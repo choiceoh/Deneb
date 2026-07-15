@@ -253,8 +253,8 @@ def _score_dispatch(dispatch: DispatchWindow) -> tuple[float, Evidence, list[Fin
                 severity="medium",
                 path="coding_dispatch",
                 evidence=f"files={dispatch.files} accepted={dispatch.accepted} landed={dispatch.landed}",
-                why="L4 dispatches accepted but none reached land/watch_passed",
-                remediation="Advance coding_dispatch through PR merge and deploy watch",
+                why="L4 dispatches accepted but none reached land (marker outcome / watch_passed)",
+                remediation="Advance coding_dispatch through PR merge and deploy watch; ensure outcome=landed",
                 verify="python3 scripts/audit/rsi-bench.py --format json",
                 priority=75.0,
             )

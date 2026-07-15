@@ -1,0 +1,11 @@
+[Unit]
+Description=Deneb daily Health+RSI bench snapshot refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/deneb
+ExecStart=%h/deneb/scripts/audit/refresh-bench-snapshots.sh
+Nice=10
+TimeoutStartSec=45min

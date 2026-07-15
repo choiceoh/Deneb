@@ -46,9 +46,10 @@ this bench.
 | operator-verdict | 20 | ANCHOR | feed-card / meta adopt |
 | codebase-delta | 20 | P5-5 | health-v3 live−baseline |
 | retention-proxy | 15 | CPE | confirm / soft watch keep |
-| dispatch-land | 20 | SkillSmith L4 | coding_dispatch land fidelity |
+| dispatch-land | 20 | SkillSmith L4 | coding_dispatch **outcome** land fidelity |
 
-**Expect-band: 25–40.** Soft watch requires `soft_confirmed ≥ 3`.
+**Expect-band: 25–50.** Soft watch requires `soft_confirmed ≥ 3`
+(open watches ∪ evolved-in-28d skills with ≥3 real post-evolve uses).
 Proxy ceilings: `swap-consistency` ≤58 (≤52 when saturated), `ability-transfer` ≤58
 until literal KO/EN swap corpus / ability-graph edges land.
 `--check` also requires confidence ≥ `MIN_CHECK_CONFIDENCE` (60).
@@ -56,9 +57,10 @@ until literal KO/EN swap corpus / ability-graph edges land.
 ### Profiles / ratchet
 
 - `fast`: ledgers + `rsi-bench-cache.json`
-- `deep` / `--refresh-cache`: live health + Health Bench 3 overall embed
+- `deep` / `--refresh-cache`: live health + Health Bench 3 overall embed (**force-rewrites** health-v3 snapshot)
 - `--check` ratchets **Process and Utility** (confidence gate applies)
 - Combined gate: `make bench-check` (health-v3-check + rsi-bench-check)
+- Daily cadence: `make bench-refresh` / `scripts/systemd/setup-bench-refresh.sh` (04:30)
 - Rubric bumps: `--migrate-rubric`
 
 ## Integration
@@ -67,6 +69,7 @@ until literal KO/EN swap corpus / ability-graph edges land.
 |---|---|
 | Health Fitness | Thin re-export of RSI `closure-land` / `operator-verdict` |
 | MetaEvolutionTask.RSIBench | Advisory evidence from baseline JSON |
+| Meta QualityBench | Consumes `health-v3-snapshot.json` live delta |
 | `make audit-test` | Includes `test_rsi_bench*.py` |
 
 ## Commands
@@ -76,6 +79,7 @@ make rsi-bench
 make rsi-bench-check
 make bench-check
 make rsi-bench-deep
+make bench-refresh
 make rsi-bench-test
 make rsi-bench-baseline
 ```
@@ -84,3 +88,4 @@ make rsi-bench-baseline
 
 - Literal BabelJudge KO/EN bilingual swap corpus (English/Korean framing pairs)
 - Full EvoAgentBench ability-graph edges (beyond validation∩skill coverage)
+- Hard `evolve_confirmed` sparse-traffic path (6-use window; prefer soft ≥3 or stale confirm)

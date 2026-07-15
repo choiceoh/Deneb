@@ -1,16 +1,16 @@
 {
   "_keep_policy": "RSI Bench 1.2 baseline. One-way ratchet across overall and ratcheted Process and Utility metrics. Never lower floors or accept new high/critical findings merely to make --check pass.",
   "domains": {
-    "process": 45.3,
-    "utility": 30.8
+    "process": 52.3,
+    "utility": 42.3
   },
   "high_findings": {},
-  "overall": 38.1,
+  "overall": 47.5,
   "pillars": {
     "process.ability-transfer": 58.0,
-    "process.acceptor-trust": 28.0,
+    "process.acceptor-trust": 55.0,
     "process.anti-collapse": 48.0,
-    "process.confirm-honesty": 28.0,
+    "process.confirm-honesty": 55.0,
     "process.judge-fuel": 45.0,
     "process.preference-collapse": 52.0,
     "process.probe-coverage": 60.0,
@@ -18,9 +18,9 @@
     "process.timescale-turn": 50.0,
     "utility.closure-land": 29.2,
     "utility.codebase-delta": 29.8,
-    "utility.dispatch-land": 31.1,
+    "utility.dispatch-land": 66.1,
     "utility.operator-verdict": 38.0,
-    "utility.retention-proxy": 25.0
+    "utility.retention-proxy": 55.0
   },
   "profile": "fast",
   "provenance": {
@@ -31,7 +31,7 @@
     "process",
     "utility"
   ],
-  "revision": "cc65a1d605693c28862740dc2db0cecb553696af+dirty",
+  "revision": "c02a23719b75dfab02a2805d985cfc92f687a424+dirty",
   "rubric_version": "1.2.0",
   "schema_version": 1,
   "tolerances": {

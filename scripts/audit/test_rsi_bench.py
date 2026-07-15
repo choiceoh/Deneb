@@ -72,6 +72,49 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(watch.soft_confirmed, 3)
             self.assertGreaterEqual(watch.soft_confirmed, MIN_RESOLVED_FOR_HARD)
 
+    def test_dispatch_counts_outcome_landed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "coding_dispatch"
+            folder.mkdir()
+            (folder / "a.json").write_text(
+                json.dumps({"status": "accepted", "outcome": "landed"}), encoding="utf-8"
+            )
+            (folder / "b.json").write_text(
+                json.dumps({"status": "accepted", "outcome": "declined"}), encoding="utf-8"
+            )
+            (folder / "c.json").write_text(
+                json.dumps({"status": "accepted", "outcome": "failed"}), encoding="utf-8"
+            )
+            from rsi_bench.ledgers import load_dispatch_window
+
+            win = load_dispatch_window(root)
+            self.assertEqual(win.files, 3)
+            self.assertEqual(win.accepted, 3)
+            self.assertEqual(win.landed, 1)
+            self.assertEqual(win.failed, 1)
+
+    def test_soft_confirm_from_usage_after_evolve(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            now = int(time.time() * 1000)
+            _write_jsonl(
+                root / "skill_genesis_log.jsonl",
+                [{"type": "evolved", "skillName": "solo", "createdAt": now - 1000}],
+            )
+            _write_jsonl(
+                root / "skill_usage.jsonl",
+                [
+                    {"skillName": "solo", "source": "real", "usedAt": now},
+                    {"skillName": "solo", "source": "real", "usedAt": now + 1},
+                    {"skillName": "solo", "source": "real", "usedAt": now + 2},
+                    {"skillName": "solo", "source": "workout", "usedAt": now + 3},
+                ],
+            )
+            (root / "skill_evolve_watch.json").write_text("{}", encoding="utf-8")
+            watch = load_watch_window(root)
+            self.assertEqual(watch.soft_confirmed, 1)
+
     def test_judge_category_and_closure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -14,11 +14,14 @@ Health Bench 3.0 점수와 비교하거나 산술 변환하지 않는다.
 - Overall은 도메인 점수의 **가중 기하평균**이다 (Process 0.55 · Utility 0.45).
 - LLM이 이 벤치를 채점하지 않는다. ledger / cache 집계만.
 - `resolved < 3` 인 비율은 unmeasured (soft watch도 **soft_confirmed ≥ 3**).
-- Soft 점수는 `SOFT_RESOLVE_SCORE_CAP` (55) 상한.
+- Soft 점수는 `SOFT_RESOLVE_SCORE_CAP` (55) 상한. Soft 표본은 **열린 워치** ∪
+  (28d 안 evolved 후 real `postUses≥3` 재구성) 합집합.
 - **1.2부터 Process와 Utility 모두 `--check` 래칫** (`ratcheted=true`).
 - `--check`는 confidence < `MIN_CHECK_CONFIDENCE`(60)이면 실패 (증거 얇은 상태의 Utility 래칫 신뢰 금지).
 - Health Fitness의 finding-land / feed-card는 RSI Utility를 **thin re-export**.
 - `swap-consistency` / `ability-transfer`는 전용 코퍼스 전까지 **proxy ceiling** (각각 ≤58, 포화 시 swap ≤52).
+- L4 `dispatch-land`는 마커 **`outcome`**(landed/…)을 착지로 센다 — review `status`는 accepted로 남을 수 있음.
+- Snapshot 케이던스: `make bench-refresh` / `scripts/systemd/setup-bench-refresh.sh` (일 04:30).
 
 ## Rubric 1.2.0
 
@@ -27,7 +30,7 @@ Health Bench 3.0 점수와 비교하거나 산술 변환하지 않는다.
 | Process | 0.55 | acceptor-trust, confirm-honesty, judge-fuel, preference-collapse, swap-consistency, probe-coverage, timescale-turn, ability-transfer, anti-collapse |
 | Utility | 0.45 | closure-land, operator-verdict, codebase-delta, retention-proxy, dispatch-land |
 
-expect-band **25–40**. 루브릭 승격 시 `--migrate-rubric`.
+expect-band **25–50** (L4 outcome 정합 + soft resolve 표본 반영). 루브릭 승격 시 `--migrate-rubric`.
 
 ## Baseline과 ratchet
 
@@ -36,8 +39,10 @@ make rsi-bench
 make rsi-bench-check
 make bench-check
 make rsi-bench-deep
+make bench-refresh
 make rsi-bench-test
-python3 scripts/audit/rsi-bench.py --update-baseline --migrate-rubric --expect-band 25:40
+python3 scripts/audit/rsi-bench.py --update-baseline --migrate-rubric --expect-band 25:50
+# production host once: scripts/systemd/setup-bench-refresh.sh
 ```
 
 ## 변경 시 검증
