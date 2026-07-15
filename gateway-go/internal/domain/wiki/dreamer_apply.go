@@ -690,6 +690,17 @@ func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code strin
 	if u.Client != "" && existing.Meta.Client == "" {
 		existing.Meta.Client = u.Client
 	}
+	// Sites/kinds are usually confirmed AFTER the rep page already exists (the
+	// common case) — newPageFromUpdate sets them on create but the update path
+	// dropped them, so a later "현장이 확인되면 기입/갱신" never persisted. Union
+	// with existing (normalize dedups; normalizeKinds refines parent→child) so a
+	// confirmation adds without clobbering prior values.
+	if len(u.Sites) > 0 {
+		existing.Meta.Sites = normalizeSites(append(append([]string{}, existing.Meta.Sites...), u.Sites...))
+	}
+	if len(u.Kinds) > 0 {
+		existing.Meta.Kinds = normalizeKinds(append(append([]string{}, existing.Meta.Kinds...), u.Kinds...))
+	}
 	existing.Meta.Updated = time.Now().Format("2006-01-02")
 }
 

@@ -52,3 +52,38 @@ func TestWikiDreamer_CreateOnExistingPathConvertsToUpdateNotOverwrite(t *testing
 		t.Errorf("new synthesized content was not merged in: %q", got.Body)
 	}
 }
+
+// TestWikiDreamer_UpdatePersistsConfirmedSitesAndKinds guards that the update
+// path persists 현장(sites)/특성(kinds) — they are usually confirmed after the
+// rep page already exists, and the update path previously dropped them (only
+// create set them), so "현장이 확인되면 기입/갱신" never took effect.
+func TestWikiDreamer_UpdatePersistsConfirmedSitesAndKinds(t *testing.T) {
+	dir := t.TempDir()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	wd := NewWikiDreamer(store, nil, "", Config{}, logger)
+
+	const path = "프로젝트/군산/대표.md"
+	existing := NewPage("군산", "프로젝트", nil)
+	existing.Body = "# 군산\n\n## 현재 상태\n진행 중."
+	if err := store.WritePage(path, existing); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	u := wikiUpdate{
+		Action: "update", Path: path, Title: "군산", Content: "현장 확인",
+		Sites: flexStringList{"전북 군산시 옥구읍 수산리"},
+		Kinds: flexStringList{"태양광"},
+	}
+	if out := wd.persistDreamUpdate(u, ""); out.failed {
+		t.Fatal("persistDreamUpdate reported failure")
+	}
+	got := testutil.Must(store.ReadPage(path))
+	if !hasStr(got.Meta.Sites, "전북 군산시 옥구읍 수산리") {
+		t.Errorf("confirmed site was dropped on update: %v", got.Meta.Sites)
+	}
+	if !hasStr(got.Meta.Kinds, "태양광") {
+		t.Errorf("confirmed kind was dropped on update: %v", got.Meta.Kinds)
+	}
+}
