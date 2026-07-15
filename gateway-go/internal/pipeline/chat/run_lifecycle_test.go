@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -243,7 +244,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 
 		var mu sync.Mutex
 		var events []string
-		broadcast := func(event string, _ any) (int, []error) {
+		broadcast := func(event string, _ json.RawMessage) (int, []error) {
 			mu.Lock()
 			events = append(events, event)
 			mu.Unlock()

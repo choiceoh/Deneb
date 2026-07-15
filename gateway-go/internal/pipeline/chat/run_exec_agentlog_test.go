@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -38,11 +39,11 @@ func newAgentLogSyncHandler(t *testing.T, server *httptest.Server, clientOpts ..
 	t.Helper()
 	logDir := t.TempDir()
 	sm := session.NewManager()
-	broadcast := func(event string, payload any) (int, []error) { return 1, nil }
+	broadcast := func(event string, payload json.RawMessage) (int, []error) { return 1, nil }
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := DefaultHandlerConfig()
 	cfg.LLMClient = llm.NewClient(server.URL, "test-key", clientOpts...)
-	cfg.Transcript = NewMemoryTranscriptStore()
+	cfg.Transcript = transcript.NewMemoryTranscriptStore()
 	cfg.DefaultModel = "test-model"
 	cfg.DefaultSystem = "You are a test assistant."
 	cfg.MaxTokens = 1024
@@ -208,7 +209,7 @@ func TestAgentLogAsyncSendWritesRunEndExactlyOnce(t *testing.T) {
 	bc := &broadcastCollector{}
 	cfg := DefaultHandlerConfig()
 	cfg.LLMClient = llm.NewClient(server.URL, "test-key")
-	cfg.Transcript = NewMemoryTranscriptStore()
+	cfg.Transcript = transcript.NewMemoryTranscriptStore()
 	cfg.DefaultModel = "test-model"
 	cfg.DefaultSystem = "test"
 	cfg.MaxTokens = 1024

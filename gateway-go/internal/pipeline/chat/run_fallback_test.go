@@ -7,6 +7,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -134,9 +135,9 @@ func TestRunAgentWithFallback_CompactionStuckOnProtectedZoneOverBudget(t *testin
 	for _, ev := range bc.get() {
 		if ev.Event == "chat.compaction_stuck" {
 			found = true
-			p, ok := ev.Payload.(ChatCompactionStuckEvent)
-			if !ok {
-				t.Fatalf("payload type = %T, want ChatCompactionStuckEvent", ev.Payload)
+			var p ChatCompactionStuckEvent
+			if err := json.Unmarshal(ev.Payload, &p); err != nil {
+				t.Fatalf("payload unmarshal = %v, want ChatCompactionStuckEvent", err)
 			}
 			if p.Reason != "protected_zone_exceeds_budget" {
 				t.Errorf("stuck reason = %q, want protected_zone_exceeds_budget", p.Reason)

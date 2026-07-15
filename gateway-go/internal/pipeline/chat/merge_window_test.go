@@ -100,7 +100,7 @@ func newSendRequestWithSkip(t *testing.T, sessionKey, message, runID string, ski
 // the previous touch happened more than mergeWindowDuration ago.
 func TestSend_QueuesWhenActiveRunOutsideMergeWindow(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -142,7 +142,7 @@ func TestSend_QueuesWhenActiveRunOutsideMergeWindow(t *testing.T) {
 // of being queued.
 func TestSend_MergesWhenActiveRunInsideMergeWindow(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -181,7 +181,7 @@ func TestSend_MergesWhenActiveRunInsideMergeWindow(t *testing.T) {
 // is folded into the new merged run rather than discarded.
 func TestSend_MergeClearsPendingQueue(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -218,7 +218,7 @@ func TestSend_MergeClearsPendingQueue(t *testing.T) {
 // timestamp) and goes through the normal startAsyncRun path.
 func TestSend_FirstMessageStartsRunNormally(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -244,7 +244,7 @@ func TestSend_FirstMessageStartsRunNormally(t *testing.T) {
 // the call falls through to the normal "queue" branch instead.
 func TestSend_SkipMergeIgnoresMergeWindow(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -281,11 +281,12 @@ func TestSend_MergeEmitsSessionsChangedBroadcast(t *testing.T) {
 	sm := session.NewManager()
 	var mu sync.Mutex
 	var events []SessionsChangedEvent
-	bc := func(event string, payload any) (int, []error) {
+	bc := func(event string, payload json.RawMessage) (int, []error) {
 		if event != "sessions.changed" {
 			return 0, nil
 		}
-		if m, ok := payload.(SessionsChangedEvent); ok {
+		var m SessionsChangedEvent
+		if err := json.Unmarshal(payload, &m); err == nil {
 			mu.Lock()
 			events = append(events, m)
 			mu.Unlock()
@@ -329,7 +330,7 @@ func TestSend_MergeEmitsSessionsChangedBroadcast(t *testing.T) {
 // perform the right channel-side cleanup (clear emoji, delete draft).
 func TestSend_MergeCancelsRunWithErrMergedIntoNewRunCause(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -367,7 +368,7 @@ func TestSend_MergeCancelsRunWithErrMergedIntoNewRunCause(t *testing.T) {
 // cancels with a nil cause — only the merge path attaches a sentinel.
 func TestInterruptActiveRunCancelsWithNilCause(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
@@ -406,7 +407,7 @@ func TestInterruptActiveRunCancelsWithNilCause(t *testing.T) {
 // started fresh runs — but the CancelFn must fire at most once.
 func TestSend_ConcurrentMergeRaceSafe(t *testing.T) {
 	sm := session.NewManager()
-	bc := func(event string, payload any) (int, []error) { return 0, nil }
+	bc := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 

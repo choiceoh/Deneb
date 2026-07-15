@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
+	transcriptstore "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 )
 
 // TestBuildMessagePersister_EphemeralAssistantSuppressesAssistant verifies the
@@ -15,7 +16,7 @@ import (
 // for any future autonomous trigger that wants the legacy "drop everything"
 // behavior; if it regresses, all autonomous output starts polluting transcripts.
 func TestBuildMessagePersister_EphemeralAssistantReturnsNilPersister(t *testing.T) {
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{
 		SessionKey:         "telegram:1",
@@ -33,7 +34,7 @@ func TestBuildMessagePersister_EphemeralAssistantReturnsNilPersister(t *testing.
 // implicitly suppress assistant persistence. Callers that need full isolation
 // must also set EphemeralAssistant.
 func TestBuildMessagePersister_EphemeralUserAllowsAssistantPersist(t *testing.T) {
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{
 		SessionKey:    "telegram:1",
@@ -74,7 +75,7 @@ func TestBuildMessagePersister_NoTranscriptYieldsNil(t *testing.T) {
 // message is not persisted — otherwise the next heartbeat would treat
 // silence as a "report" worth comparing against and we'd repeat noise.
 func TestBuildMessagePersister_IgnoresNoReplyOnlyMessage(t *testing.T) {
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{SessionKey: "telegram:1"}
 
@@ -102,7 +103,7 @@ func TestBuildMessagePersister_IgnoresNoReplyOnlyMessage(t *testing.T) {
 // the native card rendered "{{market:usd_krw}}원" verbatim).
 func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{SessionKey: "client:main"}
 
@@ -122,7 +123,7 @@ func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T)
 		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
 	}
 	var text string
-	if err := json.Unmarshal(msgs[0].Content.Bytes(), &text); err != nil {
+	if err := json.Unmarshal([]byte(msgs[0].Content), &text); err != nil {
 		t.Fatalf("unmarshal content: %v", err)
 	}
 	if text != "1달러는 1,531원입니다." {
@@ -137,7 +138,7 @@ func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T)
 // surface.
 func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
 	params := RunParams{SessionKey: "client:main"}
 
@@ -161,7 +162,7 @@ func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing
 		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
 	}
 	var got []llm.ContentBlock
-	if err := json.Unmarshal(msgs[0].Content.Bytes(), &got); err != nil {
+	if err := json.Unmarshal([]byte(msgs[0].Content), &got); err != nil {
 		t.Fatalf("unmarshal blocks: %v", err)
 	}
 	if len(got) != 2 {
@@ -181,7 +182,7 @@ func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing
 // bytes stay exactly what the model produced.
 func TestBuildMessagePersister_BriefcasePreservesRawMarketTokens(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript, briefcaseMode: true}
 	params := RunParams{SessionKey: "briefcase:run"}
 
@@ -197,7 +198,7 @@ func TestBuildMessagePersister_BriefcasePreservesRawMarketTokens(t *testing.T) {
 		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
 	}
 	var text string
-	if err := json.Unmarshal(msgs[0].Content.Bytes(), &text); err != nil {
+	if err := json.Unmarshal([]byte(msgs[0].Content), &text); err != nil {
 		t.Fatalf("unmarshal content: %v", err)
 	}
 	if !strings.Contains(text, "{{market:usd_krw}}") {
