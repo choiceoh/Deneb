@@ -189,9 +189,9 @@ Hermes/Juiz: Tailscale IP의 사설 `…/v1/chat/completions` + request_id / pen
 
 참고:
 
-- https://blog.juchunko.com/en/even-realities-g2-openclaw-bridge/
-- https://github.com/dAAAb/openclaw-even-g2-bridge-skill
-- https://note.com/yukyu30/n/n0089674e6453
+- [OpenClaw × G2 bridge write-up](https://blog.juchunko.com/en/even-realities-g2-openclaw-bridge/)
+- [openclaw-even-g2-bridge-skill](https://github.com/dAAAb/openclaw-even-g2-bridge-skill)
+- [Hermes/Juiz Tailscale bridge (note.com)](https://note.com/yukyu30/n/n0089674e6453)
 
 ---
 
@@ -339,26 +339,25 @@ Deneb 알림 제목/본문을 **한 줄 HUD 문법**으로 통일 → Even 알�
 
 ### Official
 
-- https://hub.evenrealities.com/docs/get-started/overview
-- https://hub.evenrealities.com/docs/get-started/architecture
-- https://hub.evenrealities.com/docs/build/device-apis
-- https://hub.evenrealities.com/docs/build/display
-- https://hub.evenrealities.com/docs/build/page-lifecycle
-- https://hub.evenrealities.com/docs/ship/packaging
-- https://hub.evenrealities.com/docs/reference/faq
-- https://hub.evenrealities.com/docs/AI-tooling/claude-code
-- https://support.evenrealities.com/hc/en-us/articles/13499229138959-Specs
-- https://www.evenrealities.com/products/smart-glasses
-- npm: `@evenrealities/even_hub_sdk`
+- [Hub Overview](https://hub.evenrealities.com/docs/get-started/overview)
+- [Architecture](https://hub.evenrealities.com/docs/get-started/architecture)
+- [Device APIs](https://hub.evenrealities.com/docs/build/device-apis)
+- [Display & UI](https://hub.evenrealities.com/docs/build/display)
+- [Page Lifecycle](https://hub.evenrealities.com/docs/build/page-lifecycle)
+- [Packaging](https://hub.evenrealities.com/docs/ship/packaging)
+- [FAQ](https://hub.evenrealities.com/docs/reference/faq)
+- [Claude Code tooling](https://hub.evenrealities.com/docs/AI-tooling/claude-code)
+- [Product page (G2)](https://www.evenrealities.com/products/smart-glasses) (support-center Specs page returns 403 to automated checkers; physical specs also summarized in Hub Overview)
+- npm: [`@evenrealities/even_hub_sdk`](https://www.npmjs.com/package/@evenrealities/even_hub_sdk)
 
 ### Community
 
-- https://blog.juchunko.com/en/even-realities-g2-openclaw-bridge/
-- https://github.com/dAAAb/openclaw-even-g2-bridge-skill
-- https://note.com/yukyu30/n/n0089674e6453
-- https://github.com/brianmatzelle/even-realities-g2-glasses
-- https://github.com/i-soxi/even-g2-protocol
-- https://github.com/aleapc/even-hub-devguide (SSE/backend patterns)
+- [OpenClaw × G2 bridge write-up](https://blog.juchunko.com/en/even-realities-g2-openclaw-bridge/)
+- [openclaw-even-g2-bridge-skill](https://github.com/dAAAb/openclaw-even-g2-bridge-skill)
+- [Hermes/Juiz Tailscale bridge](https://note.com/yukyu30/n/n0089674e6453)
+- [G2 plugin starter](https://github.com/brianmatzelle/even-realities-g2-glasses)
+- [even-g2-protocol (BLE RE)](https://github.com/i-soxi/even-g2-protocol)
+- [even-hub-devguide](https://github.com/aleapc/even-hub-devguide) (SSE/backend patterns)
 
 ### Deneb (internal)
 
