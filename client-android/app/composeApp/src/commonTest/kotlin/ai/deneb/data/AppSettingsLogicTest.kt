@@ -6,6 +6,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -134,5 +135,19 @@ class AppSettingsLogicTest {
         assertEquals("https://example.com/article", s.getBrowserLastUrl())
         s.setBrowserLastUrl("   ")
         assertEquals("", s.getBrowserLastUrl())
+    }
+
+    @Test
+    fun `browser translate preference and history json persist`() {
+        val s = fresh()
+        assertFalse(s.isBrowserTranslateEnabled())
+        s.setBrowserTranslateEnabled(true)
+        assertTrue(s.isBrowserTranslateEnabled())
+        s.setBrowserTranslateEnabled(false)
+        assertFalse(s.isBrowserTranslateEnabled())
+
+        assertEquals("[]", s.getBrowserHistoryJson())
+        s.setBrowserHistoryJson("""[{"url":"https://example.com","title":"Ex","visitedAtMs":1}]""")
+        assertTrue(s.getBrowserHistoryJson().contains("example.com"))
     }
 }

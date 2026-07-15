@@ -22,6 +22,12 @@ class DenebWebViewStateTest {
     }
 
     @Test
+    fun constructorCanSeedTranslateEnabled() {
+        val state = DenebWebViewState("https://example.com", translateEnabled = true)
+        assertTrue(state.translateEnabled)
+    }
+
+    @Test
     fun loadChangesOnlyTheRequestedNavigationTarget() {
         val state = DenebWebViewState("https://example.com/start")
         state.currentUrl = "https://example.com/redirected"

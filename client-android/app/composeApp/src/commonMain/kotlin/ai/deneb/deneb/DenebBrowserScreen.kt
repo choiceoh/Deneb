@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Translate
@@ -85,21 +86,40 @@ fun DenebBrowserScreen(
 ) {
     // More tile opens with an empty route URL; resume the last http(s) page. An
     // explicit deep-link / open_url keeps its own URL and then becomes the new last.
+    // Translate preference is restored from AppSettings so leave → re-enter keeps ON.
     val state = remember(url) {
-        DenebWebViewState(resolveBrowserStartUrl(url, appSettings.getBrowserLastUrl()))
+        DenebWebViewState(
+            initialUrl = resolveBrowserStartUrl(url, appSettings.getBrowserLastUrl()),
+            translateEnabled = appSettings.isBrowserTranslateEnabled(),
+        )
     }
-    LaunchedEffect(state.currentUrl) {
-        val current = state.currentUrl.trim()
-        if (canBookmarkUrl(current) && current != appSettings.getBrowserLastUrl()) {
-            appSettings.setBrowserLastUrl(current)
+    LaunchedEffect(state.translateEnabled) {
+        if (state.translateEnabled != appSettings.isBrowserTranslateEnabled()) {
+            appSettings.setBrowserTranslateEnabled(state.translateEnabled)
         }
     }
     var showBookmarks by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
+    var history by remember { mutableStateOf(decodeBrowserHistory(appSettings.getBrowserHistoryJson())) }
     fun persistBookmarks(next: List<BrowserBookmark>) {
         val json = encodeBrowserBookmarks(next)
         appSettings.setBrowserBookmarksJson(json)
         bookmarks = decodeBrowserBookmarks(json)
+    }
+    fun persistHistory(next: List<BrowserVisit>) {
+        val json = encodeBrowserHistory(next)
+        appSettings.setBrowserHistoryJson(json)
+        history = decodeBrowserHistory(json)
+    }
+    LaunchedEffect(state.currentUrl, state.pageTitle) {
+        val current = state.currentUrl.trim()
+        if (!canBookmarkUrl(current)) return@LaunchedEffect
+        if (current != appSettings.getBrowserLastUrl()) {
+            appSettings.setBrowserLastUrl(current)
+        }
+        val next = recordBrowserVisit(history, current, state.pageTitle)
+        if (next != history) persistHistory(next)
     }
     val bookmarkUrl = state.currentUrl.ifBlank { state.url }
     val bookmarkable = canBookmarkUrl(bookmarkUrl)
@@ -109,12 +129,14 @@ fun DenebBrowserScreen(
         onBack = onBack,
         modifier = modifier,
         bookmarksCount = bookmarks.size,
+        historyCount = history.size,
         isBookmarked = bookmarked,
         canBookmark = bookmarkable,
         onToggleBookmark = {
             persistBookmarks(toggleBrowserBookmark(bookmarks, bookmarkUrl, state.pageTitle))
         },
         onShowBookmarks = { showBookmarks = true },
+        onShowHistory = { showHistory = true },
     ) {
         DenebWebView(
             state = state,
@@ -131,6 +153,17 @@ fun DenebBrowserScreen(
             },
             onDelete = { bookmark -> persistBookmarks(removeBrowserBookmark(bookmarks, bookmark.url)) },
             onDismiss = { showBookmarks = false },
+        )
+    }
+    if (showHistory) {
+        BrowserHistorySheet(
+            visits = history,
+            onOpen = { visit ->
+                state.load(visit.url)
+                showHistory = false
+            },
+            onDelete = { visit -> persistHistory(removeBrowserVisit(history, visit.url)) },
+            onDismiss = { showHistory = false },
         )
     }
 }
@@ -156,10 +189,12 @@ fun DenebBrowserChrome(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     bookmarksCount: Int = 0,
+    historyCount: Int = 0,
     isBookmarked: Boolean = false,
     canBookmark: Boolean = false,
     onToggleBookmark: (() -> Unit)? = null,
     onShowBookmarks: (() -> Unit)? = null,
+    onShowHistory: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -350,6 +385,26 @@ fun DenebBrowserChrome(
                                 },
                             )
                         }
+                        if (onShowHistory != null) {
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text("최근 방문")
+                                        Text(
+                                            if (historyCount > 0) "${historyCount}개" else "방문 기록 없음",
+                                            style = DenebType.meta,
+                                            color = denebHint(),
+                                        )
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Outlined.History, contentDescription = null, tint = denebHint()) },
+                                onClick = {
+                                    haptics.tap()
+                                    menuOpen = false
+                                    onShowHistory()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("URL 복사") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = denebHint()) },
@@ -448,6 +503,88 @@ private fun BrowserBookmarksSheet(
                                 modifier = Modifier.size(40.dp),
                             ) {
                                 Icon(Icons.Outlined.Delete, contentDescription = "북마크 삭제", tint = denebHint())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BrowserHistorySheet(
+    visits: List<BrowserVisit>,
+    onOpen: (BrowserVisit) -> Unit,
+    onDelete: (BrowserVisit) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val haptics = rememberHaptics()
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text("최근 방문", style = DenebType.subject, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                if (visits.isEmpty()) "최근 방문이 없습니다" else "최근 ${visits.size}개",
+                style = DenebType.meta,
+                color = denebHint(),
+            )
+            Spacer(Modifier.height(12.dp))
+            if (visits.isEmpty()) {
+                Text(
+                    "페이지를 열면 여기에 쌓입니다.",
+                    style = DenebType.body,
+                    color = denebHint(),
+                )
+            } else {
+                LazyColumn(Modifier.fillMaxWidth()) {
+                    items(visits, key = { it.url }) { visit ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    haptics.tap()
+                                    onOpen(visit)
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Outlined.History,
+                                contentDescription = null,
+                                tint = denebHint(),
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text(
+                                    browserVisitDisplayTitle(visit),
+                                    style = DenebType.rowTitle,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    visit.url,
+                                    style = DenebType.meta,
+                                    color = denebHint(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    haptics.tap()
+                                    onDelete(visit)
+                                },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "기록 삭제", tint = denebHint())
                             }
                         }
                     }

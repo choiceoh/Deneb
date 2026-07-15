@@ -15,7 +15,10 @@ import androidx.compose.ui.Modifier
  * progress, and back-enablement, and issues commands via [load]/[goBack]/[reload]
  * and the [translateEnabled] toggle.
  */
-class DenebWebViewState(initialUrl: String) {
+class DenebWebViewState(
+    initialUrl: String,
+    translateEnabled: Boolean = false,
+) {
     /** The URL the WebView should load; setting it via [load] navigates. */
     var url by mutableStateOf(initialUrl)
         internal set
@@ -42,8 +45,9 @@ class DenebWebViewState(initialUrl: String) {
         internal set
 
     /** In-place translation on/off. The chrome toggles this; the actual pushes
-     *  it into the page's injected translator. */
-    var translateEnabled by mutableStateOf(false)
+     *  it into the page's injected translator. Seeded from AppSettings when the
+     *  browser screen opens so the preference survives leave → re-enter. */
+    var translateEnabled by mutableStateOf(translateEnabled)
 
     // Monotonic command ticks the actual observes via LaunchedEffect, so a
     // repeated tap (reload twice) still fires.
