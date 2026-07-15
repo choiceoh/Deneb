@@ -54,8 +54,8 @@ type agentConfigDeps struct {
 	// SkillNudger fires background skill reviews after every N tool
 	// invocations. Nil disables iteration-based nudging.
 	SkillNudger SkillNudger
-	// SkillUsageRecorder attributes each turn's outcome to the skills consulted
-	// that turn, feeding the genesis Evolver's success-rate gate. Nil disables.
+	// SkillUsageRecorder attributes the completed run's outcome to the skills
+	// consulted during it, feeding the genesis Evolver's success-rate gate. Nil disables.
 	SkillUsageRecorder SkillUsageRecorder
 	// ReplayDeferredTools are deferred tools the session transcript proves were
 	// activated in earlier runs (replayActivatedTools, deferred_replay.go);
@@ -142,15 +142,12 @@ func (s *agentRunState) dynamicToolsProvider(registry *ToolRegistry) func() []ll
 	}
 }
 
-// agentTurnHooks owns the mutable bookkeeping used by the heartbeat, skill
-// usage, and skill-nudger callbacks. Its mutex protects only the nudger's
+// agentTurnHooks owns the mutable bookkeeping used by the heartbeat and
+// skill-nudger callbacks. Its mutex protects only the nudger's
 // accumulated snapshot; external callbacks run after it is released.
 type agentTurnHooks struct {
 	params           RunParams
-	resolvedModel    string
 	emitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
-	usageRecorder    SkillUsageRecorder
-	skillConsults    *SkillConsultLog
 	nudger           SkillNudger
 	nudgerEnabled    bool
 	nudgeCtx         context.Context
@@ -159,7 +156,7 @@ type agentTurnHooks struct {
 	nudgerTurns      int
 }
 
-func newAgentTurnHooks(params RunParams, deps runDeps, acd agentConfigDeps, resolvedModel, sessionToolPreset string, skillConsults *SkillConsultLog) *agentTurnHooks {
+func newAgentTurnHooks(params RunParams, deps runDeps, acd agentConfigDeps, sessionToolPreset string) *agentTurnHooks {
 	nudgeCtx := deps.callbacks.shutdownCtx
 	if nudgeCtx == nil {
 		// Reviews intentionally outlive a request. Production supplies the
@@ -168,10 +165,7 @@ func newAgentTurnHooks(params RunParams, deps runDeps, acd agentConfigDeps, reso
 	}
 	return &agentTurnHooks{
 		params:        params,
-		resolvedModel: resolvedModel,
 		emitAgentFn:   acd.EmitAgentFn,
-		usageRecorder: acd.SkillUsageRecorder,
-		skillConsults: skillConsults,
 		nudger:        acd.SkillNudger,
 		nudgerEnabled: shouldEnableSkillNudger(acd.SkillNudger, params, sessionToolPreset),
 		nudgeCtx:      nudgeCtx,
@@ -190,7 +184,6 @@ func (h *agentTurnHooks) onTurn(turn, accumulatedTokens int) {
 }
 
 func (h *agentTurnHooks) onToolTurn(turn int, activities []agent.ToolActivity) {
-	recordTurnSkillUsage(h.usageRecorder, h.skillConsults, activities, h.params.SessionKey, h.resolvedModel)
 	if !h.nudgerEnabled {
 		return
 	}
@@ -393,13 +386,12 @@ func buildAgentConfig(
 	systemPrompt json.RawMessage,
 	sessionToolPreset string,
 	acd agentConfigDeps,
-	resolvedModel string,
 	logger *slog.Logger,
-) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolport.ToolExecStats) {
+) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolport.ToolExecStats, skillConsults *SkillConsultLog) {
 	tools := buildAgentTools(acd.Tools, sessionToolPreset, acd.ReplayDeferredTools)
 	state := newAgentRunState(acd.ReplayDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)
-	turnHooks := newAgentTurnHooks(params, deps, acd, resolvedModel, sessionToolPreset, state.skillConsults)
+	turnHooks := newAgentTurnHooks(params, deps, acd, sessionToolPreset)
 
 	cfg = agent.AgentConfig{
 		MaxTurns:            policy.maxTurns,
@@ -453,14 +445,13 @@ func buildAgentConfig(
 	applyReasoningSandwichPolicy(&cfg, deps.briefcaseMode, policy.thinking, state.verifyGate)
 	applyVerificationAgentPolicy(&cfg, deps.briefcaseMode, state.verifyGate, logger)
 
-	return cfg, state.spawnFlag, state.execStats
+	return cfg, state.spawnFlag, state.execStats, state.skillConsults
 }
 
-// recordTurnSkillUsage attributes one turn's outcome to the skills consulted
-// during it, feeding the genesis Evolver real success-rate signal instead of
-// empty stats. The turn counts as a failure for every consulted skill if any
-// tool in it errored. No-op when no recorder is wired or nothing was consulted.
-func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activities []agent.ToolActivity, sessionKey, model string) {
+// recordRunSkillUsage attributes one completed run's outcome to every skill
+// consulted during it. Waiting until the run ends prevents an early clean
+// skill-read turn from hiding a later tool error or missing final answer.
+func recordRunSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, result *agent.AgentResult, runErr error, sessionKey, model string) {
 	if rec == nil || log == nil {
 		return
 	}
@@ -476,20 +467,36 @@ func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activiti
 	if len(consulted) == 0 {
 		return
 	}
-	errMsg := ""
-	for _, a := range activities {
+	errMsg := skillRunFailure(result, runErr)
+	for _, name := range consulted {
+		rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg, model)
+	}
+}
+
+func skillRunFailure(result *agent.AgentResult, runErr error) string {
+	if runErr != nil {
+		return "run failed: " + runErr.Error()
+	}
+	if result == nil {
+		return "run failed: no result"
+	}
+	for _, a := range result.ToolActivities {
 		// A "skills" tool error means the consult mechanism itself failed to load
 		// the skill (e.g. a path/catalog bug) — not the skill performing badly.
 		// Attributing it would pin the skill below the evolver's success-rate
 		// threshold and trigger phantom re-evolutions, so skip it.
 		if a.IsError && a.Name != "skills" {
-			errMsg = "turn failed: tool " + a.Name + " errored"
-			break
+			return "run failed: tool " + a.Name + " errored"
 		}
 	}
-	for _, name := range consulted {
-		rec.RecordSkillUse(sessionKey, name, errMsg == "", errMsg, model)
+	if strings.TrimSpace(result.Text) == "" && strings.TrimSpace(result.DeliverableText) == "" {
+		return "run failed: no final deliverable"
 	}
+	switch result.StopReason {
+	case "aborted", "timeout", "max_tokens", "max_turns":
+		return "run failed: stop reason " + result.StopReason
+	}
+	return ""
 }
 
 func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPreset string) bool {
