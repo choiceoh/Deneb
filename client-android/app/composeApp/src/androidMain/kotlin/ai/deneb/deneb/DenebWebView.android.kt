@@ -6,6 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -22,6 +24,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayInputStream
 
 private val webViewJson = Json { ignoreUnknownKeys = true }
 
@@ -54,6 +57,25 @@ actual fun DenebWebView(
                 web.settings.domStorageEnabled = true
                 web.addJavascriptInterface(TranslateBridge(scope, translate, holder), BRIDGE_NAME)
                 web.webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): WebResourceResponse? {
+                        if (!state.adBlockEnabled) return null
+                        val url = request.url?.toString().orEmpty()
+                        if (!shouldBlockBrowserAdRequest(url, isForMainFrame = request.isForMainFrame)) {
+                            return null
+                        }
+                        return emptyBlockedResponse()
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
+                        if (!state.adBlockEnabled) return null
+                        if (!shouldBlockBrowserAdRequest(url, isForMainFrame = false)) return null
+                        return emptyBlockedResponse()
+                    }
+
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                         state.currentUrl = url
                         state.pageTitle = ""
@@ -204,3 +226,11 @@ private fun encodeStringList(values: List<String>): String = webViewJson.encodeT
 /** Encodes [value] as a JS string literal (JSON string), safe to embed in an
  *  evaluateJavascript expression. */
 private fun jsStringLiteral(value: String): String = webViewJson.encodeToString(String.serializer(), value)
+
+/** Empty successful response used to drop ad/tracker subresource requests. */
+private fun emptyBlockedResponse(): WebResourceResponse =
+    WebResourceResponse(
+        "text/plain",
+        "utf-8",
+        ByteArrayInputStream(ByteArray(0)),
+    )

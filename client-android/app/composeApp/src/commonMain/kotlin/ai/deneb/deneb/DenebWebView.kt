@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 class DenebWebViewState(
     initialUrl: String,
     translateEnabled: Boolean = false,
+    adBlockEnabled: Boolean = true,
 ) {
     /** The URL the WebView should load; setting it via [load] navigates. */
     var url by mutableStateOf(initialUrl)
@@ -48,6 +49,9 @@ class DenebWebViewState(
      *  it into the page's injected translator. Seeded from AppSettings when the
      *  browser screen opens so the preference survives leave → re-enter. */
     var translateEnabled by mutableStateOf(translateEnabled)
+
+    /** Drop known ad/tracker network requests in the Android WebView. */
+    var adBlockEnabled by mutableStateOf(adBlockEnabled)
 
     // Monotonic command ticks the actual observes via LaunchedEffect, so a
     // repeated tap (reload twice) still fires.

@@ -28,6 +28,12 @@ class DenebWebViewStateTest {
     }
 
     @Test
+    fun constructorDefaultsAdBlockEnabledAndCanSeedOff() {
+        assertTrue(DenebWebViewState("https://example.com").adBlockEnabled)
+        assertFalse(DenebWebViewState("https://example.com", adBlockEnabled = false).adBlockEnabled)
+    }
+
+    @Test
     fun loadChangesOnlyTheRequestedNavigationTarget() {
         val state = DenebWebViewState("https://example.com/start")
         state.currentUrl = "https://example.com/redirected"

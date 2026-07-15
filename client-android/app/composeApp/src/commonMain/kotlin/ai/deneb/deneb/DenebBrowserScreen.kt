@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -97,11 +98,17 @@ fun DenebBrowserScreen(
                 appSettings.getBrowserHomeUrl(),
             ),
             translateEnabled = appSettings.isBrowserTranslateEnabled(),
+            adBlockEnabled = appSettings.isBrowserAdBlockEnabled(),
         )
     }
     LaunchedEffect(state.translateEnabled) {
         if (state.translateEnabled != appSettings.isBrowserTranslateEnabled()) {
             appSettings.setBrowserTranslateEnabled(state.translateEnabled)
+        }
+    }
+    LaunchedEffect(state.adBlockEnabled) {
+        if (state.adBlockEnabled != appSettings.isBrowserAdBlockEnabled()) {
+            appSettings.setBrowserAdBlockEnabled(state.adBlockEnabled)
         }
     }
     var showBookmarks by remember { mutableStateOf(false) }
@@ -390,6 +397,31 @@ fun DenebBrowserChrome(
                             },
                             leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null, tint = denebInsight()) },
                             onClick = {},
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(if (state.adBlockEnabled) "광고 차단 끄기" else "광고 차단 켜기")
+                                    Text(
+                                        if (state.adBlockEnabled) "알려진 광고·추적 요청 차단 중" else "차단 꺼짐",
+                                        style = DenebType.meta,
+                                        color = denebHint(),
+                                    )
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Outlined.Block,
+                                    contentDescription = null,
+                                    tint = if (state.adBlockEnabled) denebInsight() else denebHint(),
+                                )
+                            },
+                            onClick = {
+                                haptics.tap()
+                                state.adBlockEnabled = !state.adBlockEnabled
+                                state.reload()
+                                menuOpen = false
+                            },
                         )
                         if (onShowBookmarks != null) {
                             DropdownMenuItem(
