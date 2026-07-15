@@ -1,6 +1,6 @@
 ---
 title: Amaranth10 groupware APIs
-summary: Internal signed HTTP surface for topsolar Amaranth (전자결재 · 게시판), session auth, and Deneb wiring notes.
+summary: Internal signed HTTP surface for topsolar Amaranth (전자결재 · 게시판 · ERP map link), session auth, and Deneb wiring notes.
 read_when:
   - Extending the groupware tool or phone-event approval enrich
   - Mapping new Amaranth eap/board endpoints
@@ -40,7 +40,8 @@ Product split (planned):
 | Read (list/body/line + attachment titles; selected attachment on demand) | Deferred tool `groupware` + phone enrich |
 | Write (승인/반려) | Work-feed chips → `miniapp.workfeed.action.run` — **not** the chat tool |
 
-See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone path).
+See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone path) ·
+[groupware-erp-api-map.md](./groupware-erp-api-map.md) (물류·영업·구매·회계 일부 API 지도, 2026-07-16).
 
 ## Env & session (not in git)
 
@@ -303,10 +304,14 @@ fields.
 ## Related discovery APIs
 
 ```
-POST /gw/gw999A03   # menu tree (e.g. upper 1000900 → box codes)
+POST /gw/gw999A01   # top modules authorized for this login
+POST /gw/gw999A03   # menu tree (e.g. upper 1000900 → box codes;
+                    # ERP: 409000000 회계, 420000000 물류공통,
+                    #      430000000 영업, 440000000 구매/자재)
 ```
 
-Useful for discovery/debug; not required on the hot path.
+Useful for discovery/debug; not required on the eap/board hot path.
+ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-erp-api-map.md).
 
 ## Code map
 
@@ -328,6 +333,7 @@ Useful for discovery/debug; not required on the hot path.
 | P2 | Board `ViewPost` on `read` | Done |
 | P3 | Approve/reject (`eap110A21`) + feed chips (native/Andromeda) | Wired; **live mutate untested** |
 | P4 | Phone enrich API-first; DOM/Page Agent last resort | In progress |
+| P5 | Read-only ERP lists (매출마감·출고·입고·현재고·발주) | Mapped; **not wired** |
 
 ## Smoke (no secrets in output)
 
