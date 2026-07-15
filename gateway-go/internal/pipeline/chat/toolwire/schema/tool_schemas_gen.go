@@ -1685,7 +1685,7 @@ func GroupwareToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Keyword (품목·거래처·사원이름) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. people: name required. Prefix lines: raw voucher lines. Required for action=read and area=people.",
+				"description": "Keyword (품목·거래처·사원이름) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. people: name required; enriches/creates wiki 인물 + org chart read match. Prefix lines: raw voucher lines. Required for action=read and area=people.",
 			},
 		},
 		"required": []string{"action"},

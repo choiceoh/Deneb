@@ -1761,5 +1761,7 @@ export async function listPeople(folder = "", query = "", limit = 10) {
     "출처: POST /personal/APCodePicker/ApAperUserCode · /personal/hph0120/0hp00001",
     "제외: 주민번호(rsrgNo)·주소 등 민감필드. 휴대폰=emgcTel, 직급/호칭=korHcls.",
   );
+  // Machine-readable cards for Go wiki/org linkage (stripped before agent sees text).
+  lines.push("DENEB_PEOPLE_JSON:" + JSON.stringify(cards));
   return lines.join("\n");
 }

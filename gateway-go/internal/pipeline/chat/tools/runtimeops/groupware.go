@@ -6,15 +6,21 @@ import (
 	"fmt"
 	"strings"
 
+	contactdomain "github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+const peopleJSONMarker = "DENEB_PEOPLE_JSON:"
+
 // ToolGroupware reads Amaranth10 전자결재 / 게시판 / 매출·재고·발주·입고·출고·단가·사원 via srv4 headless login.
 // Approval folders: pending(미결) · done(기결) · cc(수신참조) · total(전체결재문서) · all(순회).
 // Read-only: never approve, post, or delete. Unconfigured → calm off message.
-func ToolGroupware() toolport.ToolFunc {
+// store may be nil — people wiki enrichment is then skipped (Amaranth text only).
+func ToolGroupware(store *wiki.Store) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Action     string `json:"action"`
@@ -137,8 +143,153 @@ func ToolGroupware() toolport.ToolFunc {
 		if err != nil {
 			return fmt.Sprintf("그룹웨어 읽기 실패: %v", err), nil
 		}
+		if area == "people" {
+			out = linkPeopleWikiAndOrg(store, out)
+		}
 		return out, nil
 	}
+}
+
+// linkPeopleWikiAndOrg strips DENEB_PEOPLE_JSON, enriches/creates 인물 pages
+// when store is non-nil, and appends a 연계 block (wiki path + org match).
+func linkPeopleWikiAndOrg(store *wiki.Store, out string) string {
+	body, cards := stripAndParsePeopleJSON(out)
+	if len(cards) == 0 {
+		return body
+	}
+	var wikiLinks []wiki.GroupwarePersonLink
+	if store != nil {
+		res, err := store.EnrichGroupwarePeople(cards)
+		if err == nil {
+			wikiLinks = res.Links
+		}
+	}
+	byName := map[string]wiki.GroupwarePersonLink{}
+	for _, l := range wikiLinks {
+		key := contactdomain.NormalizePersonName(l.Name)
+		if key != "" {
+			byName[key] = l
+		}
+	}
+	tree, _ := org.Load()
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(body, "\n"))
+	b.WriteString("\n\n연계:\n")
+	for _, card := range cards {
+		name := strings.TrimSpace(card.Name)
+		if name == "" {
+			name = "(이름없음)"
+		}
+		key := contactdomain.NormalizePersonName(card.Name)
+		wikiLine := "위키: (스킵)"
+		if store == nil {
+			wikiLine = "위키: (미연결 — wiki store 없음)"
+		} else if l, ok := byName[key]; ok && l.Path != "" {
+			wikiLine = "위키: " + l.Path + " (" + wikiActionKo(l.Action) + ")"
+		} else if l, ok := byName[key]; ok {
+			wikiLine = "위키: (" + wikiActionKo(l.Action) + ")"
+		}
+		orgLine := "조직도: " + matchOrgChain(tree, card.Name)
+		b.WriteString("- ")
+		b.WriteString(name)
+		b.WriteString("\n  - ")
+		b.WriteString(wikiLine)
+		b.WriteString("\n  - ")
+		b.WriteString(orgLine)
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func wikiActionKo(action string) string {
+	switch action {
+	case "created":
+		return "생성"
+	case "updated":
+		return "갱신"
+	case "unchanged":
+		return "기존"
+	default:
+		return action
+	}
+}
+
+func stripAndParsePeopleJSON(out string) (body string, cards []wiki.GroupwarePersonCard) {
+	lines := strings.Split(out, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.HasPrefix(line, peopleJSONMarker) {
+			payload := strings.TrimPrefix(line, peopleJSONMarker)
+			_ = json.Unmarshal([]byte(payload), &cards)
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n"), cards
+}
+
+// matchOrgChain returns "탑솔라 > … > 팀 · 전무" or "조직도 미매칭".
+// org.json is never modified — read-only name match.
+func matchOrgChain(tree org.OrgTree, name string) string {
+	key := contactdomain.NormalizePersonName(name)
+	if len([]rune(key)) < 2 || len(tree.Nodes) == 0 {
+		return "조직도 미매칭"
+	}
+	byID := make(map[string]org.OrgNode, len(tree.Nodes))
+	for _, n := range tree.Nodes {
+		byID[n.ID] = n
+	}
+	var hits []string
+	seen := map[string]bool{}
+	for _, n := range tree.Nodes {
+		for _, m := range n.Members {
+			if contactdomain.NormalizePersonName(m.Name) != key {
+				continue
+			}
+			path := orgDepartmentPath(byID, n)
+			role := orgMemberRole(m)
+			line := path
+			if role != "" {
+				line = path + " · " + role
+			}
+			if line == "" || seen[line] {
+				continue
+			}
+			seen[line] = true
+			hits = append(hits, line)
+		}
+	}
+	if len(hits) == 0 {
+		return "조직도 미매칭"
+	}
+	return strings.Join(hits, "; ")
+}
+
+func orgDepartmentPath(byID map[string]org.OrgNode, node org.OrgNode) string {
+	parts := []string{node.Name}
+	seen := map[string]bool{node.ID: true}
+	current := node
+	for i := 0; i < len(byID)+1; i++ {
+		parent, ok := byID[current.ParentID]
+		if !ok || seen[parent.ID] {
+			break
+		}
+		parts = append([]string{parent.Name}, parts...)
+		seen[parent.ID] = true
+		current = parent
+	}
+	return strings.Join(parts, " > ")
+}
+
+func orgMemberRole(m org.Member) string {
+	var parts []string
+	if r := strings.TrimSpace(m.Rank); r != "" {
+		parts = append(parts, r)
+	}
+	if p := strings.TrimSpace(m.Position); p != "" {
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, " · ")
 }
 
 func normalizeFolder(raw, action, area string) (string, error) {
