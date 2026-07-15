@@ -207,6 +207,10 @@ func filterFetchCandidates(urls []string, limit int) ([]string, candidateFilterS
 			continue
 		}
 		switch {
+		case isSupportedSocialFetchURL(raw):
+			// Reddit pages and X status URLs have native JSON read handlers
+			// (web_reddit.go / web_x.go), so exempt them from the social host
+			// denylist below — otherwise search+fetch could never reach them.
 		case isNonDocumentMediaURL(parsed):
 			stats.DeniedMedia++
 			continue
@@ -260,6 +264,17 @@ var fetchHostDenySuffix = []string{
 	".x.com", ".twitter.com", ".reddit.com", ".quora.com",
 	".linkedin.com", ".threads.net", ".tumblr.com",
 	".snapchat.com", ".vk.com",
+}
+
+// isSupportedSocialFetchURL reports whether a URL has a native read handler
+// (web_reddit.go / web_x.go) and so should be exempt from the social host
+// denylist during search+fetch candidate selection.
+func isSupportedSocialFetchURL(raw string) bool {
+	if isRedditURL(raw) {
+		return true
+	}
+	_, ok := isXStatusURL(raw)
+	return ok
 }
 
 func isDeniedFetchHost(host string) bool {
