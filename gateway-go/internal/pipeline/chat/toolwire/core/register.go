@@ -1,14 +1,15 @@
 package core
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
 )
@@ -306,15 +307,20 @@ func RegisterProcessTools(registry toolport.ToolRegistrar, d *tooldeps.ProcessDe
 	})
 }
 
-// RegisterWebTools registers the unified web tool (search mode only).
+// RegisterWebTools registers the unified web tool (search, fetch, search+fetch).
 // spill (optional) lets the YouTube path offload full transcripts to disk.
 func RegisterWebTools(registry toolport.ToolRegistrar, spill tooldeps.SpilloverStore) {
 	webCache := web.NewFetchCache()
 	localAI := web.NewLocalAIExtractor()
 
 	registry.RegisterTool(toolport.ToolDef{
-		Name:        "web",
-		Description: "Web access: search the web or fetch page content. Use query for keyword search, url for direct fetch",
+		Name: "web",
+		Description: "Web access — search and/or fetch pages in one tool. " +
+			"query: keyword search (Serper→Brave→DuckDuckGo). " +
+			"queries: up to 5 parallel searches. " +
+			"url: fetch a page (HTML extract + bot evasion; YouTube → transcript/chapters — use watch only when you need frames). " +
+			"fetch=1..3 with query: search then auto-fetch top N pages. " +
+			"type=news|scholar|autocomplete: Serper-only typed search (incompatible with fetch).",
 		InputSchema: schema.WebToolSchema(),
 		Fn:          web.MergedTool(webCache, localAI, spill),
 	})

@@ -168,7 +168,7 @@ func classifyFetchError(err error, url string) webFetchErr {
 func hintForHTTPStatus(status int) string {
 	switch {
 	case status == 403:
-		return "Site blocked the request. Try http tool with custom headers, or search for cached version"
+		return "Site blocked the request. Try web(query=...) for a cached/alternate source, or a different URL"
 	case status == 429:
 		return "Rate limited. Wait and retry, or try a different source"
 	case status >= 500:

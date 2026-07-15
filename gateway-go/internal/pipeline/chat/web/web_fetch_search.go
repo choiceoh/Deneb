@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -25,46 +26,77 @@ import (
 
 // --- Provider dispatch ---
 
+// Test seams (same pattern as jinaFetchFn): production defaults to the real
+// providers; unit tests swap these to assert failure fallback without network.
+var (
+	serperSearchRawFn  = serperSearchRaw
+	braveSearchRawFn   = braveSearchRaw
+	duckDuckGoSearchFn = duckDuckGoSearch
+)
+
 // webSearch dispatches to the best available search provider.
-// Priority: Serper → Brave → DuckDuckGo.
+// Priority: Serper → Brave → DuckDuckGo. Missing keys skip a provider; a
+// provider error also falls through to the next (sequential, not raced).
 func webSearch(ctx context.Context, query string, count int) (string, error) {
 	if key := serperAPIKey(); key != "" {
-		return serperWebSearch(ctx, key, query, count)
+		results, answerBox, err := serperSearchRawFn(ctx, key, query, count)
+		if err == nil {
+			return formatSerperResults(results, answerBox), nil
+		}
+		slog.Info("web search fallback", "from", "serper", "to", nextSearchProvider("serper"), "error", err)
 	}
 	if key := braveAPIKey(); key != "" {
-		return braveWebSearch(ctx, key, query, count)
+		results, err := braveSearchRawFn(ctx, key, query, count)
+		if err == nil {
+			return formatSearchResults(results), nil
+		}
+		slog.Info("web search fallback", "from", "brave", "to", "duckduckgo", "error", err)
 	}
-	return duckDuckGoSearch(ctx, query)
+	return duckDuckGoSearchFn(ctx, query)
 }
 
 // webSearchWithURLs searches and returns both formatted output and fetchable URLs.
-// Used by search+fetch mode.
+// Used by search+fetch mode. Same Serper→Brave→DuckDuckGo fallback as webSearch;
+// DuckDuckGo Instant Answer has no reliable organic URLs, so urls may be empty.
 func webSearchWithURLs(ctx context.Context, query string, count int) (output string, urls []string, err error) {
 	if key := serperAPIKey(); key != "" {
-		results, answerBox, err := serperSearchRaw(ctx, key, query, count)
-		if err != nil {
-			return "", nil, err
+		results, answerBox, err := serperSearchRawFn(ctx, key, query, count)
+		if err == nil {
+			return formatSerperResults(results, answerBox), searchResultURLs(results), nil
 		}
-		var resultURLs []string
-		for _, r := range results {
-			resultURLs = append(resultURLs, r.URL)
-		}
-		return formatSerperResults(results, answerBox), resultURLs, nil
+		slog.Info("web search fallback", "from", "serper", "to", nextSearchProvider("serper"), "error", err)
 	}
 	if key := braveAPIKey(); key != "" {
-		results, err := braveSearchRaw(ctx, key, query, count)
-		if err != nil {
-			return "", nil, err
+		results, err := braveSearchRawFn(ctx, key, query, count)
+		if err == nil {
+			return formatSearchResults(results), searchResultURLs(results), nil
 		}
-		var resultURLs []string
-		for _, r := range results {
-			resultURLs = append(resultURLs, r.URL)
-		}
-		return formatSearchResults(results), resultURLs, nil
+		slog.Info("web search fallback", "from", "brave", "to", "duckduckgo", "error", err)
 	}
-	// DuckDuckGo: no reliable URLs for fetching.
-	result, err := duckDuckGoSearch(ctx, query)
+	result, err := duckDuckGoSearchFn(ctx, query)
 	return result, nil, err
+}
+
+// nextSearchProvider names the provider webSearch will try after `from` fails,
+// for fallback logs. Brave is skipped when its key is absent.
+func nextSearchProvider(from string) string {
+	switch from {
+	case "serper":
+		if braveAPIKey() != "" {
+			return "brave"
+		}
+		return "duckduckgo"
+	default:
+		return "duckduckgo"
+	}
+}
+
+func searchResultURLs(results []searchResult) []string {
+	urls := make([]string, 0, len(results))
+	for _, r := range results {
+		urls = append(urls, r.URL)
+	}
+	return urls
 }
 
 func braveAPIKey() string {
@@ -101,18 +133,6 @@ type serperAnswerBox struct {
 type serperResponse struct {
 	Organic   []searchResult  `json:"organic"`
 	AnswerBox serperAnswerBox `json:"answerBox"`
-}
-
-// serperWebSearch performs a search via Serper and formats the output.
-func serperWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
-	results, answerBox, err := serperSearchRaw(ctx, apiKey, query, count)
-	if err != nil {
-		//nolint:nilerr // tool returns user-facing error in result string
-		return formatFetchError(webFetchErr{
-			Code: "search_failed", Message: err.Error(), Retryable: true,
-		}), nil
-	}
-	return formatSerperResults(results, answerBox), nil
 }
 
 // serperSearchRaw performs a POST /search request against Serper and returns
@@ -341,17 +361,6 @@ func (r *searchResult) UnmarshalJSON(data []byte) error {
 		r.Description = raw.Snippet
 	}
 	return nil
-}
-
-func braveWebSearch(ctx context.Context, apiKey, query string, count int) (string, error) {
-	results, err := braveSearchRaw(ctx, apiKey, query, count)
-	if err != nil {
-		//nolint:nilerr // tool returns user-facing error in result string
-		return formatFetchError(webFetchErr{
-			Code: "search_failed", Message: err.Error(), Retryable: true,
-		}), nil
-	}
-	return formatSearchResults(results), nil
 }
 
 func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, error) {

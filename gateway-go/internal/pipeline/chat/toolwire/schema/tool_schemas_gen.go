@@ -314,7 +314,7 @@ func WebToolSchema() map[string]any {
 			},
 			"maxChars": map[string]any{
 				"type":        "number",
-				"description": "Maximum content characters total (default: 50000)",
+				"description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget",
 			},
 			"queries": map[string]any{
 				"type":        "array",
@@ -325,7 +325,7 @@ func WebToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query. Serper (Google) > Brave > DuckDuckGo fallback",
+				"description": "Web search query. Serper (Google) → Brave → DuckDuckGo on missing key or provider failure",
 			},
 			"type": map[string]any{
 				"type":        "string",
