@@ -83,7 +83,7 @@ func DeclaredEditableSurfaces() []EditableSurface {
 				"gateway-go/internal/domain/skills/genesis/rsi_ladder.go",
 				"gateway-go/internal/domain/skills/genesis/ladder_watch.go",
 				"gateway-go/internal/domain/skills/genesis/graduation_state.go",
-				"gateway-go/internal/domain/skills/genesis/lifecycle/rsi_profile.go",
+				"gateway-go/internal/domain/skills/genesis/lifecycle/rsi_identity.go",
 				"gateway-go/internal/domain/skills/genesis/lifecycle/self_correction.go",
 				"gateway-go/internal/domain/skills/genesis/tracker_self_correction_dispatch_selection.go",
 			},

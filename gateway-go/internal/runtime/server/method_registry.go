@@ -762,6 +762,12 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 			}
 			return s.genesisTracker.RecentSelfCorrectionCandidates("", status, limit)
 		},
+		NextDispatchCandidate: func(excludedIDs []string) (genesis.SelfCorrectionCandidateRecord, bool, error) {
+			if s.genesisTracker == nil {
+				return genesis.SelfCorrectionCandidateRecord{}, false, nil
+			}
+			return s.genesisTracker.NextSelfCorrectionDispatchCandidate(excludedIDs)
+		},
 		RecordCandidate: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
 			if s.genesisTracker == nil {
 				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")

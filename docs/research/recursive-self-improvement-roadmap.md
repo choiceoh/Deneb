@@ -258,8 +258,10 @@ python3 scripts/audit/rsi-status.py --markdown
 python3 scripts/audit/rsi-status.py --write-markdown ~/.deneb/data/rsi-current-status.md
 ```
 
-The generated document includes its timestamp and source directory and is
-never hand-edited or checked in as an allegedly current snapshot.
+The formatter obtains the canonical Go snapshot over `miniapp.rsi.status`; it
+does not re-read ledgers or duplicate layer policy. The generated document
+includes its timestamp and gateway URL and is never hand-edited or checked in
+as an allegedly current snapshot.
 
 Five workstreams, in priority order:
 
@@ -451,8 +453,8 @@ Five workstreams, in priority order:
 Staged locks and the evidence that flips them (thresholds are proposals,
 operator-tunable):
 
-> **Ladder-readiness engine landed 2026-07-13** (`genesis/rsi_ladder.go` +
-> `scripts/audit/rsi_status.py` mirror): every machine-checkable row below is now scored
+> **Ladder-readiness engine landed 2026-07-13** (`genesis/rsi_ladder.go`; exposed
+> through `miniapp.rsi.status`): every machine-checkable row below is now scored
 > CONTINUOUSLY against its evidence stream (e-process labels, dispatch-outcome
 > land rate, staged-source candidate counts, per-epoch bench samples since the
 > P5-2 window opened) and surfaced as a fifth "졸업 사다리" card (Key `GRAD`)
@@ -469,9 +471,11 @@ operator-tunable):
 > **UNLOCK EXECUTION DELEGATED 2026-07-14** (operator directive: "잠금
 > 해제도 에이전트에게 맡겨버려. 그래야 재귀적 자기개선이지"). The watch now
 > EXECUTES evidence-met unlocks itself via the loop-owned graduation state
-> (`graduation_state.go` → `~/.deneb/data/graduation_state.json`, read by
-> the Go dashboards, `scripts/dev/coding-dispatch.sh`, and `scripts/audit/rsi_status.py` so the three
-> allowlists cannot drift). Trust architecture mirrors P2 auto-adoption:
+> (`graduation_state.go` → `~/.deneb/data/graduation_state.json`, consumed by
+> the Go admission/status paths and the shell executor's daily-cap check).
+> Source admission has one Go owner; the Python status formatter consumes the
+> RPC snapshot instead of reading this file. Trust architecture mirrors P2
+> auto-adoption:
 > compiled thresholds ARE the ratified policy (the loop executes, never
 > edits — `rsi_ladder.go`/`ladder_watch.go`/`graduation_state.go`/
 > `tracker_eprocess_cutover.go` joined the forbidden acceptance-machinery

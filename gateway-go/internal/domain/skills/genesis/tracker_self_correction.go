@@ -279,12 +279,10 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 	}
 	statusFilter = normalizeSelfCorrectionStatus(statusFilter)
 	skillName = strings.TrimSpace(skillName)
-	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	merged, err := t.mergedSelfCorrectionCandidatesLocked()
 	if err != nil {
 		return nil, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
 	}
-
-	merged := mergeSelfCorrectionRecords(entries)
 
 	out := make([]SelfCorrectionCandidateRecord, 0, len(merged))
 	for _, rec := range merged {
@@ -301,6 +299,14 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (t *Tracker) mergedSelfCorrectionCandidatesLocked() (map[string]SelfCorrectionCandidateRecord, error) {
+	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	if err != nil {
+		return nil, err
+	}
+	return mergeSelfCorrectionRecords(entries), nil
 }
 
 func mergedSelfCorrectionCandidate(entries []SelfCorrectionCandidateRecord, id string) (SelfCorrectionCandidateRecord, bool) {

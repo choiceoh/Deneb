@@ -26,9 +26,8 @@ unlike its template ``genesis/runtime_error_mining.go`` (#3491). Three reasons:
   2. Single-writer queue invariant. Writes go through the gateway tracker via
      ``miniapp.self_improvement_coding.record`` (record-time forbidden-surface
      enforcement); this script never appends to the JSONL ledger itself.
-     Dedup reads use ``.list`` so the candidate/review merge logic is not
-     copied a third time (coding-dispatch.sh and rsi_status.py already carry
-     two read-side copies).
+     Dedup reads use ``.list`` so the candidate/review merge logic remains in
+     the gateway instead of being copied into audit scripts.
   3. Cadence. Structural findings move at repo cadence, not runtime cadence —
      the miner belongs with the other audit scripts and their scheduling
      (manual or timer), not inside the serving runtime.

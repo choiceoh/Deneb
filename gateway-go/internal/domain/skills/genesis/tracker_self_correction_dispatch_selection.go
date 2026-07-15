@@ -7,14 +7,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 )
 
-// SelectSelfCorrectionDispatchCandidate chooses one candidate in O(n) without
-// copying or sorting the queue. Review-approved work wins, then newest work.
-// Local marker/worktree residue remains an executor concern and is supplied as
-// excluded IDs by the RPC client.
-func SelectSelfCorrectionDispatchCandidate(
-	records []SelfCorrectionCandidateRecord,
+// NextSelfCorrectionDispatchCandidate folds the complete append-only ledger and
+// chooses one candidate without copying, sorting, or imposing a recency cap.
+// Review-approved work wins, then newest work. Local marker/worktree residue
+// remains an executor concern and is supplied as excluded IDs by the RPC client.
+func (t *Tracker) NextSelfCorrectionDispatchCandidate(
 	excludedIDs []string,
-) (SelfCorrectionCandidateRecord, bool) {
+) (SelfCorrectionCandidateRecord, bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	records, err := t.mergedSelfCorrectionCandidatesLocked()
+	if err != nil {
+		return SelfCorrectionCandidateRecord{}, false, err
+	}
 	excluded := make(map[string]bool, len(excludedIDs))
 	for _, id := range excludedIDs {
 		if id = strings.TrimSpace(id); id != "" {
@@ -32,7 +38,7 @@ func SelectSelfCorrectionDispatchCandidate(
 			found = true
 		}
 	}
-	return selected, found
+	return selected, found, nil
 }
 
 // SelfCorrectionDispatchEligible applies review, delivery, source, and surface

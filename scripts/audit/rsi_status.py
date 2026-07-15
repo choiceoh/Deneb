@@ -1,32 +1,8 @@
-"""Recursive self-improvement (RSI) loop-status surface.
+"""Render the Go-owned RSI status snapshot for operators and generated docs.
 
-The RSI subsystem is four stacked loops (L1 skill evolution, L2 meta-evolution,
-L3 verifier co-evolution, L4 source self-edit). Each writes an append-only
-ledger under ``~/.deneb/data/``. Once the machinery is built, the interesting
-question is no longer "does it compile" but "is each loop actually TURNING, or
-is it built-but-waiting?" — a distinction the ledgers answer but which nobody
-reads by hand twice the same way.
-
-This module classifies each layer into one honest state:
-
-  LIVE        the loop is producing AND consuming — it is turning.
-  DATA-GATED  built and running, but the fuel it needs has not accumulated yet
-              (e.g. the judge catches every planted defect so there are no
-              labeled misses for L3 to learn from). Time fixes this, not code.
-  STARVED     built, but its INPUT source is empty — an upstream/wiring gap that
-              CODE fixes (e.g. L4 dispatch wants code-scope candidates but no
-              source produces them).
-  FROZEN      a self-brake deliberately halted the loop (L2 auto-adopt freeze).
-  IDLE        no recent activity at all — the lane may be unscheduled.
-
-Honesty (mirrors runtime_health's fault accounting): DATA-GATED is NOT a defect
-— it is the correct state of a young loop with no data. Reporting it as a
-problem would push toward manufacturing fake fuel. STARVED, by contrast, is an
-actionable wiring gap. The two look similar in a naive "0 events" count; the
-whole point of this surface is to tell them apart.
-
-stdlib-only and importable for deterministic tests; the CLI is
-``scripts/audit/rsi-status.py``.
+Layer classification lives exclusively in ``genesis.Tracker.RSIStatus`` and is
+served by ``miniapp.rsi.status``. This module validates that read model and
+formats it; it never reinterprets ledgers or mirrors policy constants.
 """
 
 from __future__ import annotations
@@ -37,847 +13,171 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass, field
-from datetime import time as daytime, timedelta
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TextIO
-from zoneinfo import ZoneInfo
 
-DEFAULT_DATA_DIR = os.path.expanduser("~/.deneb/data")
-WINDOW_DAYS = 7
-DAY_MS = 24 * 60 * 60 * 1000
-# Matches Go dispatchMarkerAbandonAfter and the coding-dispatch SESSION_TIMEOUT
-# default (7200s): an outcome-less marker blocks re-dispatch only within this
-# grace window (by mtime), then abandons.
-DISPATCH_ABANDON_MS = 2 * 60 * 60 * 1000
-
-# e-process cutover graduation thresholds (must match
-# tracker_eprocess_cutover.go): observation-mode baseline-test labels justify
-# handing rollback firing to the anytime-valid test at n>=20 with >=90%
-# legacy agreement. Labels accumulate over the whole ledger history — a
-# windowed count would starve the evidence at organic cadence.
-EPROCESS_CUTOVER_MIN_LABELS = 20
-EPROCESS_CUTOVER_MIN_AGREEMENT = 0.90
-# >=1 fair ROLLBACK label required so cutover-ready can't false-green on a
-# pure-confirm population (agreement ~1.0 by construction) — mirrors Go
-# eProcessCutoverMinFairRollbacks (RSI 3rd-review C1-D1).
-EPROCESS_CUTOVER_MIN_FAIR_ROLLBACKS = 1
-
-# Organic false-accept mining window (must match judge_accuracy.go): rollbacks
-# are scarce at organic cadence, so real-usage P3 labels use a 30d window.
-ORGANIC_FALSE_ACCEPT_WINDOW_DAYS = 30
-
-# Degradation classes the judge-accuracy lane replays. The BLATANT ones a
-# competent judge always catches (so 0 misses there means nothing); the SUBTLE
-# ones are the ones that actually produce labeled misses (P3 fuel).
-BLATANT_CLASSES = frozenset({"section-drop", "fake-tool", "truncation", "overfit"})
-SUBTLE_CLASSES = frozenset({"imperative-drop", "safety-drop", "imperative-weaken", "scope-narrow"})
-# Escalated tier (probe curriculum ladder): the lane deploys in-place weaken
-# probes only after the incumbent judge posts ESCALATION_WINDOW consecutive
-# zero-miss drop-tier runs (genesis/judge_accuracy.go weakenTierUnlocked —
-# keep both in sync).
-WEAKEN_CLASSES = frozenset({"imperative-weaken", "scope-narrow"})
-ESCALATION_WINDOW = 5
-
-# L4 dispatch supply contract (must match scripts/dev/coding-dispatch.sh and
-# genesis/rsi_status.go rsiDispatchSources): a candidate is dispatchable only if
-# it is a proposed, code-scope correction from an evidence-bearing source.
-# health-finding graduated 2026-07-12 (first batch reviewed clean); tool-quality
-# graduated 2026-07-13 (operator directive); runtime-error and deadcode-finding
-# stay staged until their own batch review.
-L4_SOURCES = ("evolve-tool-gap", "self-harness", "health-finding", "tool-quality")
-
-GRADUATION_STATE_PATH = os.path.expanduser("~/.deneb/data/graduation_state.json")
+DEFAULT_GATEWAY_URL = "http://127.0.0.1:18789"
+DEFAULT_STATE_DIR = "~/.deneb"
+VALID_STATES = frozenset({"LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"})
+STATE_GLYPH = {"LIVE": "●", "DATA-GATED": "◐", "STARVED": "○", "FROZEN": "❄", "IDLE": "·"}
 
 
-def _graduation_rows(path: str = "") -> dict:
-    """Executed graduation-ladder unlocks (loop-owned, operator directive
-    2026-07-14). Mirrors genesis/graduation_state.go; consumed by the
-    dispatchable predicate and the ladder display so Go/sh/py cannot drift."""
-    try:
-        with open(path or GRADUATION_STATE_PATH, encoding="utf-8") as fh:
-            rows = json.load(fh).get("rows") or {}
-        return rows if isinstance(rows, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+class StatusError(RuntimeError):
+    """The canonical RSI snapshot is unavailable or malformed."""
 
 
-def _dispatchable_sources(rows: dict) -> tuple:
-    extra = tuple(k[len("source:"):] for k, v in rows.items()
-                  if k.startswith("source:") and isinstance(v, dict) and v.get("unlocked"))
-    return L4_SOURCES + extra
-
-
-def _source_dispatchable(src: str, sources: tuple) -> bool:
-    """Separator-aware namespace match, matching coding-dispatch.sh's picker:
-    an exact namespace or a "namespace:"-prefixed id. A bare startswith
-    reported "health-finding-x" as dispatchable though the picker never picks
-    it (Codex review of RSI eval M7)."""
-    return any(src == ns or src.startswith(ns + ":") for ns in sources)
-
-LIVE, DATA_GATED, STARVED, FROZEN, IDLE = "LIVE", "DATA-GATED", "STARVED", "FROZEN", "IDLE"
-TERMINAL_DISPATCH_OUTCOMES = frozenset({"landed", "declined", "failed", "timeout", "rolled_back"})
-
-
-@dataclass
+@dataclass(frozen=True)
 class LayerStatus:
     key: str
     title: str
     state: str
-    metrics: dict = field(default_factory=dict)
-    diagnosis: str = ""
+    diagnosis: str
+    detail: str
+    metrics: dict[str, str]
 
 
-def read_jsonl(path: str) -> list[dict]:
-    """Load an append-only JSONL ledger, tolerating partial/corrupt lines."""
-    out: list[dict] = []
+@dataclass(frozen=True)
+class StatusSnapshot:
+    layers: tuple[LayerStatus, ...]
+    turning: int
+    health: dict[str, Any]
+
+
+def load_token(state_dir: str) -> str:
+    token = os.environ.get("DENEB_CLIENT_TOKEN", "").strip()
+    if token:
+        return token
     try:
-        with open(path, encoding="utf-8", errors="replace") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    out.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+        return (Path(state_dir).expanduser() / "client_token").read_text(encoding="utf-8").strip()
     except OSError:
-        return []
-    return out
+        return ""
 
 
-def _auto_adopt_frozen(path: str) -> bool:
-    """True when the last auto-adopt freeze verdict has frozen=true.
-
-    Mirrors genesis.Tracker.AutoAdoptFrozen: the path is JSONL (despite the
-    .json suffix), and an unfreeze row (frozen:false) clears the brake.
-
-    Fails CLOSED like the Go side (3rd-review H5): a marker that EXISTS but
-    yields no usable verdict — unreadable, empty, or all-lines-corrupt — reads
-    frozen, because the one component whose job is to halt the loop must not
-    default to "go" when it cannot read its own brake. Only a genuinely ABSENT
-    marker (fresh install / a real clear) reads not-frozen. Previously this
-    mirror failed OPEN on every such case while Go failed closed, so the two
-    dashboards reported opposite L2 states for a corrupt marker.
-    """
-    rows = read_jsonl(path)
-    if rows:
-        return bool(rows[-1].get("frozen"))
-    return os.path.exists(path)
-
-
-def _within(created_ms: Any, cutoff_ms: int) -> bool:
-    return isinstance(created_ms, (int, float)) and created_ms >= cutoff_ms
-
-
-def assess_l1(events: list[dict], now_ms: int) -> LayerStatus:
-    """Skill evolution — genesis-log lifecycle events in the 7d window.
-
-    The ledger keys each record by ``type`` (evolved, evolve_rejected,
-    evolution_proposal, genesis). Post-evolve confirmations/rollbacks, when they
-    occur, ride the usage rollback watch (tracker_usage), not this log — so
-    "turning" is measured by committed evolves and new skills, not confirmations.
-    """
-    cutoff = now_ms - WINDOW_DAYS * DAY_MS
-    type_bucket = {
-        "evolved": "evolved",
-        "genesis": "genesis",
-        "evolution_proposal": "proposal",
-        "evolve_rejected": "rejected",
-    }
-    counts = {"evolved": 0, "genesis": 0, "proposal": 0, "rejected": 0}
-    for e in events:
-        if not _within(e.get("createdAt"), cutoff):
-            continue
-        bucket = type_bucket.get(e.get("type") or "")
-        if bucket:
-            counts[bucket] += 1
-    metrics = dict(counts)
-    metrics.update(_eprocess_readiness(events))
-    committed = counts["evolved"] + counts["genesis"]
-    if sum(counts.values()) == 0:
-        return LayerStatus("L1", "skill evolution", IDLE, metrics,
-                           "no genesis-log events in 7d — evolver/genesis lanes idle")
-    if committed > 0:
-        return LayerStatus("L1", "skill evolution", LIVE, metrics,
-                           f"{counts['evolved']} evolved / {counts['genesis']} new skills / "
-                           f"{counts['proposal']} proposals / {counts['rejected']} rejected (7d)")
-    return LayerStatus("L1", "skill evolution", DATA_GATED, metrics,
-                       f"{counts['proposal']} proposals but 0 committed — candidates not clearing the gate")
-
-
-def _eprocess_readiness(events: list[dict]) -> dict:
-    """Score observation-mode baseline-test labels against the cutover
-    graduation thresholds (mirrors Tracker.eProcessCutoverReadiness)."""
-    labels = disagreements = unfair = fair_rollbacks = 0
-    for e in events:
-        bt = e.get("baselineTest")
-        if not isinstance(bt, dict):
-            continue
-        # A label recorded while the e-process could not possibly reject
-        # (rejectReachable=false, incl. every pre-C1-fix label that lacks the
-        # field) is not evidence of mechanism agreement — excluded, matching
-        # the Go filter, so the dashboard can't show a false READY (Codex
-        # review of RSI eval C1).
-        if not bt.get("rejectReachable"):
-            unfair += 1
-            continue
-        labels += 1
-        if bt.get("disagreement"):
-            disagreements += 1
-        if e.get("type") == "evolve_rolled_back":
-            fair_rollbacks += 1
-    agreement = (labels - disagreements) / labels if labels else 0.0
-    return {
-        "eprocess_labels": labels,
-        "eprocess_disagreements": disagreements,
-        "eprocess_unfair_labels": unfair,
-        "eprocess_fair_rollbacks": fair_rollbacks,
-        "eprocess_agreement": round(agreement, 4),
-        # Requires >=1 fair ROLLBACK label so agreement isn't measured on a
-        # pure-confirm (trivially-agreeing) population — mirrors Go C1-D1.
-        "eprocess_cutover_ready": labels >= EPROCESS_CUTOVER_MIN_LABELS
-        and agreement >= EPROCESS_CUTOVER_MIN_AGREEMENT
-        and fair_rollbacks >= EPROCESS_CUTOVER_MIN_FAIR_ROLLBACKS,
-    }
-
-
-def _organic_false_accepts(events: list[dict], now_ms: int) -> int:
-    """Count real-usage judge false-accept labels: baseline-CONFIRMED rollbacks
-    (the e-process agreed the failure rate rose) in the 30d window (mirrors
-    Tracker.OrganicFalseAccepts). A threshold-only rollback with a quiet
-    e-process is a disagreement label, never P3 food."""
-    cutoff = now_ms - ORGANIC_FALSE_ACCEPT_WINDOW_DAYS * DAY_MS
-    count = 0
-    for e in events:
-        if e.get("type") != "evolve_rolled_back" or not _within(e.get("createdAt"), cutoff):
-            continue
-        bt = e.get("baselineTest")
-        if isinstance(bt, dict) and bt.get("reject"):
-            count += 1
-    return count
-
-
-def assess_l2(revisions: list[dict], frozen: bool, now_ms: int) -> LayerStatus:
-    """Meta-evolution — weekly slow-loop revisions + auto-adopt freeze state."""
-    cutoff = now_ms - 2 * WINDOW_DAYS * DAY_MS  # slow loop: 2-week look-back
-    cycles = proposed = adopted = reverted = 0
-    last = ""
-    for r in revisions:
-        if not _within(r.get("createdAt"), cutoff):
-            continue
-        action = r.get("action") or ""
-        if action in ("auto_adopted", "adopted"):
-            adopted += 1
-        elif action in ("auto_reverted", "operator_reverted"):
-            reverted += 1
-        elif action == "":
-            cycles += 1
-            if r.get("proposed"):
-                proposed += 1
-        if not last:
-            last = f"{r.get('epoch', '?')}/{os.path.basename(r.get('artifact', '?'))}"
-    metrics = {"cycles": cycles, "proposed": proposed, "adopted": adopted, "reverted": reverted}
-    if frozen:
-        return LayerStatus("L2", "meta-evolution", FROZEN, metrics,
-                           "drift self-brake engaged — auto-adopt frozen to propose-only")
-    # Parity with Go metaActivityIn (rsi_status.go): LIVE when ANY of
-    # cycles/proposed/adopted/reverted > 0. A revert alone is the rollback watch
-    # working — meta activity — so it must NOT read IDLE (else the Go RPC shows
-    # LIVE while this audit shows IDLE, and rsi_loop_audit hard-fails a healthy
-    # brake). proposed ⊆ cycles, so it needs no separate term.
-    if cycles == 0 and adopted == 0 and reverted == 0:
-        return LayerStatus("L2", "meta-evolution", IDLE, metrics,
-                           "no slow-loop activity in 14d — awaiting the weekly cadence")
-    return LayerStatus("L2", "meta-evolution", LIVE, metrics,
-                       f"{cycles} cycles / {proposed} proposed / {adopted} adopted / "
-                       f"{reverted} reverted (14d), last {last}")
-
-
-def assess_l3(runs: list[dict], genesis_events: list[dict], now_ms: int) -> LayerStatus:
-    """Verifier co-evolution (P3) — judge-accuracy lane misses plus organic
-    (real-usage) false-accept labels are the fuel."""
-    cutoff = now_ms - WINDOW_DAYS * DAY_MS
-    recent = [r for r in runs if _within(r.get("createdAt"), cutoff)]
-    # Operator labels are counted by EACH verdict's own timestamp across ALL
-    # records (parity with Go RecentOperatorJudgeVerdicts) — a verdict added today
-    # to a judge run recorded 10 days ago still counts, and a stale verdict on a
-    # fresh run does not. Their presence alone keeps L3 out of IDLE (Go's
-    # len(records)==0 && operatorLabels==0 / runs==0 && operatorLabels==0 gates).
-    operator_labels = 0
-    for r in runs:
-        for v in r.get("operatorVerdicts") or []:
-            if _within(v.get("createdAt"), cutoff):
-                operator_labels += 1
-    if not recent and operator_labels == 0:
-        return LayerStatus("L3", "verifier co-evolution", IDLE, {"runs": 0},
-                           "judge-accuracy lane has not run in 7d")
-    misses = 0
-    false_rejects = 0
-    classes_seen: set[str] = set()
-    lane_runs = 0
-    for r in recent:
-        if not (r.get("pairs") or r.get("byClass") or r.get("falseRejects")):
-            continue
-        lane_runs += 1
-        misses += len(r.get("misses") or [])
-        false_rejects += len(r.get("falseRejects") or [])
-        classes_seen.update((r.get("byClass") or {}).keys())
-    subtle_deployed = bool(classes_seen & SUBTLE_CLASSES)
-    weaken_deployed = bool(classes_seen & WEAKEN_CLASSES)
-    organic = _organic_false_accepts(genesis_events, now_ms)
-    metrics = {
-        "runs": lane_runs,
-        "misses": misses,
-        "false_rejects": false_rejects,
-        "organic_false_accepts_30d": organic,
-        "operator_labels_7d": operator_labels,
-        "subtle_probes_deployed": subtle_deployed,
-        "weaken_probes_deployed": weaken_deployed,
-    }
-    if misses > 0 or false_rejects > 0 or organic > 0 or operator_labels > 0:
-        return LayerStatus("L3", "verifier co-evolution", LIVE, metrics,
-                           f"{misses} judge misses + {false_rejects} false-rejects + {organic} organic labels + "
-                           f"{operator_labels} operator labels over {lane_runs} runs — P3 fuel accumulating")
-    if not subtle_deployed:
-        return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
-                           f"{lane_runs} runs, judge caught every BLATANT defect and subtle probes "
-                           "are not in the ledger yet — awaiting the subtle-degradation deploy")
-    if weaken_deployed:
-        return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
-                           f"{lane_runs} runs, 0 misses even at the escalated weaken tier — "
-                           "judge is strong at the current probe ceiling")
-    return LayerStatus("L3", "verifier co-evolution", DATA_GATED, metrics,
-                       f"{lane_runs} runs with subtle probes but 0 misses — judge is currently strong; "
-                       f"the lane escalates to weaken probes after {ESCALATION_WINDOW} saturated runs")
-
-
-def _merge_candidates(rows: list[dict]) -> dict[str, dict]:
-    """Fold review and dispatch deltas onto full candidate records."""
-    cand: dict[str, dict] = {}
-    for rec in rows:
-        rid = rec.get("id") or ""
-        if not rid:
-            continue
-        if rec.get("type") == "self_correction_candidate":
-            cand[rid] = dict(rec)
-            continue
-        current = cand.get(rid)
-        if current is None:
-            continue
-        if rec.get("status"):
-            current["status"] = rec["status"]
-        if rec.get("type") == "self_correction_dispatch":
-            for key in (
-                "dispatchPhase", "attemptId", "branch", "prNumber", "prUrl",
-                "commitSha", "deployHead", "outcomeNote",
-            ):
-                if rec.get(key) not in (None, "", 0):
-                    current[key] = rec[key]
-            if rec.get("dispatchPhase") == "watch_passed":
-                current["status"] = "applied"
-    return cand
-
-
-def _marker_blocks_redispatch(marker: dict | None, mtime_ms: int, now_ms: int) -> bool:
-    """Mirror Go dispatchMarkerBlocksAt (rsi_status.go): a corrupt/non-dict
-    marker fails closed (blocks); landed/attempted/declined block; failed/timeout
-    are retryable; an outcome-less marker blocks only within the 2h abandon grace
-    (by mtime), then abandons. Parity with the pick lane so the audit's L4
-    dispatchable count agrees with the Go RPC."""
-    if not isinstance(marker, dict):
-        return True  # corrupt / unparseable → fail closed
-    outcome = marker.get("outcome")
-    outcome = outcome.strip() if isinstance(outcome, str) else ""
-    if outcome in ("landed", "attempted", "declined"):
-        return True
-    if outcome in ("failed", "timeout"):
-        return False
-    return (now_ms - mtime_ms) < DISPATCH_ABANDON_MS
-
-
-def assess_l4(
-    rows: list[dict],
-    dispatch_total: int,
-    dispatch_today: int,
-    outcomes: dict[str, int] | None = None,
-    dispatched_ids: set[str] | None = None,
-    grad_rows: dict | None = None,
-    runtime_status: dict[str, Any] | None = None,
-    now_ms: int | None = None,
-    marker_outcomes: dict[str, str] | None = None,
-    marker_blocks: dict[str, bool] | None = None,
-) -> LayerStatus:
-    """Source self-edit — the coding-dispatch supply of code-scope candidates."""
-    outcomes = outcomes or {}
-    sources = _dispatchable_sources(grad_rows or {})
-    runtime_status = runtime_status or {}
-    marker_outcomes = marker_outcomes or {}
-    marker_blocks = marker_blocks or {}
-    cand = _merge_candidates(rows)
-    dispatched_ids = dispatched_ids or set()
-    by_scope: dict[str, int] = {}
-    dispatchable = 0
-    staged = 0
-    in_flight = applied = declined = failed = legacy_in_flight = 0
-    staged_sources: dict[str, int] = {}
-    oldest_pending_at = 0
-    for rid, rec in cand.items():
-        st = rec.get("status") or "proposed"
-        scope = rec.get("scope") or "?"
-        by_scope[scope] = by_scope.get(scope, 0) + 1
-        src = rec.get("source") or ""
-        phase = rec.get("dispatchPhase") or ""
-        if scope == "code" and phase in ("started", "pr_opened", "merged", "deployed"):
-            in_flight += 1
-            continue
-        if scope == "code" and phase == "watch_passed":
-            applied += 1
-            continue
-        if scope == "code" and phase == "declined":
-            declined += 1
-            continue
-        if scope == "code" and phase in ("failed", "rolled_back"):
-            outcome = marker_outcomes.get(rid, "")
-            # Compatibility for sessions completed before the authoritative
-            # declined phase shipped: their marker says declined while the
-            # old shell incorrectly wrote dispatchPhase=failed.
-            if phase == "failed" and outcome == "declined":
-                declined += 1
-                continue
-            failed += 1
-            # Parity with Go: a candidate is re-dispatchable iff its marker does
-            # not block. A rolled_back phase is always retryable; otherwise honor
-            # the marker verdict (corrupt→blocked, outcome-less within the 2h
-            # grace→blocked, failed/timeout→retryable). A candidate with no marker
-            # defaults to not-blocked (Go: ReadFile err → False).
-            if (
-                (phase == "rolled_back" or not marker_blocks.get(rid, False))
-                and st in ("proposed", "accepted")
-                and _source_dispatchable(src, sources)
-            ):
-                dispatchable += 1
-                created_at = int(rec.get("createdAt") or 0)
-                if created_at > 0 and (oldest_pending_at == 0 or created_at < oldest_pending_at):
-                    oldest_pending_at = created_at
-            continue
-        if scope == "code" and rid in dispatched_ids:
-            legacy_in_flight += 1
-            continue
-        # proposed = unreviewed backlog; accepted = review-endorsed, awaiting
-        # implementation — both are queued dispatch supply (the heartbeat review
-        # lane accepts candidates it cannot implement itself).
-        if scope == "code" and st in ("proposed", "accepted"):
-            if _source_dispatchable(src, sources):
-                dispatchable += 1
-                created_at = int(rec.get("createdAt") or 0)
-                if created_at > 0 and (oldest_pending_at == 0 or created_at < oldest_pending_at):
-                    oldest_pending_at = created_at
-            else:
-                # Proposed code candidate from a source not yet in the dispatch
-                # allowlist (runtime-error, deadcode-finding, …): staged L4 supply
-                # awaiting review/graduation — real fuel, NOT a wiring gap.
-                staged += 1
-                prefix = src.split(":", 1)[0] if src else "(no source)"
-                staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
-    # Only terminal lifecycle outcomes enter the denominator. attempted and a
-    # merge still awaiting deployment watch remain pending evidence.
-    decided = sum(v for k, v in outcomes.items() if k in TERMINAL_DISPATCH_OUTCOMES)
-    landed = outcomes.get("landed", 0)
-    land_rate = (landed / decided) if decided else None
-    metrics = {
-        "candidates": len(cand),
-        "by_scope": by_scope,
-        "dispatchable": dispatchable,
-        "staged": staged,
-        "staged_sources": staged_sources,
-        "in_flight": in_flight,
-        "applied": applied,
-        "declined": declined,
-        "failed_or_rolled_back": failed,
-        "legacy_in_flight": legacy_in_flight,
-        "dispatched_total": dispatch_total,
-        "dispatched_today": dispatch_today,
-        "dispatch_outcomes": outcomes,
-        "land_rate": land_rate,
-        "last_tick_at_ms": int(runtime_status.get("lastTickAtMs") or 0),
-        "last_result": str(runtime_status.get("lastResult") or ""),
-        "last_successful_at_ms": int(runtime_status.get("lastSuccessfulAtMs") or 0),
-        "consecutive_failures": int(runtime_status.get("consecutiveFailures") or 0),
-        "oldest_pending_age_ms": (
-            max(0, now_ms - oldest_pending_at) if now_ms is not None and oldest_pending_at else 0
-        ),
-    }
-    outcome_note = ""
-    if outcomes:
-        parts = ", ".join(f"{k}:{v}" for k, v in sorted(outcomes.items()))
-        outcome_note = (
-            f" · outcomes {parts} (land rate {land_rate:.0%})"
-            if decided else f" · outcomes {parts} (awaiting terminal evidence)"
-        )
-    if in_flight > 0:
-        return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{in_flight} candidates crossing PR/deploy/watch lifecycle"
-                           + outcome_note)
-    if legacy_in_flight > 0:
-        return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{legacy_in_flight} legacy dispatches in flight"
-                           + outcome_note)
-    if applied > 0:
-        return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{applied} source edits survived merged deployment rollback watch"
-                           + outcome_note)
-    if declined > 0:
-        return LayerStatus("L4", "source self-edit", LIVE, metrics,
-                           f"{declined} code candidates closed safely with no change"
-                           + outcome_note)
-    if dispatchable > 0 and metrics["consecutive_failures"] > 0:
-        return LayerStatus("L4", "source self-edit", STARVED, metrics,
-                           f"{dispatchable} dispatchable code candidates, dispatcher failed "
-                           f"{metrics['consecutive_failures']} consecutive ticks "
-                           f"(last={metrics['last_result'] or 'unknown'})"
-                           + outcome_note)
-    if dispatchable > 0:
-        return LayerStatus("L4", "source self-edit", IDLE, metrics,
-                           f"{dispatchable} dispatchable code candidates queued; "
-                           "no authoritative dispatch is in flight"
-                           + outcome_note)
-    if len(cand) == 0:
-        return LayerStatus("L4", "source self-edit", IDLE, metrics,
-                           "no self-correction candidates — capture funnel idle"
-                           + outcome_note)
-    if staged > 0:
-        staged_summary = ", ".join(f"{k}:{v}" for k, v in sorted(staged_sources.items()))
-        return LayerStatus("L4", "source self-edit", STARVED, metrics,
-                           f"{staged} code candidates staged from non-dispatch sources ({staged_summary}) "
-                           "— propose-only supply awaiting allowlist graduation"
-                           + outcome_note)
-    scope_summary = ", ".join(f"{k}:{v}" for k, v in sorted(by_scope.items()))
-    return LayerStatus("L4", "source self-edit", STARVED, metrics,
-                       f"{len(cand)} candidates ({scope_summary}) but 0 are code-scope from "
-                       f"{'/'.join(sources)} — no source produces code candidates (wiring gap)"
-                       + outcome_note)
-
-
-def _dispatch_attempts(marker: dict | None, fallback_at_ms: int) -> list[dict[str, Any]]:
-    """Return retained retry history plus the marker's current attempt.
-
-    ``dispatch_prompt.py`` snapshots the previous top-level attempt into
-    ``attempts`` before a retry and replaces the top-level fields with the new
-    attempt. Treating one marker file as one dispatch therefore undercounts
-    retries and inflates the graduation ladder's land rate.
-    """
-    if not isinstance(marker, dict):
-        return [{"dispatchedAt": fallback_at_ms}]
-    attempts = [a for a in (marker.get("attempts") or []) if isinstance(a, dict)]
-    current: dict[str, Any] = {}
-    if isinstance(marker.get("attemptId"), str):
-        current["attemptId"] = marker["attemptId"]
-    if isinstance(marker.get("outcome"), str):
-        current["outcome"] = marker["outcome"]
-    dispatched_at = marker.get("dispatchedAt")
-    current["dispatchedAt"] = (
-        int(dispatched_at) if isinstance(dispatched_at, (int, float)) else fallback_at_ms
+def fetch_status(base_url: str, token: str, timeout: float = 10) -> StatusSnapshot:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["X-Deneb-Client-Token"] = token
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/api/v1/miniapp/rpc",
+        data=json.dumps({
+            "type": "req",
+            "id": "rsi-status",
+            "method": "miniapp.rsi.status",
+            "params": {},
+        }).encode(),
+        headers=headers,
+        method="POST",
     )
-    return attempts + [current]
-
-
-def _dispatch_phases_by_attempt(rows: list[dict]) -> dict[str, str]:
-    phases: dict[str, str] = {}
-    for row in rows:
-        attempt_id = row.get("attemptId")
-        if row.get("type") == "self_correction_dispatch" and isinstance(attempt_id, str) and attempt_id:
-            phases[attempt_id] = str(row.get("dispatchPhase") or "").strip().lower()
-    return phases
-
-
-def _classified_dispatch_outcome(raw: str, phase: str) -> tuple[str, bool]:
-    """Return (display outcome, terminal) after joining marker + lifecycle."""
-    if raw == "landed":
-        if phase == "watch_passed":
-            return "landed", True
-        if phase == "rolled_back":
-            return "rolled_back", True
-        return "pending_watch", False
-    if raw in ("declined", "failed", "timeout", "rolled_back"):
-        return raw, True
-    return raw, False
-
-
-def _dispatch_day_bounds_ms(data_dir: str, now_ms: int) -> tuple[int, int]:
-    zone_name = os.environ.get("DENEB_TIMEZONE", "").strip()
-    if not zone_name:
-        try:
-            config_path = os.path.join(
-                os.path.dirname(os.path.abspath(data_dir)), "deneb.json"
-            )
-            with open(config_path, encoding="utf-8") as handle:
-                zone_name = str((json.load(handle) or {}).get("timezone") or "").strip()
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            pass
     try:
-        zone = ZoneInfo(zone_name) if zone_name else datetime.datetime.now().astimezone().tzinfo
-    except (KeyError, ValueError):
-        zone = datetime.datetime.now().astimezone().tzinfo
-    now = datetime.datetime.fromtimestamp(now_ms / 1000, tz=zone)
-    start = datetime.datetime.combine(now.date(), daytime.min, tzinfo=zone)
-    end = datetime.datetime.combine(now.date() + timedelta(days=1), daytime.min, tzinfo=zone)
-    return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            envelope = json.loads(response.read())
+    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError) as exc:
+        raise StatusError(f"miniapp.rsi.status unavailable: {exc}") from exc
+    if not isinstance(envelope, dict) or envelope.get("ok") is False or envelope.get("error"):
+        error = envelope.get("error") if isinstance(envelope, dict) else envelope
+        raise StatusError(f"miniapp.rsi.status rejected: {error}")
+    return snapshot_from_payload(envelope.get("payload"))
 
 
-def assess(data_dir: str, now_ms: int) -> list[LayerStatus]:
-    """Read every ledger under data_dir and classify all four layers."""
-    genesis = read_jsonl(os.path.join(data_dir, "skill_genesis_log.jsonl"))
-    revisions = read_jsonl(os.path.join(data_dir, "meta_evolution_log.jsonl"))
-    judge = read_jsonl(os.path.join(data_dir, "judge_accuracy_log.jsonl"))
-    candidates = read_jsonl(os.path.join(data_dir, "self_correction_candidates.jsonl"))
-    # Mirror genesis.Tracker.AutoAdoptFrozen: the freeze file is JSONL of
-    # DriftVerdict rows; only the LAST record's frozen bool matters. Presence
-    # alone used to force FROZEN forever after an unfreeze write (frozen:false).
-    frozen = _auto_adopt_frozen(os.path.join(data_dir, "auto_adopt_freeze.json"))
-
-    dispatch_dir = os.path.join(data_dir, "coding_dispatch")
-    dispatch_total = dispatch_today = 0
-    outcomes: dict[str, int] = {}
-    terminal_events: list[tuple[int, str]] = []
-    marker_outcomes: dict[str, str] = {}
-    marker_blocks: dict[str, bool] = {}
-    dispatched_ids: set[str] = set()
-    today_start, today_end = _dispatch_day_bounds_ms(data_dir, now_ms)
-    phases_by_attempt = _dispatch_phases_by_attempt(candidates)
-    try:
-        for name in os.listdir(dispatch_dir):
-            if not name.endswith(".json"):
-                continue
-            path = os.path.join(dispatch_dir, name)
-            try:
-                fallback_at_ms = int(os.path.getmtime(path) * 1000)
-            except OSError:
-                fallback_at_ms = 0
-            marker: dict | None = None
-            try:
-                with open(path, encoding="utf-8", errors="replace") as handle:
-                    loaded = json.load(handle)
-                marker = loaded if isinstance(loaded, dict) else None
-            except (OSError, json.JSONDecodeError, TypeError, AttributeError):
-                pass
-
-            marker_id = str((marker or {}).get("id") or name[:-5])
-            if marker_id:
-                dispatched_ids.add(marker_id)
-            attempts = _dispatch_attempts(marker, fallback_at_ms)
-            dispatch_total += len(attempts)
-            for attempt in attempts:
-                raw_outcome = attempt.get("outcome")
-                raw_outcome = raw_outcome.strip() if isinstance(raw_outcome, str) else ""
-                if raw_outcome:
-                    attempt_id = attempt.get("attemptId")
-                    phase = phases_by_attempt.get(attempt_id, "") if isinstance(attempt_id, str) else ""
-                    outcome, terminal = _classified_dispatch_outcome(raw_outcome, phase)
-                    outcomes[outcome] = outcomes.get(outcome, 0) + 1
-                    if terminal:
-                        terminal_events.append((int(attempt.get("dispatchedAt") or 0), outcome))
-                dispatched_at = attempt.get("dispatchedAt")
-                if (
-                    isinstance(dispatched_at, (int, float))
-                    and today_start <= dispatched_at < today_end
-                ):
-                    dispatch_today += 1
-
-            # Redispatch blocking follows the current attempt only. Historical
-            # failures must not make a later landed/declined marker retryable.
-            if marker is not None:
-                current_outcome = marker.get("outcome")
-                current_outcome = (
-                    current_outcome.strip() if isinstance(current_outcome, str) else ""
-                )
-                if current_outcome and marker_id:
-                    marker_outcomes[marker_id] = current_outcome
-            # Re-dispatch block verdict (parity with Go dispatchMarkerBlocksAt):
-            # corrupt fails closed, outcome-less blocks within the 2h grace by
-            # mtime, failed/timeout are retryable, landed/attempted/declined block.
-            if marker_id:
-                marker_blocks[marker_id] = _marker_blocks_redispatch(
-                    marker, fallback_at_ms, now_ms
-                )
-    except OSError:
-        pass
-
-    terminal_events.sort(key=lambda item: item[0], reverse=True)
-    graduation_outcomes: dict[str, int] = {}
-    for _, outcome in terminal_events[:LADDER_DISPATCH_MIN_DECIDED]:
-        graduation_outcomes[outcome] = graduation_outcomes.get(outcome, 0) + 1
-
-    grad_rows = _graduation_rows(os.path.join(data_dir, "graduation_state.json"))
-    runtime_status: dict[str, Any] = {}
-    try:
-        with open(os.path.join(data_dir, "coding_dispatch_status.json"), encoding="utf-8") as handle:
-            loaded = json.load(handle)
-            if isinstance(loaded, dict):
-                runtime_status = loaded
-    except (OSError, json.JSONDecodeError, TypeError):
-        pass
-
-    return [
-        assess_l1(genesis, now_ms),
-        assess_l2(revisions, frozen, now_ms),
-        assess_l3(judge, genesis, now_ms),
-        assess_l4(
-            candidates, dispatch_total, dispatch_today, outcomes, dispatched_ids,
-            grad_rows, runtime_status, now_ms, marker_outcomes, marker_blocks,
-        ),
-        assess_ladder(genesis, revisions, candidates, graduation_outcomes, grad_rows=grad_rows),
-    ]
+def snapshot_from_payload(payload: Any) -> StatusSnapshot:
+    if not isinstance(payload, dict) or not isinstance(payload.get("layers"), list):
+        raise StatusError("miniapp.rsi.status returned no layers")
+    layers = tuple(_layer_from_payload(raw) for raw in payload["layers"])
+    turning = payload.get("turning")
+    loop_count = sum(layer.key != "GRAD" for layer in layers)
+    if isinstance(turning, bool) or not isinstance(turning, int) or not 0 <= turning <= loop_count:
+        raise StatusError(f"miniapp.rsi.status returned invalid turning count: {turning!r}")
+    health = payload.get("health")
+    if not isinstance(health, dict):
+        raise StatusError("miniapp.rsi.status returned no health snapshot")
+    return StatusSnapshot(layers=layers, turning=turning, health=health)
 
 
-# --- Graduation-ladder dashboard (mirrors genesis/rsi_ladder.go) ---
-# Evidence thresholds for the machine-checkable ladder rows. The engine NEVER
-# flips a lock — READY means "evidence met, operator decision available".
-LADDER_DISPATCH_MIN_DECIDED = 5
-LADDER_DISPATCH_MIN_LAND_RATE = 0.5
-LADDER_CALIBRATION_BENCH_TARGET = 10
-# P5-2 window opened 2026-07-12 (rsi-calibration.conf) — earlier bench samples
-# belong to the default-cadence era.
-# Must equal genesis.ladderCalibrationOpenedMs (rsi_ladder.go). Pinned by
-# test_rsi_status.test_calibration_window_constant_matches_go (RSI eval H4:
-# the two mirrors disagreed by one day — Go 07-12, py 07-13 — so bench rows
-# from Jul 12 counted toward READY in Go but not Python).
-LADDER_CALIBRATION_OPENED_MS = 1_783_814_400_000  # 2026-07-12T00:00:00Z
-
-LADDER_READY = "준비됨"
-LADDER_GROWING = "축적 중"
-LADDER_MANUAL = "수동 판단"
-LADDER_DONE = "완료"
-
-
-def assess_ladder(genesis_events: list[dict], revisions: list[dict],
-                  candidate_rows: list[dict], outcomes: dict[str, int],
-                  grad_rows: dict | None = None) -> LayerStatus:
-    """Continuously score every machine-checkable graduation-ladder row."""
-    rows: list[tuple[str, str, str]] = []  # (title, state, detail)
-
-    grad = grad_rows or {}
-    ep = _eprocess_readiness(genesis_events)
-    ep_unlocked = (grad.get("eprocess-cutover") or {}).get("unlocked") \
-        and os.environ.get("DENEB_EPROCESS_OWNS_ROLLBACK") != "0"
-    if os.environ.get("DENEB_EPROCESS_OWNS_ROLLBACK") == "1" or ep_unlocked:
-        rows.append(("e-process 컷오버", LADDER_DONE, f"발화 소유 중 (라벨 n={ep['eprocess_labels']})"))
-    elif ep["eprocess_cutover_ready"]:
-        rows.append(("e-process 컷오버", LADDER_READY,
-                     f"n={ep['eprocess_labels']}·합치 {ep['eprocess_agreement']:.0%} — 플립 결정 가능"))
-    else:
-        rows.append(("e-process 컷오버", LADDER_GROWING, f"라벨 {ep['eprocess_labels']}/20"))
-
-    cap_row = grad.get("dispatch-cap") or {}
-    decided = sum(v for k, v in outcomes.items() if k in TERMINAL_DISPATCH_OUTCOMES)
-    landed = outcomes.get("landed", 0)
-    rolled_back = outcomes.get("rolled_back", 0)
-    if cap_row.get("unlocked"):
-        rows.append(("배차 캡 상향", LADDER_DONE, f"실행됨 — 일일 캡 {cap_row.get('value') or '?'} (자동 졸업)"))
-    elif decided == 0:
-        rows.append(("배차 캡 상향", LADDER_GROWING, "판정된 배차 0건"))
-    else:
-        rate = landed / decided
-        detail = f"판정 {decided}건·랜딩률 {rate:.0%}"
-        if (decided >= LADDER_DISPATCH_MIN_DECIDED
-                and rate >= LADDER_DISPATCH_MIN_LAND_RATE and rolled_back == 0):
-            rows.append(("배차 캡 상향", LADDER_READY, detail + " · 감시 롤백 0건"))
-        else:
-            rows.append(("배차 캡 상향", LADDER_GROWING, detail))
-
-    cand = _merge_candidates(candidate_rows)
-    staged_sources: dict[str, int] = {}
-    for rec in cand.values():
-        st = rec.get("status") or "proposed"
-        if rec.get("scope") != "code" or st not in ("proposed", "accepted"):
-            continue
-        src = rec.get("source") or ""
-        if _source_dispatchable(src, _dispatchable_sources(grad)):
-            continue
-        prefix = src.split(":", 1)[0] if src else "(no source)"
-        staged_sources[prefix] = staged_sources.get(prefix, 0) + 1
-    if staged_sources:
-        parts = "·".join(f"{k} {v}건" for k, v in sorted(staged_sources.items()))
-        rows.append(("스테이징 소스 졸업", LADDER_READY, "첫 배치 리뷰 가능: " + parts))
-    else:
-        rows.append(("스테이징 소스 졸업", LADDER_GROWING, "스테이징 후보 0건 (마이너 대기)"))
-
-    benched: dict[str, int] = {}
-    for r in revisions:
-        if (r.get("createdAt") or 0) < LADDER_CALIBRATION_OPENED_MS or r.get("action"):
-            continue
-        if r.get("benchIncumbent") or r.get("benchShadow") or r.get("benchGenesis"):
-            epoch = r.get("epoch") or "?"
-            benched[epoch] = benched.get(epoch, 0) + 1
-    cal_detail = (f"epoch별 벤치 n: producer {benched.get('producer', 0)}"
-                  f"·evaluator {benched.get('evaluator', 0)}·genesis {benched.get('genesis', 0)}"
-                  f" (목표 각 {LADDER_CALIBRATION_BENCH_TARGET})")
-    if all(benched.get(e, 0) >= LADDER_CALIBRATION_BENCH_TARGET
-           for e in ("producer", "evaluator", "genesis")):
-        rows.append(("캘리브레이션 창 종료", LADDER_READY, cal_detail + " — 드롭인 제거 결정 가능"))
-    else:
-        rows.append(("캘리브레이션 창 종료", LADDER_GROWING, cal_detail))
-
-    rows.append(("소스 자동적용 티어", LADDER_MANUAL, "배포 롤백 1회 완주가 증거 — 운영자 판단 행"))
-
-    metrics = {title: state for title, state, _ in rows}
-    ready = [f"{t}({d})" for t, s, d in rows if s == LADDER_READY]
-    if ready:
-        return LayerStatus("GRAD", "graduation ladder", LIVE, metrics,
-                           "증거 충족 — 운영자 결정 가능: " + " · ".join(ready))
-    growing = " · ".join(f"{t}: {d}" for t, s, d in rows if s == LADDER_GROWING)
-    return LayerStatus("GRAD", "graduation ladder", DATA_GATED, metrics,
-                       "전 행 증거 축적 중 — " + growing)
+def _layer_from_payload(raw: Any) -> LayerStatus:
+    if not isinstance(raw, dict):
+        raise StatusError("miniapp.rsi.status returned a malformed layer")
+    key = _required_text(raw, "key")
+    title = _required_text(raw, "title")
+    state = _required_text(raw, "state")
+    diagnosis = _required_text(raw, "diagnosis")
+    if state not in VALID_STATES:
+        raise StatusError(f"miniapp.rsi.status returned unknown state {state!r} for {key}")
+    metrics: dict[str, str] = {}
+    for metric in raw.get("metrics") or []:
+        if not isinstance(metric, dict):
+            raise StatusError(f"miniapp.rsi.status returned a malformed metric for {key}")
+        label = _required_text(metric, "label")
+        if label in metrics:
+            raise StatusError(f"miniapp.rsi.status returned duplicate metric {label!r} for {key}")
+        metrics[label] = str(metric.get("value") or "")
+    return LayerStatus(
+        key=key,
+        title=title,
+        state=state,
+        diagnosis=diagnosis,
+        detail=str(raw.get("detail") or ""),
+        metrics=metrics,
+    )
 
 
-# A layer is "turning" for the headline count when it is not merely idle/
-# starved. The graduation-ladder dashboard (GRAD) is an evidence surface, not
-# a loop — it never counts toward the headline numerator or denominator.
-def turning(layers: list[LayerStatus]) -> int:
-    return sum(1 for layer in layers if layer.key != "GRAD" and layer.state in (LIVE, FROZEN))
+def _required_text(raw: dict[str, Any], field: str) -> str:
+    value = raw.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise StatusError(f"miniapp.rsi.status returned invalid {field}")
+    return value.strip()
 
 
-_STATE_GLYPH = {LIVE: "●", DATA_GATED: "◐", STARVED: "○", FROZEN: "❄", IDLE: "·"}
+def snapshot_json(snapshot: StatusSnapshot) -> dict[str, Any]:
+    return {
+        "turning": snapshot.turning,
+        "health": snapshot.health,
+        "layers": [
+            {
+                "key": layer.key,
+                "title": layer.title,
+                "state": layer.state,
+                "diagnosis": layer.diagnosis,
+                "detail": layer.detail,
+                "metrics": layer.metrics,
+            }
+            for layer in snapshot.layers
+        ],
+    }
 
 
-def print_summary(layers: list[LayerStatus], stream: TextIO) -> None:
-    loop_count = sum(1 for layer in layers if layer.key != "GRAD")
-    print(f"\nRSI loop status  ({turning(layers)}/{loop_count} turning)", file=stream)
+def print_summary(snapshot: StatusSnapshot, stream: TextIO) -> None:
+    loop_count = sum(layer.key != "GRAD" for layer in snapshot.layers)
+    print(f"\nRSI loop status  ({snapshot.turning}/{loop_count} turning)", file=stream)
     print("─" * 72, file=stream)
-    for layer in layers:
-        glyph = _STATE_GLYPH.get(layer.state, "?")
-        print(f"  {glyph} {layer.key}  {layer.title:<22} {layer.state}", file=stream)
+    for layer in snapshot.layers:
+        print(f"  {STATE_GLYPH[layer.state]} {layer.key}  {layer.title:<22} {layer.state}", file=stream)
         print(f"      · {layer.diagnosis}", file=stream)
     print("─" * 72, file=stream)
 
 
-def render_markdown(layers: list[LayerStatus], now_ms: int, data_dir: str) -> str:
-    """Render a point-in-time status document from canonical ledgers.
-
-    This is the only supported "current RSI status" document; architecture
-    docs intentionally contain no live counters that can silently go stale.
-    """
+def render_markdown(snapshot: StatusSnapshot, now_ms: int, gateway_url: str) -> str:
     generated = datetime.datetime.fromtimestamp(
-        now_ms / 1000, tz=datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+        now_ms / 1000, tz=datetime.timezone.utc
+    ).isoformat().replace("+00:00", "Z")
+    loop_count = sum(layer.key != "GRAD" for layer in snapshot.layers)
     lines = [
         "# Deneb RSI live status",
         "",
-        f"> Generated {generated} from `{os.path.abspath(data_dir)}`. Do not edit by hand.",
+        f"> Generated {generated} from `{gateway_url.rstrip('/')}` via `miniapp.rsi.status`. Do not edit by hand.",
         "",
-        # Denominator excludes GRAD (the graduation dashboard is an evidence
-        # surface, not a loop) — matches print_summary's loop_count. Counting
-        # it here contradicted the "never counts toward the headline" contract
-        # in the one document the live-status contract calls authoritative
-        # (RSI eval H4).
-        f"**Turning: {turning(layers)}/{sum(1 for layer in layers if layer.key != 'GRAD')}**",
+        f"**Turning: {snapshot.turning}/{loop_count}**",
         "",
         "| Layer | State | Diagnosis |",
         "|---|---|---|",
     ]
-    for layer in layers:
+    for layer in snapshot.layers:
         diagnosis = layer.diagnosis.replace("|", "\\|").replace("\n", " ")
         lines.append(f"| {layer.key} — {layer.title} | {layer.state} | {diagnosis} |")
     lines.extend(["", "## Metrics", ""])
-    for layer in layers:
+    for layer in snapshot.layers:
         lines.extend([
             f"### {layer.key}",
             "",
@@ -886,57 +186,69 @@ def render_markdown(layers: list[LayerStatus], now_ms: int, data_dir: str) -> st
             "```",
             "",
         ])
+    lines.extend([
+        "### Health",
+        "",
+        "```json",
+        json.dumps(snapshot.health, ensure_ascii=False, indent=2, sort_keys=True),
+        "```",
+        "",
+    ])
     return "\n".join(lines).rstrip() + "\n"
 
 
 def _write_atomic(path: str, content: str) -> None:
-    path = os.path.abspath(os.path.expanduser(path))
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as handle:
-        handle.write(content)
-    os.replace(tmp, path)
+    target = Path(path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(target.name + ".tmp")
+    temp.write_text(content, encoding="utf-8")
+    temp.replace(target)
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Deneb RSI loop-status surface.")
+    parser = argparse.ArgumentParser(description="Render the Go-owned Deneb RSI status snapshot.")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--json", action="store_true")
-    mode.add_argument("--markdown", action="store_true",
-                      help="render the live status document from ledgers")
-    parser.add_argument("--write-markdown", metavar="PATH",
-                        help="atomically refresh a generated status document")
-    parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
-    parser.add_argument("--now-ms", type=int, default=None, help="override clock (tests)")
+    mode.add_argument("--markdown", action="store_true")
+    parser.add_argument("--write-markdown", metavar="PATH")
+    parser.add_argument("--url", default=os.environ.get("DENEB_GATEWAY_URL", DEFAULT_GATEWAY_URL))
+    parser.add_argument("--state-dir", default=os.environ.get("DENEB_STATE_DIR", DEFAULT_STATE_DIR))
+    parser.add_argument("--token", default="")
+    parser.add_argument("--timeout", type=float, default=10)
+    parser.add_argument("--now-ms", type=int, default=None, help=argparse.SUPPRESS)
     return parser
 
 
-def main(argv: list[str] | None = None, *, stdout: TextIO | None = None, stderr: TextIO | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    stdout: TextIO | None = None,
+    stderr: TextIO | None = None,
+) -> int:
     args = _parser().parse_args(argv)
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
-    now_ms = args.now_ms if args.now_ms is not None else int(time.time() * 1000)
-    layers = assess(args.data_dir, now_ms)
+    try:
+        snapshot = fetch_status(args.url, args.token.strip() or load_token(args.state_dir), args.timeout)
+    except StatusError as exc:
+        print(f"RSI status unavailable: {exc}", file=err)
+        return 2
 
-    markdown = render_markdown(layers, now_ms, args.data_dir)
+    now_ms = args.now_ms if args.now_ms is not None else int(time.time() * 1000)
+    markdown = render_markdown(snapshot, now_ms, args.url)
     if args.write_markdown:
         _write_atomic(args.write_markdown, markdown)
-
     if args.markdown:
         print(markdown, end="", file=out)
         return 0
-
     if args.json:
-        print(json.dumps(
-            {"turning": turning(layers), "layers": [
-                {"key": layer.key, "title": layer.title, "state": layer.state,
-                 "metrics": layer.metrics, "diagnosis": layer.diagnosis}
-                for layer in layers]},
-            ensure_ascii=False, indent=1), file=out)
-    else:
-        print_summary(layers, err)
+        print(json.dumps(snapshot_json(snapshot), ensure_ascii=False, indent=2), file=out)
+        return 0
 
-    print("DENEB_RSI_STATUS " + " ".join(f"{layer.key}={layer.state}" for layer in layers), file=out)
+    print_summary(snapshot, err)
+    print("DENEB_RSI_STATUS " + " ".join(
+        f"{layer.key}={layer.state}" for layer in snapshot.layers
+    ), file=out)
     return 0
 
 
