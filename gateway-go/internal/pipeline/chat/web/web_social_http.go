@@ -12,39 +12,63 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // socialGetJSON performs a bounded GET with a caller-supplied User-Agent and
 // returns the raw body plus HTTP status. Errors are transport-level only;
 // non-2xx statuses are returned to the caller to translate into an envelope.
-func socialGetJSON(ctx context.Context, rawURL, userAgent string, maxBytes int64) ([]byte, int, error) {
+// truncated reports that the body hit maxBytes and was cut, so callers can
+// surface a clear size-limit error instead of a misleading parse failure.
+func socialGetJSON(ctx context.Context, rawURL, userAgent string, maxBytes int64) (body []byte, status int, truncated bool, err error) {
 	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := SharedClient(15 * time.Second).Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+	// Read one byte past the cap so an oversized payload is detectable rather
+	// than silently truncated into a broken JSON document.
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, false, err
 	}
-	return body, resp.StatusCode, nil
+	if int64(len(raw)) > maxBytes {
+		return raw[:maxBytes], resp.StatusCode, true, nil
+	}
+	return raw, resp.StatusCode, false, nil
 }
 
-// collapseWS flattens whitespace runs into single spaces and trims, so
-// multi-line post/comment bodies render as compact single-line entries. Long
-// bodies are truncated to limit runes with an ellipsis marker.
+// neutralizeAngleBrackets rewrites '<'/'>' in user-generated text so it cannot
+// collide with the web tool's envelope markers (<content>/<error>), which
+// assessFetchResult treats as control tags — an un-escaped "<error>" inside a
+// post or tweet would otherwise flag the whole result as a fetch failure. HTML
+// entities keep the text readable to the model.
+func neutralizeAngleBrackets(s string) string {
+	if !strings.ContainsAny(s, "<>") {
+		return s
+	}
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
+// collapseWS prepares user-generated text for the result envelope: it flattens
+// whitespace runs into single spaces and trims (so multi-line post/comment
+// bodies render as compact single-line entries), truncates to limit runes with
+// an ellipsis marker, and finally neutralizes angle brackets so the text cannot
+// collide with the envelope's <content>/<error> tags.
 func collapseWS(s string, limit int) string {
 	b := make([]rune, 0, len(s))
 	prevSpace := false
@@ -68,7 +92,7 @@ func collapseWS(s string, limit int) string {
 	}
 	b = b[start:end]
 	if limit > 0 && len(b) > limit {
-		return string(b[:limit]) + "…"
+		return neutralizeAngleBrackets(string(b[:limit]) + "…")
 	}
-	return string(b)
+	return neutralizeAngleBrackets(string(b))
 }

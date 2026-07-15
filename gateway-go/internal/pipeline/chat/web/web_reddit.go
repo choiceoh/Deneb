@@ -37,21 +37,36 @@ const (
 )
 
 // isRedditURL reports whether a URL should be read via Reddit's JSON API.
+// Covers reddit.com (and subdomains) plus the redd.it post shortener; the
+// i.redd.it / v.redd.it media CDNs are intentionally excluded (they are images
+// and video, not JSON-readable posts).
 func isRedditURL(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return false
 	}
 	h := strings.ToLower(u.Hostname())
-	return h == "reddit.com" || strings.HasSuffix(h, ".reddit.com")
+	if h == "reddit.com" || strings.HasSuffix(h, ".reddit.com") {
+		return true
+	}
+	return h == "redd.it"
 }
 
 // redditJSONURL rewrites a Reddit page URL to its .json variant, preserving the
-// query string (so `/search?q=...` and listing sorts carry through).
+// query string (so `/search?q=...` and listing sorts carry through). redd.it
+// short links (redd.it/<id>) are expanded to the by-id comments endpoint, since
+// appending .json to the shortener path does not resolve.
 func redditJSONURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", err
+	}
+	if strings.EqualFold(u.Hostname(), "redd.it") {
+		id := strings.Trim(u.Path, "/")
+		if id == "" || strings.Contains(id, "/") {
+			return "", fmt.Errorf("unsupported redd.it URL: %s", raw)
+		}
+		return "https://www.reddit.com/comments/" + id + ".json?raw_json=1", nil
 	}
 	p := strings.TrimRight(u.Path, "/")
 	if p == "" {
@@ -61,8 +76,9 @@ func redditJSONURL(raw string) (string, error) {
 		p += ".json"
 	}
 	u.Path = p
-	// Prefer the higher-fidelity `raw_json=1` (unescaped entities) and a modest
-	// default comment cap.
+	// Prefer the higher-fidelity `raw_json=1` (unescaped entities). Comment
+	// volume and reply depth are bounded at render time (renderRedditComments),
+	// not via a query-string cap.
 	q := u.Query()
 	q.Set("raw_json", "1")
 	u.RawQuery = q.Encode()
@@ -113,9 +129,16 @@ func fetchReddit(ctx context.Context, rawURL string, maxChars int) (string, erro
 		}), nil
 	}
 
-	body, status, err := socialGetJSON(ctx, apiURL, redditUserAgent, redditMaxBytes)
+	body, status, truncated, err := socialGetJSON(ctx, apiURL, redditUserAgent, redditMaxBytes)
 	if err != nil {
 		return formatFetchError(classifyFetchError(err, rawURL)), nil
+	}
+	if truncated {
+		return formatFetchError(webFetchErr{
+			Code: "content_too_large", Message: "Reddit response exceeded the read limit",
+			URL: rawURL, Retryable: false,
+			Hint: "Fetch a specific comment permalink or a narrower listing (e.g. a single thread instead of a whole subreddit).",
+		}), nil
 	}
 	if status != 200 {
 		hint := hintForHTTPStatus(status)
@@ -194,7 +217,7 @@ func writeRedditPostHeader(b *strings.Builder, p *redditPost) {
 	fmt.Fprintf(b, "# %s\n", collapseWS(p.Title, 300))
 	fmt.Fprintf(b, "r/%s · u/%s · ▲%d · %d comments", p.Subreddit, p.Author, p.Score, p.NumComments)
 	if p.LinkFlair != "" {
-		fmt.Fprintf(b, " · [%s]", p.LinkFlair)
+		fmt.Fprintf(b, " · [%s]", collapseWS(p.LinkFlair, 100))
 	}
 	if p.Over18 {
 		b.WriteString(" · NSFW")

@@ -103,24 +103,85 @@ func TestIsXStatusURL(t *testing.T) {
 	}
 }
 
-func TestSyndicationTokenDeterministic(t *testing.T) {
-	// Token must be stable and contain no '0' or '.' characters (per react-tweet).
-	tok := syndicationToken("1349129669258448897")
-	if tok == "" {
-		t.Fatal("empty token")
+func TestSyndicationTokenMatchesJS(t *testing.T) {
+	// Oracle from Node: ((Number(id)/1e15)*Math.PI).toString(36).replace(/(0+|\.)/g,'').
+	// The base-36 rendering must match JS shortest-round-trip exactly or the
+	// syndication endpoint rejects the token.
+	if got := syndicationToken("1349129669258448897"); got != "39qeyy97t9x" {
+		t.Errorf("syndicationToken = %q, want %q (JS oracle)", got, "39qeyy97t9x")
 	}
-	if strings.ContainsAny(tok, "0.") {
-		t.Errorf("token contains stripped chars: %q", tok)
+	if strings.ContainsAny(syndicationToken("1349129669258448897"), "0.") {
+		t.Error("token must not contain '0' or '.'")
 	}
-	if got := syndicationToken("1349129669258448897"); got != tok {
-		t.Errorf("token not deterministic: %q vs %q", tok, got)
-	}
-	// Different IDs should generally yield different tokens.
-	if syndicationToken("20") == tok {
-		t.Errorf("distinct IDs produced identical tokens")
+	if syndicationToken("20") == syndicationToken("1349129669258448897") {
+		t.Error("distinct IDs produced identical tokens")
 	}
 	if syndicationToken("notanumber") != "" {
-		t.Errorf("non-numeric ID should yield empty token")
+		t.Error("non-numeric ID should yield empty token")
+	}
+}
+
+func TestReddItShortLink(t *testing.T) {
+	if !isRedditURL("https://redd.it/abc123") {
+		t.Error("redd.it short link should be recognized")
+	}
+	if isRedditURL("https://i.redd.it/photo.jpg") {
+		t.Error("i.redd.it media CDN must NOT be treated as a post")
+	}
+	got, err := redditJSONURL("https://redd.it/abc123")
+	if err != nil {
+		t.Fatalf("redditJSONURL(redd.it) error: %v", err)
+	}
+	if got != "https://www.reddit.com/comments/abc123.json?raw_json=1" {
+		t.Errorf("redd.it rewrite = %q", got)
+	}
+}
+
+func TestSupportedSocialFetchURLExemption(t *testing.T) {
+	// Supported social URLs must be exempt from the fetch denylist so
+	// search+fetch can reach the native handlers.
+	for _, u := range []string{
+		"https://www.reddit.com/r/golang/comments/1/x/",
+		"https://x.com/jack/status/20",
+		"https://redd.it/abc123",
+	} {
+		if !isSupportedSocialFetchURL(u) {
+			t.Errorf("%q should be a supported social fetch URL", u)
+		}
+	}
+	// An X profile (non-status) is NOT supported and stays denied.
+	if isSupportedSocialFetchURL("https://x.com/jack") {
+		t.Error("X profile URL should not be exempted")
+	}
+}
+
+func TestEnvelopeTagNeutralization(t *testing.T) {
+	// A Reddit post whose title/body contains "<error>" must not be misclassified
+	// as a fetch-error envelope (assessFetchResult flags any "<error>" substring).
+	body := []byte(`[
+      {"kind":"Listing","data":{"children":[
+        {"kind":"t3","data":{"subreddit":"go","title":"parsing <error> tags","author":"a","selftext":"see <error>foo</error>","score":1,"num_comments":0,"is_self":true}}
+      ]}},
+      {"kind":"Listing","data":{"children":[]}}
+    ]`)
+	out := renderReddit(body, "https://www.reddit.com/r/go/comments/1/x", 20000)
+	if strings.Contains(out, "<error>") {
+		t.Errorf("rendered Reddit content leaked a literal <error> tag:\n%s", out)
+	}
+	if !isUsableFetchContent(out) {
+		t.Errorf("neutralized Reddit content wrongly marked unusable:\n%s", out)
+	}
+
+	// Same for a tweet body containing "<error>".
+	var b strings.Builder
+	b.WriteString("<content>\nSource: https://x.com/a/status/1 (x/twitter)\n\n")
+	writeXTweet(&b, &xTweet{Text: "try <error> in your code", User: xUser{Name: "dev", ScreenName: "dev"}}, "")
+	b.WriteString("\n</content>")
+	if strings.Contains(b.String(), "<error>") {
+		t.Errorf("rendered tweet leaked a literal <error> tag:\n%s", b.String())
+	}
+	if !isUsableFetchContent(b.String()) {
+		t.Errorf("neutralized tweet content wrongly marked unusable:\n%s", b.String())
 	}
 }
 

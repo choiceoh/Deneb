@@ -67,14 +67,17 @@ func isXStatusURL(raw string) (string, bool) {
 //
 //	((Number(id) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '')
 //
-// i.e. base-36 of the float with every '0' and '.' character removed.
+// i.e. base-36 of the float with every '0' and '.' character removed. The
+// base-36 rendering must match JS Number.prototype.toString(36) EXACTLY
+// (shortest round-trip), not an approximation — the endpoint rejects a token
+// with the wrong trailing digits — so doubleToBase36 ports V8's algorithm.
 func syndicationToken(id string) string {
 	n, err := strconv.ParseFloat(id, 64)
 	if err != nil {
 		return ""
 	}
 	v := (n / 1e15) * math.Pi
-	base36 := floatToBase36(v, 24)
+	base36 := doubleToBase36(v)
 	var b strings.Builder
 	for _, c := range base36 {
 		if c != '0' && c != '.' {
@@ -84,41 +87,81 @@ func syndicationToken(id string) string {
 	return b.String()
 }
 
-// floatToBase36 renders a non-negative float in base 36 with up to fracDigits
-// fractional digits, matching JS Number.prototype.toString(36) closely enough
-// that the surviving (non-zero, non-dot) characters line up.
-func floatToBase36(v float64, fracDigits int) string {
-	const digits = "0123456789abcdefghijklmnopqrstuvwxyz"
-	if v < 0 {
-		v = -v
-	}
-	intPart := math.Floor(v)
-	frac := v - intPart
+// doubleToBase36 renders a finite non-negative float in base 36 exactly as JS
+// Number.prototype.toString(36) does. It is a direct port of V8's
+// DoubleToRadixCString (conversions.cc): fractional digits are emitted until the
+// running half-ULP `delta` guarantees a shortest round-trip, with round-to-even
+// and carry propagation back into the integer part. Reproducing this precisely
+// is what makes the X syndication token match — a fixed-digit approximation
+// produces spurious trailing digits and the endpoint rejects it.
+func doubleToBase36(value float64) string {
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+	const radix = 36.0
 
-	var ip string
-	i := int64(intPart)
-	if i == 0 {
-		ip = "0"
+	if value < 0 {
+		value = -value
+	}
+	integer := math.Floor(value)
+	fraction := value - integer
+
+	// Fractional part. buf[0] is '.'; digits follow.
+	buf := make([]byte, 0, 32)
+	delta := 0.5 * (math.Nextafter(value, math.Inf(1)) - value)
+	if delta < math.SmallestNonzeroFloat64 {
+		delta = math.SmallestNonzeroFloat64
+	}
+	if fraction >= delta {
+		buf = append(buf, '.')
+		for {
+			fraction *= radix
+			delta *= radix
+			digit := int(fraction)
+			buf = append(buf, chars[digit])
+			fraction -= float64(digit)
+			if fraction > 0.5 || (fraction == 0.5 && digit&1 == 1) {
+				if fraction+delta > 1 {
+					// Round up: increment the last digit, propagating carry by
+					// dropping trailing radix-1 digits, up into the integer part.
+					for {
+						if len(buf) == 1 { // only '.' left → carry into integer
+							integer++
+							break
+						}
+						last := buf[len(buf)-1]
+						d := int(last - '0')
+						if last > '9' {
+							d = int(last-'a') + 10
+						}
+						if d+1 < int(radix) {
+							buf[len(buf)-1] = chars[d+1]
+							break
+						}
+						buf = buf[:len(buf)-1] // drop radix-1 digit, keep carrying
+					}
+					break
+				}
+			}
+			if fraction < delta {
+				break
+			}
+		}
+	}
+
+	// Integer part (emitted most-significant first).
+	var ip []byte
+	if integer == 0 {
+		ip = append(ip, '0')
 	} else {
-		for i > 0 {
-			ip = string(digits[i%36]) + ip
-			i /= 36
+		for integer > 0 {
+			r := int(math.Mod(integer, radix))
+			ip = append(ip, chars[r])
+			integer = math.Floor(integer / radix)
+		}
+		for i, j := 0, len(ip)-1; i < j; i, j = i+1, j-1 {
+			ip[i], ip[j] = ip[j], ip[i]
 		}
 	}
-
-	var fp strings.Builder
-	for k := 0; k < fracDigits && frac > 0; k++ {
-		frac *= 36
-		d := int(math.Floor(frac))
-		if d < 0 {
-			d = 0
-		} else if d > 35 {
-			d = 35
-		}
-		fp.WriteByte(digits[d])
-		frac -= float64(d)
-	}
-	return ip + "." + fp.String()
+	return string(ip) + string(buf)
 }
 
 // X syndication response types (only the fields we render).
@@ -161,9 +204,12 @@ func fetchXTweet(ctx context.Context, rawURL, id string, maxChars int) (string, 
 	q.Set("token", tok)
 	apiURL := "https://cdn.syndication.twimg.com/tweet-result?" + q.Encode()
 
-	body, status, err := socialGetJSON(ctx, apiURL, xUserAgent, xMaxBytes)
+	body, status, truncated, err := socialGetJSON(ctx, apiURL, xUserAgent, xMaxBytes)
 	if err != nil {
 		return formatFetchError(classifyFetchError(err, rawURL)), nil
+	}
+	if truncated {
+		return xUnavailable(rawURL, "syndication response exceeded the read limit"), nil
 	}
 	if status != 200 {
 		return xUnavailable(rawURL, fmt.Sprintf("syndication returned HTTP %d", status)), nil
@@ -195,7 +241,7 @@ func fetchXTweet(ctx context.Context, rawURL, id string, maxChars int) (string, 
 
 func writeXTweet(b *strings.Builder, tw *xTweet, prefix string) {
 	handle := tw.User.ScreenName
-	name := tw.User.Name
+	name := neutralizeAngleBrackets(tw.User.Name)
 	switch {
 	case name != "" && handle != "":
 		fmt.Fprintf(b, "%s%s (@%s)", prefix, name, handle)
@@ -208,7 +254,9 @@ func writeXTweet(b *strings.Builder, tw *xTweet, prefix string) {
 		fmt.Fprintf(b, " · %s", tw.CreatedAt)
 	}
 	b.WriteString("\n")
-	for _, line := range strings.Split(tw.Text, "\n") {
+	// Neutralize angle brackets so a tweet body containing "<error>" (common in
+	// code snippets) cannot collide with the web tool's envelope tags.
+	for _, line := range strings.Split(neutralizeAngleBrackets(tw.Text), "\n") {
 		fmt.Fprintf(b, "%s%s\n", prefix, line)
 	}
 	if len(tw.Photos) > 0 {
