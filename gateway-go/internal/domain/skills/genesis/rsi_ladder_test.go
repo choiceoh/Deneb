@@ -11,6 +11,9 @@ import (
 // ever flipping a lock: thresholds met read 준비됨, accumulating evidence
 // reads 축적 중, and the aggregate card goes LIVE only when a row is READY.
 func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
+	// ladderDispatchCapRow now reads deployWatchRollbacks() (HOME-based) — isolate
+	// HOME so the row's READY state is hermetic (absent ledger → 0 rollbacks).
+	t.Setenv("HOME", t.TempDir())
 	tr := newTestTracker(t)
 
 	// Empty evidence: every machine row accumulates, aggregate DATA-GATED.
@@ -64,6 +67,49 @@ func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 	l = tr.rsiAssessLadder()
 	if l.State != rsiStateLive || !strings.Contains(l.Diagnosis, "운영자 결정 가능") {
 		t.Fatalf("ladder with READY rows = %s: %s", l.State, l.Diagnosis)
+	}
+}
+
+// The dispatch-cap READY card must mirror the AUTO gate's zero-rollback
+// requirement and report the real rollback count instead of a hardcoded
+// "롤백 0건" — otherwise the operator sees a false-green raise-the-cap card
+// while a deploy rollback actually blocks the raise.
+func TestLadderDispatchCapRowHoldsWhenDeployRollbackLedgered(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	tr := newTestTracker(t)
+
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 5 decided, 60% land rate — meets the land-rate floor.
+	for i, outcome := range []string{"landed", "landed", "landed", "declined", "declined"} {
+		name := "m" + string(rune('0'+i))
+		body := `{"id":"` + name + `","outcome":"` + outcome + `"}`
+		if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if row := tr.ladderDispatchCapRow(); row.State != ladderStateReady {
+		t.Fatalf("with 0 rollbacks want READY, got %+v", row)
+	}
+
+	// Ledger one deploy-watch rollback → the raise must hold (Growing) and the
+	// card must name the real count, not claim 롤백 0건.
+	ledger := filepath.Join(home, ".deneb", "data", "deploy_watch_log.jsonl")
+	if err := os.MkdirAll(filepath.Dir(ledger), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ledger, []byte(`{"event":"rollback"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	row := tr.ladderDispatchCapRow()
+	if row.State != ladderStateGrowing {
+		t.Fatalf("with a ledgered rollback want Growing, got %+v", row)
+	}
+	if strings.Contains(row.Detail, "롤백 0건") || !strings.Contains(row.Detail, "롤백 1건") {
+		t.Errorf("card must show the real rollback count, got %q", row.Detail)
 	}
 }
 

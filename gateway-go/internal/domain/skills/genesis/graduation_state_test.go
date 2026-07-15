@@ -67,6 +67,45 @@ func TestGraduationStateUnlockIsIdempotentAndWidensDispatchPredicate(t *testing.
 	}
 }
 
+// A re-lock is a standing operator veto: because the evidence gates are
+// cumulative, the next evidence-met auto ladder-watch would otherwise re-unlock
+// and re-fire the graduation card, silently reverting the veto. The AUTO path
+// must honor it; only an explicit operator (non-auto) unlock overrides.
+func TestRelockVetoSurvivesEvidenceMetAutoRegraduation(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr := newTestTracker(t)
+
+	if fresh, err := tr.unlockGraduation(graduationDispatchCap, "판정 6·랜딩 60%", 4, true); err != nil || !fresh {
+		t.Fatalf("first auto-unlock fresh=%v err=%v, want true/nil", fresh, err)
+	}
+	if err := tr.RelockGraduation(graduationDispatchCap, "operator veto"); err != nil {
+		t.Fatal(err)
+	}
+	if graduationUnlocked(graduationDispatchCap) {
+		t.Fatal("row must be locked after the operator veto")
+	}
+
+	// Same (still-met) evidence on the next auto cycle must NOT re-unlock.
+	fresh, err := tr.unlockGraduation(graduationDispatchCap, "판정 6·랜딩 60% (still)", 4, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh {
+		t.Error("auto re-unlock returned fresh=true — the veto was reverted")
+	}
+	if graduationUnlocked(graduationDispatchCap) {
+		t.Error("operator re-lock veto was silently reverted by the auto path")
+	}
+
+	// An explicit operator (non-auto) unlock CAN override the veto.
+	if fresh, err := tr.unlockGraduation(graduationDispatchCap, "operator manual", 4, false); err != nil || !fresh {
+		t.Fatalf("operator manual unlock fresh=%v err=%v, want true/nil", fresh, err)
+	}
+	if !graduationUnlocked(graduationDispatchCap) {
+		t.Error("operator manual unlock should override the veto")
+	}
+}
+
 // eProcessOwnsRollback: graduation state flips ownership; the operator env
 // knob overrides in BOTH directions.
 func TestEProcessOwnsRollbackFlipsOnGraduationAndEnvOverride(t *testing.T) {

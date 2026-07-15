@@ -119,7 +119,16 @@ func saveGraduationState(st graduationState) error {
 // is a no-op so watch re-runs never double-ledger.
 func (t *Tracker) unlockGraduation(key, evidence string, value int, auto bool) (bool, error) {
 	st := loadGraduationState()
-	if st.Rows[key].Unlocked {
+	row := st.Rows[key]
+	if row.Unlocked {
+		return false, nil
+	}
+	// A prior re-lock is a standing operator veto (재잠금 — post-hoc control). The
+	// evidence gates are cumulative/monotonic, so without this the very next
+	// evidence-met ladder-watch would re-unlock (and re-fire the "graduation
+	// EXECUTED" card), silently reverting the veto. The AUTO path must honor it;
+	// only an explicit operator (non-auto) unlock can override.
+	if auto && row.RelockedAt > 0 {
 		return false, nil
 	}
 	st.Rows[key] = graduationRow{

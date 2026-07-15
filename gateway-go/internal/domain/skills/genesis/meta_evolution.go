@@ -624,13 +624,18 @@ func (t *MetaEvolutionTask) maybeRevertAdoption(logger *slog.Logger) {
 }
 
 // nextEpoch rotates producer → evaluator → genesis based on the last CYCLE
-// entry — operator adopt/reject records (Action != "") don't consume an
-// epoch. An unknown/legacy epoch value falls back to producer.
+// entry. A cycle record always carries a non-empty Epoch; adoption-lifecycle
+// records (auto_reverted, and the operator feed-card adopted/rejected/
+// operator_reverted) have an empty Epoch and must not consume a rotation. Key
+// off Epoch, NOT Action: a successful auto-adoption stamps Action="auto_adopted"
+// on the cycle record itself, so skipping Action!="" froze rotation on producer
+// whenever cycles kept auto-adopting (the evaluator/genesis prompts then never
+// got revised). An unknown/legacy epoch value falls back to producer.
 func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 	prior, err := t.Tracker.RecentMetaRevisions(10)
 	if err == nil {
 		for _, p := range prior {
-			if p.Action != "" {
+			if p.Epoch == "" {
 				continue
 			}
 			switch p.Epoch {

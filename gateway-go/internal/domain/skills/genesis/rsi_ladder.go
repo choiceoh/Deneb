@@ -131,7 +131,14 @@ func (t *Tracker) ladderDispatchCapRow() ladderRow {
 	rate := float64(landed) / float64(decided)
 	detail := fmt.Sprintf("판정 %d건·랜딩률 %.0f%% (%s)", decided, rate*100, rsiOutcomeSummary(outcomes))
 	if decided >= ladderDispatchMinDecided && rate >= ladderDispatchMinLandRate {
-		return ladderRow{"배차 캡 상향", ladderStateReady, detail + " — 롤백 0건은 수동 확인 후 캡 결정"}
+		// Mirror the AUTO gate (ladder_watch autoGraduations): READY requires
+		// zero ledgered deploy-watch rollbacks. Reading the rollback count here
+		// (instead of hardcoding "롤백 0건") keeps the operator card honest — a
+		// rollback actually blocks the raise, and the card now says so.
+		if rollbacks := deployWatchRollbacks(); rollbacks > 0 {
+			return ladderRow{"배차 캡 상향", ladderStateGrowing, detail + fmt.Sprintf(" — 배포 롤백 %d건 (해소까지 캡 상향 보류)", rollbacks)}
+		}
+		return ladderRow{"배차 캡 상향", ladderStateReady, detail + " — 배포 롤백 0건, 캡 상향 준비됨"}
 	}
 	return ladderRow{"배차 캡 상향", ladderStateGrowing, detail}
 }
@@ -179,7 +186,11 @@ func (t *Tracker) ladderCalibrationRow() ladderRow {
 	}
 	benched := map[string]int{}
 	for _, r := range revs {
-		if r.CreatedAt < ladderCalibrationOpenedMs || r.Action != "" {
+		// Cycle records carry a non-empty Epoch and the per-epoch bench; adoption-
+		// lifecycle records (empty Epoch) don't. Key the skip off Epoch, not Action
+		// — an auto_adopted cycle stamps Action="auto_adopted" on the cycle record,
+		// so skipping Action!="" dropped exactly the benched cycles we must count.
+		if r.CreatedAt < ladderCalibrationOpenedMs || r.Epoch == "" {
 			continue
 		}
 		if r.BenchIncumbent != nil || r.BenchShadow != nil || r.BenchGenesis != nil {
