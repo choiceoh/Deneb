@@ -60,6 +60,7 @@ func allSchemaCases() []schemaCase {
 		{name: "knowledge", build: schema.KnowledgeToolSchema},
 		{name: "fetch_tools", build: schema.FetchToolsToolSchema},
 		{name: "graphify", build: schema.GraphifyToolSchema},
+		{name: "office", build: schema.OfficeToolSchema},
 		{name: "heartbeat_update", build: schema.HeartbeatUpdateToolSchema},
 		{name: "todo", build: schema.TodoToolSchema},
 		{name: "watch", build: schema.WatchToolSchema},
@@ -376,6 +377,7 @@ func TestToolMaxOutputsContractAndFreshMap(t *testing.T) {
 		"deal_ledger": 8000,
 		"exec":        32000,
 		"notebook":    24000,
+		"office":      32000,
 		"wiki":        20000,
 	}
 	got := ToolMaxOutputs()
@@ -443,7 +445,8 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
 		"sessions_spawn": false, "heartbeat_update": false, "goal": false,
 		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
-		"edit": true, "gateway": true, "observe": true, "fleet": true,
+		"office": false, // eager: document work is a core operator workflow
+		"edit":   true, "gateway": true, "observe": true, "fleet": true,
 		"graphify": true, "process": true, "sessions": true, "subagents": true,
 		"message": true, "todo": true, "cron": true, "files": true,
 		"morning_letter": true, "evening_letter": true,
