@@ -21,6 +21,11 @@ type statusModelRow struct {
 	// | "unchecked". Empty for local (keyless) models. Lets the picker flag a dead
 	// key before a request 401s. See keyhealth.go.
 	KeyHealth string `json:"keyHealth,omitempty"`
+	// CircuitState is "closed", "degraded", "open", or "half_open". An open
+	// model is tried after ready fallbacks until RetryAfterMS reaches zero.
+	CircuitState    string `json:"circuitState"`
+	CircuitFailures int    `json:"circuitFailures,omitempty"`
+	RetryAfterMS    int64  `json:"retryAfterMs,omitempty"`
 }
 
 // statusOut is wormhole's live operational readout (GET /status): the global
@@ -69,14 +74,14 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 		return st.label(!e.isLocal())
 	}
 	for _, e := range s.cfg.Models {
-		out.Models = append(out.Models, statusRow(e, "config", window(e.Name), healthLabel(e)))
+		out.Models = append(out.Models, statusRow(e, "config", window(e.Name), healthLabel(e), rt.circuits.view(e.Name)))
 	}
 	if f := rt.fleet.Load(); f != nil {
 		for name, e := range *f {
 			if _, shadowed := s.models[name]; shadowed {
 				continue // a configured model of the same name already covers it
 			}
-			out.Models = append(out.Models, statusRow(e, "fleet", window(name), healthLabel(e)))
+			out.Models = append(out.Models, statusRow(e, "fleet", window(name), healthLabel(e), rt.circuits.view(e.Name)))
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -86,14 +91,17 @@ func (rt *router) status(w http.ResponseWriter, r *http.Request) {
 // statusRow projects a modelEntry into a (keyless) status row tagged with its
 // source, the backend's discovered context window (0 = unknown / cloud), and the
 // last cloud-key-health label ("" for local).
-func statusRow(e modelEntry, source string, maxModelLen int, keyHealth string) statusModelRow {
+func statusRow(e modelEntry, source string, maxModelLen int, keyHealth string, circuit circuitView) statusModelRow {
 	return statusModelRow{
-		Name:        e.Name,
-		Protocol:    e.protocol(),
-		Local:       e.isLocal(),
-		Thinking:    e.ToggleKwarg != "",
-		Source:      source,
-		MaxModelLen: maxModelLen,
-		KeyHealth:   keyHealth,
+		Name:            e.Name,
+		Protocol:        e.protocol(),
+		Local:           e.isLocal(),
+		Thinking:        e.ToggleKwarg != "",
+		Source:          source,
+		MaxModelLen:     maxModelLen,
+		KeyHealth:       keyHealth,
+		CircuitState:    circuit.State,
+		CircuitFailures: circuit.Failures,
+		RetryAfterMS:    circuit.RetryAfterMS,
 	}
 }

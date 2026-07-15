@@ -33,11 +33,11 @@ an actionable `400`.
 On the same endpoint a client either **names a model** (`"model": "dsv4"`) to hit
 that backend directly, or sends **`"model": "auto"`** to delegate the choice. Auto
 runs a **local-first fallback chain**: the configured `auto` candidates are tried
-in order — local first — committing to the first that connects with a non-5xx
-status and falling through on an unreachable or 5xx backend. The egress guard
-still applies (a local-only request skips cloud candidates), and only candidates
-matching the endpoint's protocol are considered. (Task-aware routing — pick by
-request size/effort — can layer on top of this chain later.)
+in order — local first — committing to the first non-transient response and
+falling through on an unreachable, timed-out, rate-limited, or 5xx backend. The
+egress guard still applies (a local-only request skips cloud candidates), and
+only candidates matching the endpoint's protocol are considered. (Task-aware
+routing — pick by request size/effort — can layer on top of this chain later.)
 
 ## Thinking routing (effort)
 
@@ -71,6 +71,15 @@ connection error or a 5xx) up to twice with a short backoff before the error
 reaches the client — safe because nothing has streamed yet, so a completion is
 never half-sent twice. (`auto` already falls across candidates; this covers the
 single-model hot path.)
+
+Across requests, a **model-scoped circuit breaker** prevents those retries from
+becoming a repeated latency tax. Two consecutive exhausted connection/5xx
+failures open a 15s cooldown (exponential, capped at 5 minutes); a `429` opens it
+immediately and honors a longer `Retry-After` within the same cap. Open models
+move behind ready fallbacks, but stay at the end of the plan as a fail-open last
+resort. The next successful response clears the state. This is model-scoped so a
+broken model never sidelines unrelated models sharing the same provider, and it
+does not rewrite request or response bytes.
 
 When retries are exhausted, an entry with a **`"fallback"`** field fails over to
 the named entry instead of surfacing the failure: the request body is re-shaped
@@ -134,8 +143,8 @@ Requires a `sparkfleet` source (validation warns if it's missing).
   models, so a discovering client gets the window from this front instead of
   probing the backend directly. Omitted for cloud models.
 - `GET /status` — rich live operational readout (feature flags + per-model
-  protocol/local/thinking/source/`max_model_len`); token-gated. Powers the native
-  management tab.
+  protocol/local/thinking/source/`max_model_len` plus circuit state, failure
+  count, and retry delay); token-gated. Powers the native management tab.
 - `GET /metrics` — Prometheus text: request/error counts and cumulative latency,
   total and per model, plus `wormhole_client_requests_total{client=…}` (who is
   calling). The always-on visibility for the hot path (wormhole otherwise logs

@@ -97,9 +97,12 @@ type router struct {
 	// usage is the persistent per-model token/request meter behind GET /v1/usage
 	// (usage.go). Separate from metrics: metrics is in-memory Prometheus-shaped
 	// observability, usage is month-windowed accounting that survives restarts.
-	usage  *usageMeter
-	client *http.Client
-	log    *slog.Logger
+	usage *usageMeter
+	// circuits remembers repeated per-model transient failures across requests.
+	// Open models move behind healthy fallbacks until their cooldown expires.
+	circuits *circuitBook
+	client   *http.Client
+	log      *slog.Logger
 }
 
 func newRouter(cfg config, path string, log *slog.Logger) *router {
@@ -116,9 +119,10 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
 		}},
-		log:     log,
-		metrics: newMetrics(),
-		usage:   newUsageMeter(path),
+		log:      log,
+		metrics:  newMetrics(),
+		usage:    newUsageMeter(path),
+		circuits: newCircuitBook(),
 	}
 	rt.snap.Store(buildSnapshot(cfg, time.Time{}))
 	empty := map[string]modelEntry{}
@@ -291,12 +295,12 @@ func (rt *router) messages(w http.ResponseWriter, r *http.Request) {
 
 // serveAuto delegates the model choice to wormhole: it tries the configured auto
 // candidates — filtered to this endpoint's protocol and the egress guard — in
-// order (local first), committing to the first that connects with a non-5xx
-// status and falling through on an unreachable or 5xx backend. Fallback only
-// happens before any bytes are streamed; once a candidate starts responding we
-// ride it out.
+// order (local first), committing to the first non-transient response and
+// falling through on an unreachable, 408, 429, or 5xx backend. Fallback only
+// happens before any bytes are streamed; once a usable candidate starts
+// responding we ride it out.
 func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Request, body []byte, proto, pathSuffix string) {
-	cands := rt.autoCandidates(r, proto)
+	cands := rt.circuits.order(rt.autoCandidates(r, proto))
 	if len(cands) == 0 {
 		writeErr(w, http.StatusServiceUnavailable, "no eligible auto model for this protocol/policy")
 		return
@@ -314,11 +318,12 @@ func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Re
 		}
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
 		if err != nil {
+			rt.recordCircuitFailure(entry.Name, false, 0)
 			rt.log.Warn("auto: candidate unreachable, trying next", "model", entry.Name, "error", err)
 			lastErr = err
 			continue
 		}
-		if resp.StatusCode >= 500 {
+		if rt.observeCircuitResponse(entry.Name, resp) {
 			rt.log.Warn("auto: candidate errored, trying next", "model", entry.Name, "status", resp.StatusCode)
 			_ = resp.Body.Close()
 			lastErr = fmt.Errorf("%s returned %d", entry.Name, resp.StatusCode)
@@ -417,27 +422,31 @@ func (rt *router) doUpstreamWithRetry(r *http.Request, entry modelEntry, body []
 // forward proxies a model request and streams the response back, with a
 // bounded retry of transient upstream failures (this is Deneb's model hot
 // path) and, when the entry declares a Fallback, failover down the chain once
-// retries are exhausted — an unreachable upstream or one still 5xx after
-// retries moves to the next candidate instead of surfacing the failure.
+// retries are exhausted — an unreachable upstream or one still returning a
+// transient status after retries moves to the next candidate instead of
+// surfacing the failure.
 // Failover happens only before any bytes stream; each candidate shapes its
 // own body from the raw client bytes.
 func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Request, primary modelEntry, rawBody []byte, proto, pathSuffix string) {
-	cands := rt.failoverChain(primary, proto, r)
+	cands := rt.circuits.order(rt.failoverChain(primary, proto, r))
 	for i, entry := range cands {
 		body := rt.shapeFor(entry, rawBody, proto, r)
 		resp, err := rt.doUpstreamWithRetry(r, entry, body, pathSuffix)
 		if err != nil {
+			rt.recordCircuitFailure(entry.Name, false, 0)
 			rt.log.Warn("upstream call failed", "model", entry.Name, "url", entry.URL,
 				"error", err, "fallbacksLeft", len(cands)-1-i)
 			continue
 		}
-		if resp.StatusCode >= 500 && i < len(cands)-1 {
-			rt.log.Warn("upstream still 5xx, failing over",
-				"model", entry.Name, "status", resp.StatusCode, "next", cands[i+1].Name)
-			_ = resp.Body.Close()
-			continue
+		if rt.observeCircuitResponse(entry.Name, resp) {
+			if i < len(cands)-1 {
+				rt.log.Warn("upstream transient failure, failing over",
+					"model", entry.Name, "status", resp.StatusCode, "next", cands[i+1].Name)
+				_ = resp.Body.Close()
+				continue
+			}
 		}
-		if i > 0 {
+		if entry.Name != primary.Name {
 			// Warn, not Info: the primary the caller asked for is down — the
 			// reply is rescued, but the operator should see the substitution.
 			rt.log.Warn("failover routed", "from", primary.Name, "to", entry.Name)
@@ -446,6 +455,34 @@ func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeErr(w, http.StatusBadGateway, "upstream unreachable: "+primary.Name)
+}
+
+func (rt *router) recordCircuitFailure(name string, immediate bool, retryHint time.Duration) {
+	view, opened := rt.circuits.recordFailure(name, immediate, retryHint)
+	if opened {
+		rt.log.Warn("model circuit opened", "model", name, "failures", view.Failures,
+			"retryAfterMs", view.RetryAfterMS)
+	}
+}
+
+// observeCircuitResponse keeps response classification, Retry-After handling,
+// and recovery identical on the auto and explicit routing paths. It reports
+// whether the response is transient and should move to the next candidate.
+func (rt *router) observeCircuitResponse(name string, resp *http.Response) bool {
+	failure, immediate := circuitFailureStatus(resp.StatusCode)
+	if !failure {
+		rt.recordCircuitSuccess(name)
+		return false
+	}
+	hint := retryAfterHint(resp.Header.Get("Retry-After"), rt.circuits.now())
+	rt.recordCircuitFailure(name, immediate, hint)
+	return true
+}
+
+func (rt *router) recordCircuitSuccess(name string) {
+	if rt.circuits.recordSuccess(name) {
+		rt.log.Info("model circuit recovered", "model", name)
+	}
 }
 
 // commit meters and streams one upstream response to the client — the point of
