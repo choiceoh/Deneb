@@ -73,7 +73,9 @@ type modelEntry struct {
 	//   an explicit "high" to MAX, so on-mode pins "high" rather than leaking max.
 	Reasoning string `json:"reasoning,omitempty"`
 	// Fallback names another configured entry to fail over to when THIS
-	// entry's upstream stays unreachable or 5xx after the bounded retries.
+	// entry's upstream stays unreachable or returns a transient status after the
+	// bounded retries. Transient means 408, 429, or 5xx; 429 opens the model
+	// circuit immediately and honors Retry-After up to the cooldown cap.
 	// Motivation (live 2026-07-06): the srv2+srv3 tensor-parallel dsv4 went
 	// down and every dsv4-nothink caller ate 502s to exhaustion while a
 	// healthy local qwen3.6 sat idle — per-entry failover gives each pinned
