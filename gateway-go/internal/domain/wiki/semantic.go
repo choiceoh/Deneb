@@ -29,6 +29,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textchunk"
 	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
@@ -50,10 +51,21 @@ const semanticMinChars = 8
 // link suggestion, and the graph embedding rerank with no vectors at all.
 const semanticEmbedBatch = 32
 
-// cachedVec is one page's embedding plus the content hash it was computed from.
+type semanticChunk struct {
+	snippet   string
+	startLine int
+	endLine   int
+	kind      string
+	vec       []float32
+}
+
+// cachedVec keeps a page centroid for graph operations and structure-aware
+// chunks for retrieval. The centroid is derived from chunk vectors, so this
+// adds no extra embedding request.
 type cachedVec struct {
-	hash string
-	vec  []float32
+	hash   string
+	vec    []float32
+	chunks []semanticChunk
 }
 
 // semanticIndex is an in-memory, lazily-maintained vector index over wiki pages.
@@ -157,12 +169,12 @@ func (si *semanticIndex) refreshAsync(store *Store) {
 // content hash, so stale vectors for edited pages are re-embedded naturally.
 const semanticCacheFile = ".semantic-cache.json"
 
-const semanticCacheSchemaVersion = 2
+const semanticCacheSchemaVersion = 3
 
 // semanticPreprocessingVersion identifies how a wiki page becomes embedding
 // input. Bump it whenever semanticText normalization/chunking semantics change,
 // even if the embedding model and dimensions stay the same.
-const semanticPreprocessingVersion = "wiki-semantic-text-v1"
+const semanticPreprocessingVersion = "wiki-structure-chunk-v2"
 
 // diarySemanticCacheFile is the diary vector cache, kept beside the diary files
 // (leading dot so the diary walk never treats it as an entry file).
@@ -249,8 +261,17 @@ func (s *Store) WarmSemanticIndex(ctx context.Context) error {
 
 // cachedVecWire is the JSON shape of one cached embedding.
 type cachedVecWire struct {
-	Hash string    `json:"hash"`
-	Vec  []float32 `json:"vec"`
+	Hash   string              `json:"hash"`
+	Vec    []float32           `json:"vec"`
+	Chunks []semanticChunkWire `json:"chunks,omitempty"`
+}
+
+type semanticChunkWire struct {
+	Snippet   string    `json:"snippet"`
+	StartLine int       `json:"startLine"`
+	EndLine   int       `json:"endLine"`
+	Kind      string    `json:"kind,omitempty"`
+	Vec       []float32 `json:"vec"`
 }
 
 type semanticCacheEnvelope struct {
@@ -289,7 +310,17 @@ func (si *semanticIndex) loadCache() {
 		if cv.Hash == "" || len(cv.Vec) == 0 {
 			continue
 		}
-		si.vecs[rp] = cachedVec{hash: cv.Hash, vec: cv.Vec}
+		chunks := make([]semanticChunk, 0, len(cv.Chunks))
+		for _, chunk := range cv.Chunks {
+			if len(chunk.Vec) == 0 {
+				continue
+			}
+			chunks = append(chunks, semanticChunk{
+				snippet: chunk.Snippet, startLine: chunk.StartLine, endLine: chunk.EndLine,
+				kind: chunk.Kind, vec: chunk.Vec,
+			})
+		}
+		si.vecs[rp] = cachedVec{hash: cv.Hash, vec: cv.Vec, chunks: chunks}
 	}
 }
 
@@ -302,7 +333,14 @@ func (si *semanticIndex) saveCache() {
 	si.mu.Lock()
 	wire := make(map[string]cachedVecWire, len(si.vecs))
 	for rp, cv := range si.vecs {
-		wire[rp] = cachedVecWire{Hash: cv.hash, Vec: cv.vec}
+		chunks := make([]semanticChunkWire, 0, len(cv.chunks))
+		for _, chunk := range cv.chunks {
+			chunks = append(chunks, semanticChunkWire{
+				Snippet: chunk.snippet, StartLine: chunk.startLine, EndLine: chunk.endLine,
+				Kind: chunk.kind, Vec: chunk.vec,
+			})
+		}
+		wire[rp] = cachedVecWire{Hash: cv.hash, Vec: cv.vec, Chunks: chunks}
 	}
 	fingerprint := si.cacheFingerprint
 	dimensions := si.cacheDimensions
@@ -423,8 +461,8 @@ func (s *Store) SemanticStatus() SemanticIndexStatus {
 		status.Expected++
 		live[path] = struct{}{}
 		cached, ok := vecs[path]
-		if ok && !identityMismatch && !status.PreprocessingMismatch && cached.hash == contentHash(text) && len(cached.vec) > 0 &&
-			(status.Dimensions == 0 || len(cached.vec) == status.Dimensions) {
+		if ok && !identityMismatch && !status.PreprocessingMismatch && cached.hash == contentHash(text) &&
+			validCachedSemanticPage(cached, status.Dimensions) {
 			status.Indexed++
 			continue
 		}
@@ -481,6 +519,117 @@ func semanticText(page *Page) string {
 	return strings.TrimSpace(sb.String())
 }
 
+const wikiSemanticMaxChunks = textchunk.DefaultMaxChunks
+
+type semanticChunkInput struct {
+	text      string
+	snippet   string
+	startLine int
+	endLine   int
+	kind      string
+}
+
+// semanticChunkInputs prefixes each body chunk with stable page identity while
+// keeping the displayed snippet source-only. The identity prefix gives a small
+// section enough context to remain meaningful without exposing hidden cues.
+func semanticChunkInputs(relPath string, page *Page) []semanticChunkInput {
+	if page == nil {
+		return nil
+	}
+	identity := strings.TrimSpace(strings.Join([]string{
+		page.Meta.Title,
+		page.Meta.Summary,
+		strings.Join(page.Meta.Cues, " · "),
+	}, "\n"))
+	bodyStart := pageBodyStartLine(page)
+	chunks := textchunk.Split(relPath, page.Body, textchunk.Options{
+		TargetRunes: textchunk.DefaultTargetRunes,
+		MaxChunks:   wikiSemanticMaxChunks,
+	})
+	if len(chunks) == 0 {
+		if len(identity) < semanticMinChars {
+			return nil
+		}
+		return []semanticChunkInput{{text: identity, snippet: visiblePageIdentity(page), startLine: 1, endLine: 1, kind: "identity"}}
+	}
+	out := make([]semanticChunkInput, 0, len(chunks))
+	for _, chunk := range chunks {
+		input := strings.TrimSpace(identity + "\n" + chunk.Text)
+		if len(input) < semanticMinChars {
+			continue
+		}
+		out = append(out, semanticChunkInput{
+			text: input, snippet: chunk.Text,
+			startLine: bodyStart + chunk.StartLine - 1,
+			endLine:   bodyStart + chunk.EndLine - 1,
+			kind:      chunk.Kind,
+		})
+	}
+	return out
+}
+
+func pageBodyStartLine(page *Page) int {
+	if page == nil || page.Body == "" {
+		return 1
+	}
+	rendered := string(page.Render())
+	prefixLength := len(rendered) - len(page.Body)
+	if prefixLength < 0 || !strings.HasSuffix(rendered, page.Body) {
+		return 1
+	}
+	return strings.Count(rendered[:prefixLength], "\n") + 1
+}
+
+func visiblePageIdentity(page *Page) string {
+	if page == nil {
+		return ""
+	}
+	return strings.TrimSpace(strings.Join([]string{page.Meta.Title, page.Meta.Summary}, " — "))
+}
+
+func validCachedSemanticPage(cached cachedVec, dimensions int) bool {
+	if len(cached.vec) == 0 || len(cached.chunks) == 0 {
+		return false
+	}
+	expectedDimensions := dimensions
+	if expectedDimensions <= 0 {
+		expectedDimensions = len(cached.vec)
+	}
+	if len(cached.vec) != expectedDimensions {
+		return false
+	}
+	for _, chunk := range cached.chunks {
+		if len(chunk.vec) != expectedDimensions {
+			return false
+		}
+	}
+	return true
+}
+
+func centroid(vectors [][]float32) []float32 {
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		return nil
+	}
+	out := make([]float32, len(vectors[0]))
+	valid := 0
+	for _, vector := range vectors {
+		if len(vector) != len(out) {
+			continue
+		}
+		for i, value := range vector {
+			out[i] += value
+		}
+		valid++
+	}
+	if valid == 0 {
+		return nil
+	}
+	for i := range out {
+		out[i] /= float32(valid)
+	}
+	return out
+}
+
 func contentHash(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:8])
@@ -526,12 +675,27 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 		return nil
 	}
 	type scored struct {
-		path  string
-		score float64
+		path      string
+		score     float64
+		snippet   string
+		startLine int
+		endLine   int
 	}
 	hits := make([]scored, 0, len(s.sem.vecs))
 	for path, cv := range s.sem.vecs {
-		hits = append(hits, scored{path: path, score: cosine(qv, cv.vec)})
+		best := scored{path: path, score: -1}
+		for _, chunk := range cv.chunks {
+			if score := cosine(qv, chunk.vec); score > best.score {
+				best.score = score
+				best.snippet = chunk.snippet
+				best.startLine = chunk.startLine
+				best.endLine = chunk.endLine
+			}
+		}
+		if best.score < 0 {
+			best.score = cosine(qv, cv.vec)
+		}
+		hits = append(hits, best)
 	}
 	s.sem.mu.Unlock()
 
@@ -552,7 +716,10 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 		if h.score <= 0 {
 			continue
 		}
-		out = append(out, SearchResult{Path: h.path, Score: h.score})
+		out = append(out, SearchResult{
+			Path: h.path, Score: h.score, Content: h.snippet,
+			Line: h.startLine, EndLine: h.endLine,
+		})
 	}
 	return out
 }
@@ -622,10 +789,27 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 		}
 	}()
 
-	// Compute desired hashes and collect pages needing (re)embedding.
+	// Read and chunk pages without holding the semantic mutex. The cache lock is
+	// a leaf and must never cover disk I/O or embedding network calls.
 	want := make(map[string]string, len(relPaths))
+	inputs := make(map[string][]semanticChunkInput, len(relPaths))
+	for _, rp := range relPaths {
+		page, perr := store.ReadPage(rp)
+		if perr != nil || page == nil {
+			continue
+		}
+		text := semanticText(page)
+		if len(text) < semanticMinChars {
+			continue
+		}
+		chunks := semanticChunkInputs(rp, page)
+		if len(chunks) == 0 {
+			continue
+		}
+		want[rp] = contentHash(text)
+		inputs[rp] = chunks
+	}
 	var toEmbed []string
-	var toEmbedText []string
 
 	si.mu.Lock()
 	identity := embedindex.IdentityOf(si.embedder)
@@ -647,20 +831,9 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 		si.cacheDimensions = identity.Dimensions
 	}
 	si.cachePreprocessing = semanticPreprocessingVersion
-	for _, rp := range relPaths {
-		page, perr := store.ReadPage(rp)
-		if perr != nil || page == nil {
-			continue
-		}
-		text := semanticText(page)
-		if len(text) < semanticMinChars {
-			continue
-		}
-		h := contentHash(text)
-		want[rp] = h
-		if cur, ok := si.vecs[rp]; !ok || cur.hash != h {
+	for rp, hash := range want {
+		if cur, ok := si.vecs[rp]; !ok || cur.hash != hash || !validCachedSemanticPage(cur, identity.Dimensions) {
 			toEmbed = append(toEmbed, rp)
-			toEmbedText = append(toEmbedText, text)
 		}
 	}
 	// Drop entries for pages that no longer exist.
@@ -676,20 +849,35 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 	startEpoch := si.forgetEpoch
 	si.mu.Unlock()
 
-	// Embed changed pages in bounded batches (outside the lock).
-	for start := 0; start < len(toEmbed); start += semanticEmbedBatch {
-		end := min(start+semanticEmbedBatch, len(toEmbed))
-		vecs, eerr := si.embedder.Embed(ctx, toEmbedText[start:end])
-		if eerr != nil {
-			// Prior batches already landed in vecs; keep them and surface the
-			// failure (a healthy-looking server refusing batches was invisible
-			// before and silently degraded search to BM25-only).
-			slog.Warn("wiki: semantic embed batch failed; keeping prior vectors",
-				"batchStart", start, "batchSize", end-start, "error", eerr)
-			return eerr
-		}
-		if len(vecs) != end-start {
-			return fmt.Errorf("wiki: semantic embed batch returned %d vectors for %d texts", len(vecs), end-start)
+	// Stable order makes a partial refresh deterministic and resumable.
+	sort.Strings(toEmbed)
+	for pageIndex, rp := range toEmbed {
+		pageInputs := inputs[rp]
+		pageChunks := make([]semanticChunk, 0, len(pageInputs))
+		vectors := make([][]float32, 0, len(pageInputs))
+		for start := 0; start < len(pageInputs); start += semanticEmbedBatch {
+			end := min(start+semanticEmbedBatch, len(pageInputs))
+			texts := make([]string, end-start)
+			for i := start; i < end; i++ {
+				texts[i-start] = pageInputs[i].text
+			}
+			vecs, eerr := si.embedder.Embed(ctx, texts)
+			if eerr != nil {
+				slog.Warn("wiki: semantic embed batch failed; keeping prior pages",
+					"pageIndex", pageIndex, "path", rp, "batchStart", start, "batchSize", end-start, "error", eerr)
+				return eerr
+			}
+			if len(vecs) != end-start {
+				return fmt.Errorf("wiki: semantic embed batch returned %d vectors for %d texts", len(vecs), end-start)
+			}
+			for i, vector := range vecs {
+				input := pageInputs[start+i]
+				pageChunks = append(pageChunks, semanticChunk{
+					snippet: input.snippet, startLine: input.startLine, endLine: input.endLine,
+					kind: input.kind, vec: vector,
+				})
+				vectors = append(vectors, vector)
+			}
 		}
 		si.mu.Lock()
 		if si.forgetEpoch != startEpoch {
@@ -699,9 +887,7 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 			si.mu.Unlock()
 			return nil
 		}
-		for i, rp := range toEmbed[start:end] {
-			si.vecs[rp] = cachedVec{hash: want[rp], vec: vecs[i]}
-		}
+		si.vecs[rp] = cachedVec{hash: want[rp], vec: centroid(vectors), chunks: pageChunks}
 		si.mu.Unlock()
 		mutated = true
 	}

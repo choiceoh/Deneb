@@ -80,6 +80,11 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 	}
 	out := make([]Result, 0, len(hits))
 	for _, h := range hits {
+		meta := map[string]string{}
+		if h.StartLine > 0 {
+			meta["startLine"] = fmt.Sprintf("%d", h.StartLine)
+			meta["endLine"] = fmt.Sprintf("%d", h.EndLine)
+		}
 		out = append(out, Result{
 			Ref:     Ref{Layer: LayerFiles, ID: h.Entry.PathDisplay},
 			Snippet: strings.TrimSpace(h.Snippet),
@@ -88,6 +93,7 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 			// across layers by this score; see chat recall preflight for the
 			// per-layer quota that keeps files from crowding out wiki/diary.
 			Score: h.Score,
+			Meta:  meta,
 			Time:  fileMTimeMillis(h.Entry.ServerModified),
 		})
 	}

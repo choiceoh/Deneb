@@ -154,7 +154,14 @@ func formatSemanticHits(query string, hits []filestore.ScoredEntry) string {
 		if display == "" {
 			display = h.Entry.Name
 		}
-		fmt.Fprintf(&sb, "- 📄 %s  `%s`  (%s, 유사도 %.2f)\n", h.Entry.Name, display, filestore.HumanSize(h.Entry.Size), h.Score)
+		lineRef := ""
+		if h.StartLine > 0 {
+			lineRef = fmt.Sprintf(", L%d", h.StartLine)
+			if h.EndLine > h.StartLine {
+				lineRef = fmt.Sprintf(", L%d-L%d", h.StartLine, h.EndLine)
+			}
+		}
+		fmt.Fprintf(&sb, "- 📄 %s  `%s`  (%s, 유사도 %.2f%s)\n", h.Entry.Name, display, filestore.HumanSize(h.Entry.Size), h.Score, lineRef)
 		if s := strings.TrimSpace(h.Snippet); s != "" {
 			fmt.Fprintf(&sb, "  > %s\n", truncateRunes(s, 200))
 		}

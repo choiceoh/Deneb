@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
@@ -228,6 +229,9 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 	}
 	if s.wikiStore != nil {
 		s.wikiStore.SetEmbedder(s.embeddingClient)
+		if reranker := airerank.NewFromEnv(); reranker != nil {
+			s.wikiStore.SetReranker(reranker)
+		}
 		store := s.wikiStore
 		s.safeGo("wiki-semantic-warm", func() {
 			s.warmSessionSemanticIndexes(store)

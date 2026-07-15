@@ -343,12 +343,18 @@ func resolveFusion(getenv func(string) string, semantic bool) (string, bool) {
 }
 
 type benchmarkResult struct {
-	hit1       int
-	hitK       int
-	scored     int
-	searchErrs int
-	mrrSum     float64
-	latencies  []time.Duration
+	hit1          int
+	hitK          int
+	scored        int
+	searchErrs    int
+	mrrSum        float64
+	latencies     []time.Duration
+	precisionKSum float64
+	recall1Sum    float64
+	recall3Sum    float64
+	recall5Sum    float64
+	recallKSum    float64
+	f1KSum        float64
 }
 
 func evaluateCases(
@@ -376,7 +382,7 @@ func evaluateCasesWithSearch(
 			continue
 		}
 		started := time.Now()
-		matches, err := search(ctx, c.Question, k)
+		matches, err := search(ctx, c.Question, max(k, 5))
 		elapsed := time.Since(started)
 		if err != nil {
 			result.searchErrs++
@@ -384,7 +390,7 @@ func evaluateCasesWithSearch(
 		}
 		result.latencies = append(result.latencies, elapsed)
 		rank := findGoldRank(matches, c.GoldPaths, k)
-		result.record(rank)
+		result.record(rank, rankingQuality(matches, c.GoldPaths, k))
 		if verbose {
 			writeCaseResult(stdout, c, matches, rank)
 		}
@@ -422,8 +428,74 @@ func findGoldRank(results []wiki.SearchResult, goldPaths []string, k int) int {
 	return -1
 }
 
-func (r *benchmarkResult) record(rank int) {
+type qualityMetrics struct {
+	precisionK float64
+	recall1    float64
+	recall3    float64
+	recall5    float64
+	recallK    float64
+	f1K        float64
+}
+
+func rankingQuality(results []wiki.SearchResult, goldPaths []string, k int) qualityMetrics {
+	recallAt := func(limit int) float64 {
+		if len(goldPaths) == 0 {
+			return 0
+		}
+		matched := make([]bool, len(goldPaths))
+		for i, result := range results {
+			if i >= limit {
+				break
+			}
+			for goldIndex, gold := range goldPaths {
+				if pathHit(gold, result.Path) {
+					matched[goldIndex] = true
+				}
+			}
+		}
+		count := 0
+		for _, ok := range matched {
+			if ok {
+				count++
+			}
+		}
+		return float64(count) / float64(len(goldPaths))
+	}
+	relevant := 0
+	for i, result := range results {
+		if i >= k {
+			break
+		}
+		for _, gold := range goldPaths {
+			if pathHit(gold, result.Path) {
+				relevant++
+				break
+			}
+		}
+	}
+	precision := 0.0
+	if k > 0 {
+		precision = float64(relevant) / float64(k)
+	}
+	recallK := recallAt(k)
+	f1 := 0.0
+	if precision+recallK > 0 {
+		f1 = 2 * precision * recallK / (precision + recallK)
+	}
+	return qualityMetrics{
+		precisionK: precision, recall1: recallAt(1), recall3: recallAt(3),
+		recall5: recallAt(5), recallK: recallK, f1K: f1,
+	}
+}
+
+func (r *benchmarkResult) record(rank int, quality qualityMetrics) {
 	r.scored++
+	r.precisionKSum += quality.precisionK
+	r.recall1Sum += quality.recall1
+	r.recall3Sum += quality.recall3
+	r.recall5Sum += quality.recall5
+	r.recallKSum += quality.recallK
+	r.f1KSum += quality.f1K
 	if rank == 0 {
 		r.hit1++
 	}
@@ -476,6 +548,7 @@ func writeBenchmarkResult(out io.Writer, k int, fusion string, result benchmarkR
 	}
 	fmt.Fprintf(out, "RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
 		result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored), fusion)
+	writeQualityMetrics(out, "RECALL_BENCH_QUALITY", k, result)
 }
 
 func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, result benchmarkResult) {
@@ -486,6 +559,15 @@ func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, resu
 	fmt.Fprintf(out, "RECALL_BENCH_MATRIX mode=%s hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f p50_ms=%.3f p95_ms=%.3f\n",
 		mode, result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored),
 		float64(result.latencyPercentile(0.50))/float64(time.Millisecond), float64(result.latencyPercentile(0.95))/float64(time.Millisecond))
+	writeQualityMetrics(out, "RECALL_BENCH_MATRIX_QUALITY mode="+string(mode), k, result)
+}
+
+func writeQualityMetrics(out io.Writer, prefix string, k int, result benchmarkResult) {
+	denominator := float64(result.scored)
+	fmt.Fprintf(out, "%s p@%d=%.3f recall@1=%.3f recall@3=%.3f recall@5=%.3f recall@%d=%.3f f1@%d=%.3f\n",
+		prefix, k, result.precisionKSum/denominator, result.recall1Sum/denominator,
+		result.recall3Sum/denominator, result.recall5Sum/denominator,
+		k, result.recallKSum/denominator, k, result.f1KSum/denominator)
 }
 
 // loadGold parses the gold JSONL, returning the cases and the count of malformed

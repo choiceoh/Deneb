@@ -15,6 +15,7 @@ import (
 type fakeMemoryStore struct {
 	searchFn         func(ctx context.Context, q string, limit int) ([]wiki.SearchResult, error)
 	querySearchFn    func(ctx context.Context, q string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error)
+	planSearchFn     func(ctx context.Context, plan wiki.QueryPlan, limit int) (wiki.SearchReport, error)
 	searchDiaryFn    func(ctx context.Context, q string, limit int) ([]wiki.DiaryHit, error)
 	readPageFn       func(relPath string) (*wiki.Page, error)
 	writePageFn      func(relPath string, page *wiki.Page) error
@@ -24,6 +25,21 @@ type fakeMemoryStore struct {
 	listPagesFn      func(category string) ([]string, error)
 	diaryRecentFn    func(limit int) []wiki.DiaryHit
 	semanticStatusFn func() wiki.SemanticIndexStatus
+	searchDoctorFn   func(context.Context) wiki.SearchDoctorReport
+}
+
+func (f *fakeMemoryStore) SearchPlan(ctx context.Context, plan wiki.QueryPlan, n int) (wiki.SearchReport, error) {
+	if f.planSearchFn == nil {
+		return wiki.SearchReport{}, errors.New("SearchPlan not stubbed")
+	}
+	return f.planSearchFn(ctx, plan, n)
+}
+
+func (f *fakeMemoryStore) SearchDoctor(ctx context.Context) wiki.SearchDoctorReport {
+	if f.searchDoctorFn == nil {
+		return wiki.SearchDoctorReport{}
+	}
+	return f.searchDoctorFn(ctx)
 }
 
 func (f *fakeMemoryStore) SemanticStatus() wiki.SemanticIndexStatus {
@@ -201,6 +217,46 @@ func TestMemorySearchStatusReturnsSemanticCacheIntegrity(t *testing.T) {
 	decode(t, resp, &got)
 	if got.Semantic.Healthy || got.Semantic.Pending != 2 || got.Semantic.DegradedReason != "incomplete_cache" {
 		t.Fatalf("semantic status = %+v", got.Semantic)
+	}
+}
+
+func TestMemorySearchPlanReturnsAddressedResults(t *testing.T) {
+	store := &fakeMemoryStore{
+		planSearchFn: func(_ context.Context, plan wiki.QueryPlan, limit int) (wiki.SearchReport, error) {
+			if limit != 3 || len(plan.Clauses) != 2 || len(plan.Scopes) != 1 || !plan.Explain || !plan.ForceRerank {
+				t.Fatalf("plan = %+v limit=%d", plan, limit)
+			}
+			return wiki.SearchReport{Results: []wiki.SearchResult{{
+				Path: "프로젝트/계약.md", Line: 12, EndLine: 14, Content: "입금 일정", Context: []string{"프로젝트", "프로젝트/계약"}, Score: 0.8,
+			}}}, nil
+		},
+		readPageFn: func(string) (*wiki.Page, error) { return &wiki.Page{}, nil },
+	}
+	resp := memorySearch(memoryDepsFor(store))(authedCtx(), reqWith(t, "miniapp.memory.search", map[string]any{
+		"plan": "lex: 입금 일정\nvec: payment schedule", "scopes": []string{"프로젝트"}, "limit": 3, "explain": true, "rerank": true,
+	}))
+	var got struct {
+		Results []struct {
+			Line    int      `json:"line"`
+			EndLine int      `json:"endLine"`
+			Context []string `json:"context"`
+		} `json:"results"`
+	}
+	decode(t, resp, &got)
+	if len(got.Results) != 1 || got.Results[0].Line != 12 || got.Results[0].EndLine != 14 || len(got.Results[0].Context) != 2 {
+		t.Fatalf("results = %+v", got.Results)
+	}
+}
+
+func TestMemorySearchDoctorUsesExplicitEndpoint(t *testing.T) {
+	store := &fakeMemoryStore{searchDoctorFn: func(context.Context) wiki.SearchDoctorReport {
+		return wiki.SearchDoctorReport{Healthy: true, LexicalDocuments: 7}
+	}}
+	resp := memorySearchDoctor(memoryDepsFor(store))(authedCtx(), reqWith(t, "miniapp.memory.search_doctor", nil))
+	var got wiki.SearchDoctorReport
+	decode(t, resp, &got)
+	if !got.Healthy || got.LexicalDocuments != 7 {
+		t.Fatalf("doctor = %+v", got)
 	}
 }
 
@@ -439,6 +495,7 @@ func TestMemoryMethodsReturnsAllRegisteredMethods(t *testing.T) {
 	for _, name := range []string{
 		"miniapp.memory.search",
 		"miniapp.memory.search_status",
+		"miniapp.memory.search_doctor",
 		"miniapp.memory.get_page",
 		"miniapp.memory.write_page",
 		"miniapp.memory.create_page",

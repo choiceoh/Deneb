@@ -2,8 +2,20 @@ package textsearch
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestLocateSnippetReturnsAbsoluteLineRange(t *testing.T) {
+	text := "# title\n\nintro\n\n## Decision\nkeep existing API\nnext step\n"
+	snippet, start, end := LocateSnippet(text, "existing API", 3)
+	if start != 5 || end != 7 {
+		t.Fatalf("lines = %d-%d, want 5-7; snippet=%q", start, end, snippet)
+	}
+	if !strings.Contains(snippet, "keep existing API") {
+		t.Fatalf("snippet = %q", snippet)
+	}
+}
 
 func TestSearchReturnsMatchingDocuments(t *testing.T) {
 	idx := New()
