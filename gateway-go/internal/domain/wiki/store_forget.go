@@ -99,5 +99,38 @@ func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
 	// must not leave the page returnable in that window.
 	s.dropSemanticVector(relPath)
 
+	// Strip lingering inbound Related refs. deletePageLocked removes backlinks
+	// derived from the forgotten page's OWN Related, but a one-way reference
+	// (legacy/manual drift) on another page keeps the forgotten path in its
+	// frontmatter — and Related is indexed, so the path could still surface.
+	s.pruneInboundReferences(relPath)
+
 	return ForgetResult{Path: relPath, Title: title}, nil
+}
+
+// pruneInboundReferences removes relPath from the Related list of every page
+// that still references it. The caller must hold writeMu (writePageInternal
+// assumes it). Best-effort: an unreadable page is skipped.
+func (s *Store) pruneInboundReferences(relPath string) {
+	norm := normalizePagePath(relPath)
+	for _, p := range s.findPagesReferencingPath(relPath) {
+		page, err := s.ReadPage(p)
+		if err != nil {
+			continue
+		}
+		kept := make([]string, 0, len(page.Meta.Related))
+		changed := false
+		for _, r := range page.Meta.Related {
+			if normalizePagePath(r) == norm {
+				changed = true
+				continue
+			}
+			kept = append(kept, r)
+		}
+		if !changed {
+			continue
+		}
+		page.Meta.Related = kept
+		_ = s.writePageInternal(p, page, true) // best-effort; backlinks already handled
+	}
 }

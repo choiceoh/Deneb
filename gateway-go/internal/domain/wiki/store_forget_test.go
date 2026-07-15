@@ -256,6 +256,35 @@ func TestForgetRejectsInternalWikiFiles(t *testing.T) {
 	}
 }
 
+func TestForgetPrunesInboundReferences(t *testing.T) {
+	store := newForgetTestStore(t)
+	target := NewPage("잊힐사람", "인물", nil)
+	if err := store.WritePage("인물/잊힐사람.md", target); err != nil {
+		t.Fatalf("WritePage target: %v", err)
+	}
+	// A referrer with a one-way Related pointing at the target.
+	ref := NewPage("참조자", "인물", nil)
+	ref.Meta.Related = []string{"인물/잊힐사람.md"}
+	if err := store.WritePage("인물/참조자.md", ref); err != nil {
+		t.Fatalf("WritePage ref: %v", err)
+	}
+
+	if _, err := store.Forget("인물/잊힐사람", "프라이버시"); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+
+	// The referrer must no longer carry the forgotten path in Related.
+	got, err := store.ReadPage("인물/참조자.md")
+	if err != nil {
+		t.Fatalf("ReadPage ref: %v", err)
+	}
+	for _, r := range got.Meta.Related {
+		if normalizePagePath(r) == "인물/잊힐사람.md" {
+			t.Fatalf("forgotten path still in referrer Related: %v", got.Meta.Related)
+		}
+	}
+}
+
 func TestForgetRefusesDealLedgerPage(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("JA Solar", "프로젝트", nil)
