@@ -287,6 +287,9 @@ fields.
   settle; failure keeps card).
 - Confirm UI: title, doc no, amount, line, action; default-disable 전결/`1000`.
 - Dry-run: verify own line `app_sts==20` via `eap126A05` before any mutate.
+- Mutate requires `DENEB_GROUPWARE_ACT=1` (set only by `ActApproval` / feed path; bare CLI stays read-safe).
+- Line selection targets **only** the caller's line with `app_sts=20` (진행), matched by `user_id` (not `emp_seq` — real payloads use `user_id`). Already-approved (30) / downstream (70) lines are refused.
+- No retract/회수 API found in EAP JS — an approve is effectively irreversible from here; undo in the Amaranth UI.
 - First live mutate only on disposable / sandbox docs.
 - Audit: docID, docLineSts, actID, seqs, client, time, API result.
 

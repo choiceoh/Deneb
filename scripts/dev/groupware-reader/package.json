@@ -13,6 +13,7 @@
     "login-check": "node read.mjs --login-check",
     "list-pending": "node read.mjs --area approval --action list --folder pending --limit 10",
     "list-all": "node read.mjs --area approval --action list --folder all --limit 16",
-    "list-board": "node read.mjs --area board --action list --limit 10"
+    "list-board": "node read.mjs --area board --action list --limit 10",
+    "test": "node --test test/"
   }
 }
