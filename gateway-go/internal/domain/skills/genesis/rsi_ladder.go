@@ -183,7 +183,11 @@ func (t *Tracker) ladderCalibrationRow() ladderRow {
 	}
 	benched := map[string]int{}
 	for _, r := range revs {
-		if r.CreatedAt < ladderCalibrationOpenedMs || r.Action != "" {
+		// Cycle records carry a non-empty Epoch and the per-epoch bench; adoption-
+		// lifecycle records (empty Epoch) don't. Key the skip off Epoch, not Action
+		// — an auto_adopted cycle stamps Action="auto_adopted" on the cycle record,
+		// so skipping Action!="" dropped exactly the benched cycles we must count.
+		if r.CreatedAt < ladderCalibrationOpenedMs || r.Epoch == "" {
 			continue
 		}
 		if r.BenchIncumbent != nil || r.BenchShadow != nil || r.BenchGenesis != nil {
