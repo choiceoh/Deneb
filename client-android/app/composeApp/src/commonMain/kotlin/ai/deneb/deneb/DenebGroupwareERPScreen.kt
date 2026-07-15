@@ -1,14 +1,18 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebScreenScaffold
+import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebTitlePivot
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.markdown.MarkdownContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,9 +20,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,6 +40,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -93,9 +104,14 @@ fun DenebGroupwareERPScreen(
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
+    // 사원 is a directory lookup — the reader requires a name/부서 query, so an
+    // unqueried auto-fetch would just surface a dependency error.
+    fun needsQuery() = selected.key == "people" && query.isBlank()
+
     suspend fun load() {
         failed = false
         text = null
+        if (needsQuery()) return
         val q = if (selected.searchable) query.trim().ifBlank { null } else null
         val folder = if (selected.key == "sales") salesPeriod.ifBlank { null } else null
         val resp = client.fetchERP(area = selected.key, folder = folder, query = q)
@@ -186,33 +202,110 @@ fun DenebGroupwareERPScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
-            ) {
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                val snapshot = text
                 when {
                     failed -> DenebError(
                         "ERP 데이터를 불러오지 못했습니다.",
                         onRetry = { scope.launch { load() } },
                     )
 
-                    text == null -> DenebLoading()
+                    needsQuery() && snapshot == null -> DenebEmpty("이름이나 부서로 검색하세요")
 
-                    text == "(데이터 없음)" -> DenebEmpty("결과 없음")
+                    snapshot == null -> DenebLoading()
 
-                    else -> SelectionContainer {
-                        MarkdownContent(
-                            content = erpTextToMarkdown(text.orEmpty()),
-                            modifier = Modifier.fillMaxWidth(),
-                            baseStyle = DenebType.body,
+                    snapshot == "(데이터 없음)" -> DenebEmpty("결과 없음")
+
+                    else -> ErpSnapshotContent(snapshot)
+                }
+            }
+        }
+    }
+}
+
+// Structured render of the reader snapshot: summary card, section labels, native
+// rows. Falls back to markdown for shapes the parser doesn't recognize.
+@Composable
+private fun ErpSnapshotContent(snapshot: String) {
+    val blocks = remember(snapshot) { parseErpSnapshot(snapshot) }
+    if (blocks.isEmpty()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+        ) {
+            SelectionContainer {
+                MarkdownContent(
+                    content = erpTextToMarkdown(snapshot),
+                    modifier = Modifier.fillMaxWidth(),
+                    baseStyle = DenebType.body,
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+        return
+    }
+    LazyColumn(Modifier.fillMaxSize()) {
+        itemsIndexed(blocks) { i, block ->
+            when (block) {
+                is ErpBlock.Summary -> Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    block.lines.forEachIndexed { j, line ->
+                        Text(
+                            line,
+                            style = if (j == 0) DenebType.rowTitleStrong else DenebType.meta,
+                            color = if (j == 0) MaterialTheme.colorScheme.onSurface else denebHint(),
+                        )
+                        if (j == 0 && block.lines.size > 1) Spacer(Modifier.height(3.dp))
+                    }
+                }
+
+                is ErpBlock.Section -> DenebSectionLabel(
+                    block.label,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    topPadding = 14.dp,
+                )
+
+                is ErpBlock.Row -> {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        SelectionContainer {
+                            Column {
+                                Text(
+                                    block.title,
+                                    style = DenebType.rowTitle,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (block.meta.isNotBlank()) {
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        block.meta,
+                                        style = DenebType.meta,
+                                        color = denebHint(),
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (i < blocks.lastIndex && blocks[i + 1] is ErpBlock.Row) {
+                        HorizontalDivider(
+                            color = denebHairline(),
+                            thickness = 0.5.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                 }
-                Spacer(Modifier.height(24.dp))
             }
         }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }

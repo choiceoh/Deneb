@@ -42,8 +42,13 @@ export function GroupwareERPPane() {
   const appliedQ = areaDef.queryable ? searchQ.trim() : "";
   const appliedFolder = area === "sales" ? salesPeriod : "";
 
+  // 사원 is a directory lookup — the reader requires a name/부서 query, so an
+  // unqueried auto-fetch would just surface a dependency error.
+  const needsQuery = area === "people" && !appliedQ;
+
   const [text, setText] = useAsyncOnOpen(
     async () => {
+      if (needsQuery) return "(검색 필요)";
       const r = await listGroupwareERP(cfg, area, {
         folder: appliedFolder || undefined,
         query: appliedQ || undefined,
@@ -173,6 +178,8 @@ export function GroupwareERPPane() {
           {text ? (
             text === "(결과 없음)" ? (
               <p className="groupware-status">결과 없음</p>
+            ) : text === "(검색 필요)" ? (
+              <p className="groupware-status">이름이나 부서로 검색하세요</p>
             ) : (
               <div className="mail-body groupware-body">
                 <Markdown text={erpTextToMarkdown(text)} />
