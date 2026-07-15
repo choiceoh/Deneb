@@ -157,6 +157,12 @@ func newTestPlaudService(t *testing.T, exec func(ctx context.Context, name strin
 			return []mailanalysis.ProjectCandidate{{Path: "프로젝트/비금도-154kv/대표.md", Title: "비금도"}}
 		},
 		func() string { return "탑솔라 — 태양광 EPC. 1팀: 공명한 차장" },
+		func() string {
+			return "## 1. 사용자 확인\n- 이마댐 → 임하댐\n## 7. 프로젝트\n- 비금도"
+		},
+		func() string { return "테스트 교정 지침: 용어집을 우선 적용한다." },
+		"",  // topicsDir
+		nil, // projectEntities
 		func(relPath string, page *wiki.Page) error {
 			sink.pages[relPath] = page
 			return nil
@@ -225,6 +231,12 @@ func TestPlaudTickAnalyzesOnlyWhenNewRecordingAppears(t *testing.T) {
 	}
 	if len(page.Meta.Related) != 1 || page.Meta.Related[0] != "프로젝트/비금도-154kv/대표.md" {
 		t.Errorf("related = %v", page.Meta.Related)
+	}
+	if len(sink.systems) == 0 || !strings.Contains(sink.systems[0], "# 용어집") || !strings.Contains(sink.systems[0], "테스트 교정 지침") {
+		t.Fatalf("synthesis system must include glossary + correction prompt; systems=%q", sink.systems)
+	}
+	if !strings.Contains(sink.systems[0], "비금도") {
+		t.Fatalf("sliced glossary should keep project hint 비금도; system=%q", sink.systems[0])
 	}
 	if len(sink.appends) != 1 || !strings.Contains(sink.appends[0], "plaud:174d2f812c09ff81f9f95df708da938a") {
 		t.Errorf("project status append = %v", sink.appends)

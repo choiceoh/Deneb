@@ -116,11 +116,22 @@ type plaudRecordingsService struct {
 	gist       func(ctx context.Context, system, user string, maxTokens int) (string, error)
 	candidates func() []mailanalysis.ProjectCandidate
 	// topic returns the 업무 topic-knowledge block (company, org, key people)
-	// injected into the synthesis prompt — the subtractive slice of the main
-	// agent context that measurably improves term/name correction. Empty when
+	// injected into the synthesis prompt — situational context. Empty when
 	// topics are unconfigured; nil skips injection entirely.
-	topic     func() string
-	writePage func(relPath string, page *wiki.Page) error
+	topic func() string
+	// glossary returns the full topics/plaud-glossary.md body (tests / override).
+	// When nil, LoadPlaudGlossary(topicsDir) is used. The body is sliced per meeting.
+	glossary func() string
+	// correctionPrompt returns topics/plaud-correction.md (ASR correction
+	// instructions). Nil falls back to defaultPlaudCorrectionPrompt.
+	correctionPrompt func() string
+	// topicsDir is the workspace topics/ path for glossary / do-not-correct /
+	// auto-promotion. Empty disables file I/O (tests may still inject glossary).
+	topicsDir string
+	// projectEntities loads wiki-backed people/places/orgs for mentioned
+	// project 대표페이지 paths. Nil skips the project-entity block.
+	projectEntities func(paths []string) []ProjectEntityFacts
+	writePage       func(relPath string, page *wiki.Page) error
 	// appendStatus prepends a dated bullet on a linked project rep page
 	// (wiki.Store.AppendProjectStatusLine; idempotent by ref).
 	appendStatus func(projectPath, line, ref string, now time.Time) error
@@ -147,6 +158,10 @@ func newPlaudRecordingsService(
 	gist func(ctx context.Context, system, user string, maxTokens int) (string, error),
 	candidates func() []mailanalysis.ProjectCandidate,
 	topic func() string,
+	glossary func() string,
+	correctionPrompt func() string,
+	topicsDir string,
+	projectEntities func(paths []string) []ProjectEntityFacts,
 	writePage func(relPath string, page *wiki.Page) error,
 	appendStatus func(projectPath, line, ref string, now time.Time) error,
 	deliver func(text string) (bool, error),
@@ -164,19 +179,23 @@ func newPlaudRecordingsService(
 		loc = time.FixedZone("KST", kstFallbackOffset)
 	}
 	s := &plaudRecordingsService{
-		execTool:     execTool,
-		synthesize:   synthesize,
-		gist:         gist,
-		candidates:   candidates,
-		topic:        topic,
-		writePage:    writePage,
-		appendStatus: appendStatus,
-		deliver:      deliver,
-		logger:       logger,
-		statePath:    statePath,
-		displayLoc:   loc,
-		now:          time.Now,
-		state:        plaudRecordingsState{Version: 1, Seen: map[string]int64{}},
+		execTool:         execTool,
+		synthesize:       synthesize,
+		gist:             gist,
+		candidates:       candidates,
+		topic:            topic,
+		glossary:         glossary,
+		correctionPrompt: correctionPrompt,
+		topicsDir:        strings.TrimSpace(topicsDir),
+		projectEntities:  projectEntities,
+		writePage:        writePage,
+		appendStatus:     appendStatus,
+		deliver:          deliver,
+		logger:           logger,
+		statePath:        statePath,
+		displayLoc:       loc,
+		now:              time.Now,
+		state:            plaudRecordingsState{Version: 1, Seen: map[string]int64{}},
 	}
 	s.loadState()
 	return s
@@ -189,6 +208,10 @@ func NewPlaudService(
 	gist func(ctx context.Context, system, user string, maxTokens int) (string, error),
 	candidates func() []mailanalysis.ProjectCandidate,
 	topic func() string,
+	glossary func() string,
+	correctionPrompt func() string,
+	topicsDir string,
+	projectEntities func(paths []string) []ProjectEntityFacts,
 	writePage func(relPath string, page *wiki.Page) error,
 	appendStatus func(projectPath, line, ref string, now time.Time) error,
 	deliver func(text string) (bool, error),
@@ -196,7 +219,7 @@ func NewPlaudService(
 	logger *slog.Logger,
 ) *PlaudService {
 	return newPlaudRecordingsService(execTool, synthesize, gist, candidates, topic,
-		writePage, appendStatus, deliver, statePath, logger)
+		glossary, correctionPrompt, topicsDir, projectEntities, writePage, appendStatus, deliver, statePath, logger)
 }
 
 // Start launches the periodic Plaud-recording ingest loop until ctx is cancelled.
@@ -307,6 +330,14 @@ func (s *plaudRecordingsService) processRecording(ctx context.Context, f plaudFi
 	}
 	report, related := splitRelatedProjects(report, cands)
 
+	if s.topicsDir != "" {
+		if n, perr := PromotePlaudCorrections(s.topicsDir, ExtractReportCorrectionPairs(report), f.ID); perr != nil {
+			s.logger.Warn("plaud recordings: glossary promote failed", "id", f.ID, "error", perr)
+		} else if n > 0 {
+			s.logger.Info("plaud recordings: glossary promoted", "id", f.ID, "pairs", n)
+		}
+	}
+
 	// Wiki page — one per recording, project slot when linked.
 	project := ""
 	if len(related) > 0 {
@@ -370,40 +401,68 @@ func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile
 		fmt.Fprintf(&candList, "- %s — %s\n", c.Path, strings.TrimSpace(c.Title+" "+c.Summary))
 	}
 
-	// The 업무 topic-knowledge block (company/org/people) is the subtractive
-	// slice of the main agent context: the 2026-07-06 correction bake-off
-	// showed context is what separates "매/메가/kW" judgment from blind
-	// glossary matching, and this block carries it at ~2KB.
-	var knowledge string
+	// Background (업무 topic) + mentioned-project entities + sliced glossary +
+	// correction prompt. Project entities come from wiki 대표페이지 when the
+	// recording/transcript mentions a project name.
+	var b strings.Builder
 	if s.topic != nil {
 		if t := strings.TrimSpace(s.topic()); t != "" {
-			knowledge = "# 배경지식\n\n" + t + "\n\n---\n\n"
+			b.WriteString("# 배경지식\n\n")
+			b.WriteString(t)
+			b.WriteString("\n\n---\n\n")
 		}
 	}
+	var entityFacts []ProjectEntityFacts
+	mentioned := RankMentionedProjects(f.Name, transcript, cands, plaudMaxMentionedProjects)
+	if s.projectEntities != nil && len(mentioned) > 0 {
+		paths := make([]string, 0, len(mentioned))
+		for _, m := range mentioned {
+			paths = append(paths, m.Path)
+		}
+		entityFacts = s.projectEntities(paths)
+		if block := FormatProjectEntityBlock(entityFacts); block != "" {
+			b.WriteString("# 프로젝트 연관 고유명\n\n")
+			b.WriteString(block)
+			b.WriteString("\n\n---\n\n")
+		}
+	}
+	fullGlossary := ""
+	if s.glossary != nil {
+		fullGlossary = strings.TrimSpace(s.glossary())
+	} else if s.topicsDir != "" {
+		fullGlossary = LoadPlaudGlossary(s.topicsDir)
+	}
+	doNot := ""
+	if s.topicsDir != "" {
+		doNot = LoadPlaudDoNotCorrect(s.topicsDir)
+	}
+	sliceCands := mentioned
+	if len(sliceCands) == 0 {
+		sliceCands = cands
+	}
+	if sliced := SlicePlaudGlossary(fullGlossary, doNot, GlossaryHints{
+		RecordingName: f.Name,
+		Candidates:    sliceCands,
+		ExtraTokens:   EntityHintTokens(entityFacts),
+	}); sliced != "" {
+		b.WriteString("# 용어집 (회의 슬라이스)\n\n")
+		b.WriteString(sliced)
+		b.WriteString("\n\n---\n\n")
+	}
+	correction := defaultPlaudCorrectionPrompt
+	if s.correctionPrompt != nil {
+		if c := strings.TrimSpace(s.correctionPrompt()); c != "" {
+			correction = c
+		}
+	} else if s.topicsDir != "" {
+		correction = LoadPlaudCorrectionPrompt(s.topicsDir)
+	}
+	b.WriteString("# 교정 지침\n\n")
+	b.WriteString(correction)
+	b.WriteString("\n\n---\n\n")
+	b.WriteString(plaudMeetingReportPrompt)
 
-	system := knowledge + `당신은 업무 회의록 분석가다. 회의 전사를 읽고 한국어 회의록을 작성한다.
-전사는 음성인식 결과라 오인식이 섞여 있다 — 용어·단위·고유명사의 명백한 오인식은 문맥과 배경지식으로
-교정해 본문에 반영하라 (발전용량 '메가(MW)'/철골 자재 '매(장)'/생산량 '톤'/소형 설비 'kW'를 구분하고,
-프로젝트·인명·지명은 아는 표기를 우선한다).
-
-출력 형식 (마크다운, 이 구조 그대로):
-## 요약
-- (3~6개 불릿 — 무슨 회의였고 무엇이 진행됐는지)
-## 결정사항
-- (확정된 결정만. 없으면 "- 없음")
-## 액션 아이템
-- (담당자/기한이 언급됐으면 함께. 없으면 "- 없음")
-## 리스크·미해결
-- (걸림돌, 다음 회의로 넘어간 쟁점. 없으면 "- 없음")
-## 표기 교정
-- (본문에 반영한 대표 교정 5~15개: "원문 → 교정" 꼴. 실제로 표기가 달라진 항목만 —
-  원문과 교정문이 같은 항목·"유지/확인" 항목은 넣지 마라. 없으면 "- 없음")
-
-규칙:
-- 전사에 있는 내용만 쓴다. 추측은 "(추정)"을 붙인다.
-- 발언자 이름이 식별되면 결정/액션에 이름을 남긴다.
-- 마지막 줄에 정확히 한 줄: "관련프로젝트: <아래 후보 목록의 path를 쉼표로, 해당 없으면 없음>"
-- 관련프로젝트는 후보 목록에 있는 path만 쓸 수 있다.`
+	system := b.String()
 
 	user := fmt.Sprintf("# 회의 정보\n- 제목: %s\n- 일시: %s (KST)\n- 길이: %d분\n\n# 프로젝트 후보 목록\n%s\n# 전사\n%s",
 		f.Name, f.StartAt.In(s.displayLoc).Format("2006-01-02 15:04"),

@@ -306,6 +306,10 @@ func (s *Server) registerPlaudWorkflow(homeDir string) {
 		s.completePlaudStageOne,
 		s.projectCandidatesFn(),
 		s.businessTopicKnowledge,
+		s.plaudGlossary,
+		s.plaudCorrectionPrompt,
+		configresolve.TopicsDir(),
+		s.plaudProjectEntities,
 		s.wikiStore.WritePage,
 		s.wikiStore.AppendProjectStatusLine,
 		s.relayMeetingReport,
@@ -355,6 +359,64 @@ func (s *Server) businessTopicKnowledge() string {
 		return ""
 	}
 	return prompt.LoadTopicKnowledge("", dir, "업무", "").Content
+}
+
+func (s *Server) plaudGlossary() string {
+	return runtimemeeting.LoadPlaudGlossary(configresolve.TopicsDir())
+}
+
+func (s *Server) plaudCorrectionPrompt() string {
+	return runtimemeeting.LoadPlaudCorrectionPrompt(configresolve.TopicsDir())
+}
+
+// plaudProjectEntities loads 대표페이지 + related 인물/거래처 titles for
+// Plaud ASR correction. Caps related reads so a noisy related: list cannot
+// fan out into the whole wiki.
+func (s *Server) plaudProjectEntities(paths []string) []runtimemeeting.ProjectEntityFacts {
+	if s.wikiStore == nil || len(paths) == 0 {
+		return nil
+	}
+	const maxRelatedReads = 12
+	out := make([]runtimemeeting.ProjectEntityFacts, 0, len(paths))
+	relatedReads := 0
+	for _, path := range paths {
+		page, err := s.wikiStore.ReadPage(path)
+		if err != nil || page == nil {
+			continue
+		}
+		fact := runtimemeeting.ProjectEntityFacts{
+			Path:   path,
+			Title:  page.Meta.Title,
+			Client: page.Meta.Client,
+			Sites:  append([]string(nil), page.Meta.Sites...),
+			Tags:   append([]string(nil), page.Meta.Tags...),
+			Cues:   append([]string(nil), page.Meta.Cues...),
+		}
+		for _, rel := range page.Meta.Related {
+			kind := runtimemeeting.RelatedEntityKind(rel)
+			if kind == "" {
+				continue
+			}
+			title := ""
+			if relatedReads < maxRelatedReads {
+				if rp, rerr := s.wikiStore.ReadPage(rel); rerr == nil && rp != nil {
+					title = strings.TrimSpace(rp.Meta.Title)
+					relatedReads++
+				}
+			}
+			if title == "" {
+				title = runtimemeeting.TitleFromRelatedPath(rel)
+			}
+			switch kind {
+			case "person":
+				fact.People = append(fact.People, title)
+			case "org":
+				fact.Orgs = append(fact.Orgs, title)
+			}
+		}
+		out = append(out, fact)
+	}
+	return out
 }
 
 func (s *Server) relayMeetingReport(text string) (bool, error) {
