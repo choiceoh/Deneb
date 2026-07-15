@@ -303,6 +303,32 @@ func TestXcomKoreanHTMLWithEllipsisNoPanic(t *testing.T) {
 	}
 }
 
+// TestRawContentWithCaseGrowingUnicodeNoPanic guards scanRawContent against the
+// production panic (slice bounds out of range [:77544] length 72141): a raw
+// <script>/<style>/<noscript> block whose content holds a char that GROWS in
+// bytes under Go's simple ToLower — 'Ⱥ' U+023A (2 bytes) → 'ⱥ' U+2C65 (3 bytes)
+// — used to inflate the close-tag search index past len(input) and slice out of
+// range. The close tag must be located by its true byte offset, so boundary
+// text around the block survives and the raw content is dropped.
+func TestRawContentWithCaseGrowingUnicodeNoPanic(t *testing.T) {
+	for _, block := range []string{"style", "script", "noscript"} {
+		var b strings.Builder
+		b.WriteString("<p>before</p><" + block + ">")
+		for range 64 {
+			b.WriteString("Ⱥ") // Ⱥ — lowercases to 3-byte ⱥ
+		}
+		b.WriteString("</" + block + "><p>after</p>")
+
+		r := Convert(b.String()) // must not panic
+		if !strings.Contains(r.Text, "before") || !strings.Contains(r.Text, "after") {
+			t.Errorf("%s: boundary text lost — close tag mislocated: %q", block, r.Text)
+		}
+		if strings.ContainsRune(r.Text, 'Ⱥ') || strings.ContainsRune(r.Text, 'ⱥ') {
+			t.Errorf("%s: raw block content leaked: %q", block, r.Text)
+		}
+	}
+}
+
 func TestConvertPreservesEllipsisAtAnyByteAlignment(t *testing.T) {
 	for padding := range 4 {
 		prefix := strings.Repeat("x", padding)
