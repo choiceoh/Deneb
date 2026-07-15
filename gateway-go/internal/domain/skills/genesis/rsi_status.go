@@ -338,6 +338,10 @@ type l4Tally struct {
 	staged          int
 	inFlight        int
 	applied         int
+	impactPending   int
+	impactVerified  int
+	impactNoEffect  int
+	impactRegressed int
 	declined        int
 	failed          int
 	oldestPendingAt int64
@@ -372,6 +376,16 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 			tally.inFlight++
 		case genbind.DeliveryVerified:
 			tally.applied++
+			switch SelfCorrectionImpactStatus(c) {
+			case SelfCorrectionImpactPending:
+				tally.impactPending++
+			case SelfCorrectionImpactVerified:
+				tally.impactVerified++
+			case SelfCorrectionImpactNoEffect:
+				tally.impactNoEffect++
+			case SelfCorrectionImpactRegressed:
+				tally.impactRegressed++
+			}
 		case genbind.DeliverySafeNoop:
 			// A clean session with no diff is a terminal, healthy no-op. It is
 			// neither in flight nor a failed dispatch.
@@ -412,6 +426,7 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "배차 가능", Value: strconv.Itoa(tally.dispatchable)},
 		{Label: "진행 중", Value: strconv.Itoa(tally.inFlight)},
 		{Label: "감시 통과", Value: strconv.Itoa(tally.applied)},
+		{Label: "효과 판정", Value: rsiL4ImpactValue(tally)},
 		{Label: "안전 종료", Value: strconv.Itoa(tally.declined)},
 		{Label: "실패/롤백", Value: strconv.Itoa(tally.failed)},
 		{Label: "검토 대기(비배차)", Value: strconv.Itoa(tally.staged)},
@@ -421,6 +436,20 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
 		{Label: "최장 대기", Value: rsiAgeValue(tally.oldestPendingAt)},
 	}
+}
+
+func rsiL4ImpactValue(tally l4Tally) string {
+	total := tally.impactPending + tally.impactVerified + tally.impactNoEffect + tally.impactRegressed
+	if total == 0 {
+		return "계약 후보 없음"
+	}
+	return fmt.Sprintf(
+		"확인 %d · 대기 %d · 효과없음 %d · 악화 %d",
+		tally.impactVerified,
+		tally.impactPending,
+		tally.impactNoEffect,
+		tally.impactRegressed,
+	)
 }
 
 func rsiL4Verdict(tally l4Tally, total int, runtime codingDispatchRuntime) (string, string) {

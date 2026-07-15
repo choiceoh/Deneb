@@ -750,6 +750,12 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 			}
 			return s.genesisTracker.RecordSelfCorrectionDispatch(rec)
 		},
+		RecordImpact: func(rec genesisbind.SelfCorrectionCandidateRecord) (genesisbind.SelfCorrectionCandidateRecord, error) {
+			if s.genesisTracker == nil {
+				return genesisbind.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
+			}
+			return s.genesisTracker.RecordSelfCorrectionImpact(rec)
+		},
 		Funnel: func() genesisbind.SelfCorrectionFunnelSummary {
 			if s.genesisTracker == nil {
 				return genesisbind.SelfCorrectionFunnelSummary{}
