@@ -49,9 +49,7 @@ export function GroupwareERPPane() {
 
   useRegisterPane(
     "groupware",
-    text
-      ? `[그룹웨어 · ${areaDef.label}]\n${text}`
-      : `[그룹웨어 · ${areaDef.label}]\n(조회 결과 없음)`,
+    text ? `[그룹웨어 · ${areaDef.label}]\n${text}` : `[그룹웨어 · ${areaDef.label}]\n(조회 결과 없음)`,
   );
 
   async function applySearch() {
