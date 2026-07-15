@@ -68,7 +68,7 @@
   var PARTS_RESULT_PREFIX = '\uE000deneb_translate_parts:v1:';
   // Include DLE (.full-story-text) and Forumotion (.post-content) containers so
   // link-split sentence fragments group into one DeepL unit instead of 3 orphans.
-  var BLOCK_SELECTOR = 'p,li,blockquote,figcaption,caption,td,th,dt,dd,h1,h2,h3,h4,h5,h6,article,section,div.full-story-text,div.post-content,div.postbody,div.quote';
+  var BLOCK_SELECTOR = 'p,li,blockquote,figcaption,caption,td,th,dt,dd,h1,h2,h3,h4,h5,h6,article,section,div.full-story-text,div.post-content,div.postbody,div.quote,div.available-content,div.markup,div.body.markup';
   var CONTENT_SELECTORS = [
     // DLE CMS article body (topwar.ru, topcor.ru) — prefer over wrapping <article>
     '.full-story-text',
@@ -78,6 +78,13 @@
     '.post-content',
     '.postbody',
     '#page-body',
+    // Substack post body (*.substack.com)
+    '.available-content',
+    '.body.markup',
+    '.markup',
+    '.single-post',
+    '.newsletter-post',
+    '[data-testid="post-content"]',
     'article',
     'main',
     '[role="main"]',
@@ -97,7 +104,7 @@
     '#main'
   ];
   // Leftover ad/CMP chrome after network blocking — never ship to DeepL.
-  var SKIP_SELECTOR = '.banner-full-story,.banner-block,.banner-block *,[id^="yandex_rtb"],[id^="adfox"],[id*="yandex_rtb"],.dle_b_floor_ad,.adsbygoogle,.taboola,[id^="taboola"],.consentframework,[class*="consentframework"]';
+  var SKIP_SELECTOR = '.banner-full-story,.banner-block,.banner-block *,[id^="yandex_rtb"],[id^="adfox"],[id*="yandex_rtb"],.dle_b_floor_ad,.adsbygoogle,.taboola,[id^="taboola"],.consentframework,[class*="consentframework"],.subscribe-widget,[class*="subscribe-widget"],.paywall,[class*="paywall"],.modal-container,[data-testid="subscribe-widget"]';
   var OBSERVE_OPTS = { childList: true, subtree: true, characterData: true };
 
   function translatable(text) {

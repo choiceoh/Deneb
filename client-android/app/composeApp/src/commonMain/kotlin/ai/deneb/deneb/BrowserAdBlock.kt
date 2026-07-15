@@ -121,6 +121,20 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "consentframework.com",
     "cache.consentframework.com",
     "choices.consentframework.com",
+    // Substack publisher pixels / common newsletter trackers
+    "connect.facebook.net",
+    "analytics.twitter.com",
+    "static.ads-twitter.com",
+    "parsely.com",
+    "cdn.parsely.com",
+    "p1.parsely.com",
+    "amplitude.com",
+    "cdn.amplitude.com",
+    "api.amplitude.com",
+    "api2.amplitude.com",
+    "cdn.segment.com",
+    "api.segment.io",
+    "cdn.segment.io",
 )
 
 /** Slash-bounded path segments that mark ad creatives / delivery.
@@ -156,6 +170,8 @@ private val BROWSER_AD_PATH_HOSTISH: List<String> = listOf(
     "adriver",
     "taboola.com/libtrc",
     "viously.com",
+    "facebook.com/tr",
+    "connect.facebook.net",
 )
 
 /** Query keys that almost always mean ad or tracking pixels. */
@@ -191,7 +207,14 @@ internal fun shouldBlockBrowserAdRequest(url: String, isForMainFrame: Boolean = 
     val marked = "/$pathAndQuery"
 
     if (BROWSER_AD_PATH_SEGMENTS.any { marked.contains(it) }) return true
-    if (BROWSER_AD_PATH_HOSTISH.any { marked.contains(it) }) return true
+    // Domain-ish tokens (e.g. facebook.com/tr) need the full URL — path-only
+    // marked drops the hostname after the first slash of the authority.
+    if (BROWSER_AD_PATH_HOSTISH.any { token ->
+            marked.contains(token) || (token.contains('.') && lower.contains(token))
+        }
+    ) {
+        return true
+    }
     if (marked.contains("/pixel.") || marked.contains("/pixels/") || marked.contains("/beacon/")) return true
 
     val query = marked.substringAfter('?', missingDelimiterValue = "")
