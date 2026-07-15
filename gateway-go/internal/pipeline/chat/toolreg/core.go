@@ -525,6 +525,25 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 	}
 }
 
+// RegisterPersonaTools registers the `preference` tool: an append-only path for
+// the agent to persist a durable standing preference / behavior rule into the
+// workspace SOUL.md. Append-only by contract (the agent can add but never
+// delete a rule — only the human operator rewrites SOUL.md), so the agent
+// cannot quietly erase its own standing constraints. Deferred so it stays out
+// of the eager prompt (persisting a preference is a deliberate, occasional act).
+func RegisterPersonaTools(registry toolport.ToolRegistrar, workspaceDir string) {
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "preference",
+		Description: "사용자의 서 있는 선호·행동 규칙을 SOUL.md(페르소나)에 영구 저장한다 (append-only). " +
+			"사용자가 '앞으로는 …해줘/…하지 마'처럼 지속 적용될 행동 방침을 말하면 이걸로 rule 한 줄을 남긴다. " +
+			"추가만 가능하고 삭제·수정은 사용자만 SOUL.md 편집으로 할 수 있다 — 에이전트가 자기 규칙을 지우지 못하게 하는 의도적 비대칭. " +
+			"반영은 다음 세션부터. 일회성 사실은 wiki, 사용자 개인정보는 wiki 사용자 카테고리를 쓰고, 이건 '어떻게 행동할지'에만 쓴다.",
+		InputSchema: preferenceToolSchema(),
+		Fn:          tools.ToolPersonaPref(workspaceDir),
+		Deferred:    true,
+	})
+}
+
 // RegisterNotebookTool registers the notebook tool — NotebookLM-style scoped
 // source collections for grounded, cited synthesis (딜/프로젝트 브리핑). Skipped
 // when the notebook store is unavailable.

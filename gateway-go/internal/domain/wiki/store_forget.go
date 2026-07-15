@@ -1,0 +1,66 @@
+// store_forget.go — hard "forget this fact" deletion with an audit tombstone.
+//
+// This is the destructive counterpart to MarkSuperseded (store_merge.go): where
+// supersession keeps a stale page readable and merely demotes it in search,
+// Forget REMOVES the page from active memory. The trade is deliberate — a
+// privacy/correctness "forget this" that left the fact readable would not be a
+// forget. The only trace left behind is an audit-log tombstone (path, title,
+// reason), so the deletion stays accountable.
+package wiki
+
+import (
+	"fmt"
+	"strings"
+)
+
+// ForgetResult reports what a Forget removed.
+type ForgetResult struct {
+	Path  string // normalized page path that was removed
+	Title string // the page's title at removal time (for the caller's echo)
+}
+
+// Forget removes a page from active memory for privacy or correctness
+// ("forget this fact"), first recording an auditable tombstone (page path,
+// title, and the caller's reason) to the wiki log. Unlike MarkSuperseded — the
+// soft path, which keeps the page readable and only demotes it in search —
+// Forget is a HARD delete: the page is gone, and the log entry is its only
+// remaining trace.
+//
+// A reason is required and the tombstone is written BEFORE the delete: an
+// unaudited forget is not auditable, and this is the one wiki tool path that
+// destroys a fact outright, so it fails closed if the audit record can't be
+// persisted.
+func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
+	relPath = normalizePagePath(relPath)
+	if relPath == "" {
+		return ForgetResult{}, fmt.Errorf("wiki: forget needs a page path")
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return ForgetResult{}, fmt.Errorf("wiki: forget needs a reason (audit trail)")
+	}
+
+	// Hold writeMu across read → audit → delete so no concurrent writer slips an
+	// edit into the page between capturing its identity and removing it.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	page, err := s.ReadPage(relPath)
+	if err != nil {
+		return ForgetResult{}, fmt.Errorf("wiki: forget: read %q: %w", relPath, err)
+	}
+	title := page.Meta.Title
+
+	// Tombstone first: fail closed if we can't record why the fact was removed.
+	if err := s.appendLog("forget", fmt.Sprintf("%s — %s — reason: %s", relPath, title, reason)); err != nil {
+		return ForgetResult{}, fmt.Errorf("wiki: forget: record tombstone: %w", err)
+	}
+
+	// deletePageLocked (not DeletePage) because we already hold writeMu; it also
+	// cleans the FTS index, master index, and backlinks.
+	if err := s.deletePageLocked(relPath); err != nil {
+		return ForgetResult{}, fmt.Errorf("wiki: forget: delete: %w", err)
+	}
+
+	return ForgetResult{Path: relPath, Title: title}, nil
+}

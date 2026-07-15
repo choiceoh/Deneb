@@ -21,6 +21,11 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// Wiki knowledge base tools (always active when wiki is configured).
 	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
 
+	// preference: append-only standing behavior rules → workspace SOUL.md.
+	// Uses the same workspace dir the prompt reads context files from so the
+	// appended rule is picked up on the next session's context-file load.
+	toolreg.RegisterPersonaTools(registry, resolveWorkspaceDirForPrompt())
+
 	// Notebook: NotebookLM-style scoped source collections for grounded, cited
 	// synthesis (딜/프로젝트 브리핑). Active when the notebook store is wired.
 	toolreg.RegisterNotebookTool(registry, &deps.Notebook)

@@ -66,6 +66,7 @@ func allSchemaCases() []schemaCase {
 		{name: "org", build: orgToolSchema},
 		{name: "goal", build: goalToolSchema},
 		{name: "mail_archive", build: mailArchiveToolSchema},
+		{name: "preference", build: preferenceToolSchema},
 	}
 }
 
