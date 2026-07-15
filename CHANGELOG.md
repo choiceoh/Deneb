@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.112.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.111.0...deneb-v4.112.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **client:** native rows for groupware ERP snapshot ([#3786](https://github.com/choiceoh/Deneb/issues/3786)) ([c418f3b](https://github.com/choiceoh/Deneb/commit/c418f3b24845d621bfbb148756648c4aa7a6281e))
+* **client:** pivot to mail, quiet pending filter, approval detail reorder ([#3788](https://github.com/choiceoh/Deneb/issues/3788)) ([e6af3c3](https://github.com/choiceoh/Deneb/commit/e6af3c336106c5772aea8ff5676e1829d5e40395))
+* **client:** zune-style pivot header + groupware surface upgrades ([#3785](https://github.com/choiceoh/Deneb/issues/3785)) ([40db5ae](https://github.com/choiceoh/Deneb/commit/40db5ae49e7a7522cf56a9ca3d306ca79c5d1595))
+* review unknown mail senders ([#3783](https://github.com/choiceoh/Deneb/issues/3783)) ([32d1ad7](https://github.com/choiceoh/Deneb/commit/32d1ad733573947a71706a28fb41ecb46f53651b))
+* **sitemap:** 모바일 지도 심미 개선 — 시도 라벨·핀 외곽선·마감 ([#3784](https://github.com/choiceoh/Deneb/issues/3784)) ([7b35057](https://github.com/choiceoh/Deneb/commit/7b350576bbb223d99a0e6560e144c1ebd664fd9a))
+* **sitemap:** 모바일 지도 핀치 줌·팬 (데스크톱 휠 줌 대응) ([#3782](https://github.com/choiceoh/Deneb/issues/3782)) ([2773972](https://github.com/choiceoh/Deneb/commit/27739721d0a31a967b759dc8a5ef3703be6579b4))
+
+
+### 🔧 Internal
+
+* load specialist guidance just in time ([#3787](https://github.com/choiceoh/Deneb/issues/3787)) ([ca86274](https://github.com/choiceoh/Deneb/commit/ca862747b1e57237704396c741a58938d3cdf239))
+
 ## [4.111.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.110.0...deneb-v4.111.0) (2026-07-15)
 
 
