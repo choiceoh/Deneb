@@ -48,4 +48,18 @@ class BrowserBookmarksTest {
         assertFalse(canBookmarkUrl(""))
         assertFalse(canBookmarkUrl("about:blank"))
     }
+
+    @Test
+    fun `resolveBrowserStartUrl prefers nav url then last http page`() {
+        assertEquals(
+            "https://nav.example/path",
+            resolveBrowserStartUrl(" https://nav.example/path ", "https://last.example"),
+        )
+        assertEquals(
+            "https://last.example/page",
+            resolveBrowserStartUrl("", " https://last.example/page "),
+        )
+        assertEquals("", resolveBrowserStartUrl("", "about:blank"))
+        assertEquals("", resolveBrowserStartUrl("  ", ""))
+    }
 }

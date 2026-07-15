@@ -53,6 +53,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,7 +83,17 @@ fun DenebBrowserScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state = remember(url) { DenebWebViewState(url) }
+    // More tile opens with an empty route URL; resume the last http(s) page. An
+    // explicit deep-link / open_url keeps its own URL and then becomes the new last.
+    val state = remember(url) {
+        DenebWebViewState(resolveBrowserStartUrl(url, appSettings.getBrowserLastUrl()))
+    }
+    LaunchedEffect(state.currentUrl) {
+        val current = state.currentUrl.trim()
+        if (canBookmarkUrl(current) && current != appSettings.getBrowserLastUrl()) {
+            appSettings.setBrowserLastUrl(current)
+        }
+    }
     var showBookmarks by remember { mutableStateOf(false) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
     fun persistBookmarks(next: List<BrowserBookmark>) {

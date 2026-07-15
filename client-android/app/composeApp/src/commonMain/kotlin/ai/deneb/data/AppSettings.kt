@@ -78,6 +78,19 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_BROWSER_BOOKMARKS, json)
     }
 
+    // Last page shown in the in-app translation browser. Restored when reopening
+    // from More with an empty route URL (leave → re-enter resumes where you left).
+    fun getBrowserLastUrl(): String = settings.getString(KEY_BROWSER_LAST_URL, "")
+
+    fun setBrowserLastUrl(url: String) {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) {
+            settings.remove(KEY_BROWSER_LAST_URL)
+        } else {
+            settings.putString(KEY_BROWSER_LAST_URL, trimmed)
+        }
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -402,6 +415,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
         const val KEY_HIDDEN_MORE_TILES = "hidden_more_tiles"
         const val KEY_BROWSER_BOOKMARKS = "browser_bookmarks"
+        const val KEY_BROWSER_LAST_URL = "browser_last_url"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"

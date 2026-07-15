@@ -123,4 +123,16 @@ class AppSettingsLogicTest {
         assertEquals(2, s.trackAppOpen())
         assertTrue(s.trackAppOpen() == 3)
     }
+
+    // --- browser last URL ------------------------------------------------
+
+    @Test
+    fun `browser last url persists and clears on blank`() {
+        val s = fresh()
+        assertEquals("", s.getBrowserLastUrl())
+        s.setBrowserLastUrl(" https://example.com/article ")
+        assertEquals("https://example.com/article", s.getBrowserLastUrl())
+        s.setBrowserLastUrl("   ")
+        assertEquals("", s.getBrowserLastUrl())
+    }
 }
