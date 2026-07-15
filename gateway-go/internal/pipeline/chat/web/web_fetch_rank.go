@@ -3,9 +3,11 @@ package web
 
 import (
 	"context"
+	"log/slog"
 	"net/url"
 	"path"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -31,6 +33,23 @@ type fetchUsability struct {
 	Signals   []string
 }
 
+// fetchOutcome pairs the agent-facing envelope with a structured usability
+// verdict produced on the fetch path (not by re-parsing Signals: text).
+type fetchOutcome struct {
+	Content string
+	Assess  fetchUsability
+}
+
+type candidateFilterStats struct {
+	DeniedHost  int
+	DeniedYT    int
+	DeniedPath  int
+	DeniedMedia int
+	DupHost     int
+	DupETLD     int
+	Kept        int
+}
+
 func fetchCandidatePoolSize(count, fetchTop int) int {
 	pool := fetchTop + 2
 	if pool > 5 {
@@ -45,12 +64,14 @@ func fetchCandidatePoolSize(count, fetchTop int) int {
 	return pool
 }
 
-// rankFetchCandidates orders answer-box link first, then organic URLs scored by
-// query overlap with diversity demotion, then filters denylist/media/YouTube
-// non-video/host+eTLD diversity. limit caps the returned pool.
-func rankFetchCandidates(query, answerLink string, organic []searchResult, limit int) []string {
-	ordered := make([]string, 0, 1+len(organic))
+// rankFetchCandidates orders answer-box, then knowledge-graph website, then
+// organic URLs scored by query overlap with diversity demotion.
+func rankFetchCandidates(query, answerLink, knowledgeLink string, organic []searchResult, limit int) ([]string, candidateFilterStats) {
+	ordered := make([]string, 0, 2+len(organic))
 	if link := strings.TrimSpace(answerLink); link != "" {
+		ordered = append(ordered, link)
+	}
+	if link := strings.TrimSpace(knowledgeLink); link != "" && link != strings.TrimSpace(answerLink) {
 		ordered = append(ordered, link)
 	}
 	ordered = append(ordered, orderOrganicByRelevance(query, organic)...)
@@ -75,7 +96,6 @@ func orderOrganicByRelevance(query string, organic []searchResult) []string {
 			idx:   i,
 		})
 	}
-	// Stable: higher score first, then original index.
 	for i := 0; i < len(items); i++ {
 		best := i
 		for j := i + 1; j < len(items); j++ {
@@ -87,7 +107,6 @@ func orderOrganicByRelevance(query string, organic []searchResult) []string {
 		items[i], items[best] = items[best], items[i]
 	}
 
-	// Greedy diversity: prefer distinct eTLD+1 and path prefix.
 	out := make([]string, 0, len(items))
 	seenETLD := map[string]int{}
 	seenPath := map[string]int{}
@@ -154,7 +173,6 @@ func registrableDomain(host string) string {
 	host = strings.ToLower(strings.TrimPrefix(host, "www."))
 	parts := strings.Split(host, ".")
 	if len(parts) >= 2 {
-		// naive eTLD+1 (good enough for diversity; not PSL-accurate)
 		return parts[len(parts)-2] + "." + parts[len(parts)-1]
 	}
 	return host
@@ -171,11 +189,10 @@ func pathPrefixKey(u *url.URL) string {
 	return registrableDomain(u.Host) + "/" + strings.ToLower(seg)
 }
 
-// filterFetchCandidates drops empty/javascript/media/denied-host/YouTube-non-video/
-// low-quality-path URLs and duplicate hosts (first wins). PDF and Office stay.
-func filterFetchCandidates(urls []string, limit int) []string {
+func filterFetchCandidates(urls []string, limit int) ([]string, candidateFilterStats) {
+	var stats candidateFilterStats
 	if limit <= 0 {
-		return nil
+		return nil, stats
 	}
 	seenHost := make(map[string]struct{}, limit)
 	seenETLD := make(map[string]struct{}, limit)
@@ -189,16 +206,28 @@ func filterFetchCandidates(urls []string, limit int) []string {
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 			continue
 		}
-		if isNonDocumentMediaURL(parsed) || isDeniedFetchHost(parsed.Host) ||
-			isDeniedYouTubeURL(parsed) || isLowQualityFetchPath(parsed) {
+		switch {
+		case isNonDocumentMediaURL(parsed):
+			stats.DeniedMedia++
+			continue
+		case isDeniedFetchHost(parsed.Host):
+			stats.DeniedHost++
+			continue
+		case isDeniedYouTubeURL(parsed):
+			stats.DeniedYT++
+			continue
+		case isLowQualityFetchPath(parsed):
+			stats.DeniedPath++
 			continue
 		}
 		host := strings.ToLower(parsed.Host)
 		if _, ok := seenHost[host]; ok {
+			stats.DupHost++
 			continue
 		}
 		etld := registrableDomain(host)
 		if _, ok := seenETLD[etld]; ok {
+			stats.DupETLD++
 			continue
 		}
 		seenHost[host] = struct{}{}
@@ -208,18 +237,15 @@ func filterFetchCandidates(urls []string, limit int) []string {
 			break
 		}
 	}
+	stats.Kept = len(out)
+	return out, stats
+}
+
+func selectFetchURLs(urls []string, limit int) []string {
+	out, _ := filterFetchCandidates(urls, limit)
 	return out
 }
 
-// selectFetchURLs is the legacy entry used by tests; it filters without an
-// answer-box link. Prefer rankFetchCandidates for search+fetch.
-func selectFetchURLs(urls []string, limit int) []string {
-	return filterFetchCandidates(urls, limit)
-}
-
-// Social/aggregator hosts rarely yield article body for research; skip them
-// so fetchTop budget goes to document-like pages. YouTube video URLs are kept
-// (transcript); channel/home URLs are denied separately.
 var fetchHostDenyExact = map[string]struct{}{
 	"facebook.com": {}, "fb.com": {}, "instagram.com": {},
 	"tiktok.com": {}, "x.com": {}, "twitter.com": {},
@@ -252,8 +278,6 @@ func isDeniedFetchHost(host string) bool {
 	return false
 }
 
-// isDeniedYouTubeURL skips channel/home/playlist pages; keeps watch/shorts/live
-// URLs that the transcript path can handle.
 func isDeniedYouTubeURL(u *url.URL) bool {
 	host := strings.ToLower(strings.TrimPrefix(u.Host, "www."))
 	switch host {
@@ -282,7 +306,6 @@ func isLowQualityFetchPath(u *url.URL) bool {
 			return true
 		}
 	}
-	// Site-internal search result pages are rarely useful article bodies.
 	if strings.Contains(p, "/search") && u.RawQuery != "" {
 		return true
 	}
@@ -301,24 +324,17 @@ func isNonDocumentMediaURL(u *url.URL) bool {
 	return ok
 }
 
-const usableFetchMinChars = 400 // aligned with thinContentThreshold
+const usableFetchMinChars = 400
 
 var thinFetchSignals = []string{"js_required", "empty_body", "low_content_yield"}
 
-// assessFetchResult returns a structured usability verdict for a fetch envelope.
-func assessFetchResult(content string, err error) fetchUsability {
-	if err != nil {
-		return fetchUsability{HasError: true}
-	}
-	if content == "" || strings.Contains(content, "<error>") {
-		return fetchUsability{HasError: true}
-	}
-	signals := fetchResultSignalList(content)
-	bodyChars := len(strings.TrimSpace(fetchResultBody(content)))
+// assessMetaBody builds a usability verdict from fetch-path metadata + body.
+func assessMetaBody(signals []string, body string) fetchUsability {
+	bodyChars := len(strings.TrimSpace(body))
 	thin := false
-	for _, s := range thinFetchSignals {
+	for _, want := range thinFetchSignals {
 		for _, got := range signals {
-			if got == s {
+			if got == want {
 				thin = true
 				break
 			}
@@ -330,23 +346,31 @@ func assessFetchResult(content string, err error) fetchUsability {
 	u := fetchUsability{
 		Thin:      thin,
 		BodyChars: bodyChars,
-		Signals:   signals,
+		Signals:   append([]string(nil), signals...),
 	}
-	if !thin {
-		u.Usable = true
+	if thin {
+		u.Usable = bodyChars >= usableFetchMinChars
 		return u
 	}
-	u.Usable = bodyChars >= usableFetchMinChars
+	u.Usable = bodyChars > 0
 	return u
+}
+
+// assessFetchResult falls back to envelope parsing (cache hits / legacy tests).
+func assessFetchResult(content string, err error) fetchUsability {
+	if err != nil {
+		return fetchUsability{HasError: true}
+	}
+	if content == "" || strings.Contains(content, "<error>") {
+		return fetchUsability{HasError: true}
+	}
+	return assessMetaBody(fetchResultSignalList(content), fetchResultBody(content))
 }
 
 func isUsableFetchContent(content string) bool {
 	return assessFetchResult(content, nil).Usable
 }
 
-// selectUsableFetches keeps up to fetchTop pages that are not errors/thin SPA
-// shells, preserving original candidate order. Used by tests; production fill
-// uses fillUsableFetches (sequential early-stop).
 func selectUsableFetches(candidates []string, results []searchFetchOutcome, fetchTop int) []fetchedPage {
 	out := make([]fetchedPage, 0, fetchTop)
 	for i := range candidates {
@@ -362,10 +386,12 @@ func selectUsableFetches(candidates []string, results []searchFetchOutcome, fetc
 	return out
 }
 
-type urlFetchFunc func(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (string, error)
+type urlFetchDetailedFunc func(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error)
 
-// fillUsableFetches fetches candidates in order until fetchTop usable pages are
-// collected, then stops (saves scrape credits vs fetching the whole pool).
+const hybridFillWave = 2
+
+// fillUsableFetches fetches a first parallel wave, then continues sequentially
+// until fetchTop usable pages are collected (early stop).
 func fillUsableFetches(
 	ctx context.Context,
 	cache *FetchCache,
@@ -373,22 +399,76 @@ func fillUsableFetches(
 	spill tooldeps.SpilloverStore,
 	candidates []string,
 	fetchTop, perCandidateChars int,
-	fetch urlFetchFunc,
+	fetch urlFetchDetailedFunc,
 ) []fetchedPage {
 	if fetch == nil {
-		fetch = webFetchURL
+		fetch = webFetchURLDetailed
 	}
 	out := make([]fetchedPage, 0, fetchTop)
-	for _, u := range candidates {
-		if len(out) >= fetchTop {
-			break
+	var skippedThin, skippedErr, tried int
+
+	consider := func(u string, outc fetchOutcome, err error) {
+		tried++
+		a := outc.Assess
+		if err != nil {
+			a = fetchUsability{HasError: true}
+		} else if !a.Usable && !a.Thin && !a.HasError && a.BodyChars == 0 && len(a.Signals) == 0 {
+			// Zero assess (cache/legacy) — derive from envelope.
+			a = assessFetchResult(outc.Content, nil)
 		}
-		content, err := fetch(ctx, cache, localAI, spill, u, perCandidateChars)
-		if !assessFetchResult(content, err).Usable {
-			continue
+		if !a.Usable {
+			if a.HasError {
+				skippedErr++
+			} else if a.Thin {
+				skippedThin++
+			} else {
+				skippedErr++
+			}
+			return
 		}
-		out = append(out, fetchedPage{url: u, content: content})
+		out = append(out, fetchedPage{url: u, content: outc.Content})
 	}
+
+	wave := hybridFillWave
+	if wave > len(candidates) {
+		wave = len(candidates)
+	}
+	if wave > 0 && len(out) < fetchTop {
+		type indexed struct {
+			url string
+			out fetchOutcome
+			err error
+		}
+		batch := make([]indexed, wave)
+		var wg sync.WaitGroup
+		for i := 0; i < wave; i++ {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				o, e := fetch(ctx, cache, localAI, spill, candidates[idx], perCandidateChars)
+				batch[idx] = indexed{url: candidates[idx], out: o, err: e}
+			}(i)
+		}
+		wg.Wait()
+		for i := 0; i < wave && len(out) < fetchTop; i++ {
+			consider(batch[i].url, batch[i].out, batch[i].err)
+		}
+	}
+
+	for i := wave; i < len(candidates) && len(out) < fetchTop; i++ {
+		o, e := fetch(ctx, cache, localAI, spill, candidates[i], perCandidateChars)
+		consider(candidates[i], o, e)
+	}
+
+	slog.Info("web search+fetch fill",
+		"wanted", fetchTop,
+		"filled", len(out),
+		"tried", tried,
+		"pool", len(candidates),
+		"skipped_thin", skippedThin,
+		"skipped_error", skippedErr,
+		"wave", wave,
+	)
 	return out
 }
 

@@ -39,7 +39,7 @@ var (
 // provider error also falls through to the next (sequential, not raced).
 func webSearch(ctx context.Context, query string, count int) (string, error) {
 	if key := serperAPIKey(); key != "" {
-		results, answerBox, err := serperSearchRawFn(ctx, key, query, count)
+		results, answerBox, _, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
 			return formatSerperResults(results, answerBox), nil
 		}
@@ -56,26 +56,26 @@ func webSearch(ctx context.Context, query string, count int) (string, error) {
 }
 
 // webSearchWithURLs searches and returns formatted output, organic results, and
-// an optional Serper answer-box link for fetch ranking. Same Serper→Brave→
-// DuckDuckGo fallback as webSearch; DuckDuckGo Instant Answer has no reliable
-// organic URLs, so results may be empty.
-func webSearchWithURLs(ctx context.Context, query string, count int) (output string, results []searchResult, answerLink string, err error) {
+// optional Serper answer-box / knowledge-graph links for fetch ranking. Same
+// Serper→Brave→DuckDuckGo fallback as webSearch; DuckDuckGo Instant Answer has
+// no reliable organic URLs, so results may be empty.
+func webSearchWithURLs(ctx context.Context, query string, count int) (output string, results []searchResult, answerLink, knowledgeLink string, err error) {
 	if key := serperAPIKey(); key != "" {
-		organic, answerBox, err := serperSearchRawFn(ctx, key, query, count)
+		organic, answerBox, kgLink, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
-			return formatSerperResults(organic, answerBox), organic, strings.TrimSpace(answerBox.Link), nil
+			return formatSerperResults(organic, answerBox), organic, strings.TrimSpace(answerBox.Link), strings.TrimSpace(kgLink), nil
 		}
 		slog.Info("web search fallback", "from", "serper", "to", nextSearchProvider("serper"), "error", err)
 	}
 	if key := braveAPIKey(); key != "" {
 		organic, err := braveSearchRawFn(ctx, key, query, count)
 		if err == nil {
-			return formatSearchResults(organic), organic, "", nil
+			return formatSearchResults(organic), organic, "", "", nil
 		}
 		slog.Info("web search fallback", "from", "brave", "to", "duckduckgo", "error", err)
 	}
 	result, err := duckDuckGoSearchFn(ctx, query)
-	return result, nil, "", err
+	return result, nil, "", "", err
 }
 
 // nextSearchProvider names the provider webSearch will try after `from` fails,
@@ -154,17 +154,32 @@ type serperAnswerBox struct {
 	Link    string `json:"link"`
 }
 
+type serperKnowledgeGraph struct {
+	Title       string `json:"title"`
+	Website     string `json:"website"`
+	WebsiteLink string `json:"websiteLink"`
+	Description string `json:"description"`
+}
+
+func (k serperKnowledgeGraph) Link() string {
+	if s := strings.TrimSpace(k.WebsiteLink); s != "" {
+		return s
+	}
+	return strings.TrimSpace(k.Website)
+}
+
 type serperResponse struct {
-	Organic   []searchResult  `json:"organic"`
-	AnswerBox serperAnswerBox `json:"answerBox"`
+	Organic         []searchResult       `json:"organic"`
+	AnswerBox       serperAnswerBox      `json:"answerBox"`
+	KnowledgeGraph  serperKnowledgeGraph `json:"knowledgeGraph"`
 }
 
 // serperSearchRaw performs a POST /search request against Serper and returns
-// the parsed organic results plus the answer box (which may be empty).
-func serperSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, serperAnswerBox, error) {
+// organic results, answer box, and knowledge-graph website link (may be empty).
+func serperSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, serperAnswerBox, string, error) {
 	body, err := json.Marshal(buildSerperRequest(query, count))
 	if err != nil {
-		return nil, serperAnswerBox{}, fmt.Errorf("marshal serper request: %w", err)
+		return nil, serperAnswerBox{}, "", fmt.Errorf("marshal serper request: %w", err)
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -173,26 +188,26 @@ func serperSearchRaw(ctx context.Context, apiKey, query string, count int) ([]se
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
 		"https://google.serper.dev/search", bytes.NewReader(body))
 	if err != nil {
-		return nil, serperAnswerBox{}, fmt.Errorf("create serper request: %w", err)
+		return nil, serperAnswerBox{}, "", fmt.Errorf("create serper request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-KEY", apiKey)
 
 	resp, err := SharedClient(20 * time.Second).Do(req)
 	if err != nil {
-		return nil, serperAnswerBox{}, fmt.Errorf("serper request failed: %w", err)
+		return nil, serperAnswerBox{}, "", fmt.Errorf("serper request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, serperAnswerBox{}, fmt.Errorf("serper HTTP %d", resp.StatusCode)
+		return nil, serperAnswerBox{}, "", fmt.Errorf("serper HTTP %d", resp.StatusCode)
 	}
 
 	var result serperResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, serperAnswerBox{}, fmt.Errorf("parse serper response: %w", err)
+		return nil, serperAnswerBox{}, "", fmt.Errorf("parse serper response: %w", err)
 	}
-	return result.Organic, result.AnswerBox, nil
+	return result.Organic, result.AnswerBox, result.KnowledgeGraph.Link(), nil
 }
 
 // formatSerperResults renders Serper output: optional answer box followed by

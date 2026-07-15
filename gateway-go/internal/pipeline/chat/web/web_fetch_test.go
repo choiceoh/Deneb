@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
@@ -494,7 +495,7 @@ func TestRankFetchCandidatesPrefersAnswerBoxAndSkipsSocial(t *testing.T) {
 		{URL: "https://www.linkedin.com/pulse/x"},
 		{URL: "https://www.youtube.com/@SomeChannel"},
 	}
-	got := rankFetchCandidates("", "https://answer.example/box", organic, 4)
+	got, _ := rankFetchCandidates("", "https://answer.example/box", "", organic, 4)
 	want := []string{
 		"https://answer.example/box",
 		"https://good.example/article",
@@ -517,7 +518,7 @@ func TestRankFetchCandidatesQueryOverlapAndDiversity(t *testing.T) {
 		{Title: "Also deneb", URL: "https://blog.wiki.example/post", Description: "more deneb"},
 		{Title: "Other topic", URL: "https://news.example/x", Description: "politics"},
 	}
-	got := rankFetchCandidates("Deneb star", "", organic, 3)
+	got, _ := rankFetchCandidates("Deneb star", "", "", organic, 3)
 	if len(got) < 2 || got[0] != "https://wiki.example/deneb" {
 		t.Fatalf("expected deneb wiki first, got %v", got)
 	}
@@ -553,18 +554,23 @@ func TestAssessFetchResultStructured(t *testing.T) {
 }
 
 func TestFillUsableFetchesEarlyStop(t *testing.T) {
-	ok := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + strings.Repeat("body ", 100) + "\n</content>"
-	thin := "<metadata>\nSignals: js_required\n</metadata>\n<content>\nx\n</content>"
+	okBody := strings.Repeat("body ", 100)
+	okEnvelope := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + okBody + "\n</content>"
+	thinEnvelope := "<metadata>\nSignals: js_required\n</metadata>\n<content>\nx\n</content>"
+	var mu sync.Mutex
 	var calls []string
-	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (string, error) {
+	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (fetchOutcome, error) {
+		mu.Lock()
 		calls = append(calls, u)
-		if strings.Contains(u, "thin") || strings.Contains(u, "err") {
-			if strings.Contains(u, "err") {
-				return formatFetchError(webFetchErr{Code: "http_403", Message: "no"}), nil
-			}
-			return thin, nil
+		mu.Unlock()
+		if strings.Contains(u, "err") {
+			env := formatFetchError(webFetchErr{Code: "http_403", Message: "no"})
+			return fetchOutcome{Content: env, Assess: fetchUsability{HasError: true}}, nil
 		}
-		return ok, nil
+		if strings.Contains(u, "thin") {
+			return fetchOutcome{Content: thinEnvelope, Assess: assessMetaBody([]string{"js_required"}, "x")}, nil
+		}
+		return fetchOutcome{Content: okEnvelope, Assess: assessMetaBody([]string{"serper_scrape"}, okBody)}, nil
 	}
 	candidates := []string{
 		"https://a.example/err",
@@ -580,14 +586,63 @@ func TestFillUsableFetchesEarlyStop(t *testing.T) {
 	if got[0].url != "https://c.example/ok1" || got[1].url != "https://d.example/ok2" {
 		t.Fatalf("urls=%v", got)
 	}
-	// Early stop: must not fetch ok3 after filling 2.
 	for _, c := range calls {
 		if c == "https://e.example/ok3" {
 			t.Fatalf("fetched past fill target: %v", calls)
 		}
 	}
-	if len(calls) != 4 { // err, thin, ok1, ok2
+	if len(calls) != 4 { // wave err+thin, then ok1, ok2
 		t.Fatalf("calls=%v want 4", calls)
+	}
+}
+
+func TestFillUsableFetchesHybridWaveStopsEarly(t *testing.T) {
+	okBody := strings.Repeat("body ", 100)
+	okEnvelope := "<metadata>\nSignals: serper_scrape\n</metadata>\n<content>\n" + okBody + "\n</content>"
+	var mu sync.Mutex
+	var calls []string
+	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (fetchOutcome, error) {
+		mu.Lock()
+		calls = append(calls, u)
+		mu.Unlock()
+		return fetchOutcome{Content: okEnvelope, Assess: assessMetaBody([]string{"serper_scrape"}, okBody)}, nil
+	}
+	candidates := []string{
+		"https://a.example/ok1",
+		"https://b.example/ok2",
+		"https://c.example/ok3",
+	}
+	got := fillUsableFetches(context.Background(), nil, nil, nil, candidates, 2, 1000, fetch)
+	if len(got) != 2 {
+		t.Fatalf("len=%d: %+v", len(got), got)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("hybrid wave should only fetch 2, got %v", calls)
+	}
+}
+
+func TestRankFetchCandidatesKnowledgeGraphAfterAnswer(t *testing.T) {
+	organic := []searchResult{{URL: "https://organic.example/a", Title: "x"}}
+	got, _ := rankFetchCandidates("", "https://answer.example/box", "https://kg.example/entity", organic, 3)
+	want := []string{"https://answer.example/box", "https://kg.example/entity", "https://organic.example/a"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v want %v", got, want)
+		}
+	}
+}
+
+func TestAssessMetaBodyFromFetchPath(t *testing.T) {
+	ok := assessMetaBody([]string{"serper_scrape"}, strings.Repeat("x", 50))
+	if !ok.Usable || ok.Thin || ok.HasError {
+		t.Fatalf("ok=%+v", ok)
+	}
+	thin := assessMetaBody([]string{"js_required", "empty_body"}, "short")
+	if thin.Usable || !thin.Thin {
+		t.Fatalf("thin=%+v", thin)
 	}
 }
 
