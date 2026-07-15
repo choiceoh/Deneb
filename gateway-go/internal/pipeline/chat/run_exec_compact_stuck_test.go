@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	transcriptstore "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 )
 
 // TestCompaction_StuckAfterIdempotentRetries verifies the anti-thrashing
@@ -40,7 +41,7 @@ func TestCompaction_StuckAfterIdempotentRetries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	sm := session.NewManager()
 	bc := &broadcastCollector{}
 	client := llm.NewClient(server.URL, "test-key", llm.WithRetry(0, 0, 0))

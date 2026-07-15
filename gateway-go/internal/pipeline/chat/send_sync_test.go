@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,12 +15,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	transcriptstore "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 func newSyncTestHandler(server *httptest.Server, transcript TranscriptStore) *Handler {
 	sm := session.NewManager()
-	broadcast := func(event string, payload any) (int, []error) { return 1, nil }
+	broadcast := func(event string, payload json.RawMessage) (int, []error) { return 1, nil }
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := DefaultHandlerConfig()
 	cfg.LLMClient = llm.NewClient(server.URL, "test-key")
@@ -41,7 +43,7 @@ func TestSendSyncReturnsErrorForUninitializedHandler(t *testing.T) {
 func TestPrepareSyncRunPreservesExplicitZeroToolCallLimit(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
-	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
 	defer h.Close()
 
 	limit := 0 // zero is an intentional hard cap, not an omitted option.
@@ -62,7 +64,7 @@ func TestSendSync_UsesDefaultModelWhenRequestModelEmpty(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h := newSyncTestHandler(server, transcript)
 	defer h.Close()
 
@@ -95,7 +97,7 @@ func TestSendSyncRecordsActivityOnlyWhenNotEphemeral(t *testing.T) {
 	defer server.Close()
 
 	var recorded []string
-	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
 	h.recordActivity = func(sessionKey string) {
 		recorded = append(recorded, sessionKey)
 	}
@@ -122,7 +124,7 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
 	defer h.Close()
 
 	var deltas []string
@@ -149,7 +151,7 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 func TestBuildSyncResult_FillsAbortedEmptyFallback(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
-	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
 	defer h.Close()
 
 	result, err := h.buildSyncResult("", &chatRunResult{
@@ -169,7 +171,7 @@ func TestBuildSyncResult_FillsAbortedEmptyFallback(t *testing.T) {
 func TestBuildSyncResult_LeavesNormalEmptyEndTurnBlank(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
-	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
 	defer h.Close()
 
 	result, err := h.buildSyncResult("", &chatRunResult{
@@ -246,7 +248,7 @@ func TestBestTextReturnsDeliverableOverFallbacks(t *testing.T) {
 func TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer server.Close()
-	h := newSyncTestHandler(server, NewMemoryTranscriptStore())
+	h := newSyncTestHandler(server, transcriptstore.NewMemoryTranscriptStore())
 	const sessionKey = "client:main"
 
 	if h.abort.HasActiveRun(sessionKey) {

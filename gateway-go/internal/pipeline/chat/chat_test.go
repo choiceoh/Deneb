@@ -12,7 +12,7 @@ import (
 
 func newTestHandler() *Handler {
 	sessions := session.NewManager()
-	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
+	broadcastFn := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	return NewHandler(sessions, broadcastFn, nil, DefaultHandlerConfig())
 }
 
@@ -47,7 +47,7 @@ func TestChatSend_MissingMessage(t *testing.T) {
 func TestChatSendReturnsAsyncOK(t *testing.T) {
 	// With native agent execution, Send starts an async run and returns immediately.
 	sessions := session.NewManager()
-	broadcastFn := func(event string, payload any) (int, []error) { return 0, nil }
+	broadcastFn := func(event string, payload json.RawMessage) (int, []error) { return 0, nil }
 	h := NewHandler(sessions, broadcastFn, nil, DefaultHandlerConfig())
 	req := makeReq("1", "chat.send", map[string]any{
 		"sessionKey":  "test-key",

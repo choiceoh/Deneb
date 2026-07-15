@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 )
 
 func TestPrepareContextAndPromptBriefcaseWithholdsHostContext(t *testing.T) {
@@ -40,7 +41,7 @@ func TestPrepareContextAndPromptBriefcaseWithholdsHostContext(t *testing.T) {
 	deps := runDeps{
 		logger:             discardLogger(),
 		tools:              reg,
-		transcript:         NewMemoryTranscriptStore(),
+		transcript:         transcript.NewMemoryTranscriptStore(),
 		contextCfg:         DefaultContextConfig(),
 		briefcaseMode:      true,
 		disableTier1Wiki:   true,

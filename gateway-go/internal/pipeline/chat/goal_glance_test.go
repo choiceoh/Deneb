@@ -8,44 +8,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 )
 
-func TestFormatGoalGlance(t *testing.T) {
-	st := &goals.State{
-		Goal:       "탑솔라 6월 견적 정리",
-		Status:     goals.StatusActive,
-		TurnsUsed:  3,
-		MaxTurns:   10,
-		LastReason: "데이터 더 필요",
-		Subgoals:   []string{"견적서 PDF", "발송 확인"},
-	}
-	got := formatGoalGlance(st)
-	for _, want := range []string{
-		"- 목표: 탑솔라 6월 견적 정리",
-		"- 진행: 3/10턴 사용",
-		"최근 판정: 데이터 더 필요",
-		"- 완료 기준: 견적서 PDF; 발송 확인",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("formatGoalGlance missing %q in:\n%s", want, got)
-		}
-	}
-}
-
-func TestFormatGoalGlance_NoMaxTurnsNoExtras(t *testing.T) {
-	st := &goals.State{Goal: "g", Status: goals.StatusActive, TurnsUsed: 2}
-	got := formatGoalGlance(st)
-	if !strings.Contains(got, "- 진행: 2턴 사용") {
-		t.Errorf("want unbounded-turns line, got:\n%s", got)
-	}
-	if strings.Contains(got, "/") || strings.Contains(got, "최근 판정") || strings.Contains(got, "완료 기준") {
-		t.Errorf("unexpected optional sections in:\n%s", got)
-	}
-}
-
-func TestFormatGoalGlance_EmptyGoal(t *testing.T) {
-	if got := formatGoalGlance(&goals.State{Goal: "  ", Status: goals.StatusActive}); got != "" {
-		t.Errorf("empty goal should render \"\", got %q", got)
-	}
-}
+// Unit tests for the pure formatGoalGlance renderer moved with the symbol to
+// internal/pipeline/chat/tools/goal_ambient_test.go. Only the NewGoalGlanceFunc
+// wiring (still exported from this package) is exercised here.
 
 func TestNewGoalGlanceFuncReturnsGoalForActiveSession(t *testing.T) {
 	// Save/restore the process default so this never leaks into sibling tests.

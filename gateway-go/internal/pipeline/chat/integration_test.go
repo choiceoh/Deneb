@@ -14,6 +14,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	transcriptstore "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -34,10 +35,10 @@ type broadcastCollector struct {
 
 type broadcastEvent struct {
 	Event   string
-	Payload any
+	Payload json.RawMessage
 }
 
-func (bc *broadcastCollector) broadcast(event string, payload any) (int, []error) {
+func (bc *broadcastCollector) broadcast(event string, payload json.RawMessage) (int, []error) {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	bc.events = append(bc.events, broadcastEvent{Event: event, Payload: payload})
@@ -146,7 +147,7 @@ func TestIntegration_SavesSimpleTextResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h, sm, bc, rc := newIntegrationHandler(server, transcript)
 	defer h.Close()
 
@@ -193,7 +194,8 @@ func TestIntegration_SavesSimpleTextResponse(t *testing.T) {
 	hasCompleted := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(SessionsChangedEvent)
+			var p SessionsChangedEvent
+			ok := json.Unmarshal(ev.Payload, &p) == nil
 			if ok {
 				if p.Status == "running" {
 					hasStarted = true
@@ -242,7 +244,7 @@ func TestIntegration_EmitsFinalTextAfterToolCall(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	sm := session.NewManager()
 	bc := &broadcastCollector{}
 	rc := &rawBroadcastCollector{}
@@ -320,7 +322,7 @@ func TestIntegration_CancelsActiveRunWithoutGoroutineLeak(t *testing.T) {
 		<-r.Context().Done()
 	}))
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h, sm, _, _ := newIntegrationHandler(server, transcript)
 
 	// Start a run.
@@ -381,7 +383,7 @@ func TestIntegration_SavesMultipleMessagesToHistory(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h, sm, _, _ := newIntegrationHandler(server, transcript)
 	defer h.Close()
 
@@ -452,7 +454,7 @@ func TestIntegration_EmitsReplyViaReplyFunc(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h, sm, _, _ := newIntegrationHandler(server, transcript)
 	defer h.Close()
 
@@ -526,7 +528,7 @@ func TestIntegration_CancelsPreviousRunOnNewMessage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h, sm, _, _ := newIntegrationHandler(server, transcript)
 	defer h.Close()
 
@@ -566,7 +568,7 @@ func TestIntegration_LLMError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	sm := session.NewManager()
 	bc := &broadcastCollector{}
 
@@ -599,7 +601,8 @@ func TestIntegration_LLMError(t *testing.T) {
 	hasError := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(SessionsChangedEvent)
+			var p SessionsChangedEvent
+			ok := json.Unmarshal(ev.Payload, &p) == nil
 			if ok && p.Status == "failed" {
 				hasError = true
 			}
@@ -620,7 +623,7 @@ func TestIntegration_SlashResetClearsTranscript(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h, sm, _, _ := newIntegrationHandler(server, transcript)
 	defer h.Close()
 
