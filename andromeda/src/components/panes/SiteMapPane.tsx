@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ProjectSiteRow } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
@@ -176,6 +176,69 @@ export function SiteMapPane() {
   const [sidoFilter, setSidoFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<Pin | null>(null);
 
+  // Wheel-zoom + drag-pan via a controlled viewBox. Full extent = the whole map;
+  // scrolling the wheel zooms toward the cursor, dragging pans (only meaningful
+  // once zoomed in). pannedRef suppresses the click that ends a drag so a pan
+  // doesn't also select a pin / filter a 시도.
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [view, setView] = useState({ x: 0, y: 0, w: KOREA_W, h: KOREA_H });
+  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const pannedRef = useRef(false);
+  const zoomed = view.w < KOREA_W - 0.5;
+  const resetView = () => setView({ x: 0, y: 0, w: KOREA_W, h: KOREA_H });
+
+  // Wheel must be a non-passive native listener to preventDefault (stop the pane
+  // from scrolling under the zoom). One stable handler (functional setView keeps
+  // it closure-free) attached via a callback ref — the <svg> mounts late (inside
+  // GridNotice, after data loads), so a mount-time useEffect would miss it.
+  const wheelHandler = useRef((e: WheelEvent) => {
+    e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    setView((v) => {
+      const factor = e.deltaY < 0 ? 0.85 : 1 / 0.85;
+      const minW = KOREA_W / 8;
+      const nw = Math.min(Math.max(v.w * factor, minW), KOREA_W);
+      const nh = nw * (KOREA_H / KOREA_W);
+      const cx = v.x + px * v.w;
+      const cy = v.y + py * v.h;
+      const nx = Math.min(Math.max(cx - px * nw, 0), KOREA_W - nw);
+      const ny = Math.min(Math.max(cy - py * nh, 0), KOREA_H - nh);
+      return { x: nx, y: ny, w: nw, h: nh };
+    });
+  }).current;
+  const attachSvg = (node: SVGSVGElement | null) => {
+    if (svgRef.current) svgRef.current.removeEventListener("wheel", wheelHandler);
+    svgRef.current = node;
+    if (node) node.addEventListener("wheel", wheelHandler, { passive: false });
+  };
+
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    dragRef.current = { x: e.clientX, y: e.clientY };
+    pannedRef.current = false;
+  };
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const d = dragRef.current;
+    const svg = svgRef.current;
+    if (!d || !svg) return;
+    const rect = svg.getBoundingClientRect();
+    const dx = (e.clientX - d.x) / rect.width;
+    const dy = (e.clientY - d.y) / rect.height;
+    if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) > 3) pannedRef.current = true;
+    dragRef.current = { x: e.clientX, y: e.clientY };
+    setView((v) => ({
+      ...v,
+      x: Math.min(Math.max(v.x - dx * v.w, 0), KOREA_W - v.w),
+      y: Math.min(Math.max(v.y - dy * v.h, 0), KOREA_H - v.h),
+    }));
+  };
+  const endPan = () => {
+    dragRef.current = null;
+  };
+
   // 에너지원/특성 chips are shown only for values actually present, in a stable order.
   const sourcesPresent = useMemo(() => {
     const s = new Set(pins.map((p) => p.source).filter(Boolean));
@@ -285,6 +348,7 @@ export function SiteMapPane() {
         <div
           className="fade-up"
           style={{
+            position: "relative",
             marginTop: 10,
             border: "1px solid var(--line)",
             borderRadius: "var(--radius-panel)",
@@ -292,12 +356,45 @@ export function SiteMapPane() {
             padding: 12,
           }}
         >
+          {zoomed && (
+            <button
+              type="button"
+              onClick={resetView}
+              style={{
+                position: "absolute",
+                top: 18,
+                right: 18,
+                zIndex: 1,
+                fontSize: 11,
+                padding: "3px 10px",
+                borderRadius: "var(--radius-pill)",
+                border: "1px solid var(--line-2)",
+                background: "var(--panel)",
+                color: "var(--ink-2)",
+                cursor: "pointer",
+              }}
+            >
+              맞춤
+            </button>
+          )}
           <svg
-            viewBox={`0 0 ${KOREA_W} ${KOREA_H}`}
+            ref={attachSvg}
+            viewBox={`${view.x.toFixed(1)} ${view.y.toFixed(1)} ${view.w.toFixed(1)} ${view.h.toFixed(1)}`}
             preserveAspectRatio="xMidYMid meet"
             role="img"
-            aria-label="시도별 현장 지도"
-            style={{ width: "100%", height: "auto", display: "block", maxHeight: "58vh" }}
+            aria-label="시도별 현장 지도 (휠 확대·드래그 이동)"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endPan}
+            onPointerLeave={endPan}
+            style={{
+              width: "100%",
+              height: "auto",
+              display: "block",
+              maxHeight: "58vh",
+              cursor: zoomed ? "grab" : "default",
+              touchAction: "none",
+            }}
           >
             {PROVINCES.map((p) => (
               <path
@@ -308,7 +405,10 @@ export function SiteMapPane() {
                 strokeWidth={sidoFilter === p.key ? 1.2 : 0.8}
                 strokeLinejoin="round"
                 style={{ cursor: "pointer", opacity: sidoFilter && sidoFilter !== p.key ? 0.55 : 1 }}
-                onClick={() => setSidoFilter((cur) => (cur === p.key ? null : p.key))}
+                onClick={() => {
+                  if (pannedRef.current) return;
+                  setSidoFilter((cur) => (cur === p.key ? null : p.key));
+                }}
               >
                 <title>{p.name}</title>
               </path>
@@ -328,7 +428,10 @@ export function SiteMapPane() {
               <g
                 key={i}
                 transform={`translate(${pin.x.toFixed(1)},${pin.y.toFixed(1)})`}
-                onClick={() => setSelected(pin)}
+                onClick={() => {
+                  if (pannedRef.current) return;
+                  setSelected(pin);
+                }}
                 style={{ cursor: "pointer" }}
               >
                 <title>
