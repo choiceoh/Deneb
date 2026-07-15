@@ -383,9 +383,24 @@ func (r *searchResult) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// buildBraveSearchURL builds the Brave web search URL. Hangul queries get
+// country=KR and search_lang=ko; ASCII-only queries keep Brave defaults.
+func buildBraveSearchURL(query string, count int) string {
+	if count <= 0 {
+		count = 5
+	}
+	v := url.Values{}
+	v.Set("q", query)
+	v.Set("count", fmt.Sprintf("%d", count))
+	if queryHasHangul(query) {
+		v.Set("country", "KR")
+		v.Set("search_lang", "ko")
+	}
+	return "https://api.search.brave.com/res/v1/web/search?" + v.Encode()
+}
+
 func braveSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, error) {
-	reqURL := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d",
-		url.QueryEscape(query), count)
+	reqURL := buildBraveSearchURL(query, count)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {

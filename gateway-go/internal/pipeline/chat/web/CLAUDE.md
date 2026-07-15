@@ -8,14 +8,15 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
 
 - `web_fetch.go`의 `Tool`이 url, query, queries, search+fetch 모드를 분기하고
   cache와 singleflight를 거쳐 결과를 조립한다. 메타에 `FetchMs`/`Provider`를
-  넣고 slog로 fetch/extract 지연을 남긴다. search+fetch는 `rankFetchCandidates`
-  (answerBox 우선·소셜 denylist·호스트 중복 제거)로 후보를 고른 뒤
-  `fetchTop+2`(상한 5)를 병렬 fetch하고 thin/error를 건너뛴 가용 결과만
-  `fetchTop`개 넣는다.
+  넣고 slog로 fetch/extract 지연을 남긴다. search+fetch 후보는
+  `web_fetch_rank.go`의 `rankFetchCandidates`(answerBox·스니펫 겹침·eTLD/경로
+  다양성·소셜/채널 denylist)로 고른 뒤 `fillUsableFetches`가 상위부터 순차
+  fetch하며 가용 `fetchTop`개를 채우면 중단한다 (`assessFetchResult` 구조화
+  판정).
 - `web_fetch_search.go`는 Serper→Brave→DuckDuckGo 순으로 검색한다. 키 부재뿐
   아니라 프로바이더 실패도 다음으로 폴백하며 `web search fallback` slog를 남긴다.
-  Hangul 쿼리는 Serper에 `gl=kr`/`hl=ko`를 붙인다. DDG Instant Answer는
-  fetchable organic URL이 없다.
+  Hangul 쿼리는 Serper `gl=kr`/`hl=ko`, Brave `country=KR`/`search_lang=ko`를
+  붙인다. DDG Instant Answer는 fetchable organic URL이 없다.
 - `web_http.go`의 `FetchRaw`, `SharedClient`가 pooled SSRF-safe transport와
   구조화된 fetch error 경계를 노출한다.
 - `web_content.go`가 content type 분류와 metadata/error envelope를,
