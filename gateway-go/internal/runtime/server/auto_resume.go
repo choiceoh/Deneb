@@ -37,10 +37,10 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // Hard-coded defaults. Keep these inside the file so the policy is explicit

@@ -17,6 +17,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 

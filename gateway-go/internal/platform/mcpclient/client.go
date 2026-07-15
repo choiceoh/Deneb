@@ -86,8 +86,8 @@ const (
 
 // ToolInfo is one entry from tools/list.
 type ToolInfo struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
 	InputSchema jsonObject `json:"inputSchema"`
 }
 

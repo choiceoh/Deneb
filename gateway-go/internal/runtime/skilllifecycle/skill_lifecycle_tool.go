@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"

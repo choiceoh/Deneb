@@ -2,9 +2,10 @@ package genesis
 
 import (
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 	"unicode"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 type skillReplayTrace struct {

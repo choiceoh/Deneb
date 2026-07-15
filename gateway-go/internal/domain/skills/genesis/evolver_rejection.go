@@ -2,9 +2,10 @@ package genesis
 
 import (
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 // Rejection capture split out of evolver.go (pure move, no behavior change):

@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"

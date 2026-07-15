@@ -53,22 +53,22 @@ var (
 // --- pipeline/chat ---
 
 type (
-	CalendarDeps  = chat.CalendarDeps
-	ChronoDeps    = chat.ChronoDeps
-	ContactsDeps  = chat.ContactsDeps
-	CoreToolDeps  = chat.CoreToolDeps
-	FleetDeps     = chat.FleetDeps
-	Handler       = chat.Handler
-	HandlerConfig = chat.HandlerConfig
-	NotebookDeps  = chat.NotebookDeps
-	ProcessDeps   = chat.ProcessDeps
-	SessionDeps   = chat.SessionDeps
-	StatusDeps    = chat.StatusDeps
-	SyncOptions   = chat.SyncOptions
-	ToolRegistry  = chat.ToolRegistry
-	TopicResolver = chat.TopicResolver
+	CalendarDeps    = chat.CalendarDeps
+	ChronoDeps      = chat.ChronoDeps
+	ContactsDeps    = chat.ContactsDeps
+	CoreToolDeps    = chat.CoreToolDeps
+	FleetDeps       = chat.FleetDeps
+	Handler         = chat.Handler
+	HandlerConfig   = chat.HandlerConfig
+	NotebookDeps    = chat.NotebookDeps
+	ProcessDeps     = chat.ProcessDeps
+	SessionDeps     = chat.SessionDeps
+	StatusDeps      = chat.StatusDeps
+	SyncOptions     = chat.SyncOptions
+	ToolRegistry    = chat.ToolRegistry
+	TopicResolver   = chat.TopicResolver
 	TranscriptStore = chat.TranscriptStore
-	WikiDeps      = chat.WikiDeps
+	WikiDeps        = chat.WikiDeps
 )
 
 var (
@@ -104,23 +104,23 @@ type (
 // --- pipeline/chat/tooldeps ---
 
 type (
-	AgentLogAggregate    = tooldeps.AgentLogAggregate
-	AgentLogSessionStat  = tooldeps.AgentLogSessionStat
-	AgentLogStats        = tooldeps.AgentLogStats
-	CalendarAttendee     = tooldeps.CalendarAttendee
-	CalendarConference   = tooldeps.CalendarConference
-	CalendarCreateInput  = tooldeps.CalendarCreateInput
-	CalendarEvent        = tooldeps.CalendarEvent
-	CalendarReader       = tooldeps.CalendarReader
-	Contact              = tooldeps.Contact
-	ContactsBook         = tooldeps.ContactsBook
-	FileHit              = tooldeps.FileHit
-	LocalCalendar        = tooldeps.LocalCalendar
-	MarketQuote          = tooldeps.MarketQuote
-	ObserveToolFunc      = tooldeps.ObserveToolFunc
-	WorkFeedAction       = tooldeps.WorkFeedAction
-	WorkFeedItem         = tooldeps.WorkFeedItem
-	WorkFeedRW           = tooldeps.WorkFeedRW
+	AgentLogAggregate   = tooldeps.AgentLogAggregate
+	AgentLogSessionStat = tooldeps.AgentLogSessionStat
+	AgentLogStats       = tooldeps.AgentLogStats
+	CalendarAttendee    = tooldeps.CalendarAttendee
+	CalendarConference  = tooldeps.CalendarConference
+	CalendarCreateInput = tooldeps.CalendarCreateInput
+	CalendarEvent       = tooldeps.CalendarEvent
+	CalendarReader      = tooldeps.CalendarReader
+	Contact             = tooldeps.Contact
+	ContactsBook        = tooldeps.ContactsBook
+	FileHit             = tooldeps.FileHit
+	LocalCalendar       = tooldeps.LocalCalendar
+	MarketQuote         = tooldeps.MarketQuote
+	ObserveToolFunc     = tooldeps.ObserveToolFunc
+	WorkFeedAction      = tooldeps.WorkFeedAction
+	WorkFeedItem        = tooldeps.WorkFeedItem
+	WorkFeedRW          = tooldeps.WorkFeedRW
 )
 
 // --- pipeline/chat/toolport ---

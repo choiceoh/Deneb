@@ -43,7 +43,7 @@ type ChatHarnessConfig struct {
 	SkipRecall             bool
 	Arm                    Arm
 	// TokenEstimate overrides response token accounting; nil keeps provider OutputTokens only.
-	TokenEstimate          func(string) int
+	TokenEstimate func(string) int
 }
 
 type (

@@ -16,17 +16,17 @@ import (
 
 // AgentEvent represents an agent bus event (agent run lifecycle, tool use, etc.).
 type AgentEvent struct {
-	Kind       string `json:"kind"`
-	SessionKey string `json:"sessionKey,omitempty"`
-	RunID      string `json:"runId,omitempty"`
+	Kind       string       `json:"kind"`
+	SessionKey string       `json:"sessionKey,omitempty"`
+	RunID      string       `json:"runId,omitempty"`
 	Payload    EventPayload `json:"payload,omitempty"`
 }
 
 // TranscriptUpdate represents a session transcript message update.
 type TranscriptUpdate struct {
-	SessionKey string `json:"sessionKey,omitempty"`
-	MessageID  string `json:"messageId,omitempty"`
-	MessageSeq *int   `json:"messageSeq,omitempty"`
+	SessionKey string       `json:"sessionKey,omitempty"`
+	MessageID  string       `json:"messageId,omitempty"`
+	MessageSeq *int         `json:"messageSeq,omitempty"`
 	Message    EventPayload `json:"message,omitempty"`
 }
 

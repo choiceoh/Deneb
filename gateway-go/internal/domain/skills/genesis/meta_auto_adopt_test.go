@@ -1,13 +1,14 @@
 package genesis
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 // Meta rollback watch: a recent adoption whose health snapshot the current 7d

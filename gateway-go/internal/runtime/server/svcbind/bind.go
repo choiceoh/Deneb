@@ -65,9 +65,7 @@ type (
 	Sources = curriculumenv.Sources
 )
 
-var (
-	Digest = curriculumenv.Digest
-)
+var Digest = curriculumenv.Digest
 
 // --- runtime/events ---
 
@@ -96,9 +94,7 @@ type (
 	FileSemIndexService = filesemindex.Service
 )
 
-var (
-	NewFileSemIndex = filesemindex.New
-)
+var NewFileSemIndex = filesemindex.New
 
 // --- runtime/gatewayhttp ---
 
@@ -116,9 +112,7 @@ var (
 
 // --- runtime/goalloop ---
 
-var (
-	NewGoalLoopTask = goalloop.NewTask
-)
+var NewGoalLoopTask = goalloop.NewTask
 
 // --- runtime/health ---
 
@@ -127,9 +121,7 @@ type (
 	PropusSection = runtimehealth.PropusSection
 )
 
-var (
-	Propus = runtimehealth.Propus
-)
+var Propus = runtimehealth.Propus
 
 // --- runtime/heartbeat ---
 
@@ -158,9 +150,7 @@ type (
 	ToolStat = insights.ToolStat
 )
 
-var (
-	NewInsights = insights.New
-)
+var NewInsights = insights.New
 
 // --- runtime/mailflow ---
 
@@ -202,9 +192,7 @@ type (
 	Suite                = modelmaintenance.Suite
 )
 
-var (
-	NewModelMaintenance = modelmaintenance.New
-)
+var NewModelMaintenance = modelmaintenance.New
 
 // --- runtime/modelpicker ---
 
@@ -212,15 +200,11 @@ type (
 	ControllerConfig = modelpicker.ControllerConfig
 )
 
-var (
-	NewController = modelpicker.NewController
-)
+var NewController = modelpicker.NewController
 
 // --- runtime/nativeauth ---
 
-var (
-	Authenticate = nativeauth.Authenticate
-)
+var Authenticate = nativeauth.Authenticate
 
 // --- runtime/notify ---
 
@@ -281,9 +265,7 @@ type (
 	Watch = rolehealth.Watch
 )
 
-var (
-	NewRoleHealth = rolehealth.New
-)
+var NewRoleHealth = rolehealth.New
 
 // --- runtime/sessionstore ---
 
@@ -291,9 +273,7 @@ type (
 	RunMarkerStore = sessionstore.RunMarkerStore
 )
 
-var (
-	NewRunMarkerStore = sessionstore.NewRunMarkerStore
-)
+var NewRunMarkerStore = sessionstore.NewRunMarkerStore
 
 // --- runtime/skilllifecycle ---
 

@@ -1,9 +1,10 @@
 package skilllifecycle
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 )
 
 // The review runs with a dedicated lean system prompt instead of the full

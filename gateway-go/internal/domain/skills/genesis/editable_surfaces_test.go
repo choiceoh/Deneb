@@ -1,9 +1,10 @@
 package genesis
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 func TestClassifySurfaceReturnsTierByPathPattern(t *testing.T) {

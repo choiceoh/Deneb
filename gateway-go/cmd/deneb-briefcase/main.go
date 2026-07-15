@@ -238,9 +238,9 @@ func runCase(args []string, stdout, stderr io.Writer) (returnErr error) {
 	harness, err := runtimebriefcase.NewChatHarness(runtimebriefcase.ChatHarnessConfig{
 		Pack: pack, Root: runRoot, Client: client, Model: *model,
 		DevicePlanSource: devicePlanSource, DevicePlanSourceSHA256: devicePlanDigest,
-		SkipRecall: *skipRecall,
-		Arm:        runtimebriefcase.Arm(strings.TrimSpace(*arm)),
-			TokenEstimate: tokenest.EstimateUncalibrated,
+		SkipRecall:    *skipRecall,
+		Arm:           runtimebriefcase.Arm(strings.TrimSpace(*arm)),
+		TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		return err
@@ -466,9 +466,9 @@ func runClosedLoop(args []string, stdout, stderr io.Writer) (returnErr error) {
 	harness, err := runtimebriefcase.NewChatHarness(runtimebriefcase.ChatHarnessConfig{
 		Pack: pack, Root: runRoot, Client: client, Model: options.model,
 		DevicePlanSource: devicePlanSource, DevicePlanSourceSHA256: devicePlanDigest,
-		SkipRecall: options.skipRecall,
-		Arm:        runtimebriefcase.Arm(strings.TrimSpace(options.arm)),
-			TokenEstimate: tokenest.EstimateUncalibrated,
+		SkipRecall:    options.skipRecall,
+		Arm:           runtimebriefcase.Arm(strings.TrimSpace(options.arm)),
+		TokenEstimate: tokenest.EstimateUncalibrated,
 	})
 	if err != nil {
 		return err

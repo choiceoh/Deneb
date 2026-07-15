@@ -25,15 +25,11 @@ type (
 	Event          = calendar.Event
 )
 
-var (
-	DefaultCalendarClient = calendar.DefaultClient
-)
+var DefaultCalendarClient = calendar.DefaultClient
 
 // --- platform/calprop ---
 
-var (
-	CalPropDefault = calprop.Default
-)
+var CalPropDefault = calprop.Default
 
 // --- platform/cron ---
 
@@ -59,9 +55,7 @@ type (
 	MessageDetail = gmail.MessageDetail
 )
 
-var (
-	DefaultGmailClient = gmail.DefaultClient
-)
+var DefaultGmailClient = gmail.DefaultClient
 
 // --- platform/lmtpd ---
 
@@ -86,15 +80,11 @@ type (
 	LocalCalStore = localcal.Store
 )
 
-var (
-	LocalCalDefault = localcal.Default
-)
+var LocalCalDefault = localcal.Default
 
 // --- platform/localtodo ---
 
-var (
-	LocalTodoDefault = localtodo.Default
-)
+var LocalTodoDefault = localtodo.Default
 
 // --- platform/mailanalysis ---
 
@@ -145,9 +135,7 @@ type (
 	MailStore = mailstore.Store
 )
 
-var (
-	NewMailStore = mailstore.New
-)
+var NewMailStore = mailstore.New
 
 // --- platform/mailwork ---
 
@@ -156,9 +144,7 @@ type (
 	MessageInput  = mailwork.MessageInput
 )
 
-var (
-	NewMailWork = mailwork.New
-)
+var NewMailWork = mailwork.New
 
 // --- platform/mcpclient ---
 

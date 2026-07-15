@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"unicode/utf8"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
-
 
 func callTool(t *testing.T, fn toolport.ToolFunc, params any) (string, error) {
 	t.Helper()
@@ -226,7 +225,6 @@ func TestToolObserveNilDependencyResponsesAndInvalidJSON(t *testing.T) {
 		t.Fatalf("missing turn = %q/%v", out, err)
 	}
 }
-
 
 func TestUnicodeFormattingRemainsValid(t *testing.T) {
 	long := strings.Repeat("한", 20)

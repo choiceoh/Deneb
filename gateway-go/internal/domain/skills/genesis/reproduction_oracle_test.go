@@ -1,12 +1,13 @@
 package genesis
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 // Reproduction oracle (SEA Alg 8, RSI P1.5): a producer-authored case is

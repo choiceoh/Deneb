@@ -3,8 +3,8 @@ package domain
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"

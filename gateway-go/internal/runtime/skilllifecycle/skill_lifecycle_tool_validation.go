@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"

@@ -2,9 +2,9 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // AutonomousSubsystem groups background/periodic services: the autonomous

@@ -11,11 +11,11 @@ import (
 
 	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // registerSessionRPCMethods registers session state, repair, daemon status, and

@@ -13,11 +13,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {

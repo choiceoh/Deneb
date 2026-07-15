@@ -2,8 +2,9 @@ package skilllifecycle
 
 import (
 	"context"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"

@@ -22,9 +22,7 @@ type (
 	Writer    = agentlog.Writer
 )
 
-var (
-	NewWriter = agentlog.NewWriter
-)
+var NewWriter = agentlog.NewWriter
 
 // --- core/observe ---
 
@@ -56,21 +54,15 @@ var (
 
 // --- infra/logging ---
 
-var (
-	PrintShutdown = logging.PrintShutdown
-)
+var PrintShutdown = logging.PrintShutdown
 
 // --- infra/metrics ---
 
-var (
-	RPCInstrumentation = metrics.RPCInstrumentation
-)
+var RPCInstrumentation = metrics.RPCInstrumentation
 
 // --- infra/middleware ---
 
-var (
-	Logging = middleware.Logging
-)
+var Logging = middleware.Logging
 
 // --- infra/process ---
 
@@ -86,9 +78,7 @@ var (
 
 // --- infra/shortid ---
 
-var (
-	NewShortID = shortid.New
-)
+var NewShortID = shortid.New
 
 // --- infra/sparkfleet ---
 
@@ -96,6 +86,4 @@ type (
 	SparkFleetClient = sparkfleet.Client
 )
 
-var (
-	NewSparkFleetClient = sparkfleet.New
-)
+var NewSparkFleetClient = sparkfleet.New

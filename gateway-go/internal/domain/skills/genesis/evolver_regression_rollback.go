@@ -3,11 +3,12 @@ package genesis
 import (
 	"errors"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"

@@ -346,7 +346,8 @@ func webSearchAndFetch(ctx context.Context, cache *fetchCache, localAI *localAIE
 
 	poolSize := fetchCandidatePoolSize(count, fetchTop)
 	candidates, fstats := rankFetchCandidates(query, answerLink, knowledgeLink, organic, poolSize)
-	slog.Info("web search+fetch candidates",
+	slog.Info(
+		"web search+fetch candidates",
 		"query", query,
 		"pool", len(candidates),
 		"answer_link", answerLink != "",
@@ -373,7 +374,8 @@ func webSearchAndFetch(ctx context.Context, cache *fetchCache, localAI *localAIE
 	if len(selected) == 0 {
 		sb.WriteString(fmt.Sprintf(
 			"\n[Note: filled 0 of %d; skipped thin/failed. Try web(url=...) on a specific result.]\n",
-			fetchTop))
+			fetchTop,
+		))
 		return sb.String(), nil
 	}
 	if len(selected) < fetchTop {

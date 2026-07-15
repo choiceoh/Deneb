@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // GenesisSubsystem groups skill genesis services: the genesis service

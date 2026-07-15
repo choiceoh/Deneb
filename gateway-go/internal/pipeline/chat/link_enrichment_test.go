@@ -27,13 +27,17 @@ func TestStartLinkEnrichmentPreservesChatEligibilityGates(t *testing.T) {
 		opts    *SyncOptions
 	}{
 		{
-			name:    "briefcase mode",
-			handler: &Handler{logger: testLinkLogger(), briefcaseMode: true, linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string { return engine.Start(ctx, message, sanitize) }},
+			name: "briefcase mode",
+			handler: &Handler{logger: testLinkLogger(), briefcaseMode: true, linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
+				return engine.Start(ctx, message, sanitize)
+			}},
 		},
 		{
-			name:    "caller-owned history",
-			handler: &Handler{logger: testLinkLogger(), linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string { return engine.Start(ctx, message, sanitize) }},
-			opts:    &SyncOptions{Messages: []llm.Message{llm.NewTextMessage("user", "hi")}},
+			name: "caller-owned history",
+			handler: &Handler{logger: testLinkLogger(), linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
+				return engine.Start(ctx, message, sanitize)
+			}},
+			opts: &SyncOptions{Messages: []llm.Message{llm.NewTextMessage("user", "hi")}},
 		},
 	}
 	for _, tt := range tests {
@@ -52,7 +56,9 @@ func TestStartLinkEnrichmentUsesHandlerEngineAndChatSanitizer(t *testing.T) {
 		},
 		Logger: testLinkLogger(),
 	})
-	handler := &Handler{logger: testLinkLogger(), linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string { return engine.Start(ctx, message, sanitize) }}
+	handler := &Handler{logger: testLinkLogger(), linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
+		return engine.Start(ctx, message, sanitize)
+	}}
 	const typed = "이 링크 요약해줘 https://example.com/page"
 	join := handler.startLinkEnrichment(context.Background(), typed, nil)
 	if join == nil {
@@ -87,7 +93,9 @@ func TestLinkEnrichmentDisplayRoundTrip(t *testing.T) {
 		},
 		Logger: testLinkLogger(),
 	})
-	handler := &Handler{logger: testLinkLogger(), linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string { return engine.Start(ctx, message, sanitize) }}
+	handler := &Handler{logger: testLinkLogger(), linkEnrichStart: func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
+		return engine.Start(ctx, message, sanitize)
+	}}
 	const typed = "이 링크 요약해줘 https://example.com"
 	join := handler.startLinkEnrichment(context.Background(), typed, nil)
 	if join == nil {

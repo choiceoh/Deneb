@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
+	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 )
 
 // APC divergence classes, ordered from harmless to expensive.

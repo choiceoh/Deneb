@@ -32,9 +32,7 @@ type (
 	EmbeddingClient = embedding.Client
 )
 
-var (
-	NewEmbedding = embedding.New
-)
+var NewEmbedding = embedding.New
 
 // --- ai/llm ---
 
@@ -57,9 +55,7 @@ type (
 	Hub    = localai.Hub
 )
 
-var (
-	NewLocalAI = localai.New
-)
+var NewLocalAI = localai.New
 
 // --- ai/modelrole ---
 
@@ -89,9 +85,7 @@ type (
 	Report       = observatory.Report
 )
 
-var (
-	Snapshot = observatory.Snapshot
-)
+var Snapshot = observatory.Snapshot
 
 // --- ai/provider ---
 
@@ -109,6 +103,4 @@ var (
 
 // --- ai/rerank ---
 
-var (
-	NewFromEnv = rerank.NewFromEnv
-)
+var NewFromEnv = rerank.NewFromEnv

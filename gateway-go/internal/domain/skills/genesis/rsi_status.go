@@ -23,13 +23,14 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )

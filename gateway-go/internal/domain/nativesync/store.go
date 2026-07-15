@@ -40,12 +40,12 @@ var ErrInvalidEvent = errors.New("native sync event type is required")
 
 // Event is one monotonically sequenced native-client synchronization record.
 type Event struct {
-	Seq            int64           `json:"seq"`
-	Type           string          `json:"type"`
-	EntityID       string          `json:"entityId,omitempty"`
-	SessionKey     string          `json:"sessionKey,omitempty"`
-	WorkFeedItemID string          `json:"workFeedItemId,omitempty"`
-	TimestampMs    int64           `json:"timestampMs"`
+	Seq            int64   `json:"seq"`
+	Type           string  `json:"type"`
+	EntityID       string  `json:"entityId,omitempty"`
+	SessionKey     string  `json:"sessionKey,omitempty"`
+	WorkFeedItemID string  `json:"workFeedItemId,omitempty"`
+	TimestampMs    int64   `json:"timestampMs"`
 	Payload        rawJSON `json:"payload,omitempty"`
 }
 

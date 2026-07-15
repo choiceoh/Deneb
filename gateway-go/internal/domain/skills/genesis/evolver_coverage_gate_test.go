@@ -2,9 +2,10 @@ package genesis
 
 import (
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 // Coverage-conditional relaxation: a skill WITH held-out cases may land bigger

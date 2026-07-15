@@ -77,9 +77,7 @@ type (
 	FileStore   = filestore.Store
 )
 
-var (
-	DefaultLocalStore = filestore.DefaultLocalStore
-)
+var DefaultLocalStore = filestore.DefaultLocalStore
 
 // --- domain/goals ---
 
@@ -94,9 +92,7 @@ type (
 	Scorer = mailpriority.Scorer
 )
 
-var (
-	NewMailPriority = mailpriority.New
-)
+var NewMailPriority = mailpriority.New
 
 // --- domain/maintenance ---
 
@@ -104,9 +100,7 @@ type (
 	Runner = maintenance.Runner
 )
 
-var (
-	NewRunner = maintenance.NewRunner
-)
+var NewRunner = maintenance.NewRunner
 
 // --- domain/market ---
 
@@ -115,9 +109,7 @@ type (
 	Quote = market.Quote
 )
 
-var (
-	NewCache = market.NewCache
-)
+var NewCache = market.NewCache
 
 // --- domain/monitoring ---
 
@@ -125,9 +117,7 @@ type (
 	ActivityTracker = monitoring.ActivityTracker
 )
 
-var (
-	NewActivityTracker = monitoring.NewActivityTracker
-)
+var NewActivityTracker = monitoring.NewActivityTracker
 
 // --- domain/nativesync ---
 
@@ -176,9 +166,7 @@ type (
 	Template     = prompts.Template
 )
 
-var (
-	NewPromptsStore = prompts.NewStore
-)
+var NewPromptsStore = prompts.NewStore
 
 // --- domain/push ---
 
@@ -294,9 +282,7 @@ type (
 	Tracker = usage.Tracker
 )
 
-var (
-	NewUsage = usage.New
-)
+var NewUsage = usage.New
 
 // --- domain/wikiport ---
 

@@ -1,8 +1,9 @@
 package genesis
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 // NextSelfCorrectionDispatchCandidate folds the complete append-only ledger and

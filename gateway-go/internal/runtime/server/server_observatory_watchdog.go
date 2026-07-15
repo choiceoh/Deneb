@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 const (

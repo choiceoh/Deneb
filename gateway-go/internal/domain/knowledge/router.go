@@ -175,7 +175,8 @@ func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([
 			break
 		}
 	}
-	slog.Info("knowledge recall",
+	slog.Info(
+		"knowledge recall",
 		"query_len", len(query),
 		"limit", limit,
 		"hit_count", len(all),

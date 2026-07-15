@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // registerWikiResearchTask wires the project-wiki refresh only for the

@@ -714,4 +714,3 @@ func TestFetchCandidatePoolSize(t *testing.T) {
 		t.Fatalf("pool capped at 5=%d", got)
 	}
 }
-

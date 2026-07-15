@@ -1,8 +1,9 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )

@@ -21,13 +21,14 @@ package genesis
 import (
 	"context"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )

@@ -1,12 +1,13 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"

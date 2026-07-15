@@ -169,9 +169,9 @@ func (k serperKnowledgeGraph) Link() string {
 }
 
 type serperResponse struct {
-	Organic         []searchResult       `json:"organic"`
-	AnswerBox       serperAnswerBox      `json:"answerBox"`
-	KnowledgeGraph  serperKnowledgeGraph `json:"knowledgeGraph"`
+	Organic        []searchResult       `json:"organic"`
+	AnswerBox      serperAnswerBox      `json:"answerBox"`
+	KnowledgeGraph serperKnowledgeGraph `json:"knowledgeGraph"`
 }
 
 // serperSearchRaw performs a POST /search request against Serper and returns

@@ -1,20 +1,21 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
+
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
 // SyncResult holds the outcome of a synchronous agent run.

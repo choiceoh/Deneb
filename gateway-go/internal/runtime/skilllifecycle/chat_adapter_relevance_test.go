@@ -2,12 +2,13 @@ package skilllifecycle
 
 import (
 	"encoding/json"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )

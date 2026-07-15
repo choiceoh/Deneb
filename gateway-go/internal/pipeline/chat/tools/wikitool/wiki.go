@@ -361,7 +361,7 @@ func wikiWrite(ctx context.Context, store *wiki.Store, contactsBook tooldeps.Con
 		return fmt.Sprintf("위키 페이지 쓰기 실패: %v", err), nil
 	}
 	marked, failed := markSupersededPages(store, req.supersedes, path)
-		note := autoRecordPeople(store, contactsBook, page, req.category)
+	note := autoRecordPeople(store, contactsBook, page, req.category)
 	return formatWikiWriteResult(path, req, note, existed, logAppend, marked, failed), nil
 }
 

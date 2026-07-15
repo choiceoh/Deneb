@@ -3,11 +3,12 @@ package skilllifecycle
 import (
 	"context"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"log/slog"
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"

@@ -2,9 +2,9 @@ package server
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // ChatManager groups the chat pipeline and its channel delivery backends.

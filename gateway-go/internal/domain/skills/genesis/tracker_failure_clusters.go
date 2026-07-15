@@ -1,10 +1,11 @@
 package genesis
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )

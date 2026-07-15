@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 )
 
 func newPromptStore(denebDir string) *domainbind.PromptsStore {

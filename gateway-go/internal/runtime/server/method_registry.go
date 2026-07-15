@@ -14,20 +14,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
 	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // errWikiDisabled surfaces from the miniapp memory factory when the wiki

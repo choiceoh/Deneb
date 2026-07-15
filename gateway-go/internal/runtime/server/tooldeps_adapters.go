@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 )
 
 // workFeedRWAdapter projects the native-sync work-feed store onto the
