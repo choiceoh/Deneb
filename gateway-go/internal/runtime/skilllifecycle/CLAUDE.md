@@ -8,7 +8,7 @@ genesis 도메인(스킬 생성·진화·추적)을 채팅 런타임에 접착�
 
 ## 진입점과 책임
 
-- `genesis_bundle.go`의 `BuildCore`, `GenesisBundle`, type aliases —
+- `core/genesis_bundle.go`의 `BuildCore`, `GenesisBundle`, type aliases —
   `runtime/server`가 `generation`/`review` leaf를 직접 임포트하지 않도록
   하는 owning-module port. 코어 서비스(catalog/service/tracker/evolver/meta)
   조립은 여기; nudger/chat 접착은 composition root에 남긴다.

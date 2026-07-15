@@ -15,14 +15,14 @@
 - `heartbeat_selfimprove_sweep.go` — 큐가 빌 때 신호(거절·재발·실패 클러스터)를
   채굴해 후보를 **생성**하는 레인. 12h 인터벌, 동일하게 연속 무시 에스컬레이션.
 - `heartbeat_research.go` — 신규 데이터 축적 시 "[연구]" 아이템 자기 큐잉.
-- `heartbeat_signals.go` + `heartbeat_deal_signals.go` — 능동 신호 수집기
+- `signals/heartbeat_signals.go` + `signals/heartbeat_deal_signals.go` — 능동 신호 수집기
   (`CalendarSignalCollector`, `TodoDeadlineCollector`, `DealDeadlineSignalCollector`,
   `CombineCollectors`).
 - `heartbeat_fixtures.go` — 발화 입력/결과 fixture 수확(`FixturePath`),
   `heartbeat_shadow_replay.go`의 `RunShadowReplay`가 그 코퍼스로 지시문 후보를
   섀도 재생한다.
 - `boot_task.go`의 `NewBootTask` — 기동 1회 부트 체크(별개 태스크).
-- `open_loop_sink.go` — 열린 루프(미완 약속) 싱크.
+- `signals/open_loop_sink.go` — 열린 루프(미완 약속) 싱크.
 
 ## 의존 방향과 불변조건
 

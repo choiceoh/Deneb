@@ -70,7 +70,7 @@ until literal KO/EN swap corpus / ability-graph edges land.
 | Health Fitness | Thin re-export of RSI `closure-land` / `operator-verdict` |
 | MetaEvolutionTask.RSIBench | Advisory evidence from baseline JSON |
 | Meta QualityBench | Consumes `health-v3-snapshot.json` live delta |
-| `make audit-test` | Includes `test_rsi_bench*.py` |
+| `make rsi-bench-test` | Includes `test_rsi_bench*.py` |
 
 ## Commands
 

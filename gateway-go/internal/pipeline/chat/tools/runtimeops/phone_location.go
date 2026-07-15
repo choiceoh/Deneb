@@ -12,10 +12,10 @@ import (
 )
 
 // phoneLocationMaxAge bounds how stale the cached native location may be before
-// phone_read falls back to a live (Termux) read. The native client pushes its
-// location periodically / on geofence transitions, so a recent cache is the common
-// case; beyond this window we'd rather pay for a fresh read than answer with a
-// location that may be far out of date.
+// phone_read asks the native app to refresh (sync_state push). The native client
+// pushes its location periodically / on geofence transitions, so a recent cache is
+// the common case; beyond this window we'd rather request a fresh push than answer
+// with a location that may be far out of date.
 const phoneLocationMaxAge = 30 * time.Minute
 
 // phoneLocationCachePath is the native client's last-known-location cache, written by

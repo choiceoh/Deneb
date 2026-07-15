@@ -6,8 +6,8 @@
 
 ## 진입점과 책임
 
-- top-level `wiki.go`의 `ToolWiki`, `contacts.go`의 `ToolContacts`,
-  `cron_tool.go`의 `ToolCron`, `message.go`의 `ToolMessage`처럼
+- `wikitool/wiki.go`의 `ToolWiki`, `wikitool/contacts.go`의 `ToolContacts`,
+  `schedule/cron_tool.go`의 `ToolCron`, top-level `message.go`의 `ToolMessage`처럼
   `Tool*` constructor가 `toolport.ToolFunc`를 반환하는 것이 기본 계약이다.
 - `filesystem/fs.go`의 `ToolWrite`, `ToolEdit`와
   `filesystem/read.go`의 `ToolRead`, `filesystem/fs_search.go`의

@@ -174,8 +174,8 @@ metadata:
   {
     "deneb":
       {
-        "requires_tools": ["exec", "terminal"],
-        "fallback_for_tools": ["web_search"],
+        "requires_tools": ["exec", "web"],
+        "fallback_for_tools": ["wiki"],
       },
   }
 ```

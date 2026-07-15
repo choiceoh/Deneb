@@ -15,11 +15,12 @@ import (
 
 // SilentReplyToken is the token that suppresses message delivery when the LLM
 // replies with exactly this value (with optional surrounding whitespace).
-// The same value is defined independently in chat/silent_reply.go — both must stay in sync.
+// The canonical definition lives in core/replytokens/tokens.go; chat/silent_reply.go
+// re-exports it. Keep them as a single source of truth.
 const SilentReplyToken = "NO_REPLY"
 
 // HeartbeatTriggerPrefix marks user-role messages injected by the autonomous
-// 5-minute heartbeat task. The system prompt instructs the agent to treat
+// 30-minute heartbeat task. The system prompt instructs the agent to treat
 // messages starting with this prefix as self-triggers, not real user input,
 // so the model does not start modeling the user as constantly asking for
 // system checks. The heartbeat task in runtime/server references this

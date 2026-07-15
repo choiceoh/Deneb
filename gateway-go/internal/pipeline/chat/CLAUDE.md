@@ -17,7 +17,7 @@
 | `streaming/` | `Broadcaster` — 턴 이벤트 SSE 방출 | — |
 | `knowledge/` | `knowledge` 도구 → `domain/knowledge.Router` 얇은 어댑터 | — |
 | `denebui/` | deneb-ui 블록 검증·저작. wire 포맷 = **라벨 HTML v2**(`html.go`, 그래머: `docs/research/deneb-ui-html.md`; legacy JSON은 구 트랜스크립트 표시용 strict 경로). 서버 조립 collapsed 카드(메일 등) + 시스템 프롬프트 소통 섹션이 일반 응답 카드 사용을 허용([project_kaiui_server_assembly]) | — |
-| `toolpreset/` | 서브에이전트 도구 프리셋(implementer 등) | — |
+| `toolpreset/` (형제: `pipeline/toolpreset/`) | 서브에이전트 도구 프리셋(implementer 등) | — |
 
 루스 파일(top-level)은 기능별 클러스터로 읽는다:
 - **`run_*`** — 한 에이전트 턴의 실행 파이프라인(↓ 흐름).
@@ -50,7 +50,7 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
 | 새 도구 추가 | `tools/<name>.go` 구현 → `toolwire/core/register.go` `Register*Tools`에 배선 → 스키마는 `toolwire/schema/tool_schemas.json` + `make tool-schemas` (상위 CLAUDE.md 절차) |
 | 턴 실행 단계 수정 | `run_exec.go`(코어) 부터. 준비단계는 `run_prepare.go`, 폴백은 `run_fallback.go` |
 | 모델/프로바이더 해석 변경 | `run_model.go`(역할→모델), `run_provider.go`(클라이언트·API모드·캐시호환) |
-| 회상(recall) 경로 | `recall_preflight.go`(오케스트레이션) → `recall_evidence.go`(소스별 수집) → `run_tail_inject.go`(주입) |
+| 회상(recall) 경로 | `recall/recall_preflight.go`(오케스트레이션) → `recall/recall_evidence.go`(소스별 수집) → `run_tail_inject.go`(주입) |
 | 시스템 프롬프트 | `prompt/system_prompt.go`(조립), `prompt/context_files.go`(컨텍스트 파일) |
 | 사용자 입력 링크 보강 | `link_enrichment.go`(briefcase/caller-history gate·adapter) → `linkenrichment/engine.go`(fetch·변환·수명주기) |
 | 슬래시 커맨드 | `slash_commands.go`(전처리) → `slash_dispatch.go`(디스패치) |

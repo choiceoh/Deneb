@@ -9,13 +9,13 @@
 | `server/` | HTTP+SSE 서버, RPC 등록 배선, 배경 서브시스템·태스크 (~90 소스 + ~65 테스트 파일, ↓ 파일 클러스터) |
 | `rpc/` | 레지스트리 기반 RPC 디스패처. `dispatch.go`/`methods.go`/`register.go`/`workerpool.go` |
 | `rpc/handler/<domain>/` | 도메인별 핸들러(agent·chat·session·skill·wiki·process·observe·insights·handlerminiapp·handlerevents·provider·system·gateway·checkpoint). `Deps` 구조체 + `Methods(deps)`만 노출 |
-| `rpc/rpcutil/` | `gateway_hub.go`(서비스 컨테이너 — 읽기 접근자·late-bind setter·phase 헬퍼 외 행위는 `Broadcast`/`Validate`뿐), `helpers.go` |
-| `rpc/rpcerr/`·`rpc/rpctest/` | 에러 타입 / 테스트 헬퍼 |
+| `rpc/rpcutil/` | `hub/gateway_hub.go`(서비스 컨테이너 — 읽기 접근자·late-bind setter·phase 헬퍼 외 행위는 `Broadcast`/`Validate`뿐; `hub_alias.go`가 rpcutil 레벨 재익스포트), `helpers.go` |
+| `../../core/rpcerr/`·`rpc/rpctest/` | 에러 타입 / 테스트 헬퍼 |
 | `../domain/session/` | 세션 도메인 상태기계(`IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT`), 전이 검증, 이벤트 pub/sub 버스. runtime보다 아래 계층이라 pipeline/platform도 역의존 없이 사용 |
 | `bootstrap/` | 기동 시퀀스 조립 |
 | `manifest/` | `/health`에 노출하는 실행 바이너리·스킬·도구·모델 구성의 비식별 SHA-256 지문 |
-| `process/` | exec 프로세스 추적 |
-| `observe/` | LogCapture ring + observe 평면([project_observe_plane]) |
+| `../../infra/process/` | exec 프로세스 추적 |
+| `../../core/observe/` | LogCapture ring + observe 평면([project_observe_plane]) |
 | `events/`·`insights/` | 이벤트 버스 / 인사이트 집계 |
 
 ### server/ 파일 클러스터 (이름 규칙으로 읽기)
@@ -24,7 +24,7 @@
 - **`*_subsystem.go`** — 배경 서브시스템: `autonomous`·`genesis`·`infra`·`memory`·`workflow`. 각자 PeriodicTask/배경 루프를 소유.
 - **`*_task.go`** — 배경 태스크: `boot_task`·`heartbeat_task`·`goal_task`.
 - **`method_registry.go`** — ★Deps 배선 단일 지점(인라인 리터럴). 어댑터 레이어 없음.
-- **`gateway_hub.go`** — `buildHub()`(유일 생성자, `rpcutil.NewGatewayHub` 래퍼).
+- **`rpc/rpcutil/hub/gateway_hub.go`** — `buildHub()`(유일 생성자, `rpcutil.NewGatewayHub` 래퍼).
 - 나머지는 기능 단위(`miniapp_models*`·`notify_*`·`mail_*`·`wiki_*`·`workfeed_*`·`role_health_watch`·`regression_watch` 등).
 
 ## 핵심 흐름
@@ -83,8 +83,8 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
   ledger append와 async ingest 순서를 바꾸지 않는다.
 - `rpc/handler/skill/skill.go`의 `Methods`,
   `rpc/handler/skill/skill_genesis.go`의 `GenesisMethods`,
-  `rpc/handler/mail/gmail_analyze.go`의 `GmailAnalyzeMethods`,
-  `rpc/handler/mail/analysis_store.go`의 `NewAnalysisStore`는 RPC handler 포트다.
+  `rpc/handler/mail/analyzebind/gmail_analyze.go`의 `GmailAnalyzeMethods`,
+  `rpc/handler/mail/gmailops/analysis_store.go`의 `NewAnalysisStore`는 RPC handler 포트다.
   handler는 `Deps`만 받고 `rpcutil.GatewayHub` 또는 server를 import하지 않는다.
 - `briefcase/timeline.go`의 `NewTimeline`, `briefcase/device.go`의 `NewDeviceTwin`,
   `insights/engine.go`의 `New`, `insights/render.go`의 `RenderPlain`은 독립 런타임

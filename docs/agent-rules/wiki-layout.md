@@ -4,8 +4,8 @@ globs:
   - "gateway-go/internal/domain/wiki/**"
   - "gateway-go/internal/runtime/server/wiki_*.go"
   - "gateway-go/internal/runtime/wikiwork/**"
-  - "gateway-go/internal/pipeline/chat/tools/wiki.go"
-  - "gateway-go/internal/pipeline/chat/tools/wiki_ingest.go"
+  - "gateway-go/internal/pipeline/chat/tools/wikitool/wiki.go"
+  - "gateway-go/internal/pipeline/chat/tools/wikitool/wiki_ingest.go"
 ---
 
 # Wiki Project Layout (프로젝트 문서 스키마)
@@ -99,7 +99,7 @@ globs:
 ## 불변식
 
 - 프로젝트 밑 **flat `.md` 신규 생성 금지** — 드리머(`dreamer_apply.go`)와 위키
-  도구(`tools/wiki.go`)가 `NormalizeProjectPagePath`로 강제한다. 새 쓰기 경로를
+  도구(`tools/wikitool/wiki.go`)가 `NormalizeProjectPagePath`로 강제한다. 새 쓰기 경로를
   추가하면 같은 정규화를 통과시킬 것.
 - **깊이 강제**: 같은 함수가 스키마 초과 깊이를 파일명으로 접는다 — LLM 제목의
   날짜 슬래시("6/25 회의")가 유령 중첩 폴더를 만들던 실사고(2026-07-02, 드리머)
@@ -112,7 +112,7 @@ globs:
   결정적 신호(related가 프로젝트를 가리킴 / 제목이 정확히 한 프로젝트를 지목)로
   해당 프로젝트 메일분석 슬롯에 소급 파일링한다 (모호하면 잔류, 사이클당 10건).
 - 사건·이벤트는 페이지 증식이 아니라 해당 프로젝트 `로그.md`에 append.
-- **외부 소스 캡처는 `wiki(action="ingest", query=URL)`** (`tools/wiki_ingest.go`): 웹/유튜브를
+- **외부 소스 캡처는 `wiki(action="ingest", query=URL)`** (`tools/wikitool/wiki_ingest.go`): 웹/유튜브를
   lightweight 요약(fail-open — 실패 시 발췌로 캡처 보존)+바운드 발췌와 함께 자료 페이지로 영속화.
   같은 URL은 멱등(트래킹 파라미터 제거·유튜브 변형 정규화), 갱신은 `force=true`. `project=` 연결은
   대표페이지 존재를 검증(오타 유령 폴더 방지 — 없으면 전역 버킷)하고 로그에 `ingest` op 섹션을 남긴다.
