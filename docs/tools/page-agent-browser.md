@@ -65,14 +65,15 @@ When unset, `browser` returns an "integration off" message (same pattern as `fle
 API inventory, box codes, HMAC auth, and approve/reject notes:
 [groupware-amaranth.md](./groupware-amaranth.md).
 
-**How it works (fast path):** Playwright logs in once and caches `auth_a_token` + `hash_key` in `~/.deneb/groupware-session.json`. Subsequent `list`/`read` call Amaranth internal APIs with HMAC (`wehago-sign`) — typically **tens of ms**, not a full browser scrape.
+**How it works (fast path):** Playwright logs in once and caches `auth_a_token` + `hash_key` in `~/.deneb/groupware-session.json`. Subsequent `list`/`read`/selected `attachment` call Amaranth internal APIs with HMAC (`wehago-sign`) — typically **tens of ms**, not a full browser scrape.
 
 | action | area | folder | Meaning |
 |--------|------|--------|---------|
 | `status` | — | — | Credentials configured? |
 | `list` | `approval` | `pending`/`done`/`cc`/`total`/`all` | 미결 · 기결 · 수신참조 · 전체결재문서 (list 기본=`all` 순회) |
 | `list` | `board` | — | 게시판 최근 글 |
-| `read` | `approval`/`board` | (approval) | Match by `query` title/keyword (approval 기본=`pending`) |
+| `read` | `approval`/`board` | (approval) | Match by `query`; approval returns body/line/table + attachment titles only |
+| `attachment` | `approval` | — | Download/extract exactly one agent-selected file by `doc_id` + number/filename |
 
 
 ## Proactive e-approval (phone → work feed)

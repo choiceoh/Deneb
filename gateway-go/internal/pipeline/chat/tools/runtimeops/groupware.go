@@ -17,11 +17,13 @@ import (
 func ToolGroupware() toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Action string `json:"action"`
-			Area   string `json:"area"`
-			Folder string `json:"folder"`
-			Query  string `json:"query"`
-			Limit  int    `json:"limit"`
+			Action     string `json:"action"`
+			Area       string `json:"area"`
+			Folder     string `json:"folder"`
+			Query      string `json:"query"`
+			DocID      string `json:"doc_id"`
+			Attachment string `json:"attachment"`
+			Limit      int    `json:"limit"`
 		}
 		if err := jsonutil.UnmarshalInto("groupware params", input, &p); err != nil {
 			return "", err
@@ -32,10 +34,10 @@ func ToolGroupware() toolport.ToolFunc {
 		switch action {
 		case "", "status":
 			return groupware.StatusLine(cfg, ok), nil
-		case "list", "read":
+		case "list", "read", "attachment":
 			// continue
 		default:
-			return "", fmt.Errorf("unknown groupware action %q (status|list|read)", p.Action)
+			return "", fmt.Errorf("unknown groupware action %q (status|list|read|attachment)", p.Action)
 		}
 
 		if !ok {
@@ -43,6 +45,9 @@ func ToolGroupware() toolport.ToolFunc {
 		}
 
 		area := strings.ToLower(strings.TrimSpace(p.Area))
+		if action == "attachment" && area == "" {
+			area = "approval"
+		}
 		switch area {
 		case "approval", "board":
 		case "전자결재", "결재":
@@ -63,13 +68,23 @@ func ToolGroupware() toolport.ToolFunc {
 		if action == "read" && strings.TrimSpace(p.Query) == "" {
 			return "read에는 query(제목·키워드)가 필요합니다. 목록은 action=list 로 먼저 확인하라.", nil
 		}
+		if action == "attachment" {
+			if area != "approval" {
+				return "attachment는 전자결재(area=approval)에서만 지원합니다.", nil
+			}
+			if strings.TrimSpace(p.DocID) == "" || strings.TrimSpace(p.Attachment) == "" {
+				return "attachment에는 read 결과의 doc_id와 읽을 첨부 번호·파일명이 필요합니다.", nil
+			}
+		}
 
 		out, err := groupware.Run(ctx, cfg, groupware.Request{
-			Area:   groupware.Area(area),
-			Action: groupware.Action(action),
-			Folder: folder,
-			Query:  strings.TrimSpace(p.Query),
-			Limit:  p.Limit,
+			Area:       groupware.Area(area),
+			Action:     groupware.Action(action),
+			Folder:     folder,
+			Query:      strings.TrimSpace(p.Query),
+			DocID:      strings.TrimSpace(p.DocID),
+			Attachment: strings.TrimSpace(p.Attachment),
+			Limit:      p.Limit,
 		})
 		if err != nil && strings.TrimSpace(out) != "" {
 			return out, nil

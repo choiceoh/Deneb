@@ -73,4 +73,28 @@ func TestToolGroupware_FolderAlias(t *testing.T) {
 	}
 }
 
+func TestToolGroupware_AttachmentRequiresSelection(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_USER", "alice")
+	t.Setenv("DENEB_GROUPWARE_PASSWORD", "secret")
+	fn := ToolGroupware()
+	out, err := fn(context.Background(), json.RawMessage(`{"action":"attachment"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "doc_id") || !strings.Contains(out, "첨부") {
+		t.Fatalf("got %q", out)
+	}
+}
 
+func TestToolGroupware_AttachmentRejectsBoard(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_USER", "alice")
+	t.Setenv("DENEB_GROUPWARE_PASSWORD", "secret")
+	fn := ToolGroupware()
+	out, err := fn(context.Background(), json.RawMessage(`{"action":"attachment","area":"board","doc_id":"1","attachment":"1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "전자결재") {
+		t.Fatalf("got %q", out)
+	}
+}

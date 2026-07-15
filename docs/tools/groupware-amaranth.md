@@ -37,7 +37,7 @@ Product split (planned):
 
 | Concern | Surface |
 |---------|---------|
-| Read (list/body/line/attachments) | Deferred tool `groupware` + phone enrich |
+| Read (list/body/line + attachment titles; selected attachment on demand) | Deferred tool `groupware` + phone enrich |
 | Write (승인/반려) | Work-feed chips → `miniapp.workfeed.action.run` — **not** the chat tool |
 
 See also: [page-agent-browser.md](./page-agent-browser.md) (tool env + phone path).
@@ -117,7 +117,12 @@ POST /eap/eap111A23
 
 - Response: `resultData.doc_contents` (HTML), `doc_title`, `doc_no`, `form_nm`,
   drafter fields, etc.
-- Deneb collapses HTML → text via `htmlToText` (cap ~16k).
+- Deneb converts data-shaped HTML tables to **GFM Markdown tables**, expanding
+  `rowspan` / `colspan` into rectangular blank cells. One-row layout tables (금액
+  label/value shards) stay readable prose instead of fake tables. The existing
+  native `MarkdownContent` and Andromeda `AssistantText` renderers already parse
+  and draw GFM tables — no groupware-specific UI renderer.
+- Non-table HTML collapses to text via `htmlToText` (cap ~16k).
 
 ### Approval line — **confirmed**
 
@@ -177,7 +182,7 @@ POST /ecm/ecm001A03
 - Preview-only: `POST /ecm/ecm001A07` (Synap viewer path; not for extraction)
 - Legacy `/ecm/ecmapi/ecm001A03.do` → 404 on this tenant
 
-Deneb default: list metadata on `read`; download only when content is needed.
+Deneb default: `read` lists attachment titles/size only (**no download**). The agent inspects those titles and calls `groupware(action="attachment", doc_id="…", attachment="number or filename")` for exactly one file only when its content is needed. Selected PDF/image extraction uses PaddleOCR-VL → tesseract fallback.
 
 ## Confirmed APIs — 게시판
 
@@ -319,7 +324,7 @@ Useful for discovery/debug; not required on the hot path.
 | Phase | Scope | Status |
 |-------|--------|--------|
 | P0 | Session + approval list/read body + line | Done |
-| P1 | Attachment list + PDF/text extract; image·scanned-PDF OCR via PaddleOCR-VL (auto when `DENEB_OCR_VL_URL` set) → tesseract fallback | Done |
+| P1 | Attachment titles only on read → agent-selected single-file download/extract; PaddleOCR-VL for image·scanned PDF | Done |
 | P2 | Board `ViewPost` on `read` | Done |
 | P3 | Approve/reject (`eap110A21`) + feed chips (native/Andromeda) | Wired; **live mutate untested** |
 | P4 | Phone enrich API-first; DOM/Page Agent last resort | In progress |

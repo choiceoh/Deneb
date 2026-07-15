@@ -1658,13 +1658,21 @@ func GroupwareToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Read-only Amaranth groupware scrape on srv4: status (credentials configured?) | list (recent items for area/folder) | read (open one item by query). Never approve, post, or delete.",
-				"enum":        []string{"status", "list", "read"},
+				"description": "Read-only Amaranth groupware on srv4: status | list | read (document body + attachment titles only) | attachment (download/extract one explicitly selected file). Never approve, post, or delete.",
+				"enum":        []string{"status", "list", "read", "attachment"},
 			},
 			"area": map[string]any{
 				"type":        "string",
-				"description": "Surface — required for list/read: approval (전자결재) | board (게시판). Korean aliases 전자결재·게시판 accepted.",
+				"description": "Surface — required for list/read; attachment defaults to approval: approval (전자결재) | board (게시판). Korean aliases 전자결재·게시판 accepted.",
 				"enum":        []string{"approval", "board"},
+			},
+			"attachment": map[string]any{
+				"type":        "string",
+				"description": "Exactly one attachment to download/extract: 1-based number, filename/title, fileKey, or fileId from the read result. Required for action=attachment.",
+			},
+			"doc_id": map[string]any{
+				"type":        "string",
+				"description": "Approval document id shown by action=read. Required for action=attachment.",
 			},
 			"folder": map[string]any{
 				"type":        "string",
@@ -1673,7 +1681,7 @@ func GroupwareToolSchema() map[string]any {
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "Max list lines to return (default 20, max 50). Ignored for read/status.",
+				"description": "Max list lines to return (default 20, max 50). Ignored for read/attachment/status.",
 			},
 			"query": map[string]any{
 				"type":        "string",

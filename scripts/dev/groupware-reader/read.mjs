@@ -18,6 +18,7 @@
  *   node read.mjs --login-check
  *   node read.mjs --area approval --action list [--folder pending|done|cc|total|all]
  *   node read.mjs --area approval --action read --query '제목'
+ *   node read.mjs --area approval --action attachment --doc-id 99178 --attachment '지출영수증'
  *   node read.mjs --area board --action list|read ...
  *   node read.mjs --area approval --action act --decision approve|reject --doc-id 99178
  */
@@ -29,6 +30,7 @@ import {
   listBoard,
   normalizeFolder,
   readApproval,
+  readApprovalAttachment,
   readBoard,
 } from "./lib/actions.mjs";
 
@@ -44,6 +46,7 @@ const query = (argValue("--query") || "").trim();
 const source = argValue("--source");
 const decision = (argValue("--decision") || "").trim();
 const docId = (argValue("--doc-id") || argValue("--docId") || "").trim();
+const attachment = (argValue("--attachment") || "").trim();
 const comment = argValue("--comment");
 const limitRaw = parseInt(argValue("--limit") || "20", 10);
 const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 50) : 20;
@@ -78,9 +81,11 @@ async function main() {
   }
 
   if (!["approval", "board"].includes(area)) die(`unknown --area ${area}`);
-  if (!["list", "read", "act"].includes(action)) die(`unknown --action ${action}`);
-  if (action === "act" && area !== "approval") die("act is only valid for --area approval");
-  if (area === "approval" && action !== "act" && !["pending", "done", "cc", "total", "all"].includes(folder)) {
+  if (!["list", "read", "attachment", "act"].includes(action)) die(`unknown --action ${action}`);
+  if (["attachment", "act"].includes(action) && area !== "approval") {
+    die(`${action} is only valid for --area approval`);
+  }
+  if (area === "approval" && !["attachment", "act"].includes(action) && !["pending", "done", "cc", "total", "all"].includes(folder)) {
     die(`unknown --folder ${folder}`);
   }
 
@@ -88,6 +93,8 @@ async function main() {
   let out;
   if (action === "act") {
     out = await actApproval(docId || query, decision, comment);
+  } else if (action === "attachment") {
+    out = await readApprovalAttachment(docId, attachment || query);
   } else if (area === "board") {
     out = action === "list" ? await listBoard(limit) : await readBoard(query);
   } else if (action === "list") {

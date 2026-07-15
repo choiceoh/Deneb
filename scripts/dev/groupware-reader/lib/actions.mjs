@@ -35,30 +35,141 @@ export function normalizeFolder(raw) {
   return f;
 }
 
-/** Collapse Amaranth form HTML into readable Korean text. */
-export function htmlToText(html) {
+/** Decode the subset of HTML entities Amaranth forms commonly emit. */
+function decodeHtmlEntities(s) {
+  return String(s)
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)));
+}
+
+function stripHtmlFragment(html, { preserveBreaks = false } = {}) {
   let s = String(html || "");
   s = s.replace(/<script[\s\S]*?<\/script>/gi, "");
   s = s.replace(/<style[\s\S]*?<\/style>/gi, "");
-  s = s.replace(/<\/(p|div|tr|li|h[1-6]|br|table)>/gi, "\n");
-  s = s.replace(/<(br|hr)\s*\/?>/gi, "\n");
-  s = s.replace(/<\/td>/gi, "\t");
+  s = s.replace(/<(br|hr)\s*\/?>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
+  s = s.replace(/<\/(p|div|li|h[1-6])>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
   s = s.replace(/<[^>]+>/g, "");
-  s = s
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  s = decodeHtmlEntities(s);
+  if (!preserveBreaks) return s.replace(/[ \t]+/g, " ").trim();
+  return s
+    .replace(/\s*DENEBHTMLBREAK\s*/g, "<br>")
+    .replace(/(?:<br>){2,}/g, "<br>")
+    .replace(/^(?:<br>)+|(?:<br>)+$/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+function attrInt(attrs, name) {
+  const m = String(attrs || "").match(new RegExp(`${name}\\s*=\\s*["']?(\\d+)`, "i"));
+  return Math.max(1, Number.parseInt(m?.[1] || "1", 10) || 1);
+}
+
+/** Expand one HTML table to a rectangular matrix, including colspan/rowspan.
+ * Markdown cannot express merged cells, so span continuations become blanks. */
+export function htmlTableMatrix(tableHtml) {
+  const rowHtml = [...String(tableHtml).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => m[1]);
+  const rows = [];
+  const pending = new Map(); // col -> remaining rows occupied by rowspan
+
+  for (const rawRow of rowHtml) {
+    const row = [];
+    for (const [col, remaining] of [...pending.entries()]) {
+      row[col] = "";
+      if (remaining <= 1) pending.delete(col);
+      else pending.set(col, remaining - 1);
+    }
+
+    const cells = [...rawRow.matchAll(/<t[dh]\b([^>]*)>([\s\S]*?)<\/t[dh]>/gi)];
+    let col = 0;
+    for (const cell of cells) {
+      while (row[col] !== undefined) col += 1;
+      const colspan = attrInt(cell[1], "colspan");
+      const rowspan = attrInt(cell[1], "rowspan");
+      const value = stripHtmlFragment(cell[2], { preserveBreaks: true }).replace(/\|/g, "\\|");
+      row[col] = value;
+      for (let i = 1; i < colspan; i += 1) row[col + i] = "";
+      if (rowspan > 1) {
+        for (let i = 0; i < colspan; i += 1) pending.set(col + i, rowspan - 1);
+      }
+      col += colspan;
+    }
+    if (cells.length) rows.push(row);
+  }
+
+  const width = Math.max(0, ...rows.map((r) => r.length));
+  return rows.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ""));
+}
+
+/** Convert data-shaped HTML tables to Markdown. One-row layout tables (e.g.
+ * 금액 labels split across seven cells) stay a readable sentence instead. */
+export function htmlTableToMarkdown(tableHtml) {
+  const rows = htmlTableMatrix(tableHtml);
+  if (!rows.length) return "";
+  if (rows.length === 1) return rows[0].filter(Boolean).join(" ").replace(/<br>/g, " ");
+  const width = rows[0].length;
+  if (width < 2) return rows.map((r) => r.filter(Boolean).join(" ")).filter(Boolean).join("\n");
+  const render = (row) => `| ${row.map((v) => String(v).replace(/\n/g, "<br>")).join(" | ")} |`;
+  return [render(rows[0]), `| ${rows[0].map(() => "---").join(" | ")} |`, ...rows.slice(1).map(render)].join("\n");
+}
+
+/** Extract outermost table blocks without a DOM dependency. Handles nested
+ * layout tables by tracking <table> depth instead of a non-greedy regex. */
+function extractTableBlocks(html) {
+  const s = String(html || "");
+  const tags = [...s.matchAll(/<\/?table\b[^>]*>/gi)];
+  const blocks = [];
+  let depth = 0;
+  let start = -1;
+  for (const tag of tags) {
+    const closing = /^<\/table/i.test(tag[0]);
+    if (!closing) {
+      if (depth === 0) start = tag.index;
+      depth += 1;
+    } else if (depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        blocks.push({ start, end: tag.index + tag[0].length, html: s.slice(start, tag.index + tag[0].length) });
+        start = -1;
+      }
+    }
+  }
+  return blocks;
+}
+
+/** Collapse Amaranth form HTML into readable text while preserving true row/column
+ * tables as Markdown. Metadata, approval line, and attachments remain separate. */
+export function htmlToText(html) {
+  let s = String(html || "");
+  const blocks = extractTableBlocks(s);
+  const rendered = [];
+  for (let i = blocks.length - 1; i >= 0; i -= 1) {
+    const marker = `DENEBTABLEBLOCK${String(i).padStart(4, "0")}END`;
+    rendered[i] = htmlTableToMarkdown(blocks[i].html);
+    s = s.slice(0, blocks[i].start) + `\n${marker}\n` + s.slice(blocks[i].end);
+  }
+
+  s = stripHtmlFragment(s);
   const lines = s
     .split(/\n+/)
     .map((l) => l.replace(/[ \t]+/g, " ").trim())
     .filter(Boolean);
   const merged = [];
   for (const line of lines) {
+    const marker = line.match(/^DENEBTABLEBLOCK(\d{4})END$/);
+    if (marker) {
+      const table = rendered[Number.parseInt(marker[1], 10)];
+      if (table) merged.push(table);
+      continue;
+    }
     if (
       merged.length &&
+      !merged[merged.length - 1].startsWith("|") &&
       (merged[merged.length - 1].length < 8 || line.length < 8) &&
       !/^[0-9]+\./.test(line)
     ) {
@@ -395,44 +506,77 @@ async function downloadAndExtract(docId, file) {
   }
 }
 
+function attachmentName(file) {
+  const name = String(file.dispFileNm || file.fileNm || file.filePath || "첨부").trim();
+  const ext = String(file.fileExtsn || path.extname(String(file.filePath || "")) || "")
+    .replace(/^\./, "")
+    .toLowerCase();
+  return ext && !name.toLowerCase().endsWith(`.${ext}`) ? `${name}.${ext}` : name;
+}
+
+// Initial document read lists attachment titles only. The agent explicitly chooses
+// one attachment via action=attachment before any download/OCR work happens.
 async function formatAttachments(docId) {
   const list = await fetchAttachList(docId);
   if (!list.length) return "";
-  const lines = [`첨부 (${list.length}건)`];
-  let downloaded = 0;
-  for (const f of list) {
-    const name = f.dispFileNm || f.fileNm || f.filePath || "첨부";
-    const ext = String(f.fileExtsn || path.extname(String(f.filePath || "")) || "")
-      .replace(/^\./, "")
-      .toLowerCase();
-    const size = f.fileSize != null ? `${f.fileSize}B` : "";
-    lines.push(`- ${name}${ext ? `.${ext}` : ""}${size ? ` (${size})` : ""}`);
-    // Metadata-only for skipped types; don't spend the download budget on a JPG
-    // we won't OCR (image OCR is opt-in via DENEB_GROUPWARE_OCR=1).
-    if (!wantExtract(ext)) {
-      const img = IMAGE_EXTS.includes(ext);
-      lines.push(
-        `  (${img ? "이미지 — OCR 비활성(DENEB_GROUPWARE_OCR=1)" : "추출 미지원 형식"})`,
-      );
-      continue;
-    }
-    if (downloaded >= MAX_ATTACH_DOWNLOAD) {
-      lines.push("  (다운로드 상한 도달 — 메타만)");
-      continue;
-    }
-    downloaded += 1;
-    try {
-      const got = await downloadAndExtract(docId, f);
-      if (got.extracted) {
-        lines.push(`  추출:\n${got.extracted.split("\n").map((l) => `    ${l}`).join("\n")}`);
-      } else if (got.note) {
-        lines.push(`  (${got.note})`);
-      }
-    } catch (err) {
-      lines.push(`  (다운로드 실패: ${String(err?.message || err).slice(0, 80)})`);
-    }
+  const lines = [
+    `첨부 (${list.length}건 · 내용 미열람)`,
+    `필요한 파일만 groupware action=attachment, doc_id=${docId}, attachment=<번호·파일명> 으로 읽기`,
+  ];
+  for (const [i, file] of list.entries()) {
+    const size = file.fileSize != null ? ` · ${file.fileSize}B` : "";
+    lines.push(`${i + 1}. ${attachmentName(file)}${size}`);
   }
   return lines.join("\n");
+}
+
+export function selectAttachment(list, selector) {
+  const raw = String(selector || "").trim();
+  if (!raw) throw new Error("attachment requires a file number, filename, fileKey, or fileId");
+
+  if (/^\d+$/.test(raw)) {
+    const index = Number.parseInt(raw, 10) - 1;
+    if (index >= 0 && index < list.length) return list[index];
+    const byKey = list.find((f) => String(f.fileKey ?? f.fileSn ?? "") === raw);
+    if (byKey) return byKey;
+  }
+
+  const needle = raw.toLowerCase();
+  const exact = list.filter((f) =>
+    [attachmentName(f), f.dispFileNm, f.fileNm, f.filePath, f.fileId, f.fileKey]
+      .filter((v) => v != null)
+      .some((v) => String(v).trim().toLowerCase() === needle),
+  );
+  if (exact.length === 1) return exact[0];
+
+  const partial = list.filter((f) =>
+    [attachmentName(f), f.dispFileNm, f.fileNm, f.filePath]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(needle)),
+  );
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1 || exact.length > 1) {
+    const matches = (exact.length ? exact : partial).map(attachmentName).join(", ");
+    throw new Error(`첨부 선택이 모호합니다: ${matches}`);
+  }
+  throw new Error(`첨부를 찾지 못했습니다: ${raw}`);
+}
+
+export async function readApprovalAttachment(docId, selector) {
+  const id = String(docId || "").trim();
+  if (!id) throw new Error("attachment requires --doc-id");
+  const list = await fetchAttachList(id);
+  if (!list.length) throw new Error(`첨부가 없습니다: docId=${id}`);
+  const file = selectAttachment(list, selector);
+  const got = await downloadAndExtract(id, file);
+  const header = [
+    `[그룹웨어 전자결재 · 선택 첨부]`,
+    `docId: ${id}`,
+    `파일: ${attachmentName(file)}`,
+    got.size ? `크기: ${got.size}B` : "",
+  ].filter(Boolean).join("\n");
+  if (got.extracted) return `${header}\n\n추출 본문\n${got.extracted}`;
+  return `${header}\n\n(${got.note || "텍스트 추출 결과 없음"})`;
 }
 
 function formatLine(lines) {
