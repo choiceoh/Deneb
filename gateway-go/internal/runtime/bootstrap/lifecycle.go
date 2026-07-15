@@ -36,10 +36,11 @@ const ExitCodeRestart = 75
 // alive, so systemd never restarts it and only a manual SIGKILL recovers it.
 // (This caused a production miniapp outage.) The watchdog guarantees the
 // process always terminates after a signal so a fresh listener always comes
-// back. 45s sits well above a healthy shutdown (<2s) and above the sum of the
-// bounded drains in doShutdown, so it only fires on a genuine hang.
+// back. A restart may now spend up to six minutes draining a user turn before
+// the bounded subsystem teardown begins, so the watchdog leaves two minutes of
+// additional cleanup headroom and only fires on a genuine hang.
 // Indirected as a var so tests can shorten it.
-var shutdownGraceTimeout = 45 * time.Second
+var shutdownGraceTimeout = 8 * time.Minute
 
 // osExit is indirected so tests can assert the force-exit path without
 // terminating the test binary.

@@ -59,11 +59,58 @@ func translateBatchDeepL(ctx context.Context, batch []translateInput, lang strin
 		return nil, false
 	}
 
-	translated, ok := callDeepL(ctx, endpoint, key, target, texts, deepLContext(batch))
-	if !ok || len(translated) != len(texts) {
-		return nil, false
+	resolved := make([]string, len(texts))
+	missIdx := make([]int, 0, len(texts))
+	missTexts := make([]string, 0, len(texts))
+	for i, text := range texts {
+		if cached, ok := translateCached(target, text); ok {
+			resolved[i] = cached
+			continue
+		}
+		missIdx = append(missIdx, i)
+		missTexts = append(missTexts, text)
 	}
-	for i, text := range translated {
+	if len(missTexts) > 0 {
+		contextHint := deepLContext(batch)
+		flightKey := translateMissFlightKey(target, missTexts)
+		translated, ok := translateFlight.do(flightKey, func() ([]string, bool) {
+			// Re-check cache inside the flight leader: a just-finished sibling
+			// batch may have filled every miss while we waited to become leader.
+			stillMissIdx := make([]int, 0, len(missTexts))
+			stillMiss := make([]string, 0, len(missTexts))
+			filled := make([]string, len(missTexts))
+			for i, text := range missTexts {
+				if cached, hit := translateCached(target, text); hit {
+					filled[i] = cached
+					continue
+				}
+				stillMissIdx = append(stillMissIdx, i)
+				stillMiss = append(stillMiss, text)
+			}
+			if len(stillMiss) == 0 {
+				return filled, true
+			}
+			fresh, ok := callDeepL(ctx, endpoint, key, target, stillMiss, contextHint)
+			if !ok || len(fresh) != len(stillMiss) {
+				return nil, false
+			}
+			for i, text := range fresh {
+				filled[stillMissIdx[i]] = text
+				rememberTranslated(target, stillMiss[i], text)
+			}
+			return filled, true
+		})
+		if !ok || len(translated) != len(missTexts) {
+			// Full DeepL miss → false so translateRange can bisect. Cache hits
+			// still help on the smaller retries.
+			return nil, false
+		}
+		for i, text := range translated {
+			resolved[missIdx[i]] = text
+			rememberTranslated(target, missTexts[i], text)
+		}
+	}
+	for i, text := range resolved {
 		m := mapping[i]
 		if m.part >= 0 {
 			partOut[m.segment][m.part] = text

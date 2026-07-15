@@ -2,10 +2,16 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+// ErrRuntimeDraining tells callers to retry after the gateway restart. It is
+// distinct from context cancellation: turns admitted before draining continue
+// to completion, while only new work receives this error.
+var ErrRuntimeDraining = errors.New("chat runtime is draining for restart")
 
 var (
 	_ chatport.SyncRunner       = (*Handler)(nil)
@@ -14,9 +20,27 @@ var (
 )
 
 // ChatReady reports whether the concrete handler behind a chatport interface
-// is usable. It is deliberately safe on a nil receiver so consumers can reject
-// a typed nil pointer stored in an interface before dispatching a run.
-func (h *Handler) ChatReady() bool { return h != nil }
+// is currently admitting new runs. It is deliberately safe on a nil receiver
+// so consumers can reject a typed nil pointer stored in an interface before
+// dispatching a run.
+func (h *Handler) ChatReady() bool {
+	return h != nil && h.abort != nil && !h.abort.IsDraining()
+}
+
+// BeginDrain closes admission and waits for all already-accepted runs to leave
+// the abort registry. The caller controls the maximum wait with ctx; timing out
+// does not reopen admission.
+func (h *Handler) BeginDrain(ctx context.Context) error {
+	if h == nil || h.abort == nil {
+		return nil
+	}
+	select {
+	case <-h.abort.BeginDrain():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // RunSync executes the runtime-safe chatport request through the richer chat
 // implementation API.

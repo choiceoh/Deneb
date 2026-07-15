@@ -372,8 +372,8 @@ func New(addr string, opts ...Option) (*Server, error) {
 
 	// Initialise the lifecycle context up front so any background goroutine
 	// started during New() (e.g. checkpoint-gc) can read it race-free via
-	// ShutdownCtx(). initAndListen later wires caller-ctx cancellation in
-	// as a forwarder rather than replacing the context pointer.
+	// ShutdownCtx(). Server.Run observes its caller context and enters the
+	// ordered chat-drain shutdown before this lifecycle context is cancelled.
 	s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(context.Background())
 
 	s.broadcaster = events.NewBroadcaster()

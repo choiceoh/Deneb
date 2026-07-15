@@ -21,6 +21,7 @@ from health_finding_miner import (
     RUNTIME_WEAK_SCORE,
     main,
     parse_leading_json,
+    pending_impact_observations,
     reopen_blocked,
     runtime_candidates,
     select_candidates,
@@ -32,7 +33,7 @@ NOW = 1_800_000_000_000
 
 def structural_report(**overrides):
     report = {
-        "revision": "3258b6ffc0ffee",
+        "revision": "revision-test-3258",
         "profile": "fast",
         "findings": [
             {
@@ -99,10 +100,20 @@ class StructuralCandidatesTest(unittest.TestCase):
         cand = structural_candidates(structural_report())[1]
         self.assertIn("volatile-hub:46a381ef4981", cand["evidence"])
         self.assertIn("Volatile-hub index is 5.13", cand["evidence"])
-        self.assertIn("3258b6ffc0ff", cand["evidence"])  # bench revision pinned
+        self.assertIn("revision-tes", cand["evidence"])  # bench revision pinned
         self.assertEqual(cand["scope"], "code")
         self.assertEqual(cand["targetFiles"], ["gateway-go/internal/domain/wiki"])
         self.assertIn("Verify:", cand["proposedChange"])
+        self.assertEqual(
+            cand["impactContract"],
+            {
+                "metric": "health.finding_present:volatile-hub:46a381ef4981",
+                "direction": "decrease",
+                "baseline": 1,
+                "target": 0,
+                "minSamples": 1,
+            },
+        )
 
     def test_empty_report_yields_nothing(self):
         self.assertEqual(structural_candidates({"findings": []}), [])
@@ -117,6 +128,8 @@ class RuntimeCandidatesTest(unittest.TestCase):
         self.assertIn("runtime-latency", cand["evidence"])
         self.assertIn("p95_s=148.0", cand["evidence"])
         self.assertIn("51.1", cand["title"])
+        self.assertEqual(cand["impactContract"]["baseline"], 51.1)
+        self.assertEqual(cand["impactContract"]["target"], RUNTIME_WEAK_SCORE)
 
     def test_when_healthy_dims_do_not_file(self):
         report = runtime_report()
@@ -194,6 +207,65 @@ class ParseLeadingJsonTest(unittest.TestCase):
     def test_when_trailing_metric_lines_tolerated(self):
         text = '{"composite": 82.3}\nmetric_value=82.3\nDENEB_RUNTIME_DETAIL {...}\n'
         self.assertEqual(parse_leading_json(text), {"composite": 82.3})
+
+
+class PendingImpactObservationsTest(unittest.TestCase):
+    def _candidate(self, metric, *, updated=NOW - 1000, window=0):
+        return {
+            "id": "sc-impact",
+            "attemptId": "attempt-1",
+            "updatedAt": updated,
+            "impactResult": {"status": "pending"},
+            "impactContract": {
+                "metric": metric,
+                "observationWindowMs": window,
+            },
+        }
+
+    def test_structural_finding_absence_becomes_zero_observation(self):
+        candidate = self._candidate(
+            "health.finding_present:volatile-hub:46a381ef4981"
+        )
+        observations, skipped = pending_impact_observations(
+            [candidate], structural_report(findings=[]), runtime_report(), NOW
+        )
+        self.assertEqual(skipped, [])
+        self.assertEqual(observations[0]["observed"], 0)
+        self.assertEqual(observations[0]["samples"], 1)
+        self.assertIn("absent", observations[0]["note"])
+
+    def test_structural_finding_still_present_becomes_one_observation(self):
+        candidate = self._candidate(
+            "health.finding_present:volatile-hub:46a381ef4981"
+        )
+        observations, _ = pending_impact_observations(
+            [candidate], structural_report(), runtime_report(), NOW
+        )
+        self.assertEqual(observations[0]["observed"], 1)
+
+    def test_runtime_score_uses_fresh_dimension_and_sample_count(self):
+        candidate = self._candidate("runtime.health.score:latency")
+        observations, skipped = pending_impact_observations(
+            [candidate], structural_report(), runtime_report(), NOW
+        )
+        self.assertEqual(skipped, [])
+        self.assertEqual(observations[0]["observed"], 51.1)
+        self.assertEqual(observations[0]["samples"], 523)
+
+    def test_observation_window_and_foreign_metric_stay_pending(self):
+        candidates = [
+            self._candidate(
+                "runtime.health.score:latency", updated=NOW, window=60_000
+            ),
+            self._candidate("external.metric"),
+        ]
+        observations, skipped = pending_impact_observations(
+            candidates, structural_report(), runtime_report(), NOW
+        )
+        self.assertEqual(observations, [])
+        self.assertEqual(len(skipped), 2)
+        self.assertIn("window pending", skipped[0][1])
+        self.assertIn("another evaluator", skipped[1][1])
 
 
 class CliDryRunTest(unittest.TestCase):

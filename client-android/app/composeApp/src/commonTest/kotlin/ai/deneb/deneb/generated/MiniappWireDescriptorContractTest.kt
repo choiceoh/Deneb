@@ -406,7 +406,19 @@ class MiniappWireDescriptorContractTest {
             name = "SelfCorrectionCandidate",
             serializer = SelfCorrectionCandidate.serializer(),
             empty = SelfCorrectionCandidate(),
-            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "surface", "autoDispatch", "reviewer", "reviewNote", "evidenceKinds", "reviewActions", "dispatchPhase", "attemptId", "branch", "prNumber", "prUrl", "commitSha", "deployHead", "outcomeNote", "createdAt", "updatedAt"),
+            fields = listOf("id", "status", "scope", "skillName", "sessionKey", "title", "candidate", "evidence", "reason", "targetFiles", "proposedChange", "risk", "source", "surface", "autoDispatch", "reviewer", "reviewNote", "impactContract", "impactResult", "evidenceKinds", "reviewActions", "dispatchPhase", "attemptId", "branch", "prNumber", "prUrl", "commitSha", "deployHead", "outcomeNote", "createdAt", "updatedAt"),
+        ),
+        contract(
+            name = "SelfCorrectionImpactContract",
+            serializer = SelfCorrectionImpactContract.serializer(),
+            empty = SelfCorrectionImpactContract(),
+            fields = listOf("metric", "direction", "baseline", "target", "minSamples", "observationWindowMs", "guardrails"),
+        ),
+        contract(
+            name = "SelfCorrectionImpactResult",
+            serializer = SelfCorrectionImpactResult.serializer(),
+            empty = SelfCorrectionImpactResult(),
+            fields = listOf("status", "observed", "samples", "guardrailViolations", "note", "checkedAt"),
         ),
         contract(
             name = "SelfImprovementCodingFunnel",

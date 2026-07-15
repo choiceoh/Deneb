@@ -587,6 +587,8 @@ export interface SelfCorrectionCandidate {
   autoDispatch?: boolean
   reviewer?: string
   reviewNote?: string
+  impactContract?: SelfCorrectionImpactContract
+  impactResult?: SelfCorrectionImpactResult
   evidenceKinds?: string[]
   reviewActions?: string[]
   dispatchPhase?: string
@@ -599,6 +601,25 @@ export interface SelfCorrectionCandidate {
   outcomeNote?: string
   createdAt?: number
   updatedAt?: number
+}
+
+export interface SelfCorrectionImpactContract {
+  metric?: string
+  direction?: string
+  baseline?: number
+  target?: number
+  minSamples?: number
+  observationWindowMs?: number
+  guardrails?: string[]
+}
+
+export interface SelfCorrectionImpactResult {
+  status?: string
+  observed?: number
+  samples?: number
+  guardrailViolations?: string[]
+  note?: string
+  checkedAt?: number
 }
 
 export interface SelfImprovementCodingFunnel {
