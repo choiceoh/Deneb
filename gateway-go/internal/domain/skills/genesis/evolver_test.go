@@ -1492,7 +1492,7 @@ func TestRepeatedPatchFirstRejectionDedupSurvivesOperatorReview(t *testing.T) {
 	}
 	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
 		ID:       drafts[0].ID,
-		Status:   SelfCorrectionStatusRejected,
+		Status:   selfCorrectionStatusRejected,
 		Reviewer: "operator",
 	}); err != nil {
 		t.Fatalf("RecordSelfCorrectionReview: %v", err)
@@ -1500,7 +1500,7 @@ func TestRepeatedPatchFirstRejectionDedupSurvivesOperatorReview(t *testing.T) {
 
 	e.recordRejectedSkillEdit("system-health-check", "body-z", "Hermes patch-first gate rejected: candidate SKILL.md size 22000 bytes exceeds 15360 byte limit", "self-test", HarnessEditAudit{})
 	drafts = patchFirstReviewDrafts(t, tracker, "system-health-check")
-	if len(drafts) != 1 || drafts[0].Status != SelfCorrectionStatusRejected {
+	if len(drafts) != 1 || drafts[0].Status != selfCorrectionStatusRejected {
 		t.Fatalf("operator-reviewed signature must not re-promote, got %+v", drafts)
 	}
 }

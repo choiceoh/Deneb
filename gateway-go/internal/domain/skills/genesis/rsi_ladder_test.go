@@ -100,7 +100,7 @@ func TestLadderDispatchCapUsesLatestTerminalWatchedCohort(t *testing.T) {
 	}
 	write("old-rollback", "landed", "old", 1, selfCorrectionDispatchRolledBack)
 	write("pending", "attempted", "pending", 100, selfCorrectionDispatchPROpened)
-	write("unwatched", "landed", "unwatched", 101, SelfCorrectionDispatchMerged)
+	write("unwatched", "landed", "unwatched", 101, selfCorrectionDispatchMerged)
 	for i, outcome := range []string{"landed", "landed", "landed", "declined", "declined"} {
 		phase := selfCorrectionDispatchDeclined
 		if outcome == "landed" {

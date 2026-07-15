@@ -237,7 +237,7 @@ func (t *Tracker) stagedSourceReviewStats() map[string]sourceReviewStats {
 			st.proposed++
 		case SelfCorrectionStatusAccepted:
 			st.accepted++
-		case SelfCorrectionStatusRejected:
+		case selfCorrectionStatusRejected:
 			st.rejected++
 		}
 		stats[prefix] = st

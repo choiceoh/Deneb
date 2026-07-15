@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
 func rsiLayerByKey(layers []rsiLayer, key string) rsiLayer {
@@ -471,7 +473,7 @@ func TestRSIStatusL4MetricsReflectDispatchLifecyclePhasesWithoutMarkerCounts(t *
 	record("in-flight", selfCorrectionDispatchStarted)
 	makeCandidate("closed")
 	for _, phase := range []string{
-		selfCorrectionDispatchStarted, SelfCorrectionDispatchMerged,
+		selfCorrectionDispatchStarted, selfCorrectionDispatchMerged,
 		selfCorrectionDispatchDeployed, selfCorrectionDispatchWatchPassed,
 	} {
 		record("closed", phase)
@@ -500,9 +502,9 @@ func TestRSIStatusL4SeparatesSafetyFromImpactVerdicts(t *testing.T) {
 	if got := rsiMetricValue(tr.rsiAssessL4().Metrics, "효과 판정"); got != "확인 0 · 대기 1 · 효과없음 0 · 악화 0" {
 		t.Fatalf("pending impact metric = %q", got)
 	}
-	if _, err := tr.RecordSelfCorrectionImpact(SelfCorrectionCandidateRecord{
+	if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
 		ID: candidate.ID, AttemptID: "attempt-impact",
-		ImpactResult: &SelfCorrectionImpactResult{Observed: 75, Samples: 10},
+		ImpactResult: &rsilifecycle.ImpactResult{Observed: 75, Samples: 10},
 	}); err != nil {
 		t.Fatal(err)
 	}

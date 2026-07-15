@@ -21,13 +21,13 @@ const (
 
 	SelfCorrectionStatusProposed   = string(rsilifecycle.ReviewProposed)
 	SelfCorrectionStatusAccepted   = string(rsilifecycle.ReviewAccepted)
-	SelfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
-	SelfCorrectionStatusSuperseded = string(rsilifecycle.ReviewSuperseded)
 	SelfCorrectionStatusApplied    = string(rsilifecycle.ReviewApplied)
+	selfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
+	selfCorrectionStatusSuperseded = string(rsilifecycle.ReviewSuperseded)
 
 	selfCorrectionDispatchStarted     = string(rsilifecycle.DeliveryStarted)
 	selfCorrectionDispatchPROpened    = string(rsilifecycle.DeliveryPROpened)
-	SelfCorrectionDispatchMerged      = string(rsilifecycle.DeliveryMerged)
+	selfCorrectionDispatchMerged      = string(rsilifecycle.DeliveryMerged)
 	selfCorrectionDispatchDeployed    = string(rsilifecycle.DeliveryDeployed)
 	selfCorrectionDispatchWatchPassed = string(rsilifecycle.DeliveryWatchPassed)
 	selfCorrectionDispatchDeclined    = string(rsilifecycle.DeliveryDeclined)
@@ -54,14 +54,14 @@ type SelfCorrectionCandidateRecord struct {
 	// Surface is the declared editable-surface tier summarizing TargetFiles
 	// (editable_surfaces.go): auto-apply | propose-only. Empty on legacy rows
 	// and target-less candidates.
-	Surface        string                        `json:"surface,omitempty"`
-	ProposedChange string                        `json:"proposedChange,omitempty"`
-	Risk           string                        `json:"risk,omitempty"`
-	Source         string                        `json:"source,omitempty"`
-	Reviewer       string                        `json:"reviewer,omitempty"`
-	ReviewNote     string                        `json:"reviewNote,omitempty"`
-	ImpactContract *SelfCorrectionImpactContract `json:"impactContract,omitempty"`
-	ImpactResult   *SelfCorrectionImpactResult   `json:"impactResult,omitempty"`
+	Surface        string                       `json:"surface,omitempty"`
+	ProposedChange string                       `json:"proposedChange,omitempty"`
+	Risk           string                       `json:"risk,omitempty"`
+	Source         string                       `json:"source,omitempty"`
+	Reviewer       string                       `json:"reviewer,omitempty"`
+	ReviewNote     string                       `json:"reviewNote,omitempty"`
+	ImpactContract *rsilifecycle.ImpactContract `json:"impactContract,omitempty"`
+	ImpactResult   *rsilifecycle.ImpactResult   `json:"impactResult,omitempty"`
 	// Dispatch fields are populated on self_correction_dispatch rows and folded
 	// onto the candidate read model. The review status and delivery status are
 	// deliberately separate: accepted means "approved to try"; applied means a
@@ -177,6 +177,9 @@ func (t *Tracker) RecordSelfCorrectionReview(record SelfCorrectionCandidateRecor
 // A watch_passed event is itself the applied verdict in the folded read model,
 // so closure is one durable append rather than two writes that could tear.
 func (t *Tracker) RecordSelfCorrectionDispatch(record SelfCorrectionCandidateRecord) (SelfCorrectionCandidateRecord, error) {
+	if record.ImpactResult != nil {
+		return t.recordSelfCorrectionImpact(record)
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
