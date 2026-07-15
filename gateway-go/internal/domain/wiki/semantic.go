@@ -183,8 +183,16 @@ func (s *Store) dropSemanticVector(relPath string) {
 		return
 	}
 	s.sem.mu.Lock()
+	_, existed := s.sem.vecs[relPath]
 	delete(s.sem.vecs, relPath)
 	s.sem.mu.Unlock()
+	if existed {
+		// Persist the removal: otherwise a gateway restart reloads the forgotten
+		// vector from .semantic-cache.json in SetEmbedder and the first semantic
+		// search ranks it before the async prune wins — resurfacing the page.
+		// saveCache locks si.mu itself, so call it after releasing the lock.
+		s.sem.saveCache()
+	}
 }
 
 // SearchDiarySemanticBatch returns semantic (cosine-ranked) diary hits per query,

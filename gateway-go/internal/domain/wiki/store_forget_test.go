@@ -118,6 +118,33 @@ func TestForgetDropsSemanticVectorSynchronously(t *testing.T) {
 	}
 }
 
+func TestForgetSemanticRemovalSurvivesReload(t *testing.T) {
+	store := newForgetTestStore(t)
+	store.SetEmbedder(fakeEmbedder{healthy: true})
+	page := NewPage("재시작후에도", "기타", nil)
+	page.Body = "복원되면 안 되는 본문"
+	if err := store.WritePage("기타/재시작후에도.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+	if err := store.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("WarmSemanticIndex: %v", err) // also persists the on-disk cache
+	}
+
+	if _, err := store.Forget("기타/재시작후에도", "프라이버시"); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+
+	// Simulate a gateway restart: re-attach the embedder, which reloads the
+	// on-disk semantic cache. The forgotten vector must NOT come back.
+	store.SetEmbedder(fakeEmbedder{healthy: true})
+	store.sem.mu.Lock()
+	_, back := store.sem.vecs["기타/재시작후에도.md"]
+	store.sem.mu.Unlock()
+	if back {
+		t.Fatalf("forgotten vector reloaded from cache after restart")
+	}
+}
+
 func TestForgetRequiresReason(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("x", "기타", nil)
