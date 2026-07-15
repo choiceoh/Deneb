@@ -32,6 +32,8 @@ import (
 	"time"
 
 	rsistatus "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/status"
+	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // Private aliases keep the engine implementation concise while exposing the
@@ -314,7 +316,7 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
 	// so the native card layout is untouched.
-	if note := rsiDispatchOutcomeNote(t.dispatchMarkerDir()); note != "" {
+	if note := t.rsiDispatchOutcomeNote(); note != "" {
 		base.Diagnosis += note
 	}
 	return base
@@ -327,6 +329,7 @@ type l4Tally struct {
 	staged          int
 	inFlight        int
 	applied         int
+	declined        int
 	failed          int
 	oldestPendingAt int64
 }
@@ -361,7 +364,17 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 			tally.inFlight++
 		case selfCorrectionDispatchWatchPassed:
 			tally.applied++
+		case selfCorrectionDispatchDeclined:
+			// A clean session with no diff is a terminal, healthy no-op. It is
+			// neither in flight nor a failed dispatch.
+			tally.declined++
 		case selfCorrectionDispatchFailed, selfCorrectionDispatchRolledBack:
+			// Compatibility for sessions completed before the declined lifecycle
+			// phase shipped: the marker was correct, but the old shell wrote failed.
+			if phase == selfCorrectionDispatchFailed && t.dispatchMarkerOutcome(c.ID) == "declined" {
+				tally.declined++
+				continue
+			}
 			tally.failed++
 			if (phase == selfCorrectionDispatchRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
 				queued && rsiSourceDispatchable(c.Source) {
@@ -391,6 +404,7 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "배차 가능", Value: strconv.Itoa(tally.dispatchable)},
 		{Label: "진행 중", Value: strconv.Itoa(tally.inFlight)},
 		{Label: "감시 통과", Value: strconv.Itoa(tally.applied)},
+		{Label: "안전 종료", Value: strconv.Itoa(tally.declined)},
 		{Label: "실패/롤백", Value: strconv.Itoa(tally.failed)},
 		{Label: "검토 대기(비배차)", Value: strconv.Itoa(tally.staged)},
 		{Label: "오늘 배차", Value: strconv.Itoa(dispatchedToday)},
@@ -407,6 +421,8 @@ func rsiL4Verdict(tally l4Tally, total int, runtime codingDispatchRuntime) (stri
 		return rsiStateLive, fmt.Sprintf("코드 후보 %d건이 PR·배포·롤백 감시 단계를 통과 중", tally.inFlight)
 	case tally.applied > 0:
 		return rsiStateLive, fmt.Sprintf("소스 자가편집 %d건이 머지·배포 후 롤백 감시까지 통과", tally.applied)
+	case tally.declined > 0:
+		return rsiStateLive, fmt.Sprintf("코드 후보 %d건을 안전하게 변경 없음으로 종결", tally.declined)
 	case tally.dispatchable > 0 && runtime.ConsecutiveFailures > 0:
 		return rsiStateStarved, fmt.Sprintf("배차 대기 %d건 · 디스패처 %d회 연속 실패 (%s)", tally.dispatchable, runtime.ConsecutiveFailures, rsiDispatchTickValue(runtime))
 	case tally.dispatchable > 0:
@@ -471,11 +487,13 @@ func rsiAgeValue(atMs int64) string {
 }
 
 type rsiDispatchAttempt struct {
+	AttemptID    string `json:"attemptId"`
 	Outcome      string `json:"outcome"`
 	DispatchedAt int64  `json:"dispatchedAt"`
 }
 
 type rsiDispatchMarker struct {
+	AttemptID    string               `json:"attemptId"`
 	Outcome      string               `json:"outcome"`
 	DispatchedAt int64                `json:"dispatchedAt"`
 	Attempts     []rsiDispatchAttempt `json:"attempts"`
@@ -495,7 +513,7 @@ func rsiDispatchAttempts(path string, fallbackAt int64) []rsiDispatchAttempt {
 	if json.Unmarshal(raw, &marker) != nil {
 		return []rsiDispatchAttempt{{DispatchedAt: fallbackAt}}
 	}
-	current := rsiDispatchAttempt{Outcome: marker.Outcome, DispatchedAt: marker.DispatchedAt}
+	current := rsiDispatchAttempt{AttemptID: marker.AttemptID, Outcome: marker.Outcome, DispatchedAt: marker.DispatchedAt}
 	if current.DispatchedAt == 0 {
 		current.DispatchedAt = fallbackAt
 	}
@@ -505,14 +523,17 @@ func rsiDispatchAttempts(path string, fallbackAt int64) []rsiDispatchAttempt {
 // codingDispatchCounts mirrors scripts/audit/rsi_status.py's coding_dispatch/
 // attempt scan: retained retry history plus each marker's current attempt.
 func (t *Tracker) codingDispatchCounts() (total, today int) {
+	return t.codingDispatchCountsAt(dentime.Now())
+}
+
+func (t *Tracker) codingDispatchCountsAt(now time.Time) (total, today int) {
 	dir := filepath.Join(filepath.Dir(t.selfCorrectionPath), "coding_dispatch")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, 0
 	}
-	now := time.Now().UTC()
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	dayEnd := dayStart.Add(24 * time.Hour)
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	dayEnd := dayStart.AddDate(0, 0, 1)
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
@@ -524,7 +545,7 @@ func (t *Tracker) codingDispatchCounts() (total, today int) {
 		attempts := rsiDispatchAttempts(filepath.Join(dir, e.Name()), info.ModTime().UnixMilli())
 		total += len(attempts)
 		for _, attempt := range attempts {
-			at := time.UnixMilli(attempt.DispatchedAt)
+			at := time.UnixMilli(attempt.DispatchedAt).In(now.Location())
 			if !at.Before(dayStart) && at.Before(dayEnd) {
 				today++
 			}
@@ -552,6 +573,20 @@ func (t *Tracker) DispatchMarkerBlocks(id string) bool {
 	return t.dispatchMarkerBlocksAt(id, time.Now())
 }
 
+func (t *Tracker) dispatchMarkerOutcome(id string) string {
+	raw, err := os.ReadFile(filepath.Join(t.dispatchMarkerDir(), strings.TrimSpace(id)+".json"))
+	if err != nil {
+		return ""
+	}
+	var marker struct {
+		Outcome string `json:"outcome"`
+	}
+	if json.Unmarshal(raw, &marker) != nil {
+		return ""
+	}
+	return strings.TrimSpace(marker.Outcome)
+}
+
 // dispatchMarkerAbandonAfter matches Python DEFAULT_ABANDON_AFTER_SEC / the
 // coding-dispatch SESSION_TIMEOUT default (7200).
 const dispatchMarkerAbandonAfter = 2 * time.Hour
@@ -570,7 +605,7 @@ func (t *Tracker) dispatchMarkerBlocksAt(id string, now time.Time) bool {
 		Outcome string `json:"outcome"`
 	}
 	if json.Unmarshal(raw, &m) != nil {
-		return true
+		return dispatchMarkerIsFresh(path, now)
 	}
 	switch strings.TrimSpace(m.Outcome) {
 	case "landed", "attempted", "declined":
@@ -578,49 +613,124 @@ func (t *Tracker) dispatchMarkerBlocksAt(id string, now time.Time) bool {
 	case "failed", "timeout":
 		return false
 	default:
-		info, err := os.Stat(path)
-		if err != nil {
-			return true
-		}
-		return now.Sub(info.ModTime()) < dispatchMarkerAbandonAfter
+		return dispatchMarkerIsFresh(path, now)
 	}
+}
+
+func dispatchMarkerIsFresh(path string, now time.Time) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return true
+	}
+	return now.Sub(info.ModTime()) < dispatchMarkerAbandonAfter
 }
 
 // rsiDispatchOutcomeNote aggregates recorded dispatch outcomes into a short
 // diagnosis suffix ("" when no marker carries an outcome yet — markers
 // predating outcome accounting simply have none).
-func rsiDispatchOutcomeNote(dir string) string {
-	outcomes, decided, landed := rsiDispatchOutcomes(dir)
-	if decided == 0 {
+func (t *Tracker) rsiDispatchOutcomeNote() string {
+	evidence, err := t.rsiDispatchEvidence(0)
+	if err != nil {
+		return " · 배차 결과 원장을 읽을 수 없음"
+	}
+	outcomes, decided, landed := evidence.Outcomes, evidence.Decided, evidence.Landed
+	if len(outcomes) == 0 {
 		return ""
+	}
+	if decided == 0 {
+		return fmt.Sprintf(" · 배차 결과: %s (종결 근거 대기)", rsiOutcomeSummary(outcomes))
 	}
 	return fmt.Sprintf(" · 배차 결과: %s (랜딩률 %.0f%%)", rsiOutcomeSummary(outcomes), float64(landed)/float64(decided)*100)
 }
 
-// rsiDispatchOutcomes scans current and retained retry outcomes — the shared
-// read the L4 diagnosis note and the graduation-ladder cap row both aggregate
-// from. Markers predating outcome accounting carry none.
-func rsiDispatchOutcomes(dir string) (outcomes map[string]int, decided, landed int) {
-	outcomes = map[string]int{}
-	paths, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+type rsiDispatchEvidence struct {
+	Outcomes       map[string]int
+	CohortOutcomes map[string]int
+	Decided        int
+	Landed         int
+	RolledBack     int
+}
+
+type rsiDispatchEvidenceEvent struct {
+	outcome      string
+	dispatchedAt int64
+	terminal     bool
+	landed       bool
+	rolledBack   bool
+}
+
+// rsiDispatchEvidence joins crash/idempotency markers to the authoritative
+// lifecycle ledger. A marker's "landed" only becomes a success after the same
+// attempt reaches watch_passed; attempted and pre-watch merges stay outside
+// the denominator. When terminalLimit is positive, graduation uses only the
+// latest terminal cohort so an old rollback cannot poison the loop forever.
+func (t *Tracker) rsiDispatchEvidence(terminalLimit int) (rsiDispatchEvidence, error) {
+	entries, err := jsonlstore.Load[SelfCorrectionCandidateRecord](t.selfCorrectionPath)
+	if err != nil {
+		return rsiDispatchEvidence{}, err
+	}
+	phases := map[string]string{}
+	for _, entry := range entries {
+		if entry.Type != selfCorrectionTypeDispatch || strings.TrimSpace(entry.AttemptID) == "" {
+			continue
+		}
+		phases[strings.TrimSpace(entry.AttemptID)] = normalizeSelfCorrectionDispatchPhase(entry.DispatchPhase)
+	}
+
+	var events []rsiDispatchEvidenceEvent
+	paths, _ := filepath.Glob(filepath.Join(t.dispatchMarkerDir(), "*.json"))
 	for _, p := range paths {
 		info, err := os.Stat(p)
 		if err != nil {
 			continue
 		}
 		for _, attempt := range rsiDispatchAttempts(p, info.ModTime().UnixMilli()) {
-			outcome := strings.TrimSpace(attempt.Outcome)
-			if outcome == "" {
+			rawOutcome := strings.TrimSpace(attempt.Outcome)
+			if rawOutcome == "" {
 				continue
 			}
-			outcomes[outcome]++
-			decided++
-			if outcome == "landed" {
-				landed++
+			event := rsiDispatchEvidenceEvent{outcome: rawOutcome, dispatchedAt: attempt.DispatchedAt}
+			switch rawOutcome {
+			case "landed":
+				switch phases[strings.TrimSpace(attempt.AttemptID)] {
+				case selfCorrectionDispatchWatchPassed:
+					event.terminal, event.landed = true, true
+				case selfCorrectionDispatchRolledBack:
+					event.outcome, event.terminal, event.rolledBack = "rolled_back", true, true
+				default:
+					event.outcome = "pending_watch"
+				}
+			case "declined", "failed", "timeout":
+				event.terminal = true
+			case "rolled_back":
+				event.terminal, event.rolledBack = true, true
 			}
+			events = append(events, event)
 		}
 	}
-	return outcomes, decided, landed
+
+	evidence := rsiDispatchEvidence{Outcomes: map[string]int{}, CohortOutcomes: map[string]int{}}
+	for _, event := range events {
+		evidence.Outcomes[event.outcome]++
+	}
+	sort.SliceStable(events, func(i, j int) bool { return events[i].dispatchedAt > events[j].dispatchedAt })
+	for _, event := range events {
+		if !event.terminal {
+			continue
+		}
+		if terminalLimit > 0 && evidence.Decided >= terminalLimit {
+			break
+		}
+		evidence.CohortOutcomes[event.outcome]++
+		evidence.Decided++
+		if event.landed {
+			evidence.Landed++
+		}
+		if event.rolledBack {
+			evidence.RolledBack++
+		}
+	}
+	return evidence, nil
 }
 
 // rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback

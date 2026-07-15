@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 import shutil
+import json
+import datetime
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -90,7 +92,7 @@ class CodingDispatchStatusTest(unittest.TestCase):
                 "/bin/bash",
                 "-c",
                 'source "$1"; GH_BIN=""; set +e; '
-                "record_pr_outcome cid attempt branch 0 1; rc=$?; "
+                "record_pr_outcome cid attempt branch 0 1 0; rc=$?; "
                 'printf "%s:%s" "$rc" "$PR_OUTCOME"',
                 "test",
                 str(dispatcher_path),
@@ -111,9 +113,92 @@ class CodingDispatchStatusTest(unittest.TestCase):
 
     def test_clean_decline_is_completed_not_session_failure(self):
         self.assertEqual(
-            self._session_status("failed", "declined", 0),
+            self._session_status("declined", "declined", 0),
             "completed|session declined safely; no code or PR|candidate",
         )
+
+    def test_clean_no_diff_records_authoritative_declined_phase(self):
+        dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
+        proc = subprocess.run(
+            [
+                "/bin/bash", "-c",
+                'source "$1"; '
+                'pr_json_for_branch() { printf "[]"; }; '
+                'record_event() { printf "%s" "$4"; }; '
+                'record_pr_outcome cid attempt branch 0 1 0; '
+                'printf ":%s" "$PR_OUTCOME"',
+                "test", str(dispatcher_path),
+            ],
+            check=True, capture_output=True, text=True,
+        )
+        self.assertEqual(proc.stdout, "declined:declined")
+
+    def test_reconcile_never_regresses_terminal_or_post_merge_phases(self):
+        dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
+        outcome_path = Path(__file__).with_name("dispatch_outcome.py")
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            dispatch_dir = root / "coding_dispatch"
+            dispatch_dir.mkdir()
+            candidates = []
+            for phase in ("deployed", "watch_passed", "rolled_back", "declined"):
+                cid, attempt = f"sc-{phase}", f"attempt-{phase}"
+                (dispatch_dir / f"{cid}.json").write_text(json.dumps({
+                    "id": cid, "attemptId": attempt, "branch": f"dispatch/{attempt}",
+                    "outcome": "landed",
+                }) + "\n", encoding="utf-8")
+                candidates.append({
+                    "id": cid, "attemptId": attempt, "dispatchPhase": phase,
+                })
+            (dispatch_dir / "corrupt.json").write_text("{", encoding="utf-8")
+            rpc = root / "rpc.py"
+            rpc.write_text(
+                "import json\nprint(json.dumps(" + repr(candidates) + "))\n",
+                encoding="utf-8",
+            )
+            log = root / "dispatch.log"
+            proc = subprocess.run(
+                [
+                    "/bin/bash", "-c",
+                    'source "$1"; DISPATCH_DIR="$2"; DISPATCH_RPC="$3"; '
+                    'LOG_FILE="$4"; DISPATCH_OUTCOME="$5"; '
+                    'pr_json_for_branch() { printf \'[{"state":"MERGED","number":1,'
+                    '"url":"u","mergeCommit":{"oid":"sha"}}]\'; }; '
+                    'record_event() { printf "CALLED:%s" "$*"; }; reconcile_dispatches',
+                    "test", str(dispatcher_path), str(dispatch_dir), str(rpc),
+                    str(log), str(outcome_path),
+                ],
+                check=True, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.stdout, "")
+
+    def test_picker_delegates_corrupt_marker_age_to_shared_outcome_policy(self):
+        dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
+        self.assertNotIn("os.path.isfile(marker_path) and not phase", dispatcher)
+        self.assertIn("dispatch_outcome.blocks_redispatch(", dispatcher)
+
+    def test_shell_daily_cap_uses_operator_timezone(self):
+        dispatcher_path = Path(__file__).with_name("coding-dispatch.sh")
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            dispatch_dir = root / "coding_dispatch"
+            dispatch_dir.mkdir()
+            dispatched = datetime.datetime(2026, 7, 14, 23, 30, tzinfo=datetime.timezone.utc)
+            now = datetime.datetime(2026, 7, 15, 0, 30, tzinfo=datetime.timezone.utc)
+            (dispatch_dir / "kst.json").write_text(json.dumps({
+                "dispatchedAt": int(dispatched.timestamp() * 1000),
+            }) + "\n", encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    "/bin/bash", "-c",
+                    'source "$1"; DENEB_TIMEZONE=Asia/Seoul '
+                    'dispatch_cap_usage "$2" "$3" "$4"',
+                    "test", str(dispatcher_path), str(dispatch_dir), str(root),
+                    str(int(now.timestamp() * 1000)),
+                ],
+                check=True, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.stdout.strip(), "2026-07-15\t1\tAsia/Seoul")
 
     def test_real_session_failures_remain_visible(self):
         self.assertTrue(
@@ -136,8 +221,9 @@ class CodingDispatchStatusTest(unittest.TestCase):
             completed = record_status(path, "completed", now_ms=4)
             self.assertEqual(first["consecutiveFailures"], 1)
             self.assertEqual(second["consecutiveFailures"], 2)
-            self.assertEqual(dispatched["consecutiveFailures"], 0)
+            self.assertEqual(dispatched["consecutiveFailures"], 2)
             self.assertEqual(dispatched["lastDispatchAtMs"], 3)
+            self.assertEqual(completed["consecutiveFailures"], 0)
             self.assertEqual(completed["lastSuccessfulAtMs"], 4)
 
     def test_busy_tick_does_not_hide_existing_failure_streak(self):
@@ -146,6 +232,14 @@ class CodingDispatchStatusTest(unittest.TestCase):
             record_status(path, "environment_failed", now_ms=1)
             busy = record_status(path, "busy", now_ms=2)
             self.assertEqual(busy["consecutiveFailures"], 1)
+
+    def test_neutral_ticks_preserve_existing_failure_streak(self):
+        with TemporaryDirectory() as td:
+            path = Path(td) / "status.json"
+            record_status(path, "session_failed", now_ms=1)
+            for result in ("cap_reached", "idle", "dispatched"):
+                status = record_status(path, result, now_ms=2)
+                self.assertEqual(status["consecutiveFailures"], 1, result)
 
 
 if __name__ == "__main__":

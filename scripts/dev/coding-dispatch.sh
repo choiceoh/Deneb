@@ -98,6 +98,65 @@ record_runtime_status() {
     fi
 }
 
+# Print: local calendar date, attempts charged that day, effective timezone.
+# The same state/env precedence as gateway dentime keeps the cap and status
+# card on the operator's day boundary (including DST transitions).
+dispatch_cap_usage() {
+    python3 - "$1" "$2" "${3:-}" <<'PY'
+import json, os, sys
+from datetime import datetime, time as daytime, timedelta
+from zoneinfo import ZoneInfo
+
+dispatch_dir, state_dir, now_ms = sys.argv[1], sys.argv[2], sys.argv[3]
+zone_name = os.environ.get("DENEB_TIMEZONE", "").strip()
+if not zone_name:
+    try:
+        with open(os.path.join(state_dir, "deneb.json"), encoding="utf-8") as f:
+            zone_name = str((json.load(f) or {}).get("timezone") or "").strip()
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+try:
+    zone = ZoneInfo(zone_name) if zone_name else datetime.now().astimezone().tzinfo
+except (KeyError, ValueError):
+    zone = datetime.now().astimezone().tzinfo
+    zone_name = ""
+now = datetime.fromtimestamp(int(now_ms) / 1000, tz=zone) if now_ms else datetime.now(zone)
+start_dt = datetime.combine(now.date(), daytime.min, tzinfo=zone)
+end_dt = datetime.combine(now.date() + timedelta(days=1), daytime.min, tzinfo=zone)
+start = int(start_dt.timestamp() * 1000)
+end = int(end_dt.timestamp() * 1000)
+n = 0
+try:
+    names = os.listdir(dispatch_dir)
+except OSError:
+    print(f"{now.date().isoformat()}\t0\t{zone_name or str(zone)}")
+    raise SystemExit
+for name in names:
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(dispatch_dir, name)
+    timestamps = []
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            rec = json.load(f)
+        if isinstance(rec, dict) and isinstance(rec.get("dispatchedAt"), (int, float)):
+            timestamps.append(int(rec["dispatchedAt"]))
+        if isinstance(rec, dict):
+            for attempt in rec.get("attempts") or []:
+                if isinstance(attempt, dict) and isinstance(attempt.get("dispatchedAt"), (int, float)):
+                    timestamps.append(int(attempt["dispatchedAt"]))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    if not timestamps:
+        try:
+            timestamps.append(int(os.path.getmtime(path) * 1000))
+        except OSError:
+            continue
+    n += sum(1 for ts in timestamps if start <= ts < end)
+print(f"{now.date().isoformat()}\t{n}\t{zone_name or str(zone)}")
+PY
+}
+
 # A clean no-change verdict is a healthy dispatcher completion, not a broken
 # agent session. Keep actual process/timeout/unlanded-work failures visible.
 record_session_status() {
@@ -166,15 +225,24 @@ pr_json_for_branch() {
 # not remain stuck at pr_opened forever. Tracker-side idempotency makes repeats
 # cheap and keeps this safe across timer restarts.
 reconcile_dispatches() {
-    local marker cid attempt branch pr_json state number url merge_sha
+    local marker cid attempt branch pr_json state number url merge_sha ledger_json phase
     [[ -x "$DISPATCH_RPC" || -f "$DISPATCH_RPC" ]] || return 0
+    if ! ledger_json=$(python3 "$DISPATCH_RPC" --state-dir "$STATE_DIR" list --json 2>>"$LOG_FILE") || \
+            ! jq -e 'type == "array"' >/dev/null 2>&1 <<<"$ledger_json"; then
+        log "WARN: authoritative dispatch ledger unavailable — PR reconciliation deferred"
+        return 0
+    fi
     for marker in "$DISPATCH_DIR"/*.json; do
         [[ -f "$marker" ]] || continue
         command -v jq >/dev/null 2>&1 || return 0
-        cid=$(jq -r '.id // empty' "$marker")
-        attempt=$(jq -r '.attemptId // empty' "$marker")
-        branch=$(jq -r '.branch // empty' "$marker")
+        cid=$(jq -r '.id // empty' "$marker" 2>/dev/null || true)
+        attempt=$(jq -r '.attemptId // empty' "$marker" 2>/dev/null || true)
+        branch=$(jq -r '.branch // empty' "$marker" 2>/dev/null || true)
         [[ -n "$cid" && -n "$attempt" && -n "$branch" ]] || continue # legacy marker
+        phase=$(jq -r --arg id "$cid" --arg attempt "$attempt" \
+            '[.[] | select(.id == $id and .attemptId == $attempt)][0].dispatchPhase // empty' \
+            <<<"$ledger_json")
+        [[ -n "$phase" ]] || continue
         pr_json=$(pr_json_for_branch "$branch" || true)
         [[ -n "$pr_json" ]] || continue
         state=$(jq -r '.[0].state // empty' <<<"$pr_json")
@@ -182,15 +250,33 @@ reconcile_dispatches() {
         url=$(jq -r '.[0].url // empty' <<<"$pr_json")
         merge_sha=$(jq -r '.[0].mergeCommit.oid // empty' <<<"$pr_json")
         if [[ "$state" == "MERGED" && -n "$merge_sha" ]]; then
-            record_event --id "$cid" --phase merged --attempt-id "$attempt" --branch "$branch" \
-                --pr-number "$number" --pr-url "$url" --commit-sha "$merge_sha" \
-                --note "reconciled merged PR" || log "WARN: failed to reconcile merged dispatch $cid"
+            case "$phase" in
+                started|pr_opened|failed)
+                    record_event --id "$cid" --phase merged --attempt-id "$attempt" --branch "$branch" \
+                        --pr-number "$number" --pr-url "$url" --commit-sha "$merge_sha" \
+                        --note "reconciled merged PR" || log "WARN: failed to reconcile merged dispatch $cid"
+                    ;;
+                merged|deployed|watch_passed)
+                    ;; # already at or beyond merged — idempotent marker refresh only
+                *)
+                    continue # rolled_back/declined are terminal; never regress them
+                    ;;
+            esac
             python3 "$DISPATCH_OUTCOME" --marker "$marker" --rc 0 --pr-state MERGED \
                 --upgrade-only --preserve-mtime >>"$LOG_FILE" 2>&1 || true
         elif [[ "$state" == "OPEN" ]]; then
-            record_event --id "$cid" --phase pr_opened --attempt-id "$attempt" --branch "$branch" \
-                --pr-number "$number" --pr-url "$url" --note "reconciled open PR" \
-                || log "WARN: failed to reconcile open dispatch $cid"
+            case "$phase" in
+                started|failed)
+                    record_event --id "$cid" --phase pr_opened --attempt-id "$attempt" --branch "$branch" \
+                        --pr-number "$number" --pr-url "$url" --note "reconciled open PR" \
+                        || log "WARN: failed to reconcile open dispatch $cid"
+                    ;;
+                pr_opened)
+                    ;;
+                *)
+                    continue # never regress merged/deployed/terminal states
+                    ;;
+            esac
             python3 "$DISPATCH_OUTCOME" --marker "$marker" --rc 0 --ahead 0 --pr-state OPEN \
                 --preserve-mtime >>"$LOG_FILE" 2>&1 || true
         fi
@@ -250,7 +336,7 @@ reclaim_abandoned_dispatches() {
 
 PR_OUTCOME="none"
 record_pr_outcome() {
-    local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5"
+    local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5" ahead="$6"
     local pr_json state number url merge_sha
     if ! pr_json=$(pr_json_for_branch "$branch"); then
         PR_OUTCOME="unknown"
@@ -274,9 +360,15 @@ record_pr_outcome() {
                 --note "dispatch session rc=$rc elapsed=${elapsed}s; PR open"
             ;;
         *)
-            PR_OUTCOME="failed"
-            record_event --id "$cid" --phase failed --attempt-id "$attempt" --branch "$branch" \
-                --note "dispatch session rc=$rc elapsed=${elapsed}s; no merged/open PR"
+            if [[ "$rc" -eq 0 && "$ahead" == "0" ]]; then
+                PR_OUTCOME="declined"
+                record_event --id "$cid" --phase declined --attempt-id "$attempt" --branch "$branch" \
+                    --note "dispatch session completed cleanly with no diff or PR"
+            else
+                PR_OUTCOME="failed"
+                record_event --id "$cid" --phase failed --attempt-id "$attempt" --branch "$branch" \
+                    --note "dispatch session rc=$rc elapsed=${elapsed}s; no merged/open PR"
+            fi
             ;;
     esac
 }
@@ -322,48 +414,12 @@ main() {
 
     # Daily cap: prefer explicit dispatchedAt (ms) so late reprobe rewrites do
     # not burn today's slots; fall back to mtime for legacy markers.
-    local today spent
-    today=$(date -u +%Y-%m-%d)
-    spent=$(python3 - "$DISPATCH_DIR" "$today" <<'PY'
-import json, os, sys, time
-from datetime import datetime, timezone
-dispatch_dir, today = sys.argv[1], sys.argv[2]
-day = datetime.strptime(today, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-start = int(day.timestamp() * 1000)
-end = start + 86400000
-n = 0
-try:
-    names = os.listdir(dispatch_dir)
-except OSError:
-    print(0); raise SystemExit
-for name in names:
-    if not name.endswith(".json"):
-        continue
-    path = os.path.join(dispatch_dir, name)
-    timestamps = []
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            rec = json.load(f)
-        if isinstance(rec, dict) and isinstance(rec.get("dispatchedAt"), (int, float)):
-            timestamps.append(int(rec["dispatchedAt"]))
-        if isinstance(rec, dict):
-            for attempt in rec.get("attempts") or []:
-                if isinstance(attempt, dict) and isinstance(attempt.get("dispatchedAt"), (int, float)):
-                    timestamps.append(int(attempt["dispatchedAt"]))
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        pass
-    if not timestamps:
-        try:
-            timestamps.append(int(os.path.getmtime(path) * 1000))
-        except OSError:
-            continue
-    n += sum(1 for ts in timestamps if start <= ts < end)
-print(n)
-PY
-)
+    local today spent dispatch_timezone cap_usage
+    cap_usage=$(dispatch_cap_usage "$DISPATCH_DIR" "$STATE_DIR")
+    IFS=$'\t' read -r today spent dispatch_timezone <<<"$cap_usage"
     if (( spent >= DAILY_CAP )); then
-        log "daily cap reached ($spent/$DAILY_CAP UTC $today) — idle"
-        record_runtime_status cap_reached "$spent/$DAILY_CAP UTC $today"
+        log "daily cap reached ($spent/$DAILY_CAP $dispatch_timezone $today) — idle"
+        record_runtime_status cap_reached "$spent/$DAILY_CAP $dispatch_timezone $today"
         exit 0
     fi
 
@@ -457,16 +513,9 @@ for rid, rec in sorted(cand.items(), key=pick_order):
     if dispatch_prompt.forbidden_surface_mentions(rec):
         continue
     phase = dispatch_phase.get(rid, "")
-    if phase in ("started", "pr_opened", "merged", "deployed", "watch_passed"):
+    if phase in ("started", "pr_opened", "merged", "deployed", "watch_passed", "declined"):
         continue
     marker_path = os.path.join(dispatch_dir, rid + ".json")
-    if os.path.isfile(marker_path) and not phase:
-        try:
-            marker = json.load(open(marker_path, errors="replace"))
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            continue
-        if isinstance(marker, dict) and marker.get("attemptId"):
-            continue
     if dispatch_outcome.blocks_redispatch(
             marker_path,
             abandon_after_sec=abandon_after,
@@ -582,8 +631,13 @@ PYEOF
     set -e
     local elapsed=$(( $(date +%s) - started_at ))
     log "dispatch $cid finished (rc=$rc, ${elapsed}s)"
+    # Decide normal clean no-op versus failure from the actual branch delta
+    # before writing the authoritative terminal lifecycle event.
+    local ahead=""
+    git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
+    ahead=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo "")
     local terminal_recorded=1
-    if ! record_pr_outcome "$cid" "$attempt_id" "$branch" "$rc" "$elapsed"; then
+    if ! record_pr_outcome "$cid" "$attempt_id" "$branch" "$rc" "$elapsed" "$ahead"; then
         terminal_recorded=0
         log "WARN: failed to record terminal PR outcome for $cid"
     fi
@@ -605,13 +659,11 @@ PYEOF
     # measured land rate). Gather observable facts — PR state for the dispatch
     # branch, commits ahead of origin/main in the worktree — and let
     # dispatch_outcome.py fold the verdict into the marker. Never fatal.
-    local pr_state="" ahead=""
-    git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
+    local pr_state=""
     if [[ -n "$GH_BIN" ]]; then
         pr_state=$(cd "$PROD_DIR" && "$GH_BIN" pr list --head "$branch" --state all \
             --json state --jq '.[0].state // ""' 2>/dev/null || true)
     fi
-    ahead=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo "")
     local outcome
     outcome=$(python3 "$script_dir/dispatch_outcome.py" --marker "$DISPATCH_DIR/$cid.json" \
         --rc "$rc" --elapsed "$elapsed" --ahead "$ahead" --pr-state "$pr_state" 2>>"$LOG_FILE" || echo "unknown")

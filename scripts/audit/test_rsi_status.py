@@ -8,10 +8,12 @@ bearing assertions.
 from __future__ import annotations
 
 import io
+import datetime
 import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from rsi_status import (
     LADDER_CALIBRATION_OPENED_MS,
@@ -425,15 +427,21 @@ class AssessAndCliTest(unittest.TestCase):
             today_cutoff = NOW - (NOW % DAY)
             marker = {
                 "id": "retry",
+                "attemptId": "a-declined",
                 "outcome": "declined",
                 "dispatchedAt": NOW - 1_000,
                 "attempts": [
-                    {"outcome": "landed", "dispatchedAt": NOW - 2_000},
+                    {"attemptId": "a-landed", "outcome": "landed", "dispatchedAt": NOW - 2_000},
                     {"outcome": "failed", "dispatchedAt": today_cutoff - 1_000},
                 ],
             }
             with open(os.path.join(dispatch_dir, "retry.json"), "w", encoding="utf-8") as handle:
                 json.dump(marker, handle)
+
+            self._write(data_dir, "self_correction_candidates.jsonl", [{
+                "type": "self_correction_dispatch", "attemptId": "a-landed",
+                "dispatchPhase": "watch_passed",
+            }])
 
             l4 = next(layer for layer in assess(data_dir, NOW) if layer.key == "L4")
             self.assertEqual(l4.metrics["dispatched_total"], 3)
@@ -443,6 +451,61 @@ class AssessAndCliTest(unittest.TestCase):
                 {"landed": 1, "failed": 1, "declined": 1},
             )
             self.assertAlmostEqual(l4.metrics["land_rate"], 1 / 3)
+
+    def test_dispatch_today_uses_operator_timezone(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            dispatch_dir = os.path.join(data_dir, "coding_dispatch")
+            os.makedirs(dispatch_dir)
+            dispatched = datetime.datetime(2026, 7, 14, 23, 30, tzinfo=datetime.timezone.utc)
+            now = datetime.datetime(2026, 7, 15, 8, 0,
+                                    tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+            with open(os.path.join(dispatch_dir, "kst.json"), "w", encoding="utf-8") as handle:
+                json.dump({"dispatchedAt": int(dispatched.timestamp() * 1000)}, handle)
+            with mock.patch.dict(os.environ, {"DENEB_TIMEZONE": "Asia/Seoul"}):
+                l4 = next(layer for layer in assess(
+                    data_dir, int(now.timestamp() * 1000)) if layer.key == "L4")
+            self.assertEqual(l4.metrics["dispatched_today"], 1)
+
+    def test_declined_dispatch_is_healthy_terminal_not_failure(self):
+        rows = [
+            {"type": "self_correction_candidate", "id": "d", "scope": "code",
+             "status": "proposed", "source": "self-harness:test"},
+            {"type": "self_correction_dispatch", "id": "d",
+             "dispatchPhase": "declined", "attemptId": "a"},
+        ]
+        l4 = assess_l4(rows, 1, 0, {"declined": 1})
+        self.assertEqual(l4.state, LIVE)
+        self.assertEqual(l4.metrics["declined"], 1)
+        self.assertEqual(l4.metrics["failed_or_rolled_back"], 0)
+
+    def test_graduation_uses_latest_terminal_watched_cohort(self):
+        with tempfile.TemporaryDirectory() as data_dir:
+            dispatch_dir = os.path.join(data_dir, "coding_dispatch")
+            os.makedirs(dispatch_dir)
+            ledger = []
+
+            def marker(name: str, outcome: str, at: int, phase: str = "") -> None:
+                attempt = f"attempt-{name}"
+                with open(os.path.join(dispatch_dir, name + ".json"), "w", encoding="utf-8") as handle:
+                    json.dump({
+                        "id": name, "attemptId": attempt, "outcome": outcome,
+                        "dispatchedAt": at,
+                    }, handle)
+                if phase:
+                    ledger.append({
+                        "type": "self_correction_dispatch", "attemptId": attempt,
+                        "dispatchPhase": phase,
+                    })
+
+            marker("old-rollback", "landed", 1, "rolled_back")
+            marker("new-attempted", "attempted", 999, "pr_opened")
+            for i, outcome in enumerate(("landed", "landed", "landed", "declined", "declined")):
+                marker(f"new-{i}", outcome, 100 + i,
+                       "watch_passed" if outcome == "landed" else "declined")
+            self._write(data_dir, "self_correction_candidates.jsonl", ledger)
+
+            grad = next(layer for layer in assess(data_dir, NOW) if layer.key == "GRAD")
+            self.assertEqual(grad.metrics["배차 캡 상향"], "준비됨")
 
     def test_markdown_is_generated_from_the_same_snapshot(self):
         layers = [assess_l1([{"createdAt": RECENT, "type": "evolved"}], NOW)]
@@ -480,6 +543,12 @@ class LadderTest(unittest.TestCase):
         # Below the land-rate floor the cap row keeps accumulating.
         s = assess_ladder([], [], [], {"landed": 1, "failed": 4})
         self.assertEqual(s.metrics["배차 캡 상향"], "축적 중")
+
+    def test_dispatch_ladder_excludes_pending_and_blocks_cohort_rollback(self):
+        pending = assess_ladder([], [], [], {"landed": 3, "attempted": 2})
+        self.assertEqual(pending.metrics["배차 캡 상향"], "축적 중")
+        rolled_back = assess_ladder([], [], [], {"landed": 4, "rolled_back": 1})
+        self.assertEqual(rolled_back.metrics["배차 캡 상향"], "축적 중")
 
     def test_calibration_needs_every_epoch_at_target(self):
         revs = [{"createdAt": LADDER_CALIBRATION_OPENED_MS + 1, "epoch": e,

@@ -26,8 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 // ladderWatchDefaultInterval keeps the watch cheap: ladder evidence moves at
@@ -177,18 +175,19 @@ func (t *Tracker) autoGraduations() []autoGraduation {
 		})
 	}
 
-	// Dispatch cap: measured land rate over decided dispatches AND zero
-	// ledgered deploy-watch rollbacks — the full roadmap-row evidence, now
-	// machine-readable end to end.
+	// Dispatch cap: latest terminal cohort, with marker outcomes joined to the
+	// authoritative attempt lifecycle. Only watch_passed is a landed success;
+	// any rollback in the cohort blocks graduation.
 	if !graduationUnlocked(graduationDispatchCap) {
-		outcomes, decided, landed := rsiDispatchOutcomes(t.dispatchMarkerDir())
-		if decided >= ladderDispatchMinDecided {
+		evidence, err := t.rsiDispatchEvidence(ladderDispatchMinDecided)
+		if err == nil && evidence.Decided >= ladderDispatchMinDecided {
+			outcomes, decided, landed := evidence.CohortOutcomes, evidence.Decided, evidence.Landed
 			rate := float64(landed) / float64(decided)
-			if rollbacks := deployWatchRollbacks(); rate >= ladderDispatchMinLandRate && rollbacks == 0 {
+			if rate >= ladderDispatchMinLandRate && evidence.RolledBack == 0 {
 				out = append(out, autoGraduation{
 					Key: graduationDispatchCap, Title: "배차 캡 상향",
 					Value: graduationDispatchCapStep,
-					Evidence: fmt.Sprintf("판정 %d건·랜딩률 %.0f%% (%s)·배포 롤백 0건 → 일일 캡 %d",
+					Evidence: fmt.Sprintf("최근 판정 %d건·랜딩률 %.0f%% (%s)·감시 롤백 0건 → 일일 캡 %d",
 						decided, rate*100, rsiOutcomeSummary(outcomes), graduationDispatchCapStep),
 				})
 			}
@@ -240,29 +239,4 @@ func (t *Tracker) stagedSourceReviewStats() map[string]sourceReviewStats {
 		stats[prefix] = st
 	}
 	return stats
-}
-
-// deployWatchRollbacks counts ledgered post-hot-swap rollbacks
-// (deploy-watch.sh appends one row per fired rollback). An absent ledger
-// reads 0 — coverage is complete from the first dispatch because the ledger
-// ships before dispatches begin.
-func deployWatchRollbacks() int {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return 0
-	}
-	type row struct {
-		Event string `json:"event"`
-	}
-	rows, err := jsonlstore.Load[row](filepath.Join(home, ".deneb", "data", "deploy_watch_log.jsonl"))
-	if err != nil {
-		return 0
-	}
-	n := 0
-	for _, r := range rows {
-		if r.Event == "rollback" {
-			n++
-		}
-	}
-	return n
 }

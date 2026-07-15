@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -181,7 +182,10 @@ def main() -> int:
             prior = prev.get("attempts")
             if isinstance(prior, list):
                 attempts = [a for a in prior if isinstance(a, dict)]
-            if prev.get("outcome"):
+            # Snapshot every real prior delivery, including a crash between
+            # marker creation and outcome recording. Otherwise retries erase
+            # exactly the incomplete attempt needed for honest accounting.
+            if prev.get("outcome") or prev.get("dispatchedAt") or prev.get("attemptId"):
                 snap = {
                     k: prev[k]
                     for k in (
@@ -192,6 +196,8 @@ def main() -> int:
                         "outcomePrState",
                         "promptVersion",
                         "dispatchedAt",
+                        "attemptId",
+                        "branch",
                     )
                     if k in prev
                 }
@@ -205,10 +211,19 @@ def main() -> int:
     marker["branch"] = args.branch
     marker["dispatchedAt"] = int(__import__("time").time() * 1000)
     if attempts:
-        marker["attempts"] = attempts[-10:]
-    marker_path.write_text(
-        json.dumps(marker, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+        marker["attempts"] = attempts
+    # Initial marker creation is part of the crash guard, so it needs the same
+    # tmp+rename durability as later outcome rewrites. A torn JSON file must
+    # never permanently wedge a candidate.
+    tmp = marker_path.with_name(f".{marker_path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(marker, ensure_ascii=False) + "\n", encoding="utf-8")
+        tmp.replace(marker_path)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
 
     print(compose(candidate, contract))
     return 0

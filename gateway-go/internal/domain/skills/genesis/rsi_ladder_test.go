@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 // ever flipping a lock: thresholds met read 준비됨, accumulating evidence
 // reads 축적 중, and the aggregate card goes LIVE only when a row is READY.
 func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tr := newTestTracker(t)
 
 	// Empty evidence: every machine row accumulates, aggregate DATA-GATED.
@@ -28,9 +30,17 @@ func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, outcome := range []string{"landed", "landed", "landed", "declined", "declined"} {
-		body := `{"id":"m` + string(rune('0'+i)) + `","outcome":"` + outcome + `"}`
+		attempt := "attempt-" + string(rune('0'+i))
+		body := fmt.Sprintf(`{"id":"m%d","attemptId":"%s","outcome":"%s","dispatchedAt":%d}`,
+			i, attempt, outcome, 1000+i)
 		if err := os.WriteFile(filepath.Join(dir, "m"+string(rune('0'+i))+".json"), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
+		}
+		if outcome == "landed" {
+			appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+				Type: selfCorrectionTypeDispatch, AttemptID: attempt,
+				DispatchPhase: selfCorrectionDispatchWatchPassed,
+			})
 		}
 	}
 	row := tr.ladderDispatchCapRow()
@@ -64,6 +74,61 @@ func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 	l = tr.rsiAssessLadder()
 	if l.State != rsiStateLive || !strings.Contains(l.Diagnosis, "운영자 결정 가능") {
 		t.Fatalf("ladder with READY rows = %s: %s", l.State, l.Diagnosis)
+	}
+}
+
+func TestLadderDispatchCapUsesLatestTerminalWatchedCohort(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr := newTestTracker(t)
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// An old rollback ages out after five newer terminal outcomes. attempted
+	// and a merged-but-unwatched landed marker never enter the denominator.
+	write := func(name, outcome, attempt string, at int64, phase string) {
+		t.Helper()
+		body := fmt.Sprintf(`{"attemptId":"%s","outcome":"%s","dispatchedAt":%d}`, attempt, outcome, at)
+		if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if phase != "" {
+			appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+				Type: selfCorrectionTypeDispatch, AttemptID: attempt, DispatchPhase: phase,
+			})
+		}
+	}
+	write("old-rollback", "landed", "old", 1, selfCorrectionDispatchRolledBack)
+	write("pending", "attempted", "pending", 100, selfCorrectionDispatchPROpened)
+	write("unwatched", "landed", "unwatched", 101, SelfCorrectionDispatchMerged)
+	for i, outcome := range []string{"landed", "landed", "landed", "declined", "declined"} {
+		phase := selfCorrectionDispatchDeclined
+		if outcome == "landed" {
+			phase = selfCorrectionDispatchWatchPassed
+		}
+		write(fmt.Sprintf("new-%d", i), outcome, fmt.Sprintf("new-%d", i), int64(200+i), phase)
+	}
+	if row := tr.ladderDispatchCapRow(); row.State != ladderStateReady {
+		t.Fatalf("latest clean cohort should be READY: %+v", row)
+	}
+	graduations := tr.autoGraduations()
+	found := false
+	for _, graduation := range graduations {
+		if graduation.Key == graduationDispatchCap {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("clean watched cohort did not auto-graduate: %+v", graduations)
+	}
+	write("latest-rollback", "landed", "latest-rollback", 300, selfCorrectionDispatchRolledBack)
+	if row := tr.ladderDispatchCapRow(); row.State != ladderStateGrowing {
+		t.Fatalf("rollback in current cohort must block READY: %+v", row)
+	}
+	for _, graduation := range tr.autoGraduations() {
+		if graduation.Key == graduationDispatchCap {
+			t.Fatalf("rollback cohort auto-graduated: %+v", graduation)
+		}
 	}
 }
 
