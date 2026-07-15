@@ -15,7 +15,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 )
 
 // projectMatchKeys builds a project's identity key set from the same inputs the

@@ -22,7 +22,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"

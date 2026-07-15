@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coresecurity"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 )

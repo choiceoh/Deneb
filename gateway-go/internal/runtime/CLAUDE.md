@@ -58,6 +58,39 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 | 세션 상태 전이 변경 | `internal/domain/session/` 상태기계 (전이 검증이 잘못된 전이를 거부) |
 | 미니앱 모델 피커/헬스 | `miniapp_models*.go` |
 
+## 하위 런타임 포트 지도
+
+이 섹션은 server가 소비하는 runtime 하위 패키지의 좁은 진입점이다. 의존 방향은
+`server/method_registry.go`와 `server/*_subsystem.go`가 아래 runtime 포트를
+소비하고, 하위 패키지가 server를 역으로 import하지 않는 구조를 유지한다.
+
+- `proactive/client_push.go`의 `NewHub`, `PublishWithFallback`와
+  `proactive/alert_gate.go`의 `AlertGate`가 클라이언트 push·중복 relay 경계를
+  소유한다. push 실패는 notifier/fallback 경로에 남기고 server 상태를 직접
+  조회하지 않는다.
+- `meeting/meeting_harvest.go`의 `NewHarvestService`,
+  `meeting/calendar_briefing.go`의 `NewCalendarBriefingService`,
+  `meeting/plaud_recordings.go`의 `NewPlaudService`가 회의 수집 작업의 시작점이다.
+  wiki enrichment는 포트로만 받고 calendar/provider 상태를 전역에서 재조회하지 않는다.
+- `wikiwork/wiki_scout_task.go`의 `NewScoutTask`,
+  `wikiwork/wiki_review_task.go`의 `NewReviewTask`,
+  `wikiwork/wiki_research_task.go`의 `NewResearchTask`,
+  `wikiwork/supernote_digest_task.go`의 `NewSupernoteDigestTask`가 wiki 배경 작업
+  진입점이다. 파일 저장·검증 불변조건은 wiki store에 남긴다.
+- `phoneevents/handler.go`의 `New`, `Handler.ServeHTTP`와
+  `phoneevents/ledger.go`의 `NewLedger`가 phone action 수집 경계다. HTTP handler는
+  ledger append와 async ingest 순서를 바꾸지 않는다.
+- `rpc/handler/skill/skill.go`의 `Methods`,
+  `rpc/handler/skill/skill_genesis.go`의 `GenesisMethods`,
+  `rpc/handler/mail/gmail_analyze.go`의 `GmailAnalyzeMethods`,
+  `rpc/handler/mail/analysis_store.go`의 `NewAnalysisStore`는 RPC handler 포트다.
+  handler는 `Deps`만 받고 `rpcutil.GatewayHub` 또는 server를 import하지 않는다.
+- `briefcase/timeline.go`의 `NewTimeline`, `briefcase/device.go`의 `NewDeviceTwin`,
+  `insights/engine.go`의 `New`, `insights/render.go`의 `RenderPlain`은 독립 런타임
+  엔진이다. 외부 IO는 caller가 넘긴 interface 뒤에 둔다.
+
+`cd gateway-go && go test ./internal/runtime/proactive ./internal/runtime/meeting ./internal/runtime/wikiwork ./internal/runtime/phoneevents ./internal/runtime/rpc/handler/skill ./internal/runtime/rpc/handler/mail ./internal/runtime/briefcase ./internal/runtime/insights`
+
 ## 함정
 
 - **배선은 `method_registry.go`에서만.** 다른 파일에서 Deps 구조체 조립 금지(예외: `server_rpc.go`의 `registerBuiltinMethods` 서버상태 클로저). 어댑터 파일(`hub_adapters.go` 류) 만들지 마라 — `docs/agent-rules/hub-wiring.md` 5규칙 + 스냅샷 테스트가 강제.

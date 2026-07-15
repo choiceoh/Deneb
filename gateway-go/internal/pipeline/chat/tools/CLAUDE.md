@@ -21,6 +21,23 @@
   top-level alias 파일은 기존 등록 계약을 유지하는 얇은 호환 표면이다.
 - `routine/`의 `ToolMorningLetter`, `ToolEveningLetter`는 정기 산출물
   조립을 소유한다.
+- `schedule/calendar.go`의 `ToolCalendar`, `schedule/api.go`의 `MergeEvents`와
+  `ResolveReadWindow`가 calendar/todo tool 경계다. 시간 창 계산과 provider merge
+  순서는 tooldeps로 받은 clock/calendar 포트 뒤에 둔다.
+- `artifact/chart.go`의 `ToolChart`, `artifact/diagram.go`의 `ToolDiagram`,
+  `artifact/media_extract.go`의 `ToolTranscribe`, `artifact/files.go`의 `ToolFiles`가
+  artifact tool 진입점이다. protected path 검사는 `artifact/path_guard.go`의
+  `CheckProtectedPath`를 통과해야 한다.
+- `mailarchive/mail_archive.go`의 `ToolMailArchive`와
+  `notebook/notebook.go`의 `ToolNotebook`, `BuildNotebookGrounding`은 각각 archive와
+  notebook 포트를 소비한다. 도구가 server store를 직접 찾지 않는 것이 불변조건이다.
+- `filesystem/fs.go`의 `ToolWrite`, `ToolEdit`, `filesystem/read.go`의 `ToolRead`,
+  `filesystem/fs_search.go`의 `ToolGrep`는 workspace 파일 경계다. write 전 guard와
+  checkpoint 순서를 우회하지 않는다.
+- `lifecycletool/skill_lifecycle.go`의 `ToolSkillLifecycle`과
+  `SkillLifecycleToolSchema`, `codeaction/codeaction.go`의 `ToolCodeAction`과
+  `CodeActionSchema`는 agent-facing self-improvement/code 실행 표면이다. schema와
+  runtime bridge는 typed request/result 경계를 유지한다.
 
 ## 의존 방향과 불변조건
 
@@ -47,3 +64,7 @@ top-level 구현의 빠른 검증과 모든 하위 tool package의 전체 검증
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/tools`
 
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/tools/...`
+
+하위 패키지 포트만 바꾸는 빠른 검증은 다음 명령을 우선 사용한다.
+
+`cd gateway-go && go test ./internal/pipeline/chat/tools/schedule ./internal/pipeline/chat/tools/artifact ./internal/pipeline/chat/tools/routine ./internal/pipeline/chat/tools/mailarchive ./internal/pipeline/chat/tools/notebook ./internal/pipeline/chat/tools/filesystem ./internal/pipeline/chat/tools/lifecycletool ./internal/pipeline/chat/tools/codeaction`

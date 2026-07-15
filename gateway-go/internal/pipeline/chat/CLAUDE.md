@@ -54,6 +54,29 @@ startAsyncRun (run_start.go)        # 세션 확보, abort ctx, buildRunDeps, go
 | 사용자 입력 링크 보강 | `link_enrichment.go`(briefcase/caller-history gate·adapter) → `linkenrichment/engine.go`(fetch·변환·수명주기) |
 | 슬래시 커맨드 | `slash_commands.go`(전처리) → `slash_dispatch.go`(디스패치) |
 
+## 하위 패키지 진입점
+
+chat root는 하위 패키지를 포트로 소비하고, 하위 패키지가 root 실행 루프를 import하지
+않는 의존 방향을 유지한다. 이 경계가 깨지면 cache·recall·subagent 상태가 한 턴
+안에서 순서를 잃는다.
+
+- `denebui/denebui.go`의 `Validate`, `ExtractFences`와 `denebui/html.go`의
+  `ParseHTML`이 deneb-ui wire 검증 진입점이다. renderer 정책은 HTML v2 grammar에
+  묶고 chat turn 상태를 직접 읽지 않는다.
+- `recall/recall_preflight.go`의 `Build`, `recall/types.go`의 `Params`/`Deps`,
+  `recall/recall_cache.go`의 `ShouldFreeze`가 회상 프리플라이트 경계다. wiki와
+  transcript는 dependency로만 받아 마지막 user tail 주입 순서를 보존한다.
+- `runstate/pending.go`의 `NewPendingQueue`, `runstate/steer.go`의 `NewSteerQueue`는
+  실행 중 pending/steer 상태를 소유한다. 세션별 enqueue/drain 순서는 불변조건이다.
+- `subagent/notifier.go`의 `NewSubagentNotifier`와 `NotifyCh`는 subagent 완료 알림
+  포트다. parent session 상태는 `runstate.Params` alias와 dependency callback으로만
+  연결한다.
+- `transcript/store.go`의 `NewFileTranscriptStore`와 `transcript/cache.go`의
+  `NewCachedTranscriptStore`가 transcript 저장·캐시 진입점이다. cache는 source of
+  truth가 아니며 append/delete 뒤 stale read가 남으면 안 된다.
+
+`cd gateway-go && go test ./internal/pipeline/chat/denebui ./internal/pipeline/chat/recall ./internal/pipeline/chat/runstate ./internal/pipeline/chat/subagent ./internal/pipeline/chat/transcript`
+
 ## 함정 (이 서브트리 특유)
 
 - **레이어 의존 방향 엄수**: `toolport/`(안정 포트)와 `tooldeps/`(도구 의존 bag)를 `tools/`와 `toolreg/`가 소비한다. `tools/`·`toolreg/`는 **chat/를 import하지 않는다**. localai에 결합된 pilot 도구만 `toolreg_core.go`(얇은 래퍼)에서 별도 등록.

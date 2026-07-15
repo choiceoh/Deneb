@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"

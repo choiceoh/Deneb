@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
+	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
@@ -295,7 +295,7 @@ func validateWikiWrite(req wikiWriteRequest) string {
 		return "category는 필수입니다."
 	}
 	if !wiki.ValidateCategory(req.category) {
-		return fmt.Sprintf("잘못된 카테고리: %s. 사용 가능: %s", req.category, strings.Join(wiki.Categories, ", "))
+		return fmt.Sprintf("잘못된 카테고리: %s. 사용 가능: %s", req.category, strings.Join(wiki.Categories(), ", "))
 	}
 	return ""
 }

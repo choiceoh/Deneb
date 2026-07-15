@@ -8,6 +8,9 @@
 
 - `store.go`의 `Store`와 `NewStore`가 저장소 수명주기와 디렉터리 경계를
   정의한다. 새 영속 동작은 먼저 이 계약이 소유해야 하는지 판단한다.
+- 패키지 밖 소비자는 `internal/domain/wiki`를 직접 import하지 말고
+  `internal/domain/wikiport`의 안정 포트와 DTO를 통한다. 위키 구현 변경은 이
+  패키지 안에 머물고, 외부 계약 변경은 `wikiport`에서 명시적으로 검토한다.
 - `page.go`의 `Page`와 `NewPage`는 위키 페이지의 메타데이터·본문 모델을
   소유한다. 프런트매터 해석 규칙을 호출자에 복제하지 않는다.
 - `index.go`의 `Index`와 `newIndex`는 검색 인덱스의 단일 진입점이다. 인덱스
