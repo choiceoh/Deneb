@@ -1,4 +1,5 @@
 import com.android.build.api.variant.impl.VariantOutputImpl
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ValueSource
 import org.gradle.api.provider.ValueSourceParameters
 import org.gradle.process.ExecOperations
@@ -128,7 +129,11 @@ android {
 // cache forbids external processes during configuration, and a plain
 // ProcessBuilder here failed compileKotlinDesktop with "external process started
 // 'git rev-parse'". The ValueSource result is cached and tracked as a build input.
-abstract class GitShaValueSource : ValueSource<String, ValueSourceParameters.None> {
+interface GitShaParameters : ValueSourceParameters {
+    val projectDir: DirectoryProperty
+}
+
+abstract class GitShaValueSource : ValueSource<String, GitShaParameters> {
     @get:Inject
     abstract val execOperations: ExecOperations
 
@@ -136,6 +141,7 @@ abstract class GitShaValueSource : ValueSource<String, ValueSourceParameters.Non
         val output = ByteArrayOutputStream()
         return runCatching {
             execOperations.exec {
+                workingDir = parameters.projectDir.get().asFile
                 commandLine("git", "rev-parse", "--short=8", "HEAD")
                 standardOutput = output
                 isIgnoreExitValue = true
@@ -151,7 +157,11 @@ androidComponents {
     val gitSha =
         providers
             .environmentVariable("DENEB_BUILD_SHA")
-            .orElse(providers.of(GitShaValueSource::class) {})
+            .orElse(
+                providers.of(GitShaValueSource::class) {
+                    parameters.projectDir.set(rootProject.layout.projectDirectory)
+                },
+            )
             .map { it.ifBlank { "nogit" } }
             .getOrElse("nogit")
     onVariants { variant ->
