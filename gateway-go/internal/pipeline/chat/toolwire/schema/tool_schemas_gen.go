@@ -1873,6 +1873,35 @@ func WikiForgetToolSchema() map[string]any {
 	}
 }
 
+func OfficeToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"args": map[string]any{
+				"type":        "array",
+				"description": "Positional args + flags passed after the file. Cells use /<SheetName>/<A1Ref> (e.g. /Sheet1/A3, /Sheet1/B2:C3); structural nodes use 1-based index paths (e.g. /sheet[1]/row[2], /slide[1]/shape[2], /body/paragraph[1]). Examples -- view: [\"outline\"]; get: [\"/Sheet1/A3\"]; set a formula (350+ Excel funcs auto-evaluate): [\"/Sheet1/B2\",\"--prop\",\"formula=SUM(B3:B9)\"]; set value+style: [\"/Sheet1/A1\",\"--prop\",\"value=Hello\",\"--prop\",\"bold=true\"]; add: [\"/sheet[1]\",\"--type\",\"row\"]. Run command=help (e.g. args=[\"xlsx\",\"set\",\"cell\"]) to discover verbs, elements, and --prop keys.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"command": map[string]any{
+				"type":        "string",
+				"description": "officecli subcommand. READ: view (args=[mode]; modes outline, stats, text, annotated, issues, html, svg, screenshot, pdf, forms), get (node by data-path), query (CSS-like selector), validate (OpenXML schema check), dump (subtree -> replayable batch), raw (raw XML of a part), help (schema reference; args=[format,verb,element], e.g. [\"xlsx\",\"set\",\"cell\"]). WRITE: create (blank doc), set (node props via --prop), add (element under a parent), remove, move, swap, import (CSV/TSV -> xlsx sheet), merge (template {{key}} + JSON data), batch (many ops in one pass), raw-set / add-part (OpenXML escape hatch), refresh (recalc TOC/PAGE fields -- .docx needs Word+Windows).",
+				"enum":        []string{"create", "view", "get", "query", "set", "add", "remove", "move", "swap", "import", "merge", "batch", "dump", "validate", "refresh", "raw", "raw-set", "add-part", "help"},
+			},
+			"file": map[string]any{
+				"type":        "string",
+				"description": "Document path (.docx/.xlsx/.pptx). Relative paths resolve against the workspace; absolute paths are allowed. Required for every command except help.",
+			},
+			"stdin": map[string]any{
+				"type":        "string",
+				"description": "Piped to the command's stdin for large payloads -- batch (a JSON array of {command,...} ops), raw-set (raw XML), merge (JSON data map). Prefer this over stuffing big JSON into args.",
+			},
+		},
+		"required": []string{"command"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
@@ -1882,6 +1911,7 @@ func ToolMaxOutputs() map[string]int {
 		"deal_ledger": 8000,
 		"exec":        32000,
 		"notebook":    24000,
+		"office":      32000,
 		"wiki":        20000,
 	}
 }
