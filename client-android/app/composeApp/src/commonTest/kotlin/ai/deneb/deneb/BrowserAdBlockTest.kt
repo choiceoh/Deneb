@@ -26,6 +26,40 @@ class BrowserAdBlockTest {
     }
 
     @Test
+    fun `blocks topwar and topcor yandex rtb and adfox delivery hosts`() {
+        // Homepage loads context.js; bids/creatives come from these hosts.
+        assertTrue(shouldBlockBrowserAdRequest("https://yandex.ru/ads/system/context.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://yandex.ru/ads/system/header-bidding.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://an.yandex.ru/system/context.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://ads.adfox.ru/123456/getCode?p1=x"))
+        assertTrue(shouldBlockBrowserAdRequest("https://adfox.yandex.ru/api/get"))
+        assertTrue(shouldBlockBrowserAdRequest("https://awaps.yandex.ru/1"))
+        assertTrue(shouldBlockBrowserAdRequest("https://mc.yandex.ru/metrika/tag.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://top-fwz1.mail.ru/js/code.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://counter.yadro.ru/hit;vomedia?r=1"))
+        assertTrue(shouldBlockBrowserAdRequest("https://content.adriver.ru/AdRiverFlash.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://yastatic.net/partner-code-bundles/123.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.googletagmanager.com/gtag/js?id=G-N03S8HWT5F"))
+        // Keep Yandex site-search usable; first-party article HTML stays.
+        assertFalse(shouldBlockBrowserAdRequest("https://yandex.ru/search/site/?text=танк"))
+        assertFalse(shouldBlockBrowserAdRequest("https://topwar.ru/286165-article.html"))
+        assertFalse(shouldBlockBrowserAdRequest("https://topcor.ru/72772-article.html"))
+    }
+
+    @Test
+    fun `blocks russiadefence forumotion taboola prebid stack`() {
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.taboola.com/libtrc/forumotion-en/loader.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.viously.com/js/sdk/boot.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://illiweb.com/rs3/18/frm/nm/prebid/build11_11/dist/prebid.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://bidder.smilewanted.com/prebid"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cache.consentframework.com/js/pa/24697/c/IxWav/stub"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.googletagmanager.com/gtag/js?id=UA-144337024-1"))
+        // Forum chrome / static assets stay.
+        assertFalse(shouldBlockBrowserAdRequest("https://russiadefence.net/f1-forum"))
+        assertFalse(shouldBlockBrowserAdRequest("https://illipro.net/rs3/18/frm/jquery/cookie/jquery.cookie.js"))
+    }
+
+    @Test
     fun `blocks clear ad paths and query markers`() {
         assertTrue(shouldBlockBrowserAdRequest("https://news.example.com/pagead/js/ads.js"))
         assertTrue(shouldBlockBrowserAdRequest("https://cdn.example.com/ads/banner.js"))
