@@ -71,7 +71,7 @@ func newAgentRunner(
 			return nil, errors.New("agent max tool-call attempt limit must be non-negative")
 		}
 	}
-	runCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	runCtx, cancel := newAgentRunContext(ctx, cfg.Timeout)
 	state := newAgentRunState(messages, cfg.OnMessagePersist)
 	runner := &agentRunner{
 		cfg:                 cfg,
@@ -463,8 +463,9 @@ func (r *agentRunner) executeAndCommitToolTurn(turn *completedAgentTurn) bool {
 	}
 	currentTurnStart := len(r.journal.messages)
 	turn.message.append()
+	toolCtx := contextForToolExecution(turn.prepared.request.ctx)
 	outcome := executeToolTurn(
-		turn.prepared.request.ctx,
+		toolCtx,
 		r.cfg,
 		turn.result.toolCalls,
 		r.tools,
@@ -480,7 +481,7 @@ func (r *agentRunner) executeAndCommitToolTurn(turn *completedAgentTurn) bool {
 	}
 	toolResults := r.toolResultsForNextTurn(turn.prepared.index, outcome)
 	r.journal.append(llm.NewBlockMessage("user", toolResults))
-	if r.finishCanceledToolTurn(turn.prepared.request.ctx, outcome) {
+	if r.finishCanceledToolTurn(toolCtx, outcome) {
 		return true
 	}
 	r.compactPriorToolResults(turn.prepared.index, currentTurnStart)
