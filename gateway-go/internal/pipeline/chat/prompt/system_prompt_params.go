@@ -79,7 +79,7 @@ type SystemPromptParams struct {
 	WorkspaceDir  string
 	ToolDefs      []ToolDef
 	DeferredTools []DeferredToolInfo // deferred tools: name+description listed in prompt
-	SkillsPrompt  string             // pre-built skills XML from skills/prompt.go
+	SkillsPrompt  string             // pre-built name-only skills manifest from skills/prompt.go
 	UserTimezone  string
 	ContextFiles  []ContextFile
 	RuntimeInfo   *RuntimeInfo

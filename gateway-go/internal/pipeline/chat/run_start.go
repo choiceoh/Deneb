@@ -281,7 +281,8 @@ func (h *Handler) buildRunDeps() runDeps {
 			SanitizeDraft:        chatportwire.SanitizeDraft,
 			ParseReplyDirectives: chatportwire.ParseReplyDirectives,
 		},
-		reportCardHealth: h.reportCardHealth,
+		normalizeCardReply: h.normalizeCardReply,
+		reportCardHealth:   h.reportCardHealth,
 	}
 }
 

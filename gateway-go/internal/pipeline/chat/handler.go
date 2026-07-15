@@ -71,6 +71,7 @@ type Handler struct {
 	subagentCleanupUnsub func()
 	steer                *SteerQueue // mid-run /steer notes for the main agent
 	linkEnrichStart      LinkEnrichStart
+	normalizeCardReply   func(text, sessionKey string, logger *slog.Logger) string
 	reportCardHealth     func(text, sessionKey string, logger *slog.Logger)
 
 	// checkpointRoot is the directory where per-session file-edit snapshots
@@ -228,9 +229,12 @@ type HandlerConfig struct {
 	PromptWorkspaceDir string
 	// BriefcaseMode disables ambient production shortcuts that sit outside a
 	// signed evaluation world.
-	BriefcaseMode    bool
-	LinkEnrichStart  LinkEnrichStart
-	ReportCardHealth func(text, sessionKey string, logger *slog.Logger)
+	BriefcaseMode   bool
+	LinkEnrichStart LinkEnrichStart
+	// NormalizeCardReply is the final deneb-ui validity boundary before the
+	// assistant reply is persisted or delivered. Optional; nil is a no-op.
+	NormalizeCardReply func(text, sessionKey string, logger *slog.Logger) string
+	ReportCardHealth   func(text, sessionKey string, logger *slog.Logger)
 	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
 	// It is a trusted observability hook used by deterministic evaluation only.
 	AuditSystemPrompt func(sessionKey string, prompt []byte)
@@ -341,6 +345,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		mergeWindow:          NewMergeWindowTracker(),
 		steer:                NewSteerQueue(),
 		linkEnrichStart:      cfg.LinkEnrichStart,
+		normalizeCardReply:   cfg.NormalizeCardReply,
 		reportCardHealth:     cfg.ReportCardHealth,
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
 		maxHistoryCount:      cfg.MaxHistoryCount,

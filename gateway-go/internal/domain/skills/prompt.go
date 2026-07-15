@@ -2,8 +2,8 @@
 //
 // Originally ported formatSkillsCompact from the retired TypeScript skills package,
 // applySkillsPromptLimits(), and the pi-coding-agent formatSkillsForPrompt().
-// Supports full format (name + description + location) and compact format
-// (name + location only) with budget-aware fallback.
+// Supports full and compact tool responses plus a name-only ambient manifest,
+// all with budget enforcement.
 package skills
 
 import (
@@ -129,19 +129,12 @@ func formatSkillsCompact(skills []PromptSkill) string {
 	return b.String()
 }
 
-// formatSkillsIndex renders a "compact index" of skills: name + description
-// + location only (no category, tags, or related_skills). This is the P5
-// format the chat pipeline injects into the semi-static block of the
-// system prompt: the agent only needs identity + one-line purpose to
-// decide which skill matches; full SKILL.md body is loaded on demand via
-// the skills tool's read action or the read tool against the listed path.
-//
-// One markdown list line per skill instead of the per-field XML the other
-// formats use: the prompt audit (2026-06-13) measured the XML tags at ~22
-// wire tokens per skill of pure markup, paid on every turn and growing with
-// every skill Propus creates. The <available_skills>
-// envelope stays so the system-prompt instructions keep a stable anchor.
-func formatSkillsIndex(skills []PromptSkill) string {
+// formatSkillsNameIndex renders the ambient catalog as names only. Purpose,
+// location, and procedure arrive just in time through an exact-trigger hint or
+// skills(action=list/read). Paying every skill's description and path on every
+// turn made the semi-static block grow linearly with the catalog even though a
+// turn normally consults zero or one skill.
+func formatSkillsNameIndex(skills []PromptSkill) string {
 	if len(skills) == 0 {
 		return ""
 	}
@@ -150,37 +143,8 @@ func formatSkillsIndex(skills []PromptSkill) string {
 	b.WriteString("\n\n<available_skills>")
 
 	for _, s := range skills {
-		b.WriteString("\n- **")
+		b.WriteString("\n- ")
 		b.WriteString(indexLineText(s.Name))
-		b.WriteString("** (")
-		b.WriteString(indexLineText(s.FilePath))
-		b.WriteString(")")
-		if s.Description != "" {
-			b.WriteString(": ")
-			b.WriteString(indexLineText(s.Description))
-		}
-	}
-
-	b.WriteString("\n</available_skills>")
-	return b.String()
-}
-
-// formatSkillsIndexCompact is the budget-overflow fallback for the index:
-// name + location only, same line shape as formatSkillsIndex.
-func formatSkillsIndexCompact(skills []PromptSkill) string {
-	if len(skills) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString("\n\n<available_skills>")
-
-	for _, s := range skills {
-		b.WriteString("\n- **")
-		b.WriteString(indexLineText(s.Name))
-		b.WriteString("** (")
-		b.WriteString(indexLineText(s.FilePath))
-		b.WriteString(")")
 	}
 
 	b.WriteString("\n</available_skills>")
@@ -188,7 +152,7 @@ func formatSkillsIndexCompact(skills []PromptSkill) string {
 }
 
 // indexLineText flattens a frontmatter-sourced value onto one line so a
-// multi-line name/description cannot break the one-line-per-skill index shape.
+// multi-line name cannot break the one-line-per-skill index shape.
 func indexLineText(s string) string {
 	if !strings.ContainsAny(s, "\r\n") {
 		return s
@@ -196,20 +160,14 @@ func indexLineText(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// BuildSkillsIndex is the P5 builder: full index (name+description+location)
-// → compact (name+location only) → binary-search prefix shrink. Mirrors the
-// budget-enforcement shape of BuildSkillsPrompt so the chat pipeline can
-// swap one for the other without changing the surrounding caching logic.
-//
-// The result.Prompt drops in directly where snapshot.Prompt used to go in
-// chat/run_exec_skills.go (loadCachedSkillsPrompt). The agent loads full
-// SKILL.md body on demand — see system_prompt.go's skills instructions.
+// BuildSkillsIndex builds the ambient name-only manifest. Descriptions and
+// paths are deliberately excluded even when there is ample budget: exact
+// trigger matches carry a top-k summary in the per-turn tail, while unmatched
+// complex work queries the skills tool on demand. The shared budget helper
+// still enforces count/byte limits and prefix truncation for very large catalogs.
 func BuildSkillsIndex(skills []PromptSkill, limits SkillsLimits) PromptResult {
-	// ~/-compact the listed locations (the read tool expands ~ and allows the
-	// skills catalog root — tools/fs_search.go ResolvePathWithRoots), saving
-	// the home-dir prefix on every entry.
-	visible := CompactSkillPaths(visibleSkills(skills))
-	return buildBudgetedSkills(visible, limits, formatSkillsIndex, formatSkillsIndexCompact)
+	visible := visibleSkills(skills)
+	return buildBudgetedSkills(visible, limits, formatSkillsNameIndex, nil)
 }
 
 func visibleSkills(skills []PromptSkill) []PromptSkill {
@@ -255,20 +213,26 @@ func buildBudgetedSkills(
 		}
 	}
 
+	budgetFormat := fullFormat
+	compact := false
 	compactBudget := maxChars - compactWarningOverhead
-	if prompt := compactFormat(visible); len(prompt) <= compactBudget {
-		return PromptResult{
-			Prompt:    prompt,
-			Truncated: truncated,
-			Compact:   true,
-			Count:     len(visible),
+	if compactFormat != nil {
+		if prompt := compactFormat(visible); len(prompt) <= compactBudget {
+			return PromptResult{
+				Prompt:    prompt,
+				Truncated: truncated,
+				Compact:   true,
+				Count:     len(visible),
+			}
 		}
+		budgetFormat = compactFormat
+		compact = true
 	}
 
 	lo, hi := 0, len(visible)
 	for lo < hi {
 		mid := (lo + hi + 1) / 2
-		if len(compactFormat(visible[:mid])) <= compactBudget {
+		if len(budgetFormat(visible[:mid])) <= compactBudget {
 			lo = mid
 		} else {
 			hi = mid - 1
@@ -278,9 +242,9 @@ func buildBudgetedSkills(
 	truncated = true
 
 	return PromptResult{
-		Prompt:    compactFormat(visible),
+		Prompt:    budgetFormat(visible),
 		Truncated: truncated,
-		Compact:   true,
+		Compact:   compact,
 		Count:     len(visible),
 	}
 }

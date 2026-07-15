@@ -91,8 +91,8 @@ func appendCellLine(cells []any, out *[]string) {
 
 // ReplaceFences rewrites text with every deneb-ui fenced block replaced by
 // repl(body) (the block is dropped when repl returns ""). A prose prefix
-// glued to the opener line ("…했어요.```deneb-ui") is preserved. Text without
-// a fence returns unchanged.
+// glued to the opener line ("…했어요.```deneb-ui") and prose after a glued HTML
+// close are preserved. Text without a fence returns unchanged.
 func ReplaceFences(text string, repl func(body string) string) string {
 	if !HasFence(text) {
 		return text
@@ -100,24 +100,50 @@ func ReplaceFences(text string, repl func(body string) string) string {
 	lines := strings.Split(text, "\n")
 	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
-		if !isDenebUIFenceOpen(strings.TrimSpace(lines[i])) {
+		prefix, rest, open := denebUIFenceOpenParts(strings.TrimSpace(lines[i]))
+		if !open {
 			out = append(out, lines[i])
 			continue
 		}
-		// Keep a glued prose prefix ahead of the opener's backticks.
-		full := strings.TrimRight(lines[i], " \t")
-		cut := strings.TrimRight(full[:len(full)-len(FenceInfo)], " \t")
-		if prefix := strings.TrimSpace(strings.TrimRight(cut, "`")); prefix != "" {
+		if prefix != "" {
 			out = append(out, prefix)
 		}
 		var body []string
-		i++
-		for i < len(lines) && !isFenceClose(strings.TrimSpace(lines[i])) {
-			body = append(body, lines[i])
+		suffix := ""
+		isHTML := rest != ""
+		htmlDecided := rest != ""
+		closed := false
+		if rest != "" {
+			if pre, after, ok := splitGluedFenceCloseParts(rest); ok {
+				body, suffix, closed = appendBodyLine(body, pre), after, true
+			} else {
+				body = append(body, rest)
+			}
+		}
+		for !closed && i+1 < len(lines) {
 			i++
+			t := strings.TrimSpace(lines[i])
+			if isFenceClose(t) {
+				closed = true
+				break
+			}
+			if !htmlDecided && t != "" {
+				isHTML = strings.HasPrefix(t, "<")
+				htmlDecided = true
+			}
+			if isHTML {
+				if pre, after, ok := splitGluedFenceCloseParts(lines[i]); ok {
+					body, suffix, closed = appendBodyLine(body, pre), after, true
+					break
+				}
+			}
+			body = append(body, lines[i])
 		}
 		if r := strings.TrimSpace(repl(strings.Join(body, "\n"))); r != "" {
 			out = append(out, r)
+		}
+		if suffix != "" {
+			out = append(out, suffix)
 		}
 	}
 	return strings.Join(out, "\n")

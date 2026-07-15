@@ -66,6 +66,54 @@ func TestBundledSkillMetadataParsesForAllSkillsAndPreservesKbInterviewTriggers(t
 	}
 }
 
+func TestBundledEvolutionProposalRoutesPropusJustInTime(t *testing.T) {
+	skillsDir := filepath.Join("..", "..", "..", "..", "skills")
+	content, err := os.ReadFile(filepath.Join(skillsDir, "coding", "evolution-proposal", "SKILL.md"))
+	if err != nil {
+		t.Skipf("evolution-proposal skill not found: %v", err)
+	}
+	meta := ResolveDenebMetadata(ParseFrontmatter(string(content)))
+	if meta == nil {
+		t.Fatal("evolution-proposal metadata must resolve")
+	}
+	for _, want := range []string{"자가개선", "스킬 생성", "스킬 진화"} {
+		if !containsString(meta.Triggers, want) {
+			t.Errorf("evolution-proposal triggers = %#v, want %q", meta.Triggers, want)
+		}
+	}
+	for _, want := range []string{"skill_lifecycle", "skills"} {
+		if !containsString(meta.RequiresTools, want) {
+			t.Errorf("evolution-proposal requires_tools = %#v, want %q", meta.RequiresTools, want)
+		}
+	}
+}
+
+func TestBundledDenebUIAuthoringHasPreciseTriggers(t *testing.T) {
+	skillsDir := filepath.Join("..", "..", "..", "..", "skills")
+	content, err := os.ReadFile(filepath.Join(skillsDir, "productivity", "deneb-ui-authoring", "SKILL.md"))
+	if err != nil {
+		t.Skipf("deneb-ui-authoring skill not found: %v", err)
+	}
+	meta := ResolveDenebMetadata(ParseFrontmatter(string(content)))
+	if meta == nil {
+		t.Fatal("deneb-ui-authoring metadata must resolve")
+	}
+	for _, want := range []string{"카드로", "버튼으로", "표로 보여"} {
+		if !containsString(meta.Triggers, want) {
+			t.Errorf("deneb-ui-authoring triggers = %#v, want %q", meta.Triggers, want)
+		}
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParseFrontmatter_Basic(t *testing.T) {
 	content := `---
 title: Weather

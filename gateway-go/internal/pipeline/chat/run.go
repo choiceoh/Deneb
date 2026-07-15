@@ -130,8 +130,10 @@ type runDeps struct {
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
 
-	// reportCardHealth validates deneb-ui fences at turn completion (injected).
-	reportCardHealth func(text, sessionKey string, logger *slog.Logger)
+	// normalizeCardReply validates and repairs deneb-ui fences before final
+	// persistence/delivery; reportCardHealth observes the normalized result.
+	normalizeCardReply func(text, sessionKey string, logger *slog.Logger) string
+	reportCardHealth   func(text, sessionKey string, logger *slog.Logger)
 }
 
 type strictRunErrorSink struct {

@@ -30,8 +30,9 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 
 ## 저작 계약 위치 (바꾸면 함께 갱신)
 
-- 일반 응답: `prompt/system_prompt.go` 소통 섹션 카드 문단 (static 블록 —
-  내용 수정 = 캐시 1회 무효화, 마커 4개 불변).
+- 일반 응답 라우터: `prompt/system_prompt.go` 소통 섹션의 짧은 JIT 지시.
+- 일반 응답 상세 저작 계약: `skills/productivity/deneb-ui-authoring/SKILL.md`
+  (카드가 필요한 턴에만 읽고, static 블록에는 문법·예시를 중복하지 않는다).
 - 이브닝레터: `toolwire/chrono/register.go` evening_letter 도구 설명.
 - 모닝레터: `skills/productivity/morning-letter/SKILL.md` 스켈레톤 —
   `letter_card_test.go` 상수와 **동기 유지**(테스트가 서버측 게이트).
@@ -49,8 +50,9 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 
 ## 관찰/검증 사슬
 
-- 런타임: 턴 완료 시 카드 검증 Warn 로그 (`run_lifecycle.go`
-  `reportDenebUICardHealth`) — Warn 증가 = 모델/프롬프트 드리프트 신호.
+- 런타임: 최종 전달 전 `denebui.NormalizeFinalReply`가 모든 펜스를 `Validate`
+  하고, invalid/추가 펜스를 평문으로 내린다. 그 뒤 카드 health 로그가 채택률과
+  남은 드리프트를 관찰한다.
 - 품질 스위트: `checks.py check_deneb_ui_valid`(denebui-check 위임) +
   `quality-tests.yaml` `fmt-deneb-ui-card` 행동 게이트.
 - 시각: `RenderPreview.kt`의 레터 프리뷰가 **정본 HTML 스켈레톤을 실제 파서로**

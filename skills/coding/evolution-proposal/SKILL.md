@@ -1,6 +1,6 @@
 ---
 name: evolution-proposal
-version: "1.0.7"
+version: "1.0.8"
 category: coding
 description: "Propose, record, and execute self-evolution after a meaningful workflow via the skill_lifecycle tool. Use when: (1) a completed task may deserve a reusable skill, (2) the user asks for skill genesis, self-evolution, or an evolution proposal, (3) an existing skill should be evolved instead of creating a new one. NOT for: ordinary coding work, one-off notes, or directly authoring a SKILL.md without first deciding the route."
 metadata:
@@ -9,7 +9,9 @@ metadata:
       {
         "emoji": "🧭",
         "tags": ["self-evolution", "genesis", "proposal", "procedural-memory", "routing", "SkillOpt", "Self-Harness", "held-out-replay", "self-correction-queue"],
+        "triggers": ["자가개선", "자기진화", "스킬화", "스킬 생성", "스킬 개선", "스킬 진화", "evolution proposal"],
         "related_skills": ["skill-factory", "skill-creator", "skill-evolution"],
+        "requires_tools": ["skill_lifecycle", "skills"],
       },
   }
 ---
@@ -215,6 +217,7 @@ Typical manual held-out replay case:
 - Deferred correction route: `skill_lifecycle` status shows the candidate in `selfCorrectionCandidates` until a reviewer marks it accepted/rejected/superseded/applied with `self_correction_review`.
 
 ## Changelog
+- v1.0.8: Added precise auto-surfacing triggers and just-in-time activation for lifecycle tools; this skill now owns the detailed Propus procedure instead of the ambient system prompt.
 - v1.0.7: Added deferred self-correction queue guidance.
 - v1.0.6: Noted persisted Self-Harness audit fields for evolve routes.
 - v1.0.5: Added Self-Harness evidence-grounding for evolve proposals.

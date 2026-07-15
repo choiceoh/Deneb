@@ -281,6 +281,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// the calendar tool. nil when no calendar source is wired (feature off).
 	chatCfg.Ambient.CalendarGlance = toolbind.NewCalendarGlance(&s.toolDeps.Calendar)
 	chatCfg.Ambient.GoalGlance = chat.NewGoalGlanceFunc()
+	chatCfg.NormalizeCardReply = denebui.NormalizeFinalReply
 	chatCfg.ReportCardHealth = denebui.ReportCardHealth
 	chatCfg.LinkEnrichStart = toolbind.NewLinkEnrichStart(s.logger)
 
