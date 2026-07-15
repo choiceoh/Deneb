@@ -9,12 +9,14 @@ Sites live in the YAML frontmatter of project 대표페이지 as a flow array
 `sites: [광역약칭 시/군 읍/면/동, ...]`. This script mirrors the gateway's own
 rules so the numbers match what production would actually render:
 
-  - 대표페이지 detection mirrors wiki/project_layout.go IsProjectRepPage: both the
-    current folder form 프로젝트/<name>/대표.md AND legacy flat 프로젝트/<name>.md,
-    excluding reserved category buckets (거래/메일분석/자료/회의록/mail-analyses).
-    When both forms exist for one project, the folder form wins (knownProjects).
+  - 대표페이지 detection mirrors wiki/project_layout.go IsProjectRepPage + ListPages:
+    folder form 프로젝트/<name>/대표.md AND legacy flat 프로젝트/<name>.md, excluding
+    reserved buckets (거래/메일분석/자료/회의록/mail-analyses), backup/hidden dirs
+    (isNonPageDir), and index/log basenames. Folder form wins over legacy flat.
   - archived pages (frontmatter archived: true) are skipped, exactly as
     Store.knownProjects drops them from the active project surface.
+  - sites are read from the flow form `sites: [..]` ONLY — production's
+    parseFlowArray ignores YAML block form, so we do too (no false positives).
   - 시도 bucketing mirrors normalizeSiteName's provinceAbbrev.
 
 Usage:
@@ -43,6 +45,8 @@ SIDO = {"서울", "부산", "대구", "인천", "광주", "대전", "울산", "�
 # category buckets, not projects.
 RESERVED = {"거래", "메일분석", "mail-analyses", "자료", "회의록"}
 REP_PAGE_FILE = "대표.md"
+# from wiki/store.go ListPages — derived files that are never project pages.
+SKIP_BASENAMES = {"index.md", "_index.md", "log.md"}
 
 
 def normalize_site(s):
@@ -73,23 +77,16 @@ def parse_frontmatter(text):
 
 
 def extract_sites(fm):
-    """Extract the sites list from a frontmatter block. Handles the flow form
-    `sites: [a, b]` (what Render writes) and a legacy block form."""
+    """Extract sites from a frontmatter block — flow form `sites: [a, b]` ONLY,
+    mirroring wiki/page.go: parseFlowArray receives just the same-line scalar, so
+    YAML block form (`sites:` then `- a`) yields NO sites in production. We match
+    that (block form → empty) so the verdict never counts sites the gateway
+    would silently ignore."""
     m = re.search(r"^sites:\s*\[(.*?)\]\s*$", fm, re.M)
-    if m:
-        inner = m.group(1).strip()
-        return [x.strip() for x in inner.split(",") if x.strip()] if inner else []
-    m = re.search(r"^sites:\s*$", fm, re.M)
-    if m:
-        out = []
-        for line in fm[m.end():].splitlines():
-            b = re.match(r"\s*-\s*(.+)$", line)
-            if b:
-                out.append(b.group(1).strip())
-            elif line.strip() and not line.startswith((" ", "\t")):
-                break
-        return out
-    return []
+    if not m:
+        return []
+    inner = m.group(1).strip()
+    return [x.strip() for x in inner.split(",") if x.strip()] if inner else []
 
 
 def extract_scalar(fm, key):
@@ -97,21 +94,35 @@ def extract_scalar(fm, key):
     return m.group(1).strip() if m else ""
 
 
+def is_non_page_dir(name):
+    """Mirror wiki/store_index.go isNonPageDir: hidden or backup directories hold
+    derived/backup state, never live pages — ListPages prunes them entirely."""
+    if name.startswith("."):
+        return True
+    lower = name.lower()
+    return "backup" in lower or ".bak" in lower or "백업" in name or lower == "bak"
+
+
 def collect_rep_pages(proj_dir):
-    """Return {project_name: abspath} for every 대표페이지, mirroring
-    IsProjectRepPage + knownProjects dedup (folder form wins over legacy flat)."""
-    rep = {}  # name -> (abspath, is_folder_form)
+    """Return {project_name: abspath} for every 대표페이지, mirroring the gateway's
+    active project surface: IsProjectRepPage (folder form 프로젝트/<name>/대표.md +
+    legacy flat 프로젝트/<name>.md) filtered through ListPages — reserved buckets,
+    backup/hidden dirs (isNonPageDir), and index/log basenames excluded. On a
+    name collision the folder form wins (knownProjects)."""
+    flat, folder = {}, {}
     for entry in sorted(os.listdir(proj_dir)):
         path = os.path.join(proj_dir, entry)
         if os.path.isfile(path) and entry.endswith(".md"):
+            if entry in SKIP_BASENAMES:
+                continue
             name = entry[:-3]
             if name and name not in RESERVED:
-                rep.setdefault(name, (path, False))  # legacy flat
-        elif os.path.isdir(path) and entry not in RESERVED:
+                flat[name] = path
+        elif os.path.isdir(path) and entry not in RESERVED and not is_non_page_dir(entry):
             candidate = os.path.join(path, REP_PAGE_FILE)
             if os.path.isfile(candidate):
-                rep[name := entry] = (candidate, True)  # folder form wins
-    return {n: p for n, (p, _folder) in rep.items()}
+                folder[entry] = candidate
+    return {**flat, **folder}  # folder form wins on name collision
 
 
 def main():
