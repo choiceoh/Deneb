@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.80](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.79...andromeda-v0.0.80) (2026-07-15)
+
+
+### ✨ Features
+
+* **andromeda:** 관찰 팬 — miniapp.observe 동작·로그 대시보드 ([#3684](https://github.com/choiceoh/Deneb/issues/3684)) ([cf10bf5](https://github.com/choiceoh/Deneb/commit/cf10bf58940a895a7cbccd87a91b14cba8f924b0))
+* **rsi:** measure post-deploy impact ([#3704](https://github.com/choiceoh/Deneb/issues/3704)) ([68583c5](https://github.com/choiceoh/Deneb/commit/68583c5781755f636b12851a7f38753238a503a5))
+* **sitemap:** 현장 지도 — 한국 시군구·읍면 지도에 에너지원·특성·용량 인코딩 ([#3703](https://github.com/choiceoh/Deneb/issues/3703)) ([df0c299](https://github.com/choiceoh/Deneb/commit/df0c29984e7f36f87bb7ca4851770449382b3c5c))
+
 ## [0.0.79](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.78...andromeda-v0.0.79) (2026-07-15)
 
 

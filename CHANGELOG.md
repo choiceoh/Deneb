@@ -1,5 +1,67 @@
 # Changelog
 
+## [4.107.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.106.0...deneb-v4.107.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **andromeda:** 관찰 팬 — miniapp.observe 동작·로그 대시보드 ([#3684](https://github.com/choiceoh/Deneb/issues/3684)) ([cf10bf5](https://github.com/choiceoh/Deneb/commit/cf10bf58940a895a7cbccd87a91b14cba8f924b0))
+* **audit:** Health Bench 3.0 — structure+runtime+fitness geometric composite ([#3696](https://github.com/choiceoh/Deneb/issues/3696)) ([6bbddbb](https://github.com/choiceoh/Deneb/commit/6bbddbb75c41e658b28f9441a84b3aa95d369180))
+* **audit:** RSI Bench 1.2 — Process+Utility composite with Utility ratchet ([#3711](https://github.com/choiceoh/Deneb/issues/3711)) ([c02a237](https://github.com/choiceoh/Deneb/commit/c02a23719b75dfab02a2805d985cfc92f687a424))
+* **browser:** SPA/Shadow/iframe 번역 커버리지 + 서버 DeepL 캐시 ([#3705](https://github.com/choiceoh/Deneb/issues/3705)) ([99a0c92](https://github.com/choiceoh/Deneb/commit/99a0c9219de8fbefdcb2059fcdc4d192e6b21b45))
+* **browser:** 번역 토글 기억 + 최근 방문 ([#3713](https://github.com/choiceoh/Deneb/issues/3713)) ([2d1dc29](https://github.com/choiceoh/Deneb/commit/2d1dc29cb20b103343548b7fdfb75bbcd4626f9f))
+* **browser:** 시작 홈 URL ([#3716](https://github.com/choiceoh/Deneb/issues/3716)) ([a5d30ff](https://github.com/choiceoh/Deneb/commit/a5d30ff44be93800b2434a4b1e3bace9f0abec30))
+* **chat:** office 도구 신설 — officecli로 Office 문서(.docx/.xlsx/.pptx) 읽기·편집 (eager) ([#3699](https://github.com/choiceoh/Deneb/issues/3699)) ([cc65a1d](https://github.com/choiceoh/Deneb/commit/cc65a1d605693c28862740dc2db0cecb553696af))
+* **chat:** Page Agent 브리지로 실 Chrome 조작 browser 도구 추가 ([b020d6c](https://github.com/choiceoh/Deneb/commit/b020d6c2a494f89427b2ab8f719310924975536e))
+* **client-android:** 관찰 탭에 health·퍼널·백그라운드·토큰 노출 ([#3686](https://github.com/choiceoh/Deneb/issues/3686)) ([eacffac](https://github.com/choiceoh/Deneb/commit/eacffac1221613aaf8d3003958f30b81987092c7))
+* **compaction,chat:** 요약 거짓합의 가드 + deneb-ui 인터랙티브 3패턴 확장 ([#3727](https://github.com/choiceoh/Deneb/issues/3727)) ([8ccef6d](https://github.com/choiceoh/Deneb/commit/8ccef6dbf30ca196515891d5b4eca1eef234a332))
+* **knowledge:** raise recall quality — gated rerank, layer RRF, files timeout notes ([#3689](https://github.com/choiceoh/Deneb/issues/3689)) ([0bc77cf](https://github.com/choiceoh/Deneb/commit/0bc77cf643b3ddd53cb66f6f98d6ab7d3db263d3))
+* **meeting:** Plaud ASR 용어집 슬라이스·프로젝트 엔티티·자동 승격 ([#3721](https://github.com/choiceoh/Deneb/issues/3721)) ([cbc75c1](https://github.com/choiceoh/Deneb/commit/cbc75c1df74beab6e460e289bd1a6b6e475f6347))
+* **meeting:** Plaud 승격 임계·캘린더 연결·피드 중복 제거·독성 격리 ([#3726](https://github.com/choiceoh/Deneb/issues/3726)) ([588cae5](https://github.com/choiceoh/Deneb/commit/588cae58aa66e2d5c0975079c0012c7676e99272))
+* **rsi:** drop staged-source first-batch human review ([#3695](https://github.com/choiceoh/Deneb/issues/3695)) ([edd54e7](https://github.com/choiceoh/Deneb/commit/edd54e77c3f3125f8597f827f658b7c2cc999599))
+* **rsi:** measure post-deploy impact ([#3704](https://github.com/choiceoh/Deneb/issues/3704)) ([68583c5](https://github.com/choiceoh/Deneb/commit/68583c5781755f636b12851a7f38753238a503a5))
+* **rsi:** prioritize measured impact in dispatch ([#3719](https://github.com/choiceoh/Deneb/issues/3719)) ([20a77d5](https://github.com/choiceoh/Deneb/commit/20a77d529d3fd2fd523912946adae77d0aae43fb))
+* **runtime:** expose verified composition manifest ([#3720](https://github.com/choiceoh/Deneb/issues/3720)) ([7363c39](https://github.com/choiceoh/Deneb/commit/7363c39373a5e940b190056b00f836d2a8c37b1a))
+* **sitemap:** 현장 지도 — 한국 시군구·읍면 지도에 에너지원·특성·용량 인코딩 ([#3703](https://github.com/choiceoh/Deneb/issues/3703)) ([df0c299](https://github.com/choiceoh/Deneb/commit/df0c29984e7f36f87bb7ca4851770449382b3c5c))
+* **watch:** near-dup 프레임 제거 + transcript-only detail ([#3715](https://github.com/choiceoh/Deneb/issues/3715)) ([2f21c1d](https://github.com/choiceoh/Deneb/commit/2f21c1d57ba1d9fa33b4c868296b25be463604cb))
+* **web:** read X (single tweet) and Reddit via native handlers ([#3697](https://github.com/choiceoh/Deneb/issues/3697)) ([ec0ce8f](https://github.com/choiceoh/Deneb/commit/ec0ce8f6f05bec0c26f6cbe579460e8fbf33fc20))
+* **web:** search+fetch 랭킹·조기중단·Brave 로케일·다양성 ([#3693](https://github.com/choiceoh/Deneb/issues/3693)) ([4c2185a](https://github.com/choiceoh/Deneb/commit/4c2185a51d2b064bdfc5f3087cea4aa085550e68))
+* **web:** search+fetch 하이브리드 fill·상세 가용판정·KG·관측 ([#3694](https://github.com/choiceoh/Deneb/issues/3694)) ([e897a4c](https://github.com/choiceoh/Deneb/commit/e897a4cfca2df13383612148eab398763f034c8a))
+* **web:** search+fetch 후보 랭킹·오버샘플·한글 Serper 로케일 ([#3690](https://github.com/choiceoh/Deneb/issues/3690)) ([a5db437](https://github.com/choiceoh/Deneb/commit/a5db43757f5811916c6a4a774774ba30fc00bff6))
+* **wormhole:** add model circuit breaker ([#3723](https://github.com/choiceoh/Deneb/issues/3723)) ([6358e69](https://github.com/choiceoh/Deneb/commit/6358e6991bfeaa38ede16ef39b135bbe8d17d66b))
+
+
+### 🐛 Bug Fixes
+
+* **audit:** health-finding miner skips forbidden genesis surfaces before filing ([#3725](https://github.com/choiceoh/Deneb/issues/3725)) ([6e0aeae](https://github.com/choiceoh/Deneb/commit/6e0aeaedc34000070afa2022b23e03f4dc25f120))
+* **audit:** RSI Bench L4 outcome land, soft resolve reconstruct, daily snapshot timer ([#3714](https://github.com/choiceoh/Deneb/issues/3714)) ([5c24eb6](https://github.com/choiceoh/Deneb/commit/5c24eb621fc221f61a66ca5ca03f0375ca18c97e))
+* **browser:** 번역 브라우저 마지막 페이지 복원 ([#3707](https://github.com/choiceoh/Deneb/issues/3707)) ([1dd340d](https://github.com/choiceoh/Deneb/commit/1dd340dadae35a43ffdf91ff5d257a9b573ae52c))
+* **chat:** drain in-flight turns during restart ([#3702](https://github.com/choiceoh/Deneb/issues/3702)) ([6b0a557](https://github.com/choiceoh/Deneb/commit/6b0a557e1aef2642623743fd72016fc5287d717f))
+* **chat:** enqueue subagent notifications during restart drain ([#3732](https://github.com/choiceoh/Deneb/issues/3732)) ([7d113e3](https://github.com/choiceoh/Deneb/commit/7d113e3dea95bd6a27e1d81333e070e64ffc9075))
+* **chat:** restore preference and wiki_forget tools dropped by health fanout ([#3685](https://github.com/choiceoh/Deneb/issues/3685)) ([790a8e2](https://github.com/choiceoh/Deneb/commit/790a8e269f014097cb29a951dfcff7988e2f33ca))
+* **ci:** gofmt·python-test rot·genesis volatile hub finding 완화 ([#3718](https://github.com/choiceoh/Deneb/issues/3718)) ([4a1100f](https://github.com/choiceoh/Deneb/commit/4a1100fe2f37dc5712e8001affacbe674fe03f76))
+* **docs:** remove capture heading gap ([#3729](https://github.com/choiceoh/Deneb/issues/3729)) ([8759593](https://github.com/choiceoh/Deneb/commit/87595933eb11cf70db9c83b95514e520f0d3feab))
+* **htmlmd:** prevent slice-bounds panic on case-growing Unicode in raw tags ([#3680](https://github.com/choiceoh/Deneb/issues/3680)) ([09a12c4](https://github.com/choiceoh/Deneb/commit/09a12c4b2a791cd2f4bc08f204ff86a421299475))
+* **mail:** SENTSINCE 거부 시 Date 헤더 후필터 폴백 — Andromeda 날짜 페이저 무한로딩 방지 ([#3709](https://github.com/choiceoh/Deneb/issues/3709)) ([085888e](https://github.com/choiceoh/Deneb/commit/085888e6b8a52e3ce82faa0b87257b27d9a4f323))
+* **rsi:** reopen ineffective fixes on recurrence ([#3710](https://github.com/choiceoh/Deneb/issues/3710)) ([5b015db](https://github.com/choiceoh/Deneb/commit/5b015db4054f54bf7cd66149ac0219e1e69e63f7))
+* **skill_lifecycle:** slim status payloads, raise MaxOutput, compact JSON ([#3691](https://github.com/choiceoh/Deneb/issues/3691)) ([99b0970](https://github.com/choiceoh/Deneb/commit/99b0970febe37b18343a330f0dfa23373aa027b9))
+* **web:** search provider failure fallback, contract hygiene, fetch URL filter ([#3688](https://github.com/choiceoh/Deneb/issues/3688)) ([0b979b1](https://github.com/choiceoh/Deneb/commit/0b979b1f2d4398bb912c499eb03b892a4a2bcd76))
+
+
+### ⚡ Performance
+
+* **knowledge:** speed recall — graph corpus cache, skip agent rerank, 8s files ([#3687](https://github.com/choiceoh/Deneb/issues/3687)) ([9a8f49a](https://github.com/choiceoh/Deneb/commit/9a8f49a00453af0a3bd939b50f2e70afd9dee514))
+* **mailarchive:** bound and cap per-message enrichment to cut latency ([#3692](https://github.com/choiceoh/Deneb/issues/3692)) ([621ecc5](https://github.com/choiceoh/Deneb/commit/621ecc52675cffca9bab0b560a662d5af78600fc))
+* **web:** cut fetch latency — drop stealth sleep, gate LocalAI, Serper 10s ([#3682](https://github.com/choiceoh/Deneb/issues/3682)) ([2820e8f](https://github.com/choiceoh/Deneb/commit/2820e8f3b9498efa78bd47b3bdae60e348ff3f5f))
+
+
+### 🔧 Internal
+
+* **agent:** remove dead streaming attempt wrapper ([#3722](https://github.com/choiceoh/Deneb/issues/3722)) ([05b8e24](https://github.com/choiceoh/Deneb/commit/05b8e249e7bc92cd2988bb97d2c2686f75517f66))
+* **rpc:** narrow miniapp handler wire contract ([#3730](https://github.com/choiceoh/Deneb/issues/3730)) ([15fbf2b](https://github.com/choiceoh/Deneb/commit/15fbf2b000d69d89ba247cdbdeb0240bbc25a824))
+* **rsi:** narrow impact contract surface ([#3708](https://github.com/choiceoh/Deneb/issues/3708)) ([433fdef](https://github.com/choiceoh/Deneb/commit/433fdefe1493a2e3633b903a5a88c2c7f0976eca))
+* **rsi:** stream and harden ledger reads ([#3683](https://github.com/choiceoh/Deneb/issues/3683)) ([73e72b2](https://github.com/choiceoh/Deneb/commit/73e72b213d2d493cb5e2685e1b5acddf78ef0d5d))
+
 ## [4.106.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.105.0...deneb-v4.106.0) (2026-07-15)
 
 
