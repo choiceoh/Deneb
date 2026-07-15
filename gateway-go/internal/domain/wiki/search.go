@@ -48,8 +48,8 @@ type QueryOptions struct {
 	Intent       string
 	ForceIntent  bool
 	ForceRerank  bool
+	SkipRerank   bool // when true, skip cross-encoder model rerank (agent lean path)
 	skipMetadata bool
-	skipRerank   bool
 	skipValidity bool
 }
 
@@ -624,12 +624,12 @@ func (s *Store) composeSearchReport(
 	}
 	intentBonuses, applied := s.applyIntentRerank(results, intentResults, options)
 	diagnostics.IntentApplied = applied
-	if len(results) > 0 && !options.skipMetadata {
-		s.attachResultMetadata(query, results[:min(len(results), rerankCandidateLimit)])
-	}
+	// Rerank uses BM25/semantic Content snippets already on the candidates —
+	// do not attach disk metadata before rerank (avoids a second ReadPage pass
+	// over up to rerankCandidateLimit hits). Enrich once after truncate.
 	var rerankScores, rerankWeights map[string]float64
 	rerankDiagnostics := RerankDiagnostics{Reason: "deferred_to_query_plan"}
-	if !options.skipRerank {
+	if !options.SkipRerank {
 		rerankScores, rerankWeights, rerankDiagnostics = s.applyModelRerank(ctx, query, results, options.ForceRerank)
 	}
 	diagnostics.Rerank = rerankDiagnostics

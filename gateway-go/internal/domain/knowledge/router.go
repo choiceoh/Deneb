@@ -3,8 +3,10 @@ package knowledge
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
+	"time"
 )
 
 // Router federates multiple knowledge backends under one surface. Created
@@ -66,20 +68,24 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 		limit = 10
 	}
 	var (
-		wg     sync.WaitGroup
-		mu     sync.Mutex
-		byHits = make(map[Layer][]Result, len(r.adapters))
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		byHits  = make(map[Layer][]Result, len(r.adapters))
+		layerMs = make(map[Layer]int64, len(r.adapters))
 	)
+	started := time.Now()
 	for _, a := range r.adapters {
 		wg.Add(1)
 		go func(a Adapter) {
 			defer wg.Done()
+			layerStart := time.Now()
 			hits, err := a.Recall(ctx, query, limit)
-			if err != nil {
-				return
-			}
+			elapsed := time.Since(layerStart).Milliseconds()
 			mu.Lock()
-			byHits[a.Layer()] = append(byHits[a.Layer()], hits...)
+			layerMs[a.Layer()] = elapsed
+			if err == nil {
+				byHits[a.Layer()] = append(byHits[a.Layer()], hits...)
+			}
 			mu.Unlock()
 		}(a)
 	}
@@ -105,6 +111,16 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 	if len(all) > limit {
 		all = all[:limit]
 	}
+
+	slog.Info("knowledge recall",
+		"query_len", len(query),
+		"limit", limit,
+		"hit_count", len(all),
+		"layers", r.Layers(),
+		"wiki_ms", layerMs[LayerWiki],
+		"files_ms", layerMs[LayerFiles],
+		"total_ms", time.Since(started).Milliseconds(),
+	)
 	return all
 }
 

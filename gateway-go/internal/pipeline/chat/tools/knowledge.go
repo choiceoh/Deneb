@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -80,7 +81,15 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 		limit = 10
 	}
 
+	started := time.Now()
 	hits := router.Recall(ctx, query, limit)
+	slog.Info("knowledge tool recall",
+		"query_len", len(query),
+		"limit", limit,
+		"hit_count", len(hits),
+		"layers", router.Layers(),
+		"total_ms", time.Since(started).Milliseconds(),
+	)
 	if len(hits) == 0 {
 		return fmt.Sprintf("검색 결과 없음: %q (위키)", query), nil
 	}

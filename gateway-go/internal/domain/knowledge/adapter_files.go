@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -61,6 +62,11 @@ func NewFilesAdapter(deps FilesAdapterDeps) Adapter {
 // Layer identifies the knowledge layer served by the adapter.
 func (a *filesAdapter) Layer() Layer { return LayerFiles }
 
+// filesRecallTimeout bounds one files-layer HybridSearch (query embed + scan),
+// matching filesemindex.semindexQueryTimeout so a slow embed cannot stall the
+// agent knowledge recall behind the embedding client's 30s HTTP timeout.
+const filesRecallTimeout = 8 * time.Second
+
 // Recall runs the index's hybrid (BM25 lexical + dense cosine) search and maps
 // each hit to a knowledge.Result. The hybrid search already applies the
 // Korean-calibrated cosine floor (0.73) as its admission gate, so an off-topic
@@ -74,8 +80,14 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 	if limit <= 0 {
 		limit = 10
 	}
-	hits, err := a.index.HybridSearch(ctx, query, limit, a.embed, a.extractFn)
+	qctx, cancel := context.WithTimeout(ctx, filesRecallTimeout)
+	defer cancel()
+	hits, err := a.index.HybridSearch(qctx, query, limit, a.embed, a.extractFn)
 	if err != nil {
+		// Timeout / cancel → empty hits (graceful degrade), same as an unhealthy embedder.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || qctx.Err() != nil {
+			return nil, nil
+		}
 		return nil, err
 	}
 	out := make([]Result, 0, len(hits))

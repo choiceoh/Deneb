@@ -19,6 +19,9 @@ that chat tools use instead of importing `domain/wiki` directly.
 - **Invariant**: `ParseRef` is the single source for knowledge refs; adapters
   must degrade cleanly on nil stores; never leak raw wiki paths into tool
   results without going through `Document` shaping.
+- **Latency**: wiki adapter Recall uses `SearchWithOptions{SkipRerank:true}`;
+  files adapter Recall is bounded by 8s; Router logs `wiki_ms`/`files_ms`.
+  Wiki `loadGraphCorpus` is cached until page write/delete.
 - Keep fan-in on wiki low by routing new consumers through this package.
 
 ## Local change scope
