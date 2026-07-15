@@ -148,6 +148,9 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 
 	cmd := exec.CommandContext(ctx, node, args...)
 	cmd.Stdin = strings.NewReader(req.MatchText)
+	// os.Environ() already carries DENEB_OCR_VL_URL / DENEB_GROUPWARE_OCR when
+	// set on the gateway, so attachment OCR (PaddleOCR-VL → tesseract) works on
+	// the tool and phone-enrich paths without extra plumbing.
 	cmd.Env = append(os.Environ(),
 		"DENEB_GROUPWARE_URL="+cfg.URL,
 		"DENEB_GROUPWARE_USER="+cfg.User,

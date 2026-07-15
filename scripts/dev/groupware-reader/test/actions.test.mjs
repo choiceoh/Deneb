@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { htmlToText, normalizeFolder, selectApprovalLine } from "../lib/actions.mjs";
+import {
+  cleanOcr,
+  dedupeOcrText,
+  htmlToText,
+  normalizeFolder,
+  selectApprovalLine,
+} from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
 // The pending line is app_sts "20"; approved "30"; downstream "70". These fixtures
@@ -49,4 +55,21 @@ test("htmlToText strips tags and decodes entities", () => {
   assert.ok(out.includes("금액"));
   assert.ok(out.includes("105,440"));
   assert.ok(!out.includes("<script>"));
+});
+
+test("dedupeOcrText caps runaway repeated lines from OCR loops", () => {
+  const looped = Array(40).fill("부가세 권세 물품가액: 39,500").join("\n");
+  const out = dedupeOcrText(looped);
+  const n = out.split("\n").filter((l) => l.includes("39,500")).length;
+  assert.ok(n <= 3, `expected <=3 repeats, got ${n}`);
+});
+
+test("cleanOcr keeps real Korean receipt text", () => {
+  const receipt = "영광축협 하나로마트\n총 구 매 액: 65,940\n부가세: 5,993";
+  assert.equal(cleanOcr(receipt), receipt);
+});
+
+test("cleanOcr suppresses symbol-soup OCR of a photo collage", () => {
+  const soup = "| = =\n0 a | ey\nar | 「 < Nia aes\n『 칙 NY cy ^ 져 ^ i) ESS\n~ ~ 00 세";
+  assert.equal(cleanOcr(soup), "");
 });
