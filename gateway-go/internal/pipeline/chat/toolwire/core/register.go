@@ -105,15 +105,15 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 		Deferred:    true,
 	})
 
-	// Groupware: srv4 headless Amaranth — 전자결재·게시판·매출·재고·발주·입고·출고·단가.
-	// Eager: ops asks about 재고/출고/매출 often; fetch_tools round-trip was pure latency.
+	// Groupware: srv4 headless Amaranth — 전자결재·게시판·매출·재고·발주·입고·출고·단가·사원.
+	// Eager: ops asks about 재고/출고/매출/사원 often; fetch_tools round-trip was pure latency.
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "groupware",
-		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판·매출마감·재고·발주·입고·출고·품목단가. " +
+		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판·매출마감·재고·발주·입고·출고·품목단가·사원. " +
 			"action=status|list|read|attachment|summary. " +
-			"area=approval|board|sales|stock|po|receive|ship|price. " +
+			"area=approval|board|sales|stock|po|receive|ship|price|people. " +
 			"결재함 folder=pending|done|cc|total|all · ERP 기간 folder=ytd|month|today|year|last_year. " +
-			"query=키워드 또는 YYYYMMDD:YYYYMMDD · price는 모듈→M-/인버터→I- · lines:로 전표라인. " +
+			"query=키워드 또는 YYYYMMDD:YYYYMMDD · price는 모듈→M-/인버터→I- · people는 이름 필수(부서·직급/호칭·휴대폰·생년월일; 조회 시 위키 인물 보강·생성, 조직도 읽기 매칭). " +
 			"승인·반려·상신·전표 작성은 하지 않는다. DENEB_GROUPWARE_USER/PASSWORD 미설정 시 연동 꺼짐.",
 		InputSchema: schema.GroupwareToolSchema(),
 		Fn:          set.Groupware,
@@ -217,7 +217,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Observe:   observeFn,
 		Fleet:     runtimeops.ToolFleet(&deps.Fleet),
 		Browser:   runtimeops.ToolBrowser(&deps.Browser),
-		Groupware: runtimeops.ToolGroupware(),
+		Groupware: runtimeops.ToolGroupware(deps.Wiki.Store),
 	}
 	if deps.SpilloverStore != nil {
 		runtimeOps.SpilloverRead = artifact.ToolSpilloverRead(deps.SpilloverStore)

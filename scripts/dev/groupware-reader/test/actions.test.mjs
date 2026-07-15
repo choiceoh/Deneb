@@ -27,6 +27,8 @@ import {
   matchQuery,
   matchItemFilter,
   expandItemFilter,
+  parseHonorific,
+  formatBirthDate,
 } from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
@@ -341,4 +343,16 @@ test("topTraders ranks by amount", () => {
   );
   assert.equal(top[0].name, "을");
   assert.equal(top[1].amt, 150);
+});
+
+test("parseHonorific strips name prefix", () => {
+  assert.equal(parseHonorific("오선택", "오선택 전무"), "전무");
+  assert.equal(parseHonorific("김영길", "김영길"), "");
+  assert.equal(parseHonorific("", "전무"), "전무");
+});
+
+test("formatBirthDate formats YYYYMMDD", () => {
+  assert.equal(formatBirthDate("19900115"), "1990-01-15");
+  assert.equal(formatBirthDate(""), "");
+  assert.equal(formatBirthDate("90"), "");
 });
