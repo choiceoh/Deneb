@@ -30,6 +30,15 @@ const approvals: GroupwareApprovalRow[] = [
     folder: "done",
     canAct: false,
   },
+  {
+    docId: "3",
+    title: "어제 미결 발주",
+    drafter: "박과장",
+    date: ymdYesterday,
+    status: "미결",
+    folder: "total",
+    canAct: true,
+  },
 ];
 
 function renderApprovals(rows = approvals, connected = true) {
@@ -75,5 +84,15 @@ describe("ApprovalsPane", () => {
     await userEvent.click(await screen.findByText("오늘 구매 품의"));
     expect(screen.getByRole("button", { name: "승인" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "반려" })).toBeInTheDocument();
+  });
+
+  it("미결만 collects pending docs across days", async () => {
+    renderApprovals();
+    await screen.findByText("오늘 구매 품의");
+    expect(screen.queryByText("어제 미결 발주")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /미결만/ }));
+    expect(screen.getByText("오늘 구매 품의")).toBeInTheDocument();
+    expect(screen.getByText("어제 미결 발주")).toBeInTheDocument();
+    expect(screen.queryByText("어제 휴가")).not.toBeInTheDocument();
   });
 });
