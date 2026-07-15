@@ -1,4 +1,10 @@
 import com.android.build.api.variant.impl.VariantOutputImpl
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
+import org.gradle.process.ExecOperations
+import java.io.ByteArrayOutputStream
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -118,21 +124,46 @@ android {
 // is self-describing (e.g. deneb-122-a1b2c3d4-fossDebug.apk) and, crucially,
 // concurrent builds from different agent worktrees never overwrite each other in
 // the shared publish dir. The hash comes from DENEB_BUILD_SHA, else git, else "nogit".
+// Reading the git HEAD via a ValueSource (not a bare ProcessBuilder at
+// configuration time) keeps the configuration cache valid — Gradle 9's config
+// cache forbids external processes during configuration, and a plain
+// ProcessBuilder here failed compileKotlinDesktop with "external process started
+// 'git rev-parse'". The ValueSource result is cached and tracked as a build input.
+interface GitShaParameters : ValueSourceParameters {
+    val projectDir: DirectoryProperty
+}
+
+abstract class GitShaValueSource : ValueSource<String, GitShaParameters> {
+    @get:Inject
+    abstract val execOperations: ExecOperations
+
+    override fun obtain(): String {
+        val output = ByteArrayOutputStream()
+        return runCatching {
+            execOperations.exec {
+                workingDir = parameters.projectDir.get().asFile
+                commandLine("git", "rev-parse", "--short=8", "HEAD")
+                standardOutput = output
+                isIgnoreExitValue = true
+            }
+            output.toString(Charsets.UTF_8.name()).trim()
+        }.getOrDefault("")
+    }
+}
+
 androidComponents {
     val versionCode = denebVersionCode
+    // DENEB_BUILD_SHA (publish-apk.sh) wins; else the repo HEAD short sha; else "nogit".
     val gitSha =
-        (
-            System.getenv("DENEB_BUILD_SHA")
-                ?: runCatching {
-                    ProcessBuilder("git", "rev-parse", "--short=8", "HEAD")
-                        .directory(rootDir)
-                        .start()
-                        .inputStream
-                        .bufferedReader()
-                        .use { it.readText() }
-                        .trim()
-                }.getOrNull()
-        ).orEmpty().ifBlank { "nogit" }
+        providers
+            .environmentVariable("DENEB_BUILD_SHA")
+            .orElse(
+                providers.of(GitShaValueSource::class) {
+                    parameters.projectDir.set(rootProject.layout.projectDirectory)
+                },
+            )
+            .map { it.ifBlank { "nogit" } }
+            .getOrElse("nogit")
     onVariants { variant ->
         variant.outputs.forEach { output ->
             (output as? VariantOutputImpl)?.outputFileName?.set(
