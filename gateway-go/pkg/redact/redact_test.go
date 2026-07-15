@@ -125,6 +125,11 @@ func TestStringMasksAuthHeaderTokensWhenPresent(t *testing.T) {
 	if strings.Contains(got, bearerTok) {
 		t.Errorf("bearer token leaked: %q", got)
 	}
+	basicTok := "dXNlcjpwYXNz"
+	got = String("Authorization: Basic " + basicTok)
+	if strings.Contains(got, basicTok) {
+		t.Errorf("basic auth token leaked: %q", got)
+	}
 	apiKeyTok := "ghp_" + strings.Repeat("Z", 26)
 	got = String("X-API-Key: " + apiKeyTok)
 	if strings.Contains(got, apiKeyTok) {
@@ -199,6 +204,14 @@ func TestStringMasksFormBodyPasswordWhenPresent(t *testing.T) {
 	}
 	if !strings.Contains(got, "password=***") {
 		t.Errorf("expected password=*** in output: %q", got)
+	}
+	singlePair := "password=hunter2"
+	got = String(singlePair)
+	if strings.Contains(got, "hunter2") {
+		t.Errorf("single-pair form body password leaked: %q", got)
+	}
+	if !strings.Contains(got, "password=***") {
+		t.Errorf("expected password=*** in single-pair output: %q", got)
 	}
 	// Non-form text should pass through.
 	passThrough := "hello world\npassword=is_not_form"

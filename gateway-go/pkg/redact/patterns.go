@@ -107,7 +107,7 @@ var (
 
 	// Authorization / X-API-Key headers.
 	authHeaderRE = regexp.MustCompile(
-		`(?i)(Authorization:\s*Bearer\s+)(\S+)`,
+		`(?i)(Authorization:\s*[A-Za-z][A-Za-z0-9_-]*\s+)(\S+)`,
 	)
 	apiKeyHeaderRE = regexp.MustCompile(
 		`(?i)(X-API-Key:\s*)(\S+)`,
@@ -152,7 +152,7 @@ var (
 
 	// Conservative form-urlencoded body check: entire text must be k=v&k=v.
 	formBodyRE = regexp.MustCompile(
-		`^[A-Za-z_][A-Za-z0-9_.-]*=[^&\s]*(?:&[A-Za-z_][A-Za-z0-9_.-]*=[^&\s]*)+$`,
+		`^[A-Za-z_][A-Za-z0-9_.-]*=[^&\s]*(?:&[A-Za-z_][A-Za-z0-9_.-]*=[^&\s]*)*$`,
 	)
 )
 

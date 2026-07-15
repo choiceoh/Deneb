@@ -172,7 +172,8 @@ func mightContainSecret(s string) bool {
 		"eyJ", "-----BEGIN",
 		// DB and URL schemes
 		"postgres://", "postgresql://", "mysql://", "mongodb://",
-		"mongodb+srv://", "redis://", "amqp://",
+		"mongodb+srv://", "redis://", "amqp://", "http://", "https://",
+		"ftp://", "ws://", "wss://",
 		// Telegram bot prefix
 		"bot",
 		// Phone / Discord
@@ -189,7 +190,7 @@ func mightContainSecret(s string) bool {
 		"client_secret",
 		"AUTH",
 		// Form/query delimiters
-		"&", "?",
+		"&", "?", "=",
 	)
 }
 
@@ -346,9 +347,9 @@ func applyURLQueryParams(s string) string {
 }
 
 // applyFormBody redacts sensitive values in a form-urlencoded body only when
-// the entire input looks like a pure form body (k=v&k=v).
+// the entire input looks like a pure form body (k=v or k=v&k=v).
 func applyFormBody(s string) string {
-	if s == "" || strings.Contains(s, "\n") || !strings.Contains(s, "&") {
+	if s == "" || strings.Contains(s, "\n") {
 		return s
 	}
 	trimmed := strings.TrimSpace(s)
