@@ -1,0 +1,54 @@
+{
+  "_keep_policy": "Health Bench 3.0 baseline. One-way ratchet across overall, ratcheted domains, and metrics. Never lower floors or accept new high/critical findings merely to make --check pass. Fitness starts advisory (ratcheted=false).",
+  "domains": {
+    "fitness": 36.7,
+    "runtime": 58.3,
+    "structure": 50.5
+  },
+  "high_findings": {
+    "ai-maintainability:207960b23a30": "high",
+    "latency:4bb2cb403562": "high",
+    "structure:diffuse-change-responsibility:3ef63a16f7d7": "high",
+    "structure:fanout-hotspot:e3983434e99a": "high",
+    "structure:two-hop-blast:ac823ac2dd00": "high",
+    "structure:volatile-contract-responsibility:0dbb655da1b6": "high"
+  },
+  "overall": 49.1,
+  "pillars": {
+    "fitness.feed-card": 40.0,
+    "fitness.finding-land": 16.8,
+    "fitness.live-delta": 40.0,
+    "fitness.trend-28d": 50.0,
+    "runtime.error-rate": 54.2,
+    "runtime.latency": 27.8,
+    "runtime.llm-serving": 74.9,
+    "runtime.stability": 90.0,
+    "runtime.tool-reliability": 58.6,
+    "runtime.turn-reliability": 47.9,
+    "structure.ai-maintainability": 38.4,
+    "structure.boundary-contracts": 61.9,
+    "structure.change-blast": 32.2,
+    "structure.complexity-safety": 62.2,
+    "structure.dead-surface": 40.0,
+    "structure.delivery-proof": 42.0,
+    "structure.test-craft": 75.0,
+    "structure.test-truth": 64.9
+  },
+  "profile": "fast",
+  "provenance": {
+    "migration": "initial-or-update",
+    "reason": "health-bench-3.0 baseline write"
+  },
+  "ratcheted_domains": [
+    "structure",
+    "runtime"
+  ],
+  "revision": "eacffac1221613aaf8d3003958f30b81987092c7+dirty",
+  "rubric_version": "3.0.0",
+  "schema_version": 3,
+  "tolerances": {
+    "domain": 1.0,
+    "overall": 0.3,
+    "pillar": 1.0
+  }
+}

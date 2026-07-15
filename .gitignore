@@ -91,3 +91,7 @@ graphify-out/
 .graphify_python
 .graphify_*.json
 gateway-go/dream-once
+
+# Health Bench 3.0 live artifacts (baseline + runtime-cache are checked in)
+scripts/audit/health-v3-snapshot.json
+scripts/audit/health-v3-history.jsonl

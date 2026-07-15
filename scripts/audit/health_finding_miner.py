@@ -115,6 +115,8 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
         f for f in report.get("findings") or []
         if f.get("severity") in STRUCTURAL_SEVERITIES and f.get("id") and f.get("path")
     ]
+    if report.get("schema_version") == 3:
+        findings = [f for f in findings if f.get("domain", "structure") == "structure"]
     findings.sort(key=lambda f: (-float(f.get("priority") or 0.0), str(f["id"])))
     for f in findings:
         fid = str(f["id"])
@@ -134,7 +136,7 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
                 f"{str(f.get('evidence') or '').strip()} "
                 f"(bench revision {revision}, profile {profile})"
             ),
-            "reason": "codebase-health-v2 high-severity structural finding — "
+            "reason": "codebase-health high-severity structural finding — "
                       "proactive L4 supply (RSI P5 ws3)",
             "targetFiles": [str(f["path"])],
             "proposedChange": proposed,
@@ -324,6 +326,21 @@ def repo_root() -> str:
 
 
 def run_structural_bench(root: str, stderr: TextIO) -> dict[str, Any]:
+    """Prefer Health Bench 3.0; fall back to v2 when v3 cannot run."""
+    v3 = os.path.join(root, "scripts", "audit", "health-bench-v3.py")
+    if os.path.isfile(v3):
+        print("running health-bench-v3 (fast profile)…", file=stderr)
+        proc = subprocess.run(
+            [sys.executable, v3, "--format", "json"],
+            capture_output=True, text=True, cwd=root, check=False, timeout=900,
+        )
+        if proc.returncode == 0:
+            return parse_leading_json(proc.stdout)
+        print(
+            f"health-bench-v3 unavailable ({proc.stderr[-200:] or proc.returncode}); "
+            "falling back to codebase-health-v2",
+            file=stderr,
+        )
     script = os.path.join(root, "scripts", "audit", "codebase-health-v2.py")
     print("running codebase-health-v2 (fast profile)…", file=stderr)
     proc = subprocess.run(
@@ -333,6 +350,29 @@ def run_structural_bench(root: str, stderr: TextIO) -> dict[str, Any]:
     if proc.returncode != 0:
         raise GatewayError(f"codebase-health-v2 failed (rc={proc.returncode}): {proc.stderr[-400:]}")
     return parse_leading_json(proc.stdout)
+
+
+def runtime_report_from_v3(report: dict[str, Any]) -> dict[str, Any] | None:
+    """Project a v3 report's runtime domain into the legacy runtime-health shape."""
+    if report.get("schema_version") != 3:
+        return None
+    runtime = next((d for d in report.get("domains") or [] if d.get("id") == "runtime"), None)
+    if not isinstance(runtime, dict):
+        return None
+    dims = {
+        str(m["id"]): float(m["score"])
+        for m in runtime.get("metrics") or []
+        if m.get("id") is not None and isinstance(m.get("score"), (int, float))
+    }
+    if not dims:
+        return None
+    return {
+        "composite": float(runtime.get("score") or 0.0),
+        "dims": dims,
+        "meta": {"days": "cache/live", "source": "health-bench-v3"},
+        "detail": {},
+        "extra": {},
+    }
 
 
 def run_runtime_bench(root: str, stderr: TextIO) -> dict[str, Any] | None:
@@ -402,7 +442,9 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
             print(f"runtime report unreadable — skipping runtime source: {exc}", file=err)
             runtime = None
     else:
-        runtime = run_runtime_bench(root, err)
+        runtime = runtime_report_from_v3(report)
+        if runtime is None:
+            runtime = run_runtime_bench(root, err)
 
     base_url = args.url.rstrip("/")
     now_ms = int(time.time() * 1000)
