@@ -188,8 +188,8 @@ Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies
 
 | Today | ERP |
 |-------|-----|
-| Chat tool `groupware` areas | approval, board, sales, stock, po, receive, ship, price |
-| Reader adapters | `summarySales`, `listStock`, `listPurchaseOrders`, `listReceiving`, `listShipments`, `listItemPrices` |
+| Chat tool `groupware` areas | approval, board, sales, stock, po, receive, ship, price, people |
+| Reader adapters | `summarySales`, `listStock`, `listPurchaseOrders`, `listReceiving`, `listShipments`, `listItemPrices`, `listPeople` |
 | Still unwired | 미수채권, 매입마감, 수금, 지출결의 list body, … |
 
 Usage examples:
@@ -198,6 +198,7 @@ Usage examples:
 - stock: `groupware(area="stock", action="list", query="모듈")`
 - po / receive / ship: `folder=month|ytd`, optional `query` keyword
 - price: `groupware(area="price", action="list", query="인버터")` (→ itemCd `I-*`)
+- people: `groupware(area="people", action="list", query="김")` → 이름·부서·직급/호칭·휴대폰·생년월일
 - raw lines: `query="lines:모듈"` or `query="라인: YYYYMMDD:YYYYMMDD"`
 
 Defaults: list output is **품목 집계**; po/receive/ship also append 거래처 상위.
@@ -213,6 +214,7 @@ Amounts use supply fields (`clsgAm` / `rcvgAm` / `pohAm` / `isugAm`). Keep mutat
 | receive | `/purchase/pof0020/0pu00002` | `rcvgAm` | default `month`; 품목 집계 |
 | ship | `/logis/blf0050/0lo00001` | `isugAm` | default `month`; 품목 집계 |
 | price | `/logis/bsb0010/0lo00001` | `purchUm`/`stdUm`/`staUm` | no period; prefer itemCd filter |
+| people | `/personal/APCodePicker/ApAperUserCode` + `/personal/hph0120/0hp00001` | `korNm`/`deptNm`/`korHcls`/`emgcTel`/`brthDt` | strips `rsrgNo`; query=name required |
 
 ## Explicit non-goals
 

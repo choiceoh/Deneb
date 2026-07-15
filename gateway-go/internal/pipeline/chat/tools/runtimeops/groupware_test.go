@@ -163,3 +163,16 @@ func TestToolGroupware_StockAreaAlias(t *testing.T) {
 		t.Fatalf("got %q", out)
 	}
 }
+
+func TestToolGroupware_PeopleRequiresQuery(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_USER", "alice")
+	t.Setenv("DENEB_GROUPWARE_PASSWORD", "secret")
+	fn := ToolGroupware()
+	out, err := fn(context.Background(), json.RawMessage(`{"action":"list","area":"사원"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "query") {
+		t.Fatalf("got %q", out)
+	}
+}

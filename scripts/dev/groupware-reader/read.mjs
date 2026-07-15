@@ -10,6 +10,7 @@
  *   area=board
  *   area=sales     action=summary|list  folder=ytd|month|today|year|last_year
  *   area=stock|po|receive|ship|price  action=list|summary
+ *   area=people   action=list  query=이름 (부서·직급/호칭·휴대폰·생년월일)
  *                  folder=ytd|month|today|… (receive/ship default month; else ytd; price ignores)
  *                  query=keyword | YYYYMMDD:YYYYMMDD [keyword] | lines:… | 모듈/인버터(→M-/I-)
  *   action=act (approval only) — mutate; used by work-feed chips, not chat tool
@@ -43,6 +44,7 @@ import {
   listReceiving,
   listShipments,
   listItemPrices,
+  listPeople,
 } from "./lib/actions.mjs";
 
 function argValue(flag) {
@@ -92,11 +94,16 @@ async function main() {
   }
 
   const erpAreas = ["sales", "stock", "po", "receive", "ship", "price"];
+  const peopleArea = area === "people";
   if (area === "sales" && (action === "read" || action === "")) action = "summary";
-  if (erpAreas.includes(area) && area !== "sales" && (action === "read" || action === "")) action = "list";
-  if (!["approval", "board", ...erpAreas].includes(area)) die(`unknown --area ${area}`);
+  if ((erpAreas.includes(area) || peopleArea) && area !== "sales" && (action === "read" || action === "")) action = "list";
+  if (!["approval", "board", ...erpAreas, "people"].includes(area)) die(`unknown --area ${area}`);
   if (area === "sales") {
     if (!["summary", "list"].includes(action)) die(`sales action must be summary|list (got ${action})`);
+  } else if (peopleArea) {
+    if (action === "summary" || action === "read") action = "list";
+    if (action !== "list") die(`people action must be list (got ${action})`);
+    if (!query) die("people requires --query (name keyword)");
   } else if (erpAreas.includes(area)) {
     if (action === "summary") action = "list";
     if (action !== "list") die(`${area} action must be list|summary (got ${action})`);
@@ -128,6 +135,8 @@ async function main() {
     out = await listShipments(erpFolder, query, limit);
   } else if (area === "price") {
     out = await listItemPrices(erpFolder, query, limit);
+  } else if (area === "people") {
+    out = await listPeople(erpFolder, query, limit);
   } else if (action === "act") {
     out = await actApproval(docId || query, decision, comment);
   } else if (action === "attachment") {

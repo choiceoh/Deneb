@@ -1615,3 +1615,108 @@ export async function listItemPrices(folder = "", query = "", limit = 20) {
   lines.push("", "출처: POST /logis/bsb0010/0lo00001 · purchUm/stdUm/staUm · 모듈/인버터는 itemCd 접두사 매핑");
   return lines.join("\n");
 }
+
+
+/** Strip name prefix from korHcls ("오선택 전무" → "전무"). */
+export function parseHonorific(korNm, korHcls) {
+  const name = String(korNm || "").trim();
+  const raw = String(korHcls || "").trim();
+  if (!raw) return "";
+  if (name && raw.startsWith(name)) {
+    return raw.slice(name.length).trim();
+  }
+  const parts = raw.split(/\s+/);
+  if (parts.length >= 2 && parts[0] === name) return parts.slice(1).join(" ");
+  return raw;
+}
+
+/** YYYYMMDD → YYYY-MM-DD (empty if invalid). */
+export function formatBirthDate(brthDt) {
+  const s = String(brthDt || "").replace(/\D/g, "");
+  if (s.length !== 8) return "";
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+}
+
+function peopleSafeCard(detail, listRow = {}) {
+  const korNm = detail.korNm || listRow.korNm || "";
+  const title = parseHonorific(korNm, detail.korHcls);
+  return {
+    empCd: detail.empCd || listRow.empCd || "",
+    name: korNm,
+    dept: detail.deptNm || "",
+    div: detail.divNm || "",
+    title, // 직급/호칭 (korHcls에서 이름 제거)
+    honorific: title,
+    mobile: detail.emgcTel || "",
+    officeTel: detail.tel || "",
+    birth: formatBirthDate(detail.brthDt),
+    status: detail.enrlFgNm || "",
+  };
+}
+
+function formatPeopleLine(i, card) {
+  const bits = [
+    card.name || "(이름없음)",
+    card.dept && `부서 ${card.dept}`,
+    card.title && `직급/호칭 ${card.title}`,
+    card.mobile && `휴대폰 ${card.mobile}`,
+    card.birth && `생년월일 ${card.birth}`,
+    card.officeTel && `회사전화 ${card.officeTel}`,
+    card.status && card.status,
+    card.empCd && card.empCd,
+  ].filter(Boolean);
+  return `${i + 1}. ${bits.join(" · ")}`;
+}
+
+/**
+ * 사원 조회 — 명부(ApAperUserCode) + 상세(hph0120).
+ * Returns name/dept/title/mobile/birth only (strips rsrgNo and other PII).
+ */
+export async function listPeople(folder = "", query = "", limit = 10) {
+  const q = String(query || "").trim();
+  if (!q) {
+    return [
+      "사원 조회 (인사 · Amaranth)",
+      "query에 이름(또는 일부)이 필요합니다. 예: groupware(area=\"people\", query=\"김\")",
+      "",
+      "출처: POST /personal/APCodePicker/ApAperUserCode + /personal/hph0120/0hp00001",
+    ].join("\n");
+  }
+  const listRes = await apiPost("/personal/APCodePicker/ApAperUserCode", {
+    helpTy: "APER_USER_INFO",
+    searchText: q,
+  });
+  assertOk(listRes, "사원명부");
+  const candidates = rowsOf(listRes.json).filter((x) => x?.empCd && x?.usrYn !== "N");
+  const cap = Math.min(capLimit(limit), 20); // detail is N+1; keep small
+  const slice = candidates.slice(0, cap);
+  const cards = [];
+  for (const row of slice) {
+    const detailRes = await apiPost("/personal/hph0120/0hp00001", { empCd: row.empCd });
+    assertOk(detailRes, "사원상세");
+    const details = rowsOf(detailRes.json);
+    // Prefer exact empCd match when API returns multiple
+    const detail = details.find((d) => d.empCd === row.empCd) || details[0] || {};
+    cards.push(peopleSafeCard(detail, row));
+  }
+  const lines = [
+    "사원 조회 (인사 · Amaranth · 이름/부서/직급·호칭/휴대폰/생년월일)",
+    `검색: ${q} · 명부매칭 ${candidates.length.toLocaleString("ko-KR")}명 · 상세 ${cards.length}명`,
+    "",
+    "결과:",
+  ];
+  if (!cards.length) {
+    lines.push("(결과 없음 — 이름 철자를 확인하거나 성만 입력해 보세요)");
+  } else {
+    cards.forEach((c, i) => lines.push(formatPeopleLine(i, c)));
+  }
+  if (candidates.length > cards.length) {
+    lines.push("", `… 외 ${candidates.length - cards.length}명은 limit으로 생략 (limit 최대 20)`);
+  }
+  lines.push(
+    "",
+    "출처: POST /personal/APCodePicker/ApAperUserCode · /personal/hph0120/0hp00001",
+    "제외: 주민번호(rsrgNo)·주소 등 민감필드. 휴대폰=emgcTel, 직급/호칭=korHcls.",
+  );
+  return lines.join("\n");
+}

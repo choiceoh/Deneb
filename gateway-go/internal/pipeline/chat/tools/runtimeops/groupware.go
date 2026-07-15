@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// ToolGroupware reads Amaranth10 전자결재 / 게시판 / 매출·재고·발주·입고·출고·단가 via srv4 headless login.
+// ToolGroupware reads Amaranth10 전자결재 / 게시판 / 매출·재고·발주·입고·출고·단가·사원 via srv4 headless login.
 // Approval folders: pending(미결) · done(기결) · cc(수신참조) · total(전체결재문서) · all(순회).
 // Read-only: never approve, post, or delete. Unconfigured → calm off message.
 func ToolGroupware() toolport.ToolFunc {
@@ -49,7 +49,7 @@ func ToolGroupware() toolport.ToolFunc {
 			area = "approval"
 		}
 		switch area {
-		case "approval", "board", "sales", "stock", "po", "receive", "ship", "price":
+		case "approval", "board", "sales", "stock", "po", "receive", "ship", "price", "people":
 		case "전자결재", "결재":
 			area = "approval"
 		case "게시판", "공지", "공지사항":
@@ -66,13 +66,15 @@ func ToolGroupware() toolport.ToolFunc {
 			area = "ship"
 		case "단가", "품목단가", "단가등록":
 			area = "price"
+		case "사원", "직원", "인사", "조직", "연락처", "사람들":
+			area = "people"
 		case "영업":
 			// ambiguous legacy alias → sales (매출마감)
 			area = "sales"
 		case "":
-			return "area가 필요합니다 — approval|board|sales|stock|po|receive|ship|price.", nil
+			return "area가 필요합니다 — approval|board|sales|stock|po|receive|ship|price|people.", nil
 		default:
-			return "", fmt.Errorf("unknown groupware area %q (approval|board|sales|stock|po|receive|ship|price)", p.Area)
+			return "", fmt.Errorf("unknown groupware area %q (approval|board|sales|stock|po|receive|ship|price|people)", p.Area)
 		}
 
 		switch area {
@@ -88,6 +90,14 @@ func ToolGroupware() toolport.ToolFunc {
 			}
 			if action == "summary" {
 				action = "list"
+			}
+		case "people":
+			if action != "list" && action != "summary" && action != "read" {
+				return "people는 action=list 만 지원합니다 — query에 이름(일부) 필수.", nil
+			}
+			action = "list"
+			if strings.TrimSpace(p.Query) == "" {
+				return `people는 query(이름 키워드)가 필요합니다. 예: query="김".`, nil
 			}
 		default:
 			if action == "summary" {
@@ -152,7 +162,7 @@ func normalizeFolder(raw, action, area string) (string, error) {
 		default:
 			return "", fmt.Errorf("unknown period folder %q (ytd|month|today|year|last_year)", raw)
 		}
-	case "price":
+	case "price", "people":
 		return "", nil
 	}
 	if area != "approval" {
