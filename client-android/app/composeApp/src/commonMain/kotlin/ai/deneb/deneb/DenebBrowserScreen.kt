@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Translate
@@ -84,12 +85,17 @@ fun DenebBrowserScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // More tile opens with an empty route URL; resume the last http(s) page. An
-    // explicit deep-link / open_url keeps its own URL and then becomes the new last.
-    // Translate preference is restored from AppSettings so leave → re-enter keeps ON.
+    // More tile opens with an empty route URL; resume the last http(s) page, else
+    // the user-chosen home. An explicit deep-link / open_url keeps its own URL
+    // and then becomes the new last. Translate preference is restored so leave →
+    // re-enter keeps ON.
     val state = remember(url) {
         DenebWebViewState(
-            initialUrl = resolveBrowserStartUrl(url, appSettings.getBrowserLastUrl()),
+            initialUrl = resolveBrowserStartUrl(
+                url,
+                appSettings.getBrowserLastUrl(),
+                appSettings.getBrowserHomeUrl(),
+            ),
             translateEnabled = appSettings.isBrowserTranslateEnabled(),
         )
     }
@@ -100,6 +106,7 @@ fun DenebBrowserScreen(
     }
     var showBookmarks by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var homeUrl by remember { mutableStateOf(appSettings.getBrowserHomeUrl()) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
     var history by remember { mutableStateOf(decodeBrowserHistory(appSettings.getBrowserHistoryJson())) }
     fun persistBookmarks(next: List<BrowserBookmark>) {
@@ -130,6 +137,7 @@ fun DenebBrowserScreen(
         modifier = modifier,
         bookmarksCount = bookmarks.size,
         historyCount = history.size,
+        homeUrl = homeUrl,
         isBookmarked = bookmarked,
         canBookmark = bookmarkable,
         onToggleBookmark = {
@@ -137,6 +145,20 @@ fun DenebBrowserScreen(
         },
         onShowBookmarks = { showBookmarks = true },
         onShowHistory = { showHistory = true },
+        onGoHome = {
+            val target = homeUrl.trim()
+            if (canBookmarkUrl(target)) state.load(target)
+        },
+        onSetHome = {
+            if (canBookmarkUrl(bookmarkUrl)) {
+                appSettings.setBrowserHomeUrl(bookmarkUrl)
+                homeUrl = appSettings.getBrowserHomeUrl()
+            }
+        },
+        onClearHome = {
+            appSettings.setBrowserHomeUrl("")
+            homeUrl = ""
+        },
     ) {
         DenebWebView(
             state = state,
@@ -190,11 +212,15 @@ fun DenebBrowserChrome(
     modifier: Modifier = Modifier,
     bookmarksCount: Int = 0,
     historyCount: Int = 0,
+    homeUrl: String = "",
     isBookmarked: Boolean = false,
     canBookmark: Boolean = false,
     onToggleBookmark: (() -> Unit)? = null,
     onShowBookmarks: (() -> Unit)? = null,
     onShowHistory: (() -> Unit)? = null,
+    onGoHome: (() -> Unit)? = null,
+    onSetHome: (() -> Unit)? = null,
+    onClearHome: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
@@ -402,6 +428,53 @@ fun DenebBrowserChrome(
                                     haptics.tap()
                                     menuOpen = false
                                     onShowHistory()
+                                },
+                            )
+                        }
+                        val hasHome = canBookmarkUrl(homeUrl)
+                        if (onGoHome != null) {
+                            DropdownMenuItem(
+                                enabled = hasHome,
+                                text = {
+                                    Column {
+                                        Text("홈으로")
+                                        Text(
+                                            if (hasHome) homeUrl else "설정된 홈 없음",
+                                            style = DenebType.meta,
+                                            color = denebHint(),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Outlined.Home, contentDescription = null, tint = denebHint()) },
+                                onClick = {
+                                    haptics.tap()
+                                    menuOpen = false
+                                    onGoHome()
+                                },
+                            )
+                        }
+                        if (onSetHome != null) {
+                            DropdownMenuItem(
+                                enabled = canBookmark,
+                                text = { Text("현재 페이지를 홈으로") },
+                                leadingIcon = { Icon(Icons.Outlined.Home, contentDescription = null, tint = denebInsight()) },
+                                onClick = {
+                                    haptics.tap()
+                                    menuOpen = false
+                                    onSetHome()
+                                },
+                            )
+                        }
+                        if (onClearHome != null && hasHome) {
+                            DropdownMenuItem(
+                                text = { Text("홈 지우기") },
+                                leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = denebHint()) },
+                                onClick = {
+                                    haptics.tap()
+                                    menuOpen = false
+                                    onClearHome()
                                 },
                             )
                         }

@@ -150,4 +150,14 @@ class AppSettingsLogicTest {
         s.setBrowserHistoryJson("""[{"url":"https://example.com","title":"Ex","visitedAtMs":1}]""")
         assertTrue(s.getBrowserHistoryJson().contains("example.com"))
     }
+
+    @Test
+    fun `browser home url persists and clears on blank`() {
+        val s = fresh()
+        assertEquals("", s.getBrowserHomeUrl())
+        s.setBrowserHomeUrl(" https://home.example/ ")
+        assertEquals("https://home.example/", s.getBrowserHomeUrl())
+        s.setBrowserHomeUrl("   ")
+        assertEquals("", s.getBrowserHomeUrl())
+    }
 }

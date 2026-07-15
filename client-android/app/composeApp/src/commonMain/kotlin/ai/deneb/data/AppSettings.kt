@@ -105,6 +105,19 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_BROWSER_HISTORY, json)
     }
 
+    // User-chosen start home for the in-app browser. Used when there is no nav
+    // URL and no resumable last page (nav → last → home → blank).
+    fun getBrowserHomeUrl(): String = settings.getString(KEY_BROWSER_HOME_URL, "")
+
+    fun setBrowserHomeUrl(url: String) {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) {
+            settings.remove(KEY_BROWSER_HOME_URL)
+        } else {
+            settings.putString(KEY_BROWSER_HOME_URL, trimmed)
+        }
+    }
+
     fun getCurrentConversationId(): String? = settings.getStringOrNull(KEY_CURRENT_CONVERSATION_ID)
 
     fun setCurrentConversationId(id: String?) {
@@ -432,6 +445,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_BROWSER_LAST_URL = "browser_last_url"
         const val KEY_BROWSER_TRANSLATE_ENABLED = "browser_translate_enabled"
         const val KEY_BROWSER_HISTORY = "browser_history"
+        const val KEY_BROWSER_HOME_URL = "browser_home_url"
         const val KEY_CONVERSATIONS = "conversations_json"
         const val KEY_CURRENT_CONVERSATION_ID = "current_conversation_id"
         const val KEY_CURRENT_CONVERSATION_MIGRATED = "current_conversation_migrated"
