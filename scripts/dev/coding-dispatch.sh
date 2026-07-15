@@ -55,6 +55,14 @@ CAPEOF
     )
 fi
 SESSION_TIMEOUT="${DENEB_DISPATCH_TIMEOUT_SEC:-7200}"
+# Consecutive instant-failure cap per candidate. Below this, an instant failure
+# (<60s, rc!=0, no PR) is treated as a transient environment problem and the
+# marker is released for a free retry (no daily-cap slot burned). At/above it,
+# the candidate stops getting the free environment pass and flows through normal
+# outcome accounting — otherwise a candidate that instant-fails every tick would
+# re-dispatch forever, consuming no cap and silently starving the lane. See the
+# instant-failure block in the dispatch flow below.
+INSTANT_FAIL_MAX="${DENEB_DISPATCH_INSTANT_FAIL_MAX:-3}"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DISPATCH_RPC="$SCRIPT_DIR/self_correction_dispatch.py"
 DISPATCH_RECLAIM="$SCRIPT_DIR/dispatch_reclaim.py"
@@ -84,6 +92,23 @@ resolve_gh_bin() {
 # lookup explicit so a successfully merged squash PR cannot be recorded as a
 # failed or merely attempted dispatch just because the service PATH is narrow.
 GH_BIN=$(resolve_gh_bin || true)
+
+# Per-candidate consecutive instant-failure streak. Stored as a tiny integer
+# sidecar next to the marker; the ".instantfail" suffix keeps it out of the
+# ".json"-only daily-cap scan and the marker pick lane. bump prints the new
+# count; reset clears the streak once a real (non-instant) session runs.
+instant_fail_file() { printf '%s/%s.instantfail' "$DISPATCH_DIR" "$1"; }
+read_instant_fails() {
+    local f; f=$(instant_fail_file "$1")
+    if [[ -f "$f" ]]; then cat "$f" 2>/dev/null || echo 0; else echo 0; fi
+}
+bump_instant_fails() {
+    local f n; f=$(instant_fail_file "$1")
+    n=$(read_instant_fails "$1"); n=$((n + 1))
+    printf '%s' "$n" >"$f" 2>/dev/null || true
+    echo "$n"
+}
+reset_instant_fails() { rm -f "$(instant_fail_file "$1")" 2>/dev/null || true; }
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
@@ -594,11 +619,25 @@ PYEOF
     # the lane silently: release the marker and the worktree so the same
     # candidate re-dispatches once the environment is fixed.
     if (( rc != 0 && elapsed < 60 )) && [[ "$PR_OUTCOME" == "failed" || "$PR_OUTCOME" == "none" ]]; then
-        release_owned_marker "$DISPATCH_DIR/$cid.json" "$attempt_id"
-        release_clean_attempt "$wt" "$branch" || true
-        log "instant failure — marker released for $cid (environment problem, not the candidate)"
-        record_runtime_status environment_failed "instant environment failure rc=$rc" "$cid"
-        exit 0
+        local ifails
+        ifails=$(bump_instant_fails "$cid")
+        if (( ifails < INSTANT_FAIL_MAX )); then
+            release_owned_marker "$DISPATCH_DIR/$cid.json" "$attempt_id"
+            release_clean_attempt "$wt" "$branch" || true
+            log "instant failure ${ifails}/${INSTANT_FAIL_MAX} — marker released for $cid (environment problem, retrying)"
+            record_runtime_status environment_failed "instant environment failure rc=$rc (${ifails}/${INSTANT_FAIL_MAX})" "$cid"
+            exit 0
+        fi
+        # Streak hit the cap: stop granting the free environment pass. A candidate
+        # that instant-fails every tick would otherwise re-dispatch forever,
+        # consuming no daily-cap slot and starving the lane silently (observed:
+        # one candidate re-dispatched 4x over 4h against a broken executor). Fall
+        # through to normal outcome accounting so it records a real failed marker —
+        # bounded by the daily cap and visible in the ledger/dashboard.
+        log "instant failure ${ifails}/${INSTANT_FAIL_MAX} for $cid — persistent; recording as candidate failure (no longer masked as environment)"
+    else
+        # A real session ran (>=60s or produced a PR): clear the streak.
+        reset_instant_fails "$cid"
     fi
 
     # Outcome accounting (graduation-ladder evidence: cap raise needs a

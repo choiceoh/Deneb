@@ -102,12 +102,22 @@ class CodingDispatchStatusTest(unittest.TestCase):
         )
         self.assertEqual(proc.stdout, "1:unknown")
 
-    def test_instant_process_failure_is_classified_as_environment_failure(self):
+    def test_instant_process_failure_below_cap_is_classified_as_environment_failure(self):
         dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
-        expected = (
-            'record_runtime_status environment_failed "instant environment failure rc=$rc" "$cid"'
-        )
-        self.assertIn(expected, dispatcher)
+        # Below the per-candidate streak cap, an instant failure is still treated
+        # as a transient environment problem and released for a free retry.
+        self.assertIn("if (( ifails < INSTANT_FAIL_MAX )); then", dispatcher)
+        self.assertIn("record_runtime_status environment_failed", dispatcher)
+
+    def test_persistent_instant_failures_stop_getting_the_free_environment_pass(self):
+        dispatcher = Path(__file__).with_name("coding-dispatch.sh").read_text(encoding="utf-8")
+        # A candidate that instant-fails every tick must not re-dispatch forever
+        # (consuming no daily-cap slot, starving the lane). Once the streak hits
+        # the cap it flows through to normal failure accounting instead of the
+        # early `exit 0` with the marker released.
+        self.assertIn("INSTANT_FAIL_MAX=", dispatcher)
+        self.assertIn("ifails=$(bump_instant_fails", dispatcher)
+        self.assertIn("recording as candidate failure", dispatcher)
 
     def test_clean_decline_is_completed_not_session_failure(self):
         self.assertEqual(
