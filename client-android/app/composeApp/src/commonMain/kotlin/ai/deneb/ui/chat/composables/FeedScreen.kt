@@ -85,7 +85,7 @@ internal fun FeedScreen(
     onMarkSeen: (String) -> Unit,
     onLoadDateRange: suspend (Long, Long) -> Boolean,
     onRunAction: (String, String) -> Unit,
-    onAnswer: (WorkFeedItem, String, String?) -> Unit,
+    onAnswer: (WorkFeedItem, String, String?, String?) -> Unit,
     onSubmitFeedback: (String, String) -> Unit,
     onRewrite: (String) -> Unit,
     onAsk: (String) -> Unit,
@@ -360,7 +360,7 @@ private fun FeedRowWithBody(
     expanded: Boolean,
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
-    onAnswer: (WorkFeedItem, String, String?) -> Unit,
+    onAnswer: (WorkFeedItem, String, String?, String?) -> Unit,
     onLongAction: (WorkFeedItem) -> Unit,
 ) {
     WorkFeedRow(item = item, onOpen = onOpen, onRunAction = onRunAction, expanded = expanded, onLongAction = onLongAction)

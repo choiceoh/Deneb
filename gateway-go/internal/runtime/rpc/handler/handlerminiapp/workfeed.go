@@ -16,7 +16,7 @@ type WorkFeedStore interface {
 	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
 	Ack(id string) (workfeed.Item, error)
 	MarkRead(id string) (workfeed.Item, error)
-	RunAction(itemID, actionID string) (workfeed.ActionResult, error)
+	RunAction(itemID, actionID, comment string) (workfeed.ActionResult, error)
 }
 
 type rangedWorkFeedStore interface {
@@ -193,6 +193,7 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ItemID   string `json:"itemId"`
 		ActionID string `json:"actionId"`
+		Comment  string `json:"comment,omitempty"`
 	}
 	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		itemID := strings.TrimSpace(p.ItemID)
@@ -203,7 +204,7 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 		if actionID == "" {
 			return rpcerr.MissingParam("actionId").Response(req.ID)
 		}
-		result, err := deps.Store.RunAction(itemID, actionID)
+		result, err := deps.Store.RunAction(itemID, actionID, p.Comment)
 		if err != nil {
 			switch {
 			case errors.Is(err, workfeed.ErrNotFound):

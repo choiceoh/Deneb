@@ -58,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
@@ -69,6 +70,30 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
+
+internal const val MaxApprovalCommentCharacters = 500
+
+internal fun approvalCommentCharacterCount(value: String): Int {
+    var count = 0
+    var index = 0
+    while (index < value.length) {
+        val char = value[index]
+        index += if (char.isHighSurrogate() && index + 1 < value.length && value[index + 1].isLowSurrogate()) 2 else 1
+        count++
+    }
+    return count
+}
+
+internal fun limitApprovalComment(value: String): String {
+    var count = 0
+    var end = 0
+    while (end < value.length && count < MaxApprovalCommentCharacters) {
+        val char = value[end]
+        end += if (char.isHighSurrogate() && end + 1 < value.length && value[end + 1].isLowSurrogate()) 2 else 1
+        count++
+    }
+    return value.substring(0, end)
+}
 
 /**
  * Bottom-sheet content for the work feed (action inbox), in the Deneb idiom:
@@ -232,37 +257,63 @@ internal fun WorkFeedRow(
  * Inline answer affordance for a question card (Toss-style). Renders the card's
  * options as tappable chips, or — when there are no fixed options — a free-text
  * reply field. Both route the answer back to the asking agent via [onAnswer]
- * (item, answerText, actionId?): a chip passes its actionId; the reply passes null.
+ * (item, answerText, actionId?, comment?): a chip passes its actionId; the reply
+ * passes null. Approval rejection can additionally carry a transient comment.
  * Shown under the expanded body of a card whose [WorkFeedItem.question] is true.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun WorkFeedAnswerBlock(
     item: WorkFeedItem,
-    onAnswer: (WorkFeedItem, String, String?) -> Unit,
+    onAnswer: (WorkFeedItem, String, String?, String?) -> Unit,
 ) {
     val haptics = rememberHaptics()
     var pendingApproval by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
     pendingApproval?.let { action ->
+        val isReject = action.id == "approval:reject"
+        var rejectionComment by remember(item.id, action.id) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { pendingApproval = null },
             title = { Text("${action.label}할까요?", style = DenebType.subject) },
             text = {
-                Text(
-                    buildString {
-                        append(item.title.ifBlank { "이 결재 문서" })
-                        if (item.refId.isNotBlank()) append(" (doc ${item.refId})")
-                        append("을(를) ${action.label}합니다. 그룹웨어에 즉시 반영됩니다.")
-                    },
-                    style = DenebType.body,
-                )
+                Column {
+                    Text(
+                        buildString {
+                            append(item.title.ifBlank { "이 결재 문서" })
+                            if (item.refId.isNotBlank()) append(" (doc ${item.refId})")
+                            append("을(를) ${action.label}합니다. 그룹웨어에 즉시 반영됩니다.")
+                        },
+                        style = DenebType.body,
+                    )
+                    if (isReject) {
+                        Spacer(Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = rejectionComment,
+                            onValueChange = { rejectionComment = limitApprovalComment(it) },
+                            label = { Text("반려 사유 (선택)", style = DenebType.meta) },
+                            supportingText = {
+                                Text(
+                                    "${approvalCommentCharacterCount(rejectionComment)}/$MaxApprovalCommentCharacters",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    style = DenebType.meta,
+                                    color = denebHint(),
+                                    textAlign = TextAlign.End,
+                                )
+                            },
+                            minLines = 3,
+                            maxLines = 5,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val comment = rejectionComment.trim().takeIf { isReject && it.isNotEmpty() }
                         pendingApproval = null
-                        haptics.confirm()
-                        onAnswer(item, action.label, action.id)
+                        if (isReject) haptics.reject() else haptics.confirm()
+                        onAnswer(item, action.label, action.id, comment)
                     },
                 ) { Text(action.label, style = DenebType.button) }
             },
@@ -283,7 +334,7 @@ internal fun WorkFeedAnswerBlock(
                                 pendingApproval = action
                             } else {
                                 haptics.confirm()
-                                onAnswer(item, action.label, action.id)
+                                onAnswer(item, action.label, action.id, null)
                             }
                         },
                         label = { Text(action.label, style = DenebType.button) },
@@ -308,7 +359,7 @@ internal fun WorkFeedAnswerBlock(
                     enabled = text.isNotBlank(),
                     onClick = {
                         haptics.confirm()
-                        onAnswer(item, text.trim(), null)
+                        onAnswer(item, text.trim(), null, null)
                         text = ""
                     },
                 ) {

@@ -623,11 +623,11 @@ class ChatViewModel(
     // ActionAnswer returns the choice as a prompt. A free-text reply (actionId null)
     // acks the card and routes the typed answer to the card's asking session. Either
     // way the returned prompt is delivered as a turn so the agent reacts to it.
-    private fun answerWorkFeed(item: WorkFeedItem, answer: String, actionId: String?) {
+    private fun answerWorkFeed(item: WorkFeedItem, answer: String, actionId: String?, comment: String?) {
         viewModelScope.launch(backgroundDispatcher) {
             val gw = dataRepository as? DenebGatewayClient ?: return@launch
             val prompt = if (actionId != null) {
-                gw.runWorkFeedAction(item.id, actionId) // adoptSession=true → routes to the asking session
+                gw.runWorkFeedAction(item.id, actionId, comment) // adoptSession=true → routes to the asking session
             } else {
                 if (answer.isBlank()) return@launch
                 gw.answerWorkFeedItem(item.id, answer)

@@ -329,13 +329,22 @@ internal fun DenebGatewayClient.workItemSessionKey(itemId: String): String {
     return if (slug.isEmpty()) "client:main:${Uuid.random()}" else "client:main:wf-$slug"
 }
 
-suspend fun DenebGatewayClient.runWorkFeedAction(itemId: String, actionId: String, adoptSession: Boolean = true): String? {
+suspend fun DenebGatewayClient.runWorkFeedAction(
+    itemId: String,
+    actionId: String,
+    comment: String? = null,
+    adoptSession: Boolean = true,
+): String? {
     if (itemId.isBlank() || actionId.isBlank()) return null
+    val rejectionComment = comment
+        ?.trim()
+        ?.takeIf { actionId.trim() == "approval:reject" && it.isNotEmpty() }
     val payload = callRpc<WorkFeedActionRunPayload>(
         "miniapp.workfeed.action.run",
         buildJsonObject {
             put("itemId", itemId)
             put("actionId", actionId)
+            if (rejectionComment != null) put("comment", rejectionComment)
         },
     ) ?: return null
     if (payload.removeFromFeed) {

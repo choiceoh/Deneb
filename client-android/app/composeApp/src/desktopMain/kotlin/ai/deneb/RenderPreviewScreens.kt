@@ -399,7 +399,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                                 WorkFeedAction(id = "dept:none", label = "딜 아님"),
                             ),
                         ),
-                        onAnswer = { _, _, _ -> },
+                        onAnswer = { _, _, _, _ -> },
                     )
                     DenebSectionLabel("자유 답변 — 입력란")
                     WorkFeedAnswerBlock(
@@ -409,7 +409,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
                             summary = "내일 미팅 시간을 몇 시로 잡을까요?",
                             question = true,
                         ),
-                        onAnswer = { _, _, _ -> },
+                        onAnswer = { _, _, _, _ -> },
                     )
                 }
             }
