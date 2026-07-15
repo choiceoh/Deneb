@@ -25,7 +25,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ColumnNode>(
@@ -33,7 +32,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ColumnNode().id, node.id)
-
         },
         {
             val node = assertIs<ColumnNode>(
@@ -44,7 +42,6 @@ class DenebUiFieldContractTest {
             val child = assertIs<TextNode>(node.children.single())
             assertEquals("child-id", child.id)
             assertEquals("child-value", child.value)
-
         },
         {
             val node = assertIs<ColumnNode>(
@@ -52,7 +49,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ColumnNode().children, node.children)
-
         },
         {
             val node = assertIs<RowNode>(
@@ -60,7 +56,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<RowNode>(
@@ -68,7 +63,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RowNode().id, node.id)
-
         },
         {
             val node = assertIs<RowNode>(
@@ -79,7 +73,6 @@ class DenebUiFieldContractTest {
             val child = assertIs<TextNode>(node.children.single())
             assertEquals("child-id", child.id)
             assertEquals("child-value", child.value)
-
         },
         {
             val node = assertIs<RowNode>(
@@ -87,7 +80,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RowNode().children, node.children)
-
         },
         {
             val node = assertIs<CardNode>(
@@ -95,7 +87,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<CardNode>(
@@ -103,7 +94,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CardNode().id, node.id)
-
         },
         {
             val node = assertIs<CardNode>(
@@ -114,7 +104,6 @@ class DenebUiFieldContractTest {
             val child = assertIs<TextNode>(node.children.single())
             assertEquals("child-id", child.id)
             assertEquals("child-value", child.value)
-
         },
         {
             val node = assertIs<CardNode>(
@@ -122,7 +111,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CardNode().children, node.children)
-
         },
         {
             val node = assertIs<DividerNode>(
@@ -130,7 +118,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<DividerNode>(
@@ -138,7 +125,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(DividerNode().id, node.id)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -146,7 +132,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -154,7 +139,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNode().id, node.id)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -162,7 +146,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -170,7 +153,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNode().value, node.value)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -178,7 +160,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNodeStyle.HEADLINE, node.style)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -186,7 +167,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNode().style, node.style)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -194,7 +174,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.bold)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -202,7 +181,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNode().bold, node.bold)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -210,7 +188,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.italic)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -218,7 +195,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNode().italic, node.italic)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -226,7 +202,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("color-한글 /?#", node.color)
-
         },
         {
             val node = assertIs<TextNode>(
@@ -234,7 +209,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextNode().color, node.color)
-
         },
         {
             val node = assertIs<MarkdownNode>(
@@ -242,7 +216,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<MarkdownNode>(
@@ -250,7 +223,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(MarkdownNode().id, node.id)
-
         },
         {
             val node = assertIs<MarkdownNode>(
@@ -258,7 +230,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<MarkdownNode>(
@@ -266,7 +237,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(MarkdownNode().value, node.value)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -274,7 +244,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -282,7 +251,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ImageNode().id, node.id)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -290,7 +258,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("url-한글 /?#", node.url)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -298,7 +265,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ImageNode().url, node.url)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -306,7 +272,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("alt-한글 /?#", node.alt)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -314,7 +279,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ImageNode().alt, node.alt)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -322,7 +286,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(17, node.height)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -330,7 +293,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ImageNode().height, node.height)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -338,7 +300,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(12.5f, node.aspectRatio)
-
         },
         {
             val node = assertIs<ImageNode>(
@@ -346,7 +307,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ImageNode().aspectRatio, node.aspectRatio)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -354,7 +314,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -362,7 +321,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ButtonNode().id, node.id)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -370,7 +328,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -378,7 +335,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ButtonNode().label, node.label)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -389,7 +345,6 @@ class DenebUiFieldContractTest {
             assertEquals("submit", action.event)
             assertEquals(mapOf("enabled" to "true", "count" to "7"), action.dataAsStrings)
             assertEquals(listOf("input-a", "input-b"), action.collectFrom)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -397,7 +352,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ButtonNode().action, node.action)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -405,7 +359,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ButtonVariant.TONAL, node.variant)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -413,7 +366,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ButtonNode().variant, node.variant)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -421,7 +373,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.enabled)
-
         },
         {
             val node = assertIs<ButtonNode>(
@@ -429,7 +380,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ButtonNode().enabled, node.enabled)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -437,7 +387,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -445,7 +394,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().id, node.id)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -453,7 +401,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -461,7 +408,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().label, node.label)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -469,7 +415,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("placeholder-한글 /?#", node.placeholder)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -477,7 +422,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().placeholder, node.placeholder)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -485,7 +429,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -493,7 +436,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().value, node.value)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -501,7 +443,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.multiline)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -509,7 +450,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().multiline, node.multiline)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -517,7 +457,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("keyboard-한글 /?#", node.keyboard)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -525,7 +464,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().keyboard, node.keyboard)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -533,7 +471,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.required)
-
         },
         {
             val node = assertIs<TextInputNode>(
@@ -541,7 +478,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TextInputNode().required, node.required)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -549,7 +485,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -557,7 +492,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(DateInputNode().id, node.id)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -565,7 +499,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -573,7 +506,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(DateInputNode().label, node.label)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -581,7 +513,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -589,7 +520,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(DateInputNode().value, node.value)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -597,7 +527,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.required)
-
         },
         {
             val node = assertIs<DateInputNode>(
@@ -605,7 +534,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(DateInputNode().required, node.required)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -613,7 +541,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -621,7 +548,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TimeInputNode().id, node.id)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -629,7 +555,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -637,7 +562,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TimeInputNode().label, node.label)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -645,7 +569,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -653,7 +576,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TimeInputNode().value, node.value)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -661,7 +583,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.required)
-
         },
         {
             val node = assertIs<TimeInputNode>(
@@ -669,7 +590,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TimeInputNode().required, node.required)
-
         },
         {
             val node = assertIs<CheckboxNode>(
@@ -677,7 +597,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<CheckboxNode>(
@@ -685,7 +604,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CheckboxNode().id, node.id)
-
         },
         {
             val node = assertIs<CheckboxNode>(
@@ -693,7 +611,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<CheckboxNode>(
@@ -701,7 +618,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CheckboxNode().label, node.label)
-
         },
         {
             val node = assertIs<CheckboxNode>(
@@ -709,7 +625,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.checked)
-
         },
         {
             val node = assertIs<CheckboxNode>(
@@ -717,7 +632,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CheckboxNode().checked, node.checked)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -725,7 +639,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -733,7 +646,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SelectNode().id, node.id)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -741,7 +653,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -749,7 +660,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SelectNode().label, node.label)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -757,7 +667,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(listOf("one", "둘"), node.options.toList())
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -765,7 +674,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SelectNode().options, node.options)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -773,7 +681,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("selected-한글 /?#", node.selected)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -781,7 +688,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SelectNode().selected, node.selected)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -789,7 +695,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("placeholder-한글 /?#", node.placeholder)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -797,7 +702,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SelectNode().placeholder, node.placeholder)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -805,7 +709,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.required)
-
         },
         {
             val node = assertIs<SelectNode>(
@@ -813,7 +716,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SelectNode().required, node.required)
-
         },
         {
             val node = assertIs<SwitchNode>(
@@ -821,7 +723,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<SwitchNode>(
@@ -829,7 +730,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SwitchNode().id, node.id)
-
         },
         {
             val node = assertIs<SwitchNode>(
@@ -837,7 +737,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<SwitchNode>(
@@ -845,7 +744,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SwitchNode().label, node.label)
-
         },
         {
             val node = assertIs<SwitchNode>(
@@ -853,7 +751,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.checked)
-
         },
         {
             val node = assertIs<SwitchNode>(
@@ -861,7 +758,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SwitchNode().checked, node.checked)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -869,7 +765,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -877,7 +772,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SliderNode().id, node.id)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -885,7 +779,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -893,7 +786,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SliderNode().label, node.label)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -901,7 +793,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(12.5f, node.value)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -909,7 +800,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SliderNode().value, node.value)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -917,7 +807,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(12.5f, node.min)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -925,7 +814,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SliderNode().min, node.min)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -933,7 +821,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(12.5f, node.max)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -941,7 +828,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SliderNode().max, node.max)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -949,7 +835,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(12.5f, node.step)
-
         },
         {
             val node = assertIs<SliderNode>(
@@ -957,7 +842,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(SliderNode().step, node.step)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -965,7 +849,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -973,7 +856,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RadioGroupNode().id, node.id)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -981,7 +863,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -989,7 +870,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RadioGroupNode().label, node.label)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -997,7 +877,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(listOf("one", "둘"), node.options.toList())
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -1005,7 +884,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RadioGroupNode().options, node.options)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -1013,7 +891,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("selected-한글 /?#", node.selected)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -1021,7 +898,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RadioGroupNode().selected, node.selected)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -1029,7 +905,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.required)
-
         },
         {
             val node = assertIs<RadioGroupNode>(
@@ -1037,7 +912,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(RadioGroupNode().required, node.required)
-
         },
         {
             val node = assertIs<ProgressNode>(
@@ -1045,7 +919,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ProgressNode>(
@@ -1053,7 +926,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ProgressNode().id, node.id)
-
         },
         {
             val node = assertIs<ProgressNode>(
@@ -1061,7 +933,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(12.5f, node.value)
-
         },
         {
             val node = assertIs<ProgressNode>(
@@ -1069,7 +940,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ProgressNode().value, node.value)
-
         },
         {
             val node = assertIs<ProgressNode>(
@@ -1077,7 +947,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<ProgressNode>(
@@ -1085,7 +954,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ProgressNode().label, node.label)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1093,7 +961,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1101,7 +968,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AlertNode().id, node.id)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1109,7 +975,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("message-한글 /?#", node.message)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1117,7 +982,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AlertNode().message, node.message)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1125,7 +989,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("title-한글 /?#", node.title)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1133,7 +996,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AlertNode().title, node.title)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1141,7 +1003,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AlertSeverity.WARNING, node.severity)
-
         },
         {
             val node = assertIs<AlertNode>(
@@ -1149,7 +1010,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AlertNode().severity, node.severity)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1157,7 +1017,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1165,7 +1024,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CountdownNode().id, node.id)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1173,7 +1031,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(17, node.seconds)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1181,7 +1038,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CountdownNode().seconds, node.seconds)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1189,7 +1045,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1197,7 +1052,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CountdownNode().label, node.label)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1208,7 +1062,6 @@ class DenebUiFieldContractTest {
             assertEquals("submit", action.event)
             assertEquals(mapOf("enabled" to "true", "count" to "7"), action.dataAsStrings)
             assertEquals(listOf("input-a", "input-b"), action.collectFrom)
-
         },
         {
             val node = assertIs<CountdownNode>(
@@ -1216,7 +1069,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CountdownNode().action, node.action)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1224,7 +1076,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1232,7 +1083,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChipGroupNode().id, node.id)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1240,7 +1090,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(listOf(ChipItem("A", "a"), ChipItem("B", "B")), node.chips.toList())
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1248,7 +1097,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChipGroupNode().chips, node.chips)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1256,7 +1104,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("selection-한글 /?#", node.selection)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1264,7 +1111,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChipGroupNode().selection, node.selection)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1272,7 +1118,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.required)
-
         },
         {
             val node = assertIs<ChipGroupNode>(
@@ -1280,7 +1125,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChipGroupNode().required, node.required)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1288,7 +1132,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1296,7 +1139,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(IconNode().id, node.id)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1304,7 +1146,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("name-한글 /?#", node.name)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1312,7 +1153,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(IconNode().name, node.name)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1320,7 +1160,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(17, node.size)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1328,7 +1167,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(IconNode().size, node.size)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1336,7 +1174,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("color-한글 /?#", node.color)
-
         },
         {
             val node = assertIs<IconNode>(
@@ -1344,7 +1181,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(IconNode().color, node.color)
-
         },
         {
             val node = assertIs<CodeNode>(
@@ -1352,7 +1188,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<CodeNode>(
@@ -1360,7 +1195,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CodeNode().id, node.id)
-
         },
         {
             val node = assertIs<CodeNode>(
@@ -1368,7 +1202,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("code-한글 /?#", node.code)
-
         },
         {
             val node = assertIs<CodeNode>(
@@ -1376,7 +1209,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CodeNode().code, node.code)
-
         },
         {
             val node = assertIs<CodeNode>(
@@ -1384,7 +1216,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("language-한글 /?#", node.language)
-
         },
         {
             val node = assertIs<CodeNode>(
@@ -1392,7 +1223,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(CodeNode().language, node.language)
-
         },
         {
             val node = assertIs<BoxNode>(
@@ -1400,7 +1230,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<BoxNode>(
@@ -1408,7 +1237,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(BoxNode().id, node.id)
-
         },
         {
             val node = assertIs<BoxNode>(
@@ -1419,7 +1247,6 @@ class DenebUiFieldContractTest {
             val child = assertIs<TextNode>(node.children.single())
             assertEquals("child-id", child.id)
             assertEquals("child-value", child.value)
-
         },
         {
             val node = assertIs<BoxNode>(
@@ -1427,7 +1254,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(BoxNode().children, node.children)
-
         },
         {
             val node = assertIs<BoxNode>(
@@ -1435,7 +1261,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("contentAlignment-한글 /?#", node.contentAlignment)
-
         },
         {
             val node = assertIs<BoxNode>(
@@ -1443,7 +1268,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(BoxNode().contentAlignment, node.contentAlignment)
-
         },
         {
             val node = assertIs<TabsNode>(
@@ -1451,7 +1275,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<TabsNode>(
@@ -1459,7 +1282,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TabsNode().id, node.id)
-
         },
         {
             val node = assertIs<TabsNode>(
@@ -1469,7 +1291,6 @@ class DenebUiFieldContractTest {
             assertEquals(1, node.tabs.size)
             assertEquals("Tab A", node.tabs.single().label)
             assertEquals("tab child", assertIs<TextNode>(node.tabs.single().children.single()).value)
-
         },
         {
             val node = assertIs<TabsNode>(
@@ -1477,7 +1298,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TabsNode().tabs, node.tabs)
-
         },
         {
             val node = assertIs<TabsNode>(
@@ -1485,7 +1305,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(17, node.selectedIndex)
-
         },
         {
             val node = assertIs<TabsNode>(
@@ -1493,7 +1312,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TabsNode().selectedIndex, node.selectedIndex)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1501,7 +1319,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1509,7 +1326,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AccordionNode().id, node.id)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1517,7 +1333,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("title-한글 /?#", node.title)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1525,7 +1340,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AccordionNode().title, node.title)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1536,7 +1350,6 @@ class DenebUiFieldContractTest {
             val child = assertIs<TextNode>(node.children.single())
             assertEquals("child-id", child.id)
             assertEquals("child-value", child.value)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1544,7 +1357,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AccordionNode().children, node.children)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1552,7 +1364,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.expanded)
-
         },
         {
             val node = assertIs<AccordionNode>(
@@ -1560,7 +1371,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AccordionNode().expanded, node.expanded)
-
         },
         {
             val node = assertIs<QuoteNode>(
@@ -1568,7 +1378,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<QuoteNode>(
@@ -1576,7 +1385,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(QuoteNode().id, node.id)
-
         },
         {
             val node = assertIs<QuoteNode>(
@@ -1584,7 +1392,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("text-한글 /?#", node.text)
-
         },
         {
             val node = assertIs<QuoteNode>(
@@ -1592,7 +1399,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(QuoteNode().text, node.text)
-
         },
         {
             val node = assertIs<QuoteNode>(
@@ -1600,7 +1406,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("source-한글 /?#", node.source)
-
         },
         {
             val node = assertIs<QuoteNode>(
@@ -1608,7 +1413,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(QuoteNode().source, node.source)
-
         },
         {
             val node = assertIs<BadgeNode>(
@@ -1616,7 +1420,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<BadgeNode>(
@@ -1624,7 +1427,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(BadgeNode().id, node.id)
-
         },
         {
             val node = assertIs<BadgeNode>(
@@ -1632,7 +1434,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<BadgeNode>(
@@ -1640,7 +1441,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(BadgeNode().value, node.value)
-
         },
         {
             val node = assertIs<BadgeNode>(
@@ -1648,7 +1448,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("color-한글 /?#", node.color)
-
         },
         {
             val node = assertIs<BadgeNode>(
@@ -1656,7 +1455,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(BadgeNode().color, node.color)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1664,7 +1462,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1672,7 +1469,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(StatNode().id, node.id)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1680,7 +1476,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("value-한글 /?#", node.value)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1688,7 +1483,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(StatNode().value, node.value)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1696,7 +1490,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1704,7 +1497,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(StatNode().label, node.label)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1712,7 +1504,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("description-한글 /?#", node.description)
-
         },
         {
             val node = assertIs<StatNode>(
@@ -1720,7 +1511,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(StatNode().description, node.description)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1728,7 +1518,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1736,7 +1525,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AvatarNode().id, node.id)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1744,7 +1532,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("name-한글 /?#", node.name)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1752,7 +1539,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AvatarNode().name, node.name)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1760,7 +1546,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("imageUrl-한글 /?#", node.imageUrl)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1768,7 +1553,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AvatarNode().imageUrl, node.imageUrl)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1776,7 +1560,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(17, node.size)
-
         },
         {
             val node = assertIs<AvatarNode>(
@@ -1784,7 +1567,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(AvatarNode().size, node.size)
-
         },
         {
             val node = assertIs<ListNode>(
@@ -1792,7 +1574,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ListNode>(
@@ -1800,7 +1581,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ListNode().id, node.id)
-
         },
         {
             val node = assertIs<ListNode>(
@@ -1811,7 +1591,6 @@ class DenebUiFieldContractTest {
             val child = assertIs<TextNode>(node.items.single())
             assertEquals("child-id", child.id)
             assertEquals("child-value", child.value)
-
         },
         {
             val node = assertIs<ListNode>(
@@ -1819,7 +1598,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ListNode().items, node.items)
-
         },
         {
             val node = assertIs<ListNode>(
@@ -1827,7 +1605,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(true, node.ordered)
-
         },
         {
             val node = assertIs<ListNode>(
@@ -1835,7 +1612,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ListNode().ordered, node.ordered)
-
         },
         {
             val node = assertIs<TableNode>(
@@ -1843,7 +1619,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<TableNode>(
@@ -1851,7 +1626,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TableNode().id, node.id)
-
         },
         {
             val node = assertIs<TableNode>(
@@ -1859,7 +1633,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(listOf("one", "둘"), node.headers.toList())
-
         },
         {
             val node = assertIs<TableNode>(
@@ -1867,7 +1640,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TableNode().headers, node.headers)
-
         },
         {
             val node = assertIs<TableNode>(
@@ -1878,7 +1650,6 @@ class DenebUiFieldContractTest {
                 listOf(listOf("r1c1", "r1c2"), listOf("r2c1", "r2c2"), listOf("r3")),
                 node.rows.map { it.toList() },
             )
-
         },
         {
             val node = assertIs<TableNode>(
@@ -1886,7 +1657,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(TableNode().rows, node.rows)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1894,7 +1664,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("id-한글 /?#", node.id)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1902,7 +1671,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChartNode().id, node.id)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1910,7 +1678,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("chartType-한글 /?#", node.chartType)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1918,7 +1685,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChartNode().chartType, node.chartType)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1926,7 +1692,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(listOf("one", "둘"), node.labels.toList())
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1934,7 +1699,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChartNode().labels, node.labels)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1942,7 +1706,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(listOf(1f, 2.5f), node.values.toList())
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1950,7 +1713,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChartNode().values, node.values)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1958,7 +1720,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals("label-한글 /?#", node.label)
-
         },
         {
             val node = assertIs<ChartNode>(
@@ -1966,7 +1727,6 @@ class DenebUiFieldContractTest {
             )
 
             assertEquals(ChartNode().label, node.label)
-
         },
     )
 

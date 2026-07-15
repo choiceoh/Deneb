@@ -296,7 +296,10 @@ class DenebWirePayloadSerializationTest {
             """
             {
               "runs":10,"proactiveRuns":3,"compactedRuns":2,
-              "tools":[{"name":"mail.search","calls":8,"errors":1,"avgMs":250}],
+              "totalInputTokens":1000,"totalOutputTokens":200,"cacheReadTokens":50,
+              "tools":[{"name":"mail.search","calls":8,"errors":1,"avgMs":250,"repaired":1,"blocked":2}],
+              "proactiveDecisions":{"delivered":5,"suppressed:contentless":2},
+              "backgroundJobs":{"sync":9},
               "backgroundErrors":{"sync":4,"push":1}
             }
             """.trimIndent(),
@@ -305,17 +308,40 @@ class DenebWirePayloadSerializationTest {
         assertEquals(10, payload.runs)
         assertEquals(3, payload.proactiveRuns)
         assertEquals(2, payload.compactedRuns)
+        assertEquals(1000L, payload.totalInputTokens)
         assertEquals(8, payload.tools.single().calls)
         assertEquals(250L, payload.tools.single().avgMs)
+        assertEquals(1, payload.tools.single().repaired)
+        assertEquals(5, payload.proactiveDecisions["delivered"])
+        assertEquals(9, payload.backgroundJobs["sync"])
         assertEquals(4, payload.backgroundErrors["sync"])
+    }
+
+    @Test
+    fun observationHealthDecodesCaptureAndVllmGlance() {
+        val payload = json.decodeFromString<ObserveHealth>(
+            """
+            {
+              "captureEnabled":true,"agentLogEnabled":true,
+              "ringCapacity":5000,"ringUsed":120,"recentErrors":3,
+              "runs24h":40,"proactiveRuns24h":5,"compactedRuns24h":2,"backgroundErrors24h":1,
+              "vllmPrefixCache":[{"model":"main","queries":8,"hits":3,"hitRatePct":37.5}]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(true, payload.captureEnabled)
+        assertEquals(5000, payload.ringCapacity)
+        assertEquals(40, payload.runs24h)
+        assertEquals(37.5, payload.vllmPrefixCache.single().hitRatePct)
     }
 
     @Test
     fun observationLogsPreserveOrderAndCountIndependently() {
         val payload = ObserveLogsPayload(
             lines = listOf(
-                ObserveLogLine(level = "INFO", msg = "started", runId = "r1"),
-                ObserveLogLine(level = "ERROR", msg = "failed", runId = "r1"),
+                ObserveLogLine(ts = 1, level = "INFO", msg = "started", runId = "r1", session = "s1"),
+                ObserveLogLine(ts = 2, level = "ERROR", msg = "failed", runId = "r1", session = "s1"),
             ),
             count = 99,
         )
@@ -323,6 +349,7 @@ class DenebWirePayloadSerializationTest {
         val decoded = json.decodeFromString<ObserveLogsPayload>(json.encodeToString(payload))
 
         assertEquals(listOf("started", "failed"), decoded.lines.map { it.msg })
+        assertEquals(listOf("s1", "s1"), decoded.lines.map { it.session })
         assertEquals(99, decoded.count)
     }
 

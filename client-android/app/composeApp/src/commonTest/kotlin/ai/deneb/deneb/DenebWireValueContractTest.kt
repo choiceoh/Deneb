@@ -49,7 +49,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(RecentPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -58,7 +57,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"sessions":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -81,7 +79,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(TranscriptPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -90,7 +87,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"messages":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -113,7 +109,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(WorkFeedPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -122,7 +117,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"items":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -152,7 +146,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(WorkFeedActionRunPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -161,7 +154,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"ok":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -187,7 +179,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(WorkFeedFeedbackPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -196,7 +187,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"ok":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -225,7 +215,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(NativeSyncPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -234,7 +223,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"events":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -268,7 +256,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(NativeSyncEvent.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -277,7 +264,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"seq":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -299,7 +285,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(NativeSyncActionPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -308,7 +293,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"item":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -331,7 +315,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(MemoryListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -340,7 +323,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"pages":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -363,7 +345,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(DiaryRecentPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -372,7 +353,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"entries":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -398,7 +378,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(DiaryRecentRow.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -407,7 +386,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"file":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -429,7 +407,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(DeletePagesPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -438,7 +415,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"ok":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -458,7 +434,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(MovePagePayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -467,7 +442,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"ok":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -494,7 +468,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CategoriesPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -503,7 +476,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"categories":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -526,7 +498,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CronListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -535,7 +506,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"jobs":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -571,7 +541,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(ModelsPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -580,7 +549,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"current":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -614,7 +582,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(ClientHelloPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -623,7 +590,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"version":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -648,7 +614,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(MailListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -657,7 +622,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"messages":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -677,7 +641,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(OkPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -686,7 +649,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"ok":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -706,7 +668,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(AskPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -715,7 +676,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"answer":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -748,7 +708,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(SenderContextPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -757,7 +716,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"sender":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -780,7 +738,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CalListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -789,7 +746,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"events":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -812,7 +768,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CalProposalsPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -821,7 +776,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"proposals":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -844,7 +798,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(TodoListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -853,7 +806,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"todos":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -876,7 +828,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(PeopleListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -885,7 +836,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"people":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -908,7 +858,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(ContactsListPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -917,7 +866,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"contacts":"wrong-shape"}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -957,7 +905,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(WikiPagePayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -966,7 +913,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"path":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -986,7 +932,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CaptureImagePayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -995,7 +940,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1015,7 +959,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CaptureAudioPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1024,7 +967,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1044,7 +986,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CaptureDocumentPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1053,7 +994,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1073,7 +1013,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(CaptureContactsPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1082,7 +1021,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"text":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1090,7 +1028,12 @@ class DenebWireValueContractTest {
                     "name": "name-value",
                     "calls": 7,
                     "errors": 7,
-                    "avgMs": 7000000000
+                    "avgMs": 7000000000,
+                    "repaired": 7,
+                    "unknown": 7,
+                    "blocked": 7,
+                    "cacheHits": 7,
+                    "truncated": 7
                 }
                 """.trimIndent(),
             ).jsonObject
@@ -1103,12 +1046,16 @@ class DenebWireValueContractTest {
             assertEquals(input["calls"], encoded["calls"])
             assertEquals(input["errors"], encoded["errors"])
             assertEquals(input["avgMs"], encoded["avgMs"])
+            assertEquals(input["repaired"], encoded["repaired"])
+            assertEquals(input["unknown"], encoded["unknown"])
+            assertEquals(input["blocked"], encoded["blocked"])
+            assertEquals(input["cacheHits"], encoded["cacheHits"])
+            assertEquals(input["truncated"], encoded["truncated"])
 
             assertEquals(
                 decoded,
                 json.decodeFromJsonElement(ObserveToolStat.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1117,7 +1064,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"name":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1125,9 +1071,18 @@ class DenebWireValueContractTest {
                     "runs": 7,
                     "proactiveRuns": 7,
                     "compactedRuns": 7,
+                    "totalInputTokens": 7000000000,
+                    "totalOutputTokens": 7000000000,
+                    "cacheReadTokens": 7000000000,
                     "tools": [
                         {}
                     ],
+                    "proactiveDecisions": {
+                        "delivered": 7
+                    },
+                    "backgroundJobs": {
+                        "gmailpoll": 7
+                    },
                     "backgroundErrors": {
                         "sample-key": 7
                     }
@@ -1142,15 +1097,19 @@ class DenebWireValueContractTest {
             assertEquals(input["runs"], encoded["runs"])
             assertEquals(input["proactiveRuns"], encoded["proactiveRuns"])
             assertEquals(input["compactedRuns"], encoded["compactedRuns"])
+            assertEquals(input["totalInputTokens"], encoded["totalInputTokens"])
+            assertEquals(input["totalOutputTokens"], encoded["totalOutputTokens"])
+            assertEquals(input["cacheReadTokens"], encoded["cacheReadTokens"])
             assertTrue(encoded["tools"] is JsonArray)
             assertEquals(1, (encoded["tools"] as JsonArray).size)
+            assertEquals(input["proactiveDecisions"], encoded["proactiveDecisions"])
+            assertEquals(input["backgroundJobs"], encoded["backgroundJobs"])
             assertEquals(input["backgroundErrors"], encoded["backgroundErrors"])
 
             assertEquals(
                 decoded,
                 json.decodeFromJsonElement(ObserveBehavior.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1159,14 +1118,15 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"runs":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
                 """{
+                    "ts": 7000000000,
                     "level": "level-value",
                     "msg": "msg-value",
-                    "runId": "runId-value"
+                    "runId": "runId-value",
+                    "session": "session-value"
                 }
                 """.trimIndent(),
             ).jsonObject
@@ -1175,15 +1135,16 @@ class DenebWireValueContractTest {
             val encoded = json.encodeToJsonElement(ObserveLogLine.serializer(), decoded).jsonObject
 
             assertEquals(input.keys, encoded.keys)
+            assertEquals(input["ts"], encoded["ts"])
             assertEquals(input["level"], encoded["level"])
             assertEquals(input["msg"], encoded["msg"])
             assertEquals(input["runId"], encoded["runId"])
+            assertEquals(input["session"], encoded["session"])
 
             assertEquals(
                 decoded,
                 json.decodeFromJsonElement(ObserveLogLine.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1192,7 +1153,6 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"level":{}}"""),
                 )
             }
-
         },
         {
             val input = json.parseToJsonElement(
@@ -1217,7 +1177,6 @@ class DenebWireValueContractTest {
                 decoded,
                 json.decodeFromJsonElement(ObserveLogsPayload.serializer(), encoded),
             )
-
         },
         {
             assertFailsWith<SerializationException> {
@@ -1226,7 +1185,87 @@ class DenebWireValueContractTest {
                     json.parseToJsonElement("""{"lines":"wrong-shape"}"""),
                 )
             }
+        },
+        {
+            val input = json.parseToJsonElement(
+                """{
+                    "model": "model-value",
+                    "queries": 7000000000,
+                    "hits": 7000000000,
+                    "hitRatePct": 37.5
+                }
+                """.trimIndent(),
+            ).jsonObject
 
+            val decoded = json.decodeFromJsonElement(ObserveVllmPrefixCache.serializer(), input)
+            val encoded = json.encodeToJsonElement(ObserveVllmPrefixCache.serializer(), decoded).jsonObject
+
+            assertEquals(input.keys, encoded.keys)
+            assertEquals(input["model"], encoded["model"])
+            assertEquals(input["queries"], encoded["queries"])
+            assertEquals(input["hits"], encoded["hits"])
+            assertEquals(input["hitRatePct"], encoded["hitRatePct"])
+
+            assertEquals(
+                decoded,
+                json.decodeFromJsonElement(ObserveVllmPrefixCache.serializer(), encoded),
+            )
+        },
+        {
+            assertFailsWith<SerializationException> {
+                json.decodeFromJsonElement(
+                    ObserveVllmPrefixCache.serializer(),
+                    json.parseToJsonElement("""{"model":{}}"""),
+                )
+            }
+        },
+        {
+            val input = json.parseToJsonElement(
+                """{
+                    "captureEnabled": true,
+                    "agentLogEnabled": true,
+                    "ringCapacity": 7,
+                    "ringUsed": 7,
+                    "recentErrors": 7,
+                    "runs24h": 7,
+                    "proactiveRuns24h": 7,
+                    "compactedRuns24h": 7,
+                    "backgroundErrors24h": 7,
+                    "vllmPrefixCache": [
+                        {}
+                    ]
+                }
+                """.trimIndent(),
+            ).jsonObject
+
+            val decoded = json.decodeFromJsonElement(ObserveHealth.serializer(), input)
+            val encoded = json.encodeToJsonElement(ObserveHealth.serializer(), decoded).jsonObject
+
+            assertEquals(input.keys, encoded.keys)
+            assertEquals(input["captureEnabled"], encoded["captureEnabled"])
+            assertEquals(input["agentLogEnabled"], encoded["agentLogEnabled"])
+            assertEquals(input["ringCapacity"], encoded["ringCapacity"])
+            assertEquals(input["ringUsed"], encoded["ringUsed"])
+            assertEquals(input["recentErrors"], encoded["recentErrors"])
+            assertEquals(input["runs24h"], encoded["runs24h"])
+            assertEquals(input["proactiveRuns24h"], encoded["proactiveRuns24h"])
+            assertEquals(input["compactedRuns24h"], encoded["compactedRuns24h"])
+            assertEquals(input["backgroundErrors24h"], encoded["backgroundErrors24h"])
+            assertTrue(encoded["vllmPrefixCache"] is JsonArray)
+            assertEquals(1, (encoded["vllmPrefixCache"] as JsonArray).size)
+
+            assertEquals(
+                decoded,
+                json.decodeFromJsonElement(ObserveHealth.serializer(), encoded),
+            )
+        },
+        {
+            assertFailsWith<SerializationException> {
+                json.decodeFromJsonElement(
+                    ObserveHealth.serializer(),
+                    json.parseToJsonElement("""{"captureEnabled":1}"""),
+                )
+            }
         },
     )
 

@@ -50,7 +50,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = TranscriptPayload.serializer()
@@ -74,7 +73,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = WorkFeedPayload.serializer()
@@ -98,7 +96,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = WorkFeedActionRunPayload.serializer()
@@ -122,7 +119,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = WorkFeedFeedbackPayload.serializer()
@@ -146,7 +142,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = NativeSyncPayload.serializer()
@@ -170,7 +165,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = NativeSyncEvent.serializer()
@@ -194,7 +188,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = NativeSyncActionPayload.serializer()
@@ -218,7 +211,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = MemoryListPayload.serializer()
@@ -242,7 +234,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = DiaryRecentPayload.serializer()
@@ -266,7 +257,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = DiaryRecentRow.serializer()
@@ -290,7 +280,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = DeletePagesPayload.serializer()
@@ -314,7 +303,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = MovePagePayload.serializer()
@@ -338,7 +326,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CategoriesPayload.serializer()
@@ -362,7 +349,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CronListPayload.serializer()
@@ -386,7 +372,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ModelsPayload.serializer()
@@ -410,7 +395,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ClientHelloPayload.serializer()
@@ -434,7 +418,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = MailListPayload.serializer()
@@ -458,7 +441,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = OkPayload.serializer()
@@ -482,7 +464,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = AskPayload.serializer()
@@ -506,7 +487,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = SenderContextPayload.serializer()
@@ -530,7 +510,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CalListPayload.serializer()
@@ -554,7 +533,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CalProposalsPayload.serializer()
@@ -578,7 +556,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = TodoListPayload.serializer()
@@ -602,7 +579,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = PeopleListPayload.serializer()
@@ -626,7 +602,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ContactsListPayload.serializer()
@@ -650,7 +625,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = WikiPagePayload.serializer()
@@ -674,7 +648,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CaptureImagePayload.serializer()
@@ -698,7 +671,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CaptureAudioPayload.serializer()
@@ -722,7 +694,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CaptureDocumentPayload.serializer()
@@ -746,7 +717,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = CaptureContactsPayload.serializer()
@@ -770,7 +740,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ObserveToolStat.serializer()
@@ -794,7 +763,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ObserveBehavior.serializer()
@@ -818,7 +786,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ObserveLogLine.serializer()
@@ -842,7 +809,6 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
-
         },
         {
             val serializer = ObserveLogsPayload.serializer()
@@ -866,7 +832,52 @@ class DenebWireDescriptorContractTest {
             assertTrue(encoded is JsonObject)
             assertTrue(encoded.jsonObject.isEmpty())
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
+        },
+        {
+            val serializer = ObserveVllmPrefixCache.serializer()
+            val descriptor = serializer.descriptor
 
+            assertEquals("ObserveVllmPrefixCache", descriptor.serialName.substringAfterLast('.'))
+            assertTrue(descriptor.elementsCount > 0)
+            assertEquals(descriptor.elementsCount, descriptor.names().distinct().size)
+            assertTrue((0 until descriptor.elementsCount).all(descriptor::isElementOptional))
+
+            val empty = json.decodeFromString(serializer, "{}")
+            assertEquals(ObserveVllmPrefixCache(), empty)
+
+            val future = json.decodeFromString(
+                serializer,
+                """{"futureEnvelopeVersion":99,"future":{"nested":[true,1,null]}}""",
+            )
+            assertEquals(empty, future)
+
+            val encoded = json.encodeToJsonElement(serializer, empty)
+            assertTrue(encoded is JsonObject)
+            assertTrue(encoded.jsonObject.isEmpty())
+            assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
+        },
+        {
+            val serializer = ObserveHealth.serializer()
+            val descriptor = serializer.descriptor
+
+            assertEquals("ObserveHealth", descriptor.serialName.substringAfterLast('.'))
+            assertTrue(descriptor.elementsCount > 0)
+            assertEquals(descriptor.elementsCount, descriptor.names().distinct().size)
+            assertTrue((0 until descriptor.elementsCount).all(descriptor::isElementOptional))
+
+            val empty = json.decodeFromString(serializer, "{}")
+            assertEquals(ObserveHealth(), empty)
+
+            val future = json.decodeFromString(
+                serializer,
+                """{"futureEnvelopeVersion":99,"future":{"nested":[true,1,null]}}""",
+            )
+            assertEquals(empty, future)
+
+            val encoded = json.encodeToJsonElement(serializer, empty)
+            assertTrue(encoded is JsonObject)
+            assertTrue(encoded.jsonObject.isEmpty())
+            assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
         },
     )
 

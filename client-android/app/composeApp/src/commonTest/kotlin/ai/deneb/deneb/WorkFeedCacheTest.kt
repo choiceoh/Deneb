@@ -16,21 +16,18 @@ class WorkFeedCacheTest {
         {
             val json = encodeWorkFeedCache(items, owner = "https://gw#abc")
             assertEquals(items, decodeWorkFeedCache(json, expectedOwner = "https://gw#abc"))
-
         },
         {
             // The owner fingerprint stops a prior account's cached feed from rendering
             // under new credentials (mirrors the mail cache guard).
             val json = encodeWorkFeedCache(items, owner = "https://gw#abc")
             assertNull(decodeWorkFeedCache(json, expectedOwner = "https://other#xyz"))
-
         },
         {
             // An empty cache is "no last-known briefing" — the home shows its own empty
             // state rather than a stale-but-empty render.
             val json = encodeWorkFeedCache(emptyList(), owner = "https://gw#abc")
             assertNull(decodeWorkFeedCache(json, expectedOwner = "https://gw#abc"))
-
         },
     )
 

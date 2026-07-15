@@ -30,7 +30,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(emptySet(), params.keys)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -38,7 +37,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.refreshModels()
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -51,7 +49,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel refreshModels", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.models.list", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -68,7 +65,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("id", "role"), params.keys)
             assertEquals("provider/model", params["id"]?.jsonPrimitive?.content)
             assertEquals("fallback", params["role"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -76,7 +72,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.setRoleModel("provider/model", "fallback")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -89,7 +84,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel setRoleModel", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.models.set", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -105,7 +99,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("endpoint", "model"), params.keys)
             assertEquals("https://model.example/v1", params["endpoint"]?.jsonPrimitive?.content)
             assertEquals("org/model", params["model"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -113,7 +106,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.addCustomModel("https://model.example/v1", "org/model")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -126,7 +118,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel addCustomModel", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.models.add_custom", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -141,7 +132,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("id"), params.keys)
             assertEquals("custom:model", params["id"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -149,7 +139,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.deleteCustomModel("custom:model")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -162,7 +151,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel deleteCustomModel", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.models.delete_custom", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -176,7 +164,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(emptySet(), params.keys)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -184,7 +171,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.refreshSkills()
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -197,7 +183,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel refreshSkills", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.skills.list", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -213,7 +198,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("limit", "skillName"), params.keys)
             assertEquals(17, params["limit"]?.jsonPrimitive?.content?.toInt())
             assertEquals("coding/github", params["skillName"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -221,7 +205,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.fetchSkillLifecycle(limit = 17, skillName = "coding/github")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -234,7 +217,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel fetchSkillLifecycle", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.skills.lifecycle", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -250,7 +232,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("limit", "status"), params.keys)
             assertEquals(23, params["limit"]?.jsonPrimitive?.content?.toInt())
             assertEquals("review", params["status"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -258,7 +239,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.fetchSelfImprovementCodingQueue(limit = 23, status = "review")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -271,7 +251,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel fetchSelfImprovementCodingQueue", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.self_improvement_coding.list", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -286,7 +265,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("name"), params.keys)
             assertEquals("coding/github", params["name"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -294,7 +272,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.fetchSkillDetail("coding/github")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -307,7 +284,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel fetchSkillDetail", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.skills.detail", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -323,7 +299,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("name", "body"), params.keys)
             assertEquals("local/skill", params["name"]?.jsonPrimitive?.content)
             assertEquals("# Skill\nBody", params["body"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -331,7 +306,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.updateSkill("local/skill", "# Skill\nBody")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -344,7 +318,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel updateSkill", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.skills.update", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -359,7 +332,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("name"), params.keys)
             assertEquals("local/skill", params["name"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -367,7 +339,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.deleteSkill("local/skill")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -380,7 +351,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel deleteSkill", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.skills.delete", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -396,7 +366,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("id"), params.keys)
             assertEquals("cron-7", params["id"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -404,7 +373,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.removeCron("cron-7")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -417,7 +385,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel removeCron", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.crons.remove", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -432,7 +399,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("includeDisabled"), params.keys)
             assertEquals(true, params["includeDisabled"]?.jsonPrimitive?.content?.toBoolean())
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -440,7 +406,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.refreshScheduledTasks()
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -453,7 +418,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel refreshScheduledTasks", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.crons.list", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -468,7 +432,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("id"), params.keys)
             assertEquals("cron-run", params["id"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -476,7 +439,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.runCron("cron-run")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -489,7 +451,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel runCron", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.crons.run", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -504,7 +465,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("id"), params.keys)
             assertEquals("cron-detail", params["id"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -512,7 +472,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.fetchCron("cron-detail")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -525,7 +484,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel fetchCron", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.crons.get", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -541,7 +499,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("id", "enabled"), params.keys)
             assertEquals("cron-toggle", params["id"]?.jsonPrimitive?.content)
             assertEquals(false, params["enabled"]?.jsonPrimitive?.content?.toBoolean())
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -549,7 +506,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.setCronEnabled("cron-toggle", false)
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -562,7 +518,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel setCronEnabled", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.crons.update", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -582,7 +537,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("Asia/Seoul", params["tz"]?.jsonPrimitive?.content)
             assertEquals("Brief", params["prompt"]?.jsonPrimitive?.content)
             assertEquals("provider/model", params["model"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -590,7 +544,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.updateCron("cron-edit", name = "Daily", schedule = "0 9 * * *", tz = "Asia/Seoul", prompt = "Brief", model = "provider/model")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -603,7 +556,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel updateCron", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.crons.update", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -617,7 +569,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(emptySet(), params.keys)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -625,7 +576,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.refreshClientStatus()
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -638,7 +588,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel refreshClientStatus", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.client.hello", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -654,7 +603,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("token", "platform"), params.keys)
             assertEquals("fcm-token", params["token"]?.jsonPrimitive?.content)
             assertEquals("android", params["platform"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -662,7 +610,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.registerPushToken("fcm-token", "android")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -675,7 +622,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel registerPushToken", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.push.register", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -690,7 +636,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("token"), params.keys)
             assertEquals("fcm-token", params["token"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -698,7 +643,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.unregisterPushToken("fcm-token")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -711,7 +655,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel unregisterPushToken", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.push.unregister", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -732,7 +675,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("start", params["start"]?.jsonPrimitive?.content)
             assertEquals("end", params["end"]?.jsonPrimitive?.content)
             assertEquals("Asia/Seoul", params["timeZone"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -740,7 +682,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.createCalendarEvent("Summary", "Description", "Room", false, "start", "end", "Asia/Seoul")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -753,7 +694,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel createCalendarEvent", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.calendar.create", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -768,7 +708,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("id"), params.keys)
             assertEquals("event-7", params["id"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -776,7 +715,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.deleteCalendarEvent("event-7")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -789,7 +727,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel deleteCalendarEvent", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.calendar.delete", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -807,7 +744,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("Note", params["note"]?.jsonPrimitive?.content)
             assertEquals("2026-07-31", params["due"]?.jsonPrimitive?.content)
             assertEquals(true, params["dueAllDay"]?.jsonPrimitive?.content?.toBoolean())
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -815,7 +751,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.createTodo("Title", "Note", "2026-07-31", true)
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -828,7 +763,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel createTodo", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.todo.create", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -844,7 +778,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("id", "done"), params.keys)
             assertEquals("todo-7", params["id"]?.jsonPrimitive?.content)
             assertEquals(true, params["done"]?.jsonPrimitive?.content?.toBoolean())
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -852,7 +785,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.setTodoDone("todo-7", true)
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -865,7 +797,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel setTodoDone", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.todo.set_done", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -880,7 +811,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("id"), params.keys)
             assertEquals("todo-7", params["id"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -888,7 +818,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.deleteTodo("todo-7")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -901,7 +830,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel deleteTodo", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.todo.delete", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -916,7 +844,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("path"), params.keys)
             assertEquals("Folder/file.txt", params["path"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -924,7 +851,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.filesDelete("Folder/file.txt")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -937,7 +863,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel filesDelete", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.files.delete", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -952,7 +877,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("endpoint-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
             assertEquals(setOf("path"), params.keys)
             assertEquals("Folder/New", params["path"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -960,7 +884,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.filesMkdir("Folder/New")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -973,7 +896,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel filesMkdir", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.files.mkdir", f.transport.singleRequest().rpcMethod)
-
         },
         {
             val f = gatewayClientFixture(token = "endpoint-token")
@@ -989,7 +911,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals(setOf("src", "dst"), params.keys)
             assertEquals("Folder/old", params["src"]?.jsonPrimitive?.content)
             assertEquals("Folder/new", params["dst"]?.jsonPrimitive?.content)
-
         },
         {
             val f = gatewayClientFixture(token = "")
@@ -997,7 +918,6 @@ class GatewayEndpointSafetyMatrixTest {
             f.client.filesMove("Folder/old", "Folder/new")
 
             assertTrue(f.transport.requests.isEmpty())
-
         },
         {
             val f = gatewayClientFixture()
@@ -1010,7 +930,6 @@ class GatewayEndpointSafetyMatrixTest {
             assertEquals("cancel filesMove", failure.message)
             assertEquals(1, f.transport.requests.size)
             assertEquals("miniapp.files.move", f.transport.singleRequest().rpcMethod)
-
         },
     )
 
