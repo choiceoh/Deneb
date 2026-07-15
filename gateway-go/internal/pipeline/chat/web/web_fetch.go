@@ -316,14 +316,18 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	return sb.String(), nil
 }
 
-// webSearchAndFetch searches the web and auto-fetches the top N results.
-// Uses webSearchWithURLs() to get both formatted output and fetchable URLs.
+// webSearchAndFetch searches the web and auto-fetches the top N usable pages.
+// Candidates are ranked (answer-box link first, social hosts skipped), over-
+// sampled, fetched in parallel, then thinned to fetchTop usable results.
 func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 15000
 	}
+	if fetchTop <= 0 {
+		fetchTop = 1
+	}
 
-	searchOutput, fetchURLs, err := webSearchWithURLs(ctx, query, count)
+	searchOutput, organic, answerLink, err := webSearchWithURLs(ctx, query, count)
 	if err != nil {
 		return "", err
 	}
@@ -336,48 +340,95 @@ func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 	sb.WriteString(searchOutput)
 	sb.WriteString("\n</search_results>\n\n")
 
-	fetchURLs = selectFetchURLs(fetchURLs, fetchTop)
-	if len(fetchURLs) == 0 {
+	poolSize := fetchCandidatePoolSize(count, fetchTop)
+	candidates := rankFetchCandidates(answerLink, organic, poolSize)
+	if len(candidates) == 0 {
 		sb.WriteString("\n[Note: fetch requested but no fetchable URLs (provider=duckduckgo or filtered). " +
 			"search+fetch needs Serper/Brave organic results; use web(url=...) for specific pages.]\n")
 		return sb.String(), nil
 	}
 
-	// Parallel fetch: fan-out to goroutines, collect in order.
-	type fetchResult struct {
-		content string
-		err     error
+	perCandidateChars := maxChars / fetchTop
+	if perCandidateChars <= 0 {
+		perCandidateChars = maxChars
 	}
-	perResultChars := maxChars / len(fetchURLs)
-	results := make([]fetchResult, len(fetchURLs))
+
+	results := make([]searchFetchOutcome, len(candidates))
 	var wg sync.WaitGroup
-	for i := range fetchURLs {
+	for i := range candidates {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			c, e := webFetchURL(ctx, cache, localAI, spill, fetchURLs[idx], perResultChars)
-			results[idx] = fetchResult{content: c, err: e}
+			c, e := webFetchURL(ctx, cache, localAI, spill, candidates[idx], perCandidateChars)
+			results[idx] = searchFetchOutcome{content: c, err: e}
 		}(i)
 	}
 	wg.Wait()
 
-	for i := range fetchURLs {
-		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, fetchURLs[i])
-		if results[i].err != nil {
-			fmt.Fprintf(&sb, "Fetch failed: %s\n", results[i].err.Error())
-		} else {
-			sb.WriteString(results[i].content)
-		}
+	selected := selectUsableFetches(candidates, results, fetchTop)
+	if len(selected) == 0 {
+		sb.WriteString(fmt.Sprintf(
+			"\n[Note: filled 0 of %d; skipped thin/failed. Try web(url=...) on a specific result.]\n",
+			fetchTop))
+		return sb.String(), nil
+	}
+	if len(selected) < fetchTop {
+		fmt.Fprintf(&sb, "\n[Note: filled %d of %d; skipped thin/failed]\n\n", len(selected), fetchTop)
+	}
+
+	finalChars := maxChars / len(selected)
+	if finalChars <= 0 {
+		finalChars = maxChars
+	}
+	for i, item := range selected {
+		fmt.Fprintf(&sb, "<fetched index=\"%d\" url=\"%s\">\n", i+1, item.url)
+		sb.WriteString(applyTruncation(item.content, finalChars))
 		sb.WriteString("\n</fetched>\n\n")
 	}
 
 	return sb.String(), nil
 }
 
-// selectFetchURLs picks up to limit auto-fetch candidates: drops empty/javascript
-// URLs, obvious non-document media, and duplicate hosts (first wins). PDF and
-// Office URLs stay — liteparse handles them on the fetch path.
-func selectFetchURLs(urls []string, limit int) []string {
+type searchFetchOutcome struct {
+	content string
+	err     error
+}
+
+type fetchedPage struct {
+	url     string
+	content string
+}
+
+func fetchCandidatePoolSize(count, fetchTop int) int {
+	pool := fetchTop + 2
+	if pool > 5 {
+		pool = 5
+	}
+	if count > 0 && pool > count {
+		pool = count
+	}
+	if pool < fetchTop {
+		pool = fetchTop
+	}
+	return pool
+}
+
+// rankFetchCandidates orders answer-box link first, then organic URLs, applying
+// denylist / media / host-dedupe filters. limit caps the returned pool.
+func rankFetchCandidates(answerLink string, organic []searchResult, limit int) []string {
+	ordered := make([]string, 0, 1+len(organic))
+	if link := strings.TrimSpace(answerLink); link != "" {
+		ordered = append(ordered, link)
+	}
+	for _, r := range organic {
+		ordered = append(ordered, r.URL)
+	}
+	return filterFetchCandidates(ordered, limit)
+}
+
+// filterFetchCandidates drops empty/javascript/media/denied-host URLs and
+// duplicate hosts (first wins). PDF and Office stay for liteparse.
+func filterFetchCandidates(urls []string, limit int) []string {
 	if limit <= 0 {
 		return nil
 	}
@@ -392,7 +443,7 @@ func selectFetchURLs(urls []string, limit int) []string {
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 			continue
 		}
-		if isNonDocumentMediaURL(parsed) {
+		if isNonDocumentMediaURL(parsed) || isDeniedFetchHost(parsed.Host) {
 			continue
 		}
 		host := strings.ToLower(parsed.Host)
@@ -408,6 +459,42 @@ func selectFetchURLs(urls []string, limit int) []string {
 	return out
 }
 
+// selectFetchURLs is the legacy entry used by tests; it filters without an
+// answer-box link. Prefer rankFetchCandidates for search+fetch.
+func selectFetchURLs(urls []string, limit int) []string {
+	return filterFetchCandidates(urls, limit)
+}
+
+// Social/aggregator hosts rarely yield article body for research; skip them
+// so fetchTop budget goes to document-like pages. YouTube is kept (transcript).
+var fetchHostDenyExact = map[string]struct{}{
+	"facebook.com": {}, "fb.com": {}, "instagram.com": {},
+	"tiktok.com": {}, "x.com": {}, "twitter.com": {},
+	"reddit.com": {}, "quora.com": {},
+}
+
+var fetchHostDenySuffix = []string{
+	".facebook.com", ".fb.com", ".instagram.com",
+	".pinterest.com", ".pinterest.co.kr", ".tiktok.com",
+	".x.com", ".twitter.com", ".reddit.com", ".quora.com",
+}
+
+func isDeniedFetchHost(host string) bool {
+	host = strings.ToLower(strings.TrimPrefix(host, "www."))
+	if _, ok := fetchHostDenyExact[host]; ok {
+		return true
+	}
+	if strings.HasPrefix(host, "pinterest.") {
+		return true
+	}
+	for _, suf := range fetchHostDenySuffix {
+		if strings.HasSuffix(host, suf) {
+			return true
+		}
+	}
+	return false
+}
+
 var nonDocumentMediaExt = map[string]struct{}{
 	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {}, ".svg": {}, ".ico": {},
 	".mp4": {}, ".webm": {}, ".mov": {}, ".avi": {}, ".mkv": {},
@@ -418,4 +505,65 @@ func isNonDocumentMediaURL(u *url.URL) bool {
 	ext := strings.ToLower(path.Ext(u.Path))
 	_, ok := nonDocumentMediaExt[ext]
 	return ok
+}
+
+// selectUsableFetches keeps up to fetchTop pages that are not errors/thin SPA
+// shells, preserving original candidate order.
+func selectUsableFetches(candidates []string, results []searchFetchOutcome, fetchTop int) []fetchedPage {
+	out := make([]fetchedPage, 0, fetchTop)
+	for i := range candidates {
+		if i >= len(results) || len(out) >= fetchTop {
+			break
+		}
+		if results[i].err != nil {
+			continue
+		}
+		content := results[i].content
+		if !isUsableFetchContent(content) {
+			continue
+		}
+		out = append(out, fetchedPage{url: candidates[i], content: content})
+	}
+	return out
+}
+
+const usableFetchMinChars = 400 // aligned with thinContentThreshold
+
+func isUsableFetchContent(content string) bool {
+	if content == "" || strings.Contains(content, "<error>") {
+		return false
+	}
+	signals := fetchResultSignals(content)
+	thin := false
+	for _, s := range []string{"js_required", "empty_body", "low_content_yield"} {
+		if strings.Contains(signals, s) {
+			thin = true
+			break
+		}
+	}
+	if !thin {
+		return true
+	}
+	return len(strings.TrimSpace(fetchResultBody(content))) >= usableFetchMinChars
+}
+
+func fetchResultSignals(content string) string {
+	const prefix = "Signals: "
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return line[len(prefix):]
+		}
+	}
+	return ""
+}
+
+func fetchResultBody(content string) string {
+	start := strings.Index(content, "<content>\n")
+	if start < 0 {
+		return ""
+	}
+	body := content[start+len("<content>\n"):]
+	body = strings.TrimSuffix(body, "\n</content>")
+	body = strings.TrimSuffix(body, "</content>")
+	return body
 }

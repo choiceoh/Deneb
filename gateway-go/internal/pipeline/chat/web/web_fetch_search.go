@@ -55,26 +55,27 @@ func webSearch(ctx context.Context, query string, count int) (string, error) {
 	return duckDuckGoSearchFn(ctx, query)
 }
 
-// webSearchWithURLs searches and returns both formatted output and fetchable URLs.
-// Used by search+fetch mode. Same Serper→Brave→DuckDuckGo fallback as webSearch;
-// DuckDuckGo Instant Answer has no reliable organic URLs, so urls may be empty.
-func webSearchWithURLs(ctx context.Context, query string, count int) (output string, urls []string, err error) {
+// webSearchWithURLs searches and returns formatted output, organic results, and
+// an optional Serper answer-box link for fetch ranking. Same Serper→Brave→
+// DuckDuckGo fallback as webSearch; DuckDuckGo Instant Answer has no reliable
+// organic URLs, so results may be empty.
+func webSearchWithURLs(ctx context.Context, query string, count int) (output string, results []searchResult, answerLink string, err error) {
 	if key := serperAPIKey(); key != "" {
-		results, answerBox, err := serperSearchRawFn(ctx, key, query, count)
+		organic, answerBox, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
-			return formatSerperResults(results, answerBox), searchResultURLs(results), nil
+			return formatSerperResults(organic, answerBox), organic, strings.TrimSpace(answerBox.Link), nil
 		}
 		slog.Info("web search fallback", "from", "serper", "to", nextSearchProvider("serper"), "error", err)
 	}
 	if key := braveAPIKey(); key != "" {
-		results, err := braveSearchRawFn(ctx, key, query, count)
+		organic, err := braveSearchRawFn(ctx, key, query, count)
 		if err == nil {
-			return formatSearchResults(results), searchResultURLs(results), nil
+			return formatSearchResults(organic), organic, "", nil
 		}
 		slog.Info("web search fallback", "from", "brave", "to", "duckduckgo", "error", err)
 	}
 	result, err := duckDuckGoSearchFn(ctx, query)
-	return result, nil, err
+	return result, nil, "", err
 }
 
 // nextSearchProvider names the provider webSearch will try after `from` fails,
@@ -89,14 +90,6 @@ func nextSearchProvider(from string) string {
 	default:
 		return "duckduckgo"
 	}
-}
-
-func searchResultURLs(results []searchResult) []string {
-	urls := make([]string, 0, len(results))
-	for _, r := range results {
-		urls = append(urls, r.URL)
-	}
-	return urls
 }
 
 func braveAPIKey() string {
@@ -121,6 +114,37 @@ func serperAPIKey() string {
 type serperRequest struct {
 	Q   string `json:"q"`
 	Num int    `json:"num,omitempty"`
+	GL  string `json:"gl,omitempty"`
+	HL  string `json:"hl,omitempty"`
+}
+
+// buildSerperRequest sets Korean locale when the query contains Hangul.
+// ASCII-only queries keep global defaults (no gl/hl).
+func buildSerperRequest(query string, count int) serperRequest {
+	if count <= 0 {
+		count = 5
+	}
+	req := serperRequest{Q: query, Num: count}
+	if queryHasHangul(query) {
+		req.GL = "kr"
+		req.HL = "ko"
+	}
+	return req
+}
+
+func queryHasHangul(s string) bool {
+	for _, r := range s {
+		if r >= 0xAC00 && r <= 0xD7A3 { // Hangul syllables
+			return true
+		}
+		if r >= 0x1100 && r <= 0x11FF { // Hangul Jamo
+			return true
+		}
+		if r >= 0x3130 && r <= 0x318F { // Hangul Compatibility Jamo
+			return true
+		}
+	}
+	return false
 }
 
 type serperAnswerBox struct {
@@ -138,11 +162,7 @@ type serperResponse struct {
 // serperSearchRaw performs a POST /search request against Serper and returns
 // the parsed organic results plus the answer box (which may be empty).
 func serperSearchRaw(ctx context.Context, apiKey, query string, count int) ([]searchResult, serperAnswerBox, error) {
-	if count <= 0 {
-		count = 5
-	}
-	reqBody := serperRequest{Q: query, Num: count}
-	body, err := json.Marshal(reqBody)
+	body, err := json.Marshal(buildSerperRequest(query, count))
 	if err != nil {
 		return nil, serperAnswerBox{}, fmt.Errorf("marshal serper request: %w", err)
 	}
@@ -517,12 +537,16 @@ func webParallelSearchWithType(ctx context.Context, queries []string, searchType
 
 // serperTypedSearch calls a Serper specialised endpoint and formats the response.
 func serperTypedSearch(ctx context.Context, apiKey, endpoint, searchType, query string, count int) (string, error) {
-	if count <= 0 {
-		count = 5
-	}
+	payload := buildSerperRequest(query, count)
 	reqBody := map[string]any{
-		"q":   query,
-		"num": count,
+		"q":   payload.Q,
+		"num": payload.Num,
+	}
+	if payload.GL != "" {
+		reqBody["gl"] = payload.GL
+	}
+	if payload.HL != "" {
+		reqBody["hl"] = payload.HL
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
