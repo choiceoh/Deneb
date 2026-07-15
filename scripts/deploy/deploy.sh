@@ -307,6 +307,25 @@ if [[ -n "$DEPLOY_REMOTE" ]]; then
     exit 0
 fi
 
+# Refresh the CodeGraph index so the runtime agent's self-inspection tools
+# (codegraph_* via DENEB_MCP_SERVERS) map the code we're about to run. Only
+# meaningful on the in-place topology, where $PROD_DIR is the gateway host's
+# own checkout — so it lives here, past the remote-topology exit. Runs before
+# the restart: the fresh MCP child then opens an up-to-date index (the old,
+# --no-watch child is idle and never writes, so a concurrent sync is safe).
+#
+# Fully soft: gated on codegraph being installed (operator/self-provisioned),
+# and never allowed to fail the deploy — a broken index is a degraded
+# self-inspection surface, not a reason to block production. AST-only, seconds.
+if command -v codegraph >/dev/null 2>&1; then
+    echo "==> codegraph index refresh"
+    if [[ -d .codegraph ]]; then
+        codegraph sync . || echo "    codegraph sync failed (non-fatal); serving prior index"
+    else
+        codegraph init . || echo "    codegraph init failed (non-fatal); self-inspection tools will be absent"
+    fi
+fi
+
 case "$RESTART_MODE" in
     systemd)
         restart_with_systemd
