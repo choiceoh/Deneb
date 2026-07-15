@@ -15,9 +15,9 @@
 //   - a work-feed card (SourceMeetingReport, feed-only doctrine).
 //
 // Ordering with AutoFlow mails: both paths may cover the same meeting. The
-// mail path stays untouched (it is the fallback when MCP auth lapses); this
-// service is the deep, meeting-shaped one. Dedup of the mail-side card is a
-// possible follow-up, deliberately not attempted here.
+// mail path stays the auth-fallback; this service is the deep, meeting-shaped
+// one. Work-feed near-dup across mail_report↔meeting_report collapses the
+// weaker second card (workfeed.AppendIfNew).
 //
 // First run seeds a baseline: every recording that exists before the service
 // first ticks is marked seen WITHOUT analysis — months of backlog (and
@@ -37,6 +37,7 @@ import (
 	"unicode/utf8"
 
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -102,7 +103,9 @@ type plaudRecordingsState struct {
 	// Seen maps recording ID → processed-at unix millis.
 	Seen map[string]int64 `json:"seen"`
 	// LastAuthNotify throttles the "token expired" operator card.
-	LastAuthNotify int64 `json:"lastAuthNotify,omitempty"`
+	Failures             map[string]int `json:"failures,omitempty"`
+	LastAuthNotify       int64          `json:"lastAuthNotify,omitempty"`
+	LastQuarantineNotify int64          `json:"lastQuarantineNotify,omitempty"`
 }
 
 // plaudRecordingsService polls Plaud via the chat ToolRegistry and lands
@@ -131,6 +134,8 @@ type plaudRecordingsService struct {
 	// projectEntities loads wiki-backed people/places/orgs for mentioned
 	// project 대표페이지 paths. Nil skips the project-entity block.
 	projectEntities func(paths []string) []ProjectEntityFacts
+	listCalendar    func(ctx context.Context, from, to time.Time) ([]calendar.Event, error)
+	priorMeeting    func(projectPath string) (title, body string)
 	writePage       func(relPath string, page *wiki.Page) error
 	// appendStatus prepends a dated bullet on a linked project rep page
 	// (wiki.Store.AppendProjectStatusLine; idempotent by ref).
@@ -222,6 +227,20 @@ func NewPlaudService(
 		glossary, correctionPrompt, topicsDir, projectEntities, writePage, appendStatus, deliver, statePath, logger)
 }
 
+// SetCalendarLister wires calendar overlap matching for Plaud recordings.
+func (s *plaudRecordingsService) SetCalendarLister(fn func(ctx context.Context, from, to time.Time) ([]calendar.Event, error)) {
+	if s != nil {
+		s.listCalendar = fn
+	}
+}
+
+// SetPriorMeetingLoader wires prior 회의록 continuity for synthesis.
+func (s *plaudRecordingsService) SetPriorMeetingLoader(fn func(projectPath string) (title, body string)) {
+	if s != nil {
+		s.priorMeeting = fn
+	}
+}
+
 // Start launches the periodic Plaud-recording ingest loop until ctx is cancelled.
 func (s *plaudRecordingsService) Start(ctx context.Context) {
 	if s == nil {
@@ -230,9 +249,15 @@ func (s *plaudRecordingsService) Start(ctx context.Context) {
 	safego.GoWithSlog(s.logger, "plaud-recordings", func() {
 		ticker := time.NewTicker(plaudPollInterval)
 		defer ticker.Stop()
-		// No immediate first pass: MCP tool discovery is async post-boot
-		// (mcp_external_tools.go), so the first tick would race an empty
-		// registry on every deploy and log a spurious skip.
+		// Delayed first pass: MCP discovery is async; full poll left new
+		// recordings idle ~15–30m after deploy.
+		select {
+		case <-ctx.Done():
+			s.logger.Debug("plaud recordings service stopped")
+			return
+		case <-time.After(plaudFirstTickDelay):
+			s.tick(ctx)
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -248,11 +273,7 @@ func (s *plaudRecordingsService) Start(ctx context.Context) {
 func (s *plaudRecordingsService) tick(ctx context.Context) {
 	now := s.now()
 	listCtx, cancel := context.WithTimeout(ctx, plaudToolTimeout)
-	args, _ := json.Marshal(map[string]any{
-		"date_from": now.UTC().AddDate(0, 0, -plaudListWindowDays).Format("2006-01-02"),
-		"date_to":   now.UTC().Format("2006-01-02"),
-	})
-	out, err := s.execTool(listCtx, plaudListTool, args)
+	out, err := s.listRecordings(listCtx, now)
 	cancel()
 	if err != nil {
 		s.handleToolError(err)
@@ -274,12 +295,17 @@ func (s *plaudRecordingsService) tick(ctx context.Context) {
 			return
 		}
 		if err := s.processRecording(ctx, f, now); err != nil {
-			// Leave unseen: transient failures (LLM/tool timeouts) retry next
-			// tick. Persistent poison is bounded by plaudMaxPerTick.
+			n := s.bumpFailure(f.ID)
 			s.logger.Error("plaud recordings: analysis failed (will retry)",
-				"id", f.ID, "name", f.Name, "error", err)
+				"id", f.ID, "name", f.Name, "failures", n, "error", err)
+			if n >= plaudMaxFailures {
+				s.markSeen(f.ID, s.now())
+				s.clearFailure(f.ID)
+				s.notifyQuarantineOnce(f)
+			}
 			continue
 		}
+		s.clearFailure(f.ID)
 		s.markSeen(f.ID, s.now())
 	}
 	s.pruneState(now)
@@ -328,7 +354,7 @@ func (s *plaudRecordingsService) processRecording(ctx context.Context, f plaudFi
 	if err != nil {
 		return fmt.Errorf("synthesis: %w", err)
 	}
-	report, related := splitRelatedProjects(report, cands)
+	report, related := relatedProjectsOrFallback(report, cands, f.Name, transcript)
 
 	if s.topicsDir != "" {
 		if n, perr := PromotePlaudCorrections(s.topicsDir, ExtractReportCorrectionPairs(report), f.ID); perr != nil {
@@ -345,8 +371,32 @@ func (s *plaudRecordingsService) processRecording(ctx context.Context, f plaudFi
 			project = name
 		}
 	}
+	spill := writeTranscriptSpill(s.statePath, f.ID, transcript)
+	var calEv *calendar.Event
+	if s.listCalendar != nil && !f.StartAt.IsZero() {
+		from, to := f.StartAt.Add(-plaudCalendarMatchWindow), f.StartAt.Add(f.Duration).Add(plaudCalendarMatchWindow)
+		if evs, cerr := s.listCalendar(ctx, from, to); cerr != nil {
+			s.logger.Debug("plaud recordings: calendar list failed", "error", cerr)
+		} else {
+			calEv = matchCalendarEvent(f, evs)
+		}
+	}
 	pagePath := wiki.MeetingPagePath(project, meetingFilename(f))
 	page := buildMeetingPage(f, report, related, transcript, now, s.displayLoc)
+	if due := extractEarliestDue(report); due != "" {
+		page.Meta.Due = due
+	}
+	if spill != "" {
+		page.Body = strings.TrimRight(page.Body, "\n") + "\n\n> 전문 전사 spill: `" + spill + "`\n"
+	}
+	if calEv != nil {
+		page.Body = strings.TrimRight(page.Body, "\n") + fmt.Sprintf(
+			"\n\n> 캘린더 연결: %s (`%s`)\n", strings.TrimSpace(calEv.Summary), calEv.ID,
+		)
+		if calEv.ID != "" {
+			page.Meta.Related = append(page.Meta.Related, "calendar:"+calEv.ID)
+		}
+	}
 	if err := s.writePage(pagePath, page); err != nil {
 		return fmt.Errorf("wiki write: %w", err)
 	}
@@ -412,8 +462,16 @@ func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile
 			b.WriteString("\n\n---\n\n")
 		}
 	}
-	var entityFacts []ProjectEntityFacts
 	mentioned := RankMentionedProjects(f.Name, transcript, cands, plaudMaxMentionedProjects)
+	if s.priorMeeting != nil && len(mentioned) > 0 {
+		if title, body := s.priorMeeting(mentioned[0].Path); strings.TrimSpace(body) != "" || strings.TrimSpace(title) != "" {
+			if blk := formatPriorMeetingBlock(title, body); blk != "" {
+				b.WriteString(blk)
+				b.WriteString("\n\n---\n\n")
+			}
+		}
+	}
+	var entityFacts []ProjectEntityFacts
 	if s.projectEntities != nil && len(mentioned) > 0 {
 		paths := make([]string, 0, len(mentioned))
 		for _, m := range mentioned {
@@ -544,6 +602,64 @@ func (s *plaudRecordingsService) notifyAuthExpiredOnce() {
 	}
 }
 
+func (s *plaudRecordingsService) listRecordings(ctx context.Context, now time.Time) (string, error) {
+	args, _ := json.Marshal(map[string]any{
+		"date_from": now.UTC().AddDate(0, 0, -plaudListWindowDays).Format("2006-01-02"),
+		"date_to":   now.UTC().Format("2006-01-02"),
+	})
+	out, err := s.execTool(ctx, plaudListTool, args)
+	if err == nil {
+		return out, nil
+	}
+	if !strings.Contains(err.Error(), "unknown tool") {
+		return "", err
+	}
+	out, err2 := s.execTool(ctx, plaudListToolAlt, args)
+	if err2 != nil {
+		return "", err
+	}
+	s.logger.Warn("plaud recordings: list_files missing; using search_recordings")
+	return out, nil
+}
+
+func (s *plaudRecordingsService) bumpFailure(id string) int {
+	s.mu.Lock()
+	if s.state.Failures == nil {
+		s.state.Failures = map[string]int{}
+	}
+	s.state.Failures[id]++
+	n := s.state.Failures[id]
+	s.mu.Unlock()
+	s.saveState()
+	return n
+}
+
+func (s *plaudRecordingsService) clearFailure(id string) {
+	s.mu.Lock()
+	if s.state.Failures != nil {
+		delete(s.state.Failures, id)
+	}
+	s.mu.Unlock()
+	s.saveState()
+}
+
+func (s *plaudRecordingsService) notifyQuarantineOnce(f plaudFile) {
+	now := s.now()
+	s.mu.Lock()
+	last := time.UnixMilli(s.state.LastQuarantineNotify)
+	if now.Sub(last) < plaudAuthNotifyEvery {
+		s.mu.Unlock()
+		return
+	}
+	s.state.LastQuarantineNotify = now.UnixMilli()
+	s.mu.Unlock()
+	s.saveState()
+	msg := fmt.Sprintf("🎙 Plaud 녹음 분석이 %d회 실패해 건너뜁니다: %s (`%s`)", plaudMaxFailures, strings.TrimSpace(f.Name), f.ID)
+	if _, err := s.deliver(msg); err != nil {
+		s.logger.Warn("plaud recordings: quarantine notice delivery failed", "error", err)
+	}
+}
+
 // --- state ------------------------------------------------------------------
 
 func (s *plaudRecordingsService) baselined() bool {
@@ -613,6 +729,9 @@ func (s *plaudRecordingsService) loadState() {
 	}
 	if st.Seen == nil {
 		st.Seen = map[string]int64{}
+	}
+	if st.Failures == nil {
+		st.Failures = map[string]int{}
 	}
 	s.mu.Lock()
 	s.state = st

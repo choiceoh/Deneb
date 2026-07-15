@@ -88,6 +88,30 @@ prefixed `📥 공유: …` and the agent triages it like any other message. The
 no dedicated capture RPC for text; it rides the ordinary `miniapp.chat.send`
 path.
 
+
+## Plaud meeting recordings
+
+Autonomous ingest (`gateway-go/internal/runtime/meeting/plaud_recordings.go`) polls
+the Plaud MCP tools, synthesizes a Korean meeting report, writes a wiki 회의록
+page, and posts a `meeting_report` work-feed card.
+
+Operator assets under the workspace `topics/` directory:
+
+| File | Role |
+|---|---|
+| `plaud-glossary.md` | Canonical terms + 원문→교정 pairs (sliced per meeting) |
+| `plaud-correction.md` | ASR correction instructions |
+| `plaud-do-not-correct.md` | Forbidden false corrections |
+| `plaud-promote-pending.json` | Sighting counters before auto-promote (≥2 recordings) |
+
+ASR hotwords for VibeVoice also merge glossary `From`/`To` terms (with wiki +
+contacts). Disable the worker with `DENEB_PLAUD_RECORDINGS_DISABLE=1`. Token
+expiry posts a throttled feed card; poison recordings (3 failed analyses) are
+quarantined the same way.
+
+Templates for a fresh workspace live in
+`docs/reference/templates/topics/plaud-*.md`.
+
 ## Voice Input
 
 The drawer's `voice`, and the `deneb://voice` home-icon shortcut, fire the
