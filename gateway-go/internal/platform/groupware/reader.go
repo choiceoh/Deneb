@@ -32,6 +32,11 @@ const (
 	AreaApproval Area = "approval" // 전자결재
 	AreaBoard    Area = "board"    // 게시판
 	AreaSales    Area = "sales"    // 영업 매출마감
+	AreaStock    Area = "stock"    // 현재고
+	AreaPO       Area = "po"       // 발주현황
+	AreaReceive  Area = "receive"  // 입고현황
+	AreaShip     Area = "ship"     // 출고현황
+	AreaPrice    Area = "price"    // 품목단가
 )
 
 // Action is a read-only operation against an Area.
@@ -90,7 +95,7 @@ func FromEnv() (Config, bool) {
 func StatusLine(cfg Config, ok bool) string {
 	if !ok || strings.TrimSpace(cfg.User) == "" || cfg.Password == "" {
 		return "그룹웨어 리더: 꺼짐 (DENEB_GROUPWARE_USER / DENEB_GROUPWARE_PASSWORD 미설정). " +
-			"srv4에 아마란스 계정을 넣으면 전자결재·게시판·매출마감을 읽을 수 있다."
+			"srv4에 아마란스 계정을 넣으면 전자결재·게시판·매출·재고·발주·입고·출고·단가를 읽을 수 있다."
 	}
 	u := strings.TrimSpace(cfg.URL)
 	if u == "" {
@@ -100,7 +105,7 @@ func StatusLine(cfg Config, ok bool) string {
 	if co == "" {
 		co = "topsolar"
 	}
-	return fmt.Sprintf("그룹웨어 리더: 설정됨 · %s · 회사=%s · 사용자=%s · 읽기 전용(전자결재·게시판·매출마감)",
+	return fmt.Sprintf("그룹웨어 리더: 설정됨 · %s · 회사=%s · 사용자=%s · 읽기 전용(전자결재·게시판·매출·재고·발주·입고·출고·단가)",
 		u, co, cfg.User)
 }
 

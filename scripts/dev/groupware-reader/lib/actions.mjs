@@ -997,3 +997,368 @@ export async function summarySales(folder = "ytd", query = "") {
   return lines.join("\n");
 }
 
+
+/** Reuse sales period resolver for date-scoped ERP lists. */
+export const resolveErpPeriod = resolveSalesPeriod;
+
+function rowsOf(json) {
+  const rd = json?.resultData;
+  if (Array.isArray(rd)) return rd;
+  if (Array.isArray(rd?.data)) return rd.data;
+  if (Array.isArray(rd?.list)) return rd.list;
+  return [];
+}
+
+function assertOk(r, label) {
+  const code = r.json?.resultCode;
+  if (code !== 0 && code !== 200) {
+    throw new Error(r.json?.resultMsg || `${label} 실패 code=${code}`);
+  }
+}
+
+function matchQuery(row, query, fields) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => String(row?.[f] ?? "").toLowerCase().includes(q));
+}
+
+function fmtQty(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "0";
+  return v.toLocaleString("ko-KR");
+}
+
+function emptyPeriodBody(period) {
+  return {
+    divCds: [],
+    deptCds: [],
+    empCds: [],
+    itemCds: [],
+    itemCdExcludes: [],
+    itemgrpCds: [],
+    lCds: [],
+    mCds: [],
+    sCds: [],
+  };
+}
+
+/** 현재고현황 — POST /purchase/pom0010/0pu00000 */
+export async function listStock(folder = "ytd", query = "", limit = 20) {
+  const period = resolveErpPeriod(folder || "ytd", "");
+  const yyyy = period.from.slice(0, 4);
+  const body = {
+    yyyy,
+    divCds: [],
+    whCds: [],
+    lcCds: [],
+    notGrpFgs: [],
+    itemCds: [],
+    itemCdExcludes: [],
+    itemgrpCds: [],
+    gayongQt: "",
+    lCds: [],
+    mCds: [],
+    sCds: [],
+    qtFgs: [],
+    acctFgs: [],
+    odrFgs: [],
+    badYns: [],
+    avabstockYns: [],
+    useYns: [],
+    lotFgs: [],
+    setitemFgs: [],
+    menuCd: "POM0010",
+    searchType: "coCd",
+  };
+  const r = await apiPost("/purchase/pom0010/0pu00000", body);
+  assertOk(r, "현재고");
+  let rows = rowsOf(r.json).filter((x) => matchQuery(x, query, ["itemCd", "itemNm", "itemDc", "itemgrpNm", "whNm", "lcNm"]));
+  rows = rows
+    .filter((x) => Number(x?.jegoQt || x?.gayongQt || 0) !== 0 || !query)
+    .sort((a, b) => Number(b.jegoQt || 0) - Number(a.jegoQt || 0));
+  const shown = rows.slice(0, Math.max(1, Math.min(limit || 20, 50)));
+  const totalQty = sumField(rows, "jegoQt");
+  const lines = [
+    "현재고 요약 (구매/자재 · Amaranth)",
+    `기준연도: ${yyyy}${query ? ` · 필터: ${query}` : ""}`,
+    `매칭 품목수: ${rows.length.toLocaleString("ko-KR")} · 재고수량합: ${fmtQty(totalQty)}`,
+    "",
+    "재고 상위:",
+  ];
+  if (!shown.length) {
+    lines.push("(결과 없음)");
+  } else {
+    shown.forEach((x, i) => {
+      const nm = x.itemNm || x.itemCd || "(품목)";
+      const wh = [x.whNm, x.lcNm].filter(Boolean).join("/");
+      const grp = x.itemgrpNm || "";
+      lines.push(
+        `${i + 1}. ${nm} · 재고 ${fmtQty(x.jegoQt)} · 가용 ${fmtQty(x.gayongQt)}${grp ? ` · ${grp}` : ""}${wh ? ` · ${wh}` : ""} · ${x.itemCd || ""}`,
+      );
+    });
+  }
+  lines.push("", "출처: POST /purchase/pom0010/0pu00000");
+  return lines.join("\n");
+}
+
+/** 발주현황 — POST /purchase/poc0030/0pu00001 */
+export async function listPurchaseOrders(folder = "ytd", query = "", limit = 20) {
+  const period = resolveErpPeriod(folder || "month", query.includes(":") || query.includes("~") ? query : "");
+  const filter = query.includes(":") || query.includes("~") ? "" : query;
+  const body = {
+    ...emptyPeriodBody(period),
+    poDtFr: period.from,
+    poDtTo: period.to,
+    poFgs: [],
+    poNb: "",
+    remarkDcFg: "",
+    remarkDc: "",
+    lotFgs: [],
+    acctFgs: [],
+    odrFgs: [],
+    trCds: [],
+    trCdExcludes: [],
+    tradeGrps: [],
+    exchCds: [],
+    plnCdFg: "",
+    plnCds: [],
+    plnsCds: [],
+    areaCds: [],
+    areaGrps: [],
+    mgmtCds: [],
+    pjtCds: [],
+    pjtgrpCds: [],
+    setitemFgs: [],
+    expireYns: [],
+    dtFg: "0",
+    dueDtFr: "",
+    dueDtTo: "",
+    useYns: [],
+    mgmNm: "",
+  };
+  const r = await apiPost("/purchase/poc0030/0pu00001", body);
+  assertOk(r, "발주현황");
+  let rows = rowsOf(r.json).filter((x) =>
+    matchQuery(x, filter, ["itemCd", "itemNm", "trNm", "poNb", "plnNm", "deptNm", "itemgrpNm"]),
+  );
+  rows = [...rows].sort((a, b) => Number(b.pohAm || b.pogAm || b.exchAm || 0) - Number(a.pohAm || a.pogAm || a.exchAm || 0));
+  const shown = rows.slice(0, Math.max(1, Math.min(limit || 20, 50)));
+  const amt = sumField(rows, "pohAm") || sumField(rows, "pogAm") || sumField(rows, "exchAm");
+  const qty = sumField(rows, "poQt");
+  const lines = [
+    "발주현황 요약 (구매/자재 · Amaranth · 공급가액 우선)",
+    `기간: ${period.label}${filter ? ` · 필터: ${filter}` : ""}`,
+    `건수: ${rows.length.toLocaleString("ko-KR")} · 발주수량합: ${fmtQty(qty)} · 금액합: ${formatWon(amt)}`,
+    "",
+    "금액 상위:",
+  ];
+  if (!shown.length) lines.push("(결과 없음)");
+  else {
+    shown.forEach((x, i) => {
+      const nm = x.itemNm || x.itemCd || "(품목)";
+      const tr = x.trNm || "";
+      const am = x.pohAm ?? x.pogAm ?? x.exchAm ?? 0;
+      lines.push(
+        `${i + 1}. ${nm} · ${formatWon(am)} · 수량 ${fmtQty(x.poQt)} · ${ymdDash(String(x.poDt || ""))}${tr ? ` · ${tr}` : ""} · ${x.poNb || ""}`,
+      );
+    });
+  }
+  lines.push("", "출처: POST /purchase/poc0030/0pu00001");
+  return lines.join("\n");
+}
+
+/** 입고현황 — POST /purchase/pof0020/0pu00002 */
+export async function listReceiving(folder = "month", query = "", limit = 20) {
+  const period = resolveErpPeriod(folder || "month", query.includes(":") || query.includes("~") ? query : "");
+  const filter = query.includes(":") || query.includes("~") ? "" : query;
+  const body = {
+    readType: "data",
+    pagingDirection: "",
+    rowCountPerPage: 5000,
+    initialPageSize: 5000,
+    markPreventRead: false,
+    currentPage: 0,
+    startRowIndex: 0,
+    currentRowCount: 5000,
+    ...emptyPeriodBody(period),
+    rcvDtFrom: period.from,
+    rcvDtTo: period.to,
+    rcvNb: "",
+    remarkDcFg: "",
+    remarkDc: "",
+    poQtFg: "",
+    negNumFg: "",
+    lotFgs: [],
+    acctFgs: [],
+    odrFgs: [],
+    trCds: [],
+    trCdExcludes: [],
+    tradeGrps: [],
+    poFgs: [],
+    mapFgs: [],
+    exchCds: [],
+    plnCdFg: "",
+    plnCds: [],
+    plnsCds: [],
+    areaCds: [],
+    areaGrps: [],
+    mgmtCds: [],
+    pjtCds: [],
+    pjtgrpCds: [],
+    vatFgs: [],
+    whCds: [],
+    lcCds: [],
+  };
+  const r = await apiPost("/purchase/pof0020/0pu00002", body);
+  assertOk(r, "입고현황");
+  let rows = rowsOf(r.json).filter((x) =>
+    matchQuery(x, filter, ["itemCd", "itemNm", "trNm", "rcvNb", "plnNm", "whNm", "itemgrpNm"]),
+  );
+  rows = [...rows].sort((a, b) => Number(b.rcvgAm || 0) - Number(a.rcvgAm || 0));
+  const shown = rows.slice(0, Math.max(1, Math.min(limit || 20, 50)));
+  const lines = [
+    "입고현황 요약 (구매/자재 · Amaranth · 공급가액)",
+    `기간: ${period.label}${filter ? ` · 필터: ${filter}` : ""}`,
+    `건수: ${rows.length.toLocaleString("ko-KR")} · 입고수량합: ${fmtQty(sumField(rows, "rcvQt"))} · 공급가액합: ${formatWon(sumField(rows, "rcvgAm"))}`,
+    "",
+    "금액 상위:",
+  ];
+  if (!shown.length) lines.push("(결과 없음)");
+  else {
+    shown.forEach((x, i) => {
+      const nm = x.itemNm || x.itemCd || "(품목)";
+      lines.push(
+        `${i + 1}. ${nm} · ${formatWon(x.rcvgAm)} · 수량 ${fmtQty(x.rcvQt)} · ${ymdDash(String(x.rcvDt || ""))}${x.trNm ? ` · ${x.trNm}` : ""}${x.whNm ? ` · ${x.whNm}` : ""}`,
+      );
+    });
+  }
+  lines.push("", "출처: POST /purchase/pof0020/0pu00002");
+  return lines.join("\n");
+}
+
+/** 출고현황 — POST /logis/blf0050/0lo00001 */
+export async function listShipments(folder = "month", query = "", limit = 20) {
+  const period = resolveErpPeriod(folder || "month", query.includes(":") || query.includes("~") ? query : "");
+  const filter = query.includes(":") || query.includes("~") ? "" : query;
+  const body = {
+    readType: "data",
+    pagingDirection: "",
+    rowCountPerPage: 5000,
+    initialPageSize: 5000,
+    markPreventRead: false,
+    currentPage: 0,
+    startRowIndex: 0,
+    currentRowCount: 5000,
+    ...emptyPeriodBody(period),
+    isuDtFrom: period.from,
+    isuDtTo: period.to,
+    isuNbFg: "",
+    isuNb: "",
+    remarkDcFg: "",
+    remarkDc: "",
+    soQtFg: "",
+    negNumYn: "",
+    lotFgs: [],
+    acctFgs: [],
+    odrFgs: [],
+    trCds: [],
+    trCdExcludes: [],
+    shipCds: [],
+    tradeGrps: [],
+    soFgs: [],
+    mapFgs: [],
+    exchCds: [],
+    plnCdFg: "",
+    plnCds: [],
+    plnsCds: [],
+    areaCds: [],
+    areaGrps: [],
+    mgmtCds: [],
+    pjtCds: [],
+    pjtgrpCds: [],
+    vatFgs: [],
+    whCds: [],
+    lcCds: [],
+    shipFgs: [],
+  };
+  const r = await apiPost("/logis/blf0050/0lo00001", body);
+  assertOk(r, "출고현황");
+  let rows = rowsOf(r.json).filter((x) =>
+    matchQuery(x, filter, ["itemCd", "itemNm", "trNm", "isuNb", "plnNm", "whNm", "itemgrpNm", "attrNm"]),
+  );
+  rows = [...rows].sort((a, b) => Number(b.isugAm || b.exchAm || 0) - Number(a.isugAm || a.exchAm || 0));
+  const shown = rows.slice(0, Math.max(1, Math.min(limit || 20, 50)));
+  const amField = rows.some((x) => x.isugAm != null) ? "isugAm" : "exchAm";
+  const lines = [
+    "출고현황 요약 (영업관리 · Amaranth · 공급가액)",
+    `기간: ${period.label}${filter ? ` · 필터: ${filter}` : ""}`,
+    `건수: ${rows.length.toLocaleString("ko-KR")} · 출고수량합: ${fmtQty(sumField(rows, "isuQt"))} · 금액합: ${formatWon(sumField(rows, amField))}`,
+    "",
+    "금액 상위:",
+  ];
+  if (!shown.length) lines.push("(결과 없음)");
+  else {
+    shown.forEach((x, i) => {
+      const nm = x.itemNm || x.attrNm || x.itemCd || "(품목)";
+      const am = x.isugAm ?? x.exchAm ?? 0;
+      lines.push(
+        `${i + 1}. ${nm} · ${formatWon(am)} · 수량 ${fmtQty(x.isuQt)} · ${ymdDash(String(x.isuDt || ""))}${x.trNm ? ` · ${x.trNm}` : ""}${x.whNm ? ` · ${x.whNm}` : ""}`,
+      );
+    });
+  }
+  lines.push("", "출처: POST /logis/blf0050/0lo00001");
+  return lines.join("\n");
+}
+
+/** 품목단가등록 — POST /logis/bsb0010/0lo00001 */
+export async function listItemPrices(folder = "", query = "", limit = 20) {
+  const body = {
+    pagingDirection: "",
+    rowCountPerPage: 2500,
+    initialPageSize: 5000,
+    markPreventRead: false,
+    currentPage: 0,
+    startRowIndex: 0,
+    currentRowCount: 5000,
+    itemCds: [],
+    useYns: [],
+    itemgrpCds: [],
+    lCds: [],
+    mCds: [],
+    sCds: [],
+    odrFgs: [],
+    acctFgs: [],
+    isTotalSelectItem: "0",
+  };
+  const r = await apiPost("/logis/bsb0010/0lo00001", body);
+  assertOk(r, "품목단가");
+  let rows = rowsOf(r.json).filter((x) =>
+    matchQuery(x, query, ["itemCd", "itemNm", "itemDc", "attrNm", "itemgrpNm"]),
+  );
+  // Prefer rows with a numeric unit price-ish field
+  const priceOf = (x) =>
+    Number(x?.purchUm || x?.stdUm || x?.staUm || x?.purchvatUm || x?.um || 0);
+  rows = [...rows].sort((a, b) => priceOf(b) - priceOf(a));
+  const shown = rows.slice(0, Math.max(1, Math.min(limit || 20, 50)));
+  const lines = [
+    "품목단가 요약 (물류공통 · Amaranth)",
+    query ? `필터: ${query}` : "필터: (전체·상위)",
+    `매칭: ${rows.length.toLocaleString("ko-KR")}건`,
+    "",
+    "단가 목록:",
+  ];
+  if (!shown.length) lines.push("(결과 없음)");
+  else {
+    shown.forEach((x, i) => {
+      const nm = x.itemNm || x.itemCd || "(품목)";
+      const um = priceOf(x);
+      const extra = [x.itemDc, x.attrNm, x.itemgrpNm].filter(Boolean).join(" · ");
+      lines.push(
+        `${i + 1}. ${nm} · 단가 ${um ? formatWon(um) : "(단가필드 없음)"}${extra ? ` · ${extra}` : ""} · ${x.itemCd || ""}`,
+      );
+    });
+  }
+  lines.push("", "출처: POST /logis/bsb0010/0lo00001");
+  return lines.join("\n");
+}
+

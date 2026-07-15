@@ -11,7 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// ToolGroupware reads Amaranth10 전자결재 / 게시판 / 매출마감 via srv4 headless login.
+// ToolGroupware reads Amaranth10 전자결재 / 게시판 / 매출·재고·발주·입고·출고·단가 via srv4 headless login.
 // Approval folders: pending(미결) · done(기결) · cc(수신참조) · total(전체결재문서) · all(순회).
 // Read-only: never approve, post, or delete. Unconfigured → calm off message.
 func ToolGroupware() toolport.ToolFunc {
@@ -49,27 +49,50 @@ func ToolGroupware() toolport.ToolFunc {
 			area = "approval"
 		}
 		switch area {
-		case "approval", "board", "sales":
+		case "approval", "board", "sales", "stock", "po", "receive", "ship", "price":
 		case "전자결재", "결재":
 			area = "approval"
 		case "게시판", "공지", "공지사항":
 			area = "board"
-		case "매출", "매출마감", "영업":
+		case "매출", "매출마감":
+			area = "sales"
+		case "재고", "현재고":
+			area = "stock"
+		case "발주", "발주현황":
+			area = "po"
+		case "입고", "입고현황":
+			area = "receive"
+		case "출고", "출고현황":
+			area = "ship"
+		case "단가", "품목단가":
+			area = "price"
+		case "영업":
+			// ambiguous legacy alias → sales (매출마감)
 			area = "sales"
 		case "":
-			return "area가 필요합니다 — approval(전자결재) · board(게시판) · sales(매출마감).", nil
+			return "area가 필요합니다 — approval|board|sales|stock|po|receive|ship|price.", nil
 		default:
-			return "", fmt.Errorf("unknown groupware area %q (approval|board|sales)", p.Area)
+			return "", fmt.Errorf("unknown groupware area %q (approval|board|sales|stock|po|receive|ship|price)", p.Area)
 		}
 
-		if area == "sales" {
+		switch area {
+		case "sales":
 			switch action {
 			case "summary", "list":
 			default:
-				return "sales는 action=summary(또는 list)만 지원합니다 — 기간은 folder=ytd|month|today|year|last_year.", nil
+				return "sales는 action=summary(또는 list)만 지원합니다 — folder=ytd|month|today|year|last_year.", nil
 			}
-		} else if action == "summary" {
-			return "summary는 area=sales(매출마감)에서만 지원합니다.", nil
+		case "stock", "po", "receive", "ship", "price":
+			if action != "list" && action != "summary" {
+				return fmt.Sprintf("%s는 action=list 만 지원합니다 (기간 folder=ytd|month|today, query=키워드).", area), nil
+			}
+			if action == "summary" {
+				action = "list"
+			}
+		default:
+			if action == "summary" {
+				return "summary는 area=sales(매출마감)에서만 지원합니다.", nil
+			}
 		}
 
 		folder, ferr := normalizeFolder(p.Folder, action, area)
@@ -109,10 +132,14 @@ func ToolGroupware() toolport.ToolFunc {
 }
 
 func normalizeFolder(raw, action, area string) (string, error) {
-	if area == "sales" {
+	switch area {
+	case "sales", "stock", "po", "receive", "ship":
 		f := strings.ToLower(strings.TrimSpace(raw))
 		switch f {
 		case "", "ytd", "올해", "연초", "올해누적":
+			if area == "receive" || area == "ship" {
+				return "month", nil
+			}
 			return "ytd", nil
 		case "month", "이번달", "당월", "월":
 			return "month", nil
@@ -123,8 +150,10 @@ func normalizeFolder(raw, action, area string) (string, error) {
 		case "last_year", "lastyear", "작년", "전년":
 			return "last_year", nil
 		default:
-			return "", fmt.Errorf("unknown sales folder %q (ytd|month|today|year|last_year)", raw)
+			return "", fmt.Errorf("unknown period folder %q (ytd|month|today|year|last_year)", raw)
 		}
+	case "price":
+		return "", nil
 	}
 	if area != "approval" {
 		return "", nil

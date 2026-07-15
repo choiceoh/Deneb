@@ -12,6 +12,7 @@ import {
   humanSize,
   selectAttachment,
   resolveSalesPeriod,
+  resolveErpPeriod,
   formatWon,
 } from "../lib/actions.mjs";
 
@@ -183,4 +184,10 @@ test("resolveSalesPeriod explicit range", () => {
 test("formatWon uses eok/man", () => {
   assert.match(formatWon(294031347655), /억/);
   assert.match(formatWon(12345), /12,345원/);
+});
+
+test("resolveErpPeriod aliases resolveSalesPeriod", () => {
+  const a = resolveSalesPeriod("month", "", new Date("2026-07-16T01:00:00+09:00"));
+  const b = resolveErpPeriod("month", "", new Date("2026-07-16T01:00:00+09:00"));
+  assert.deepEqual(a, b);
 });

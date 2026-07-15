@@ -9,7 +9,9 @@
  *   area=approval  folder=pending|done|cc|total|all
  *   area=board
  *   area=sales     action=summary|list  folder=ytd|month|today|year|last_year
- *                  query=YYYYMMDD:YYYYMMDD optional explicit range
+ *   area=stock|po|receive|ship|price  action=list
+ *                  folder=ytd|month|today|… (stock uses year; price ignores)
+ *                  query=keyword or YYYYMMDD:YYYYMMDD
  *   action=act (approval only) — mutate; used by work-feed chips, not chat tool
  *
  * Env:
@@ -36,6 +38,11 @@ import {
   readApprovalAttachment,
   readBoard,
   summarySales,
+  listStock,
+  listPurchaseOrders,
+  listReceiving,
+  listShipments,
+  listItemPrices,
 } from "./lib/actions.mjs";
 
 function argValue(flag) {
@@ -84,10 +91,14 @@ async function main() {
     return;
   }
 
+  const erpAreas = ["sales", "stock", "po", "receive", "ship", "price"];
   if (area === "sales" && (action === "read" || action === "")) action = "summary";
-  if (!["approval", "board", "sales"].includes(area)) die(`unknown --area ${area}`);
+  if (erpAreas.includes(area) && area !== "sales" && (action === "read" || action === "")) action = "list";
+  if (!["approval", "board", ...erpAreas].includes(area)) die(`unknown --area ${area}`);
   if (area === "sales") {
     if (!["summary", "list"].includes(action)) die(`sales action must be summary|list (got ${action})`);
+  } else if (erpAreas.includes(area)) {
+    if (action !== "list" && !(area === "sales")) die(`${area} action must be list (got ${action})`);
   } else if (!["list", "read", "attachment", "act"].includes(action)) {
     die(`unknown --action ${action}`);
   }
@@ -98,10 +109,24 @@ async function main() {
     die(`unknown --folder ${folder}`);
   }
 
+  const erpFolder = ["all", "pending", "done", "cc", "total"].includes(folder)
+    ? (area === "receive" || area === "ship" ? "month" : "ytd")
+    : folder;
+
   const t0 = Date.now();
   let out;
   if (area === "sales") {
-    out = await summarySales(folder === "all" || folder === "pending" ? "ytd" : folder, query);
+    out = await summarySales(erpFolder, query);
+  } else if (area === "stock") {
+    out = await listStock(erpFolder, query, limit);
+  } else if (area === "po") {
+    out = await listPurchaseOrders(erpFolder, query, limit);
+  } else if (area === "receive") {
+    out = await listReceiving(erpFolder, query, limit);
+  } else if (area === "ship") {
+    out = await listShipments(erpFolder, query, limit);
+  } else if (area === "price") {
+    out = await listItemPrices(erpFolder, query, limit);
   } else if (action === "act") {
     out = await actApproval(docId || query, decision, comment);
   } else if (action === "attachment") {

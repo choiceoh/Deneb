@@ -188,12 +188,18 @@ Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies
 
 | Today | ERP |
 |-------|-----|
-| Chat tool `groupware` areas | approval, board, sales (매출마감 summary) |
-| Reader adapters | `lib/actions.mjs` — eap/board + `summarySales` |
-| Other ERP lists | Still unwired — call via `apiPost` / future areas |
+| Chat tool `groupware` areas | approval, board, sales, stock, po, receive, ship, price |
+| Reader adapters | `summarySales`, `listStock`, `listPurchaseOrders`, `listReceiving`, `listShipments`, `listItemPrices` |
+| Still unwired | 미수채권, 매입마감, 수금, 지출결의 list body, … |
 
-Sales usage: `groupware(area="sales", action="summary", folder="ytd"|"month"|"today"|"year"|"last_year")`.
-Supply amount (`clsgAm`) only in the headline. Keep mutate off the chat tool.
+Usage examples:
+
+- sales: `groupware(area="sales", action="summary", folder="ytd")`
+- stock: `groupware(area="stock", action="list", query="모듈")`
+- po / receive / ship: `folder=month|ytd`, optional `query` keyword
+- price: `groupware(area="price", action="list", query="인버터")`
+
+Amounts use supply fields where available (`clsgAm` / `rcvgAm` / `pohAm` / `isugAm`). Keep mutate off the chat tool.
 
 ## Explicit non-goals
 
