@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
@@ -49,23 +50,31 @@ const codegraphNodeMiss = "not found in the codebase"
 var codegraphSymbolRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{2,}$`)
 
 // tuneCodegraphTool wraps one codegraph tool's call with two Deneb-side tunings:
-//   - reroute: a single-symbol codegraph_explore → codegraph_node (precision);
-//   - enrich: append the nearest folder's CLAUDE.md subtree map to explore/node
-//     results, so the runtime agent gets the folder's INTENT (role/rules/gotchas)
-//     alongside codegraph's STRUCTURE. The runtime agent's system prompt carries
-//     only the root CLAUDE.md, never these subtree maps, so this is the moment it
-//     otherwise never sees them. Every other codegraph tool is passed through.
+//   - reroute: a single-symbol explore → node (precision);
+//   - enrich: append the nearest folder's CLAUDE.md map to explore/node results,
+//     so the runtime agent gets the folder's INTENT (role/rules/gotchas) alongside
+//     codegraph's STRUCTURE. The runtime prompt loads NEITHER root nor subtree
+//     CLAUDE.md (context_files.go), so this is the only place the agent sees them.
+//
+// Keyed on the tool's KIND, not its exact remote name: codegraph self-prefixes
+// (codegraph_explore/codegraph_node), but a server that advertises the plain
+// explore/node still gets tuned. Every other codegraph tool is passed through.
 func tuneCodegraphTool(
 	remote string,
 	base toolport.ToolFunc,
 	call func(ctx context.Context, name string, args json.RawMessage) (string, error),
 ) toolport.ToolFunc {
+	kind := strings.TrimPrefix(remote, "codegraph_")
 	inner := base
-	if remote == codegraphExploreTool {
-		inner = exploreRerouteFn(base, call)
+	if kind == "explore" {
+		// Derive the sibling node tool from this remote's own prefix scheme
+		// (codegraph_explore→codegraph_node, explore→node) so the reroute dials
+		// the tool the same server actually advertises.
+		nodeTarget := strings.TrimSuffix(remote, "explore") + "node"
+		inner = exploreRerouteFn(base, call, nodeTarget)
 	}
 	// Only the source-returning tools carry file paths worth mapping to a folder.
-	if remote != codegraphExploreTool && remote != codegraphNodeTool {
+	if kind != "explore" && kind != "node" {
 		return inner
 	}
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -81,10 +90,12 @@ func tuneCodegraphTool(
 	}
 }
 
-// exploreRerouteFn reroutes a single specific-symbol explore to node.
+// exploreRerouteFn reroutes a single specific-symbol explore to node (nodeTarget
+// is the sibling node tool's remote name).
 func exploreRerouteFn(
 	base toolport.ToolFunc,
 	call func(ctx context.Context, name string, args json.RawMessage) (string, error),
+	nodeTarget string,
 ) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		sym, ok := singleSymbolExploreQuery(input)
@@ -95,7 +106,7 @@ func exploreRerouteFn(
 		if err != nil {
 			return base(ctx, input)
 		}
-		out, err := call(ctx, codegraphNodeTool, nodeArgs)
+		out, err := call(ctx, nodeTarget, nodeArgs)
 		if err != nil || strings.TrimSpace(out) == "" || strings.Contains(out, codegraphNodeMiss) {
 			return base(ctx, input) // not a known symbol → the caller meant to explore
 		}
@@ -164,11 +175,14 @@ func enrichWithFolderDocs(out, root string, readFile func(string) ([]byte, error
 	type doc struct{ rel, content string }
 	var docs []doc
 	for _, m := range sourcePathRe.FindAllString(out, -1) {
-		if !strings.Contains(m, "/") || seenPath[m] {
-			continue // need a folder to map; skip bare basenames + repeats
+		// Need a folder to map; skip bare basenames + repeats. Reject any `..`:
+		// the path comes from external tool output, and a `..` segment could
+		// escape root once joined (path traversal). Fail-open — just skip it.
+		if !strings.Contains(m, "/") || strings.Contains(m, "..") || seenPath[m] {
+			continue
 		}
 		seenPath[m] = true
-		rel, content := nearestSubtreeClaudeMd(path.Dir(m), root, readFile)
+		rel, content := nearestClaudeMd(path.Dir(m), root, readFile)
 		if rel == "" || seenDoc[rel] {
 			continue
 		}
@@ -183,7 +197,7 @@ func enrichWithFolderDocs(out, root string, readFile func(string) ([]byte, error
 	}
 	var b strings.Builder
 	b.WriteString(out)
-	b.WriteString("\n\n## 폴더 맥락 (CLAUDE.md 서브트리 맵)\n")
+	b.WriteString("\n\n## 폴더 맥락 (CLAUDE.md)\n")
 	b.WriteString("검색 결과가 속한 폴더의 설명 — 이 코드를 다룰 때의 역할·규칙·함정이다.\n")
 	for _, d := range docs {
 		fmt.Fprintf(&b, "\n### %s\n%s\n", d.rel, capHead(d.content, perFolderDocCap))
@@ -191,29 +205,44 @@ func enrichWithFolderDocs(out, root string, readFile func(string) ([]byte, error
 	return b.String()
 }
 
-// nearestSubtreeClaudeMd walks up from a repo-relative dir to the closest
-// CLAUDE.md, WITHOUT reaching the repo root (root's CLAUDE.md is already in the
-// system prompt). Returns the repo-relative map path + its content, or "","".
-func nearestSubtreeClaudeMd(dir, root string, readFile func(string) ([]byte, error)) (string, string) {
-	for dir != "." && dir != "/" && dir != "" {
-		rel := dir + "/CLAUDE.md"
+// nearestClaudeMd walks up from a repo-relative dir to the closest CLAUDE.md,
+// falling back to the repo-root CLAUDE.md as a last resort — the runtime prompt
+// loads none of these (context_files.go), so root is the only applicable map for
+// areas without a subtree one (scripts/, top-level files). Returns the
+// repo-relative map path + its content, or "","" if even root has none.
+func nearestClaudeMd(dir, root string, readFile func(string) ([]byte, error)) (string, string) {
+	for {
+		rel := "CLAUDE.md"
+		atRoot := dir == "." || dir == "/" || dir == ""
+		if !atRoot {
+			rel = dir + "/CLAUDE.md"
+		}
 		if b, err := readFile(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
 			return rel, string(b)
 		}
+		if atRoot {
+			return "", ""
+		}
 		dir = path.Dir(dir)
 	}
-	return "", ""
 }
 
-// capHead truncates to n bytes on a line boundary (keeping whole lines), noting
-// the cut so the model knows the map continues in the file.
+// capHead truncates to n bytes, preferring a line boundary, else backing off to
+// a UTF-8 rune boundary so a multibyte rune (subtree maps carry Korean) is never
+// cut in half. Notes the cut so the model knows the map continues in the file.
 func capHead(s string, n int) string {
 	if len(s) <= n {
 		return strings.TrimRight(s, "\n")
 	}
 	cut := s[:n]
 	if i := strings.LastIndexByte(cut, '\n'); i > 0 {
-		cut = cut[:i]
+		cut = cut[:i] // '\n' is a rune boundary — safe
+	} else {
+		// No line break in the window: back off until the next byte starts a
+		// rune, so cut ends on a boundary and stays valid UTF-8.
+		for len(cut) > 0 && !utf8.RuneStart(s[len(cut)]) {
+			cut = cut[:len(cut)-1]
+		}
 	}
 	return strings.TrimRight(cut, "\n") + "\n…(생략 — 전문은 해당 CLAUDE.md 참조)"
 }

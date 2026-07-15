@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func fakeReadFileMap(files map[string]string) func(string) ([]byte, error) {
@@ -19,16 +20,17 @@ func fakeReadFileMap(files map[string]string) func(string) ([]byte, error) {
 	}
 }
 
-func TestEnrichWithFolderDocsAttachesNearestSubtreeMap(t *testing.T) {
+func TestEnrichWithFolderDocsResolvesNearestThenRoot(t *testing.T) {
 	root := "/repo"
 	files := map[string]string{
 		filepath.Join(root, "gateway-go/internal/runtime/CLAUDE.md"): "runtime map: RPC server.",
-		filepath.Join(root, "CLAUDE.md"):                             "ROOT map — must NOT attach.",
+		filepath.Join(root, "CLAUDE.md"):                             "ROOT project map.",
 	}
-	// externalmcp/ and runtime/server/ have no CLAUDE.md here → both resolve to
-	// runtime/CLAUDE.md (nearest ancestor); main.go walks up only to the root.
+	// externalmcp/ and runtime/server/ have no CLAUDE.md → both resolve to
+	// runtime/CLAUDE.md (nearest ancestor, deduped). scripts/deploy has no
+	// subtree map → falls back to the repo-root CLAUDE.md (not in the prompt).
 	out := "`gateway-go/internal/runtime/externalmcp/mcp_external_tools.go:166`, " +
-		"gateway-go/internal/runtime/server/server.go:10, main.go:1"
+		"gateway-go/internal/runtime/server/server.go:10, scripts/deploy/deploy_helper.py:3"
 	got := enrichWithFolderDocs(out, root, fakeReadFileMap(files))
 
 	if !strings.Contains(got, "## 폴더 맥락") || !strings.Contains(got, "runtime map") {
@@ -37,8 +39,49 @@ func TestEnrichWithFolderDocsAttachesNearestSubtreeMap(t *testing.T) {
 	if n := strings.Count(got, "gateway-go/internal/runtime/CLAUDE.md"); n != 1 {
 		t.Fatalf("nearest-ancestor + dedup should attach runtime map once, got %d", n)
 	}
-	if strings.Contains(got, "ROOT map") {
-		t.Fatal("root CLAUDE.md must never be attached (already in system prompt)")
+	if !strings.Contains(got, "ROOT project map") {
+		t.Fatal("a map-less area (scripts/) should fall back to the root CLAUDE.md")
+	}
+}
+
+func TestEnrichWithFolderDocsSkipsPathTraversal(t *testing.T) {
+	root := "/repo"
+	files := map[string]string{filepath.Join(root, "CLAUDE.md"): "ROOT"}
+	// A `..` segment from (untrusted) tool output must never be joined+read.
+	got := enrichWithFolderDocs("see `gateway-go/../../etc/evil.go:1`", root, fakeReadFileMap(files))
+	if strings.Contains(got, "폴더 맥락") {
+		t.Fatalf("a `..` path must be skipped (traversal), got %q", got)
+	}
+}
+
+func TestCapHeadStaysValidUTF8(t *testing.T) {
+	// A long Korean line (3 bytes/rune) with NO newline forces the rune-boundary
+	// back-off; the truncated result must remain valid UTF-8.
+	s := strings.Repeat("가나다", 500) // ~4500 bytes, no '\n'
+	got := capHead(s, perFolderDocCap)
+	if !utf8.ValidString(got) {
+		t.Fatal("capHead produced invalid UTF-8 (cut mid-rune)")
+	}
+	if !strings.Contains(got, "생략") {
+		t.Fatal("over-cap content should note the truncation")
+	}
+}
+
+func TestTuneCodegraphHandlesUnprefixedToolNames(t *testing.T) {
+	// A server advertising plain "explore"/"node" (no self-prefix) must still be
+	// rerouted, dialing the sibling "node" (not the codegraph_-prefixed name).
+	call, lastName, _ := fakeCall("**Sym** (struct)\n")
+	base := func(context.Context, json.RawMessage) (string, error) { return "EXPLORE", nil }
+	fn := tuneCodegraphTool("explore", base, call)
+	out, err := fn(context.Background(), exploreInput("GatewayHub"))
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if *lastName != "node" {
+		t.Fatalf("unprefixed explore should reroute to \"node\", got %q", *lastName)
+	}
+	if strings.Contains(out, "EXPLORE") {
+		t.Fatal("reroute should have replaced explore output with node")
 	}
 }
 
