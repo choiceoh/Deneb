@@ -8,6 +8,9 @@ import {
   htmlToText,
   listApproval,
   listApprovalEntries,
+  listBoard,
+  listBoardEntries,
+  normalizeBoardPost,
   normalizeApprovalDoc,
   normalizeFolder,
   selectApprovalLine,
@@ -125,6 +128,56 @@ test("listApprovalEntries normalizes without network and preserves human list ou
 
   const human = await listApproval("pending", 80, loaders);
   assert.equal(human, "전자결재 · 미결문서 (1건)\n\n1. 지출결의 · 기안 이대리 · id=12");
+});
+
+test("normalizeBoardPost handles board payload aliases", () => {
+  assert.deepEqual(
+    normalizeBoardPost({
+      art_seq_no: 17106,
+      art_title: "휴무 일정",
+      mbr_nick: "인사팀",
+      write_date: "2026-07-16",
+      cat_seq_no: 42,
+    }),
+    {
+      postId: "17106",
+      title: "휴무 일정",
+      author: "인사팀",
+      date: "2026-07-16",
+      categoryId: "42",
+    },
+  );
+  assert.equal(normalizeBoardPost({ postId: "7", categoryId: "9" }).postId, "7");
+});
+
+test("listBoardEntries normalizes without network and preserves human list output", async () => {
+  const calls = [];
+  const loaders = {
+    async fetchBoardEntries(limit) {
+      calls.push(limit);
+      return [
+        {
+          art_seq_no: "17106",
+          art_title: "휴무 일정",
+          mbr_nick: "인사팀",
+          write_date: "2026-07-16",
+          cat_seq_no: "42",
+        },
+      ];
+    },
+  };
+  const entries = await listBoardEntries(80, loaders);
+  assert.deepEqual(calls, [50]);
+  assert.deepEqual(entries[0], {
+    postId: "17106",
+    title: "휴무 일정",
+    author: "인사팀",
+    date: "2026-07-16",
+    categoryId: "42",
+  });
+
+  const human = await listBoard(80, loaders);
+  assert.equal(human, "게시판 최근 글 (1건)\n\n1. 휴무 일정 · 작성 인사팀 · 일자 2026-07-16 · id=17106");
 });
 
 test("htmlToText strips tags and decodes entities", () => {
