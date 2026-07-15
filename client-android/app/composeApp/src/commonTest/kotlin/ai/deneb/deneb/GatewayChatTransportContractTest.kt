@@ -345,7 +345,7 @@ class GatewayChatTransportContractTest {
     }
 
     @Test
-    fun streamingChatReturnsEmptySuccessfulReplyWhenStreamEndsWithoutDone() = runTest {
+    fun streamingChatFailsWhenStreamEndsWithoutTerminalEvent() = runTest {
         val transport = GatewayHttpHarness()
         transport.enqueueSse(
             """
@@ -356,21 +356,20 @@ class GatewayChatTransportContractTest {
         )
         val deltas = mutableListOf<String>()
 
-        val reply = streamGatewayChat(
-            transport.httpClient,
-            GatewayHttpHarness.TEST_JSON,
-            "https://gateway.example",
-            "token",
-            "client:main",
-            "message",
-            onDelta = deltas::add,
-        )
+        val failure = assertFailsWith<IllegalStateException> {
+            streamGatewayChat(
+                transport.httpClient,
+                GatewayHttpHarness.TEST_JSON,
+                "https://gateway.example",
+                "token",
+                "client:main",
+                "message",
+                onDelta = deltas::add,
+            )
+        }
 
         assertEquals(listOf("partial"), deltas)
-        assertEquals("", reply.text)
-        assertEquals("", reply.model)
-        assertFalse(reply.fellBack)
-        assertTrue(reply.ok)
+        assertEquals("chat stream ended before terminal event", failure.message)
     }
 
     @Test
