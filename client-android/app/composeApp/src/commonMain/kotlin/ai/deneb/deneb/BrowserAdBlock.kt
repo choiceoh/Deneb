@@ -70,6 +70,7 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "fullstory.com",
     "clarity.ms",
     "google-analytics.com",
+    "googletagmanager.com",
     // Mobile attribution
     "branch.io",
     "appsflyer.com",
@@ -95,6 +96,31 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "ad.mail.ru",
     "yandexadexchange.net",
     "ads.yahoo.co.jp",
+    // Yandex RTB / AdFox / RU counters — topwar.ru, topcor.ru, and similar RU news
+    "an.yandex.ru",
+    "adfox.ru",
+    "ads.adfox.ru",
+    "adfox.yandex.ru",
+    "matchid.adfox.yandex.ru",
+    "awaps.yandex.ru",
+    "adfstat.yandex.ru",
+    "adsdk.yandex.ru",
+    "mc.yandex.ru",
+    "adriver.ru",
+    "content.adriver.ru",
+    "ad.adriver.ru",
+    "counter.yadro.ru",
+    "top-fwz1.mail.ru",
+    "rs.mail.ru",
+    "relap.io",
+    "relap.mail.ru",
+    // Forumotion (russiadefence.net) — Taboola/Criteo already covered; these are the rest
+    "viously.com",
+    "cdn.viously.com",
+    "smilewanted.com",
+    "consentframework.com",
+    "cache.consentframework.com",
+    "choices.consentframework.com",
 )
 
 /** Slash-bounded path segments that mark ad creatives / delivery.
@@ -109,6 +135,12 @@ private val BROWSER_AD_PATH_SEGMENTS: List<String> = listOf(
     "/gampad/",
     "/adsbygoogle",
     "/ads/",
+    "/ads/system/",
+    "/partner-code-bundles/",
+    "/adfox",
+    "/metrika/",
+    "/libtrc/",
+    "/prebid/",
 )
 
 /** Host-ish tokens that appear inside ad CDN URLs. */
@@ -118,6 +150,12 @@ private val BROWSER_AD_PATH_HOSTISH: List<String> = listOf(
     "googleads.",
     "adsystem",
     "amazon-adsystem",
+    "yandex.ru/ads",
+    "yandex.ru/an/",
+    "adfox",
+    "adriver",
+    "taboola.com/libtrc",
+    "viously.com",
 )
 
 /** Query keys that almost always mean ad or tracking pixels. */
