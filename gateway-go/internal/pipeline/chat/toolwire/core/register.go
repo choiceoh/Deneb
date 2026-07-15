@@ -314,7 +314,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 //
 // Deferred (prompt audit 2026-06-12): together ~1,050 wire tokens for 17 uses
 // in 14 days, nearly all on phone-event turns. The one name-directing prompt
-// (server_http_event_ingest.go) now teaches the fetch_tools step, and those
+// (phoneevents/handler.go) now teaches the fetch_tools step, and those
 // turns are background — a fetch round-trip there is cheap, while every
 // interactive turn stops paying for the schemas.
 func RegisterPhoneTools(registry toolport.ToolRegistrar, send runtimeops.PhoneActionFunc) {

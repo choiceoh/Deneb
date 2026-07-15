@@ -9,13 +9,13 @@ handler 배선은 runtime/server method registry가 소유한다.
 - `miniapp.go`의 `Deps`와 `Methods`가 ping, whoami,
   client.hello의 최소 공통 표면이다.
 - 각 기능은 파일별 `*Deps` + `*Methods` 쌍으로 노출된다.
-  `dashboard.go`의 `DashboardMethods`, `project.go`의
-  `ProjectMethods`, `skills.go`의 `SkillsMethods`,
-  `sessions.go`의 `SessionsMethods`가 대표 진입점이다.
+  `dashboard/dashboard.go`의 `DashboardMethods`, `project.go`의
+  `ProjectMethods`, `skillsrpc/skills.go`의 `SkillsMethods`,
+  `sessions/sessions.go`의 `SessionsMethods`가 대표 진입점이다.
 - `files/`의 `FilesBrowseMethods`, `knowledge/`의
   `SearchMethods`·`NotebookMethods`·`PeopleMethods`, `schedule/`의
   `CalendarMethods`·`TodoMethods`가 큰 client 영역을 분리한다.
-- `mail_wire.go`, `models.go`, `project.go`, `dashboard.go`의
+- `mail_wire.go`, `models.go`, `project.go`, `dashboard/dashboard.go`의
   `//deneb:wire` struct가 Kotlin과 TypeScript client DTO의 Go source of
   truth다.
 - 실제 등록과 dependency literal은

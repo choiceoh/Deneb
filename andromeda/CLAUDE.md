@@ -11,7 +11,7 @@ for the Deneb gateway (a single-agent personal assistant). Three columns: nav +
 work area (grids/editors) + Deneb AI collaboration. Data and AI come from the
 Deneb gateway over `miniapp.*` RPC, `chat/stream` (SSE), and `events` (SSE).
 
-Stack: **Tauri 2** (Rust desktop shell) + **React 18** + **Refine** (headless
+Stack: **Tauri 2** (Rust desktop shell) + **React 19** + **Refine** (headless
 admin framework) + **Vite**. Design rationale (why/what): [`docs/DESIGN.md`](docs/DESIGN.md).
 UI·UX design system (how it looks/behaves — tokens, components, patterns): [`docs/UI-UX.md`](docs/UI-UX.md).
 Design philosophy (the beliefs behind the system + how to judge a design): [`docs/DESIGN-PHILOSOPHY.md`](docs/DESIGN-PHILOSOPHY.md).
@@ -64,23 +64,23 @@ Gateway (Deneb)  ──miniapp.* RPC──▶  gateway.ts (callRpc)
 
 ### File responsibilities (`src/`)
 
-| File                   | Role                                                                                                                                                                                                                                           |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gateway.ts`           | Raw gateway client: `callRpc`, `ping`, `chatStream`, token/config storage. The only place that talks HTTP to the gateway (plus `events.ts`).                                                                                                   |
-| `events.ts`            | Proactive push SSE client (`subscribeEvents`).                                                                                                                                                                                                 |
-| `sse.ts`               | Shared SSE frame reader (`readSSE`) used by both `chatStream` and `events.ts`.                                                                                                                                                                 |
-| `aiText.ts`            | `serializeList` — the counted-header + one-line-per-row projection list panes push to the AI.                                                                                                                                                  |
-| `dataProvider.ts`      | Refine `DataProvider` — generic CRUD→RPC glue, **derived from `resources.ts`**.                                                                                                                                                                |
-| `resources.ts`         | **Single source of truth** for resource↔RPC mapping + Refine resource metadata. Query-driven RPCs (memory/search) live here as constants, not CRUD.                                                                                            |
-| `authProvider.ts`      | Token-based Refine auth provider (DESIGN §4).                                                                                                                                                                                                  |
-| `workspaceContext.tsx` | Shared workstation state + the mechanism where the active pane publishes its serialized content to the AI panel (`useRegisterPane`). Holds `cfg` for query-driven panes. Also the cross-pane `openWiki(path)` channel (인물·검색 → 위키 pane). |
-| `hooks.ts`             | `useChat`, `useEvents`, `useGatewayStatus`.                                                                                                                                                                                                    |
-| `log.ts`               | Namespaced, leveled logger (see Logging).                                                                                                                                                                                                      |
-| `format.ts`            | Pure display helpers (`text`, `fmtDate`, `calSpan`, `errText`). No React.                                                                                                                                                                      |
-| `theme.ts`             | Design tokens + shared style objects. **No hardcoded colors in components.**                                                                                                                                                                   |
-| `types.ts`             | Domain row types + the `View` union (pane keys).                                                                                                                                                                                               |
-| `components/`          | `Workstation` (3-col shell), `Sidebar` (nav + connect), `AIPanel`, `ProactivePanel`, `Grid` (+`GridNotice`, `RowBtn`, `StopClick`; `onRowClick` opens detail), `Modal` (+`Field`, `Detail` — detail/edit overlays), `ErrorBoundary`.           |
-| `components/panes/`    | One file per pane + `index.ts` = the **pane registry** (`PANES`).                                                                                                                                                                              |
+| File                   | Role                                                                                                                                                                                                                                                                                    |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway.ts`           | Raw gateway client: `callRpc`, `ping`, `chatStream`, token/config storage. The only place that talks HTTP to the gateway (plus `events.ts`).                                                                                                                                            |
+| `events.ts`            | Proactive push SSE client (`subscribeEvents`).                                                                                                                                                                                                                                          |
+| `sse.ts`               | Shared SSE frame reader (`readSSE`) used by both `chatStream` and `events.ts`.                                                                                                                                                                                                          |
+| `aiText.ts`            | `serializeList` — the counted-header + one-line-per-row projection list panes push to the AI.                                                                                                                                                                                           |
+| `dataProvider.ts`      | Refine `DataProvider` — generic CRUD→RPC glue, **derived from `resources.ts`**.                                                                                                                                                                                                         |
+| `resources.ts`         | **Single source of truth** for resource↔RPC mapping + Refine resource metadata. Query-driven RPCs (memory/search) live here as constants, not CRUD.                                                                                                                                     |
+| `authProvider.ts`      | Token-based Refine auth provider (DESIGN §4).                                                                                                                                                                                                                                           |
+| `workspaceContext.tsx` | Shared workstation state + the mechanism where the active pane publishes its serialized content to the AI panel (`useRegisterPane`). Holds `cfg` for query-driven panes. Carries the context type (incl. `openWiki(path)` — defined in `WorkspaceProvider.tsx`, 인물·검색 → 위키 pane). |
+| `hooks.ts`             | `useChat`, `useEvents`, `useGatewayStatus`.                                                                                                                                                                                                                                             |
+| `log.ts`               | Namespaced, leveled logger (see Logging).                                                                                                                                                                                                                                               |
+| `format.ts`            | Pure display helpers (`text`, `fmtDate`, `calSpan`, `errText`). No React.                                                                                                                                                                                                               |
+| `theme.ts`             | Design tokens + shared style objects. **No hardcoded colors in components.**                                                                                                                                                                                                            |
+| `types.ts`             | Domain row types + the `View` union (pane keys).                                                                                                                                                                                                                                        |
+| `components/`          | `Workstation` (3-col shell), `Sidebar` (nav + connect), `AIPanel`, `ProactivePanel`, `Grid` (+`GridNotice`, `RowBtn`; `onRowClick` opens detail), `Modal` (+`Field`, `Detail` — detail/edit overlays), `ErrorBoundary`.                                                                 |
+| `components/panes/`    | One file per pane + `index.ts` = the **pane registry** (`PANES`).                                                                                                                                                                                                                       |
 
 ## Recipe: add a resource-backed grid pane
 
@@ -112,8 +112,8 @@ The center "선택 항목 상세" (DESIGN §4) is a floating `Modal`, not a rout
 grid rows open one:
 
 1. Pass `onRowClick={(row) => setSel(row)}` to `<Grid>`; hold the selected row in
-   pane state (`null` = closed). Wrap any in-row action buttons in `<StopClick>` so
-   their clicks don't also open the modal.
+   pane state (`null` = closed). Use `<RowBtn>` for in-row action buttons — it
+   calls `stopPropagation` internally so clicks don't also open the modal.
 2. Render `{sel && <DetailModal …/>}` as a sibling. Build the modal from
    `components/Modal` primitives: `<Modal title footer>`, `<Field label>` for edit
    inputs, `<Detail label value>` for read-only rows.
@@ -132,7 +132,7 @@ grid rows open one:
 - **Logging, not `console`.** `import { log } from "./log"; const x = log.child("foo");`
   then `x.debug/info/warn/error`. Raise verbosity at runtime:
   `localStorage.setItem("andromeda.logLevel","debug")`.
-- **Styling via `theme.ts`** tokens (`color`, `field`, `line`, `navButton`, …). No
+- **Styling via `theme.ts`** tokens (`color`, `line`, `font`, `pane`, `muted`, …). No
   inline hex.
 - **The AI sees text, not pixels.** Each pane serializes its content to text and
   pushes it via `useRegisterPane`; the AI panel reads that. Keep new panes doing this.

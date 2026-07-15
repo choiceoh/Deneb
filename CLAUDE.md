@@ -6,7 +6,7 @@
 
 - `gateway-go/` — Go 게이트웨이 (HTTP+SSE, RPC 200+, 챗/LLM 파이프라인, ~50 내장 도구). **주 런타임.**
 - `client-android/` — Kotlin Multiplatform **모바일** 클라 (Android 데일리드라이버 + iOS). Compose Desktop 타깃은 헤드리스 검증용으로만 잔존.
-- `andromeda/` — **데스크톱** 워크스테이션 (Tauri 2 + React 18 + Refine + Vite). 자체 게이트/가이드 보유.
+- `andromeda/` — **데스크톱** 워크스테이션 (Tauri 2 + React 19 + Refine + Vite). 자체 게이트/가이드 보유.
 - `skills/` — 파일시스템 발견 스킬 플러그인. `docs/` — Mintlify 문서.
 - 두 클라 모두 `miniapp.*` RPC (`X-Deneb-Client-Token`) 사용. wire 타입은 Go `//deneb:wire` 구조체에서 Kotlin+TS **양쪽** 생성.
 - 모듈 상세는 각 모듈의 `CLAUDE.md` (gateway-go/, client-android/app/, andromeda/, skills/).

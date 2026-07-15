@@ -11,7 +11,7 @@ and never owns durable session state.
 - `bootstrap.go` handles deterministic first compaction; `llm.go` performs
   summary compaction through `Summarizer`.
 - `embedding.go` provides relevance/diversity selection with recency fallback.
-- `truncate_old_tool_results.go` and protected-tool helpers shrink historical
+- `protected.go` (protected-tool helpers) and `micro.go` shrink historical
   results without breaking tool pairs or fetch-tools schemas.
 - `restore.go` removes thinking blocks and recovers recent file-read context.
 - `context_fence.go`: `FormatContextFence` marks untrusted recovered context.

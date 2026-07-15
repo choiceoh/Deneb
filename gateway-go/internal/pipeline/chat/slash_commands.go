@@ -79,7 +79,8 @@ func ParseSlashCommand(text string) *SlashResult {
 			Command:  "kill",
 		}
 	case "goal", "목표":
-		// Standing goal (Ralph loop). Subcommands parsed in slash_dispatch.go:
+		// Standing goal (Ralph loop). Dispatched in slash_dispatch.go →
+		// goal_command.go → toolwire.HandleGoalCommand (tools/goal_ambient.go):
 		// "/goal <text>" sets a new goal; status | pause | resume | stop manage
 		// it. Korean alias /목표 routes to the same handler.
 		return &SlashResult{
