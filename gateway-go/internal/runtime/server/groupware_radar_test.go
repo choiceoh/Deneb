@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
@@ -30,7 +31,7 @@ func TestGroupwareRadarCallbacksDedupeAndResolveByRefID(t *testing.T) {
 	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	feed := &nativeWorkFeedStore{store: store}
 	ingestCalls := 0
-	onPending, onResolved := groupwareRadarCallbacks(feed, func(_ context.Context, source, text string) error {
+	onPending, _, onResolved := groupwareRadarCallbacks(feed, func(_ context.Context, source, text string) error {
 		ingestCalls++
 		if source != "groupware-radar" || !strings.Contains(text, "문서ID: 7") {
 			t.Fatalf("ingest source=%q text=%q", source, text)
@@ -39,7 +40,7 @@ func TestGroupwareRadarCallbacksDedupeAndResolveByRefID(t *testing.T) {
 			ID: "approval-card", Source: workfeed.SourceGroupwareApproval, RefID: "7", Body: "analysis",
 		})
 		return err
-	})
+	}, func(context.Context, groupware.ApprovalSummary, int, time.Duration) error { return nil })
 	doc := groupware.ApprovalSummary{DocID: "7", Title: "품의", Status: "미결"}
 	if err := onPending(context.Background(), doc); err != nil {
 		t.Fatal(err)
@@ -70,5 +71,25 @@ func TestGroupwareRadarMaxPerCyclePositiveOverride(t *testing.T) {
 	t.Setenv("DENEB_GROUPWARE_RADAR_MAX_PER_CYCLE", "0")
 	if got := groupwareRadarMaxPerCycle(); got != groupware.DefaultRadarMaxPerCycle {
 		t.Fatalf("invalid max = %d, want default", got)
+	}
+}
+
+func TestGroupwareEscalationLabel(t *testing.T) {
+	if got := groupwareEscalationLabel(groupware.RadarEscalationLevelFourHours, 5*time.Hour); got != "5시간째" {
+		t.Fatalf("got %q", got)
+	}
+	if got := groupwareEscalationLabel(groupware.RadarEscalationLevelTwentyFour, 26*time.Hour); got != "24시간 이상" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestGroupwareRadarMaxEscalationsOverride(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_RADAR_MAX_ESCALATIONS", "4")
+	if got := groupwareRadarMaxEscalations(); got != 4 {
+		t.Fatalf("got %d", got)
+	}
+	t.Setenv("DENEB_GROUPWARE_RADAR_MAX_ESCALATIONS", "0")
+	if got := groupwareRadarMaxEscalations(); got != groupware.DefaultRadarMaxEscalations {
+		t.Fatalf("default %d", got)
 	}
 }

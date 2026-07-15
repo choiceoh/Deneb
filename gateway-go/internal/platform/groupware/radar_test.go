@@ -237,3 +237,93 @@ func approval(id, title string) ApprovalSummary {
 		Date: "2026-07-13", Status: "pending", Folder: "pending",
 	}
 }
+
+func TestRadarEscalatesAtFourAndTwentyFourHoursOnce(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	now := radarMonday
+	var levels []int
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return now },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return []ApprovalSummary{approval("1", "stale")}, nil
+			}
+			return nil, nil
+		},
+		OnPending: func(context.Context, ApprovalSummary) error { return nil },
+		OnEscalated: func(_ context.Context, _ ApprovalSummary, level int, _ time.Duration) error {
+			levels = append(levels, level)
+			return nil
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(4 * time.Hour)
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(20 * time.Hour)
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(levels, []int{RadarEscalationLevelFourHours, RadarEscalationLevelTwentyFour}) {
+		t.Fatalf("levels %v", levels)
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Docs["1"].FirstSeenAt != radarMonday.UnixMilli() || state.Docs["1"].EscalationLevel != 2 {
+		t.Fatalf("state %+v", state.Docs["1"])
+	}
+}
+
+func TestRadarEscalationFailureRetriesAndStateMigrationPreservesAge(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	now := radarMonday
+	if err := saveRadarState(statePath, radarState{Docs: map[string]radarDocState{"1": {Fingerprint: approvalFingerprint(approval("1", "stale")), Notified: true, LastSeenAt: now.Add(-5 * time.Hour).UnixMilli()}}}); err != nil {
+		t.Fatal(err)
+	}
+	attempts := 0
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return now },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return []ApprovalSummary{approval("1", "stale")}, nil
+			}
+			return nil, nil
+		},
+		OnPending: func(context.Context, ApprovalSummary) error { return nil },
+		OnEscalated: func(context.Context, ApprovalSummary, int, time.Duration) error {
+			attempts++
+			if attempts == 1 {
+				return errors.New("push failed")
+			}
+			return nil
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected escalation failure")
+	}
+	state, _ := loadRadarState(statePath)
+	if state.Docs["1"].EscalationLevel != 0 || state.Docs["1"].FirstSeenAt != now.Add(-5*time.Hour).UnixMilli() {
+		t.Fatalf("failed state %+v", state.Docs["1"])
+	}
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts %d", attempts)
+	}
+}

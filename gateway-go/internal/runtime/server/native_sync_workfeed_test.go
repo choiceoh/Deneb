@@ -15,6 +15,16 @@ func TestNativeWorkFeedSourceRefHelpers(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
+	updated, err := native.EscalateApprovalBySourceRef("99178", 1, "4시간째")
+	if err != nil || !updated {
+		t.Fatalf("escalate updated=%v err=%v", updated, err)
+	}
+	escalated, ok, err := store.FindActiveBySourceRef(workfeed.SourceGroupwareApproval, "99178")
+	if err != nil || !ok || escalated.Priority != workfeed.PriorityHigh {
+		t.Fatalf("escalated %+v ok=%v err=%v", escalated, ok, err)
+	}
+
 	active, err := native.HasActiveSourceRef(workfeed.SourceGroupwareApproval, "99178")
 	if err != nil || !active {
 		t.Fatalf("HasActiveSourceRef = %v, %v", active, err)
