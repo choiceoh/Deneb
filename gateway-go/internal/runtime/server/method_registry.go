@@ -787,7 +787,7 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 			if s.genesisTracker == nil {
 				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
 			}
-			return s.genesisTracker.RecordSelfCorrectionImpact(rec)
+			return s.genesisTracker.RecordSelfCorrectionDispatch(rec)
 		},
 		Funnel: func() genesis.SelfCorrectionFunnelSummary {
 			if s.genesisTracker == nil {

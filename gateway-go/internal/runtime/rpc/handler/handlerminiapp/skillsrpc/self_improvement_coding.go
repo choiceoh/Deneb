@@ -15,6 +15,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
+const (
+	selfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
+	selfCorrectionStatusSuperseded = string(rsilifecycle.ReviewSuperseded)
+)
+
 // Wire type aliases — see handlerminiapp/self_improvement_coding_contract.go.
 type (
 	SelfCorrectionCandidate             = handlerminiapp.SelfCorrectionCandidate
@@ -92,7 +97,7 @@ func selfImprovementCodingImpact(deps SelfImprovementCodingDeps) rpcutil.Handler
 		record, err := deps.RecordImpact(genesis.SelfCorrectionCandidateRecord{
 			ID:        p.ID,
 			AttemptID: p.AttemptID,
-			ImpactResult: &genesis.SelfCorrectionImpactResult{
+			ImpactResult: &rsilifecycle.ImpactResult{
 				Observed:            p.Observed,
 				Samples:             p.Samples,
 				GuardrailViolations: p.GuardrailViolations,
@@ -357,11 +362,11 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 	}
 }
 
-func genesisImpactContract(contract *SelfCorrectionImpactContract) *genesis.SelfCorrectionImpactContract {
+func genesisImpactContract(contract *SelfCorrectionImpactContract) *rsilifecycle.ImpactContract {
 	if contract == nil {
 		return nil
 	}
-	return &genesis.SelfCorrectionImpactContract{
+	return &rsilifecycle.ImpactContract{
 		Metric: contract.Metric, Direction: contract.Direction,
 		Baseline: contract.Baseline, Target: contract.Target,
 		MinSamples: contract.MinSamples, ObservationWindowMs: contract.ObservationWindowMs,
@@ -369,7 +374,7 @@ func genesisImpactContract(contract *SelfCorrectionImpactContract) *genesis.Self
 	}
 }
 
-func selfCorrectionImpactContract(contract *genesis.SelfCorrectionImpactContract) *SelfCorrectionImpactContract {
+func selfCorrectionImpactContract(contract *rsilifecycle.ImpactContract) *SelfCorrectionImpactContract {
 	if contract == nil {
 		return nil
 	}
@@ -382,7 +387,12 @@ func selfCorrectionImpactContract(contract *genesis.SelfCorrectionImpactContract
 }
 
 func selfCorrectionImpactResult(rec genesis.SelfCorrectionCandidateRecord) *SelfCorrectionImpactResult {
-	status := genesis.SelfCorrectionImpactStatus(rec)
+	status := ""
+	if rec.ImpactResult != nil {
+		status = rec.ImpactResult.Status
+	} else if rec.ImpactContract != nil && rsilifecycle.NormalizeDelivery(rec.DispatchPhase) == rsilifecycle.DeliveryWatchPassed {
+		status = "pending"
+	}
 	if status == "" {
 		return nil
 	}
@@ -449,9 +459,9 @@ func normalizeSelfImprovementCodingStatus(status string) (string, error) {
 	case "accept", "accepted":
 		return genesis.SelfCorrectionStatusAccepted, nil
 	case "reject", "rejected":
-		return genesis.SelfCorrectionStatusRejected, nil
+		return selfCorrectionStatusRejected, nil
 	case "supersede", "superseded":
-		return genesis.SelfCorrectionStatusSuperseded, nil
+		return selfCorrectionStatusSuperseded, nil
 	case "apply", "applied":
 		return genesis.SelfCorrectionStatusApplied, nil
 	default:
@@ -461,12 +471,12 @@ func normalizeSelfImprovementCodingStatus(status string) (string, error) {
 
 func selfImprovementCodingStatusCounts(recs []genesis.SelfCorrectionCandidateRecord) []SelfImprovementCodingStatusCount {
 	counts := map[string]int{
-		"all":                                  len(recs),
-		genesis.SelfCorrectionStatusProposed:   0,
-		genesis.SelfCorrectionStatusAccepted:   0,
-		genesis.SelfCorrectionStatusApplied:    0,
-		genesis.SelfCorrectionStatusRejected:   0,
-		genesis.SelfCorrectionStatusSuperseded: 0,
+		"all":                                len(recs),
+		genesis.SelfCorrectionStatusProposed: 0,
+		genesis.SelfCorrectionStatusAccepted: 0,
+		genesis.SelfCorrectionStatusApplied:  0,
+		selfCorrectionStatusRejected:         0,
+		selfCorrectionStatusSuperseded:       0,
 	}
 	for _, rec := range recs {
 		status := strings.TrimSpace(rec.Status)
@@ -481,8 +491,8 @@ func selfImprovementCodingStatusCounts(recs []genesis.SelfCorrectionCandidateRec
 		genesis.SelfCorrectionStatusProposed,
 		genesis.SelfCorrectionStatusAccepted,
 		genesis.SelfCorrectionStatusApplied,
-		genesis.SelfCorrectionStatusRejected,
-		genesis.SelfCorrectionStatusSuperseded,
+		selfCorrectionStatusRejected,
+		selfCorrectionStatusSuperseded,
 		"all",
 	}
 	out := make([]SelfImprovementCodingStatusCount, 0, len(order))

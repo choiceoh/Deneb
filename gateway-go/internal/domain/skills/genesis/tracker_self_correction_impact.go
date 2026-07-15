@@ -7,58 +7,35 @@ import (
 	"strings"
 	"time"
 
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
 const (
-	SelfCorrectionImpactDirectionDecrease = "decrease"
-	SelfCorrectionImpactDirectionIncrease = "increase"
+	selfCorrectionImpactDirectionDecrease = "decrease"
+	selfCorrectionImpactDirectionIncrease = "increase"
 
-	SelfCorrectionImpactPending   = "pending"
-	SelfCorrectionImpactVerified  = "verified"
-	SelfCorrectionImpactNoEffect  = "no_effect"
-	SelfCorrectionImpactRegressed = "regressed"
+	selfCorrectionImpactPending   = "pending"
+	selfCorrectionImpactVerified  = "verified"
+	selfCorrectionImpactNoEffect  = "no_effect"
+	selfCorrectionImpactRegressed = "regressed"
 )
 
-// SelfCorrectionImpactContract declares how a safely deployed L4 change will
-// be judged for usefulness. It is advisory until delivery reaches
-// watch_passed; the result is then classified deterministically by Go.
-type SelfCorrectionImpactContract struct {
-	Metric              string   `json:"metric"`
-	Direction           string   `json:"direction"`
-	Baseline            float64  `json:"baseline"`
-	Target              float64  `json:"target"`
-	MinSamples          int      `json:"minSamples"`
-	ObservationWindowMs int64    `json:"observationWindowMs,omitempty"`
-	Guardrails          []string `json:"guardrails,omitempty"`
-}
-
-// SelfCorrectionImpactResult is one terminal usefulness verdict for a
-// watch-passed dispatch attempt. pending is derived and never persisted.
-type SelfCorrectionImpactResult struct {
-	Status              string   `json:"status"`
-	Observed            float64  `json:"observed"`
-	Samples             int      `json:"samples"`
-	GuardrailViolations []string `json:"guardrailViolations,omitempty"`
-	Note                string   `json:"note,omitempty"`
-	CheckedAt           int64    `json:"checkedAt"`
-}
-
-// SelfCorrectionImpactStatus returns the independent usefulness axis. Safety
+// selfCorrectionImpactStatus returns the independent usefulness axis. Safety
 // still closes at watch_passed even when a legacy candidate has no contract.
-func SelfCorrectionImpactStatus(record SelfCorrectionCandidateRecord) string {
+func selfCorrectionImpactStatus(record SelfCorrectionCandidateRecord) string {
 	if record.ImpactResult != nil {
 		return record.ImpactResult.Status
 	}
 	if record.ImpactContract != nil && record.DispatchPhase == selfCorrectionDispatchWatchPassed {
-		return SelfCorrectionImpactPending
+		return selfCorrectionImpactPending
 	}
 	return ""
 }
 
-// RecordSelfCorrectionImpact appends a deterministic usefulness verdict for
+// recordSelfCorrectionImpact appends a deterministic usefulness verdict for
 // the exact dispatch attempt that survived the rollback watch.
-func (t *Tracker) RecordSelfCorrectionImpact(record SelfCorrectionCandidateRecord) (SelfCorrectionCandidateRecord, error) {
+func (t *Tracker) recordSelfCorrectionImpact(record SelfCorrectionCandidateRecord) (SelfCorrectionCandidateRecord, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -133,7 +110,7 @@ func (t *Tracker) RecordSelfCorrectionImpact(record SelfCorrectionCandidateRecor
 	return record, nil
 }
 
-func normalizeSelfCorrectionImpactContract(contract *SelfCorrectionImpactContract) (*SelfCorrectionImpactContract, error) {
+func normalizeSelfCorrectionImpactContract(contract *rsilifecycle.ImpactContract) (*rsilifecycle.ImpactContract, error) {
 	if contract == nil {
 		return nil, nil
 	}
@@ -160,11 +137,11 @@ func normalizeSelfCorrectionImpactContract(contract *SelfCorrectionImpactContrac
 		return nil, fmt.Errorf("baseline and target must be finite")
 	}
 	switch out.Direction {
-	case SelfCorrectionImpactDirectionDecrease:
+	case selfCorrectionImpactDirectionDecrease:
 		if out.Target >= out.Baseline {
 			return nil, fmt.Errorf("decrease target must be below baseline")
 		}
-	case SelfCorrectionImpactDirectionIncrease:
+	case selfCorrectionImpactDirectionIncrease:
 		if out.Target <= out.Baseline {
 			return nil, fmt.Errorf("increase target must be above baseline")
 		}
@@ -174,7 +151,7 @@ func normalizeSelfCorrectionImpactContract(contract *SelfCorrectionImpactContrac
 	return &out, nil
 }
 
-func classifySelfCorrectionImpact(contract SelfCorrectionImpactContract, result SelfCorrectionImpactResult) (string, error) {
+func classifySelfCorrectionImpact(contract rsilifecycle.ImpactContract, result rsilifecycle.ImpactResult) (string, error) {
 	if !finiteImpactValue(result.Observed) {
 		return "", fmt.Errorf("observed value must be finite")
 	}
@@ -182,26 +159,26 @@ func classifySelfCorrectionImpact(contract SelfCorrectionImpactContract, result 
 		return "", fmt.Errorf("samples %d below minimum %d", result.Samples, contract.MinSamples)
 	}
 	if len(result.GuardrailViolations) > 0 {
-		return SelfCorrectionImpactRegressed, nil
+		return selfCorrectionImpactRegressed, nil
 	}
 	switch contract.Direction {
-	case SelfCorrectionImpactDirectionDecrease:
+	case selfCorrectionImpactDirectionDecrease:
 		switch {
 		case result.Observed <= contract.Target:
-			return SelfCorrectionImpactVerified, nil
+			return selfCorrectionImpactVerified, nil
 		case result.Observed > contract.Baseline:
-			return SelfCorrectionImpactRegressed, nil
+			return selfCorrectionImpactRegressed, nil
 		default:
-			return SelfCorrectionImpactNoEffect, nil
+			return selfCorrectionImpactNoEffect, nil
 		}
-	case SelfCorrectionImpactDirectionIncrease:
+	case selfCorrectionImpactDirectionIncrease:
 		switch {
 		case result.Observed >= contract.Target:
-			return SelfCorrectionImpactVerified, nil
+			return selfCorrectionImpactVerified, nil
 		case result.Observed < contract.Baseline:
-			return SelfCorrectionImpactRegressed, nil
+			return selfCorrectionImpactRegressed, nil
 		default:
-			return SelfCorrectionImpactNoEffect, nil
+			return selfCorrectionImpactNoEffect, nil
 		}
 	default:
 		return "", fmt.Errorf("unknown direction %q", contract.Direction)
@@ -219,7 +196,7 @@ func applySelfCorrectionImpact(base, record SelfCorrectionCandidateRecord) SelfC
 	return base
 }
 
-func sameSelfCorrectionImpactResult(left, right SelfCorrectionImpactResult) bool {
+func sameSelfCorrectionImpactResult(left, right rsilifecycle.ImpactResult) bool {
 	return left.Status == right.Status &&
 		left.Observed == right.Observed &&
 		left.Samples == right.Samples &&

@@ -396,7 +396,7 @@ func TestSelfCorrectionDispatchPhasesFoldIntoAppliedAndRejectsPostTerminalReview
 	for _, event := range []SelfCorrectionCandidateRecord{
 		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-dispatch"},
 		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchPROpened, AttemptID: "attempt-1", PRNumber: 42},
-		{ID: candidate.ID, DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "merge-sha"},
+		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "merge-sha"},
 		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchDeployed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
 		{ID: candidate.ID, DispatchPhase: selfCorrectionDispatchWatchPassed, AttemptID: "attempt-1", DeployHead: "deploy-sha"},
 	} {
@@ -435,7 +435,7 @@ func TestSelfCorrectionDispatchFSMRejectsSkippedAndCrossAttemptPhases(t *testing
 		t.Fatalf("candidate: %v", err)
 	}
 	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
-		ID: "sc-fsm", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1",
+		ID: "sc-fsm", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1",
 	}); err == nil || !strings.Contains(err.Error(), "invalid self-correction dispatch transition") {
 		t.Fatalf("skipped start accepted: %v", err)
 	}
@@ -445,7 +445,7 @@ func TestSelfCorrectionDispatchFSMRejectsSkippedAndCrossAttemptPhases(t *testing
 		t.Fatalf("start: %v", err)
 	}
 	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
-		ID: "sc-fsm", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-2",
+		ID: "sc-fsm", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-2",
 	}); err == nil || !strings.Contains(err.Error(), "attempt changed") {
 		t.Fatalf("cross-attempt merge accepted: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestSelfCorrectionDispatchFSMRecordsCleanDeclineAsTerminal(t *testing.T) {
 		t.Fatalf("declined lifecycle folded incorrectly: %+v", rows)
 	}
 	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
-		ID: "sc-declined", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1",
+		ID: "sc-declined", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1",
 	}); err == nil {
 		t.Fatal("declined terminal unexpectedly transitioned to merged")
 	}
@@ -488,8 +488,8 @@ func TestSelfCorrectionDispatchSamePhaseCanEnrichMissingProvenance(t *testing.T)
 	}
 	for _, event := range []SelfCorrectionCandidateRecord{
 		{ID: "sc-enrich", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1"},
-		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1"},
-		{ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha"},
+		{ID: "sc-enrich", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1"},
+		{ID: "sc-enrich", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha"},
 	} {
 		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
 			t.Fatalf("record %+v: %v", event, err)
@@ -505,7 +505,7 @@ func TestSelfCorrectionDispatchSamePhaseCanEnrichMissingProvenance(t *testing.T)
 	}
 	// Exact retry after enrichment must not append again.
 	if _, err := tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
-		ID: "sc-enrich", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha",
+		ID: "sc-enrich", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1", CommitSHA: "late-merge-sha",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -556,7 +556,7 @@ func TestSelfCorrectionDispatchLatePRReconciliationPromotesFailedAttempt(t *test
 	for _, event := range []SelfCorrectionCandidateRecord{
 		{ID: "sc-late-pr", DispatchPhase: selfCorrectionDispatchStarted, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1"},
 		{ID: "sc-late-pr", DispatchPhase: selfCorrectionDispatchFailed, AttemptID: "attempt-1", OutcomeNote: "PR not visible at session exit"},
-		{ID: "sc-late-pr", DispatchPhase: SelfCorrectionDispatchMerged, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1", PRNumber: 77, CommitSHA: "late-merge"},
+		{ID: "sc-late-pr", DispatchPhase: selfCorrectionDispatchMerged, AttemptID: "attempt-1", Branch: "dispatch/sc-late-pr-attempt-1", PRNumber: 77, CommitSHA: "late-merge"},
 	} {
 		if _, err := tracker.RecordSelfCorrectionDispatch(event); err != nil {
 			t.Fatalf("record %+v: %v", event, err)
@@ -566,7 +566,7 @@ func TestSelfCorrectionDispatchLatePRReconciliationPromotesFailedAttempt(t *test
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows=%+v err=%v", rows, err)
 	}
-	if rows[0].DispatchPhase != SelfCorrectionDispatchMerged || rows[0].PRNumber != 77 || rows[0].CommitSHA != "late-merge" {
+	if rows[0].DispatchPhase != selfCorrectionDispatchMerged || rows[0].PRNumber != 77 || rows[0].CommitSHA != "late-merge" {
 		t.Fatalf("late PR reconciliation did not promote failed attempt: %+v", rows[0])
 	}
 }

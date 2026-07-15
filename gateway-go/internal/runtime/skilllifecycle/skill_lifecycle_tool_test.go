@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
@@ -746,7 +747,7 @@ func TestSkillLifecycleSelfCorrectionReviewUpdatesStatusVisibility(t *testing.T)
 
 	if _, err := backend.ReviewSelfCorrectionCandidate(context.Background(), chattools.SkillSelfCorrectionReviewRequest{
 		ID:         rec.ID,
-		Status:     genesis.SelfCorrectionStatusRejected,
+		Status:     string(rsilifecycle.ReviewRejected),
 		Reviewer:   "codex",
 		ReviewNote: "superseded by existing scorecard",
 	}); err != nil {

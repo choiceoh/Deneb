@@ -24,7 +24,7 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 				ProposedChange: "자가개선 코딩 화면에서 후보 큐를 렌더링",
 				Risk:           "후보와 적용 완료 이벤트가 섞이면 혼란",
 				Source:         "self-correction",
-				DispatchPhase:  genesis.SelfCorrectionDispatchMerged,
+				DispatchPhase:  "merged",
 				AttemptID:      "attempt-1",
 				PRNumber:       42,
 				CommitSHA:      "merge-sha",
@@ -40,7 +40,7 @@ func testSelfImprovementCodingDeps() SelfImprovementCodingDeps {
 				UpdatedAt:      333,
 			}, {
 				ID:             "sc-3",
-				Status:         genesis.SelfCorrectionStatusRejected,
+				Status:         selfCorrectionStatusRejected,
 				Scope:          "code",
 				Title:          "기각된 코드 후보",
 				ProposedChange: "근거가 약한 후보를 숨기지 않고 기각으로 보존",
@@ -90,7 +90,7 @@ func TestSelfImprovementCodingListReturnsPendingCandidatesByDefault(t *testing.T
 	if countSelfImprovementCodingStatus(payload.StatusCounts, "all") != 3 ||
 		countSelfImprovementCodingStatus(payload.StatusCounts, genesis.SelfCorrectionStatusProposed) != 1 ||
 		countSelfImprovementCodingStatus(payload.StatusCounts, genesis.SelfCorrectionStatusApplied) != 1 ||
-		countSelfImprovementCodingStatus(payload.StatusCounts, genesis.SelfCorrectionStatusRejected) != 1 {
+		countSelfImprovementCodingStatus(payload.StatusCounts, selfCorrectionStatusRejected) != 1 {
 		t.Fatalf("unexpected status counts: %+v", payload.StatusCounts)
 	}
 	candidate := payload.Candidates[0]
@@ -102,7 +102,7 @@ func TestSelfImprovementCodingListReturnsPendingCandidatesByDefault(t *testing.T
 		len(candidate.TargetFiles) != 1 {
 		t.Fatalf("unexpected self-improvement coding candidate: %+v", candidate)
 	}
-	if candidate.DispatchPhase != genesis.SelfCorrectionDispatchMerged || candidate.AttemptID != "attempt-1" ||
+	if candidate.DispatchPhase != "merged" || candidate.AttemptID != "attempt-1" ||
 		candidate.PRNumber != 42 || candidate.CommitSHA != "merge-sha" {
 		t.Fatalf("dispatch provenance missing from candidate: %+v", candidate)
 	}
@@ -291,7 +291,7 @@ func TestSelfImprovementCodingImpactPassesObservationsToDeterministicTracker(t *
 	deps := testSelfImprovementCodingDeps()
 	deps.RecordImpact = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
 		got = rec
-		rec.ImpactResult.Status = genesis.SelfCorrectionImpactVerified
+		rec.ImpactResult.Status = "verified"
 		return rec, nil
 	}
 	h := selfImprovementCodingImpact(deps)
@@ -305,7 +305,7 @@ func TestSelfImprovementCodingImpactPassesObservationsToDeterministicTracker(t *
 		got.ImpactResult.Observed != 79.5 || got.ImpactResult.Samples != 12 {
 		t.Fatalf("impact observation not passed through: %+v", got)
 	}
-	if payload["impactStatus"] != genesis.SelfCorrectionImpactVerified {
+	if payload["impactStatus"] != "verified" {
 		t.Fatalf("impact response = %+v", payload)
 	}
 }

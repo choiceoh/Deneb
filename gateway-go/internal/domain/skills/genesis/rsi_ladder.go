@@ -172,7 +172,7 @@ func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 		parts = append(parts, fmt.Sprintf("%s %d건", src, n))
 	}
 	sort.Strings(parts)
-		return ladderRow{"스테이징 소스 졸업", ladderStateReady, "공급 충족 → 자동 졸업 대기: " + strings.Join(parts, "·")}
+	return ladderRow{"스테이징 소스 졸업", ladderStateReady, "공급 충족 → 자동 졸업 대기: " + strings.Join(parts, "·")}
 }
 
 // ladderCalibrationRow: the P5-2 window closes when every rotating epoch has

@@ -376,14 +376,14 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 			tally.inFlight++
 		case rsilifecycle.DeliveryVerified:
 			tally.applied++
-			switch SelfCorrectionImpactStatus(c) {
-			case SelfCorrectionImpactPending:
+			switch selfCorrectionImpactStatus(c) {
+			case selfCorrectionImpactPending:
 				tally.impactPending++
-			case SelfCorrectionImpactVerified:
+			case selfCorrectionImpactVerified:
 				tally.impactVerified++
-			case SelfCorrectionImpactNoEffect:
+			case selfCorrectionImpactNoEffect:
 				tally.impactNoEffect++
-			case SelfCorrectionImpactRegressed:
+			case selfCorrectionImpactRegressed:
 				tally.impactRegressed++
 			}
 		case rsilifecycle.DeliverySafeNoop:
