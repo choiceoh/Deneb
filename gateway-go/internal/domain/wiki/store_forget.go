@@ -11,8 +11,18 @@ package wiki
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
+
+// reservedForgetFiles are wiki-root bookkeeping files that must never be
+// hard-deleted through forget: log.md is the audit log (it holds the tombstone
+// forget itself writes), index.md is the master search index. Deleting either
+// corrupts the store rather than forgetting a fact.
+var reservedForgetFiles = map[string]struct{}{
+	"log.md":   {},
+	"index.md": {},
+}
 
 // ForgetResult reports what a Forget removed.
 type ForgetResult struct {
@@ -33,9 +43,19 @@ type ForgetResult struct {
 // destroys a fact outright, so it fails closed if the audit record can't be
 // persisted.
 func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
-	relPath = normalizePagePath(relPath)
+	relPath = strings.TrimSpace(relPath)
 	if relPath == "" {
 		return ForgetResult{}, fmt.Errorf("wiki: forget needs a page path")
+	}
+	// Canonicalize BEFORE using the value as an index key. An in-root ".." path
+	// (e.g. "기타/../기타/x") deletes the real file via filepath.Join but would
+	// prune FTS/master-index/backlinks/semantic under the unclean key, leaving the
+	// page searchable. filepath.Clean collapses it to the indexed key.
+	relPath = normalizePagePath(filepath.Clean(relPath))
+	// Refuse the store's own bookkeeping files — forgetting them corrupts the
+	// wiki (log.md holds the tombstone we are about to write).
+	if _, reserved := reservedForgetFiles[relPath]; reserved {
+		return ForgetResult{}, fmt.Errorf("wiki: forget: %q is an internal wiki file, not a page", relPath)
 	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {

@@ -201,6 +201,61 @@ func TestForgetDuringInFlightRefreshIsNotResurrected(t *testing.T) {
 	}
 }
 
+func TestForgetCanonicalizesPathSoIndexesArePruned(t *testing.T) {
+	store := newForgetTestStore(t)
+	page := NewPage("옛회사", "기타", nil)
+	page.Body = "검색에서 사라져야 하는 본문 canonicalize"
+	if err := store.WritePage("기타/옛회사.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	// Non-canonical in-root path: deletes the real file, but the indexes must be
+	// pruned under the CLEAN key, not "기타/../기타/옛회사.md".
+	res, err := store.Forget("기타/../기타/옛회사", "정정")
+	if err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+	if res.Path != "기타/옛회사.md" {
+		t.Fatalf("path not canonicalized: %q", res.Path)
+	}
+	results, _ := store.Search(context.Background(), "canonicalize", 10)
+	for _, r := range results {
+		if strings.Contains(r.Path, "옛회사") {
+			t.Fatalf("page still in search after non-canonical forget: %+v", results)
+		}
+	}
+}
+
+func TestForgetRejectsInternalWikiFiles(t *testing.T) {
+	store := newForgetTestStore(t)
+	// Seed an audit-log entry so log.md exists with real history.
+	page := NewPage("아무거나", "기타", nil)
+	if err := store.WritePage("기타/아무거나.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+	if _, err := store.Forget("기타/아무거나", "감사기록 생성"); err != nil {
+		t.Fatalf("seed forget: %v", err)
+	}
+	before, err := os.ReadFile(filepath.Join(store.dir, "log.md"))
+	if err != nil {
+		t.Fatalf("read log.md: %v", err)
+	}
+
+	for _, name := range []string{"log.md", "index.md"} {
+		if _, err := store.Forget(name, "실수"); err == nil {
+			t.Fatalf("Forget(%q) should be rejected", name)
+		}
+	}
+	// The audit log must be intact (not deleted/truncated).
+	after, err := os.ReadFile(filepath.Join(store.dir, "log.md"))
+	if err != nil {
+		t.Fatalf("log.md missing after rejected forget: %v", err)
+	}
+	if len(after) < len(before) {
+		t.Fatalf("audit log shrank after rejected forget: %d -> %d", len(before), len(after))
+	}
+}
+
 func TestForgetRequiresReason(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("x", "기타", nil)
