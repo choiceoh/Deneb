@@ -160,7 +160,8 @@ func Run(ctx context.Context, cfg Config, req Request) (string, error) {
 	// os.Environ() already carries DENEB_OCR_VL_URL / DENEB_GROUPWARE_OCR when
 	// set on the gateway, so attachment OCR (PaddleOCR-VL → tesseract) works on
 	// the tool and phone-enrich paths without extra plumbing.
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"DENEB_GROUPWARE_URL="+cfg.URL,
 		"DENEB_GROUPWARE_USER="+cfg.User,
 		"DENEB_GROUPWARE_PASSWORD="+cfg.Password,
@@ -265,7 +266,8 @@ func ActApproval(ctx context.Context, cfg Config, docID, decision, comment strin
 		args = append(args, "--comment", c)
 	}
 	cmd := exec.CommandContext(ctx, node, args...)
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"DENEB_GROUPWARE_URL="+cfg.URL,
 		"DENEB_GROUPWARE_USER="+cfg.User,
 		"DENEB_GROUPWARE_PASSWORD="+cfg.Password,
@@ -308,7 +310,8 @@ func LoginCheck(ctx context.Context, cfg Config) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, node, script, "--login-check")
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"DENEB_GROUPWARE_URL="+cfg.URL,
 		"DENEB_GROUPWARE_USER="+cfg.User,
 		"DENEB_GROUPWARE_PASSWORD="+cfg.Password,
