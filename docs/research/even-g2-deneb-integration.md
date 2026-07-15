@@ -348,7 +348,7 @@ Deneb 알림 제목/본문을 **한 줄 HUD 문법**으로 통일 → Even 알�
 - [FAQ](https://hub.evenrealities.com/docs/reference/faq)
 - [Claude Code tooling](https://hub.evenrealities.com/docs/AI-tooling/claude-code)
 - [Product page (G2)](https://www.evenrealities.com/products/smart-glasses) (support-center Specs page returns 403 to automated checkers; physical specs also summarized in Hub Overview)
-- npm: [`@evenrealities/even_hub_sdk`](https://www.npmjs.com/package/@evenrealities/even_hub_sdk)
+- npm package name: `@evenrealities/even_hub_sdk` (linked from [Hub docs](https://hub.evenrealities.com/docs))
 
 ### Community
 
