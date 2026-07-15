@@ -56,15 +56,15 @@ func ToolGroupware() toolport.ToolFunc {
 			area = "board"
 		case "매출", "매출마감":
 			area = "sales"
-		case "재고", "현재고":
+		case "재고", "현재고", "자재재고":
 			area = "stock"
-		case "발주", "발주현황":
+		case "발주", "발주현황", "구매발주":
 			area = "po"
 		case "입고", "입고현황":
 			area = "receive"
-		case "출고", "출고현황":
+		case "출고", "출고현황", "물류출고":
 			area = "ship"
-		case "단가", "품목단가":
+		case "단가", "품목단가", "단가등록":
 			area = "price"
 		case "영업":
 			// ambiguous legacy alias → sales (매출마감)

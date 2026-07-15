@@ -19,7 +19,7 @@ Auth, session file, and signing: [groupware-amaranth.md](/tools/groupware-amaran
 ## Architecture
 
 ```
-Chat/CLI (future area=logis|purchase|financial)
+Chat tool groupware(area=sales|stock|po|receive|ship|price|…)
                 │
         HMAC client (scripts/dev/groupware-reader/lib/client.mjs)
                 │
@@ -200,6 +200,17 @@ Usage examples:
 - price: `groupware(area="price", action="list", query="인버터")`
 
 Amounts use supply fields where available (`clsgAm` / `rcvgAm` / `pohAm` / `isugAm`). Keep mutate off the chat tool.
+
+### Wired chat areas (amount / qty fields)
+
+| Area | Endpoint | Prefer | Notes |
+|------|----------|--------|-------|
+| sales | `/logis/blg0070/0lo00001` | `clsgAm` | summary totals + top lines |
+| stock | `/purchase/pom0010/0pu00000` | `jegoQt` / `gayongQt` | `searchType=coCd`; **품목코드 집계**(창고 합산) |
+| po | `/purchase/poc0030/0pu00001` | `pohAm` | default folder=`ytd`; 품목 집계 |
+| receive | `/purchase/pof0020/0pu00002` | `rcvgAm` | default `month`; 품목 집계 |
+| ship | `/logis/blf0050/0lo00001` | `isugAm` | default `month`; 품목 집계 |
+| price | `/logis/bsb0010/0lo00001` | `purchUm`/`stdUm`/`staUm` | no period; prefer itemCd filter |
 
 ## Explicit non-goals
 

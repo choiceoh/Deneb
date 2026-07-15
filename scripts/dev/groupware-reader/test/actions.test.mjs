@@ -14,6 +14,12 @@ import {
   resolveSalesPeriod,
   resolveErpPeriod,
   formatWon,
+  splitErpQuery,
+  capLimit,
+  aggregateStockByItem,
+  aggregateByItem,
+  unitPrices,
+  matchQuery,
 } from "../lib/actions.mjs";
 
 // Real eap126A05 payload keys the user as `user_id` (string), NOT `emp_seq`.
@@ -190,4 +196,55 @@ test("resolveErpPeriod aliases resolveSalesPeriod", () => {
   const a = resolveSalesPeriod("month", "", new Date("2026-07-16T01:00:00+09:00"));
   const b = resolveErpPeriod("month", "", new Date("2026-07-16T01:00:00+09:00"));
   assert.deepEqual(a, b);
+});
+
+test("splitErpQuery separates range and keyword", () => {
+  assert.deepEqual(splitErpQuery("20260301:20260331 모듈"), {
+    periodQuery: "20260301:20260331",
+    filter: "모듈",
+  });
+  assert.deepEqual(splitErpQuery("인버터"), { periodQuery: "", filter: "인버터" });
+  assert.deepEqual(splitErpQuery(""), { periodQuery: "", filter: "" });
+});
+
+test("capLimit clamps 1..50", () => {
+  assert.equal(capLimit(0), 20);
+  assert.equal(capLimit(3), 3);
+  assert.equal(capLimit(999), 50);
+});
+
+test("aggregateStockByItem sums warehouses", () => {
+  const rows = aggregateStockByItem([
+    { itemCd: "A", itemNm: "모듈", jegoQt: 10, gayongQt: 8, whNm: "본사" },
+    { itemCd: "A", itemNm: "모듈", jegoQt: 5, gayongQt: 5, whNm: "부산" },
+    { itemCd: "B", itemNm: "인버터", jegoQt: 0, gayongQt: 0, whNm: "본사" },
+  ]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].itemCd, "A");
+  assert.equal(rows[0].jegoQt, 15);
+  assert.equal(rows[0].whCount, 2);
+});
+
+test("aggregateByItem sums amount and qty", () => {
+  const rows = aggregateByItem(
+    [
+      { itemCd: "A", itemNm: "x", poQt: 2, pohAm: 100, poDt: "20260701", trNm: "갑" },
+      { itemCd: "A", itemNm: "x", poQt: 3, pohAm: 150, poDt: "20260710", trNm: "을" },
+    ],
+    { qtyField: "poQt", amtField: "pohAm" },
+  );
+  assert.equal(rows[0].qty, 5);
+  assert.equal(rows[0].amt, 250);
+  assert.equal(rows[0].lines, 2);
+  assert.equal(rows[0].lastDt, "20260710");
+});
+
+test("unitPrices prefers purch/std/sta", () => {
+  assert.equal(unitPrices({ purchUm: 1000, stdUm: 0, staUm: 0 }).any, 1000);
+  assert.equal(unitPrices({ stdUm: 200 }).std, 200);
+});
+
+test("matchQuery is case-insensitive substring", () => {
+  assert.equal(matchQuery({ itemNm: "태양광모듈" }, "모듈", ["itemNm"]), true);
+  assert.equal(matchQuery({ itemNm: "인버터" }, "모듈", ["itemNm"]), false);
 });

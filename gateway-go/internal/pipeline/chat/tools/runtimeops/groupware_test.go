@@ -140,6 +140,14 @@ func TestToolGroupware_ErpPeriodDefaults(t *testing.T) {
 	if err != nil || f != "today" {
 		t.Fatalf("ship today %q %v", f, err)
 	}
+	f, err = normalizeFolder("", "list", "receive")
+	if err != nil || f != "month" {
+		t.Fatalf("receive default %q %v", f, err)
+	}
+	f, err = normalizeFolder("", "list", "ship")
+	if err != nil || f != "month" {
+		t.Fatalf("ship default %q %v", f, err)
+	}
 }
 
 func TestToolGroupware_StockAreaAlias(t *testing.T) {

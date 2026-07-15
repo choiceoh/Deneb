@@ -1658,7 +1658,7 @@ func GroupwareToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Read-only Amaranth: status | list | read | attachment | summary. summary=매출마감(area=sales). list also covers stock/po/receive/ship/price. Never mutate.",
+				"description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price accept list or summary(=list). Never mutate.",
 				"enum":        []string{"status", "list", "read", "attachment", "summary"},
 			},
 			"area": map[string]any{
@@ -1676,7 +1676,7 @@ func GroupwareToolSchema() map[string]any {
 			},
 			"folder": map[string]any{
 				"type":        "string",
-				"description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (po/receive/ship default month; sales/stock default ytd). Ignored for price/board.",
+				"description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/board.",
 				"enum":        []string{"pending", "done", "cc", "total", "all", "ytd", "month", "today", "year", "last_year"},
 			},
 			"limit": map[string]any{

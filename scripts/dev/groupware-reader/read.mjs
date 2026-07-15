@@ -9,9 +9,9 @@
  *   area=approval  folder=pending|done|cc|total|all
  *   area=board
  *   area=sales     action=summary|list  folder=ytd|month|today|year|last_year
- *   area=stock|po|receive|ship|price  action=list
- *                  folder=ytd|month|today|… (stock uses year; price ignores)
- *                  query=keyword or YYYYMMDD:YYYYMMDD
+ *   area=stock|po|receive|ship|price  action=list|summary
+ *                  folder=ytd|month|today|… (receive/ship default month; else ytd; price ignores)
+ *                  query=keyword or YYYYMMDD:YYYYMMDD [keyword]
  *   action=act (approval only) — mutate; used by work-feed chips, not chat tool
  *
  * Env:
@@ -52,7 +52,7 @@ function argValue(flag) {
 
 const loginCheck = process.argv.includes("--login-check");
 const area = (argValue("--area") || "approval").trim().toLowerCase();
-const action = (argValue("--action") || (loginCheck ? "login-check" : "read")).trim().toLowerCase();
+let action = (argValue("--action") || (loginCheck ? "login-check" : "read")).trim().toLowerCase();
 const query = (argValue("--query") || "").trim();
 const source = argValue("--source");
 const decision = (argValue("--decision") || "").trim();
@@ -98,7 +98,8 @@ async function main() {
   if (area === "sales") {
     if (!["summary", "list"].includes(action)) die(`sales action must be summary|list (got ${action})`);
   } else if (erpAreas.includes(area)) {
-    if (action !== "list" && !(area === "sales")) die(`${area} action must be list (got ${action})`);
+    if (action === "summary") action = "list";
+    if (action !== "list") die(`${area} action must be list|summary (got ${action})`);
   } else if (!["list", "read", "attachment", "act"].includes(action)) {
     die(`unknown --action ${action}`);
   }
