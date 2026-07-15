@@ -83,6 +83,9 @@ func DeclaredEditableSurfaces() []EditableSurface {
 				"gateway-go/internal/domain/skills/genesis/rsi_ladder.go",
 				"gateway-go/internal/domain/skills/genesis/ladder_watch.go",
 				"gateway-go/internal/domain/skills/genesis/graduation_state.go",
+				"gateway-go/internal/domain/skills/genesis/lifecycle/rsi_profile.go",
+				"gateway-go/internal/domain/skills/genesis/lifecycle/self_correction.go",
+				"gateway-go/internal/domain/skills/genesis/tracker_self_correction_dispatch_selection.go",
 			},
 			Note: "deterministic accept/reject core (gates, benches, e-process, rollback watch, drift brake, graduation policy, record-time gate, this whitelist)",
 		},
@@ -211,4 +214,60 @@ func ClassifyProposalSurfaces(targets []string) (tier string, forbidden []string
 		tier = undeclaredSurface.Tier
 	}
 	return tier, forbidden
+}
+
+// ForbiddenSurfaceMentions returns forbidden basenames mentioned as whole path
+// components in untrusted proposal text. It is the single prose-side companion
+// to ClassifyProposalSurfaces, so the dispatcher does not maintain a second
+// acceptance-file list in Python.
+func ForbiddenSurfaceMentions(values ...string) []string {
+	blob := strings.ToLower(strings.Join(values, "\n"))
+	seen := make(map[string]bool)
+	out := make([]string, 0)
+	for _, surface := range DeclaredEditableSurfaces() {
+		if surface.Tier != SurfaceTierForbidden {
+			continue
+		}
+		for _, pattern := range surface.Patterns {
+			if strings.HasPrefix(pattern, "*.") {
+				continue
+			}
+			base := strings.ToLower(path.Base(pattern))
+			if seen[base] || !mentionsPathComponent(blob, base) {
+				continue
+			}
+			seen[base] = true
+			out = append(out, base)
+		}
+	}
+	return out
+}
+
+func mentionsPathComponent(blob, component string) bool {
+	for start := 0; ; {
+		relative := strings.Index(blob[start:], component)
+		if relative < 0 {
+			return false
+		}
+		index := start + relative
+		end := index + len(component)
+		beforeOK := index == 0 || !isFilenameBody(blob[index-1])
+		afterOK := end == len(blob) || !isFilenameTail(blob, end)
+		if beforeOK && afterOK {
+			return true
+		}
+		start = index + 1
+	}
+}
+
+func isFilenameBody(ch byte) bool {
+	return ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '.' || ch == '_' || ch == '-'
+}
+
+func isFilenameTail(blob string, index int) bool {
+	ch := blob[index]
+	if ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '_' || ch == '-' {
+		return true
+	}
+	return ch == '.' && index+1 < len(blob) && ((blob[index+1] >= 'a' && blob[index+1] <= 'z') || (blob[index+1] >= '0' && blob[index+1] <= '9'))
 }

@@ -148,6 +148,42 @@ func TestSelfImprovementCodingListReturnsAllCandidatesWhenStatusAll(t *testing.T
 	}
 }
 
+func TestSelfImprovementCodingListReadsLedgerOnceAndSelectsCanonicalDispatchCandidate(t *testing.T) {
+	calls, funnelCalls := 0, 0
+	deps := testSelfImprovementCodingDeps()
+	deps.RecentCandidates = func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+		calls++
+		if status != "" {
+			t.Fatalf("RecentCandidates status = %q, want one unfiltered read", status)
+		}
+		return []genesis.SelfCorrectionCandidateRecord{
+			{ID: "new-proposed", Scope: "code", Status: genesis.SelfCorrectionStatusProposed, Source: "health-finding:x", CreatedAt: 30},
+			{ID: "accepted", Scope: "code", Status: genesis.SelfCorrectionStatusAccepted, Source: "tool-quality:x", CreatedAt: 20},
+			{ID: "forbidden", Scope: "code", Status: genesis.SelfCorrectionStatusAccepted, Source: "health-finding:x", ProposedChange: "relax validation_engine.go", CreatedAt: 40},
+		}, nil
+	}
+	deps.Funnel = func() genesis.SelfCorrectionFunnelSummary {
+		funnelCalls++
+		return genesis.SelfCorrectionFunnelSummary{}
+	}
+	h := selfImprovementCodingList(deps)
+	params, _ := json.Marshal(map[string]any{
+		"dispatchableOnly": true,
+		"excludeIds":       []string{"accepted"},
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
+	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
+	if calls != 1 {
+		t.Fatalf("ledger reads = %d, want 1", calls)
+	}
+	if funnelCalls != 0 {
+		t.Fatalf("dispatch selection computed unrelated funnel %d times", funnelCalls)
+	}
+	if payload.Count != 1 || payload.Candidates[0].ID != "new-proposed" {
+		t.Fatalf("dispatch candidate = %+v", payload.Candidates)
+	}
+}
+
 func TestSelfImprovementCodingList_RejectsUnknownStatus(t *testing.T) {
 	h := selfImprovementCodingList(testSelfImprovementCodingDeps())
 	params, _ := json.Marshal(map[string]any{"status": "mystery"})
@@ -268,6 +304,40 @@ func TestSelfImprovementCodingDispatchReturnsErrorWithoutAttemptID(t *testing.T)
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
 	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
 		t.Fatalf("expected missing attemptId, got %+v", resp.Error)
+	}
+}
+
+func TestSelfImprovementCodingDispatchClassifiesResultFactsInDomainKernel(t *testing.T) {
+	var got genesis.SelfCorrectionCandidateRecord
+	deps := testSelfImprovementCodingDeps()
+	deps.RecordDispatch = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		got = rec
+		return rec, nil
+	}
+	h := selfImprovementCodingDispatch(deps)
+	params, _ := json.Marshal(map[string]any{
+		"id": "sc-1", "attemptId": "attempt-1", "branch": "dispatch/sc-1",
+		"returnCode": 0, "ahead": 0, "prState": "CLOSED",
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
+	payload := decodeSkillsPayload[map[string]any](t, resp)
+	if got.DispatchPhase != "declined" || payload["dispatchPhase"] != "declined" {
+		t.Fatalf("classified record=%+v payload=%+v", got, payload)
+	}
+}
+
+func TestSelfImprovementCodingDispatchRejectsUnknownCleanResult(t *testing.T) {
+	h := selfImprovementCodingDispatch(SelfImprovementCodingDeps{
+		RecordDispatch: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+			return rec, nil
+		},
+	})
+	params, _ := json.Marshal(map[string]any{
+		"id": "sc-1", "attemptId": "attempt-1", "returnCode": 0,
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
+	if resp.Error == nil || resp.Error.Code != protocol.ErrValidationFailed {
+		t.Fatalf("expected fail-closed result rejection, got %+v", resp.Error)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -155,20 +156,39 @@ func selfImprovementCodingDispatch(deps SelfImprovementCodingDeps) rpcutil.Handl
 		CommitSHA     string `json:"commitSha"`
 		DeployHead    string `json:"deployHead"`
 		OutcomeNote   string `json:"outcomeNote"`
+		ReturnCode    *int   `json:"returnCode"`
+		Ahead         *int   `json:"ahead"`
+		PRState       string `json:"prState"`
 	}
 	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if strings.TrimSpace(p.ID) == "" {
 			return rpcerr.MissingParam("id").Response(req.ID)
 		}
-		if strings.TrimSpace(p.DispatchPhase) == "" {
-			return rpcerr.MissingParam("dispatchPhase").Response(req.ID)
-		}
 		if strings.TrimSpace(p.AttemptID) == "" {
 			return rpcerr.MissingParam("attemptId").Response(req.ID)
 		}
+		phase := strings.TrimSpace(p.DispatchPhase)
+		if phase == "" {
+			if p.ReturnCode == nil && strings.TrimSpace(p.PRState) == "" {
+				return rpcerr.MissingParam("dispatchPhase or result facts").Response(req.ID)
+			}
+			returnCode := 0
+			if p.ReturnCode != nil {
+				returnCode = *p.ReturnCode
+			}
+			classified, err := rsilifecycle.ClassifyDispatchResult(rsilifecycle.DispatchFacts{
+				ReturnCode: returnCode,
+				Ahead:      p.Ahead,
+				PRState:    p.PRState,
+			})
+			if err != nil {
+				return rpcerr.WrapValidationFailed("self-correction result facts rejected", err).Response(req.ID)
+			}
+			phase = string(classified)
+		}
 		_, err := deps.RecordDispatch(genesis.SelfCorrectionCandidateRecord{
 			ID:            p.ID,
-			DispatchPhase: p.DispatchPhase,
+			DispatchPhase: phase,
 			AttemptID:     p.AttemptID,
 			Branch:        p.Branch,
 			PRNumber:      p.PRNumber,
@@ -180,7 +200,7 @@ func selfImprovementCodingDispatch(deps SelfImprovementCodingDeps) rpcutil.Handl
 		if err != nil {
 			return rpcerr.WrapValidationFailed("self-correction dispatch rejected", err).Response(req.ID)
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "id": strings.TrimSpace(p.ID), "dispatchPhase": strings.TrimSpace(p.DispatchPhase)})
+		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "id": strings.TrimSpace(p.ID), "dispatchPhase": phase})
 	})
 }
 
@@ -247,36 +267,63 @@ func selfImprovementCodingRecord(deps SelfImprovementCodingDeps) rpcutil.Handler
 
 func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Limit  int    `json:"limit"`
-		Status string `json:"status"`
+		Limit            int      `json:"limit"`
+		Status           string   `json:"status"`
+		DispatchableOnly bool     `json:"dispatchableOnly"`
+		ExcludeIDs       []string `json:"excludeIds"`
 	}
 	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		if p.Limit <= 0 || p.Limit > lifecycleScanLimit {
 			p.Limit = 60
 		}
-		status, err := normalizeSelfImprovementCodingStatus(p.Status)
-		if err != nil {
-			return rpcerr.InvalidParams(err).Response(req.ID)
-		}
-		recs, err := deps.RecentCandidates(status, p.Limit)
-		if err != nil {
-			return rpcerr.WrapUnavailable("self-improvement coding queue unavailable", err).Response(req.ID)
-		}
 		allRecs, err := deps.RecentCandidates("", lifecycleScanLimit)
 		if err != nil {
 			return rpcerr.WrapUnavailable("self-improvement coding queue unavailable", err).Response(req.ID)
+		}
+		var recs []genesis.SelfCorrectionCandidateRecord
+		if p.DispatchableOnly {
+			if selected, ok := genesis.SelectSelfCorrectionDispatchCandidate(allRecs, p.ExcludeIDs); ok {
+				recs = []genesis.SelfCorrectionCandidateRecord{selected}
+			}
+		} else {
+			status, normalizeErr := normalizeSelfImprovementCodingStatus(p.Status)
+			if normalizeErr != nil {
+				return rpcerr.InvalidParams(normalizeErr).Response(req.ID)
+			}
+			recs = filterSelfImprovementCodingRecords(allRecs, status, p.Limit)
 		}
 		candidates := make([]SelfCorrectionCandidate, 0, len(recs))
 		for _, rec := range recs {
 			candidates = append(candidates, selfCorrectionCandidate(rec))
 		}
-		return rpcutil.RespondOK(req.ID, SelfImprovementCodingListResponse{
-			Candidates:   candidates,
-			Count:        len(candidates),
-			StatusCounts: selfImprovementCodingStatusCounts(allRecs),
-			Funnel:       selfImprovementCodingFunnel(deps),
-		})
+		response := SelfImprovementCodingListResponse{
+			Candidates: candidates,
+			Count:      len(candidates),
+		}
+		if !p.DispatchableOnly {
+			response.StatusCounts = selfImprovementCodingStatusCounts(allRecs)
+			response.Funnel = selfImprovementCodingFunnel(deps)
+		}
+		return rpcutil.RespondOK(req.ID, response)
 	})
+}
+
+func filterSelfImprovementCodingRecords(
+	records []genesis.SelfCorrectionCandidateRecord,
+	status string,
+	limit int,
+) []genesis.SelfCorrectionCandidateRecord {
+	out := make([]genesis.SelfCorrectionCandidateRecord, 0, min(limit, len(records)))
+	for _, record := range records {
+		if status != "" && strings.TrimSpace(record.Status) != status {
+			continue
+		}
+		out = append(out, record)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovementCodingFunnel {

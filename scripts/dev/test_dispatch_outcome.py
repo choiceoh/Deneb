@@ -51,6 +51,20 @@ class DecisionTableTest(unittest.TestCase):
                 dispatch_outcome.decide(rc, ahead, state), want, (rc, ahead, state)
             )
 
+    def test_authoritative_phase_drives_marker_projection(self):
+        self.assertEqual(
+            dispatch_outcome.project_authoritative_phase("declined", 1, 0, ""),
+            "declined",
+        )
+        self.assertEqual(
+            dispatch_outcome.project_authoritative_phase("failed", 0, 1, ""),
+            "attempted",
+        )
+        self.assertEqual(
+            dispatch_outcome.project_authoritative_phase("merged", 124, 0, ""),
+            "landed",
+        )
+
     def test_unknown_ahead_without_pr_skips_outcome(self):
         with TemporaryDirectory() as td:
             marker = Path(td) / "sc-u.json"

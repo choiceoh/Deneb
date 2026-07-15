@@ -229,8 +229,8 @@ func TestRSIDispatchMetricsCountRetryHistoryNotMarkerFiles(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC()
-	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	marker := fmt.Sprintf(`{
 		"id":"retry",
 		"attemptId":"a-declined",
@@ -245,7 +245,7 @@ func TestRSIDispatchMetricsCountRetryHistoryNotMarkerFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	total, today := tr.codingDispatchCounts()
+	total, today := tr.codingDispatchCountsAt(now)
 	if total != 3 || today != 2 {
 		t.Fatalf("dispatch counts = total %d today %d, want 3/2", total, today)
 	}

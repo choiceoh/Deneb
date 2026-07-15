@@ -28,7 +28,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -40,79 +39,6 @@ ARTIFACT_NAME = "dispatch-contract-prompt.md"
 MIN_ARTIFACT_BYTES = 200
 # Exit code meaning "artifact unavailable — defer this dispatch, burn nothing".
 DEFER_EXIT = 3
-
-# Defense-in-depth for the acceptor boundary (RSI code eval C2/F1): the
-# record-time surface gate only sees structured targetFiles, so a candidate
-# whose PROSE names acceptance machinery would otherwise flow verbatim into a
-# headless session with landing authority. Any mention of these basenames in
-# the candidate text defers the dispatch to operator review — conservative on
-# purpose; a legitimate candidate discussing a gate file still deserves a
-# human eye before an unattended session edits near it. Pinned against the
-# forbidden surface whitelist in surfaces.go by test_dispatch_prompt.py.
-FORBIDDEN_SURFACE_BASENAMES = (
-    "validation_engine.go",
-    "validation_replay.go",
-    "eprocess.go",
-    "meta_judge_bench.go",
-    "meta_producer_bench.go",
-    "meta_genesis_bench.go",
-    "meta_evolution.go",
-    "judge_accuracy.go",
-    "surfaces.go",
-    "tracker_usage.go",
-    "tracker_self_correction.go",
-    "tracker_eprocess_cutover.go",
-    "evolution_drift.go",
-    "rsi_ladder.go",
-    "ladder_watch.go",
-    "graduation_state.go",
-    "coding-dispatch.sh",
-    "dispatch_prompt.py",
-    "dispatch_outcome.py",
-    # The landing tool and CI gate are the highest-value acceptance-script
-    # targets. Boundary-aware matching (below) makes them safe to guard in
-    # prose without false-positiving the words "PR" or "CI" (3rd-review C2-C2).
-    "pr.sh",
-    "ci.yml",
-    "prompt_cache.go",
-    "cache_breakpoints.go",
-    "tier1_cache.go",
-    "prompt_snapshot_persist.go",
-    "dependabot.yml",
-    "codeql.yml",
-)
-
-# A basename must appear as a whole PATH COMPONENT, not an arbitrary substring:
-# a bare `name in blob` flagged "eprocess.go" inside the real, unrelated file
-# `web_html_preprocess.go` (…pr[eprocess.go]) and wedged it out of the L4 lane
-# (3rd-review C2-C1). Bound it with negative lookarounds: the name may not be
-# preceded by a filename-body char (so "preprocess" 's "r" blocks it, while
-# "/", space, quote, or start is fine) nor followed by one — including an
-# extension continuation "."+alnum, so "eprocess.go.bak" / "pr.sh.md" do NOT
-# match "eprocess.go" / "pr.sh" (Copilot review). A bare trailing "." (sentence
-# period) or "/" (dir slash) still terminates the component.
-_FORBIDDEN_RE = re.compile(
-    r"(?<![A-Za-z0-9._-])(" + "|".join(re.escape(n) for n in FORBIDDEN_SURFACE_BASENAMES)
-    + r")(?![A-Za-z0-9_-])(?!\.[A-Za-z0-9])",
-    re.IGNORECASE,
-)
-
-
-def forbidden_surface_mentions(candidate: dict) -> list[str]:
-    """Forbidden-surface basenames mentioned as a whole path component in the
-    candidate's free text or structured targets (case-insensitive)."""
-    fields = [
-        str(candidate.get(k, ""))
-        for k in ("title", "skillName", "candidate", "proposedChange", "evidence", "risk")
-    ]
-    targets = candidate.get("targetFiles")
-    if isinstance(targets, list):
-        fields.extend(str(x) for x in targets)
-    blob = "\n".join(fields)
-    hits = {m.group(1).lower() for m in _FORBIDDEN_RE.finditer(blob)}
-    # Preserve declaration order for stable, testable output.
-    return [name for name in FORBIDDEN_SURFACE_BASENAMES if name in hits]
-
 
 def resolve_contract(meta_dir: Path) -> tuple[str, str] | None:
     """Return (contract_text, sha12) or None when the artifact is unusable."""
@@ -152,13 +78,6 @@ def main() -> int:
     args = ap.parse_args()
 
     candidate = json.load(sys.stdin)
-    if mentions := forbidden_surface_mentions(candidate):
-        print(
-            f"candidate {candidate.get('id')} mentions forbidden acceptance "
-            f"surfaces {mentions} — deferring to operator review (no marker burned)",
-            file=sys.stderr,
-        )
-        return DEFER_EXIT
     resolved = resolve_contract(Path(args.meta_dir))
     if resolved is None:
         print(

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Record the OUTCOME of one L4 coding-dispatch session onto its marker.
+"""Project the authoritative L4 result onto its local compatibility marker.
 
 RSI graduation-ladder evidence (roadmap P5): raising the daily dispatch cap
 requires "N dispatches with 0 deploy-watch rollbacks and >=50% land rate" —
 but until now nothing measured land rate: the marker recorded only that a
-dispatch HAPPENED. This module folds the session's observable outcome back
-into the marker (the dispatch ledger), so the ladder evidence accumulates
-from the very first dispatch.
+dispatch HAPPENED. This module folds the gateway-classified outcome back into
+the local compatibility marker, so older audits and worktree protection retain
+their compact outcome vocabulary.
 
 Decision table — deterministic, from facts the shell gathers (a PR probe and
 the worktree's commit state), never from parsing session text:
@@ -28,9 +28,10 @@ the session abandon age (default = SESSION_TIMEOUT). A clean decline is a
 deliberate no-change verdict, so repeating the same unchanged candidate only
 burns another agent session without adding evidence.
 
-The marker is rewritten atomically (tmp+rename); all fields are additive so
-older markers without outcomes stay readable. Exit 0 even on unreadable
-markers or write failures — outcome accounting must never break the lane.
+The gateway lifecycle kernel owns the authoritative result decision. This
+module keeps marker history for local worktree protection and older audits;
+it never advances the tracker ledger. The marker is rewritten atomically
+(tmp+rename), and write failures never break the lane.
 """
 
 from __future__ import annotations
@@ -95,7 +96,7 @@ def _marker_is_fresh(
 
 
 def decide(rc: int, ahead: int, pr_state: str) -> str:
-    """Map observables to an outcome. Caller must not pass unknown ahead as 0."""
+    """Legacy fact classifier for callers without an authoritative phase."""
     if pr_state == "MERGED":
         return "landed"
     # OPEN / unpushed commits win over session rc: a timeout after opening a PR
@@ -107,6 +108,26 @@ def decide(rc: int, ahead: int, pr_state: str) -> str:
     if rc != 0:
         return "failed"
     return "declined"
+
+
+def project_authoritative_phase(phase: str, rc: int, ahead: int, pr_state: str) -> str:
+    """Map the gateway-owned phase to the compatibility marker vocabulary."""
+    phase = phase.strip().lower()
+    if phase in {"merged", "deployed", "watch_passed"}:
+        return "landed"
+    if phase == "pr_opened":
+        return "attempted"
+    if phase == "declined":
+        return "declined"
+    if phase in {"failed", "rolled_back"}:
+        # Preserve unlanded local work even though the authoritative attempt is
+        # closed and retryable once that residue is reclaimed.
+        if ahead > 0 or pr_state == "OPEN":
+            return "attempted"
+        if rc == TIMEOUT_RC:
+            return "timeout"
+        return "failed"
+    return decide(rc, ahead, pr_state)
 
 
 def write_marker(path: Path, marker: dict, *, mtime_sec: float | None = None) -> bool:
@@ -141,6 +162,11 @@ def main() -> int:
         "--pr-state",
         default="",
         help="gh PR state: MERGED|OPEN|CLOSED|'' (unknown)",
+    )
+    ap.add_argument(
+        "--authoritative-phase",
+        default="",
+        help="gateway-classified dispatch phase; marker projection only",
     )
     ap.add_argument(
         "--upgrade-only",
@@ -185,7 +211,7 @@ def main() -> int:
         return 0
 
     ahead_raw = args.ahead.strip()
-    if ahead_raw == "" and not pr_state:
+    if ahead_raw == "" and not pr_state and not args.authoritative_phase.strip():
         # Unknown facts — do not invent declined (bot review #3609).
         print("unknown", file=sys.stderr)
         print("")
@@ -195,7 +221,12 @@ def main() -> int:
     except ValueError:
         ahead = 0
 
-    outcome = decide(args.rc, ahead, pr_state)
+    outcome = project_authoritative_phase(
+        args.authoritative_phase,
+        args.rc,
+        ahead,
+        pr_state,
+    ) if args.authoritative_phase.strip() else decide(args.rc, ahead, pr_state)
     marker["outcome"] = outcome
     marker["outcomeRc"] = args.rc
     marker["outcomeElapsedSec"] = args.elapsed

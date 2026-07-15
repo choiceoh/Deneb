@@ -99,3 +99,33 @@ func TestClassifySurfaceRejectsAcceptanceScriptsIncludingBareBasename(t *testing
 		t.Fatalf("non-acceptor script = %+v, must stay proposable", s)
 	}
 }
+
+func TestForbiddenSurfaceMentionsMatchesComponentsWithoutSubstringFalsePositives(t *testing.T) {
+	for _, benign := range []string{
+		"gateway-go/internal/pipeline/chat/web/web_html_preprocess.go",
+		"a/eprocess.go.bak",
+		"see docs/pr.sh.md for details",
+		"open a PR, wait for CI to pass",
+		"use the pr.shell wrapper",
+		"edit the unrelated internal/ai/modelrole/profile.go",
+	} {
+		if got := ForbiddenSurfaceMentions(benign); len(got) != 0 {
+			t.Fatalf("ForbiddenSurfaceMentions(%q) = %v, want none", benign, got)
+		}
+	}
+	for input, want := range map[string]string{
+		"edit surfaces.go. then rebuild":                                     "surfaces.go",
+		"gateway-go/internal/domain/skills/genesis/lifecycle/rsi_profile.go": "rsi_profile.go",
+		"patch scripts/dev/pr.sh land":                                       "pr.sh",
+		"change .github/workflows/ci.yml":                                    "ci.yml",
+	} {
+		got := ForbiddenSurfaceMentions(input)
+		found := false
+		for _, name := range got {
+			found = found || name == want
+		}
+		if !found {
+			t.Fatalf("ForbiddenSurfaceMentions(%q) = %v, want %q", input, got, want)
+		}
+	}
+}
