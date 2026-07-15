@@ -148,10 +148,12 @@ abstract class GitShaValueSource : ValueSource<String, ValueSourceParameters.Non
 androidComponents {
     val versionCode = denebVersionCode
     // DENEB_BUILD_SHA (publish-apk.sh) wins; else the repo HEAD short sha; else "nogit".
-    val gitSha = providers.environmentVariable("DENEB_BUILD_SHA")
-        .orElse(providers.of(GitShaValueSource::class) {})
-        .map { it.ifBlank { "nogit" } }
-        .getOrElse("nogit")
+    val gitSha =
+        providers
+            .environmentVariable("DENEB_BUILD_SHA")
+            .orElse(providers.of(GitShaValueSource::class) {})
+            .map { it.ifBlank { "nogit" } }
+            .getOrElse("nogit")
     onVariants { variant ->
         variant.outputs.forEach { output ->
             (output as? VariantOutputImpl)?.outputFileName?.set(
