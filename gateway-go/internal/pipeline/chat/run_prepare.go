@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
-	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -39,7 +39,7 @@ type prepResult struct {
 // build in parallel. Returns the combined results.
 func prepareContextAndPrompt(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	workspaceDir string,
 	sessionToolPreset string,
@@ -112,7 +112,7 @@ func prepareContextAndPrompt(
 
 // buildTier1WikiSnapshot returns the session-frozen tier-1 wiki block ("" for
 // explicit-System runs, which own their prompt).
-func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
+func buildTier1WikiSnapshot(params runParams, deps runDeps) string {
 	if deps.disableTier1Wiki {
 		return ""
 	}
@@ -135,7 +135,7 @@ func buildTier1WikiSnapshot(params RunParams, deps runDeps) string {
 // buildRecallSnapshot runs the recall preflight for the turn: profile/toggle
 // gates, per-cue caching, and the multi-source search. Returns the wire-ready
 // recall block ("" when gated or no evidence).
-func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, logger *slog.Logger) string {
+func buildRecallSnapshot(ctx context.Context, params runParams, deps runDeps, logger *slog.Logger) string {
 	// Ephemeral turns (autonomous heartbeat self-triggers) never run
 	// recall — there is no real user message to recall against. SkipRecall
 	// is the user's "focused chat / memory off" toggle: skip the whole
@@ -154,13 +154,13 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 	if _, _, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		return ""
 	}
-	fingerprint := chatrecall.CueFingerprint(params.Message)
+	fingerprint := leafbind.RecallCueFingerprint(params.Message)
 	hasCue := fingerprint != ""
 	// Hermes-style auto_recall: run the preflight every turn, not just cue turns.
 	// recall.Build searches wiki/diary/polaris/transcript and returns
 	// "" silently when there's no evidence, so non-cue turns add latency but no noise.
 	if hasCue && !deps.briefcaseMode {
-		if cached, ok := chatrecall.CachedSnapshot(params.SessionKey, fingerprint); ok {
+		if cached, ok := leafbind.RecallCachedSnapshot(params.SessionKey, fingerprint); ok {
 			return cached
 		}
 		// Explicit recall: surface the recalling phase so the user sees the
@@ -168,15 +168,15 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 		// stays invisible.
 		emitPhase(deps, params, "recalling", time.Now())
 	}
-	recallMemory, recallTruncated := chatrecall.Build(
+	recallMemory, recallTruncated := leafbind.RecallBuild(
 		ctx,
-		chatrecall.Params{
+		leafbind.RecallParams{
 			SessionKey:    params.SessionKey,
 			Message:       params.Message,
 			EphemeralUser: params.EphemeralUser,
 			SkipRecall:    params.SkipRecall,
 		},
-		chatrecall.Deps{
+		leafbind.RecallDeps{
 			Wiki:         deps.memory.Wiki,
 			Transcript:   deps.transcript,
 			FileRecall:   deps.memory.FileRecall,
@@ -187,15 +187,15 @@ func buildRecallSnapshot(ctx context.Context, params RunParams, deps runDeps, lo
 		},
 		logger,
 	)
-	if !deps.briefcaseMode && chatrecall.ShouldFreeze(hasCue, recallTruncated, recallMemory) {
-		chatrecall.StoreSnapshot(params.SessionKey, fingerprint, recallMemory)
+	if !deps.briefcaseMode && leafbind.RecallShouldFreeze(hasCue, recallTruncated, recallMemory) {
+		leafbind.RecallStoreSnapshot(params.SessionKey, fingerprint, recallMemory)
 	}
 	return recallMemory
 }
 
 // loadTurnContextMessages assembles the transcript-backed message history for
 // the turn (polaris bridge path); (nil, nil) when no bridge is wired.
-func loadTurnContextMessages(params RunParams, deps runDeps, logger *slog.Logger) ([]llm.Message, error) {
+func loadTurnContextMessages(params runParams, deps runDeps, logger *slog.Logger) ([]llm.Message, error) {
 	var messages []llm.Message
 	var contextErr error
 	if bridge, ok := deps.transcript.(*polaris.Bridge); ok {
@@ -226,7 +226,7 @@ func loadTurnContextMessages(params RunParams, deps runDeps, logger *slog.Logger
 // session-frozen inputs that must be persisted alongside them
 // (prompt_snapshot_persist.go). Explicit-System runs and default-system
 // deployments short-circuit with nil frozen inputs.
-func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, workspaceDir, sessionToolPreset string) (json.RawMessage, []prompt.ContextFile, *prompt.TopicKnowledge) {
+func buildTurnSystemPrompt(ctx context.Context, params runParams, deps runDeps, workspaceDir, sessionToolPreset string) (json.RawMessage, []prompt.ContextFile, *prompt.TopicKnowledge) {
 	if params.System != "" {
 		return json.RawMessage(llm.SystemString(params.System).Bytes()), nil, nil
 	}

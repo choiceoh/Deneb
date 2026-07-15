@@ -3,6 +3,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 func accuracyFixture(t *testing.T) (*JudgeAccuracyTask, *Tracker) {
@@ -34,7 +34,7 @@ func accuracyFixture(t *testing.T) (*JudgeAccuracyTask, *Tracker) {
 	catalog.Register(e)
 	task := &JudgeAccuracyTask{
 		Evolver: &Evolver{catalog: catalog, tracker: tr, logger: slog.Default()},
-		Meta:    generation.NewMetaArtifacts(t.TempDir(), slog.Default()),
+		Meta:    genbind.NewMetaArtifacts(t.TempDir(), slog.Default()),
 		Tracker: tr,
 		Logger:  slog.Default(),
 	}
@@ -105,8 +105,8 @@ func TestOperatorJudgeVerdictIsIdempotentAndSeparateFromLaneRuns(t *testing.T) {
 // judge; a drop-tier miss or a judge revision (version change) re-locks it.
 func TestJudgeAccuracyEscalationAllowsWeakenTierAfterSaturatedWindow(t *testing.T) {
 	task, tr := accuracyFixture(t)
-	version := task.Meta.Version(generation.MetaSkillJudgeSystemPrompt,
-		generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])
+	version := task.Meta.Version(genbind.MetaSkillJudgeSystemPrompt,
+		genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt])
 	seed := func(v string, dropMissed int) {
 		t.Helper()
 		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{

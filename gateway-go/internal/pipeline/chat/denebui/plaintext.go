@@ -106,7 +106,7 @@ func ReplaceFences(text string, repl func(body string) string) string {
 		}
 		// Keep a glued prose prefix ahead of the opener's backticks.
 		full := strings.TrimRight(lines[i], " \t")
-		cut := strings.TrimRight(full[:len(full)-len(FenceInfo)], " \t")
+		cut := strings.TrimRight(full[:len(full)-len(fenceInfo)], " \t")
 		if prefix := strings.TrimSpace(strings.TrimRight(cut, "`")); prefix != "" {
 			out = append(out, prefix)
 		}

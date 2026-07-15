@@ -136,6 +136,69 @@ func inQueryScopes(path string, scopes []string) bool {
 	return false
 }
 
+func isSemanticClause(kind QueryKind) bool {
+	return kind == QueryKindVec || kind == QueryKindHyDE
+}
+
+func filterSearchResultsByScopes(results []SearchResult, scopes []string) []SearchResult {
+	if len(scopes) == 0 {
+		return results
+	}
+	filtered := results[:0]
+	for _, result := range results {
+		if inQueryScopes(result.Path, scopes) {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered
+}
+
+func (s *Store) embedSemanticVectorsForPlan(ctx context.Context, clauses []QueryClause) map[int][]float32 {
+	semanticQueries := make([]string, 0, len(clauses))
+	semanticClauseIndexes := make([]int, 0, len(clauses))
+	for i, clause := range clauses {
+		if isSemanticClause(clause.Kind) {
+			semanticQueries = append(semanticQueries, clause.Query)
+			semanticClauseIndexes = append(semanticClauseIndexes, i)
+		}
+	}
+	semanticVectors := make(map[int][]float32, len(semanticClauseIndexes))
+	if len(semanticQueries) == 0 {
+		return semanticVectors
+	}
+	vectors := s.embedQueriesBatch(ctx, semanticQueries)
+	if vectors == nil {
+		return semanticVectors
+	}
+	for i, clauseIndex := range semanticClauseIndexes {
+		semanticVectors[clauseIndex] = vectors[i]
+	}
+	return semanticVectors
+}
+
+func (s *Store) searchPlanClause(ctx context.Context, clause QueryClause, fetchLimit int, semanticVec []float32) (SearchReport, error) {
+	options := QueryOptions{skipMetadata: true, SkipRerank: true, skipValidity: true}
+	if isSemanticClause(clause.Kind) {
+		options.Mode = SearchModeSemantic
+		semantic := s.searchSemanticWithVec(semanticVec, max(fetchLimit, semanticBlendK))
+		return s.composeSearchReport(ctx, clause.Query, fetchLimit, fetchLimit, nil, semantic, false, options, nil), nil
+	}
+	options.Mode = SearchModeBM25
+	report, err := s.SearchWithOptions(ctx, clause.Query, fetchLimit, options)
+	if err != nil {
+		return SearchReport{}, fmt.Errorf("wiki query plan %s: %w", clause.Kind, err)
+	}
+	return report, nil
+}
+
+func (s *Store) intentResultsForPlan(ctx context.Context, plan QueryPlan, results []SearchResult, fetchLimit int) []SearchResult {
+	if plan.Intent == "" || !shouldIntentRerank(results, QueryOptions{Intent: plan.Intent}) {
+		return nil
+	}
+	intentResults, _ := s.fts.search(ctx, plan.Intent, fetchLimit)
+	return filterSearchResultsByScopes(intentResults, plan.Scopes)
+}
+
 // SearchPlan executes typed clauses independently and combines their ranks
 // with weighted RRF. It preserves the existing per-backend admission floors,
 // validity demotion, deterministic ties, and graceful semantic fallback.
@@ -150,66 +213,24 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	fetchLimit := max(limit*3, limit+50)
 	rankings := make([][]SearchResult, 0, len(plan.Clauses))
 	diagnostics := SearchDiagnostics{Mode: SearchModeFull, Fusion: "weighted-rrf", Scopes: plan.Scopes}
-	semanticQueries := make([]string, 0, len(plan.Clauses))
-	semanticClauseIndexes := make([]int, 0, len(plan.Clauses))
-	for i, clause := range plan.Clauses {
-		if clause.Kind == QueryKindVec || clause.Kind == QueryKindHyDE {
-			semanticQueries = append(semanticQueries, clause.Query)
-			semanticClauseIndexes = append(semanticClauseIndexes, i)
-		}
-	}
-	semanticVectors := make(map[int][]float32, len(semanticClauseIndexes))
-	if len(semanticQueries) > 0 {
-		if vectors := s.embedQueriesBatch(ctx, semanticQueries); vectors != nil {
-			for i, clauseIndex := range semanticClauseIndexes {
-				semanticVectors[clauseIndex] = vectors[i]
-			}
-		}
-	}
+	semanticVectors := s.embedSemanticVectorsForPlan(ctx, plan.Clauses)
 	for clauseIndex, clause := range plan.Clauses {
-		options := QueryOptions{skipMetadata: true, SkipRerank: true, skipValidity: true}
-		var report SearchReport
-		if clause.Kind == QueryKindVec || clause.Kind == QueryKindHyDE {
-			options.Mode = SearchModeSemantic
-			semantic := s.searchSemanticWithVec(semanticVectors[clauseIndex], max(fetchLimit, semanticBlendK))
-			report = s.composeSearchReport(ctx, clause.Query, fetchLimit, fetchLimit, nil, semantic, false, options, nil)
-		} else {
-			options.Mode = SearchModeBM25
-			var err error
-			report, err = s.SearchWithOptions(ctx, clause.Query, fetchLimit, options)
-			if err != nil {
-				return SearchReport{}, fmt.Errorf("wiki query plan %s: %w", clause.Kind, err)
-			}
+		report, err := s.searchPlanClause(ctx, clause, fetchLimit, semanticVectors[clauseIndex])
+		if err != nil {
+			return SearchReport{}, err
 		}
-		filtered := report.Results[:0]
-		for _, result := range report.Results {
-			if inQueryScopes(result.Path, plan.Scopes) {
-				filtered = append(filtered, result)
-			}
-		}
+		filtered := filterSearchResultsByScopes(report.Results, plan.Scopes)
 		rankings = append(rankings, filtered)
 		diagnostics.Clauses = append(diagnostics.Clauses, QueryClauseDiagnostic{
 			Kind: clause.Kind, Weight: clause.Weight, Candidates: len(filtered),
 		})
-		diagnostics.SemanticAvailable = diagnostics.SemanticAvailable || ((clause.Kind == QueryKindVec || clause.Kind == QueryKindHyDE) && len(filtered) > 0)
+		diagnostics.SemanticAvailable = diagnostics.SemanticAvailable || (isSemanticClause(clause.Kind) && len(filtered) > 0)
 	}
 	results := fuseQueryPlan(rankings, plan.Clauses, fetchLimit)
 	diagnostics.CandidateCount = len(results)
 	baseScores := resultScoreMap(results)
 	results = s.fts.applyValidity(results)
-	intentResults := []SearchResult(nil)
-	if plan.Intent != "" && shouldIntentRerank(results, QueryOptions{Intent: plan.Intent}) {
-		intentResults, _ = s.fts.search(ctx, plan.Intent, fetchLimit)
-		if len(plan.Scopes) > 0 {
-			filtered := intentResults[:0]
-			for _, result := range intentResults {
-				if inQueryScopes(result.Path, plan.Scopes) {
-					filtered = append(filtered, result)
-				}
-			}
-			intentResults = filtered
-		}
-	}
+	intentResults := s.intentResultsForPlan(ctx, plan, results, fetchLimit)
 	bonuses, applied := s.applyIntentRerank(results, intentResults, QueryOptions{Intent: plan.Intent})
 	diagnostics.IntentApplied = applied
 	if len(results) > 0 {

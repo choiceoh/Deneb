@@ -8,7 +8,7 @@
 // the user gets a proactive Telegram completion notice via proactiveRelay (the
 // same delivery path cron uses).
 //
-// The deterministic structural merge lives in wiki.Store.MergePage; this file
+// The deterministic structural merge lives in domainbind.WikiStore.MergePage; this file
 // only adds the model call, the background goroutine, and the notification.
 
 package server
@@ -19,11 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -53,8 +52,8 @@ const wikiMergeJobTimeout = 4 * time.Minute
 // notifies the active home chat when done. Lazy field access (hub.WikiStore,
 // s.modelRegistry, s.proactiveRelay) is fine — by the time a user triggers a
 // merge, all are wired, even though MemoryDeps is assembled in the early phase.
-func (s *Server) makeWikiMergeStarter(hub *rpcutil.GatewayHub) func(targetPath, sourcePath string, target, source *wiki.Page) {
-	return func(targetPath, sourcePath string, target, source *wiki.Page) {
+func (s *Server) makeWikiMergeStarter(hub *rpcutil.GatewayHub) func(targetPath, sourcePath string, target, source *domainbind.Page) {
+	return func(targetPath, sourcePath string, target, source *domainbind.Page) {
 		safego.GoWithSlog(s.logger, "miniapp-wiki-merge", func() {
 			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), wikiMergeJobTimeout)
 			defer cancel()
@@ -70,7 +69,7 @@ func (s *Server) makeWikiMergeStarter(hub *rpcutil.GatewayHub) func(targetPath, 
 			// unavailable / slow / errors, so the merge always completes.
 			body, usedLLM := s.synthesizeMergeBody(ctx, target, source)
 
-			res, err := store.MergePage(targetPath, sourcePath, body, wiki.MergeOptions{})
+			res, err := store.MergePage(targetPath, sourcePath, body, domainbind.MergeOptions{})
 			if err != nil {
 				s.logger.Error("miniapp wiki merge failed",
 					"target", targetPath, "source", sourcePath, "error", err)
@@ -98,13 +97,13 @@ func (s *Server) makeWikiMergeStarter(hub *rpcutil.GatewayHub) func(targetPath, 
 // synthesizeMergeBody asks the lightweight model to combine the two bodies.
 // Returns (synthesized, true) on success, or (concatenation, false) when the
 // model is unavailable / slow / errors — keeping the merge lossless either way.
-func (s *Server) synthesizeMergeBody(ctx context.Context, target, source *wiki.Page) (string, bool) {
+func (s *Server) synthesizeMergeBody(ctx context.Context, target, source *domainbind.Page) (string, bool) {
 	concat := concatMergeBody(target, source)
 	if s.modelRegistry == nil {
 		return concat, false
 	}
-	client := s.modelRegistry.Client(modelrole.RoleLightweight)
-	model := s.modelRegistry.Model(modelrole.RoleLightweight)
+	client := s.modelRegistry.Client(aibind.RoleLightweight)
+	model := s.modelRegistry.Model(aibind.RoleLightweight)
 	if client == nil || strings.TrimSpace(model) == "" {
 		return concat, false
 	}
@@ -113,10 +112,10 @@ func (s *Server) synthesizeMergeBody(ctx context.Context, target, source *wiki.P
 		strings.TrimSpace(target.Meta.Title), strings.TrimSpace(target.Body),
 		strings.TrimSpace(source.Meta.Title), strings.TrimSpace(source.Body))
 
-	out, err := client.Complete(ctx, llm.ChatRequest{
+	out, err := client.Complete(ctx, aibind.ChatRequest{
 		Model:     model,
-		System:    llm.SystemString(wikiMergeSystemPrompt),
-		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+		System:    aibind.SystemString(wikiMergeSystemPrompt),
+		Messages:  []aibind.Message{aibind.NewTextMessage("user", user)},
 		MaxTokens: wikiMergeMaxTokens,
 	})
 	if err != nil || strings.TrimSpace(out) == "" {
@@ -130,7 +129,7 @@ func (s *Server) synthesizeMergeBody(ctx context.Context, target, source *wiki.P
 
 // concatMergeBody is the lossless fallback body: target then source under a
 // divider. Keeps every line of both pages.
-func concatMergeBody(target, source *wiki.Page) string {
+func concatMergeBody(target, source *domainbind.Page) string {
 	srcTitle := strings.TrimSpace(source.Meta.Title)
 	if srcTitle == "" {
 		srcTitle = "병합된 페이지"
@@ -146,14 +145,14 @@ func concatMergeBody(target, source *wiki.Page) string {
 // the same proactive relay cron uses. Best-effort: a delivery failure is logged
 // (the merge itself already succeeded or failed on its own merits).
 func (s *Server) notifyMergeResult(ctx context.Context, message string) {
-	if _, err := s.proactiveRelay.Relay(ctx, proactive.NativeWorkSessionKey, message); err != nil {
+	if _, err := s.proactiveRelay.Relay(ctx, svcbind.NativeWorkSessionKey, message); err != nil {
 		s.logger.Error("wiki merge: completion notify failed", "error", err)
 	}
 }
 
 // titleOrPath prefers a page's title, falling back to its path so notices are
 // never blank for an untitled page.
-func titleOrPath(p *wiki.Page, path string) string {
+func titleOrPath(p *domainbind.Page, path string) string {
 	if p != nil {
 		if t := strings.TrimSpace(p.Meta.Title); t != "" {
 			return t

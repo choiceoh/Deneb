@@ -351,44 +351,44 @@ func classifyTransport(err error, msg string, httpStatus int, hint Hint) (Reason
 
 // ─── Extraction helpers ─────────────────────────────────────────────────
 
-// extractBodySignals parses the response body opportunistically. Returns the
-// nested error message (if any) and the provider error code.
-//
-// Handles common shapes:
-//   - {"error": {"message": "...", "code": "..." | "type": "..."}}
-//   - {"message": "..."}
-//   - {"error": {"metadata": {"raw": "{...}"}}} (OpenRouter-wrapped)
-func extractBodySignals(body []byte) (msg, code string) {
+func parseErrorBodyJSON(body []byte) (map[string]any, bool) {
 	if len(body) == 0 {
-		return "", ""
+		return nil, false
 	}
 	var top map[string]any
 	if err := json.Unmarshal(body, &top); err != nil {
-		return "", ""
+		return nil, false
 	}
+	return top, true
+}
 
-	// Nested error object.
-	if obj, ok := top["error"].(map[string]any); ok {
-		if m, ok := obj["message"].(string); ok && m != "" {
-			msg = m
-		}
-		if c, ok := obj["code"].(string); ok && c != "" {
-			code = c
-		} else if t, ok := obj["type"].(string); ok && t != "" {
-			code = t
-		}
-		// OpenRouter wraps upstream errors inside metadata.raw.
-		if msg != "" {
-			if meta, ok := obj["metadata"].(map[string]any); ok {
-				if rawStr, ok := meta["raw"].(string); ok && rawStr != "" {
-					if inner := extractInnerMessage(rawStr); inner != "" {
-						msg = msg + " " + inner
-					}
-				}
-			}
-		}
+func nestedErrorSignals(obj map[string]any) (msg, code string) {
+	if m, ok := obj["message"].(string); ok && m != "" {
+		msg = m
 	}
-	// Flat body: {"message": "..."}.
+	if c, ok := obj["code"].(string); ok && c != "" {
+		code = c
+	} else if t, ok := obj["type"].(string); ok && t != "" {
+		code = t
+	}
+	if msg == "" {
+		return msg, code
+	}
+	meta, ok := obj["metadata"].(map[string]any)
+	if !ok {
+		return msg, code
+	}
+	rawStr, ok := meta["raw"].(string)
+	if !ok || rawStr == "" {
+		return msg, code
+	}
+	if inner := extractInnerMessage(rawStr); inner != "" {
+		msg = msg + " " + inner
+	}
+	return msg, code
+}
+
+func flatBodySignals(top map[string]any, msg, code string) (string, string) {
 	if msg == "" {
 		if m, ok := top["message"].(string); ok && m != "" {
 			msg = m
@@ -402,6 +402,24 @@ func extractBodySignals(body []byte) (msg, code string) {
 		}
 	}
 	return msg, code
+}
+
+// extractBodySignals parses the response body opportunistically. Returns the
+// nested error message (if any) and the provider error code.
+//
+// Handles common shapes:
+//   - {"error": {"message": "...", "code": "..." | "type": "..."}}
+//   - {"message": "..."}
+//   - {"error": {"metadata": {"raw": "{...}"}}} (OpenRouter-wrapped)
+func extractBodySignals(body []byte) (msg, code string) {
+	top, ok := parseErrorBodyJSON(body)
+	if !ok {
+		return "", ""
+	}
+	if obj, ok := top["error"].(map[string]any); ok {
+		msg, code = nestedErrorSignals(obj)
+	}
+	return flatBodySignals(top, msg, code)
 }
 
 // extractInnerMessage parses OpenRouter-wrapped raw provider errors.

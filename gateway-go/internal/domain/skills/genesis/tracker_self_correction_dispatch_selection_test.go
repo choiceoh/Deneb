@@ -75,7 +75,7 @@ func TestSelfCorrectionDispatchEligibleCentralizesReviewDeliveryAndSurfacePolicy
 		ID: "safe", Scope: "code", Status: SelfCorrectionStatusProposed,
 		Source: "health-finding:x", ProposedChange: "narrow a gateway contract",
 	}
-	if !SelfCorrectionDispatchEligible(base) {
+	if !selfCorrectionDispatchEligible(base) {
 		t.Fatal("safe graduated candidate should dispatch")
 	}
 	tests := []SelfCorrectionCandidateRecord{
@@ -86,13 +86,13 @@ func TestSelfCorrectionDispatchEligibleCentralizesReviewDeliveryAndSurfacePolicy
 		{ID: "forbidden-prose", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "health-finding:x", ProposedChange: "relax validation_engine.go"},
 	}
 	for _, record := range tests {
-		if SelfCorrectionDispatchEligible(record) {
+		if selfCorrectionDispatchEligible(record) {
 			t.Fatalf("candidate unexpectedly eligible: %+v", record)
 		}
 	}
 	retry := base
 	retry.DispatchPhase = selfCorrectionDispatchFailed
-	if !SelfCorrectionDispatchEligible(retry) {
+	if !selfCorrectionDispatchEligible(retry) {
 		t.Fatal("failed candidate should be retryable before local residue checks")
 	}
 }

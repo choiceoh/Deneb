@@ -2,11 +2,11 @@ package skilllifecycle
 
 import (
 	"context"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/propuswire"
 )
 
 // Skill-lifecycle status surface split out of skill_lifecycle_tool.go (pure
@@ -17,8 +17,8 @@ import (
 func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chattools.SkillLifecycleStatusRequest) (chattools.SkillLifecycleStatusResult, error) {
 	if b.tracker == nil {
 		return chattools.SkillLifecycleStatusResult{
-			System:   propuswire.SystemStatus(strings.TrimSpace(req.SkillName)),
-			Overview: propuswire.UnavailableOverview(strings.TrimSpace(req.SkillName)),
+			System:   leafbind.SystemStatus(strings.TrimSpace(req.SkillName)),
+			Overview: leafbind.UnavailableOverview(strings.TrimSpace(req.SkillName)),
 			Reason:   "skill tracker is not configured",
 		}, nil
 	}
@@ -48,13 +48,13 @@ func (b *skillLifecycleBackend) skillLifecycleStatusForSkill(skillName string, l
 	common := b.collectSkillLifecycleCommonStatus(skillName, limit)
 	optimizerMemory, optimizerMemoryErr := b.optimizerMemory(skillName)
 	status := chattools.SkillLifecycleStatusResult{
-		System:          propuswire.SystemStatus(skillName),
-		Overview:        propuswire.SkillOverview(skillName, recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections),
+		System:          leafbind.SystemStatus(skillName),
+		Overview:        leafbind.SkillOverview(skillName, recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections),
 		OK:              true,
 		SkillName:       skillName,
 		Limit:           lifecycleValue(limit),
 		Recent:          lifecycleValue(recent),
-		Stats:           &chattools.SkillLifecycleStats{Scope: propuswire.ScopeSkill, Skill: stats},
+		Stats:           &chattools.SkillLifecycleStats{Scope: leafbind.ScopeSkill, Skill: stats},
 		Curator:         lifecycleValue(curator),
 		OptimizerMemory: lifecycleValue(optimizerMemory),
 	}
@@ -78,12 +78,12 @@ func (b *skillLifecycleBackend) globalSkillLifecycleStatus(limit int, recent []g
 	failureClusters := b.tracker.FailureEvidenceClusters(0)
 	workoutActivity := b.tracker.WorkoutActivitySummarize()
 	status := chattools.SkillLifecycleStatusResult{
-		System:             propuswire.SystemStatus(""),
-		Overview:           propuswire.GlobalOverview(recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections, selfHarnessSignals),
+		System:             leafbind.SystemStatus(""),
+		Overview:           leafbind.GlobalOverview(recent, stats, curator, common.usageQuality, common.validationSummary, common.opportunities, common.selfCorrections, selfHarnessSignals),
 		OK:                 true,
 		Limit:              lifecycleValue(limit),
 		Recent:             lifecycleValue(recent),
-		Stats:              &chattools.SkillLifecycleStats{Scope: propuswire.ScopeGlobal, Fleet: stats},
+		Stats:              &chattools.SkillLifecycleStats{Scope: leafbind.ScopeGlobal, Fleet: stats},
 		Curator:            lifecycleValue(curator),
 		SelfHarnessSignals: lifecycleValue(selfHarnessSignals),
 		// Fleet-wide failure clusters (Self-Harness weakness mining) — the same
@@ -253,4 +253,3 @@ func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string,
 	}
 	return out, ""
 }
-

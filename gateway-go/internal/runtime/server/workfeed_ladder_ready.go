@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 const ladderReadySource = "genesis-ladder"
@@ -24,7 +24,7 @@ func (s *Server) postLadderReadyCard(title, detail string) error {
 	if nf == nil {
 		return errors.New("native work feed unavailable")
 	}
-	item := workfeed.Item{
+	item := domainbind.Item{
 		Source:  ladderReadySource,
 		Title:   "졸업 사다리 준비됨: " + title,
 		Summary: detail,
@@ -35,8 +35,8 @@ func (s *Server) postLadderReadyCard(title, detail string) error {
 - 증거: %s
 
 잠금 해제는 자동으로 실행되지 않습니다 — 결정하시려면 채팅에서 지시하세요 (해당 노브/허용목록 변경은 세션 작업입니다). 상세 근거는 더보기 → 재귀적 자가개선의 '졸업 사다리' 카드에 있습니다.`, title, detail),
-		Actions: []workfeed.Action{
-			{ID: "ladder:ack", Kind: workfeed.ActionAck, Label: "확인"},
+		Actions: []domainbind.Action{
+			{ID: "ladder:ack", Kind: domainbind.ActionAck, Label: "확인"},
 		},
 	}
 	if _, err := nf.Append(item); err != nil {
@@ -58,7 +58,7 @@ func (s *Server) postGraduationCard(key, title, evidence string) {
 	if nf == nil {
 		return
 	}
-	item := workfeed.Item{
+	item := domainbind.Item{
 		Source:  ladderReadySource,
 		Title:   "졸업 실행: " + title,
 		Summary: evidence,
@@ -69,8 +69,8 @@ func (s *Server) postGraduationCard(key, title, evidence string) {
 - 증거: %s
 
 임계값 정책은 코드에 고정되어 있고 루프는 이를 실행만 합니다 (수용회로 forbidden). 되돌리려면 아래 재잠금을 누르세요 — 즉시 잠금 상태로 복원되고 원장에 기록됩니다. 킬 스위치: DENEB_AUTO_GRADUATE=0.`, title, evidence),
-		Actions: []workfeed.Action{
-			{ID: ladderActionRelockPrefix + key, Kind: workfeed.ActionAck, Label: "재잠금"},
+		Actions: []domainbind.Action{
+			{ID: ladderActionRelockPrefix + key, Kind: domainbind.ActionAck, Label: "재잠금"},
 		},
 	}
 	if _, err := nf.Append(item); err != nil {
@@ -80,7 +80,7 @@ func (s *Server) postGraduationCard(key, title, evidence string) {
 
 // handleLadderCardAction durably applies the operator's 재잠금 veto. An error
 // keeps the card unsettled so the operator can retry instead of losing the veto.
-func (s *Server) handleLadderCardAction(_ workfeed.Item, actionID string) error {
+func (s *Server) handleLadderCardAction(_ domainbind.Item, actionID string) error {
 	if s.genesisTracker == nil {
 		return errors.New("genesis tracker unavailable")
 	}

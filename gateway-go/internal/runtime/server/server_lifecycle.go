@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // DefaultTurnDeadline is the end-to-end budget for one user turn.
@@ -65,7 +65,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		// WriteTimeout is a DoS backstop: a peer that opens a connection and then
 		// stops reading the response can otherwise pin a goroutine + connection
 		// indefinitely. It must exceed DefaultTurnDeadline because the blocking
-		// miniapp.chat.send RPC writes its response only after the full agent
+		// miniapp.pipebind.send RPC writes its response only after the full agent
 		// turn completes. Long-lived streaming routes (SSE chat/stream and the
 		// persistent events channel) and large file downloads (APK, Gmail
 		// attachments) legitimately outlast this and lift it per-response via
@@ -121,7 +121,7 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 		// here (same goroutine, right after restore) so the prune-at-load drops
 		// snapshots whose session no longer exists, and the first post-restart
 		// turn of each live session reuses its frozen bytes (no APC re-prefill).
-		if n := chat.LoadPromptSnapshots(func(key string) bool { return s.sessions.Get(key) != nil }); n > 0 {
+		if n := pipebind.LoadPromptSnapshots(func(key string) bool { return s.sessions.Get(key) != nil }); n > 0 {
 			s.logger.Info("prompt snapshot restore: restored sessions", "count", n)
 		}
 		s.autoResumeInterruptedRuns(ctx)
@@ -211,7 +211,7 @@ func (s *Server) shutdown() error {
 
 func (s *Server) doShutdown() error {
 	s.ready.Store(false)
-	logging.PrintShutdown(os.Stderr, time.Since(s.startedAt), s.logColor)
+	infrabind.PrintShutdown(os.Stderr, time.Since(s.startedAt), s.logColor)
 
 	// 1. Stop accepting new connections.
 	var httpErr error

@@ -24,6 +24,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -33,8 +34,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -68,14 +67,14 @@ const judgeMissEvidenceRuns = 10
 // otherwise silently drop the new schema when adopted (near-miss 2026-07-11:
 // the first live proposal predated tool_gap and would have erased it).
 var metaArtifactContracts = map[string][]string{
-	generation.MetaEvolveSystemPrompt: {
+	genbind.MetaEvolveSystemPrompt: {
 		`"skip"`, `"changes"`, `"body"`, `"new_version"`,
 		`"target_signature"`, `"reproduction_case"`, `"tool_gap"`,
 	},
-	generation.MetaSkillJudgeSystemPrompt: {
+	genbind.MetaSkillJudgeSystemPrompt: {
 		`"pass"`, `"original_score"`, `"candidate_score"`, `"reason"`,
 	},
-	generation.MetaGenesisSystemPrompt: {
+	genbind.MetaGenesisSystemPrompt: {
 		`"skip"`, `"skill"`, `"name"`, `"category"`, `"description"`, `"body"`,
 	},
 }
@@ -232,7 +231,7 @@ func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
 	newest := entries[0]
 	out.LastArtifact = newest.Artifact
 	out.LastEpoch = newest.Epoch
-	out.LastReason = common.TruncateRunes(newest.Reason, 200)
+	out.LastReason = genbind.TruncateRunes(newest.Reason, 200)
 	out.LastProposed = newest.Proposed
 	return out
 }
@@ -279,7 +278,7 @@ func (t *Tracker) operatorUtilitySignals() operatorUtilitySignals {
 // isolated state dir, so no extra production gate is needed for propose-only.
 type MetaEvolutionTask struct {
 	Evolver *Evolver
-	Meta    *generation.MetaArtifacts
+	Meta    *genbind.MetaArtifacts
 	Tracker *Tracker
 	Logger  *slog.Logger
 
@@ -304,7 +303,7 @@ type MetaEvolutionTask struct {
 	QualityBench func(ctx context.Context) string
 	// GenesisGen, when set, executes one genesis generation with an explicit
 	// system prompt on the PRODUCTION genesis model — the genesis-epoch shadow
-	// bench's executor (server wires generation.Service.ShadowGenerate). Nil
+	// bench's executor (server wires genbind.Service.ShadowGenerate). Nil
 	// drops genesis-epoch proposals (bench unavailable), mirroring the
 	// evaluator epoch's no-judge behavior.
 	GenesisGen genesisShadowGenFn
@@ -361,7 +360,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	driftVerdict := t.Tracker.runEvolutionDriftAudit(t.OnDriftFreeze)
 
 	epoch, artifact := t.nextEpoch()
-	fallback := generation.DefaultMetaArtifacts()[artifact]
+	fallback := genbind.DefaultMetaArtifacts()[artifact]
 	incumbent := t.Meta.Load(artifact, fallback)
 	fromVersion := t.Meta.Version(artifact, fallback)
 
@@ -501,7 +500,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow,
 			false, "", "proposal write failed: "+werr.Error())
 	}
-	toVersion := generation.ContentSHA256(strings.TrimSpace(proposal))[:12]
+	toVersion := genbind.ContentSHA256(strings.TrimSpace(proposal))[:12]
 	// Low-confidence routing (ANCHOR 2606.06114 — human intervention is most
 	// valuable at output verification): a proposal the bench CLEARED but could
 	// not show improving (margin <= 0) is not auto-adopted; it surfaces as a
@@ -640,14 +639,14 @@ func (t *MetaEvolutionTask) nextEpoch() (string, string) {
 			}
 			switch p.Epoch {
 			case metaEpochProducer:
-				return metaEpochEvaluator, generation.MetaSkillJudgeSystemPrompt
+				return metaEpochEvaluator, genbind.MetaSkillJudgeSystemPrompt
 			case metaEpochEvaluator:
-				return metaEpochGenesis, generation.MetaGenesisSystemPrompt
+				return metaEpochGenesis, genbind.MetaGenesisSystemPrompt
 			}
 			break
 		}
 	}
-	return metaEpochProducer, generation.MetaEvolveSystemPrompt
+	return metaEpochProducer, genbind.MetaEvolveSystemPrompt
 }
 
 // assembleEvidence builds the compact evidence block the proposal prompt sees:
@@ -662,13 +661,13 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 		h.Evolves7d, h.EvolveRejected7d, h.EvolveRolledBack7d, h.EvolveConfirmed7d,
 		h.ConfirmRate, h.FalseAcceptRate, h.ResolvedEvolves7d)
 	if h.LastRejectedReason != "" {
-		fmt.Fprintf(&b, "- 최근 기각: %s — %s\n", h.LastRejectedSkill, common.TruncateRunes(h.LastRejectedReason, 200))
+		fmt.Fprintf(&b, "- 최근 기각: %s — %s\n", h.LastRejectedSkill, genbind.TruncateRunes(h.LastRejectedReason, 200))
 	}
 	if levers, err := t.Tracker.lowYieldLevers(3, 2, 0.5); err == nil && len(levers) > 0 {
 		b.WriteString("\n## 저수율 레버 (반복 커밋되나 확인율 낮음)\n")
 		for _, lv := range levers {
 			fmt.Fprintf(&b, "- %s/%s: committed %d, confirmed %d, rolledBack %d (rate %.2f)\n",
-				common.TruncateRunes(lv.Signature, 80), lv.Surface, lv.Committed, lv.Confirmed, lv.RolledBack, lv.ConfirmRate)
+				genbind.TruncateRunes(lv.Signature, 80), lv.Surface, lv.Committed, lv.Confirmed, lv.RolledBack, lv.ConfirmRate)
 		}
 	}
 	if prior, err := t.Tracker.RecentMetaRevisions(5); err == nil && len(prior) > 0 {
@@ -682,7 +681,7 @@ func (t *MetaEvolutionTask) assembleEvidence(ctx context.Context, epoch string) 
 				status = "오퍼레이터 " + p.Action
 			}
 			fmt.Fprintf(&b, "- [%s] %s %s→%s: %s (%s)\n",
-				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, common.TruncateRunes(p.Reason, 160), status)
+				p.Epoch, p.Artifact, p.FromVersion, p.ToVersion, genbind.TruncateRunes(p.Reason, 160), status)
 		}
 	}
 	if epoch == metaEpochProducer {
@@ -759,7 +758,7 @@ func (t *MetaEvolutionTask) assembleRevisionClassEvidence() string {
 	if t.Tracker == nil {
 		return ""
 	}
-	bal := t.Tracker.MetaRevisionClassBalance()
+	bal := t.Tracker.metaRevisionClassBalance()
 	if bal.Structural+bal.Parametric == 0 {
 		return "" // pre-instrumentation history only — stay quiet
 	}
@@ -799,8 +798,8 @@ func (t *MetaEvolutionTask) assembleJudgeAccuracyEvidence() string {
 	if t.Tracker == nil || t.Meta == nil {
 		return ""
 	}
-	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
-	version := t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	judgeFallback := genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]
+	version := t.Meta.Version(genbind.MetaSkillJudgeSystemPrompt, judgeFallback)
 	ev := t.collectJudgeAccuracyEvidence(version)
 	if ev.clean() {
 		return "" // incumbent judge is clean — nothing to co-evolve on
@@ -1055,8 +1054,8 @@ func (t *MetaEvolutionTask) propose(ctx context.Context, artifact, incumbent, ev
 // Returns "" when the proposal is admissible, else the rejection reason.
 func metaProposalGate(artifact, incumbent, proposal string) string {
 	trimmed := strings.TrimSpace(proposal)
-	if len(trimmed) < generation.MetaArtifactMinBytes {
-		return fmt.Sprintf("proposal too short (%d bytes < %d floor)", len(trimmed), generation.MetaArtifactMinBytes)
+	if len(trimmed) < genbind.MetaArtifactMinBytes {
+		return fmt.Sprintf("proposal too short (%d bytes < %d floor)", len(trimmed), genbind.MetaArtifactMinBytes)
 	}
 	if len(trimmed) > metaProposalMaxBytes {
 		return fmt.Sprintf("proposal too large (%d bytes > %d cap)", len(trimmed), metaProposalMaxBytes)

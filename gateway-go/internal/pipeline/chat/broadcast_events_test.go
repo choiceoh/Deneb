@@ -19,62 +19,62 @@ func TestBroadcastEventsEncodeWireShape(t *testing.T) {
 	}{
 		{
 			"sessions.changed minimal (no deltaMs)",
-			SessionsChangedEvent{SessionKey: "k", Reason: "message_sent", Status: "running"},
+			sessionsChangedEvent{SessionKey: "k", Reason: "message_sent", Status: "running"},
 			[]string{"reason", "sessionKey", "status"},
 		},
 		{
 			"sessions.changed merged (deltaMs present)",
-			SessionsChangedEvent{SessionKey: "k", Reason: "merged", Status: "running", DeltaMs: 42},
+			sessionsChangedEvent{SessionKey: "k", Reason: "merged", Status: "running", DeltaMs: 42},
 			[]string{"deltaMs", "reason", "sessionKey", "status"},
 		},
 		{
 			"chat.delivery_failed without error",
-			ChatDeliveryFailedEvent{Session: "s", Channel: "client", Reason: "parse_directives_nil"},
+			chatDeliveryFailedEvent{Session: "s", Channel: "client", Reason: "parse_directives_nil"},
 			[]string{"channel", "reason", "session"},
 		},
 		{
 			"chat.delivery_failed with error",
-			ChatDeliveryFailedEvent{Session: "s", Channel: "client", Reason: "reply_func_error", Error: "boom"},
+			chatDeliveryFailedEvent{Session: "s", Channel: "client", Reason: "reply_func_error", Error: "boom"},
 			[]string{"channel", "error", "reason", "session"},
 		},
 		{
 			"chat.empty_response (turns=0 still present)",
-			ChatEmptyResponseEvent{Session: "s", Channel: "client", StopReason: "end_turn", Turns: 0},
+			chatEmptyResponseEvent{Session: "s", Channel: "client", StopReason: "end_turn", Turns: 0},
 			[]string{"channel", "session", "stopReason", "turns"},
 		},
 		{
 			"chat.media_delivery_failed",
-			ChatMediaDeliveryFailedEvent{Session: "s", Channel: "client", Count: 1, Total: 2, URLs: []string{"u"}},
+			chatMediaDeliveryFailedEvent{Session: "s", Channel: "client", Count: 1, Total: 2, URLs: []string{"u"}},
 			[]string{"channel", "count", "session", "total", "urls"},
 		},
 		{
 			"session.tool (isError=false still present)",
-			SessionToolEvent{SessionKey: "k", RunID: "r", Tool: "fs", ToolUseID: "t", IsError: false},
+			sessionToolEvent{SessionKey: "k", RunID: "r", Tool: "fs", ToolUseID: "t", IsError: false},
 			[]string{"isError", "runId", "sessionKey", "tool", "toolUseId"},
 		},
 		{
 			"chat.tool_failed (session AND sessionKey)",
-			ChatToolFailedEvent{Session: "s", SessionKey: "s", RunID: "r", Tool: "fs", Reason: "mutation_tool_in_band_failure", Error: "e"},
+			chatToolFailedEvent{Session: "s", SessionKey: "s", RunID: "r", Tool: "fs", Reason: "mutation_tool_in_band_failure", Error: "e"},
 			[]string{"error", "reason", "runId", "session", "sessionKey", "tool"},
 		},
 		{
 			"chat.compaction_degraded",
-			ChatCompactionDegradedEvent{Session: "s", TokensBefore: 10, TokensAfter: 5, Budget: 8},
+			chatCompactionDegradedEvent{Session: "s", TokensBefore: 10, TokensAfter: 5, Budget: 8},
 			[]string{"budget", "session", "tokensAfter", "tokensBefore"},
 		},
 		{
 			"chat.compaction_stuck (budget path, no inputHash)",
-			ChatCompactionStuckEvent{Reason: "protected_zone_exceeds_budget", MessageCount: 3, Budget: 8},
+			chatCompactionStuckEvent{Reason: "protected_zone_exceeds_budget", MessageCount: 3, Budget: 8},
 			[]string{"budget", "messageCount", "reason"},
 		},
 		{
 			"chat.compaction_stuck (inputHash path, no budget)",
-			ChatCompactionStuckEvent{Reason: "idempotent_compaction", MessageCount: 3, InputHash: "abc"},
+			chatCompactionStuckEvent{Reason: "idempotent_compaction", MessageCount: 3, InputHash: "abc"},
 			[]string{"inputHash", "messageCount", "reason"},
 		},
 		{
 			"chat.context_overflow_unrecoverable",
-			ChatContextOverflowEvent{Model: "m", MessageCount: 3, Attempts: 4, Error: "e"},
+			chatContextOverflowEvent{Model: "m", MessageCount: 3, Attempts: 4, Error: "e"},
 			[]string{"attempts", "error", "messageCount", "model"},
 		},
 	}
@@ -110,7 +110,7 @@ func TestBroadcastEventsEncodeWireShape(t *testing.T) {
 // TestSessionsChangedPreservesDeltaMsValue guards the one non-string field whose value
 // (not just presence) the merged path depends on.
 func TestSessionsChangedPreservesDeltaMsValue(t *testing.T) {
-	data, err := json.Marshal(SessionsChangedEvent{SessionKey: "k", Reason: "merged", Status: "running", DeltaMs: 1234})
+	data, err := json.Marshal(sessionsChangedEvent{SessionKey: "k", Reason: "merged", Status: "running", DeltaMs: 1234})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

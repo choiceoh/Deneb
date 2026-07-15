@@ -7,7 +7,7 @@ package genesis
 // so its fitness is measured by what it produces: replay fixed session
 // scenarios through the incumbent and the proposed system prompt and score
 // both outputs with the production admissibility gate
-// (generation.BenchAdmissibility — parse + specificity issues). Scenarios are
+// (genbind.BenchAdmissibility — parse + specificity issues). Scenarios are
 // COMPILED fixtures, identical for both prompts, so the comparison is fair
 // and deterministic; the LLM only executes the two prompts. A revision that
 // flips a scenario the incumbent handles cleanly (produces an
@@ -17,8 +17,7 @@ package genesis
 import (
 	"context"
 	"fmt"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 )
 
 // genesisBenchIssueEpsilon tolerates generation noise on the mean gate-issue
@@ -31,7 +30,7 @@ type genesisShadowScenario struct {
 	UserPrompt string
 }
 
-// genesisScenarioPrompt mirrors generation.Service.Generate's user-prompt
+// genesisScenarioPrompt mirrors genbind.Service.Generate's user-prompt
 // shape byte-for-byte, so the bench exercises the same input format
 // production sees. The existing-skill list is FIXED inside the fixture (the
 // live catalog would make runs non-deterministic).
@@ -93,7 +92,7 @@ type genesisBenchOutcome struct {
 
 // genesisShadowGenFn generates ONE genesis response with an explicit system
 // prompt. Injectable so the bench is testable without an LLM; production
-// wires generation.Service.ShadowGenerate (the real genesis model).
+// wires genbind.Service.ShadowGenerate (the real genesis model).
 type genesisShadowGenFn func(ctx context.Context, systemPrompt, userPrompt string) (string, error)
 
 // runGenesisShadowBench replays every scenario through both prompts and
@@ -115,8 +114,8 @@ func runGenesisShadowBench(ctx context.Context, incumbentPrompt, proposalPrompt 
 			out.Notes = append(out.Notes, fmt.Sprintf("%s: proposal generation error: %v", sc.Label, err))
 			continue
 		}
-		incSkip, incIssues, incErr := generation.BenchAdmissibility(incText)
-		propSkip, propIssues, propErr := generation.BenchAdmissibility(propText)
+		incSkip, incIssues, incErr := genbind.BenchAdmissibility(incText)
+		propSkip, propIssues, propErr := genbind.BenchAdmissibility(propText)
 		if incErr != nil || propErr != nil {
 			out.Notes = append(out.Notes, fmt.Sprintf("%s: unparsable output (incumbent=%v proposal=%v)", sc.Label, incErr, propErr))
 			continue

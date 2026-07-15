@@ -19,7 +19,7 @@ func (f *fakeUsageRecorder) RecordSkillUse(sessionKey, skillName string, success
 
 func TestRecordTurnSkillUsageReturnsSuccessForCleanTurn(t *testing.T) {
 	rec := &fakeUsageRecorder{}
-	log := NewSkillConsultLog()
+	log := newSkillConsultLog()
 	log.Add("research-flow")
 	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "read"}}, "client:main", "m1")
 
@@ -34,7 +34,7 @@ func TestRecordTurnSkillUsageReturnsSuccessForCleanTurn(t *testing.T) {
 
 func TestRecordTurnSkillUsage_erroredTurnIsFailure(t *testing.T) {
 	rec := &fakeUsageRecorder{}
-	log := NewSkillConsultLog()
+	log := newSkillConsultLog()
 	log.Add("deploy-flow")
 	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills"}, {Name: "exec", IsError: true}}, "client:main", "m1")
 
@@ -60,7 +60,7 @@ func TestRecordTurnSkillUsage_skillsToolErrorIsNotSkillFailure(t *testing.T) {
 	// ("system:skill-review:*") are now excluded from recording entirely —
 	// see TestRecordTurnSkillUsageIgnoresReviewForks.)
 	rec := &fakeUsageRecorder{}
-	log := NewSkillConsultLog()
+	log := newSkillConsultLog()
 	log.Add("email-analysis")
 	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}}, "client:main", "m1")
 
@@ -77,7 +77,7 @@ func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing
 	// A genuine non-"skills" tool error is still a real failure even when the
 	// skills tool also appears in the turn's activities.
 	rec := &fakeUsageRecorder{}
-	log := NewSkillConsultLog()
+	log := newSkillConsultLog()
 	log.Add("deploy-flow")
 	recordTurnSkillUsage(rec, log, []agent.ToolActivity{{Name: "skills", IsError: true}, {Name: "exec", IsError: true}}, "client:main", "m1")
 
@@ -91,18 +91,18 @@ func TestRecordTurnSkillUsage_nonSkillsErrorStillFailsAlongsideSkills(t *testing
 
 func TestRecordTurnSkillUsageIgnoresEmptyAndNilInputs(t *testing.T) {
 	// Nil recorder must not panic.
-	recordTurnSkillUsage(nil, NewSkillConsultLog(), nil, "s", "m1")
+	recordTurnSkillUsage(nil, newSkillConsultLog(), nil, "s", "m1")
 
 	// Nothing consulted → no records.
 	rec := &fakeUsageRecorder{}
-	recordTurnSkillUsage(rec, NewSkillConsultLog(), []agent.ToolActivity{{Name: "read"}}, "s", "m1")
+	recordTurnSkillUsage(rec, newSkillConsultLog(), []agent.ToolActivity{{Name: "read"}}, "s", "m1")
 	if len(rec.calls) != 0 {
 		t.Fatalf("no-consult turn recorded %+v, want none", rec.calls)
 	}
 
 	// A skill is attributed only once per turn even if its consult is drained;
 	// a second call with nothing new drains empty.
-	log := NewSkillConsultLog()
+	log := newSkillConsultLog()
 	log.Add("once")
 	recordTurnSkillUsage(rec, log, nil, "s", "m1")
 	recordTurnSkillUsage(rec, log, nil, "s", "m1")

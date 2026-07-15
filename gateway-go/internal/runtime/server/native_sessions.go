@@ -3,7 +3,7 @@ package server
 import (
 	"strings"
 
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 const nativeClientSessionPrefix = "client:"
@@ -19,8 +19,8 @@ func isNativeClientSessionKey(sessionKey string) bool {
 // startup restore cannot revive them. This is intentionally stricter than
 // isNativeClientSessionKey, which still governs activity/heartbeat/resume paths.
 func isRestorableNativeSessionKey(sessionKey string) bool {
-	return sessionKey == runtimesession.NativeWorkSessionKey ||
-		strings.HasPrefix(sessionKey, runtimesession.NativeWorkSessionKey+":")
+	return sessionKey == domainbind.NativeWorkSessionKey ||
+		strings.HasPrefix(sessionKey, domainbind.NativeWorkSessionKey+":")
 }
 
 type resumableSessionTarget struct {

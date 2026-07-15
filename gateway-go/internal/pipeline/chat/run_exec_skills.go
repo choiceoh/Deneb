@@ -62,7 +62,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	// Discover entries first so we can cache them for slash command routing.
 	allEntries := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
 	allEntries = skills.FilterExcludedSkills(allEntries, cfg.ExcludedSkills)
-	SetCachedSkillEntries(allEntries, 0)
+	setCachedSkillEntries(allEntries, 0)
 
 	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
 	if snapshot != nil {
@@ -88,8 +88,8 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 	return skillsCache.prompt
 }
 
-// CachedSkillsSnapshot returns the last-built skills snapshot, or nil.
-func CachedSkillsSnapshot() *skills.FullSkillSnapshot {
+// cachedSkillsSnapshot returns the last-built skills snapshot, or nil.
+func cachedSkillsSnapshot() *skills.FullSkillSnapshot {
 	skillsCache.mu.RLock()
 	defer skillsCache.mu.RUnlock()
 	return skillsCache.snapshot
@@ -171,7 +171,7 @@ func availableToolNames(tools *ToolRegistry) []string {
 	if tools == nil {
 		return nil
 	}
-	return tools.SortedNames()
+	return tools.sortedNames()
 }
 
 func skillCuratorStatePath() string {

@@ -15,7 +15,7 @@ func TestResolveModelReturnsCodingModelForSubagent(t *testing.T) {
 	})
 	deps := runDeps{
 		registry: reg,
-		callbacks: CallbackSnapshot{
+		callbacks: callbackSnapshot{
 			defaultModel: "zai/glm-main",
 		},
 		providerConfigs: map[string]ProviderConfig{
@@ -27,7 +27,7 @@ func TestResolveModelReturnsCodingModelForSubagent(t *testing.T) {
 		AgentConfig: session.AgentConfig{SpawnedBy: "client:main"},
 	}
 
-	got := resolveModel(RunParams{SessionKey: "client:main:impl"}, deps, sess)
+	got := resolveModel(runParams{SessionKey: "client:main:impl"}, deps, sess)
 	if got.model != "kimi-for-coding" {
 		t.Errorf("model = %q, want kimi-for-coding", got.model)
 	}
@@ -45,7 +45,7 @@ func TestResolveModelReturnsRemappedProviderForNonCodingSubagent(t *testing.T) {
 	})
 	deps := runDeps{
 		registry:  reg,
-		callbacks: CallbackSnapshot{defaultModel: "zai/glm-main"},
+		callbacks: callbackSnapshot{defaultModel: "zai/glm-main"},
 		providerConfigs: map[string]ProviderConfig{
 			"zai-subagent": {BaseURL: "https://example.invalid/zai-subagent"},
 		},
@@ -55,7 +55,7 @@ func TestResolveModelReturnsRemappedProviderForNonCodingSubagent(t *testing.T) {
 		AgentConfig: session.AgentConfig{SpawnedBy: "client:main"},
 	}
 
-	got := resolveModel(RunParams{SessionKey: "client:main:research"}, deps, sess)
+	got := resolveModel(runParams{SessionKey: "client:main:research"}, deps, sess)
 	if got.providerID != "zai-subagent" {
 		t.Errorf("providerID = %q, want zai-subagent", got.providerID)
 	}

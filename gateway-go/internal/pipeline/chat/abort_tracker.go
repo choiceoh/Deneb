@@ -2,10 +2,10 @@ package chat
 
 import runstate "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/runstate"
 
-// AbortTracker manages cancellation for active chat runs.
-type AbortTracker = runstate.AbortTracker
+// abortTracker manages cancellation for active chat runs.
+type abortTracker = runstate.AbortTracker
 
-// NewAbortTracker creates a tracker and starts its expiry collector.
-func NewAbortTracker() *AbortTracker {
+// newAbortTracker creates a tracker and starts its expiry collector.
+func newAbortTracker() *abortTracker {
 	return runstate.NewAbortTracker()
 }

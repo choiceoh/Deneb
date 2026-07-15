@@ -9,7 +9,7 @@
 //	/restart 확인       → same; legacy confirm form kept for muscle memory
 //	/restart confirm   → English alias
 //
-// Korean alias: /재시작 routes here too (see ParseSlashCommand).
+// Korean alias: /재시작 routes here too (see parseSlashCommand).
 //
 // Restart reuses the same mechanism as the /update execute path: SIGUSR1 →
 // bootstrap.ExitCodeRestart (75) → the supervising wrapper relaunches the

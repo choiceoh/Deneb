@@ -124,7 +124,7 @@ func TestMetaRevisionClassBalance_StreakAndJoin(t *testing.T) {
 	})
 	log(MetaRevisionRecord{Artifact: "evolve.md", ToVersion: "v3", Action: "adopted"})
 
-	bal := tr.MetaRevisionClassBalance()
+	bal := tr.metaRevisionClassBalance()
 	if bal.Structural != 1 || bal.Parametric != 2 {
 		t.Fatalf("mix = %d structural / %d parametric, want 1/2 (%+v)", bal.Structural, bal.Parametric, bal)
 	}
@@ -144,7 +144,7 @@ func TestMetaRevisionClassBalance_UnknownClassEndsStreak(t *testing.T) {
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Artifact: "evolve.md", ToVersion: "old", Action: "auto_adopted"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := tr.MetaRevisionClassBalance().AdoptedParametricStreak; got != 0 {
+	if got := tr.metaRevisionClassBalance().AdoptedParametricStreak; got != 0 {
 		t.Fatalf("streak = %d, want 0 for unresolvable class", got)
 	}
 }

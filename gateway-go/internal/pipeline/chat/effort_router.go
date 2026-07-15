@@ -4,7 +4,7 @@
 // reusable internal/ai/router package, parameterized by a per-model
 // leafbind.Profile that modelrole resolves (builtin defaults + deneb.json
 // overrides). This file owns the chat-specific LIFECYCLE the policy can't:
-// translating a RunParams turn into a leafbind.Request, swapping the agent's
+// translating a runParams turn into a leafbind.Request, swapping the agent's
 // thinking config, the per-step modulator, and the escalation/fallback restore.
 //
 // Dual-mode models (DeepSeek V4 family today) ship with an always-thinking
@@ -90,7 +90,7 @@ type effortRoute struct {
 // "cron:"/"acp:" session prefixes (cron persists its transcript, so it is NOT
 // ephemeral). AutoDeliveredOutput is deliberately NOT checked: it is delivery
 // semantics and is set on the interactive native client path too.
-func isAutomationRun(params RunParams) bool {
+func isAutomationRun(params runParams) bool {
 	return params.EphemeralUser ||
 		strings.HasPrefix(params.SessionKey, "cron:") ||
 		strings.HasPrefix(params.SessionKey, "acp:")
@@ -103,7 +103,7 @@ func isAutomationRun(params RunParams) bool {
 // restore on escalation/fallback (nil when not routed) plus the decision string
 // ("routed:…"/"kept:…", "" when the router gate is closed) for the structured
 // run-complete record.
-func applyEffortRouter(cfg *agent.AgentConfig, params RunParams, messages []llm.Message, profile leafbind.Profile, logger *slog.Logger) (*effortRoute, string) {
+func applyEffortRouter(cfg *agent.AgentConfig, params runParams, messages []llm.Message, profile leafbind.Profile, logger *slog.Logger) (*effortRoute, string) {
 	// Always arm the thinking-runaway recovery for models with a chat_template
 	// off-toggle (dsv4), independent of routing/mode: a KEPT-thinking run (e.g.
 	// kept:automation cron analysis) can still loop in the thinking channel until

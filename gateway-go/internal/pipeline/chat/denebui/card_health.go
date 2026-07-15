@@ -68,14 +68,10 @@ func ReportCardHealth(text, sessionKey string, logger *slog.Logger) {
 	}
 }
 
-// LooksStructuredWithoutCard is the deterministic adoption-miss proxy: a
+// looksStructuredWithoutCard is the deterministic adoption-miss proxy: a
 // markdown table, or >=5 bullet lines in a >=400-rune answer, is the shape the
 // authoring contract says should have been a card. Heuristic — it feeds an
 // Info observation, never a gate.
-func LooksStructuredWithoutCard(text string) bool {
-	return looksStructuredWithoutCard(text)
-}
-
 func looksStructuredWithoutCard(text string) bool {
 	longAnswer := utf8.RuneCountInString(text) >= 400
 	bullets := 0

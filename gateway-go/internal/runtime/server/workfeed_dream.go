@@ -8,8 +8,7 @@ package server
 import (
 	"fmt"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 // postDreamWorkfeedCard appends one feed card for a dream cycle that changed
@@ -17,7 +16,7 @@ import (
 // writes 대표페이지 "## 현재 상태" sections outside the apply counters). No-change
 // cycles post nothing — a card per idle 8h cycle would be noise. Nil-safe on
 // every dependency (report, feed store).
-func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
+func (s *Server) postDreamWorkfeedCard(r *domainbind.DreamReport) {
 	if r == nil || r.WikiPagesCreated+r.WikiPagesUpdated+r.WikiProjectDigests == 0 {
 		return
 	}
@@ -47,8 +46,8 @@ func (s *Server) postDreamWorkfeedCard(r *autonomous.DreamReport) {
 			summary += fmt.Sprintf(" · 회상활용 %d면", r.RecallHitPages)
 		}
 	}
-	if _, err := feed.Append(workfeed.Item{
-		Source:  workfeed.SourceDream,
+	if _, err := feed.Append(domainbind.Item{
+		Source:  domainbind.SourceDream,
 		Title:   title,
 		Summary: summary,
 	}); err != nil {

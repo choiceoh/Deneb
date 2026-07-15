@@ -10,29 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/approval"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/goals"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/goalloop"
-	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
-	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelmaintenance"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
@@ -41,13 +26,13 @@ func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
 	}
 	// When a tool execution requires approval, create a request, broadcast it
 	// to connected clients, and wait for the bounded decision.
-	s.processes.SetApprover(func(ctx context.Context, req process.ExecRequest) bool {
-		ar := s.approvals.CreateRequest(approval.CreateRequestParams{
+	s.processes.SetApprover(func(ctx context.Context, req infrabind.ExecRequest) bool {
+		ar := s.approvals.CreateRequest(domainbind.CreateRequestParams{
 			Command:     req.Command,
 			CommandArgv: req.Args,
 			Cwd:         req.WorkingDir,
 		})
-		approvalWire, _ := events.PayloadOf(map[string]any{
+		approvalWire, _ := svcbind.PayloadOf(map[string]any{
 			"id":      ar.ID,
 			"command": req.Command,
 			"args":    req.Args,
@@ -60,7 +45,7 @@ func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
 		case <-waitCh:
 			resolved := s.approvals.Get(ar.ID)
 			if resolved != nil && resolved.Decision != nil {
-				return *resolved.Decision == approval.DecisionAllowOnce || *resolved.Decision == approval.DecisionAllowAlways
+				return *resolved.Decision == domainbind.DecisionAllowOnce || *resolved.Decision == domainbind.DecisionAllowAlways
 			}
 			return false
 		case <-ctx.Done():
@@ -73,7 +58,7 @@ func (s *Server) registerProcessApprovalSideEffect(hub *rpcutil.GatewayHub) {
 
 func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
-	s.autonomousSvc = autonomous.NewService(s.logger)
+	s.autonomousSvc = domainbind.NewService(s.logger)
 	s.autonomousSvc.SetBehaviorLog(s.agentLogWriter)
 	// Persist last-run times so deploy restarts do not reset daily/weekly tasks.
 	if home, err := os.UserHomeDir(); err == nil {
@@ -82,15 +67,15 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 
 	// Prompt snapshots must be configured before the service can begin a dream
 	// cycle, otherwise a restart loses byte-identical APC prompt reuse.
-	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
-	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
-		dreamWire, _ := events.PayloadOf(event)
+	pipebind.ConfigurePromptSnapshots(infrabind.ResolveStateDir(), s.logger)
+	s.autonomousSvc.OnEvent(func(event domainbind.CycleEvent) {
+		dreamWire, _ := svcbind.PayloadOf(event)
 		hub.Broadcast("dreaming.cycle", dreamWire)
 		if event.Type == "dreaming_completed" {
 			s.postDreamWorkfeedCard(event.DreamReport)
 		}
 	})
-	if n := s.proactiveRelay.NotifierForSession(proactive.DreamWorkSessionKey); n != nil {
+	if n := s.proactiveRelay.NotifierForSession(svcbind.DreamWorkSessionKey); n != nil {
 		s.autonomousSvc.SetNotifier(n)
 	}
 	// Keep SetDreamer last: it starts the timer loop and can immediately emit.
@@ -108,20 +93,20 @@ func workflowHomeDir() string {
 }
 
 func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
-	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewBootTask(
+	s.autonomousSvc.RegisterTask(svcbind.NewBootTask(
 		s.chatHandler, s.activity, s.logger, homeDir,
 	))
-	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
+	s.autonomousSvc.RegisterTask(svcbind.NewHeartbeatTask(svcbind.TaskConfig{
 		ChatHandler: s.chatHandler,
 		Activity:    s.activity,
 		Logger:      s.logger,
 		HomeDir:     homeDir,
-		CollectSignals: runtimeheartbeat.CombineCollectors(
-			runtimeheartbeat.CalendarSignalCollector(runtimemeeting.ResolveCalendarClient),
-			runtimeheartbeat.TodoDeadlineCollector(),
-			runtimeheartbeat.DealDeadlineSignalCollector(func() *wiki.Store { return s.wikiStore }),
+		CollectSignals: svcbind.CombineCollectors(
+			svcbind.CalendarSignalCollector(svcbind.ResolveCalendarClient),
+			svcbind.TodoDeadlineCollector(),
+			svcbind.DealDeadlineSignalCollector(func() *domainbind.WikiStore { return s.wikiStore }),
 		),
-		SignalConfig:              autonomous.SignalConfigForThreshold(configresolve.ProactiveEscalateThreshold(s.logger)),
+		SignalConfig:              domainbind.SignalConfigForThreshold(svcbind.ProactiveEscalateThreshold(s.logger)),
 		ProposedSelfCoding:        s.proposedSelfCodingFingerprint,
 		DispatchBacklogSelfCoding: s.dispatchBacklogSelfCodingCount,
 		PromoteRecurrences:        s.promoteSelfCodingRecurrences,
@@ -137,7 +122,7 @@ func (s *Server) proposedSelfCodingFingerprint() (int, string) {
 	if tracker == nil {
 		return 0, ""
 	}
-	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusProposed, 20)
+	recs, err := tracker.RecentSelfCorrectionCandidates("", domainbind.SelfCorrectionStatusProposed, 20)
 	if err != nil || len(recs) == 0 {
 		return 0, ""
 	}
@@ -160,7 +145,7 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 	if tracker == nil {
 		return 0
 	}
-	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusAccepted, 100)
+	recs, err := tracker.RecentSelfCorrectionCandidates("", domainbind.SelfCorrectionStatusAccepted, 100)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("dispatch backlog: self-correction read failed — suppressing sweep", "error", err)
@@ -172,7 +157,7 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 		if rec.Scope != "code" {
 			continue
 		}
-		if !genesis.SourceAutoDispatches(rec.Source) {
+		if !domainbind.SourceAutoDispatches(rec.Source) {
 			continue
 		}
 		if tracker.DispatchMarkerBlocks(rec.ID) {
@@ -199,15 +184,15 @@ func (s *Server) promoteSelfCodingClusters() (int, error) {
 	return tracker.PromoteFailureClusterCandidates()
 }
 
-func (s *Server) selfCodingFunnelSignals() (genesis.SelfCorrectionFunnelSummary, int) {
+func (s *Server) selfCodingFunnelSignals() (domainbind.SelfCorrectionFunnelSummary, int) {
 	tracker := s.genesisTracker
 	if tracker == nil {
-		return genesis.SelfCorrectionFunnelSummary{}, 0
+		return domainbind.SelfCorrectionFunnelSummary{}, 0
 	}
 	return tracker.SelfCorrectionFunnel(), tracker.SelfHarnessSignals().TargetRecurrences7d
 }
 
-func (s *Server) selfCodingFailureEvidence(limit int) []genesis.FailureClusterSummary {
+func (s *Server) selfCodingFailureEvidence(limit int) []domainbind.FailureClusterSummary {
 	tracker := s.genesisTracker
 	if tracker == nil {
 		return nil
@@ -220,9 +205,9 @@ func (s *Server) registerGoalWorkflowTask(homeDir string) {
 	if homeDir != "" {
 		goalStateDir = filepath.Join(homeDir, ".deneb")
 	}
-	goalStore := goals.NewStore(goalStateDir, s.logger)
-	goals.SetDefault(goalStore)
-	s.autonomousSvc.RegisterTask(goalloop.NewTask(
+	goalStore := domainbind.NewGoalsStore(goalStateDir, s.logger)
+	domainbind.SetDefault(goalStore)
+	s.autonomousSvc.RegisterTask(svcbind.NewGoalLoopTask(
 		s.chatHandler,
 		goalStore,
 		s.activity,
@@ -245,14 +230,14 @@ func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
 	if !ok {
 		return
 	}
-	s.meetingHarvest = runtimemeeting.NewHarvestService(
+	s.meetingHarvest = svcbind.NewHarvestService(
 		func(text string) (bool, error) {
 			return s.proactiveRelay.RelayNativeToOptions("", text,
-				proactive.Options{MirrorTranscript: true})
+				svcbind.Options{MirrorTranscript: true})
 		},
-		runtimemeeting.ResolveCalendarClient,
+		svcbind.ResolveCalendarClient,
 		s.matchMeetingProjectName,
-		filepath.Join(stateDir, runtimemeeting.HarvestStateFile),
+		filepath.Join(stateDir, svcbind.HarvestStateFile),
 		s.logger,
 	)
 	// Silent attendance record: log that a matched meeting happened to its
@@ -262,16 +247,16 @@ func (s *Server) registerMeetingHarvestWorkflow(homeDir string) {
 	// returns handled=true (deliberate skip, nothing to write) rather than
 	// re-interpreting a colliding name as a project. Returns false only on a
 	// transient write failure so the harvest retries.
-	s.meetingHarvest.SetAttendanceRecorder(func(ev calendar.Event) bool {
+	s.meetingHarvest.SetAttendanceRecorder(func(ev platbind.Event) bool {
 		st := s.wikiStore
 		if st == nil {
 			return true
 		}
-		ref, ok := st.UniqueProjectInText(runtimemeeting.MeetingMatchText(ev))
+		ref, ok := st.UniqueProjectInText(svcbind.MeetingMatchText(ev))
 		if !ok {
 			return true // no single project — skip, don't retry
 		}
-		return wikiwork.RecordMeetingAttendanceByPath(st, ref.Path, ev.Summary,
+		return svcbind.RecordMeetingAttendanceByPath(st, ref.Path, ev.Summary,
 			ev.End.In(dentime.Location()).Format("2006-01-02"))
 	})
 	s.meetingHarvest.Start(s.ShutdownCtx())
@@ -288,19 +273,19 @@ func (s *Server) matchMeetingProjectName(text string) string {
 	if counterparties := st.MatchCounterpartiesInText(text, 1); len(counterparties) > 0 {
 		return counterparties[0].Name
 	}
-	return runtimemeeting.LooseUniqueNameMatch(text,
-		runtimemeeting.KnownNames(st.KnownProjects(), st.KnownCounterparties()))
+	return svcbind.LooseUniqueNameMatch(text,
+		svcbind.KnownNames(st.KnownProjects(), st.KnownCounterparties()))
 }
 
 func (s *Server) registerPlaudWorkflow(homeDir string) {
-	if os.Getenv(runtimemeeting.PlaudDisableEnv) == "1" {
+	if os.Getenv(svcbind.PlaudDisableEnv) == "1" {
 		return
 	}
 	stateDir, ok := s.productionStateDir(homeDir)
 	if !ok || s.wikiStore == nil {
 		return
 	}
-	s.plaudRecordings = runtimemeeting.NewPlaudService(
+	s.plaudRecordings = svcbind.NewPlaudService(
 		s.callPlaudTool,
 		s.completePlaudAnalysis,
 		s.completePlaudStageOne,
@@ -309,7 +294,7 @@ func (s *Server) registerPlaudWorkflow(homeDir string) {
 		s.wikiStore.WritePage,
 		s.wikiStore.AppendProjectStatusLine,
 		s.relayMeetingReport,
-		filepath.Join(stateDir, runtimemeeting.PlaudStateFile),
+		filepath.Join(stateDir, svcbind.PlaudStateFile),
 		s.logger,
 	)
 	s.plaudRecordings.Start(s.ShutdownCtx())
@@ -339,27 +324,27 @@ func (s *Server) completePlaudStageOne(ctx context.Context, system, user string,
 	return client.Complete(ctx, plaudChatRequest(model, system, user, maxTokens))
 }
 
-func plaudChatRequest(model, system, user string, maxTokens int) llm.ChatRequest {
-	return llm.ChatRequest{
+func plaudChatRequest(model, system, user string, maxTokens int) aibind.ChatRequest {
+	return aibind.ChatRequest{
 		Model:     model,
-		System:    llm.SystemString(system),
-		Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+		System:    aibind.SystemString(system),
+		Messages:  []aibind.Message{aibind.NewTextMessage("user", user)},
 		MaxTokens: maxTokens,
-		Thinking:  &llm.ThinkingConfig{Type: "disabled"},
+		Thinking:  &aibind.ThinkingConfig{Type: "disabled"},
 	}
 }
 
 func (s *Server) businessTopicKnowledge() string {
-	dir := configresolve.TopicsDir()
+	dir := svcbind.TopicsDir()
 	if dir == "" {
 		return ""
 	}
-	return prompt.LoadTopicKnowledge("", dir, "업무", "").Content
+	return pipebind.LoadTopicKnowledge("", dir, "업무", "").Content
 }
 
 func (s *Server) relayMeetingReport(text string) (bool, error) {
 	return s.proactiveRelay.RelayNativeToOptions("", text,
-		proactive.Options{WorkFeedSource: workfeed.SourceMeetingReport})
+		svcbind.Options{WorkFeedSource: domainbind.SourceMeetingReport})
 }
 
 func (s *Server) registerModelMaintenanceWorkflows() {
@@ -367,15 +352,15 @@ func (s *Server) registerModelMaintenanceWorkflows() {
 		return
 	}
 	var notify func(ctx context.Context, msg string) error
-	if notifier := s.proactiveRelay.NotifierForSession(proactive.NativeWorkSessionKey); notifier != nil {
+	if notifier := s.proactiveRelay.NotifierForSession(svcbind.NativeWorkSessionKey); notifier != nil {
 		notify = notifier.Notify
 	}
-	s.modelMaintenance = modelmaintenance.New(modelmaintenance.Deps{
+	s.modelMaintenance = svcbind.NewModelMaintenance(svcbind.ModelMaintenanceDeps{
 		Logs:      s.agentLogWriter,
 		Registry:  s.modelRegistry,
 		Summaries: s.polarisStore,
 		Capture:   s.logCapture,
-		StateDir:  config.ResolveStateDir(),
+		StateDir:  infrabind.ResolveStateDir(),
 		Notify:    notify,
 		Logger:    s.logger,
 	})
@@ -394,20 +379,20 @@ func (s *Server) registerFileSemanticIndexWorkflow() {
 }
 
 func (s *Server) registerMailIngestWorkflows() {
-	cfgSnap, _ := config.LoadConfigFromDefaultPath()
+	cfgSnap, _ := infrabind.LoadConfigFromDefaultPath()
 	s.initGmailPoll(cfgSnap)
 	s.initLMTPServer(cfgSnap)
 }
 
 func (s *Server) registerCalendarBriefingWorkflow() {
-	s.calendarBriefing = runtimemeeting.NewCalendarBriefingService(
+	s.calendarBriefing = svcbind.NewCalendarBriefingService(
 		func(text string) (bool, error) { return s.proactiveRelay.RelayNative(text) },
-		runtimemeeting.ResolveCalendarClient,
+		svcbind.ResolveCalendarClient,
 		s.logger,
 	)
 	if s.calendarBriefing != nil {
 		s.calendarBriefing.EnableEnrichment(
-			func() *wiki.Store { return s.wikiStore },
+			func() *domainbind.WikiStore { return s.wikiStore },
 			s.logger,
 		)
 	}
@@ -418,10 +403,10 @@ func (s *Server) registerRoleHealthWorkflow() {
 	if s.modelRegistry == nil || s.roleHealth != nil {
 		return
 	}
-	s.roleHealth = rolehealth.New(
+	s.roleHealth = svcbind.NewRoleHealth(
 		s.modelRegistry,
 		s.logger,
-		func(event string, payload events.EventPayload) {
+		func(event string, payload svcbind.EventPayload) {
 			if s.broadcaster != nil {
 				s.broadcaster.Broadcast(event, payload)
 			}

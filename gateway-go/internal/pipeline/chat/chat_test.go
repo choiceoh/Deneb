@@ -166,7 +166,7 @@ func TestSessionsAbortReturnsStatusWhenNoActiveRun(t *testing.T) {
 func TestSessionsAbortCancelsRunByID(t *testing.T) {
 	h := newTestHandler()
 	cancelled := false
-	h.abort.Register("run-to-abort", &AbortEntry{
+	h.abort.Register("run-to-abort", &abortEntry{
 		SessionKey: "sess-abort",
 		CancelFn: func(error) {
 			cancelled = true

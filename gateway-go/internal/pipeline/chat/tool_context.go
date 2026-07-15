@@ -10,59 +10,59 @@ import (
 // Context helpers — delegate to toolport/ (the canonical definitions).
 // These wrappers preserve backward compatibility for callers within chat/.
 
-// WithDeliveryContext attaches a DeliveryContext to ctx.
-func WithDeliveryContext(ctx context.Context, d *DeliveryContext) context.Context {
+// withDeliveryContext attaches a DeliveryContext to ctx.
+func withDeliveryContext(ctx context.Context, d *DeliveryContext) context.Context {
 	return toolport.WithDeliveryContext(ctx, d)
 }
 
-// WithReplyFunc attaches a ReplyFunc to ctx.
-func WithReplyFunc(ctx context.Context, fn ReplyFunc) context.Context {
+// withReplyFunc attaches a replyFunc to ctx.
+func withReplyFunc(ctx context.Context, fn replyFunc) context.Context {
 	return toolport.WithReplyFunc(ctx, fn)
 }
 
-// WithAutoDelivery marks a run whose final reply text is delivered by the
+// withAutoDelivery marks a run whose final reply text is delivered by the
 // run-completion layer rather than the agent's in-loop message tool.
-func WithAutoDelivery(ctx context.Context) context.Context {
+func withAutoDelivery(ctx context.Context) context.Context {
 	return toolport.WithAutoDelivery(ctx)
 }
 
-// WithSessionKey attaches the session key to ctx.
-func WithSessionKey(ctx context.Context, key string) context.Context {
+// withSessionKey attaches the session key to ctx.
+func withSessionKey(ctx context.Context, key string) context.Context {
 	return toolport.WithSessionKey(ctx, key)
 }
 
-// WithMediaSendFunc attaches a MediaSendFunc to ctx.
-func WithMediaSendFunc(ctx context.Context, fn MediaSendFunc) context.Context {
+// withMediaSendFunc attaches a mediaSendFunc to ctx.
+func withMediaSendFunc(ctx context.Context, fn mediaSendFunc) context.Context {
 	return toolport.WithMediaSendFunc(ctx, fn)
 }
 
-// WithMaxUploadBytes attaches the channel-specific file upload limit to ctx.
-func WithMaxUploadBytes(ctx context.Context, n int64) context.Context {
+// withMaxUploadBytes attaches the channel-specific file upload limit to ctx.
+func withMaxUploadBytes(ctx context.Context, n int64) context.Context {
 	return toolport.WithMaxUploadBytes(ctx, n)
 }
 
-// WithTurnContext attaches a TurnContext to ctx for cross-tool result sharing.
-func WithTurnContext(ctx context.Context, tc *TurnContext) context.Context {
+// withTurnContext attaches a TurnContext to ctx for cross-tool result sharing.
+func withTurnContext(ctx context.Context, tc *TurnContext) context.Context {
 	return toolport.WithTurnContext(ctx, tc)
 }
 
-// TurnContextFromContext extracts the TurnContext from ctx. Returns nil if not set.
-func TurnContextFromContext(ctx context.Context) *TurnContext {
+// turnContextFromContext extracts the TurnContext from ctx. Returns nil if not set.
+func turnContextFromContext(ctx context.Context) *TurnContext {
 	return toolport.TurnContextFromContext(ctx)
 }
 
-// WithRunCache attaches a RunCache to ctx for cross-turn result caching.
-func WithRunCache(ctx context.Context, rc *RunCache) context.Context {
+// withRunCache attaches a runCache to ctx for cross-turn result caching.
+func withRunCache(ctx context.Context, rc *runCache) context.Context {
 	return toolport.WithRunCache(ctx, rc)
 }
 
-// RunCacheFromContext extracts the RunCache from ctx. Returns nil if not set.
-func RunCacheFromContext(ctx context.Context) *RunCache {
+// runCacheFromContext extracts the runCache from ctx. Returns nil if not set.
+func runCacheFromContext(ctx context.Context) *runCache {
 	return toolport.RunCacheFromContext(ctx)
 }
 
-// WithFileCache attaches a FileCache to ctx for cross-turn file read dedup.
-func WithFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
+// withFileCache attaches a FileCache to ctx for cross-turn file read dedup.
+func withFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
 	return toolport.WithFileCache(ctx, fc)
 }
 
@@ -71,28 +71,28 @@ func WithToolPreset(ctx context.Context, preset string) context.Context {
 	return toolport.WithToolPreset(ctx, preset)
 }
 
-// SpawnFlag is a re-export of toolport.SpawnFlag.
-type SpawnFlag = toolport.SpawnFlag
+// spawnFlag is a re-export of toolport.SpawnFlag.
+type spawnFlag = toolport.SpawnFlag
 
-// NewSpawnFlag creates a new (unset) SpawnFlag.
-func NewSpawnFlag() *SpawnFlag {
+// newSpawnFlag creates a new (unset) spawnFlag.
+func newSpawnFlag() *spawnFlag {
 	return toolport.NewSpawnFlag()
 }
 
-// WithSpawnFlag attaches a SpawnFlag to ctx.
-func WithSpawnFlag(ctx context.Context, f *SpawnFlag) context.Context {
+// withSpawnFlag attaches a spawnFlag to ctx.
+func withSpawnFlag(ctx context.Context, f *spawnFlag) context.Context {
 	return toolport.WithSpawnFlag(ctx, f)
 }
 
-// DeferredActivation is a re-export of toolport.DeferredActivation.
-type DeferredActivation = toolport.DeferredActivation
+// deferredActivation is a re-export of toolport.DeferredActivation.
+type deferredActivation = toolport.DeferredActivation
 
-// NewDeferredActivation creates a new (empty) DeferredActivation tracker.
-func NewDeferredActivation() *DeferredActivation {
+// newDeferredActivation creates a new (empty) deferredActivation tracker.
+func newDeferredActivation() *deferredActivation {
 	return toolport.NewDeferredActivation()
 }
 
-// WithDeferredActivation attaches a DeferredActivation to ctx.
-func WithDeferredActivation(ctx context.Context, da *DeferredActivation) context.Context {
+// withDeferredActivation attaches a deferredActivation to ctx.
+func withDeferredActivation(ctx context.Context, da *deferredActivation) context.Context {
 	return toolport.WithDeferredActivation(ctx, da)
 }

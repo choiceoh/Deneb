@@ -69,7 +69,7 @@ func escalateThinContent(
 	ctx context.Context,
 	targetURL string,
 	maxBytes int64,
-	localAI *LocalAIExtractor,
+	localAI *localAIExtractor,
 	meta *webFetchMeta,
 ) (content string, ok bool) {
 	result, err := jinaFetchFn(ctx, targetURL, maxBytes)

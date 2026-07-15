@@ -1,17 +1,6 @@
-// watch.go — the "watch a video" tool: let the agent SEE and HEAR a video.
-//
-// The agent's normal YouTube path (web tool) reads only the subtitle transcript,
-// so the model never sees the screen. This tool closes that gap: given a YouTube
-// URL or a local video file, it extracts representative frames + subtitles
-// (media.WatchVideo) and analyzes them with the main multimodal model in an
-// ISOLATED vision call (pilot.CallVisionLLM). Only the resulting analysis text
-// flows back into the conversation — the base64 frames never touch the main
-// transcript, preserving the prompt cache and context budget (the same isolation
-// rationale as the YouTube transcript summarizer in web_youtube.go).
-//
-// Typical uses: analyze a video's structure/hook, diagnose a bug from a screen
-// recording, or summarize a long video faster than watching at 2x.
-package artifact
+// Package watchtool implements the watch video tool behind a leaf import so the
+// artifact package does not pull pilot directly.
+package watchtool
 
 import (
 	"context"
@@ -26,19 +15,22 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
+// PathResolver maps a user path within a workspace root.
+type PathResolver func(filePath, workspaceDir string) string
+
+// PathGuard rejects protected credential/control-plane paths.
+type PathGuard func(path, action string) error
+
 type watchParams struct {
-	Source string  `json:"source"`          // YouTube URL or local video file path
-	Task   string  `json:"task,omitempty"`  // what to analyze (default: general analysis)
-	Start  float64 `json:"start,omitempty"` // optional window start (seconds)
-	End    float64 `json:"end,omitempty"`   // optional window end (seconds)
+	Source string  `json:"source"`
+	Task   string  `json:"task,omitempty"`
+	Start  float64 `json:"start,omitempty"`
+	End    float64 `json:"end,omitempty"`
 }
 
 const (
-	// watchMaxTranscriptChars caps the subtitle text fed to the vision model so
-	// a long transcript cannot crowd out the frames in the analysis call.
 	watchMaxTranscriptChars = 12000
-	// watchAnalysisMaxTokens is the token budget for the generated analysis.
-	watchAnalysisMaxTokens = 1500
+	watchAnalysisMaxTokens  = 1500
 )
 
 const watchSystemPrompt = "당신은 영상을 분석하는 전문가입니다. " +
@@ -47,9 +39,8 @@ const watchSystemPrompt = "당신은 영상을 분석하는 전문가입니다. 
 	"요청된 작업이 있으면 그에 집중하세요. 불필요한 서두 없이 한국어로 분석 결과만 출력하세요."
 
 // ToolWatch returns a ToolFunc that watches (frames + subtitles + vision
-// analysis) a YouTube URL or a local video file. workspaceDir bounds local file
-// access; an empty string disables local-file watching (URL-only).
-func ToolWatch(workspaceDir string) toolport.ToolFunc {
+// analysis) a YouTube URL or a local video file.
+func ToolWatch(workspaceDir string, resolve PathResolver, guard PathGuard) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p watchParams
 		if err := jsonutil.UnmarshalInto("watch params", input, &p); err != nil {
@@ -60,14 +51,12 @@ func ToolWatch(workspaceDir string) toolport.ToolFunc {
 			return "", fmt.Errorf("source는 필수입니다 (유튜브 URL 또는 영상 파일 경로)")
 		}
 
-		// Local files are jailed to the workspace and screened by the
-		// prompt-injection path guard, mirroring the fs tools.
 		if !media.IsYouTubeURL(p.Source) {
 			if workspaceDir == "" {
 				return "", fmt.Errorf("로컬 영상 파일 분석이 비활성화되어 있습니다. 유튜브 URL을 사용하세요")
 			}
-			resolved := ResolvePath(p.Source, workspaceDir)
-			if err := CheckProtectedPath(resolved, "read"); err != nil {
+			resolved := resolve(p.Source, workspaceDir)
+			if err := guard(resolved, "read"); err != nil {
 				return "", err
 			}
 			p.Source = resolved
@@ -86,13 +75,9 @@ func ToolWatch(workspaceDir string) toolport.ToolFunc {
 
 		analysis, err := analyzeWatch(ctx, &p, result)
 		if err != nil {
-			// Vision unavailable (e.g., the main model is text-only and rejects
-			// image blocks) — don't dead-end. Summarize the transcript (captions
-			// or ASR) with a text model so the user still gets a real analysis.
 			if textAnalysis := summarizeWatchTranscript(ctx, &p, result); textAnalysis != "" {
 				return formatWatchTextResult(result, textAnalysis), nil
 			}
-			// No transcript either — return metadata + whatever we have.
 			return formatWatchFallback(result, err), nil
 		}
 		return formatWatchResult(result, analysis), nil
@@ -103,9 +88,6 @@ const watchTextSystemPrompt = "당신은 영상의 자막/음성 전사를 바�
 	"화면을 직접 보지는 못했으니 자막/전사 내용만으로 핵심 주제, 주요 논점, 결론을 충실히 정리하세요. " +
 	"요청된 작업이 있으면 그에 집중하고, 불필요한 서두 없이 한국어로 분석 결과만 출력하세요."
 
-// summarizeWatchTranscript produces a text-only analysis from the extracted
-// transcript when the vision call is unavailable. Returns "" when there is no
-// transcript or the text model is unavailable, so the caller can degrade further.
 func summarizeWatchTranscript(ctx context.Context, p *watchParams, result *media.WatchResult) string {
 	t := strings.TrimSpace(result.Transcript)
 	if t == "" {
@@ -129,8 +111,6 @@ func summarizeWatchTranscript(ctx context.Context, p *watchParams, result *media
 	b.WriteString(watchChaptersBlock(result.Chapters))
 	fmt.Fprintf(&b, "\n자막/전사(%s):\n%s\n", result.Language, t)
 
-	// Free-text transcript analysis on the non-reasoning lightweight model →
-	// append the reflective self-check to cut errors/omissions (arXiv:2507.02778).
 	out, err := pilot.CallLocalLLM(ctx, watchTextSystemPrompt+"\n"+pilot.ReflectionDirective, b.String(), watchAnalysisMaxTokens)
 	if err != nil {
 		return ""
@@ -138,8 +118,6 @@ func summarizeWatchTranscript(ctx context.Context, p *watchParams, result *media
 	return strings.TrimSpace(out)
 }
 
-// formatWatchTextResult renders a transcript-based analysis (vision skipped),
-// noting that the screen wasn't analyzed so the reader knows the basis.
 func formatWatchTextResult(result *media.WatchResult, analysis string) string {
 	var b strings.Builder
 	b.WriteString("## 🎬 영상 분석 (자막/음성 기반)\n\n")
@@ -164,7 +142,6 @@ func formatWatchTextResult(result *media.WatchResult, analysis string) string {
 	return b.String()
 }
 
-// analyzeWatch runs the isolated vision call over the extracted frames.
 func analyzeWatch(ctx context.Context, p *watchParams, result *media.WatchResult) (string, error) {
 	frames := make([]pilot.VisionFrame, 0, len(result.Frames))
 	for _, f := range result.Frames {
@@ -178,10 +155,6 @@ func analyzeWatch(ctx context.Context, p *watchParams, result *media.WatchResult
 	return pilot.CallVisionLLM(ctx, watchSystemPrompt, userText, frames, watchAnalysisMaxTokens)
 }
 
-// buildWatchPrompt assembles the per-call prompt: task + metadata + (clipped)
-// transcript. The frames follow as image blocks (added by CallVisionLLM).
-// watchChaptersBlock renders a compact chapter list for the analysis prompt so
-// the model can structure its analysis by section. Empty when no chapters.
 func watchChaptersBlock(chapters []media.YouTubeChapter) string {
 	if len(chapters) == 0 {
 		return ""
@@ -228,7 +201,6 @@ func buildWatchPrompt(p *watchParams, result *media.WatchResult) string {
 	return b.String()
 }
 
-// formatWatchResult renders the final tool output: a header + the analysis.
 func formatWatchResult(result *media.WatchResult, analysis string) string {
 	var b strings.Builder
 	b.WriteString("## 🎬 영상 분석\n\n")
@@ -252,8 +224,6 @@ func formatWatchResult(result *media.WatchResult, analysis string) string {
 	return b.String()
 }
 
-// formatWatchFallback renders a degraded result when the vision call fails but
-// frames/transcript were extracted.
 func formatWatchFallback(result *media.WatchResult, callErr error) string {
 	var b strings.Builder
 	b.WriteString("## 🎬 영상 (분석 모델 사용 불가)\n\n")
@@ -270,7 +240,6 @@ func formatWatchFallback(result *media.WatchResult, callErr error) string {
 	return b.String()
 }
 
-// formatWatchDuration renders seconds as "M:SS" or "H:MM:SS".
 func formatWatchDuration(seconds int) string {
 	if seconds < 0 {
 		seconds = 0

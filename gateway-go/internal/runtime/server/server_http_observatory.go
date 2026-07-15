@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // handleObservatory serves Deneb's self-improvement telemetry as one compact,
@@ -19,7 +19,7 @@ func (s *Server) handleObservatory(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusForbidden, map[string]any{"error": "localhost only"})
 		return
 	}
-	rep := observatory.Snapshot(config.ResolveStateDir(), time.Now())
+	rep := aibind.Snapshot(infrabind.ResolveStateDir(), time.Now())
 	if r.URL.Query().Get("format") == "json" {
 		s.writeJSON(w, http.StatusOK, rep)
 		return

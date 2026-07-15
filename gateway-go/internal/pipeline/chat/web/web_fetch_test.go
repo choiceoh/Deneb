@@ -559,7 +559,7 @@ func TestFillUsableFetchesEarlyStop(t *testing.T) {
 	thinEnvelope := "<metadata>\nSignals: js_required\n</metadata>\n<content>\nx\n</content>"
 	var mu sync.Mutex
 	var calls []string
-	fetch := func(_ context.Context, _ *FetchCache, _ *LocalAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (fetchOutcome, error) {
+	fetch := func(_ context.Context, _ *fetchCache, _ *localAIExtractor, _ tooldeps.SpilloverStore, u string, _ int) (fetchOutcome, error) {
 		mu.Lock()
 		calls = append(calls, u)
 		mu.Unlock()

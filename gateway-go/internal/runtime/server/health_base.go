@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // collectBaseHealth builds the always-present portion of the /health contract.
@@ -20,7 +20,7 @@ func (s *Server) collectBaseHealth() map[string]any {
 	activeProcesses := 0
 	if s.processes != nil {
 		for _, p := range s.processes.List() {
-			if p.Status == process.StatusRunning {
+			if p.Status == infrabind.StatusRunning {
 				activeProcesses++
 			}
 		}
@@ -36,7 +36,7 @@ func (s *Server) collectBaseHealth() map[string]any {
 		currentModel = s.chatHandler.DefaultModel()
 	}
 	if currentModel == "" && s.modelRegistry != nil {
-		currentModel = s.modelRegistry.FullModelID(modelrole.RoleMain)
+		currentModel = s.modelRegistry.FullModelID(aibind.RoleMain)
 	}
 
 	localAIStatus := "off"

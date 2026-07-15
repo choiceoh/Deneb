@@ -30,7 +30,7 @@ func CollapsedReportFence(title, body string) string {
 	}
 	var b strings.Builder
 	b.WriteString("```")
-	b.WriteString(FenceInfo)
+	b.WriteString(fenceInfo)
 	b.WriteString("\n<accordion title=\"")
 	b.WriteString(attrEscaper.Replace(title))
 	b.WriteString("\">\n<markdown>")

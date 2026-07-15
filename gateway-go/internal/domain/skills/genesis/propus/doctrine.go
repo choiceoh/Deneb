@@ -11,14 +11,14 @@ type PropusDoctrineSpec struct {
 	Codename       string
 	Version        string
 	Lifecycle      []string
-	Papers         []PropusDoctrinePaper
-	FilteredPapers []PropusDoctrinePaper
+	Papers         []propusDoctrinePaper
+	FilteredPapers []propusDoctrinePaper
 	Invariants     []string
 	QualityGates   []string
 }
 
-// PropusDoctrinePaper describes one source that grounds the doctrine.
-type PropusDoctrinePaper struct {
+// propusDoctrinePaper describes one source that grounds the doctrine.
+type propusDoctrinePaper struct {
 	ID                string
 	Title             string
 	OriginalPrinciple string
@@ -41,7 +41,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"watch",
 			"rollback_or_backlog",
 		},
-		Papers: []PropusDoctrinePaper{
+		Papers: []propusDoctrinePaper{
 			{
 				ID:                "arxiv:2602.20867",
 				Title:             "SoK: Agentic Skills -- Beyond Tool Use in LLM Agents",
@@ -101,7 +101,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 				EvidenceGrade:     "operational-transfer",
 			},
 		},
-		FilteredPapers: []PropusDoctrinePaper{
+		FilteredPapers: []propusDoctrinePaper{
 			{
 				ID:                "arxiv:2606.15363",
 				Title:             "APEX: Adaptive Principle EXtraction A Three-Layer Self-Evolution Framework for Production AI Agents",

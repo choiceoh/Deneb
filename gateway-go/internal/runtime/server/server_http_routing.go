@@ -4,23 +4,21 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // buildMux configures HTTP routing for health, native-client HTTP (SSE via gatewayhttp/nativeapi), hooks, and introspection routes.
 func (s *Server) buildMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	phoneEventHandler := func() *phoneevents.Handler {
-		return phoneevents.New(phoneevents.Config{
+	phoneEventHandler := func() *svcbind.Handler {
+		return svcbind.NewPhoneEvents(svcbind.PhoneEventsConfig{
 			ChatHandler:     s.chatHandler,
 			Relay:           &s.proactiveRelay,
 			ShutdownContext: s.ShutdownCtx(),
 			Logger:          s.logger,
 			Ledger:          s.phoneEventLedgerInstance(),
 			OnLocationPlace: s.siteVisitOnLocation(),
-			ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
+			ResolvePhoneAction: func(res svcbind.ActionResult) bool {
 				if s.phoneActions == nil {
 					return false
 				}
@@ -35,7 +33,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /readyz", s.handleReady)
 	mux.HandleFunc("POST /api/cron/run", s.handleCronRun)
 	mux.HandleFunc("POST /api/event/ingest", func(w http.ResponseWriter, r *http.Request) { phoneEventHandler().ServeHTTP(w, r) })
-	clientRoutes := gatewayhttp.Config{
+	clientRoutes := svcbind.GatewayHTTPConfig{
 		PushHub:           s.pushHub,
 		ShutdownContext:   s.ShutdownCtx(),
 		Logger:            s.logger,
@@ -51,18 +49,18 @@ func (s *Server) buildMux() *http.ServeMux {
 	if s.ChatManager != nil {
 		clientRoutes.ChatHandler = s.chatHandler
 	}
-	gatewayhttp.RegisterRoutes(mux, clientRoutes)
+	svcbind.RegisterRoutes(mux, clientRoutes)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)
 	// SparkFleet webhook → native push (loopback-only, like /api/event/ingest).
-	gatewayhttp.RegisterFleetAlertRoute(mux, gatewayhttp.FleetAlertConfig{
+	svcbind.RegisterFleetAlertRoute(mux, svcbind.FleetAlertConfig{
 		Gate: s.alertGate,
 		Publish: func(title, body string) {
-			proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+			svcbind.PublishWithFallback(s.pushHub, s.pushNotifier, svcbind.Event{
 				Title: title,
 				Body:  body,
-				Kind:  proactive.PushKindFleet,
+				Kind:  svcbind.PushKindFleet,
 			})
 		},
 		Logger: s.logger,

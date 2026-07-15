@@ -17,7 +17,7 @@ import (
 func TestBuildMessagePersister_EphemeralAssistantReturnsNilPersister(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
-	params := RunParams{
+	params := runParams{
 		SessionKey:         "telegram:1",
 		EphemeralAssistant: true,
 	}
@@ -35,7 +35,7 @@ func TestBuildMessagePersister_EphemeralAssistantReturnsNilPersister(t *testing.
 func TestBuildMessagePersister_EphemeralUserAllowsAssistantPersist(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
-	params := RunParams{
+	params := runParams{
 		SessionKey:    "telegram:1",
 		EphemeralUser: true, // trigger suppressed
 		// EphemeralAssistant: false (default) — reply must persist
@@ -62,7 +62,7 @@ func TestBuildMessagePersister_EphemeralUserAllowsAssistantPersist(t *testing.T)
 // guard that protects transcripts-disabled deployments from a nil-deref.
 func TestBuildMessagePersister_NoTranscriptYieldsNil(t *testing.T) {
 	deps := runDeps{transcript: nil}
-	params := RunParams{SessionKey: "x"}
+	params := runParams{SessionKey: "x"}
 
 	if persister := buildMessagePersister(deps, params, slog.Default()); persister != nil {
 		t.Fatal("nil transcript must yield nil persister regardless of ephemeral flags")
@@ -76,7 +76,7 @@ func TestBuildMessagePersister_NoTranscriptYieldsNil(t *testing.T) {
 func TestBuildMessagePersister_IgnoresNoReplyOnlyMessage(t *testing.T) {
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
-	params := RunParams{SessionKey: "telegram:1"}
+	params := runParams{SessionKey: "telegram:1"}
 
 	persister := buildMessagePersister(deps, params, slog.Default())
 	if persister == nil {
@@ -104,7 +104,7 @@ func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T)
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
-	params := RunParams{SessionKey: "client:main"}
+	params := runParams{SessionKey: "client:main"}
 
 	persister := buildMessagePersister(deps, params, slog.Default())
 	if persister == nil {
@@ -139,7 +139,7 @@ func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript}
-	params := RunParams{SessionKey: "client:main"}
+	params := runParams{SessionKey: "client:main"}
 
 	persister := buildMessagePersister(deps, params, slog.Default())
 	toolInput := `{"command":"echo {{market:usd_krw}}"}`
@@ -183,7 +183,7 @@ func TestBuildMessagePersister_BriefcasePreservesRawMarketTokens(t *testing.T) {
 	market.RecordLetterTokens(map[string]string{market.LetterTokenUSDKRW: "1,531"})
 	transcript := NewMemoryTranscriptStore()
 	deps := runDeps{transcript: transcript, briefcaseMode: true}
-	params := RunParams{SessionKey: "briefcase:run"}
+	params := runParams{SessionKey: "briefcase:run"}
 
 	persister := buildMessagePersister(deps, params, slog.Default())
 	rawText, _ := json.Marshal("환율은 {{market:usd_krw}}원.")

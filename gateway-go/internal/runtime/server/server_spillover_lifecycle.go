@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -30,12 +30,12 @@ import (
 // s.toolDeps (see chat_pipeline.go); the returned unsubscribe handle is
 // stored on ServerRPC and invoked on shutdown (see server_lifecycle.go
 // doShutdown).
-func (s *Server) initSpilloverLifecycle(store *agent.SpilloverStore) {
+func (s *Server) initSpilloverLifecycle(store *aibind.SpilloverStore) {
 	if store == nil || s.sessions == nil {
 		return
 	}
 	logger := s.logger
-	s.spilloverLifecycleUnsub = s.sessions.EventBusRef().Subscribe(func(e session.Event) {
+	s.spilloverLifecycleUnsub = s.sessions.EventBusRef().Subscribe(func(e domainbind.Event) {
 		if !shouldReleaseSpillover(e) {
 			return
 		}
@@ -54,16 +54,16 @@ func (s *Server) initSpilloverLifecycle(store *agent.SpilloverStore) {
 // shouldReleaseSpillover mirrors shouldReleaseCheckpoints: only terminal
 // status transitions, /reset (empty NewStatus), or full session deletion
 // trigger cleanup. See server_checkpoint_lifecycle.go for the full rationale.
-func shouldReleaseSpillover(e session.Event) bool {
+func shouldReleaseSpillover(e domainbind.Event) bool {
 	switch e.Kind {
-	case session.EventDeleted:
+	case domainbind.EventDeleted:
 		return true
-	case session.EventStatusChanged:
+	case domainbind.EventStatusChanged:
 		if e.NewStatus == "" {
 			return true
 		}
-		return session.IsTerminal(e.NewStatus)
-	case session.EventCreated:
+		return domainbind.IsTerminal(e.NewStatus)
+	case domainbind.EventCreated:
 		return false
 	}
 	return false

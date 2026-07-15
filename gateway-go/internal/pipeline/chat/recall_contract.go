@@ -1,9 +1,9 @@
 package chat
 
-import chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
+import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 // FileRecallHit is the transport-neutral file-search result used by recall preflight.
-type FileRecallHit = chatrecall.FileRecallHit
+type FileRecallHit = leafbind.FileRecallHit
 
 // FileRecallFunc searches the on-box file store for recall evidence.
-type FileRecallFunc = chatrecall.FileRecallFunc
+type FileRecallFunc = leafbind.FileRecallFunc

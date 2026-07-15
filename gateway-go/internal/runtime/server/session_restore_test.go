@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 // makeSessionTranscript writes a minimal JSONL transcript file so the restore
@@ -23,7 +23,7 @@ func makeSessionTranscript(t *testing.T, dir, sessionKey string) {
 }
 
 // newTestServerForRestore builds the minimal server stub needed by restoreAndWakeSessions.
-func newTestServerForRestore(mgr *session.Manager) *Server {
+func newTestServerForRestore(mgr *domainbind.Manager) *Server {
 	return &Server{
 		ServerTransport:     &ServerTransport{},
 		ServerRPC:           &ServerRPC{},
@@ -61,7 +61,7 @@ func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 	makeSessionTranscript(t, transcriptDir, "cron:job1")                                   // transient, not a user session
 	makeSessionTranscript(t, transcriptDir, "telegram:111")                                // retired channel
 
-	mgr := session.NewManager()
+	mgr := domainbind.NewManager()
 	srv := newTestServerForRestore(mgr)
 
 	srv.restoreAndWakeSessions(context.Background())
@@ -92,7 +92,7 @@ func TestRestoreAndWakeSessions_RestoresNativeSessions(t *testing.T) {
 		if s == nil {
 			continue
 		}
-		if s.Status != session.StatusDone {
+		if s.Status != domainbind.StatusDone {
 			t.Errorf("%s: got %q, want status DONE", key, s.Status)
 		}
 		if s.Channel != "client" {

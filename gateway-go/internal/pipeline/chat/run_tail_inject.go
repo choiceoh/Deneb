@@ -33,7 +33,7 @@ import (
 // reply text is delivered by the run-completion layer (cron relay /
 // main-session handoff / miniapp sync response) rather than by the agent's
 // own `message` tool. It used to live in the system prompt's Messaging
-// section gated on RunParams.AutoDeliveredOutput, which split heartbeat
+// section gated on runParams.AutoDeliveredOutput, which split heartbeat
 // (flag off) and interactive (flag on) turns of the same session into two
 // divergent system prompts — two APC prefix families. As a tail addition it
 // costs ~100 tokens on exactly the turns it applies to and the system prompt
@@ -61,7 +61,7 @@ const autoDeliveryDirective = `[전달 정책 — 이번 턴]
 // skill hint (procedure pointer — orthogonal to reference material, so it rides
 // both branches; skill_hints.go) and the delivery directive (current-turn
 // policy). Empty strings are omitted.
-func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skillHints string) []string {
+func buildTailAdditions(params runParams, recallMemory, notebookGrounding, skillHints string) []string {
 	var adds []string
 	if notebookGrounding != "" {
 		adds = append(adds, notebookGrounding)

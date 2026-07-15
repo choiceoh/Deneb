@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	skillcore "github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/core"
 )
 
@@ -22,7 +21,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
 		metaDir := filepath.Join(t.TempDir(), "meta")
-		tracker, err := genesis.NewTracker(slog.Default())
+		tracker, err := domainbind.NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,8 +34,8 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 		}, metaDir
 	}
 	proposal := strings.Repeat("proposed prompt revision. ", 20)
-	item := func(metaDir string) workfeed.Item {
-		return workfeed.Item{Source: "genesis-meta", RefID: filepath.Join(metaDir, "prompt.md.proposed")}
+	item := func(metaDir string) domainbind.Item {
+		return domainbind.Item{Source: "genesis-meta", RefID: filepath.Join(metaDir, "prompt.md.proposed")}
 	}
 
 	t.Run("adopt promotes the proposal and records the decision", func(t *testing.T) {
@@ -85,7 +84,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 	t.Run("missing proposal and junk ref are safe no-ops", func(t *testing.T) {
 		s, metaDir := newServer(t)
 		s.handleMetaProposalAction(item(metaDir), "meta:adopt") // no .proposed on disk
-		s.handleMetaProposalAction(workfeed.Item{Source: "genesis-meta", RefID: ""}, "meta:adopt")
+		s.handleMetaProposalAction(domainbind.Item{Source: "genesis-meta", RefID: ""}, "meta:adopt")
 		if ledger, _ := s.genesisTracker.RecentMetaRevisions(5); len(ledger) != 0 {
 			t.Fatalf("no-op paths wrote ledger entries: %+v", ledger)
 		}
@@ -94,7 +93,7 @@ func TestHandleMetaProposalActionUpdatesArtifactOnAdoptOrReject(t *testing.T) {
 
 func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	tracker, err := genesis.NewTracker(slog.Default())
+	tracker, err := domainbind.NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,14 +101,14 @@ func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 	s := &Server{
 		logger: slog.Default(),
 		MemorySubsystem: &MemorySubsystem{
-			workFeedStore: workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl")),
+			workFeedStore: domainbind.NewWorkFeedStore(filepath.Join(t.TempDir(), "workfeed.jsonl")),
 		},
 		GenesisSubsystem: &GenesisSubsystem{
 			genesisTracker: tracker,
-			genesisEvolver: &genesis.Evolver{},
+			genesisEvolver: &domainbind.Evolver{},
 		},
 	}
-	result := genesis.EvolveResult{
+	result := domainbind.EvolveResult{
 		SkillName: "email-analysis", Evolved: true, NewVersion: "1.0.1",
 		JudgeVersion: "judge-v1", JudgeMargin: &margin, NeedsOperatorVerdict: true,
 	}
@@ -126,7 +125,7 @@ func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 		t.Fatal(err)
 	}
 	labels := tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
-	if len(labels) != 1 || labels[0].Verdict != genesis.OperatorJudgeVerdictConfirm || labels[0].JudgeMargin != margin {
+	if len(labels) != 1 || labels[0].Verdict != domainbind.OperatorJudgeVerdictConfirm || labels[0].JudgeMargin != margin {
 		t.Fatalf("operator labels = %+v", labels)
 	}
 	// A later tap on the opposite chip is a no-op: the first decision wins.
@@ -134,52 +133,52 @@ func TestLowConfidenceEvolveCardPreservesFirstOperatorVerdict(t *testing.T) {
 		t.Fatal(err)
 	}
 	labels = tracker.RecentOperatorJudgeVerdicts(time.Hour, 5)
-	if len(labels) != 1 || labels[0].Verdict != genesis.OperatorJudgeVerdictConfirm {
+	if len(labels) != 1 || labels[0].Verdict != domainbind.OperatorJudgeVerdictConfirm {
 		t.Fatalf("settled verdict changed: %+v", labels)
 	}
 }
 
 func TestNativeWorkFeedVerdictFailureKeepsCardRetryable(t *testing.T) {
-	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
-	if _, err := store.Append(workfeed.Item{
+	store := domainbind.NewWorkFeedStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	if _, err := store.Append(domainbind.Item{
 		ID: "verdict", Source: evolveVerdictSource,
-		Actions: []workfeed.Action{{ID: evolveVerdictConfirm, Kind: workfeed.ActionAck}},
+		Actions: []domainbind.Action{{ID: evolveVerdictConfirm, Kind: domainbind.ActionAck}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	wantErr := errors.New("verdict ledger unavailable")
 	feed := &nativeWorkFeedStore{
 		store:           store,
-		onEvolveVerdict: func(workfeed.Item, string) error { return wantErr },
+		onEvolveVerdict: func(domainbind.Item, string) error { return wantErr },
 	}
 	if _, err := feed.RunAction("verdict", evolveVerdictConfirm); !errors.Is(err, wantErr) {
 		t.Fatalf("RunAction error = %v, want %v", err, wantErr)
 	}
 	items, total, err := store.List(10, false)
-	if err != nil || total != 1 || len(items) != 1 || items[0].Status == workfeed.StatusAcked {
+	if err != nil || total != 1 || len(items) != 1 || items[0].Status == domainbind.StatusAcked {
 		t.Fatalf("failed verdict consumed card: items=%+v total=%d err=%v", items, total, err)
 	}
 }
 
 func TestNativeWorkFeedRelockFailureKeepsCardRetryable(t *testing.T) {
-	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	store := domainbind.NewWorkFeedStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	actionID := ladderActionRelockPrefix + "source:runtime-error"
-	if _, err := store.Append(workfeed.Item{
+	if _, err := store.Append(domainbind.Item{
 		ID: "graduation", Source: ladderReadySource,
-		Actions: []workfeed.Action{{ID: actionID, Kind: workfeed.ActionAck}},
+		Actions: []domainbind.Action{{ID: actionID, Kind: domainbind.ActionAck}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	wantErr := errors.New("graduation ledger unavailable")
 	feed := &nativeWorkFeedStore{
 		store:          store,
-		onLadderAction: func(workfeed.Item, string) error { return wantErr },
+		onLadderAction: func(domainbind.Item, string) error { return wantErr },
 	}
 	if _, err := feed.RunAction("graduation", actionID); !errors.Is(err, wantErr) {
 		t.Fatalf("RunAction error = %v, want %v", err, wantErr)
 	}
 	items, total, err := store.List(10, false)
-	if err != nil || total != 1 || len(items) != 1 || items[0].Status == workfeed.StatusAcked {
+	if err != nil || total != 1 || len(items) != 1 || items[0].Status == domainbind.StatusAcked {
 		t.Fatalf("failed relock consumed card: items=%+v total=%d err=%v", items, total, err)
 	}
 }

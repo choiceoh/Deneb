@@ -1,12 +1,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // MemorySubsystem groups the wiki knowledge base and contacts address-book mirror.
@@ -15,14 +11,14 @@ import (
 // it is available when the contacts tool is wired during chat init.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type MemorySubsystem struct {
-	wikiStore       *wiki.Store       // set during initMemorySubsystem()
-	notebookStore   *notebook.Store   // set during initToolsAndDeps(); deal-anchored source collections
-	contactsStore   *contacts.Store   // set during registerEarlyMethods()
-	workFeedStore   *workfeed.Store   // set during registerEarlyMethods()
-	nativeSyncStore *nativesync.Store // set during registerEarlyMethods()
+	wikiStore       *domainbind.WikiStore       // set during initMemorySubsystem()
+	notebookStore   *domainbind.NotebookStore   // set during initToolsAndDeps(); deal-anchored source collections
+	contactsStore   *domainbind.ContactsStore   // set during registerEarlyMethods()
+	workFeedStore   *domainbind.WorkFeedStore   // set during registerEarlyMethods()
+	nativeSyncStore *domainbind.NativeSyncStore // set during registerEarlyMethods()
 
 	// cpProjects caches the wiki-derived counterparty→projects map for the
 	// mail-analysis party anchor (mail_counterparty.go). Zero value ready;
 	// reads tolerate the late-bound wikiStore.
-	cpProjects mailflow.CounterpartyProjectsCache
+	cpProjects svcbind.CounterpartyProjectsCache
 }

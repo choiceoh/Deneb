@@ -134,21 +134,21 @@ type SyncOptions struct {
 	Delivery *DeliveryContext
 
 	// EphemeralUser suppresses persistence of the inbound user-role message —
-	// see RunParams.EphemeralUser. Set by autonomous triggers (heartbeat) so
+	// see runParams.EphemeralUser. Set by autonomous triggers (heartbeat) so
 	// recurring self-triggers do not crowd out the recent-history window.
 	EphemeralUser bool
 
 	// SkipRecall skips the long-term-memory recall preflight for this turn —
-	// see RunParams.SkipRecall. Set from the native client's "memory off /
+	// see runParams.SkipRecall. Set from the native client's "memory off /
 	// focused chat" toggle so general questions skip work-context injection.
 	SkipRecall bool
 
 	// FeedContext is the 업무 day's-feed digest to inject as wire-only context —
-	// see RunParams.FeedContext. Set by the native bridge for 업무 turns only.
+	// see runParams.FeedContext. Set by the native bridge for 업무 turns only.
 	FeedContext string
 
 	// EphemeralAssistant suppresses persistence of assistant/tool_result
-	// messages produced during the run — see RunParams.EphemeralAssistant.
+	// messages produced during the run — see runParams.EphemeralAssistant.
 	// Heartbeat sets this true so autonomous ticks do not crowd out the
 	// user's short-term conversation context; heartbeat state belongs in
 	// HEARTBEAT.md instead.
@@ -156,17 +156,17 @@ type SyncOptions struct {
 
 	// AutoDeliveredOutput marks a run whose final reply text is delivered by
 	// the caller's run-completion path (e.g. the cron delivery layer) rather
-	// than by the agent's in-loop `message` tool. Propagated to RunParams;
-	// see RunParams.AutoDeliveredOutput.
+	// than by the agent's in-loop `message` tool. Propagated to runParams;
+	// see runParams.AutoDeliveredOutput.
 	AutoDeliveredOutput bool
 
 	// BeforeToolCall, when set, gates each tool execution (block + reason).
-	// Propagated to RunParams.BeforeToolCall; the goal loop uses it for its
+	// Propagated to runParams.BeforeToolCall; the goal loop uses it for its
 	// idempotency guard. nil = no gate.
 	BeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
 
 	// OnToolResult, when set, observes each tool result. Propagated to
-	// RunParams.OnToolResult; the goal loop uses it to record committed
+	// runParams.OnToolResult; the goal loop uses it to record committed
 	// destructive actions into the ledger. nil = no observer.
 	OnToolResult func(name, toolUseID, result string, isErr bool)
 
@@ -186,15 +186,15 @@ type SyncOptions struct {
 	// GateUntrustedTools enables the untrusted-origin tool gate (blocking
 	// irreversible tools when promptware enters the turn). Set by the
 	// interactive native-client transports. Propagated to
-	// RunParams.GateUntrustedTools.
+	// runParams.GateUntrustedTools.
 	GateUntrustedTools bool
 }
 
-// prepareSyncRun builds RunParams and runDeps from the common sync arguments.
+// prepareSyncRun builds runParams and runDeps from the common sync arguments.
 // Both SendSync and SendSyncStream share this setup.
-func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string, opts *SyncOptions) (RunParams, runDeps, error) {
+func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string, opts *SyncOptions) (runParams, runDeps, error) {
 	if h.sessions == nil {
-		return RunParams{}, runDeps{}, fmt.Errorf("chat handler not initialized")
+		return runParams{}, runDeps{}, fmt.Errorf("chat handler not initialized")
 	}
 
 	sess := h.sessions.Get(sessionKey)
@@ -202,7 +202,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		sess = h.sessions.Create(sessionKey, "direct")
 	}
 
-	params := RunParams{
+	params := runParams{
 		SessionKey:   sessionKey,
 		Message:      sanitizeInput(message),
 		Model:        model,
@@ -387,7 +387,7 @@ func (h *Handler) withSyncRunLifecycle(
 	runCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	h.abort.Register(clientRunID, &AbortEntry{
+	h.abort.Register(clientRunID, &abortEntry{
 		SessionKey: sessionKey,
 		ClientRun:  clientRunID,
 		CancelFn:   cancel,
@@ -489,7 +489,7 @@ func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOp
 // trySlashSync short-circuits slash commands on the synchronous send paths.
 // The native client talks to the gateway via miniapp.chat.send (SendSync), so
 // without this, slash input fell through to the LLM as plain text and the
-// dispatch layer's reply (delivered via ReplyFn, unwired on the native-only
+// dispatch layer's reply (delivered via replyFn, unwired on the native-only
 // deployment) was lost. The collector captures every immediate respond() call
 // so the slash reply returns in the RPC response the client renders.
 // Long-running commands (/update, /rollback, …) reply from their own
@@ -503,7 +503,7 @@ func (h *Handler) trySlashSync(sessionKey, message string, opts *SyncOptions) (*
 	if opts != nil && len(opts.Messages) > 0 {
 		return nil, false
 	}
-	cmd := ParseSlashCommand(message)
+	cmd := parseSlashCommand(message)
 	if cmd == nil || !cmd.Handled {
 		return nil, false
 	}

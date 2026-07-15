@@ -58,9 +58,9 @@ func contextFileCharBudget(name string) int {
 	return maxContextFileChars
 }
 
-// ResetContextFileCacheForTest clears all prompt caches.
+// resetContextFileCacheForTest clears all prompt caches.
 // Intended for tests to avoid cross-test state leakage.
-func ResetContextFileCacheForTest() {
+func resetContextFileCacheForTest() {
 	Cache.Reset()
 }
 
@@ -89,8 +89,8 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 		}
 	}
 
-	Cache.LockCtx()
-	defer Cache.UnlockCtx()
+	Cache.lockCtx()
+	defer Cache.unlockCtx()
 
 	var files []ContextFile
 	if cached, ok := Cache.ContextFiles(workspaceDir); ok {
@@ -98,7 +98,7 @@ func LoadContextFiles(workspaceDir string, opts ...LoadContextOption) []ContextF
 	} else {
 		var resolved map[string]time.Time
 		files, resolved = loadContextFilesFromDisk(workspaceDir)
-		Cache.SetContextFiles(workspaceDir, files, resolved)
+		Cache.setContextFiles(workspaceDir, files, resolved)
 	}
 
 	// Freeze for this session.
@@ -337,10 +337,10 @@ func clipTailUTF8(s string, n int) string {
 	return s[start:]
 }
 
-// FormatContextFilesForPrompt formats loaded context files for inclusion
+// formatContextFilesForPrompt formats loaded context files for inclusion
 // in the system prompt. If SOUL.md is present, an explicit instruction to
 // embody its persona/tone is injected (mirrors the TS system-prompt behavior).
-func FormatContextFilesForPrompt(files []ContextFile) string {
+func formatContextFilesForPrompt(files []ContextFile) string {
 	if len(files) == 0 {
 		return ""
 	}

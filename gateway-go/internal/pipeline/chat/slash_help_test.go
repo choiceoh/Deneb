@@ -7,9 +7,9 @@ import (
 
 func TestParseSlashCommand_Help(t *testing.T) {
 	for _, in := range []string{"/help", "/?", "/도움말", "/help me"} {
-		got := ParseSlashCommand(in)
+		got := parseSlashCommand(in)
 		if got == nil || !got.Handled || got.Command != "help" {
-			t.Errorf("ParseSlashCommand(%q) = %+v, want handled help command", in, got)
+			t.Errorf("parseSlashCommand(%q) = %+v, want handled help command", in, got)
 		}
 	}
 }
@@ -35,9 +35,9 @@ func TestSlashHelpTextDisplaysCommands(t *testing.T) {
 func TestSlashHelpEntriesAreParseable(t *testing.T) {
 	for _, e := range slashBuiltinHelp {
 		name := strings.Fields(e.usage)[0] // "/model <이름|역할>" -> "/model"
-		got := ParseSlashCommand(name)
+		got := parseSlashCommand(name)
 		if got == nil || !got.Handled {
-			t.Errorf("help entry %q: ParseSlashCommand(%q) not handled (%+v)", e.usage, name, got)
+			t.Errorf("help entry %q: parseSlashCommand(%q) not handled (%+v)", e.usage, name, got)
 		}
 	}
 }

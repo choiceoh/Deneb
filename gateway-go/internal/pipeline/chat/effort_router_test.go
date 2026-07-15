@@ -26,15 +26,15 @@ func disabledProfile() router.Profile { return router.DefaultProfile() }
 // automation; AutoDeliveredOutput alone is an interactive native chat.
 func TestIsAutomationRunReturnsTrueOnlyForAutomationSignals(t *testing.T) {
 	cases := []struct {
-		params RunParams
+		params runParams
 		want   bool
 		name   string
 	}{
-		{RunParams{Message: "안녕", EphemeralUser: true}, true, "ephemeral automation"},
-		{RunParams{Message: "아침 브리핑", SessionKey: "cron:morning-letter:123"}, true, "cron prefix"},
-		{RunParams{Message: "x", SessionKey: "acp:subagent:1"}, true, "acp prefix"},
-		{RunParams{Message: "브리핑 보내줘", AutoDeliveredOutput: true}, false, "auto-delivered alone is interactive"},
-		{RunParams{Message: "안녕"}, false, "plain interactive"},
+		{runParams{Message: "안녕", EphemeralUser: true}, true, "ephemeral automation"},
+		{runParams{Message: "아침 브리핑", SessionKey: "cron:morning-letter:123"}, true, "cron prefix"},
+		{runParams{Message: "x", SessionKey: "acp:subagent:1"}, true, "acp prefix"},
+		{runParams{Message: "브리핑 보내줘", AutoDeliveredOutput: true}, false, "auto-delivered alone is interactive"},
+		{runParams{Message: "안녕"}, false, "plain interactive"},
 	}
 	for _, c := range cases {
 		if got := isAutomationRun(c.params); got != c.want {
@@ -53,7 +53,7 @@ func TestApplyEffortRouter_RouteAndrestoreEffort(t *testing.T) {
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash", Thinking: orig, ThinkingModulator: origMod}
 	profile := enabledProfile()
 
-	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, profile, nil)
+	route, decision := applyEffortRouter(&cfg, runParams{Message: "안녕"}, nil, profile, nil)
 	if route == nil || decision != "routed:short-conversational" {
 		t.Fatalf("simple message on toggle model must route (decision=%q)", decision)
 	}
@@ -93,14 +93,14 @@ func TestApplyEffortRouter_RouteAndrestoreEffort(t *testing.T) {
 func TestApplyEffortRouter_RoutesOnlyWhenGatesPass(t *testing.T) {
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "")
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash"}
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, enabledProfile(), nil); r != nil || d != "" {
+	if r, d := applyEffortRouter(&cfg, runParams{Message: "안녕"}, nil, enabledProfile(), nil); r != nil || d != "" {
 		t.Error("flag off must not route and reports no decision")
 	}
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "1")
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, disabledProfile(), nil); r != nil || d != "" {
+	if r, d := applyEffortRouter(&cfg, runParams{Message: "안녕"}, nil, disabledProfile(), nil); r != nil || d != "" {
 		t.Error("inert profile (no toggle) must not route")
 	}
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, nil, enabledProfile(), nil); r != nil || d != "kept:hard-signal:분석" {
+	if r, d := applyEffortRouter(&cfg, runParams{Message: "이 코드 분석해줘"}, nil, enabledProfile(), nil); r != nil || d != "kept:hard-signal:분석" {
 		t.Errorf("hard message must report kept decision, got %q", d)
 	}
 	if cfg.Thinking != nil {
@@ -109,10 +109,10 @@ func TestApplyEffortRouter_RoutesOnlyWhenGatesPass(t *testing.T) {
 	// force mode (eval baseline): routes even hard messages — but never
 	// automation/attachment-protected runs.
 	t.Setenv("DENEB_ADAPTIVE_EFFORT", "force")
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "이 코드 분석해줘"}, nil, enabledProfile(), nil); r == nil || d != "routed:forced" {
+	if r, d := applyEffortRouter(&cfg, runParams{Message: "이 코드 분석해줘"}, nil, enabledProfile(), nil); r == nil || d != "routed:forced" {
 		t.Errorf("force mode must route everything eligible, got %q", d)
 	}
-	if r, d := applyEffortRouter(&cfg, RunParams{Message: "메일 분석", SessionKey: "cron:mail:1"}, nil, enabledProfile(), nil); r != nil || d != "kept:automation" {
+	if r, d := applyEffortRouter(&cfg, runParams{Message: "메일 분석", SessionKey: "cron:mail:1"}, nil, enabledProfile(), nil); r != nil || d != "kept:automation" {
 		t.Errorf("force must NOT override the automation guard, got %q", d)
 	}
 	cfg.Thinking = nil
@@ -200,7 +200,7 @@ func TestApplyEffortRouter_PreservesSandwichBoostAfterRouting(t *testing.T) {
 	}
 	cfg := agent.AgentConfig{Model: "deepseek-v4-flash", ThinkingModulator: sandwich}
 
-	route, decision := applyEffortRouter(&cfg, RunParams{Message: "안녕"}, nil, enabledProfile(), nil)
+	route, decision := applyEffortRouter(&cfg, runParams{Message: "안녕"}, nil, enabledProfile(), nil)
 	if route == nil || decision != "routed:short-conversational" {
 		t.Fatalf("simple message must route (decision=%q)", decision)
 	}

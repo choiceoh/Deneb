@@ -2,11 +2,10 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"sort"
 	"strings"
 	"time"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
@@ -33,7 +32,7 @@ func (t *Tracker) RecordRejectedSkillEdit(record RejectedSkillEditRecord) error 
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.Reason = strings.TrimSpace(record.Reason)
 	record.Source = strings.TrimSpace(record.Source)
-	record.CandidateBody = strings.TrimSpace(genesiscommon.TruncateRunes(record.CandidateBody, 1997))
+	record.CandidateBody = strings.TrimSpace(genbind.TruncateRunes(record.CandidateBody, 1997))
 	if record.SelfHarnessAudit != nil && record.SelfHarnessAudit.Empty() {
 		record.SelfHarnessAudit = nil
 	}

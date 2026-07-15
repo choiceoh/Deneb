@@ -28,7 +28,7 @@ func TestBuildSystemPromptRendersRequiredSections(t *testing.T) {
 		Channel: "telegram",
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 
 	// Check required sections exist.
 	sections := []string{
@@ -64,7 +64,7 @@ func TestBuildSystemPromptRendersWorkPersona(t *testing.T) {
 	// 업무 workspace: Nev persona + 비서실장 + 위키 외부메모리 all present. The
 	// retired 챗봇 neutral-assistant identity must never render — every
 	// non-coding session gets the single chief-of-staff persona.
-	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools})
+	work := buildSystemPrompt(SystemPromptParams{ToolDefs: tools})
 	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리", "## 작업 기억"} {
 		if !strings.Contains(work, want) {
 			t.Errorf("업무 prompt regression — missing %q", want)
@@ -85,11 +85,11 @@ func TestBuildSystemPromptRendersWorkPersona(t *testing.T) {
 // coaching a model to call polaris when the preset withholds the tool produces
 // failed tool-call loops, so the section renders only when the tool is present.
 func TestBuildSystemPromptRendersPolarisSectionWhenToolPresent(t *testing.T) {
-	with := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}, {Name: "polaris"}}})
+	with := buildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}, {Name: "polaris"}}})
 	if !strings.Contains(with, "## 회상 (polaris)") {
 		t.Error("polaris-carrying prompt missing 회상 section")
 	}
-	without := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}}})
+	without := buildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}}})
 	if strings.Contains(without, "## 회상 (polaris)") {
 		t.Error("polaris-less prompt must not coach the polaris tool")
 	}
@@ -105,7 +105,7 @@ func TestBuildSystemPromptRendersCompactToolList(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 
 	// Should contain categorized tool list format.
 	if !strings.Contains(prompt, "File: read, write") {
@@ -126,7 +126,7 @@ func TestBuildSystemPromptRendersSkillsAndPropusDoctrine(t *testing.T) {
 		SkillsPrompt: `<available_skills><skill><name>test-skill</name></skill></available_skills>`,
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if !strings.Contains(prompt, "## 스킬") {
 		t.Error("missing skills section")
 	}
@@ -155,7 +155,7 @@ func TestBuildSystemPromptRendersSkillsSectionWithoutSkills(t *testing.T) {
 		WorkspaceDir: "/tmp",
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	// Even without always-skills, the skills section appears with skills tool hint.
 	if !strings.Contains(prompt, "## 스킬") {
 		t.Error("skills section should always appear with skills tool hint")
@@ -173,7 +173,7 @@ func TestBuildSystemPromptNoMemoryWithoutTools(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if strings.Contains(prompt, "## Memory Recall") {
 		t.Error("memory section should not appear without memory tools")
 	}
@@ -255,7 +255,7 @@ func TestBuildSystemPromptRendersMessagingGuidanceWithMessageTool(t *testing.T) 
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if !strings.Contains(prompt, SilentReplyToken) {
 		t.Error("expected SilentReplyToken in messaging section when message tool is available")
 	}
@@ -272,7 +272,7 @@ func TestBuildSystemPromptOmitsMessagingGuidanceWithoutMessageTool(t *testing.T)
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	// The message-specific guidance (proactive sends, NO_REPLY) should not appear without message tool
 	if strings.Contains(prompt, "proactive sends") {
 		t.Error("message-specific guidance should not appear without message tool")
@@ -306,7 +306,7 @@ func TestBuildSystemPromptWithoutPilotReferences(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if strings.Contains(prompt, "pilot") {
 		t.Error("pilot references should not appear in system prompt")
 	}
@@ -339,7 +339,7 @@ func TestBuildSystemPromptRendersDateInConfiguredZone(t *testing.T) {
 		ToolDefs:     []ToolDef{{Name: "read"}},
 		UserTimezone: "Asia/Seoul",
 	}
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 
 	if !strings.Contains(prompt, "(timezone: Asia/Seoul)") {
 		t.Fatalf("system prompt missing configured timezone label; got:\n%s", prompt)
@@ -357,7 +357,7 @@ func TestBuildSystemPromptRendersDateFromInjectedTime(t *testing.T) {
 		UserTimezone: "Asia/Seoul",
 		Now:          time.Date(2040, time.December, 31, 16, 30, 0, 0, time.UTC),
 	}
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if want := "Tuesday, January 1, 2041"; !strings.Contains(prompt, want) {
 		t.Fatalf("system prompt did not use injected semantic time %q; got:\n%s", want, prompt)
 	}
@@ -373,7 +373,7 @@ func TestBuildSystemPromptBlocksReturnsSameContentAsString(t *testing.T) {
 		UserTimezone: "UTC",
 	}
 
-	stringPrompt := BuildSystemPrompt(params)
+	stringPrompt := buildSystemPrompt(params)
 	blocks := BuildSystemPromptBlocks(params)
 
 	// Blocks should concatenate to the same content as string version.
@@ -383,7 +383,7 @@ func TestBuildSystemPromptBlocksReturnsSameContentAsString(t *testing.T) {
 	}
 
 	if combined.String() != stringPrompt {
-		t.Error("BuildSystemPromptBlocks content should match BuildSystemPrompt")
+		t.Error("BuildSystemPromptBlocks content should match buildSystemPrompt")
 	}
 }
 
@@ -456,7 +456,7 @@ func TestBuildSystemPromptRendersWikiSaveGuidance(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 
 	invariants := []string{
 		"wiki write/log에 쓰는 내용은 사용자에게 보이지 않는다",
@@ -481,7 +481,7 @@ func TestBuildSystemPromptRendersConversationModeWithPreset(t *testing.T) {
 		ToolPreset: "conversation",
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if !strings.Contains(prompt, "현재 모드: 대화") {
 		t.Error("conversation mode block should appear when ToolPreset is 'conversation'")
 	}
@@ -502,7 +502,7 @@ func TestBuildSystemPromptOmitsConversationModeWithoutPreset(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if strings.Contains(prompt, "현재 모드: 대화") {
 		t.Error("conversation mode block should NOT appear in normal mode")
 	}
@@ -534,7 +534,7 @@ func TestBuildSystemPromptRendersWebGuidanceWithWebTool(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if !strings.Contains(prompt, "## Web") {
 		t.Error("expected ## Web section when web tool is registered")
 	}
@@ -554,7 +554,7 @@ func TestBuildSystemPrompt_NoWebGuidanceWithoutTools(t *testing.T) {
 		},
 	}
 
-	prompt := BuildSystemPrompt(params)
+	prompt := buildSystemPrompt(params)
 	if strings.Contains(prompt, "## Web\n") {
 		t.Error("web guidance should not appear without web/http tools")
 	}

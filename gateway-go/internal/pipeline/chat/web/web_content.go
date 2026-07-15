@@ -93,7 +93,7 @@ func processFetchedContent(
 	rawBytes []byte,
 	contentType string,
 	url string,
-	localAI *LocalAIExtractor,
+	localAI *localAIExtractor,
 	meta *webFetchMeta,
 ) string {
 	switch classifyContentType(contentType, url) {
@@ -105,7 +105,7 @@ func processFetchedContent(
 		// Use raw bytes (not charset-normalized string) for binary documents.
 		// Best-effort archive the fetched source into the user file store so it
 		// survives the turn and is browsable/recallable (filestore leverage).
-		archiveFetchedDocument(ctx, url, rawBytes)
+		document.ArchiveFetchedWebDoc(ctx, url, rawBytes)
 		return processDocument(ctx, rawBytes, url, contentType)
 	default:
 		return rawContent

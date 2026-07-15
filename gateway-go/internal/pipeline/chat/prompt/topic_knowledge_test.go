@@ -75,7 +75,7 @@ func TestLoadTopicKnowledge_Truncates(t *testing.T) {
 }
 
 func TestLoadTopicKnowledge_FrozenPerSession(t *testing.T) {
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	dir := t.TempDir()
 	mustWriteTopic(t, dir, "topics", "coding", "version one")
 	sessionKey := "telegram:123:thread:42"

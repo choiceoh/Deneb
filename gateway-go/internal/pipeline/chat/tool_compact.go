@@ -20,7 +20,7 @@ const (
 	compactDedupMinLines = 8
 )
 
-// CompactToolOutput is a global post-processor that cheaply cleans verbose tool
+// compactToolOutput is a global post-processor that cheaply cleans verbose tool
 // output BEFORE it enters the LLM context: it strips ANSI escapes and collapses
 // runs of identical adjacent lines. It is lossless for the model (only terminal
 // control bytes and exact-duplicate lines are removed) and deterministic, so it
@@ -35,7 +35,7 @@ const (
 // so it only cleans what already fit the tool's budget. Complements compaction,
 // which prunes OLD tool results: this trims a result the moment it returns,
 // lowering the token baseline so compaction fires less often.
-func CompactToolOutput(_ context.Context, _, output string) string {
+func compactToolOutput(_ context.Context, _, output string) string {
 	if len(output) < compactMinInputBytes {
 		return output
 	}

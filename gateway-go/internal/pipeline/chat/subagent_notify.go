@@ -7,21 +7,21 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
-// SubagentNotifier routes completed child results back to their parent.
-type SubagentNotifier = leafbind.SubagentNotifier
+// subagentNotifier routes completed child results back to their parent.
+type subagentNotifier = leafbind.SubagentNotifier
 
-// SubagentNotifierDeps supplies parent-run callbacks without coupling the
+// subagentNotifierDeps supplies parent-run callbacks without coupling the
 // notifier package to the chat handler.
-type SubagentNotifierDeps struct {
+type subagentNotifierDeps struct {
 	Logger       *slog.Logger
 	HasActiveRun func(sessionKey string) bool
-	StartRun     func(reqID string, params RunParams, isSteer bool)
-	EnqueuePend  func(sessionKey string, params RunParams)
+	StartRun     func(reqID string, params runParams, isSteer bool)
+	EnqueuePend  func(sessionKey string, params runParams)
 	Sessions     func() *session.Manager
 }
 
-// NewSubagentNotifier creates and subscribes a child-completion notifier.
-func NewSubagentNotifier(deps SubagentNotifierDeps) *SubagentNotifier {
+// newSubagentNotifier creates and subscribes a child-completion notifier.
+func newSubagentNotifier(deps subagentNotifierDeps) *subagentNotifier {
 	return leafbind.NewSubagentNotifier(leafbind.SubagentNotifierDeps{
 		Logger:                 deps.Logger,
 		HasActiveRun:           deps.HasActiveRun,

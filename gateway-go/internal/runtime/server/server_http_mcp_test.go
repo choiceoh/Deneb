@@ -11,8 +11,8 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -32,7 +32,7 @@ func postMCP(t *testing.T, s *Server, token, body string) *httptest.ResponseReco
 func mcpHandler(s *Server) *mcpapi.Handler {
 	return mcpapi.New(mcpapi.Config{
 		Authenticate: func(w http.ResponseWriter, r *http.Request) (*clientauth.Identity, bool) {
-			return nativeauth.Authenticate(w, r, s.logger)
+			return svcbind.Authenticate(w, r, s.logger)
 		},
 		Dispatcher: s.dispatcher,
 		Version:    s.version,

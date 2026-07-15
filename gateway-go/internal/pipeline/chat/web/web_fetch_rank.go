@@ -386,7 +386,7 @@ func selectUsableFetches(candidates []string, results []searchFetchOutcome, fetc
 	return out
 }
 
-type urlFetchDetailedFunc func(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error)
+type urlFetchDetailedFunc func(ctx context.Context, cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error)
 
 const hybridFillWave = 2
 
@@ -394,8 +394,8 @@ const hybridFillWave = 2
 // until fetchTop usable pages are collected (early stop).
 func fillUsableFetches(
 	ctx context.Context,
-	cache *FetchCache,
-	localAI *LocalAIExtractor,
+	cache *fetchCache,
+	localAI *localAIExtractor,
 	spill tooldeps.SpilloverStore,
 	candidates []string,
 	fetchTop, perCandidateChars int,

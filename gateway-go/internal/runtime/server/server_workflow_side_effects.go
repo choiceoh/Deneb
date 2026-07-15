@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 )
 
 // resolveFeedWorkModel returns the display name of the model behind proactive
@@ -14,7 +14,7 @@ func (s *Server) resolveFeedWorkModel() string {
 	if s.modelRegistry == nil {
 		return ""
 	}
-	return s.modelRegistry.Model(modelrole.RoleMain)
+	return s.modelRegistry.Model(aibind.RoleMain)
 }
 
 // registerWorkflowSideEffects wires non-RPC business logic: process approval

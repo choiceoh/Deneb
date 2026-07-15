@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 func TestIdleReviewDueReturnsTrueWhenStaleOrNeverReviewed(t *testing.T) {
@@ -146,7 +146,7 @@ func TestHeartbeatRunReachesIdleReviewLaneBeforeEarlyReturn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tz: %v", err)
 	}
-	task := runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
+	task := svcbind.NewHeartbeatTask(svcbind.TaskConfig{
 		Now:         func() time.Time { return time.Date(2026, 7, 11, 12, 0, 0, 0, kst) },
 		ChatHandler: &chat.Handler{},
 		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),

@@ -393,17 +393,10 @@ func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (
 	return editWhitespaceTolerantContext(context.Background(), path, displayPath, content, oldStr, newStr)
 }
 
-func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
-	if strings.Contains(content, "\r") {
-		// CR/CRLF file: the tolerant splice joins with bare \n, so the
-		// replaced block (and any new lines) would silently switch line
-		// endings inside a Windows-style file. Exact matching still works —
-		// leave those files to it.
-		return "", false, nil
-	}
-	oldLines := strings.Split(oldStr, "\n")
+func prepareWhitespaceTolerantMatch(oldStr string) (oldLines, oldTrimmed []string, ok bool) {
+	oldLines = strings.Split(oldStr, "\n")
 	allBlank := true
-	oldTrimmed := make([]string, len(oldLines))
+	oldTrimmed = make([]string, len(oldLines))
 	for i, l := range oldLines {
 		oldTrimmed[i] = strings.TrimSpace(l)
 		if oldTrimmed[i] != "" {
@@ -411,17 +404,19 @@ func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, conte
 		}
 	}
 	if allBlank {
-		return "", false, nil // whitespace-only target — too dangerous to guess
+		return nil, nil, false
 	}
+	return oldLines, oldTrimmed, true
+}
 
-	lines := strings.Split(content, "\n")
+func findWhitespaceTolerantStarts(ctx context.Context, lines, oldLines, oldTrimmed []string) ([]int, error) {
 	if len(oldLines) > len(lines) {
-		return "", false, nil
+		return nil, nil
 	}
 	var starts []int
 	for i := 0; i+len(oldLines) <= len(lines); i++ {
 		if err := ctx.Err(); err != nil {
-			return "", true, err
+			return nil, err
 		}
 		ok := true
 		for j := range oldLines {
@@ -434,31 +429,22 @@ func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, conte
 			starts = append(starts, i)
 		}
 	}
-	switch len(starts) {
-	case 0:
-		return "", false, nil
-	case 1:
-		// fall through to apply
-	default:
-		shown := starts
-		if len(shown) > 3 {
-			shown = shown[:3]
-		}
-		lineNos := make([]string, len(shown))
-		for i, s := range shown {
-			lineNos[i] = fmt.Sprintf("%d", s+1)
-		}
-		return "", true, fmt.Errorf("old_string not found exactly, and %d whitespace-tolerant matches exist (lines %s). Add surrounding context or use line= to target one", len(starts), strings.Join(lineNos, ", "))
-	}
+	return starts, nil
+}
 
-	start := starts[0]
-	// Re-indent new_string so the block lands at the file's actual depth AND
-	// style (tabs vs spaces). The matched window gives an exact per-level
-	// translation table — old_string line j's indent maps to the file line's
-	// indent — and new lines almost always reuse indent levels present in the
-	// block they replace. Unseen levels fall back to translating whole
-	// repetitions of the base (first line) indent, which preserves relative
-	// depth without mixing whitespace styles. Blank lines pass.
+func whitespaceTolerantAmbiguityError(starts []int) error {
+	shown := starts
+	if len(shown) > 3 {
+		shown = shown[:3]
+	}
+	lineNos := make([]string, len(shown))
+	for i, s := range shown {
+		lineNos[i] = fmt.Sprintf("%d", s+1)
+	}
+	return fmt.Errorf("old_string not found exactly, and %d whitespace-tolerant matches exist (lines %s). Add surrounding context or use line= to target one", len(starts), strings.Join(lineNos, ", "))
+}
+
+func buildWhitespaceIndentMap(oldLines, lines []string, start int) (map[string]string, error) {
 	indentMap := make(map[string]string, len(oldLines))
 	for j := range oldLines {
 		if strings.TrimSpace(oldLines[j]) == "" {
@@ -466,16 +452,14 @@ func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, conte
 		}
 		k, v := leadingWhitespace(oldLines[j]), leadingWhitespace(lines[start+j])
 		if prev, ok := indentMap[k]; ok && prev != v {
-			// The same source indent maps to two different file depths (the
-			// model flattened a nested block). Any replacement choice would
-			// corrupt indentation-sensitive files — refuse and ask for exact
-			// text instead of guessing.
-			return "", true, fmt.Errorf("old_string not found exactly; a whitespace-tolerant match exists at line %d but old_string's indentation is ambiguous (identical source indents map to different file depths). Copy the exact text from read, including indentation", start+1)
+			return nil, fmt.Errorf("old_string not found exactly; a whitespace-tolerant match exists at line %d but old_string's indentation is ambiguous (identical source indents map to different file depths). Copy the exact text from read, including indentation", start+1)
 		}
 		indentMap[k] = v
 	}
-	oldIndent := leadingWhitespace(oldLines[0])
-	fileIndent := leadingWhitespace(lines[start])
+	return indentMap, nil
+}
+
+func reindentWhitespaceNewLines(newStr string, indentMap map[string]string, oldIndent, fileIndent string) ([]string, bool) {
 	newLines := strings.Split(newStr, "\n")
 	reindented := false
 	for i, l := range newLines {
@@ -495,6 +479,44 @@ func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, conte
 			reindented = true
 		}
 	}
+	return newLines, reindented
+}
+
+func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
+	if strings.Contains(content, "\r") {
+		// CR/CRLF file: the tolerant splice joins with bare \n, so the
+		// replaced block (and any new lines) would silently switch line
+		// endings inside a Windows-style file. Exact matching still works —
+		// leave those files to it.
+		return "", false, nil
+	}
+	oldLines, oldTrimmed, ok := prepareWhitespaceTolerantMatch(oldStr)
+	if !ok {
+		return "", false, nil
+	}
+
+	lines := strings.Split(content, "\n")
+	starts, err := findWhitespaceTolerantStarts(ctx, lines, oldLines, oldTrimmed)
+	if err != nil {
+		return "", true, err
+	}
+	switch len(starts) {
+	case 0:
+		return "", false, nil
+	case 1:
+		// fall through to apply
+	default:
+		return "", true, whitespaceTolerantAmbiguityError(starts)
+	}
+
+	start := starts[0]
+	indentMap, err := buildWhitespaceIndentMap(oldLines, lines, start)
+	if err != nil {
+		return "", true, err
+	}
+	oldIndent := leadingWhitespace(oldLines[0])
+	fileIndent := leadingWhitespace(lines[start])
+	newLines, reindented := reindentWhitespaceNewLines(newStr, indentMap, oldIndent, fileIndent)
 
 	spliced := make([]string, 0, len(lines)-len(oldLines)+len(newLines))
 	spliced = append(spliced, lines[:start]...)

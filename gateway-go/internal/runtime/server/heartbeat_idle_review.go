@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // Idle skill-review lane — the backstop that keeps the Propus review loop fed
@@ -192,7 +192,7 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 			return false, ""
 		}
 		for _, key := range keys {
-			sctx, err := skilllifecycle.BuildSessionContext(store, key)
+			sctx, err := svcbind.BuildSessionContext(store, key)
 			if err != nil {
 				continue
 			}

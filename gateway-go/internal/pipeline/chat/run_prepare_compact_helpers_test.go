@@ -34,13 +34,13 @@ func TestCompactionTierReturnsHighestImpactOutcome(t *testing.T) {
 
 func TestReportCompactionDegradedBroadcastsOnlyWhenCompactionRemainsOverBudget(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	params := RunParams{SessionKey: "session-1"}
-	var events []ChatCompactionDegradedEvent
+	params := runParams{SessionKey: "session-1"}
+	var events []chatCompactionDegradedEvent
 	deps := runDeps{broadcast: func(event string, payload any) (int, []error) {
 		if event != "chat.compaction_degraded" {
 			t.Fatalf("event = %q", event)
 		}
-		events = append(events, payload.(ChatCompactionDegradedEvent))
+		events = append(events, payload.(chatCompactionDegradedEvent))
 		return 1, nil
 	}}
 
@@ -52,7 +52,7 @@ func TestReportCompactionDegradedBroadcastsOnlyWhenCompactionRemainsOverBudget(t
 	if len(events) != 1 {
 		t.Fatalf("broadcast count = %d, want 1", len(events))
 	}
-	want := ChatCompactionDegradedEvent{
+	want := chatCompactionDegradedEvent{
 		Session:      "session-1",
 		TokensBefore: 120,
 		TokensAfter:  110,

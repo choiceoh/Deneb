@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 )
 
 // Agent-facing status budgets. Full fixture bodies / candidate SKILL.md dumps
@@ -18,8 +18,8 @@ const (
 	statusSlimCandidateRunes = 400
 	// Bodies longer than this are omitted entirely (not head-truncated) so a
 	// 2KB SKILL.md dump cannot crowd out nextActions / open corrections.
-	statusSlimBodyOmitAbove  = 800
-	statusSlimBodyOmitNote   = "[omitted from status — see rejected-edit store / validation corpus]"
+	statusSlimBodyOmitAbove = 800
+	statusSlimBodyOmitNote  = "[omitted from status — see rejected-edit store / validation corpus]"
 )
 
 // slimSkillLifecycleStatusForAgent mutates status in place to drop bulky
@@ -33,11 +33,11 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 		slim := make([]genesis.LifecycleLogEntry, len(*status.Recent))
 		copy(slim, *status.Recent)
 		for i := range slim {
-			slim[i].Candidate = genesiscommon.TruncateRunes(slim[i].Candidate, statusSlimCandidateRunes)
-			slim[i].Evidence = genesiscommon.TruncateRunes(slim[i].Evidence, statusSlimEvidenceRunes)
-			slim[i].Reason = genesiscommon.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
-			slim[i].Result = genesiscommon.TruncateRunes(slim[i].Result, statusSlimResultRunes)
-			slim[i].Description = genesiscommon.TruncateRunes(slim[i].Description, statusSlimResultRunes)
+			slim[i].Candidate = leafbind.TruncateRunes(slim[i].Candidate, statusSlimCandidateRunes)
+			slim[i].Evidence = leafbind.TruncateRunes(slim[i].Evidence, statusSlimEvidenceRunes)
+			slim[i].Reason = leafbind.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
+			slim[i].Result = leafbind.TruncateRunes(slim[i].Result, statusSlimResultRunes)
+			slim[i].Description = leafbind.TruncateRunes(slim[i].Description, statusSlimResultRunes)
 		}
 		status.Recent = &slim
 	}
@@ -45,7 +45,7 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 		slim := make([]genesis.RejectedSkillEditRecord, len(*status.RejectedEdits))
 		copy(slim, *status.RejectedEdits)
 		for i := range slim {
-			slim[i].Reason = genesiscommon.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
+			slim[i].Reason = leafbind.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
 			slim[i].CandidateBody = omitOrTruncateBody(slim[i].CandidateBody)
 		}
 		status.RejectedEdits = &slim
@@ -54,8 +54,8 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 		slim := make([]genesis.SkillValidationCaseRecord, len(*status.ValidationCases))
 		copy(slim, *status.ValidationCases)
 		for i := range slim {
-			slim[i].Description = genesiscommon.TruncateRunes(slim[i].Description, statusSlimResultRunes)
-			slim[i].Replay.Input = genesiscommon.TruncateRunes(slim[i].Replay.Input, statusSlimCandidateRunes)
+			slim[i].Description = leafbind.TruncateRunes(slim[i].Description, statusSlimResultRunes)
+			slim[i].Replay.Input = leafbind.TruncateRunes(slim[i].Replay.Input, statusSlimCandidateRunes)
 			slim[i].Replay.Context = append([]string(nil), slim[i].Replay.Context...)
 			slim[i].Replay.ExpectedToolCalls = slimReplayToolCalls(slim[i].Replay.ExpectedToolCalls)
 			slim[i].Replay.ForbiddenToolCalls = slimReplayToolCalls(slim[i].Replay.ForbiddenToolCalls)
@@ -66,12 +66,12 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 		slim := make([]genesis.SelfCorrectionCandidateRecord, len(*status.SelfCorrectionCandidates))
 		copy(slim, *status.SelfCorrectionCandidates)
 		for i := range slim {
-			slim[i].Candidate = genesiscommon.TruncateRunes(slim[i].Candidate, statusSlimCandidateRunes)
-			slim[i].Evidence = genesiscommon.TruncateRunes(slim[i].Evidence, statusSlimEvidenceRunes)
-			slim[i].ProposedChange = genesiscommon.TruncateRunes(slim[i].ProposedChange, statusSlimEvidenceRunes)
-			slim[i].Reason = genesiscommon.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
-			slim[i].ReviewNote = genesiscommon.TruncateRunes(slim[i].ReviewNote, statusSlimResultRunes)
-			slim[i].OutcomeNote = genesiscommon.TruncateRunes(slim[i].OutcomeNote, statusSlimResultRunes)
+			slim[i].Candidate = leafbind.TruncateRunes(slim[i].Candidate, statusSlimCandidateRunes)
+			slim[i].Evidence = leafbind.TruncateRunes(slim[i].Evidence, statusSlimEvidenceRunes)
+			slim[i].ProposedChange = leafbind.TruncateRunes(slim[i].ProposedChange, statusSlimEvidenceRunes)
+			slim[i].Reason = leafbind.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
+			slim[i].ReviewNote = leafbind.TruncateRunes(slim[i].ReviewNote, statusSlimResultRunes)
+			slim[i].OutcomeNote = leafbind.TruncateRunes(slim[i].OutcomeNote, statusSlimResultRunes)
 			slim[i].TargetFiles = append([]string(nil), slim[i].TargetFiles...)
 		}
 		status.SelfCorrectionCandidates = &slim
@@ -80,9 +80,9 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 		slim := make([]genesis.SkillOpportunityRecord, len(*status.Opportunities))
 		copy(slim, *status.Opportunities)
 		for i := range slim {
-			slim[i].Candidate = genesiscommon.TruncateRunes(slim[i].Candidate, statusSlimCandidateRunes)
-			slim[i].Evidence = genesiscommon.TruncateRunes(slim[i].Evidence, statusSlimEvidenceRunes)
-			slim[i].Reason = genesiscommon.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
+			slim[i].Candidate = leafbind.TruncateRunes(slim[i].Candidate, statusSlimCandidateRunes)
+			slim[i].Evidence = leafbind.TruncateRunes(slim[i].Evidence, statusSlimEvidenceRunes)
+			slim[i].Reason = leafbind.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
 		}
 		status.Opportunities = &slim
 	}
@@ -105,7 +105,7 @@ func slimReplayToolCalls(calls []genesis.SkillReplayToolCallRecord) []genesis.Sk
 func omitOrTruncateBody(body string) string {
 	runes := []rune(body)
 	if len(runes) <= statusSlimBodyOmitAbove {
-		return genesiscommon.TruncateRunes(body, statusSlimEvidenceRunes)
+		return leafbind.TruncateRunes(body, statusSlimEvidenceRunes)
 	}
 	return fmt.Sprintf("%s (%d runes)", statusSlimBodyOmitNote, len(runes))
 }

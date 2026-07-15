@@ -112,9 +112,9 @@ var destructivePatterns = []DestructiveCheck{
 	},
 }
 
-// CheckDestructiveCommand returns warnings for potentially destructive
+// checkDestructiveCommand returns warnings for potentially destructive
 // commands. Returns nil if the command appears safe.
-func CheckDestructiveCommand(command string) []DestructiveCheck {
+func checkDestructiveCommand(command string) []DestructiveCheck {
 	var matches []DestructiveCheck
 	for _, check := range destructivePatterns {
 		if check.Pattern.MatchString(command) {
@@ -128,9 +128,9 @@ func CheckDestructiveCommand(command string) []DestructiveCheck {
 	return matches
 }
 
-// FormatDestructiveWarnings returns a human-readable warning string
+// formatDestructiveWarnings returns a human-readable warning string
 // for destructive command detections.
-func FormatDestructiveWarnings(checks []DestructiveCheck) string {
+func formatDestructiveWarnings(checks []DestructiveCheck) string {
 	if len(checks) == 0 {
 		return ""
 	}
@@ -181,7 +181,7 @@ var diskDestroyPattern = regexp.MustCompile(
 // positive.
 var forkBombPattern = regexp.MustCompile(`:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:`)
 
-// CheckCatastrophicCommand returns block-severity matches for commands that are
+// checkCatastrophicCommand returns block-severity matches for commands that are
 // unrecoverable AND have no plausible legitimate use in an automated agent
 // context: wiping the filesystem root / home / a whole system directory,
 // overwriting a raw block device, formatting a disk, or a fork bomb. exec refuses
@@ -189,7 +189,7 @@ var forkBombPattern = regexp.MustCompile(`:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}
 // warn-only destructivePatterns — kept small and high-precision so legitimate
 // operations (rm -rf ./build, git reset --hard, dd of=backup.img) are never
 // blocked. Returns nil if the command is not catastrophic.
-func CheckCatastrophicCommand(command string) []DestructiveCheck {
+func checkCatastrophicCommand(command string) []DestructiveCheck {
 	var matches []DestructiveCheck
 	if rmForceRecursivePattern.MatchString(command) && catastrophicRootTarget.MatchString(command) {
 		matches = append(matches, DestructiveCheck{
@@ -218,11 +218,11 @@ func CheckCatastrophicCommand(command string) []DestructiveCheck {
 	return matches
 }
 
-// FormatCatastrophicRefusal renders the message exec returns IN PLACE OF running
+// formatCatastrophicRefusal renders the message exec returns IN PLACE OF running
 // a blocked command — a clear Korean refusal naming each reason, so the model
 // adjusts (narrow the target) rather than retries blindly. The operator can still
 // run the command directly on the host.
-func FormatCatastrophicRefusal(checks []DestructiveCheck) string {
+func formatCatastrophicRefusal(checks []DestructiveCheck) string {
 	if len(checks) == 0 {
 		return ""
 	}
@@ -427,9 +427,9 @@ func sedModifiesFile(command string) bool {
 // `sed` missed in-place edits behind another flag (review catch on #3171).
 var sedInPlacePattern = regexp.MustCompile(`\bsed\s+(?:-[^\s]+\s+)*(-[a-zA-Z]*i|--in-place)\b`)
 
-// DetectFileModification checks if a command is likely to modify files.
+// detectFileModification checks if a command is likely to modify files.
 // Returns the type of modification detected, or empty string if none.
-func DetectFileModification(command string) string {
+func detectFileModification(command string) string {
 	if sedModifiesFile(command) {
 		return "sed_in_place"
 	}
@@ -456,7 +456,7 @@ var shellSegmentSplit = regexp.MustCompile(`\|\||&&|[|;&\n]`)
 // redirectTargetPattern captures the target of a single '>' redirect (not '>>').
 var redirectTargetPattern = regexp.MustCompile(`(?:^|[^>])>\s*([^\s|&>;]+)`)
 
-// InPlaceFileTargets returns candidate file paths a command modifies IN PLACE —
+// inPlaceFileTargets returns candidate file paths a command modifies IN PLACE —
 // sed -i targets and single-'>' redirect targets — so exec can checkpoint them
 // before running, giving exec's destructive file edits the same /rollback net the
 // fs Write/Edit tools already have.
@@ -468,7 +468,7 @@ var redirectTargetPattern = regexp.MustCompile(`(?:^|[^>])>\s*([^\s|&>;]+)`)
 // by SHA), and the only failure mode worth avoiding is missing the REAL target,
 // which over-inclusion prevents. Globs / here-docs / exotic quoting yield extra or
 // no candidates and fall through unsnapshotted — no worse than before this guard.
-func InPlaceFileTargets(command string) []string {
+func inPlaceFileTargets(command string) []string {
 	var out []string
 	seen := map[string]struct{}{}
 	add := func(tok string) {

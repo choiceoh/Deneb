@@ -23,7 +23,7 @@ import (
 // The detector is intentionally a small, explicit per-tool phrase table (not a
 // generic "실패" scan) so it never false-positives on outputs that merely mention
 // failure counts or read-side errors. It is pure and unit-tested. Wiring is a
-// per-tool PostProcessor registered in RegisterDefaultPostProcessors.
+// per-tool postProcessor registered in registerDefaultPostProcessors.
 //
 // Escalation to Error log + broadcast is handled in run_hooks.go. Remaining
 // follow-up: converting each tool's in-band failure into a real error-slot
@@ -69,7 +69,7 @@ func mutationOutcomeIsFailure(toolName, output string) bool {
 }
 
 // isMutationFailureResult reports whether a finalized tool result carries the
-// mutation failure banner (i.e. MutationFailureAnnotator surfaced an in-band
+// mutation failure banner (i.e. mutationFailureAnnotator surfaced an in-band
 // failure the agent loop saw as isError=false). Used by the run hooks to escalate
 // to an Error log + operator broadcast per docs/agent-rules/logging.md.
 func isMutationFailureResult(result string) bool {
@@ -87,11 +87,11 @@ func mutationFailureError(result string) string {
 	return trimmed
 }
 
-// MutationFailureAnnotator is a per-tool PostProcessor that prepends the mutation
+// mutationFailureAnnotator is a per-tool postProcessor that prepends the mutation
 // failure banner when a mutation tool's output indicates an in-band failure. It is
 // idempotent (won't double-annotate) and a no-op for success output or tools
 // without markers.
-func MutationFailureAnnotator(_ context.Context, toolName, output string) string {
+func mutationFailureAnnotator(_ context.Context, toolName, output string) string {
 	if strings.Contains(output, mutationFailureBanner) {
 		return output // already annotated
 	}

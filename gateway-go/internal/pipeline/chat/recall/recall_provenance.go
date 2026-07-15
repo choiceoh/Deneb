@@ -76,68 +76,78 @@ func recallShareEntity(a, b map[string]struct{}) bool {
 	return false
 }
 
+type provenanceParsed struct {
+	nums   map[string]struct{}
+	tokens map[string]struct{}
+}
+
+func parseProvenanceEvidence(evidence []recallEvidence) []provenanceParsed {
+	parsed := make([]provenanceParsed, len(evidence))
+	for i, ev := range evidence {
+		if ev.Kind == "wiki" || ev.Kind == "diary" {
+			parsed[i] = provenanceParsed{nums: recallNumbers(ev.Note), tokens: recallEntityTokens(ev.Note)}
+		}
+	}
+	return parsed
+}
+
+func numsContainedIn(set, want map[string]struct{}) bool {
+	for n := range want {
+		if _, ok := set[n]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func diaryContradictsWiki(wiki, diary provenanceParsed, diaryScore float64) (corroborated bool, contradictScore float64) {
+	contradictScore = -1.0
+	if !recallShareEntity(wiki.tokens, diary.tokens) {
+		return false, contradictScore
+	}
+	if numsContainedIn(diary.nums, wiki.nums) {
+		return true, contradictScore
+	}
+	for n := range diary.nums {
+		if _, ok := wiki.nums[n]; !ok {
+			if diaryScore > contradictScore {
+				contradictScore = diaryScore
+			}
+			return false, contradictScore
+		}
+	}
+	return false, contradictScore
+}
+
+func wikiProvenanceOutcome(wiki provenanceParsed, evidence []recallEvidence, parsed []provenanceParsed) (corroborated bool, contradictScore float64) {
+	contradictScore = -1.0
+	for j := range evidence {
+		if evidence[j].Kind != "diary" || len(parsed[j].nums) == 0 {
+			continue
+		}
+		corroborated, score := diaryContradictsWiki(wiki, parsed[j], evidence[j].Score)
+		if corroborated {
+			return true, contradictScore
+		}
+		if score > contradictScore {
+			contradictScore = score
+		}
+	}
+	return false, contradictScore
+}
+
 // applyProvenancePenalty demotes a wiki evidence row whose numeric figure
 // contradicts the raw diary for the same fact AND is UNCORROBORATED by any raw
 // observation, to just below the contradicting diary row — so a drifted curated
 // figure cannot outrank the faithful raw one. In place on the slice (scores
 // only); final ordering is fixed by the caller's subsequent sort.
-//
-// Two conditions, both required:
-//   - CONTRADICTION (mutual disagreement on a same-entity diary row): the wiki
-//     asserts a number that row lacks AND that row records one the wiki lacks, so
-//     a wiki page that merely ADDS a figure the diary never had is not penalized.
-//   - UNCORROBORATED: NO same-entity diary row contains all of the wiki's
-//     numbers. This is what separates DRIFT (a synthesis error — the wiki figure
-//     appears in no raw entry) from legitimate EVOLUTION (the value genuinely
-//     changed and the new figure WAS recorded in the diary): an evolved figure is
-//     corroborated by its own raw entry, so the wiki keeps its rank even though an
-//     older diary entry still disagrees.
 func applyProvenancePenalty(evidence []recallEvidence) {
-	type parsed struct {
-		nums   map[string]struct{}
-		tokens map[string]struct{}
-	}
-	p := make([]parsed, len(evidence))
-	for i, ev := range evidence {
-		if ev.Kind == "wiki" || ev.Kind == "diary" {
-			p[i] = parsed{nums: recallNumbers(ev.Note), tokens: recallEntityTokens(ev.Note)}
-		}
-	}
-	contains := func(set, want map[string]struct{}) bool {
-		for n := range want {
-			if _, ok := set[n]; !ok {
-				return false
-			}
-		}
-		return true
-	}
+	parsed := parseProvenanceEvidence(evidence)
 	for i := range evidence {
-		if evidence[i].Kind != "wiki" || len(p[i].nums) == 0 {
+		if evidence[i].Kind != "wiki" || len(parsed[i].nums) == 0 {
 			continue
 		}
-		corroborated := false
-		contradictScore := -1.0
-		for j := range evidence {
-			if evidence[j].Kind != "diary" || len(p[j].nums) == 0 {
-				continue
-			}
-			if !recallShareEntity(p[i].tokens, p[j].tokens) {
-				continue // different fact — a figure here can't speak to there
-			}
-			if contains(p[j].nums, p[i].nums) {
-				corroborated = true // a raw entry records the wiki's figure → verified
-				break
-			}
-			diaryExtra := false
-			for n := range p[j].nums {
-				if _, ok := p[i].nums[n]; !ok {
-					diaryExtra = true
-				}
-			}
-			if diaryExtra && evidence[j].Score > contradictScore {
-				contradictScore = evidence[j].Score
-			}
-		}
+		corroborated, contradictScore := wikiProvenanceOutcome(parsed[i], evidence, parsed)
 		if !corroborated && contradictScore >= 0 && evidence[i].Score >= contradictScore {
 			evidence[i].Score = contradictScore - 0.01 // raw wins an uncorroborated conflict
 		}

@@ -86,7 +86,7 @@ func (t *Tracker) skillUtilityCounts(now time.Time, window time.Duration) map[st
 // classifyUnfixableUnderperformer returns a non-empty archive reason when a
 // skill's repair history shows rollback thrash above the configured floors, else
 // "". Pure — the deterministic verdict, split out for testing.
-func classifyUnfixableUnderperformer(c skillUtilityCount, cfg SkillCuratorConfig) string {
+func classifyUnfixableUnderperformer(c skillUtilityCount, cfg skillCuratorConfig) string {
 	// Evidence floor: enough committed evolves AND rollbacks to judge. A skill
 	// with no committed evolve, or a single rollback, is unmeasured — never fired.
 	if c.evolves <= 0 || c.rollbacks < cfg.UtilityMinRollbacks {

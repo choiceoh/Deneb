@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 )
 
 // TestBackupAndRollbackSkill verifies the backup-then-restore path: after an
@@ -427,15 +427,15 @@ func TestValidateEditedSurfaceRequiresMatchingChangedSectionRejectsUneditableSur
 	mismatch := HarnessEditAudit{
 		EditedSurface: "Verification",
 	}
-	if ok, reason := guardrails.ValidateEditedSurface(mismatch, original, candidate); ok || !strings.Contains(reason, "did not match changed SKILL.md sections") {
+	if ok, reason := genbind.ValidateEditedSurface(mismatch, original, candidate); ok || !strings.Contains(reason, "did not match changed SKILL.md sections") {
 		t.Fatalf("expected edited surface mismatch, ok=%v reason=%q", ok, reason)
 	}
 	matching := HarnessEditAudit{EditedSurface: "Procedure"}
-	if ok, reason := guardrails.ValidateEditedSurface(matching, original, candidate); !ok {
+	if ok, reason := genbind.ValidateEditedSurface(matching, original, candidate); !ok {
 		t.Fatalf("expected changed Procedure section to pass, reason=%q", reason)
 	}
 	supportFile := HarnessEditAudit{EditedSurface: "support-file"}
-	if ok, reason := guardrails.ValidateEditedSurface(supportFile, original, candidate); ok || !strings.Contains(reason, "not editable by SKILL.md body evolve") {
+	if ok, reason := genbind.ValidateEditedSurface(supportFile, original, candidate); ok || !strings.Contains(reason, "not editable by SKILL.md body evolve") {
 		t.Fatalf("expected support-file surface rejection, ok=%v reason=%q", ok, reason)
 	}
 }
@@ -566,7 +566,7 @@ func TestValidateTextualEditBudgetRejectsFullRewriteAndMissingHeadings(t *testin
 	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n" + originalBody + "\n"
 
 	smallPatch := originalBody + "\n- Capture rollback command."
-	if ok, reason := guardrails.ValidateTextualEditBudget(original, smallPatch, false); !ok {
+	if ok, reason := genbind.ValidateTextualEditBudget(original, smallPatch, false); !ok {
 		t.Fatalf("small additive patch should pass, reason=%q", reason)
 	}
 
@@ -584,21 +584,21 @@ func TestValidateTextualEditBudgetRejectsFullRewriteAndMissingHeadings(t *testin
 		"## Done",
 		"- Done.",
 	}, "\n")
-	if ok, reason := guardrails.ValidateTextualEditBudget(original, fullRewrite, false); ok || !strings.Contains(reason, "textual edit budget exceeded") {
+	if ok, reason := genbind.ValidateTextualEditBudget(original, fullRewrite, false); ok || !strings.Contains(reason, "textual edit budget exceeded") {
 		t.Fatalf("full rewrite should fail textual budget, ok=%v reason=%q", ok, reason)
 	}
 
 	missingHeading := strings.ReplaceAll(originalBody, "## Verification", "## Done")
-	if ok, reason := guardrails.ValidateTextualEditBudget(original, missingHeading, false); ok || !strings.Contains(reason, "removed required headings") {
+	if ok, reason := genbind.ValidateTextualEditBudget(original, missingHeading, false); ok || !strings.Contains(reason, "removed required headings") {
 		t.Fatalf("missing heading should fail textual budget, ok=%v reason=%q", ok, reason)
 	}
 
 	shortOriginal := "---\nname: tiny\nversion: \"1.0.0\"\n---\n\n# Tiny\n\nold body\n"
-	if ok, reason := guardrails.ValidateTextualEditBudget(shortOriginal, "# Tiny\n\nnew body", false); !ok {
+	if ok, reason := genbind.ValidateTextualEditBudget(shortOriginal, "# Tiny\n\nnew body", false); !ok {
 		t.Fatalf("short skills should not be budget-gated, reason=%q", reason)
 	}
 
-	if ok, reason := guardrails.ValidateTextualEditBudget(original, "   ", false); ok || !strings.Contains(reason, "empty candidate") {
+	if ok, reason := genbind.ValidateTextualEditBudget(original, "   ", false); ok || !strings.Contains(reason, "empty candidate") {
 		t.Fatalf("empty candidate should fail, ok=%v reason=%q", ok, reason)
 	}
 }
@@ -623,17 +623,17 @@ func TestValidateHermesEvolutionGuardrailsRejectsOversizedRetitledAndBroadRewrit
 	original := "---\nname: deploy-helper\nversion: \"1.0.0\"\n---\n\n" + originalBody + "\n"
 
 	smallPatch := originalBody + "\n- Capture rollback command."
-	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(original, smallPatch, false); !ok {
+	if ok, reason := genbind.ValidateHermesEvolutionGuardrails(original, smallPatch, false); !ok {
 		t.Fatalf("small Hermes-style patch should pass, reason=%q", reason)
 	}
 
 	oversized := "# Deploy Helper\n\n" + strings.Repeat("- keep going\n", 1800)
-	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(original, oversized, false); ok || !strings.Contains(reason, "15") {
+	if ok, reason := genbind.ValidateHermesEvolutionGuardrails(original, oversized, false); ok || !strings.Contains(reason, "15") {
 		t.Fatalf("oversized candidate should fail Hermes size gate, ok=%v reason=%q", ok, reason)
 	}
 
 	retitled := strings.Replace(originalBody, "# Deploy Helper", "# Incident Responder", 1)
-	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(original, retitled, false); ok || !strings.Contains(reason, "title changed") {
+	if ok, reason := genbind.ValidateHermesEvolutionGuardrails(original, retitled, false); ok || !strings.Contains(reason, "title changed") {
 		t.Fatalf("title drift should fail semantic-preservation gate, ok=%v reason=%q", ok, reason)
 	}
 
@@ -650,7 +650,7 @@ func TestValidateHermesEvolutionGuardrailsRejectsOversizedRetitledAndBroadRewrit
 		"## Verification",
 		"- Say done.",
 	}, "\n")
-	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(original, broadRewrite, false); ok || !strings.Contains(reason, "broad rewrite") {
+	if ok, reason := genbind.ValidateHermesEvolutionGuardrails(original, broadRewrite, false); ok || !strings.Contains(reason, "broad rewrite") {
 		t.Fatalf("broad multi-section rewrite should fail Hermes patch-first gate, ok=%v reason=%q", ok, reason)
 	}
 }

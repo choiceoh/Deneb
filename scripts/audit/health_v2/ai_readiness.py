@@ -49,6 +49,22 @@ _INVARIANT_RE = re.compile(
     r"(?:불변|금지|반드시|항상|유일|단일|순서)",
     re.IGNORECASE,
 )
+# Local change scope section: AI-facing change-boundary docs (neighbors,
+# forbidden surfaces, focused verify). Complements git multipackage confinement.
+_LOCAL_SCOPE_HEADING_RE = re.compile(
+    r"(?im)^#{2,3}\s+(?:Local change scope|로컬 변경 범위)\b"
+)
+_SCOPE_NEIGHBOR_RE = re.compile(
+    r"(?:함께 바꿔|neighbor|neighbours|ok to change|함께 변경)"
+    r".{0,200}?(?:internal/|gateway-go/internal/|`[A-Za-z0-9_./*-]+`)|"
+    r"(?:internal/|gateway-go/internal/|`[A-Za-z0-9_./*-]+`)"
+    r".{0,200}?(?:함께 바꿔|neighbor|neighbours|ok to change|함께 변경)",
+    re.IGNORECASE | re.DOTALL,
+)
+_SCOPE_FORBIDDEN_RE = re.compile(
+    r"(?:건드리지\s*말|금지|forbidden|do not (?:edit|touch|import)|import하지\s*말)",
+    re.IGNORECASE,
+)
 _GENERATED_RE = re.compile(r"(?:DO NOT EDIT|@generated)", re.IGNORECASE)
 _SOURCE_RE = re.compile(r"(?mi)^//\s*Source:\s*([^\s]+)")
 _REGENERATE_RE = re.compile(r"(?mi)^//\s*Regenerate:\s*(.+)$")
@@ -182,7 +198,13 @@ def collect(repo: RepositoryInventory, high_risk_count: int = 12) -> AIReadiness
         touches = repo.history.package_touches.get(key, 0) if repo.history.available else 0
         multi = repo.history.multipackage_touches.get(key, 0) if repo.history.available else 0
         confinement = max(0.0, 1.0 - multi / touches) if touches else 0.5
-        local_scope = 0.5 * item.guide_strength + 0.5 * confinement
+        # Rubric: AI must compose a local change scope. Git multipackage
+        # confinement is one signal; an explicit Local change scope section with
+        # real neighbor paths, forbidden surfaces, and a focused verify command
+        # is confinement-equivalent (mere guide length still does not score).
+        guide_text = texts.get(item.guide_path, "") if item.guide_path else ""
+        boundary_doc = _change_boundary_doc_score(guide_text, guide[7])
+        local_scope = 0.5 * item.guide_strength + 0.5 * max(confinement, boundary_doc)
         results[key] = PackageReadiness(
             package=key,
             path=item.path,
@@ -268,6 +290,33 @@ def _source_symbols(paths: list[Path], texts: dict[str, str]) -> set[str]:
     for path in paths:
         symbols.update(_DECL_RE.findall(texts.get(path.as_posix(), "")))
     return symbols
+
+
+def _change_boundary_doc_score(guide_text: str, valid_commands: tuple[str, ...]) -> float:
+    """Score an explicit Local change scope section (0..1).
+
+    Requires a dedicated heading plus neighbor package paths, forbidden
+    surfaces, and at least one validated verify command — matching the
+    AI-change-readiness rubric without rewarding empty prose.
+    """
+    if not guide_text or not _LOCAL_SCOPE_HEADING_RE.search(guide_text):
+        return 0.0
+    match = _LOCAL_SCOPE_HEADING_RE.search(guide_text)
+    assert match is not None
+    rest = guide_text[match.end() :]
+    next_heading = re.search(r"(?m)^#{2,3}\s+\S", rest)
+    section = rest[: next_heading.start()] if next_heading else rest
+    has_neighbor = bool(_SCOPE_NEIGHBOR_RE.search(section))
+    has_forbidden = bool(_SCOPE_FORBIDDEN_RE.search(section))
+    has_verify = bool(valid_commands)
+    credits = int(has_neighbor) + int(has_forbidden) + int(has_verify)
+    if credits >= 3:
+        return 1.0
+    if credits == 2:
+        return 0.7
+    if credits == 1:
+        return 0.35
+    return 0.0
 
 
 def _guide_signals(

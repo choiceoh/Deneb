@@ -8,40 +8,40 @@ import (
 	"strings"
 )
 
-// Pre-compiled regex for ExecAnnotator (avoid re-compiling on every tool call).
+// Pre-compiled regex for execAnnotator (avoid re-compiling on every tool call).
 var exitCodeRe = regexp.MustCompile(`Exit code: (\d+)`)
 
-// PostProcessor transforms a tool's output after execution.
+// postProcessor transforms a tool's output after execution.
 // Returning the input unchanged is valid (no-op).
-type PostProcessor func(ctx context.Context, toolName string, output string) string
+type postProcessor func(ctx context.Context, toolName string, output string) string
 
-// PostProcessRegistry holds per-tool and global post-processors.
+// postProcessRegistry holds per-tool and global post-processors.
 // Per-tool processors run first, then global ones.
-type PostProcessRegistry struct {
-	perTool map[string][]PostProcessor
-	global  []PostProcessor
+type postProcessRegistry struct {
+	perTool map[string][]postProcessor
+	global  []postProcessor
 }
 
-// NewPostProcessRegistry creates an empty registry.
-func NewPostProcessRegistry() *PostProcessRegistry {
-	return &PostProcessRegistry{
-		perTool: make(map[string][]PostProcessor),
+// newPostProcessRegistry creates an empty registry.
+func newPostProcessRegistry() *postProcessRegistry {
+	return &postProcessRegistry{
+		perTool: make(map[string][]postProcessor),
 	}
 }
 
-// AddGlobal registers a post-processor that runs on all tool outputs.
-func (r *PostProcessRegistry) AddGlobal(p PostProcessor) {
+// addGlobal registers a post-processor that runs on all tool outputs.
+func (r *postProcessRegistry) addGlobal(p postProcessor) {
 	r.global = append(r.global, p)
 }
 
 // Add registers a post-processor for a specific tool.
-func (r *PostProcessRegistry) Add(toolName string, p PostProcessor) {
+func (r *postProcessRegistry) Add(toolName string, p postProcessor) {
 	r.perTool[toolName] = append(r.perTool[toolName], p)
 }
 
 // Apply runs all applicable post-processors on the output.
 // Per-tool processors run first (e.g., summarizers before trimming), then global ones.
-func (r *PostProcessRegistry) Apply(ctx context.Context, toolName, output string) string {
+func (r *postProcessRegistry) Apply(ctx context.Context, toolName, output string) string {
 	if processors, ok := r.perTool[toolName]; ok {
 		for _, p := range processors {
 			output = p(ctx, toolName, output)
@@ -67,8 +67,8 @@ const grepMaxMatches = 200 // max match lines before summarizing
 // sat orphaned on disk). If a processor here ever needs to shrink output, it
 // must preserve the read_spillover marker.
 
-// ErrorEnricher adds actionable hints to common error patterns.
-func ErrorEnricher(_ context.Context, _, output string) string {
+// errorEnricher adds actionable hints to common error patterns.
+func errorEnricher(_ context.Context, _, output string) string {
 	if !strings.Contains(output, "Error:") && !strings.Contains(output, "STDERR:") {
 		return output
 	}
@@ -93,9 +93,9 @@ func ErrorEnricher(_ context.Context, _, output string) string {
 	return output
 }
 
-// GrepResultSummarizer caps grep output and adds match count summary.
+// grepResultSummarizer caps grep output and adds match count summary.
 // Registered as a per-tool processor for "grep".
-func GrepResultSummarizer(_ context.Context, _, output string) string {
+func grepResultSummarizer(_ context.Context, _, output string) string {
 	lines := strings.Split(output, "\n")
 	if len(lines) <= grepMaxMatches {
 		return output
@@ -104,8 +104,8 @@ func GrepResultSummarizer(_ context.Context, _, output string) string {
 	return fmt.Sprintf("%s\n\n[... %d more matches omitted (total: %d lines)]", kept, len(lines)-grepMaxMatches, len(lines))
 }
 
-// StructuredFormatter pretty-prints compact JSON outputs for readability.
-func StructuredFormatter(_ context.Context, _, output string) string {
+// structuredFormatter pretty-prints compact JSON outputs for readability.
+func structuredFormatter(_ context.Context, _, output string) string {
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" || len(trimmed) > 10000 {
 		return output
@@ -129,8 +129,8 @@ func StructuredFormatter(_ context.Context, _, output string) string {
 	return string(formatted)
 }
 
-// ExecAnnotator adds a structured header to exec results with metadata.
-func ExecAnnotator(_ context.Context, toolName, output string) string {
+// execAnnotator adds a structured header to exec results with metadata.
+func execAnnotator(_ context.Context, toolName, output string) string {
 	if toolName != "exec" {
 		return output
 	}
@@ -145,45 +145,45 @@ func ExecAnnotator(_ context.Context, toolName, output string) string {
 	return output
 }
 
-// RegisterDefaultPostProcessors sets up the standard post-processing pipeline.
+// registerDefaultPostProcessors sets up the standard post-processing pipeline.
 // Execution order: per-tool processors run first, then global ones. Size
 // capping is NOT done here — ToolRegistry.Execute already spill+truncated the
 // output to the tool's budget before post-processing (see the note above).
-func RegisterDefaultPostProcessors(registry *ToolRegistry) {
-	pp := NewPostProcessRegistry()
+func registerDefaultPostProcessors(registry *ToolRegistry) {
+	pp := newPostProcessRegistry()
 
 	// Global processors (run on all tools after per-tool processors).
 	// 1. Compactor: strip ANSI + collapse adjacent duplicate lines (cheap,
 	//    lossless, deterministic).
-	pp.AddGlobal(CompactToolOutput)
+	pp.addGlobal(compactToolOutput)
 	// 2. Error enrichment: adds actionable hints to error patterns.
-	pp.AddGlobal(ErrorEnricher)
+	pp.addGlobal(errorEnricher)
 
 	// Tool-specific processors (run before global processors).
 	// Summarizers are per-tool so they only run for their respective tools,
 	// avoiding unnecessary function calls across all 34+ tools every turn.
-	pp.Add("exec", ExecAnnotator)
-	pp.Add("grep", GrepResultSummarizer)
+	pp.Add("exec", execAnnotator)
+	pp.Add("grep", grepResultSummarizer)
 	// Skill-consult attribution + required-tool activation: a SKILL.md load —
 	// via plain `read` (the compact index teaches exactly that path) or via
 	// skills(action=read) — counts as a consult for the usage ledger, and the
 	// skill's requires_tools deferred tools activate in the same step so the
 	// procedure's tools are callable without a fetch_tools round-trip. See
 	// tool_skill_read_consult.go and tool_skill_required_tools.go.
-	pp.Add("read", NewReadSkillConsultRecorder(registry))
-	pp.Add("skills", NewSkillsReadToolsActivator(registry))
+	pp.Add("read", newReadSkillConsultRecorder(registry))
+	pp.Add("skills", newSkillsReadToolsActivator(registry))
 
 	// JSON formatting for structured tools.
 	for _, tool := range []string{"web", "kv", "sessions"} {
-		pp.Add(tool, StructuredFormatter)
+		pp.Add(tool, structuredFormatter)
 	}
 
 	// Mutation outcome verification: surface buried in-band failures (a mutation
 	// tool returning "…실패" as text with a nil error) so the agent cannot mistake
 	// them for success. See tool_mutation_verify.go (research finding A).
 	for _, tool := range mutationVerifyTools() {
-		pp.Add(tool, MutationFailureAnnotator)
+		pp.Add(tool, mutationFailureAnnotator)
 	}
 
-	registry.SetPostProcess(pp)
+	registry.setPostProcess(pp)
 }

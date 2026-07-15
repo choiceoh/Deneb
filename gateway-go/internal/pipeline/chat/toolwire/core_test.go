@@ -46,12 +46,12 @@ func TestRegisterFileToolsCreatesOnlyFileToolSet(t *testing.T) {
 	}
 }
 
-// ─── RegisterProcessTools ─────────────────────────────────────────────────────
+// ─── registerProcessTools ─────────────────────────────────────────────────────
 
 func TestRegisterProcessToolsCreatesExecAndProcessContracts(t *testing.T) {
 	reg := &mockRegistrar{}
 	deps := &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}
-	RegisterProcessTools(reg, deps)
+	registerProcessTools(reg, deps)
 
 	assertRegisteredContract(t, registeredTool(t, reg, "exec"), false)
 	assertRegisteredContract(t, registeredTool(t, reg, "process"), true)
@@ -59,7 +59,7 @@ func TestRegisterProcessToolsCreatesExecAndProcessContracts(t *testing.T) {
 
 func TestRegisterSessionToolsContracts(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterSessionTools(reg, &tooldeps.SessionDeps{})
+	registerSessionTools(reg, &tooldeps.SessionDeps{})
 
 	assertRegisteredContract(t, registeredTool(t, reg, "sessions"), true)
 	assertRegisteredContract(t, registeredTool(t, reg, "sessions_spawn"), false)
@@ -68,14 +68,14 @@ func TestRegisterSessionToolsContracts(t *testing.T) {
 
 func TestRegisterHeartbeatContract(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterChronoTools(reg)
+	registerChronoTools(reg)
 
 	assertRegisteredContract(t, registeredTool(t, reg, "heartbeat_update"), false)
 }
 
 func TestRegisterMediaToolsCreatesDeferredContracts(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterMediaTools(reg, t.TempDir())
+	registerMediaTools(reg, t.TempDir())
 
 	for _, name := range []string{"send_file", "chart", "diagram", "watch"} {
 		def := registeredTool(t, reg, name)

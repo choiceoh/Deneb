@@ -40,6 +40,19 @@ snapshot과 prompt token budget을 소유한다. chat turn은 완성된 prompt�
 - context 파일은 byte budget, UTF-8 경계와 trust 표기를 보존한다. 파일
   전체를 무제한 system prompt에 삽입하지 않는다.
 
+## Local change scope
+
+prompt 조립 변경은 cache 구획 경계에 가둔다. turn 실행·도구 배선을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `internal/pipeline/chat`(턴 소비자),
+  `docs/agent-rules/prompt-cache.md`(정책 정본). `BuildSystemPrompt`/
+  `PromptCache`/`LoadContextFiles` 계약이 바뀌면 `system_prompt_test.go`와
+  `prompt_cache_test.go`를 먼저 본다.
+- 건드리지 말 것: `internal/pipeline/chat/tools` 구현,
+  `internal/runtime/server` registry, per-turn 가변 바이트를 system 구획에
+  넣는 변경. prompt에서 chat handler·tools·server를 import하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/pipeline/chat/prompt`
+
 ## 집중 검증
 
 prompt 변경은 block 순서·marker 수·cache key 변화·session snapshot 안정성과

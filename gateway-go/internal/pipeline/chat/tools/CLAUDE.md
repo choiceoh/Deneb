@@ -39,6 +39,20 @@
 - tool 결과의 사용자 표시용 정제와 원본 실행 결과를 혼합하지 않는다.
   display 정제는 `toolport`, turn 후처리는 chat pipeline이 소유한다.
 
+## Local change scope
+
+도구 구현 변경은 `tools/` 서브트리에 가둔다. 등록·턴 오케스트레이션을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `internal/pipeline/chat/toolreg`(등록),
+  `internal/pipeline/chat/toolport`(실행 계약),
+  `internal/pipeline/chat/tooldeps`(의존 bag). `ToolWiki`/`ToolFunc`/
+  `ToolMessage` 계약이 바뀌면 해당 `*_test.go`와 `toolreg/core.go` 배선을
+  함께 본다.
+- 건드리지 말 것: `internal/pipeline/chat` root(`run_exec.go` 등),
+  `tool_schemas_gen.go` 직접 수정, chat handler import. `tools`에서 chat
+  root·prompt·registry를 import하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/pipeline/chat/tools`
+
 ## 집중 검증
 
 top-level 구현의 빠른 검증과 모든 하위 tool package의 전체 검증을 모두

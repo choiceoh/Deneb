@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/cardtitle"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // TestCardTitle_RoleCompare_Live exercises the REAL card-title prompt against the
@@ -25,15 +25,15 @@ func TestCardTitleRoleCompareLiveSkipsWithoutEnvFlag(t *testing.T) {
 		t.Skip("set DENEB_TITLE_LIVETEST=1 to run (needs real config + network to wormhole)")
 	}
 	logger := slog.Default()
-	reg := modelrole.NewRegistryWithOptions(logger, modelrole.RegistryOptions{
-		MainModel:        configresolve.DefaultModel(logger),
-		LocalVllmModel:   configresolve.LocalVLLMModel(logger),
-		LightweightModel: configresolve.LightweightModel(logger),
-		TinyModel:        configresolve.TinyModel(logger),
-		CodingModel:      configresolve.CodingModel(logger),
-		FallbackModel:    configresolve.FallbackModel(logger),
-		VisionModel:      configresolve.VisionModel(logger),
-		Providers:        configresolve.ProviderCatalog(logger),
+	reg := aibind.NewRegistryWithOptions(logger, aibind.RegistryOptions{
+		MainModel:        svcbind.DefaultModel(logger),
+		LocalVllmModel:   svcbind.LocalVLLMModel(logger),
+		LightweightModel: svcbind.LightweightModel(logger),
+		TinyModel:        svcbind.TinyModel(logger),
+		CodingModel:      svcbind.CodingModel(logger),
+		FallbackModel:    svcbind.FallbackModel(logger),
+		VisionModel:      svcbind.VisionModel(logger),
+		Providers:        svcbind.ProviderCatalog(logger),
 	})
 	pilot.SetModelRoleRegistry(reg)
 
@@ -44,7 +44,7 @@ func TestCardTitleRoleCompareLiveSkipsWithoutEnvFlag(t *testing.T) {
 		"운영 텔레메트리 회귀가 감지되었습니다. glm-5.2 모델의 도구 호출 에러율이 지난 24시간 평균 대비 3배로 상승했고, p95 레이턴시도 172초로 악화됐습니다. thinking 런 비중이 100/127로 높아 경량 역할 재배치 검토가 필요합니다.",
 	}
 
-	for _, role := range []modelrole.Role{modelrole.RoleTiny, modelrole.RoleLightweight} {
+	for _, role := range []aibind.Role{aibind.RoleTiny, aibind.RoleLightweight} {
 		t.Logf("========== role=%s  model=%s ==========", role, reg.FullModelID(role))
 		for i, body := range samples {
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)

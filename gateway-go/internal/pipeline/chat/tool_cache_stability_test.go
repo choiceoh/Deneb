@@ -17,7 +17,7 @@ func TestPartitionToolsReturnsSortedGroupsWithStableCacheKey(t *testing.T) {
 	}
 	builtins := map[string]struct{}{"grep": {}, "exec": {}, "read": {}, "edit": {}}
 
-	p := PartitionTools(tools, builtins)
+	p := partitionTools(tools, builtins)
 
 	// Builtins should be sorted.
 	if len(p.Builtin) != 4 {
@@ -39,7 +39,7 @@ func TestPartitionToolsReturnsSortedGroupsWithStableCacheKey(t *testing.T) {
 	}
 
 	// Cache key should be deterministic.
-	p2 := PartitionTools(tools, builtins)
+	p2 := partitionTools(tools, builtins)
 	if p.CacheKey != p2.CacheKey {
 		t.Error("cache key should be deterministic")
 	}
@@ -55,9 +55,9 @@ func TestMergedToolsReturnsBuiltinsBeforeDynamic(t *testing.T) {
 		{Name: "read"},
 	}
 	builtins := map[string]struct{}{"exec": {}, "read": {}}
-	p := PartitionTools(tools, builtins)
+	p := partitionTools(tools, builtins)
 
-	merged := p.MergedTools()
+	merged := p.mergedTools()
 	if len(merged) != 3 {
 		t.Fatalf("merged count = %d, want 3", len(merged))
 	}

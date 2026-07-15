@@ -5,9 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 func TestPostDreamWorkfeedCardCreatesCardOnlyWhenPagesChange(t *testing.T) {
@@ -15,34 +13,34 @@ func TestPostDreamWorkfeedCardCreatesCardOnlyWhenPagesChange(t *testing.T) {
 	s := &Server{
 		logger: slog.Default(),
 		MemorySubsystem: &MemorySubsystem{
-			workFeedStore:   workfeed.NewStore(filepath.Join(dir, "feed.jsonl")),
-			nativeSyncStore: nativesync.NewStore(filepath.Join(dir, "sync.jsonl")),
+			workFeedStore:   domainbind.NewWorkFeedStore(filepath.Join(dir, "feed.jsonl")),
+			nativeSyncStore: domainbind.NewNativeSyncStore(filepath.Join(dir, "sync.jsonl")),
 		},
 	}
 
 	// No-change cycles and nil reports post nothing.
 	s.postDreamWorkfeedCard(nil)
-	s.postDreamWorkfeedCard(&autonomous.DreamReport{WikiUpdatesProposed: 3})
+	s.postDreamWorkfeedCard(&domainbind.DreamReport{WikiUpdatesProposed: 3})
 	items, _, err := s.workFeedStore.List(10, true)
 	if err != nil || len(items) != 0 {
 		t.Fatalf("no-change cycle must not post: items=%d err=%v", len(items), err)
 	}
 
 	// A page-changing cycle posts exactly one card.
-	s.postDreamWorkfeedCard(&autonomous.DreamReport{
+	s.postDreamWorkfeedCard(&domainbind.DreamReport{
 		WikiPagesCreated: 1, WikiPagesUpdated: 4, WikiUpdatesProposed: 5,
 	})
 	items, _, err = s.workFeedStore.List(10, true)
 	if err != nil || len(items) != 1 {
 		t.Fatalf("expected one dream card, got %d (err=%v)", len(items), err)
 	}
-	if items[0].Source != workfeed.SourceDream || items[0].Title != "위키 드림: 1 생성 · 4 갱신" {
+	if items[0].Source != domainbind.SourceDream || items[0].Title != "위키 드림: 1 생성 · 4 갱신" {
 		t.Errorf("card = %+v", items[0])
 	}
 
 	// A digest-only cycle (Phase 3d wrote 현재 상태 sections, no synthesis
 	// creates/updates) still changed wiki pages and must post a card.
-	s.postDreamWorkfeedCard(&autonomous.DreamReport{WikiProjectDigests: 3})
+	s.postDreamWorkfeedCard(&domainbind.DreamReport{WikiProjectDigests: 3})
 	items, _, err = s.workFeedStore.List(10, true)
 	if err != nil || len(items) != 2 {
 		t.Fatalf("digest-only cycle must post a card: items=%d err=%v", len(items), err)
@@ -52,7 +50,7 @@ func TestPostDreamWorkfeedCardCreatesCardOnlyWhenPagesChange(t *testing.T) {
 	}
 
 	// Combined cycle mentions the digest count alongside creates/updates.
-	s.postDreamWorkfeedCard(&autonomous.DreamReport{
+	s.postDreamWorkfeedCard(&domainbind.DreamReport{
 		WikiPagesCreated: 2, WikiPagesUpdated: 1, WikiProjectDigests: 4,
 	})
 	items, _, err = s.workFeedStore.List(10, true)

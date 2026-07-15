@@ -4,14 +4,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/system"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // registerConfigLifecycleMethods stays as a standalone helper because it
 // contains debounce timer logic that goes beyond simple Deps wiring.
 func (s *Server) registerConfigLifecycleMethods() {
-	// Resolve reload debounce/deferral settings from config.
+	// Resolve reload debounce/deferral settings from infrabind.
 	debounceMs := 300 // default
 	deferralTimeoutMs := 300000
 	if s.runtimeCfg != nil {
@@ -23,13 +23,13 @@ func (s *Server) registerConfigLifecycleMethods() {
 		}
 	}
 
-	// Debounce timer: collapses rapid config.reload calls into a single
+	// Debounce timer: collapses rapid infrabind.reload calls into a single
 	// propagation pass using gateway.reload.debounceMs.
 	var debounceMu sync.Mutex
 	var debounceTimer *time.Timer
 
-	s.dispatcher.RegisterDomain(handlersystem.ConfigReloadMethods(handlersystem.ConfigReloadDeps{
-		OnReloaded: func(snap *config.ConfigSnapshot) {
+	s.dispatcher.RegisterDomain(handlerwire.SystemConfigReloadMethods(handlerwire.SystemConfigReloadDeps{
+		OnReloaded: func(snap *infrabind.ConfigSnapshot) {
 			debounceMu.Lock()
 			if debounceTimer != nil {
 				debounceTimer.Stop()
@@ -45,12 +45,12 @@ func (s *Server) registerConfigLifecycleMethods() {
 // propagateConfigReload performs the post-reload side effects: hooks, channel
 // restart (bounded by deferralTimeoutMs), cron restart, and process env cache
 // invalidation.
-func (s *Server) propagateConfigReload(_ *config.ConfigSnapshot, deferralTimeoutMs int) {
+func (s *Server) propagateConfigReload(_ *infrabind.ConfigSnapshot, deferralTimeoutMs int) {
 	// Broadcast config change to subscribers via publisher.
 	s.publisher.PublishConfigChanged("config")
 
 	// Invalidate the process manager's cached environment so new processes
-	// pick up any env changes introduced by the reloaded config.
+	// pick up any env changes introduced by the reloaded infrabind.
 	if s.processes != nil {
 		s.processes.InvalidateEnvCache()
 	}

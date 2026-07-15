@@ -3,13 +3,12 @@ package skilllifecycle
 import (
 	"context"
 	"encoding/json"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -132,11 +131,11 @@ func TestSkillLifecycleStatusReturnsFilteredStatsForSkill(t *testing.T) {
 	if system.Name != "Propus" || system.Tool != "skill_lifecycle" || system.Scope != "skill" {
 		t.Fatalf("unexpected Propus system status: %+v", system)
 	}
-	if system.Version != propus.PropusDoctrine().Version {
+	if system.Version != leafbind.PropusDoctrine().Version {
 		t.Fatalf("unexpected Propus doctrine version: %+v", system)
 	}
 	sourcePapers := system.SourcePapers
-	if len(sourcePapers) != len(propus.PropusDoctrine().SourceIDs()) ||
+	if len(sourcePapers) != len(leafbind.PropusDoctrine().SourceIDs()) ||
 		sourcePapers[0] != "arxiv:2602.20867" ||
 		sourcePapers[len(sourcePapers)-1] != "hermes:agent-self-evolution" {
 		t.Fatalf("unexpected source papers: %+v", sourcePapers)

@@ -20,31 +20,31 @@ func TestEphemeralNeedsExplicitAppendReturnsWhetherAppendNeeded(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		params RunParams
+		params runParams
 		prep   prepResult
 		want   bool
 	}{
 		{
 			name:   "heartbeat on history-bearing session",
-			params: RunParams{SessionKey: "client:main", Message: "[시스템 하트비트] 점검", EphemeralUser: true},
+			params: runParams{SessionKey: "client:main", Message: "[시스템 하트비트] 점검", EphemeralUser: true},
 			prep:   history,
 			want:   true,
 		},
 		{
 			name:   "fresh session keeps scratch-build path",
-			params: RunParams{SessionKey: "system:boot", Message: "부팅 점검", EphemeralUser: true},
+			params: runParams{SessionKey: "system:boot", Message: "부팅 점검", EphemeralUser: true},
 			prep:   empty,
 			want:   false,
 		},
 		{
 			name:   "persisted interactive turn is in history already",
-			params: RunParams{SessionKey: "client:main", Message: "안녕"},
+			params: runParams{SessionKey: "client:main", Message: "안녕"},
 			prep:   history,
 			want:   false,
 		},
 		{
 			name: "prebuilt API history carries its own message",
-			params: RunParams{
+			params: runParams{
 				SessionKey: "api:x", Message: "hi", EphemeralUser: true,
 				PrebuiltMessages: []llm.Message{llm.NewTextMessage("user", "hi")},
 			},
@@ -53,7 +53,7 @@ func TestEphemeralNeedsExplicitAppendReturnsWhetherAppendNeeded(t *testing.T) {
 		},
 		{
 			name: "enrichment join already handled the append",
-			params: RunParams{
+			params: runParams{
 				SessionKey: "client:main", Message: "링크", EphemeralUser: true,
 				AppendCurrentMessage: true,
 			},

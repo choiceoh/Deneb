@@ -170,7 +170,7 @@ func TestCodeActionBridgeEnforcesAuthAndAllowlist(t *testing.T) {
 
 func TestCodeActionPromotionEmitsSkillLifecycleCallOnSuccess(t *testing.T) {
 	inv := &recordingInvoker{result: `{"ok":true,"route":"genesis","executed":true}`}
-	out := promoteCodeActionWorkflow(context.Background(), inv, CodeActionPromotion{
+	out := promoteCodeActionWorkflow(context.Background(), inv, codeActionPromotion{
 		Candidate: "Batch join contacts calendar and wiki in code_action",
 		Evidence:  "used structured as_json joins and local wiki write",
 	}, true)
@@ -196,7 +196,7 @@ func TestCodeActionPromotionEmitsSkillLifecycleCallOnSuccess(t *testing.T) {
 
 func TestCodeActionPromotionSkipsFailedRun(t *testing.T) {
 	inv := &recordingInvoker{result: "SHOULD_NOT_CALL"}
-	out := promoteCodeActionWorkflow(context.Background(), inv, CodeActionPromotion{
+	out := promoteCodeActionWorkflow(context.Background(), inv, codeActionPromotion{
 		Candidate: "Failed workflow",
 	}, false)
 	if !strings.Contains(out, "skipped") {

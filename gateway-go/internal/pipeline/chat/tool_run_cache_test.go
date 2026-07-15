@@ -8,7 +8,7 @@ import (
 )
 
 func TestRunCacheSavesAndLoadsEntry(t *testing.T) {
-	rc := NewRunCache()
+	rc := newRunCache()
 
 	// Miss on empty cache.
 	if _, ok := rc.Get("find:{}"); ok {
@@ -27,7 +27,7 @@ func TestRunCacheSavesAndLoadsEntry(t *testing.T) {
 }
 
 func TestRunCache_Invalidate(t *testing.T) {
-	rc := NewRunCache()
+	rc := newRunCache()
 	rc.Set("find:{}", "file1.go")
 	rc.Set("tree:{}", "dir tree output")
 
@@ -45,7 +45,7 @@ func TestRunCache_Invalidate(t *testing.T) {
 }
 
 func TestRunCache_InvalidateByPath(t *testing.T) {
-	rc := NewRunCache()
+	rc := newRunCache()
 
 	// Scoped entries in different subtrees.
 	rc.SetWithScope("grep:a", "match in src", "src")
@@ -71,7 +71,7 @@ func TestRunCache_InvalidateByPath(t *testing.T) {
 }
 
 func TestRunCache_InvalidateByPath_WorkspaceScope(t *testing.T) {
-	rc := NewRunCache()
+	rc := newRunCache()
 
 	// "." scope means workspace-wide — always affected.
 	rc.SetWithScope("grep:ws", "workspace grep", ".")
@@ -88,7 +88,7 @@ func TestRunCache_InvalidateByPath_WorkspaceScope(t *testing.T) {
 }
 
 func TestRunCache_ConcurrentAccess(t *testing.T) {
-	rc := NewRunCache()
+	rc := newRunCache()
 	var wg sync.WaitGroup
 	const n = 100
 
@@ -136,16 +136,16 @@ func TestBuildCacheKeyReturnsMatchingKeysForIdenticalJSON(t *testing.T) {
 	input1 := json.RawMessage(`{"pattern":"*.go","path":"src"}`)
 	input2 := json.RawMessage(`{"pattern":"*.go","path":"src"}`)
 
-	key1 := BuildCacheKey("find", input1)
-	key2 := BuildCacheKey("find", input2)
+	key1 := buildCacheKey("find", input1)
+	key2 := buildCacheKey("find", input2)
 
 	if key1 != key2 {
 		t.Fatalf("expected canonical keys to match:\n  key1=%q\n  key2=%q", key1, key2)
 	}
 
-	// Different JSON key ordering → different keys (BuildCacheKey uses raw JSON).
+	// Different JSON key ordering → different keys (buildCacheKey uses raw JSON).
 	input3 := json.RawMessage(`{"path":"src","pattern":"*.go"}`)
-	key3 := BuildCacheKey("find", input3)
+	key3 := buildCacheKey("find", input3)
 	if key1 == key3 {
 		t.Fatal("different JSON key order should produce different cache keys")
 	}
@@ -157,9 +157,9 @@ func TestBuildCacheKeyIgnoresNonSemanticFields(t *testing.T) {
 	withCompress := json.RawMessage(`{"pattern":"*.go","compress":true}`)
 	withRef := json.RawMessage(`{"pattern":"*.go","$ref":"tool_123"}`)
 
-	keyPlain := BuildCacheKey("find", plain)
-	keyCompress := BuildCacheKey("find", withCompress)
-	keyRef := BuildCacheKey("find", withRef)
+	keyPlain := buildCacheKey("find", plain)
+	keyCompress := buildCacheKey("find", withCompress)
+	keyRef := buildCacheKey("find", withRef)
 
 	if keyPlain != keyCompress {
 		t.Fatalf("compress should be stripped:\n  plain=%q\n  compress=%q", keyPlain, keyCompress)
@@ -171,8 +171,8 @@ func TestBuildCacheKeyIgnoresNonSemanticFields(t *testing.T) {
 
 func TestBuildCacheKeyReturnsDistinctKeysPerTool(t *testing.T) {
 	input := json.RawMessage(`{"pattern":"*.go"}`)
-	findKey := BuildCacheKey("find", input)
-	treeKey := BuildCacheKey("tree", input)
+	findKey := buildCacheKey("find", input)
+	treeKey := buildCacheKey("tree", input)
 
 	if findKey == treeKey {
 		t.Fatal("different tool names should produce different keys")
@@ -180,26 +180,26 @@ func TestBuildCacheKeyReturnsDistinctKeysPerTool(t *testing.T) {
 }
 
 func TestIsCacheableToolReturnsExpectedForKnownTools(t *testing.T) {
-	if !IsCacheableTool("grep") {
+	if !isCacheableTool("grep") {
 		t.Fatal("grep should be cacheable")
 	}
 	// fetch_tools is deliberately NOT cacheable: its already-active branch
 	// returns a compact response on repeats, which a cache hit would replace
 	// with the first call's full schema payload (review catch on #3171).
-	if IsCacheableTool("fetch_tools") {
+	if isCacheableTool("fetch_tools") {
 		t.Fatal("fetch_tools should not be cacheable")
 	}
-	if IsCacheableTool("find") {
+	if isCacheableTool("find") {
 		t.Fatal("find should not be cacheable")
 	}
-	if IsCacheableTool("read") {
+	if isCacheableTool("read") {
 		t.Fatal("read should not be cacheable")
 	}
 }
 
 func TestIsMutationToolReturnsExpectedForKnownTools(t *testing.T) {
 	for _, name := range []string{"write", "edit"} {
-		if !IsMutationTool(name) {
+		if !isMutationTool(name) {
 			t.Fatalf("%s should be a mutation tool", name)
 		}
 	}
@@ -208,13 +208,13 @@ func TestIsMutationToolReturnsExpectedForKnownTools(t *testing.T) {
 	// Commands that CAN write are handled separately — Execute consults
 	// runtimeops.ExecCommandPreservesRunCache and invalidates for anything not
 	// provably read-only (see TestExecute_ExecInvalidatesRunCache).
-	if IsMutationTool("exec") {
+	if isMutationTool("exec") {
 		t.Fatal("exec should not be a mutation tool")
 	}
-	if IsMutationTool("find") {
+	if isMutationTool("find") {
 		t.Fatal("find should not be a mutation tool")
 	}
-	if IsMutationTool("read") {
+	if isMutationTool("read") {
 		t.Fatal("read should not be a mutation tool")
 	}
 }
@@ -234,7 +234,7 @@ func TestExecute_ExecInvalidatesRunCache(t *testing.T) {
 		return "done", nil
 	})
 
-	ctx := WithRunCache(context.Background(), NewRunCache())
+	ctx := withRunCache(context.Background(), newRunCache())
 	grepInput := json.RawMessage(`{"pattern":"foo"}`)
 
 	// Prime the cache, then confirm a repeat is served from it.
@@ -285,7 +285,7 @@ func TestExecuteStopsRunCacheAfterProcessInteraction(t *testing.T) {
 		return "exited", nil
 	})
 
-	ctx := WithRunCache(context.Background(), NewRunCache())
+	ctx := withRunCache(context.Background(), newRunCache())
 	grepInput := json.RawMessage(`{"pattern":"foo"}`)
 
 	for range 2 {
@@ -326,8 +326,8 @@ func TestExecuteStopsRunCacheWhenBackgroundExecMutates(t *testing.T) {
 		return `{"id":"p1","status":"running"}`, nil
 	})
 
-	rc := NewRunCache()
-	ctx := WithRunCache(context.Background(), rc)
+	rc := newRunCache()
+	ctx := withRunCache(context.Background(), rc)
 
 	// Read-only background command: latch must not fire.
 	if _, err := reg.Execute(ctx, "exec", json.RawMessage(`{"command":"ls -la","background":true}`)); err != nil {
@@ -360,13 +360,13 @@ func TestExecuteStopsRunCacheWhenBackgroundExecMutates(t *testing.T) {
 // write/edit/exec is an async writer against the shared workspace; a
 // read-focused researcher child is not.
 func TestExecuteStopsRunCacheWhenSpawnPresetCanMutate(t *testing.T) {
-	newReg := func() (*ToolRegistry, *RunCache, context.Context) {
+	newReg := func() (*ToolRegistry, *runCache, context.Context) {
 		reg := NewToolRegistry()
 		reg.Register("sessions_spawn", func(_ context.Context, _ json.RawMessage) (string, error) {
 			return "spawned", nil
 		})
-		rc := NewRunCache()
-		return reg, rc, WithRunCache(context.Background(), rc)
+		rc := newRunCache()
+		return reg, rc, withRunCache(context.Background(), rc)
 	}
 
 	reg, rc, ctx := newReg()

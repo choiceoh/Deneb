@@ -31,6 +31,6 @@ func ClearStandingGoal(sessionKey string) {
 	bridge.ClearStandingGoal(sessionKey)
 }
 
-func FetchToolsSchema() map[string]any {
+func fetchToolsSchema() map[string]any {
 	return bridge.FetchToolsSchema()
 }

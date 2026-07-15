@@ -74,38 +74,38 @@ func (selfSignaller) Signal(sig os.Signal) error {
 // PID returns the current process identifier.
 func (selfSignaller) PID() int { return os.Getpid() }
 
-// GatewayDeps bundles the injectable dependencies for the gateway tool.
+// gatewayDeps bundles the injectable dependencies for the gateway tool.
 // When all fields are zero values, sensible defaults are wired (real git,
 // real SIGUSR1 to self). Tests pass fakes.
-type GatewayDeps struct {
+type gatewayDeps struct {
 	Runner     CommandRunner
 	Signaller  ProcessSignaller
 	ConfigPath string // override for config file path (empty ⇒ config.ResolveConfigPath)
 	Now        func() time.Time
 }
 
-func (d GatewayDeps) runner() CommandRunner {
+func (d gatewayDeps) runner() CommandRunner {
 	if d.Runner != nil {
 		return d.Runner
 	}
 	return execRunner{}
 }
 
-func (d GatewayDeps) signaller() ProcessSignaller {
+func (d gatewayDeps) signaller() ProcessSignaller {
 	if d.Signaller != nil {
 		return d.Signaller
 	}
 	return selfSignaller{}
 }
 
-func (d GatewayDeps) configPath() string {
+func (d gatewayDeps) configPath() string {
 	if d.ConfigPath != "" {
 		return d.ConfigPath
 	}
 	return config.ResolveConfigPath()
 }
 
-func (d GatewayDeps) now() time.Time {
+func (d gatewayDeps) now() time.Time {
 	if d.Now != nil {
 		return d.Now()
 	}
@@ -127,7 +127,7 @@ func (d GatewayDeps) now() time.Time {
 // to the user and then invoke the `.confirmed` variant with the same
 // `action_token` to execute.
 func ToolGateway(repoDir string) toolport.ToolFunc {
-	return ToolGatewayWithDeps(repoDir, GatewayDeps{})
+	return toolGatewayWithDeps(repoDir, gatewayDeps{})
 }
 
 // gatewayParams is the gateway tool's input payload.
@@ -141,8 +141,8 @@ type gatewayParams struct {
 	Reason      string         `json:"reason"`
 }
 
-// ToolGatewayWithDeps is the injectable constructor used by tests.
-func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolport.ToolFunc {
+// toolGatewayWithDeps is the injectable constructor used by tests.
+func toolGatewayWithDeps(repoDir string, deps gatewayDeps) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p gatewayParams
 		if err := jsonutil.UnmarshalInto("gateway params", input, &p); err != nil {
@@ -183,7 +183,7 @@ func ToolGatewayWithDeps(repoDir string, deps GatewayDeps) toolport.ToolFunc {
 
 // gatewayLegacyAction dispatches the legacy / existing action names
 // (preserved for backward compatibility) plus the unknown-action default.
-func gatewayLegacyAction(deps GatewayDeps, p gatewayParams) (string, error) {
+func gatewayLegacyAction(deps gatewayDeps, p gatewayParams) (string, error) {
 	switch p.Action {
 	case "config.get":
 		return legacyConfigGet(deps)
@@ -217,7 +217,7 @@ func gatewayLegacyAction(deps GatewayDeps, p gatewayParams) (string, error) {
 	}
 }
 
-func legacyConfigGet(deps GatewayDeps) (string, error) {
+func legacyConfigGet(deps gatewayDeps) (string, error) {
 	snapshot, err := config.LoadConfig(deps.configPath())
 	if err != nil {
 		return fmt.Sprintf("설정 파일 로드에 실패했습니다: %s", err.Error()), nil
@@ -245,7 +245,7 @@ func legacySchemaLookup(path string) (string, error) {
 // legacyConfigPatch handles config.patch (confirmed=false: secret-path block +
 // approval request) and config.patch.confirmed (confirmed=true: token consume
 // + apply).
-func legacyConfigPatch(deps GatewayDeps, patch map[string]any, actionToken string, confirmed bool) (string, error) {
+func legacyConfigPatch(deps gatewayDeps, patch map[string]any, actionToken string, confirmed bool) (string, error) {
 	if patch == nil {
 		return "", fmt.Errorf("config.patch에는 patch 객체가 필요합니다")
 	}
@@ -269,7 +269,7 @@ func legacyConfigPatch(deps GatewayDeps, patch map[string]any, actionToken strin
 // legacyConfigApply handles config.apply (confirmed=false: secret-path block +
 // approval request) and config.apply.confirmed (confirmed=true: token consume
 // + apply).
-func legacyConfigApply(deps GatewayDeps, cfg map[string]any, actionToken string, confirmed bool) (string, error) {
+func legacyConfigApply(deps gatewayDeps, cfg map[string]any, actionToken string, confirmed bool) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("config.apply에는 config 객체가 필요합니다")
 	}
@@ -303,7 +303,7 @@ func legacyRestartRequest(reason string) (string, error) {
 	)
 }
 
-func legacyRestartConfirmed(deps GatewayDeps, actionToken string) (string, error) {
+func legacyRestartConfirmed(deps gatewayDeps, actionToken string) (string, error) {
 	if msg := consumePendingApproval(actionToken, "restart", ""); msg != "" {
 		return msg, nil
 	}
@@ -318,7 +318,7 @@ func legacyRestartConfirmed(deps GatewayDeps, actionToken string) (string, error
 
 // ── Action implementations ────────────────────────────────────────────────
 
-func gatewayStatus(deps GatewayDeps) (string, error) {
+func gatewayStatus(deps gatewayDeps) (string, error) {
 	cfgPath := deps.configPath()
 	snap, err := config.LoadConfig(cfgPath)
 	port := config.DefaultGatewayPort
@@ -346,7 +346,7 @@ func gatewayStatus(deps GatewayDeps) (string, error) {
 	return string(data), nil
 }
 
-func gatewayConfigGet(deps GatewayDeps, path string) (string, error) {
+func gatewayConfigGet(deps gatewayDeps, path string) (string, error) {
 	snap, err := config.LoadConfig(deps.configPath())
 	if err != nil {
 		return fmt.Sprintf("설정 파일 로드에 실패했습니다: %s", err.Error()), nil
@@ -375,7 +375,7 @@ func gatewayConfigGet(deps GatewayDeps, path string) (string, error) {
 	return string(data), nil
 }
 
-func gatewayConfigSet(deps GatewayDeps, path string, value any, confirmed bool) (string, error) {
+func gatewayConfigSet(deps gatewayDeps, path string, value any, confirmed bool) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("config_set: path는 필수입니다 (예: \"model.main\")")
 	}
@@ -418,7 +418,7 @@ func gatewayConfigSet(deps GatewayDeps, path string, value any, confirmed bool) 
 	return fmt.Sprintf("설정을 저장했습니다: `%s` = %s. 변경 사항을 반영하려면 재시작이 필요할 수 있습니다.", path, formatValueForSummary(value)), nil
 }
 
-func gatewayConfigPatch(deps GatewayDeps, patch map[string]any) (string, error) {
+func gatewayConfigPatch(deps gatewayDeps, patch map[string]any) (string, error) {
 	cfgPath := deps.configPath()
 	rootMap, err := loadRawConfigMap(cfgPath)
 	if err != nil {
@@ -437,7 +437,7 @@ func gatewayConfigPatch(deps GatewayDeps, patch map[string]any) (string, error) 
 	return fmt.Sprintf("설정을 패치했습니다. 저장 경로: %s", cfgPath), nil
 }
 
-func gatewayConfigApply(deps GatewayDeps, cfg map[string]any) (string, error) {
+func gatewayConfigApply(deps gatewayDeps, cfg map[string]any) (string, error) {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("설정 직렬화 실패: %s", err.Error()), nil
@@ -449,7 +449,7 @@ func gatewayConfigApply(deps GatewayDeps, cfg map[string]any) (string, error) {
 	return fmt.Sprintf("설정을 적용했습니다. 저장 경로: %s", cfgPath), nil
 }
 
-func gatewayUpdate(ctx context.Context, deps GatewayDeps, repoDir string, confirmed bool) (string, error) {
+func gatewayUpdate(ctx context.Context, deps gatewayDeps, repoDir string, confirmed bool) (string, error) {
 	dir := repoDir
 	if dir == "" {
 		dir, _ = os.Getwd()

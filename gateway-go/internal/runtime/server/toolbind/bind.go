@@ -4,13 +4,8 @@ package toolbind
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/linkenrichment"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/schedule"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/observebind"
@@ -61,16 +56,4 @@ func RenderWeeklyReportCard(opts WeeklyReportOpts, now time.Time) string {
 
 func BuildWeeklyReportImage(ctx context.Context, opts WeeklyReportOpts, now time.Time) ([]byte, bool) {
 	return weekly.BuildWeeklyReportImage(ctx, opts, now)
-}
-
-func NewCalendarGlance(d *tooldeps.CalendarDeps) chat.CalendarGlanceFunc {
-	return chat.CalendarGlanceFunc(schedule.NewCalendarGlanceFunc(d))
-}
-
-// NewLinkEnrichStart wires the concrete linkenrichment engine for chat.HandlerConfig.
-func NewLinkEnrichStart(logger *slog.Logger) chat.LinkEnrichStart {
-	engine := linkenrichment.New(linkenrichment.Config{Logger: logger})
-	return func(ctx context.Context, message string, sanitize func(string) string) func(context.Context) string {
-		return engine.Start(ctx, message, sanitize)
-	}
 }

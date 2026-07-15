@@ -38,7 +38,7 @@ func TestMutationOutcomeIsFailure(t *testing.T) {
 }
 
 func TestMutationFailureAnnotator_PrependsBannerOnFailure(t *testing.T) {
-	out := MutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
+	out := mutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
 	if !strings.HasPrefix(out, mutationFailureBanner) {
 		t.Fatalf("expected banner prefix, got: %q", out)
 	}
@@ -49,22 +49,22 @@ func TestMutationFailureAnnotator_PrependsBannerOnFailure(t *testing.T) {
 
 func TestMutationFailureAnnotator_NoOpOnSuccess(t *testing.T) {
 	in := "# 문서 제목\n본문..."
-	if got := MutationFailureAnnotator(context.Background(), "wiki", in); got != in {
+	if got := mutationFailureAnnotator(context.Background(), "wiki", in); got != in {
 		t.Fatalf("success output must be unchanged, got: %q", got)
 	}
 }
 
 func TestMutationFailureAnnotator_NoOpOnUnknownTool(t *testing.T) {
 	in := "발송 실패: boom" // failure phrase but tool not in table
-	if got := MutationFailureAnnotator(context.Background(), "exec", in); got != in {
+	if got := mutationFailureAnnotator(context.Background(), "exec", in); got != in {
 		t.Fatalf("unknown tool output must be unchanged, got: %q", got)
 	}
 }
 
 func TestMutationFailureAnnotator_Idempotent(t *testing.T) {
 	ctx := context.Background()
-	once := MutationFailureAnnotator(ctx, "wiki", "위키 페이지 쓰기 실패: x")
-	twice := MutationFailureAnnotator(ctx, "wiki", once)
+	once := mutationFailureAnnotator(ctx, "wiki", "위키 페이지 쓰기 실패: x")
+	twice := mutationFailureAnnotator(ctx, "wiki", once)
 	if once != twice {
 		t.Fatalf("annotator must be idempotent;\n once=%q\ntwice=%q", once, twice)
 	}
@@ -74,9 +74,9 @@ func TestMutationFailureAnnotator_Idempotent(t *testing.T) {
 }
 
 func TestMutationFailureAnnotator_WiredViaRegistry(t *testing.T) {
-	// End-to-end through the PostProcessRegistry the same way Execute applies it.
+	// End-to-end through the postProcessRegistry the same way Execute applies it.
 	reg := NewToolRegistry()
-	RegisterDefaultPostProcessors(reg)
+	registerDefaultPostProcessors(reg)
 
 	out := reg.postProcess.Apply(context.Background(), "wiki", "위키 페이지 쓰기 실패: 550")
 	if !strings.Contains(out, mutationFailureBanner) {
@@ -90,7 +90,7 @@ func TestMutationFailureAnnotator_WiredViaRegistry(t *testing.T) {
 }
 
 func TestIsMutationFailureResult(t *testing.T) {
-	annotated := MutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
+	annotated := mutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
 	if !isMutationFailureResult(annotated) {
 		t.Fatal("annotated failure result must be detected for escalation")
 	}
@@ -103,7 +103,7 @@ func TestIsMutationFailureResult(t *testing.T) {
 }
 
 func TestMutationFailureError_StripsBanner(t *testing.T) {
-	annotated := MutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
+	annotated := mutationFailureAnnotator(context.Background(), "wiki", "위키 페이지 쓰기 실패: boom")
 	if got := mutationFailureError(annotated); got != "위키 페이지 쓰기 실패: boom" {
 		t.Fatalf("got %q, want underlying failure", got)
 	}

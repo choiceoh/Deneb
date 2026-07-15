@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 )
@@ -24,7 +24,7 @@ const (
 )
 
 type skillLifecycleBackend struct {
-	genesis         *generation.Service
+	genesis         *leafbind.Service
 	evolver         *genesis.Evolver
 	tracker         *genesis.Tracker
 	transcripts     toolport.TranscriptStore
@@ -45,7 +45,7 @@ type Backend = skillLifecycleBackend
 // BackendConfig contains the Propus services and optional replay boundary used
 // by a lifecycle backend.
 type BackendConfig struct {
-	Genesis     *generation.Service
+	Genesis     *leafbind.Service
 	Evolver     *genesis.Evolver
 	Tracker     *genesis.Tracker
 	Transcripts toolport.TranscriptStore
@@ -178,7 +178,7 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 
 	source := "session"
 	var sessionKey string
-	var skill *generation.GeneratedSkill
+	var skill *leafbind.GeneratedSkill
 	var err error
 	if strings.TrimSpace(req.DreamSummary) != "" {
 		source = "dream"
@@ -203,7 +203,7 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 		}, nil
 	}
 	if err := b.genesis.Persist(skill); err != nil {
-		if errors.Is(err, generation.ErrSkillDeduped) {
+		if errors.Is(err, leafbind.ErrSkillDeduped) {
 			return chattools.SkillGenesisResult{
 				OK:     true,
 				Skip:   true,

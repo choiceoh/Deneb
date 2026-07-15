@@ -79,7 +79,7 @@ func TestEngineEnrichMessageConvertsHTMLAndTruncatesContent(t *testing.T) {
 func TestEngineEnrichMessageGracefullyDropsFailedOrPanickingFetches(t *testing.T) {
 	tests := []struct {
 		name  string
-		fetch FetchFunc
+		fetch fetchFunc
 	}{
 		{
 			name: "fetch error",
@@ -162,7 +162,7 @@ type fetchResponse struct {
 	err         error
 }
 
-func stubFetcher(responses map[string]fetchResponse) FetchFunc {
+func stubFetcher(responses map[string]fetchResponse) fetchFunc {
 	return func(_ context.Context, url string) ([]byte, string, error) {
 		response, ok := responses[url]
 		if !ok {
@@ -172,7 +172,7 @@ func stubFetcher(responses map[string]fetchResponse) FetchFunc {
 	}
 }
 
-func testEngine(fetch FetchFunc) *Engine {
+func testEngine(fetch fetchFunc) *Engine {
 	return New(Config{
 		Fetch:  fetch,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),

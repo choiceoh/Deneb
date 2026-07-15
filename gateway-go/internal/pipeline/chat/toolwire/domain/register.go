@@ -1,11 +1,10 @@
 package domain
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
@@ -14,7 +13,7 @@ import (
 
 // Register wires domain tools that RegisterCoreTools owns (mail + skills deferred to chat wrapper).
 func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
-	RegisterMailArchiveTool(registry, deps)
+	mailtool.RegisterMailArchiveTool(registry, deps)
 }
 
 // RegisterContactsTool registers the address-book lookup tool (phone lookup +
@@ -137,27 +136,6 @@ func RegisterSkillsTools(registry toolport.ToolRegistrar, getSnapshot skilltool.
 		InputSchema: schema.SkillsToolSchema(),
 		Fn:          skilltool.ToolSkills(getSnapshot, workspaceDir, bundledSkillsDir, invalidateCache),
 		Deferred:    true,
-	})
-}
-
-// RegisterMailArchiveTool registers the received-mail archive reader.
-func RegisterMailArchiveTool(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
-	// Mail archive reader — the received-mail hand. Eager (2026-07-09): received
-	// mail is the most common 업무 surface (analysis, meeting prep, project
-	// history), so it earns its schema every turn. Left deferred, the model routed
-	// mail reads through code_action's eager bridge (deneb.mail_archive) to dodge
-	// the fetch_tools hop — overusing code_action even for plain reads and
-	// dead-ending on attachments (the attachment action is off the bridge allowlist).
-	// Reads the on-box deneb-mailarchive store over loopback IMAP.
-	registry.RegisterTool(toolport.ToolDef{
-		Name:        "mail_archive",
-		Description: "받은 메일 조회 1순위 — 메일 분석·미팅 준비·프로젝트 과거 확인에 우선 사용. 자체 메일 아카이브(자동보관 수신 메일 + 과거 백필)를 조회해 ID/Locator를 얻고, 전체 스레드와 프로젝트 히스토리를 복원한다. action=list(오늘/최근 메일) | search(키워드) | read(Locator/ID 또는 query로 원문 열기) | thread(Message-ID/References 기반 전체 대화) | project_history(회사·프로젝트 키워드 시간선+스레드 후보).",
-		InputSchema: schema.MailArchiveToolSchema(),
-		Fn: mailtool.ToolMailArchive(mailtool.MailArchiveDeps{
-			Wiki:     knowledge.NewWikiAdapter(deps.Wiki.Store),
-			Calendar: &deps.Calendar,
-			Store:    deps.MailStore,
-		}),
 	})
 }
 

@@ -28,8 +28,8 @@ var (
 	cachedWorkspaceDirOnce sync.Once
 )
 
-// RunParams holds all parameters for an asynchronous agent run.
-type RunParams = runstate.Params
+// runParams holds all parameters for an asynchronous agent run.
+type runParams = runstate.Params
 
 // Agent run defaults.
 const (
@@ -100,10 +100,10 @@ type runDeps struct {
 	auditSystemPrompt    func(sessionKey string, prompt []byte)
 	// drainPendingFn drains the next queued message for a session after the
 	// current run completes. Set by the Handler; nil disables pending queue.
-	drainPendingFn func(sessionKey string) *RunParams
+	drainPendingFn func(sessionKey string) *runParams
 	// startRunFn starts a new async run (for processing queued messages).
 	// Set by the Handler; nil disables pending queue processing.
-	startRunFn func(params RunParams)
+	startRunFn func(params runParams)
 
 	// subagentNotifyCh receives completion notifications for child sessions
 	// spawned by the current session. Consumed by DeferredSystemText to inject
@@ -113,19 +113,19 @@ type runDeps struct {
 	// steerQueue is the per-Handler /steer note queue. The agent run goroutine
 	// drains it via BeforeAPICall to inject notes into the next tool_result.
 	// nil disables the mid-run steer feature.
-	steerQueue *SteerQueue
+	steerQueue *steerQueue
 
 	// skills groups the Propus/genesis skill-loop hooks. See SkillDeps.
 	skills SkillDeps
 
 	// callbacks is an atomic snapshot of channel callbacks taken at run start.
 	// Contains reply, media, typing, reaction, draft, emit, shutdown, and model fields.
-	callbacks CallbackSnapshot
+	callbacks callbackSnapshot
 
 	// ambient groups the ambient system-prompt context providers. The chat
 	// package stays free of the prompts/server import by talking through
-	// these closures (wired in server/chat_pipeline.go). See AmbientDeps.
-	ambient AmbientDeps
+	// these closures (wired in server/chat_pipeline.go). See ambientDeps.
+	ambient ambientDeps
 
 	// chatport holds injected adapters that decouple chat from autoreply.
 	chatport chatportAdapters
@@ -164,12 +164,12 @@ func (d runDeps) now() time.Time {
 	return dentime.Now()
 }
 
-// PersonaOverrideFunc returns the operator-edited 업무 persona override text, or
+// personaOverrideFunc returns the operator-edited 업무 persona override text, or
 // "" when there is no override. The concrete implementation lives in the server
 // package and reads the prompt store; the chat package stays free of any
 // infra/config import by talking through this function. nil disables the
 // override entirely (DefaultPersona renders).
-type PersonaOverrideFunc func() string
+type personaOverrideFunc func() string
 
 // abbreviateSession shortens channel prefixes in session keys for compact log output.
 // e.g. "client:main:task:ts" → "cl:main:task:ts"
@@ -209,7 +209,7 @@ func isMainSession(key string) bool {
 // runAgentAsync is the background goroutine that executes an agent run.
 // It persists the user message, assembles context, calls the LLM agent loop,
 // persists the result, and broadcasts completion events.
-func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
+func runAgentAsync(ctx context.Context, params runParams, deps runDeps) {
 	logger := runAgentLoggerFor(params, deps)
 
 	// Emit lifecycle start event for agent job tracker.
@@ -259,7 +259,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	//     returned cleanly with stopReason="aborted" (no error)
 	// In both cases the user's intent is "supersede with the next run",
 	// so the run is quietly superseded; the new run produces the reply.
-	mergedCancel := errors.Is(context.Cause(ctx), ErrMergedIntoNewRun)
+	mergedCancel := errors.Is(context.Cause(ctx), errMergedIntoNewRun)
 
 	if err != nil {
 		handleRunError(ctx, params, deps, broadcaster, logger, err, now)
@@ -288,7 +288,7 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 
 // runAgentLoggerFor derives the per-run logger (session/runId annotations for
 // non-main sessions) from the deps logger.
-func runAgentLoggerFor(params RunParams, deps runDeps) *slog.Logger {
+func runAgentLoggerFor(params runParams, deps runDeps) *slog.Logger {
 	logger := deps.logger
 	if logger == nil {
 		logger = slog.Default()
@@ -309,14 +309,14 @@ func runAgentLoggerFor(params RunParams, deps runDeps) *slog.Logger {
 // withRunContextValues injects the per-run context values tools read: delivery
 // context, reply/media send functions, auto-delivery flag, channel upload
 // limit, and session key.
-func withRunContextValues(ctx context.Context, params RunParams, deps runDeps) context.Context {
+func withRunContextValues(ctx context.Context, params runParams, deps runDeps) context.Context {
 	// Inject delivery context and reply function into ctx so tools
 	// (especially the message tool) can send proactive messages.
 	if params.Delivery != nil {
-		ctx = WithDeliveryContext(ctx, params.Delivery)
+		ctx = withDeliveryContext(ctx, params.Delivery)
 	}
 	if deps.callbacks.replyFunc != nil {
-		ctx = WithReplyFunc(ctx, deps.callbacks.replyFunc)
+		ctx = withReplyFunc(ctx, deps.callbacks.replyFunc)
 	} else if deps.logger != nil {
 		// Diagnostic for the self-contradicting "채널이 끊겼어요" cron
 		// incident class: when this branch fires, the in-loop message tool
@@ -332,7 +332,7 @@ func withRunContextValues(ctx context.Context, params RunParams, deps runDeps) c
 			deliveryChannel = params.Delivery.Channel
 			deliveryTo = params.Delivery.To
 		}
-		deps.logger.Warn("run started without ReplyFunc in callbacks; in-loop message tool will fail with replyFn=nil",
+		deps.logger.Warn("run started without replyFunc in callbacks; in-loop message tool will fail with replyFn=nil",
 			"sessionKey", params.SessionKey,
 			"runID", params.ClientRunID,
 			"deliveryChannel", deliveryChannel,
@@ -343,26 +343,26 @@ func withRunContextValues(ctx context.Context, params RunParams, deps runDeps) c
 	// layer, so an in-loop message-tool send failure is a benign no-op rather
 	// than an outage the model should report. The message tool reads this flag.
 	if params.AutoDeliveredOutput {
-		ctx = WithAutoDelivery(ctx)
+		ctx = withAutoDelivery(ctx)
 	}
 	if deps.callbacks.mediaSendFn != nil {
-		ctx = WithMediaSendFunc(ctx, deps.callbacks.mediaSendFn)
+		ctx = withMediaSendFunc(ctx, deps.callbacks.mediaSendFn)
 	}
 	// Inject the channel-specific upload limit so send_file can enforce
 	// the correct per-channel maximum without hard-coding channel names.
 	if deps.channelUploadLimitFn != nil && params.Delivery != nil {
 		if limit := deps.channelUploadLimitFn(params.Delivery.Channel); limit > 0 {
-			ctx = WithMaxUploadBytes(ctx, limit)
+			ctx = withMaxUploadBytes(ctx, limit)
 		}
 	}
-	return WithSessionKey(ctx, params.SessionKey)
+	return withSessionKey(ctx, params.SessionKey)
 }
 
 // startRunTypingSignaler sets up the phase-aware typing indicator for
 // native-client delivery. The factory (injected via chatport boundary) creates
 // a TypingSignaler with a 5s keepalive cadence for the native typing
 // indicator. Returns nil when typing signalling is not wired for this run.
-func startRunTypingSignaler(ctx context.Context, params RunParams, deps runDeps) chatport.TypingSignaler {
+func startRunTypingSignaler(ctx context.Context, params runParams, deps runDeps) chatport.TypingSignaler {
 	if deps.chatport.NewTypingSignaler == nil || deps.callbacks.typingFn == nil || params.Delivery == nil {
 		return nil
 	}
@@ -375,7 +375,7 @@ func startRunTypingSignaler(ctx context.Context, params RunParams, deps runDeps)
 // drainPendingAfterRun processes one queued message after a run finishes (on
 // both the error and success paths), so messages sent mid-run are never
 // silently lost.
-func drainPendingAfterRun(params RunParams, deps runDeps, logger *slog.Logger, logMsg string) {
+func drainPendingAfterRun(params runParams, deps runDeps, logger *slog.Logger, logMsg string) {
 	if deps.drainPendingFn == nil || deps.startRunFn == nil {
 		return
 	}

@@ -66,7 +66,7 @@ func newTestNudger(t *testing.T, interval int) *Nudger {
 		CooldownPerSkill: 24 * time.Hour,
 		OutputDir:        t.TempDir(),
 	}, nil, nil, slog.Default())
-	return NewNudger(svc, NudgerConfig{Interval: interval}, slog.Default())
+	return newNudger(svc, nudgerConfig{Interval: interval}, slog.Default())
 }
 
 func TestNudgerEnabledFalseWhenIntervalZero(t *testing.T) {
@@ -77,7 +77,7 @@ func TestNudgerEnabledFalseWhenIntervalZero(t *testing.T) {
 }
 
 func TestNudger_Disabled_NilService(t *testing.T) {
-	n := NewNudger(nil, NudgerConfig{Interval: 10}, slog.Default())
+	n := newNudger(nil, nudgerConfig{Interval: 10}, slog.Default())
 	if n.Enabled() {
 		t.Error("expected disabled when service is nil")
 	}
@@ -236,7 +236,7 @@ func TestNudgerRunReviewOnceSkipsReviewerWhenEvaluateReviewRejects(t *testing.T)
 func TestNudger_FromEnv_DefaultWhenUnset(t *testing.T) {
 	t.Setenv("DENEB_SKILL_NUDGE_INTERVAL", "")
 	svc := generation.NewService(generation.Config{}, nil, nil, slog.Default())
-	n := NewNudgerFromEnv(svc, slog.Default())
+	n := newNudgerFromEnv(svc, slog.Default())
 	if n.Interval() != DefaultNudgeInterval {
 		t.Errorf("expected default interval %d, got %d", DefaultNudgeInterval, n.Interval())
 	}
@@ -245,7 +245,7 @@ func TestNudger_FromEnv_DefaultWhenUnset(t *testing.T) {
 func TestNudgerFromEnvDisabledWhenIntervalEnvIsZero(t *testing.T) {
 	t.Setenv("DENEB_SKILL_NUDGE_INTERVAL", "0")
 	svc := generation.NewService(generation.Config{}, nil, nil, slog.Default())
-	n := NewNudgerFromEnv(svc, slog.Default())
+	n := newNudgerFromEnv(svc, slog.Default())
 	if n.Enabled() {
 		t.Errorf("expected disabled with env=0")
 	}
@@ -254,7 +254,7 @@ func TestNudgerFromEnvDisabledWhenIntervalEnvIsZero(t *testing.T) {
 func TestNudger_FromEnv_InvalidValueUsesDefault(t *testing.T) {
 	t.Setenv("DENEB_SKILL_NUDGE_INTERVAL", "not-a-number")
 	svc := generation.NewService(generation.Config{}, nil, nil, slog.Default())
-	n := NewNudgerFromEnv(svc, slog.Default())
+	n := newNudgerFromEnv(svc, slog.Default())
 	if n.Interval() != DefaultNudgeInterval {
 		t.Errorf("expected fallback to %d, got %d", DefaultNudgeInterval, n.Interval())
 	}

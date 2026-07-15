@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // metaRuntimeHealthWindow is the advisory lookback (matches the 7d evolution-
@@ -72,7 +72,7 @@ func (s *Server) metaRuntimeHealthEvidence(_ context.Context) string {
 
 // slowestModelName returns the short name of the slowest-by-p95 model, or a
 // placeholder when the stat row lacks a model label.
-func slowestModelName(stats []agentlog.ModelStat) string {
+func slowestModelName(stats []infrabind.ModelStat) string {
 	if len(stats) == 0 || stats[0].Model == "" {
 		return "?"
 	}

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 const (
@@ -33,7 +33,7 @@ type watchdogAlert struct {
 // improvement loop gone stale, or a silent-failure pattern that has spiked.
 // Titles are stable (no changing age/count) so the alert gate keys on the
 // condition, not the reading. Pure, so it is unit-testable.
-func watchdogAlerts(rep observatory.Report, failThreshold int) []watchdogAlert {
+func watchdogAlerts(rep aibind.Report, failThreshold int) []watchdogAlert {
 	var out []watchdogAlert
 	for _, l := range rep.Liveness {
 		if l.Fresh || l.Missing {
@@ -73,13 +73,13 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 			s.logger.Error("panic in observatory watchdog tick", "panic", r)
 		}
 	}()
-	rep := observatory.Snapshot(config.ResolveStateDir(), now)
+	rep := aibind.Snapshot(infrabind.ResolveStateDir(), now)
 	for _, a := range watchdogAlerts(rep, observatoryFailAlertThreshold) {
 		if s.alertGate != nil && !s.alertGate.ShouldRelay(a.Title, a.Level, now) {
 			continue
 		}
 		if s.pushHub != nil {
-			s.pushHub.Publish(proactive.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: proactive.PushKindFleet})
+			s.pushHub.Publish(svcbind.Event{Title: "⚠️ 자기점검 · " + a.Title, Body: a.Body, Kind: svcbind.PushKindFleet})
 		}
 		s.logger.Warn("observatory watchdog alert", "title", a.Title)
 	}
@@ -88,7 +88,7 @@ func (s *Server) observatoryWatchdogTick(now time.Time) {
 // runObservatoryWatchdog periodically checks whether Deneb's own improvement
 // loops have gone silent — the dreamer/skill-curator/config-audit deaths that
 // rotted unnoticed for weeks. It mirrors the fleet hook (which exists for the
-// same reason: a silent SparkFleet death), gated by [proactive.AlertGate] against the
+// same reason: a silent SparkFleet death), gated by [svcbind.AlertGate] against the
 // over-notification the project forbids. Stops when ctx is canceled.
 func (s *Server) runObservatoryWatchdog(ctx context.Context) {
 	select {

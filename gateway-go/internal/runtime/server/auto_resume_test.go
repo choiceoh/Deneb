@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 // writeTranscriptLine appends one JSON line to a transcript file under tmpHome.
@@ -205,7 +205,7 @@ func newAutoResumeTestServer(t *testing.T, tmpHome string) *Server {
 		MemorySubsystem:     &MemorySubsystem{},
 		AutonomousSubsystem: &AutonomousSubsystem{},
 		InfraSubsystem:      &InfraSubsystem{},
-		SessionManager:      &SessionManager{sessions: session.NewManager()},
+		SessionManager:      &SessionManager{sessions: domainbind.NewManager()},
 		ChatManager:         &ChatManager{},
 		HookManager:         &HookManager{},
 		logger:              slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
@@ -239,7 +239,7 @@ func TestAutoResumeDispatchesWhenNativeTurnInterrupted(t *testing.T) {
 		`{"role":"user","content":"이어 해줘","timestamp":1700000001000}`,
 	)
 	store := srv.runMarkerStore()
-	if err := store.Write(session.RunMarker{
+	if err := store.Write(domainbind.RunMarker{
 		SessionKey:     sessionKey,
 		StartedAt:      time.Now().UnixMilli(),
 		LastActivityAt: time.Now().UnixMilli(),
@@ -285,7 +285,7 @@ func TestAutoResumeClearsMarkerWithoutDispatchOnCleanEnd(t *testing.T) {
 		`{"role":"assistant","content":[{"type":"text","text":"hello"}],"timestamp":1700000001500}`,
 	)
 	store := srv.runMarkerStore()
-	_ = store.Write(session.RunMarker{
+	_ = store.Write(domainbind.RunMarker{
 		SessionKey: "client:7", StartedAt: time.Now().UnixMilli(),
 		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 	})
@@ -322,7 +322,7 @@ func TestAutoResumeDeletesStaleMarkerWithoutDispatch(t *testing.T) {
 	store := srv.runMarkerStore()
 	// StartedAt = 10 hours ago (older than 2h default MaxAge).
 	stale := time.Now().Add(-10 * time.Hour).UnixMilli()
-	_ = store.Write(session.RunMarker{
+	_ = store.Write(domainbind.RunMarker{
 		SessionKey: "client:stale", StartedAt: stale,
 		LastActivityAt: stale, Channel: "client",
 	})
@@ -354,7 +354,7 @@ func TestAutoResumeDeletesMarkerWithoutDispatchWhenAttemptsExhausted(t *testing.
 		`{"role":"user","content":"retry bait","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
-	_ = store.Write(session.RunMarker{
+	_ = store.Write(domainbind.RunMarker{
 		SessionKey: "client:loop", StartedAt: time.Now().UnixMilli(),
 		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 		ResumeAttempts: 1,
@@ -387,7 +387,7 @@ func TestAutoResumeClearsMarkersWithoutDispatchWhenDisabled(t *testing.T) {
 		`{"role":"user","content":"a","timestamp":1}`,
 	)
 	store := srv.runMarkerStore()
-	_ = store.Write(session.RunMarker{
+	_ = store.Write(domainbind.RunMarker{
 		SessionKey: "client:1", StartedAt: time.Now().UnixMilli(),
 		LastActivityAt: time.Now().UnixMilli(), Channel: "client",
 	})
@@ -417,11 +417,11 @@ func TestAutoResumeDeletesMarkersWithoutDispatchForNonUserSessions(t *testing.T)
 	srv := newAutoResumeTestServer(t, tmpHome)
 
 	store := srv.runMarkerStore()
-	_ = store.Write(session.RunMarker{
+	_ = store.Write(domainbind.RunMarker{
 		SessionKey: "cron:nightly", StartedAt: time.Now().UnixMilli(),
 		Channel: "cron",
 	})
-	_ = store.Write(session.RunMarker{
+	_ = store.Write(domainbind.RunMarker{
 		SessionKey: "btw:abc", StartedAt: time.Now().UnixMilli(),
 		Channel: "client",
 	})
@@ -456,16 +456,16 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 
 	sm := srv.sessions
 	// Create a direct session, transition to running.
-	sm.Create("client:99", session.KindDirect)
-	if err := sm.Set(&session.Session{
-		Key: "client:99", Kind: session.KindDirect, Channel: "client",
-		Status: session.StatusRunning,
+	sm.Create("client:99", domainbind.KindDirect)
+	if err := sm.Set(&domainbind.Session{
+		Key: "client:99", Kind: domainbind.KindDirect, Channel: "client",
+		Status: domainbind.StatusRunning,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	store := srv.runMarkerStore()
 	// Event dispatch is async — poll for up to 2s.
-	var marker *session.RunMarker
+	var marker *domainbind.RunMarker
 	waitForCondition(t, 2*time.Second, func() bool {
 		m, _ := store.Read("client:99")
 		marker = m
@@ -479,9 +479,9 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 	}
 
 	// Terminal transition clears the marker.
-	if err := sm.Set(&session.Session{
-		Key: "client:99", Kind: session.KindDirect, Channel: "client",
-		Status: session.StatusDone,
+	if err := sm.Set(&domainbind.Session{
+		Key: "client:99", Kind: domainbind.KindDirect, Channel: "client",
+		Status: domainbind.StatusDone,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -503,24 +503,24 @@ func TestRunMarkerLifecycleIgnoresNonDirectSessionKinds(t *testing.T) {
 	store := srv.runMarkerStore()
 
 	// Non-direct kind: the listener must NOT write a marker for it.
-	sm.Create("cron:job1", session.KindCron)
-	if err := sm.Set(&session.Session{
-		Key: "cron:job1", Kind: session.KindCron,
-		Status: session.StatusRunning,
+	sm.Create("cron:job1", domainbind.KindCron)
+	if err := sm.Set(&domainbind.Session{
+		Key: "cron:job1", Kind: domainbind.KindCron,
+		Status: domainbind.StatusRunning,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	// Sentinel: a direct session enqueued AFTER the cron event. The marker
-	// listener drains its mailbox FIFO in a single goroutine (session.EventBus),
+	// listener drains its mailbox FIFO in a single goroutine (domainbind.EventBus),
 	// so once the sentinel's marker appears the earlier cron event has already
 	// been processed. That ordering is a deterministic sync point — it replaces
 	// the old blind sleep, which false-passed if the (unwanted) write was merely
 	// slow rather than absent.
-	sm.Create("client:sentinel", session.KindDirect)
-	if err := sm.Set(&session.Session{
-		Key: "client:sentinel", Kind: session.KindDirect, Channel: "client",
-		Status: session.StatusRunning,
+	sm.Create("client:sentinel", domainbind.KindDirect)
+	if err := sm.Set(&domainbind.Session{
+		Key: "client:sentinel", Kind: domainbind.KindDirect, Channel: "client",
+		Status: domainbind.StatusRunning,
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -7,10 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
-	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // errNativeMailUnconfigured surfaces when the on-box mail archive isn't configured.
@@ -20,8 +19,8 @@ import (
 // dropped the per-mail AI analyses keyed by archive Message-IDs).
 var errNativeMailUnconfigured = errors.New("native mail archive not configured (set DENEB_ARCHIVE_IMAP_ADDR/USER/PASS)")
 
-func (s *Server) miniappMailClientFactory(denebDir string) func() (handlermail.GmailClient, error) {
-	return func() (handlermail.GmailClient, error) {
+func (s *Server) miniappMailClientFactory(denebDir string) func() (handlerwire.MailGmailClient, error) {
+	return func() (handlerwire.MailGmailClient, error) {
 		client, err := s.newMiniappMailClient(denebDir)
 		if err != nil {
 			return nil, err
@@ -30,7 +29,7 @@ func (s *Server) miniappMailClientFactory(denebDir string) func() (handlermail.G
 	}
 }
 
-func (s *Server) newMiniappMailClient(denebDir string) (handlermail.GmailClient, error) {
+func (s *Server) newMiniappMailClient(denebDir string) (handlerwire.MailGmailClient, error) {
 	// Native-archive-only — no Gmail fallback (see errNativeMailUnconfigured).
 	if repo := s.newArchiveMailRepository(denebDir, nil); repo != nil {
 		return repo, nil
@@ -38,14 +37,14 @@ func (s *Server) newMiniappMailClient(denebDir string) (handlermail.GmailClient,
 	return nil, errNativeMailUnconfigured
 }
 
-func (s *Server) newMiniappMailAttachmentClient() (gatewayhttp.MailAttachmentClient, error) {
+func (s *Server) newMiniappMailAttachmentClient() (svcbind.MailAttachmentClient, error) {
 	if repo := s.newArchiveMailRepository(s.denebDir, nil); repo != nil {
 		return repo, nil
 	}
 	return nil, errNativeMailUnconfigured
 }
 
-func (s *Server) newArchiveMailRepository(denebDir string, fallback mailarchive.FallbackClient) *mailarchive.Repository {
+func (s *Server) newArchiveMailRepository(denebDir string, fallback platbind.FallbackClient) *platbind.Repository {
 	cfg := miniappArchiveMailConfig()
 	if strings.TrimSpace(cfg.Addr) == "" ||
 		strings.TrimSpace(cfg.User) == "" ||
@@ -53,16 +52,16 @@ func (s *Server) newArchiveMailRepository(denebDir string, fallback mailarchive.
 		return nil
 	}
 	if denebDir == "" {
-		denebDir = configresolve.DenebDir()
+		denebDir = svcbind.DenebDir()
 	}
-	return mailarchive.NewRepository(cfg, mailarchive.RepositoryOptions{
+	return platbind.NewRepository(cfg, platbind.RepositoryOptions{
 		StatePath: filepath.Join(denebDir, "mail", "native_state.json"),
 		Fallback:  fallback,
 	})
 }
 
-func miniappArchiveMailConfig() mailarchive.Config {
-	return mailarchive.Config{
+func miniappArchiveMailConfig() platbind.MailArchiveConfig {
+	return platbind.MailArchiveConfig{
 		Addr:      archiveIMAPAddr(),
 		User:      strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER")),
 		Pass:      strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_PASS")),
@@ -72,5 +71,5 @@ func miniappArchiveMailConfig() mailarchive.Config {
 }
 
 func archiveIMAPMailboxes() []string {
-	return mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
+	return platbind.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES"))
 }

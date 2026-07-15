@@ -43,6 +43,20 @@ function/interface, per-turn context와 작은 동시성 안전 상태만 제공
   전달받은 slice를 제자리 수정할 수 있으므로 persisted message backing
   slice나 원본 tool result에 직접 호출하지 않는다.
 
+## Local change scope
+
+toolport는 chat subtree의 leaf 계약이다. 실행·등록·도메인 bag은 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `internal/pipeline/chat/tooldeps`(의존 bag),
+  `internal/pipeline/chat/tools`·`internal/pipeline/chat/toolreg`(소비자).
+  `ToolFunc`/`ToolDef`/`TurnContext`/`RunCache` 계약이 바뀌면
+  `context_test.go`와 `run_cache_test.go`에서 `WithTurnContext`·`BuildCacheKey`를
+  먼저 본다.
+- 건드리지 말 것: `internal/pipeline/chat` root turn 오케스트레이션,
+  `internal/runtime/server` registry, domain/platform import 추가.
+  `toolport`에서 `tools`·`toolreg`·chat root를 import하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/pipeline/chat/toolport`
+
 ## 집중 검증
 
 context 취소, concurrent wait/store, cache invalidation, defensive copy와

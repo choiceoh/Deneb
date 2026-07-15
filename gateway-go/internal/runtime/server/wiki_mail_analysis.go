@@ -15,12 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
-	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -32,7 +29,7 @@ const wikiProjectCategory = "프로젝트"
 // project's 메일분석/ slot when the analyzer linked one, else the category-level
 // unlinked bucket (see wiki/project_layout.go). One page per message.
 func mailAnalysisWikiPath(msgID string, relatedProjects []string) string {
-	return wiki.MailAnalysisPagePath(mailProjectName(relatedProjects), msgID)
+	return domainbind.MailAnalysisPagePath(mailProjectName(relatedProjects), msgID)
 }
 
 // mailProjectName picks the owning project from the analyzer's related-project
@@ -43,20 +40,20 @@ func mailAnalysisWikiPath(msgID string, relatedProjects []string) string {
 func mailProjectName(relatedProjects []string) string {
 	for _, r := range relatedProjects {
 		r = strings.TrimSpace(r)
-		if !wiki.IsProjectRepPage(r) {
+		if !domainbind.IsProjectRepPage(r) {
 			continue
 		}
-		if name, ok := wiki.ProjectNameOf(r); ok {
+		if name, ok := domainbind.ProjectNameOf(r); ok {
 			return name
 		}
 	}
 	return ""
 }
 
-// buildMailAnalysisPage renders a wiki.Page from a fresh analysis. The
+// buildMailAnalysisPage renders a domainbind.Page from a fresh analysis. The
 // body is a short metadata blockquote followed by the LLM markdown so
 // memory.search hits show the From/Date/ID in the preview.
-func buildMailAnalysisPage(in handlermail.WikiAnalysisInput) *wiki.Page {
+func buildMailAnalysisPage(in handlerwire.MailWikiAnalysisInput) *domainbind.Page {
 	title := strings.TrimSpace(in.Subject)
 	if title == "" {
 		title = "(제목 없음) " + in.MsgID
@@ -80,8 +77,8 @@ func buildMailAnalysisPage(in handlermail.WikiAnalysisInput) *wiki.Page {
 	body.WriteString("`\n\n")
 	body.WriteString(in.Analysis)
 
-	return &wiki.Page{
-		Meta: wiki.Frontmatter{
+	return &domainbind.Page{
+		Meta: domainbind.Frontmatter{
 			Title:      title,
 			Summary:    senderShortLabel(in.From) + " 메일 분석",
 			Category:   wikiProjectCategory, // 프로젝트 (raw-data sub-folder; bucket = path dir)
@@ -129,8 +126,8 @@ func senderShortLabel(from string) string {
 // analysis. Returns nil when the wiki store is unavailable. Shared by the
 // autonomous poller and the Mini App's manual analyze path so both cite
 // projects from the same source.
-func (s *Server) projectCandidatesFn() func() []mailanalysis.ProjectCandidate {
-	return func() []mailanalysis.ProjectCandidate {
+func (s *Server) projectCandidatesFn() func() []platbind.ProjectCandidate {
+	return func() []platbind.ProjectCandidate {
 		store := s.wikiStore
 		if store == nil {
 			return nil
@@ -139,9 +136,9 @@ func (s *Server) projectCandidatesFn() func() []mailanalysis.ProjectCandidate {
 		// not cite an auto-generated mail dump, deal ledger page, or sub-page as a
 		// "related project". KnownProjects owns that layout rule.
 		refs := store.KnownProjects()
-		cands := make([]mailanalysis.ProjectCandidate, 0, len(refs))
+		cands := make([]platbind.ProjectCandidate, 0, len(refs))
 		for _, r := range refs {
-			cands = append(cands, mailanalysis.ProjectCandidate{
+			cands = append(cands, platbind.ProjectCandidate{
 				Path:    r.Path,
 				Title:   r.Name,
 				Summary: r.Summary,
@@ -157,15 +154,15 @@ func (s *Server) projectCandidatesFn() func() []mailanalysis.ProjectCandidate {
 // mirroring what the manual analyze handler does on a fresh run. This is
 // what lets a polled email show up already-analyzed in the Mini App with no
 // manual tap.
-func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.AnalysisResult) error {
-	cacheStore := handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
-	return func(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) error {
+func (s *Server) makeMailAnalysisSink() func(*platbind.MessageDetail, platbind.AnalysisResult) error {
+	cacheStore := handlerwire.MailNewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis"))
+	workStore := platbind.NewMailWork(filepath.Join(s.denebDir, "mail_work_state.json"))
+	return func(msg *platbind.MessageDetail, res platbind.AnalysisResult) error {
 		if msg == nil {
 			return nil
 		}
 		var errs []error
-		if err := cacheStore.SaveAnalysis(handlermail.CachedAnalysis{
+		if err := cacheStore.SaveAnalysis(handlerwire.MailCachedAnalysis{
 			MsgID:           msg.ID,
 			Subject:         msg.Subject,
 			From:            msg.From,
@@ -179,7 +176,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 			errs = append(errs, err)
 		}
 		if s.wikiStore != nil {
-			page := buildMailAnalysisPage(handlermail.WikiAnalysisInput{
+			page := buildMailAnalysisPage(handlerwire.MailWikiAnalysisInput{
 				MsgID:           msg.ID,
 				Subject:         msg.Subject,
 				From:            msg.From,
@@ -210,8 +207,8 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 		// proposals the operator accepts from the calendar bell. See
 		// mail_calendar.go. No push — bell badge only.
 		calendarCount := s.autoProposeCalendarFromMail(msg, res.ActionItems, res.Deal, res.Importance)
-		if _, err := workStore.MarkAnalysisDone(mailwork.AnalysisInput{
-			MessageInput: mailwork.MessageInput{
+		if _, err := workStore.MarkAnalysisDone(platbind.AnalysisInput{
+			MessageInput: platbind.MessageInput{
 				ID:              msg.ID,
 				ThreadID:        msg.ThreadID,
 				From:            msg.From,
@@ -233,7 +230,7 @@ func (s *Server) makeMailAnalysisSink() func(*gmail.MessageDetail, mailanalysis.
 }
 
 func (s *Server) makeMailFeedDeliverySink() func([]string) {
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
+	workStore := platbind.NewMailWork(filepath.Join(s.denebDir, "mail_work_state.json"))
 	return func(ids []string) {
 		for _, id := range ids {
 			id = strings.TrimSpace(id)
@@ -247,13 +244,13 @@ func (s *Server) makeMailFeedDeliverySink() func([]string) {
 	}
 }
 
-func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error) {
-	workStore := mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json"))
-	return func(msg *gmail.MessageDetail, err error) {
+func (s *Server) makeMailAnalysisFailureSink() func(*platbind.MessageDetail, error) {
+	workStore := platbind.NewMailWork(filepath.Join(s.denebDir, "mail_work_state.json"))
+	return func(msg *platbind.MessageDetail, err error) {
 		if msg == nil || strings.TrimSpace(msg.ID) == "" {
 			return
 		}
-		if _, werr := workStore.MarkAnalysisFailed(mailwork.MessageInput{
+		if _, werr := workStore.MarkAnalysisFailed(platbind.MessageInput{
 			ID:              msg.ID,
 			ThreadID:        msg.ThreadID,
 			From:            msg.From,
@@ -270,12 +267,12 @@ func (s *Server) makeMailAnalysisFailureSink() func(*gmail.MessageDetail, error)
 // fileDealFromMail files a structured business-document extraction onto its
 // counterparty's 거래 wiki page. Silent and best-effort: no push, deduped by
 // the mail id, failures logged only. nil deal (non-deal mail) is a no-op.
-func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *mailanalysis.DealInfo, relatedProjects []string) {
+func (s *Server) fileDealFromMail(msg *platbind.MessageDetail, deal *platbind.DealInfo, relatedProjects []string) {
 	if deal == nil || msg == nil || s.wikiStore == nil {
 		return
 	}
 	now := time.Now()
-	input := wiki.DealPageInput{
+	input := domainbind.DealPageInput{
 		Counterparty:    deal.Counterparty,
 		DocType:         deal.DocType,
 		Amount:          deal.Amount,
@@ -326,12 +323,12 @@ func (s *Server) fileDealFromMail(msg *gmail.MessageDetail, deal *mailanalysis.D
 // pinDealEvidenceToNotebook auto-pins a deal email's extraction onto its deal
 // notebook. Silent, best-effort, deduped by mail id (PinUnique): re-analysis of
 // the same email never double-pins. Mirrors fileDealFromMail's silent behavior.
-func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *mailanalysis.DealInfo, dealRef string, relatedProjects []string) {
+func (s *Server) pinDealEvidenceToNotebook(msg *platbind.MessageDetail, deal *platbind.DealInfo, dealRef string, relatedProjects []string) {
 	if s.notebookStore == nil || dealRef == "" {
 		return
 	}
-	added, err := s.notebookStore.PinUnique(dealRef, deal.Counterparty, notebook.Source{
-		Kind:  notebook.KindNote,
+	added, err := s.notebookStore.PinUnique(dealRef, deal.Counterparty, domainbind.Source{
+		Kind:  domainbind.KindNote,
 		Ref:   "mail:" + msg.ID, // provenance + dedup key
 		Title: dealEvidenceTitle(deal),
 		Text:  dealEvidenceText(deal, msg),
@@ -356,7 +353,7 @@ func (s *Server) pinDealEvidenceToNotebook(msg *gmail.MessageDetail, deal *maila
 }
 
 // directProjectPages filters a related-project list to project 대표페이지 paths
-// (new in-folder or legacy flat form — wiki.IsProjectRepPage owns the rule),
+// (new in-folder or legacy flat form — domainbind.IsProjectRepPage owns the rule),
 // dropping raw-data pages (메일분석/, 거래/) and any non-프로젝트 entry, deduped in
 // order. This is the reliable project signal the analyzer computed; the same
 // filter gates both the 현재 상태 status update and notebook 각인 so they link to
@@ -368,7 +365,7 @@ func directProjectPages(related []string) []string {
 		// Normalize backslashes universally (filepath.ToSlash is a no-op off
 		// Windows) so separator variants dedupe and match as one path.
 		r = strings.ReplaceAll(strings.TrimSpace(r), "\\", "/")
-		if !wiki.IsProjectRepPage(r) {
+		if !domainbind.IsProjectRepPage(r) {
 			continue
 		}
 		if seen[r] {
@@ -383,14 +380,14 @@ func directProjectPages(related []string) []string {
 // dealTermsFromFacts maps the pipeline's quote-verified extraction onto the
 // wiki ledger's term type (domain must not import platform, so the copy lives
 // here). nil in, or nothing surviving, → nil out.
-func dealTermsFromFacts(f *mailanalysis.DealFacts) *wiki.DealTerms {
+func dealTermsFromFacts(f *platbind.DealFacts) *domainbind.DealTerms {
 	if f == nil {
 		return nil
 	}
-	q := func(v mailanalysis.QuotedFact) wiki.QuotedTerm {
-		return wiki.QuotedTerm{Value: v.Value, Quote: v.Quote}
+	q := func(v platbind.QuotedFact) domainbind.QuotedTerm {
+		return domainbind.QuotedTerm{Value: v.Value, Quote: v.Quote}
 	}
-	t := &wiki.DealTerms{
+	t := &domainbind.DealTerms{
 		Capacity:     q(f.CapacityMW),
 		UnitPrice:    q(f.UnitPrice),
 		Payment:      q(f.PaymentTerms),
@@ -404,7 +401,7 @@ func dealTermsFromFacts(f *mailanalysis.DealFacts) *wiki.DealTerms {
 }
 
 // dealEvidenceTitle is the human label for a pinned deal source ("견적서 · 탑솔라").
-func dealEvidenceTitle(deal *mailanalysis.DealInfo) string {
+func dealEvidenceTitle(deal *platbind.DealInfo) string {
 	parts := make([]string, 0, 2)
 	if t := strings.TrimSpace(deal.DocType); t != "" {
 		parts = append(parts, t)
@@ -420,7 +417,7 @@ func dealEvidenceTitle(deal *mailanalysis.DealInfo) string {
 
 // dealEvidenceText renders the extracted deal fields as the pinned note body —
 // the citable evidence a brief grounds on.
-func dealEvidenceText(deal *mailanalysis.DealInfo, msg *gmail.MessageDetail) string {
+func dealEvidenceText(deal *platbind.DealInfo, msg *platbind.MessageDetail) string {
 	var b strings.Builder
 	writeField := func(label, val string) {
 		if v := strings.TrimSpace(val); v != "" {
@@ -455,7 +452,7 @@ func dealEvidenceText(deal *mailanalysis.DealInfo, msg *gmail.MessageDetail) str
 // "/" == 1) are touched — the raw-data sub-folders (mail-analyses/, 거래/) are
 // skipped, mirroring projectCandidatesFn. Idempotent by mail id; best-effort
 // (a failure logs, never fails the analysis).
-func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) {
+func (s *Server) appendMailStatusToProjects(msg *platbind.MessageDetail, res platbind.AnalysisResult) {
 	if s.wikiStore == nil || msg == nil {
 		return
 	}
@@ -475,7 +472,7 @@ func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res mailan
 // mailStatusLine renders the one-line status entry for a project from an analyzed
 // mail: the deal title when it's a recognized business document ("견적서 · 탑솔라
 // 수신"), else the sender + subject. Empty when there's nothing to say.
-func mailStatusLine(msg *gmail.MessageDetail, res mailanalysis.AnalysisResult) string {
+func mailStatusLine(msg *platbind.MessageDetail, res platbind.AnalysisResult) string {
 	if d := res.Deal; d != nil {
 		if t := strings.TrimSpace(dealEvidenceTitle(d)); t != "" && t != "거래 문서" {
 			return t + " 수신"

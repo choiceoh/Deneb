@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoadContextFiles(t *testing.T) {
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	dir := t.TempDir()
 
 	agentsMd := "# Project Agent\nThis agent helps with coding."
@@ -40,7 +40,7 @@ func TestLoadContextFiles(t *testing.T) {
 // the agent relies on for "기억력"-style requests; if the loader stops
 // picking it up the UX degrades silently because everything still builds.
 func TestLoadContextFiles_IncludesMemoryMd(t *testing.T) {
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	dir := t.TempDir()
 	memContent := "# Memory\n\n- prefers korean\n- works on deneb gateway"
 	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(memContent), 0o644); err != nil {
@@ -95,7 +95,7 @@ func TestTruncateContent_MemoryBudget(t *testing.T) {
 // TestLoadContextFiles_MemoryTruncationVisible verifies an oversized MEMORY.md
 // is loaded with the larger budget and carries a visible omission marker.
 func TestLoadContextFiles_MemoryTruncationVisible(t *testing.T) {
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	dir := t.TempDir()
 	big := strings.Repeat("기억 항목입니다. ", 4_000) // ~88KB, over the 32K budget
 	if err := os.WriteFile(filepath.Join(dir, "MEMORY.md"), []byte(big), 0o644); err != nil {
@@ -204,7 +204,7 @@ func TestFormatContextFilesForPrompt(t *testing.T) {
 		{Path: "SOUL.md", Content: "soul content"},
 	}
 
-	result := FormatContextFilesForPrompt(files)
+	result := formatContextFilesForPrompt(files)
 	if !strings.Contains(result, "# Project Context") {
 		t.Error("expected Project Context heading")
 	}
@@ -223,7 +223,7 @@ func TestFormatContextFilesForPrompt(t *testing.T) {
 }
 
 func TestSessionSnapshotPreservesFrozenContentUntilCleared(t *testing.T) {
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	dir := t.TempDir()
 
 	os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("fact-v1"), 0o644)
@@ -244,7 +244,7 @@ func TestSessionSnapshotPreservesFrozenContentUntilCleared(t *testing.T) {
 	}
 
 	// Different session key — gets fresh content.
-	ResetContextFileCacheForTest() // clear mtime cache to force re-read
+	resetContextFileCacheForTest() // clear mtime cache to force re-read
 	files = LoadContextFiles(dir, WithSessionSnapshot("s2"))
 	if len(files) != 1 || files[0].Content != "fact-v2" {
 		t.Fatalf("got %q, want fresh fact-v2 for new session", files[0].Content)
@@ -252,7 +252,7 @@ func TestSessionSnapshotPreservesFrozenContentUntilCleared(t *testing.T) {
 
 	// Clear snapshot — next call for s1 loads fresh.
 	ClearSessionSnapshot("s1")
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	files = LoadContextFiles(dir, WithSessionSnapshot("s1"))
 	if len(files) != 1 || files[0].Content != "fact-v2" {
 		t.Fatalf("got %q, want fresh fact-v2 after clear", files[0].Content)

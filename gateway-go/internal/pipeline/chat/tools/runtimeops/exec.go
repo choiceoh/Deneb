@@ -83,15 +83,15 @@ func ToolExec(procMgr *process.Manager, defaultDir string) toolport.ToolFunc {
 		// `git reset --hard` — these have no plausible automated use; the operator
 		// can still run them directly on the host. Checked before workdir/exec so it
 		// covers both the process-manager and fallback execution paths.
-		if blocked := CheckCatastrophicCommand(p.Command); len(blocked) > 0 {
-			return FormatCatastrophicRefusal(blocked), nil
+		if blocked := checkCatastrophicCommand(p.Command); len(blocked) > 0 {
+			return formatCatastrophicRefusal(blocked), nil
 		}
 
 		// Safety check: warn about destructive commands.
 		// The warning is prepended to the output so the LLM sees it.
 		var destructiveWarning string
-		if checks := CheckDestructiveCommand(p.Command); len(checks) > 0 {
-			destructiveWarning = FormatDestructiveWarnings(checks)
+		if checks := checkDestructiveCommand(p.Command); len(checks) > 0 {
+			destructiveWarning = formatDestructiveWarnings(checks)
 		}
 
 		workDir := p.Workdir
@@ -121,7 +121,7 @@ func ToolExec(procMgr *process.Manager, defaultDir string) toolport.ToolFunc {
 // candidates (a misparsed sed script) harmlessly drop out, and the command
 // itself is never blocked or modified.
 func snapshotInPlaceTargets(ctx context.Context, command, workDir string) {
-	for _, t := range InPlaceFileTargets(command) {
+	for _, t := range inPlaceFileTargets(command) {
 		abs := t
 		if !filepath.IsAbs(abs) {
 			abs = filepath.Join(workDir, t)
@@ -172,7 +172,7 @@ func execViaManager(ctx context.Context, procMgr *process.Manager, p execParams,
 	// Annotate non-error exit codes with command-specific context.
 	// e.g. grep exit 1 = "no matches found", not an error.
 	if result.ExitCode != 0 {
-		if isErr, hint := InterpretExitCode(p.Command, result.ExitCode); !isErr && hint != "" {
+		if isErr, hint := interpretExitCode(p.Command, result.ExitCode); !isErr && hint != "" {
 			out += " " + hint
 		}
 	}
@@ -227,7 +227,7 @@ func execFallback(ctx context.Context, p execParams, workDir string, timeoutMs i
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if isErr, hint := InterpretExitCode(p.Command, exitErr.ExitCode()); !isErr && hint != "" {
+			if isErr, hint := interpretExitCode(p.Command, exitErr.ExitCode()); !isErr && hint != "" {
 				outStr += " " + hint
 			}
 		}

@@ -3,14 +3,13 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -223,7 +222,7 @@ func (t *SkillWorkoutTask) recordWorkoutFailure(
 	}
 	errMsg := fmt.Sprintf("workout replay failed %d/%d assertions on case %s: %s",
 		score.Total-score.Passed, score.Total, validationCaseLabel(testCase), formatValidationFailures(score.Failures))
-	trimmedError := genesiscommon.TruncateRunes(errMsg, 500)
+	trimmedError := genbind.TruncateRunes(errMsg, 500)
 	if err := t.Tracker.RecordUsage(UsageRecord{
 		SkillName: name, SessionKey: workoutSessionPrefix + strconv.FormatInt(cycle, 10),
 		Model: executorModel, Success: false, ErrorMsg: trimmedError,

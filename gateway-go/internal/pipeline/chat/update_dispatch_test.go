@@ -213,18 +213,18 @@ func TestParseSlashCommand_Update(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := ParseSlashCommand(tt.input)
+			got := parseSlashCommand(tt.input)
 			if got == nil {
-				t.Fatalf("ParseSlashCommand(%q) = nil, want command", tt.input)
+				t.Fatalf("parseSlashCommand(%q) = nil, want command", tt.input)
 			}
 			if got.Command != "update" {
-				t.Errorf("ParseSlashCommand(%q).Command = %q, want %q", tt.input, got.Command, "update")
+				t.Errorf("parseSlashCommand(%q).Command = %q, want %q", tt.input, got.Command, "update")
 			}
 			if !got.Handled {
-				t.Errorf("ParseSlashCommand(%q).Handled = false, want true", tt.input)
+				t.Errorf("parseSlashCommand(%q).Handled = false, want true", tt.input)
 			}
 			if got.Args != tt.wantArg {
-				t.Errorf("ParseSlashCommand(%q).Args = %q, want %q", tt.input, got.Args, tt.wantArg)
+				t.Errorf("parseSlashCommand(%q).Args = %q, want %q", tt.input, got.Args, tt.wantArg)
 			}
 		})
 	}

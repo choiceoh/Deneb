@@ -38,21 +38,21 @@ func TestParseSlashCommand(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := ParseSlashCommand(tt.input)
+			got := parseSlashCommand(tt.input)
 			if tt.wantNil {
 				if got != nil {
-					t.Errorf("ParseSlashCommand(%q) = %+v, want nil", tt.input, got)
+					t.Errorf("parseSlashCommand(%q) = %+v, want nil", tt.input, got)
 				}
 				return
 			}
 			if got == nil {
-				t.Fatalf("ParseSlashCommand(%q) = nil, want command", tt.input)
+				t.Fatalf("parseSlashCommand(%q) = nil, want command", tt.input)
 			}
 			if got.Command != tt.wantCmd {
-				t.Errorf("ParseSlashCommand(%q).Command = %q, want %q", tt.input, got.Command, tt.wantCmd)
+				t.Errorf("parseSlashCommand(%q).Command = %q, want %q", tt.input, got.Command, tt.wantCmd)
 			}
 			if got.Args != tt.wantArg {
-				t.Errorf("ParseSlashCommand(%q).Args = %q, want %q", tt.input, got.Args, tt.wantArg)
+				t.Errorf("parseSlashCommand(%q).Args = %q, want %q", tt.input, got.Args, tt.wantArg)
 			}
 		})
 	}

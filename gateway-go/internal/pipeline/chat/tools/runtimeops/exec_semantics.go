@@ -54,11 +54,11 @@ var commandSemantics = map[string]commandSemantic{
 	},
 }
 
-// InterpretExitCode checks whether a non-zero exit code is actually an error
+// interpretExitCode checks whether a non-zero exit code is actually an error
 // for the given command string. Returns:
 //   - isError: true if the exit code represents a genuine error
 //   - hint: optional explanation for non-error exits (empty if isError)
-func InterpretExitCode(command string, exitCode int) (isError bool, hint string) {
+func interpretExitCode(command string, exitCode int) (isError bool, hint string) {
 	if exitCode == 0 {
 		return false, ""
 	}

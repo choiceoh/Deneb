@@ -25,12 +25,12 @@ package server
 import (
 	"net/http"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // withCORS wraps the gateway mux so browser clients can reach the miniapp.* HTTP
 // surface. It is a no-op for requests without an Origin header (native clients),
 // so non-browser callers are entirely unaffected.
 func withCORS(next http.Handler) http.Handler {
-	return gatewayhttp.WithCORS(next)
+	return svcbind.WithCORS(next)
 }

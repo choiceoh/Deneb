@@ -7,6 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact/watchtool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
@@ -425,7 +426,7 @@ func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string) {
 			"Use for analyzing video structure/hooks, diagnosing bugs from screen recordings, or summarizing long videos. " +
 			"Supports start/end to focus on a time window.",
 		InputSchema: schema.WatchToolSchema(),
-		Fn:          artifact.ToolWatch(workspaceDir),
+		Fn:          watchtool.ToolWatch(workspaceDir, artifact.ResolvePath, artifact.CheckProtectedPath),
 		Deferred:    true,
 	})
 }

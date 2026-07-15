@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -32,7 +32,7 @@ func (s *Server) initCheckpointLifecycle(root string) {
 		return
 	}
 	logger := s.logger
-	s.checkpointLifecycleUnsub = s.sessions.EventBusRef().Subscribe(func(e session.Event) {
+	s.checkpointLifecycleUnsub = s.sessions.EventBusRef().Subscribe(func(e domainbind.Event) {
 		if !shouldReleaseCheckpoints(e) {
 			return
 		}
@@ -64,17 +64,17 @@ func (s *Server) initCheckpointLifecycle(root string) {
 //
 // EventCreated and non-terminal status transitions are no-ops — we only
 // release on end-of-life events.
-func shouldReleaseCheckpoints(e session.Event) bool {
+func shouldReleaseCheckpoints(e domainbind.Event) bool {
 	switch e.Kind {
-	case session.EventDeleted:
+	case domainbind.EventDeleted:
 		return true
-	case session.EventStatusChanged:
+	case domainbind.EventStatusChanged:
 		// /reset → NewStatus == "".
 		if e.NewStatus == "" {
 			return true
 		}
-		return session.IsTerminal(e.NewStatus)
-	case session.EventCreated:
+		return domainbind.IsTerminal(e.NewStatus)
+	case domainbind.EventCreated:
 		return false
 	}
 	return false

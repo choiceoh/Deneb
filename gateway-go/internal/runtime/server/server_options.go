@@ -3,7 +3,7 @@ package server
 import (
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // Option configures the gateway server.
@@ -24,7 +24,7 @@ func WithVersion(version string) Option {
 }
 
 // WithConfig sets the resolved runtime configuration.
-func WithConfig(cfg *config.GatewayRuntimeConfig) Option {
+func WithConfig(cfg *infrabind.GatewayRuntimeConfig) Option {
 	return func(s *Server) {
 		s.runtimeCfg = cfg
 	}

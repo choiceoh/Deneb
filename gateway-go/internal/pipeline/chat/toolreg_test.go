@@ -41,7 +41,7 @@ func TestToolRegistryAutoSpilloverWritesOverThresholdOutputToDisk(t *testing.T) 
 	store := agent.NewSpilloverStore(t.TempDir())
 
 	reg := NewToolRegistry()
-	reg.SetSpilloverStore(store)
+	reg.setSpilloverStore(store)
 
 	big := strings.Repeat("Z", agent.DefaultMaxOutput+4096)
 	reg.Register("big", func(_ context.Context, _ json.RawMessage) (string, error) {
@@ -75,7 +75,7 @@ func TestToolRegistryAutoSpilloverPreservesOutputBelowThreshold(t *testing.T) {
 	store := agent.NewSpilloverStore(t.TempDir())
 
 	reg := NewToolRegistry()
-	reg.SetSpilloverStore(store)
+	reg.setSpilloverStore(store)
 
 	small := strings.Repeat("s", 256)
 	reg.Register("small", func(_ context.Context, _ json.RawMessage) (string, error) {

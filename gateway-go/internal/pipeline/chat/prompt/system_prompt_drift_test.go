@@ -174,7 +174,7 @@ func TestStaticCacheKeyTopicEmptyEqualsLegacy(t *testing.T) {
 // every turn a cache miss, and a leak into semi-static would collide with the
 // skills cache marker.
 func TestTopicKnowledgeRendersOnlyInStaticBlock(t *testing.T) {
-	ResetContextFileCacheForTest()
+	resetContextFileCacheForTest()
 	marker := "DENEB_TOPIC_CACHE_SENTINEL_ZZZ"
 	pathMarker := "/tmp/topics/coding.md"
 	params := SystemPromptParams{

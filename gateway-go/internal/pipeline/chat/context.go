@@ -38,7 +38,7 @@ type ContextConfig struct {
 	FreshTailCount     uint32 // messages protected from eviction
 }
 
-// DefaultContextConfig returns sensible defaults.
+// defaultContextConfig returns sensible defaults.
 //
 // DENEB_MEMORY_TOKEN_BUDGET overrides the total history+system token budget.
 // The 170K default was sized for large-window remote models; on the local
@@ -48,7 +48,7 @@ type ContextConfig struct {
 // smaller budget here and lets Polaris compaction + recall preflight carry
 // the long tail. An override that leaves no real history headroom above the
 // system-prompt budget is ignored (see minMemoryBudgetHeadroom).
-func DefaultContextConfig() ContextConfig {
+func defaultContextConfig() ContextConfig {
 	cfg := ContextConfig{
 		MemoryTokenBudget:  defaultMemoryTokenBudget,
 		SystemPromptBudget: defaultSystemPromptBudget,

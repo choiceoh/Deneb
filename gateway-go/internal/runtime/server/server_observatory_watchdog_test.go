@@ -4,17 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/observatory"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 )
 
 func TestWatchdogAlertsReturnsAlertsForStaleLoopsAndFailureSpikes(t *testing.T) {
-	rep := observatory.Report{
-		Liveness: []observatory.LoopStatus{
+	rep := aibind.Report{
+		Liveness: []aibind.LoopStatus{
 			{Name: "dreamer", AgeHours: 60, Fresh: false},    // stale → alert
 			{Name: "skill-review", AgeHours: 2, Fresh: true}, // fresh → none
 			{Name: "diary", Missing: true},                   // missing → none
 		},
-		Failures: []observatory.FailureCount{
+		Failures: []aibind.FailureCount{
 			{Pattern: "type-coercion drop", Count: 7}, // ≥5 → alert
 			{Pattern: "unknown tool", Count: 2},       // <5 → none
 		},
@@ -48,9 +48,9 @@ func TestWatchdogAlertsReturnsAlertsForStaleLoopsAndFailureSpikes(t *testing.T) 
 }
 
 func TestWatchdogAlertsReturnsEmptyForHealthySnapshot(t *testing.T) {
-	rep := observatory.Report{
-		Liveness: []observatory.LoopStatus{{Name: "dreamer", AgeHours: 2, Fresh: true}},
-		Failures: []observatory.FailureCount{{Pattern: "x", Count: 1}},
+	rep := aibind.Report{
+		Liveness: []aibind.LoopStatus{{Name: "dreamer", AgeHours: 2, Fresh: true}},
+		Failures: []aibind.FailureCount{{Pattern: "x", Count: 1}},
 	}
 	if a := watchdogAlerts(rep, observatoryFailAlertThreshold); len(a) != 0 {
 		t.Errorf("a healthy snapshot must yield no alerts, got %+v", a)

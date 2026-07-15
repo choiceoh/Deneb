@@ -3,23 +3,21 @@ package server
 import (
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calprop"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // autoProposeCalendarFromMail persists the conservative proposals derived by
 // mailflow. Individual failures are logged and do not abort mail analysis.
-func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []mailanalysis.ActionItem, deal *mailanalysis.DealInfo, importance string) int {
+func (s *Server) autoProposeCalendarFromMail(msg *platbind.MessageDetail, items []platbind.ActionItem, deal *platbind.DealInfo, importance string) int {
 	if msg == nil {
 		return 0
 	}
-	inputs := mailflow.CalendarProposalsFromMail(
+	inputs := svcbind.CalendarProposalsFromMail(
 		msg.ID,
 		msg.Subject,
 		msg.From,
-		mailflow.DocumentAttachmentNames(msg.Attachments),
+		svcbind.DocumentAttachmentNames(msg.Attachments),
 		items,
 		deal,
 		importance,
@@ -28,7 +26,7 @@ func (s *Server) autoProposeCalendarFromMail(msg *gmail.MessageDetail, items []m
 	if len(inputs) == 0 {
 		return 0
 	}
-	store, err := calprop.Default()
+	store, err := platbind.CalPropDefault()
 	if err != nil {
 		s.logger.Warn("mail→calendar: proposal store unavailable", "id", msg.ID, "error", err)
 		return len(inputs)

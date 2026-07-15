@@ -21,11 +21,11 @@ import (
 //	staticMu  (independent — never held together with ctxMu or sessMu)
 //
 // ctxMu → sessMu: LoadContextFiles (context_files.go) holds ctxMu via
-// LockCtx/UnlockCtx and calls SetSessionSnapshot (sessMu) to freeze the
+// lockCtx/unlockCtx and calls SetSessionSnapshot (sessMu) to freeze the
 // loaded files for the session. sessMu sections are leaf-level map accesses
 // that never acquire ctxMu. Reset takes each lock strictly sequentially.
-// ContextFiles/SetContextFiles assume the caller already holds ctxMu (see
-// LockCtx/UnlockCtx); they must not be called with sessMu held.
+// ContextFiles/setContextFiles assume the caller already holds ctxMu (see
+// lockCtx/unlockCtx); they must not be called with sessMu held.
 type PromptCache struct {
 	// --- Static prompt block (keyed on tool set + profile/topic/persona hashes) ---
 	// A bounded map, not a single slot: the 업무/코딩 profiles (and distinct
@@ -71,16 +71,16 @@ var Cache = &PromptCache{}
 // not worth it at this size.
 const staticCacheMaxEntries = 32
 
-// StaticPrompt returns the cached static prompt for the key.
-func (c *PromptCache) StaticPrompt(key string) (string, bool) {
+// staticPrompt returns the cached static prompt for the key.
+func (c *PromptCache) staticPrompt(key string) (string, bool) {
 	c.staticMu.RLock()
 	defer c.staticMu.RUnlock()
 	text, ok := c.staticCache[key]
 	return text, ok
 }
 
-// SetStaticPrompt stores the assembled static prompt block under its key.
-func (c *PromptCache) SetStaticPrompt(key, text string) {
+// setStaticPrompt stores the assembled static prompt block under its key.
+func (c *PromptCache) setStaticPrompt(key, text string) {
 	c.staticMu.Lock()
 	if c.staticCache == nil || len(c.staticCache) >= staticCacheMaxEntries {
 		c.staticCache = make(map[string]string, 4)
@@ -113,19 +113,19 @@ func (c *PromptCache) ContextFiles(workspace string) ([]ContextFile, bool) {
 	return c.ctxFiles, true
 }
 
-// SetContextFiles stores context files for the given workspace.
-func (c *PromptCache) SetContextFiles(workspace string, files []ContextFile, resolved map[string]time.Time) {
+// setContextFiles stores context files for the given workspace.
+func (c *PromptCache) setContextFiles(workspace string, files []ContextFile, resolved map[string]time.Time) {
 	c.ctxWorkspace = workspace
 	c.ctxFiles = files
 	c.ctxResolved = resolved
 	c.ctxCachedAt = time.Now()
 }
 
-// LockCtx acquires the context file mutex. Must be paired with UnlockCtx.
-func (c *PromptCache) LockCtx() { c.ctxMu.Lock() }
+// lockCtx acquires the context file mutex. Must be paired with unlockCtx.
+func (c *PromptCache) lockCtx() { c.ctxMu.Lock() }
 
-// UnlockCtx releases the context file mutex.
-func (c *PromptCache) UnlockCtx() { c.ctxMu.Unlock() }
+// unlockCtx releases the context file mutex.
+func (c *PromptCache) unlockCtx() { c.ctxMu.Unlock() }
 
 // --- Session snapshots ---
 
@@ -220,8 +220,8 @@ func (c *PromptCache) Hostname() string {
 	return c.hostname
 }
 
-// BuildRuntimeInfo creates RuntimeInfo from the current environment.
-func (c *PromptCache) BuildRuntimeInfo(model, defaultModel string) *RuntimeInfo {
+// buildRuntimeInfo creates RuntimeInfo from the current environment.
+func (c *PromptCache) buildRuntimeInfo(model, defaultModel string) *RuntimeInfo {
 	return &RuntimeInfo{
 		Host:         c.Hostname(),
 		OS:           "linux",

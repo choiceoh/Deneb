@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 )
 
 // TestDreamerLLMShape pins the request shaping that keeps the wiki dreamer
@@ -15,14 +15,14 @@ import (
 func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 	shape := func(lightweight string) (map[string]any, int) {
 		t.Helper()
-		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		reg := aibind.NewRegistryWithOptions(slog.Default(), aibind.RegistryOptions{
 			MainModel:        "zai/main-model",
 			LightweightModel: lightweight,
 			// Hermetic endpoints: registry construction probes vLLM-backed
 			// providers for /v1/models discovery — an unroutable loopback
 			// port fails instantly on any host, so the test neither dials a
 			// live dev vLLM nor waits on a discovery timeout.
-			Providers: map[string]modelrole.ProviderResolved{
+			Providers: map[string]aibind.ProviderResolved{
 				"vllm":     {BaseURL: "http://127.0.0.1:1/v1"},
 				"wormhole": {BaseURL: "http://127.0.0.1:1/v1"},
 			},
@@ -102,10 +102,10 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 		// endpoint by its provider's deneb.json entry (CapabilityForModel
 		// layering) — must budget like a builtin reasoning model.
 		yes := true
-		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		reg := aibind.NewRegistryWithOptions(slog.Default(), aibind.RegistryOptions{
 			MainModel:        "zai/main-model",
 			LightweightModel: "mycloud/mystery-reasoner",
-			Providers: map[string]modelrole.ProviderResolved{
+			Providers: map[string]aibind.ProviderResolved{
 				"mycloud": {BaseURL: "http://127.0.0.1:1/v1", Reasoning: &yes},
 			},
 		})
@@ -120,11 +120,11 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 
 	t.Run("routing.toggleKwarg override shapes a config-declared dual-mode model", func(t *testing.T) {
 		kw := "custom_thinking"
-		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
+		reg := aibind.NewRegistryWithOptions(slog.Default(), aibind.RegistryOptions{
 			MainModel:        "zai/main-model",
 			LightweightModel: "myvllm/custom-dual-mode",
-			Providers: map[string]modelrole.ProviderResolved{
-				"myvllm": {BaseURL: "http://127.0.0.1:1/v1", Routing: &modelrole.RoutingOverride{ToggleKwarg: &kw}},
+			Providers: map[string]aibind.ProviderResolved{
+				"myvllm": {BaseURL: "http://127.0.0.1:1/v1", Routing: &aibind.RoutingOverride{ToggleKwarg: &kw}},
 			},
 		})
 		extra, synthMax := dreamerLLMShape(reg)

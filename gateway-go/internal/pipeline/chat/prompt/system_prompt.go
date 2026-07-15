@@ -82,11 +82,11 @@ func buildPromptSections(params SystemPromptParams) (staticText, semiStaticText,
 	if params.Briefcase {
 		cacheKey += "|briefcase"
 	}
-	if cached, ok := Cache.StaticPrompt(cacheKey); ok {
+	if cached, ok := Cache.staticPrompt(cacheKey); ok {
 		staticText = cached
 	} else {
 		staticText = buildStaticPrompt(params, eagerSet, toolSet)
-		Cache.SetStaticPrompt(cacheKey, staticText)
+		Cache.setStaticPrompt(cacheKey, staticText)
 	}
 
 	semiStaticText = buildSemiStaticPrompt(params)
@@ -585,7 +585,7 @@ func writeDynamicContext(d *strings.Builder, params SystemPromptParams) {
 	// system block markers retain prefix-match identity across turns.
 	// Models that need the exact wall-clock time can call exec("date").
 	fmt.Fprintf(d, "%s (timezone: %s)\n", now.Format("Monday, January 2, 2006"), tz)
-	contextPrompt := FormatContextFilesForPrompt(params.ContextFiles)
+	contextPrompt := formatContextFilesForPrompt(params.ContextFiles)
 	if contextPrompt != "" {
 		d.WriteString(contextPrompt)
 	}
@@ -603,8 +603,8 @@ func writeDynamicContext(d *strings.Builder, params SystemPromptParams) {
 	}
 }
 
-// BuildSystemPrompt assembles the full system prompt as a single string.
-func BuildSystemPrompt(params SystemPromptParams) string {
+// buildSystemPrompt assembles the full system prompt as a single string.
+func buildSystemPrompt(params SystemPromptParams) string {
 	staticText, semiStaticText, dynamicText := buildPromptSections(params)
 	return staticText + semiStaticText + dynamicText
 }

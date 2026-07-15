@@ -2,13 +2,11 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"hash/fnv"
 	"sort"
 	"strings"
 	"time"
-
-	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
@@ -18,20 +16,20 @@ const (
 	selfCorrectionTypeReview    = "self_correction_review"
 	selfCorrectionTypeDispatch  = "self_correction_dispatch"
 
-	SelfCorrectionStatusProposed   = string(rsilifecycle.ReviewProposed)
-	SelfCorrectionStatusAccepted   = string(rsilifecycle.ReviewAccepted)
-	SelfCorrectionStatusRejected   = string(rsilifecycle.ReviewRejected)
-	SelfCorrectionStatusSuperseded = string(rsilifecycle.ReviewSuperseded)
-	SelfCorrectionStatusApplied    = string(rsilifecycle.ReviewApplied)
+	SelfCorrectionStatusProposed   = string(genbind.ReviewProposed)
+	SelfCorrectionStatusAccepted   = string(genbind.ReviewAccepted)
+	SelfCorrectionStatusRejected   = string(genbind.ReviewRejected)
+	SelfCorrectionStatusSuperseded = string(genbind.ReviewSuperseded)
+	SelfCorrectionStatusApplied    = string(genbind.ReviewApplied)
 
-	selfCorrectionDispatchStarted     = string(rsilifecycle.DeliveryStarted)
-	selfCorrectionDispatchPROpened    = string(rsilifecycle.DeliveryPROpened)
-	SelfCorrectionDispatchMerged      = string(rsilifecycle.DeliveryMerged)
-	selfCorrectionDispatchDeployed    = string(rsilifecycle.DeliveryDeployed)
-	selfCorrectionDispatchWatchPassed = string(rsilifecycle.DeliveryWatchPassed)
-	selfCorrectionDispatchDeclined    = string(rsilifecycle.DeliveryDeclined)
-	selfCorrectionDispatchFailed      = string(rsilifecycle.DeliveryFailed)
-	selfCorrectionDispatchRolledBack  = string(rsilifecycle.DeliveryRolledBack)
+	selfCorrectionDispatchStarted     = string(genbind.DeliveryStarted)
+	selfCorrectionDispatchPROpened    = string(genbind.DeliveryPROpened)
+	SelfCorrectionDispatchMerged      = string(genbind.DeliveryMerged)
+	selfCorrectionDispatchDeployed    = string(genbind.DeliveryDeployed)
+	selfCorrectionDispatchWatchPassed = string(genbind.DeliveryWatchPassed)
+	selfCorrectionDispatchDeclined    = string(genbind.DeliveryDeclined)
+	selfCorrectionDispatchFailed      = string(genbind.DeliveryFailed)
+	selfCorrectionDispatchRolledBack  = string(genbind.DeliveryRolledBack)
 )
 
 // SelfCorrectionCandidateRecord is an append-only proposal for a future coding
@@ -51,7 +49,7 @@ type SelfCorrectionCandidateRecord struct {
 	Reason      string   `json:"reason,omitempty"`
 	TargetFiles []string `json:"targetFiles,omitempty"`
 	// Surface is the declared editable-surface tier summarizing TargetFiles
-	// (editable_surfaces.go): auto-apply | propose-only. Empty on legacy rows
+	// (editable_genbind.go): auto-apply | propose-only. Empty on legacy rows
 	// and target-less candidates.
 	Surface        string `json:"surface,omitempty"`
 	ProposedChange string `json:"proposedChange,omitempty"`
@@ -101,7 +99,7 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 	// the loop): a forbidden target rejects the whole candidate at record time,
 	// and the summary tier travels with the record so reviewers see at a glance
 	// whether this could ever auto-apply or must land as a reviewed PR.
-	tier, forbidden := surfaces.ClassifyProposalSurfaces(record.TargetFiles)
+	tier, forbidden := genbind.ClassifyProposalSurfaces(record.TargetFiles)
 	if len(forbidden) > 0 {
 		return record, fmt.Errorf("genesis-tracker: self-correction targets a forbidden surface: %s", strings.Join(forbidden, ", "))
 	}
@@ -408,10 +406,10 @@ func applySelfCorrectionDispatch(base, rec SelfCorrectionCandidateRecord) SelfCo
 	if rec.OutcomeNote != "" && (!samePhase || base.OutcomeNote == "") {
 		base.OutcomeNote = rec.OutcomeNote
 	}
-	if derived := rsilifecycle.ReviewAfterDelivery(
-		rsilifecycle.ReviewState(base.Status),
-		rsilifecycle.DeliveryPhase(base.DispatchPhase),
-	); derived == rsilifecycle.ReviewApplied && base.Status != SelfCorrectionStatusApplied {
+	if derived := genbind.ReviewAfterDelivery(
+		genbind.ReviewState(base.Status),
+		genbind.DeliveryPhase(base.DispatchPhase),
+	); derived == genbind.ReviewApplied && base.Status != SelfCorrectionStatusApplied {
 		base.Status = SelfCorrectionStatusApplied
 		base.Reviewer = "deploy-watch"
 		if base.ReviewNote == "" {
@@ -472,20 +470,20 @@ func normalizedSelfCorrectionCandidate(rec SelfCorrectionCandidateRecord) SelfCo
 }
 
 func validSelfCorrectionStatusTransition(from, to string) bool {
-	return rsilifecycle.CanReviewTransition(
-		rsilifecycle.ReviewState(from),
-		rsilifecycle.ReviewState(to),
+	return genbind.CanReviewTransition(
+		genbind.ReviewState(from),
+		genbind.ReviewState(to),
 	)
 }
 
 func normalizeSelfCorrectionDispatchPhase(phase string) string {
-	return string(rsilifecycle.NormalizeDelivery(phase))
+	return string(genbind.NormalizeDelivery(phase))
 }
 
 func validSelfCorrectionDispatchTransition(from, to string) bool {
-	return rsilifecycle.CanDeliveryTransition(
-		rsilifecycle.DeliveryPhase(from),
-		rsilifecycle.DeliveryPhase(to),
+	return genbind.CanDeliveryTransition(
+		genbind.DeliveryPhase(from),
+		genbind.DeliveryPhase(to),
 	)
 }
 
@@ -493,7 +491,7 @@ func normalizeSelfCorrectionStatus(status string) string {
 	if strings.TrimSpace(status) == "" {
 		return ""
 	}
-	return string(rsilifecycle.NormalizeReview(status))
+	return string(genbind.NormalizeReview(status))
 }
 
 func normalizeSelfCorrectionScope(scope string) string {

@@ -177,7 +177,7 @@ func TestIntegration_SavesSimpleTextResponse(t *testing.T) {
 	// First message should be user. Transcript user messages carry a leading
 	// "[<RFC3339 ts>] " prefix (see executeAgentRun); strip it to compare
 	// against the raw input.
-	if msgs[0].Role != "user" || StripUserMessageTimestamp(msgs[0].TextContent()) != "hello" {
+	if msgs[0].Role != "user" || stripUserMessageTimestamp(msgs[0].TextContent()) != "hello" {
 		t.Errorf("msgs[0] = {%s, %q}, want {user, hello}", msgs[0].Role, msgs[0].TextContent())
 	}
 	// Last message should be assistant.
@@ -193,7 +193,7 @@ func TestIntegration_SavesSimpleTextResponse(t *testing.T) {
 	hasCompleted := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(SessionsChangedEvent)
+			p, ok := ev.Payload.(sessionsChangedEvent)
 			if ok {
 				if p.Status == "running" {
 					hasStarted = true
@@ -413,13 +413,13 @@ func TestIntegration_SavesMultipleMessagesToHistory(t *testing.T) {
 	}
 	// Transcript user messages carry a leading "[<RFC3339 ts>] " prefix
 	// (see executeAgentRun); strip when comparing to raw input.
-	if msgs[0].Role != "user" || StripUserMessageTimestamp(msgs[0].TextContent()) != "first message" {
+	if msgs[0].Role != "user" || stripUserMessageTimestamp(msgs[0].TextContent()) != "first message" {
 		t.Errorf("msgs[0] = {%s, %q}", msgs[0].Role, msgs[0].TextContent())
 	}
 	if msgs[1].Role != "assistant" || msgs[1].TextContent() != "First reply" {
 		t.Errorf("msgs[1] = {%s, %q}", msgs[1].Role, msgs[1].TextContent())
 	}
-	if msgs[2].Role != "user" || StripUserMessageTimestamp(msgs[2].TextContent()) != "second message" {
+	if msgs[2].Role != "user" || stripUserMessageTimestamp(msgs[2].TextContent()) != "second message" {
 		t.Errorf("msgs[2] = {%s, %q}", msgs[2].Role, msgs[2].TextContent())
 	}
 	if msgs[3].Role != "assistant" || msgs[3].TextContent() != "Second reply" {
@@ -443,7 +443,7 @@ func TestIntegration_SavesMultipleMessagesToHistory(t *testing.T) {
 }
 
 // TestIntegration_ReplyFunc tests that the assistant response is delivered
-// back to the originating channel via ReplyFunc.
+// back to the originating channel via replyFunc.
 func TestIntegration_EmitsReplyViaReplyFunc(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -460,7 +460,7 @@ func TestIntegration_EmitsReplyViaReplyFunc(t *testing.T) {
 	var repliedText string
 	var repliedDelivery *DeliveryContext
 
-	h.SetReplyFunc(func(_ context.Context, d *DeliveryContext, text string) error {
+	h.setReplyFunc(func(_ context.Context, d *DeliveryContext, text string) error {
 		repliedMu.Lock()
 		defer repliedMu.Unlock()
 		repliedText = text
@@ -599,7 +599,7 @@ func TestIntegration_LLMError(t *testing.T) {
 	hasError := false
 	for _, ev := range events {
 		if ev.Event == "sessions.changed" {
-			p, ok := ev.Payload.(SessionsChangedEvent)
+			p, ok := ev.Payload.(sessionsChangedEvent)
 			if ok && p.Status == "failed" {
 				hasError = true
 			}

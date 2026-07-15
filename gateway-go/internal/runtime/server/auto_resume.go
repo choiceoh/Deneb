@@ -36,12 +36,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // Hard-coded defaults. Keep these inside the file so the policy is explicit
@@ -78,12 +77,12 @@ const (
 
 // runMarkerStore returns the server's marker store, lazily constructing
 // it on first use. The store lives under <denebDir>/run_markers/.
-func (s *Server) runMarkerStore() *sessionstore.RunMarkerStore {
+func (s *Server) runMarkerStore() *svcbind.RunMarkerStore {
 	s.resumeMu.Lock()
 	defer s.resumeMu.Unlock()
 	if s.markerStore == nil {
 		base := filepath.Join(s.denebDir, "run_markers")
-		s.markerStore = sessionstore.NewRunMarkerStore(base)
+		s.markerStore = svcbind.NewRunMarkerStore(base)
 	}
 	return s.markerStore
 }
@@ -101,18 +100,18 @@ func (s *Server) initRunMarkerLifecycle() func() {
 	}
 	store := s.runMarkerStore()
 	logger := s.logger
-	return s.sessions.EventBusRef().Subscribe(func(e session.Event) {
+	return s.sessions.EventBusRef().Subscribe(func(e domainbind.Event) {
 		switch e.Kind {
-		case session.EventStatusChanged:
+		case domainbind.EventStatusChanged:
 			switch {
-			case e.NewStatus == session.StatusRunning:
+			case e.NewStatus == domainbind.StatusRunning:
 				// Guard: only persistent direct sessions get markers.
 				sess := s.sessions.Get(e.Key)
-				if sess == nil || sess.Kind != session.KindDirect {
+				if sess == nil || sess.Kind != domainbind.KindDirect {
 					return
 				}
 				now := time.Now().UnixMilli()
-				m := session.RunMarker{
+				m := domainbind.RunMarker{
 					SessionKey:     e.Key,
 					StartedAt:      now,
 					LastActivityAt: now,
@@ -122,18 +121,18 @@ func (s *Server) initRunMarkerLifecycle() func() {
 					logger.Warn("failed to write run marker",
 						"session", e.Key, "error", err)
 				}
-			case session.IsTerminal(e.NewStatus):
+			case domainbind.IsTerminal(e.NewStatus):
 				if err := store.Delete(e.Key); err != nil {
 					logger.Warn("failed to delete run marker",
 						"session", e.Key, "error", err)
 				}
 			}
-		case session.EventDeleted:
+		case domainbind.EventDeleted:
 			if err := store.Delete(e.Key); err != nil {
 				logger.Warn("failed to delete run marker on session delete",
 					"session", e.Key, "error", err)
 			}
-		case session.EventCreated:
+		case domainbind.EventCreated:
 			// Session creation emits no marker — markers track running
 			// state only, written on EventStatusChanged → running.
 		}
@@ -306,7 +305,7 @@ type autoResumeOptions struct {
 // autoResumeEnabled returns the opt-out flag from deneb.json. Default = true.
 // Missing config file or missing field = enabled. Any explicit false = disabled.
 func autoResumeEnabled() bool {
-	snap, err := config.LoadConfigFromDefaultPath()
+	snap, err := infrabind.LoadConfigFromDefaultPath()
 	if err != nil || snap == nil || snap.Config.Session == nil {
 		return true
 	}
@@ -462,7 +461,7 @@ func (s *Server) dispatchResumeMessage(ctx context.Context, sessionKey, channel,
 	params := map[string]any{
 		"sessionKey":  sessionKey,
 		"message":     resumeSystemNote,
-		"clientRunId": shortid.New("resume"),
+		"clientRunId": infrabind.NewShortID("resume"),
 		"skipMerge":   true, // synthetic dispatch — do not collapse with real user input
 	}
 	req, err := protocol.NewRequestFrame(

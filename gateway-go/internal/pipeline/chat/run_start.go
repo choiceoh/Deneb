@@ -8,7 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -16,14 +16,14 @@ import (
 
 // startAsyncRun is the shared logic for Send/SessionsSend/SessionsSteer.
 // It validates the session, creates abort context, and spawns the agent goroutine.
-func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *protocol.ResponseFrame {
+func (h *Handler) startAsyncRun(reqID string, params runParams, isSteer bool) *protocol.ResponseFrame {
 	// Ensure session exists.
 	sess := h.sessions.Get(params.SessionKey)
 	if sess == nil {
 		sess = h.sessions.Create(params.SessionKey, session.KindDirect)
 	}
 
-	// Inherit model from session state when RunParams doesn't specify one.
+	// Inherit model from session state when runParams doesn't specify one.
 	// Skip for sub-agents — their default model is resolved separately in
 	// executeAgentRun (subagentDefaultModel takes priority over session.Model).
 	if params.Model == "" && sess.Model != "" && sess.SpawnedBy == "" {
@@ -38,7 +38,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 
 	// Create a background context (not tied to the RPC request lifetime).
 	// WithCancelCause lets callers attach a sentinel (e.g.
-	// ErrMergedIntoNewRun) so the run goroutine can choose targeted
+	// errMergedIntoNewRun) so the run goroutine can choose targeted
 	// cleanup based on why it was cancelled.
 	runCtx, runCancel := context.WithCancelCause(context.Background())
 
@@ -54,7 +54,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		runCtx = toolport.WithCheckpointer(runCtx, checkpoint.NewToolAdapter(cpm))
 	}
 
-	h.abort.Register(params.ClientRunID, &AbortEntry{
+	h.abort.Register(params.ClientRunID, &abortEntry{
 		SessionKey: params.SessionKey,
 		ClientRun:  params.ClientRunID,
 		CancelFn:   runCancel,
@@ -67,7 +67,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 		if isSteer {
 			reason = "steered"
 		}
-		broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
+		broadcastPayload(h.broadcast, "sessions.changed", sessionsChangedEvent{
 			SessionKey: params.SessionKey,
 			Reason:     reason,
 			Status:     "running",
@@ -107,7 +107,7 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 					Ts:    time.Now().UnixMilli(),
 				})
 				if h.broadcast != nil {
-					broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
+					broadcastPayload(h.broadcast, "sessions.changed", sessionsChangedEvent{
 						SessionKey: params.SessionKey,
 						Reason:     "panic",
 						Status:     "failed",
@@ -126,8 +126,8 @@ func (h *Handler) startAsyncRun(reqID string, params RunParams, isSteer bool) *p
 	return resp
 }
 
-// InterruptActiveRun cancels all active runs for a session key.
-func (h *Handler) InterruptActiveRun(sessionKey string) {
+// interruptActiveRun cancels all active runs for a session key.
+func (h *Handler) interruptActiveRun(sessionKey string) {
 	h.abort.InterruptSession(sessionKey)
 }
 
@@ -144,7 +144,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		providerRuntime:      h.providerRuntime,
 		broadcast:            h.broadcast,
 		jobTracker:           h.jobTracker,
-		channelUploadLimitFn: h.ChannelUploadLimit,
+		channelUploadLimitFn: h.channelUploadLimit,
 		providerConfigs:      h.ProviderConfigs(),
 		logger:               h.logger,
 		memory:               h.memory,
@@ -166,7 +166,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		briefcaseMode:        h.briefcaseMode,
 		auditSystemPrompt:    h.auditSystemPrompt,
 		drainPendingFn:       h.pending.Drain,
-		startRunFn: func(params RunParams) {
+		startRunFn: func(params runParams) {
 			h.startAsyncRun("pending-"+params.ClientRunID, params, false)
 		},
 		steerQueue: h.steer,
@@ -178,9 +178,9 @@ func (h *Handler) buildRunDeps() runDeps {
 
 		// chatport boundary: wire concrete autoreply implementations.
 		chatport: chatportAdapters{
-			NewTypingSignaler:     chatportwire.NewTypingSignaler,
-			SanitizeDraft:        chatportwire.SanitizeDraft,
-			ParseReplyDirectives: chatportwire.ParseReplyDirectives,
+			NewTypingSignaler:    leafbind.ChatportNewTypingSignaler,
+			SanitizeDraft:        leafbind.ChatportSanitizeDraft,
+			ParseReplyDirectives: leafbind.ChatportParseReplyDirectives,
 		},
 		reportCardHealth: h.reportCardHealth,
 	}

@@ -65,7 +65,7 @@ func routingProfileForRun(deps runDeps, providerID, model string) leafbind.Profi
 //     kwarg is the only effective off-switch (the reasoning_effort field is a
 //     no-op on deepseek-v4). The effort router builds its own disabled config
 //     with the kwarg already set; this covers the config-driven path.
-func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string) {
+func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params runParams, providerID, model string) {
 	if deps.briefcaseMode {
 		temperature, topP, zero := 0.0, 1.0, 0.0
 		cfg.Temperature = &temperature

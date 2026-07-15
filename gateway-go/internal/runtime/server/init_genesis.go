@@ -7,16 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
-	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // initGenesisServices creates the genesis service, tracker, and evolver.
@@ -24,7 +21,7 @@ import (
 // RPC methods can be registered in method_registry.go (Rule 1 compliance).
 //
 // Core construction (catalog/service/tracker/evolver/meta) lives in
-// skilllifecycle.BuildCore — the owning-module registrar port — so this
+// svcbind.BuildCore — the owning-module registrar port — so this
 // composition root does not import generation/review leaves.
 func (s *Server) initGenesisServices() {
 	if s.chatHandler == nil || s.modelRegistry == nil {
@@ -32,8 +29,8 @@ func (s *Server) initGenesisServices() {
 		return
 	}
 
-	lwClient := s.modelRegistry.Client(modelrole.RoleLightweight)
-	lwModel := s.modelRegistry.Model(modelrole.RoleLightweight)
+	lwClient := s.modelRegistry.Client(aibind.RoleLightweight)
+	lwModel := s.modelRegistry.Model(aibind.RoleLightweight)
 	if lwClient == nil || lwModel == "" {
 		s.logger.Debug("genesis: skipped (lightweight model not configured)")
 		return
@@ -44,22 +41,22 @@ func (s *Server) initGenesisServices() {
 		workspaceDir = s.toolDeps.WorkspaceDir
 	}
 	thinkingKwargs := s.genesisThinkingKwargs()
-	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
-	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
+	mainClient := s.modelRegistry.Client(aibind.RoleMain)
+	mainModel := s.modelRegistry.Model(aibind.RoleMain)
 
-	var evolverRole modelrole.Role
+	var evolverRole aibind.Role
 	var evolverModel string
-	bundle := skilllifecycle.BuildCore(skilllifecycle.CoreBuildInput{
+	bundle := svcbind.BuildCore(svcbind.CoreBuildInput{
 		Logger:                s.logger,
 		LWClient:              lwClient,
 		LWModel:               lwModel,
 		MainClient:            mainClient,
 		MainModel:             mainModel,
 		WorkspaceDir:          workspaceDir,
-		BundledSkillsDir:      chat.BundledSkillsDir(),
+		BundledSkillsDir:      pipebind.BundledSkillsDir(),
 		ThinkingKwargs:        thinkingKwargs,
 		LowConfidenceObserver: s.postLowConfidenceEvolveCard,
-		ConfigureEvolver: func(evolver *skilllifecycle.Evolver) (string, string) {
+		ConfigureEvolver: func(evolver *svcbind.Evolver) (string, string) {
 			evolverRole, evolverModel = s.configureGenesisEvolverModels(evolver)
 			return string(evolverRole), evolverModel
 		},
@@ -76,8 +73,8 @@ func (s *Server) initGenesisServices() {
 
 	// Iteration-based nudger (Hermes-style): fires a mid-session skill
 	// review every N tool calls. Env var DENEB_SKILL_NUDGE_INTERVAL
-	// overrides skilllifecycle.DefaultNudgeInterval; 0 disables.
-	// The review fork dispatches through chat.SendSync, which re-resolves the model string into a
+	// overrides svcbind.DefaultNudgeInterval; 0 disables.
+	// The review fork dispatches through pipebind.SendSync, which re-resolves the model string into a
 	// provider via resolveModel — so it needs the FULL "provider/model" id. Model() returns the
 	// bare name (e.g. "step3p7"), which has no provider and fails client resolution
 	// ("no LLM client available, provider=\"\""), silently killing every nudger review and leaving
@@ -91,12 +88,12 @@ func (s *Server) initGenesisServices() {
 	// coding role — the same tool-capable model the evolver already drives (model-roles dogma #7:
 	// tool-heavy roles need a measured tool-caller). Fall back to lightweight when coding is
 	// unconfigured, so a host without a coding model keeps the prior behavior instead of an empty id.
-	reviewModel := s.modelRegistry.FullModelID(modelrole.RoleCoding)
+	reviewModel := s.modelRegistry.FullModelID(aibind.RoleCoding)
 	if reviewModel == "" {
-		reviewModel = s.modelRegistry.FullModelID(modelrole.RoleLightweight)
+		reviewModel = s.modelRegistry.FullModelID(aibind.RoleLightweight)
 	}
-	reviewFork := skilllifecycle.NewReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
-	s.genesisNudger = skilllifecycle.NewNudgerFromEnvWithTrackerAndReviewer(
+	reviewFork := svcbind.NewReviewFork(s.chatHandler, s.genesisTranscripts, s.genesisTracker, reviewModel, s.logger)
+	s.genesisNudger = svcbind.NewNudgerFromEnvWithTrackerAndReviewer(
 		s.genesisSvc,
 		s.genesisTracker,
 		reviewFork,
@@ -125,14 +122,14 @@ func (s *Server) initGenesisServices() {
 	if !nudgerProdState && os.Getenv("DENEB_SKILL_NUDGE_INTERVAL") == "" {
 		s.logger.Info("genesis: skill nudger disabled (non-production state dir; set DENEB_SKILL_NUDGE_INTERVAL to force)")
 	} else if s.chatHandler != nil && s.genesisNudger.Enabled() {
-		s.chatHandler.SetSkillNudger(skilllifecycle.NewSkillNudger(s.genesisNudger))
+		s.chatHandler.SetSkillNudger(svcbind.NewSkillNudger(s.genesisNudger))
 	}
 	// Usage attribution is independent of the nudger: even with the nudger
 	// disabled, recording which skills are used (and whether their turns
 	// succeed) gives the Evolver the success-rate signal its
 	// SkillsNeedingEvolution gate reads — without it the loop runs blind.
 	if s.chatHandler != nil && s.genesisTracker != nil {
-		s.chatHandler.SetSkillUsageRecorder(skilllifecycle.NewChatUsageRecorder(
+		s.chatHandler.SetSkillUsageRecorder(svcbind.NewChatUsageRecorder(
 			s.genesisTracker,
 			s.genesisTranscripts,
 			s.logger,
@@ -157,7 +154,7 @@ func (s *Server) refreshCodingModelConsumers() {
 	if s.modelRegistry == nil {
 		return
 	}
-	codingModel := s.modelRegistry.FullModelID(modelrole.RoleCoding)
+	codingModel := s.modelRegistry.FullModelID(aibind.RoleCoding)
 	if s.toolDeps != nil {
 		s.toolDeps.Sessions.CodingDefaultModel = codingModel
 	}
@@ -168,16 +165,16 @@ func (s *Server) refreshCodingModelConsumers() {
 	}
 }
 
-func (s *Server) configureGenesisEvolverModels(evolver *skilllifecycle.Evolver) (modelrole.Role, string) {
+func (s *Server) configureGenesisEvolverModels(evolver *svcbind.Evolver) (aibind.Role, string) {
 	if evolver == nil || s.modelRegistry == nil {
 		return "", ""
 	}
-	evolverRole := modelrole.RoleLightweight
-	evolverClient := s.modelRegistry.Client(modelrole.RoleLightweight)
-	evolverModel := s.modelRegistry.Model(modelrole.RoleLightweight)
-	if codingModel := s.modelRegistry.Model(modelrole.RoleCoding); codingModel != "" {
-		if codingClient := s.modelRegistry.Client(modelrole.RoleCoding); codingClient != nil {
-			evolverRole = modelrole.RoleCoding
+	evolverRole := aibind.RoleLightweight
+	evolverClient := s.modelRegistry.Client(aibind.RoleLightweight)
+	evolverModel := s.modelRegistry.Model(aibind.RoleLightweight)
+	if codingModel := s.modelRegistry.Model(aibind.RoleCoding); codingModel != "" {
+		if codingClient := s.modelRegistry.Client(aibind.RoleCoding); codingClient != nil {
+			evolverRole = aibind.RoleCoding
 			evolverClient = codingClient
 			evolverModel = codingModel
 		}
@@ -189,9 +186,9 @@ func (s *Server) configureGenesisEvolverModels(evolver *skilllifecycle.Evolver) 
 	// dedicated coding model is configured, it owns the patch-generation path;
 	// keep main out of the rewrite loop so code/skill edits are made by the
 	// coding role the operator selected.
-	mainClient := s.modelRegistry.Client(modelrole.RoleMain)
-	mainModel := s.modelRegistry.Model(modelrole.RoleMain)
-	if evolverRole != modelrole.RoleCoding && mainClient != nil && mainModel != "" && mainModel != evolverModel {
+	mainClient := s.modelRegistry.Client(aibind.RoleMain)
+	mainModel := s.modelRegistry.Model(aibind.RoleMain)
+	if evolverRole != aibind.RoleCoding && mainClient != nil && mainModel != "" && mainModel != evolverModel {
 		evolver.SetTeacher(mainClient, mainModel)
 	} else {
 		evolver.SetTeacher(nil, "")
@@ -223,8 +220,8 @@ func (s *Server) configureGenesisEvolverModels(evolver *skilllifecycle.Evolver) 
 	// exist.
 	if replayExecutorEnabled() {
 		evolver.SetReplayExecutor(
-			s.modelRegistry.Client(modelrole.RoleLightweight),
-			s.modelRegistry.Model(modelrole.RoleLightweight),
+			s.modelRegistry.Client(aibind.RoleLightweight),
+			s.modelRegistry.Model(aibind.RoleLightweight),
 		)
 	} else {
 		evolver.SetReplayExecutor(nil, "")
@@ -256,7 +253,7 @@ func (s *Server) genesisThinkingKwargs() map[string]string {
 	// truncated JSON ("judge error"). Keyed by bare model name to match the names
 	// the evolver passes to thinkingOff.
 	thinkingKwargs := map[string]string{}
-	for _, role := range []modelrole.Role{modelrole.RoleLightweight, modelrole.RoleCoding, modelrole.RoleMain} {
+	for _, role := range []aibind.Role{aibind.RoleLightweight, aibind.RoleCoding, aibind.RoleMain} {
 		mc := s.modelRegistry.Config(role)
 		if mc.Model == "" {
 			continue
@@ -274,25 +271,25 @@ func (s *Server) registerSkillLifecycleTool() {
 	}
 	var fixturePath string
 	if home, err := os.UserHomeDir(); err == nil {
-		fixturePath = runtimeheartbeat.FixturePath(home)
+		fixturePath = svcbind.FixturePath(home)
 	}
-	var shadowComplete runtimeheartbeat.ShadowCompleteFunc
+	var shadowComplete svcbind.ShadowCompleteFunc
 	// Heartbeat shadow-replay wiring (P1): text-only lightweight executor over
 	// the harvested fixture corpus. Same model both sides, thinking disabled on
 	// dual-mode models (the evolver judge's dsv4 lesson). Missing pieces leave
 	// the action cleanly unconfigured.
-	if lwClient := s.modelRegistry.Client(modelrole.RoleLightweight); lwClient != nil {
-		lwModel := s.modelRegistry.Model(modelrole.RoleLightweight)
+	if lwClient := s.modelRegistry.Client(aibind.RoleLightweight); lwClient != nil {
+		lwModel := s.modelRegistry.Model(aibind.RoleLightweight)
 		thinkingKwargs := s.genesisThinkingKwargs()
 		shadowComplete = func(ctx context.Context, system, user string) (string, error) {
-			req := llm.ChatRequest{
+			req := aibind.ChatRequest{
 				Model:     lwModel,
-				System:    llm.SystemString(system),
-				Messages:  []llm.Message{llm.NewTextMessage("user", user)},
+				System:    aibind.SystemString(system),
+				Messages:  []aibind.Message{aibind.NewTextMessage("user", user)},
 				MaxTokens: 4096,
 			}
 			if kw := thinkingKwargs[lwModel]; kw != "" {
-				req.Thinking = &llm.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
+				req.Thinking = &aibind.ThinkingConfig{Type: "disabled", TemplateKwarg: kw}
 			}
 			return lwClient.Complete(ctx, req)
 		}
@@ -300,14 +297,14 @@ func (s *Server) registerSkillLifecycleTool() {
 	var shadowReplay func(context.Context, string, int) (toolbind.HeartbeatShadowReplayResult, error)
 	if fixturePath != "" && shadowComplete != nil {
 		shadowReplay = func(ctx context.Context, candidate string, limit int) (toolbind.HeartbeatShadowReplayResult, error) {
-			report, err := runtimeheartbeat.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
+			report, err := svcbind.RunShadowReplay(ctx, fixturePath, candidate, limit, shadowComplete)
 			if err != nil {
 				return toolbind.HeartbeatShadowReplayResult{}, err
 			}
 			return heartbeatShadowReplayToolResult(report), nil
 		}
 	}
-	backend := skilllifecycle.NewBackend(skilllifecycle.BackendConfig{
+	backend := svcbind.NewBackend(svcbind.BackendConfig{
 		Genesis:      s.genesisSvc,
 		Evolver:      s.genesisEvolver,
 		Tracker:      s.genesisTracker,
@@ -315,7 +312,7 @@ func (s *Server) registerSkillLifecycleTool() {
 		Logger:       s.logger,
 		ShadowReplay: shadowReplay,
 	})
-	s.chatHandler.RegisterTool(toolport.ToolDef{
+	s.chatHandler.RegisterTool(pipebind.ToolDef{
 		Name: "skill_lifecycle",
 		Description: "Propus control plane for Deneb self-improvement (tool name kept as skill_lifecycle for compatibility): " +
 			"propose (record/route reusable workflow decisions), " +
@@ -335,7 +332,7 @@ func (s *Server) registerSkillLifecycleTool() {
 	})
 }
 
-func heartbeatShadowReplayToolResult(report runtimeheartbeat.ShadowReplayReport) toolbind.HeartbeatShadowReplayResult {
+func heartbeatShadowReplayToolResult(report svcbind.ShadowReplayReport) toolbind.HeartbeatShadowReplayResult {
 	results := make([]toolbind.HeartbeatShadowReplayFixtureResult, 0, len(report.Results))
 	for _, result := range report.Results {
 		results = append(results, toolbind.HeartbeatShadowReplayFixtureResult{
@@ -372,7 +369,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 	}
 
 	if s.genesisTracker != nil {
-		evolveTask := &genesis.EvolutionTask{
+		evolveTask := &domainbind.EvolutionTask{
 			Evolver: s.genesisEvolver,
 			Logger:  s.logger,
 			// RSI P1 materialization rides the first real evolution tick:
@@ -387,7 +384,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 					return
 				}
 				if _, prod := s.productionStateDir(home); prod {
-					s.genesisMeta.MaterializeDefaults(skilllifecycle.DefaultMetaArtifacts())
+					s.genesisMeta.MaterializeDefaults(svcbind.DefaultMetaArtifacts())
 				}
 			},
 		}
@@ -395,7 +392,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// RSI P2 slow loop (propose-only): weekly, one meta-artifact revision
 		// proposal per cycle, alternating producer/evaluator epochs. Never
 		// touches live artifacts — writes <name>.proposed + the ledger.
-		s.autonomousSvc.RegisterTask(&genesis.MetaEvolutionTask{
+		s.autonomousSvc.RegisterTask(&domainbind.MetaEvolutionTask{
 			Evolver: s.genesisEvolver,
 			Meta:    s.genesisMeta,
 			Tracker: s.genesisTracker,
@@ -420,10 +417,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// daily-cap interaction).
 			GenesisGen: s.genesisSvc.ShadowGenerate,
 		})
-		s.autonomousSvc.RegisterTask(&genesis.SkillCuratorTask{
+		s.autonomousSvc.RegisterTask(&domainbind.SkillCuratorTask{
 			Tracker: s.genesisTracker,
 			Logger:  s.logger,
-			Config:  genesis.SkillCuratorConfigFromEnv(),
+			Config:  domainbind.SkillCuratorConfigFromEnv(),
 		})
 
 		// Deterministic bench growth: retro-extract held-out validation cases
@@ -431,8 +428,8 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// holds a minimum corpus (validation_backfill_task.go). Without this the
 		// behavioral held-out gate stays inert on skills whose capture-time
 		// extraction never fired.
-		s.autonomousSvc.RegisterTask(skilllifecycle.NewValidationBackfillTask(
-			skilllifecycle.NewBackend(skilllifecycle.BackendConfig{
+		s.autonomousSvc.RegisterTask(svcbind.NewValidationBackfillTask(
+			svcbind.NewBackend(svcbind.BackendConfig{
 				Genesis:     s.genesisSvc,
 				Evolver:     s.genesisEvolver,
 				Tracker:     s.genesisTracker,
@@ -440,8 +437,8 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Logger:      s.logger,
 				// Same lightweight relevance classifier as the real-time capture:
 				// keep consulted-but-off-topic sessions out of the backfilled corpus.
-				RelevanceClient: s.modelRegistry.Client(modelrole.RoleLightweight),
-				RelevanceModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
+				RelevanceClient: s.modelRegistry.Client(aibind.RoleLightweight),
+				RelevanceModel:  s.modelRegistry.Model(aibind.RoleLightweight),
 			}),
 			s.logger,
 		))
@@ -466,7 +463,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// replay through the LIVE judge + deterministic false-reject mining.
 		// Same gate as workout — live model calls + shared genesis writes.
 		if isProdState {
-			s.autonomousSvc.RegisterTask(&genesis.JudgeAccuracyTask{
+			s.autonomousSvc.RegisterTask(&domainbind.JudgeAccuracyTask{
 				Evolver: s.genesisEvolver,
 				Meta:    s.genesisMeta,
 				Tracker: s.genesisTracker,
@@ -476,7 +473,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// transition into READY (evidence met — operator decision
 			// available). Prod-gated: writes the shared snapshot and posts
 			// operator-facing cards.
-			s.autonomousSvc.RegisterTask(&genesis.LadderWatchTask{
+			s.autonomousSvc.RegisterTask(&domainbind.LadderWatchTask{
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
 				OnReady: s.postLadderReadyCard,
@@ -489,7 +486,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// cases that catch uncaught mutations — "harder tests, found
 			// automatically". No LLM; prod-gated because it writes shared
 			// validation state.
-			s.autonomousSvc.RegisterTask(&genesis.AdversarialCoverageTask{
+			s.autonomousSvc.RegisterTask(&domainbind.AdversarialCoverageTask{
 				Evolver: s.genesisEvolver,
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
@@ -501,13 +498,13 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// runtime-error source, so candidates accumulate for review before any
 			// autonomous source edit is dispatched.
 			if s.logCapture != nil {
-				s.autonomousSvc.RegisterTask(&genesis.RuntimeErrorMiningTask{
-					ErrorLines: func(limit int) []observe.LogLine {
+				s.autonomousSvc.RegisterTask(&domainbind.RuntimeErrorMiningTask{
+					ErrorLines: func(limit int) []infrabind.LogLine {
 						r := s.logCapture.Ring()
 						if r == nil {
 							return nil
 						}
-						return r.Query(observe.QueryOpts{MinLevel: slog.LevelError, Limit: limit})
+						return r.Query(infrabind.QueryOpts{MinLevel: slog.LevelError, Limit: limit})
 					},
 					Tracker: s.genesisTracker,
 					Logger:  s.logger,
@@ -519,7 +516,7 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// opportunity for the existing reviews to route. Propose-only;
 			// prod-gated for the same reason as the lanes above (live LLM call +
 			// shared genesis writes).
-			s.autonomousSvc.RegisterTask(&genesis.CurriculumTask{
+			s.autonomousSvc.RegisterTask(&domainbind.CurriculumTask{
 				Evolver: s.genesisEvolver,
 				Tracker: s.genesisTracker,
 				Logger:  s.logger,
@@ -530,12 +527,12 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			})
 		}
 		if replayExecutorEnabled() && isProdState {
-			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)
+			workoutEngine := domainbind.NewSkillValidationEngine(s.genesisTracker, s.logger)
 			workoutEngine.SetExecutor(
-				s.modelRegistry.Client(modelrole.RoleLightweight),
-				s.modelRegistry.Model(modelrole.RoleLightweight),
+				s.modelRegistry.Client(aibind.RoleLightweight),
+				s.modelRegistry.Model(aibind.RoleLightweight),
 			)
-			s.autonomousSvc.RegisterTask(&genesis.SkillWorkoutTask{
+			s.autonomousSvc.RegisterTask(&domainbind.SkillWorkoutTask{
 				Engine:  workoutEngine,
 				Tracker: s.genesisTracker,
 				Catalog: s.skillCatalog,
@@ -554,11 +551,11 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 10*time.Minute)
 			defer cancel()
 			_ = evolveTask.Run(ctx)
-		}, genesis.DefaultEvolveEventThreshold, 30*time.Minute)
+		}, domainbind.DefaultEvolveEventThreshold, 30*time.Minute)
 
 		// Post-evolve rollback: revert an evolution that regresses (N consecutive
 		// post-evolve failures restore the skill from its backup). Closes the
 		// evolve loop — generate -> gate -> cross-model judge -> watch -> revert.
-		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkillWithResult, genesis.DefaultRollbackThreshold)
+		s.genesisTracker.SetRollback(s.genesisEvolver.RollbackSkillWithResult, domainbind.DefaultRollbackThreshold)
 	}
 }

@@ -1,8 +1,8 @@
 package chat
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 )
 
 // flushSessionPromptCaches drops the per-session prompt snapshots that may hold
@@ -16,7 +16,7 @@ func flushSessionPromptCaches(sessionKey string) {
 		return
 	}
 	prompt.ClearSessionSnapshot(sessionKey) // context-file session snapshot
-	chatrecall.ClearSession(sessionKey)     // recall snapshot cache
+	leafbind.RecallClearSession(sessionKey) // recall snapshot cache
 	clearTier1Wiki(sessionKey)              // tier-1 wiki snapshot
 	forgetPromptSnapshot(sessionKey)        // persisted (restart-surviving) copy
 }

@@ -9,11 +9,11 @@ import (
 // It delegates to toolwire.RegisterCoreTools for the bulk of registrations,
 // then adds tools that depend on chat-internal state (post-processors).
 func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
-	registry.SetToolProvenanceRoot(deps.WorkspaceDir)
+	registry.setToolProvenanceRoot(deps.WorkspaceDir)
 	toolwire.RegisterCoreTools(registry, deps)
 
 	// Skills discovery + management: list, create, patch, delete skills at runtime.
-	toolwire.RegisterSkillsTools(registry, CachedSkillsSnapshot,
+	toolwire.RegisterSkillsTools(registry, cachedSkillsSnapshot,
 		resolveWorkspaceDirForPrompt(), deps.BundledSkillsDir, InvalidateSkillsCache)
 
 	// Wiki knowledge base tools (always active when wiki is configured).
@@ -51,15 +51,15 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 	// lives in toolreg so the chat parent does not import those tool packages.
 	toolwire.RegisterRegistryBridgeTools(registry, deps)
 
-	RegisterDefaultPostProcessors(registry)
+	registerDefaultPostProcessors(registry)
 
 	// Wire spillover store for large tool result management.
 	if deps.SpilloverStore != nil {
-		registry.SetSpilloverStore(deps.SpilloverStore)
+		registry.setSpilloverStore(deps.SpilloverStore)
 	}
 
 	// Apply per-tool output budgets from tool_schemas.json.
-	registry.ApplyMaxOutputs(toolwire.ToolMaxOutputs())
+	registry.applyMaxOutputs(toolwire.ToolMaxOutputs())
 }
 
 // Ensure *ToolRegistry satisfies the bridge surface used by toolwire.

@@ -48,7 +48,7 @@ func TestSubagentCleanupStopsChildrenWhenParentKilled(t *testing.T) {
 
 	var mu sync.Mutex
 	var interrupted []string
-	unsub := StartSubagentCleanup(SubagentCleanupDeps{
+	unsub := startSubagentCleanup(subagentCleanupDeps{
 		Sessions: func() *session.Manager { return sm },
 		InterruptRun: func(k string) {
 			mu.Lock()
@@ -95,7 +95,7 @@ func TestSubagentCleanup_ParentDeletedKillsRunningChildren(t *testing.T) {
 	startRunning(t, sm, "client:main", "")
 	startRunning(t, sm, "client:main:worker:1", "client:main")
 
-	unsub := StartSubagentCleanup(SubagentCleanupDeps{
+	unsub := startSubagentCleanup(subagentCleanupDeps{
 		Sessions:     func() *session.Manager { return sm },
 		InterruptRun: func(string) {},
 	})
@@ -115,7 +115,7 @@ func TestSubagentCleanupPreservesChildrenWhenParentDone(t *testing.T) {
 	startRunning(t, sm, "client:main", "")
 	startRunning(t, sm, "client:main:worker:1", "client:main")
 
-	unsub := StartSubagentCleanup(SubagentCleanupDeps{
+	unsub := startSubagentCleanup(subagentCleanupDeps{
 		Sessions:     func() *session.Manager { return sm },
 		InterruptRun: func(string) {},
 	})
@@ -148,7 +148,7 @@ func TestSubagentCleanupPreservesTerminalChildren(t *testing.T) {
 		t.Fatalf("finish child: %v", err)
 	}
 
-	unsub := StartSubagentCleanup(SubagentCleanupDeps{
+	unsub := startSubagentCleanup(subagentCleanupDeps{
 		Sessions:     func() *session.Manager { return sm },
 		InterruptRun: func(string) {},
 	})

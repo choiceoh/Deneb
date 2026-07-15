@@ -21,7 +21,7 @@ import (
 // the sync entry paths — so this handler owns only delivery and persistence.
 func handleRunSuccess(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
@@ -87,7 +87,7 @@ func handleRunSuccess(
 // historically wired on the async path only, which left them dead on the
 // native client's sync surface after PR #1922 — adding any future entry path
 // must call this, not re-wire the hooks individually.
-func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+func finishTurnSideEffects(deps runDeps, params runParams, result *agent.AgentResult, logger *slog.Logger) {
 	if result == nil || deps.briefcaseMode {
 		return
 	}
@@ -116,7 +116,7 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 //
 // The substance floor (thin/narration-only answers) lives in publishDeliverable.
 // No-op unless the server wired deps.deliverablePublisher.
-func maybeAutoPublishDeliverable(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+func maybeAutoPublishDeliverable(deps runDeps, params runParams, result *agent.AgentResult, logger *slog.Logger) {
 	if deps.deliverablePublisher == nil || result == nil {
 		return
 	}
@@ -148,7 +148,7 @@ func maybeAutoPublishDeliverable(deps runDeps, params RunParams, result *agent.A
 // token must never reach any client (RPC, WebSocket, native) or the transcript
 // — and forces an explicit failure notice when an external delivery tool
 // failed and the reply would otherwise be empty/silent. Returns isSilent.
-func applySilentReplyPolicy(params RunParams, result *agent.AgentResult, logger *slog.Logger) bool {
+func applySilentReplyPolicy(params runParams, result *agent.AgentResult, logger *slog.Logger) bool {
 	// Strip silent reply token (NO_REPLY) from the response text before
 	// persisting, broadcasting, or delivering. This ensures the internal
 	// token is never exposed to any client (RPC, SSE, native client)
@@ -201,7 +201,7 @@ func substituteRunMarketTokens(result *agent.AgentResult) {
 
 // persistAggregateAssistantText persists the run's accumulated text as one
 // assistant message (legacy path) when per-turn persistence was NOT active.
-func persistAggregateAssistantText(params RunParams, deps runDeps, result *agent.AgentResult, now int64, logger *slog.Logger) {
+func persistAggregateAssistantText(params runParams, deps runDeps, result *agent.AgentResult, now int64, logger *slog.Logger) {
 	// Persist assistant message to transcript + Aurora store.
 	// When tool activities were recorded, prepend a compact summary so the
 	// next context assembly includes what the agent actually did — not just
@@ -239,7 +239,7 @@ func persistAggregateAssistantText(params RunParams, deps runDeps, result *agent
 // channel reply with one retry, and media token delivery — with every
 // user-observable failure escalated per logging.md (Error + broadcast +
 // transcript note).
-func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, isSilent, sseDelivered bool, logger *slog.Logger) {
+func deliverRunReply(params runParams, deps runDeps, result *agent.AgentResult, isSilent, sseDelivered bool, logger *slog.Logger) {
 	// Deliver response back to the originating channel (e.g., the native client).
 	// Use parseReplyDirectives (chatport boundary) for unified processing: silent token
 	// detection, leaked tool-call stripping, MEDIA: extraction, and threading.
@@ -261,7 +261,7 @@ func deliverRunReply(params RunParams, deps runDeps, result *agent.AgentResult, 
 // deliverEmptyRunReply preserves the empty-output decision tree: abnormal
 // stops receive a bounded fallback reply, while legitimate tool-only empties
 // remain observable through chat.empty_response.
-func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentResult, logger *slog.Logger) {
+func deliverEmptyRunReply(params runParams, deps runDeps, result *agent.AgentResult, logger *slog.Logger) {
 	logger.Warn("agent produced empty response, nothing to deliver",
 		"session", params.SessionKey,
 		"channel", params.Delivery.Channel,
@@ -281,7 +281,7 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 				"error", err, "stopReason", result.StopReason,
 				"session", params.SessionKey)
 			if deps.broadcast != nil {
-				broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
+				broadcastPayload(deps.broadcast, "chat.delivery_failed", chatDeliveryFailedEvent{
 					Session: params.SessionKey,
 					Channel: params.Delivery.Channel,
 					Reason:  "stop_fallback_error",
@@ -293,7 +293,7 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 		return
 	}
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "chat.empty_response", ChatEmptyResponseEvent{
+		broadcastPayload(deps.broadcast, "chat.empty_response", chatEmptyResponseEvent{
 			Session:    params.SessionKey,
 			Channel:    params.Delivery.Channel,
 			StopReason: result.StopReason,
@@ -302,13 +302,13 @@ func deliverEmptyRunReply(params RunParams, deps runDeps, result *agent.AgentRes
 	}
 }
 
-func reportMissingReplyDirectiveParser(params RunParams, deps runDeps, result *agent.AgentResult, logger *slog.Logger) {
+func reportMissingReplyDirectiveParser(params runParams, deps runDeps, result *agent.AgentResult, logger *slog.Logger) {
 	logger.Error("parseReplyDirectives is nil — response not delivered (wiring bug)",
 		"session", params.SessionKey,
 		"channel", params.Delivery.Channel,
 		"textLen", len(result.Text))
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.delivery_failed", chatDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Reason:  "parse_directives_nil",
@@ -321,7 +321,7 @@ func reportMissingReplyDirectiveParser(params RunParams, deps runDeps, result *a
 // any channel side effect. Silent replies intentionally leave streamed drafts
 // untouched; media delivery remains a later independent stage.
 func deliverDirectiveReplyText(
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	result *agent.AgentResult,
 	directives chatport.ReplyDirectives,
@@ -340,7 +340,7 @@ func deliverDirectiveReplyText(
 	return deliverChannelReply(params, deps, replyText, sseDelivered, logger)
 }
 
-func formatRunReplyText(params RunParams, deps runDeps, result *agent.AgentResult, text string) string {
+func formatRunReplyText(params runParams, deps runDeps, result *agent.AgentResult, text string) string {
 	replyText := strings.TrimSpace(stripReasoningLeak(jsonutil.StripThinkingTags(text)))
 	if !showThinkingInChat(deps, params.SessionKey) || result.Thinking == "" {
 		return replyText
@@ -355,7 +355,7 @@ func formatRunReplyText(params RunParams, deps runDeps, result *agent.AgentResul
 	return formatted + "\n\n" + replyText
 }
 
-func deliverChannelReply(params RunParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) context.CancelFunc {
+func deliverChannelReply(params runParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) context.CancelFunc {
 	replyCtx, replyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	if deps.callbacks.replyFunc == nil {
 		handleMissingChannelReply(params, deps, replyText, sseDelivered, logger)
@@ -367,13 +367,13 @@ func deliverChannelReply(params RunParams, deps runDeps, replyText string, sseDe
 
 // channelReplyAlreadyHandled identifies run shapes with no pending channel
 // push: sub-agents, channel-less runs, and native replies already sent by SSE.
-func channelReplyAlreadyHandled(params RunParams, deps runDeps, sseDelivered bool) bool {
+func channelReplyAlreadyHandled(params runParams, deps runDeps, sseDelivered bool) bool {
 	return isSubagentSession(deps, params.SessionKey) ||
 		params.Delivery.Channel == "" ||
 		(params.Delivery.Channel == "client" && sseDelivered)
 }
 
-func handleMissingChannelReply(params RunParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) {
+func handleMissingChannelReply(params runParams, deps runDeps, replyText string, sseDelivered bool, logger *slog.Logger) {
 	if channelReplyAlreadyHandled(params, deps, sseDelivered) {
 		logger.Debug("run produced reply text but has no channel replyFunc (expected: sub-agent or channel-less session; output read via LastOutput)",
 			"session", params.SessionKey,
@@ -386,7 +386,7 @@ func handleMissingChannelReply(params RunParams, deps runDeps, replyText string,
 		"channel", params.Delivery.Channel,
 		"textLen", len(replyText))
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.delivery_failed", chatDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Reason:  "reply_func_nil",
@@ -395,7 +395,7 @@ func handleMissingChannelReply(params RunParams, deps runDeps, replyText string,
 	persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
 }
 
-func sendChannelReply(ctx context.Context, params RunParams, deps runDeps, replyText string, logger *slog.Logger) {
+func sendChannelReply(ctx context.Context, params runParams, deps runDeps, replyText string, logger *slog.Logger) {
 	err := deps.callbacks.replyFunc(ctx, params.Delivery, replyText)
 	if err != nil {
 		logger.Warn("channel reply failed, retrying once",
@@ -410,7 +410,7 @@ func sendChannelReply(ctx context.Context, params RunParams, deps runDeps, reply
 		"error", err, "channel", params.Delivery.Channel,
 		"session", params.SessionKey)
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "chat.delivery_failed", ChatDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.delivery_failed", chatDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Reason:  "reply_func_error",
@@ -423,7 +423,7 @@ func sendChannelReply(ctx context.Context, params RunParams, deps runDeps, reply
 // deliverDirectiveMedia is deliberately last and independent of text silence:
 // explicit media tokens still express delivery intent after NO_REPLY.
 func deliverDirectiveMedia(
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	directives chatport.ReplyDirectives,
 	logger *slog.Logger,
@@ -448,7 +448,7 @@ func deliverDirectiveMedia(
 		"failed", len(failedURLs),
 		"total", len(directives.MediaURLs))
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "chat.media_delivery_failed", ChatMediaDeliveryFailedEvent{
+		broadcastPayload(deps.broadcast, "chat.media_delivery_failed", chatMediaDeliveryFailedEvent{
 			Session: params.SessionKey,
 			Channel: params.Delivery.Channel,
 			Count:   len(failedURLs),
@@ -461,7 +461,7 @@ func deliverDirectiveMedia(
 
 func sendDirectiveMedia(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	mediaURLs []string,
 	mediaType string,
@@ -482,7 +482,7 @@ func sendDirectiveMedia(
 // the sync entry paths — so this handler owns only lifecycle and broadcast.
 func handleRunError(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	logger *slog.Logger,
@@ -523,14 +523,14 @@ func handleRunError(
 // finishRun transitions the session out of running and broadcasts the change.
 // failureReason is a human-readable Korean description of why the run failed;
 // pass "" for non-error completions.
-func finishRun(deps runDeps, params RunParams, phase session.LifecyclePhase, reason, status, failureReason string, ts int64) {
+func finishRun(deps runDeps, params runParams, phase session.LifecyclePhase, reason, status, failureReason string, ts int64) {
 	deps.sessions.ApplyLifecycleEvent(params.SessionKey, session.LifecycleEvent{
 		Phase:         phase,
 		Ts:            ts,
 		FailureReason: failureReason,
 	})
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "sessions.changed", SessionsChangedEvent{
+		broadcastPayload(deps.broadcast, "sessions.changed", sessionsChangedEvent{
 			SessionKey: params.SessionKey,
 			Reason:     reason,
 			Status:     status,
@@ -647,7 +647,7 @@ func emitJobEvent(deps runDeps, runID, phase string, aborted bool, errMsg string
 // 자동으로 일지에 기록한다" silently held for no interactive turn since the
 // native client became the sole surface (PR #1922), leaving the diary fed
 // only by mail polling/captures and dreaming fired only by the 30-min timer.
-func maybeRecordRunDiary(deps runDeps, params RunParams, result *agent.AgentResult, logger *slog.Logger) {
+func maybeRecordRunDiary(deps runDeps, params runParams, result *agent.AgentResult, logger *slog.Logger) {
 	if deps.memory.Wiki == nil || result == nil || !shouldRecordRunDiary(params) {
 		return
 	}

@@ -22,6 +22,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"sort"
@@ -30,7 +31,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	common "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -176,7 +176,7 @@ func (t *CurriculumTask) Run(ctx context.Context) error {
 	}
 	if resp.Skip {
 		logger.Info("curriculum: no capability cleared the bar",
-			"reason", common.TruncateRunes(resp.Reason, 160))
+			"reason", genbind.TruncateRunes(resp.Reason, 160))
 		return nil
 	}
 	if reason := curriculumGate(resp, catalog, backlog, time.Now()); reason != "" {
@@ -265,7 +265,7 @@ func (t *CurriculumTask) assembleDemandEvidence(ctx context.Context, catalog map
 		b.WriteString("(비어 있음)\n")
 	}
 	for _, name := range names {
-		desc := common.TruncateRunes(strings.SplitN(catalog[name], "\n", 2)[0], 100)
+		desc := genbind.TruncateRunes(strings.SplitN(catalog[name], "\n", 2)[0], 100)
 		fmt.Fprintf(&b, "- %s — %s\n", name, desc)
 	}
 
@@ -286,13 +286,13 @@ func (t *CurriculumTask) assembleDemandEvidence(ctx context.Context, catalog map
 			if i >= 20 {
 				break
 			}
-			fmt.Fprintf(&b, "- [%s] %s\n", rec.Route, common.TruncateRunes(rec.Candidate, 100))
+			fmt.Fprintf(&b, "- [%s] %s\n", rec.Route, genbind.TruncateRunes(rec.Candidate, 100))
 		}
 	}
 
 	if t.EnvDigest != nil {
 		if digest := strings.TrimSpace(t.EnvDigest(ctx)); digest != "" {
-			shown := common.TruncateRunes(digest, 2000)
+			shown := genbind.TruncateRunes(digest, 2000)
 			b.WriteString("\n## 환경 요약\n")
 			b.WriteString(shown)
 			b.WriteString("\n")

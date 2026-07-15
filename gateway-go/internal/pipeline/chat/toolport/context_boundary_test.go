@@ -54,7 +54,7 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 	if DeliveryFromContext(base) != nil || ReplyFuncFromContext(base) != nil ||
 		MediaSendFuncFromContext(base) != nil || TurnContextFromContext(base) != nil ||
 		RunCacheFromContext(base) != nil || FileCacheFromContext(base) != nil ||
-		CheckpointerFromContext(base) != nil || SpawnFlagFromContext(base) != nil ||
+		checkpointerFromContext(base) != nil || SpawnFlagFromContext(base) != nil ||
 		DeferredActivationFromContext(base) != nil {
 		t.Fatal("empty context returned a pointer/function value")
 	}
@@ -112,7 +112,7 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 
 	if DeliveryFromContext(ctx) != delivery || TurnContextFromContext(ctx) != tc ||
 		RunCacheFromContext(ctx) != rc || FileCacheFromContext(ctx) != fc ||
-		CheckpointerFromContext(ctx) != cp || SpawnFlagFromContext(ctx) != flag ||
+		checkpointerFromContext(ctx) != cp || SpawnFlagFromContext(ctx) != flag ||
 		DeferredActivationFromContext(ctx) != da {
 		t.Fatal("pointer context value did not round-trip by identity")
 	}
@@ -179,7 +179,7 @@ func TestContextReadersRejectWrongDynamicTypes(t *testing.T) {
 		SessionKeyFromContext(ctx) != "" || MediaSendFuncFromContext(ctx) != nil ||
 		MaxUploadBytesFromContext(ctx) != 0 || TurnContextFromContext(ctx) != nil ||
 		RunCacheFromContext(ctx) != nil || FileCacheFromContext(ctx) != nil ||
-		ToolPresetFromContext(ctx) != "" || CheckpointerFromContext(ctx) != nil ||
+		ToolPresetFromContext(ctx) != "" || checkpointerFromContext(ctx) != nil ||
 		SpawnFlagFromContext(ctx) != nil || DeferredActivationFromContext(ctx) != nil {
 		t.Fatal("wrong dynamic context values escaped zero-value fallback")
 	}

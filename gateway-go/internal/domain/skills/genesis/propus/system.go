@@ -123,8 +123,8 @@ type PropusSystemIdentity struct {
 	Principles         []string              `json:"principles"`
 	Invariants         []string              `json:"invariants"`
 	QualityGates       []string              `json:"qualityGates"`
-	SourcePrinciples   []PropusDoctrinePaper `json:"sourcePrinciples"`
-	FilteredPrinciples []PropusDoctrinePaper `json:"filteredPrinciples"`
+	SourcePrinciples   []propusDoctrinePaper `json:"sourcePrinciples"`
+	FilteredPrinciples []propusDoctrinePaper `json:"filteredPrinciples"`
 }
 
 // BuildPropusSystemIdentity derives the system identity for scope.
@@ -283,7 +283,7 @@ type PropusOverview struct {
 // BuildPropusOverview summarizes the current self-improvement system state.
 func BuildPropusOverview(input PropusOverviewInput) PropusOverview {
 	scope := normalizePropusScope(input.Scope)
-	counts := PropusLifecycleCounts(input.Recent)
+	counts := propusLifecycleCounts(input.Recent)
 	nextActions := make([]string, 0, 6)
 	state := "steady"
 
@@ -475,7 +475,7 @@ func BuildPropusLifecycleSummary(input PropusLifecycleSummaryInput) PropusLifecy
 		NextActions:      overview.NextActions,
 		DoctrineCoverage: overview.DoctrineCoverage,
 		QualityGate:      "검증 없는 생성/진화는 skill debt로 취급",
-		NextCue:          PropusNextCue(overview.State, overview.NextActions),
+		NextCue:          propusNextCue(overview.State, overview.NextActions),
 	}
 	summary.Attention = summary.Rejected + summary.RolledBack
 	if summary.Total == 0 && overview.State == "steady" {
@@ -488,15 +488,15 @@ func BuildPropusLifecycleSummary(input PropusLifecycleSummaryInput) PropusLifecy
 	for _, entry := range input.Recent {
 		if entry.CreatedAt > summary.LatestAt {
 			summary.LatestAt = entry.CreatedAt
-			summary.LatestType = PropusLifecycleEventType(entry)
+			summary.LatestType = propusLifecycleEventType(entry)
 			summary.LatestSkill = entry.SkillName
 		}
 	}
 	return summary
 }
 
-// PropusLifecycleCounts counts normalized event types across entries.
-func PropusLifecycleCounts(entries []LifecycleLogEntry) map[string]int {
+// propusLifecycleCounts counts normalized event types across entries.
+func propusLifecycleCounts(entries []LifecycleLogEntry) map[string]int {
 	counts := map[string]int{
 		"genesis":              0,
 		"review":               0,
@@ -533,8 +533,8 @@ func PropusLifecycleCounts(entries []LifecycleLogEntry) map[string]int {
 	return counts
 }
 
-// PropusLifecycleEventType returns the normalized event type for entry.
-func PropusLifecycleEventType(entry LifecycleLogEntry) string {
+// propusLifecycleEventType returns the normalized event type for entry.
+func propusLifecycleEventType(entry LifecycleLogEntry) string {
 	switch entry.Type {
 	case "genesis", "evolved", "evolve_rejected", "evolve_rolled_back":
 		return entry.Type
@@ -594,8 +594,8 @@ func PropusLastActivityMS(live SkillLivenessState) int64 {
 	return last
 }
 
-// PropusNextCue chooses the next operator cue for state and available actions.
-func PropusNextCue(state string, nextActions []string) string {
+// propusNextCue chooses the next operator cue for state and available actions.
+func propusNextCue(state string, nextActions []string) string {
 	if len(nextActions) > 0 {
 		switch nextActions[0] {
 		case "review_pending_self_corrections":

@@ -9,8 +9,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -27,7 +27,7 @@ func (h *Handler) handleSlashCommand(
 	reqID string,
 	sessionKey string,
 	delivery *DeliveryContext,
-	cmd *SlashResult,
+	cmd *slashResult,
 	respond func(text string),
 ) *protocol.ResponseFrame {
 	if respond == nil {
@@ -38,7 +38,7 @@ func (h *Handler) handleSlashCommand(
 		h.handleResetCommand(sessionKey, respond)
 
 	case "kill":
-		h.InterruptActiveRun(sessionKey)
+		h.interruptActiveRun(sessionKey)
 		h.pending.Clear(sessionKey)
 		h.mergeWindow.Clear(sessionKey)
 		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
@@ -102,14 +102,14 @@ func (h *Handler) handleSlashCommand(
 // handleResetCommand implements /reset: abort any active run, clear the
 // transcript, and discard every frozen per-session snapshot.
 func (h *Handler) handleResetCommand(sessionKey string, respond func(text string)) {
-	h.InterruptActiveRun(sessionKey)
+	h.interruptActiveRun(sessionKey)
 	h.pending.Clear(sessionKey)
 	h.mergeWindow.Clear(sessionKey)
 	if h.steer != nil {
 		h.steer.Clear(sessionKey)
 	}
 	prompt.ClearSessionSnapshot(sessionKey)
-	chatrecall.ClearSession(sessionKey)
+	leafbind.RecallClearSession(sessionKey)
 	clearTier1Wiki(sessionKey)
 	toolport.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
 	clearNotebookGrounding(sessionKey)       // drop the frozen grounding snapshot too
@@ -186,7 +186,7 @@ func (h *Handler) runSlashAsync(what string, fn func()) {
 
 // deliverSlashResponse sends a slash command response back to the originating channel.
 func (h *Handler) deliverSlashResponse(delivery *DeliveryContext, text string) {
-	fn := h.ReplyFn()
+	fn := h.replyFn()
 	if fn == nil || delivery == nil || text == "" {
 		return
 	}
@@ -320,7 +320,7 @@ func (h *Handler) sessionTokenLine(sess *session.Session) string {
 		formatCompactTokens(in), formatCompactTokens(out))
 }
 
-// appendServerStatus appends the server-level info from StatusDepsFunc, or —
+// appendServerStatus appends the server-level info from statusDepsFunc, or —
 // when no status dependency is wired — the session's own failure reason.
 func (h *Handler) appendServerStatus(sections []string, sessionKey string, sess *session.Session) []string {
 	statusFn := h.StatusDeps()

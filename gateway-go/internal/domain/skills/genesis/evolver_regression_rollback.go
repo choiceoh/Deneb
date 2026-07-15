@@ -3,12 +3,11 @@ package genesis
 import (
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
@@ -98,7 +97,7 @@ func (e *Evolver) crossSkillNeighbors(skillName string) []skills.SkillEntry {
 	if !ok {
 		return nil
 	}
-	selfTokens := genesiscommon.SkillDedupTokens(self.Skill.Name, self.Skill.Description)
+	selfTokens := genbind.SkillDedupTokens(self.Skill.Name, self.Skill.Description)
 	selfTags := skillTagSet(*self)
 	if len(selfTokens) == 0 && len(selfTags) == 0 {
 		return nil
@@ -113,7 +112,7 @@ func (e *Evolver) crossSkillNeighbors(skillName string) []skills.SkillEntry {
 		if candidate.Skill.Name == skillName || strings.TrimSpace(candidate.Skill.FilePath) == "" {
 			continue
 		}
-		similarity := genesiscommon.JaccardSimilarity(selfTokens, genesiscommon.SkillDedupTokens(candidate.Skill.Name, candidate.Skill.Description))
+		similarity := genbind.JaccardSimilarity(selfTokens, genbind.SkillDedupTokens(candidate.Skill.Name, candidate.Skill.Description))
 		sharesTag := tagSetsOverlap(selfTags, skillTagSet(candidate))
 		if similarity < skillCrossRegressionMinSimilarity && !sharesTag {
 			continue
@@ -288,7 +287,7 @@ func (e *Evolver) distillRollbackValidationCase(skillName string) {
 		}
 		call := SkillReplayToolCallRecord{Name: strings.TrimSpace(tr.ToolName)}
 		if frag := strings.TrimSpace(tr.ToolInput); frag != "" {
-			call.InputIncludes = []string{genesiscommon.TruncateRunes(frag, 120)}
+			call.InputIncludes = []string{genbind.TruncateRunes(frag, 120)}
 		}
 		desc := strings.TrimSpace(tr.AgentMechanism)
 		if desc == "" {
@@ -296,11 +295,11 @@ func (e *Evolver) distillRollbackValidationCase(skillName string) {
 		}
 		rec := SkillValidationCaseRecord{
 			SkillName:    skillName,
-			Description:  genesiscommon.TruncateRunes("post-rollback regression evidence: "+desc, 400),
+			Description:  genbind.TruncateRunes("post-rollback regression evidence: "+desc, 400),
 			FrontierTier: "hard",
 			Source:       "post-rollback",
 			Replay: SkillReplayCaseRecord{
-				Input:             genesiscommon.TruncateRunes(strings.TrimSpace(tr.Signature), 200),
+				Input:             genbind.TruncateRunes(strings.TrimSpace(tr.Signature), 200),
 				ExpectedToolCalls: []SkillReplayToolCallRecord{call},
 			},
 		}

@@ -6,7 +6,7 @@
 // verification (2026-07-04, "이 계약서 검토해줘") did exactly that: the model
 // read skills/productivity/contract-review/SKILL.md with the `read` tool and
 // followed the procedure — but only the `skills(action="read")` path fed the
-// SkillConsultLog, so the consult never reached skill_usage.jsonl and the
+// skillConsultLog, so the consult never reached skill_usage.jsonl and the
 // hint→consult conversion metric undercounted its very first success. This
 // post-processor closes that gap: when a `read` output is a SKILL.md whose
 // directory names a skill in the runtime catalog, record the consult.
@@ -29,12 +29,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
-// NewReadSkillConsultRecorder returns the per-tool post-processor for `read`.
+// newReadSkillConsultRecorder returns the per-tool post-processor for `read`.
 // It records the consult and activates the skill's required deferred tools
 // (tool_skill_required_tools.go) — non-consult reads pass through unchanged.
 // Registered before the global compaction/trimming processors, so the
 // "[File: …]" header is still intact.
-func NewReadSkillConsultRecorder(registry *ToolRegistry) PostProcessor {
+func newReadSkillConsultRecorder(registry *ToolRegistry) postProcessor {
 	return func(ctx context.Context, _, output string) string {
 		if toolport.ToolPresetFromContext(ctx) == toolwire.PresetBriefcase {
 			return output

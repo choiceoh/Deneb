@@ -18,10 +18,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 const mailQASystemPrompt = `당신은 사용자가 보고 있는 이메일에 대한 후속 질문에 답하는 비서다.
@@ -35,27 +35,27 @@ const mailQAMaxTokens = 1536
 // makeMailQAAsk returns the Ask callback wired into GmailAnalyzeDeps. Returns
 // nil when chatHandler isn't ready, in which case the handler skips
 // registering miniapp.gmail.ask entirely.
-func (s *Server) makeMailQAAsk() func(context.Context, string, []handlermail.QATurn, string) (string, error) {
+func (s *Server) makeMailQAAsk() func(context.Context, string, []handlerwire.MailQATurn, string) (string, error) {
 	if s.chatHandler == nil {
 		return nil
 	}
-	return func(ctx context.Context, mailContext string, history []handlermail.QATurn, question string) (string, error) {
-		msgs := make([]llm.Message, 0, len(history)*2+1)
+	return func(ctx context.Context, mailContext string, history []handlerwire.MailQATurn, question string) (string, error) {
+		msgs := make([]aibind.Message, 0, len(history)*2+1)
 		for _, t := range history {
 			if strings.TrimSpace(t.Q) != "" {
-				msgs = append(msgs, llm.NewTextMessage("user", t.Q))
+				msgs = append(msgs, aibind.NewTextMessage("user", t.Q))
 			}
 			if strings.TrimSpace(t.A) != "" {
-				msgs = append(msgs, llm.NewTextMessage("assistant", t.A))
+				msgs = append(msgs, aibind.NewTextMessage("assistant", t.A))
 			}
 		}
-		msgs = append(msgs, llm.NewTextMessage("user", question))
+		msgs = append(msgs, aibind.NewTextMessage("user", question))
 
 		maxTok := mailQAMaxTokens
 		// Fresh ephemeral session key per call — PrebuiltMessages carry the
 		// full context, so no session state is reused; Ephemeral* keep the
 		// transcript empty. model="" → chat handler's default.
-		res, err := s.chatHandler.SendSync(ctx, "mail-qa:"+shortid.New("m"), "", "", &chat.SyncOptions{
+		res, err := s.chatHandler.SendSync(ctx, "mail-qa:"+infrabind.NewShortID("m"), "", "", &pipebind.SyncOptions{
 			Messages:           msgs,
 			SystemPrompt:       mailQASystemPrompt + "\n\n" + mailContext,
 			ToolPreset:         "conversation",

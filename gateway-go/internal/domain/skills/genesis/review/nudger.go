@@ -84,8 +84,8 @@ type Nudger struct {
 	shutdownCtx context.Context
 }
 
-// NudgerConfig configures a Nudger.
-type NudgerConfig struct {
+// nudgerConfig configures a Nudger.
+type nudgerConfig struct {
 	// Interval is the tool-call threshold. <=0 disables nudging.
 	Interval int
 	// Tracker records created skills into the lifecycle/curator sidecar.
@@ -102,13 +102,13 @@ type SkillReviewRunner interface {
 	RunSkillReview(ctx context.Context, sessionKey string, snapshot generation.SessionContext) error
 }
 
-// NewNudger creates a Nudger bound to an existing genesis Service.
+// newNudger creates a Nudger bound to an existing genesis Service.
 // The Service supplies the LLM client, catalog, and cooldown/daily cap
 // state — the Nudger never duplicates that logic.
 //
 // If svc is nil the Nudger becomes a no-op so callers can install it
 // unconditionally without checking whether genesis is configured.
-func NewNudger(svc *generation.Service, cfg NudgerConfig, logger *slog.Logger) *Nudger {
+func newNudger(svc *generation.Service, cfg nudgerConfig, logger *slog.Logger) *Nudger {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -128,13 +128,13 @@ func NewNudger(svc *generation.Service, cfg NudgerConfig, logger *slog.Logger) *
 	}
 }
 
-// NewNudgerFromEnv reads DENEB_SKILL_NUDGE_INTERVAL and falls back to
+// newNudgerFromEnv reads DENEB_SKILL_NUDGE_INTERVAL and falls back to
 // DefaultNudgeInterval when the env var is unset or invalid.
-func NewNudgerFromEnv(svc *generation.Service, logger *slog.Logger) *Nudger {
+func newNudgerFromEnv(svc *generation.Service, logger *slog.Logger) *Nudger {
 	return NewNudgerFromEnvWithTracker(svc, nil, logger)
 }
 
-// NewNudgerFromEnvWithTracker is NewNudgerFromEnv plus lifecycle logging.
+// NewNudgerFromEnvWithTracker is newNudgerFromEnv plus lifecycle logging.
 func NewNudgerFromEnvWithTracker(svc *generation.Service, tracker ActivityTracker, logger *slog.Logger) *Nudger {
 	return NewNudgerFromEnvWithTrackerAndReviewer(svc, tracker, nil, logger)
 }
@@ -153,7 +153,7 @@ func NewNudgerFromEnvWithTrackerAndReviewer(
 			interval = parsed
 		}
 	}
-	return NewNudger(svc, NudgerConfig{
+	return newNudger(svc, nudgerConfig{
 		Interval: interval,
 		Tracker:  tracker,
 		Reviewer: reviewer,

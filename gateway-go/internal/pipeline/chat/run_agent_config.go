@@ -58,7 +58,7 @@ type agentConfigDeps struct {
 	SkillUsageRecorder SkillUsageRecorder
 	// ReplayDeferredTools are deferred tools the session transcript proves were
 	// activated in earlier runs (replayActivatedTools, deferred_replay.go);
-	// they re-enter this run's Tools array and pre-seed DeferredActivation.
+	// they re-enter this run's Tools array and pre-seed deferredActivation.
 	ReplayDeferredTools []string
 }
 
@@ -81,23 +81,23 @@ type agentExecutionPolicy struct {
 // initializer below injects these exact instances into each fresh turn
 // context; callers also receive spawnFlag and execStats for run-level reports.
 type agentRunState struct {
-	runCache           *RunCache
-	skillConsults      *SkillConsultLog
+	runCache           *runCache
+	skillConsults      *skillConsultLog
 	fileCache          *agent.FileCache
-	spawnFlag          *SpawnFlag
+	spawnFlag          *spawnFlag
 	verifyGate         *verifyGateState
-	deferredActivation *DeferredActivation
+	deferredActivation *deferredActivation
 	execStats          *toolport.ToolExecStats
 }
 
 func newAgentRunState(replayedDeferredTools []string) *agentRunState {
 	state := &agentRunState{
-		runCache:           NewRunCache(),
-		skillConsults:      NewSkillConsultLog(),
+		runCache:           newRunCache(),
+		skillConsults:      newSkillConsultLog(),
 		fileCache:          agent.NewFileCache(agent.DefaultFileCacheMaxItems),
-		spawnFlag:          NewSpawnFlag(),
+		spawnFlag:          newSpawnFlag(),
 		verifyGate:         &verifyGateState{},
-		deferredActivation: NewDeferredActivation(),
+		deferredActivation: newDeferredActivation(),
 		execStats:          toolport.NewToolExecStats(),
 	}
 	if len(replayedDeferredTools) > 0 {
@@ -109,23 +109,23 @@ func newAgentRunState(replayedDeferredTools []string) *agentRunState {
 // turnInitializer is the shared context-decoration point for asynchronous and
 // SendSync runs. The ordering is deliberate: general run state is installed
 // before optional per-run policies such as dry-run and auto-delivery.
-func (s *agentRunState) turnInitializer(params RunParams, sessionToolPreset string) func(context.Context) context.Context {
+func (s *agentRunState) turnInitializer(params runParams, sessionToolPreset string) func(context.Context) context.Context {
 	return func(ctx context.Context) context.Context {
-		ctx = WithSessionKey(ctx, params.SessionKey)
-		ctx = WithTurnContext(ctx, NewTurnContext())
-		ctx = WithRunCache(ctx, s.runCache)
-		ctx = WithSkillConsultLog(ctx, s.skillConsults)
-		ctx = WithFileCache(ctx, s.fileCache)
+		ctx = withSessionKey(ctx, params.SessionKey)
+		ctx = withTurnContext(ctx, newTurnContext())
+		ctx = withRunCache(ctx, s.runCache)
+		ctx = withSkillConsultLog(ctx, s.skillConsults)
+		ctx = withFileCache(ctx, s.fileCache)
 		ctx = WithToolPreset(ctx, sessionToolPreset)
-		ctx = WithDeferredActivation(ctx, s.deferredActivation)
-		ctx = WithSpawnFlag(ctx, s.spawnFlag)
-		ctx = WithVerifyGate(ctx, s.verifyGate)
+		ctx = withDeferredActivation(ctx, s.deferredActivation)
+		ctx = withSpawnFlag(ctx, s.spawnFlag)
+		ctx = withVerifyGate(ctx, s.verifyGate)
 		ctx = toolport.WithToolExecStats(ctx, s.execStats)
 		if params.ToolDryRun {
 			ctx = toolport.WithToolDryRun(ctx)
 		}
 		if params.AutoDeliveredOutput {
-			ctx = WithAutoDelivery(ctx)
+			ctx = withAutoDelivery(ctx)
 		}
 		return ctx
 	}
@@ -137,7 +137,7 @@ func (s *agentRunState) dynamicToolsProvider(registry *ToolRegistry) func() []ll
 		if len(names) == 0 || registry == nil {
 			return nil
 		}
-		return registry.DeferredLLMTools(names)
+		return registry.deferredLLMTools(names)
 	}
 }
 
@@ -145,7 +145,7 @@ func (s *agentRunState) dynamicToolsProvider(registry *ToolRegistry) func() []ll
 // skill-nudger callbacks. Its mutex protects only the nudger's
 // accumulated snapshot; external callbacks run after it is released.
 type agentTurnHooks struct {
-	params           RunParams
+	params           runParams
 	emitAgentFn      func(kind, sessionKey, runID string, payload map[string]any)
 	nudger           SkillNudger
 	nudgerEnabled    bool
@@ -155,7 +155,7 @@ type agentTurnHooks struct {
 	nudgerTurns      int
 }
 
-func newAgentTurnHooks(params RunParams, deps runDeps, acd agentConfigDeps, sessionToolPreset string) *agentTurnHooks {
+func newAgentTurnHooks(params runParams, deps runDeps, acd agentConfigDeps, sessionToolPreset string) *agentTurnHooks {
 	nudgeCtx := deps.callbacks.shutdownCtx
 	if nudgeCtx == nil {
 		// Reviews intentionally outlive a request. Production supplies the
@@ -220,9 +220,9 @@ func buildAgentTools(registry *ToolRegistry, sessionToolPreset string, replayedD
 		return nil
 	}
 	preset := sessionToolPreset
-	rawTools := registry.FilteredLLMTools(toolwire.AllowedTools(preset))
+	rawTools := registry.filteredLLMTools(toolwire.AllowedTools(preset))
 	if preload := toolwire.PreloadedDeferredTools(preset); len(preload) > 0 {
-		rawTools = append(rawTools, registry.DeferredLLMTools(preload)...)
+		rawTools = append(rawTools, registry.deferredLLMTools(preload)...)
 	}
 
 	// Cache-stable ordering: built-in tools form a sorted prefix, while
@@ -232,7 +232,7 @@ func buildAgentTools(registry *ToolRegistry, sessionToolPreset string, replayedD
 	for _, name := range registeredNames {
 		builtinNames[name] = struct{}{}
 	}
-	tools := PartitionTools(rawTools, builtinNames).MergedTools()
+	tools := partitionTools(rawTools, builtinNames).mergedTools()
 	return appendReplayedDeferredTools(registry, tools, replayedDeferredTools)
 }
 
@@ -244,7 +244,7 @@ func appendReplayedDeferredTools(registry *ToolRegistry, tools []llm.Tool, repla
 	for _, tool := range tools {
 		existing[tool.Name] = struct{}{}
 	}
-	for _, tool := range registry.DeferredLLMTools(replayed) {
+	for _, tool := range registry.deferredLLMTools(replayed) {
 		if _, ok := existing[tool.Name]; !ok {
 			tools = append(tools, tool)
 		}
@@ -252,7 +252,7 @@ func appendReplayedDeferredTools(registry *ToolRegistry, tools []llm.Tool, repla
 	return tools
 }
 
-func resolveAgentExecutionPolicy(params RunParams, deps runDeps, cachedSession *session.Session, configuredMaxTokens int) agentExecutionPolicy {
+func resolveAgentExecutionPolicy(params runParams, deps runDeps, cachedSession *session.Session, configuredMaxTokens int) agentExecutionPolicy {
 	maxTurns, timeout := resolveAgentRunLimits(params, deps, cachedSession)
 	maxOutputRecovery, maxOutputScaleFactors, streamIdleTimeout, parallelSafeTool := resolveAgentOutputPolicy(deps.briefcaseMode)
 	return agentExecutionPolicy{
@@ -268,7 +268,7 @@ func resolveAgentExecutionPolicy(params RunParams, deps runDeps, cachedSession *
 	}
 }
 
-func resolveAgentMaxTokens(params RunParams, configured int) int {
+func resolveAgentMaxTokens(params runParams, configured int) int {
 	if params.MaxTokens != nil && *params.MaxTokens > 0 {
 		return *params.MaxTokens
 	}
@@ -286,7 +286,7 @@ func copyMaxToolCallAttempts(value *int) *int {
 	return &cloned
 }
 
-func resolveAgentThinking(params RunParams, cachedSession *session.Session) *llm.ThinkingConfig {
+func resolveAgentThinking(params runParams, cachedSession *session.Session) *llm.ThinkingConfig {
 	level := ""
 	if cachedSession != nil {
 		level = cachedSession.ThinkingLevel
@@ -302,7 +302,7 @@ func resolveAgentThinking(params RunParams, cachedSession *session.Session) *llm
 	return thinking
 }
 
-func resolveAgentRunLimits(params RunParams, deps runDeps, cachedSession *session.Session) (int, time.Duration) {
+func resolveAgentRunLimits(params runParams, deps runDeps, cachedSession *session.Session) (int, time.Duration) {
 	maxTurns := defaultMaxTurns
 	timeout := defaultAgentTimeout
 	if cachedSession != nil {
@@ -379,14 +379,14 @@ func applyVerificationAgentPolicy(cfg *agent.AgentConfig, briefcaseMode bool, ve
 // wiring all turn-level hooks. Returns the config along with the spawn flag
 // for the run orchestrator.
 func buildAgentConfig(
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	cachedSession *session.Session,
 	systemPrompt json.RawMessage,
 	sessionToolPreset string,
 	acd agentConfigDeps,
 	logger *slog.Logger,
-) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolport.ToolExecStats, skillConsults *SkillConsultLog) {
+) (cfg agent.AgentConfig, spawnFlag *spawnFlag, execStats *toolport.ToolExecStats, skillConsults *skillConsultLog) {
 	tools := buildAgentTools(acd.Tools, sessionToolPreset, acd.ReplayDeferredTools)
 	state := newAgentRunState(acd.ReplayDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)
@@ -450,7 +450,7 @@ func buildAgentConfig(
 // recordRunSkillUsage attributes one completed run's outcome to every skill
 // consulted during it. Waiting until the run ends prevents an early clean
 // skill-read turn from hiding a later tool error or missing final answer.
-func recordRunSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, result *agent.AgentResult, runErr error, sessionKey, model string) {
+func recordRunSkillUsage(rec SkillUsageRecorder, log *skillConsultLog, result *agent.AgentResult, runErr error, sessionKey, model string) {
 	if rec == nil || log == nil {
 		return
 	}
@@ -498,7 +498,7 @@ func skillRunFailure(result *agent.AgentResult, runErr error) string {
 	return ""
 }
 
-func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPreset string) bool {
+func shouldEnableSkillNudger(nudger SkillNudger, params runParams, sessionToolPreset string) bool {
 	if nudger == nil || !nudger.Enabled() {
 		return false
 	}
@@ -652,7 +652,7 @@ func reasoningSandwichThinking(base *llm.ThinkingConfig, maxTokens int, gate *ve
 // it had replied — the "대답 안 하고 대답했다고 생각하는 경향" bug.
 func buildMessagePersister(
 	deps runDeps,
-	params RunParams,
+	params runParams,
 	logger *slog.Logger,
 ) func(msg llm.Message) {
 	// EphemeralAssistant turns suppress assistant + tool_result persistence:

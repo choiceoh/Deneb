@@ -28,8 +28,8 @@ type fetchCacheItem struct {
 	element *list.Element
 }
 
-// FetchCache is a bounded TTL cache for web_fetch results.
-type FetchCache struct {
+// fetchCache is a bounded TTL cache for web_fetch results.
+type fetchCache struct {
 	mu      sync.Mutex
 	items   map[string]*fetchCacheItem
 	order   *list.List // front = oldest, back = newest
@@ -38,16 +38,16 @@ type FetchCache struct {
 }
 
 // NewFetchCache creates a cache with default size (64) and TTL (5 min).
-func NewFetchCache() *FetchCache {
-	return NewFetchCacheWithTTL(fetchCacheDefaultMaxSize, fetchCacheDefaultTTL)
+func NewFetchCache() *fetchCache {
+	return newFetchCacheWithTTL(fetchCacheDefaultMaxSize, fetchCacheDefaultTTL)
 }
 
-// NewFetchCacheWithTTL creates a cache with the given size and TTL.
-func NewFetchCacheWithTTL(maxSize int, ttl time.Duration) *FetchCache {
+// newFetchCacheWithTTL creates a cache with the given size and TTL.
+func newFetchCacheWithTTL(maxSize int, ttl time.Duration) *fetchCache {
 	if maxSize <= 0 {
 		maxSize = fetchCacheDefaultMaxSize
 	}
-	return &FetchCache{
+	return &fetchCache{
 		items:   make(map[string]*fetchCacheItem, maxSize),
 		order:   list.New(),
 		maxSize: maxSize,
@@ -56,7 +56,7 @@ func NewFetchCacheWithTTL(maxSize int, ttl time.Duration) *FetchCache {
 }
 
 // Get returns cached content for the URL if it exists and hasn't expired.
-func (c *FetchCache) Get(url string) (string, bool) {
+func (c *fetchCache) Get(url string) (string, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -75,7 +75,7 @@ func (c *FetchCache) Get(url string) (string, bool) {
 }
 
 // Put stores content for the URL. Evicts the oldest entry if at capacity.
-func (c *FetchCache) Put(url, content string) {
+func (c *fetchCache) Put(url, content string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -104,7 +104,7 @@ func (c *FetchCache) Put(url, content string) {
 }
 
 // removeLocked removes an entry by key. Must be called with mu held.
-func (c *FetchCache) removeLocked(url string) {
+func (c *fetchCache) removeLocked(url string) {
 	item, ok := c.items[url]
 	if !ok {
 		return

@@ -33,7 +33,7 @@ func (*replyDeliverySequenceTranscript) CloneRecent(string, string, int) error {
 
 func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	params := RunParams{
+	params := runParams{
 		SessionKey: "client:main",
 		Delivery: &DeliveryContext{
 			Channel:    "client",
@@ -53,7 +53,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 					AudioAsVoice: true,
 				}
 			}},
-			callbacks: CallbackSnapshot{
+			callbacks: callbackSnapshot{
 				replyFunc: func(_ context.Context, _ *DeliveryContext, text string) error {
 					events = append(events, "reply:"+text)
 					return nil
@@ -102,7 +102,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 					MediaURLs: []string{"media://silent"},
 				}
 			}},
-			callbacks: CallbackSnapshot{
+			callbacks: callbackSnapshot{
 				replyFunc: func(context.Context, *DeliveryContext, string) error {
 					events = append(events, "reply")
 					return nil
@@ -159,7 +159,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 				events = append(events, "parse")
 				return chatport.ReplyDirectives{Text: "답변"}
 			}},
-			callbacks: CallbackSnapshot{replyFunc: func(context.Context, *DeliveryContext, string) error {
+			callbacks: callbackSnapshot{replyFunc: func(context.Context, *DeliveryContext, string) error {
 				events = append(events, "reply")
 				return errors.New("reply failed")
 			}},
@@ -185,7 +185,7 @@ func TestDeliverRunReply_PreservesDecisionAndSideEffectOrder(t *testing.T) {
 				events = append(events, "parse")
 				return chatport.ReplyDirectives{}
 			}},
-			callbacks: CallbackSnapshot{replyFunc: func(_ context.Context, _ *DeliveryContext, text string) error {
+			callbacks: callbackSnapshot{replyFunc: func(_ context.Context, _ *DeliveryContext, text string) error {
 				events = append(events, "fallback:"+text)
 				return nil
 			}},

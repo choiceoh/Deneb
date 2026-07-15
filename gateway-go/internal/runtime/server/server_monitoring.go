@@ -9,22 +9,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // SetDaemon attaches the daemon used by server monitoring.
-func (s *Server) SetDaemon(d *daemon.Daemon) {
+func (s *Server) SetDaemon(d *domainbind.Daemon) {
 	s.daemon = d
 }
 
 // Broadcaster returns the event broadcaster for external use.
-func (s *Server) Broadcaster() *events.Broadcaster {
+func (s *Server) Broadcaster() *svcbind.Broadcaster {
 	return s.broadcaster
 }
 
 // Publisher returns the event publisher for enriched event delivery.
-func (s *Server) Publisher() *events.Publisher {
+func (s *Server) Publisher() *svcbind.Publisher {
 	return s.publisher
 }
 

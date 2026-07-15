@@ -19,7 +19,7 @@ import (
 // see executeAgentRun.
 func wireStreamHooks(
 	hc *agent.HookCompositor,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
@@ -44,7 +44,7 @@ func wireStreamHooks(
 		hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
 			broadcaster.EmitToolResult(name, toolUseID, result, isErr)
 			if deps.broadcast != nil {
-				broadcastPayload(deps.broadcast, "session.tool", SessionToolEvent{
+				broadcastPayload(deps.broadcast, "session.tool", sessionToolEvent{
 					SessionKey: params.SessionKey,
 					RunID:      params.ClientRunID,
 					Tool:       name,
@@ -73,7 +73,7 @@ func wireStreamHooks(
 	}
 
 	// Mutation failure escalation: a mutation tool reported an in-band failure
-	// (banner added by MutationFailureAnnotator) that the agent loop saw as
+	// (banner added by mutationFailureAnnotator) that the agent loop saw as
 	// isError=false. Per docs/agent-rules/logging.md, a user-observable failure must
 	// surface as Error + a broadcast so the operator/UI sees the dropped action,
 	// not just the agent. Runs regardless of broadcaster wiring. (research finding A)
@@ -86,7 +86,7 @@ func wireStreamHooks(
 				"tool", name, "session", params.SessionKey, "runId", params.ClientRunID)
 		}
 		if deps.broadcast != nil {
-			broadcastPayload(deps.broadcast, "chat.tool_failed", ChatToolFailedEvent{
+			broadcastPayload(deps.broadcast, "chat.tool_failed", chatToolFailedEvent{
 				Session:    params.SessionKey,
 				SessionKey: params.SessionKey,
 				RunID:      params.ClientRunID,

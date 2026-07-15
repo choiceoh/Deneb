@@ -198,11 +198,11 @@ func CollectWeeklyReportData(_ context.Context, opts WeeklyReportOpts, now time.
 	return string(out), nil
 }
 
-// BuildWeeklyReportPDF collects the report, composes the HTML form, and renders
+// buildWeeklyReportPDF collects the report, composes the HTML form, and renders
 // it to a PDF via headless Chromium. Returns the PDF path on success; on any
 // render failure it returns rendered=false with a plain-text fallback (the
 // caller delivers text instead). Never errors on render failure — degrades.
-func BuildWeeklyReportPDF(ctx context.Context, opts WeeklyReportOpts, now time.Time) (pdfPath, textFallback string, rendered bool) {
+func buildWeeklyReportPDF(ctx context.Context, opts WeeklyReportOpts, now time.Time) (pdfPath, textFallback string, rendered bool) {
 	env := collectWeekly(opts, now)
 	textFallback = composeWeeklyText(env)
 	html, err := composeWeeklyHTML(env)
@@ -547,7 +547,7 @@ func weeklyClip(s string, maxLen int) string {
 	return s
 }
 
-// composeWeeklyText renders the plain-text 양식 — BuildWeeklyReportPDF's fallback
+// composeWeeklyText renders the plain-text 양식 — buildWeeklyReportPDF's fallback
 // when the Chromium render is unavailable. The delivered report body is the
 // deneb-ui card (weekly_card.go) since 2026-07; this text form survives only as
 // that fallback composition.

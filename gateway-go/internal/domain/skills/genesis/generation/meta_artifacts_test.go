@@ -114,8 +114,8 @@ func TestMetaArtifactsVersionReturnsHashOfEffectivePromptContent(t *testing.T) {
 		t.Fatal("short-floor fallback must report the fallback version")
 	}
 
-	vs := m.ActiveVersions(DefaultMetaArtifacts())
+	vs := m.activeVersions(DefaultMetaArtifacts())
 	if len(vs) != len(DefaultMetaArtifacts()) {
-		t.Fatalf("ActiveVersions size = %d", len(vs))
+		t.Fatalf("activeVersions size = %d", len(vs))
 	}
 }

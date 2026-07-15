@@ -11,14 +11,14 @@ import (
 
 func newSteerTestHandler() *Handler {
 	return &Handler{
-		abort:  NewAbortTracker(),
-		steer:  NewSteerQueue(),
+		abort:  newAbortTracker(),
+		steer:  newSteerQueue(),
 		logger: slog.Default(),
 	}
 }
 
 func markActiveRun(h *Handler, sessionKey string) {
-	h.abort.Register("active-"+sessionKey, &AbortEntry{
+	h.abort.Register("active-"+sessionKey, &abortEntry{
 		SessionKey: sessionKey,
 		ClientRun:  "active-" + sessionKey,
 		CancelFn:   func(error) {},

@@ -20,18 +20,18 @@ import (
 	"strings"
 )
 
-// FenceInfo is the markdown fence info-string that marks a deneb-ui block.
+// fenceInfo is the markdown fence info-string that marks a deneb-ui block.
 // Matched case-insensitively, mirroring Kai's BlockScanner.kt.
-const FenceInfo = "deneb-ui"
+const fenceInfo = "deneb-ui"
 
-// Issue describes a single schema violation at a JSON-ish path.
-type Issue struct {
+// issue describes a single schema violation at a JSON-ish path.
+type issue struct {
 	Path string
 	Msg  string
 }
 
 // String returns the human-readable representation.
-func (is Issue) String() string { return is.Path + ": " + is.Msg }
+func (is issue) String() string { return is.Path + ": " + is.Msg }
 
 // nodeSpec captures the structural rules for one node type.
 type nodeSpec struct {
@@ -189,8 +189,8 @@ func denebUIFenceOpenSplit(line string) (rest string, open bool) {
 		for k < len(line) && (line[k] == ' ' || line[k] == '\t') {
 			k++
 		}
-		if len(line)-k >= len(FenceInfo) && strings.EqualFold(line[k:k+len(FenceInfo)], FenceInfo) {
-			m := k + len(FenceInfo)
+		if len(line)-k >= len(fenceInfo) && strings.EqualFold(line[k:k+len(fenceInfo)], fenceInfo) {
+			m := k + len(fenceInfo)
 			for m < len(line) && (line[m] == ' ' || line[m] == '\t') {
 				m++
 			}
@@ -233,7 +233,7 @@ func isFenceClose(line string) bool {
 // '{'/'[' bodies take the legacy strict-JSON path, kept for old transcripts.
 // It returns the list of issues (empty == valid). A non-nil error means the
 // body was not parseable at all.
-func Validate(body string) ([]Issue, error) {
+func Validate(body string) ([]issue, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return nil, fmt.Errorf("empty deneb-ui block")
@@ -252,7 +252,7 @@ func Validate(body string) ([]Issue, error) {
 		if nerr != nil {
 			return nil, fmt.Errorf("invalid JSON: %w", err)
 		}
-		var issues []Issue
+		var issues []issue
 		for i, n := range nodes {
 			issues = append(issues, validateNode(n, fmt.Sprintf("[%d]", i))...)
 		}
@@ -261,10 +261,10 @@ func Validate(body string) ([]Issue, error) {
 	return validateNode(root, "$"), nil
 }
 
-func validateNode(v any, path string) []Issue {
+func validateNode(v any, path string) []issue {
 	switch t := v.(type) {
 	case []any:
-		var issues []Issue
+		var issues []issue
 		for i, e := range t {
 			issues = append(issues, validateNode(e, fmt.Sprintf("%s[%d]", path, i))...)
 		}
@@ -272,31 +272,31 @@ func validateNode(v any, path string) []Issue {
 	case map[string]any:
 		return validateObject(t, path)
 	default:
-		return []Issue{{path, "expected a UI node object"}}
+		return []issue{{path, "expected a UI node object"}}
 	}
 }
 
-func validateObject(m map[string]any, path string) []Issue {
+func validateObject(m map[string]any, path string) []issue {
 	typ, _ := m["type"].(string)
 	if typ == "" {
-		return []Issue{{path, `missing or non-string "type"`}}
+		return []issue{{path, `missing or non-string "type"`}}
 	}
 	spec, ok := nodeSpecs[typ]
 	if !ok {
-		return []Issue{{path, fmt.Sprintf("unknown node type %q", typ)}}
+		return []issue{{path, fmt.Sprintf("unknown node type %q", typ)}}
 	}
 
-	var issues []Issue
+	var issues []issue
 	if spec.requireID {
 		if id, _ := m["id"].(string); id == "" {
-			issues = append(issues, Issue{path, fmt.Sprintf("node %q requires a non-empty %q", typ, "id")})
+			issues = append(issues, issue{path, fmt.Sprintf("node %q requires a non-empty %q", typ, "id")})
 		}
 	}
 	for field, allowed := range spec.enums {
 		if raw, present := m[field]; present {
 			s, _ := raw.(string)
 			if !contains(allowed, s) {
-				issues = append(issues, Issue{
+				issues = append(issues, issue{
 					path + "." + field,
 					fmt.Sprintf("invalid %s %q (allowed: %s)", field, s, strings.Join(allowed, ", ")),
 				})
@@ -315,7 +315,7 @@ func validateObject(m map[string]any, path string) []Issue {
 		}
 		arr, ok := raw.([]any)
 		if !ok {
-			issues = append(issues, Issue{path + "." + cf, fmt.Sprintf("%q must be an array of nodes", cf)})
+			issues = append(issues, issue{path + "." + cf, fmt.Sprintf("%q must be an array of nodes", cf)})
 			continue
 		}
 		for i, e := range arr {
@@ -328,20 +328,20 @@ func validateObject(m map[string]any, path string) []Issue {
 	return issues
 }
 
-func validateTabs(m map[string]any, path string) []Issue {
+func validateTabs(m map[string]any, path string) []issue {
 	raw, present := m["tabs"]
 	if !present || raw == nil {
 		return nil
 	}
 	arr, ok := raw.([]any)
 	if !ok {
-		return []Issue{{path + ".tabs", `"tabs" must be an array`}}
+		return []issue{{path + ".tabs", `"tabs" must be an array`}}
 	}
-	var issues []Issue
+	var issues []issue
 	for i, e := range arr {
 		tab, ok := e.(map[string]any)
 		if !ok {
-			issues = append(issues, Issue{fmt.Sprintf("%s.tabs[%d]", path, i), "tab must be an object"})
+			issues = append(issues, issue{fmt.Sprintf("%s.tabs[%d]", path, i), "tab must be an object"})
 			continue
 		}
 		ch, present := tab["children"]
@@ -350,7 +350,7 @@ func validateTabs(m map[string]any, path string) []Issue {
 		}
 		carr, ok := ch.([]any)
 		if !ok {
-			issues = append(issues, Issue{fmt.Sprintf("%s.tabs[%d].children", path, i), "must be an array"})
+			issues = append(issues, issue{fmt.Sprintf("%s.tabs[%d].children", path, i), "must be an array"})
 			continue
 		}
 		for j, ce := range carr {
@@ -360,17 +360,17 @@ func validateTabs(m map[string]any, path string) []Issue {
 	return issues
 }
 
-func validateAction(v any, path string) []Issue {
+func validateAction(v any, path string) []issue {
 	m, ok := v.(map[string]any)
 	if !ok {
-		return []Issue{{path, "action must be an object"}}
+		return []issue{{path, "action must be an object"}}
 	}
 	typ, _ := m["type"].(string)
 	if typ == "" {
-		return []Issue{{path, `action missing "type"`}}
+		return []issue{{path, `action missing "type"`}}
 	}
 	if !contains(actionTypes, typ) {
-		return []Issue{{path, fmt.Sprintf("unknown action type %q (allowed: %s)", typ, strings.Join(actionTypes, ", "))}}
+		return []issue{{path, fmt.Sprintf("unknown action type %q (allowed: %s)", typ, strings.Join(actionTypes, ", "))}}
 	}
 	return nil
 }

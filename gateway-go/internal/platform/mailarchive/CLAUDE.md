@@ -42,6 +42,20 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
 - read/archive/trash는 `overlay.Store` 계약을 통해 적용한다. IMAP
   원본 mutation으로 의미를 바꾸지 않는다.
 
+## Local change scope
+
+archive transport 변경은 mailarchive 서브트리에 가둔다. 분석·OCR을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `internal/platform/mailarchive/overlay`(로컬 상태),
+  `internal/pipeline/chat/tools`(mail 도구 소비자),
+  `internal/platform/lmtpd`·`internal/platform/mailbody`(파싱 경계).
+  `Repository`/`Source`/`overlay.Store` 계약이 바뀌면 `repository_test.go`와
+  `overlay/store_test.go`를 먼저 본다.
+- 건드리지 말 것: `internal/pipeline/mailanalysis` 판단 로직,
+  RPC handler DTO 조립, OCR/요약을 이 패키지에 넣는 변경. mailarchive에서
+  mailanalysis·RPC handler를 import하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/platform/mailarchive`
+
 ## 집중 검증
 
 기본 검증은 mock IMAP과 결정적 clock을 사용하며 live test는 별도 환경이

@@ -12,7 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -24,7 +24,7 @@ import (
 // Handler manages chat RPC methods.
 type Handler struct {
 	// Embedded channel callbacks — all Set*/Get methods are promoted.
-	*ChannelCallbacks
+	*channelCallbacks
 
 	sessions       *session.Manager
 	broadcast      BroadcastFunc
@@ -64,12 +64,12 @@ type Handler struct {
 	auditSystemPrompt    func(sessionKey string, prompt []byte)
 
 	// Extracted components.
-	abort                *AbortTracker
-	pending              *PendingQueue
-	mergeWindow          *MergeWindowTracker
-	subagent             *SubagentNotifier
+	abort                *abortTracker
+	pending              *pendingQueue
+	mergeWindow          *mergeWindowTracker
+	subagent             *subagentNotifier
 	subagentCleanupUnsub func()
-	steer                *SteerQueue // mid-run /steer notes for the main agent
+	steer                *steerQueue // mid-run /steer notes for the main agent
 	linkEnrichStart      LinkEnrichStart
 	reportCardHealth     func(text, sessionKey string, logger *slog.Logger)
 
@@ -91,8 +91,8 @@ type Handler struct {
 	skills SkillDeps
 
 	// ambient groups the ambient system-prompt context providers (topic
-	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
-	ambient AmbientDeps
+	// knowledge, calendar/goal glances, persona override). See ambientDeps.
+	ambient ambientDeps
 
 	// weeklyReportTextFn / weeklyFormDeliverFn back the interactive /weekly
 	// (/주간보고) slash command — the deterministic 주간업무보고 generators the
@@ -118,7 +118,7 @@ type MemoryDeps struct {
 	// Org loads the operator's org chart (조직도) for the recall preflight's org
 	// source (org members/divisions named in a turn → their 부서 + 인물 page).
 	// Injected by the server as org.Load; nil disables the org recall source.
-	Org chatrecall.OrgLoader
+	Org leafbind.RecallOrgLoader
 	// Embedding is the embedding client (BGE-M3) for the MMR compaction
 	// fallback tier.
 	Embedding compact.Embedder
@@ -134,11 +134,11 @@ type SkillDeps struct {
 	UsageRecorder SkillUsageRecorder
 }
 
-// AmbientDeps groups the ambient system-prompt context providers that flow
+// ambientDeps groups the ambient system-prompt context providers that flow
 // HandlerConfig → Handler → runDeps unchanged. One field here replaces three
 // mirrored declarations and two field-by-field copies (the triple-mirror debt
 // from the 2026-07 pipeline audit). Every field is optional; nil disables it.
-type AmbientDeps struct {
+type ambientDeps struct {
 	// TopicResolver maps a forum threadID to a per-topic knowledge key for
 	// system-prompt injection.
 	TopicResolver TopicResolver
@@ -146,11 +146,11 @@ type AmbientDeps struct {
 	// dynamic system-prompt block.
 	CalendarGlance CalendarGlanceFunc
 	// GoalGlance builds the ambient active-goal glance for the dynamic block.
-	GoalGlance GoalGlanceFunc
+	GoalGlance goalGlanceFunc
 	// PersonaOverride returns the operator-edited 업무 persona text (Settings
 	// prompt corner); "" → the default persona renders. Read per turn —
 	// byte-stable between rare edits, so the Static cache holds.
-	PersonaOverride PersonaOverrideFunc
+	PersonaOverride personaOverrideFunc
 }
 
 // TopicResolver maps a forum/topic threadID to a per-topic knowledge key
@@ -228,8 +228,8 @@ type HandlerConfig struct {
 	PromptWorkspaceDir string
 	// BriefcaseMode disables ambient production shortcuts that sit outside a
 	// signed evaluation world.
-	BriefcaseMode bool
-	LinkEnrichStart LinkEnrichStart
+	BriefcaseMode    bool
+	LinkEnrichStart  LinkEnrichStart
 	ReportCardHealth func(text, sessionKey string, logger *slog.Logger)
 	// AuditSystemPrompt receives the exact finalized system-prompt wire bytes.
 	// It is a trusted observability hook used by deterministic evaluation only.
@@ -243,8 +243,8 @@ type HandlerConfig struct {
 	EmitTranscriptFn func(sessionKey string, message rawJSON, messageID string)
 
 	// Ambient groups the ambient system-prompt context providers (topic
-	// knowledge, calendar/goal glances, persona override). See AmbientDeps.
-	Ambient AmbientDeps
+	// knowledge, calendar/goal glances, persona override). See ambientDeps.
+	Ambient ambientDeps
 
 	// RecordActivity is called for user-originating chat turns so the server
 	// can remember the latest active channel session for autonomous follow-ups.
@@ -258,14 +258,14 @@ func DefaultHandlerConfig() HandlerConfig {
 		MaxHistoryBytes: 2 * 1024 * 1024, // 2 MB
 		MaxHistoryCount: 200,
 		MaxMessageBytes: 128 * 1024, // 128 KB
-		ContextCfg:      DefaultContextConfig(),
+		ContextCfg:      defaultContextConfig(),
 		MaxTokens:       defaultMaxTokens,
 	}
 }
 
-// StatusDepsFunc returns server-level status data for the /status command.
+// statusDepsFunc returns server-level status data for the /status command.
 // Called lazily so values are always fresh.
-type StatusDepsFunc func(sessionKey string) StatusDeps
+type statusDepsFunc func(sessionKey string) StatusDeps
 
 // StatusDeps holds server-level data for the /status command.
 type StatusDeps struct {
@@ -291,7 +291,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		cfg.SemanticNow = dentime.Now
 	}
 
-	cb := NewChannelCallbacks(cfg.DefaultModel)
+	cb := newChannelCallbacks(cfg.DefaultModel)
 	// Initialize callbacks available at construction time.
 	if cfg.BroadcastRaw != nil {
 		cb.broadcastRaw = cfg.BroadcastRaw
@@ -304,7 +304,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	}
 
 	h := &Handler{
-		ChannelCallbacks:     cb,
+		channelCallbacks:     cb,
 		sessions:             sessions,
 		broadcast:            broadcast,
 		logger:               logger,
@@ -336,10 +336,10 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		briefcaseMode:        cfg.BriefcaseMode,
 		auditSystemPrompt:    cfg.AuditSystemPrompt,
 		providerRuntime:      cfg.ProviderRuntime,
-		abort:                NewAbortTracker(),
-		pending:              NewPendingQueue(),
-		mergeWindow:          NewMergeWindowTracker(),
-		steer:                NewSteerQueue(),
+		abort:                newAbortTracker(),
+		pending:              newPendingQueue(),
+		mergeWindow:          newMergeWindowTracker(),
+		steer:                newSteerQueue(),
 		linkEnrichStart:      cfg.LinkEnrichStart,
 		reportCardHealth:     cfg.ReportCardHealth,
 		maxHistoryBytes:      cfg.MaxHistoryBytes,
@@ -351,10 +351,10 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		pilot.SetModelRoleRegistry(h.registry)
 	}
 	// Wire centralized local AI hub for token budget management and health checks.
-	h.subagent = NewSubagentNotifier(SubagentNotifierDeps{
+	h.subagent = newSubagentNotifier(subagentNotifierDeps{
 		Logger:       h.logger,
 		HasActiveRun: h.abort.HasActiveRun,
-		StartRun: func(reqID string, params RunParams, isSteer bool) {
+		StartRun: func(reqID string, params runParams, isSteer bool) {
 			h.startAsyncRun(reqID, params, isSteer)
 		},
 		EnqueuePend: h.pending.Enqueue,
@@ -363,7 +363,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 	// Cascade cleanup: when a parent session is killed or deleted, interrupt and
 	// kill its running children. Subscribed for the handler's lifetime (same as
 	// the notifier above).
-	h.subagentCleanupUnsub = StartSubagentCleanup(SubagentCleanupDeps{
+	h.subagentCleanupUnsub = startSubagentCleanup(subagentCleanupDeps{
 		Logger:       h.logger,
 		Sessions:     func() *session.Manager { return h.sessions },
 		InterruptRun: h.abort.InterruptSession,
@@ -418,7 +418,7 @@ func (h *Handler) ToolNames() []string {
 	if h == nil || h.tools == nil {
 		return nil
 	}
-	return h.tools.SortedNames()
+	return h.tools.sortedNames()
 }
 
 // Close stops background goroutines and cancels all active abort entries.
@@ -453,9 +453,9 @@ func (h *Handler) EnqueueSteer(sessionKey, note string) bool {
 	return h.steer.Enqueue(sessionKey, note)
 }
 
-// SteerQueue returns the queue for internal wiring (used by runDeps to
+// steerQueue returns the queue for internal wiring (used by runDeps to
 // give the agent run goroutine access without leaking the Handler).
-func (h *Handler) SteerQueue() *SteerQueue {
+func (h *Handler) steerQueue() *steerQueue {
 	return h.steer
 }
 

@@ -10,9 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 const (
@@ -28,7 +27,7 @@ const (
 // postLowConfidenceEvolveCard turns a borderline-but-admissible judge decision
 // into a real operator label. The evolve remains protected by the normal
 // post-use rollback watch; this card only adds fast, explicit P3 feedback.
-func (s *Server) postLowConfidenceEvolveCard(result genesis.EvolveResult) {
+func (s *Server) postLowConfidenceEvolveCard(result domainbind.EvolveResult) {
 	if !result.Evolved || !result.NeedsOperatorVerdict || result.JudgeMargin == nil {
 		return
 	}
@@ -37,7 +36,7 @@ func (s *Server) postLowConfidenceEvolveCard(result genesis.EvolveResult) {
 		return
 	}
 	margin := strconv.FormatFloat(*result.JudgeMargin, 'f', 1, 64)
-	item := workfeed.Item{
+	item := domainbind.Item{
 		Source:  evolveVerdictSource,
 		Title:   "저신뢰 스킬 개선 확인: " + result.SkillName,
 		Summary: fmt.Sprintf("%s → %s · 판정 여유 %s점", result.SkillName, result.NewVersion, margin),
@@ -59,11 +58,11 @@ func (s *Server) postLowConfidenceEvolveCard(result genesis.EvolveResult) {
 			"judgeMargin":  margin,
 		},
 		Question: true,
-		Actions: []workfeed.Action{
-			{ID: evolveVerdictConfirm, Kind: workfeed.ActionAck, Label: "개선 확정"},
-			{ID: evolveVerdictRollback, Kind: workfeed.ActionAck, Label: "되돌리기"},
+		Actions: []domainbind.Action{
+			{ID: evolveVerdictConfirm, Kind: domainbind.ActionAck, Label: "개선 확정"},
+			{ID: evolveVerdictRollback, Kind: domainbind.ActionAck, Label: "되돌리기"},
 		},
-		Status: workfeed.StatusUnread,
+		Status: domainbind.StatusUnread,
 	}
 	if _, err := nf.Append(item); err != nil {
 		s.logger.Warn("low-confidence evolve 카드 생성 실패", "skill", result.SkillName, "error", err)
@@ -73,7 +72,7 @@ func (s *Server) postLowConfidenceEvolveCard(result genesis.EvolveResult) {
 // handleEvolveVerdictAction applies one settled low-confidence verdict and
 // writes an idempotent, version-attributed P3 label. A rollback is recorded
 // only when the exact card version is still live and restoration succeeds.
-func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) error {
+func (s *Server) handleEvolveVerdictAction(item domainbind.Item, actionID string) error {
 	if s.genesisTracker == nil || s.genesisEvolver == nil {
 		return fmt.Errorf("evolve verdict subsystem unavailable")
 	}
@@ -88,7 +87,7 @@ func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) 
 	if _, settled := s.genesisTracker.OperatorJudgeVerdictByDecisionID(decisionID); settled {
 		return nil
 	}
-	verdict := genesis.OperatorJudgeVerdictConfirm
+	verdict := domainbind.OperatorJudgeVerdictConfirm
 	if actionID == evolveVerdictRollback {
 		if s.skillCatalog == nil {
 			return fmt.Errorf("skill catalog unavailable")
@@ -102,11 +101,11 @@ func (s *Server) handleEvolveVerdictAction(item workfeed.Item, actionID string) 
 			s.logger.Warn("operator evolve rollback failed", "skill", skill, "version", version)
 			return fmt.Errorf("operator evolve rollback failed for %s@%s", skill, version)
 		}
-		verdict = genesis.OperatorJudgeVerdictRollback
+		verdict = domainbind.OperatorJudgeVerdictRollback
 	} else if actionID != evolveVerdictConfirm {
 		return fmt.Errorf("unsupported evolve verdict action %q", actionID)
 	}
-	if err := s.genesisTracker.LogOperatorJudgeVerdict(genesis.OperatorJudgeVerdict{
+	if err := s.genesisTracker.LogOperatorJudgeVerdict(domainbind.OperatorJudgeVerdict{
 		DecisionID:   decisionID,
 		Skill:        skill,
 		Version:      version,
@@ -137,7 +136,7 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adop
 	if epochLabel == "" {
 		epochLabel = epoch
 	}
-	item := workfeed.Item{
+	item := domainbind.Item{
 		Source:  metaProposalSource,
 		Summary: reason,
 		RefType: "file",
@@ -155,8 +154,8 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adop
 
 건강 지표가 열화하면 롤백 워치가 자동 복원합니다. 지금 되돌리려면 아래 버튼을 누르세요.`,
 			artifact, epochLabel, reason, path)
-		item.Actions = []workfeed.Action{
-			{ID: metaProposalActionRevert, Kind: workfeed.ActionAck, Label: "되돌리기"},
+		item.Actions = []domainbind.Action{
+			{ID: metaProposalActionRevert, Kind: domainbind.ActionAck, Label: "되돌리기"},
 		}
 	} else {
 		item.Title = "메타 개정 제안: " + artifact
@@ -170,9 +169,9 @@ func (s *Server) postMetaProposalCard(artifact, epoch, reason, path string, adop
 아래 버튼으로 채택하거나 기각하세요 — 결정은 메타 경험 원장에 기록되어 다음 사이클이 읽습니다.`,
 			artifact, epochLabel, reason, path)
 		item.Question = true // render the decision chips inline
-		item.Actions = []workfeed.Action{
-			{ID: metaProposalActionAdopt, Kind: workfeed.ActionAck, Label: "채택"},
-			{ID: metaProposalActionReject, Kind: workfeed.ActionAck, Label: "기각"},
+		item.Actions = []domainbind.Action{
+			{ID: metaProposalActionAdopt, Kind: domainbind.ActionAck, Label: "채택"},
+			{ID: metaProposalActionReject, Kind: domainbind.ActionAck, Label: "기각"},
 		}
 	}
 	if _, err := nf.Append(item); err != nil {
@@ -201,7 +200,7 @@ func (s *Server) postDriftFreezeCard(frozen bool, reasons []string) {
 		title = "자가개선 자동 채택 재개"
 		body = "진화 궤적이 회복되어 자기 브레이크가 풀렸습니다 — 벤치 통과 제안이 다시 자동 채택됩니다."
 	}
-	if _, err := nf.Append(workfeed.Item{
+	if _, err := nf.Append(domainbind.Item{
 		Source:  metaProposalSource,
 		Title:   title,
 		Summary: "메타 자동 채택 " + map[bool]string{true: "동결", false: "재개"}[frozen],
@@ -219,7 +218,7 @@ func (s *Server) postMetaRevertedCard(artifact, reason string) {
 	if nf == nil {
 		return
 	}
-	if _, err := nf.Append(workfeed.Item{
+	if _, err := nf.Append(domainbind.Item{
 		Source:  metaProposalSource,
 		Title:   "메타 개정 자동 복원: " + artifact,
 		Summary: reason,
@@ -239,7 +238,7 @@ func (s *Server) postMetaRevertedCard(artifact, reason string) {
 // promotes the .proposed into the live artifact, reject discards it. Either
 // way the decision lands in the meta-experience ledger so the next weekly
 // cycles read it. Best-effort — the card has already settled.
-func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
+func (s *Server) handleMetaProposalAction(item domainbind.Item, actionID string) {
 	if s.genesisMeta == nil || s.genesisTracker == nil {
 		return
 	}
@@ -247,7 +246,7 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 	if artifact == "" || artifact == "." {
 		return
 	}
-	fallback := skilllifecycle.DefaultMetaArtifacts()[artifact]
+	fallback := svcbind.DefaultMetaArtifacts()[artifact]
 	fromVersion := s.genesisMeta.Version(artifact, fallback)
 	switch actionID {
 	case metaProposalActionAdopt:
@@ -261,13 +260,13 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 		// an operator-adopted revision was never revert-watched (reviewer
 		// feedback, #3459).
 		eh := s.genesisTracker.EvolutionHealth()
-		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
+		if err := s.genesisTracker.LogMetaRevision(domainbind.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			ToVersion:   toVersion,
 			Action:      "adopted",
 			Reason:      "operator adopted from feed card",
-			AdoptionHealth: &genesis.MetaAdoptionHealth{
+			AdoptionHealth: &domainbind.MetaAdoptionHealth{
 				ConfirmRate:     eh.ConfirmRate,
 				FalseAcceptRate: eh.FalseAcceptRate,
 				Resolved:        eh.ResolvedEvolves7d,
@@ -282,7 +281,7 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 			s.logger.Warn("meta proposal 되돌리기 실패", "artifact", artifact, "error", err)
 			return
 		}
-		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
+		if err := s.genesisTracker.LogMetaRevision(domainbind.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			ToVersion:   toVersion,
@@ -297,7 +296,7 @@ func (s *Server) handleMetaProposalAction(item workfeed.Item, actionID string) {
 			s.logger.Warn("meta proposal 기각 실패", "artifact", artifact, "error", err)
 			return
 		}
-		if err := s.genesisTracker.LogMetaRevision(genesis.MetaRevisionRecord{
+		if err := s.genesisTracker.LogMetaRevision(domainbind.MetaRevisionRecord{
 			Artifact:    artifact,
 			FromVersion: fromVersion,
 			Action:      "rejected",

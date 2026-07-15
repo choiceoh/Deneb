@@ -75,11 +75,11 @@ type CodeActionDeps struct {
 	Wiki     *wiki.Store
 }
 
-// CodeActionPromotion asks the Go side of code_action to record a reusable
+// codeActionPromotion asks the Go side of code_action to record a reusable
 // successful Python workflow into the normal skill lifecycle. The Python
 // sandbox never receives a skill-writing primitive; promotion is explicit input
 // from the agent and still goes through skill_lifecycle's proposal/genesis gates.
-type CodeActionPromotion struct {
+type codeActionPromotion struct {
 	Candidate    string `json:"candidate,omitempty"`
 	Evidence     string `json:"evidence,omitempty"`
 	Route        string `json:"route,omitempty"`
@@ -509,7 +509,7 @@ func ToolCodeAction(d CodeActionDeps) toolport.ToolFunc {
 		var p struct {
 			Code           string               `json:"code"`
 			Timeout        float64              `json:"timeout"`
-			PromoteToSkill *CodeActionPromotion `json:"promoteToSkill,omitempty"`
+			PromoteToSkill *codeActionPromotion `json:"promoteToSkill,omitempty"`
 		}
 		if err := jsonutil.UnmarshalInto("code_action params", input, &p); err != nil {
 			return "", err
@@ -599,7 +599,7 @@ func ToolCodeAction(d CodeActionDeps) toolport.ToolFunc {
 	}
 }
 
-func appendCodeActionPromotionResult(ctx context.Context, invoker ToolInvoker, result string, promotion CodeActionPromotion, runOK bool) string {
+func appendCodeActionPromotionResult(ctx context.Context, invoker ToolInvoker, result string, promotion codeActionPromotion, runOK bool) string {
 	promoText := promoteCodeActionWorkflow(ctx, invoker, promotion, runOK)
 	if strings.TrimSpace(promoText) == "" {
 		return result
@@ -610,7 +610,7 @@ func appendCodeActionPromotionResult(ctx context.Context, invoker ToolInvoker, r
 	return result + "\n\n" + promoText
 }
 
-func promoteCodeActionWorkflow(ctx context.Context, invoker ToolInvoker, promotion CodeActionPromotion, runOK bool) string {
+func promoteCodeActionWorkflow(ctx context.Context, invoker ToolInvoker, promotion codeActionPromotion, runOK bool) string {
 	if !runOK {
 		return "[code_action skill promotion: skipped because the script did not complete successfully]"
 	}

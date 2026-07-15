@@ -37,18 +37,18 @@ func RegisterSkillsTools(registry wire.ToolRegistrar, getSnapshot wire.SkillsSna
 	wire.RegisterSkillsTools(registry, getSnapshot, workspaceDir, bundledSkillsDir, invalidateCache)
 }
 
-func RegisterProcessTools(registry wire.ToolRegistrar, d *wire.ProcessDeps) {
+func registerProcessTools(registry wire.ToolRegistrar, d *wire.ProcessDeps) {
 	wire.RegisterProcessTools(registry, d)
 }
 
-func RegisterSessionTools(registry wire.ToolRegistrar, d *wire.SessionDeps) {
+func registerSessionTools(registry wire.ToolRegistrar, d *wire.SessionDeps) {
 	wire.RegisterSessionTools(registry, d)
 }
 
-func RegisterChronoTools(registry wire.ToolRegistrar) {
+func registerChronoTools(registry wire.ToolRegistrar) {
 	wire.RegisterChronoTools(registry)
 }
 
-func RegisterMediaTools(registry wire.ToolRegistrar, workspaceDir string) {
+func registerMediaTools(registry wire.ToolRegistrar, workspaceDir string) {
 	wire.RegisterMediaTools(registry, workspaceDir)
 }

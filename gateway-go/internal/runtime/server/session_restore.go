@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 // restoreAndWakeSessions scans the transcript directory for persisted user
@@ -37,7 +37,7 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			continue
 		}
 		sessionKey := strings.TrimSuffix(name, ".jsonl")
-		channel, ok := session.RestorableTranscriptChannel(sessionKey)
+		channel, ok := domainbind.RestorableTranscriptChannel(sessionKey)
 		if !ok {
 			continue
 		}
@@ -56,10 +56,10 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			updatedAt = time.Now().UnixMilli()
 		}
 
-		if err := s.sessions.Set(&session.Session{
+		if err := s.sessions.Set(&domainbind.Session{
 			Key:       sessionKey,
-			Kind:      session.KindDirect,
-			Status:    session.StatusDone,
+			Kind:      domainbind.KindDirect,
+			Status:    domainbind.StatusDone,
 			Channel:   channel,
 			UpdatedAt: updatedAt,
 		}); err != nil {

@@ -10,7 +10,7 @@ import (
 func TestCompactToolOutputClearsANSIEscapes(t *testing.T) {
 	// >= compactMinInputBytes so the compactor runs; ANSI wraps the payload.
 	big := "\x1b[31m" + strings.Repeat("payload\n", 400) + "\x1b[0m"
-	got := CompactToolOutput(context.Background(), "exec", big)
+	got := compactToolOutput(context.Background(), "exec", big)
 	if strings.Contains(got, "\x1b[") {
 		t.Fatalf("ANSI escapes not stripped: %q", got[:40])
 	}
@@ -18,14 +18,14 @@ func TestCompactToolOutputClearsANSIEscapes(t *testing.T) {
 
 func TestCompactToolOutputPreservesSmallOutput(t *testing.T) {
 	small := "\x1b[31mred\x1b[0m" // well under compactMinInputBytes
-	if got := CompactToolOutput(context.Background(), "exec", small); got != small {
+	if got := compactToolOutput(context.Background(), "exec", small); got != small {
 		t.Fatalf("small output should pass through unchanged, got %q", got)
 	}
 }
 
 func TestCompactToolOutputDeduplicatesRepeatedLines(t *testing.T) {
 	big := strings.Repeat("Building...\n", 500) // ~6KB, 500 identical lines
-	got := CompactToolOutput(context.Background(), "exec", big)
+	got := compactToolOutput(context.Background(), "exec", big)
 	if !strings.Contains(got, "Building... (×500)") {
 		t.Fatalf("adjacent duplicates not collapsed: %.80q", got)
 	}
@@ -41,7 +41,7 @@ func TestCompactToolOutput_NoChangeReturnsOriginal(t *testing.T) {
 		sb.WriteString("line " + strconv.Itoa(i) + " content\n")
 	}
 	out := sb.String()
-	if got := CompactToolOutput(context.Background(), "exec", out); got != out {
+	if got := compactToolOutput(context.Background(), "exec", out); got != out {
 		t.Fatal("clean output should be returned unchanged (pass-through guard)")
 	}
 }

@@ -9,9 +9,9 @@ import (
 )
 
 func TestTurnContext_StoreAndLoad(t *testing.T) {
-	tc := NewTurnContext()
+	tc := newTurnContext()
 
-	tc.Store("toolu_1", &TurnResult{
+	tc.Store("toolu_1", &turnResult{
 		ToolName: "read",
 		Output:   "file contents",
 		IsError:  false,
@@ -36,8 +36,8 @@ func TestTurnContext_StoreAndLoad(t *testing.T) {
 }
 
 func TestTurnContext_Wait_AlreadyAvailable(t *testing.T) {
-	tc := NewTurnContext()
-	tc.Store("toolu_1", &TurnResult{ToolName: "grep", Output: "match"})
+	tc := newTurnContext()
+	tc.Store("toolu_1", &turnResult{ToolName: "grep", Output: "match"})
 
 	r, ok := tc.Wait(context.Background(), "toolu_1", 1*time.Second)
 	if !ok {
@@ -49,12 +49,12 @@ func TestTurnContext_Wait_AlreadyAvailable(t *testing.T) {
 }
 
 func TestTurnContextWaitReturnsAfterDelayedStore(t *testing.T) {
-	tc := NewTurnContext()
+	tc := newTurnContext()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var result *TurnResult
+	var result *turnResult
 	var ok bool
 	go func() {
 		defer wg.Done()
@@ -63,7 +63,7 @@ func TestTurnContextWaitReturnsAfterDelayedStore(t *testing.T) {
 
 	// Simulate delayed store.
 	time.Sleep(50 * time.Millisecond)
-	tc.Store("toolu_1", &TurnResult{ToolName: "exec", Output: "done"})
+	tc.Store("toolu_1", &turnResult{ToolName: "exec", Output: "done"})
 
 	wg.Wait()
 	if !ok {
@@ -75,7 +75,7 @@ func TestTurnContextWaitReturnsAfterDelayedStore(t *testing.T) {
 }
 
 func TestTurnContext_Wait_Timeout(t *testing.T) {
-	tc := NewTurnContext()
+	tc := newTurnContext()
 
 	r, ok := tc.Wait(context.Background(), "toolu_never", 50*time.Millisecond)
 	if ok {
@@ -87,7 +87,7 @@ func TestTurnContext_Wait_Timeout(t *testing.T) {
 }
 
 func TestTurnContext_Wait_ContextCancelled(t *testing.T) {
-	tc := NewTurnContext()
+	tc := newTurnContext()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// Cancel after a short delay — should return before the 5s timeout.
@@ -112,7 +112,7 @@ func TestTurnContext_Wait_ContextCancelled(t *testing.T) {
 }
 
 func TestTurnContext_ConcurrentAccess(t *testing.T) {
-	tc := NewTurnContext()
+	tc := newTurnContext()
 
 	var wg sync.WaitGroup
 	for i := range 20 {
@@ -120,7 +120,7 @@ func TestTurnContext_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			key := "toolu_" + string(rune('a'+id))
-			tc.Store(key, &TurnResult{ToolName: "test", Output: key})
+			tc.Store(key, &turnResult{ToolName: "test", Output: key})
 			tc.Load(key)
 		}(i)
 	}
@@ -133,16 +133,16 @@ func TestTurnContext_ConcurrentAccess(t *testing.T) {
 }
 
 func TestTurnContextRoundTripsThroughContext(t *testing.T) {
-	tc := NewTurnContext()
-	ctx := WithTurnContext(context.Background(), tc)
+	tc := newTurnContext()
+	ctx := withTurnContext(context.Background(), tc)
 
-	extracted := TurnContextFromContext(ctx)
+	extracted := turnContextFromContext(ctx)
 	if extracted != tc {
 		t.Error("expected same TurnContext from context")
 	}
 
 	// Nil context.
-	if TurnContextFromContext(context.Background()) != nil {
+	if turnContextFromContext(context.Background()) != nil {
 		t.Error("expected nil from context without TurnContext")
 	}
 }
@@ -152,7 +152,7 @@ func TestDetectCycleReturnsNilForAcyclicRefs(t *testing.T) {
 		"toolu_2": "toolu_1",
 		"toolu_3": "toolu_2",
 	}
-	if err := DetectCycle(refs); err != nil {
+	if err := detectCycle(refs); err != nil {
 		t.Errorf("expected no cycle, got: %v", err)
 	}
 }
@@ -163,7 +163,7 @@ func TestDetectCycle_WithCycle(t *testing.T) {
 		"toolu_2": "toolu_3",
 		"toolu_3": "toolu_1",
 	}
-	err := DetectCycle(refs)
+	err := detectCycle(refs)
 	if err == nil {
 		t.Fatal("expected cycle detection error")
 	}

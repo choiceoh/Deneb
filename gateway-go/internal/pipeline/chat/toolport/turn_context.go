@@ -89,9 +89,9 @@ func (tc *TurnContext) Store(toolUseID string, result *TurnResult) {
 	}
 }
 
-// ToolTiming returns aggregated completion-time stats for the named tool within
+// toolTiming returns aggregated completion-time stats for the named tool within
 // this turn. Returns false if no completions have been recorded yet.
-func (tc *TurnContext) ToolTiming(toolName string) (ToolTimingStats, bool) {
+func (tc *TurnContext) toolTiming(toolName string) (ToolTimingStats, bool) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	s, ok := tc.stats[toolName]

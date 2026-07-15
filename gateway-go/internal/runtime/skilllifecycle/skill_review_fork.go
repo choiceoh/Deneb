@@ -3,13 +3,13 @@ package skilllifecycle
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"log/slog"
 	"sort"
 	"strings"
 	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -74,7 +74,7 @@ func NewReviewFork(
 }
 
 // RunSkillReview runs an isolated review for the requested skill snapshot.
-func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string, snapshot generation.SessionContext) error {
+func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string, snapshot leafbind.SessionContext) error {
 	if r == nil || r.chat == nil || !r.chat.ChatReady() {
 		return fmt.Errorf("skill review fork: chat handler is not configured")
 	}
@@ -111,7 +111,7 @@ func (r *skillReviewFork) RunSkillReview(ctx context.Context, sessionKey string,
 	return err
 }
 
-func mergeSkillReviewContext(snapshot, loaded generation.SessionContext) generation.SessionContext {
+func mergeSkillReviewContext(snapshot, loaded leafbind.SessionContext) leafbind.SessionContext {
 	if loaded.Key == "" {
 		loaded.Key = snapshot.Key
 	}
@@ -131,22 +131,22 @@ func mergeSkillReviewContext(snapshot, loaded generation.SessionContext) generat
 	return loaded
 }
 
-func mergeSkillReviewActivities(a, b []generation.ToolActivity) []generation.ToolActivity {
+func mergeSkillReviewActivities(a, b []leafbind.ToolActivity) []leafbind.ToolActivity {
 	if len(a) == 0 {
-		return append([]generation.ToolActivity(nil), b...)
+		return append([]leafbind.ToolActivity(nil), b...)
 	}
 	if len(b) == 0 {
-		return append([]generation.ToolActivity(nil), a...)
+		return append([]leafbind.ToolActivity(nil), a...)
 	}
 	if skillReviewActivitiesHaveTrace(a) {
-		return append([]generation.ToolActivity(nil), a...)
+		return append([]leafbind.ToolActivity(nil), a...)
 	}
-	out := append([]generation.ToolActivity(nil), a...)
+	out := append([]leafbind.ToolActivity(nil), a...)
 	out = append(out, b...)
 	return out
 }
 
-func skillReviewActivitiesHaveTrace(activities []generation.ToolActivity) bool {
+func skillReviewActivitiesHaveTrace(activities []leafbind.ToolActivity) bool {
 	for _, activity := range activities {
 		if strings.TrimSpace(activity.Input) != "" || strings.TrimSpace(activity.Output) != "" {
 			return true
@@ -169,7 +169,7 @@ func (r *skillReviewFork) recentOpportunityContext() string {
 	return formatSkillReviewOpportunities(records)
 }
 
-func buildSkillReviewPrompt(sessionKey string, sctx generation.SessionContext, opportunities string) string {
+func buildSkillReviewPrompt(sessionKey string, sctx leafbind.SessionContext, opportunities string) string {
 	transcript := truncateRunes(sctx.AllText, skillReviewMaxTranscriptRunes)
 	if strings.TrimSpace(transcript) == "" {
 		transcript = "(no transcript text available; decide conservatively from tool summary)"
@@ -256,7 +256,7 @@ func formatSkillReviewOpportunities(records []genesis.SkillOpportunityRecord) st
 	return strings.Join(parts, "\n")
 }
 
-func skillReviewToolSummary(activities []generation.ToolActivity) string {
+func skillReviewToolSummary(activities []leafbind.ToolActivity) string {
 	if len(activities) == 0 {
 		return "(none)"
 	}

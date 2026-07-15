@@ -46,11 +46,11 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	}
 
 	// Pre-process slash commands before dispatching to agent.
-	if slashResult := ParseSlashCommand(p.Message); slashResult != nil && slashResult.Handled {
+	if slashResult := parseSlashCommand(p.Message); slashResult != nil && slashResult.Handled {
 		return h.handleSlashCommand(req.ID, p.SessionKey, p.Delivery, slashResult, nil)
 	}
 
-	runParams := RunParams{
+	runParams := runParams{
 		SessionKey:   p.SessionKey,
 		Message:      sanitizeInput(p.Message),
 		Attachments:  p.Attachments,
@@ -65,7 +65,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 	// + inside window", both cancel, and both dispatch fresh runs. The
 	// lock is scoped to the synchronous decision phase only; startAsyncRun
 	// itself spawns a goroutine and returns fast.
-	sessLock := h.mergeWindow.SessionLock(p.SessionKey)
+	sessLock := h.mergeWindow.sessionLock(p.SessionKey)
 	sessLock.Lock()
 	defer sessLock.Unlock()
 
@@ -93,10 +93,10 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 				"sessionKey", p.SessionKey,
 				"deltaMs", deltaMs,
 			)
-			// Cancel with ErrMergedIntoNewRun so the cancelled run's
+			// Cancel with errMergedIntoNewRun so the cancelled run's
 			// goroutine can do clean teardown (clear emoji, delete
 			// orphan draft) instead of the generic-error path.
-			h.abort.CancelBySessionKeyWithCause(p.SessionKey, ErrMergedIntoNewRun)
+			h.abort.CancelBySessionKeyWithCause(p.SessionKey, errMergedIntoNewRun)
 			// Fold any older queued message into this one so nothing is lost.
 			if pending := h.pending.Drain(p.SessionKey); pending != nil {
 				if pending.Message != "" {
@@ -113,7 +113,7 @@ func (h *Handler) Send(_ context.Context, req *protocol.RequestFrame) *protocol.
 			// Surface the merge on the session event bus so dashboards
 			// can distinguish it from normal "message_sent" starts.
 			if h.broadcast != nil {
-				broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
+				broadcastPayload(h.broadcast, "sessions.changed", sessionsChangedEvent{
 					SessionKey: p.SessionKey,
 					Reason:     "merged",
 					Status:     "running",
@@ -166,7 +166,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	// Without clearPending, queued user messages survive the interrupt and
 	// replay after the new run completes — causing the "diary navigation" bug
 	// where the user's reply is discarded and a scheduled task takes over.
-	h.InterruptActiveRun(p.Key)
+	h.interruptActiveRun(p.Key)
 	h.pending.Clear(p.Key)
 
 	runID := p.IdempotencyKey
@@ -185,7 +185,7 @@ func (h *Handler) SessionsSend(_ context.Context, req *protocol.RequestFrame) *p
 	// non-channel prefix like "cron:<id>" yields Channel="cron" and the
 	// reply layer decides what to do with the unregistered channel
 	// (delivery_route_test.go locks this in).
-	return h.startAsyncRun(req.ID, RunParams{
+	return h.startAsyncRun(req.ID, runParams{
 		SessionKey:  p.Key,
 		Message:     sanitizeInput(p.Message),
 		Attachments: p.Attachments,
@@ -214,12 +214,12 @@ func (h *Handler) SessionsSteer(_ context.Context, req *protocol.RequestFrame) *
 	}
 
 	// Interrupt any active run and clear the pending queue for this session.
-	h.InterruptActiveRun(p.Key)
+	h.interruptActiveRun(p.Key)
 	h.pending.Clear(p.Key)
 
 	runID := leafbind.NewShortID("steer")
 
-	return h.startAsyncRun(req.ID, RunParams{
+	return h.startAsyncRun(req.ID, runParams{
 		SessionKey:  p.Key,
 		Message:     sanitizeInput(p.Message),
 		Model:       p.Model,
@@ -426,7 +426,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 			Ts:    time.Now().UnixMilli(),
 		})
 		if h.broadcast != nil {
-			broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
+			broadcastPayload(h.broadcast, "sessions.changed", sessionsChangedEvent{
 				SessionKey: key,
 				Reason:     "aborted",
 				Status:     "killed",
@@ -444,7 +444,7 @@ func (h *Handler) Abort(_ context.Context, req *protocol.RequestFrame) *protocol
 // Delivery context is derived from the session key (e.g., "client:main" →
 // channel="client", to="main") so the response reaches the user's device.
 func (h *Handler) SendDirect(sessionKey, message string) {
-	params := RunParams{
+	params := runParams{
 		SessionKey: sessionKey,
 		Message:    sanitizeInput(message),
 		Delivery:   deliveryFromSessionKey(sessionKey),

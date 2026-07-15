@@ -1,11 +1,10 @@
 package genesis
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"sort"
 	"strings"
 	"time"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
@@ -149,7 +148,7 @@ func rejectionFailureClusterEvidence(entry LifecycleLogEntry, cutoff int64) (fai
 		},
 		observedAt: entry.CreatedAt,
 		example: singleLine(
-			genesiscommon.TruncateRunes(strings.TrimSpace(entry.Reason), 160),
+			genbind.TruncateRunes(strings.TrimSpace(entry.Reason), 160),
 		),
 	}, true
 }

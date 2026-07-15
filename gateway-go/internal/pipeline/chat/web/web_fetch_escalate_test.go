@@ -91,7 +91,7 @@ func TestEscalateThinContentUpdatesMetaWithRicherResult(t *testing.T) {
 		ExtractChars: 12, // thin original
 		Signals:      []string{"js_required"},
 	}
-	content, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &LocalAIExtractor{}, &meta)
+	content, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &localAIExtractor{}, &meta)
 	if !ok {
 		t.Fatal("expected escalation to succeed with richer content")
 	}
@@ -116,7 +116,7 @@ func TestEscalateThinContent_KeepsOriginalWhenBackendEmpty(t *testing.T) {
 	})
 
 	meta := webFetchMeta{URL: "https://x.example/app", ExtractChars: 12, Signals: []string{"empty_body"}}
-	content, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &LocalAIExtractor{}, &meta)
+	content, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &localAIExtractor{}, &meta)
 	if ok || content != "" {
 		t.Fatalf("expected no escalation on empty backend result, got ok=%v content=%q", ok, content)
 	}
@@ -133,7 +133,7 @@ func TestEscalateThinContent_KeepsOriginalWhenBackendErrors(t *testing.T) {
 		return nil, errors.New("jina down")
 	})
 	meta := webFetchMeta{URL: "https://x.example/app", ExtractChars: 12, Signals: []string{"js_required"}}
-	if _, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &LocalAIExtractor{}, &meta); ok {
+	if _, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &localAIExtractor{}, &meta); ok {
 		t.Fatal("backend error must not yield escalation")
 	}
 }
@@ -144,7 +144,7 @@ func TestEscalateThinContent_KeepsOriginalWhenNotRicher(t *testing.T) {
 		return &media.FetchResult{Data: []byte("tiny"), ContentType: "text/plain"}, nil
 	})
 	meta := webFetchMeta{URL: "https://x.example/app", ExtractChars: 100, Signals: []string{"js_required"}}
-	if _, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &LocalAIExtractor{}, &meta); ok {
+	if _, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &localAIExtractor{}, &meta); ok {
 		t.Fatal("must not adopt a result that is not strictly richer")
 	}
 	if got := atomic.LoadInt32(calls); got != 1 {

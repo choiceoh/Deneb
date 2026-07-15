@@ -128,24 +128,24 @@ func truncateMetaDetail(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// MetaRevisionClassBalance aggregates the structural/parametric mix of recent
+// metaRevisionClassBalance aggregates the structural/parametric mix of recent
 // meta revisions. AdoptedParametricStreak counts the newest consecutive
 // adoptions whose class resolves to parametric; a record whose class cannot be
 // resolved (pre-instrumentation history) ends the streak scan — honest zero
 // over guessed continuity.
-type MetaRevisionClassBalance struct {
+type metaRevisionClassBalance struct {
 	Structural              int `json:"structural"`   // among newest window of proposed revisions
 	Parametric              int `json:"parametric"`   //
 	Unclassified            int `json:"unclassified"` // proposed before this instrumentation landed
 	AdoptedParametricStreak int `json:"adoptedParametricStreak"`
 }
 
-// MetaRevisionClassBalance computes the balance from the meta-experience
+// metaRevisionClassBalance computes the balance from the meta-experience
 // ledger. Feed-card adoptions are separate Action records without a class of
 // their own; they resolve through the (artifact, toVersion) join against the
 // proposal record that produced the version.
-func (t *Tracker) MetaRevisionClassBalance() MetaRevisionClassBalance {
-	var out MetaRevisionClassBalance
+func (t *Tracker) metaRevisionClassBalance() metaRevisionClassBalance {
+	var out metaRevisionClassBalance
 	entries, err := t.RecentMetaRevisions(3 * metaClassBalanceWindow)
 	if err != nil || len(entries) == 0 {
 		return out

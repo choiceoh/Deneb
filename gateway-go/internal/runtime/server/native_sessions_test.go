@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 // TestRestorableTranscriptSession pins the startup-restore filter to the live
@@ -34,7 +34,7 @@ func TestRestorableTranscriptSessionReturnsTrueOnlyForLiveKeyFormats(t *testing.
 		{"", false},
 	}
 	for _, c := range cases {
-		ch, ok := runtimesession.RestorableTranscriptChannel(c.key)
+		ch, ok := domainbind.RestorableTranscriptChannel(c.key)
 		if ok != c.want {
 			t.Errorf("restorableTranscriptSession(%q) ok=%v, want %v", c.key, ok, c.want)
 		}

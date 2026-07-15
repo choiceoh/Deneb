@@ -58,10 +58,10 @@ func TestSkillNameFromReadOutput(t *testing.T) {
 // GLOBAL skills snapshot, empty under test, so this exercises the no-match
 // passthrough; the matching itself is covered by the pure function above.)
 func TestReadSkillConsultRecorder(t *testing.T) {
-	log := NewSkillConsultLog()
-	ctx := WithSkillConsultLog(context.Background(), log)
+	log := newSkillConsultLog()
+	ctx := withSkillConsultLog(context.Background(), log)
 	in := "[File: skills/productivity/contract-review/SKILL.md | 88 lines]\n1\t---"
-	if out := NewReadSkillConsultRecorder(nil)(ctx, "read", in); out != in {
+	if out := newReadSkillConsultRecorder(nil)(ctx, "read", in); out != in {
 		t.Fatalf("output must pass through unchanged")
 	}
 	// Direct wiring proof with an explicit catalog: matcher result → log.Add.

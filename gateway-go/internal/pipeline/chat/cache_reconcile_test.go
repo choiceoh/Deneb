@@ -197,7 +197,7 @@ func TestWireBeforeAPICall_UsesAnthropicClientModeWithoutProviderID(t *testing.T
 	cfg := agent.AgentConfig{System: markedSystemBlocks(t)}
 	client := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
 
-	mode := wireBeforeAPICall(&cfg, runDeps{}, RunParams{}, "", "test-model", client, discardLogger())
+	mode := wireBeforeAPICall(&cfg, runDeps{}, runParams{}, "", "test-model", client, discardLogger())
 	if mode != llm.APIModeAnthropic {
 		t.Fatalf("wire mode = %q, want actual client mode %q", mode, llm.APIModeAnthropic)
 	}
@@ -218,7 +218,7 @@ func TestWireBeforeAPICallClearsCacheMetadataForBriefcase(t *testing.T) {
 	cfg := agent.AgentConfig{System: markedSystemBlocks(t)}
 	client := llm.NewClient("http://127.0.0.1:1", "", llm.WithAPIMode(llm.APIModeAnthropic))
 
-	mode := wireBeforeAPICall(&cfg, runDeps{briefcaseMode: true}, RunParams{}, "", "test-model", client, discardLogger())
+	mode := wireBeforeAPICall(&cfg, runDeps{briefcaseMode: true}, runParams{}, "", "test-model", client, discardLogger())
 	if mode != llm.APIModeAnthropic {
 		t.Fatalf("wire mode = %q, want actual client mode %q", mode, llm.APIModeAnthropic)
 	}

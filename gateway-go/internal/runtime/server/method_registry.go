@@ -19,50 +19,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/market"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
-	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
-	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
-	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
-	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
-	minifiles "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/files"
-	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
-	minimodule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/module"
-	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
-	handlerinsights "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/insights"
-	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
-	handlerobservatory "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observatory"
-	handlerobserve "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/observe"
-	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
-	handlerprovider "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/provider"
-	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
-	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/skill"
-	handlersystem "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/system"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // errWikiDisabled surfaces from the miniapp memory factory when the wiki
@@ -151,8 +116,8 @@ func withMailAliases(m map[string]rpcutil.HandlerFunc) map[string]rpcutil.Handle
 // composition root: handler Deps remain assembled inline below.
 type earlyMethodCapabilities struct {
 	nativeWorkFeed *nativeWorkFeedStore
-	observe        handlerobserve.Deps
-	observatory    handlerobservatory.Deps
+	observe        handlerwire.ObserveDeps
+	observatory    handlerwire.ObservatoryDeps
 	miniapp        map[string]rpcutil.HandlerFunc
 }
 
@@ -185,7 +150,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	// Create the insights engine. Read-only — aggregates session manager
 	// snapshots and usage tracker state. Stored on both the hub (for RPC
 	// handlers) and the server (so the chat dispatcher can wire /insights).
-	insightsEngine := insights.New(hub.Sessions(), s.usageTracker)
+	insightsEngine := svcbind.NewInsights(hub.Sessions(), s.usageTracker)
 	hub.Opt.Insights = insightsEngine
 	s.insights = insightsEngine
 
@@ -193,25 +158,25 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	// so it's created here in the early phase and is ready by the time chat init wires
 	// the contacts tool. nil-tolerant: a load failure just disables the store write
 	// (the contacts tool / save path degrade to "unavailable" cleanly).
-	if cs, err := contacts.NewStore(filepath.Join(denebDir, "contacts.json")); err != nil {
+	if cs, err := domainbind.NewContactsStore(filepath.Join(denebDir, "contacts.json")); err != nil {
 		s.logger.Warn("contacts store init failed; contacts sync disabled", "error", err)
 	} else {
 		s.contactsStore = cs
 		hub.Opt.ContactsStore = cs
 	}
-	s.nativeSyncStore = nativesync.NewStore(filepath.Join(denebDir, "native_sync.jsonl"))
-	s.workFeedStore = workfeed.NewStore(filepath.Join(denebDir, "workfeed.jsonl"))
+	s.nativeSyncStore = domainbind.NewNativeSyncStore(filepath.Join(denebDir, "native_sync.jsonl"))
+	s.workFeedStore = domainbind.NewWorkFeedStore(filepath.Join(denebDir, "workfeed.jsonl"))
 	nativeWorkFeed := s.nativeWorkFeedStore()
 
 	// Mirror local-calendar mutations onto the native-sync stream so the client
 	// refetches its calendar promptly instead of waiting out its background warm
-	// throttle. localcal.Store is the single choke point every mutation path funnels
+	// throttle. platbind.LocalCalStore is the single choke point every mutation path funnels
 	// through (the client's RPC, the agent calendar tool, mail-proposal accept,
 	// cron), so one observer on the process-wide store covers them all. Set-once,
 	// nil-tolerant: a store-load failure just leaves the client on its warm cadence.
-	if calStore, err := localcal.Default(); err == nil && calStore != nil {
+	if calStore, err := platbind.LocalCalDefault(); err == nil && calStore != nil {
 		calStore.SetChangeObserver(func(eventID string) {
-			if _, err := s.nativeSyncStore.Append(nativesync.CalendarChanged(eventID)); err != nil {
+			if _, err := s.nativeSyncStore.Append(domainbind.CalendarChanged(eventID)); err != nil {
 				s.logger.Error("native sync: calendar event append failed", "eventID", eventID, "error", err)
 			}
 		})
@@ -221,17 +186,17 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	// and no live SSE client is connected). The device-token store is always
 	// created so registration RPCs work and tokens accumulate; the sender is
 	// dormant until a service-account file is configured (DENEB_FCM_CREDENTIALS_FILE).
-	s.pushTokenStore = push.NewStore(filepath.Join(denebDir, "push_tokens.json"))
-	if fcmCfg := push.ConfigFromEnv(); fcmCfg.Enabled() {
-		if sender, err := push.NewFCMSender(fcmCfg); err != nil {
+	s.pushTokenStore = domainbind.NewPushStore(filepath.Join(denebDir, "push_tokens.json"))
+	if fcmCfg := domainbind.PushConfigFromEnv(); fcmCfg.Enabled() {
+		if sender, err := domainbind.NewFCMSender(fcmCfg); err != nil {
 			s.logger.Error("FCM push: credentials load failed; proactive FCM fallback disabled", "error", err)
 		} else {
-			s.pushNotifier = push.NewNotifier(push.NotifierDeps{
+			s.pushNotifier = domainbind.NewNotifier(domainbind.NotifierDeps{
 				Store:  s.pushTokenStore,
 				Sender: sender,
 				Logger: s.logger,
 				Broadcast: func(event string, payload json.RawMessage) {
-					s.broadcaster.Broadcast(event, events.PayloadFromRaw(payload))
+					s.broadcaster.Broadcast(event, svcbind.PayloadFromRaw(payload))
 				},
 				ShutdownCtx: s.ShutdownCtx(),
 			})
@@ -240,8 +205,8 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	}
 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
-	s.notify = runtimenotify.NewService(hub.Sessions(), hub.Logger(), func(title, body string) {
-		proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{Title: title, Body: body})
+	s.notify = svcbind.NewService(hub.Sessions(), hub.Logger(), func(title, body string) {
+		svcbind.PublishWithFallback(s.pushHub, s.pushNotifier, svcbind.Event{Title: title, Body: body})
 	}, s.BoundAddr)
 	if s.notify != nil {
 		s.broadcaster.RegisterTap(s.notify.Tap)
@@ -252,9 +217,9 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	// the remote miniapp.observe.* registrations below. AgentLog and VllmBases
 	// are getters because the agentlog writer and the model registry are both
 	// constructed later (session phase); resolving lazily avoids capturing nil.
-	observeDeps := handlerobserve.Deps{
+	observeDeps := handlerwire.ObserveDeps{
 		Capture:  s.logCapture,
-		AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
+		AgentLog: func() *infrabind.Writer { return s.agentLogWriter },
 		VllmBases: func() []string {
 			if s.modelRegistry == nil {
 				return nil
@@ -267,33 +232,33 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	// Improvement-loop liveness digest, registered twice like observe above
 	// (in-process observatory.* + client-token-gated miniapp.observatory.*).
 	// denebDir is the resolved state dir the watchdog reads too.
-	observatoryDeps := handlerobservatory.Deps{
+	observatoryDeps := handlerwire.ObservatoryDeps{
 		StateDir: func() string { return denebDir },
 	}
 
 	// 시장(market) card data for the 오늘 dashboard — a keyless Yahoo Finance fetch
 	// cached for 10m. Promoted to a server field so the agent's market tool
 	// (wired later during chat init) shares the same cache/asOf. Created once at boot.
-	s.marketCache = market.NewCache()
+	s.marketCache = domainbind.NewCache()
 	marketCache := s.marketCache
 
 	// Independently owned native-client capabilities. Build their combined
 	// method set before the registration table so ownership collisions fail
 	// through this function's normal startup error boundary.
-	miniappMethods, err := minimodule.Methods(minimodule.Dependencies{
-		Sync:      minimodule.SyncDeps{Store: s.nativeSyncStore},
+	miniappMethods, err := handlerwire.MiniModuleMethods(handlerwire.MiniDependencies{
+		Sync:      handlerwire.MiniSyncDeps{Store: s.nativeSyncStore},
 		Dashboard: s.dashboardDeps(),
-		Sessions: minimodule.SessionsDeps{
+		Sessions: handlerwire.MiniSessionsDeps{
 			Manager: hub.Sessions(),
-			Transcripts: func() (minimodule.TranscriptLoader, error) {
+			Transcripts: func() (handlerwire.MiniTranscriptLoader, error) {
 				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
 					return nil, errTranscriptUnavailable
 				}
 				return s.toolDeps.Sessions.Transcript, nil
 			},
 		},
-		Contacts: minimodule.ContactsDeps{
-			Store: func() (*contacts.Store, error) {
+		Contacts: handlerwire.MiniContactsDeps{
+			Store: func() (*domainbind.ContactsStore, error) {
 				cs := hub.Opt.ContactsStore
 				if cs == nil {
 					return nil, errors.New("contacts store not configured")
@@ -301,7 +266,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 				return cs, nil
 			},
 		},
-		Market: minimodule.MarketDeps{Fetch: marketCache.Summary},
+		Market: handlerwire.MiniMarketDeps{Fetch: marketCache.Summary},
 	})
 	if err != nil {
 		return earlyMethodCapabilities{}, fmt.Errorf("server init: miniapp module: %w", err)
@@ -343,64 +308,64 @@ func (s *Server) registerEarlyCapabilityDomains(hub *rpcutil.GatewayHub, denebDi
 // tools, events, scheduling, observability, and lifecycle operations.
 func (s *Server) earlyCoreMethods(hub *rpcutil.GatewayHub, denebDir string, capabilities earlyMethodCapabilities) []map[string]rpcutil.HandlerFunc {
 	return []map[string]rpcutil.HandlerFunc{
-		handlersession.CRUDMethods(handlersession.Deps{
+		handlerwire.SessionCRUDMethods(handlerwire.SessionDeps{
 			Sessions:    hub.Sessions(),
 			GatewaySubs: hub.GatewaySubs(),
-			Transcripts: func() (handlersession.TranscriptDeleter, error) {
+			Transcripts: func() (handlerwire.SessionTranscriptDeleter, error) {
 				if s.toolDeps == nil || s.toolDeps.Sessions.Transcript == nil {
 					return nil, errTranscriptUnavailable
 				}
 				return s.toolDeps.Sessions.Transcript, nil
 			},
 		}),
-		handlersystem.HealthMethods(handlersystem.HealthDeps{
+		handlerwire.SystemHealthMethods(handlerwire.SystemHealthDeps{
 			SessionCount: hub.Sessions().Count,
 			Version:      hub.Version(),
 		}),
-		handleragent.ExtendedMethods(handleragent.ExtendedDeps{
+		handlerwire.AgentExtendedMethods(handlerwire.AgentExtendedDeps{
 			Sessions:    hub.Sessions(),
 			GatewaySubs: hub.GatewaySubs(),
 			Processes:   hub.Processes(),
 			CronService: hub.CronService(),
 			Broadcaster: hub.Broadcast,
 		}),
-		handlerprocess.ACPMethods(s.acpDeps),
-		handlerskill.ToolMethods(handlerskill.ToolDeps{Processes: hub.Processes()}),
-		handlerskill.Methods(handlerskill.Deps{
+		handlerwire.ProcessACPMethods(s.acpDeps),
+		handlerwire.SkillToolMethods(handlerwire.SkillToolDeps{Processes: hub.Processes()}),
+		handlerwire.SkillMethods(handlerwire.SkillDeps{
 			Skills:      hub.Skills(),
 			Broadcaster: hub.Broadcast,
 		}),
-		handlerevents.BroadcastMethods(handlerevents.EventsDeps{
+		handlerwire.BroadcastMethods(handlerwire.EventsDeps{
 			Broadcaster: hub.Broadcaster(),
 			Logger:      hub.Logger(),
 		}),
-		handlerevents.EventsMethods(handlerevents.EventsDeps{
+		handlerwire.EventsMethods(handlerwire.EventsDeps{
 			Broadcaster: hub.Broadcaster(),
 			Logger:      hub.Logger(),
 		}),
-		handlerprocess.CronAdvancedMethods(handlerprocess.CronAdvancedDeps{
+		handlerwire.ProcessCronAdvancedMethods(handlerwire.ProcessCronAdvancedDeps{
 			Service:     hub.CronService(),
 			RunLog:      hub.CronPersistLog(),
 			Broadcaster: hub.Broadcast,
 		}),
-		handlerprocess.CronServiceMethods(handlerprocess.CronServiceDeps{Service: hub.CronService()}),
-		handlersystem.IdentityMethods(hub.Version()),
-		handlersystem.MonitoringMethods(handlersystem.MonitoringDeps{Dispatcher: s.dispatcher}),
-		handlersystem.ConfigAdvancedMethods(handlersystem.ConfigAdvancedDeps{Broadcaster: hub.Broadcast}),
-		handlersystem.UsageMethods(handlersystem.UsageDeps{Tracker: s.usageTracker}),
-		handlersystem.LogsMethods(handlersystem.LogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
-		handlerobserve.Methods(capabilities.observe),
-		handlerobservatory.Methods(capabilities.observatory),
-		handlerinsights.Methods(handlerinsights.Deps{
+		handlerwire.ProcessCronServiceMethods(handlerwire.ProcessCronServiceDeps{Service: hub.CronService()}),
+		handlerwire.SystemIdentityMethods(hub.Version()),
+		handlerwire.SystemMonitoringMethods(handlerwire.SystemMonitoringDeps{Dispatcher: s.dispatcher}),
+		handlerwire.SystemConfigAdvancedMethods(handlerwire.SystemConfigAdvancedDeps{Broadcaster: hub.Broadcast}),
+		handlerwire.SystemUsageMethods(handlerwire.SystemUsageDeps{Tracker: s.usageTracker}),
+		handlerwire.SystemLogsMethods(handlerwire.SystemLogsDeps{LogDir: filepath.Join(denebDir, "logs")}),
+		handlerwire.ObserveMethods(capabilities.observe),
+		handlerwire.ObservatoryMethods(capabilities.observatory),
+		handlerwire.InsightsMethods(handlerwire.InsightsDeps{
 			Engine: hub.Opt.Insights,
 			Logger: hub.Logger(),
 		}),
-		handlercheckpoint.Methods(handlercheckpoint.Deps{
+		handlerwire.CheckpointMethods(handlerwire.CheckpointDeps{
 			Root:   filepath.Join(denebDir, "checkpoints"),
 			Logger: hub.Logger(),
 		}),
-		handlersystem.MaintenanceMethods(handlersystem.MaintenanceDeps{Runner: s.maintRunner}),
-		handlersystem.UpdateMethods(handlersystem.UpdateDeps{DenebDir: denebDir}),
+		handlerwire.SystemMaintenanceMethods(handlerwire.SystemMaintenanceDeps{Runner: s.maintRunner}),
+		handlerwire.SystemUpdateMethods(handlerwire.SystemUpdateDeps{DenebDir: denebDir}),
 	}
 }
 
@@ -408,8 +373,8 @@ func (s *Server) earlyCoreMethods(hub *rpcutil.GatewayHub, denebDir string, capa
 // and shared native stores. Product domains are registered by later groups.
 func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities earlyMethodCapabilities) []map[string]rpcutil.HandlerFunc {
 	return []map[string]rpcutil.HandlerFunc{
-		handlerobserve.MiniappMethods(capabilities.observe),
-		handlerobservatory.MiniappMethods(capabilities.observatory),
+		handlerwire.ObserveMiniappMethods(capabilities.observe),
+		handlerwire.ObservatoryMiniappMethods(capabilities.observatory),
 		s.earlyMiniappGatewayMethods(hub),
 		capabilities.miniapp,
 		// DeliveryEnabled keeps the client on background SSE when device tokens
@@ -432,27 +397,27 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 
 func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcutil.HandlerFunc {
 	return []map[string]rpcutil.HandlerFunc{
-		withMailAliases(handlermail.GmailMethods(handlermail.GmailDeps{
+		withMailAliases(handlerwire.MailGmailMethods(handlerwire.MailGmailDeps{
 			Client:        s.miniappMailClientFactory(denebDir),
-			AnalysisCache: handlermail.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
-			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
-			MailStore: func() handlermail.MailStoreReader {
+			AnalysisCache: handlerwire.MailNewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
+			WorkState:     platbind.NewMailWork(filepath.Join(denebDir, "mail_work_state.json")),
+			MailStore: func() handlerwire.MailStoreReader {
 				if s.mailStore == nil {
 					return nil
 				}
 				return s.mailStore
 			},
 			Priority: func() func(from, subject, snippet string) (string, string) {
-				counterparties := mailflow.NewCounterpartyLookup(func() *wiki.Store { return s.wikiStore })
+				counterparties := svcbind.NewCounterpartyLookup(func() *domainbind.WikiStore { return s.wikiStore })
 				return func(from, subject, snippet string) (string, string) {
 					tier, hint := mailPriorityScorer(s.contactsStore, counterparties).Score(from, subject, snippet)
 					return string(tier), hint
 				}
 			}(),
 		})),
-		minischedule.CalendarMethods(minischedule.CalendarDeps{
-			Client: func() (minischedule.CalendarClient, error) {
-				return calendar.DefaultClient()
+		handlerminiapp.CalendarMethods(handlerminiapp.CalendarDeps{
+			Client: func() (handlerminiapp.CalendarClient, error) {
+				return platbind.DefaultCalendarClient()
 			},
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
@@ -464,7 +429,7 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcu
 	return []map[string]rpcutil.HandlerFunc{
 		s.earlyProjectMethods(hub),
 		handlerminiapp.OrgMethods(s.orgDeps()),
-		minischedule.TodoMethods(minischedule.TodoDeps{Store: resolveLocalTodos(s.logger)}),
+		handlerminiapp.TodoMethods(handlerminiapp.TodoDeps{Store: resolveLocalTodos(s.logger)}),
 	}
 }
 
@@ -472,7 +437,7 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub) []map[string]rpcu
 // request-time factory so an unavailable wiki, notebook, or cron service does
 // not prevent gateway startup.
 func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpcutil.HandlerFunc {
-	wikiStore := func() (miniknowledge.MemorySearcher, error) {
+	wikiStore := func() (handlerminiapp.MemorySearcher, error) {
 		store := hub.Opt.WikiStore
 		if store == nil {
 			return nil, errWikiDisabled
@@ -481,20 +446,20 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 	}
 
 	return []map[string]rpcutil.HandlerFunc{
-		miniknowledge.MemoryMethods(miniknowledge.MemoryDeps{
+		handlerminiapp.MemoryMethods(handlerminiapp.MemoryDeps{
 			Store:      wikiStore,
 			StartMerge: s.makeWikiMergeStarter(hub),
 		}),
-		miniknowledge.NotebookMethods(miniknowledge.NotebookDeps{
-			Store: func() (*notebook.Store, error) {
+		handlerminiapp.NotebookMethods(handlerminiapp.NotebookDeps{
+			Store: func() (*domainbind.NotebookStore, error) {
 				if s.notebookStore == nil {
 					return nil, errNotebookDisabled
 				}
 				return s.notebookStore, nil
 			},
 		}),
-		minischedule.CronsMethods(minischedule.CronsDeps{
-			Service: func() (minischedule.CronService, error) {
+		handlerminiapp.CronsMethods(handlerminiapp.CronsDeps{
+			Service: func() (handlerminiapp.CronService, error) {
 				service := hub.CronService()
 				if service == nil {
 					return nil, errCronUnavailable
@@ -511,26 +476,26 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 				return s.modelMaintenance.PromptTuner()
 			},
 		}),
-		miniknowledge.TopicDocsMethods(miniknowledge.TopicDocsDeps{
-			TopicsDir:  func() (string, error) { return configresolve.TopicsDir(), nil },
-			CurrentKey: configresolve.CurrentTopicKey,
-			ApplyNow:   prompt.Cache.ClearAllTopicSnapshots,
+		handlerminiapp.TopicDocsMethods(handlerminiapp.TopicDocsDeps{
+			TopicsDir:  func() (string, error) { return svcbind.TopicsDir(), nil },
+			CurrentKey: svcbind.CurrentTopicKey,
+			ApplyNow:   pipebind.Cache.ClearAllTopicSnapshots,
 		}),
-		withMailAliases(handlermail.GmailContextMethods(handlermail.GmailContextDeps{
-			Client: func() (handlermail.GmailClient, error) {
-				return gmail.DefaultClient()
+		withMailAliases(handlerwire.MailGmailContextMethods(handlerwire.MailGmailContextDeps{
+			Client: func() (handlerwire.MailGmailClient, error) {
+				return platbind.DefaultGmailClient()
 			},
 			WikiStore: wikiStore,
 			SenderFacts: func(ctx context.Context, from string) string {
 				if facts := s.wikiSenderFacts(ctx, from); facts != "" {
 					return facts
 				}
-				return mailanalysis.ExtractSenderFacts(ctx, from)
+				return platbind.ExtractSenderFacts(ctx, from)
 			},
 		})),
-		miniknowledge.PeopleMethods(miniknowledge.PeopleDeps{
-			Client: func() (miniknowledge.PeopleClient, error) {
-				return gmail.DefaultClient()
+		handlerminiapp.PeopleMethods(handlerminiapp.PeopleDeps{
+			Client: func() (handlerminiapp.PeopleClient, error) {
+				return platbind.DefaultGmailClient()
 			},
 			WikiStore: wikiStore,
 		}),
@@ -542,16 +507,16 @@ func (s *Server) earlyImprovementMethods(hub *rpcutil.GatewayHub) []map[string]r
 		s.earlySkillMethods(),
 		s.earlySelfImprovementMethods(),
 		s.earlyRSIStatusMethods(),
-		miniknowledge.SearchMethods(miniknowledge.SearchDeps{
-			Store: func() (miniknowledge.MemorySearcher, error) {
+		handlerminiapp.SearchMethods(handlerminiapp.SearchDeps{
+			Store: func() (handlerminiapp.MemorySearcher, error) {
 				store := hub.Opt.WikiStore
 				if store == nil {
 					return nil, errWikiDisabled
 				}
 				return store, nil
 			},
-			Client: func() (miniknowledge.PeopleClient, error) {
-				return gmail.DefaultClient()
+			Client: func() (handlerminiapp.PeopleClient, error) {
+				return platbind.DefaultGmailClient()
 			},
 		}),
 	}
@@ -570,7 +535,7 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 				}
 			}
 			if s.modelRegistry != nil {
-				return s.modelRegistry.FullModelID(modelrole.RoleMain)
+				return s.modelRegistry.FullModelID(aibind.RoleMain)
 			}
 			return ""
 		},
@@ -601,7 +566,7 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 				"updateManifest":  true,
 				"prompts":         s.promptStore != nil,
 				"promptTuner":     s.modelMaintenance != nil && s.modelMaintenance.PromptTuner() != nil,
-				"topicDocs":       configresolve.CurrentTopicKey() != "",
+				"topicDocs":       svcbind.CurrentTopicKey() != "",
 			}
 		},
 	})
@@ -611,13 +576,13 @@ func (s *Server) earlyMiniappGatewayMethods(hub *rpcutil.GatewayHub) map[string]
 // index. Mutations invalidate stale vectors immediately; the periodic indexer
 // repopulates them with current content.
 func (s *Server) earlyFileMethods() map[string]rpcutil.HandlerFunc {
-	return minifiles.FilesBrowseMethods(minifiles.FilesBrowseDeps{
+	return handlerminiapp.FilesBrowseMethods(handlerminiapp.FilesBrowseDeps{
 		Store: localFileStoreOrNil(s.logger),
 		ExtractText: func(ctx context.Context, data []byte, name string) string {
 			text, _ := toolbind.ExtractDocumentText(ctx, data, name, "")
 			return text
 		},
-		SemanticSearch: func(ctx context.Context, query string, max int) ([]filestore.ScoredEntry, error) {
+		SemanticSearch: func(ctx context.Context, query string, max int) ([]domainbind.ScoredEntry, error) {
 			if s.fileSemindex == nil {
 				return nil, nil
 			}
@@ -681,7 +646,7 @@ func (s *Server) earlyProjectMethods(hub *rpcutil.GatewayHub) map[string]rpcutil
 			return out
 		},
 		Calendar: func() []handlerminiapp.ProjectLinkedCalEvent {
-			store, err := localcal.Default()
+			store, err := platbind.LocalCalDefault()
 			if err != nil || store == nil {
 				return nil
 			}
@@ -702,101 +667,101 @@ func (s *Server) earlyProjectMethods(hub *rpcutil.GatewayHub) map[string]rpcutil
 // earlySkillMethods wires the native skill catalog to late-bound Genesis
 // projections. Missing tracker state degrades to an unenriched catalog.
 func (s *Server) earlySkillMethods() map[string]rpcutil.HandlerFunc {
-	return minimodule.SkillsMethods(minimodule.SkillsDeps{
-		List: func() []skills.SkillEntry {
+	return handlerwire.MiniSkillsMethods(handlerwire.MiniSkillsDeps{
+		List: func() []domainbind.SkillEntry {
 			var toolNames []string
 			if s.chatHandler != nil {
 				toolNames = s.chatHandler.ToolNames()
 			}
-			return chat.EligibleWorkspaceSkills(configresolve.WorkspaceDir(), toolNames)
+			return pipebind.EligibleWorkspaceSkills(svcbind.WorkspaceDir(), toolNames)
 		},
-		CuratorRecords: func() ([]genesis.SkillCuratorRecord, error) {
+		CuratorRecords: func() ([]domainbind.SkillCuratorRecord, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
 			}
 			return s.genesisTracker.SkillCuratorReport("")
 		},
-		UsageStats: func() ([]genesis.UsageStats, error) {
+		UsageStats: func() ([]domainbind.UsageStats, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
 			}
 			return s.genesisTracker.ListAllStats()
 		},
-		RecentLifecycle: func(limit int) ([]genesis.LifecycleLogEntry, error) {
+		RecentLifecycle: func(limit int) ([]domainbind.LifecycleLogEntry, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
 			}
 			return s.genesisTracker.RecentLifecycleLog(limit)
 		},
-		ValidationSummary: func(skillName string) (genesis.SkillValidationCaseSummary, error) {
+		ValidationSummary: func(skillName string) (domainbind.SkillValidationCaseSummary, error) {
 			if s.genesisTracker == nil {
-				return genesis.SkillValidationCaseSummary{SkillName: strings.TrimSpace(skillName)}, nil
+				return domainbind.SkillValidationCaseSummary{SkillName: strings.TrimSpace(skillName)}, nil
 			}
 			return s.genesisTracker.ValidationCaseSummary(strings.TrimSpace(skillName))
 		},
-		RecentOpportunities: func(skillName string, limit int) ([]genesis.SkillOpportunityRecord, error) {
+		RecentOpportunities: func(skillName string, limit int) ([]domainbind.SkillOpportunityRecord, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
 			}
 			return s.genesisTracker.RecentSkillOpportunities(strings.TrimSpace(skillName), limit)
 		},
-		RecentSelfCorrections: func(skillName string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+		RecentSelfCorrections: func(skillName string, limit int) ([]domainbind.SelfCorrectionCandidateRecord, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
 			}
-			return s.genesisTracker.RecentSelfCorrectionCandidates(strings.TrimSpace(skillName), genesis.SelfCorrectionStatusProposed, limit)
+			return s.genesisTracker.RecentSelfCorrectionCandidates(strings.TrimSpace(skillName), domainbind.SelfCorrectionStatusProposed, limit)
 		},
-		SelfHarnessSignals: func() genesis.SelfHarnessSignalSummary {
+		SelfHarnessSignals: func() domainbind.SelfHarnessSignalSummary {
 			if s.genesisTracker == nil {
-				return genesis.SelfHarnessSignalSummary{}
+				return domainbind.SelfHarnessSignalSummary{}
 			}
 			return s.genesisTracker.SelfHarnessSignals()
 		},
-		InvalidateSkills: chat.InvalidateSkillsCache,
+		InvalidateSkills: pipebind.InvalidateSkillsCache,
 	})
 }
 
 func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
-	return minimodule.SelfImprovementCodingMethods(minimodule.SelfImprovementCodingDeps{
-		RecentCandidates: func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
+	return handlerwire.MiniSelfImprovementCodingMethods(handlerwire.MiniSelfImprovementCodingDeps{
+		RecentCandidates: func(status string, limit int) ([]domainbind.SelfCorrectionCandidateRecord, error) {
 			if s.genesisTracker == nil {
 				return nil, nil
 			}
 			return s.genesisTracker.RecentSelfCorrectionCandidates("", status, limit)
 		},
-		NextDispatchCandidate: func(excludedIDs []string) (genesis.SelfCorrectionCandidateRecord, bool, error) {
+		NextDispatchCandidate: func(excludedIDs []string) (domainbind.SelfCorrectionCandidateRecord, bool, error) {
 			if s.genesisTracker == nil {
-				return genesis.SelfCorrectionCandidateRecord{}, false, nil
+				return domainbind.SelfCorrectionCandidateRecord{}, false, nil
 			}
 			return s.genesisTracker.NextSelfCorrectionDispatchCandidate(excludedIDs)
 		},
-		RecordCandidate: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		RecordCandidate: func(rec domainbind.SelfCorrectionCandidateRecord) (domainbind.SelfCorrectionCandidateRecord, error) {
 			if s.genesisTracker == nil {
-				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
+				return domainbind.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
 			}
 			return s.genesisTracker.RecordSelfCorrectionCandidate(rec)
 		},
-		RecordDispatch: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		RecordDispatch: func(rec domainbind.SelfCorrectionCandidateRecord) (domainbind.SelfCorrectionCandidateRecord, error) {
 			if s.genesisTracker == nil {
-				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
+				return domainbind.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
 			}
 			return s.genesisTracker.RecordSelfCorrectionDispatch(rec)
 		},
-		Funnel: func() genesis.SelfCorrectionFunnelSummary {
+		Funnel: func() domainbind.SelfCorrectionFunnelSummary {
 			if s.genesisTracker == nil {
-				return genesis.SelfCorrectionFunnelSummary{}
+				return domainbind.SelfCorrectionFunnelSummary{}
 			}
 			return s.genesisTracker.SelfCorrectionFunnel()
 		},
-		LastNudgeAtMs: runtimeheartbeat.LastSelfCodingNudgeAtMillis,
+		LastNudgeAtMs: svcbind.LastSelfCodingNudgeAtMillis,
 	})
 }
 
 func (s *Server) earlyRSIStatusMethods() map[string]rpcutil.HandlerFunc {
-	return minimodule.RSIStatusMethods(minimodule.RSIStatusDeps{
-		Status: func() genesis.RSILoopStatus {
+	return handlerwire.MiniRSIStatusMethods(handlerwire.MiniRSIStatusDeps{
+		Status: func() domainbind.RSILoopStatus {
 			if s.genesisTracker == nil {
-				return genesis.RSILoopStatus{}
+				return domainbind.RSILoopStatus{}
 			}
 			return s.genesisTracker.RSIStatus()
 		},
@@ -808,11 +773,11 @@ func (s *Server) earlyProviderMethods() []map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return []map[string]rpcutil.HandlerFunc{
-		handlerprovider.Methods(handlerprovider.Deps{
+		handlerwire.ProviderMethods(handlerwire.ProviderDeps{
 			Providers:   s.providers,
 			AuthManager: s.authManager,
 		}),
-		handlerprovider.ModelsMethods(handlerprovider.ModelsDeps{
+		handlerwire.ProviderModelsMethods(handlerwire.ProviderModelsDeps{
 			Providers: s.providers,
 		}),
 	}

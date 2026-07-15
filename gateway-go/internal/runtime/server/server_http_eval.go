@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // handleEvalExtract runs a PRODUCTION extractor (its real prompt + jsonutil parse +
@@ -23,7 +23,7 @@ import (
 // tags) the result is fence-immune — the difference prod never sees and the raw
 // sparkfleet probe wrongly penalized.
 func (s *Server) handleEvalExtract(w http.ResponseWriter, r *http.Request) {
-	if _, ok := nativeauth.Authenticate(w, r, s.logger); !ok {
+	if _, ok := svcbind.Authenticate(w, r, s.logger); !ok {
 		return
 	}
 	var req struct {
@@ -48,14 +48,14 @@ func (s *Server) handleEvalExtract(w http.ResponseWriter, r *http.Request) {
 	// client is wormhole-backed too, so it is a safe fallback.
 	client := s.modelRegistry.ClientForProvider("wormhole")
 	if client == nil {
-		client = s.modelRegistry.Client(modelrole.RoleLightweight)
+		client = s.modelRegistry.Client(aibind.RoleLightweight)
 	}
 	if client == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no wormhole-backed client configured"})
 		return
 	}
 
-	result, err := mailanalysis.ExtractForEval(r.Context(), client, req.Model, req.Kind, req.Input)
+	result, err := platbind.ExtractForEval(r.Context(), client, req.Model, req.Kind, req.Input)
 	if err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return

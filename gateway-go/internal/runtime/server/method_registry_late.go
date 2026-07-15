@@ -1,31 +1,21 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/cronrunner"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/modelpicker"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
-	miniknowledge "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/knowledge"
-	handlermail "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/mail"
-	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
-	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/skill"
-	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/wiki"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // registerLateMethods registers RPC domains that depend on chatHandler.
@@ -35,18 +25,18 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	hub.Opt.WikiStore = s.wikiStore // late-bound: created during session phase
 
 	domains := []map[string]rpcutil.HandlerFunc{
-		handlerchat.Methods(handlerchat.Deps{
+		handlerwire.ChatMethods(handlerwire.ChatDeps{
 			Chat:        s.chatHandler,
 			Broadcaster: hub.Broadcast,
 		}),
-		handlerchat.BtwMethods(handlerchat.BtwDeps{
+		handlerwire.ChatBtwMethods(handlerwire.ChatBtwDeps{
 			Chat:        s.chatHandler,
 			Broadcaster: hub.Broadcast,
 		}),
 		// Native-client chat bridge (miniapp.chat.send/history): lets the
 		// standalone app drive a turn over the miniapp.* RPC surface via
 		// SendSync, with deneb-ui emission enabled (channel "client").
-		handlerchat.MiniappMethods(handlerchat.Deps{
+		handlerwire.ChatMiniappMethods(handlerwire.ChatDeps{
 			Chat:       s.chatHandler,
 			OcrImage:   toolbind.OCRImage,
 			Transcribe: toolbind.TranscribeAudio,
@@ -90,7 +80,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 					return 0, fmt.Errorf("contacts store unavailable")
 				}
 				var p struct {
-					Contacts []contacts.Contact `json:"contacts"`
+					Contacts []domainbind.Contact `json:"contacts"`
 				}
 				if err := json.Unmarshal(contactsJSON, &p); err != nil {
 					return 0, err
@@ -100,10 +90,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// Bonus: enrich existing wiki people (native-client contacts sync).
 			// Enriches only 사람 pages already in the wiki — it creates none — so
 			// the phone book strengthens the curated set without flooding it.
-			EnrichContacts: func(contactsJSON []byte) (wiki.ContactEnrichResult, error) {
+			EnrichContacts: func(contactsJSON []byte) (domainbind.ContactEnrichResult, error) {
 				ws := hub.Opt.WikiStore
 				if ws == nil {
-					return wiki.ContactEnrichResult{}, fmt.Errorf("wiki store unavailable")
+					return domainbind.ContactEnrichResult{}, fmt.Errorf("wiki store unavailable")
 				}
 				res, err := ws.EnrichContacts(contactsJSON)
 				if err != nil {
@@ -114,14 +104,14 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// disambiguates 동명이인 the name cannot. Best-effort (a bonus alongside
 				// the 연락처 body enrichment); homonyms are flagged, not guessed.
 				var p struct {
-					Contacts []contacts.Contact `json:"contacts"`
+					Contacts []domainbind.Contact `json:"contacts"`
 				}
 				if json.Unmarshal(contactsJSON, &p) == nil {
 					// Give our own staff (company-domain contacts) an 인물 page even without
 					// a wiki mention — they should be first-class identities. External people
 					// stay mention-curated (the dreamer), so this never floods with the whole
 					// phone book. Runs BEFORE the email backfill so the new pages get seeded.
-					ourDomains := mailanalysis.OurMailDomains()
+					ourDomains := platbind.OurMailDomains()
 					if cr, cerr := ws.EnrichEmployeePages(p.Contacts, ourDomains); cerr == nil && len(cr.Created) > 0 {
 						s.logger.Info("employee pages created", "count", len(cr.Created))
 					}
@@ -143,14 +133,14 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			PublishDeliverable: func(text string) (bool, error) {
 				return s.proactiveRelay.PublishDeliverable(text)
 			},
-			IngestEvent: phoneevents.New(phoneevents.Config{
+			IngestEvent: svcbind.NewPhoneEvents(svcbind.PhoneEventsConfig{
 				ChatHandler:     s.chatHandler,
 				Relay:           &s.proactiveRelay,
 				ShutdownContext: s.ShutdownCtx(),
 				Logger:          s.logger,
 				Ledger:          s.phoneEventLedgerInstance(),
 				OnLocationPlace: s.siteVisitOnLocation(),
-				ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
+				ResolvePhoneAction: func(res svcbind.ActionResult) bool {
 					if s.phoneActions == nil {
 						return false
 					}
@@ -158,12 +148,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				},
 			}).IngestAsync,
 		}),
-		handlersession.ExecMethods(handlersession.ExecDeps{
+		handlerwire.SessionExecMethods(handlerwire.SessionExecDeps{
 			Chat:       s.chatHandler,
 			JobTracker: hub.JobTracker(),
 		}),
 		// --- Wiki knowledge base (feature-flagged, late-bound) ---
-		handlerwiki.Methods(handlerwiki.Deps{
+		handlerwire.WikiMethods(handlerwire.WikiDeps{
 			Store: hub.Opt.WikiStore,
 		}),
 
@@ -173,7 +163,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// registerSessionRPCMethods. Registered early (#3457) the snapshot
 		// stayed nil forever — the native picker showed every role as 미설정
 		// and models.set was rejected as "not ready".
-		modelpicker.NewController(modelpicker.ControllerConfig{
+		svcbind.NewController(svcbind.ControllerConfig{
 			Registry:    s.modelRegistry,
 			ChatHandler: s.chatHandler,
 			Logger:      s.logger,
@@ -184,13 +174,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return s.roleHealth.Verdicts()
 			},
 			RefreshCodingModelConsumers: s.refreshCodingModelConsumers,
-			ProviderConfigs: func() map[string]chatport.ProviderConfig {
-				return configresolve.LoadProviderConfigs(s.logger)
+			ProviderConfigs: func() map[string]pipebind.ProviderConfig {
+				return svcbind.LoadProviderConfigs(s.logger)
 			},
 		}).Methods(),
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
-		handlerskill.GenesisMethods(handlerskill.GenesisDeps{
+		handlerwire.SkillGenesisMethods(handlerwire.SkillGenesisDeps{
 			Genesis:     s.genesisSvc,
 			Evolver:     s.genesisEvolver,
 			Tracker:     s.genesisTracker,
@@ -203,16 +193,16 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// init right before this phase. Lazy factory still — operator
 		// runs without any provider configured, the call returns
 		// UNAVAILABLE rather than crashing the gateway.
-		withMailAliases(handlermail.GmailAnalyzeMethods(handlermail.GmailAnalyzeDeps{
+		withMailAliases(handlerwire.MailGmailAnalyzeMethods(handlerwire.MailGmailAnalyzeDeps{
 			// Archive-first client — the same factory the native mail list/detail
 			// surface uses. Mail now arrives via LMTP and lives in the on-box
-			// archive keyed by RFC822 Message-ID. The old gmail.DefaultClient()
+			// archive keyed by RFC822 Message-ID. The old platbind.DefaultGmailClient()
 			// fetched by Gmail-API message id, so "🔄 다시 분석" on an archived mail
 			// handed an archive id (…@amazonses.com) to the Gmail API → HTTP 400
 			// "Invalid id value". The miniapp mail surface is now native-archive-only
 			// (the Gmail fallback was removed — see server_mail_repository.go).
 			Client: s.miniappMailClientFactory(s.denebDir),
-			Pipeline: func() (handlermail.AnalyzePipeline, error) {
+			Pipeline: func() (handlerwire.MailAnalyzePipeline, error) {
 				// Role selection is shared with the autonomous poller via
 				// mailAnalysisModels (stage-2 = main role, stage-1 = tiny
 				// role) so the two mail-analysis paths cannot drift apart.
@@ -224,20 +214,20 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				// 2026-06-10).
 				llmClient, model, localClient, localModel := s.mailAnalysisModels()
 				if llmClient == nil {
-					return nil, handlermail.ErrAnalyzeNoLLM
+					return nil, handlerwire.MailErrAnalyzeNoLLM
 				}
-				gmailClient, err := gmail.DefaultClient()
+				gmailClient, err := platbind.DefaultGmailClient()
 				if err != nil {
 					return nil, err
 				}
-				return handlermail.PipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
+				return handlerwire.MailPipelineFromMailAnalysis(gmailClient, llmClient, localClient, model, localModel, s.mailAnalysisPrompt(), s.projectCandidatesFn(), s.wikiSenderFacts, toolbind.ExtractAttachmentText, func(domain string) []string {
 					return s.cpProjects.Lookup(s.wikiStore, domain)
 				})
 			},
-			Cache:      handlermail.NewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
-			WorkState:  mailwork.New(filepath.Join(s.denebDir, "mail_work_state.json")),
+			Cache:      handlerwire.MailNewAnalysisStore(filepath.Join(s.denebDir, "cache", "mail_analysis")),
+			WorkState:  platbind.NewMailWork(filepath.Join(s.denebDir, "mail_work_state.json")),
 			SaveToWiki: makeMailAnalysisWikiSink(hub),
-			WikiStore: func() (miniknowledge.MemorySearcher, error) {
+			WikiStore: func() (handlerminiapp.MemorySearcher, error) {
 				store := hub.Opt.WikiStore
 				if store == nil {
 					return nil, errWikiDisabled
@@ -286,7 +276,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return err
 			}
 		}
-		s.cronService.SetAgentRunner(cronrunner.New(cronrunner.Config{
+		s.cronService.SetAgentRunner(svcbind.NewCronRunner(svcbind.CronRunnerConfig{
 			Chat:              s.chatHandler,
 			Logger:            s.logger,
 			WeeklyReportData:  weeklyDataFn,
@@ -300,7 +290,7 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			s.chatHandler.SetWeeklyReport(weeklyTextFn, weeklyFormFn)
 		}
 		if s.acpDeps != nil {
-			s.cronService.SetSubagentPoller(cronrunner.NewSubagentPoller(
+			s.cronService.SetSubagentPoller(svcbind.NewSubagentPoller(
 				s.acpDeps.Registry,
 				s.sessions,
 			))

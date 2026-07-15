@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 
-	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 )
 
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := s.collectBaseHealth()
-	if propus, ok := runtimehealth.Propus(s.genesisTracker); ok {
+	if propus, ok := svcbind.Propus(s.genesisTracker); ok {
 		attachPropus(health, propus)
 	}
 
@@ -34,7 +34,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // attachPropus publishes the canonical name and its legacy compatibility alias
 // as the same immutable snapshot.
-func attachPropus(health map[string]any, section *runtimehealth.PropusSection) {
+func attachPropus(health map[string]any, section *svcbind.PropusSection) {
 	health["propus"] = section
 	health["self_evolution"] = section
 }

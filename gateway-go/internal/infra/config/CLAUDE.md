@@ -38,6 +38,19 @@
 - 기본값은 load 이후 일관되게 적용되어야 한다. missing file과 빈 JSON이
   서로 다른 runtime 결과를 내지 않게 테스트한다.
 
+## Local change scope
+
+설정 계약 변경은 typed config 경계에 가둔다. 런타임 배선을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `internal/runtime/commands`(bootstrap 소비자),
+  `internal/infra/secret`(credential resolution). `LoadConfig`/
+  `BootstrapGatewayConfig`/`ResolveGatewayRuntimeConfig`가 바뀌면
+  `loader_test.go`와 `runtime_test.go`를 먼저 본다.
+- 건드리지 말 것: `internal/runtime/server` method registry,
+  `internal/pipeline/chat` prompt cache, client wire 생성물. config에서
+  server·RPC·pipeline을 import하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/infra/config`
+
 ## 집중 검증
 
 설정 변경은 missing/invalid/valid JSON, default 적용, raw-key 보존과 보안

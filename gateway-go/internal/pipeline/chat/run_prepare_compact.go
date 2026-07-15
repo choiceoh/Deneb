@@ -25,7 +25,7 @@ import (
 // model's capabilities (context window, vision).
 func assembleMessages(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	prep prepResult,
 	mr modelResolution,
@@ -44,7 +44,7 @@ func assembleMessages(
 // assembleTurnMessages builds the turn's raw message list: transcript
 // history (or caller-prebuilt messages), the current user message, extracted
 // document attachments, and the non-vision image strip.
-func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, prep prepResult, mr modelResolution) []llm.Message {
+func assembleTurnMessages(ctx context.Context, params runParams, deps runDeps, prep prepResult, mr modelResolution) []llm.Message {
 	messages := prep.Messages
 
 	// Extract raw document attachments (PDF/Office/CSV the native client sends as
@@ -108,8 +108,8 @@ func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, p
 // STW (Stop-the-World): when LLM compaction fires, the user sees a
 // ✍ status emoji and typing keepalive until compaction completes.
 // No LLM call is made until context is compressed — incoming messages
-// are already queued by PendingQueue during the active run.
-func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr modelResolution, messages []llm.Message, logger *slog.Logger, hooks *compactionHooks) []llm.Message {
+// are already queued by pendingQueue during the active run.
+func compactTurnMessages(ctx context.Context, params runParams, deps runDeps, mr modelResolution, messages []llm.Message, logger *slog.Logger, hooks *compactionHooks) []llm.Message {
 	// Derive compaction budget from context assembly budgets so they stay
 	// in sync, clamped to the model's context window when it is known.
 	contextBudget := effectiveContextBudget(deps, mr.providerID, mr.model, logger)
@@ -196,7 +196,7 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 }
 
 func deferCompactionToBackground(
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	mr modelResolution,
 	messages []llm.Message,
@@ -305,7 +305,7 @@ func finishCompactionStatus(done chan struct{}, started time.Time, logger *slog.
 
 func runPolarisCompaction(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	messages []llm.Message,
 	summarizer compact.Summarizer,
@@ -323,7 +323,7 @@ func runPolarisCompaction(
 func compactWithPolarisBridge(
 	ctx context.Context,
 	engine *polaris.Engine,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	messages []llm.Message,
 	summarizer compact.Summarizer,
@@ -387,7 +387,7 @@ func condensePolarisInBackground(
 
 func compactWithoutPolarisBridge(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	messages []llm.Message,
 	summarizer compact.Summarizer,
@@ -447,7 +447,7 @@ func compactionTier(result compact.Result) (string, bool) {
 }
 
 func reportCompactionDegraded(
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	contextBudget int,
 	result compact.Result,
@@ -462,7 +462,7 @@ func reportCompactionDegraded(
 		"tokensAfter", result.TokensAfter,
 		"budget", contextBudget)
 	if deps.broadcast != nil {
-		broadcastPayload(deps.broadcast, "chat.compaction_degraded", ChatCompactionDegradedEvent{
+		broadcastPayload(deps.broadcast, "chat.compaction_degraded", chatCompactionDegradedEvent{
 			Session:      params.SessionKey,
 			TokensBefore: result.TokensBefore,
 			TokensAfter:  result.TokensAfter,

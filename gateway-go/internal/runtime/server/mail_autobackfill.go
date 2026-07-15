@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -64,11 +64,11 @@ func (s *Server) maybeAutoBackfillMailStore(mailStoreDir string) {
 	if addr == "" {
 		addr = "127.0.0.1:1143"
 	}
-	cfg := mailarchive.Config{
+	cfg := platbind.MailArchiveConfig{
 		Addr:      addr,
 		User:      os.Getenv("DENEB_ARCHIVE_IMAP_USER"),
 		Pass:      os.Getenv("DENEB_ARCHIVE_IMAP_PASS"),
-		Mailboxes: mailarchive.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES")),
+		Mailboxes: platbind.ParseMailboxList(os.Getenv("DENEB_ARCHIVE_IMAP_MAILBOXES")),
 	}
 	markerPath := filepath.Join(mailStoreDir, mailAutoBackfillMarker)
 	if !autoBackfillEnabled(markerPath, cfg.User, cfg.Pass) {
@@ -83,9 +83,9 @@ func (s *Server) maybeAutoBackfillMailStore(mailStoreDir string) {
 
 		start := time.Now()
 		added := 0
-		opts := mailarchive.ContextOptions{Mailboxes: cfg.Mailboxes}
-		total, err := mailarchive.FetchAllContextMessages(ctx, cfg, opts, mailAutoBackfillBatch,
-			func(m mailarchive.ContextMessage) error {
+		opts := platbind.ContextOptions{Mailboxes: cfg.Mailboxes}
+		total, err := platbind.FetchAllContextMessages(ctx, cfg, opts, mailAutoBackfillBatch,
+			func(m platbind.ContextMessage) error {
 				created, perr := store.Put(m)
 				if perr != nil {
 					return perr

@@ -32,10 +32,10 @@ type ToolPartition struct {
 	CacheKey string
 }
 
-// PartitionTools separates tools into builtin (registered in the core
+// partitionTools separates tools into builtin (registered in the core
 // registry) and dynamic (everything else, e.g., MCP, plugin tools).
 // Both groups are sorted alphabetically by name within their partition.
-func PartitionTools(allTools []llm.Tool, builtinNames map[string]struct{}) ToolPartition {
+func partitionTools(allTools []llm.Tool, builtinNames map[string]struct{}) ToolPartition {
 	var builtin, dynamic []llm.Tool
 	for _, t := range allTools {
 		if _, ok := builtinNames[t.Name]; ok {
@@ -55,8 +55,8 @@ func PartitionTools(allTools []llm.Tool, builtinNames map[string]struct{}) ToolP
 	}
 }
 
-// MergedTools returns the combined tool list (builtin prefix + dynamic suffix).
-func (tp ToolPartition) MergedTools() []llm.Tool {
+// mergedTools returns the combined tool list (builtin prefix + dynamic suffix).
+func (tp ToolPartition) mergedTools() []llm.Tool {
 	result := make([]llm.Tool, 0, len(tp.Builtin)+len(tp.Dynamic))
 	result = append(result, tp.Builtin...)
 	result = append(result, tp.Dynamic...)

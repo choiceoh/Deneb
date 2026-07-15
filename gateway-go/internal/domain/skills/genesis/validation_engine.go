@@ -3,12 +3,10 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"strings"
 	"sync"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -21,7 +19,7 @@ const (
 
 // SkillValidationEngine is the selector-side held-out gate for skill evolution.
 // It is deliberately separate from Evolver so deterministic invariants and
-// dry-run replay checks can evolve without changing candidate generation.
+// dry-run replay checks can evolve without changing candidate genbind.
 type SkillValidationEngine struct {
 	tracker       *Tracker
 	logger        *slog.Logger
@@ -377,7 +375,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 	scores := make([]validationCaseScore, 0, len(cases))
 	normalizedBody := normalizedValidationText(body)
 	headings := map[string]struct{}{}
-	for _, heading := range guardrails.NormalizedSkillHeadings(body) {
+	for _, heading := range genbind.NormalizedSkillHeadings(body) {
 		headings[heading] = struct{}{}
 	}
 	for _, tc := range cases {
@@ -393,7 +391,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 				score.Passed++
 				continue
 			}
-			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required substring %q", label, genesiscommon.TruncateRunes(required, 80)))
+			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required substring %q", label, genbind.TruncateRunes(required, 80)))
 		}
 		for _, forbidden := range tc.ForbiddenSubstrings {
 			if normalizedValidationText(forbidden) == "" {
@@ -405,7 +403,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 				score.Passed++
 				continue
 			}
-			score.Failures = append(score.Failures, fmt.Sprintf("%s contains forbidden substring %q", label, genesiscommon.TruncateRunes(forbidden, 80)))
+			score.Failures = append(score.Failures, fmt.Sprintf("%s contains forbidden substring %q", label, genbind.TruncateRunes(forbidden, 80)))
 		}
 		for _, required := range tc.RequiredHeadings {
 			normalizedHeading := strings.ToLower(strings.Join(strings.Fields(required), " "))
@@ -418,7 +416,7 @@ func scoreSkillValidationCasesByCase(body string, cases []SkillValidationCaseRec
 				score.Passed++
 				continue
 			}
-			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required heading %q", label, genesiscommon.TruncateRunes(required, 80)))
+			score.Failures = append(score.Failures, fmt.Sprintf("%s missing required heading %q", label, genbind.TruncateRunes(required, 80)))
 		}
 		score.add(scoreSkillReplayCase(body, tc))
 		scores = append(scores, score)

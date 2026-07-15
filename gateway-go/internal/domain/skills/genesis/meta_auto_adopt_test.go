@@ -1,21 +1,20 @@
 package genesis
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 // Meta rollback watch: a recent adoption whose health snapshot the current 7d
 // window regresses hard against gets auto-reverted; healthy or under-sampled
 // windows stay put.
 func TestMaybeRevertAdoptionTriggersRollbackOnlyOnHardHealthRegression(t *testing.T) {
-	setup := func(t *testing.T) (*MetaEvolutionTask, *generation.MetaArtifacts, string) {
+	setup := func(t *testing.T) (*MetaEvolutionTask, *genbind.MetaArtifacts, string) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
 		tr, err := NewTracker(slog.Default())
@@ -23,11 +22,11 @@ func TestMaybeRevertAdoptionTriggersRollbackOnlyOnHardHealthRegression(t *testin
 			t.Fatal(err)
 		}
 		metaDir := filepath.Join(t.TempDir(), "meta")
-		meta := generation.NewMetaArtifacts(metaDir, slog.Default())
+		meta := genbind.NewMetaArtifacts(metaDir, slog.Default())
 		task := &MetaEvolutionTask{Tracker: tr, Meta: meta, Logger: slog.Default()}
 		return task, meta, metaDir
 	}
-	adoptFixture := func(t *testing.T, meta *generation.MetaArtifacts) {
+	adoptFixture := func(t *testing.T, meta *genbind.MetaArtifacts) {
 		t.Helper()
 		// Materialize an incumbent, write + adopt a proposal so a .rollback
 		// backup exists (the state the watch would revert to).
@@ -159,7 +158,7 @@ func TestMetaAutoAdoptEnabledDefaultsOnAndStopsOnKillSwitch(t *testing.T) {
 // Adoption backup/rollback round-trip at the artifact layer.
 func TestAdoptProposal_RollbackBackup(t *testing.T) {
 	dir := t.TempDir()
-	m := generation.NewMetaArtifacts(dir, slog.Default())
+	m := genbind.NewMetaArtifacts(dir, slog.Default())
 	m.MaterializeDefaults(map[string]string{"prompt.md": strings.Repeat("v1 incumbent. ", 20)})
 	if _, err := m.WriteProposal("prompt.md", strings.Repeat("v2 proposal. ", 20)); err != nil {
 		t.Fatal(err)

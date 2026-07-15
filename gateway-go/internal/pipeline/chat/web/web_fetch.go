@@ -43,7 +43,7 @@ var fetchGroup singleflight
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
 // spill (optional) lets the YouTube path offload full transcripts to disk while
 // returning only a summary to the conversation transcript.
-func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore) toolport.ToolFunc {
+func Tool(cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore) toolport.ToolFunc {
 	return func(ctx context.Context, input rawJSON) (string, error) {
 		var p struct {
 			URL      string   `json:"url"`
@@ -121,7 +121,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 }
 
 // webFetchURL fetches a URL and returns extracted content with metadata envelope.
-func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (string, error) {
+func webFetchURL(ctx context.Context, cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (string, error) {
 	out, err := webFetchURLDetailed(ctx, cache, localAI, spill, targetURL, maxChars)
 	if err != nil {
 		return "", err
@@ -131,7 +131,7 @@ func webFetchURL(ctx context.Context, cache *FetchCache, localAI *LocalAIExtract
 
 // webFetchURLDetailed is the search+fetch path: same fetch as webFetchURL but
 // returns a structured usability verdict alongside the envelope.
-func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error) {
+func webFetchURLDetailed(ctx context.Context, cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore, targetURL string, maxChars int) (fetchOutcome, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -235,7 +235,7 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 // fetcher (e.g. non-HTML URL, empty response, or API error).
 //
 // The returned result is already cached; the caller does not need to re-cache.
-func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL string) (fetchOutcome, bool) {
+func webFetchViaSerper(ctx context.Context, cache *fetchCache, apiKey, targetURL string) (fetchOutcome, bool) {
 	fetchStart := time.Now()
 	scrape, err := serperScrape(ctx, apiKey, targetURL)
 	fetchMs := time.Since(fetchStart).Milliseconds()
@@ -276,7 +276,7 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 // webParallelSearch runs multiple search queries concurrently and returns
 // combined results. Each query runs independently with optional fetch.
 // This avoids sequential LLM round-trips for multi-constraint questions.
-func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, queries []string, count, fetch, maxChars int) (string, error) {
+func webParallelSearch(ctx context.Context, cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore, queries []string, count, fetch, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
@@ -323,7 +323,7 @@ func webParallelSearch(ctx context.Context, cache *FetchCache, localAI *LocalAIE
 // webSearchAndFetch searches the web and auto-fetches the top N usable pages.
 // Candidates are ranked (answer-box, knowledge graph, query overlap, denylist),
 // then filled with a parallel wave + sequential early-stop.
-func webSearchAndFetch(ctx context.Context, cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
+func webSearchAndFetch(ctx context.Context, cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore, query string, count, fetchTop, maxChars int) (string, error) {
 	if maxChars <= 0 {
 		maxChars = 15000
 	}

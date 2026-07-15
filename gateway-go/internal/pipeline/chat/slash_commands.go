@@ -7,8 +7,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 )
 
-// SlashResult holds the result of parsing a slash command from user input.
-type SlashResult struct {
+// slashResult holds the result of parsing a slash command from user input.
+type slashResult struct {
 	Handled   bool             // If true, the message was a slash command and should not be sent to LLM.
 	Response  string           // Direct response to send back to the user.
 	Command   string           // The parsed command name (e.g., "reset", "model").
@@ -17,10 +17,10 @@ type SlashResult struct {
 	SkillName string           // The skill name if dispatched via skill routing.
 }
 
-// ParseSlashCommand checks if a message starts with a slash command.
+// parseSlashCommand checks if a message starts with a slash command.
 // First tries skill-based routing (local/system types), then falls back to
 // hardcoded builtins. Returns nil if not a recognized command.
-func ParseSlashCommand(text string) *SlashResult {
+func parseSlashCommand(text string) *slashResult {
 	trimmed := strings.TrimSpace(text)
 	if !strings.HasPrefix(trimmed, "/") {
 		return nil
@@ -56,24 +56,24 @@ func ParseSlashCommand(text string) *SlashResult {
 	case "help", "도움말", "?":
 		// Discovery: list the builtin slash commands. Response is filled by the
 		// dispatcher from slashHelpText() so the listing has a single source.
-		return &SlashResult{
+		return &slashResult{
 			Handled: true,
 			Command: "help",
 		}
 	case "reset":
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "세션이 초기화되었습니다.",
 			Command:  "reset",
 		}
 	case "status":
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "", // Will be filled by the handler with actual status.
 			Command:  "status",
 		}
 	case "kill", "stop", "cancel":
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "실행이 중단되었습니다.",
 			Command:  "kill",
@@ -82,7 +82,7 @@ func ParseSlashCommand(text string) *SlashResult {
 		// Standing goal (Ralph loop). Subcommands parsed in slash_dispatch.go:
 		// "/goal <text>" sets a new goal; status | pause | resume | stop manage
 		// it. Korean alias /목표 routes to the same handler.
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "",
 			Command:  "goal",
@@ -91,7 +91,7 @@ func ParseSlashCommand(text string) *SlashResult {
 	case "rollback", "롤백":
 		// Subcommand parsing (list/목록 | diff/비교 | restore/복원) happens in
 		// rollback_dispatch.go. Korean alias /롤백 routes to the same handler.
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "",
 			Command:  "rollback",
@@ -101,7 +101,7 @@ func ParseSlashCommand(text string) *SlashResult {
 		// Bare /update previews available commits; /update 확인 runs the
 		// pull + build + restart. Parsed in update_dispatch.go. Korean alias
 		// /업데이트 routes to the same handler.
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "",
 			Command:  "update",
@@ -111,7 +111,7 @@ func ParseSlashCommand(text string) *SlashResult {
 	// deployment). Legacy /restart 확인 still works. Parsed in
 	// restart_dispatch.go. Korean alias /재시작 routes to the same handler.
 	case "restart", "재시작":
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "",
 			Command:  "restart",
@@ -122,7 +122,7 @@ func ParseSlashCommand(text string) *SlashResult {
 		// Mirrors the Saturday cron path (cron_agent_adapter.go) so a manual
 		// trigger works too — previously only the cron payload "/weekly" (or
 		// "/주간보고") ran it, and typed input fell through to the LLM.
-		return &SlashResult{
+		return &slashResult{
 			Handled:  true,
 			Response: "",
 			Command:  "weekly",
@@ -135,8 +135,8 @@ func ParseSlashCommand(text string) *SlashResult {
 }
 
 // trySkillCommand checks the cached skills snapshot for local/system skill matches.
-func trySkillCommand(cmd, args string) *SlashResult {
-	snapshot := CachedSkillsSnapshot()
+func trySkillCommand(cmd, args string) *slashResult {
+	snapshot := cachedSkillsSnapshot()
 	if snapshot == nil {
 		return nil
 	}
@@ -158,7 +158,7 @@ func trySkillCommand(cmd, args string) *SlashResult {
 		case skills.SkillTypeLocal:
 			output, err := skills.ExecuteLocalSkill(*entry, args)
 			if err != nil {
-				return &SlashResult{
+				return &slashResult{
 					Handled:   true,
 					Response:  skills.WrapSkillError(ps.Name, string(skills.SkillTypeLocal), args, err.Error()),
 					Command:   cmd,
@@ -167,7 +167,7 @@ func trySkillCommand(cmd, args string) *SlashResult {
 					SkillName: ps.Name,
 				}
 			}
-			return &SlashResult{
+			return &slashResult{
 				Handled:   true,
 				Response:  skills.WrapSkillInvocation(ps.Name, string(skills.SkillTypeLocal), args, output),
 				Command:   cmd,
@@ -179,7 +179,7 @@ func trySkillCommand(cmd, args string) *SlashResult {
 		case skills.SkillTypeSystem:
 			output, err := skills.ExecuteSystemSkill(*entry, args)
 			if err != nil {
-				return &SlashResult{
+				return &slashResult{
 					Handled:   true,
 					Response:  skills.WrapSkillError(ps.Name, string(skills.SkillTypeSystem), args, err.Error()),
 					Command:   cmd,
@@ -188,7 +188,7 @@ func trySkillCommand(cmd, args string) *SlashResult {
 					SkillName: ps.Name,
 				}
 			}
-			return &SlashResult{
+			return &slashResult{
 				Handled:   true,
 				Response:  skills.WrapSkillInvocation(ps.Name, string(skills.SkillTypeSystem), args, output),
 				Command:   cmd,
@@ -228,8 +228,8 @@ var cachedSkillEntries struct {
 	version int64
 }
 
-// SetCachedSkillEntries updates the cached skill entries (called during snapshot rebuild).
-func SetCachedSkillEntries(entries []skills.SkillEntry, version int64) {
+// setCachedSkillEntries updates the cached skill entries (called during snapshot rebuild).
+func setCachedSkillEntries(entries []skills.SkillEntry, version int64) {
 	cachedSkillEntries.mu.Lock()
 	cachedSkillEntries.entries = entries
 	cachedSkillEntries.version = version

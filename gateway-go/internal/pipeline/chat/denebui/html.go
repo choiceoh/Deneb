@@ -65,7 +65,7 @@ var inlineTags = map[string]string{
 
 // genericTags are structural HTML wrappers (div soup) models emit out of
 // pre-trained habit. They produce no node: children hoist to the parent and
-// bare text becomes implicit text nodes. Accepted fluency — no Issue.
+// bare text becomes implicit text nodes. Accepted fluency — no issue.
 var genericTags = map[string]bool{
 	"div": true, "section": true, "article": true, "header": true,
 	"footer": true, "main": true, "aside": true, "figure": true,
@@ -74,7 +74,7 @@ var genericTags = map[string]bool{
 
 // knownTags is every tag convertElem maps to a node or structural. Tags in
 // none of the tables (knownTags/genericTags/inlineTags/voidTags) unwrap like
-// genericTags but keep the validator Issue, so typos stay visible in health
+// genericTags but keep the validator issue, so typos stay visible in health
 // telemetry while the content still renders.
 var knownTags = map[string]bool{
 	"column": true, "col": true, "row": true, "card": true, "box": true,
@@ -117,12 +117,12 @@ func IsHTMLBody(body string) bool {
 // ParseHTML converts a labeled-HTML fence body into the shared node-tree shape
 // (map[string]any, same as the JSON path) plus any parse-level issues (unknown
 // tags, empty body). The returned tree may be nil when nothing usable parsed.
-func ParseHTML(body string) (any, []Issue) {
+func ParseHTML(body string) (any, []issue) {
 	p := &htmlParser{src: strings.TrimSpace(body)}
 	nodes := p.parseNodes()
 	switch len(nodes) {
 	case 0:
-		p.issues = append(p.issues, Issue{"$", "empty deneb-ui block"})
+		p.issues = append(p.issues, issue{"$", "empty deneb-ui block"})
 		return nil, p.issues
 	case 1:
 		return nodes[0], p.issues
@@ -155,7 +155,7 @@ type htmlParser struct {
 	roots            []any
 	rootPending      []string // buffered root-level text runs
 	rootPendingSpace bool     // root-level counterpart of openElem.pendingSpace
-	issues           []Issue
+	issues           []issue
 }
 
 func (p *htmlParser) parseNodes() []any {
@@ -343,7 +343,7 @@ func (p *htmlParser) handleOpen(name string, attrs map[string]string, selfClose 
 			return
 		}
 		if !knownTags[name] {
-			p.issues = append(p.issues, Issue{"$", "unknown tag <" + name + ">"})
+			p.issues = append(p.issues, issue{"$", "unknown tag <" + name + ">"})
 			return
 		}
 		p.attach(convertElem(el, p))
@@ -454,7 +454,7 @@ func (p *htmlParser) closeTop() {
 		// Structural intermediates hoist too, so <thead>/<tbody> table rows
 		// reach the enclosing <table> instead of vanishing with the wrapper.
 		if !genericTags[el.tag] {
-			p.issues = append(p.issues, Issue{"$", "unknown tag <" + el.tag + "> (children hoisted)"})
+			p.issues = append(p.issues, issue{"$", "unknown tag <" + el.tag + "> (children hoisted)"})
 		}
 		p.flushPending(el)
 		for _, c := range el.children {

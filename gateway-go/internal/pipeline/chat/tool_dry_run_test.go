@@ -84,7 +84,7 @@ func TestExecuteDryRunPreservesVerifyGateBehavior(t *testing.T) {
 	}
 
 	gate := &verifyGateState{}
-	ctx := WithVerifyGate(toolport.WithToolDryRun(context.Background()), gate)
+	ctx := withVerifyGate(toolport.WithToolDryRun(context.Background()), gate)
 
 	if _, err := reg.Execute(ctx, "write", json.RawMessage(`{"file_path":"a.go","content":"x"}`)); err != nil {
 		t.Fatal(err)

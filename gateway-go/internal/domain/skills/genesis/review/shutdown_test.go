@@ -8,7 +8,7 @@ import (
 // A nudger with no shutdown context wired falls back to context.Background(),
 // preserving the prior (never-cancelled-by-us) behavior.
 func TestNudgerBaseContextDefaultsToUncancelledBackground(t *testing.T) {
-	n := NewNudger(nil, NudgerConfig{}, nil)
+	n := newNudger(nil, nudgerConfig{}, nil)
 	ctx := n.baseContext()
 	if ctx == nil {
 		t.Fatal("baseContext returned nil")
@@ -24,7 +24,7 @@ func TestNudgerBaseContextDefaultsToUncancelledBackground(t *testing.T) {
 // cancels the base context the background review forks derive their timeout
 // from, so an in-flight genesis review terminates instead of orphaning.
 func TestNudger_ShutdownContextCancels(t *testing.T) {
-	n := NewNudger(nil, NudgerConfig{}, nil)
+	n := newNudger(nil, nudgerConfig{}, nil)
 	shutdown, cancel := context.WithCancel(context.Background())
 	n.SetShutdownContext(shutdown)
 

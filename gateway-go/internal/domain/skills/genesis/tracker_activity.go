@@ -3,10 +3,9 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"os"
 	"time"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
@@ -54,7 +53,7 @@ func (t *Tracker) recordEvolutionActivityLocked(kind string, ok bool, errMsg str
 	if !metricOnly && !ok && errMsg != "" {
 		// Truncate by rune, not byte: this surfaces in /health JSON, and a
 		// byte slice can split a multi-byte UTF-8 sequence into replacement runes.
-		state.LastError = genesiscommon.TruncateRunes(errMsg, 200)
+		state.LastError = genbind.TruncateRunes(errMsg, 200)
 		state.LastErrorAt = now
 	} else if !metricOnly && ok {
 		// A successful activity clears a stale error so /health doesn't keep

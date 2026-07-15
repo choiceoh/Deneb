@@ -41,14 +41,14 @@ func TestPrepareContextAndPromptBriefcaseWithholdsHostContext(t *testing.T) {
 		logger:             discardLogger(),
 		tools:              reg,
 		transcript:         NewMemoryTranscriptStore(),
-		contextCfg:         DefaultContextConfig(),
+		contextCfg:         defaultContextConfig(),
 		briefcaseMode:      true,
 		disableTier1Wiki:   true,
 		promptWorkspaceDir: "/briefcase/workspace",
 		semanticTimezone:   "UTC",
 		semanticNow:        func() time.Time { return fixedNow },
 		strictErrors:       &strictRunErrorSink{},
-		ambient: AmbientDeps{
+		ambient: ambientDeps{
 			CalendarGlance: func(context.Context, string, string) string {
 				calendarCalled.Store(true)
 				return "HOST-CALENDAR-SENTINEL"
@@ -61,7 +61,7 @@ func TestPrepareContextAndPromptBriefcaseWithholdsHostContext(t *testing.T) {
 		},
 	}
 
-	prep := prepareContextAndPrompt(context.Background(), RunParams{
+	prep := prepareContextAndPrompt(context.Background(), runParams{
 		SessionKey: "client:briefcase-isolation",
 		Message:    "기억을 확인해줘",
 	}, deps, workspace, "briefcase", deps.logger)

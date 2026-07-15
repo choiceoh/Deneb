@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
@@ -294,8 +294,8 @@ func looksOpaqueReplayFragment(value string) bool {
 	return true
 }
 
-func buildSkillLifecycleSessionContext(store toolport.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
-	sctx := generation.SessionContext{Key: sessionKey}
+func buildSkillLifecycleSessionContext(store toolport.TranscriptStore, sessionKey string) (leafbind.SessionContext, error) {
+	sctx := leafbind.SessionContext{Key: sessionKey}
 	if store == nil {
 		return sctx, nil
 	}
@@ -321,11 +321,11 @@ func buildSkillLifecycleSessionContext(store toolport.TranscriptStore, sessionKe
 }
 
 // BuildSessionContext reconstructs the lifecycle review context for a session.
-func BuildSessionContext(store toolport.TranscriptStore, sessionKey string) (generation.SessionContext, error) {
+func BuildSessionContext(store toolport.TranscriptStore, sessionKey string) (leafbind.SessionContext, error) {
 	return buildSkillLifecycleSessionContext(store, sessionKey)
 }
 
-func extractSkillLifecycleToolActivities(content json.RawMessage, pending map[string]int, activities *[]generation.ToolActivity) {
+func extractSkillLifecycleToolActivities(content json.RawMessage, pending map[string]int, activities *[]leafbind.ToolActivity) {
 	if len(content) == 0 || content[0] != '[' {
 		return
 	}
@@ -339,7 +339,7 @@ func extractSkillLifecycleToolActivities(content json.RawMessage, pending map[st
 			if strings.TrimSpace(b.Name) == "" {
 				continue
 			}
-			*activities = append(*activities, generation.ToolActivity{
+			*activities = append(*activities, leafbind.ToolActivity{
 				Name:  b.Name,
 				Input: compactJSONForReplay(json.RawMessage(b.Input.Bytes())),
 			})

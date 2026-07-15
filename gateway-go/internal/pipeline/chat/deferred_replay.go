@@ -1,7 +1,7 @@
 // deferred_replay.go — carry deferred-tool activation across runs by replaying
 // transcript evidence (Pydantic AI's load_capability replay discipline).
 //
-// DeferredActivation is run-scoped: without replay, a tool the model activated
+// deferredActivation is run-scoped: without replay, a tool the model activated
 // via fetch_tools (or a skill consult) vanishes from the Tools array on the
 // next user message — while the transcript still tells the model "call them
 // directly". The model then wastes a turn re-fetching, and the Tools array

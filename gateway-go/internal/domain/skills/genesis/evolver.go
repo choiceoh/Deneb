@@ -3,6 +3,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"strconv"
@@ -10,13 +11,9 @@ import (
 	"sync"
 	"time"
 
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
-
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 )
 
 // Compile-time interface compliance.
@@ -49,7 +46,7 @@ type EvolveResult struct {
 // HarnessEditAudit is the Self-Harness transition metadata for a candidate
 // skill-body edit. It keeps the "why this changed" fields queryable instead of
 // burying them in a free-form description.
-type HarnessEditAudit = guardrails.Audit
+type HarnessEditAudit = genbind.Audit
 
 // Evolver auto-improves skills based on usage data.
 type Evolver struct {
@@ -110,7 +107,7 @@ type Evolver struct {
 	skillLocks   map[string]*sync.Mutex
 
 	// meta resolves prompt artifacts (RSI P1); nil → compiled-in prompts.
-	meta *generation.MetaArtifacts
+	meta *genbind.MetaArtifacts
 
 	// lowConfidenceObserver surfaces accepted-but-borderline judge verdicts to
 	// an operator without blocking the evolve. Guarded by configMu.
@@ -184,7 +181,7 @@ func (e *Evolver) notifyLowConfidence(result EvolveResult) {
 	}
 }
 
-// SetPrimary updates the model/client used for rewrite generation. It mutates
+// SetPrimary updates the model/client used for rewrite genbind. It mutates
 // the existing evolver so RPC handlers and tools holding this pointer observe
 // Settings changes without being re-registered.
 func (e *Evolver) SetPrimary(client *llm.Client, model string) {
@@ -234,7 +231,7 @@ func (e *Evolver) SetReplayExecutor(client *llm.Client, model string) {
 // reasoning-effort floor).
 // SetMetaArtifacts wires the prompt-artifact resolver (RSI P1). Nil keeps
 // compiled-in prompts.
-func (e *Evolver) SetMetaArtifacts(m *generation.MetaArtifacts) {
+func (e *Evolver) SetMetaArtifacts(m *genbind.MetaArtifacts) {
 	e.configMu.Lock()
 	e.meta = m
 	e.configMu.Unlock()
@@ -257,8 +254,8 @@ func (e *Evolver) newProvenance() evolveProvenance {
 	m := e.meta
 	e.configMu.RUnlock()
 	return evolveProvenance{
-		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt]),
-		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]),
+		EvolveArtifactVersion: m.Version(genbind.MetaEvolveSystemPrompt, genbind.DefaultMetaArtifacts()[genbind.MetaEvolveSystemPrompt]),
+		JudgeArtifactVersion:  m.Version(genbind.MetaSkillJudgeSystemPrompt, genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]),
 	}
 }
 
@@ -641,7 +638,7 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	text, err := primaryClient.Complete(ctx, llm.ChatRequest{
 		Model:    primaryModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", prompt)},
-		System:   llm.SystemString(e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])),
+		System:   llm.SystemString(e.metaLoad(genbind.MetaEvolveSystemPrompt, genbind.DefaultMetaArtifacts()[genbind.MetaEvolveSystemPrompt])),
 		// 12288, not 4096: GLM bills reasoning INSIDE the completion budget and
 		// the rewrite must carry a full SKILL.md body (cap 15KB ≈ 5.5K tokens)
 		// plus audit fields — at 4096 the live drill (2026-07-04) truncated
@@ -870,7 +867,7 @@ func (t *EvolutionTask) Run(ctx context.Context) error {
 	results, err := t.Evolver.evolveUnderperformers(ctx)
 	// Heartbeat: records that the evolve cycle actually ran (liveness on /health).
 	if t.Evolver != nil && t.Evolver.tracker != nil {
-		t.Evolver.tracker.RecordEvolutionActivity(skillActivityEvolve, err == nil, genesiscommon.ErrorString(err))
+		t.Evolver.tracker.RecordEvolutionActivity(skillActivityEvolve, err == nil, genbind.ErrorString(err))
 	}
 	if err != nil {
 		return err

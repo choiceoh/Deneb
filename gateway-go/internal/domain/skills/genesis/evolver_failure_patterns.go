@@ -6,10 +6,9 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"sort"
 	"strings"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 )
 
 type skillFailurePattern struct {
@@ -89,7 +88,7 @@ func mineRawErrorPatterns(bySignature map[string]*skillFailurePattern, rawErrors
 		}
 		pattern.Support++
 		if example := strings.TrimSpace(raw); example != "" && len(pattern.Examples) < 2 {
-			pattern.Examples = append(pattern.Examples, genesiscommon.TruncateRunes(example, 160))
+			pattern.Examples = append(pattern.Examples, genbind.TruncateRunes(example, 160))
 		}
 	}
 }

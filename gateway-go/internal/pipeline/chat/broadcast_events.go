@@ -21,43 +21,43 @@ package chat
 // "user did not get a reply" signals; keeping their schema explicit here makes
 // those failure payloads auditable.
 
-// SessionsChangedEvent — "sessions.changed". The session lifecycle moved
+// sessionsChangedEvent — "sessions.changed". The session lifecycle moved
 // (started / merged / aborted / finished / panic). The most frequently emitted
 // event. DeltaMs is set only on the "merged" path (rpc.go), so it is omitempty:
 // a zero value is dropped from the wire exactly as the other emitters never sent
 // the key.
-type SessionsChangedEvent struct {
+type sessionsChangedEvent struct {
 	SessionKey string `json:"sessionKey"`
 	Reason     string `json:"reason"`
 	Status     string `json:"status"`
 	DeltaMs    int64  `json:"deltaMs,omitempty"`
 }
 
-// ChatDeliveryFailedEvent — "chat.delivery_failed". A final reply could not be
+// chatDeliveryFailedEvent — "chat.delivery_failed". A final reply could not be
 // delivered to the native client (the user got nothing). Error is present only
 // when an underlying call returned one (stop_fallback_error / reply_func_error),
 // absent for the structural reasons (parse_directives_nil / reply_func_nil), so
 // it is omitempty to match.
-type ChatDeliveryFailedEvent struct {
+type chatDeliveryFailedEvent struct {
 	Session string `json:"session"`
 	Channel string `json:"channel"`
 	Reason  string `json:"reason"`
 	Error   string `json:"error,omitempty"`
 }
 
-// ChatEmptyResponseEvent — "chat.empty_response". The turn finished but produced
+// chatEmptyResponseEvent — "chat.empty_response". The turn finished but produced
 // no deliverable text. Turns has no omitempty: the prior map always included it
 // (even at 0).
-type ChatEmptyResponseEvent struct {
+type chatEmptyResponseEvent struct {
 	Session    string `json:"session"`
 	Channel    string `json:"channel"`
 	StopReason string `json:"stopReason"`
 	Turns      int    `json:"turns"`
 }
 
-// ChatMediaDeliveryFailedEvent — "chat.media_delivery_failed". Some media URLs
+// chatMediaDeliveryFailedEvent — "chat.media_delivery_failed". Some media URLs
 // failed to deliver. All fields were always present in the prior map.
-type ChatMediaDeliveryFailedEvent struct {
+type chatMediaDeliveryFailedEvent struct {
 	Session string   `json:"session"`
 	Channel string   `json:"channel"`
 	Count   int      `json:"count"`
@@ -65,10 +65,10 @@ type ChatMediaDeliveryFailedEvent struct {
 	URLs    []string `json:"urls"`
 }
 
-// SessionToolEvent — "session.tool". A tool call started/finished within a run
+// sessionToolEvent — "session.tool". A tool call started/finished within a run
 // (used by the native client's tool-activity surface). Emitted on every tool
 // call, so it is high-frequency.
-type SessionToolEvent struct {
+type sessionToolEvent struct {
 	SessionKey string `json:"sessionKey"`
 	RunID      string `json:"runId"`
 	Tool       string `json:"tool"`
@@ -76,10 +76,10 @@ type SessionToolEvent struct {
 	IsError    bool   `json:"isError"`
 }
 
-// ChatToolFailedEvent — "chat.tool_failed". A mutation tool failed in-band. The
+// chatToolFailedEvent — "chat.tool_failed". A mutation tool failed in-band. The
 // prior map carried BOTH "session" and "sessionKey" with the same value; both
 // are kept verbatim for wire compatibility (the client may key on either).
-type ChatToolFailedEvent struct {
+type chatToolFailedEvent struct {
 	Session    string `json:"session"`
 	SessionKey string `json:"sessionKey"`
 	RunID      string `json:"runId"`
@@ -88,30 +88,30 @@ type ChatToolFailedEvent struct {
 	Error      string `json:"error"`
 }
 
-// ChatCompactionDegradedEvent — "chat.compaction_degraded". Compaction ran but
+// chatCompactionDegradedEvent — "chat.compaction_degraded". Compaction ran but
 // could not reach the target budget. All fields always present.
-type ChatCompactionDegradedEvent struct {
+type chatCompactionDegradedEvent struct {
 	Session      string `json:"session"`
 	TokensBefore int    `json:"tokensBefore"`
 	TokensAfter  int    `json:"tokensAfter"`
 	Budget       int    `json:"budget"`
 }
 
-// ChatCompactionStuckEvent — "chat.compaction_stuck". Compaction could not make
+// chatCompactionStuckEvent — "chat.compaction_stuck". Compaction could not make
 // progress. The two emitters diverge: the protected-zone path sends Budget, the
 // idempotent-compaction path sends InputHash. Both are omitempty so each path's
 // JSON matches what it sent before (the other key was simply absent).
-type ChatCompactionStuckEvent struct {
+type chatCompactionStuckEvent struct {
 	Reason       string `json:"reason"`
 	MessageCount int    `json:"messageCount"`
 	Budget       int    `json:"budget,omitempty"`
 	InputHash    string `json:"inputHash,omitempty"`
 }
 
-// ChatContextOverflowEvent — "chat.context_overflow_unrecoverable". All
+// chatContextOverflowEvent — "chat.context_overflow_unrecoverable". All
 // compaction retries were exhausted and the context still overflows. All fields
 // always present.
-type ChatContextOverflowEvent struct {
+type chatContextOverflowEvent struct {
 	Model        string `json:"model"`
 	MessageCount int    `json:"messageCount"`
 	Attempts     int    `json:"attempts"`

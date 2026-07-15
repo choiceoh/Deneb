@@ -1311,7 +1311,7 @@ func TestTrackerCuratorTransitionsOnlyAgentCreatedAndHonorsPin(t *testing.T) {
 		t.Fatalf("RecordUsage user-skill: %v", err)
 	}
 
-	summary, err := tracker.applySkillCuratorTransitions(now, SkillCuratorConfig{
+	summary, err := tracker.applySkillCuratorTransitions(now, skillCuratorConfig{
 		IntervalHours:    1,
 		MinIdleHours:     0,
 		StaleAfterDays:   30,

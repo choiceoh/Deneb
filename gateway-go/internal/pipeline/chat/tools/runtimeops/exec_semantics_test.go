@@ -36,7 +36,7 @@ func TestInterpretExitCodeReturnsErrorAndHint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isErr, hint := InterpretExitCode(tt.command, tt.exitCode)
+			isErr, hint := interpretExitCode(tt.command, tt.exitCode)
 			if isErr != tt.wantErr {
 				t.Errorf("isError = %v, want %v", isErr, tt.wantErr)
 			}

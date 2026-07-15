@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
 	propussystem "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/propus"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -55,26 +55,26 @@ func TestHealthEndpointReturnsOKWithWorkerPoolStats(t *testing.T) {
 
 func TestHealthEndpointReturnsUsageQualityAndPropusSignals(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	tracker, err := genesis.NewTracker(slog.Default())
+	tracker, err := domainbind.NewTracker(slog.Default())
 	if err != nil {
 		t.Fatalf("NewTracker: %v", err)
 	}
-	if err := tracker.RecordUsage(genesis.UsageRecord{SkillName: "topsolar-db", Success: true}); err != nil {
+	if err := tracker.RecordUsage(domainbind.UsageRecord{SkillName: "topsolar-db", Success: true}); err != nil {
 		t.Fatalf("RecordUsage success: %v", err)
 	}
-	if err := tracker.RecordUsage(genesis.UsageRecord{SkillName: "topsolar-db", Success: false}); err != nil {
+	if err := tracker.RecordUsage(domainbind.UsageRecord{SkillName: "topsolar-db", Success: false}); err != nil {
 		t.Fatalf("RecordUsage empty legacy failure: %v", err)
 	}
-	tracker.RecordEvolutionActivity(genesis.SkillActivityReviewAttempt, true, "")
-	tracker.RecordEvolutionActivity(genesis.SkillActivityReviewSkipped, true, "")
-	tracker.RecordEvolutionActivity(genesis.SkillActivityValidationRejected, true, "")
+	tracker.RecordEvolutionActivity(domainbind.SkillActivityReviewAttempt, true, "")
+	tracker.RecordEvolutionActivity(domainbind.SkillActivityReviewSkipped, true, "")
+	tracker.RecordEvolutionActivity(domainbind.SkillActivityValidationRejected, true, "")
 	for _, desc := range []string{"older trace", "newer trace"} {
-		if err := tracker.RecordSkillValidationCase(genesis.SkillValidationCaseRecord{
+		if err := tracker.RecordSkillValidationCase(domainbind.SkillValidationCaseRecord{
 			SkillName:   "topsolar-db",
 			ID:          "real-server-health",
 			Description: desc,
-			Replay: genesis.SkillReplayCaseRecord{
-				ExpectedToolCalls: []genesis.SkillReplayToolCallRecord{
+			Replay: domainbind.SkillReplayCaseRecord{
+				ExpectedToolCalls: []domainbind.SkillReplayToolCallRecord{
 					{Name: "exec", InputIncludes: []string{"systemctl --user status deneb-gateway.service"}},
 				},
 			},
@@ -83,10 +83,10 @@ func TestHealthEndpointReturnsUsageQualityAndPropusSignals(t *testing.T) {
 			t.Fatalf("RecordSkillValidationCase(%s): %v", desc, err)
 		}
 	}
-	if err := tracker.LogEvolveRejectedWithAudit("topsolar-db", "self-harness audit rejected: missing target_signature", genesis.HarnessEditAudit{}); err != nil {
+	if err := tracker.LogEvolveRejectedWithAudit("topsolar-db", "self-harness audit rejected: missing target_signature", domainbind.HarnessEditAudit{}); err != nil {
 		t.Fatalf("LogEvolveRejectedWithAudit: %v", err)
 	}
-	if _, err := tracker.RecordSelfCorrectionCandidate(genesis.SelfCorrectionCandidateRecord{
+	if _, err := tracker.RecordSelfCorrectionCandidate(domainbind.SelfCorrectionCandidateRecord{
 		Scope:     "test",
 		SkillName: "topsolar-db",
 		Title:     "Promote rejected evolve into held-out validation",

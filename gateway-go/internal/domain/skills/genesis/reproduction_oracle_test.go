@@ -1,13 +1,12 @@
 package genesis
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 // Reproduction oracle (SEA Alg 8, RSI P1.5): a producer-authored case is
@@ -86,7 +85,7 @@ func TestAdoptReproductionCaseAdoptsOnlyWhenDiscriminativeAgainstOriginalAndCand
 // default follows the compiled default forward; a revised file never moves.
 func TestMaterializeDefaultsRefreshesPristineFileButPreservesRevisedOne(t *testing.T) {
 	dir := t.TempDir()
-	m := generation.NewMetaArtifacts(dir, slog.Default())
+	m := genbind.NewMetaArtifacts(dir, slog.Default())
 	name := "prompt.md"
 	v1 := strings.Repeat("v1 prompt content. ", 20)
 	v2 := strings.Repeat("v2 prompt content. ", 20)
@@ -123,7 +122,7 @@ func TestMaterializeDefaultsRefreshesPristineFileButPreservesRevisedOne(t *testi
 // provenance — preserved, never refreshed.
 func TestMaterializeDefaults_NoSidecarDivergentPreserved(t *testing.T) {
 	dir := t.TempDir()
-	m := generation.NewMetaArtifacts(dir, slog.Default())
+	m := genbind.NewMetaArtifacts(dir, slog.Default())
 	name := "prompt.md"
 	legacy := strings.Repeat("legacy default from an old binary. ", 10)
 	path := filepath.Join(dir, name)

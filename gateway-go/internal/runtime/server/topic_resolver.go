@@ -3,12 +3,12 @@ package server
 import (
 	"log/slog"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // topicResolver maps a delivery topic ID to a per-topic knowledge key,
-// implementing chat.TopicResolver. It snapshots deneb.json topics.map at boot
+// implementing pipebind.TopicResolver. It snapshots deneb.json topics.map at boot
 // so per-turn lookups are pure in-memory map reads (prompt-cache Rule C: no
 // per-request config reload).
 type topicResolver struct {
@@ -24,8 +24,8 @@ type topicConfigSnapshot struct {
 // newTopicResolver reads topics config from deneb.json once. It returns nil
 // when topics are unconfigured or the map is empty, so the chat handler leaves
 // deps.topicResolver nil and skips per-topic injection entirely.
-func newTopicResolver(logger *slog.Logger) chat.TopicResolver {
-	snapshot, err := config.LoadConfigFromDefaultPath()
+func newTopicResolver(logger *slog.Logger) pipebind.TopicResolver {
+	snapshot, err := infrabind.LoadConfigFromDefaultPath()
 	if err != nil || snapshot == nil || snapshot.Config.Topics == nil {
 		return nil
 	}
@@ -49,7 +49,7 @@ func newTopicResolver(logger *slog.Logger) chat.TopicResolver {
 	return &topicResolver{dir: topicSnapshot.dir, m: topicSnapshot.m}
 }
 
-func topicSnapshotFromConfig(tc *config.TopicsConfig) *topicConfigSnapshot {
+func topicSnapshotFromConfig(tc *infrabind.TopicsConfig) *topicConfigSnapshot {
 	if tc == nil || len(tc.Map) == 0 {
 		return nil
 	}

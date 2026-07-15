@@ -10,7 +10,7 @@
 //	/update 확인        → execute: git pull --ff-only → make gateway-prod → restart
 //	/update confirm    → English alias for execute
 //
-// Korean alias: /업데이트 routes here too (see ParseSlashCommand).
+// Korean alias: /업데이트 routes here too (see parseSlashCommand).
 //
 // Restart works the same way scripts/deploy/deploy.sh does: a SIGUSR1 to our
 // own PID makes the process exit with bootstrap.ExitCodeRestart (75), which
@@ -390,7 +390,7 @@ func (h *Handler) dispatchUncommittedHandoff(reqID, sessionKey string, delivery 
 	prompt.WriteString(truncateUpdateOutput(status))
 	prompt.WriteString("\n```")
 
-	h.startAsyncRun(reqID, RunParams{
+	h.startAsyncRun(reqID, runParams{
 		SessionKey: sessionKey,
 		Message:    prompt.String(),
 		Delivery:   delivery,

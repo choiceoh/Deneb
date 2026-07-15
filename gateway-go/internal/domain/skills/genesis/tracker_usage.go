@@ -114,7 +114,7 @@ func (t *Tracker) loadWatchesLocked() {
 			recurred:      w.Recurred,
 			baselineUses:  w.BaselineUses,
 			baselineFails: w.BaselineFails,
-			ep:            w.EProcess,
+			ep:            w.eProcess,
 			createdAt:     w.CreatedAt,
 		}
 		// Pre-timestamp watches (persisted by an older binary) start their
@@ -144,7 +144,7 @@ func (t *Tracker) saveWatchesLocked() {
 			Recurred:      w.recurred,
 			BaselineUses:  w.baselineUses,
 			BaselineFails: w.baselineFails,
-			EProcess:      w.ep,
+			eProcess:      w.ep,
 			CreatedAt:     w.createdAt,
 		}
 	}

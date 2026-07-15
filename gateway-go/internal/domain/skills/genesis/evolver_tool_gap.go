@@ -15,10 +15,10 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -58,7 +58,7 @@ func (e *Evolver) maybePairToolGap(skillName string, resp evolveResp, stats *Usa
 			if strings.EqualFold(strings.TrimSpace(tr.ToolName), tool) {
 				evidence = strings.TrimSpace(tr.Signature)
 				if evidence == "" {
-					evidence = common.TruncateRunes(tr.ErrorMsg, 200)
+					evidence = genbind.TruncateRunes(tr.ErrorMsg, 200)
 				}
 				break
 			}

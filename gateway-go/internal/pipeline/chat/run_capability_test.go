@@ -154,7 +154,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 
 	t.Run("profile defaults fill unset sampling only", func(t *testing.T) {
 		cfg := agent.AgentConfig{MaxTokens: 8192}
-		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "qwen3.6-35b")
+		applyModelTuning(&cfg, deps, runParams{}, "vllm", "qwen3.6-35b")
 		if cfg.Temperature == nil || *cfg.Temperature != 0.7 || cfg.TopP == nil || *cfg.TopP != 0.8 {
 			t.Errorf("qwen profile not applied: temp=%v topP=%v", cfg.Temperature, cfg.TopP)
 		}
@@ -162,7 +162,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		// An explicit request value must never be overwritten.
 		explicit := 0.1
 		cfg = agent.AgentConfig{MaxTokens: 8192, Temperature: &explicit}
-		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "qwen3.6-35b")
+		applyModelTuning(&cfg, deps, runParams{}, "vllm", "qwen3.6-35b")
 		if *cfg.Temperature != 0.1 {
 			t.Errorf("explicit temperature overwritten: %v", *cfg.Temperature)
 		}
@@ -173,13 +173,13 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		defer reg.SetTunedMaxTokens("custom-model", 0)
 
 		cfg := agent.AgentConfig{MaxTokens: 8192}
-		applyModelTuning(&cfg, deps, RunParams{}, "acme", "custom-model")
+		applyModelTuning(&cfg, deps, runParams{}, "acme", "custom-model")
 		if cfg.MaxTokens != 16384 {
 			t.Errorf("maxTokens = %d, want tuned floor 16384", cfg.MaxTokens)
 		}
 
 		cfg = agent.AgentConfig{MaxTokens: 32768}
-		applyModelTuning(&cfg, deps, RunParams{}, "acme", "custom-model")
+		applyModelTuning(&cfg, deps, runParams{}, "acme", "custom-model")
 		if cfg.MaxTokens != 32768 {
 			t.Errorf("maxTokens = %d, floor must not lower a larger budget", cfg.MaxTokens)
 		}
@@ -187,7 +187,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		// Explicit per-request max wins over the tuned floor.
 		reqMax := 4096
 		cfg = agent.AgentConfig{MaxTokens: 4096}
-		applyModelTuning(&cfg, deps, RunParams{MaxTokens: &reqMax}, "acme", "custom-model")
+		applyModelTuning(&cfg, deps, runParams{MaxTokens: &reqMax}, "acme", "custom-model")
 		if cfg.MaxTokens != 4096 {
 			t.Errorf("maxTokens = %d, explicit request value must win", cfg.MaxTokens)
 		}
@@ -195,7 +195,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 
 	t.Run("nil registry falls back to builtin profile", func(t *testing.T) {
 		cfg := agent.AgentConfig{MaxTokens: 8192}
-		applyModelTuning(&cfg, runDeps{}, RunParams{}, "vllm", "qwen3.6-35b")
+		applyModelTuning(&cfg, runDeps{}, runParams{}, "vllm", "qwen3.6-35b")
 		if cfg.Temperature == nil || *cfg.Temperature != 0.7 {
 			t.Errorf("builtin profile not applied without registry: %v", cfg.Temperature)
 		}
@@ -205,7 +205,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		// Pins the dsv4 fix: the shipped generation_config is 1.0/1.0, so the
 		// gateway must send the recommended 0.6/0.95 itself.
 		cfg := agent.AgentConfig{MaxTokens: 8192}
-		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
+		applyModelTuning(&cfg, deps, runParams{}, "vllm", "deepseek-v4-flash")
 		if cfg.Temperature == nil || *cfg.Temperature != 0.6 || cfg.TopP == nil || *cfg.TopP != 0.95 {
 			t.Errorf("dsv4 profile not applied: temp=%v topP=%v", cfg.Temperature, cfg.TopP)
 		}
@@ -216,7 +216,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		// disabled config; the model's chat_template toggle must be attached
 		// here because on deepseek-v4 the reasoning_effort field is a no-op.
 		cfg := agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "disabled"}}
-		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
+		applyModelTuning(&cfg, deps, runParams{}, "vllm", "deepseek-v4-flash")
 		if cfg.Thinking.TemplateKwarg != "thinking" {
 			t.Errorf("TemplateKwarg = %q, want \"thinking\"", cfg.Thinking.TemplateKwarg)
 		}
@@ -224,14 +224,14 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		// Models without a toggle keep the kwarg empty (openai.go falls back
 		// to its reasoning_effort floor).
 		cfg = agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "disabled"}}
-		applyModelTuning(&cfg, deps, RunParams{}, "acme", "custom-model")
+		applyModelTuning(&cfg, deps, runParams{}, "acme", "custom-model")
 		if cfg.Thinking.TemplateKwarg != "" {
 			t.Errorf("TemplateKwarg = %q, want empty for non-toggle model", cfg.Thinking.TemplateKwarg)
 		}
 
 		// An enabled config is never touched.
 		cfg = agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}}
-		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
+		applyModelTuning(&cfg, deps, runParams{}, "vllm", "deepseek-v4-flash")
 		if cfg.Thinking.TemplateKwarg != "" {
 			t.Errorf("enabled config must not get a toggle kwarg, got %q", cfg.Thinking.TemplateKwarg)
 		}

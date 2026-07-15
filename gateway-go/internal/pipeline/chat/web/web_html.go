@@ -2,7 +2,7 @@
 //
 // processHTML orchestrates the full extraction pipeline for HTML content.
 // htmlmdConvert is the HTML→Markdown baseline.
-// LocalAIExtractor is the optional AI-powered extraction layer (Qwen via local AI).
+// localAIExtractor is the optional AI-powered extraction layer (Qwen via local AI).
 package web
 
 import (
@@ -29,7 +29,7 @@ import (
 // 2. Detect quality signals
 // 3. Strip noise elements (nav, aside, footer, ads, cookie banners)
 // 4. Convert to Markdown (htmlmd default; LocalAI only when gated)
-func processHTML(ctx context.Context, html, url string, localAI *LocalAIExtractor, meta *webFetchMeta) string {
+func processHTML(ctx context.Context, html, url string, localAI *localAIExtractor, meta *webFetchMeta) string {
 	// Step 1: Extract metadata from raw HTML (before any stripping).
 	extractHTMLMeta(html, meta)
 
@@ -95,8 +95,8 @@ func htmlmdConvertStripNoise(html string) string {
 
 // --- local AI-powered content extraction ---
 
-// LocalAIExtractor converts fetched HTML into readable text using local models.
-type LocalAIExtractor struct {
+// localAIExtractor converts fetched HTML into readable text using local models.
+type localAIExtractor struct {
 	mu      sync.Mutex
 	client  *http.Client
 	baseURL string
@@ -115,7 +115,7 @@ const (
 )
 
 // NewLocalAIExtractor constructs an extractor with production defaults.
-func NewLocalAIExtractor() *LocalAIExtractor {
+func NewLocalAIExtractor() *localAIExtractor {
 	baseURL := firstEnv("LOCAL_AI_BASE_URL", "SGLANG_BASE_URL")
 	if baseURL == "" {
 		baseURL = modelrole.DefaultVllmBaseURL
@@ -128,7 +128,7 @@ func NewLocalAIExtractor() *LocalAIExtractor {
 	if model == "" {
 		model = modelrole.DefaultVllmModel
 	}
-	return &LocalAIExtractor{
+	return &localAIExtractor{
 		client:  httputil.NewClient(60 * time.Second),
 		baseURL: baseURL,
 		apiKey:  apiKey,
@@ -138,7 +138,7 @@ func NewLocalAIExtractor() *LocalAIExtractor {
 
 // available checks if local AI is reachable. Probes on first call,
 // then re-probes periodically if previously unavailable.
-func (s *LocalAIExtractor) available() bool {
+func (s *localAIExtractor) available() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -205,7 +205,7 @@ RULES:
 - Empty extraction is better than including noise`
 
 // extract calls local AI for intelligent content extraction from pre-cleaned HTML.
-func (s *LocalAIExtractor) extract(ctx context.Context, html, url, language string) (string, error) {
+func (s *localAIExtractor) extract(ctx context.Context, html, url, language string) (string, error) {
 	// Convert HTML to markdown first to reduce token count.
 	mdContent := htmlmdConvert(html)
 

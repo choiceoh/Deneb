@@ -43,7 +43,7 @@ type ToolRegistry struct {
 	mu             sync.RWMutex
 	tools          map[string]ToolDef
 	order          []string // preserves registration order
-	postProcess    *PostProcessRegistry
+	postProcess    *postProcessRegistry
 	spillStore     tooldeps.SpilloverStore // optional; spills large tool results to disk
 	provenanceRoot string                // optional workspace root for content-free file effect metadata
 	cachedLLMTools []llm.Tool            // cached tool list; invalidated on RegisterTool
@@ -135,7 +135,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	rc, cacheable := toolRunCache(ctx, name)
 	var cacheKey string
 	if cacheable {
-		cacheKey = BuildCacheKey(name, input)
+		cacheKey = buildCacheKey(name, input)
 		if cached, ok := cachedToolResult(ctx, rc, cacheKey, name, wantCompress); ok {
 			return cached, nil
 		}
@@ -234,14 +234,14 @@ func prepareToolInput(ctx context.Context, name string, input json.RawMessage, b
 
 // toolRunCache resolves the run-level cache and whether this tool's results
 // are cacheable in it.
-func toolRunCache(ctx context.Context, name string) (*RunCache, bool) {
-	rc := RunCacheFromContext(ctx)
-	return rc, rc != nil && IsCacheableTool(name)
+func toolRunCache(ctx context.Context, name string) (*runCache, bool) {
+	rc := runCacheFromContext(ctx)
+	return rc, rc != nil && isCacheableTool(name)
 }
 
 // cachedToolResult returns the run-cached result for cacheKey, applying
 // requested compression. ok=false means a cache miss.
-func cachedToolResult(ctx context.Context, rc *RunCache, cacheKey, name string, wantCompress bool) (string, bool) {
+func cachedToolResult(ctx context.Context, rc *runCache, cacheKey, name string, wantCompress bool) (string, bool) {
 	cached, ok := rc.Get(cacheKey)
 	if !ok {
 		return "", false
@@ -280,7 +280,7 @@ func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, out
 // finalizeToolOutput applies the post-execution output pipeline in order:
 // post-processors, run-cache store (after post-processing, before
 // compression), and agent-requested compression.
-func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *RunCache, name, cacheKey, output string, input json.RawMessage, cacheable, wantCompress bool) string {
+func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *runCache, name, cacheKey, output string, input json.RawMessage, cacheable, wantCompress bool) string {
 	if r.postProcess != nil {
 		output = r.postProcess.Apply(ctx, name, output)
 	}
@@ -293,15 +293,15 @@ func (r *ToolRegistry) finalizeToolOutput(ctx context.Context, rc *RunCache, nam
 	return output
 }
 
-// SetPostProcess attaches a PostProcessRegistry to the tool registry.
-func (r *ToolRegistry) SetPostProcess(pp *PostProcessRegistry) {
+// setPostProcess attaches a postProcessRegistry to the tool registry.
+func (r *ToolRegistry) setPostProcess(pp *postProcessRegistry) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.postProcess = pp
 }
 
-// SetSpilloverStore attaches a SpilloverStore for spilling large tool results.
-func (r *ToolRegistry) SetSpilloverStore(ss tooldeps.SpilloverStore) {
+// setSpilloverStore attaches a SpilloverStore for spilling large tool results.
+func (r *ToolRegistry) setSpilloverStore(ss tooldeps.SpilloverStore) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.spillStore = ss
@@ -314,9 +314,9 @@ func (r *ToolRegistry) SpilloverStore() tooldeps.SpilloverStore {
 	return r.spillStore
 }
 
-// SetToolProvenanceRoot sets the workspace root used by the agent executor
+// setToolProvenanceRoot sets the workspace root used by the agent executor
 // when logging content-free file effect metadata for mutating tools.
-func (r *ToolRegistry) SetToolProvenanceRoot(root string) {
+func (r *ToolRegistry) setToolProvenanceRoot(root string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.provenanceRoot = root
@@ -330,9 +330,9 @@ func (r *ToolRegistry) ToolProvenanceRoot() string {
 	return r.provenanceRoot
 }
 
-// ApplyMaxOutputs sets per-tool max output budgets from a name→chars map.
+// applyMaxOutputs sets per-tool max output budgets from a name→chars map.
 // Tools not in the map keep their current MaxOutput (zero = default).
-func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
+func (r *ToolRegistry) applyMaxOutputs(budgets map[string]int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for name, max := range budgets {
@@ -354,7 +354,7 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 //     sub-agent whose preset carries write/edit/exec; any process-tool
 //     interaction — the tracked process may be mid-write regardless of which
 //     run launched it) mutate at unpredictable future points, so the run
-//     cache is DISABLED for the rest of the run (RunCache.Disable) — this
+//     cache is DISABLED for the rest of the run (runCache.Disable) — this
 //     replaced per-poll invalidation, which both left a stale window between
 //     a background job's writes and the next poll AND wiped re-cached entries
 //     on every poll of a still-running job.
@@ -364,8 +364,8 @@ func (r *ToolRegistry) ApplyMaxOutputs(budgets map[string]int) {
 // an old child only through the subagents tool — does not trip the latch.
 // FileCache needs no exec/process handling: its entries are mtime+hash
 // validated on read (agent.FileChanged).
-func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawMessage, rc *RunCache) {
-	if IsMutationTool(name) {
+func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawMessage, rc *runCache) {
+	if isMutationTool(name) {
 		mutPath := extractFilePath(input)
 		if rc != nil {
 			if mutPath != "" {
@@ -526,7 +526,7 @@ func resolveRef(ctx context.Context, input json.RawMessage) json.RawMessage {
 		return input
 	}
 
-	tc := TurnContextFromContext(ctx)
+	tc := turnContextFromContext(ctx)
 	if tc == nil {
 		return input
 	}
@@ -586,10 +586,10 @@ func (r *ToolRegistry) Names() []string {
 	return out
 }
 
-// LLMTools returns tool definitions formatted for LLM API requests,
+// lLMTools returns tool definitions formatted for LLM API requests,
 // in registration order. Results are cached and only rebuilt when tools change.
 // The returned slice is shared — callers must not mutate it.
-func (r *ToolRegistry) LLMTools() []llm.Tool {
+func (r *ToolRegistry) lLMTools() []llm.Tool {
 	r.mu.RLock()
 	if r.cachedLLMTools != nil {
 		out := r.cachedLLMTools
@@ -623,12 +623,12 @@ func (r *ToolRegistry) buildLLMToolsLocked() []llm.Tool {
 	return tools
 }
 
-// FilteredLLMTools returns tool definitions filtered to only include tools in
+// filteredLLMTools returns tool definitions filtered to only include tools in
 // the allowed set. If allowed is nil or empty, returns all tools (no filtering).
-// Unlike LLMTools(), the result is not cached since the filter varies per call.
-func (r *ToolRegistry) FilteredLLMTools(allowed map[string]struct{}) []llm.Tool {
+// Unlike lLMTools(), the result is not cached since the filter varies per call.
+func (r *ToolRegistry) filteredLLMTools(allowed map[string]struct{}) []llm.Tool {
 	if len(allowed) == 0 {
-		return r.LLMTools()
+		return r.lLMTools()
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -674,16 +674,16 @@ func (r *ToolRegistry) Summaries() map[string]string {
 	return m
 }
 
-// SortedNames returns registered tool names sorted alphabetically.
-func (r *ToolRegistry) SortedNames() []string {
+// sortedNames returns registered tool names sorted alphabetically.
+func (r *ToolRegistry) sortedNames() []string {
 	names := r.Names()
 	sort.Strings(names)
 	return names
 }
 
-// DeferredLLMTools returns pre-serialized LLM tool definitions for the named
+// deferredLLMTools returns pre-serialized LLM tool definitions for the named
 // deferred tools. Unknown or non-deferred names are silently skipped.
-func (r *ToolRegistry) DeferredLLMTools(names []string) []llm.Tool {
+func (r *ToolRegistry) deferredLLMTools(names []string) []llm.Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	tools := make([]llm.Tool, 0, len(names))
@@ -712,7 +712,7 @@ func toLLMTool(def ToolDef) llm.Tool {
 	return tool
 }
 
-// DeferredSummaries returns name+description for all deferred (non-hidden) tools.
+// deferredSummaries returns name+description for all deferred (non-hidden) tools.
 func (r *ToolRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

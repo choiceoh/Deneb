@@ -49,9 +49,9 @@ type verifyGateState struct {
 
 type verifyGateCtxKey struct{}
 
-// WithVerifyGate attaches the run's verification-gate state to ctx so
+// withVerifyGate attaches the run's verification-gate state to ctx so
 // ToolRegistry.Execute can record mutations and verifications.
-func WithVerifyGate(ctx context.Context, g *verifyGateState) context.Context {
+func withVerifyGate(ctx context.Context, g *verifyGateState) context.Context {
 	if g == nil {
 		return ctx
 	}

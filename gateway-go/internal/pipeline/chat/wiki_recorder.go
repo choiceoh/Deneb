@@ -63,7 +63,7 @@ func shouldRecordDiary(msg string, signal diarySignal) bool {
 	return true
 }
 
-func shouldRecordRunDiary(params RunParams) bool {
+func shouldRecordRunDiary(params runParams) bool {
 	if strings.TrimSpace(params.Message) == "" {
 		return false
 	}

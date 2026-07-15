@@ -214,5 +214,5 @@ func resolveTimezone() string {
 // BuildDefaultRuntimeInfo creates RuntimeInfo from the current environment.
 // Static fields (hostname, OS, arch) are cached; only model fields change per request.
 func BuildDefaultRuntimeInfo(model, defaultModel string) *RuntimeInfo {
-	return Cache.BuildRuntimeInfo(model, defaultModel)
+	return Cache.buildRuntimeInfo(model, defaultModel)
 }

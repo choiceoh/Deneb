@@ -6,7 +6,7 @@ import (
 )
 
 func TestFetchCacheReturnsHitOrMiss(t *testing.T) {
-	c := NewFetchCacheWithTTL(8, time.Minute)
+	c := newFetchCacheWithTTL(8, time.Minute)
 
 	// Miss on empty cache.
 	if _, ok := c.Get("https://example.com"); ok {
@@ -26,7 +26,7 @@ func TestFetchCacheReturnsHitOrMiss(t *testing.T) {
 }
 
 func TestFetchCacheExpiresAfterTTL(t *testing.T) {
-	c := NewFetchCacheWithTTL(8, 10*time.Millisecond)
+	c := newFetchCacheWithTTL(8, 10*time.Millisecond)
 
 	c.Put("https://example.com", "data")
 	if _, ok := c.Get("https://example.com"); !ok {
@@ -40,7 +40,7 @@ func TestFetchCacheExpiresAfterTTL(t *testing.T) {
 }
 
 func TestFetchCache_Eviction(t *testing.T) {
-	c := NewFetchCacheWithTTL(3, time.Minute)
+	c := newFetchCacheWithTTL(3, time.Minute)
 
 	c.Put("https://a.com", "a")
 	c.Put("https://b.com", "b")
@@ -65,7 +65,7 @@ func TestFetchCache_Eviction(t *testing.T) {
 }
 
 func TestFetchCache_GetPromotesLRU(t *testing.T) {
-	c := NewFetchCacheWithTTL(3, time.Minute)
+	c := newFetchCacheWithTTL(3, time.Minute)
 	c.Put("https://a.com", "a")
 	c.Put("https://b.com", "b")
 	c.Put("https://c.com", "c")

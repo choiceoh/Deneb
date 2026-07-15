@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 )
 
 func TestRegisterEarlyMethodsReturnsValidationErrorBeforeStoresInitialize(t *testing.T) {
@@ -87,7 +87,7 @@ func TestEarlyProviderMethodsReturnsMethodsOnlyWithRegistry(t *testing.T) {
 		t.Fatalf("provider groups without registry = %v, want nil", got)
 	}
 
-	srv.providers = provider.NewRegistry()
+	srv.providers = aibind.NewRegistry()
 	var names []string
 	for _, methods := range srv.earlyProviderMethods() {
 		names = append(names, sortedMethodNames(methods)...)

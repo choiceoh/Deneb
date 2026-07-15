@@ -37,6 +37,19 @@ HTTP wire 형식만 책임진다.
 - 구체 모델 이름이나 역할 정책을 여기 추가하지 않는다. 새 provider mode는
   `Client`의 mode 분기와 공통 request/event 계약을 함께 검증한다.
 
+## Local change scope
+
+전송 계층 변경은 wire 정규화 경계에 가둔다. 역할·모델 선택을 여기로 끌어오지 않는다.
+
+- 함께 바꿔도 되는 이웃: `internal/ai/modelrole`(역할 해석),
+  `internal/ai/httpretry`·`internal/ai/modelcaps`(transport helper).
+  `Client`/`DoStream`/`Complete` 계약이 바뀌면 `client_test.go`와
+  `openai_stream_test.go`를 먼저 본다.
+- 건드리지 말 것: `internal/pipeline/chat` turn loop,
+  `internal/runtime/server` 배선, model-role catalog 직접 수정.
+  `llm`에서 `modelrole`·chat·server를 import하지 않는다.
+- 집중 검증: `cd gateway-go && go test -count=1 ./internal/ai/llm`
+
 ## 집중 검증
 
 전송 변경은 request body/header, 정상 종료, provider error, 취소와 premature

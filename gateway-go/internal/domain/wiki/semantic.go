@@ -762,6 +762,111 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 	return out
 }
 
+// refreshInputsFromPages reads and chunks embeddable pages without holding si.mu.
+func refreshInputsFromPages(store *Store, relPaths []string) (want map[string]string, inputs map[string][]semanticChunkInput) {
+	want = make(map[string]string, len(relPaths))
+	inputs = make(map[string][]semanticChunkInput, len(relPaths))
+	for _, rp := range relPaths {
+		page, perr := store.ReadPage(rp)
+		if perr != nil || page == nil {
+			continue
+		}
+		text := semanticText(page)
+		if len(text) < semanticMinChars {
+			continue
+		}
+		chunks := semanticChunkInputs(rp, page)
+		if len(chunks) == 0 {
+			continue
+		}
+		want[rp] = contentHash(text)
+		inputs[rp] = chunks
+	}
+	return want, inputs
+}
+
+// prepareSemanticRefresh updates cache metadata under si.mu, prunes deleted
+// pages, and returns paths needing (re)embed plus the forget epoch snapshot.
+func (si *semanticIndex) prepareSemanticRefresh(want map[string]string) (toEmbed []string, startEpoch uint64, mutated bool) {
+	si.mu.Lock()
+	defer si.mu.Unlock()
+
+	identity := embedindex.IdentityOf(si.embedder)
+	identityChanged := identity.Fingerprint != "" && (si.cacheFingerprint == "" || si.cacheFingerprint != identity.Fingerprint ||
+		(si.cacheDimensions > 0 && identity.Dimensions > 0 && si.cacheDimensions != identity.Dimensions))
+	preprocessingChanged := si.cachePreprocessing != semanticPreprocessingVersion
+	if identityChanged || preprocessingChanged {
+		if len(si.vecs) > 0 {
+			slog.Warn("wiki: semantic cache contract changed; rebuilding",
+				"cached", si.cacheFingerprint, "active", identity.Fingerprint,
+				"cachedDimensions", si.cacheDimensions, "activeDimensions", identity.Dimensions,
+				"cachedPreprocessing", si.cachePreprocessing, "activePreprocessing", semanticPreprocessingVersion)
+		}
+		clear(si.vecs)
+		mutated = true
+	}
+	if identity.Fingerprint != "" {
+		si.cacheFingerprint = identity.Fingerprint
+		si.cacheDimensions = identity.Dimensions
+	}
+	si.cachePreprocessing = semanticPreprocessingVersion
+	for rp, hash := range want {
+		if cur, ok := si.vecs[rp]; !ok || cur.hash != hash || !validCachedSemanticPage(cur, identity.Dimensions) {
+			toEmbed = append(toEmbed, rp)
+		}
+	}
+	for rp := range si.vecs {
+		if _, ok := want[rp]; !ok {
+			delete(si.vecs, rp)
+			mutated = true
+		}
+	}
+	startEpoch = si.forgetEpoch
+	return toEmbed, startEpoch, mutated
+}
+
+func (si *semanticIndex) embedSemanticPage(ctx context.Context, rp string, pageInputs []semanticChunkInput, pageIndex int) (pageChunks []semanticChunk, vectors [][]float32, err error) {
+	pageChunks = make([]semanticChunk, 0, len(pageInputs))
+	vectors = make([][]float32, 0, len(pageInputs))
+	for start := 0; start < len(pageInputs); start += semanticEmbedBatch {
+		end := min(start+semanticEmbedBatch, len(pageInputs))
+		texts := make([]string, end-start)
+		for i := start; i < end; i++ {
+			texts[i-start] = pageInputs[i].text
+		}
+		vecs, eerr := si.embedder.Embed(ctx, texts)
+		if eerr != nil {
+			slog.Warn("wiki: semantic embed batch failed; keeping prior pages",
+				"pageIndex", pageIndex, "path", rp, "batchStart", start, "batchSize", end-start, "error", eerr)
+			return nil, nil, eerr
+		}
+		if len(vecs) != end-start {
+			return nil, nil, fmt.Errorf("wiki: semantic embed batch returned %d vectors for %d texts", len(vecs), end-start)
+		}
+		for i, vector := range vecs {
+			input := pageInputs[start+i]
+			pageChunks = append(pageChunks, semanticChunk{
+				snippet: input.snippet, startLine: input.startLine, endLine: input.endLine,
+				kind: input.kind, vec: vector,
+			})
+			vectors = append(vectors, vector)
+		}
+	}
+	return pageChunks, vectors, nil
+}
+
+// writeBackRefreshedPage stores an embedded page when the forget epoch is
+// unchanged. Returns false when a concurrent forget raced the refresh.
+func (si *semanticIndex) writeBackRefreshedPage(rp, hash string, pageChunks []semanticChunk, vectors [][]float32, startEpoch uint64) bool {
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	if si.forgetEpoch != startEpoch {
+		return false
+	}
+	si.vecs[rp] = cachedVec{hash: hash, vec: centroid(vectors), chunks: pageChunks}
+	return true
+}
+
 // refresh re-embeds pages whose content changed and drops deleted ones. Holds
 // the index mutex only around map mutations, not around the network call.
 // Any mutation (even partial progress before a batch error) is mirrored to the
@@ -789,106 +894,19 @@ func (si *semanticIndex) refresh(ctx context.Context, store *Store) (err error) 
 		}
 	}()
 
-	// Read and chunk pages without holding the semantic mutex. The cache lock is
-	// a leaf and must never cover disk I/O or embedding network calls.
-	want := make(map[string]string, len(relPaths))
-	inputs := make(map[string][]semanticChunkInput, len(relPaths))
-	for _, rp := range relPaths {
-		page, perr := store.ReadPage(rp)
-		if perr != nil || page == nil {
-			continue
-		}
-		text := semanticText(page)
-		if len(text) < semanticMinChars {
-			continue
-		}
-		chunks := semanticChunkInputs(rp, page)
-		if len(chunks) == 0 {
-			continue
-		}
-		want[rp] = contentHash(text)
-		inputs[rp] = chunks
-	}
-	var toEmbed []string
+	want, inputs := refreshInputsFromPages(store, relPaths)
+	toEmbed, startEpoch, prepMutated := si.prepareSemanticRefresh(want)
+	mutated = prepMutated
 
-	si.mu.Lock()
-	identity := embedindex.IdentityOf(si.embedder)
-	identityChanged := identity.Fingerprint != "" && (si.cacheFingerprint == "" || si.cacheFingerprint != identity.Fingerprint ||
-		(si.cacheDimensions > 0 && identity.Dimensions > 0 && si.cacheDimensions != identity.Dimensions))
-	preprocessingChanged := si.cachePreprocessing != semanticPreprocessingVersion
-	if identityChanged || preprocessingChanged {
-		if len(si.vecs) > 0 {
-			slog.Warn("wiki: semantic cache contract changed; rebuilding",
-				"cached", si.cacheFingerprint, "active", identity.Fingerprint,
-				"cachedDimensions", si.cacheDimensions, "activeDimensions", identity.Dimensions,
-				"cachedPreprocessing", si.cachePreprocessing, "activePreprocessing", semanticPreprocessingVersion)
-		}
-		clear(si.vecs)
-		mutated = true
-	}
-	if identity.Fingerprint != "" {
-		si.cacheFingerprint = identity.Fingerprint
-		si.cacheDimensions = identity.Dimensions
-	}
-	si.cachePreprocessing = semanticPreprocessingVersion
-	for rp, hash := range want {
-		if cur, ok := si.vecs[rp]; !ok || cur.hash != hash || !validCachedSemanticPage(cur, identity.Dimensions) {
-			toEmbed = append(toEmbed, rp)
-		}
-	}
-	// Drop entries for pages that no longer exist.
-	for rp := range si.vecs {
-		if _, ok := want[rp]; !ok {
-			delete(si.vecs, rp)
-			mutated = true
-		}
-	}
-	// Snapshot the forget epoch under the same lock as the page snapshot: if it
-	// advances before a write-back below, a forget deleted a page we are still
-	// embedding and the write-back must be abandoned to avoid resurrecting it.
-	startEpoch := si.forgetEpoch
-	si.mu.Unlock()
-
-	// Stable order makes a partial refresh deterministic and resumable.
 	sort.Strings(toEmbed)
 	for pageIndex, rp := range toEmbed {
-		pageInputs := inputs[rp]
-		pageChunks := make([]semanticChunk, 0, len(pageInputs))
-		vectors := make([][]float32, 0, len(pageInputs))
-		for start := 0; start < len(pageInputs); start += semanticEmbedBatch {
-			end := min(start+semanticEmbedBatch, len(pageInputs))
-			texts := make([]string, end-start)
-			for i := start; i < end; i++ {
-				texts[i-start] = pageInputs[i].text
-			}
-			vecs, eerr := si.embedder.Embed(ctx, texts)
-			if eerr != nil {
-				slog.Warn("wiki: semantic embed batch failed; keeping prior pages",
-					"pageIndex", pageIndex, "path", rp, "batchStart", start, "batchSize", end-start, "error", eerr)
-				return eerr
-			}
-			if len(vecs) != end-start {
-				return fmt.Errorf("wiki: semantic embed batch returned %d vectors for %d texts", len(vecs), end-start)
-			}
-			for i, vector := range vecs {
-				input := pageInputs[start+i]
-				pageChunks = append(pageChunks, semanticChunk{
-					snippet: input.snippet, startLine: input.startLine, endLine: input.endLine,
-					kind: input.kind, vec: vector,
-				})
-				vectors = append(vectors, vector)
-			}
+		pageChunks, vectors, eerr := si.embedSemanticPage(ctx, rp, inputs[rp], pageIndex)
+		if eerr != nil {
+			return eerr
 		}
-		si.mu.Lock()
-		if si.forgetEpoch != startEpoch {
-			// A forget raced this refresh; its deletion must win. Abandon the
-			// write-back (the next refresh re-embeds any legitimately changed
-			// pages) so an in-flight embed never resurrects a forgotten vector.
-			si.mu.Unlock()
+		if !si.writeBackRefreshedPage(rp, want[rp], pageChunks, vectors, startEpoch) {
 			return nil
 		}
-		si.vecs[rp] = cachedVec{hash: want[rp], vec: centroid(vectors), chunks: pageChunks}
-		si.mu.Unlock()
 		mutated = true
 	}
 	return nil

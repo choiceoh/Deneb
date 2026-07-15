@@ -3,11 +3,10 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"os"
 	"strings"
 	"time"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -165,7 +164,7 @@ func applyOptimizerMemoryOutcome(entry *SkillOptimizerMemoryEntry, outcome, note
 	if entry == nil {
 		return
 	}
-	direction := strings.TrimSpace(genesiscommon.TruncateRunes(note, 400))
+	direction := strings.TrimSpace(genbind.TruncateRunes(note, 400))
 	switch outcome {
 	case "accepted":
 		entry.AcceptedCount++

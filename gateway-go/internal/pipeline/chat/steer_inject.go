@@ -31,7 +31,7 @@ import (
 // hook has no effect (queue disabled or empty session) so the composer can
 // filter it cleanly.
 func buildSteerHookIfEnabled(
-	queue *SteerQueue,
+	queue *steerQueue,
 	sessionKey string,
 	logger *slog.Logger,
 ) func(messages []llm.Message) []llm.Message {
@@ -47,7 +47,7 @@ func buildSteerHookIfEnabled(
 // When no tool_result exists yet, drained notes are Restored so a later turn
 // can pick them up after a tool batch runs.
 func buildSteerBeforeAPICall(
-	queue *SteerQueue,
+	queue *steerQueue,
 	sessionKey string,
 	logger *slog.Logger,
 ) func(messages []llm.Message) []llm.Message {

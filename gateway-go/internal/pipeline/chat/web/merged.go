@@ -9,6 +9,6 @@ import (
 // MergedTool returns the web search/fetch tool handler (url, query, queries,
 // search+fetch, typed search). spill (optional) offloads full YouTube
 // transcripts to disk.
-func MergedTool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore) toolport.ToolFunc {
+func MergedTool(cache *fetchCache, localAI *localAIExtractor, spill tooldeps.SpilloverStore) toolport.ToolFunc {
 	return Tool(cache, localAI, spill)
 }

@@ -2,10 +2,9 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 )
 
 // Coverage-conditional relaxation: a skill WITH held-out cases may land bigger
@@ -31,10 +30,10 @@ func TestCoverageConditionalGates_AllowRelaxedBudgetAndJudgeMarginForCoveredSkil
 	}
 	candidate := strings.Join(candLines, "\n")
 
-	if ok, _ := guardrails.ValidateTextualEditBudget(original, candidate, false); ok {
+	if ok, _ := genbind.ValidateTextualEditBudget(original, candidate, false); ok {
 		t.Fatal("a ~0.75 changed ratio must fail the uncovered budget")
 	}
-	if ok, reason := guardrails.ValidateTextualEditBudget(original, candidate, true); !ok {
+	if ok, reason := genbind.ValidateTextualEditBudget(original, candidate, true); !ok {
 		t.Fatalf("a ~0.75 changed ratio should pass the covered budget: %s", reason)
 	}
 

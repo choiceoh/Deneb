@@ -25,7 +25,7 @@ type modelResolution struct {
 //  6. Provider prefix extraction ("google/gemini" → provider="google")
 //  7. Sub-agent provider remapping ("<provider>-subagent")
 func resolveModel(
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	sess *session.Session,
 ) modelResolution {

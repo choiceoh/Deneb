@@ -6,11 +6,11 @@ import (
 	runstate "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/runstate"
 )
 
-// SteerQueue stores per-session notes waiting for the next tool result.
-type SteerQueue = runstate.SteerQueue
+// steerQueue stores per-session notes waiting for the next tool result.
+type steerQueue = runstate.SteerQueue
 
-// NewSteerQueue creates an empty steer queue.
-func NewSteerQueue() *SteerQueue {
+// newSteerQueue creates an empty steer queue.
+func newSteerQueue() *steerQueue {
 	return runstate.NewSteerQueue()
 }
 

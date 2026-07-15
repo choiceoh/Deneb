@@ -17,38 +17,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/middleware"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/process"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
-	arSession "github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
-	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
-	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // ServerTransport owns HTTP lifecycle and connection state.
@@ -81,10 +59,10 @@ func (s *Server) BoundAddr() string {
 // ServerRPC owns dispatcher construction and RPC wiring state.
 type ServerRPC struct {
 	dispatcher               *rpc.Dispatcher
-	providers                *provider.Registry
-	authManager              *provider.AuthManager
-	providerRuntime          *provider.ProviderRuntimeResolver
-	acpDeps                  *handlerprocess.ACPDeps
+	providers                *aibind.ProviderRegistry
+	authManager              *aibind.AuthManager
+	providerRuntime          *aibind.ProviderRuntimeResolver
+	acpDeps                  *handlerwire.ProcessACPDeps
 	acpLifecycleUnsub        func()
 	acpResultInjectionUnsub  func()
 	snapshotLifecycleUnsub   func()
@@ -96,15 +74,15 @@ type ServerRPC struct {
 type ServerRuntime struct {
 	ready        atomic.Bool
 	shutdownOnce sync.Once
-	gatewaySubs  *events.GatewayEventSubscriptions
-	activity     *monitoring.ActivityTracker
+	gatewaySubs  *svcbind.GatewayEventSubscriptions
+	activity     *domainbind.ActivityTracker
 	// Auto-resume state: the marker store persists "run active at T"
 	// records across gateway restarts. See auto_resume.go for the
 	// resume policy and file layout. resumeMu guards markerStore's
 	// lazy init, and runMarkerUnsub tears down the lifecycle listener
 	// on shutdown.
 	resumeMu       sync.Mutex
-	markerStore    *sessionstore.RunMarkerStore
+	markerStore    *svcbind.RunMarkerStore
 	runMarkerUnsub func()
 
 	// cacheHealth holds the rolling vLLM prefix-cache hit-ratio samples surfaced
@@ -112,7 +90,7 @@ type ServerRuntime struct {
 	// the /health gpu section and /health/gpu route. Both zero values are
 	// ready-to-use (no constructor) and degrade silently on hosts without a vLLM
 	// role or NVIDIA GPU. See health_cache.go and health_gpu.go.
-	healthProbes runtimehealth.Probes
+	healthProbes svcbind.Probes
 }
 
 // Server is the main gateway server.
@@ -128,15 +106,15 @@ type Server struct {
 	*InfraSubsystem
 	*GenesisSubsystem
 
-	broadcaster *events.Broadcaster
-	publisher   *events.Publisher
-	processes   *process.Manager
-	daemon      *daemon.Daemon
+	broadcaster *svcbind.Broadcaster
+	publisher   *svcbind.Publisher
+	processes   *infrabind.Manager
+	daemon      *domainbind.Daemon
 
 	// pushHub fans proactive 업무-topic reports out to connected native clients
 	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
 	// in New so it's non-nil before any handler or relay touches it.
-	pushHub *proactive.Hub
+	pushHub *svcbind.Hub
 
 	// phoneActions correlates dispatched phone_write actions with the app's
 	// execution reports (phone_action_result events) so the tool can return
@@ -149,34 +127,34 @@ type Server struct {
 	// HTTP door (/api/event/ingest) builds its handler per request, so the lazy
 	// init is guarded by phoneEventLedgerOnce (concurrent ingests must share one
 	// ledger, not race two into existence — server_phone_action.go).
-	phoneEventLedger     *phoneevents.Ledger
+	phoneEventLedger     *svcbind.Ledger
 	phoneEventLedgerOnce sync.Once
 
 	// siteVisitRecorder logs project 현장 visits from phone location fixes
-	// (wikiwork.SiteVisitRecorder). Lazily created (guarded by
+	// (svcbind.SiteVisitRecorder). Lazily created (guarded by
 	// siteVisitRecorderOnce — same per-request door as the ledger); nil when no
 	// wiki store.
-	siteVisitRecorder     *wikiwork.SiteVisitRecorder
+	siteVisitRecorder     *svcbind.SiteVisitRecorder
 	siteVisitRecorderOnce sync.Once
 
 	// alertGate is the process-wide cooldown shared by external Fleet alerts and
 	// the observatory watchdog. One instance for the server lifetime prevents a
 	// route rebuild or repeated watchdog tick from resetting suppression state.
-	alertGate *proactive.AlertGate
+	alertGate *svcbind.AlertGate
 
 	// pushTokenStore holds native-client FCM registration IDs (durable). The
 	// registration RPCs (miniapp.push.register/unregister) write here regardless
 	// of whether FCM sending is configured, so tokens accumulate and proactive
 	// FCM delivery begins the moment credentials are provisioned. Created in
 	// registerEarlyMethods.
-	pushTokenStore *push.Store
+	pushTokenStore *domainbind.PushStore
 	// pushNotifier sends proactive notifications via FCM as a fallback when no
 	// native client holds a live SSE connection (app fully closed / Doze). nil
 	// (dormant) unless DENEB_FCM_CREDENTIALS_FILE points at a valid service
 	// account — see internal/domain/push.
-	pushNotifier *push.Notifier
+	pushNotifier *domainbind.Notifier
 
-	runtimeCfg *config.GatewayRuntimeConfig
+	runtimeCfg *infrabind.GatewayRuntimeConfig
 	version    string
 	logColor   bool // true when ANSI color output is enabled
 	logger     *slog.Logger
@@ -184,46 +162,46 @@ type Server struct {
 	// fleet reads the SparkFleet control plane (GET /api/services) to surface
 	// which GPU backends (OCR/ASR/embeddings/vLLM) are actually up instead of
 	// degrading silently. nil unless DENEB_SPARKFLEET_URL is set.
-	fleet *sparkfleet.Client
+	fleet *infrabind.SparkFleetClient
 
 	// insights aggregates session/usage data for /insights reports.
 	// Created during registerEarlyMethods; nil until then.
-	insights *insights.Engine
+	insights *svcbind.Engine
 
 	// polarisStore is the compaction summary store, created in
 	// registerSessionRPCMethods (Session phase) and read by the opt-in
 	// compaction tuner registered in registerWorkflowSideEffects (later phase).
-	polarisStore *polaris.Store
+	polarisStore *pipebind.Store
 
 	// mailStore is the local file-backed mail archive mirror (created in
 	// initMemorySubsystem). LMTP intake writes new mail to it; the mail_archive
 	// tool reads from it (IMAP fallback on miss). nil = IMAP only.
-	mailStore *mailstore.Store
+	mailStore *platbind.MailStore
 
 	// notify mirrors user-impacting error events and status snapshots to the
 	// native client (live push) and the operator log. Created during
 	// registerEarlyMethods.
-	notify *runtimenotify.Service
+	notify *svcbind.NotifyService
 
 	// calendarBriefing is the D-15min meeting push service, delivered to the
 	// native client. nil when calendar OAuth tokens aren't configured — safe to
 	// call start() unconditionally; the service is a no-op.
-	calendarBriefing *runtimemeeting.CalendarBriefingService
+	calendarBriefing *svcbind.CalendarBriefingService
 
 	// meetingHarvest asks "회의 어떻게 됐어요?" after work-linked calendar events
 	// end, pulling meeting/call outcomes into the wiki flywheel (mail is only
 	// half the negotiation). nil-safe start(); see meeting_harvest.go.
-	meetingHarvest *runtimemeeting.HarvestService
+	meetingHarvest *svcbind.HarvestService
 
 	// plaudRecordings analyzes new Plaud meeting recordings via the external
 	// MCP tools (transcript → meeting report → 회의록 wiki page + feed card).
 	// nil-safe start(); see plaud_recordings.go.
-	plaudRecordings *runtimemeeting.PlaudService
+	plaudRecordings *svcbind.PlaudService
 
 	// chatToolRegistry is the chat pipeline's tool registry, captured at
 	// pipeline build so background services (plaud recordings) can execute
 	// registered tools outside a chat turn. nil until buildChatPipeline runs.
-	chatToolRegistry *chat.ToolRegistry
+	chatToolRegistry *pipebind.ToolRegistry
 
 	// mailIngestHealth stores mailIngestHealth when LMTP ingest is enabled so
 	// /health exposes archive-context degradation instead of leaving it in logs.
@@ -233,13 +211,13 @@ type Server struct {
 	// logSwap wraps the gateway logger so the notify service can install
 	// an ERROR-mirroring handler after creation. Set once in New(); never
 	// nil if logger is non-nil.
-	logSwap *runtimenotify.SwappableHandler
+	logSwap *svcbind.SwappableHandler
 
 	// logCapture heads the slog handler chain: it mirrors every record into an
-	// in-memory ring for the observe plane (observe.logs / observe.turn) before
+	// in-memory ring for the observe plane (infrabind.logs / infrabind.turn) before
 	// delegating onward. Set once in New() alongside logSwap; nil only when
 	// logger is nil.
-	logCapture *observe.LogCapture
+	logCapture *infrabind.LogCapture
 
 	// denebDir holds the resolved state directory for the lifetime of the
 	// server (set in Run before registerSessionRPCMethods). Downstream
@@ -249,7 +227,7 @@ type Server struct {
 
 	// promptStore persists operator-editable prompt overrides surfaced in the
 	// native Settings prompt corner. nil only if initialization is skipped in tests.
-	promptStore *prompts.Store
+	promptStore *domainbind.PromptsStore
 
 	// Session, chat, and hook subsystems — logically grouped to reduce God-Object growth.
 	*SessionManager // sessions, transcript
@@ -270,19 +248,19 @@ type Server struct {
 	OnListening func(addr net.Addr)
 }
 
-// sessionSnapshotProvider implements events.SessionSnapshotProvider by
-// reading from the session.Manager and mapping to the events wire type.
+// sessionSnapshotProvider implements svcbind.SessionSnapshotProvider by
+// reading from the domainbind.Manager and mapping to the events wire type.
 type sessionSnapshotProvider struct {
-	sessions *session.Manager
+	sessions *domainbind.Manager
 }
 
 // SessionSnapshot returns the latest observable snapshot for a session.
-func (p *sessionSnapshotProvider) SessionSnapshot(sessionKey string) *events.SessionSnapshot {
+func (p *sessionSnapshotProvider) SessionSnapshot(sessionKey string) *svcbind.SessionSnapshot {
 	s := p.sessions.Get(sessionKey)
 	if s == nil {
 		return nil
 	}
-	return &events.SessionSnapshot{
+	return &svcbind.SessionSnapshot{
 		SessionKey:     s.Key,
 		SessionID:      s.SessionID,
 		Kind:           string(s.Kind),
@@ -336,14 +314,14 @@ func New(addr string, opts ...Option) (*Server, error) {
 		GenesisSubsystem:    &GenesisSubsystem{},
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
-		pushHub:             proactive.NewHub(),
+		pushHub:             svcbind.NewHub(),
 		phoneActions:        newPhoneActionAwaiter(),
-		alertGate:           proactive.NewAlertGate(),
+		alertGate:           svcbind.NewAlertGate(),
 		SessionManager: &SessionManager{
-			sessions:       session.NewManager(),
-			abortMemory:    arSession.NewAbortMemory(2000),
-			historyTracker: arSession.NewHistoryTracker(),
-			sessionUsage:   &arSession.SessionUsage{},
+			sessions:       domainbind.NewManager(),
+			abortMemory:    pipebind.NewAbortMemory(2000),
+			historyTracker: pipebind.NewHistoryTracker(),
+			sessionUsage:   &pipebind.SessionUsage{},
 		},
 		ChatManager: &ChatManager{},
 		HookManager: &HookManager{},
@@ -363,8 +341,8 @@ func New(addr string, opts ...Option) (*Server, error) {
 		// can wrap on top later. Resulting order: notify(swap) → capture → base.
 		// notify forwards ERRORs but always runs its delegate first, so capture
 		// still sees every line after the swap.
-		s.logCapture = observe.NewCapture(s.logger.Handler(), observe.NewRing(observe.DefaultRingSize))
-		s.logSwap = runtimenotify.NewSwappableHandler(s.logCapture)
+		s.logCapture = infrabind.NewCapture(s.logger.Handler(), infrabind.NewRing(infrabind.DefaultRingSize))
+		s.logSwap = svcbind.NewSwappableHandler(s.logCapture)
 		if s.logSwap != nil {
 			s.logger = slog.New(s.logSwap)
 		}
@@ -376,38 +354,38 @@ func New(addr string, opts ...Option) (*Server, error) {
 	// as a forwarder rather than replacing the context pointer.
 	s.lifecycleCtx, s.lifecycleCancel = context.WithCancel(context.Background())
 
-	s.broadcaster = events.NewBroadcaster()
+	s.broadcaster = svcbind.NewBroadcaster()
 	s.broadcaster.SetLogger(s.logger)
-	s.gatewaySubs = events.NewGatewayEventSubscriptions(events.GatewaySubscriptionParams{
+	s.gatewaySubs = svcbind.NewGatewayEventSubscriptions(svcbind.GatewaySubscriptionParams{
 		Broadcaster: s.broadcaster,
 		Logger:      s.logger,
 	})
-	s.publisher = events.NewPublisher(s.broadcaster, &sessionSnapshotProvider{sessions: s.sessions}, s.logger)
+	s.publisher = svcbind.NewPublisher(s.broadcaster, &sessionSnapshotProvider{sessions: s.sessions}, s.logger)
 	s.gatewaySubs.SetPublisher(s.publisher)
-	s.processes = process.NewManager(s.logger)
+	s.processes = infrabind.NewManager(s.logger)
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		cronEnabled := true
 		// Load config early just to honor a cron-disabled setting. The cron
 		// delivery default (DefaultChannel/DefaultTo below) no longer depends on
 		// any channel config: the Telegram bot was retired (PR #1922), so every
 		// job routes to the native client's 업무 session via MainSessionHandoff.
-		if snap, err := config.LoadConfigFromDefaultPath(); err == nil && snap != nil {
+		if snap, err := infrabind.LoadConfigFromDefaultPath(); err == nil && snap != nil {
 			if snap.Config.Cron != nil && snap.Config.Cron.Enabled != nil && !*snap.Config.Cron.Enabled {
 				cronEnabled = false
 			}
 		}
-		storePath := cron.DefaultCronStorePath(homeDir)
-		s.cronRunLog = cron.NewPersistentRunLog(storePath)
+		storePath := platbind.DefaultCronStorePath(homeDir)
+		s.cronRunLog = platbind.NewPersistentRunLog(storePath)
 		// Cron delivery defaults: every report routes to the native client's
 		// 업무 chat (client:main) via MainSessionHandoff regardless of the
 		// per-job target. Default targetless jobs straight to that native
 		// sentinel — without it a job with no explicit Delivery.To fails
 		// ResolveDeliveryTarget ("no delivery recipient configured") before its
 		// agent even runs, and with Telegram retired there is no other channel.
-		s.cronService = cron.NewService(cron.ServiceConfig{
+		s.cronService = platbind.NewCronService(platbind.ServiceConfig{
 			StorePath:      storePath,
 			DefaultChannel: "client",
-			DefaultTo:      proactive.NativeWorkSessionTarget,
+			DefaultTo:      svcbind.NativeWorkSessionTarget,
 			Enabled:        cronEnabled,
 			Sessions:       s.sessions,
 		}, nil, s.logger) // agent runner wired later during chat handler setup
@@ -415,16 +393,16 @@ func New(addr string, opts ...Option) (*Server, error) {
 			s.logger.Info("cron service disabled by config")
 		}
 	}
-	s.activity = monitoring.NewActivityTracker()
+	s.activity = domainbind.NewActivityTracker()
 
 	// Provider auth manager and runtime resolver.
 	if s.providers != nil {
-		s.authManager = provider.NewAuthManager(s.providers, s.logger)
-		s.providerRuntime = provider.NewProviderRuntimeResolver(s.providers, s.logger)
+		s.authManager = aibind.NewAuthManager(s.providers, s.logger)
+		s.providerRuntime = aibind.NewProviderRuntimeResolver(s.providers, s.logger)
 	}
 
 	// Subsystem construction: each independently testable.
-	denebDir := configresolve.DenebDir()
+	denebDir := svcbind.DenebDir()
 	s.denebDir = denebDir
 	s.promptStore = newPromptStore(denebDir)
 	s.InfraSubsystem = NewInfraSubsystem(s.logger, denebDir)
@@ -434,7 +412,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.initACPSubsystem(denebDir)
 
 	s.dispatcher = rpc.NewDispatcher(s.logger)
-	s.dispatcher.UseMiddleware(metrics.RPCInstrumentation(), middleware.Logging(s.logger))
+	s.dispatcher.UseMiddleware(infrabind.RPCInstrumentation(), infrabind.Logging(s.logger))
 
 	// Build GatewayHub — central service registry. Chat is nil until
 	// registerSessionRPCMethods() creates the chat handler.
@@ -447,7 +425,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 	}
 	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.localAIHub != nil {
-		pilot.SetLocalAIHub(s.localAIHub)
+		pipebind.SetLocalAIHub(s.localAIHub)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)
@@ -492,13 +470,13 @@ func New(addr string, opts ...Option) (*Server, error) {
 	if fleetURL != "" {
 		fleetLogger = sparkFleetLogger(s.logger) // dedicated file, off the main gateway log
 	}
-	s.fleet = sparkfleet.New(fleetURL, fleetLogger)
+	s.fleet = infrabind.NewSparkFleetClient(fleetURL, fleetLogger)
 
 	return s, nil
 }
 
 // sparkFleetLogger returns a logger that writes SparkFleet control-plane chatter
-// (GPU backend up/down churn) to its own file — <stateDir>/logs/sparkfleet.log —
+// (GPU backend up/down churn) to its own file — <stateDir>/logs/infrabind.log —
 // off the main gateway log. That backend status is SparkFleet's domain and
 // flooded journald (1000+ lines/day when a backend is persistently down); the
 // live status is still on /health. Falls back to a discard logger (never the
@@ -506,12 +484,12 @@ func New(addr string, opts ...Option) (*Server, error) {
 // main stream. The handle lives for the process; the SparkFleet client only logs
 // on state transitions, so the file grows slowly.
 func sparkFleetLogger(main *slog.Logger) *slog.Logger {
-	dir := filepath.Join(config.ResolveStateDir(), "logs")
+	dir := filepath.Join(infrabind.ResolveStateDir(), "logs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		main.Warn("sparkfleet: dedicated log dir unavailable; suppressing sparkfleet logs", "error", err)
 		return slog.New(slog.DiscardHandler)
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "sparkfleet.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(filepath.Join(dir, "infrabind.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		main.Warn("sparkfleet: dedicated log file unavailable; suppressing sparkfleet logs", "error", err)
 		return slog.New(slog.DiscardHandler)

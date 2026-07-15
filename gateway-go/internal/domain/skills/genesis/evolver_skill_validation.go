@@ -5,11 +5,11 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/guardrails"
 )
 
 func validateSelfHarnessAudit(audit HarnessEditAudit, stats *UsageStats, reviewFinding string) (bool, string) {
@@ -41,9 +41,9 @@ func validateSelfHarnessAudit(audit HarnessEditAudit, stats *UsageStats, reviewF
 	if len(patterns) == 0 {
 		return false, "self-harness audit rejected: no failure evidence bundle or review finding supports target_signature"
 	}
-	target := guardrails.NormalizeSignature(audit.TargetSignature)
+	target := genbind.NormalizeSignature(audit.TargetSignature)
 	for _, pattern := range patterns {
-		if guardrails.SignatureMatches(target, guardrails.NormalizeSignature(pattern.Signature)) {
+		if genbind.SignatureMatches(target, genbind.NormalizeSignature(pattern.Signature)) {
 			return true, ""
 		}
 	}
@@ -62,15 +62,15 @@ func supportedFailureSignatures(patterns []skillFailurePattern) []string {
 }
 
 func normalizedSelfHarnessSignature(value string) string {
-	return guardrails.NormalizeSignature(value)
+	return genbind.NormalizeSignature(value)
 }
 
 func selfHarnessSignatureMatches(target, supported string) bool {
-	return guardrails.SignatureMatches(target, supported)
+	return genbind.SignatureMatches(target, supported)
 }
 
 func canonicalSkillSurface(surface string) string {
-	return guardrails.CanonicalSkillSurface(surface)
+	return genbind.CanonicalSkillSurface(surface)
 }
 
 type acceptedSkillCandidate struct {
@@ -144,10 +144,10 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	// held-out gate can score (hasAssertions). Mere case existence let an
 	// assertion-less corpus grant the relaxed caps while the gate failed open.
 	covered := hasScorableValidationCase(e.validationCasesForCoverage(skillName))
-	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
+	if ok, reason := genbind.ValidateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
-	if ok, reason := guardrails.ValidateTextualEditBudget(originalContent, candidateBody, covered); !ok {
+	if ok, reason := genbind.ValidateTextualEditBudget(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
 	if engine := e.SkillValidationEngine(); engine != nil {
@@ -175,7 +175,7 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	if ok, reason := validateSelfHarnessAudit(audit, stats, reviewFinding); !ok {
 		return false, reason
 	}
-	if ok, reason := guardrails.ValidateEditedSurface(audit, originalContent, candidateBody); !ok {
+	if ok, reason := genbind.ValidateEditedSurface(audit, originalContent, candidateBody); !ok {
 		return false, reason
 	}
 	return true, ""

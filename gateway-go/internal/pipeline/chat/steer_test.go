@@ -1,4 +1,4 @@
-// steer_test.go — Unit tests for SteerQueue and the drain-inject path.
+// steer_test.go — Unit tests for steerQueue and the drain-inject path.
 package chat
 
 import (
@@ -11,7 +11,7 @@ import (
 )
 
 func TestSteerQueueEnqueueAllowsTrimmedNote(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	if !q.Enqueue("sess", "  nudge  ") {
 		t.Fatal("expected accept for non-empty note")
 	}
@@ -25,7 +25,7 @@ func TestSteerQueueEnqueueAllowsTrimmedNote(t *testing.T) {
 }
 
 func TestSteerQueue_Enqueue_RejectsEmptyAndWhitespace(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	if q.Enqueue("sess", "") {
 		t.Error("empty note should be rejected")
 	}
@@ -41,7 +41,7 @@ func TestSteerQueue_Enqueue_RejectsEmptyAndWhitespace(t *testing.T) {
 }
 
 func TestSteerQueueEnqueuePreservesOrder(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	q.Enqueue("sess", "first")
 	q.Enqueue("sess", "second")
 	q.Enqueue("sess", "third")
@@ -55,7 +55,7 @@ func TestSteerQueueEnqueuePreservesOrder(t *testing.T) {
 }
 
 func TestSteerQueue_Drain_EmptyReturnsNil(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	if got := q.Drain("sess"); got != nil {
 		t.Errorf("Drain on empty = %v, want nil", got)
 	}
@@ -65,7 +65,7 @@ func TestSteerQueue_Drain_EmptyReturnsNil(t *testing.T) {
 }
 
 func TestSteerQueue_Restore_PrependsOrder(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	q.Enqueue("sess", "newcomer")
 	// Simulate a drain-then-restore path (no tool_result found).
 	q.Restore("sess", []string{"original-1", "original-2"})
@@ -82,7 +82,7 @@ func TestSteerQueue_Restore_PrependsOrder(t *testing.T) {
 }
 
 func TestSteerQueue_Clear(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	q.Enqueue("sess", "x")
 	q.Clear("sess")
 	if q.Len("sess") != 0 {
@@ -91,7 +91,7 @@ func TestSteerQueue_Clear(t *testing.T) {
 }
 
 func TestSteerQueueResetClearsAllSessions(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	q.Enqueue("s1", "a")
 	q.Enqueue("s2", "b")
 	q.Reset()
@@ -104,7 +104,7 @@ func TestSteerQueueResetClearsAllSessions(t *testing.T) {
 // concurrent Enqueues paired with concurrent Drains must not panic and must
 // preserve at-most-once delivery (sum of observed notes equals inserted count).
 func TestSteerQueue_ConcurrentEnqueueDrain(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	const writers = 8
 	const perWriter = 50
 
@@ -238,10 +238,10 @@ func TestSteerInjectWritesToLatestWhenMultipleResults(t *testing.T) {
 	}
 }
 
-// TestSteerBeforeAPICallWritesMarkerAndClearsQueue glues SteerQueue + buildSteerBeforeAPICall
+// TestSteerBeforeAPICallWritesMarkerAndClearsQueue glues steerQueue + buildSteerBeforeAPICall
 // together and checks the expected drain-and-inject happens on call.
 func TestSteerBeforeAPICallWritesMarkerAndClearsQueue(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	q.Enqueue("sess", "do extra step")
 
 	hook := buildSteerBeforeAPICall(q, "sess", nil)
@@ -272,7 +272,7 @@ func TestSteerBeforeAPICallWritesMarkerAndClearsQueue(t *testing.T) {
 // TestSteerBeforeAPICall_PreservesOrderOnNoToolResult: when nothing to inject
 // into, the notes must be Restored so the NEXT call (after tools ran) sees them.
 func TestSteerBeforeAPICall_PreservesOrderOnNoToolResult(t *testing.T) {
-	q := NewSteerQueue()
+	q := newSteerQueue()
 	q.Enqueue("sess", "pending")
 
 	hook := buildSteerBeforeAPICall(q, "sess", nil)

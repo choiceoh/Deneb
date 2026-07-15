@@ -1,10 +1,9 @@
 package skilllifecycle
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"strings"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 // The review runs with a dedicated lean system prompt instead of the full
@@ -27,7 +26,7 @@ func TestSkillReviewSystemPromptIncludesToolsWithinSizeBoundary(t *testing.T) {
 // back conservatively when the listing is empty/unavailable (nil snapshot
 // after a restart, always-on skills missing from the discoverable list).
 func TestBuildSkillReviewPromptIncludesIndexGuidanceAndFallback(t *testing.T) {
-	prompt := buildSkillReviewPrompt("client:main", generation.SessionContext{AllText: "user: 테스트"}, "(none)")
+	prompt := buildSkillReviewPrompt("client:main", leafbind.SessionContext{AllText: "user: 테스트"}, "(none)")
 	if !strings.Contains(prompt, "skills action=list") {
 		t.Error("prompt missing skills-index guidance")
 	}

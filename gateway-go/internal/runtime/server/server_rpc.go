@@ -31,8 +31,8 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/gateway"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
 )
 
 func (s *Server) registerBuiltinMethods() {
@@ -73,7 +73,7 @@ func (s *Server) registerBuiltinMethods() {
 				}
 			}
 			if s.modelRegistry != nil {
-				return s.modelRegistry.FullModelID(modelrole.RoleMain)
+				return s.modelRegistry.FullModelID(aibind.RoleMain)
 			}
 			return ""
 		},

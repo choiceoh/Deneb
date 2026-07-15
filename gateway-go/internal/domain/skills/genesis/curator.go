@@ -36,9 +36,9 @@ const (
 // Compile-time interface compliance.
 var _ autonomous.PeriodicTask = (*SkillCuratorTask)(nil)
 
-// SkillCuratorConfig controls the Hermes-style lifecycle window for generated
+// skillCuratorConfig controls the Hermes-style lifecycle window for generated
 // skills. The curator only manages skills explicitly marked as agent-created.
-type SkillCuratorConfig struct {
+type skillCuratorConfig struct {
 	IntervalHours    int `json:"intervalHours"`
 	MinIdleHours     int `json:"minIdleHours"`
 	StaleAfterDays   int `json:"staleAfterDays"`
@@ -92,8 +92,8 @@ type skillCuratorSummary struct {
 
 // defaultSkillCuratorConfig returns the production defaults copied from the
 // proven Hermes pattern: weekly review, stale after 30 days, archived after 90.
-func defaultSkillCuratorConfig() SkillCuratorConfig {
-	return SkillCuratorConfig{
+func defaultSkillCuratorConfig() skillCuratorConfig {
+	return skillCuratorConfig{
 		IntervalHours:          defaultSkillCuratorIntervalHours,
 		MinIdleHours:           defaultSkillCuratorMinIdleHours,
 		StaleAfterDays:         defaultSkillCuratorStaleDays,
@@ -105,7 +105,7 @@ func defaultSkillCuratorConfig() SkillCuratorConfig {
 }
 
 // SkillCuratorConfigFromEnv returns curator config with explicit env overrides.
-func SkillCuratorConfigFromEnv() SkillCuratorConfig {
+func SkillCuratorConfigFromEnv() skillCuratorConfig {
 	cfg := defaultSkillCuratorConfig()
 	cfg.IntervalHours = envInt("DENEB_SKILL_CURATOR_INTERVAL_HOURS", cfg.IntervalHours)
 	cfg.MinIdleHours = envInt("DENEB_SKILL_CURATOR_MIN_IDLE_HOURS", cfg.MinIdleHours)
@@ -142,7 +142,7 @@ func envBool(name string, fallback bool) bool {
 	}
 }
 
-func (cfg SkillCuratorConfig) withDefaults() SkillCuratorConfig {
+func (cfg skillCuratorConfig) withDefaults() skillCuratorConfig {
 	def := defaultSkillCuratorConfig()
 	if cfg.IntervalHours <= 0 {
 		cfg.IntervalHours = def.IntervalHours
@@ -273,7 +273,7 @@ func (t *Tracker) SkillCuratorReport(skillName string) ([]SkillCuratorRecord, er
 
 // applySkillCuratorTransitions updates active/stale/archive state for managed
 // skills. It never deletes skill files and never touches user-authored skills.
-func (t *Tracker) applySkillCuratorTransitions(now time.Time, cfg SkillCuratorConfig) (skillCuratorSummary, error) {
+func (t *Tracker) applySkillCuratorTransitions(now time.Time, cfg skillCuratorConfig) (skillCuratorSummary, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
@@ -582,7 +582,7 @@ func curatorStateRank(state string) int {
 type SkillCuratorTask struct {
 	Tracker *Tracker
 	Logger  *slog.Logger
-	Config  SkillCuratorConfig
+	Config  skillCuratorConfig
 }
 
 // Name returns the component's stable scheduler name.

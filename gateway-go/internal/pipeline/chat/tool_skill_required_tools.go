@@ -82,12 +82,12 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 	return "\n\n" + toolport.FormatSkillActivationNotice(names)
 }
 
-// NewSkillsReadToolsActivator returns the per-tool post-processor for the
+// newSkillsReadToolsActivator returns the per-tool post-processor for the
 // `skills` tool. When an action=read returned a cataloged SKILL.md body, it
 // activates the skill's required deferred tools. Consult recording stays in
 // the tool itself (tools/skill_manage.go); this only adds the tool half of
 // the bundle.
-func NewSkillsReadToolsActivator(registry *ToolRegistry) PostProcessor {
+func newSkillsReadToolsActivator(registry *ToolRegistry) postProcessor {
 	return func(ctx context.Context, _, output string) string {
 		resolved := cachedResolvedSkills()
 		name := skillNameFromSkillsReadOutput(output, resolved)

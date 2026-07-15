@@ -26,7 +26,7 @@ func requiredToolsCatalog() []skills.PromptSkill {
 
 // TestActivateSkillRequiredToolsStartsDeferredTool: a consult activates the skill's deferred
 // requires_tools — eager and unknown names are skipped, the notice names
-// exactly what was activated, and the DeferredActivation tracker receives it.
+// exactly what was activated, and the deferredActivation tracker receives it.
 func TestActivateSkillRequiredToolsStartsDeferredTool(t *testing.T) {
 	registry := requiredToolsRegistry()
 	da := toolport.NewDeferredActivation()
@@ -52,7 +52,7 @@ func TestActivateSkillRequiredToolsReturnsEmptyForNoOpPaths(t *testing.T) {
 	catalog := requiredToolsCatalog()
 
 	if got := activateSkillRequiredTools(context.Background(), registry, "graph-analysis", catalog); got != "" {
-		t.Fatalf("nil DeferredActivation must no-op, got %q", got)
+		t.Fatalf("nil deferredActivation must no-op, got %q", got)
 	}
 
 	da := toolport.NewDeferredActivation()
@@ -122,7 +122,7 @@ func TestSkillNameFromSkillsReadOutput(t *testing.T) {
 // passes non-consult outputs through unchanged (global snapshot is empty
 // under test; the matching itself is covered above).
 func TestSkillsReadToolsActivator_passthrough(t *testing.T) {
-	pp := NewSkillsReadToolsActivator(requiredToolsRegistry())
+	pp := newSkillsReadToolsActivator(requiredToolsRegistry())
 	in := "---\nname: graph-analysis\n---\nbody"
 	if out := pp(context.Background(), "skills", in); out != in {
 		t.Fatalf("output must pass through unchanged, got %q", out)

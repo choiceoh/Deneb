@@ -10,7 +10,7 @@
 // Threat model (single operator): the operator is trusted; the attacker plants
 // instructions in content the agent ingests — a fetched web page, an email body,
 // a shared screenshot's OCR, a recalled note. The gate is opt-in per run
-// (RunParams.GateUntrustedTools, set only by the native transports) and never
+// (runParams.GateUntrustedTools, set only by the native transports) and never
 // mutates the transcript or system prompt, so it is prompt-cache neutral.
 package chat
 
@@ -137,7 +137,7 @@ func isIrreversibleTool(name string, _ []byte) bool {
 // seed the taint and the gate registers AFTER any goal-loop guard — the
 // compositor composes before-tool-call gates first-block-wins in registration
 // order, so no hand-rolled chaining is needed here.
-func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prepResult, deps runDeps, logger *slog.Logger) {
+func wireUntrustedToolGate(hc *agent.HookCompositor, params runParams, prep prepResult, deps runDeps, logger *slog.Logger) {
 	if !params.GateUntrustedTools {
 		return
 	}

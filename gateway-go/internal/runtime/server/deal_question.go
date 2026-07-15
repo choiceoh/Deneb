@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 )
 
 // deal_question.go — the "질문 카드" loop. When mail analysis files a NEW deal it
@@ -44,20 +44,20 @@ var deptOptions = []struct{ code, label string }{
 
 // appendDealQuestionCard posts a "which team owns this new deal?" question to the
 // work feed. Best-effort: a feed failure must never break mail analysis.
-func (s *Server) appendDealQuestionCard(deal *mailanalysis.DealInfo, dealPagePath string) {
+func (s *Server) appendDealQuestionCard(deal *platbind.DealInfo, dealPagePath string) {
 	nf := s.nativeWorkFeedStore()
 	if nf == nil || deal == nil {
 		return
 	}
-	actions := make([]workfeed.Action, 0, len(deptOptions))
+	actions := make([]domainbind.Action, 0, len(deptOptions))
 	for _, o := range deptOptions {
-		actions = append(actions, workfeed.Action{
+		actions = append(actions, domainbind.Action{
 			ID:    dealQuestionActionPrefix + o.code,
-			Kind:  workfeed.ActionAck, // ack-kind settles + removes the card when tapped
+			Kind:  domainbind.ActionAck, // ack-kind settles + removes the card when tapped
 			Label: o.label,
 		})
 	}
-	if _, err := nf.Append(workfeed.Item{
+	if _, err := nf.Append(domainbind.Item{
 		Source:   dealQuestionSource,
 		Title:    "새 거래: " + strings.TrimSpace(deal.Counterparty),
 		Summary:  "어느 팀이 담당할까요?",
@@ -72,7 +72,7 @@ func (s *Server) appendDealQuestionCard(deal *mailanalysis.DealInfo, dealPagePat
 	}
 }
 
-func dealQuestionBody(deal *mailanalysis.DealInfo) string {
+func dealQuestionBody(deal *platbind.DealInfo) string {
 	var b strings.Builder
 	b.WriteString("새 거래처에서 문서가 왔는데, 어느 팀이 담당할지 몰라 정하지 못했어요.\n\n")
 	if d := strings.TrimSpace(deal.DocType); d != "" {
@@ -93,7 +93,7 @@ func dealQuestionBody(deal *mailanalysis.DealInfo) string {
 // handler calls it after a deal_question card's "dept:*" answer settles.
 // Best-effort — a write failure is logged, not surfaced (the card is already
 // settled by then).
-func (s *Server) recordDealQuestionAnswer(item workfeed.Item, actionID string) {
+func (s *Server) recordDealQuestionAnswer(item domainbind.Item, actionID string) {
 	if s.wikiStore == nil {
 		return
 	}

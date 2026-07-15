@@ -2,7 +2,7 @@
 //
 // Children spawned via sessions_spawn normally outlive individual parent turns
 // (that is the async design: the parent goes idle, the child finishes later and
-// the SubagentNotifier delivers the result). But two parent transitions mean the
+// the subagentNotifier delivers the result). But two parent transitions mean the
 // children's work is unwanted:
 //
 //   - parent KILLED: the user explicitly aborted the parent's work
@@ -22,11 +22,11 @@ import (
 )
 
 // subagentParentTerminatedReason marks children killed by the cascade so the
-// SubagentNotifier can tell bookkeeping kills apart from real results.
+// subagentNotifier can tell bookkeeping kills apart from real results.
 const subagentParentTerminatedReason = "parent session terminated"
 
-// SubagentCleanupDeps holds the dependencies for the cascade cleanup listener.
-type SubagentCleanupDeps struct {
+// subagentCleanupDeps holds the dependencies for the cascade cleanup listener.
+type subagentCleanupDeps struct {
 	Logger   *slog.Logger
 	Sessions func() *session.Manager
 	// InterruptRun cancels all in-flight runs for a session key (context cancel
@@ -34,9 +34,9 @@ type SubagentCleanupDeps struct {
 	InterruptRun func(sessionKey string)
 }
 
-// StartSubagentCleanup subscribes the cascade listener to the session event bus.
+// startSubagentCleanup subscribes the cascade listener to the session event bus.
 // Returns the unsubscribe function.
-func StartSubagentCleanup(deps SubagentCleanupDeps) func() {
+func startSubagentCleanup(deps subagentCleanupDeps) func() {
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default()

@@ -2,6 +2,7 @@ package skilllifecycle
 
 import (
 	"encoding/json"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 func TestParseUsesSkillVerdict(t *testing.T) {
@@ -38,7 +38,7 @@ func TestParseUsesSkillVerdict(t *testing.T) {
 }
 
 func TestToolActivityNamesDedupesAndKeepsOrder(t *testing.T) {
-	got := toolActivityNames([]generation.ToolActivity{
+	got := toolActivityNames([]leafbind.ToolActivity{
 		{Name: "exec"}, {Name: "wiki"}, {Name: "exec"}, {Name: ""}, {Name: "mail_archive"},
 	})
 	want := []string{"exec", "wiki", "mail_archive"}
@@ -54,7 +54,7 @@ func TestToolActivityNamesDedupesAndKeepsOrder(t *testing.T) {
 
 // With no classifier wired the gate is fail-open: it never drops a case.
 func TestSessionExercisesSkillFailsOpenWithoutClassifier(t *testing.T) {
-	if !sessionExercisesSkill(slog.Default(), nil, "", "system-health-check", generation.SessionContext{Key: "s", AllText: "anything"}) {
+	if !sessionExercisesSkill(slog.Default(), nil, "", "system-health-check", leafbind.SessionContext{Key: "s", AllText: "anything"}) {
 		t.Fatal("no classifier wired must fail open (record the case)")
 	}
 }
@@ -71,10 +71,10 @@ func relevanceStubClient(t *testing.T, verdict string) *llm.Client {
 }
 
 func TestSessionExercisesSkillSkipsOffTopicKeepsOnTopic(t *testing.T) {
-	sctx := generation.SessionContext{
+	sctx := leafbind.SessionContext{
 		Key:            "client:main",
 		AllText:        "user asked about 당진 솔라빌리지 EPC 계약금액 and mail history",
-		ToolActivities: []generation.ToolActivity{{Name: "mail_archive"}, {Name: "wiki"}},
+		ToolActivities: []leafbind.ToolActivity{{Name: "mail_archive"}, {Name: "wiki"}},
 	}
 
 	// Classifier says the session did NOT exercise the skill → gate skips it.

@@ -1,16 +1,15 @@
 package chat
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"log/slog"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/pkg/llmerr"
@@ -48,7 +47,7 @@ type streamEventSinks struct {
 // direct callbacks for streaming HTTP clients.
 func executeAgentRunWithDelta(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	sinks streamEventSinks,
 	logger *slog.Logger,
@@ -119,7 +118,7 @@ func executeAgentRunWithDelta(
 // ReasonUnknown because llmerr.Classify intentionally does not match bare
 // digits inside a message.
 func classifyLLMError(err error) llmerr.Classified {
-	return chatportwire.Classify(err)
+	return leafbind.ChatportClassify(err)
 }
 
 // isContextOverflow reports whether an error indicates a context window
@@ -279,7 +278,7 @@ func formatToolActivitySummary(activities []agent.ToolActivity) string {
 
 // toPromptToolDefs converts chat.ToolDef slice to the minimal prompt.ToolDef
 // slice needed for system prompt assembly. Deferred tools are excluded — they
-// are listed separately via DeferredSummaries in SystemPromptParams.
+// are listed separately via deferredSummaries in SystemPromptParams.
 func toPromptToolDefs(defs []ToolDef) []prompt.ToolDef {
 	out := make([]prompt.ToolDef, 0, len(defs))
 	for _, d := range defs {

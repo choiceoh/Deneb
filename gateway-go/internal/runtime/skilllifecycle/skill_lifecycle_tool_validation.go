@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattools "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/lifecycletool"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -318,7 +318,7 @@ func skillReplayToolCallsFromRequest(calls []chattools.SkillReplayToolCallReques
 	return out
 }
 
-func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx generation.SessionContext) genesis.SkillValidationCaseRecord {
+func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx leafbind.SessionContext) genesis.SkillValidationCaseRecord {
 	replay := genesis.SkillReplayCaseRecord{
 		Input:                 textutil.FirstNonBlank(req.Replay.Input, skillReplayInputFromTranscript(sctx.AllText)),
 		Context:               append([]string(nil), req.Replay.Context...),
@@ -371,11 +371,11 @@ func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSe
 
 // BuildValidationCaseFromSession derives a held-out replay record from a real
 // session trace.
-func BuildValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx generation.SessionContext) genesis.SkillValidationCaseRecord {
+func BuildValidationCaseFromSession(req chattools.SkillValidationCaseFromSessionRequest, sctx leafbind.SessionContext) genesis.SkillValidationCaseRecord {
 	return buildSkillValidationCaseFromSession(req, sctx)
 }
 
-func skillReplayToolCallsFromActivities(activities []generation.ToolActivity) ([]genesis.SkillReplayToolCallRecord, []genesis.SkillReplayToolCallRecord) {
+func skillReplayToolCallsFromActivities(activities []leafbind.ToolActivity) ([]genesis.SkillReplayToolCallRecord, []genesis.SkillReplayToolCallRecord) {
 	const maxExtractedReplayToolCalls = 12
 	expected := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
 	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))

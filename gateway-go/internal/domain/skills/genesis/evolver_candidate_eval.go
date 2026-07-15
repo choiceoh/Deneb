@@ -3,11 +3,11 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -500,11 +500,11 @@ func enrichReproductionWithBehavior(rc *SkillValidationCaseRecord, stats *UsageS
 		}
 		call := SkillReplayToolCallRecord{Name: tool, FixtureError: true}
 		if frag := strings.TrimSpace(tr.ToolInput); frag != "" {
-			call.InputIncludes = []string{genesiscommon.TruncateRunes(frag, 80)}
+			call.InputIncludes = []string{genbind.TruncateRunes(frag, 80)}
 		}
 		rc.Replay.ForbiddenToolCalls = append(rc.Replay.ForbiddenToolCalls, call)
 		if sig := strings.TrimSpace(tr.Signature); sig != "" {
-			rc.Replay.ForbiddenActions = append(rc.Replay.ForbiddenActions, genesiscommon.TruncateRunes(sig, 80))
+			rc.Replay.ForbiddenActions = append(rc.Replay.ForbiddenActions, genbind.TruncateRunes(sig, 80))
 		}
 		if rc.Replay.Input == "" {
 			rc.Replay.Input = "reproduce the failure that named tool " + tool

@@ -13,7 +13,7 @@ package genesis
 //  2. False-reject mining: score each buffered rejected candidate against the
 //     CURRENT skill body on stored validation cases — a rejected body that
 //     scores strictly better with zero flips is a suspected judge false
-//     reject, the label class organic usage almost never surfaces.
+//     reject, the label class organic usage almost never genbind.
 //
 // Everything is labeled at construction; nothing touches real-usage stats.
 // LLM executes the judge prompt only; scoring and mining are deterministic Go.
@@ -21,6 +21,7 @@ package genesis
 import (
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -28,8 +29,6 @@ import (
 	"strings"
 	"time"
 
-	common "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -296,7 +295,7 @@ func (t *Tracker) OperatorJudgeVerdictByDecisionID(decisionID string) (OperatorJ
 // makes live judge calls and writes shared genesis state).
 type JudgeAccuracyTask struct {
 	Evolver *Evolver
-	Meta    *generation.MetaArtifacts
+	Meta    *genbind.MetaArtifacts
 	Tracker *Tracker
 	Logger  *slog.Logger
 
@@ -335,10 +334,10 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		return nil // no judge model wired
 	}
 
-	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
-	judgePrompt := t.Meta.Load(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	judgeFallback := genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]
+	judgePrompt := t.Meta.Load(genbind.MetaSkillJudgeSystemPrompt, judgeFallback)
 	rec := judgeAccuracyRecord{
-		JudgeVersion: t.Meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback),
+		JudgeVersion: t.Meta.Version(genbind.MetaSkillJudgeSystemPrompt, judgeFallback),
 		ByClass:      map[string][2]int{},
 		ByCategory:   map[string][2]int{},
 	}
@@ -497,7 +496,7 @@ func (t *JudgeAccuracyTask) mineFalseRejects() []falseRejectExhibit {
 			if rjs.percent() >= cur.percent()+falseRejectMargin {
 				out = append(out, falseRejectExhibit{
 					Skill:        skill,
-					RejectReason: common.TruncateRunes(rej.Reason, 160),
+					RejectReason: genbind.TruncateRunes(rej.Reason, 160),
 					CurrentScore: cur.percent(),
 					RejectScore:  rjs.percent(),
 					RejectedAt:   rej.CreatedAt,

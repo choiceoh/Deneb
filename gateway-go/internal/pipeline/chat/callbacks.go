@@ -1,6 +1,6 @@
 // callbacks.go — Late-bind callback registry for channel integration.
 //
-// ChannelCallbacks stores all callback functions that integrate the chat
+// channelCallbacks stores all callback functions that integrate the chat
 // handler with a specific channel (e.g., the native client). Set during server
 // initialization, read during request handling. Protected by an RWMutex.
 package chat
@@ -13,17 +13,17 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 )
 
-// ChannelCallbacks holds late-bind callback functions for channel integration.
+// channelCallbacks holds late-bind callback functions for channel integration.
 // Thread-safe: all fields are protected by mu.
-type ChannelCallbacks struct {
+type channelCallbacks struct {
 	mu sync.RWMutex
 
-	replyFunc    ReplyFunc      // delivers response to originating channel
-	mediaSendFn  MediaSendFunc  // delivers files to originating channel
-	typingFn     TypingFunc     // sends typing indicator during agent run
-	reactionFn   ReactionFunc   // sets emoji reaction on triggering message
-	draftEditFn  DraftEditFunc  // sends/edits streaming draft messages
-	deleteMsgFn  MessageDeleter // deletes a channel message (cancel-time draft cleanup)
+	replyFunc    replyFunc      // delivers response to originating channel
+	mediaSendFn  mediaSendFunc  // delivers files to originating channel
+	typingFn     typingFunc     // sends typing indicator during agent run
+	reactionFn   reactionFunc   // sets emoji reaction on triggering message
+	draftEditFn  draftEditFunc  // sends/edits streaming draft messages
+	deleteMsgFn  messageDeleter // deletes a channel message (cancel-time draft cleanup)
 	broadcastRaw streaming.BroadcastRawFunc
 
 	// emitAgentFn sends agent lifecycle events to gateway event subscriptions.
@@ -41,23 +41,23 @@ type ChannelCallbacks struct {
 	defaultModel string
 
 	// statusDepsFunc returns server-level status data for /status command.
-	statusDepsFunc StatusDepsFunc
+	statusDepsFunc statusDepsFunc
 }
 
-// NewChannelCallbacks creates a ChannelCallbacks with default model.
-func NewChannelCallbacks(defaultModel string) *ChannelCallbacks {
-	return &ChannelCallbacks{
+// newChannelCallbacks creates a channelCallbacks with default model.
+func newChannelCallbacks(defaultModel string) *channelCallbacks {
+	return &channelCallbacks{
 		defaultModel: defaultModel,
 		uploadLimits: make(map[string]int64),
 	}
 }
 
-// Snapshot atomically reads all callback fields into a CallbackSnapshot.
+// Snapshot atomically reads all callback fields into a callbackSnapshot.
 // Used by buildRunDeps to capture stable references for the run goroutine.
-func (cb *ChannelCallbacks) Snapshot() CallbackSnapshot {
+func (cb *channelCallbacks) Snapshot() callbackSnapshot {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
-	return CallbackSnapshot{
+	return callbackSnapshot{
 		replyFunc:        cb.replyFunc,
 		mediaSendFn:      cb.mediaSendFn,
 		typingFn:         cb.typingFn,
@@ -72,14 +72,14 @@ func (cb *ChannelCallbacks) Snapshot() CallbackSnapshot {
 	}
 }
 
-// CallbackSnapshot is an immutable snapshot of callbacks for a single run.
-type CallbackSnapshot struct {
-	replyFunc        ReplyFunc
-	mediaSendFn      MediaSendFunc
-	typingFn         TypingFunc
-	reactionFn       ReactionFunc
-	draftEditFn      DraftEditFunc
-	deleteMsgFn      MessageDeleter
+// callbackSnapshot is an immutable snapshot of callbacks for a single run.
+type callbackSnapshot struct {
+	replyFunc        replyFunc
+	mediaSendFn      mediaSendFunc
+	typingFn         typingFunc
+	reactionFn       reactionFunc
+	draftEditFn      draftEditFunc
+	deleteMsgFn      messageDeleter
 	broadcastRaw     streaming.BroadcastRawFunc
 	emitAgentFn      func(kind, sessionKey, runID string, payload jsonObject)
 	emitTranscriptFn func(sessionKey string, message rawJSON, messageID string)
@@ -93,84 +93,84 @@ type CallbackSnapshot struct {
 // to drop silently at runtime. Optional callbacks (media, typing, reaction,
 // draft, delete, broadcast, emit*) are not checked — their absence is
 // handled at the callsite via nil guards and documented as optional.
-func (cb *ChannelCallbacks) Validate() error {
+func (cb *channelCallbacks) Validate() error {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	if cb.replyFunc == nil {
-		return fmt.Errorf("ChannelCallbacks: replyFunc is required for channel-facing handlers " +
+		return fmt.Errorf("channelCallbacks: replyFunc is required for channel-facing handlers " +
 			"(without it every agent reply would drop silently); " +
-			"call SetReplyFunc before the server starts accepting messages")
+			"call setReplyFunc before the server starts accepting messages")
 	}
 	return nil
 }
 
 // --- Setters (called during server initialization) ---
 
-// SetReplyFunc installs the channel reply delivery callback.
-func (cb *ChannelCallbacks) SetReplyFunc(fn ReplyFunc) {
+// setReplyFunc installs the channel reply delivery callback.
+func (cb *channelCallbacks) setReplyFunc(fn replyFunc) {
 	cb.mu.Lock()
 	cb.replyFunc = fn
 	cb.mu.Unlock()
 }
 
 // SetMediaSendFunc installs the channel media delivery callback.
-func (cb *ChannelCallbacks) SetMediaSendFunc(fn MediaSendFunc) {
+func (cb *channelCallbacks) SetMediaSendFunc(fn mediaSendFunc) {
 	cb.mu.Lock()
 	cb.mediaSendFn = fn
 	cb.mu.Unlock()
 }
 
 // SetTypingFunc installs the typing-indicator callback.
-func (cb *ChannelCallbacks) SetTypingFunc(fn TypingFunc) {
+func (cb *channelCallbacks) SetTypingFunc(fn typingFunc) {
 	cb.mu.Lock()
 	cb.typingFn = fn
 	cb.mu.Unlock()
 }
 
 // SetReactionFunc installs the message-reaction callback.
-func (cb *ChannelCallbacks) SetReactionFunc(fn ReactionFunc) {
+func (cb *channelCallbacks) SetReactionFunc(fn reactionFunc) {
 	cb.mu.Lock()
 	cb.reactionFn = fn
 	cb.mu.Unlock()
 }
 
 // SetDraftEditFunc installs the streaming draft editor.
-func (cb *ChannelCallbacks) SetDraftEditFunc(fn DraftEditFunc) {
+func (cb *channelCallbacks) SetDraftEditFunc(fn draftEditFunc) {
 	cb.mu.Lock()
 	cb.draftEditFn = fn
 	cb.mu.Unlock()
 }
 
 // SetMessageDeleter installs the channel message deletion callback.
-func (cb *ChannelCallbacks) SetMessageDeleter(fn MessageDeleter) {
+func (cb *channelCallbacks) SetMessageDeleter(fn messageDeleter) {
 	cb.mu.Lock()
 	cb.deleteMsgFn = fn
 	cb.mu.Unlock()
 }
 
 // SetChannelUploadLimit records the maximum media size for a channel.
-func (cb *ChannelCallbacks) SetChannelUploadLimit(channelID string, maxBytes int64) {
+func (cb *channelCallbacks) SetChannelUploadLimit(channelID string, maxBytes int64) {
 	cb.mu.Lock()
 	cb.uploadLimits[channelID] = maxBytes
 	cb.mu.Unlock()
 }
 
 // SetDefaultModel updates the model reported to newly captured runs.
-func (cb *ChannelCallbacks) SetDefaultModel(model string) {
+func (cb *channelCallbacks) SetDefaultModel(model string) {
 	cb.mu.Lock()
 	cb.defaultModel = model
 	cb.mu.Unlock()
 }
 
 // SetShutdownCtx installs the server lifecycle context.
-func (cb *ChannelCallbacks) SetShutdownCtx(ctx context.Context) {
+func (cb *channelCallbacks) SetShutdownCtx(ctx context.Context) {
 	cb.mu.Lock()
 	cb.shutdownCtx = ctx
 	cb.mu.Unlock()
 }
 
 // SetStatusDepsFunc installs the lazy status dependency provider.
-func (cb *ChannelCallbacks) SetStatusDepsFunc(fn StatusDepsFunc) {
+func (cb *channelCallbacks) SetStatusDepsFunc(fn statusDepsFunc) {
 	cb.mu.Lock()
 	cb.statusDepsFunc = fn
 	cb.mu.Unlock()
@@ -178,16 +178,16 @@ func (cb *ChannelCallbacks) SetStatusDepsFunc(fn StatusDepsFunc) {
 
 // --- Getters ---
 
-// ChannelUploadLimit returns the configured media limit for channelID.
-func (cb *ChannelCallbacks) ChannelUploadLimit(channelID string) int64 {
+// channelUploadLimit returns the configured media limit for channelID.
+func (cb *channelCallbacks) channelUploadLimit(channelID string) int64 {
 	cb.mu.RLock()
 	n := cb.uploadLimits[channelID]
 	cb.mu.RUnlock()
 	return n
 }
 
-// ReplyFn returns the current reply delivery callback.
-func (cb *ChannelCallbacks) ReplyFn() ReplyFunc {
+// replyFn returns the current reply delivery callback.
+func (cb *channelCallbacks) replyFn() replyFunc {
 	cb.mu.RLock()
 	fn := cb.replyFunc
 	cb.mu.RUnlock()
@@ -195,7 +195,7 @@ func (cb *ChannelCallbacks) ReplyFn() ReplyFunc {
 }
 
 // MediaSendFn returns the current media delivery callback.
-func (cb *ChannelCallbacks) MediaSendFn() MediaSendFunc {
+func (cb *channelCallbacks) MediaSendFn() mediaSendFunc {
 	cb.mu.RLock()
 	fn := cb.mediaSendFn
 	cb.mu.RUnlock()
@@ -203,7 +203,7 @@ func (cb *ChannelCallbacks) MediaSendFn() MediaSendFunc {
 }
 
 // TypingFn returns the current typing callback.
-func (cb *ChannelCallbacks) TypingFn() TypingFunc {
+func (cb *channelCallbacks) TypingFn() typingFunc {
 	cb.mu.RLock()
 	fn := cb.typingFn
 	cb.mu.RUnlock()
@@ -211,7 +211,7 @@ func (cb *ChannelCallbacks) TypingFn() TypingFunc {
 }
 
 // ReactionFn returns the current reaction callback.
-func (cb *ChannelCallbacks) ReactionFn() ReactionFunc {
+func (cb *channelCallbacks) ReactionFn() reactionFunc {
 	cb.mu.RLock()
 	fn := cb.reactionFn
 	cb.mu.RUnlock()
@@ -219,7 +219,7 @@ func (cb *ChannelCallbacks) ReactionFn() ReactionFunc {
 }
 
 // DefaultModel returns the model captured for new runs.
-func (cb *ChannelCallbacks) DefaultModel() string {
+func (cb *channelCallbacks) DefaultModel() string {
 	cb.mu.RLock()
 	m := cb.defaultModel
 	cb.mu.RUnlock()
@@ -227,7 +227,7 @@ func (cb *ChannelCallbacks) DefaultModel() string {
 }
 
 // StatusDeps returns the lazy status dependency provider.
-func (cb *ChannelCallbacks) StatusDeps() StatusDepsFunc {
+func (cb *channelCallbacks) StatusDeps() statusDepsFunc {
 	cb.mu.RLock()
 	fn := cb.statusDepsFunc
 	cb.mu.RUnlock()

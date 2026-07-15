@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle/leafbind"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -32,7 +32,7 @@ const (
 // returns true (record the case, the prior behavior), so a down classifier can
 // never silently starve the already-sparse corpus. It only skips on an explicit,
 // parsed "does not use the skill" verdict.
-func sessionExercisesSkill(logger *slog.Logger, client *llm.Client, model, skillName string, sctx generation.SessionContext) bool {
+func sessionExercisesSkill(logger *slog.Logger, client *llm.Client, model, skillName string, sctx leafbind.SessionContext) bool {
 	if client == nil || strings.TrimSpace(model) == "" {
 		return true // gate disabled — preserve record-everything behavior
 	}
@@ -108,7 +108,7 @@ func parseUsesSkillVerdict(raw string) (uses bool, parsed bool) {
 }
 
 // toolActivityNames lists the distinct tool names used in a session, order-stable.
-func toolActivityNames(activities []generation.ToolActivity) []string {
+func toolActivityNames(activities []leafbind.ToolActivity) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	for _, t := range activities {

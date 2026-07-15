@@ -32,7 +32,7 @@ func TestMaybeRecordRunDiaryWritesDiaryAndFiresDreamTrigger(t *testing.T) {
 		Text:       "[thinking]\n내부 추론 노출\n[/thinking]\n계약 협상 단계입니다. 다음 주 공정표 제출 예정.",
 		StopReason: "end_turn", Turns: 1,
 	}
-	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "당진 계약 진행상황 정리해줘"}, result, nil)
+	maybeRecordRunDiary(deps, runParams{SessionKey: "client:main", Message: "당진 계약 진행상황 정리해줘"}, result, nil)
 
 	select {
 	case <-dreamFired:
@@ -48,7 +48,7 @@ func TestMaybeRecordRunDiaryWritesDiaryAndFiresDreamTrigger(t *testing.T) {
 	}
 
 	// Excluded prefix: nothing recorded, no dream trigger.
-	maybeRecordRunDiary(deps, RunParams{SessionKey: "system:heartbeat", Message: "내부 하트비트 점검 메시지"}, result, nil)
+	maybeRecordRunDiary(deps, runParams{SessionKey: "system:heartbeat", Message: "내부 하트비트 점검 메시지"}, result, nil)
 	select {
 	case <-dreamFired:
 		t.Fatal("excluded session must not fire the dream trigger")
@@ -74,7 +74,7 @@ func TestMaybeRecordRunDiaryEmitsPreferenceSignalBeforeDreamTrigger(t *testing.T
 	}
 	result := &agent.AgentResult{Text: "알겠습니다. 그 방식으로 정리하겠습니다.", StopReason: "end_turn", Turns: 1}
 
-	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "앞으로 보고는 산문으로 정리해줘"}, result, nil)
+	maybeRecordRunDiary(deps, runParams{SessionKey: "client:main", Message: "앞으로 보고는 산문으로 정리해줘"}, result, nil)
 	if got := waitDiaryEvent(t, events); got != "pref" {
 		t.Fatalf("first event = %q, want pref (must precede the dream-turn increment)", got)
 	}
@@ -82,7 +82,7 @@ func TestMaybeRecordRunDiaryEmitsPreferenceSignalBeforeDreamTrigger(t *testing.T
 		t.Fatalf("second event = %q, want dream", got)
 	}
 
-	maybeRecordRunDiary(deps, RunParams{SessionKey: "client:main", Message: "당진 프로젝트 진행상황 알려줘"}, result, nil)
+	maybeRecordRunDiary(deps, runParams{SessionKey: "client:main", Message: "당진 프로젝트 진행상황 알려줘"}, result, nil)
 	if got := waitDiaryEvent(t, events); got != "dream" {
 		t.Fatalf("non-preference turn: event = %q, want dream only", got)
 	}
@@ -178,26 +178,26 @@ func TestRecordDiaryIgnoresTrivialAcknowledgement(t *testing.T) {
 }
 
 func TestShouldRecordRunDiaryIgnoresHeartbeatAndSystemSessions(t *testing.T) {
-	if shouldRecordRunDiary(RunParams{SessionKey: "telegram:1", Message: "[시스템 하트비트] check", EphemeralUser: true}) {
+	if shouldRecordRunDiary(runParams{SessionKey: "telegram:1", Message: "[시스템 하트비트] check", EphemeralUser: true}) {
 		t.Fatal("heartbeat trigger should not be recorded to diary")
 	}
-	if shouldRecordRunDiary(RunParams{SessionKey: "system:diary-heartbeat", Message: "internal"}) {
+	if shouldRecordRunDiary(runParams{SessionKey: "system:diary-heartbeat", Message: "internal"}) {
 		t.Fatal("system session should not be recorded to diary")
 	}
 	// Sync-only surface excluded by design: cron payload prompts (their "user"
 	// message is a payload, not the user speaking).
-	if shouldRecordRunDiary(RunParams{SessionKey: "cron:morning-letter", Message: "실질적인 내용이 있는 메시지"}) {
+	if shouldRecordRunDiary(runParams{SessionKey: "cron:morning-letter", Message: "실질적인 내용이 있는 메시지"}) {
 		t.Error("cron:morning-letter: should NOT record diary")
 	}
-	if !shouldRecordRunDiary(RunParams{SessionKey: "client:main:task:123", Message: "서브 대화도 일지에 남는다"}) {
+	if !shouldRecordRunDiary(runParams{SessionKey: "client:main:task:123", Message: "서브 대화도 일지에 남는다"}) {
 		t.Error("client sub-conversation should record diary")
 	}
 	// Legacy chat: keys (retired 챗봇 workspace) are absorbed into 업무: a
 	// continued old conversation records to the diary like any work session.
-	if !shouldRecordRunDiary(RunParams{SessionKey: "chat:legacy-1", Message: "이어서 대화"}) {
+	if !shouldRecordRunDiary(runParams{SessionKey: "chat:legacy-1", Message: "이어서 대화"}) {
 		t.Error("legacy chat: session should record diary after the mode's removal")
 	}
-	if !shouldRecordRunDiary(RunParams{SessionKey: "telegram:1", Message: "기억 체계 개선 계속"}) {
+	if !shouldRecordRunDiary(runParams{SessionKey: "telegram:1", Message: "기억 체계 개선 계속"}) {
 		t.Fatal("normal user turn should be recorded")
 	}
 }

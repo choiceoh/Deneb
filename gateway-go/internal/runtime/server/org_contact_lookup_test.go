@@ -1,7 +1,7 @@
 package server
 
 // Tests for orgContactLookup — the miniapp.org.get member enrichment wiring that
-// matches org-chart member names to the contacts store via contacts.NormalizePersonName.
+// matches org-chart member names to the contacts store via domainbind.NormalizePersonName.
 //
 // FAKE names/numbers only — never real contacts.
 
@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
 // newContactStore returns a temp-backed contacts store seeded with the given
 // entries (fully replacing the snapshot, as a native sync would).
-func newContactStore(t *testing.T, entries ...contacts.Contact) *contacts.Store {
+func newContactStore(t *testing.T, entries ...domainbind.Contact) *domainbind.ContactsStore {
 	t.Helper()
-	s, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	s, err := domainbind.NewContactsStore(filepath.Join(t.TempDir(), "contacts.json"))
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestOrgContactLookup_NilStoreReturnsNilFunc(t *testing.T) {
 }
 
 func TestOrgContactLookupReturnsPhonesAndEmailsForExactName(t *testing.T) {
-	store := newContactStore(t, contacts.Contact{
+	store := newContactStore(t, domainbind.Contact{
 		Name:   "김철수",
 		Phones: []string{"010-1111-2222"},
 		Emails: []string{"chulsoo@example.test"},
@@ -49,7 +49,7 @@ func TestOrgContactLookupReturnsPhonesAndEmailsForExactName(t *testing.T) {
 }
 
 func TestOrgContactLookup_NormalizesTitleAndAffiliation(t *testing.T) {
-	store := newContactStore(t, contacts.Contact{
+	store := newContactStore(t, domainbind.Contact{
 		Name:   "김철수",
 		Phones: []string{"010-3333-4444"},
 	})
@@ -67,7 +67,7 @@ func TestOrgContactLookup_NormalizesTitleAndAffiliation(t *testing.T) {
 func TestOrgContactLookupReturnsEmptyForSubstringMismatch(t *testing.T) {
 	// "이수" must NOT match the contact "이수민" — matching is exact on the
 	// normalized key, not a substring.
-	store := newContactStore(t, contacts.Contact{
+	store := newContactStore(t, domainbind.Contact{
 		Name:   "이수민",
 		Phones: []string{"010-5555-6666"},
 	})
@@ -78,7 +78,7 @@ func TestOrgContactLookupReturnsEmptyForSubstringMismatch(t *testing.T) {
 }
 
 func TestOrgContactLookup_NoMatchEmpty(t *testing.T) {
-	store := newContactStore(t, contacts.Contact{Name: "이영희", Phones: []string{"010-0000-0000"}})
+	store := newContactStore(t, domainbind.Contact{Name: "이영희", Phones: []string{"010-0000-0000"}})
 	lookup := orgContactLookup(store)
 	if phones, emails := lookup("박지성"); len(phones) != 0 || len(emails) != 0 {
 		t.Fatalf("unmatched lookup = %v / %v, want empty", phones, emails)
@@ -86,7 +86,7 @@ func TestOrgContactLookup_NoMatchEmpty(t *testing.T) {
 }
 
 func TestOrgContactLookup_BlankNameEmpty(t *testing.T) {
-	store := newContactStore(t, contacts.Contact{Name: "김철수", Phones: []string{"010-1111-2222"}})
+	store := newContactStore(t, domainbind.Contact{Name: "김철수", Phones: []string{"010-1111-2222"}})
 	lookup := orgContactLookup(store)
 	if phones, emails := lookup("   "); len(phones) != 0 || len(emails) != 0 {
 		t.Fatalf("blank-name lookup = %v / %v, want empty", phones, emails)
@@ -98,8 +98,8 @@ func TestOrgContactLookupDeduplicatesUnionedHomonymResults(t *testing.T) {
 	// phones/emails are unioned, and a value shared across both appears once.
 	store := newContactStore(
 		t,
-		contacts.Contact{Name: "김철수", Phones: []string{"010-1111-2222"}, Emails: []string{"shared@example.test"}},
-		contacts.Contact{Name: "김철수 부장", Phones: []string{"010-1111-2222", "010-7777-8888"}, Emails: []string{"shared@example.test"}},
+		domainbind.Contact{Name: "김철수", Phones: []string{"010-1111-2222"}, Emails: []string{"shared@example.test"}},
+		domainbind.Contact{Name: "김철수 부장", Phones: []string{"010-1111-2222", "010-7777-8888"}, Emails: []string{"shared@example.test"}},
 	)
 	lookup := orgContactLookup(store)
 	phones, emails := lookup("김철수")

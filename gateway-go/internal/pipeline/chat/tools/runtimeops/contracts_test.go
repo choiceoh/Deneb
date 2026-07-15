@@ -290,11 +290,11 @@ func TestGatewayDepsReturnsOverridesOrDefaults(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	runner := &fakeRunner{}
 	signaller := &fakeSignaller{}
-	deps := GatewayDeps{Runner: runner, Signaller: signaller, ConfigPath: "/custom/config", Now: func() time.Time { return now }}
+	deps := gatewayDeps{Runner: runner, Signaller: signaller, ConfigPath: "/custom/config", Now: func() time.Time { return now }}
 	if deps.runner() != runner || deps.signaller() != signaller || deps.configPath() != "/custom/config" || !deps.now().Equal(now) {
 		t.Fatal("overrides not returned")
 	}
-	defaults := GatewayDeps{}
+	defaults := gatewayDeps{}
 	if defaults.runner() == nil || defaults.signaller() == nil || defaults.configPath() == "" || defaults.now().IsZero() {
 		t.Fatal("defaults missing")
 	}
@@ -302,7 +302,7 @@ func TestGatewayDepsReturnsOverridesOrDefaults(t *testing.T) {
 
 func TestGatewayStatusUnreadableConfigStillReportsHealth(t *testing.T) {
 	dir := t.TempDir()
-	out, err := gatewayStatus(GatewayDeps{ConfigPath: dir, Signaller: &fakeSignaller{}, Now: func() time.Time { return gatewayStartTime.Add(time.Minute) }})
+	out, err := gatewayStatus(gatewayDeps{ConfigPath: dir, Signaller: &fakeSignaller{}, Now: func() time.Time { return gatewayStartTime.Add(time.Minute) }})
 	if err != nil {
 		t.Fatal(err)
 	}

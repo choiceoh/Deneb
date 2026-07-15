@@ -9,11 +9,11 @@ import (
 )
 
 func TestIssueStringContract(t *testing.T) {
-	if got := (Issue{Path: "$.children[1]", Msg: "missing type"}).String(); got != "$.children[1]: missing type" {
-		t.Fatalf("Issue.String() = %q", got)
+	if got := (issue{Path: "$.children[1]", Msg: "missing type"}).String(); got != "$.children[1]: missing type" {
+		t.Fatalf("issue.String() = %q", got)
 	}
-	if got := (Issue{}).String(); got != ": " {
-		t.Fatalf("zero Issue.String() = %q", got)
+	if got := (issue{}).String(); got != ": " {
+		t.Fatalf("zero issue.String() = %q", got)
 	}
 }
 

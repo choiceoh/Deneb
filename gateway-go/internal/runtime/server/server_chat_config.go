@@ -2,25 +2,22 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/lmtpd"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
-// noopGmailNotifier is a mailanalysis.Notifier that drops messages. Used in
+// noopGmailNotifier is a platbind.Notifier that drops messages. Used in
 // silent mode so the poller fills the Mini App cache + wiki (via OnAnalyzed)
 // without delivering a duplicate proactive chat message. A real no-op (rather
 // than a nil notifier) keeps sendNotification from logging a per-cycle warn.
@@ -49,7 +46,7 @@ const (
 	lmtpAnalysisItemTimeout = 5 * time.Minute
 )
 
-func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
+func (s *Server) initGmailPoll(snap *infrabind.ConfigSnapshot) {
 	if snap == nil {
 		return
 	}
@@ -58,10 +55,10 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		return
 	}
 
-	stateDir := config.ResolveStateDir()
+	stateDir := infrabind.ResolveStateDir()
 
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
-	cfg := mailanalysis.Config{
+	cfg := platbind.MailAnalysisConfig{
 		StateDir:      stateDir,
 		LLMClient:     stage2,
 		Model:         stage2Model,
@@ -117,7 +114,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		cfg.OnDelivered = s.makeMailFeedDeliverySink()
 	}
 
-	s.gmailPollSvc = mailanalysis.NewService(cfg, s.logger)
+	s.gmailPollSvc = platbind.NewMailAnalysisService(cfg, s.logger)
 
 	// Wire proactive relay as the gmail-poll notifier so email summaries
 	// are delivered verbatim AND mirrored into the main session
@@ -136,7 +133,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 		s.gmailPollSvc.SetNotifier(noopGmailNotifier{})
 		s.logger.Info("gmailpoll: silent mode — cache/wiki pre-warm only, chat delivery suppressed")
 	} else {
-		s.gmailPollSvc.SetNotifier(s.proactiveRelay.MailNotifierForSession(proactive.NativeWorkSessionKey))
+		s.gmailPollSvc.SetNotifier(s.proactiveRelay.MailNotifierForSession(svcbind.NativeWorkSessionKey))
 	}
 
 	// Register as a periodic task within the autonomous service.
@@ -158,7 +155,7 @@ func (s *Server) initGmailPoll(snap *config.ConfigSnapshot) {
 //	DENEB_ARCHIVE_IMAP_ADDR  (default 127.0.0.1:1143)
 //	DENEB_ARCHIVE_IMAP_USER  / DENEB_ARCHIVE_IMAP_PASS  (required to enable)
 //	DENEB_ARCHIVE_IMAP_MAILBOXES (optional, e.g. INBOX,Archive)
-func (s *Server) archiveThreadSource() mailanalysis.ThreadSource {
+func (s *Server) archiveThreadSource() platbind.ThreadSource {
 	addr := archiveIMAPAddr()
 	user := strings.TrimSpace(os.Getenv("DENEB_ARCHIVE_IMAP_USER"))
 	pass := os.Getenv("DENEB_ARCHIVE_IMAP_PASS")
@@ -166,7 +163,7 @@ func (s *Server) archiveThreadSource() mailanalysis.ThreadSource {
 		s.logger.Warn("LMTP 분석: 아카이브 스레드 컨텍스트 비활성화 (DENEB_ARCHIVE_IMAP_USER/PASS 미설정)", "addr", addr)
 		return nil // stays off until creds are set (graceful: analysis runs without it)
 	}
-	src := mailarchive.New(mailarchive.Config{Addr: addr, User: user, Pass: pass, Mailboxes: archiveIMAPMailboxes()})
+	src := platbind.NewMailArchive(platbind.MailArchiveConfig{Addr: addr, User: user, Pass: pass, Mailboxes: archiveIMAPMailboxes()})
 	if src == nil {
 		return nil
 	}
@@ -186,7 +183,7 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 	if s.chatHandler == nil {
 		return "", fmt.Errorf("chat handler unavailable")
 	}
-	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, "", &chat.SyncOptions{
+	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, "", &pipebind.SyncOptions{
 		AutoDeliveredOutput: true,
 		EphemeralUser:       true,
 		EphemeralAssistant:  true,
@@ -201,10 +198,10 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 // on-box mail server (e.g. Maddy in Docker) PUSHES new mail over LMTP, which
 // replaces IMAP polling for that source: each message is parsed and analyzed
 // through the same pipeline as a polled one (Mini App cache + per-message wiki +
-// proactive 업무 chat). A dedicated mailanalysis.Service — built with the same analysis
+// proactive 업무 chat). A dedicated platbind.MailAnalysisService — built with the same analysis
 // deps but NOT registered as a periodic task and given a real chat notifier —
 // carries the analysis + delivery wiring; the LMTP server just feeds it messages.
-func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
+func (s *Server) initLMTPServer(snap *infrabind.ConfigSnapshot) {
 	if snap == nil {
 		return
 	}
@@ -217,10 +214,10 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		addr = "127.0.0.1:10024"
 	}
 
-	stateDir := config.ResolveStateDir()
+	stateDir := infrabind.ResolveStateDir()
 	stage2, stage2Model, stage1, stage1Model := s.mailAnalysisModels()
 	threadSource := s.archiveThreadSource()
-	cfg := mailanalysis.Config{
+	cfg := platbind.MailAnalysisConfig{
 		StateDir:      stateDir,
 		LLMClient:     stage2,
 		Model:         stage2Model,
@@ -245,10 +242,10 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	// Run the synthesis as a chat agent turn so the analysis prompt's tools
 	// (wiki, mail_archive) execute instead of leaking as <tool_call> text.
 	cfg.AgentSynthesisFn = s.mailAnalysisAgentSynthesis
-	svc := mailanalysis.NewService(cfg, s.logger)
-	svc.SetNotifier(s.proactiveRelay.MailNotifierForSession(proactive.NativeWorkSessionKey))
+	svc := platbind.NewMailAnalysisService(cfg, s.logger)
+	svc.SetNotifier(s.proactiveRelay.MailNotifierForSession(svcbind.NativeWorkSessionKey))
 
-	queue, err := lmtpd.NewQueue(filepath.Join(stateDir, "lmtp-queue"))
+	queue, err := platbind.NewQueue(filepath.Join(stateDir, "lmtp-queue"))
 	if err != nil {
 		s.mailIngestHealth.Store(mailIngestHealth{
 			Status:        "queue_error",
@@ -281,14 +278,14 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	// Dedup by Message-ID across restarts so an MTA re-delivery isn't analyzed
 	// (or wiki-paged / chat-reported) twice. Marked only after queued analysis
 	// succeeds; queued/processing duplicates are suppressed by the durable queue.
-	seen := lmtpd.NewSeenStore(filepath.Join(stateDir, "lmtp-seen.json"), 2000)
+	seen := platbind.NewSeenStore(filepath.Join(stateDir, "lmtp-seen.json"), 2000)
 
 	s.startLMTPAnalysisWorkers(queue, seen, svc)
 
 	// ACK delivery only after the parsed message is durably queued. Analysis is an
 	// LLM call, too slow for the LMTP transaction; the queue gives us post-ACK retry
 	// semantics without holding decoded attachment bytes in unbounded goroutines.
-	handler := func(_ context.Context, m *lmtpd.Message) error {
+	handler := func(_ context.Context, m *platbind.Message) error {
 		if seen.Seen(m.DedupKey) {
 			s.logger.Info("LMTP 중복 메일 건너뜀 (분석 완료)", "key", m.DedupKey, "subject", m.Detail.Subject)
 			return nil // ACK — already analyzed on an earlier delivery
@@ -302,7 +299,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		// not fail delivery (the durable queue + IMAP archive stay the records of
 		// record). Idempotent by Message-ID, so a re-delivery re-Puts harmlessly.
 		if s.mailStore != nil && m.Detail != nil {
-			cm := mailarchive.ContextMessageFromDetail("INBOX", "", m.Detail, 0)
+			cm := platbind.ContextMessageFromDetail("INBOX", "", m.Detail, 0)
 			if _, perr := s.mailStore.Put(cm); perr != nil {
 				s.logger.Warn("mailstore put 실패(분석은 계속)", "key", m.DedupKey, "error", perr)
 			}
@@ -313,7 +310,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 		return nil
 	}
 
-	srv := lmtpd.New(addr, handler, s.logger)
+	srv := platbind.NewLmtpd(addr, handler, s.logger)
 	s.safeGo("lmtp-server", func() {
 		if err := srv.Serve(s.ShutdownCtx()); err != nil {
 			s.logger.Error("LMTP 서버 종료(오류)", "error", err)
@@ -322,7 +319,7 @@ func (s *Server) initLMTPServer(snap *config.ConfigSnapshot) {
 	s.logger.Info("LMTP mail ingest 활성화 (IMAP 폴링 대체)", "addr", addr)
 }
 
-func (s *Server) startLMTPAnalysisWorkers(queue *lmtpd.Queue, seen *lmtpd.SeenStore, svc *mailanalysis.Service) {
+func (s *Server) startLMTPAnalysisWorkers(queue *platbind.Queue, seen *platbind.SeenStore, svc *platbind.MailAnalysisService) {
 	for i := 0; i < lmtpAnalysisWorkers; i++ {
 		workerID := i + 1
 		s.safeGo("lmtp-analyze-worker", func() {
@@ -372,11 +369,11 @@ func (s *Server) startLMTPAnalysisWorkers(queue *lmtpd.Queue, seen *lmtpd.SeenSt
 	}
 }
 
-func (s *Server) processLMTPQueueItem(ctx context.Context, svc *mailanalysis.Service, item *lmtpd.QueueItem) error {
+func (s *Server) processLMTPQueueItem(ctx context.Context, svc *platbind.MailAnalysisService, item *platbind.QueueItem) error {
 	if item == nil {
 		return nil
 	}
-	msg, err := lmtpd.ParseMessage(item.Raw, item.Key)
+	msg, err := platbind.ParseMessage(item.Raw, item.Key)
 	if err != nil {
 		return err
 	}
@@ -421,14 +418,14 @@ func archiveStatus(enabled bool) string {
 // paths drifting apart: the #2045 tiny/analysis upgrade reached only the poller,
 // and the miniapp button stayed pinned to the fallback role until that
 // provider's key died (401, 2026-06-10).
-func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, stage1 *llm.Client, stage1Model string) {
+func (s *Server) mailAnalysisModels() (stage2 *aibind.LLMClient, stage2Model string, stage1 *aibind.LLMClient, stage1Model string) {
 	if s.modelRegistry == nil {
 		return nil, "", nil, ""
 	}
-	return s.modelRegistry.Client(modelrole.RoleMain),
-		s.modelRegistry.Model(modelrole.RoleMain),
-		s.modelRegistry.Client(modelrole.RoleTiny),
-		s.modelRegistry.Model(modelrole.RoleTiny)
+	return s.modelRegistry.Client(aibind.RoleMain),
+		s.modelRegistry.Model(aibind.RoleMain),
+		s.modelRegistry.Client(aibind.RoleTiny),
+		s.modelRegistry.Model(aibind.RoleTiny)
 }
 
 // mailStage2ThinkingKwarg returns the chat_template_kwargs thinking off-switch for
@@ -436,11 +433,11 @@ func (s *Server) mailAnalysisModels() (stage2 *llm.Client, stage2Model string, s
 // (non-vLLM, e.g. an Anthropic-wire cloud model). Threaded into the mailanalysis
 // synthesis so its "disabled" thinking config truly stops reasoning on dual-mode
 // vLLM models (dsv4) instead of exhausting the budget and returning empty — the
-// analysis-path equivalent of what applyModelTuning does for the main chat.
+// analysis-path equivalent of what applyModelTuning does for the main pipebind.
 func (s *Server) mailStage2ThinkingKwarg() string {
 	if s.modelRegistry == nil {
 		return ""
 	}
-	c := s.modelRegistry.Config(modelrole.RoleMain)
+	c := s.modelRegistry.Config(aibind.RoleMain)
 	return s.modelRegistry.CapabilityForModel(c.ProviderID, c.Model).ThinkingToggleKwarg
 }

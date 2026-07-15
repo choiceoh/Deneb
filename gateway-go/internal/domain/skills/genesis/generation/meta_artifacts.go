@@ -276,8 +276,8 @@ func (m *MetaArtifacts) Version(name, fallback string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-// ActiveVersions maps every artifact in defaults to its effective version.
-func (m *MetaArtifacts) ActiveVersions(defaults map[string]string) map[string]string {
+// activeVersions maps every artifact in defaults to its effective version.
+func (m *MetaArtifacts) activeVersions(defaults map[string]string) map[string]string {
 	out := make(map[string]string, len(defaults))
 	for name, fallback := range defaults {
 		out[name] = m.Version(name, fallback)

@@ -134,9 +134,9 @@ func TestRunAgentWithFallback_CompactionStuckOnProtectedZoneOverBudget(t *testin
 	for _, ev := range bc.get() {
 		if ev.Event == "chat.compaction_stuck" {
 			found = true
-			p, ok := ev.Payload.(ChatCompactionStuckEvent)
+			p, ok := ev.Payload.(chatCompactionStuckEvent)
 			if !ok {
-				t.Fatalf("payload type = %T, want ChatCompactionStuckEvent", ev.Payload)
+				t.Fatalf("payload type = %T, want chatCompactionStuckEvent", ev.Payload)
 			}
 			if p.Reason != "protected_zone_exceeds_budget" {
 				t.Errorf("stuck reason = %q, want protected_zone_exceeds_budget", p.Reason)

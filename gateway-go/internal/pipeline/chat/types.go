@@ -10,20 +10,20 @@ import (
 // BroadcastFunc sends an event to all matching subscribers.
 type BroadcastFunc = toolport.BroadcastFunc
 
-// ReplyFunc delivers the assistant response back to the originating channel.
-type ReplyFunc = toolport.ReplyFunc
+// replyFunc delivers the assistant response back to the originating channel.
+type replyFunc = toolport.ReplyFunc
 
-// TypingFunc signals a typing indicator to the originating channel.
-type TypingFunc = toolport.TypingFunc
+// typingFunc signals a typing indicator to the originating channel.
+type typingFunc = toolport.TypingFunc
 
-// ReactionFunc sets or removes an emoji reaction on the triggering message.
-type ReactionFunc = toolport.ReactionFunc
+// reactionFunc sets or removes an emoji reaction on the triggering message.
+type reactionFunc = toolport.ReactionFunc
 
-// DraftEditFunc sends or edits a streaming draft message on the originating channel.
-type DraftEditFunc = toolport.DraftEditFunc
+// draftEditFunc sends or edits a streaming draft message on the originating channel.
+type draftEditFunc = toolport.DraftEditFunc
 
-// MessageDeleter removes a previously-sent message from the originating channel.
-type MessageDeleter = toolport.MessageDeleter
+// messageDeleter removes a previously-sent message from the originating channel.
+type messageDeleter = toolport.MessageDeleter
 
 // ProviderConfig holds credentials and endpoint for an LLM provider.
 type ProviderConfig = toolport.ProviderConfig
@@ -40,15 +40,15 @@ type ChatMessage = toolport.ChatMessage
 // ChatAttachment represents a file or media attachment on a chat message.
 type ChatAttachment = toolport.ChatAttachment
 
-// AbortEntry tracks an active abort controller for a running chat session.
-type AbortEntry = toolport.AbortEntry
+// abortEntry tracks an active abort controller for a running chat session.
+type abortEntry = toolport.AbortEntry
 
-// MediaSendFunc delivers a file to the originating channel.
-type MediaSendFunc = toolport.MediaSendFunc
+// mediaSendFunc delivers a file to the originating channel.
+type mediaSendFunc = toolport.MediaSendFunc
 
 // NewTextChatMessage creates a ChatMessage with text-only content.
 var NewTextChatMessage = toolport.NewTextChatMessage
 
-// StripUserMessageTimestamp removes the baked "[<RFC3339>] " prefix from a
+// stripUserMessageTimestamp removes the baked "[<RFC3339>] " prefix from a
 // user message text (see the transcript persist site in run_exec.go).
-var StripUserMessageTimestamp = toolport.StripUserMessageTimestamp
+var stripUserMessageTimestamp = toolport.StripUserMessageTimestamp

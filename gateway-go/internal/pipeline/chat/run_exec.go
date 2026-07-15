@@ -27,8 +27,8 @@ import (
 // chatRunResult wraps the agent result with chat-layer metadata.
 type chatRunResult struct {
 	*agent.AgentResult
-	// SpawnFlag is non-nil; IsSet() returns true when sessions_spawn was called.
-	SpawnFlag *SpawnFlag
+	// spawnFlag is non-nil; IsSet() returns true when sessions_spawn was called.
+	spawnFlag *spawnFlag
 	// ActualModel is the model that actually produced the answer. It differs
 	// from the requested model only when the model fallback chain fired.
 	ActualModel string
@@ -42,7 +42,7 @@ type chatRunResult struct {
 // run agent loop, persist result.
 func executeAgentRun(
 	ctx context.Context,
-	params RunParams,
+	params runParams,
 	deps runDeps,
 	broadcaster *streaming.Broadcaster,
 	typingSignaler chatport.TypingSignaler,
@@ -251,11 +251,11 @@ func executeAgentRun(
 		agentStart:     agentStart,
 	}, logger)
 
-	return &chatRunResult{AgentResult: agentResult, SpawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
+	return &chatRunResult{AgentResult: agentResult, spawnFlag: spawnFlag, ActualModel: actualModel, FellBack: fellBack}, nil
 }
 
 // emitRunStart emits the agent run.start event to gateway subscriptions.
-func emitRunStart(deps runDeps, params RunParams, runStart time.Time) {
+func emitRunStart(deps runDeps, params runParams, runStart time.Time) {
 	if deps.callbacks.emitAgentFn == nil {
 		return
 	}
@@ -267,7 +267,7 @@ func emitRunStart(deps runDeps, params RunParams, runStart time.Time) {
 
 // persistInitialUserMessage persists the inbound user message unless the
 // persist is deferred to the enrichment join (a link enrichment in flight).
-func persistInitialUserMessage(params RunParams, deps runDeps, logger *slog.Logger) error {
+func persistInitialUserMessage(params runParams, deps runDeps, logger *slog.Logger) error {
 	if params.PendingEnrichment != nil {
 		return nil
 	}
@@ -281,7 +281,7 @@ func persistInitialUserMessage(params RunParams, deps runDeps, logger *slog.Logg
 // prewarmPromptWorkspace resolves the workspace dir and pre-warms the context
 // file snapshot for this session so disk I/O happens before the parallel prep
 // phase (no-op if already cached from a prior turn).
-func prewarmPromptWorkspace(params RunParams, deps runDeps) string {
+func prewarmPromptWorkspace(params runParams, deps runDeps) string {
 	workspaceDir := params.WorkspaceDir
 	if workspaceDir == "" {
 		workspaceDir = resolveWorkspaceDirForPrompt()
@@ -313,7 +313,7 @@ func sessionThinkingLevel(sess *session.Session) string {
 // before the enrichment join, where the deferred persist lives — persist the
 // original message here so the user's input isn't lost from history. No LLM
 // saw anything this turn, so the unenriched bytes are consistent.
-func noLLMClientError(params RunParams, deps runDeps, providerID, model string, runLog *agentlog.RunLogger, logger *slog.Logger) error {
+func noLLMClientError(params runParams, deps runDeps, providerID, model string, runLog *agentlog.RunLogger, logger *slog.Logger) error {
 	if params.PendingEnrichment != nil {
 		persistTurnUserMessage(params, deps, logger)
 	}
@@ -343,7 +343,7 @@ func checkContextAssembly(prep prepResult, deps runDeps, sessionKey string, logg
 // not contain it — and AppendCurrentMessage tells assembleTurnMessages to
 // append the exact persisted bytes explicitly, keeping next turn's history
 // reload byte-identical to what this turn's LLM call sees (vLLM APC).
-func joinPendingEnrichment(ctx context.Context, params *RunParams, deps runDeps, logger *slog.Logger) error {
+func joinPendingEnrichment(ctx context.Context, params *runParams, deps runDeps, logger *slog.Logger) error {
 	if params.PendingEnrichment == nil {
 		return nil
 	}
@@ -361,7 +361,7 @@ func joinPendingEnrichment(ctx context.Context, params *RunParams, deps runDeps,
 // buildCompactionHooks wires the typing signal into compaction, so the user
 // sees activity during a long compaction pass. Nil when the run has no
 // delivery or typing callback.
-func buildCompactionHooks(params RunParams, deps runDeps) *compactionHooks {
+func buildCompactionHooks(params runParams, deps runDeps) *compactionHooks {
 	if deps.callbacks.typingFn == nil || params.Delivery == nil {
 		return nil
 	}
@@ -388,7 +388,7 @@ type prepTimings struct {
 // the per-stage breakdown when prep is user-noticeably slow. prepMs alone hid
 // a 60s stall (4× on one session, 2026-07-07 — the stage that ate it was
 // unidentifiable post-hoc), so the breakdown names the culprit in the journal.
-func logRunPrep(logger *slog.Logger, runLog *agentlog.RunLogger, params RunParams, prep prepResult, systemPromptChars, messageCount int, t prepTimings) {
+func logRunPrep(logger *slog.Logger, runLog *agentlog.RunLogger, params runParams, prep prepResult, systemPromptChars, messageCount int, t prepTimings) {
 	prepTotalMs := time.Since(t.runStart).Milliseconds()
 	if prepTotalMs > 5000 {
 		logger.Warn("pipeline: slow prep",
@@ -457,7 +457,7 @@ func flushDeltaTail(deltaTranslit *streaming.Streamer, broadcaster *streaming.Br
 
 // runCompletionRecord bundles everything the post-loop telemetry sink needs.
 type runCompletionRecord struct {
-	params         RunParams
+	params         runParams
 	deps           runDeps
 	runLog         *agentlog.RunLogger
 	client         *llm.Client
@@ -624,7 +624,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 // Returns the formatted (timestamped) message actually persisted, or "" when
 // persistence was skipped — the deferred-enrichment join uses the returned
 // bytes as the wire message so transcript and LLM input stay byte-identical.
-func persistTurnUserMessage(params RunParams, deps runDeps, logger *slog.Logger) string {
+func persistTurnUserMessage(params runParams, deps runDeps, logger *slog.Logger) string {
 	if deps.transcript == nil || params.Message == "" || params.EphemeralUser {
 		return ""
 	}
@@ -655,7 +655,7 @@ func formatTurnUserMessage(message string, now time.Time) string {
 // scratch-build path exactly as before, and prebuilt-history API turns carry
 // their own message. AppendCurrentMessage already set means the enrichment
 // join handled it.
-func ephemeralNeedsExplicitAppend(params RunParams, prep prepResult) bool {
+func ephemeralNeedsExplicitAppend(params runParams, prep prepResult) bool {
 	return params.EphemeralUser && !params.AppendCurrentMessage &&
 		params.Message != "" && len(params.PrebuiltMessages) == 0 && len(prep.Messages) > 0
 }
@@ -680,7 +680,7 @@ func ephemeralNeedsExplicitAppend(params RunParams, prep prepResult) bool {
 // explicit scope). Skill hints are gated on the run's effective preset: a
 // preset without the skills tool (btw "conversation", code: "coding") must
 // not receive a hint that instructs a blocked call.
-func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string) {
+func applyTailAdditions(params runParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string) {
 	notebookGrounding := ""
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
@@ -725,7 +725,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 // conflict rather than a silent clobber. Nil hooks (disabled features) are
 // skipped; an all-nil chain builds to nil.
 //
-//   - steer (NORMAL): drains SteerQueue notes into the last tool_result before
+//   - steer (NORMAL): drains steerQueue notes into the last tool_result before
 //     the call. No-op when the queue is nil (sub-agents, tests).
 //   - trailingCache (POST): attaches ephemeral cache_control to the last 2
 //     non-system messages (Hermes Agent's "system_and_3" pattern, scaled to
@@ -739,7 +739,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 // modelcaps; a `promptCache` boolean on the provider's deneb.json entry
 // overrides it either way. The strip operates on the per-request cfg.System
 // copy, so the prompt-cache doctrine (don't mutate cached blocks) holds.
-func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string, client *llm.Client, logger *slog.Logger) string {
+func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params runParams, providerID, model string, client *llm.Client, logger *slog.Logger) string {
 	apiMode := resolveAPIMode(deps, providerID)
 	if client != nil {
 		// The selected client is the wire authority. A handler-scoped client
@@ -770,7 +770,7 @@ func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, p
 // subscribers can render live phase progression (the pattern the retired
 // Telegram status controller established). Silently no-ops when the agent
 // emit callback is unset (sub-agents, tests).
-func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
+func emitPhase(deps runDeps, params runParams, phase string, at time.Time) {
 	if deps.callbacks.emitAgentFn == nil {
 		return
 	}

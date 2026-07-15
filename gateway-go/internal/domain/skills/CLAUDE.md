@@ -36,6 +36,19 @@ they must not be pulled into this domain package.
 - Prompt limits are hard output bounds. Adding metadata must not bypass the
   existing per-entry and total-budget truncation paths.
 
+## Local change scope
+
+Keep catalog and eligibility rules inside this domain package.
+
+- Neighbors OK to change: `internal/domain/skills/genesis` (evolution only —
+  separate verify), `internal/runtime/skilllifecycle` (runtime surface).
+  When `Catalog`/`NewCatalog`/`DiscoverWorkspaceSkills` contracts change,
+  start in `catalog_test.go` and `discovery_test.go`.
+- Do not touch: `internal/runtime` RPC handlers, `internal/pipeline/chat`
+  tool wiring, genesis acceptance machinery. Never import `runtime` or
+  `pipeline/chat` from this package.
+- Focused verify: `cd gateway-go && go test -count=1 ./internal/domain/skills`
+
 ## Focused verification
 
 Start with the source-matched tests: `catalog_test.go` for `Catalog`,

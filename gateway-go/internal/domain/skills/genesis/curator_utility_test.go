@@ -81,7 +81,7 @@ func TestApplySkillCuratorTransitions_ArchivesActivelyUsedRollbackThrasher(t *te
 
 	// MinIdleHours=2 with brand-new skills → the idle path skips both (idle≈0),
 	// so any archival here MUST come from the utility path.
-	summary, err := tracker.applySkillCuratorTransitions(time.Now(), SkillCuratorConfig{
+	summary, err := tracker.applySkillCuratorTransitions(time.Now(), skillCuratorConfig{
 		MinIdleHours:           2,
 		StaleAfterDays:         30,
 		ArchiveAfterDays:       90,
@@ -130,7 +130,7 @@ func TestApplySkillCuratorTransitions_PinnedThrasherRejectsUtilityArchival(t *te
 		t.Fatalf("rollback: %v", err)
 	}
 
-	summary, err := tracker.applySkillCuratorTransitions(time.Now(), SkillCuratorConfig{
+	summary, err := tracker.applySkillCuratorTransitions(time.Now(), skillCuratorConfig{
 		MinIdleHours:           2,
 		UtilityMinRollbacks:    2,
 		UtilityRollbackRatePct: 50,

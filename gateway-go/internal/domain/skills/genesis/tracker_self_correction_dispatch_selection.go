@@ -1,10 +1,8 @@
 package genesis
 
 import (
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"strings"
-
-	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 )
 
 // NextSelfCorrectionDispatchCandidate folds the complete append-only ledger and
@@ -30,7 +28,7 @@ func (t *Tracker) NextSelfCorrectionDispatchCandidate(
 	var selected SelfCorrectionCandidateRecord
 	found := false
 	for _, record := range records {
-		if excluded[record.ID] || !SelfCorrectionDispatchEligible(record) {
+		if excluded[record.ID] || !selfCorrectionDispatchEligible(record) {
 			continue
 		}
 		if !found || dispatchCandidateBefore(record, selected) {
@@ -41,15 +39,15 @@ func (t *Tracker) NextSelfCorrectionDispatchCandidate(
 	return selected, found, nil
 }
 
-// SelfCorrectionDispatchEligible applies review, delivery, source, and surface
+// selfCorrectionDispatchEligible applies review, delivery, source, and surface
 // policy before any unattended coding session receives candidate prose.
-func SelfCorrectionDispatchEligible(record SelfCorrectionCandidateRecord) bool {
+func selfCorrectionDispatchEligible(record SelfCorrectionCandidateRecord) bool {
 	if strings.TrimSpace(record.ID) == "" || strings.TrimSpace(record.Scope) != "code" {
 		return false
 	}
-	if !rsilifecycle.CanDispatch(
-		rsilifecycle.ReviewState(record.Status),
-		rsilifecycle.DeliveryPhase(record.DispatchPhase),
+	if !genbind.CanDispatch(
+		genbind.ReviewState(record.Status),
+		genbind.DeliveryPhase(record.DispatchPhase),
 	) || !SourceAutoDispatches(record.Source) {
 		return false
 	}
@@ -62,7 +60,7 @@ func SelfCorrectionDispatchEligible(record SelfCorrectionCandidateRecord) bool {
 		record.Risk,
 	}
 	values = append(values, record.TargetFiles...)
-	return len(surfaces.ForbiddenSurfaceMentions(values...)) == 0
+	return len(genbind.ForbiddenSurfaceMentions(values...)) == 0
 }
 
 func dispatchCandidateBefore(left, right SelfCorrectionCandidateRecord) bool {

@@ -74,7 +74,7 @@ func parseEnvelope(t *testing.T, s string) map[string]any {
 func TestGatewayStatusReturnsVersionPortAndUptime(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"gateway": {"port": 19999}}`)
 	GatewayVersion = "test-1.2.3"
-	tool := ToolGatewayWithDeps("", GatewayDeps{
+	tool := toolGatewayWithDeps("", gatewayDeps{
 		ConfigPath: cfgPath,
 		Signaller:  &fakeSignaller{},
 		Now:        func() time.Time { return gatewayStartTime.Add(65 * time.Second) },
@@ -98,7 +98,7 @@ func TestGatewayStatusReturnsVersionPortAndUptime(t *testing.T) {
 
 func TestGatewayConfigGetReturnsDottedPathValue(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "glm-5.1", "fallback": "qwen"}}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 
 	out := mustCallTool(t, tool, map[string]any{"action": "config_get", "path": "model.main"})
 	if !strings.Contains(out, "glm-5.1") {
@@ -119,7 +119,7 @@ func TestGatewayConfigGetReturnsDottedPathValue(t *testing.T) {
 
 func TestGatewayConfigSetReturnsApprovalThenWritesOnConfirm(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "glm-5.1"}}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 
 	// First call — expect approval envelope.
 	out := mustCallTool(t, tool, map[string]any{
@@ -164,7 +164,7 @@ func TestGatewayConfigSetReturnsApprovalThenWritesOnConfirm(t *testing.T) {
 
 func TestGatewayConfigSetRejectsSecretPaths(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 
 	cases := []string{
 		"gateway.auth.token",
@@ -190,7 +190,7 @@ func TestGatewayConfigSetRejectsSecretPaths(t *testing.T) {
 
 func TestGatewayConfigSetRejectsObjectReplacement(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 	out := mustCallTool(t, tool, map[string]any{
 		"action": "config_set",
 		"path":   "model",
@@ -203,7 +203,7 @@ func TestGatewayConfigSetRejectsObjectReplacement(t *testing.T) {
 
 func TestGatewayConfigSetReturnsErrorWithoutPath(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 	raw, _ := json.Marshal(map[string]any{"action": "config_set"})
 	_, err := tool(context.Background(), raw)
 	if err == nil || !strings.Contains(err.Error(), "path") {
@@ -215,7 +215,7 @@ func TestGatewayConfigSetReturnsErrorWithoutPath(t *testing.T) {
 
 func TestGatewayRestartApprovalEnvelope(t *testing.T) {
 	sig := &fakeSignaller{}
-	tool := ToolGatewayWithDeps("", GatewayDeps{Signaller: sig})
+	tool := toolGatewayWithDeps("", gatewayDeps{Signaller: sig})
 	out := mustCallTool(t, tool, map[string]any{"action": "restart"})
 	env := parseEnvelope(t, out)
 	if env["needs_approval"] != true {
@@ -242,7 +242,7 @@ func TestGatewayRestartApprovalEnvelope(t *testing.T) {
 
 func TestGatewayRestartConfirmed(t *testing.T) {
 	sig := &fakeSignaller{}
-	tool := ToolGatewayWithDeps("", GatewayDeps{Signaller: sig})
+	tool := toolGatewayWithDeps("", gatewayDeps{Signaller: sig})
 	env := parseEnvelope(t, mustCallTool(t, tool, map[string]any{"action": "restart"}))
 	token := env["action_token"].(string)
 	mustCallTool(t, tool, map[string]any{"action": "restart.confirmed", "action_token": token})
@@ -256,7 +256,7 @@ func TestGatewayRestartConfirmed(t *testing.T) {
 func TestGatewayConfirmedWithoutApprovalRejected(t *testing.T) {
 	sig := &fakeSignaller{}
 	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{Signaller: sig, ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{Signaller: sig, ConfigPath: cfgPath})
 
 	for _, call := range []map[string]any{
 		{"action": "restart.confirmed"},
@@ -282,7 +282,7 @@ func TestGatewayConfirmedWithoutApprovalRejected(t *testing.T) {
 // A token approved for one payload must not execute a different one.
 func TestGatewayConfigSetConfirmPayloadMismatch(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 
 	env := parseEnvelope(t, mustCallTool(t, tool, map[string]any{
 		"action": "config_set", "path": "model.main", "value": "b",
@@ -317,7 +317,7 @@ func TestGatewayConfigSetConfirmPayloadMismatch(t *testing.T) {
 // Legacy bulk writes now share the secret block + approval gate.
 func TestGatewayConfigPatchRejectsSecretsAndRequiresApproval(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"model": {"main": "a"}}`)
-	tool := ToolGatewayWithDeps("", GatewayDeps{ConfigPath: cfgPath})
+	tool := toolGatewayWithDeps("", gatewayDeps{ConfigPath: cfgPath})
 
 	// Secret-looking key anywhere in the patch is rejected outright.
 	out := mustCallTool(t, tool, map[string]any{
@@ -380,7 +380,7 @@ func TestGatewayUpdateRejectsDirtyWorktree(t *testing.T) {
 		{match: matcherFor("git", "rev-parse"), output: []byte("main\n")},
 		{match: matcherFor("git", "status"), output: []byte(" M gateway-go/some.go\n")},
 	}}
-	tool := ToolGatewayWithDeps("/tmp", GatewayDeps{Runner: runner, Signaller: &fakeSignaller{}})
+	tool := toolGatewayWithDeps("/tmp", gatewayDeps{Runner: runner, Signaller: &fakeSignaller{}})
 	out := mustCallTool(t, tool, map[string]any{"action": "update"})
 	if !strings.Contains(out, "거부") || !strings.Contains(out, "커밋되지 않은") {
 		t.Errorf("expected Korean dirty-worktree rejection: %s", out)
@@ -391,7 +391,7 @@ func TestGatewayUpdateRejectsNonMainBranch(t *testing.T) {
 	runner := &fakeRunner{responses: []fakeResponse{
 		{match: matcherFor("git", "rev-parse"), output: []byte("feature/foo\n")},
 	}}
-	tool := ToolGatewayWithDeps("/tmp", GatewayDeps{Runner: runner, Signaller: &fakeSignaller{}})
+	tool := toolGatewayWithDeps("/tmp", gatewayDeps{Runner: runner, Signaller: &fakeSignaller{}})
 	out := mustCallTool(t, tool, map[string]any{"action": "update"})
 	if !strings.Contains(out, "거부") || !strings.Contains(out, "main") {
 		t.Errorf("expected Korean non-main rejection: %s", out)
@@ -404,7 +404,7 @@ func TestGatewayUpdateReturnsApprovalEnvelope(t *testing.T) {
 		{match: matcherFor("git", "status"), output: []byte("")},
 	}}
 	sig := &fakeSignaller{}
-	tool := ToolGatewayWithDeps("/tmp", GatewayDeps{Runner: runner, Signaller: sig})
+	tool := toolGatewayWithDeps("/tmp", gatewayDeps{Runner: runner, Signaller: sig})
 	out := mustCallTool(t, tool, map[string]any{"action": "update"})
 	env := parseEnvelope(t, out)
 	if env["needs_approval"] != true {
@@ -430,7 +430,7 @@ func TestGatewayUpdateConfirmedHappyPath(t *testing.T) {
 		{match: matcherFor("make", "go"), output: []byte("built\n")},
 	}}
 	sig := &fakeSignaller{}
-	tool := ToolGatewayWithDeps("/tmp", GatewayDeps{
+	tool := toolGatewayWithDeps("/tmp", gatewayDeps{
 		Runner: runner, Signaller: sig,
 		Now: func() time.Time { return time.Unix(1, 0) },
 	})
@@ -448,7 +448,7 @@ func TestGatewayUpdateConfirmedHappyPath(t *testing.T) {
 // ── bad input ─────────────────────────────────────────────────────────────
 
 func TestGatewayUnknownAction(t *testing.T) {
-	tool := ToolGatewayWithDeps("", GatewayDeps{})
+	tool := toolGatewayWithDeps("", gatewayDeps{})
 	out := mustCallTool(t, tool, map[string]any{"action": "wat"})
 	if !strings.Contains(out, "알 수 없는") {
 		t.Errorf("expected Korean unknown-action error: %s", out)

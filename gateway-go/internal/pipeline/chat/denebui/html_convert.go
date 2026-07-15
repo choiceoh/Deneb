@@ -36,7 +36,7 @@ func convertElem(el *openElem, p *htmlParser) any {
 	if value, ok := convertFormElem(el, inner, node); ok {
 		return value
 	}
-	p.issues = append(p.issues, Issue{"$", "unknown tag <" + el.tag + ">"})
+	p.issues = append(p.issues, issue{"$", "unknown tag <" + el.tag + ">"})
 	return nil
 }
 

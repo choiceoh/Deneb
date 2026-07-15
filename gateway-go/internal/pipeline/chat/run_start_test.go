@@ -121,7 +121,7 @@ func TestPendingQueueDrainReturnsEnqueuedMessage(t *testing.T) {
 	}
 
 	// Enqueue a message.
-	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "first"})
+	h.pending.Enqueue(key, runParams{SessionKey: key, Message: "first"})
 	p := h.pending.Drain(key)
 	if p == nil {
 		t.Fatal("expected pending message")
@@ -143,8 +143,8 @@ func TestPendingQueueDrainReturnsNewestMessage(t *testing.T) {
 	defer h.Close()
 
 	key := "test-session-2"
-	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "old"})
-	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "new"})
+	h.pending.Enqueue(key, runParams{SessionKey: key, Message: "old"})
+	h.pending.Enqueue(key, runParams{SessionKey: key, Message: "new"})
 
 	// Only latest message survives (at-most-1 semantics).
 	p := h.pending.Drain(key)
@@ -163,7 +163,7 @@ func TestPendingQueue_clearRemovesAll(t *testing.T) {
 	defer h.Close()
 
 	key := "test-session-3"
-	h.pending.Enqueue(key, RunParams{SessionKey: key, Message: "queued"})
+	h.pending.Enqueue(key, runParams{SessionKey: key, Message: "queued"})
 	h.pending.Clear(key)
 
 	if got := h.pending.Drain(key); got != nil {
@@ -171,7 +171,7 @@ func TestPendingQueue_clearRemovesAll(t *testing.T) {
 	}
 }
 
-// ─── InterruptActiveRun ────────────────────────────────────────────────────
+// ─── interruptActiveRun ────────────────────────────────────────────────────
 
 func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 	sm := session.NewManager()
@@ -180,20 +180,20 @@ func TestInterruptActiveRun_cancelsMatchingSession(t *testing.T) {
 	defer h.Close()
 
 	canceled := false
-	h.abort.Register("run-1", &AbortEntry{
+	h.abort.Register("run-1", &abortEntry{
 		SessionKey: "sess-A",
 		ClientRun:  "run-1",
 		CancelFn:   func(error) { canceled = true },
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
-	h.abort.Register("run-2", &AbortEntry{
+	h.abort.Register("run-2", &abortEntry{
 		SessionKey: "sess-B",
 		ClientRun:  "run-2",
 		CancelFn:   func(error) {},
 		ExpiresAt:  time.Now().Add(time.Hour),
 	})
 
-	h.InterruptActiveRun("sess-A")
+	h.interruptActiveRun("sess-A")
 
 	if !canceled {
 		t.Error("expected sess-A run to be canceled")
@@ -214,7 +214,7 @@ func TestInterruptActiveRun_noopWhenEmpty(t *testing.T) {
 	defer h.Close()
 
 	// Should not panic or error when no runs exist.
-	h.InterruptActiveRun("nonexistent-session")
+	h.interruptActiveRun("nonexistent-session")
 }
 
 // ─── countActiveRuns ───────────────────────────────────────────────────────
@@ -229,9 +229,9 @@ func TestCountActiveRunsReturnsPerSessionTally(t *testing.T) {
 		t.Errorf("got %d, want 0", got)
 	}
 
-	h.abort.Register("r1", &AbortEntry{SessionKey: "sess", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
-	h.abort.Register("r2", &AbortEntry{SessionKey: "sess", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
-	h.abort.Register("r3", &AbortEntry{SessionKey: "other", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r1", &abortEntry{SessionKey: "sess", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r2", &abortEntry{SessionKey: "sess", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("r3", &abortEntry{SessionKey: "other", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
 
 	if got := h.abort.CountForSession("sess"); got != 2 {
 		t.Errorf("got %d, want 2", got)
@@ -249,7 +249,7 @@ func TestCleanupAbortDeletesEntry(t *testing.T) {
 	h := NewHandler(sm, bc, nil, DefaultHandlerConfig())
 	defer h.Close()
 
-	h.abort.Register("run-x", &AbortEntry{SessionKey: "s", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
+	h.abort.Register("run-x", &abortEntry{SessionKey: "s", CancelFn: func(error) {}, ExpiresAt: time.Now().Add(time.Hour)})
 
 	h.abort.Cleanup("run-x")
 

@@ -13,12 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
-	minimodule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/module"
-	minischedule "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 )
 
 // dashboardCalendarSource adapts the hybrid calendar (read-only Google client +
@@ -28,16 +26,16 @@ import (
 // absent — a nil client or a Google error degrades to local-only so the
 // dashboard's calendar lane keeps working without OAuth.
 type dashboardCalendarSource struct {
-	client func() (minischedule.CalendarClient, error)
-	local  minischedule.LocalCalendar
+	client func() (handlerminiapp.CalendarClient, error)
+	local  handlerminiapp.LocalCalendar
 }
 
 // ListRange returns events in [from, to), Google ∪ local, sorted by start and
 // capped at limit. Best-effort: a Google factory/list error is swallowed when a
 // local store can still answer (the dashboard prefers a partial calendar over an
 // errored one); only with no source at all does it return empty.
-func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Time, limit int) ([]calendar.Event, error) {
-	var merged []calendar.Event
+func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Time, limit int) ([]platbind.Event, error) {
+	var merged []platbind.Event
 	if d.client != nil {
 		if client, err := d.client(); err == nil {
 			if events, err := client.ListUpcoming(ctx, from, to, limit); err == nil {
@@ -59,21 +57,21 @@ func (d dashboardCalendarSource) ListRange(ctx context.Context, from, to time.Ti
 // a nil work-feed store or calendar simply drops that lane's contributions.
 //
 // Rules + Lanes both derive from the operator's org chart when present (the
-// chart is the master): org.LoadRules derives classification rules from the
-// chart's lane-tagged nodes, and org.LoadLanes derives the dashboard column set
+// chart is the master): domainbind.LoadRules derives classification rules from the
+// chart's lane-tagged nodes, and domainbind.LoadLanes derives the dashboard column set
 // from the same nodes. When no org.json exists (or it defines no parts), both
-// fall back to the legacy classification path — org.LoadRules → the operator's
-// {stateDir}/classification_rules.json (or keyword defaults), and org.LoadLanes
+// fall back to the legacy classification path — domainbind.LoadRules → the operator's
+// {stateDir}/classification_rules.json (or keyword defaults), and domainbind.LoadLanes
 // → nil so the handler uses its hardcoded part set. Both are always non-nil so
 // the dashboard always registers and always renders a part skeleton.
-func (s *Server) dashboardDeps() minimodule.DashboardDeps {
-	var wf minimodule.DashboardWorkFeedSource
+func (s *Server) dashboardDeps() handlerwire.MiniDashboardDeps {
+	var wf handlerwire.MiniDashboardWorkFeedSource
 	if nwf := s.nativeWorkFeedStore(); nwf != nil {
 		wf = nwf
 	}
-	return minimodule.OrgDashboardDeps(
+	return handlerwire.MiniOrgDashboardDeps(
 		dashboardCalendarSource{
-			client: func() (minischedule.CalendarClient, error) { return calendar.DefaultClient() },
+			client: func() (handlerminiapp.CalendarClient, error) { return platbind.DefaultCalendarClient() },
 			local:  resolveLocalCalendar(s.logger),
 		},
 		wf,
@@ -89,8 +87,8 @@ func (s *Server) dashboardDeps() minimodule.DashboardDeps {
 // absent (enrichment just yields nothing).
 func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 	return handlerminiapp.OrgDeps{
-		Load:          func() (org.OrgTree, error) { return org.Load() },
-		SavePath:      org.ResolvePath,
+		Load:          func() (domainbind.OrgTree, error) { return domainbind.Load() },
+		SavePath:      domainbind.ResolvePath,
 		LookupContact: orgContactLookup(s.contactsStore),
 		// Read s.wikiStore lazily at GET time (not orgDeps() time): the org editor
 		// registers before the wiki store is wired, so capturing the field's value
@@ -115,7 +113,7 @@ func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 
 // orgContactLookup builds the name → (phones, emails) enrichment used by
 // miniapp.org.get. It matches a member's display name to the address book the
-// same way the people directory does — via contacts.NormalizePersonName, which peels
+// same way the people directory does — via domainbind.NormalizePersonName, which peels
 // honorific/role suffixes and affiliation parentheticals so "김민준 부장" matches
 // the contact "김민준" (exact on the normalized key; no substring matching, which
 // would mis-pair "이수" with "이수민").
@@ -127,17 +125,17 @@ func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 // infrequent, so one O(contacts) build per request is negligible. When several
 // contacts collapse to the same normalized name (homonyms), their phones/emails
 // are unioned (deduped, first-seen order).
-func orgContactLookup(store *contacts.Store) func(name string) (phones, emails []string) {
+func orgContactLookup(store *domainbind.ContactsStore) func(name string) (phones, emails []string) {
 	if store == nil {
 		return nil
 	}
 	return func(name string) (phones, emails []string) {
-		key := contacts.NormalizePersonName(name)
+		key := domainbind.NormalizePersonName(name)
 		if key == "" {
 			return nil, nil
 		}
 		for _, c := range store.All() {
-			if contacts.NormalizePersonName(c.Name) != key {
+			if domainbind.NormalizePersonName(c.Name) != key {
 				continue
 			}
 			phones = appendDedup(phones, c.Phones)

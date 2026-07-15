@@ -2,14 +2,13 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -186,7 +185,7 @@ type evolveWatch struct {
 	// labels justify it (eProcessCutoverReadiness), the operator flips
 	// DENEB_EPROCESS_OWNS_ROLLBACK=1 and ep owns the firing decision — with
 	// the threshold verdict still recorded, so labeling never stops.
-	ep *EProcess
+	ep *eProcess
 	// createdAt (unix millis) starts the time-based resolution clock: a watch
 	// on a rarely-used skill would otherwise stay open forever (backtest
 	// 2026-07-11: ZERO watches ever resolved in production history — the
@@ -206,7 +205,7 @@ type persistedEvolveWatch struct {
 	Recurred      int              `json:"recurred,omitempty"`
 	BaselineUses  int              `json:"baselineUses,omitempty"`
 	BaselineFails int              `json:"baselineFails,omitempty"`
-	EProcess      *EProcess        `json:"eProcess,omitempty"`
+	eProcess      *eProcess        `json:"eProcess,omitempty"`
 	CreatedAt     int64            `json:"createdAt,omitempty"`
 }
 
@@ -370,10 +369,10 @@ func usageFailureTraceFromRecord(record UsageRecord) *UsageFailureTrace {
 	trace.TerminalCause = strings.TrimSpace(trace.TerminalCause)
 	trace.CausalStatus = strings.TrimSpace(trace.CausalStatus)
 	trace.AgentMechanism = strings.TrimSpace(trace.AgentMechanism)
-	trace.ToolName = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ToolName), 120)
-	trace.ToolInput = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ToolInput), 1000)
-	trace.ToolOutput = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ToolOutput), 1000)
-	trace.ErrorMsg = genesiscommon.TruncateRunes(strings.TrimSpace(trace.ErrorMsg), 1000)
+	trace.ToolName = genbind.TruncateRunes(strings.TrimSpace(trace.ToolName), 120)
+	trace.ToolInput = genbind.TruncateRunes(strings.TrimSpace(trace.ToolInput), 1000)
+	trace.ToolOutput = genbind.TruncateRunes(strings.TrimSpace(trace.ToolOutput), 1000)
+	trace.ErrorMsg = genbind.TruncateRunes(strings.TrimSpace(trace.ErrorMsg), 1000)
 
 	classifyText := usageFailureTraceText(trace)
 	if strings.TrimSpace(classifyText) == "" {
@@ -428,5 +427,5 @@ func usageFailureTraceExample(trace UsageFailureTrace) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return genesiscommon.TruncateRunes(strings.Join(parts, "; "), 160)
+	return genbind.TruncateRunes(strings.Join(parts, "; "), 160)
 }

@@ -256,7 +256,7 @@ func TestHandleRunSuccess_SubagentReplyFuncNil(t *testing.T) {
 			logger:    logger,
 			chatport:  chatportAdapters{ParseReplyDirectives: parseDirectives},
 		}
-		params := RunParams{
+		params := runParams{
 			SessionKey:  sessionKey,
 			ClientRunID: "run-test",
 			Delivery:    deliveryFromSessionKey(sessionKey),

@@ -11,17 +11,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/platbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-// installCleanCronService attaches a fresh cron.Service backed by a temp
+// installCleanCronService attaches a fresh platbind.CronService backed by a temp
 // store path, so HTTP handler tests don't depend on whether os.UserHomeDir
 // was set in the test environment.
-func installCleanCronService(t *testing.T, srv *Server) *cron.Service {
+func installCleanCronService(t *testing.T, srv *Server) *platbind.CronService {
 	t.Helper()
 	storePath := filepath.Join(t.TempDir(), "jobs.json")
-	svc := cron.NewService(cron.ServiceConfig{
+	svc := platbind.NewCronService(platbind.ServiceConfig{
 		StorePath:      storePath,
 		DefaultChannel: "telegram",
 		Enabled:        true,
@@ -86,8 +86,8 @@ func TestHandleCronRun_UnknownName(t *testing.T) {
 func TestHandleCronRunReturnsOKForMatchingJobName(t *testing.T) {
 	srv := testutil.Must(New(":0"))
 	svc := installCleanCronService(t, srv)
-	finished := make(chan cron.CronEvent, 1)
-	svc.OnEvent(func(event cron.CronEvent) {
+	finished := make(chan platbind.CronEvent, 1)
+	svc.OnEvent(func(event platbind.CronEvent) {
 		if event.Type == "job_finished" && event.JobID == "job-success" {
 			select {
 			case finished <- event:
@@ -95,12 +95,12 @@ func TestHandleCronRunReturnsOKForMatchingJobName(t *testing.T) {
 			}
 		}
 	})
-	if err := svc.Add(context.Background(), cron.StoreJob{
+	if err := svc.Add(context.Background(), platbind.StoreJob{
 		ID:       "job-success",
 		Name:     "happy-path",
 		Enabled:  true,
-		Schedule: cron.StoreSchedule{Kind: "every", EveryMs: 60_000},
-		Payload:  cron.StorePayload{Kind: "agentTurn", Message: "hi"},
+		Schedule: platbind.StoreSchedule{Kind: "every", EveryMs: 60_000},
+		Payload:  platbind.StorePayload{Kind: "agentTurn", Message: "hi"},
 	}); err != nil {
 		t.Fatalf("svc.Add: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestHandleCronRunReturns500OnCorruptStore(t *testing.T) {
 	if err := os.WriteFile(storePath, []byte("{not valid json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	srv.cronService = cron.NewService(cron.ServiceConfig{
+	srv.cronService = platbind.NewCronService(platbind.ServiceConfig{
 		StorePath:      storePath,
 		DefaultChannel: "telegram",
 		Enabled:        true,

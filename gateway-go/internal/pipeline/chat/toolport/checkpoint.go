@@ -8,7 +8,7 @@ import (
 // SnapshotBeforeWrite takes a best-effort pre-edit checkpoint when ctx carries
 // a Checkpointer. Snapshot failures are logged but never block the write.
 func SnapshotBeforeWrite(ctx context.Context, path, reason string) {
-	cp := CheckpointerFromContext(ctx)
+	cp := checkpointerFromContext(ctx)
 	if cp == nil {
 		return
 	}

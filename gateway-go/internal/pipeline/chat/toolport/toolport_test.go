@@ -216,7 +216,7 @@ func TestTurnContextToolTimingReturnsAggregatedStats(t *testing.T) {
 
 	stats, ok := tc.ToolTiming("grep")
 	if !ok {
-		t.Fatal("ToolTiming returned false for grep")
+		t.Fatal("toolTiming returned false for grep")
 	}
 	if stats.Count != 2 {
 		t.Errorf("Count = %d, want 2", stats.Count)
@@ -234,7 +234,7 @@ func TestTurnContextToolTimingReturnsAggregatedStats(t *testing.T) {
 
 	// Unrecorded tool returns false.
 	if _, ok := tc.ToolTiming("exec"); ok {
-		t.Error("ToolTiming returned true for unrecorded tool")
+		t.Error("toolTiming returned true for unrecorded tool")
 	}
 }
 

@@ -9,24 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
-	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
-	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
+	handlerwire "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/aibind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/pipebind"
 )
 
 // registerSessionRPCMethods registers session state, repair, daemon status, and
@@ -41,10 +30,10 @@ func (s *Server) registerSessionRPCMethods() {
 
 	chatCfg := s.buildSessionChatConfig(transcriptStore, agentLogWriter)
 
-	s.chatHandler = chat.NewHandler(
+	s.chatHandler = pipebind.NewHandler(
 		s.sessions,
 		func(event string, payload json.RawMessage) (int, []error) {
-			return s.broadcastSessionEvent(event, events.PayloadFromRaw(payload))
+			return s.broadcastSessionEvent(event, svcbind.PayloadFromRaw(payload))
 		},
 		s.logger,
 		chatCfg,
@@ -67,13 +56,13 @@ func (s *Server) registerSessionRPCMethods() {
 }
 
 func (s *Server) registerSessionDomainMethods() {
-	s.dispatcher.RegisterDomain(handlersession.Methods(handlersession.Deps{
+	s.dispatcher.RegisterDomain(handlerwire.SessionMethods(handlerwire.SessionDeps{
 		Sessions:    s.sessions,
 		GatewaySubs: s.gatewaySubs,
 	}))
 }
 
-func targetedToolRunID(event string, payload events.EventPayload) string {
+func targetedToolRunID(event string, payload svcbind.EventPayload) string {
 	if event != "session.tool" {
 		return ""
 	}
@@ -86,30 +75,30 @@ func targetedToolRunID(event string, payload events.EventPayload) string {
 }
 
 // eventPayloadFromAny converts pipeline/domain broadcast payloads into the
-// typed events.EventPayload used by the runtime broadcaster. Keeps higher
+// typed svcbind.EventPayload used by the runtime broadcaster. Keeps higher
 // layers from importing runtime/events (Health Bench upward-import rule).
-func eventPayloadFromAny(payload any) events.EventPayload {
+func eventPayloadFromAny(payload any) svcbind.EventPayload {
 	switch v := payload.(type) {
 	case nil:
-		return events.EventPayload{}
-	case events.EventPayload:
+		return svcbind.EventPayload{}
+	case svcbind.EventPayload:
 		return v
 	case json.RawMessage:
-		return events.PayloadFromRaw(v)
+		return svcbind.PayloadFromRaw(v)
 	case []byte:
-		return events.PayloadFromRaw(v)
+		return svcbind.PayloadFromRaw(v)
 	default:
 		raw, err := json.Marshal(v)
 		if err != nil {
-			return events.EventPayload{}
+			return svcbind.EventPayload{}
 		}
-		return events.PayloadFromRaw(raw)
+		return svcbind.PayloadFromRaw(raw)
 	}
 }
 
 // broadcastSessionEvent keeps tool progress scoped to the connection that
 // started the run; every other event retains the normal fan-out behavior.
-func (s *Server) broadcastSessionEvent(event string, payload events.EventPayload) (int, []error) {
+func (s *Server) broadcastSessionEvent(event string, payload svcbind.EventPayload) (int, []error) {
 	runID := targetedToolRunID(event, payload)
 	if runID != "" {
 		if connID := s.broadcaster.ToolEventRecipient(runID); connID != "" {
@@ -119,7 +108,7 @@ func (s *Server) broadcastSessionEvent(event string, payload events.EventPayload
 	return s.broadcaster.Broadcast(event, payload)
 }
 
-func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *polaris.Store) {
+func (s *Server) openSessionTranscriptStore() (pipebind.TranscriptStore, string, *pipebind.Store) {
 	transcriptDir := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		transcriptDir = home + "/.deneb/transcripts"
@@ -128,7 +117,7 @@ func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *po
 		return nil, "", nil
 	}
 
-	cached := chattranscript.NewCachedTranscriptStore(chattranscript.NewFileTranscriptStore(transcriptDir), 0)
+	cached := pipebind.NewCachedTranscriptStore(pipebind.NewFileTranscriptStore(transcriptDir), 0)
 	transcriptStore, polarisStore := s.openPolarisTranscriptBridge(cached)
 	if transcriptStore == nil {
 		// Assembly will return an error, but the gateway can still serve other functions.
@@ -137,22 +126,22 @@ func (s *Server) openSessionTranscriptStore() (chat.TranscriptStore, string, *po
 	return transcriptStore, transcriptDir, polarisStore
 }
 
-func (s *Server) openPolarisTranscriptBridge(cached chat.TranscriptStore) (chat.TranscriptStore, *polaris.Store) {
+func (s *Server) openPolarisTranscriptBridge(cached pipebind.TranscriptStore) (pipebind.TranscriptStore, *pipebind.Store) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		s.logger.Error("polaris: cannot determine home directory", "error", err)
 		return nil, nil
 	}
-	polarisStore, err := polaris.NewStore(home + "/.deneb/polaris.db")
+	polarisStore, err := pipebind.NewStore(home + "/.deneb/pipebind.db")
 	if err != nil {
 		s.logger.Error("polaris: failed to open store", "error", err)
 		return nil, nil
 	}
 	s.polarisStore = polarisStore // read by the opt-in compaction tuner
-	return polaris.NewBridge(cached, polarisStore, s.logger), polarisStore
+	return pipebind.NewBridge(cached, polarisStore, s.logger), polarisStore
 }
 
-func (s *Server) startSessionMemorySweep(transcriptDir string, polarisStore *polaris.Store) {
+func (s *Server) startSessionMemorySweep(transcriptDir string, polarisStore *pipebind.Store) {
 	maxAge := memorySweepRetention()
 	if maxAge <= 0 {
 		return
@@ -165,31 +154,31 @@ func (s *Server) startSessionMemorySweep(transcriptDir string, polarisStore *pol
 	})
 }
 
-func (s *Server) newSessionAgentLogWriter() *agentlog.Writer {
+func (s *Server) newSessionAgentLogWriter() *infrabind.Writer {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil
 	}
-	return agentlog.NewWriter(home + "/.deneb/agent-logs")
+	return infrabind.NewWriter(home + "/.deneb/agent-logs")
 }
 
-func (s *Server) wireSessionInsights(agentLogWriter *agentlog.Writer) {
+func (s *Server) wireSessionInsights(agentLogWriter *infrabind.Writer) {
 	if s.insights == nil || agentLogWriter == nil {
 		return
 	}
-	s.insights.SetToolAggregator(func(_ context.Context, since time.Time) []insights.ToolStat {
+	s.insights.SetToolAggregator(func(_ context.Context, since time.Time) []svcbind.ToolStat {
 		return sessionInsightToolStats(agentLogWriter.Aggregate(since.UnixMilli()).Tools)
 	})
 }
 
-func sessionInsightToolStats(stats []agentlog.ToolStat) []insights.ToolStat {
-	out := make([]insights.ToolStat, 0, len(stats))
+func sessionInsightToolStats(stats []infrabind.ToolStat) []svcbind.ToolStat {
+	out := make([]svcbind.ToolStat, 0, len(stats))
 	for _, stat := range stats {
 		errorRate := 0.0
 		if stat.Calls > 0 {
 			errorRate = float64(stat.Errors) / float64(stat.Calls)
 		}
-		out = append(out, insights.ToolStat{
+		out = append(out, svcbind.ToolStat{
 			Name:      stat.Name,
 			Calls:     stat.Calls,
 			ErrorRate: errorRate,
@@ -200,18 +189,18 @@ func sessionInsightToolStats(stats []agentlog.ToolStat) []insights.ToolStat {
 }
 
 func (s *Server) buildSessionChatConfig(
-	transcriptStore chat.TranscriptStore,
-	agentLogWriter *agentlog.Writer,
-) chat.HandlerConfig {
-	chatCfg := chat.DefaultHandlerConfig()
+	transcriptStore pipebind.TranscriptStore,
+	agentLogWriter *infrabind.Writer,
+) pipebind.HandlerConfig {
+	chatCfg := pipebind.DefaultHandlerConfig()
 	chatCfg.Transcript = transcriptStore
 	s.genesisTranscripts = transcriptStore
-	chatCfg.Tools = chat.NewToolRegistry()
+	chatCfg.Tools = pipebind.NewToolRegistry()
 	chatCfg.JobTracker = s.jobTracker
 	chatCfg.AgentLog = agentLogWriter
 	chatCfg.Ambient.TopicResolver = newTopicResolver(s.logger)
 
-	var registry *modelrole.Registry
+	var registry *aibind.ModelRoleRegistry
 	s.initMemorySubsystem(&chatCfg, &registry)
 	s.initSessionAI(&chatCfg, registry)
 	s.initToolsAndDeps(&chatCfg, registry, transcriptStore, agentLogWriter)
@@ -219,17 +208,17 @@ func (s *Server) buildSessionChatConfig(
 	return chatCfg
 }
 
-func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.Registry) {
-	s.localAIHub = localai.New(localai.Config{}, registry, s.logger)
-	
-	s.embeddingClient = embedding.New("", s.logger)
+func (s *Server) initSessionAI(chatCfg *pipebind.HandlerConfig, registry *aibind.ModelRoleRegistry) {
+	s.localAIHub = aibind.NewLocalAI(aibind.Config{}, registry, s.logger)
+
+	s.embeddingClient = aibind.NewEmbedding("", s.logger)
 	chatCfg.Memory.Embedding = s.embeddingClient
 	if s.polarisStore != nil {
 		s.polarisStore.SetSummaryEmbedder(s.embeddingClient)
 	}
 	if s.wikiStore != nil {
 		s.wikiStore.SetEmbedder(s.embeddingClient)
-		if reranker := airerank.NewFromEnv(); reranker != nil {
+		if reranker := aibind.NewFromEnv(); reranker != nil {
 			s.wikiStore.SetReranker(reranker)
 		}
 		store := s.wikiStore
@@ -258,19 +247,19 @@ func (s *Server) warmSessionSemanticIndexes(store interface {
 	}
 }
 
-func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
+func (s *Server) configureSessionChatCallbacks(chatCfg *pipebind.HandlerConfig) {
 	if s.authManager != nil {
 		chatCfg.AuthManager = s.authManager
 	}
-	chatCfg.ProviderConfigs = configresolve.LoadProviderConfigs(s.logger)
+	chatCfg.ProviderConfigs = svcbind.LoadProviderConfigs(s.logger)
 	chatCfg.ProviderRuntime = s.providerRuntime
-	chatCfg.BroadcastRaw = streaming.BroadcastRawFunc(func(event string, data []byte) int {
+	chatCfg.BroadcastRaw = pipebind.BroadcastRawFunc(func(event string, data []byte) int {
 		return s.broadcaster.BroadcastRaw(event, data)
 	})
 	if s.gatewaySubs != nil {
 		chatCfg.EmitAgentFn = func(kind, sessionKey, runID string, payload map[string]any) {
-			ep, _ := events.PayloadOf(payload)
-			s.gatewaySubs.EmitAgent(events.AgentEvent{
+			ep, _ := svcbind.PayloadOf(payload)
+			s.gatewaySubs.EmitAgent(svcbind.AgentEvent{
 				Kind:       kind,
 				SessionKey: sessionKey,
 				RunID:      runID,
@@ -278,9 +267,9 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 			})
 		}
 		chatCfg.EmitTranscriptFn = func(sessionKey string, message json.RawMessage, messageID string) {
-			s.gatewaySubs.EmitTranscript(events.TranscriptUpdate{
+			s.gatewaySubs.EmitTranscript(svcbind.TranscriptUpdate{
 				SessionKey: sessionKey,
-				Message:    events.PayloadFromRaw(message),
+				Message:    svcbind.PayloadFromRaw(message),
 				MessageID:  messageID,
 			})
 		}
@@ -302,8 +291,8 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 }
 
 func (s *Server) configureSessionChatHandler() {
-	s.chatHandler.SetStatusDepsFunc(func(sessionKey string) chat.StatusDeps {
-		status := chat.StatusDeps{Version: s.version, StartedAt: s.startedAt}
+	s.chatHandler.SetStatusDepsFunc(func(sessionKey string) pipebind.StatusDeps {
+		status := pipebind.StatusDeps{Version: s.version, StartedAt: s.startedAt}
 		if s.sessions != nil {
 			status.SessionCount = s.sessions.Count()
 		}
@@ -324,7 +313,7 @@ func (s *Server) configureSessionChatHandler() {
 func (s *Server) sessionSendFunc() func(sessionKey, message string) error {
 	return func(sessionKey, message string) error {
 		request := &protocol.RequestFrame{
-			ID:     shortid.New("tool_send"),
+			ID:     infrabind.NewShortID("tool_send"),
 			Method: "sessions.send",
 		}
 		params := map[string]string{"key": sessionKey, "message": message}
@@ -338,10 +327,10 @@ func (s *Server) sessionSendFunc() func(sessionKey, message string) error {
 }
 
 func (s *Server) initSessionProactiveRelay(
-	transcriptStore chat.TranscriptStore,
-	agentLogWriter *agentlog.Writer,
+	transcriptStore pipebind.TranscriptStore,
+	agentLogWriter *infrabind.Writer,
 ) {
-	s.proactiveRelay = proactive.NewRelay(proactive.Deps{
+	s.proactiveRelay = svcbind.NewRelay(svcbind.ProactiveDeps{
 		TranscriptStore: transcriptStore,
 		Logger:          s.logger,
 		PushHub:         s.pushHub,
@@ -351,13 +340,13 @@ func (s *Server) initSessionProactiveRelay(
 		BehaviorLog:     agentLogWriter,
 		Sessions:        s.sessions,
 		CardTitler: func(content string) (string, string) {
-			return proactive.CardTitleSummary(s.ShutdownCtx(), content)
+			return svcbind.CardTitleSummary(s.ShutdownCtx(), content)
 		},
 		WorkModel: s.resolveFeedWorkModel,
 	})
 }
 
-func (s *Server) wireSessionCronRelay(transcriptStore chat.TranscriptStore) {
+func (s *Server) wireSessionCronRelay(transcriptStore pipebind.TranscriptStore) {
 	if s.cronService == nil || transcriptStore == nil {
 		return
 	}
@@ -404,12 +393,12 @@ func (s *Server) relayCronAnalysis(
 	return delivered, nil
 }
 
-func (s *Server) wireSessionACP(transcriptStore chat.TranscriptStore) {
+func (s *Server) wireSessionACP(transcriptStore pipebind.TranscriptStore) {
 	s.wireACPTranscriptLoader(transcriptStore)
 	s.wireACPResultInjection(transcriptStore)
 }
 
-func (s *Server) wireACPTranscriptLoader(transcriptStore chat.TranscriptStore) {
+func (s *Server) wireACPTranscriptLoader(transcriptStore pipebind.TranscriptStore) {
 	if s.acpDeps == nil || transcriptStore == nil {
 		return
 	}
@@ -428,17 +417,17 @@ func (s *Server) wireACPTranscriptLoader(transcriptStore chat.TranscriptStore) {
 	}
 }
 
-func (s *Server) wireACPResultInjection(transcriptStore chat.TranscriptStore) {
+func (s *Server) wireACPResultInjection(transcriptStore pipebind.TranscriptStore) {
 	if s.acpDeps == nil || transcriptStore == nil {
 		return
 	}
-	projector := acp.NewACPProjector(s.acpDeps.Registry)
-	s.acpResultInjectionUnsub = acp.StartSubagentResultInjection(acp.ResultInjectionDeps{
+	projector := pipebind.NewACPProjector(s.acpDeps.Registry)
+	s.acpResultInjectionUnsub = pipebind.StartSubagentResultInjection(pipebind.ResultInjectionDeps{
 		Registry:  s.acpDeps.Registry,
 		Projector: projector,
 		Sessions:  s.sessions,
-		Transcript: acp.TranscriptAppendFunc(func(sessionKey, text string) error {
-			message := chat.NewTextChatMessage("system", text, 0)
+		Transcript: pipebind.TranscriptAppendFunc(func(sessionKey, text string) error {
+			message := pipebind.NewTextChatMessage("system", text, 0)
 			return transcriptStore.Append(sessionKey, message)
 		}),
 		Logger: s.logger,

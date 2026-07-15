@@ -23,6 +23,7 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,8 +31,6 @@ import (
 	"strings"
 	"time"
 
-	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
-	rsistatus "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/status"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
@@ -40,19 +39,19 @@ import (
 type (
 	// RSILoopStatus keeps the established handler port stable while the full
 	// read model lives in the narrow status package.
-	RSILoopStatus = rsistatus.LoopStatus
-	rsiLoopStatus = rsistatus.LoopStatus
-	rsiHealth     = rsistatus.Health
-	rsiLayer      = rsistatus.Layer
-	rsiMetric     = rsistatus.Metric
+	RSILoopStatus = genbind.LoopStatus
+	rsiLoopStatus = genbind.LoopStatus
+	rsiHealth     = genbind.Health
+	rsiLayer      = genbind.StatusLayer
+	rsiMetric     = genbind.Metric
 )
 
 const (
-	rsiStateLive      = rsistatus.StateLive
-	rsiStateDataGated = rsistatus.StateDataGated
-	rsiStateStarved   = rsistatus.StateStarved
-	rsiStateFrozen    = rsistatus.StateFrozen
-	rsiStateIdle      = rsistatus.StateIdle
+	rsiStateLive      = genbind.StateLive
+	rsiStateDataGated = genbind.StateDataGated
+	rsiStateStarved   = genbind.StateStarved
+	rsiStateFrozen    = genbind.StateFrozen
+	rsiStateIdle      = genbind.StateIdle
 )
 
 // rsiSubtleDegradationClasses are the judge-degradation classes that actually
@@ -88,8 +87,8 @@ func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(sou
 
 const rsiGraduationDetail = "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다."
 
-func newRSILayer(layer rsilifecycle.Layer, metrics []rsiMetric) rsiLayer {
-	identity, ok := rsilifecycle.IdentityFor(layer)
+func newRSILayer(layer genbind.LifecycleLayer, metrics []rsiMetric) rsiLayer {
+	identity, ok := genbind.IdentityFor(layer)
 	if !ok {
 		return rsiLayer{Key: string(layer), Metrics: metrics}
 	}
@@ -103,7 +102,7 @@ func newRSILayer(layer rsilifecycle.Layer, metrics []rsiMetric) rsiLayer {
 
 // RSIStatus composes the four layer assessments from the tracker's public
 // aggregates. It takes no lock of its own — each aggregate locks internally.
-func (t *Tracker) RSIStatus() rsistatus.LoopStatus {
+func (t *Tracker) RSIStatus() genbind.LoopStatus {
 	layers := []rsiLayer{t.rsiAssessL1(), t.rsiAssessL2(), t.rsiAssessL3(), t.rsiAssessL4(), t.rsiAssessLadder()}
 	turning := 0
 	for i := range layers {
@@ -150,7 +149,7 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		{Label: "e-process", Value: rsiEProcessValue(t.eProcessCutoverReadiness())},
 		{Label: "라벨러 사각", Value: strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
 	}
-	base := newRSILayer(rsilifecycle.LayerL1, metrics)
+	base := newRSILayer(genbind.LifecycleLayerL1, metrics)
 	switch {
 	case committed > 0:
 		base.State = rsiStateLive
@@ -184,14 +183,14 @@ func (t *Tracker) rsiAssessL2() rsiLayer {
 	// proposals, plus the consecutive-parametric-adoption streak once it hits
 	// the nudge threshold — all-parametric adoption is the regime Bilevel
 	// Autoresearch (2603.23420) measured as a null result.
-	bal := t.MetaRevisionClassBalance()
+	bal := t.metaRevisionClassBalance()
 	if bal.Structural+bal.Parametric > 0 {
 		metrics = append(metrics, rsiMetric{Label: "구조형·파라미터형", Value: fmt.Sprintf("%d·%d", bal.Structural, bal.Parametric)})
 		if bal.AdoptedParametricStreak >= metaParametricStreakNudge {
 			metrics = append(metrics, rsiMetric{Label: "연속 파라미터형 채택", Value: strconv.Itoa(bal.AdoptedParametricStreak)})
 		}
 	}
-	base := newRSILayer(rsilifecycle.LayerL2, metrics)
+	base := newRSILayer(genbind.LifecycleLayerL2, metrics)
 	switch {
 	case t.AutoAdoptFrozen():
 		base.State = rsiStateFrozen
@@ -256,7 +255,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 	records, err := t.recentJudgeAccuracy(20)
 	operatorLabels := len(t.RecentOperatorJudgeVerdicts(7*24*time.Hour, 100))
 	if err != nil || (len(records) == 0 && operatorLabels == 0) {
-		base := newRSILayer(rsilifecycle.LayerL3, nil)
+		base := newRSILayer(genbind.LifecycleLayerL3, nil)
 		base.State, base.Diagnosis = rsiStateIdle, "판정 정확도 레인이 아직 실행되지 않았습니다"
 		return base
 	}
@@ -280,7 +279,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		}
 	}
 	if runs == 0 && operatorLabels == 0 {
-		base := newRSILayer(rsilifecycle.LayerL3, nil)
+		base := newRSILayer(genbind.LifecycleLayerL3, nil)
 		base.State, base.Diagnosis = rsiStateIdle, "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"
 		return base
 	}
@@ -292,7 +291,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		{Label: "실전 라벨(30일)", Value: strconv.Itoa(organic)},
 		{Label: "운영자 라벨(7일)", Value: strconv.Itoa(operatorLabels)},
 	}
-	base := newRSILayer(rsilifecycle.LayerL3, metrics)
+	base := newRSILayer(genbind.LifecycleLayerL3, metrics)
 	switch {
 	case misses > 0 || falseRejects > 0 || organic > 0 || operatorLabels > 0:
 		base.State = rsiStateLive
@@ -313,14 +312,14 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 func (t *Tracker) rsiAssessL4() rsiLayer {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
-		base := newRSILayer(rsilifecycle.LayerL4, nil)
+		base := newRSILayer(genbind.LifecycleLayerL4, nil)
 		base.State, base.Diagnosis = rsiStateIdle, "후보 저장소를 읽을 수 없습니다"
 		return base
 	}
 	tally := t.tallyL4Candidates(cands)
 	_, dispatchedToday := t.codingDispatchCounts()
 	runtime := t.codingDispatchRuntimeStatus()
-	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime))
+	base := newRSILayer(genbind.LifecycleLayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime))
 	base.State, base.Diagnosis = rsiL4Verdict(tally, len(cands), runtime)
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
@@ -364,35 +363,35 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 		// proposed = unreviewed backlog; accepted = review-endorsed, awaiting
 		// implementation — both are queued dispatch supply (the heartbeat review
 		// lane accepts candidates it cannot implement itself).
-		review := rsilifecycle.NormalizeReview(c.Status)
-		queued := rsilifecycle.CanDispatch(review, "")
-		phase := rsilifecycle.NormalizeDelivery(c.DispatchPhase)
-		switch rsilifecycle.ClassifyDelivery(phase) {
-		case rsilifecycle.DeliveryInFlight:
+		review := genbind.NormalizeReview(c.Status)
+		queued := genbind.CanDispatch(review, "")
+		phase := genbind.NormalizeDelivery(c.DispatchPhase)
+		switch genbind.ClassifyDelivery(phase) {
+		case genbind.DeliveryInFlight:
 			tally.inFlight++
-		case rsilifecycle.DeliveryVerified:
+		case genbind.DeliveryVerified:
 			tally.applied++
-		case rsilifecycle.DeliverySafeNoop:
+		case genbind.DeliverySafeNoop:
 			// A clean session with no diff is a terminal, healthy no-op. It is
 			// neither in flight nor a failed dispatch.
 			tally.declined++
-		case rsilifecycle.DeliveryRetryable:
+		case genbind.DeliveryRetryable:
 			// Compatibility for sessions completed before the declined lifecycle
 			// phase shipped: the marker was correct, but the old shell wrote failed.
-			if phase == rsilifecycle.DeliveryFailed && t.dispatchMarkerOutcome(c.ID) == "declined" {
+			if phase == genbind.DeliveryFailed && t.dispatchMarkerOutcome(c.ID) == "declined" {
 				tally.declined++
 				continue
 			}
 			tally.failed++
-			if (phase == rsilifecycle.DeliveryRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
-				SelfCorrectionDispatchEligible(c) {
+			if (phase == genbind.DeliveryRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
+				selfCorrectionDispatchEligible(c) {
 				tally.markPending(c.CreatedAt)
 			}
-		case rsilifecycle.DeliveryQueued:
+		case genbind.DeliveryQueued:
 			if !queued {
 				continue
 			}
-			if SelfCorrectionDispatchEligible(c) {
+			if selfCorrectionDispatchEligible(c) {
 				tally.markPending(c.CreatedAt)
 			} else {
 				// Code candidate from a source not yet in the dispatch

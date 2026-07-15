@@ -472,8 +472,8 @@ func TestPropusNextCueSelectsMessageByFirstMatchingActionOrStateFallback(t *test
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := PropusNextCue(tc.state, tc.actions); got != tc.want {
-				t.Fatalf("PropusNextCue(%q, %#v) = %q, want %q", tc.state, tc.actions, got, tc.want)
+			if got := propusNextCue(tc.state, tc.actions); got != tc.want {
+				t.Fatalf("propusNextCue(%q, %#v) = %q, want %q", tc.state, tc.actions, got, tc.want)
 			}
 		})
 	}
@@ -541,7 +541,7 @@ func TestPropusLifecycleEventTypeNormalizesKnownTypesElseReview(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := PropusLifecycleEventType(LifecycleLogEntry{Type: tc.input}); got != tc.want {
+			if got := propusLifecycleEventType(LifecycleLogEntry{Type: tc.input}); got != tc.want {
 				t.Fatalf("event type = %q, want %q", got, tc.want)
 			}
 		})
@@ -585,7 +585,7 @@ func TestPropusLifecycleCountsReturnsEntriesByTypeAndExecution(t *testing.T) {
 		{Type: "evolution_proposal", Executed: false},
 		{Type: "other"},
 	}
-	got := PropusLifecycleCounts(entries)
+	got := propusLifecycleCounts(entries)
 	want := map[string]int{
 		"genesis":              2,
 		"review":               2,

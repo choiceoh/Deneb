@@ -23,7 +23,7 @@ func TestDefaultContextConfigBudgetOverrideFallsBackOnInvalid(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("DENEB_MEMORY_TOKEN_BUDGET", tc.env)
-			cfg := DefaultContextConfig()
+			cfg := defaultContextConfig()
 			if cfg.MemoryTokenBudget != tc.want {
 				t.Errorf("MemoryTokenBudget = %d, want %d", cfg.MemoryTokenBudget, tc.want)
 			}

@@ -32,7 +32,7 @@ const maxSkillHints = 2
 // cachedResolvedSkills returns the resolved skills of the last-built snapshot,
 // or nil before the first prompt build (hints simply stay off until then).
 func cachedResolvedSkills() []skills.PromptSkill {
-	if snap := CachedSkillsSnapshot(); snap != nil {
+	if snap := cachedSkillsSnapshot(); snap != nil {
 		return snap.ResolvedSkills
 	}
 	return nil
@@ -51,7 +51,7 @@ func cachedResolvedSkills() []skills.PromptSkill {
 // `skills(action="read")` call, so a preset whose allow-list excludes the
 // skills tool (btw:* runs use "conversation") would turn the hint into a
 // guaranteed tool-not-allowed error — no hint beats a hint at a blocked door.
-func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string) {
+func buildSkillHints(params runParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string) {
 	if params.EphemeralUser || params.SkipRecall {
 		return "", nil
 	}

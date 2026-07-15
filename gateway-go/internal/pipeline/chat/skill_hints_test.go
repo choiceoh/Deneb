@@ -33,7 +33,7 @@ func hintSkills() []skills.PromptSkill {
 // TestBuildSkillHints_MatchAndFormat: a trigger hit produces the hint block
 // with the skill name, first-clause summary, and an explicit read call.
 func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
-	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills())
+	out, names := buildSkillHints(runParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills())
 	if out == "" {
 		t.Fatal("expected a hint for 계약서")
 	}
@@ -60,7 +60,7 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 // longest-trigger (most specific) ones.
 func TestBuildSkillHintsTruncatesAtCap(t *testing.T) {
 	msg := "회의록이랑 계약서, 그리고 팩트체크까지 — 독소조항 있는지 확실해?"
-	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
+	out, names := buildSkillHints(runParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
 	if out == "" || len(names) == 0 || len(names) > maxSkillHints {
 		t.Fatalf("expected capped hints, names=%v", names)
 	}
@@ -80,29 +80,29 @@ func TestBuildSkillHintsTruncatesAtCap(t *testing.T) {
 func TestBuildSkillHintsReturnsEmptyWhenGated(t *testing.T) {
 	cases := []struct {
 		name   string
-		params RunParams
+		params runParams
 		preset string
 	}{
-		{"system session", RunParams{SessionKey: "system:skill-review:client:main", Message: "계약서 검토"}, ""},
-		{"ephemeral", RunParams{SessionKey: "client:main", Message: "계약서 검토", EphemeralUser: true}, ""},
-		{"skip recall", RunParams{SessionKey: "client:main", Message: "계약서 검토", SkipRecall: true}, ""},
-		{"empty message", RunParams{SessionKey: "client:main", Message: "  "}, ""},
-		{"no match", RunParams{SessionKey: "client:main", Message: "오늘 날씨 어때"}, ""},
+		{"system session", runParams{SessionKey: "system:skill-review:client:main", Message: "계약서 검토"}, ""},
+		{"ephemeral", runParams{SessionKey: "client:main", Message: "계약서 검토", EphemeralUser: true}, ""},
+		{"skip recall", runParams{SessionKey: "client:main", Message: "계약서 검토", SkipRecall: true}, ""},
+		{"empty message", runParams{SessionKey: "client:main", Message: "  "}, ""},
+		{"no match", runParams{SessionKey: "client:main", Message: "오늘 날씨 어때"}, ""},
 		// btw:* side questions run with the "conversation" preset, whose
 		// allow-list has no skills tool — the hinted call would be rejected.
-		{"conversation preset (btw)", RunParams{SessionKey: "btw:abc123", Message: "계약서 검토"}, "conversation"},
+		{"conversation preset (btw)", runParams{SessionKey: "btw:abc123", Message: "계약서 검토"}, "conversation"},
 	}
 	for _, tc := range cases {
 		if out, names := buildSkillHints(tc.params, tc.preset, hintSkills()); out != "" || len(names) != 0 {
 			t.Errorf("%s: expected no hint, got:\n%s", tc.name, out)
 		}
 	}
-	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, "", nil); out != "" {
+	if out, _ := buildSkillHints(runParams{SessionKey: "client:main", Message: "계약서"}, "", nil); out != "" {
 		t.Errorf("nil catalog: expected no hint, got:\n%s", out)
 	}
 	// The self-review preset DOES allow the skills tool — the preset gate must
 	// key on the allow-list, not blanket-suppress preset runs.
-	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills()); out == "" {
+	if out, _ := buildSkillHints(runParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills()); out == "" {
 		t.Error("self-review preset allows the skills tool; hint should fire")
 	}
 }
@@ -123,11 +123,11 @@ func TestSkillHintSummaryTruncatesAtSeparatorAndCap(t *testing.T) {
 // (a procedure pointer is orthogonal to reference material, so unlike
 // recall/feed it is NOT suppressed by notebook grounding).
 func TestBuildTailAdditionsPreservesHintPosition(t *testing.T) {
-	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall", "", "힌트")
+	adds := buildTailAdditions(runParams{AutoDeliveredOutput: true}, "recall", "", "힌트")
 	if len(adds) != 3 || adds[0] != "recall" || adds[1] != "힌트" {
 		t.Fatalf("recall branch adds = %#v", adds)
 	}
-	adds = buildTailAdditions(RunParams{}, "", "노트북", "힌트")
+	adds = buildTailAdditions(runParams{}, "", "노트북", "힌트")
 	if len(adds) != 2 || adds[0] != "노트북" || adds[1] != "힌트" {
 		t.Fatalf("notebook branch adds = %#v", adds)
 	}
@@ -145,7 +145,7 @@ func (f *hintFakeRecorder) RecordSkillUse(sessionKey, skillName string, success 
 // consult counts and wrote spurious failure rows in production).
 func TestRecordTurnSkillUsageIgnoresReviewForks(t *testing.T) {
 	rec := &hintFakeRecorder{}
-	log := NewSkillConsultLog()
+	log := newSkillConsultLog()
 	log.Add("topsolar-db")
 	recordTurnSkillUsage(rec, log, nil, "system:skill-review:cron:email:123", "m1")
 	if rec.calls != 0 {
@@ -153,7 +153,7 @@ func TestRecordTurnSkillUsageIgnoresReviewForks(t *testing.T) {
 	}
 
 	// A real session still records.
-	log2 := NewSkillConsultLog()
+	log2 := newSkillConsultLog()
 	log2.Add("topsolar-db")
 	recordTurnSkillUsage(rec, log2, []agent.ToolActivity{}, "client:main", "m1")
 	if rec.calls != 1 {

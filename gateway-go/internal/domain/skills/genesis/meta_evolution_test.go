@@ -3,6 +3,7 @@ package genesis
 import (
 	"context"
 	"encoding/json"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"io"
 	"log/slog"
 	"math"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
 // H1 regression pin: a producer-epoch proposal must NEVER auto-adopt when no
@@ -45,7 +45,7 @@ func TestMetaEvolution_ProducerDropsWithoutShadowGenerator(t *testing.T) {
 	e.SetTeacher(llm.NewClient(teacher.URL, "test-key"), "teacher")
 
 	metaDir := filepath.Join(t.TempDir(), "meta")
-	meta := generation.NewMetaArtifacts(metaDir, slog.Default())
+	meta := genbind.NewMetaArtifacts(metaDir, slog.Default())
 	meta.MaterializeDefaults(nil) // seed compiled defaults incl. the evolve prompt
 
 	adopted := false
@@ -93,16 +93,16 @@ func TestMetaProposalGateRejectsIdenticalOversizedAndSchemaBreakingProposals(t *
 		wantPass bool
 		wantIn   string
 	}{
-		{"valid evolve revision passes", generation.MetaEvolveSystemPrompt, valid, true, ""},
-		{"identical proposal rejected", generation.MetaEvolveSystemPrompt, incumbent, false, "identical"},
-		{"short stump rejected", generation.MetaEvolveSystemPrompt, "too short", false, "too short"},
-		{"oversized rejected", generation.MetaEvolveSystemPrompt, valid + strings.Repeat("x", metaProposalMaxBytes), false, "too large"},
+		{"valid evolve revision passes", genbind.MetaEvolveSystemPrompt, valid, true, ""},
+		{"identical proposal rejected", genbind.MetaEvolveSystemPrompt, incumbent, false, "identical"},
+		{"short stump rejected", genbind.MetaEvolveSystemPrompt, "too short", false, "too short"},
+		{"oversized rejected", genbind.MetaEvolveSystemPrompt, valid + strings.Repeat("x", metaProposalMaxBytes), false, "too large"},
 		{
-			"dropped schema anchor rejected", generation.MetaEvolveSystemPrompt,
+			"dropped schema anchor rejected", genbind.MetaEvolveSystemPrompt,
 			strings.ReplaceAll(valid, `"reproduction_case"`, `"repro"`), false, "anchor",
 		},
 		{
-			"judge contract enforced", generation.MetaSkillJudgeSystemPrompt,
+			"judge contract enforced", genbind.MetaSkillJudgeSystemPrompt,
 			strings.Repeat("점수 없이 서술만 하는 judge 프롬프트. ", 20), false, `"pass"`,
 		},
 	}
@@ -135,21 +135,21 @@ func TestNextEpochRotatesProducerEvaluatorGenesisAndIgnoresActionRecords(t *test
 	task := &MetaEvolutionTask{Tracker: tr}
 
 	epoch, artifact := task.nextEpoch()
-	if epoch != metaEpochProducer || artifact != generation.MetaEvolveSystemPrompt {
+	if epoch != metaEpochProducer || artifact != genbind.MetaEvolveSystemPrompt {
 		t.Fatalf("first cycle = %s/%s, want producer/evolve", epoch, artifact)
 	}
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "aaa"}); err != nil {
 		t.Fatal(err)
 	}
 	epoch, artifact = task.nextEpoch()
-	if epoch != metaEpochEvaluator || artifact != generation.MetaSkillJudgeSystemPrompt {
+	if epoch != metaEpochEvaluator || artifact != genbind.MetaSkillJudgeSystemPrompt {
 		t.Fatalf("second cycle = %s/%s, want evaluator/judge", epoch, artifact)
 	}
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "bbb"}); err != nil {
 		t.Fatal(err)
 	}
 	epoch, artifact = task.nextEpoch()
-	if epoch != metaEpochGenesis || artifact != generation.MetaGenesisSystemPrompt {
+	if epoch != metaEpochGenesis || artifact != genbind.MetaGenesisSystemPrompt {
 		t.Fatalf("third cycle = %s/%s, want genesis/genesis-prompt", epoch, artifact)
 	}
 	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: epoch, Artifact: artifact, FromVersion: "ccc"}); err != nil {
@@ -188,8 +188,8 @@ func TestMetaRevisionLedgerNewestFirstAndDisplayedInEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range []MetaRevisionRecord{
-		{Epoch: metaEpochProducer, Artifact: generation.MetaEvolveSystemPrompt, FromVersion: "v1", Reason: "first"},
-		{Epoch: metaEpochEvaluator, Artifact: generation.MetaSkillJudgeSystemPrompt, FromVersion: "v2", ToVersion: "v3", Proposed: true, Reason: "tightened scoring rubric"},
+		{Epoch: metaEpochProducer, Artifact: genbind.MetaEvolveSystemPrompt, FromVersion: "v1", Reason: "first"},
+		{Epoch: metaEpochEvaluator, Artifact: genbind.MetaSkillJudgeSystemPrompt, FromVersion: "v2", ToVersion: "v3", Proposed: true, Reason: "tightened scoring rubric"},
 	} {
 		if err := tr.LogMetaRevision(r); err != nil {
 			t.Fatal(err)
@@ -223,11 +223,11 @@ func TestAssembleEvidenceLoadsEvaluatorEpochOnIncumbentJudgeMissesOnly(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	meta := genbind.NewMetaArtifacts(t.TempDir(), slog.Default())
 	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
 
-	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
-	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	judgeFallback := genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(genbind.MetaSkillJudgeSystemPrompt, judgeFallback)
 
 	// Incumbent judge: caught every blatant section-drop, missed 3/5 subtle
 	// safety-drops, and has one suspected false-reject.
@@ -287,10 +287,10 @@ func TestAssembleEvidenceLoadsOrganicFalseAcceptsForIncumbentJudgeVersion(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	meta := genbind.NewMetaArtifacts(t.TempDir(), slog.Default())
 	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
-	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
-	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	judgeFallback := genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(genbind.MetaSkillJudgeSystemPrompt, judgeFallback)
 
 	rollback := func(skill, judgeVersion string) {
 		t.Helper()
@@ -330,10 +330,10 @@ func TestAssembleEvidenceSurfacesCategorySkewWithoutFullyCaughtCategories(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	meta := genbind.NewMetaArtifacts(t.TempDir(), slog.Default())
 	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
-	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
-	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	judgeFallback := genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(genbind.MetaSkillJudgeSystemPrompt, judgeFallback)
 
 	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
@@ -360,10 +360,10 @@ func TestAssembleEvidenceLeavesMissBlockEmptyForCleanJudge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	meta := generation.NewMetaArtifacts(t.TempDir(), slog.Default())
+	meta := genbind.NewMetaArtifacts(t.TempDir(), slog.Default())
 	task := &MetaEvolutionTask{Tracker: tr, Meta: meta}
-	judgeFallback := generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]
-	version := meta.Version(generation.MetaSkillJudgeSystemPrompt, judgeFallback)
+	judgeFallback := genbind.DefaultMetaArtifacts()[genbind.MetaSkillJudgeSystemPrompt]
+	version := meta.Version(genbind.MetaSkillJudgeSystemPrompt, judgeFallback)
 
 	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
 		JudgeVersion: version,
@@ -381,7 +381,7 @@ func TestAssembleEvidenceLeavesMissBlockEmptyForCleanJudge(t *testing.T) {
 // Propose-only invariant: WriteProposal never touches the live artifact.
 func TestWriteProposal_DoesNotTouchLiveArtifact(t *testing.T) {
 	dir := t.TempDir()
-	m := generation.NewMetaArtifacts(dir, slog.Default())
+	m := genbind.NewMetaArtifacts(dir, slog.Default())
 	live := strings.Repeat("live artifact content. ", 20)
 	m.MaterializeDefaults(map[string]string{"prompt.md": live})
 
@@ -408,11 +408,11 @@ func TestMetaEvolutionHealthWindowsRevisionsAndDisplaysNewest(t *testing.T) {
 	if h := tr.MetaEvolutionHealth(); h.Revisions7d != 0 || h.LastArtifact != "" {
 		t.Fatalf("empty ledger scoreboard = %+v", h)
 	}
-	old := MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: generation.MetaEvolveSystemPrompt, FromVersion: "v0", Reason: "ancient", CreatedAt: 1}
+	old := MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: genbind.MetaEvolveSystemPrompt, FromVersion: "v0", Reason: "ancient", CreatedAt: 1}
 	if err := tr.LogMetaRevision(old); err != nil {
 		t.Fatal(err)
 	}
-	fresh := MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: generation.MetaSkillJudgeSystemPrompt, FromVersion: "v1", ToVersion: "v2", Proposed: true, Reason: "recent proposal"}
+	fresh := MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: genbind.MetaSkillJudgeSystemPrompt, FromVersion: "v1", ToVersion: "v2", Proposed: true, Reason: "recent proposal"}
 	if err := tr.LogMetaRevision(fresh); err != nil {
 		t.Fatal(err)
 	}
@@ -420,7 +420,7 @@ func TestMetaEvolutionHealthWindowsRevisionsAndDisplaysNewest(t *testing.T) {
 	if h.Revisions7d != 1 || h.Proposed7d != 1 {
 		t.Fatalf("window counts = %+v (ancient entry must be excluded)", h)
 	}
-	if h.LastArtifact != generation.MetaSkillJudgeSystemPrompt || !h.LastProposed || h.LastReason != "recent proposal" {
+	if h.LastArtifact != genbind.MetaSkillJudgeSystemPrompt || !h.LastProposed || h.LastReason != "recent proposal" {
 		t.Fatalf("newest summary = %+v", h)
 	}
 }

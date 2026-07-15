@@ -28,7 +28,7 @@ func TestFetchCacheEvictsLRUAndExpiresEntries(t *testing.T) {
 		t.Fatalf("missing Get = (%q,%v)", got, ok)
 	}
 
-	cache := NewFetchCacheWithTTL(2, time.Hour)
+	cache := newFetchCacheWithTTL(2, time.Hour)
 	cache.Put("a", "one")
 	cache.Put("b", "two")
 	cache.Put("a", "one-refreshed") // refresh moves a to newest
@@ -46,7 +46,7 @@ func TestFetchCacheEvictsLRUAndExpiresEntries(t *testing.T) {
 		t.Fatalf("cache indexes diverged: items=%d order=%d", len(cache.items), cache.order.Len())
 	}
 
-	expiring := NewFetchCacheWithTTL(1, 5*time.Millisecond)
+	expiring := newFetchCacheWithTTL(1, 5*time.Millisecond)
 	expiring.Put("short", "lived")
 	time.Sleep(10 * time.Millisecond)
 	if got, ok := expiring.Get("short"); ok || got != "" {
@@ -60,14 +60,14 @@ func TestFetchCacheEvictsLRUAndExpiresEntries(t *testing.T) {
 	expiring.removeLocked("short")
 	expiring.mu.Unlock()
 
-	fallback := NewFetchCacheWithTTL(0, time.Second)
+	fallback := newFetchCacheWithTTL(0, time.Second)
 	if fallback.maxSize != fetchCacheDefaultMaxSize {
 		t.Fatalf("nonpositive max size = %d", fallback.maxSize)
 	}
 }
 
 func TestFetchCacheConcurrentCapacityAndIntegrity(t *testing.T) {
-	cache := NewFetchCacheWithTTL(8, time.Hour)
+	cache := newFetchCacheWithTTL(8, time.Hour)
 	const writers = 64
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -152,7 +152,7 @@ func TestProcessFetchedContentPlainJSONAndHTMLFallback(t *testing.T) {
 		t.Fatalf("invalid JSON changed to %q", got)
 	}
 
-	extractor := &LocalAIExtractor{state: localAIUnavailable, probeAt: time.Now()}
+	extractor := &localAIExtractor{state: localAIUnavailable, probeAt: time.Now()}
 	html := `<!doctype html><html lang="en"><head><title>Example</title><meta name="description" content="summary"></head><body><nav>noise</nav><main><h1>Heading</h1><p>Main article paragraph with enough useful words.</p></main><footer>footer noise</footer></body></html>`
 	htmlMeta := &webFetchMeta{URL: meta.URL, OrigChars: len(html)}
 	converted := processFetchedContent(context.Background(), html, []byte(html), "text/html", meta.URL, extractor, htmlMeta)
@@ -418,7 +418,7 @@ func TestLocalAIExtractorLoadsEnvAndCachesAvailability(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	extractor := &LocalAIExtractor{client: server.Client(), baseURL: server.URL, apiKey: "test-key", model: "test"}
+	extractor := &localAIExtractor{client: server.Client(), baseURL: server.URL, apiKey: "test-key", model: "test"}
 	if !extractor.available() || !extractor.available() {
 		t.Fatal("healthy local AI reported unavailable")
 	}
@@ -426,7 +426,7 @@ func TestLocalAIExtractorLoadsEnvAndCachesAvailability(t *testing.T) {
 		t.Fatalf("available state did not cache probe: requests=%d", requests.Load())
 	}
 
-	unavailable := &LocalAIExtractor{client: server.Client(), baseURL: "://bad", apiKey: "x"}
+	unavailable := &localAIExtractor{client: server.Client(), baseURL: "://bad", apiKey: "x"}
 	if unavailable.available() || unavailable.state != localAIUnavailable {
 		t.Fatalf("malformed extractor state=%d", unavailable.state)
 	}
@@ -437,7 +437,7 @@ func TestLocalAIExtractorLoadsEnvAndCachesAvailability(t *testing.T) {
 }
 
 func TestLocalAIExtractParsesSmallContentAndResponseVariants(t *testing.T) {
-	extractor := &LocalAIExtractor{}
+	extractor := &localAIExtractor{}
 	small := "<html><body><h1>Hello</h1><p>short body</p></body></html>"
 	got, err := extractor.extract(context.Background(), small, "https://example.com", "en")
 	if err != nil || !strings.Contains(got, "Hello") || !strings.Contains(got, "short body") {
@@ -465,7 +465,7 @@ func TestLocalAIExtractParsesSmallContentAndResponseVariants(t *testing.T) {
 				_, _ = io.WriteString(w, tc.body)
 			}))
 			defer server.Close()
-			e := &LocalAIExtractor{client: server.Client(), baseURL: server.URL, apiKey: "key", model: "model"}
+			e := &localAIExtractor{client: server.Client(), baseURL: server.URL, apiKey: "key", model: "model"}
 			large := "<main><p>" + strings.Repeat("useful content ", 220) + "</p></main>"
 			got, err := e.extract(context.Background(), large, "https://example.com", "en")
 			if tc.status == 200 && tc.want == "extracted" {

@@ -2,10 +2,10 @@ package genesis
 
 import (
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"sort"
 	"time"
 
-	genesiseprocess "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/eprocess"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -13,9 +13,9 @@ import (
 // genesis/evolve/rollback log entries, their writers, and the evidence queries
 // (SkillsNeedingEvolution) built on them.
 
-// EProcess keeps the tracker wire types stable while the implementation lives
+// eProcess keeps the tracker wire types stable while the implementation lives
 // in the dependency-free eprocess child package.
-type EProcess = genesiseprocess.EProcess
+type eProcess = genbind.EProcess
 
 // LifecycleLogEntry is the combined JSONL view for genesis and evolution
 // proposal events. Older genesis entries may not have Type populated; readers
@@ -186,7 +186,7 @@ func (t *Tracker) logEvolveWithProvenance(skillName, newVersion, description str
 		if w.baselineUses > 0 {
 			baselineRate = float64(w.baselineFails) / float64(w.baselineUses)
 		}
-		w.ep = genesiseprocess.NewEProcess(genesiseprocess.DefaultEProcessAlpha, baselineRate)
+		w.ep = genbind.NewEProcess(genbind.DefaultEProcessAlpha, baselineRate)
 		t.postEvolve[skillName] = w
 		t.saveWatchesLocked()
 	}

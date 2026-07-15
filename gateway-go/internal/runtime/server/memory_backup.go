@@ -16,7 +16,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/backup"
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // defaultBackupSSHHost is this deployment's storage node — the Tailscale machine
@@ -32,8 +32,8 @@ const defaultBackupSSHHost = "srv2"
 // dev/live-test instance (DENEB_STATE_DIR=/tmp/...) never touches production
 // data. Single source for that safety invariant.
 func (s *Server) productionStateDir(homeDir string) (string, bool) {
-	stateDir := config.ResolveStateDir()
-	return stateDir, homeDir != "" && stateDir == filepath.Join(homeDir, config.DefaultStateDirname)
+	stateDir := infrabind.ResolveStateDir()
+	return stateDir, homeDir != "" && stateDir == filepath.Join(homeDir, infrabind.DefaultStateDirname)
 }
 
 // registerMemoryBackupTask wires the daily backup into the autonomous service.

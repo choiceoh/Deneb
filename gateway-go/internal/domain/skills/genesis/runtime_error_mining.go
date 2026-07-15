@@ -31,6 +31,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/genbind"
 	"log/slog"
 	"os"
 	"regexp"
@@ -40,7 +41,6 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 )
 
 const (
@@ -192,7 +192,7 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 		if _, rerr := t.Tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 			Scope:     "code",
 			SkillName: runtimeErrorMiningSkill,
-			Title:     "recurring runtime error: " + common.TruncateRunes(a.sig, 80),
+			Title:     "recurring runtime error: " + genbind.TruncateRunes(a.sig, 80),
 			Candidate: a.sig,
 			Evidence:  evidence,
 			Reason:    "recurring gateway error signature (grounded, non-external)",
@@ -206,7 +206,7 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 			// in acceptance-machinery/security code must not become auto-fix
 			// candidates) — debug, not warn.
 			logger.Debug("runtime-error-mining: candidate rejected",
-				"sig", common.TruncateRunes(a.sig, 60), "error", rerr)
+				"sig", genbind.TruncateRunes(a.sig, 60), "error", rerr)
 			continue
 		}
 		authored++
@@ -224,10 +224,10 @@ func buildRuntimeErrorEvidence(a *runtimeErrorAgg) string {
 	var b strings.Builder
 	b.WriteString(strconv.Itoa(a.count))
 	b.WriteString("× in the recent error ring. example: ")
-	b.WriteString(common.TruncateRunes(a.example.Msg, 300))
+	b.WriteString(genbind.TruncateRunes(a.example.Msg, 300))
 	if e := strings.TrimSpace(a.example.Attrs["error"]); e != "" {
 		b.WriteString("\nerror=")
-		b.WriteString(common.TruncateRunes(e, 300))
+		b.WriteString(genbind.TruncateRunes(e, 300))
 	}
 	if rid := strings.TrimSpace(a.example.RunID); rid != "" {
 		b.WriteString("\nrunId=")

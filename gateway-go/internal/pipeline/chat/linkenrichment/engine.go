@@ -27,9 +27,9 @@ const (
 	linkFetchMaxBytes      = 2 * 1024 * 1024
 )
 
-// FetchFunc retrieves one URL for enrichment. The default uses the web tool's
+// fetchFunc retrieves one URL for enrichment. The default uses the web tool's
 // stealth, SSRF-safe fetch pipeline; explicit injection keeps tests offline.
-type FetchFunc func(ctx context.Context, url string) (data []byte, contentType string, err error)
+type fetchFunc func(ctx context.Context, url string) (data []byte, contentType string, err error)
 
 // Sanitizer applies the chat package's exact wire normalization to the typed
 // message and fetched content before persistence.
@@ -41,14 +41,14 @@ type Join func(context.Context) string
 
 // Config supplies the stable dependencies shared by every enrichment run.
 type Config struct {
-	Fetch  FetchFunc
+	Fetch  fetchFunc
 	Logger *slog.Logger
 }
 
 // Engine owns immutable fetch/conversion dependencies. Per-message goroutines
 // and timers remain scoped to Start and its returned Join.
 type Engine struct {
-	fetch   FetchFunc
+	fetch   fetchFunc
 	youtube func(context.Context, string) *media.YouTubeResult
 	logger  *slog.Logger
 }

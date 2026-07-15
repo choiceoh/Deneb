@@ -33,7 +33,13 @@ Health Bench 2.0은 줄 수를 줄이는 게임이 아니라, 변경이 국소�
 - 필수 증거가 없으면 check를 tooling error로 끝낸다. 모르는 상태를 건강한
   상태로 간주하지 않는다.
 
-## Rubric 2.2.0
+## Rubric 2.2.1
+
+2.2.1 keeps 2.2.0 weights and adds Local change scope
+documentation (neighbors/forbidden/verify) as confinement-equivalent
+evidence for `ai-change-readiness` / `local_change_scope`.
+
+## Rubric 2.2.0 (base)
 
 2.2.0은 2.1.2의 typed-contract와 테스트 provenance 규칙을 유지하면서,
 단일 패키지 안에서 반복된 변경 빈도를 integration bottleneck으로 오인하지

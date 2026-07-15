@@ -32,7 +32,7 @@ func TestCheckDestructiveCommandReturnsDangerWarnings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.command, func(t *testing.T) {
-			checks := CheckDestructiveCommand(tt.command)
+			checks := checkDestructiveCommand(tt.command)
 			if tt.danger && len(checks) == 0 {
 				t.Error("expected destructive warning")
 			}
@@ -87,7 +87,7 @@ func TestCheckCatastrophicCommandRejectsCatastrophicPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.command, func(t *testing.T) {
-			blocked := CheckCatastrophicCommand(tt.command)
+			blocked := checkCatastrophicCommand(tt.command)
 			if tt.block && len(blocked) == 0 {
 				t.Errorf("expected %q to be blocked", tt.command)
 			}
@@ -99,10 +99,10 @@ func TestCheckCatastrophicCommandRejectsCatastrophicPaths(t *testing.T) {
 }
 
 func TestFormatCatastrophicRefusal(t *testing.T) {
-	if FormatCatastrophicRefusal(nil) != "" {
+	if formatCatastrophicRefusal(nil) != "" {
 		t.Error("expected empty string for no checks")
 	}
-	s := FormatCatastrophicRefusal(CheckCatastrophicCommand("rm -rf /"))
+	s := formatCatastrophicRefusal(checkCatastrophicCommand("rm -rf /"))
 	if s == "" {
 		t.Fatal("expected a non-empty refusal message")
 	}
@@ -113,14 +113,14 @@ func TestFormatCatastrophicRefusal(t *testing.T) {
 
 func TestFormatDestructiveWarnings(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
-		if FormatDestructiveWarnings(nil) != "" {
+		if formatDestructiveWarnings(nil) != "" {
 			t.Error("expected empty string")
 		}
 	})
 
 	t.Run("with warnings", func(t *testing.T) {
-		checks := CheckDestructiveCommand("rm -rf /tmp && git push --force")
-		s := FormatDestructiveWarnings(checks)
+		checks := checkDestructiveCommand("rm -rf /tmp && git push --force")
+		s := formatDestructiveWarnings(checks)
 		if s == "" {
 			t.Error("expected non-empty warning")
 		}
@@ -151,7 +151,7 @@ func TestInPlaceFileTargetsReturnsCheckpointCandidates(t *testing.T) {
 		{"grep foo file.go", nil, []string{"file.go"}},                    // read-only → not a target
 	}
 	for _, tc := range cases {
-		got := InPlaceFileTargets(tc.command)
+		got := inPlaceFileTargets(tc.command)
 		for _, m := range tc.must {
 			if !contains(got, m) {
 				t.Errorf("%q: expected target %q in %v", tc.command, m, got)
@@ -183,7 +183,7 @@ func TestDetectFileModificationReturnsModificationKind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.command, func(t *testing.T) {
-			got := DetectFileModification(tt.command)
+			got := detectFileModification(tt.command)
 			if got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}

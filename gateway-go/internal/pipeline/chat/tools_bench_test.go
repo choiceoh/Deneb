@@ -52,7 +52,7 @@ func registerSampleTools(r *ToolRegistry, n int) {
 func BenchmarkLLMTools_Marshal(b *testing.B) {
 	reg := NewToolRegistry()
 	registerSampleTools(reg, 40)
-	tools := reg.LLMTools()
+	tools := reg.lLMTools()
 
 	b.ResetTimer()
 	b.ReportAllocs()

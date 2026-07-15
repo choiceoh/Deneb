@@ -1,37 +1,35 @@
 package server
 
 import (
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/svcbind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/infrabind"
 )
 
 // phoneEventLedgerInstance lazily creates the shared notification ledger. The
 // HTTP loopback door (server_http_routing.go) builds its phone-event handler
 // per request, so this can run concurrently — sync.Once ensures every ingest
 // records into one ledger rather than racing separate instances into being.
-func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
+func (s *Server) phoneEventLedgerInstance() *svcbind.Ledger {
 	s.phoneEventLedgerOnce.Do(func() {
-		s.phoneEventLedger = phoneevents.NewLedger(
-			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger,
+		s.phoneEventLedger = svcbind.NewLedger(
+			filepath.Join(infrabind.ResolveStateDir(), svcbind.LedgerDirname), s.logger,
 		)
 	})
 	return s.phoneEventLedger
 }
 
 // siteVisitOnLocation lazily builds the site-visit recorder and returns its
-// location callback for phoneevents.Config.OnLocationPlace. nil wiki store ⇒
+// location callback for svcbind.PhoneEventsConfig.OnLocationPlace. nil wiki store ⇒
 // nil callback (site-visit recording off). Guarded by sync.Once: the HTTP
 // ingest door constructs its handler per request, so two concurrent location
 // updates must share the one recorder (separate recorders would each load empty
@@ -41,9 +39,9 @@ func (s *Server) siteVisitOnLocation() func(string) {
 		return nil
 	}
 	s.siteVisitRecorderOnce.Do(func() {
-		s.siteVisitRecorder = wikiwork.NewSiteVisitRecorder(
+		s.siteVisitRecorder = svcbind.NewSiteVisitRecorder(
 			s.wikiStore, s.logger,
-			filepath.Join(config.ResolveStateDir(), wikiwork.SiteVisitStateFile),
+			filepath.Join(infrabind.ResolveStateDir(), svcbind.SiteVisitStateFile),
 		)
 	})
 	return s.siteVisitRecorder.RecordFromLocationPayload
@@ -207,8 +205,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	data["action"] = action
 
 	if action == "sync_state" {
-		s.pushHub.Publish(proactive.Event{
-			Kind:  proactive.PushKindPhoneAction,
+		s.pushHub.Publish(svcbind.Event{
+			Kind:  svcbind.PushKindPhoneAction,
 			Title: "phone action",
 			Body:  action,
 			Data:  data,
@@ -221,8 +219,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	result := s.phoneActions.register(id, fanout)
 	defer s.phoneActions.drop(id)
 
-	s.pushHub.Publish(proactive.Event{
-		Kind:  proactive.PushKindPhoneAction,
+	s.pushHub.Publish(svcbind.Event{
+		Kind:  svcbind.PushKindPhoneAction,
 		Title: "phone action",
 		Body:  action,
 		Ref:   id,

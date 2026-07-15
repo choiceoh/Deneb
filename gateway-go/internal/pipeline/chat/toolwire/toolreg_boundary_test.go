@@ -358,13 +358,13 @@ func TestSchemaBuildersReturnFreshMutableGraphs(t *testing.T) {
 }
 
 func TestFetchToolsSchemaMatchesGeneratedBuilderWithoutAliasing(t *testing.T) {
-	public := FetchToolsSchema()
+	public := fetchToolsSchema()
 	direct := schema.FetchToolsToolSchema()
 	if !reflect.DeepEqual(public, direct) {
 		t.Fatalf("public fetch schema differs from generated schema")
 	}
 	public["type"] = "mutated"
-	if got := FetchToolsSchema()["type"]; got != "object" {
+	if got := fetchToolsSchema()["type"]; got != "object" {
 		t.Fatalf("public schema reused map: %#v", got)
 	}
 }
@@ -490,14 +490,14 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		}, want: []string{"fleet", "gateway", "observe"}},
 		{name: "graph", run: func(r *mockRegistrar) { core.RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
 		{name: "phone", run: func(r *mockRegistrar) { core.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
-		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
+		{name: "process", run: func(r *mockRegistrar) { registerProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
 		{name: "web", run: func(r *mockRegistrar) { core.RegisterWebTools(r, nil) }, want: []string{"web"}},
-		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
-		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
+		{name: "session", run: func(r *mockRegistrar) { registerSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
+		{name: "chrono", run: func(r *mockRegistrar) { registerChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
 		{name: "todo", run: func(r *mockRegistrar) { chrono.RegisterTodoTool(r) }, want: []string{"todo"}},
 		{name: "routine", run: func(r *mockRegistrar) { chrono.RegisterRoutineTools(r, &tooldeps.ChronoDeps{}, "", "", nil) }, want: []string{"cron", "evening_letter", "files", "morning_letter"}},
 		{name: "skills", run: func(r *mockRegistrar) { RegisterSkillsTools(r, nil, t.TempDir(), "", nil) }, want: []string{"skills"}},
-		{name: "media", run: func(r *mockRegistrar) { RegisterMediaTools(r, t.TempDir()) }, want: []string{"chart", "diagram", "send_file", "watch"}},
+		{name: "media", run: func(r *mockRegistrar) { registerMediaTools(r, t.TempDir()) }, want: []string{"chart", "diagram", "send_file", "watch"}},
 	}
 	all := make(map[string]string)
 	for _, g := range groups {
@@ -562,7 +562,7 @@ func TestCalendarRegistrationRequiresEitherReaderOrLocalStore(t *testing.T) {
 
 func TestRegistrarPreservesIndependentSchemaCopies(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterMediaTools(reg, t.TempDir())
+	registerMediaTools(reg, t.TempDir())
 	if len(reg.tools) < 2 {
 		t.Fatal("media fixture too small")
 	}
@@ -571,7 +571,7 @@ func TestRegistrarPreservesIndependentSchemaCopies(t *testing.T) {
 		t.Fatal("registered tools share schema root maps")
 	}
 	fresh := &mockRegistrar{}
-	RegisterMediaTools(fresh, t.TempDir())
+	registerMediaTools(fresh, t.TempDir())
 	if fresh.tools[0].InputSchema["type"] != "object" {
 		t.Fatal("registration reused schema from prior call")
 	}
@@ -630,13 +630,13 @@ func TestToolDefinitionsCanBeInvokedWithCancelledContextWithoutRegistrationPanic
 	}
 	reg := &mockRegistrar{}
 	core.RegisterPhoneTools(reg, nil)
-	RegisterProcessTools(reg, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()})
+	registerProcessTools(reg, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()})
 	core.RegisterWebTools(reg, nil)
-	RegisterSessionTools(reg, &tooldeps.SessionDeps{})
-	RegisterChronoTools(reg)
+	registerSessionTools(reg, &tooldeps.SessionDeps{})
+	registerChronoTools(reg)
 	chrono.RegisterRoutineTools(reg, &tooldeps.ChronoDeps{}, "", "", nil)
 	RegisterSkillsTools(reg, nil, t.TempDir(), "", nil)
-	RegisterMediaTools(reg, t.TempDir())
+	registerMediaTools(reg, t.TempDir())
 	for _, def := range reg.tools {
 		if def.Fn == nil {
 			t.Errorf("cancelled-context registration left %q without Fn", def.Name)

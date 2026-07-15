@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/checkpoint"
 )
 
@@ -20,17 +20,17 @@ import (
 func TestShouldReleaseCheckpointsReturnsTrueForTerminalEvents(t *testing.T) {
 	cases := []struct {
 		name  string
-		event session.Event
+		event domainbind.Event
 		want  bool
 	}{
-		{"delete always releases", session.Event{Kind: session.EventDeleted, Key: "k"}, true},
-		{"status → done releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusDone}, true},
-		{"status → failed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusFailed}, true},
-		{"status → killed releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusKilled}, true},
-		{"status → timeout releases", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusTimeout}, true},
-		{"reset (empty status) releases", session.Event{Kind: session.EventStatusChanged, NewStatus: ""}, true},
-		{"status → running does NOT release", session.Event{Kind: session.EventStatusChanged, NewStatus: session.StatusRunning}, false},
-		{"create does NOT release", session.Event{Kind: session.EventCreated}, false},
+		{"delete always releases", domainbind.Event{Kind: domainbind.EventDeleted, Key: "k"}, true},
+		{"status → done releases", domainbind.Event{Kind: domainbind.EventStatusChanged, NewStatus: domainbind.StatusDone}, true},
+		{"status → failed releases", domainbind.Event{Kind: domainbind.EventStatusChanged, NewStatus: domainbind.StatusFailed}, true},
+		{"status → killed releases", domainbind.Event{Kind: domainbind.EventStatusChanged, NewStatus: domainbind.StatusKilled}, true},
+		{"status → timeout releases", domainbind.Event{Kind: domainbind.EventStatusChanged, NewStatus: domainbind.StatusTimeout}, true},
+		{"reset (empty status) releases", domainbind.Event{Kind: domainbind.EventStatusChanged, NewStatus: ""}, true},
+		{"status → running does NOT release", domainbind.Event{Kind: domainbind.EventStatusChanged, NewStatus: domainbind.StatusRunning}, false},
+		{"create does NOT release", domainbind.Event{Kind: domainbind.EventCreated}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,7 +42,7 @@ func TestShouldReleaseCheckpointsReturnsTrueForTerminalEvents(t *testing.T) {
 }
 
 // TestCheckpointLifecycle_RemovesOnTerminal builds the minimum wiring needed
-// to exercise the real subscription path: a session.Manager, a real
+// to exercise the real subscription path: a domainbind.Manager, a real
 // checkpoint Manager, and the subscriber installed via initCheckpointLifecycle.
 // When the session transitions to a terminal phase, the checkpoint directory
 // must be removed within a short timeout — proving the hook fires and the
@@ -55,7 +55,7 @@ func TestCheckpointLifecycleDeletesDirOnTerminalTransition(t *testing.T) {
 		ServerTransport: &ServerTransport{},
 		ServerRPC:       &ServerRPC{},
 		ServerRuntime:   &ServerRuntime{},
-		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		SessionManager:  &SessionManager{sessions: domainbind.NewManager()},
 		ChatManager:     &ChatManager{},
 		HookManager:     &HookManager{},
 		logger:          logger,
@@ -86,8 +86,8 @@ func TestCheckpointLifecycleDeletesDirOnTerminalTransition(t *testing.T) {
 
 	// Drive the session through start → end. The End event fires
 	// EventStatusChanged with NewStatus=done, which must trigger removal.
-	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
-	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseEnd, Ts: 2})
+	s.sessions.ApplyLifecycleEvent(sessionKey, domainbind.LifecycleEvent{Phase: domainbind.PhaseStart, Ts: 1})
+	s.sessions.ApplyLifecycleEvent(sessionKey, domainbind.LifecycleEvent{Phase: domainbind.PhaseEnd, Ts: 2})
 
 	if !waitForMissing(sessionDir, 2*time.Second) {
 		t.Fatalf("checkpoint dir %s still exists after terminal transition", sessionDir)
@@ -104,7 +104,7 @@ func TestCheckpointLifecycleDeletesDirOnReset(t *testing.T) {
 		ServerTransport: &ServerTransport{},
 		ServerRPC:       &ServerRPC{},
 		ServerRuntime:   &ServerRuntime{},
-		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		SessionManager:  &SessionManager{sessions: domainbind.NewManager()},
 		ChatManager:     &ChatManager{},
 		HookManager:     &HookManager{},
 		logger:          logger,
@@ -120,7 +120,7 @@ func TestCheckpointLifecycleDeletesDirOnReset(t *testing.T) {
 
 	// ResetSession requires the session to exist with a non-empty status for
 	// the emitted event to carry OldStatus != NewStatus (otherwise no event).
-	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
+	s.sessions.ApplyLifecycleEvent(sessionKey, domainbind.LifecycleEvent{Phase: domainbind.PhaseStart, Ts: 1})
 
 	// Snapshot after session exists so the directory is in place.
 	cpm := checkpoint.New(root, sessionKey)
@@ -152,7 +152,7 @@ func TestCheckpointLifecycle_IgnoresRunningTransition(t *testing.T) {
 		ServerTransport: &ServerTransport{},
 		ServerRPC:       &ServerRPC{},
 		ServerRuntime:   &ServerRuntime{},
-		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		SessionManager:  &SessionManager{sessions: domainbind.NewManager()},
 		ChatManager:     &ChatManager{},
 		HookManager:     &HookManager{},
 		logger:          logger,
@@ -176,7 +176,7 @@ func TestCheckpointLifecycle_IgnoresRunningTransition(t *testing.T) {
 	sessionDir := cpm.SessionDir()
 
 	// Transition to running. The subscriber must NOT delete the dir.
-	s.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{Phase: session.PhaseStart, Ts: 1})
+	s.sessions.ApplyLifecycleEvent(sessionKey, domainbind.LifecycleEvent{Phase: domainbind.PhaseStart, Ts: 1})
 
 	// Give the goroutine a reasonable window — if it was going to fire, it
 	// would have by now (subscriber is async-dispatched).
@@ -194,7 +194,7 @@ func TestCheckpointLifecycle_EmptyRootIsNoop(t *testing.T) {
 		ServerTransport: &ServerTransport{},
 		ServerRPC:       &ServerRPC{},
 		ServerRuntime:   &ServerRuntime{},
-		SessionManager:  &SessionManager{sessions: session.NewManager()},
+		SessionManager:  &SessionManager{sessions: domainbind.NewManager()},
 		ChatManager:     &ChatManager{},
 		HookManager:     &HookManager{},
 		logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),

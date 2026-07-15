@@ -31,7 +31,7 @@ func TestWeeklyReportLiveCollectsAndRendersPDF(t *testing.T) {
 	t.Logf("weekly report data (%d bytes):\n%s", len(out), out)
 
 	// Full pipeline: compose HTML + render PDF (or text fallback).
-	pdfPath, textFallback, rendered := BuildWeeklyReportPDF(context.Background(), opts, time.Now())
+	pdfPath, textFallback, rendered := buildWeeklyReportPDF(context.Background(), opts, time.Now())
 	t.Logf("rendered=%v pdf=%q", rendered, pdfPath)
 	if rendered {
 		fi, err := os.Stat(pdfPath)

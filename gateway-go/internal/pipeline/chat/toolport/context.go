@@ -188,10 +188,10 @@ func WithCheckpointer(ctx context.Context, cp Checkpointer) context.Context {
 	return context.WithValue(ctx, ctxKeyCheckpointer, cp)
 }
 
-// CheckpointerFromContext extracts the Checkpointer from a context.
+// checkpointerFromContext extracts the Checkpointer from a context.
 // Returns nil if none was attached (in which case tools should skip
 // snapshotting but still perform the write).
-func CheckpointerFromContext(ctx context.Context) Checkpointer {
+func checkpointerFromContext(ctx context.Context) Checkpointer {
 	cp, _ := ctx.Value(ctxKeyCheckpointer).(Checkpointer)
 	return cp
 }

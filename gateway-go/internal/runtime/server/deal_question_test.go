@@ -7,14 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/domainbind"
 )
 
-func discardServer(t *testing.T) (*Server, *wiki.Store) {
+func discardServer(t *testing.T) (*Server, *domainbind.WikiStore) {
 	t.Helper()
 	dir := t.TempDir()
-	ws, err := wiki.NewStore(dir, filepath.Join(dir, "diary"))
+	ws, err := domainbind.NewWikiStore(dir, filepath.Join(dir, "diary"))
 	if err != nil {
 		t.Fatalf("wiki store: %v", err)
 	}
@@ -29,11 +28,11 @@ func discardServer(t *testing.T) (*Server, *wiki.Store) {
 func TestRecordDealQuestionAnswerUpdatesPagePreservingBody(t *testing.T) {
 	s, ws := discardServer(t)
 	const path = "프로젝트/완도.md"
-	if err := ws.WritePage(path, &wiki.Page{Meta: wiki.Frontmatter{Title: "완도군청"}, Body: "기존 본문"}); err != nil {
+	if err := ws.WritePage(path, &domainbind.Page{Meta: domainbind.Frontmatter{Title: "완도군청"}, Body: "기존 본문"}); err != nil {
 		t.Fatalf("seed page: %v", err)
 	}
 
-	s.recordDealQuestionAnswer(workfeed.Item{RefType: "wiki", RefID: path}, "dept:pl1")
+	s.recordDealQuestionAnswer(domainbind.Item{RefType: "wiki", RefID: path}, "dept:pl1")
 
 	page, err := ws.ReadPage(path)
 	if err != nil {
@@ -48,7 +47,7 @@ func TestRecordDealQuestionAnswerUpdatesPagePreservingBody(t *testing.T) {
 
 	// "딜 아님" (none) must not modify the page.
 	before := page.Body
-	s.recordDealQuestionAnswer(workfeed.Item{RefType: "wiki", RefID: path}, "dept:none")
+	s.recordDealQuestionAnswer(domainbind.Item{RefType: "wiki", RefID: path}, "dept:none")
 	after, _ := ws.ReadPage(path)
 	if after.Body != before {
 		t.Errorf("none answer must not modify page:\nbefore %q\nafter  %q", before, after.Body)
@@ -58,6 +57,6 @@ func TestRecordDealQuestionAnswerUpdatesPagePreservingBody(t *testing.T) {
 // A missing/empty RefID or wiki page is a no-op, not a panic.
 func TestRecordDealQuestionAnswerIgnoresMissingTarget(t *testing.T) {
 	s, _ := discardServer(t)
-	s.recordDealQuestionAnswer(workfeed.Item{RefID: ""}, "dept:pl1")           // empty path
-	s.recordDealQuestionAnswer(workfeed.Item{RefID: "프로젝트/없음.md"}, "dept:pl2") // missing page
+	s.recordDealQuestionAnswer(domainbind.Item{RefID: ""}, "dept:pl1")           // empty path
+	s.recordDealQuestionAnswer(domainbind.Item{RefID: "프로젝트/없음.md"}, "dept:pl2") // missing page
 }
