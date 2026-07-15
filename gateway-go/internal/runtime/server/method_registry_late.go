@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -26,6 +26,7 @@ import (
 	handlerskill "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/skill"
 	handlerwiki "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
 // registerLateMethods registers RPC domains that depend on chatHandler.
