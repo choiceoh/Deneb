@@ -1,20 +1,30 @@
 package genesis
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
-func TestSelectSelfCorrectionDispatchCandidatePrioritizesReviewThenRecency(t *testing.T) {
-	records := []SelfCorrectionCandidateRecord{
-		{ID: "new-proposed", Scope: "code", Status: SelfCorrectionStatusProposed, Source: "health-finding:x", CreatedAt: 30},
-		{ID: "old-accepted", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "tool-quality:x", CreatedAt: 10},
-		{ID: "new-accepted", Scope: "code", Status: SelfCorrectionStatusAccepted, Source: "self-harness:x", CreatedAt: 20},
+func TestNextSelfCorrectionDispatchCandidateSearchesBeyondRecentViewLimit(t *testing.T) {
+	tracker := newTestTracker(t)
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "old-accepted", Scope: "code", Status: SelfCorrectionStatusAccepted,
+		Source: "tool-quality:x", CreatedAt: 1,
+	})
+	for i := range 501 {
+		appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+			ID: fmt.Sprintf("new-proposed-%03d", i), Scope: "code",
+			Status: SelfCorrectionStatusProposed, Source: "health-finding:x", CreatedAt: int64(i + 2),
+		})
 	}
-	got, ok := SelectSelfCorrectionDispatchCandidate(records, nil)
-	if !ok || got.ID != "new-accepted" {
-		t.Fatalf("selected = %+v, %v", got, ok)
+
+	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
+	if err != nil || !ok || got.ID != "old-accepted" {
+		t.Fatalf("selected = %+v, ok=%v, err=%v", got, ok, err)
 	}
-	got, ok = SelectSelfCorrectionDispatchCandidate(records, []string{"new-accepted"})
-	if !ok || got.ID != "old-accepted" {
-		t.Fatalf("selected with exclusion = %+v, %v", got, ok)
+	got, ok, err = tracker.NextSelfCorrectionDispatchCandidate([]string{"old-accepted"})
+	if err != nil || !ok || got.ID != "new-proposed-500" {
+		t.Fatalf("selected with exclusion = %+v, ok=%v, err=%v", got, ok, err)
 	}
 }
 

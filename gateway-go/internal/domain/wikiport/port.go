@@ -22,12 +22,19 @@ type (
 	SearchResult            = wiki.SearchResult
 	SearchMode              = wiki.SearchMode
 	QueryOptions            = wiki.QueryOptions
+	QueryKind               = wiki.QueryKind
+	QueryClause             = wiki.QueryClause
+	QueryPlan               = wiki.QueryPlan
+	QueryClauseDiagnostic   = wiki.QueryClauseDiagnostic
 	SearchSignalExplanation = wiki.SearchSignalExplanation
 	SearchExplanation       = wiki.SearchExplanation
 	SearchDropSummary       = wiki.SearchDropSummary
 	SearchDiagnostics       = wiki.SearchDiagnostics
 	SearchReport            = wiki.SearchReport
 	SemanticIndexStatus     = wiki.SemanticIndexStatus
+	SearchProbeStatus       = wiki.SearchProbeStatus
+	RerankerStatus          = wiki.RerankerStatus
+	SearchDoctorReport      = wiki.SearchDoctorReport
 	DiaryHit                = wiki.DiaryHit
 	StoreStats              = wiki.StoreStats
 	Tier1Result             = wiki.Tier1Result
@@ -64,6 +71,9 @@ const (
 	SearchModeSemantic = wiki.SearchModeSemantic
 	SearchModeHybrid   = wiki.SearchModeHybrid
 	SearchModeFull     = wiki.SearchModeFull
+	QueryKindLex       = wiki.QueryKindLex
+	QueryKindVec       = wiki.QueryKindVec
+	QueryKindHyDE      = wiki.QueryKindHyDE
 )
 
 // Tier1Store is the prompt-injection read surface for high-importance pages.
@@ -166,6 +176,10 @@ func AppendDiaryTo(diaryDir, content string) error {
 
 func ExtractWikiLinks(body string) []string {
 	return wiki.ExtractWikiLinks(body)
+}
+
+func ParseQueryPlan(input string) QueryPlan {
+	return wiki.ParseQueryPlan(input)
 }
 
 func LogArchivePath(project string) string {

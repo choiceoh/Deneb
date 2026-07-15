@@ -29,6 +29,9 @@ type (
 // lifecycle log events; they are unapplied coding hypotheses for batch review.
 type SelfImprovementCodingDeps struct {
 	RecentCandidates func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error)
+	// NextDispatchCandidate selects across the complete merged ledger. It must
+	// not inherit the bounded history used by list/status views.
+	NextDispatchCandidate func(excludedIDs []string) (genesis.SelfCorrectionCandidateRecord, bool, error)
 	// RecordCandidate appends one propose-only candidate through the genesis
 	// tracker — the queue's single writer, which enforces the forbidden-surface
 	// list at record time. Optional: without it the record method is absent.
@@ -182,38 +185,45 @@ func selfImprovementCodingList(deps SelfImprovementCodingDeps) rpcutil.HandlerFu
 		ExcludeIDs       []string `json:"excludeIds"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		if p.DispatchableOnly {
+			if deps.NextDispatchCandidate == nil {
+				return rpcerr.Unavailable("self-improvement dispatch selector unavailable").Response(req.ID)
+			}
+			selected, ok, err := deps.NextDispatchCandidate(p.ExcludeIDs)
+			if err != nil {
+				return rpcerr.WrapUnavailable("self-improvement coding queue unavailable", err).Response(req.ID)
+			}
+			if !ok {
+				return rpcutil.RespondOK(req.ID, SelfImprovementCodingListResponse{})
+			}
+			return rpcutil.RespondOK(req.ID, SelfImprovementCodingListResponse{
+				Candidates: []SelfCorrectionCandidate{selfCorrectionCandidate(selected)},
+				Count:      1,
+			})
+		}
+
 		if p.Limit <= 0 || p.Limit > lifecycleScanLimit {
 			p.Limit = 60
+		}
+		status, normalizeErr := normalizeSelfImprovementCodingStatus(p.Status)
+		if normalizeErr != nil {
+			return rpcerr.InvalidParams(normalizeErr).Response(req.ID)
 		}
 		allRecs, err := deps.RecentCandidates("", lifecycleScanLimit)
 		if err != nil {
 			return rpcerr.WrapUnavailable("self-improvement coding queue unavailable", err).Response(req.ID)
 		}
-		var recs []genesis.SelfCorrectionCandidateRecord
-		if p.DispatchableOnly {
-			if selected, ok := genesis.SelectSelfCorrectionDispatchCandidate(allRecs, p.ExcludeIDs); ok {
-				recs = []genesis.SelfCorrectionCandidateRecord{selected}
-			}
-		} else {
-			status, normalizeErr := normalizeSelfImprovementCodingStatus(p.Status)
-			if normalizeErr != nil {
-				return rpcerr.InvalidParams(normalizeErr).Response(req.ID)
-			}
-			recs = filterSelfImprovementCodingRecords(allRecs, status, p.Limit)
-		}
+		recs := filterSelfImprovementCodingRecords(allRecs, status, p.Limit)
 		candidates := make([]SelfCorrectionCandidate, 0, len(recs))
 		for _, rec := range recs {
 			candidates = append(candidates, selfCorrectionCandidate(rec))
 		}
-		response := SelfImprovementCodingListResponse{
-			Candidates: candidates,
-			Count:      len(candidates),
-		}
-		if !p.DispatchableOnly {
-			response.StatusCounts = selfImprovementCodingStatusCounts(allRecs)
-			response.Funnel = selfImprovementCodingFunnel(deps)
-		}
-		return rpcutil.RespondOK(req.ID, response)
+		return rpcutil.RespondOK(req.ID, SelfImprovementCodingListResponse{
+			Candidates:   candidates,
+			Count:        len(candidates),
+			StatusCounts: selfImprovementCodingStatusCounts(allRecs),
+			Funnel:       selfImprovementCodingFunnel(deps),
+		})
 	})
 }
 

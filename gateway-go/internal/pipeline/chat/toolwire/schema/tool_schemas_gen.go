@@ -1034,10 +1034,20 @@ func WikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan.",
 			},
+			"explain": map[string]any{
+				"type":        "boolean",
+				"description": "search 전용 검색 신호·융합·rerank 진단 포함",
+				"default":     false,
+			},
 			"force": map[string]any{
 				"type":        "boolean",
 				"description": "write action: 새 문서 생성 시 유사 문서가 발견되면 기본적으로 생성이 거부되고 기존 경로가 안내된다. 안내된 문서가 정말 별개 주제일 때만 force=true로 생성을 강행",
 				"default":     false,
+			},
+			"from_line": map[string]any{
+				"type":        "integer",
+				"description": "read 전용 절대 시작 줄(1 기반). search 결과의 Lx-Ly 주소를 그대로 사용",
+				"minimum":     1,
 			},
 			"id": map[string]any{
 				"type":        "string",
@@ -1048,6 +1058,10 @@ func WikiToolSchema() map[string]any {
 				"description": "Page importance 0.0-1.0 (write action, default: 0.5)",
 				"minimum":     0,
 				"maximum":     1,
+			},
+			"intent": map[string]any{
+				"type":        "string",
+				"description": "search 전용 원래 사용자 의도. 후보를 새로 들이지 않고 애매한 순위만 보정한다",
 			},
 			"kinds": map[string]any{
 				"type":        "array",
@@ -1063,12 +1077,22 @@ func WikiToolSchema() map[string]any {
 				"minimum":     1,
 				"maximum":     50,
 			},
+			"max_lines": map[string]any{
+				"type":        "integer",
+				"description": "read 전용 반환 줄 수(기본 120, 최대 400)",
+				"minimum":     1,
+				"maximum":     400,
+			},
 			"paths": map[string]any{
 				"type":        "array",
 				"description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of read-per-page. Same forms as query (path or w: ref); up to 8 pages per call.",
 				"items": map[string]any{
 					"type": "string",
 				},
+			},
+			"plan": map[string]any{
+				"type":        "string",
+				"description": "search 전용 타입 질의 계획. 줄마다 lex:, vec:, hyde:, intent:, scope: 연산자를 사용한다. 첫 검색절은 기본 2배 가중치이며 scope는 결과 제한 전에 경로 prefix를 필터링한다. 예: 'lex: 대한전선 계약 일정\\nvec: payment milestone\\nintent: 대한전선 계약\\nscope: 프로젝트/대한전선'",
 			},
 			"project": map[string]any{
 				"type":        "string",
@@ -1081,6 +1105,18 @@ func WikiToolSchema() map[string]any {
 			"related": map[string]any{
 				"type":        "array",
 				"description": "Related page topics (write action)",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"rerank": map[string]any{
+				"type":        "boolean",
+				"description": "search 전용 선택적 reranker 강제 실행. 기본은 상위 후보가 애매할 때만 실행",
+				"default":     false,
+			},
+			"scopes": map[string]any{
+				"type":        "array",
+				"description": "search 전용 위키 경로 prefix 필터. 예: ['프로젝트/대한전선', '업무/계약']",
 				"items": map[string]any{
 					"type": "string",
 				},

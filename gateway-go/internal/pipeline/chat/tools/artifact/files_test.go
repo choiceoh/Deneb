@@ -80,9 +80,11 @@ func TestToolFilesSemanticSearchUsesNameSearchFallback(t *testing.T) {
 	// Fake semantic backend returns one ranked hit with a snippet.
 	semantic := func(_ context.Context, _ string, _ int) ([]filestore.ScoredEntry, error) {
 		return []filestore.ScoredEntry{{
-			Entry:   filestore.Entry{Tag: "file", Name: "계약서.txt", PathDisplay: "/계약/계약서.txt", Size: 42},
-			Score:   0.87,
-			Snippet: "납기 지연 위약금 조항",
+			Entry:     filestore.Entry{Tag: "file", Name: "계약서.txt", PathDisplay: "/계약/계약서.txt", Size: 42},
+			Score:     0.87,
+			Snippet:   "납기 지연 위약금 조항",
+			StartLine: 12,
+			EndLine:   14,
 		}}, nil
 	}
 	tool := ToolFiles(semantic)
@@ -95,7 +97,7 @@ func TestToolFilesSemanticSearchUsesNameSearchFallback(t *testing.T) {
 	if !strings.Contains(out, "시맨틱") || !strings.Contains(out, "계약서.txt") {
 		t.Errorf("semantic search out = %q", out)
 	}
-	if !strings.Contains(out, "위약금") || !strings.Contains(out, "0.87") {
+	if !strings.Contains(out, "위약금") || !strings.Contains(out, "0.87") || !strings.Contains(out, "L12-L14") {
 		t.Errorf("semantic search missing snippet/score: %q", out)
 	}
 

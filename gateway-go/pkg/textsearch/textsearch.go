@@ -61,6 +61,57 @@ type Hit struct {
 	Snippet string  // text excerpt with match context
 }
 
+// LocateSnippet returns a source-addressable line window around the strongest
+// lexical match. Line numbers are 1-based and inclusive. When no query token
+// matches, it returns the first non-empty window so callers still have a stable
+// address instead of the historical line 0 sentinel.
+func LocateSnippet(text, query string, maxLines int) (snippet string, startLine, endLine int) {
+	if maxLines <= 0 {
+		maxLines = 5
+	}
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if len(lines) == 0 {
+		return "", 0, 0
+	}
+	queryTokens := tokenize(query)
+	best, bestScore := -1, 0
+	for i, line := range lines {
+		lineTokens := tokenize(line)
+		score := 0
+		for _, token := range queryTokens {
+			if matchedTermFrequency(lineTokens, token) > 0 {
+				score++
+			}
+			if strings.Contains(strings.ToLower(line), token) {
+				score++
+			}
+		}
+		if score > bestScore {
+			best, bestScore = i, score
+		}
+	}
+	if best < 0 {
+		for i, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				best = i
+				break
+			}
+		}
+	}
+	if best < 0 {
+		return "", 0, 0
+	}
+	start := best
+	if start > 0 && strings.TrimSpace(lines[start-1]) != "" {
+		start--
+	}
+	end := min(len(lines), start+maxLines)
+	for end > start && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	return strings.TrimSpace(strings.Join(lines[start:end], "\n")), start + 1, end
+}
+
 // New creates an empty search index.
 func New() *Index {
 	return &Index{

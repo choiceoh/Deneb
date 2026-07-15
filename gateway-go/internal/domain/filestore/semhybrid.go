@@ -119,8 +119,10 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 			// Surface the cosine as the displayed similarity (a stable, familiar
 			// 0–1 number) rather than the RRF score, which is a tiny fusion value
 			// with no intuitive meaning to a reader. Ranking still uses RRF.
-			Score:   h.cos,
-			Snippet: h.snippet,
+			Score:     h.cos,
+			Snippet:   h.snippet,
+			StartLine: h.start,
+			EndLine:   h.end,
 		})
 	}
 	return results, nil
@@ -134,6 +136,8 @@ type hybridSemHit struct {
 	mtime   string
 	cos     float64
 	snippet string
+	start   int
+	end     int
 }
 
 // hybridFusedHit is an admitted file carrying its RRF fusion score (the
@@ -145,6 +149,8 @@ type hybridFusedHit struct {
 	snippet string
 	score   float64 // RRF score
 	cos     float64
+	start   int
+	end     int
 }
 
 // hybridSemanticHits computes each file's best chunk cosine (and its snippet),
@@ -155,17 +161,20 @@ func hybridSemanticHits(qv []float32, entries []*fileEntry) []hybridSemHit {
 	for _, fe := range entries {
 		best := -1.0
 		bestSnip := ""
+		bestStart, bestEnd := 0, 0
 		for i := range fe.Chunks {
 			s := cosine(qv, fe.Chunks[i].Vector)
 			if s > best {
 				best = s
 				bestSnip = fe.Chunks[i].Snippet
+				bestStart = fe.Chunks[i].StartLine
+				bestEnd = fe.Chunks[i].EndLine
 			}
 		}
 		if best < 0 {
 			best = 0 // a file with no chunks (text-less) has no semantic signal
 		}
-		sem = append(sem, hybridSemHit{path: fe.Path, size: fe.Size, mtime: fe.MTime, cos: best, snippet: bestSnip})
+		sem = append(sem, hybridSemHit{path: fe.Path, size: fe.Size, mtime: fe.MTime, cos: best, snippet: bestSnip, start: bestStart, end: bestEnd})
 	}
 	sort.Slice(sem, func(a, b int) bool {
 		if sem[a].cos != sem[b].cos {
@@ -259,7 +268,7 @@ func fuseHybridHits(sem []hybridSemHit, lex map[string]lexResult, semRank, lexRa
 		}
 		out = append(out, hybridFusedHit{
 			path: h.path, size: h.size, mtime: h.mtime,
-			snippet: h.snippet, score: score, cos: h.cos,
+			snippet: h.snippet, score: score, cos: h.cos, start: h.start, end: h.end,
 		})
 	}
 

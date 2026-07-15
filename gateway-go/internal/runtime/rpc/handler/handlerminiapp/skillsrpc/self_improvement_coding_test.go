@@ -148,19 +148,21 @@ func TestSelfImprovementCodingListReturnsAllCandidatesWhenStatusAll(t *testing.T
 	}
 }
 
-func TestSelfImprovementCodingListReadsLedgerOnceAndSelectsCanonicalDispatchCandidate(t *testing.T) {
-	calls, funnelCalls := 0, 0
+func TestSelfImprovementCodingListUsesUnboundedSelectorWithoutListOrFunnelReads(t *testing.T) {
+	listCalls, selectorCalls, funnelCalls := 0, 0, 0
 	deps := testSelfImprovementCodingDeps()
 	deps.RecentCandidates = func(status string, limit int) ([]genesis.SelfCorrectionCandidateRecord, error) {
-		calls++
-		if status != "" {
-			t.Fatalf("RecentCandidates status = %q, want one unfiltered read", status)
+		listCalls++
+		return nil, errors.New("bounded list must not serve dispatch selection")
+	}
+	deps.NextDispatchCandidate = func(excludedIDs []string) (genesis.SelfCorrectionCandidateRecord, bool, error) {
+		selectorCalls++
+		if len(excludedIDs) != 1 || excludedIDs[0] != "blocked" {
+			t.Fatalf("excluded IDs = %v", excludedIDs)
 		}
-		return []genesis.SelfCorrectionCandidateRecord{
-			{ID: "new-proposed", Scope: "code", Status: genesis.SelfCorrectionStatusProposed, Source: "health-finding:x", CreatedAt: 30},
-			{ID: "accepted", Scope: "code", Status: genesis.SelfCorrectionStatusAccepted, Source: "tool-quality:x", CreatedAt: 20},
-			{ID: "forbidden", Scope: "code", Status: genesis.SelfCorrectionStatusAccepted, Source: "health-finding:x", ProposedChange: "relax validation_engine.go", CreatedAt: 40},
-		}, nil
+		return genesis.SelfCorrectionCandidateRecord{
+			ID: "accepted", Scope: "code", Status: genesis.SelfCorrectionStatusAccepted,
+		}, true, nil
 	}
 	deps.Funnel = func() genesis.SelfCorrectionFunnelSummary {
 		funnelCalls++
@@ -169,17 +171,17 @@ func TestSelfImprovementCodingListReadsLedgerOnceAndSelectsCanonicalDispatchCand
 	h := selfImprovementCodingList(deps)
 	params, _ := json.Marshal(map[string]any{
 		"dispatchableOnly": true,
-		"excludeIds":       []string{"accepted"},
+		"excludeIds":       []string{"blocked"},
 	})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
 	payload := decodeSkillsPayload[SelfImprovementCodingListResponse](t, resp)
-	if calls != 1 {
-		t.Fatalf("ledger reads = %d, want 1", calls)
+	if listCalls != 0 || selectorCalls != 1 {
+		t.Fatalf("list calls = %d, selector calls = %d", listCalls, selectorCalls)
 	}
 	if funnelCalls != 0 {
 		t.Fatalf("dispatch selection computed unrelated funnel %d times", funnelCalls)
 	}
-	if payload.Count != 1 || payload.Candidates[0].ID != "new-proposed" {
+	if payload.Count != 1 || payload.Candidates[0].ID != "accepted" {
 		t.Fatalf("dispatch candidate = %+v", payload.Candidates)
 	}
 }

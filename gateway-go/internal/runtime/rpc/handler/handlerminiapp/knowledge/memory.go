@@ -44,8 +44,16 @@ type memoryQuerySearcher interface {
 	SearchWithOptions(ctx context.Context, query string, limit int, options wiki.QueryOptions) (wiki.SearchReport, error)
 }
 
+type memoryPlanSearcher interface {
+	SearchPlan(ctx context.Context, plan wiki.QueryPlan, limit int) (wiki.SearchReport, error)
+}
+
 type memorySemanticStatus interface {
 	SemanticStatus() wiki.SemanticIndexStatus
+}
+
+type memorySearchDoctorStore interface {
+	SearchDoctor(context.Context) wiki.SearchDoctorReport
 }
 
 // MemoryDeps holds the wiki store and is consumed at registration time.
@@ -94,6 +102,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
 		"miniapp.memory.search":           memorySearch(deps),
 		"miniapp.memory.search_status":    memorySearchStatus(deps),
+		"miniapp.memory.search_doctor":    memorySearchDoctor(deps),
 		"miniapp.memory.get_page":         memoryGetPage(deps),
 		"miniapp.memory.write_page":       memoryWritePage(deps),
 		"miniapp.memory.create_page":      memoryCreatePage(deps),
@@ -120,6 +129,23 @@ func memorySearchStatus(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("memory search status unsupported").Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, out{Semantic: statusStore.SemanticStatus()})
+	})
+}
+
+// memorySearchDoctor is deliberately separate from the cheap cache-status
+// endpoint: it performs live embedding and reranker probes and must only run
+// when an operator explicitly asks for it, never on a polling UI path.
+func memorySearchDoctor(deps MemoryDeps) rpcutil.HandlerFunc {
+	return minibind.Authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory search doctor unavailable", err).Response(req.ID)
+		}
+		doctorStore, ok := store.(memorySearchDoctorStore)
+		if !ok {
+			return rpcerr.Unavailable("memory search doctor unsupported").Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, doctorStore.SearchDoctor(ctx))
 	})
 }
 
@@ -198,25 +224,32 @@ func memoryGetPage(deps MemoryDeps) rpcutil.HandlerFunc {
 
 func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Query   string          `json:"query"`
-		Limit   int             `json:"limit,omitempty"`
-		Mode    wiki.SearchMode `json:"mode,omitempty"`
-		Explain bool            `json:"explain,omitempty"`
-		Intent  string          `json:"intent,omitempty"`
-		Rerank  bool            `json:"rerank,omitempty"`
+		Query   string             `json:"query"`
+		Plan    string             `json:"plan,omitempty"`
+		Clauses []wiki.QueryClause `json:"clauses,omitempty"`
+		Scopes  []string           `json:"scopes,omitempty"`
+		Limit   int                `json:"limit,omitempty"`
+		Mode    wiki.SearchMode    `json:"mode,omitempty"`
+		Explain bool               `json:"explain,omitempty"`
+		Intent  string             `json:"intent,omitempty"`
+		Rerank  bool               `json:"rerank,omitempty"`
 	}
 	type hitOut struct {
 		Path     string                  `json:"path"`
+		Line     int                     `json:"line,omitempty"`
+		EndLine  int                     `json:"endLine,omitempty"`
 		Title    string                  `json:"title,omitempty"`
 		Summary  string                  `json:"summary,omitempty"`
 		Category string                  `json:"category,omitempty"`
+		Context  []string                `json:"context,omitempty"`
 		Snippet  string                  `json:"snippet"`
 		Score    float64                 `json:"score"`
 		Explain  *wiki.SearchExplanation `json:"explain,omitempty"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		query := strings.TrimSpace(p.Query)
-		if query == "" {
+		planRequested := strings.TrimSpace(p.Plan) != "" || len(p.Clauses) > 0 || len(p.Scopes) > 0
+		if query == "" && !planRequested {
 			return rpcerr.MissingParam("query").Response(req.ID)
 		}
 		limit := p.Limit
@@ -236,7 +269,29 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 			results     []wiki.SearchResult
 			diagnostics *wiki.SearchDiagnostics
 		)
-		if optionsRequested {
+		if planRequested {
+			searcher, ok := store.(memoryPlanSearcher)
+			if !ok {
+				return rpcerr.Unavailable("memory query plans unavailable").Response(req.ID)
+			}
+			plan := wiki.ParseQueryPlan(p.Plan)
+			plan.Clauses = append(plan.Clauses, p.Clauses...)
+			if len(plan.Clauses) == 0 && query != "" {
+				plan = wiki.ParseQueryPlan(query)
+			}
+			if strings.TrimSpace(p.Intent) != "" {
+				plan.Intent = strings.TrimSpace(p.Intent)
+			}
+			plan.Scopes = append(plan.Scopes, p.Scopes...)
+			plan.Explain = p.Explain
+			plan.ForceRerank = p.Rerank
+			report, searchErr := searcher.SearchPlan(ctx, plan, limit)
+			if searchErr != nil {
+				return rpcerr.WrapUnavailable("memory search failed", searchErr).Response(req.ID)
+			}
+			results = report.Results
+			diagnostics = &report.Diagnostics
+		} else if optionsRequested {
 			searcher, ok := store.(memoryQuerySearcher)
 			if !ok {
 				return rpcerr.Unavailable("memory search diagnostics unavailable").Response(req.ID)
@@ -246,6 +301,7 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 				Explain:     p.Explain,
 				Intent:      strings.TrimSpace(p.Intent),
 				ForceIntent: p.Rerank,
+				ForceRerank: p.Rerank,
 			})
 			if searchErr != nil {
 				return rpcerr.WrapUnavailable("memory search failed", searchErr).Response(req.ID)
@@ -262,10 +318,9 @@ func memorySearch(deps MemoryDeps) rpcutil.HandlerFunc {
 		out := make([]hitOut, 0, len(results))
 		for _, r := range results {
 			row := hitOut{
-				Path:    r.Path,
-				Snippet: truncateRunes(r.Content, maxMemorySnippetChars),
-				Score:   r.Score,
-				Explain: r.Explain,
+				Path: r.Path, Line: r.Line, EndLine: r.EndLine,
+				Context: r.Context, Snippet: truncateRunes(r.Content, maxMemorySnippetChars),
+				Score: r.Score, Explain: r.Explain,
 			}
 			// Best-effort title/summary lookup. If reading the page
 			// fails, fall through — Path + Snippet are still useful.

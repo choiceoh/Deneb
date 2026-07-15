@@ -215,6 +215,22 @@ func (b *skillLifecycleBackend) backfillSkillValidationCasesFromKeys(ctx context
 			continue
 		}
 		scanned++
+		// Relevance gate: RecentRealUseSessionsBySkill attributes a session to a
+		// skill on the "consulted" signal, so an off-topic session that merely
+		// loaded the skill would otherwise be backfilled as its held-out case.
+		// Skip when the classifier says the session did not exercise the skill.
+		if b.relevanceClient != nil && b.transcripts != nil {
+			if sctx, serr := BuildSessionContext(b.transcripts, key); serr == nil &&
+				!sessionExercisesSkill(b.logger, b.relevanceClient, b.relevanceModel, req.SkillName, sctx) {
+				skipped++
+				if len(details) < 20 {
+					details = append(details, chattools.SkillValidationBackfillDetail{
+						SessionKey: key, OK: true, Skip: true, Reason: "off-topic: session did not exercise the skill",
+					})
+				}
+				continue
+			}
+		}
 		got, err := b.RecordSkillValidationCaseFromSession(ctx, skillValidationBackfillCaseRequest(req, key))
 		if err != nil {
 			errText := key + ": " + err.Error()

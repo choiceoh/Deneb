@@ -137,6 +137,10 @@ func (s *Server) initGenesisServices() {
 			s.genesisTranscripts,
 			s.logger,
 			replayExecutorEnabled(),
+			// Lightweight text role drives the fresh-context relevance classifier
+			// that keeps off-topic sessions out of a skill's held-out corpus.
+			lwClient,
+			lwModel,
 		))
 	}
 	s.registerSkillLifecycleTool()
@@ -431,6 +435,10 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Tracker:     s.genesisTracker,
 				Transcripts: s.genesisTranscripts,
 				Logger:      s.logger,
+				// Same lightweight relevance classifier as the real-time capture:
+				// keep consulted-but-off-topic sessions out of the backfilled corpus.
+				RelevanceClient: s.modelRegistry.Client(modelrole.RoleLightweight),
+				RelevanceModel:  s.modelRegistry.Model(modelrole.RoleLightweight),
 			}),
 			s.logger,
 		))

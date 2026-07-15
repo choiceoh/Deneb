@@ -19,8 +19,10 @@ import (
 // SearchResult is a single search hit.
 type SearchResult struct {
 	Path    string             `json:"path"`              // relative path within wiki dir
-	Line    int                `json:"line,omitempty"`    // always 0 (line-level matching not available)
+	Line    int                `json:"line,omitempty"`    // absolute 1-based start line
+	EndLine int                `json:"endLine,omitempty"` // absolute 1-based inclusive end line
 	Content string             `json:"content"`           // matching snippet
+	Context []string           `json:"context,omitempty"` // hierarchical path/business context
 	Score   float64            `json:"score"`             // relevance score (0-1)
 	Explain *SearchExplanation `json:"explain,omitempty"` // populated only for explicit diagnostic queries
 }
@@ -41,10 +43,14 @@ const (
 // Intent never admits a new document: it only reranks already-admitted
 // candidates, and normally runs only when the base ranking is ambiguous.
 type QueryOptions struct {
-	Mode        SearchMode
-	Explain     bool
-	Intent      string
-	ForceIntent bool
+	Mode         SearchMode
+	Explain      bool
+	Intent       string
+	ForceIntent  bool
+	ForceRerank  bool
+	skipMetadata bool
+	skipRerank   bool
+	skipValidity bool
 }
 
 type SearchSignalExplanation struct {
@@ -59,8 +65,10 @@ type SearchExplanation struct {
 	Semantic       *SearchSignalExplanation `json:"semantic,omitempty"`
 	Graph          *SearchSignalExplanation `json:"graph,omitempty"`
 	Intent         *SearchSignalExplanation `json:"intent,omitempty"`
+	Rerank         *SearchSignalExplanation `json:"rerank,omitempty"`
 	BaseScore      float64                  `json:"baseScore"`
 	IntentBonus    float64                  `json:"intentBonus,omitempty"`
+	RerankWeight   float64                  `json:"rerankWeight,omitempty"`
 	ValidityFactor float64                  `json:"validityFactor"`
 	FinalScore     float64                  `json:"finalScore"`
 }
@@ -71,15 +79,18 @@ type SearchDropSummary struct {
 }
 
 type SearchDiagnostics struct {
-	Mode              SearchMode          `json:"mode"`
-	Fusion            string              `json:"fusion"`
-	SemanticAvailable bool                `json:"semanticAvailable"`
-	GraphCandidates   int                 `json:"graphCandidates"`
-	CommonOnlyQuery   bool                `json:"commonOnlyQuery"`
-	IntentApplied     bool                `json:"intentApplied"`
-	CandidateCount    int                 `json:"candidateCount"`
-	ReturnedCount     int                 `json:"returnedCount"`
-	Dropped           []SearchDropSummary `json:"dropped,omitempty"`
+	Mode              SearchMode              `json:"mode"`
+	Fusion            string                  `json:"fusion"`
+	SemanticAvailable bool                    `json:"semanticAvailable"`
+	GraphCandidates   int                     `json:"graphCandidates"`
+	CommonOnlyQuery   bool                    `json:"commonOnlyQuery"`
+	IntentApplied     bool                    `json:"intentApplied"`
+	CandidateCount    int                     `json:"candidateCount"`
+	ReturnedCount     int                     `json:"returnedCount"`
+	Scopes            []string                `json:"scopes,omitempty"`
+	Clauses           []QueryClauseDiagnostic `json:"clauses,omitempty"`
+	Rerank            RerankDiagnostics       `json:"rerank"`
+	Dropped           []SearchDropSummary     `json:"dropped,omitempty"`
 }
 
 type SearchReport struct {
@@ -604,24 +615,90 @@ func (s *Store) composeSearchReport(
 	for _, result := range results {
 		baseScores[result.Path] = result.Score
 	}
-	results = s.fts.applyValidity(results)
+	if !options.skipValidity {
+		results = s.fts.applyValidity(results)
+	}
 	var intentResults []SearchResult
 	if shouldIntentRerank(results, options) && loadIntent != nil {
 		intentResults = loadIntent()
 	}
 	intentBonuses, applied := s.applyIntentRerank(results, intentResults, options)
 	diagnostics.IntentApplied = applied
+	if len(results) > 0 && !options.skipMetadata {
+		s.attachResultMetadata(query, results[:min(len(results), rerankCandidateLimit)])
+	}
+	var rerankScores, rerankWeights map[string]float64
+	rerankDiagnostics := RerankDiagnostics{Reason: "deferred_to_query_plan"}
+	if !options.skipRerank {
+		rerankScores, rerankWeights, rerankDiagnostics = s.applyModelRerank(ctx, query, results, options.ForceRerank)
+	}
+	diagnostics.Rerank = rerankDiagnostics
 
 	admitted := len(results)
 	results = truncateResults(results, limit)
+	if !options.skipMetadata {
+		s.attachResultMetadata(query, results)
+	}
 	if admitted > len(results) {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "result_limit", admitted-len(results))
 	}
 	diagnostics.ReturnedCount = len(results)
 	if options.Explain {
 		s.attachSearchExplanations(results, diagnostics.Fusion, bm25, sem, graphPaths, intentResults, baseScores, intentBonuses, applied)
+		attachRerankExplanations(results, rerankScores, rerankWeights)
 	}
 	return SearchReport{Results: results, Diagnostics: diagnostics}
+}
+
+func (s *Store) attachResultMetadata(query string, results []SearchResult) {
+	for i := range results {
+		page, err := s.ReadPage(results[i].Path)
+		if err != nil || page == nil {
+			continue
+		}
+		results[i].Context = hierarchicalPageContext(results[i].Path, page)
+		if results[i].Line > 0 && results[i].Content != "" {
+			if results[i].EndLine < results[i].Line {
+				results[i].EndLine = results[i].Line
+			}
+			continue
+		}
+		source := page.Body
+		offset := pageBodyStartLine(page) - 1
+		if strings.TrimSpace(source) == "" {
+			results[i].Content = visiblePageIdentity(page)
+			results[i].Line = 1
+			results[i].EndLine = 1
+			continue
+		}
+		snippet, start, end := textsearch.LocateSnippet(source, query, 5)
+		if snippet == "" {
+			snippet = visiblePageIdentity(page)
+		}
+		results[i].Content = snippet
+		results[i].Line = start + offset
+		results[i].EndLine = end + offset
+	}
+}
+
+func hierarchicalPageContext(relPath string, page *Page) []string {
+	clean := filepath.ToSlash(strings.TrimSuffix(strings.TrimSpace(relPath), ".md"))
+	parts := strings.Split(clean, "/")
+	context := make([]string, 0, len(parts)+3)
+	for i := range parts {
+		if strings.TrimSpace(parts[i]) != "" {
+			context = append(context, strings.Join(parts[:i+1], "/"))
+		}
+	}
+	if page != nil {
+		if client := strings.TrimSpace(page.Meta.Client); client != "" {
+			context = append(context, "거래처: "+client)
+		}
+		if title := strings.TrimSpace(page.Meta.Title); title != "" && (len(context) == 0 || context[len(context)-1] != title) {
+			context = append(context, "문서: "+title)
+		}
+	}
+	return context
 }
 
 func appendDrop(drops []SearchDropSummary, reason string, count int) []SearchDropSummary {

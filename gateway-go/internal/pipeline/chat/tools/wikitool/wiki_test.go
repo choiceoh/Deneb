@@ -109,6 +109,28 @@ func TestWikiRead_AcceptsNamespacedRef(t *testing.T) {
 	}
 }
 
+func TestWikiReadRangeReturnsNumberedAbsoluteLines(t *testing.T) {
+	store := newTestWikiStore(t)
+	out, err := wikiReadRange(context.Background(), store, "w:phase-2-summary", "", 1, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "L1: ---") || !strings.Contains(out, "L3:") || !strings.Contains(out, "[계속: from_line=4") {
+		t.Fatalf("range output = %q", out)
+	}
+}
+
+func TestWikiSearchTypedPlanReturnsLineRangeAndScope(t *testing.T) {
+	store := newTestWikiStore(t)
+	out, err := wikiSearchWithPlan(context.Background(), store, "", "lex: redact\nscope: phase-2-summary", "", nil, 5, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "w:phase-2-summary") || !strings.Contains(out, "L") || strings.Contains(out, "deneb-architecture") {
+		t.Fatalf("plan output = %q", out)
+	}
+}
+
 // TestWikiReadBatch_ReadsSeveralPagesInOneCall covers the batched read that
 // collapses the per-page LLM round-trips: every requested page lands under its
 // own numbered header, a missing page fills its slot without failing the

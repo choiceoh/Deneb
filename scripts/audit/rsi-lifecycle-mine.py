@@ -3,9 +3,9 @@
 
 The genesis subsystem writes every evolve/reject/rollback/confirm event to
 ``skill_genesis_log.jsonl`` (append-only JSONL under ``~/.deneb/data/``).
-``rsi_status.py`` classifies loop layers as LIVE/DATA-GATED/STARVED; this tool
-goes one level deeper — it mines the EVENT STREAM for quality patterns that the
-layer status cannot surface:
+``miniapp.rsi.status`` classifies loop layers as LIVE/DATA-GATED/STARVED;
+this tool goes one level deeper — it mines the EVENT STREAM for quality
+patterns that the layer status cannot surface:
 
   - **Thrash**: skills that evolve → rollback repeatedly (the loop is spinning,
     not learning — roadmap: "memoryless repetition collapse").

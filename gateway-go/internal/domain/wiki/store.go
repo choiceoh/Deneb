@@ -92,6 +92,7 @@ type Store struct {
 	// query finds pages by meaning, not just keyword overlap. Degrades silently
 	// to pure BM25 whenever the embedding server is unavailable.
 	sem             *semanticIndex
+	reranker        Reranker
 	bm25RarityFloor float64
 }
 
