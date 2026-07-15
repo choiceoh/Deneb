@@ -86,7 +86,6 @@ type (
 	SessionCacheFlushFn = wikitool.SessionCacheFlushFn
 )
 
-
 // NewGoalGlanceFunc builds the ambient standing-goal glance.
 func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
 	return core.NewGoalGlanceFunc()
