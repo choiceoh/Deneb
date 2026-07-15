@@ -295,7 +295,7 @@ scripts/dev/live-test.sh tool-check wiki "위키에서 백업 정책 찾아줘"
 > `chat`/`chat-check`가 **유저 역할**의 주입이라면, `scripts/dev/puppet.sh`는
 > **모델(LLM) 역할**의 주입이다. dev 게이트웨이의 모든 LLM role을 로컬 브로커
 > (`scripts/dev/puppet_broker.py`, OpenAI 호환 SSE)로 돌려, 코딩 에이전트가
-> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 ~45개,
+> 데네브의 LLM이 받는 것(조립된 시스템 프롬프트·메시지 히스토리·도구 스키마 ~50개,
 > 프리셋별 상이)을 **그대로 받아 보고**, 텍스트/도구호출을 직접 결정해 턴을
 > 운전한다. 도구 호출은 게이트웨이가 **실제로 실행**해 결과를 다음 요청에 담아온다.
 > 게이트웨이 코드 수정 0줄 — config-gen 결과에 `models.providers.puppet` +

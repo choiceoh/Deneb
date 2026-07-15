@@ -1,6 +1,6 @@
 ---
 description: "기계 생성 코드 수정 금지 규칙"
-globs: ["gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go", "gateway-go/internal/pipeline/chat/tool_classification_gen.go", "client-android/**/generated/*.kt", "andromeda/src/gen/**"]
+globs: ["gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go", "gateway-go/internal/pipeline/chat/tool_classification_gen.go", "client-android/**/generated/*.kt", "andromeda/src/gen/**"]
 ---
 
 # Generated Code Boundary
@@ -9,7 +9,7 @@ Several files in this repo are **machine-generated** and carry a `// Code genera
 
 | Generated file | Source of truth | Regenerate with |
 |---|---|---|
-| `gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `gateway-go/internal/pipeline/chat/toolreg/tool_schemas.json` | `make tool-schemas` |
+| `gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go` | `gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas.json` | `make tool-schemas` |
 | `gateway-go/internal/pipeline/chat/tool_classification_gen.go` | `gateway-go/internal/pipeline/chat/tool_classification.json` | `make data-gen` |
 | `client-android/.../deneb/generated/MiniappWireTypes.kt` | Go miniapp handler structs marked `//deneb:wire` (e.g. `gateway-go/internal/runtime/rpc/handler/handlerminiapp/schedule/calendar.go`) | `make kotlin-models` |
 | `andromeda/src/gen/miniappWire.ts` | the **same** `//deneb:wire` structs (Andromeda desktop client) | `pnpm gen:wire` (from `andromeda/`) |

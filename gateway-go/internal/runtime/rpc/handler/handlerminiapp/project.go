@@ -102,9 +102,10 @@ type ProjectDigestsOut struct {
 // ProjectLinkedOut is the miniapp.project.linked response: the IDs of items
 // linked to one project, grouped by type, resolved server-side. Clients filter
 // their already-fetched lists by these IDs instead of running a local heuristic.
-// Calendar and Todo are always empty for now — those items carry no project
-// linkage in the data yet — but are kept in the contract so a client reads every
-// section uniformly and they light up when their linkage lands.
+// Calendar is populated from mail-sourced events; Todo is still empty — those
+// items carry no project linkage in the data yet — but every section is kept in
+// the contract so a client reads them uniformly and they light up when their
+// linkage lands.
 //
 //deneb:wire
 type ProjectLinkedOut struct {

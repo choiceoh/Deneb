@@ -32,7 +32,7 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 
 - 일반 응답: `prompt/system_prompt.go` 소통 섹션 카드 문단 (static 블록 —
   내용 수정 = 캐시 1회 무효화, 마커 4개 불변).
-- 이브닝레터: `toolreg/core.go` evening_letter 도구 설명.
+- 이브닝레터: `toolwire/chrono/register.go` evening_letter 도구 설명.
 - 모닝레터: `skills/productivity/morning-letter/SKILL.md` 스켈레톤 —
   `letter_card_test.go` 상수와 **동기 유지**(테스트가 서버측 게이트).
 - 서버 조립: `denebui/collapsed.go` (`CollapsedReportFence`) — raw-text 본문의

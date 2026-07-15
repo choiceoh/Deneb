@@ -38,9 +38,9 @@ enforced by code review + snapshot test):
 4. Update the `requiredMethods` snapshot list in `method_registry_test.go`
 
 ### Adding a New Agent Tool
-1. Add schema to `internal/pipeline/chat/toolreg/tool_schemas.json`, run `make tool-schemas`
+1. Add schema to `internal/pipeline/chat/toolwire/schema/tool_schemas.json`, run `make tool-schemas`
 2. Implement handler in `internal/pipeline/chat/tools/` (or a subpackage: `runtimeops/`, `routine/`, `mailarchive/`, `codeaction/`, …)
-3. Register in `internal/pipeline/chat/toolreg/core.go` (appropriate Register*Tools function)
+3. Register in `internal/pipeline/chat/toolwire/core/register.go` (appropriate Register*Tools function)
 
 ### Working with Generated Files
 
@@ -48,7 +48,7 @@ Several files in this module are machine-generated. **Never edit them by hand.**
 
 | File | Source | Command |
 |------|--------|---------|
-| `internal/pipeline/chat/toolreg/tool_schemas_gen.go` | `internal/pipeline/chat/toolreg/tool_schemas.json` | `make tool-schemas` |
+| `internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go` | `internal/pipeline/chat/toolwire/schema/tool_schemas.json` | `make tool-schemas` |
 | `internal/pipeline/chat/tool_classification_gen.go` | `internal/pipeline/chat/tool_classification.json` | `make data-gen` |
 
 To modify a generated file: edit the source or generator, run the `make` target, commit both together. CI will reject any PR where the generated output diverges from its source.

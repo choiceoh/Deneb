@@ -1,7 +1,7 @@
 # Chat Tool 구현 변경 지도
 
 이 디렉터리는 agent가 호출하는 tool의 실행 구현을 소유한다. 도구의 공유
-함수형 계약은 `../toolport`, 등록과 schema 연결은 `../toolreg`가 소유한다.
+함수형 계약은 `../toolport`, 등록과 schema 연결은 `../toolwire`가 소유한다.
 구현 파일이 자신을 등록하거나 chat turn 오케스트레이션을 import하지 않는다.
 
 ## 진입점과 책임
@@ -24,10 +24,10 @@
 
 ## 의존 방향과 불변조건
 
-- 의존 방향은 `toolreg → tools → toolport/domain/platform`이다. tools에서
+- 의존 방향은 `toolwire → tools → toolport/domain/platform`이다. tools에서
   `pipeline/chat` root, prompt, tool registry를 import하지 않는다.
-- 새 도구는 구현만으로 끝나지 않는다. `../toolreg/core.go`에 constructor를
-  배선하고 `../toolreg/tool_schemas.json`을 수정한 뒤 generator를 사용한다.
+- 새 도구는 구현만으로 끝나지 않는다. `../toolwire/core/register.go`에 constructor를
+  배선하고 `../toolwire/schema/tool_schemas.json`을 수정한 뒤 generator를 사용한다.
   `tool_schemas_gen.go`는 직접 편집하지 않는다.
 - 모든 구현은 context 취소와 전달받은 dependency를 존중한다. package
   singleton이나 server 전역을 조회해 `Deps` 경계를 우회하지 않는다.

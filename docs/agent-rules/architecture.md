@@ -21,7 +21,7 @@ description: "프로젝트 구조 및 모듈 아키텍처 참조"
 The repo supports parallel coding agents with shared infrastructure:
 
 - **CodeGraph** (`.codegraph/`, gitignored) — SQLite symbol graph (~55K nodes) powering the `codegraph_explore` MCP tool. Auto-synced after edits via PostToolUse hooks. Config in `codegraph.json`; setup: `npm i -g @colbymchenry/codegraph && codegraph init`.
-- **rpcmap** (`scripts/dev/rpcmap.py`) — fills CodeGraph's blind spot: string-keyed indirection (RPC method → handler, tool name → handler, event name → event type). ~280 mappings (`rpcmap --list`).
+- **rpcmap** (`scripts/dev/rpcmap.py`) — fills CodeGraph's blind spot: string-keyed indirection (RPC method → handler, tool name → handler, event name → event type). ~270 mappings (`rpcmap --list`).
 - **Worktree isolation** — each agent gets its own worktree (`~/.zcode/`, `~/.codex/`, `~/.cursor/worktrees/Deneb/`, or Claude's `EnterWorktree`) on a namespaced branch to prevent collisions. Guards block main-checkout edits.
 - **Hook pipeline** — PreToolUse hooks (conflict detection via `clash`, rule guidance, CodeGraph nudges) and PostToolUse hooks (index sync) are shared across Claude Code, ZCode, Codex, and Cursor. Configs: `.claude/settings.json`, `.zcode/config.json`, `~/.codex/hooks.json`, `.cursor/hooks.json`.
 - Full guide: [docs/tools/zcode-environment.md](../tools/zcode-environment.md).

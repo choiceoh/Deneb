@@ -88,7 +88,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 ### Rule B — **대화 중 툴셋을 바꾸지 마라**
 
 - `BuildSystemPromptBlocks`는 static 블록 키를 **정렬된 툴 이름 리스트**로 생성. 툴 추가/제거는 static 캐시 무효화
-- 대화 시작 후 `/tools` 조작이나 `toolreg` 재등록 금지 — 다음 세션부터 반영
+- 대화 시작 후 `/tools` 조작이나 `toolwire` 재등록 금지 — 다음 세션부터 반영
 - 위반 예시 (금지):
 
   ```go
