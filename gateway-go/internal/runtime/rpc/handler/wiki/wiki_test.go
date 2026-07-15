@@ -13,7 +13,7 @@ import (
 var (
 	callMethod    = rpctest.Call
 	mustOK        = rpctest.MustOK
-	extractResult = rpctest.Result
+	extractResult = rpctest.Result[map[string]any]
 )
 
 // newTestStore creates a wiki.Store backed by a temp directory.

@@ -149,7 +149,7 @@ func RegisterGatewayRuntimeMethods(d *Dispatcher, deps GatewayRuntimeDeps) {
 
 const maxKeyInErrorMsg = rpcutil.MaxKeyInErrorMsg
 
-func unmarshalParams(params json.RawMessage, v any) error {
+func unmarshalParams[T any](params json.RawMessage, v *T) error {
 	return rpcutil.UnmarshalParams(params, v)
 }
 

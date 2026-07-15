@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	transcriptstore "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -19,7 +20,7 @@ func TestHandleBtwReturnsSyncResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	h := newSyncTestHandler(server, transcript)
 	defer h.Close()
 
@@ -38,7 +39,7 @@ func TestHandleBtwPreservesMainSessionIsolation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	// Seed the main session with a message.
 	testutil.NoError(t, transcript.Append("main-session", NewTextChatMessage("user", "hello", 0)))
 
@@ -79,7 +80,7 @@ func TestHandleBtwLoadsParentTranscriptContext(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcript := NewMemoryTranscriptStore()
+	transcript := transcriptstore.NewMemoryTranscriptStore()
 	// Seed the parent session with conversation history.
 	testutil.NoError(t, transcript.Append("parent-session", NewTextChatMessage("user", "my name is Alice", 0)))
 	testutil.NoError(t, transcript.Append("parent-session", NewTextChatMessage("assistant", "nice to meet you Alice", 0)))

@@ -260,7 +260,7 @@ func TestExtractTextFromMessageReturnsPlainOrBlockText(t *testing.T) {
 	})
 
 	t.Run("empty content", func(t *testing.T) {
-		msg := llm.Message{Role: "user", Content: json.RawMessage(`{}`)}
+		msg := llm.Message{Role: "user", Content: llm.FlexibleFromRaw([]byte(`{}`))}
 		got := extractTextFromMessage(msg)
 		if got != "" {
 			t.Errorf("got %q, want empty", got)
@@ -284,7 +284,7 @@ func TestAppendAttachmentsToHistoryUpdatesOrCreatesUserMessage(t *testing.T) {
 		}
 		// The last message should be a block message now.
 		var blocks []llm.ContentBlock
-		if err := json.Unmarshal(result[2].Content, &blocks); err != nil {
+		if err := json.Unmarshal(result[2].Content.Bytes(), &blocks); err != nil {
 			t.Fatalf("failed to unmarshal blocks: %v", err)
 		}
 		if len(blocks) < 2 {

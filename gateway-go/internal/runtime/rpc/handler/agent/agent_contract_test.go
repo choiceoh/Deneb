@@ -133,7 +133,7 @@ func TestAgentStatusReturnsSessionCountsAndOptionalProcessCount(t *testing.T) {
 	methods := ExtendedMethods(ExtendedDeps{Sessions: manager})
 	response := rpctest.Call(methods, "agent.status", nil)
 	rpctest.MustOK(t, response)
-	result := rpctest.Result(t, response)
+	result := rpctest.Result[map[string]any](t, response)
 	if result["activeSessions"] != float64(1) || result["totalSessions"] != float64(3) {
 		t.Fatalf("status = %#v", result)
 	}
@@ -148,7 +148,7 @@ func TestAgentStatusReturnsSessionCountsAndOptionalProcessCount(t *testing.T) {
 	processes := process.NewManager(nil)
 	t.Cleanup(processes.Stop)
 	withProcesses := ExtendedMethods(ExtendedDeps{Sessions: manager, Processes: processes})
-	result = rpctest.Result(t, rpctest.Call(withProcesses, "agent.status", nil))
+	result = rpctest.Result[map[string]any](t, rpctest.Call(withProcesses, "agent.status", nil))
 	if result["activeProcesses"] != float64(0) {
 		t.Fatalf("activeProcesses = %#v", result["activeProcesses"])
 	}

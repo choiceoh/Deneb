@@ -193,7 +193,7 @@ func TestTurnRequestPreparerCreatesRequestWithAllConfigFields(t *testing.T) {
 		PresencePenalty:  &presencePenalty,
 		StopSequences:    []string{"stop"},
 		ResponseFormat:   responseFormat,
-		ToolChoice:       "required",
+		ToolChoice:       json.RawMessage(`"required"`),
 	}
 
 	request := newTurnRequestPreparer(&cfg).prepare(context.Background(), 0, messages, nil).request

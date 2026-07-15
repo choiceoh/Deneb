@@ -26,21 +26,21 @@ func TestNilDependenciesReturnExplicitEmptyState(t *testing.T) {
 
 	logs := rpctest.Call(methods, "observe.logs", nil)
 	rpctest.MustOK(t, logs)
-	logsResult := rpctest.Result(t, logs)
+	logsResult := rpctest.Result[map[string]any](t, logs)
 	if logsResult["captureDisabled"] != true || logsResult["count"] != float64(0) {
 		t.Fatalf("logs result = %#v", logsResult)
 	}
 
 	behavior := rpctest.Call(methods, "observe.behavior", nil)
 	rpctest.MustOK(t, behavior)
-	behaviorResult := rpctest.Result(t, behavior)
+	behaviorResult := rpctest.Result[map[string]any](t, behavior)
 	if behaviorResult["proactiveDecisions"] == nil || behaviorResult["backgroundErrors"] == nil {
 		t.Fatalf("behavior result = %#v", behaviorResult)
 	}
 
 	health := rpctest.Call(methods, "observe.health", nil)
 	rpctest.MustOK(t, health)
-	healthResult := rpctest.Result(t, health)
+	healthResult := rpctest.Result[map[string]any](t, health)
 	if healthResult["captureEnabled"] != false || healthResult["agentLogEnabled"] != false {
 		t.Fatalf("health result = %#v", healthResult)
 	}

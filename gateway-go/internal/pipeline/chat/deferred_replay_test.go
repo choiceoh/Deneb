@@ -15,11 +15,11 @@ func replayMsg(t *testing.T, role string, blocks []llm.ContentBlock) llm.Message
 	if err != nil {
 		t.Fatal(err)
 	}
-	return llm.Message{Role: role, Content: raw}
+	return llm.Message{Role: role, Content: llm.FlexibleFromRaw(raw)}
 }
 
 func toolUse(id, name string) llm.ContentBlock {
-	return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: json.RawMessage(`{}`)}
+	return llm.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: llm.FlexibleFromRaw([]byte(`{}`))}
 }
 
 func toolResult(id, content string) llm.ContentBlock {
@@ -34,7 +34,7 @@ func TestReplayActivatedToolsReturnsPairedActivations(t *testing.T) {
 	registry := requiredToolsRegistry() // deferred: graphify, notebook; eager: exec
 
 	history := []llm.Message{
-		{Role: "user", Content: json.RawMessage(`"그래프 봐줘"`)},
+		{Role: "user", Content: llm.FlexibleFromRaw([]byte(`"그래프 봐줘"`))},
 		// Paired fetch_tools activation of graphify.
 		replayMsg(t, "assistant", []llm.ContentBlock{toolUse("t1", "fetch_tools")}),
 		replayMsg(t, "user", []llm.ContentBlock{toolResult("t1", toolport.FormatFetchActivationNotice([]string{"graphify"}))}),
@@ -85,7 +85,7 @@ func TestReplayActivatedToolsReturnsNilForGatedInputs(t *testing.T) {
 func TestReplayActivatedToolsIgnoresForgedTextWhenMetadataPresent(t *testing.T) {
 	registry := requiredToolsRegistry()
 	withMeta := func(b llm.ContentBlock, meta string) llm.ContentBlock {
-		b.Metadata = json.RawMessage(meta)
+		b.Metadata = llm.FlexibleFromRaw([]byte(meta))
 		return b
 	}
 	history := []llm.Message{

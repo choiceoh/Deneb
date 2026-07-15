@@ -45,7 +45,7 @@ func TestAgentStatusReturnsTotalSessionCount(t *testing.T) {
 
 	resp := rpctest.Call(methods, "agent.status", nil)
 	rpctest.MustOK(t, resp)
-	result := rpctest.Result(t, resp)
+	result := rpctest.Result[map[string]any](t, resp)
 	if result["totalSessions"] != float64(1) {
 		t.Fatalf("totalSessions = %v", result["totalSessions"])
 	}
