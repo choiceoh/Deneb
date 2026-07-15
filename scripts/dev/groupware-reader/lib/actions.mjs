@@ -160,25 +160,170 @@ function authKeyMap(docId) {
   });
 }
 
-function extractTextFromFile(filePath, ext) {
+const OCR_VL_URL = (process.env.DENEB_OCR_VL_URL || "").replace(/\/$/, "");
+const OCR_VL_MODEL = process.env.DENEB_OCR_VL_MODEL || "paddleocr-vl";
+const OCR_TIMEOUT_MS = 60_000;
+const MAX_OCR_PDF_PAGES = 2;
+
+// OCR is on when the fleet PaddleOCR-VL server is wired (gateway sets
+// DENEB_OCR_VL_URL) or explicitly forced with DENEB_GROUPWARE_OCR=1; set
+// DENEB_GROUPWARE_OCR=0 to force it off (e.g. latency-sensitive smoke).
+function ocrEnabled() {
+  if (process.env.DENEB_GROUPWARE_OCR === "0") return false;
+  return process.env.DENEB_GROUPWARE_OCR === "1" || Boolean(OCR_VL_URL);
+}
+
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"];
+
+// PaddleOCR-VL near the token ceiling can loop — the same line, or two lines
+// alternating, echoed dozens of times. Cap how many times any one normalized
+// line may appear (catches both consecutive and alternating loops) and bound the
+// total line count so a runaway page can't dominate the card.
+const MAX_OCR_LINES = 80;
+export function dedupeOcrText(s) {
+  const counts = new Map();
+  const out = [];
+  for (const raw of String(s).split("\n")) {
+    const key = raw.replace(/\s+/g, " ").trim();
+    if (key) {
+      const n = (counts.get(key) || 0) + 1;
+      counts.set(key, n);
+      if (n > 3) continue; // keep at most 3 of any repeated line
+    }
+    out.push(raw);
+    if (out.length >= MAX_OCR_LINES) {
+      out.push("…(생략)");
+      break;
+    }
+  }
+  return out.join("\n").trim();
+}
+
+// A "real" token is a run that looks like actual content: 2+ Hangul, a 3+ digit
+// number, or a 4+ letter Latin word. Symbol-soup OCR of a photo/stamp is mostly
+// isolated 1–2 char fragments between punctuation, so it has almost none.
+const REAL_TOKEN = /[가-힣]{2,}|\d{3,}|[A-Za-z]{4,}/;
+
+// A line is noise when it carries no real token (kept short lines like "끝." pass
+// only if they contain Hangul/among the doc, judged at the block level below).
+function hasRealToken(line) {
+  return REAL_TOKEN.test(line);
+}
+
+// Blank out symbol-soup OCR (photo collages, stamps) and trim to budget: if few
+// lines carry a real token there is no text worth surfacing, so return "" and let
+// the caller show a short note instead of pages of garbage.
+export function cleanOcr(s) {
+  const out = String(s || "").trim();
+  if (!out) return "";
+  const lines = out.split("\n").filter((l) => l.trim());
+  if (!lines.length) return "";
+  const real = lines.filter(hasRealToken).length / lines.length;
+  if (real < 0.5) return "";
+  return out.slice(0, MAX_EXTRACT_CHARS);
+}
+
+/** PaddleOCR-VL (fleet vLLM, OpenAI-compatible). Far better than tesseract on
+ *  Korean business docs — tables, stamps, mixed numbers. Falls back to tesseract
+ *  when the server is unset/unreachable so extraction degrades gracefully. */
+async function ocrViaVL(buffer, mime) {
+  if (!OCR_VL_URL) return "";
+  const dataURI = `data:${mime || "image/png"};base64,${buffer.toString("base64")}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), OCR_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${OCR_VL_URL}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        model: OCR_VL_MODEL,
+        temperature: 0,
+        max_tokens: 1536,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: dataURI } },
+            { type: "text", text: "OCR:" },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) return "";
+    const j = await res.json();
+    return dedupeOcrText(String(j?.choices?.[0]?.message?.content || "").trim());
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function tesseractFile(filePath) {
+  const r = spawnSync("tesseract", [filePath, "stdout", "-l", "kor+eng", "--psm", "6"], {
+    encoding: "utf8",
+    maxBuffer: 4 * 1024 * 1024,
+    timeout: 60_000,
+  });
+  return r.status === 0 ? String(r.stdout || "").trim() : "";
+}
+
+function mimeForExt(ext) {
+  const e = String(ext || "").toLowerCase();
+  if (e === "jpg" || e === "jpeg") return "image/jpeg";
+  if (e === "png") return "image/png";
+  if (e === "webp") return "image/webp";
+  if (e === "bmp") return "image/bmp";
+  if (e === "tif" || e === "tiff") return "image/tiff";
+  return "image/png";
+}
+
+// Rasterize a (likely scanned) PDF to PNG pages so OCR-VL can read them. Bounded
+// to the first MAX_OCR_PDF_PAGES pages to keep latency predictable on the phone
+// enrich path. Returns absolute page-image paths under dir.
+function rasterizePdf(pdfPath, dir) {
+  const prefix = path.join(dir, "page");
+  const r = spawnSync(
+    "pdftoppm",
+    ["-png", "-r", "150", "-f", "1", "-l", String(MAX_OCR_PDF_PAGES), pdfPath, prefix],
+    { timeout: 60_000 },
+  );
+  if (r.status !== 0) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.startsWith("page") && f.endsWith(".png"))
+    .sort()
+    .map((f) => path.join(dir, f));
+}
+
+async function extractTextFromFile(filePath, ext, dir) {
   const e = String(ext || "").toLowerCase().replace(/^\./, "");
   if (e === "pdf") {
     const r = spawnSync("pdftotext", ["-layout", "-nopgbrk", filePath, "-"], {
       encoding: "utf8",
-      maxBuffer: 2 * 1024 * 1024,
+      maxBuffer: 4 * 1024 * 1024,
       timeout: 30_000,
     });
-    if (r.status === 0) return String(r.stdout || "").trim().slice(0, MAX_EXTRACT_CHARS);
-    return "";
+    const text = r.status === 0 ? String(r.stdout || "").trim() : "";
+    if (text) return text.slice(0, MAX_EXTRACT_CHARS);
+    // Empty → likely a scanned PDF. Rasterize + OCR when enabled.
+    if (!ocrEnabled()) return "";
+    const pages = rasterizePdf(filePath, dir);
+    const parts = [];
+    for (const pg of pages) {
+      const buf = fs.readFileSync(pg);
+      let pt = await ocrViaVL(buf, "image/png");
+      if (!pt) pt = dedupeOcrText(tesseractFile(pg));
+      if (pt) parts.push(pt);
+    }
+    return cleanOcr(parts.join("\n"));
   }
-  if (["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"].includes(e)) {
-    const r = spawnSync(
-      "tesseract",
-      [filePath, "stdout", "-l", "kor+eng", "--psm", "6"],
-      { encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: 60_000 },
-    );
-    if (r.status === 0) return String(r.stdout || "").trim().slice(0, MAX_EXTRACT_CHARS);
-    return "";
+  if (IMAGE_EXTS.includes(e)) {
+    if (!ocrEnabled()) return "";
+    const buf = fs.readFileSync(filePath);
+    let out = await ocrViaVL(buf, mimeForExt(e));
+    if (!out) out = dedupeOcrText(tesseractFile(filePath));
+    return cleanOcr(out);
   }
   if (["txt", "csv", "md", "log"].includes(e)) {
     try {
@@ -193,9 +338,7 @@ function extractTextFromFile(filePath, ext) {
 function wantExtract(ext) {
   const e = String(ext || "").toLowerCase();
   if (["pdf", "txt", "csv", "md", "log"].includes(e)) return true;
-  if (["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"].includes(e)) {
-    return process.env.DENEB_GROUPWARE_OCR === "1";
-  }
+  if (IMAGE_EXTS.includes(e)) return ocrEnabled();
   return false;
 }
 
@@ -235,13 +378,13 @@ async function downloadAndExtract(docId, file) {
   const tmpFile = path.join(tmpDir, `${String(fileSn)}.${ext || "bin"}`);
   try {
     fs.writeFileSync(tmpFile, out.buffer);
-    const extracted = extractTextFromFile(tmpFile, ext);
+    const extracted = await extractTextFromFile(tmpFile, ext, tmpDir);
     return {
       name,
       ext,
       size: out.buffer.length,
       extracted,
-      note: extracted ? "" : "텍스트 추출 없음(이미지·스캔일 수 있음)",
+      note: extracted ? "" : "텍스트 추출 없음(빈 스캔이거나 OCR 실패)",
     };
   } finally {
     try {
@@ -267,9 +410,9 @@ async function formatAttachments(docId) {
     // Metadata-only for skipped types; don't spend the download budget on a JPG
     // we won't OCR (image OCR is opt-in via DENEB_GROUPWARE_OCR=1).
     if (!wantExtract(ext)) {
-      const img = ["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"].includes(ext);
+      const img = IMAGE_EXTS.includes(ext);
       lines.push(
-        `  (${img ? "이미지 — OCR 생략 (DENEB_GROUPWARE_OCR=1 시 추출)" : "추출 미지원 형식"})`,
+        `  (${img ? "이미지 — OCR 비활성(DENEB_GROUPWARE_OCR=1)" : "추출 미지원 형식"})`,
       );
       continue;
     }

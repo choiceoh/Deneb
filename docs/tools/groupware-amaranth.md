@@ -170,8 +170,10 @@ POST /ecm/ecm001A03
 ```
 
 - `authKeyMap` values come from session (`compSeq`, `empSeq`) + `docId`
-- No server-side text API for JPG/PDF — download to temp, then local OCR /
-  extract when the agent needs content
+- No server-side text API for JPG/PDF — download to temp, then extract:
+  text-layer PDF via `pdftotext`; scanned PDF/image via **PaddleOCR-VL**
+  (fleet `DENEB_OCR_VL_URL`, ~1s/page) with `tesseract` fallback. Scanned PDFs
+  are rasterized (`pdftoppm`, first 2 pages).
 - Preview-only: `POST /ecm/ecm001A07` (Synap viewer path; not for extraction)
 - Legacy `/ecm/ecmapi/ecm001A03.do` → 404 on this tenant
 
@@ -317,7 +319,7 @@ Useful for discovery/debug; not required on the hot path.
 | Phase | Scope | Status |
 |-------|--------|--------|
 | P0 | Session + approval list/read body + line | Done |
-| P1 | Attachment list + PDF extract; image OCR opt-in (`DENEB_GROUPWARE_OCR=1`) | Done |
+| P1 | Attachment list + PDF/text extract; image·scanned-PDF OCR via PaddleOCR-VL (auto when `DENEB_OCR_VL_URL` set) → tesseract fallback | Done |
 | P2 | Board `ViewPost` on `read` | Done |
 | P3 | Approve/reject (`eap110A21`) + feed chips (native/Andromeda) | Wired; **live mutate untested** |
 | P4 | Phone enrich API-first; DOM/Page Agent last resort | In progress |
