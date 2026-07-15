@@ -15,7 +15,6 @@
 package chat
 
 import (
-	"encoding/json"
 	"log/slog"
 	"strings"
 	"sync/atomic"
@@ -115,36 +114,21 @@ func (g *untrustedToolGate) markTainted(source string) {
 // visible effects that must not run on a promptware-tainted turn. Other tools
 // — reads, searches, wiki writes (checkpointed, internal) — stay available so a
 // tainted turn can still do safe work and explain itself.
-func isIrreversibleTool(name string, input []byte) bool {
+func isIrreversibleTool(name string, _ []byte) bool {
 	switch name {
 	case "exec":
+		// exec = arbitrary shell (RCE).
 		return true
 	case "preference":
 		// preference appends a DURABLE standing rule to SOUL.md that steers every
-		// future session — exactly the kind of persistent persona mutation a
-		// prompt injection must not be able to plant.
+		// future session — a persistent persona mutation an injection must not plant.
 		return true
-	case "wiki":
-		// forget is a hard page delete — block it on a tainted turn. Every other
-		// wiki action (search/read/write/log/close/…) is reversible or checkpointed
-		// and stays available so a tainted turn can still do safe work.
-		return wikiActionIsForget(input)
+	case "wiki_forget":
+		// wiki_forget hard-deletes a page — irreversible data loss.
+		return true
 	default:
 		return false
 	}
-}
-
-// wikiActionIsForget reports whether a wiki tool call selects the destructive
-// forget action. Malformed input is treated as non-forget (the tool itself will
-// reject it); this gate only needs to catch a real forget attempt.
-func wikiActionIsForget(input []byte) bool {
-	var p struct {
-		Action string `json:"action"`
-	}
-	if json.Unmarshal(input, &p) != nil {
-		return false
-	}
-	return p.Action == "forget"
 }
 
 // wireUntrustedToolGate installs the untrusted-origin tool gate on the hook

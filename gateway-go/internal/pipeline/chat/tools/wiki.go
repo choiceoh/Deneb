@@ -76,42 +76,10 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 			return wikiReopenProject(d.Store, p.Query)
 		case "ingest":
 			return wikiIngest(ctx, d.Store, p.Query, p.Project, p.Title, p.Content, p.Force)
-		case "forget":
-			return wikiForget(d.Store, p.Query, p.Content)
 		default:
-			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, close, reopen, ingest, forget", p.Action), nil
+			return fmt.Sprintf("알 수 없는 액션: %s. 사용 가능: search, read, index, write, log, daily, status, close, reopen, ingest", p.Action), nil
 		}
 	}
-}
-
-// wikiForget hard-deletes a wiki page for privacy or correctness ("잊어줘"),
-// recording an audit tombstone with the reason. Distinct from close (archive,
-// reversible) and supersedes (soft-demote, still readable): this REMOVES the
-// fact so it no longer surfaces in search or recall. Destructive — the agent
-// should search for the exact path first.
-func wikiForget(store *wiki.Store, path, reason string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "query에 잊을 페이지 경로를 지정하세요 (예: 인물/홍길동.md). 먼저 search로 정확한 경로를 확인하세요.", nil
-	}
-	if strings.TrimSpace(reason) == "" {
-		return "content에 잊는 사유를 한 줄로 적으세요 — 감사 로그에 남깁니다 (오정보·프라이버시 등).", nil
-	}
-	// Accept a namespaced "w:" ref interchangeably with a bare path.
-	path = strings.TrimPrefix(path, RefWiki)
-	// Escape guard: reject a path that could resolve outside the wiki root.
-	if err := wiki.ValidateExternalPath(path); err != nil {
-		return fmt.Sprintf("잘못된 페이지 경로입니다 (위키 루트 밖 접근 불가): %s", path), nil //nolint:nilerr // tool surface: guidance to the model, not an error
-	}
-	res, err := store.Forget(path, reason)
-	if err != nil {
-		return fmt.Sprintf("잊기 실패: %v", err), nil //nolint:nilerr // tool surface: guidance to the model, not an error
-	}
-	title := res.Title
-	if title == "" {
-		title = res.Path
-	}
-	return fmt.Sprintf("위키에서 삭제(잊음): %s (%s). 감사 로그에 사유를 기록했습니다. 이 사실은 이제 검색·회상되지 않습니다.", title, res.Path), nil
 }
 
 func wikiSearch(ctx context.Context, store *wiki.Store, query string, limit int) (string, error) {

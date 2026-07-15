@@ -499,7 +499,7 @@ func RegisterCalendarTool(registry toolport.ToolRegistrar, calDeps *tooldeps.Cal
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.
-func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string) {
+func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string, sessionCacheFlush tools.SessionCacheFlushFn) {
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
 		registry.RegisterTool(toolport.ToolDef{
@@ -520,6 +520,20 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 			Description: "'총 거래액'·'올해 견적 몇 건'·'거래처별 합계' 류 거래 금액 집계 질문에 쓰는 정형 거래 원장 — 메일 분석이 파일한 거래 문서(견적·계약·세금계산서 등)의 타입드 기록에서 합계·건수·통화별 집계·기간 필터를 코드로 계산한다(위키 산문 눈대중 금지). 금액 미파싱 건은 합계에서 제외되고 원문과 함께 표기된다",
 			InputSchema: dealLedgerToolSchema(),
 			Fn:          tools.ToolDealLedger(wikiDeps.Store),
+			Deferred:    true,
+		})
+
+		// wiki_forget: standalone HARD delete of a page (privacy/correctness).
+		// Separate tool (not a wiki action) so it stays out of the autonomous
+		// background presets' name-based allow-lists — a destructive delete must
+		// not be reachable from untrusted-content turns. Deferred: rare + destructive.
+		registry.RegisterTool(toolport.ToolDef{
+			Name: "wiki_forget",
+			Description: "위키 페이지를 영구 삭제(잊기) — 오정보·프라이버시로 사실을 지운다. path=페이지 경로, reason=사유(감사 로그 기록). " +
+				"close(아카이브)·supersedes(소프트 강등)와 달리 실제 제거해 검색·회상에서 사라진다. 파괴적이므로 먼저 wiki search로 정확한 경로를 확인하라. " +
+				"거래 원장 페이지(프로젝트/거래/…)는 재무 감사 기록이라 거부된다.",
+			InputSchema: wikiForgetToolSchema(),
+			Fn:          tools.ToolWikiForget(wikiDeps, sessionCacheFlush),
 			Deferred:    true,
 		})
 	}

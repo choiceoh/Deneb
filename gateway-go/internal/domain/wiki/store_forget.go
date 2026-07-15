@@ -57,6 +57,11 @@ func (s *Store) Forget(relPath, reason string) (ForgetResult, error) {
 	if _, reserved := reservedForgetFiles[relPath]; reserved {
 		return ForgetResult{}, fmt.Errorf("wiki: forget: %q is an internal wiki file, not a page", relPath)
 	}
+	// Refuse deal ledger pages: they mirror the financial deal records, a
+	// business/audit surface that a privacy forget must not silently erase.
+	if IsDealLedgerPath(relPath) {
+		return ForgetResult{}, fmt.Errorf("wiki: forget: %q is a 거래 원장 페이지(재무 감사 기록)라 forget 대상이 아닙니다", relPath)
+	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return ForgetResult{}, fmt.Errorf("wiki: forget needs a reason (audit trail)")

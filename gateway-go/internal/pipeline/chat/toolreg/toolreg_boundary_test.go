@@ -67,6 +67,7 @@ func allSchemaCases() []schemaCase {
 		{name: "goal", build: goalToolSchema},
 		{name: "mail_archive", build: mailArchiveToolSchema},
 		{name: "preference", build: preferenceToolSchema},
+		{name: "wiki_forget", build: wikiForgetToolSchema},
 	}
 }
 
@@ -523,7 +524,7 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 		{name: "knowledge nil", run: func(r *mockRegistrar) { RegisterKnowledgeTool(r, nil) }},
 		{name: "contacts empty", run: func(r *mockRegistrar) { RegisterContactsTool(r, &tooldeps.ContactsDeps{}) }},
 		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &tooldeps.CalendarDeps{}) }},
-		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir()) }},
+		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir(), nil) }},
 		{name: "notebook nil", run: func(r *mockRegistrar) { RegisterNotebookTool(r, nil) }},
 		{name: "notebook empty", run: func(r *mockRegistrar) { RegisterNotebookTool(r, &tooldeps.NotebookDeps{}) }},
 	}

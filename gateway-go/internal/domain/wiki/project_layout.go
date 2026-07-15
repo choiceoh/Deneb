@@ -202,6 +202,15 @@ func IsProjectRawDataPath(relPath string) bool {
 	return seg[1] == mailAnalysisDir || seg[1] == legacyMailAnalysisDir || seg[1] == materialDir || seg[1] == meetingDir
 }
 
+// IsDealLedgerPath reports whether relPath is a per-counterparty deal ledger
+// page (프로젝트/거래/…). forget refuses these: they mirror the financial deal
+// records (.deals.jsonl) — 견적·계약·세금계산서 amounts and counts — which are a
+// business/audit surface, not a stray fact to erase on request.
+func IsDealLedgerPath(relPath string) bool {
+	seg := splitProjectPath(relPath)
+	return len(seg) >= 1 && seg[0] == dealDir
+}
+
 // NormalizeProjectPagePath enforces the project layout's path shape on a write:
 //
 //   - a flat "프로젝트/<name>.md" routes onto the 대표페이지 slot

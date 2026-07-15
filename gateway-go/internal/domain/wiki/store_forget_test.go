@@ -256,6 +256,21 @@ func TestForgetRejectsInternalWikiFiles(t *testing.T) {
 	}
 }
 
+func TestForgetRefusesDealLedgerPage(t *testing.T) {
+	store := newForgetTestStore(t)
+	page := NewPage("JA Solar", "프로젝트", nil)
+	if err := store.WritePage("프로젝트/거래/JA Solar.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+	if _, err := store.Forget("프로젝트/거래/JA Solar", "실수"); err == nil {
+		t.Fatalf("Forget should refuse a 거래 ledger page")
+	}
+	// The page must survive the refused forget.
+	if _, err := store.ReadPage("프로젝트/거래/JA Solar.md"); err != nil {
+		t.Fatalf("deal page removed despite refusal: %v", err)
+	}
+}
+
 func TestForgetRequiresReason(t *testing.T) {
 	store := newForgetTestStore(t)
 	page := NewPage("x", "기타", nil)

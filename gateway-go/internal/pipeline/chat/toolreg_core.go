@@ -19,7 +19,9 @@ func RegisterCoreTools(registry *ToolRegistry, deps *CoreToolDeps) {
 		resolveWorkspaceDirForPrompt(), deps.BundledSkillsDir, InvalidateSkillsCache)
 
 	// Wiki knowledge base tools (always active when wiki is configured).
-	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir)
+	// flushSessionPromptCaches lets wiki_forget drop this session's prompt
+	// snapshots so a forgotten page can't re-surface from a frozen snapshot.
+	toolreg.RegisterWikiTools(registry, &deps.Wiki, deps.WorkspaceDir, flushSessionPromptCaches)
 
 	// preference: append-only standing behavior rules → workspace SOUL.md.
 	// Bind to the SAME workspace file/wiki tools use (deps.WorkspaceDir), falling
