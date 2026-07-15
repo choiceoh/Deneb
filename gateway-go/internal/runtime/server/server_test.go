@@ -36,6 +36,19 @@ func TestHealthEndpointReturnsOKWithWorkerPoolStats(t *testing.T) {
 	if _, ok := resp["subsystems"]; !ok {
 		t.Errorf("expected subsystems field in health response")
 	}
+	manifest, ok := resp["runtime_manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtime_manifest health section, got %T", resp["runtime_manifest"])
+	}
+	if len(manifest["sha256"].(string)) != 64 {
+		t.Fatalf("invalid runtime manifest digest: %+v", manifest)
+	}
+	if tools := manifest["tools"].(map[string]any); tools["state"] != "loaded" || tools["count"].(float64) < 1 {
+		t.Fatalf("runtime manifest did not capture registered tools: %+v", tools)
+	}
+	if models := manifest["models"].(map[string]any); models["state"] != "loaded" || models["count"].(float64) < 1 {
+		t.Fatalf("runtime manifest did not capture configured models: %+v", models)
+	}
 	rpcHealth, ok := resp["rpc"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected rpc health section, got %T", resp["rpc"])

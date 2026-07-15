@@ -10,6 +10,9 @@ import (
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := s.collectBaseHealth()
+	if manifest := s.runtimeManifestSnapshot(); manifest != nil {
+		health["runtime_manifest"] = manifest
+	}
 	if propus, ok := runtimehealth.Propus(s.genesisTracker); ok {
 		attachPropus(health, propus)
 	}
