@@ -99,14 +99,14 @@ func nativeAPIHandler(s *Server) *nativeapi.Handler {
 	factory := miniappMailAttachmentClientFactory
 	if factory == nil {
 		factory = func() (nativeapi.MailAttachmentClient, error) {
-			client, err := s.newMiniappMailAttachmentClient()
+			client, err := s.Mail.NewMiniappMailAttachmentClient()
 			return client, err
 		}
 	}
 	return nativeapi.New(nativeapi.Config{
 		Dispatcher:        s.dispatcher,
-		ChatHandler:       s.chatHandler,
-		PushHub:           s.pushHub,
+		ChatHandler:       s.ChatHandler(),
+		PushHub:           s.PushHub(),
 		ShutdownContext:   s.ShutdownCtx(),
 		Logger:            s.logger,
 		AttachmentFactory: factory,

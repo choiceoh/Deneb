@@ -79,18 +79,18 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	s.startedAt = time.Now()
 	s.StartMonitoring(ctx)
-	s.sessions.StartGC(ctx)
+	s.Sessions().StartGC(ctx)
 
 	// Propagate server lifecycle context to the chat handler so background
 	// goroutines (auto-memory extraction) stop cleanly on shutdown.
-	if s.chatHandler != nil {
-		s.chatHandler.SetShutdownCtx(ctx)
+	if s.ChatHandler() != nil {
+		s.ChatHandler().SetShutdownCtx(ctx)
 	}
 
 	// Start persistent cron service (loads jobs from disk, schedules with delivery).
-	if s.cronService != nil {
+	if s.CronService() != nil {
 		s.safeGo("cron-service-start", func() {
-			if err := s.cronService.Start(ctx); err != nil {
+			if err := s.CronService().Start(ctx); err != nil {
 				s.logger.Error("cron service start failed", "error", err)
 			}
 		})
@@ -115,21 +115,21 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// Both phases run in one goroutine so the ordering is fixed — auto-resume
 	// reads the sessions that restoreAndWakeSessions just populated.
 	s.safeGo("session-restore", func() {
-		s.restoreAndWakeSessions(ctx)
+		s.Chat.RestoreAndWakeSessions(ctx)
 		// Restore the persisted per-session prompt snapshots into the live
 		// stores, now that the session manager knows which keys are alive. Done
 		// here (same goroutine, right after restore) so the prune-at-load drops
 		// snapshots whose session no longer exists, and the first post-restart
 		// turn of each live session reuses its frozen bytes (no APC re-prefill).
-		if n := chat.LoadPromptSnapshots(func(key string) bool { return s.sessions.Get(key) != nil }); n > 0 {
+		if n := chat.LoadPromptSnapshots(func(key string) bool { return s.Sessions().Get(key) != nil }); n > 0 {
 			s.logger.Info("prompt snapshot restore: restored sessions", "count", n)
 		}
-		s.autoResumeInterruptedRuns(ctx)
+		s.Auto.AutoResumeInterruptedRuns(ctx)
 	})
 
 	// Start autonomous service (dreaming lifecycle).
-	if s.autonomousSvc != nil {
-		s.autonomousSvc.Start()
+	if s.AutonomousSvc() != nil {
+		s.AutonomousSvc().Start()
 	}
 
 	// Watch our OWN improvement loops for silent death — the dreamer/skill-
@@ -231,9 +231,9 @@ func (s *Server) doShutdown() error {
 	// for them so that downstream subsystems (the chat handler) are not
 	// torn down while a cron run is still using them.
 	// See issue #1633.
-	if s.cronService != nil {
+	if s.CronService() != nil {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		s.cronService.StopCtx(stopCtx)
+		s.CronService().StopCtx(stopCtx)
 		stopCancel()
 	}
 
@@ -245,39 +245,39 @@ func (s *Server) doShutdown() error {
 	// window short — the watchdog stays a last resort, not the routine path.
 
 	// 4. Stop autonomous service (dreaming).
-	if s.autonomousSvc != nil {
-		stopWithTimeout(10*time.Second, "autonomousSvc.Stop", s.logger, s.autonomousSvc.Stop)
+	if s.AutonomousSvc() != nil {
+		stopWithTimeout(10*time.Second, "autonomousSvc.Stop", s.logger, s.AutonomousSvc().Stop)
 	}
 
 	// 5. Cleanup genesis subsystem.
-	if s.genesisSvc != nil {
-		stopWithTimeout(5*time.Second, "genesisSvc.Stop", s.logger, s.genesisSvc.Stop)
+	if s.Auto.GenesisSvc != nil {
+		stopWithTimeout(5*time.Second, "genesisSvc.Stop", s.logger, s.Auto.GenesisSvc.Stop)
 	}
-	if s.genesisTracker != nil {
-		stopWithTimeout(5*time.Second, "genesisTracker.Close", s.logger, func() { _ = s.genesisTracker.Close() })
+	if s.Auto.GenesisTracker != nil {
+		stopWithTimeout(5*time.Second, "genesisTracker.Close", s.logger, func() { _ = s.Auto.GenesisTracker.Close() })
 	}
 
 	// 6. Stop local AI hub (drains queued requests, cancels in-flight). Bounded
 	// because the drain can block on an in-flight inference to a stalled local
 	// model server (vLLM under memory pressure) — the most likely cause of the
 	// shutdown hang that wedged the gateway before the watchdog + these caps.
-	if s.localAIHub != nil {
-		stopWithTimeout(10*time.Second, "localAIHub.Shutdown", s.logger, s.localAIHub.Shutdown)
+	if s.Chat.LocalAIHub != nil {
+		stopWithTimeout(10*time.Second, "localAIHub.Shutdown", s.logger, s.Chat.LocalAIHub.Shutdown)
 	}
-	if s.embeddingClient != nil {
-		stopWithTimeout(10*time.Second, "embeddingClient.Shutdown", s.logger, s.embeddingClient.Shutdown)
+	if s.Chat.EmbeddingClient != nil {
+		stopWithTimeout(10*time.Second, "embeddingClient.Shutdown", s.logger, s.Chat.EmbeddingClient.Shutdown)
 	}
 
 	// Gmail polling is stopped by autonomous service (registered as periodic task).
 
 	// 11. Close chat handler.
-	if s.chatHandler != nil {
-		stopWithTimeout(5*time.Second, "chatHandler.Close", s.logger, s.chatHandler.Close)
+	if s.ChatHandler() != nil {
+		stopWithTimeout(5*time.Second, "chatHandler.Close", s.logger, s.ChatHandler().Close)
 	}
 
 	// 13. Close wiki store (FTS database).
-	if s.wikiStore != nil {
-		stopWithTimeout(5*time.Second, "wikiStore.Close", s.logger, func() { _ = s.wikiStore.Close() })
+	if s.WikiStore() != nil {
+		stopWithTimeout(5*time.Second, "wikiStore.Close", s.logger, func() { _ = s.WikiStore().Close() })
 	}
 
 	// 14. Stop process manager background goroutine.
@@ -289,33 +289,33 @@ func (s *Server) doShutdown() error {
 	}
 
 	// 15. ACP cleanup: persist bindings, registry, and unsubscribe lifecycle sync.
-	if s.acpDeps != nil && s.acpDeps.BindingStore != nil && s.acpDeps.Bindings != nil {
-		if err := s.acpDeps.BindingStore.SyncFromService(s.acpDeps.Bindings); err != nil {
+	if s.Chat.ACPDeps != nil && s.Chat.ACPDeps.BindingStore != nil && s.Chat.ACPDeps.Bindings != nil {
+		if err := s.Chat.ACPDeps.BindingStore.SyncFromService(s.Chat.ACPDeps.Bindings); err != nil {
 			s.logger.Warn("failed to persist ACP bindings on shutdown", "error", err)
 		}
 	}
-	if s.acpDeps != nil && s.acpDeps.RegistryStore != nil && s.acpDeps.Registry != nil {
-		if err := s.acpDeps.RegistryStore.SyncFromRegistry(s.acpDeps.Registry); err != nil {
+	if s.Chat.ACPDeps != nil && s.Chat.ACPDeps.RegistryStore != nil && s.Chat.ACPDeps.Registry != nil {
+		if err := s.Chat.ACPDeps.RegistryStore.SyncFromRegistry(s.Chat.ACPDeps.Registry); err != nil {
 			s.logger.Warn("failed to persist ACP registry on shutdown", "error", err)
 		}
 	}
-	if s.acpLifecycleUnsub != nil {
-		s.acpLifecycleUnsub()
+	if s.Chat.ACPLifecycleUnsub != nil {
+		s.Chat.ACPLifecycleUnsub()
 	}
-	if s.acpResultInjectionUnsub != nil {
-		s.acpResultInjectionUnsub()
+	if s.Chat.ACPResultInjectionUnsub != nil {
+		s.Chat.ACPResultInjectionUnsub()
 	}
-	if s.snapshotLifecycleUnsub != nil {
-		s.snapshotLifecycleUnsub()
+	if s.Chat.SnapshotLifecycleUnsub != nil {
+		s.Chat.SnapshotLifecycleUnsub()
 	}
-	if s.checkpointLifecycleUnsub != nil {
-		s.checkpointLifecycleUnsub()
+	if s.Chat.CheckpointLifecycleUnsub != nil {
+		s.Chat.CheckpointLifecycleUnsub()
 	}
-	if s.spilloverLifecycleUnsub != nil {
-		s.spilloverLifecycleUnsub()
+	if s.Chat.SpilloverLifecycleUnsub != nil {
+		s.Chat.SpilloverLifecycleUnsub()
 	}
-	if s.runMarkerUnsub != nil {
-		s.runMarkerUnsub()
+	if s.Auto.RunMarkerUnsub != nil {
+		s.Auto.RunMarkerUnsub()
 	}
 
 	// 13. Cancel lifecycle context so remaining background goroutines exit,

@@ -10,7 +10,7 @@ import (
 // handleHealth responds with gateway health status including subsystem state.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := s.collectBaseHealth()
-	if propus, ok := runtimehealth.Propus(s.genesisTracker); ok {
+	if propus, ok := runtimehealth.Propus(s.Auto.GenesisTracker); ok {
 		attachPropus(health, propus)
 	}
 
@@ -43,10 +43,10 @@ func attachPropus(health map[string]any, section *runtimehealth.PropusSection) {
 // model registry isn't wired yet (early startup, tests) — nil-safe so the
 // health probe never panics before the session phase populates the registry.
 func (s *Server) vllmBaseURLs() []string {
-	if s.modelRegistry == nil {
+	if s.Chat.ModelRegistry == nil {
 		return nil
 	}
-	return s.modelRegistry.VllmBaseURLs()
+	return s.ModelRegistry().VllmBaseURLs()
 }
 
 // handleHealthGPU serves GET /health/gpu — the GPU telemetry section as a

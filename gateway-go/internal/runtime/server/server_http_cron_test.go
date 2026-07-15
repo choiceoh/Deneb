@@ -26,7 +26,7 @@ func installCleanCronService(t *testing.T, srv *Server) *cron.Service {
 		DefaultChannel: "telegram",
 		Enabled:        true,
 	}, nil, srv.logger)
-	srv.cronService = svc
+	srv.Chat.CronService = svc
 	return svc
 }
 
@@ -132,7 +132,7 @@ func TestHandleCronRunReturnsOKForMatchingJobName(t *testing.T) {
 
 func TestHandleCronRunReturns503WhenCronServiceNil(t *testing.T) {
 	srv := testutil.Must(New(":0"))
-	srv.cronService = nil
+	srv.Chat.CronService = nil
 	mux := srv.buildMux()
 
 	w := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestHandleCronRunReturns500OnCorruptStore(t *testing.T) {
 	if err := os.WriteFile(storePath, []byte("{not valid json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	srv.cronService = cron.NewService(cron.ServiceConfig{
+	srv.Chat.CronService = cron.NewService(cron.ServiceConfig{
 		StorePath:      storePath,
 		DefaultChannel: "telegram",
 		Enabled:        true,

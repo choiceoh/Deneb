@@ -27,21 +27,23 @@ func (s *Server) collectBaseHealth() map[string]any {
 	}
 
 	cronTasks := 0
-	if s.cronService != nil {
-		cronTasks = s.cronService.Status().TaskCount
+	if cron := s.CronService(); cron != nil {
+		cronTasks = cron.Status().TaskCount
 	}
 
 	currentModel := ""
-	if s.chatHandler != nil {
-		currentModel = s.chatHandler.DefaultModel()
+	if ch := s.ChatHandler(); ch != nil {
+		currentModel = ch.DefaultModel()
 	}
-	if currentModel == "" && s.modelRegistry != nil {
-		currentModel = s.modelRegistry.FullModelID(modelrole.RoleMain)
+	if currentModel == "" {
+		if mr := s.ModelRegistry(); mr != nil {
+			currentModel = mr.FullModelID(modelrole.RoleMain)
+		}
 	}
 
 	localAIStatus := "off"
-	if s.localAIHub != nil {
-		if s.localAIHub.IsHealthy() {
+	if s.Chat != nil && s.Chat.LocalAIHub != nil {
+		if s.Chat.LocalAIHub.IsHealthy() {
 			localAIStatus = "ok"
 		} else {
 			localAIStatus = "unhealthy"
@@ -49,8 +51,8 @@ func (s *Server) collectBaseHealth() map[string]any {
 	}
 
 	embeddingStatus := "off"
-	if s.embeddingClient != nil {
-		if s.embeddingClient.IsHealthy() {
+	if s.Chat != nil && s.Chat.EmbeddingClient != nil {
+		if s.Chat.EmbeddingClient.IsHealthy() {
 			embeddingStatus = "ok"
 		} else {
 			embeddingStatus = "unhealthy"
@@ -62,13 +64,8 @@ func (s *Server) collectBaseHealth() map[string]any {
 		"local_ai":  localAIStatus,
 		"embedding": embeddingStatus,
 	}
-	if value := s.mailIngestHealth.Load(); value != nil {
-		if ingestHealth, ok := value.(mailIngestHealth); ok {
-			if s.mailIngestQueueStats != nil {
-				ingestHealth.Queue = s.mailIngestQueueStats()
-			}
-			subsystems["mail_ingest"] = ingestHealth
-		} else {
+	if s.Chat != nil {
+		if value := s.Chat.MailIngestHealthSnapshot(); value != nil {
 			subsystems["mail_ingest"] = value
 		}
 	}
@@ -81,7 +78,7 @@ func (s *Server) collectBaseHealth() map[string]any {
 		"uptime":     formatUptimeHTTP(uptime),
 		"uptime_ms":  uptime.Milliseconds(),
 		"subsystems": subsystems,
-		"sessions":   s.sessions.Count(),
+		"sessions":   s.Sessions().Count(),
 		"workers": map[string]int{
 			"processes": activeProcesses,
 			"cron":      cronTasks,

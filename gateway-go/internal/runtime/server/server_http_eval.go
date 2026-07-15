@@ -40,15 +40,15 @@ func (s *Server) handleEvalExtract(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "kind, input, and model are required"})
 		return
 	}
-	if s.modelRegistry == nil {
+	if s.Chat.ModelRegistry == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "model registry unavailable"})
 		return
 	}
 	// wormhole fronts every benchmarkable model by name; the lightweight role's
 	// client is wormhole-backed too, so it is a safe fallback.
-	client := s.modelRegistry.ClientForProvider("wormhole")
+	client := s.ModelRegistry().ClientForProvider("wormhole")
 	if client == nil {
-		client = s.modelRegistry.Client(modelrole.RoleLightweight)
+		client = s.ModelRegistry().Client(modelrole.RoleLightweight)
 	}
 	if client == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no wormhole-backed client configured"})
