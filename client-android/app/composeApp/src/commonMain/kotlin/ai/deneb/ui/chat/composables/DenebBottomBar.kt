@@ -83,7 +83,7 @@ const val ROUTE_MORE = "deneb_more"
 private val feedTab = DenebTabItem(
     "피드",
     ROUTE_FEED,
-    DenebFeed,
+    DenebFeed(),
     Icons.Outlined.NotificationsOutlined,
     Icons.Filled.NotificationsFilled,
 )

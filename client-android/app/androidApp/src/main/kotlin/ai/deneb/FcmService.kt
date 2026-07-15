@@ -38,6 +38,12 @@ class FcmService : FirebaseMessagingService() {
         // an older gateway build working during a version skew window.
         val title = message.data["title"] ?: message.notification?.title ?: "데네브"
         val body = message.data["body"] ?: message.notification?.body ?: return
-        DenebMessagingNotification.postIncoming(this, title, body)
+        DenebMessagingNotification.postIncoming(
+            context = this,
+            title = title,
+            body = body,
+            kind = message.data["kind"].orEmpty(),
+            ref = message.data["ref"].orEmpty(),
+        )
     }
 }

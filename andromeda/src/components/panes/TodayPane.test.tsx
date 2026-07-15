@@ -52,7 +52,7 @@ describe("TodayPane (오늘 대시보드)", () => {
       calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],
       mail: [{ id: "m1", subject: "예산 검토", from: "kim@corp.com" }],
       todo: [{ id: "t1", title: "보고서 초안", done: false }],
-      workfeed: [{ id: "w1", title: "일정 충돌 감지", source: "alert" }],
+      workfeed: [{ id: "w1", title: "전자결재 검토", source: "groupware-approval" }],
     });
     renderWithProviders(
       <>
@@ -70,6 +70,10 @@ describe("TodayPane (오늘 대시보드)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /보고서 초안/ }));
     expect(screen.getByTestId("workspace-target")).toHaveTextContent("todo:todo:t1:");
+
+    expect(screen.getByText("전자결재")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /전자결재 검토/ }));
+    expect(screen.getByTestId("workspace-target")).toHaveTextContent("workfeed:workfeed:w1:");
   });
 
   it("renders cached todo and workfeed sections while the gateway refresh is still pending", () => {

@@ -1,5 +1,6 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.consumeFeedItemOpen
 import ai.deneb.deneb.DenebEmpty
 import ai.deneb.deneb.DenebLoading
 import ai.deneb.ui.DenebScreenScaffold
@@ -41,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +89,8 @@ internal fun FeedScreen(
     onSubmitFeedback: (String, String) -> Unit,
     onRewrite: (String) -> Unit,
     onAsk: (String) -> Unit,
+    initialOpenItemId: String? = null,
+    initialOpenItemCreatedAtMs: Long = 0L,
 ) {
     DenebScreenScaffold(title = "피드", onBack = {}, showBack = false) {
         // Keep the selected date independent of the loaded item list. A ranged fetch
@@ -96,7 +100,19 @@ internal fun FeedScreen(
         val tz = remember { TimeZone.currentSystemDefault() }
         val today = remember { Clock.System.todayIn(tz) }
         val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
-        var selectedDate by remember { mutableStateOf(today) }
+        val initialDate = remember(initialOpenItemId, initialOpenItemCreatedAtMs, today) {
+            if (initialOpenItemId.isNullOrBlank() || initialOpenItemCreatedAtMs <= 0L) {
+                today
+            } else {
+                localDateOf(initialOpenItemCreatedAtMs)
+            }
+        }
+        var selectedDateIso by rememberSaveable(initialOpenItemId) { mutableStateOf(initialDate.toString()) }
+        val selectedDate = runCatching { LocalDate.parse(selectedDateIso) }.getOrDefault(today)
+        var expandedId by rememberSaveable(initialOpenItemId) { mutableStateOf<String?>(null) }
+        var pendingOpenItemId by rememberSaveable(initialOpenItemId) {
+            mutableStateOf(initialOpenItemId?.trim()?.takeIf(String::isNotEmpty))
+        }
         val nav = feedDateNavState(selectedDate, today, dates)
         // A day-fetch that fails (boot race, gateway mid-redeploy, VPN waking) must
         // say so — the feed is the 업무 home, and a silent failure reads as "피드
@@ -116,8 +132,12 @@ internal fun FeedScreen(
             label = feedDateLabel(selectedDate, today),
             canGoPrev = nav.canGoPrev,
             canGoNext = nav.canGoNext,
-            onPrev = { if (nav.canGoPrev) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
-            onNext = { if (nav.canGoNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
+            onPrev = {
+                if (nav.canGoPrev) selectedDateIso = selectedDate.minus(1, DateTimeUnit.DAY).toString()
+            },
+            onNext = {
+                if (nav.canGoNext) selectedDateIso = selectedDate.plus(1, DateTimeUnit.DAY).toString()
+            },
         )
 
         AnimatedVisibility(visible = loadFailed, enter = denebBannerEnter, exit = denebBannerExit) {
@@ -135,7 +155,6 @@ internal fun FeedScreen(
             }
         }
 
-        var expandedId by remember { mutableStateOf<String?>(null) }
         // Partition by a snapshot of seenIds taken when the feed's items load, not
         // live: tapping a row marks it seen (onMarkSeen) and expands it inline, and a
         // live re-partition would yank the tapped item from 안읽음 (top) down into the
@@ -154,6 +173,15 @@ internal fun FeedScreen(
         val open: (String) -> Unit = { id ->
             expandedId = if (expandedId == id) null else id
             onMarkSeen(id)
+        }
+        LaunchedEffect(pendingOpenItemId, items) {
+            val consumption = consumeFeedItemOpen(pendingOpenItemId, items.map(WorkFeedItem::id))
+            pendingOpenItemId = consumption.pendingItemId
+            val itemId = consumption.openedItemId ?: return@LaunchedEffect
+            val item = items.firstOrNull { it.id == itemId } ?: return@LaunchedEffect
+            selectedDateIso = localDateOf(item.createdAtMs).toString()
+            expandedId = itemId
+            onMarkSeen(itemId)
         }
 
         // Pull-to-refresh is the feed's user-driven recovery path. The empty state

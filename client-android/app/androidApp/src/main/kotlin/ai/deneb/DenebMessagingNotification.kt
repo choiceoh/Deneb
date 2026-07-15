@@ -20,9 +20,9 @@ import androidx.core.app.RemoteInput
  * MessagingStyle + a reply Action with a RemoteInput (SemanticAction REPLY,
  * showsUserInterface=false, allowGeneratedReplies=true) + a mark-as-read Action
  * (SemanticAction MARK_AS_READ, showsUserInterface=false). On the phone tray the
- * same notification keeps the existing behavior: tap deep-links into the 업무
- * topic (EXTRA_OPEN_WORK_TOPIC), and the inline reply field posts back to the
- * gateway via [DenebReplyReceiver].
+ * same notification deep-links a `kind=workfeed` payload with a ref to that exact
+ * feed card. Version-skew payloads without a ref keep the legacy 업무-topic
+ * destination, and the inline reply field posts back via [DenebReplyReceiver].
  */
 object DenebMessagingNotification {
     /**
@@ -48,11 +48,17 @@ object DenebMessagingNotification {
     private val userPerson: Person = Person.Builder().setName("나").setKey("deneb-user").build()
 
     /** Posts a new incoming message, appending to the live conversation if one is in the tray. */
-    fun postIncoming(context: Context, title: String, body: String) {
+    fun postIncoming(
+        context: Context,
+        title: String,
+        body: String,
+        kind: String = "",
+        ref: String = "",
+    ) {
         val style = (activeStyle(context) ?: newStyle())
             .setConversationTitle(title)
             .addMessage(body, System.currentTimeMillis(), denebPerson)
-        post(context, style)
+        post(context, style, workFeedItemId(kind, ref))
     }
 
     /**
@@ -105,7 +111,11 @@ object DenebMessagingNotification {
         NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(active)
     }.getOrNull()
 
-    private fun post(context: Context, style: NotificationCompat.MessagingStyle) {
+    private fun post(
+        context: Context,
+        style: NotificationCompat.MessagingStyle,
+        workFeedItemId: String? = null,
+    ) {
         // postIncoming runs on the FCM background thread (onMessageReceived), so ANY
         // throw here — channel create, PendingIntent build, MessagingStyle build, or
         // notify — would crash the app on push delivery. Guard the WHOLE post (not
@@ -122,20 +132,24 @@ object DenebMessagingNotification {
                     .setAutoCancel(true)
                     .addAction(replyAction(context))
                     .addAction(markAsReadAction(context))
-                contentIntent(context)?.let { builder.setContentIntent(it) }
+                contentIntent(context, workFeedItemId)?.let { builder.setContentIntent(it) }
                 manager.notify(NOTIFICATION_ID, builder.build())
             }
         }.onFailure { Log.w(TAG, "notification post failed; dropped this one", it) }
     }
 
     /**
-     * Same phone-tray tap behavior as the legacy proactive path: open the app
-     * and deep-link into the 업무 topic where the report was mirrored.
+     * A targeted work-feed notification opens its exact card. Older notification
+     * payloads without an item ref retain the 업무-topic destination.
      */
-    private fun contentIntent(context: Context): PendingIntent? {
+    private fun contentIntent(context: Context, workFeedItemId: String?): PendingIntent? {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(EXTRA_OPEN_WORK_TOPIC, true)
+            if (workFeedItemId == null) {
+                putExtra(EXTRA_OPEN_WORK_TOPIC, true)
+            } else {
+                putExtra(EXTRA_OPEN_WORK_FEED_ITEM_ID, workFeedItemId)
+            }
         } ?: return null
         return PendingIntent.getActivity(
             context,

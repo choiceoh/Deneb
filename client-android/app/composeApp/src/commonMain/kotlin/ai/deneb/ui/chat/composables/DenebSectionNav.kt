@@ -22,7 +22,7 @@ import androidx.navigation.NavHostController
  * reached through categories' pinned "사람" row.
  */
 val denebSectionDestinations: List<Any> = listOf(
-    DenebFeed,
+    DenebFeed(),
     DenebDashboard,
     Home,
     DenebMail,

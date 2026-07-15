@@ -30,6 +30,9 @@ const val EXTRA_OPEN_HEARTBEAT = "ai.deneb.OPEN_HEARTBEAT"
  */
 const val EXTRA_OPEN_WORK_TOPIC = "ai.deneb.OPEN_WORK_TOPIC"
 
+/** Intent extra carrying a specific work-feed item to expand after navigation. */
+const val EXTRA_OPEN_WORK_FEED_ITEM_ID = "ai.deneb.OPEN_WORK_FEED_ITEM_ID"
+
 /**
  * Fixed ID so a new heartbeat report replaces any earlier unread one in the tray
  * instead of piling up. Android notification IDs are app-wide, so keep this
@@ -44,16 +47,34 @@ actual fun sendHeartbeatNotification(title: String, body: String) {
     postNotification(title, body, EXTRA_OPEN_HEARTBEAT, HEARTBEAT_NOTIFICATION_ID)
 }
 
-actual fun sendProactiveReportNotification(title: String, body: String) {
-    postNotification(title, body, EXTRA_OPEN_WORK_TOPIC, PROACTIVE_NOTIFICATION_ID)
+actual fun sendProactiveReportNotification(title: String, body: String, kind: String, ref: String) {
+    val itemId = workFeedItemId(kind, ref)
+    if (itemId != null) {
+        postNotification(
+            title = title,
+            body = body,
+            deepLinkExtra = EXTRA_OPEN_WORK_FEED_ITEM_ID,
+            notificationId = PROACTIVE_NOTIFICATION_ID,
+            deepLinkValue = itemId,
+        )
+    } else {
+        postNotification(title, body, EXTRA_OPEN_WORK_TOPIC, PROACTIVE_NOTIFICATION_ID)
+    }
 }
 
 /**
  * Posts a tray notification whose tap deep-links via [deepLinkExtra] (one of the
- * EXTRA_OPEN_* keys). [notificationId] keeps heartbeat vs proactive reports in
- * separate tray slots so one doesn't replace the other.
+ * EXTRA_OPEN_* keys). [deepLinkValue] carries an opaque target ID when present;
+ * legacy boolean extras remain unchanged when it is null. [notificationId] keeps
+ * heartbeat vs proactive reports in separate tray slots.
  */
-private fun postNotification(title: String, body: String, deepLinkExtra: String, notificationId: Int) {
+private fun postNotification(
+    title: String,
+    body: String,
+    deepLinkExtra: String,
+    notificationId: Int,
+    deepLinkValue: String? = null,
+) {
     val context: Context by inject(Context::class.java)
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -62,7 +83,11 @@ private fun postNotification(title: String, body: String, deepLinkExtra: String,
 
     val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        putExtra(deepLinkExtra, true)
+        if (deepLinkValue == null) {
+            putExtra(deepLinkExtra, true)
+        } else {
+            putExtra(deepLinkExtra, deepLinkValue)
+        }
     }
     val pendingIntent = intent?.let {
         PendingIntent.getActivity(

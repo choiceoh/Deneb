@@ -9,6 +9,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
+import ai.deneb.workFeedItemId
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,6 +62,7 @@ import kotlin.time.Instant
 fun DenebDashboardScreen(
     client: DenebGatewayClient,
     onBack: () -> Unit,
+    onOpenWorkFeedItem: (String, Long) -> Unit = { _, _ -> },
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var lanes by remember { mutableStateOf<List<LaneOut>>(emptyList()) }
@@ -112,7 +114,7 @@ fun DenebDashboardScreen(
                     // list means a degenerate/old response — guide rather than blank.
                     lanes.isEmpty() -> DenebEmpty("표시할 업무 현황이 없습니다.")
 
-                    else -> DashboardLanesContent(lanes)
+                    else -> DashboardLanesContent(lanes, onOpenWorkFeedItem)
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -126,16 +128,24 @@ fun DenebDashboardScreen(
  * The dashboard lanes: one grouped card per 파트, each headed by the part name and
  * its item count. Items list as title / subtitle / scheduled-time rows; an empty
  * lane shows a quiet "지금 할 일이 없습니다" line so the part still reads as present.
- * The '미분류' triage lane is rendered muted. Pure presentation — the shell owns
- * fetch + state.
+ * The '미분류' triage lane is rendered muted. Work-feed refs open their source
+ * card; other row types keep the existing no-op tap.
  */
 @Composable
-internal fun DashboardLanesContent(lanes: List<LaneOut>) {
+internal fun DashboardLanesContent(
+    lanes: List<LaneOut>,
+    onOpenWorkFeedItem: (String, Long) -> Unit = { _, _ -> },
+) {
     val tz = remember { TimeZone.currentSystemDefault() }
     Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
         lanes.forEach { lane ->
             val muted = lane.key == "unclassified"
-            DashboardLane(lane = lane, tz = tz, muted = muted)
+            DashboardLane(
+                lane = lane,
+                tz = tz,
+                muted = muted,
+                onOpenWorkFeedItem = onOpenWorkFeedItem,
+            )
             Spacer(Modifier.height(18.dp))
         }
     }
@@ -144,7 +154,12 @@ internal fun DashboardLanesContent(lanes: List<LaneOut>) {
 /** One 파트 lane: a [DenebGroup] (header + rows). When [muted] (the 미분류 triage
  *  bucket) the whole lane relaxes to hint color so the named parts read first. */
 @Composable
-private fun DashboardLane(lane: LaneOut, tz: TimeZone, muted: Boolean) {
+private fun DashboardLane(
+    lane: LaneOut,
+    tz: TimeZone,
+    muted: Boolean,
+    onOpenWorkFeedItem: (String, Long) -> Unit,
+) {
     val titleColor = if (muted) denebHint() else MaterialTheme.colorScheme.onBackground
     DenebGroup {
         // Lane header: part name + count. The count is hint-colored so the name leads.
@@ -178,7 +193,12 @@ private fun DashboardLane(lane: LaneOut, tz: TimeZone, muted: Boolean) {
             )
         } else {
             lane.items.forEach { item ->
-                DashboardItemRow(item = item, tz = tz, muted = muted)
+                DashboardItemRow(
+                    item = item,
+                    tz = tz,
+                    muted = muted,
+                    onOpenWorkFeedItem = onOpenWorkFeedItem,
+                )
             }
         }
     }
@@ -187,15 +207,23 @@ private fun DashboardLane(lane: LaneOut, tz: TimeZone, muted: Boolean) {
 /** A single work item inside a lane: title / subtitle / scheduled-time. Uses a bare
  *  [DenebRow] (single hairline) so the rows read as a content list inside the card —
  *  the last row's hairline sits fine against the group's rounded edge (matches the
- *  feed list). Non-interactive for now (the dashboard is a read-only glance). */
+ *  feed list). Work-feed refs drill into their exact card; other source rows keep
+ *  their prior glance-only behavior. */
 @Composable
-private fun DashboardItemRow(item: DashboardItem, tz: TimeZone, muted: Boolean) {
+private fun DashboardItemRow(
+    item: DashboardItem,
+    tz: TimeZone,
+    muted: Boolean,
+    onOpenWorkFeedItem: (String, Long) -> Unit,
+) {
     val haptics = rememberHaptics()
     val titleColor = if (muted) denebHint() else MaterialTheme.colorScheme.onBackground
+    val workFeedId = workFeedItemId(item.refType, item.refId)
     DenebRow(
-        // Whole-row haptic tap kept for parity with other lists, but no navigation
-        // yet — the gateway hands back refType/refId for a future deep-link.
-        onClick = { haptics.tap() },
+        onClick = {
+            haptics.tap()
+            if (workFeedId != null) onOpenWorkFeedItem(workFeedId, item.whenMs)
+        },
         modifier = Modifier.padding(horizontal = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Delete
@@ -162,9 +163,10 @@ internal fun WorkFeedRow(
         modifier = Modifier.padding(horizontal = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
+            val source = workFeedSourcePresentation(item.source)
             Icon(
-                painter = sourcePainter(item.source),
-                contentDescription = null,
+                painter = sourcePainter(source.icon),
+                contentDescription = source.label,
                 tint = denebHint(),
                 modifier = Modifier.padding(top = 1.dp).size(18.dp),
             )
@@ -466,16 +468,40 @@ private fun stripLeadingIcon(s: String): String {
     return s.substring(i).trimStart().ifBlank { s }
 }
 
-/** Leading icon by card source: an envelope for mail reports, a generic report
- *  page for other proactive briefings, and a concrete glyph for each capture kind
- *  (image / audio / contacts). */
+internal enum class WorkFeedSourceIcon {
+    MAIL,
+    IMAGE,
+    AUDIO,
+    CONTACTS,
+    APPROVAL,
+    DOCUMENT,
+}
+
+internal data class WorkFeedSourcePresentation(
+    val icon: WorkFeedSourceIcon,
+    val label: String?,
+)
+
+internal fun workFeedSourcePresentation(source: String): WorkFeedSourcePresentation = when (source.trim()) {
+    "mail_report" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.MAIL, "메일")
+    "capture_image" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.IMAGE, "이미지")
+    "capture_audio" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.AUDIO, "음성")
+    "capture_contacts" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.CONTACTS, "연락처")
+    "groupware-approval" -> WorkFeedSourcePresentation(WorkFeedSourceIcon.APPROVAL, "전자결재")
+    else -> WorkFeedSourcePresentation(WorkFeedSourceIcon.DOCUMENT, null)
+}
+
+/** Leading icon by card source: an envelope for mail reports, a checked document
+ *  for electronic approvals, a generic report page for other proactive
+ *  briefings, and a concrete glyph for each capture kind. */
 @Composable
-private fun sourcePainter(source: String): Painter = when (source) {
-    "mail_report" -> rememberVectorPainter(Icons.Outlined.MailOutline)
-    "capture_image" -> painterResource(Res.drawable.ic_image)
-    "capture_audio" -> rememberVectorPainter(Icons.Filled.Mic)
-    "capture_contacts" -> rememberVectorPainter(Icons.Filled.Person)
-    else -> painterResource(Res.drawable.ic_file)
+private fun sourcePainter(source: WorkFeedSourceIcon): Painter = when (source) {
+    WorkFeedSourceIcon.MAIL -> rememberVectorPainter(Icons.Outlined.MailOutline)
+    WorkFeedSourceIcon.IMAGE -> painterResource(Res.drawable.ic_image)
+    WorkFeedSourceIcon.AUDIO -> rememberVectorPainter(Icons.Filled.Mic)
+    WorkFeedSourceIcon.CONTACTS -> rememberVectorPainter(Icons.Filled.Person)
+    WorkFeedSourceIcon.APPROVAL -> rememberVectorPainter(Icons.Filled.TaskAlt)
+    WorkFeedSourceIcon.DOCUMENT -> painterResource(Res.drawable.ic_file)
 }
 
 /** A compact trailing quick-action icon button (보관 / 휴지통), muted to denebHint. */

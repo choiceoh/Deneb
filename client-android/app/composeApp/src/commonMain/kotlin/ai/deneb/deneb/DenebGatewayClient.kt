@@ -259,7 +259,12 @@ class DenebGatewayClient private constructor(
     val denebWorkFeed: StateFlow<List<WorkFeedItem>> = _denebWorkFeed.asStateFlow()
 
     /** One proactive 업무-feed report worth a tray notification. */
-    data class ProactiveNotification(val title: String, val body: String)
+    data class ProactiveNotification(
+        val title: String,
+        val body: String,
+        val kind: String = "workfeed",
+        val ref: String = "",
+    )
 
     // Durable proactive-notification stream. Emits once per genuinely-new
     // workfeed.created item the native-sync pull surfaces (see applyNativeSyncEvent

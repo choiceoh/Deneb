@@ -130,9 +130,21 @@ internal fun AppContent(
     darkColorScheme: ColorScheme,
     textToSpeech: TextToSpeechInstance?,
     onAppOpens: ((Int) -> Unit)?,
+    openWorkFeedItemId: String?,
+    onWorkFeedItemConsumed: (String) -> Unit,
 ) {
     val appSettings = koinInject<AppSettings>()
     val denebClient = koinInject<DataRepository>() as? DenebGatewayClient
+    LaunchedEffect(openWorkFeedItemId) {
+        val itemId = openWorkFeedItemId?.trim()?.takeIf(String::isNotEmpty)
+            ?: return@LaunchedEffect
+        navigateToDenebSection(
+            navController,
+            DenebFeed(openItemId = itemId),
+            restoreState = false,
+        )
+        onWorkFeedItemConsumed(itemId)
+    }
 
     // Track app opens after Koin is initialized
     onAppOpens?.let { callback ->
@@ -207,7 +219,8 @@ internal fun AppContent(
                 // it, same as OrgContactActions does for contact calls.
                 val systemUriHandler = LocalUriHandler.current
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
-                val isHome = currentBackStackEntry?.destination?.route == "home"
+                val currentRoute = currentBackStackEntry?.destination?.route?.substringBefore('?')
+                val isHome = currentRoute == "home"
 
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -289,7 +302,7 @@ internal fun AppContent(
                                     navController,
                                     // Launch into the 피드 home — the work feed is the app's
                                     // main screen; the chat is one tab away.
-                                    startDestination = DenebFeed,
+                                    startDestination = DenebFeed(),
                                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                                     enterTransition = { denebNavEnter() },
                                     exitTransition = { denebNavExit() },
@@ -305,12 +318,15 @@ internal fun AppContent(
                                             navigationTabBar = if (showTabBar) navigationTabBar else null,
                                         )
                                     }
-                                    denebComposable<DenebFeed> {
+                                    denebComposable<DenebFeed> { entry ->
+                                        val feedRoute = entry.toRoute<DenebFeed>()
                                         Box(Modifier.fillMaxSize()) {
                                             FeedScreen(
                                                 items = feedState.workFeed,
                                                 loaded = feedState.workFeedLoaded,
                                                 seenIds = feedSeenIds,
+                                                initialOpenItemId = feedRoute.openItemId,
+                                                initialOpenItemCreatedAtMs = feedRoute.openItemCreatedAtMs,
                                                 onMarkSeen = { id ->
                                                     appSettings.markFeedSeen(id)
                                                     feedSeenIds = appSettings.getFeedSeenIds()
@@ -484,6 +500,16 @@ internal fun AppContent(
                                             DenebDashboardScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
+                                                onOpenWorkFeedItem = { itemId, createdAtMs ->
+                                                    navigateToDenebSection(
+                                                        navController,
+                                                        DenebFeed(
+                                                            openItemId = itemId,
+                                                            openItemCreatedAtMs = createdAtMs,
+                                                        ),
+                                                        restoreState = false,
+                                                    )
+                                                },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }
@@ -679,7 +705,7 @@ internal fun AppContent(
                 // the chat input owns the bottom. The content area consumes the
                 // navigation-bar inset (the bar applies it) so the screens' own
                 // navigationBarsPadding doesn't double up.
-                val route = currentBackStackEntry?.destination?.route
+                val route = currentRoute
                 val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
                 // The bottom tab bar is the app's primary navigation. Hidden only on
                 // non-tab routes (deep details) and while the keyboard is up.

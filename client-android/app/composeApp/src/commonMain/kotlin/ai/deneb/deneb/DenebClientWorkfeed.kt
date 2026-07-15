@@ -537,6 +537,10 @@ private fun DenebGatewayClient.maybeEmitProactiveNotification(item: WorkFeedItem
     if (item.id.isBlank() || item.status != "unread") return
     val body = item.summary.ifBlank { item.body }.ifBlank { item.title }
     _proactiveNotifications.tryEmit(
-        DenebGatewayClient.ProactiveNotification(title = item.title.ifBlank { "Deneb" }, body = body),
+        DenebGatewayClient.ProactiveNotification(
+            title = item.title.ifBlank { "Deneb" },
+            body = body,
+            ref = item.id,
+        ),
     )
 }

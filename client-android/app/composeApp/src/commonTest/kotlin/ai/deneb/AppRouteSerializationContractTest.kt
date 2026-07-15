@@ -84,6 +84,14 @@ class AppRouteSerializationContractTest {
     private fun opaqueRouteCases(): List<() -> Unit> = listOf(
         {
             assertOpaqueRoutePreservesArguments(
+                serialName = "deneb_feed",
+                fieldNames = listOf("openItemId", "openItemCreatedAtMs"),
+                inputJson = """{"openItemId":"feed-한글 /?#","openItemCreatedAtMs":123456789}""",
+                serializer = DenebFeed.serializer(),
+            )
+        },
+        {
+            assertOpaqueRoutePreservesArguments(
                 serialName = "deneb_mail_detail",
                 fieldNames = listOf("id"),
                 inputJson = """{"id":"id-한글 /?#"}""",
@@ -199,6 +207,12 @@ class AppRouteSerializationContractTest {
     private fun opaqueRouteFutureMetadataCases(): List<() -> Unit> = listOf(
         {
             assertOpaqueRouteIgnoresFutureMetadata(
+                inputJson = """{"openItemId":"feed-한글 /?#","openItemCreatedAtMs":123456789}""",
+                serializer = DenebFeed.serializer(),
+            )
+        },
+        {
+            assertOpaqueRouteIgnoresFutureMetadata(
                 inputJson = """{"id":"id-한글 /?#"}""",
                 serializer = DenebMailDetail.serializer(),
             )
@@ -287,7 +301,6 @@ class AppRouteSerializationContractTest {
     fun objectRoutesKeepStableRouteIdentity() {
         listOf(
             { assertObjectRouteIdentity("home", Home, Home.serializer()) },
-            { assertObjectRouteIdentity("deneb_feed", DenebFeed, DenebFeed.serializer()) },
             { assertObjectRouteIdentity("deneb_config", DenebConfig, DenebConfig.serializer()) },
             { assertObjectRouteIdentity("deneb_fleet", DenebFleet, DenebFleet.serializer()) },
             { assertObjectRouteIdentity("deneb_mail", DenebMail, DenebMail.serializer()) },
@@ -336,6 +349,10 @@ class AppRouteSerializationContractTest {
     @Test
     fun backwardCompatibleDefaultArgumentsRestoreFromEmptyPayload() {
         listOf(
+            {
+                val restored = json.decodeFromJsonElement(DenebFeed.serializer(), buildJsonObject {})
+                assertEquals(DenebFeed(), restored)
+            },
             {
                 val restored = json.decodeFromJsonElement(DenebTodoAdd.serializer(), buildJsonObject {})
                 assertEquals(DenebTodoAdd(), restored)
