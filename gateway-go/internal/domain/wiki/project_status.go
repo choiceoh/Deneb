@@ -107,6 +107,7 @@ type ProjectStatus struct {
 	Due       string   // page Meta.Due — imminent deadline, "" if none
 	Bullets   []string // the "## 현재 상태" lines, newest first
 	UpdatedMs int64    // page Meta.Updated (YYYY-MM-DD) as epoch millis, 0 if unparseable
+	Sites     []string // page Meta.Sites — 현장 (canonical 광역약칭 시/군 …); matching keys for the 현장 지도
 }
 
 // ProjectStatuses returns each project that has a non-empty 현재 상태 section,
@@ -134,6 +135,7 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 			Due:       strings.TrimSpace(page.Meta.Due),
 			Bullets:   bullets,
 			UpdatedMs: dateToMillis(page.Meta.Updated),
+			Sites:     page.Meta.Sites,
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {

@@ -495,6 +495,7 @@ data class ProjectDigestRow(
     val code: String = "",
     val client: String = "",
     val refs: List<String> = emptyList(),
+    val sites: List<String> = emptyList(),
 )
 
 @Immutable

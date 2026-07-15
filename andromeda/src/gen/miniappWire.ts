@@ -410,6 +410,7 @@ export interface ProjectDigestRow {
   code?: string
   client?: string
   refs?: string[]
+  sites?: string[]
 }
 
 export interface ProjectDigestsOut {

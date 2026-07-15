@@ -1756,6 +1756,12 @@ class MiniappWireNullCompatibilityTest {
             field = "refs",
         ),
         nullContract(
+            name = "ProjectDigestRow.sites",
+            serializer = ProjectDigestRow.serializer(),
+            empty = ProjectDigestRow(),
+            field = "sites",
+        ),
+        nullContract(
             name = "ProjectDigestsOut.digests",
             serializer = ProjectDigestsOut.serializer(),
             empty = ProjectDigestsOut(),
