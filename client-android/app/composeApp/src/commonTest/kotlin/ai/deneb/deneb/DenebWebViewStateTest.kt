@@ -31,6 +31,7 @@ class DenebWebViewStateTest {
     fun constructorDefaultsAdBlockEnabledAndCanSeedOff() {
         assertTrue(DenebWebViewState("https://example.com").adBlockEnabled)
         assertFalse(DenebWebViewState("https://example.com", adBlockEnabled = false).adBlockEnabled)
+        assertEquals(0, DenebWebViewState("https://example.com").adBlockedCount)
     }
 
     @Test

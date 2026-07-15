@@ -403,7 +403,11 @@ fun DenebBrowserChrome(
                                 Column {
                                     Text(if (state.adBlockEnabled) "광고 차단 끄기" else "광고 차단 켜기")
                                     Text(
-                                        if (state.adBlockEnabled) "알려진 광고·추적 요청 차단 중" else "차단 꺼짐",
+                                        when {
+                                            !state.adBlockEnabled -> "차단 꺼짐"
+                                            state.adBlockedCount > 0 -> "이 페이지 ${state.adBlockedCount}건 차단"
+                                            else -> "알려진 광고·추적 요청 차단 중"
+                                        },
                                         style = DenebType.meta,
                                         color = denebHint(),
                                     )
