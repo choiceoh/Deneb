@@ -104,29 +104,40 @@ func groupwareApprovalsList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 			}
 			dayKey = key
 		}
-		docs, err := deps.List(ctx, folder, limit)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("list groupware approvals", err).Response(req.ID)
-		}
-		rows := make([]GroupwareApprovalRow, 0, len(docs))
-		for _, doc := range docs {
-			if dayKey != "" {
-				got, ok := approvalDayKey(doc.Date)
-				if !ok || got != dayKey {
-					continue
-				}
+			docs, err := deps.List(ctx, folder, limit)
+			if err != nil {
+				return rpcerr.WrapDependencyFailed("list groupware approvals", err).Response(req.ID)
 			}
-			rows = append(rows, GroupwareApprovalRow{
-				DocID:   doc.DocID,
-				Title:   doc.Title,
-				DocNo:   doc.DocNo,
-				Drafter: doc.Drafter,
-				Date:    doc.Date,
-				Status:  doc.Status,
-				Folder:  doc.Folder,
-				CanAct:  approvalCanAct(doc),
-			})
-		}
+			// Amaranth "total" rows ship empty status/folder=total, so canAct would
+			// always be false without cross-checking the pending box.
+			pendingByID := approvalPendingIndex(ctx, deps, folder, limit)
+			rows := make([]GroupwareApprovalRow, 0, len(docs))
+			for _, doc := range docs {
+				if dayKey != "" {
+					got, ok := approvalDayKey(doc.Date)
+					if !ok || got != dayKey {
+						continue
+					}
+				}
+				status := doc.Status
+				canAct := approvalCanAct(doc)
+				if pend, ok := pendingByID[strings.TrimSpace(doc.DocID)]; ok {
+					canAct = true
+					if strings.TrimSpace(status) == "" {
+						status = pend.Status
+					}
+				}
+				rows = append(rows, GroupwareApprovalRow{
+					DocID:   doc.DocID,
+					Title:   doc.Title,
+					DocNo:   doc.DocNo,
+					Drafter: doc.Drafter,
+					Date:    doc.Date,
+					Status:  status,
+					Folder:  doc.Folder,
+					CanAct:  canAct,
+				})
+			}
 		return rpcutil.RespondOK(req.ID, GroupwareApprovalsListResponse{
 			Approvals: rows,
 			Folder:    folder,
@@ -322,7 +333,37 @@ func approvalCanAct(doc groupware.ApprovalSummary) bool {
 		return true
 	}
 	status := strings.TrimSpace(doc.Status)
-	return strings.Contains(status, "대기") || strings.EqualFold(status, "pending")
+	if status == "" {
+		return false
+	}
+	if strings.EqualFold(status, "pending") {
+		return true
+	}
+	// Amaranth pending box uses "미결"; some forms say "결재대기".
+	return strings.Contains(status, "대기") || strings.Contains(status, "미결")
+}
+
+// approvalPendingIndex returns pending-box docs keyed by docId when the list
+// folder is total/all (where status is blank). Best-effort — a pending-list
+// failure leaves the map empty so rows fall back to approvalCanAct alone.
+func approvalPendingIndex(ctx context.Context, deps GroupwareApprovalsDeps, folder string, limit int) map[string]groupware.ApprovalSummary {
+	folder = strings.TrimSpace(strings.ToLower(folder))
+	if folder != "total" && folder != "all" {
+		return nil
+	}
+	pending, err := deps.List(ctx, "pending", limit)
+	if err != nil || len(pending) == 0 {
+		return nil
+	}
+	out := make(map[string]groupware.ApprovalSummary, len(pending))
+	for _, doc := range pending {
+		id := strings.TrimSpace(doc.DocID)
+		if id == "" {
+			continue
+		}
+		out[id] = doc
+	}
+	return out
 }
 
 func approvalDayKey(raw string) (string, bool) {

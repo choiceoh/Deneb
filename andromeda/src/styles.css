@@ -2388,6 +2388,38 @@ textarea {
   color: var(--muted-2);
   font-size: 11px;
 }
+
+/* Approval detail: sectioned body with foldable 결재선/첨부 + sticky act bar. */
+.approval-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.approval-doc-meta,
+.approval-doc-block {
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.approval-doc .mail-card > .mail-card-title {
+  margin-bottom: 6px;
+}
+.approval-act-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline, rgba(0, 0, 0, 0.08));
+}
+.approval-act-bar .btn {
+  flex: 1;
+  min-height: 36px;
+}
 /* AI 분석 head: a bare title+caret toggle (badge / 다시 분석 stay beside it) so the
  * analysis can fold without nesting buttons. Leading caret — not the disclosure's
  * right-aligned one — so the auto margin is overridden. */

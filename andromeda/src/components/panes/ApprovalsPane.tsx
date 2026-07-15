@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
 import { addDays, dayLabel, errText, startOfDay } from "@/format";
 import { analyzeApproval, cachedApprovalAnalysis, fetchApprovalBody } from "@/gateway";
+import { parseApprovalDocBody } from "@/approvalBody";
 import { useAction } from "@/useAction";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -162,6 +163,8 @@ function ApprovalDetail({
   const { cfg, connected } = useWorkspace();
   const docId = String(doc.docId ?? "").trim();
   const [view, setView] = useState<"analysis" | "body">("analysis");
+  const [lineOpen, setLineOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
   const [analysis, setAnalysis] = useAsyncOnOpen(
     async () => {
       const cached = await cachedApprovalAnalysis(cfg, docId);
@@ -185,6 +188,7 @@ function ApprovalDetail({
   );
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisErr, setAnalysisErr] = useState("");
+  const sections = useMemo(() => parseApprovalDocBody(body ?? ""), [body]);
 
   async function rerun() {
     setAnalyzing(true);
@@ -210,6 +214,13 @@ function ApprovalDetail({
     .join(" · ");
   const text = analysis?.analysis?.trim() ? analysis.analysis : "";
   const importance = analysis?.importance?.trim();
+  const lineTeaser = sections.lineCount > 0 ? `${sections.lineCount}명` : "";
+  const attachTeaser =
+    sections.attachmentCount > 0
+      ? `${sections.attachmentCount}건`
+      : sections.attachmentHeader
+        ? sections.attachmentHeader.replace(/^첨부\s*/, "")
+        : "";
 
   return (
     <section className="workfeed-detail" aria-label="결재 상세">
@@ -219,16 +230,6 @@ function ApprovalDetail({
           <div className="workfeed-detail-title">{doc.title ?? "(제목 없음)"}</div>
         </div>
         <div className="workfeed-detail-actions">
-          {doc.canAct && (
-            <>
-              <button className="row-btn" disabled={busy} onClick={onApprove}>
-                승인
-              </button>
-              <button className="row-btn" disabled={busy} onClick={onReject}>
-                반려
-              </button>
-            </>
-          )}
           <button className="row-btn" onClick={onClose}>
             닫기
           </button>
@@ -288,13 +289,66 @@ function ApprovalDetail({
         </div>
       ) : body === null ? (
         <div className="mail-card-line">본문 불러오는 중…</div>
-      ) : body ? (
-        <div className="mail-body">
-          <Markdown text={body} />
-        </div>
       ) : (
-        <div className="mail-body mail-detail-empty">본문 없음</div>
+        <div className="approval-doc">
+          {sections.meta ? (
+            <div className="mail-card">
+              <div className="mail-card-title">문서 정보</div>
+              <pre className="approval-doc-meta">{sections.meta}</pre>
+            </div>
+          ) : null}
+
+          {sections.line ? (
+            <div className="mail-card">
+              <button
+                className={"mail-card-disclosure" + (lineOpen ? " open" : "")}
+                onClick={() => setLineOpen((v) => !v)}
+                aria-expanded={lineOpen}
+                title={lineOpen ? "결재선 접기" : "결재선 펼치기"}
+              >
+                <span className="mail-card-title">결재선</span>
+                {!lineOpen && lineTeaser ? <span className="mail-card-teaser">{lineTeaser}</span> : null}
+                <span className="mail-card-caret">{lineOpen ? "▾" : "▸"}</span>
+              </button>
+              {lineOpen ? <pre className="approval-doc-block">{sections.line}</pre> : null}
+            </div>
+          ) : null}
+
+          {sections.attachments ? (
+            <div className="mail-card">
+              <button
+                className={"mail-card-disclosure" + (attachOpen ? " open" : "")}
+                onClick={() => setAttachOpen((v) => !v)}
+                aria-expanded={attachOpen}
+                title={attachOpen ? "첨부 접기" : "첨부 펼치기"}
+              >
+                <span className="mail-card-title">첨부</span>
+                {!attachOpen && attachTeaser ? <span className="mail-card-teaser">{attachTeaser}</span> : null}
+                <span className="mail-card-caret">{attachOpen ? "▾" : "▸"}</span>
+              </button>
+              {attachOpen ? <pre className="approval-doc-block">{sections.attachments}</pre> : null}
+            </div>
+          ) : null}
+
+          <div className="mail-body">
+            <div className="mail-card-title" style={{ marginBottom: 8 }}>
+              본문
+            </div>
+            {sections.body ? <Markdown text={sections.body} /> : <div className="mail-detail-empty">본문 없음</div>}
+          </div>
+        </div>
       )}
+
+      {doc.canAct ? (
+        <div className="approval-act-bar" role="group" aria-label="결재 처리">
+          <button className="btn" disabled={busy} onClick={onApprove}>
+            승인
+          </button>
+          <button className="btn" disabled={busy} onClick={onReject}>
+            반려
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

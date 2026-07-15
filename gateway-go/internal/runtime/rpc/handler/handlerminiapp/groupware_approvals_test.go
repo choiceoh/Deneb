@@ -10,7 +10,7 @@ import (
 )
 
 func TestGroupwareApprovalsList_DefaultsToTotalAndFiltersDate(t *testing.T) {
-	var gotFolder string
+	var folders []string
 	var gotLimit int
 	docs := []groupware.ApprovalSummary{
 		{DocID: "1", Title: "오늘 품의", Date: "2026-07-16", Status: "결재대기", Folder: "pending"},
@@ -19,8 +19,11 @@ func TestGroupwareApprovalsList_DefaultsToTotalAndFiltersDate(t *testing.T) {
 	}
 	h := GroupwareApprovalsMethods(GroupwareApprovalsDeps{
 		List: func(_ context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error) {
-			gotFolder = folder
+			folders = append(folders, folder)
 			gotLimit = limit
+			if folder == "pending" {
+				return []groupware.ApprovalSummary{docs[0]}, nil
+			}
 			return docs, nil
 		},
 		Act: func(context.Context, string, string, string) (string, error) { return "", nil },
@@ -31,8 +34,8 @@ func TestGroupwareApprovalsList_DefaultsToTotalAndFiltersDate(t *testing.T) {
 	}))
 	var out GroupwareApprovalsListResponse
 	decode(t, resp, &out)
-	if gotFolder != "total" {
-		t.Fatalf("folder = %q, want total", gotFolder)
+	if len(folders) < 1 || folders[0] != "total" {
+		t.Fatalf("folders = %v, want total first", folders)
 	}
 	if gotLimit != defaultApprovalsLimit {
 		t.Fatalf("limit = %d, want %d", gotLimit, defaultApprovalsLimit)
@@ -48,6 +51,49 @@ func TestGroupwareApprovalsList_DefaultsToTotalAndFiltersDate(t *testing.T) {
 	}
 	if out.Approvals[1].CanAct {
 		t.Fatal("done doc should not be canAct")
+	}
+}
+
+func TestGroupwareApprovalsList_TotalMarksPendingCanAct(t *testing.T) {
+	h := GroupwareApprovalsMethods(GroupwareApprovalsDeps{
+		List: func(_ context.Context, folder string, _ int) ([]groupware.ApprovalSummary, error) {
+			switch folder {
+			case "pending":
+				return []groupware.ApprovalSummary{
+					{DocID: "9", Title: "미결 품의", Date: "2026-07-16", Status: "미결", Folder: "pending"},
+				}, nil
+			case "total":
+				return []groupware.ApprovalSummary{
+					{DocID: "9", Title: "미결 품의", Date: "2026-07-16", Status: "", Folder: "total"},
+					{DocID: "8", Title: "끝난 품의", Date: "2026-07-16", Status: "", Folder: "total"},
+				}, nil
+			default:
+				return nil, nil
+			}
+		},
+		Act: func(context.Context, string, string, string) (string, error) { return "", nil },
+	})["miniapp.groupware.approvals.list"]
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.groupware.approvals.list", map[string]any{"folder": "total"}))
+	var out GroupwareApprovalsListResponse
+	decode(t, resp, &out)
+	if len(out.Approvals) != 2 {
+		t.Fatalf("approvals = %d, want 2", len(out.Approvals))
+	}
+	if !out.Approvals[0].CanAct || out.Approvals[0].Status != "미결" {
+		t.Fatalf("doc 9 = canAct=%v status=%q, want canAct with 미결", out.Approvals[0].CanAct, out.Approvals[0].Status)
+	}
+	if out.Approvals[1].CanAct {
+		t.Fatal("doc 8 should not be canAct")
+	}
+}
+
+func TestApprovalCanAct_MigyeolStatus(t *testing.T) {
+	if !approvalCanAct(groupware.ApprovalSummary{Status: "미결", Folder: "total"}) {
+		t.Fatal("미결 status should be canAct")
+	}
+	if approvalCanAct(groupware.ApprovalSummary{Status: "", Folder: "total"}) {
+		t.Fatal("blank total status should not be canAct alone")
 	}
 }
 
