@@ -145,6 +145,26 @@ func webFetchURLDetailed(ctx context.Context, cache *fetchCache, localAI *localA
 		return fetchOutcome{Content: content, Assess: assessFetchResult(content, nil)}, nil
 	}
 
+	// Reddit → JSON API (posts+comments, listings, search). The SPA HTML the
+	// stealth fetcher would get is an empty JS shell — see web_reddit.go.
+	if isRedditURL(targetURL) {
+		content, err := fetchReddit(ctx, targetURL, maxChars)
+		if err != nil {
+			return fetchOutcome{Assess: fetchUsability{HasError: true}}, err
+		}
+		return fetchOutcome{Content: content, Assess: assessFetchResult(content, nil)}, nil
+	}
+
+	// X/Twitter single tweet → syndication endpoint (no-auth read). Search and
+	// timelines are login-walled and not reachable — see web_x.go.
+	if id, ok := isXStatusURL(targetURL); ok {
+		content, err := fetchXTweet(ctx, targetURL, id, maxChars)
+		if err != nil {
+			return fetchOutcome{Assess: fetchUsability{HasError: true}}, err
+		}
+		return fetchOutcome{Content: content, Assess: assessFetchResult(content, nil)}, nil
+	}
+
 	// Cache hit — envelope only; fall back to parsing for assess.
 	if cached, ok := cache.Get(targetURL); ok {
 		slog.Info("web fetch", "url", targetURL, "cache_hit", true)

@@ -271,6 +271,58 @@ func TestSelfImprovementCodingMethodsDispatchEndpointPresentOnlyWhenConfigured(t
 	}
 }
 
+func TestSelfImprovementCodingMethodsImpactEndpointPresentOnlyWhenConfigured(t *testing.T) {
+	deps := testSelfImprovementCodingDeps()
+	methods := SelfImprovementCodingMethods(deps)
+	if _, ok := methods["miniapp.self_improvement_coding.impact"]; ok {
+		t.Fatal("impact method must be absent without a RecordImpact dep")
+	}
+	deps.RecordImpact = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		return rec, nil
+	}
+	methods = SelfImprovementCodingMethods(deps)
+	if _, ok := methods["miniapp.self_improvement_coding.impact"]; !ok {
+		t.Fatal("impact method missing despite RecordImpact dep")
+	}
+}
+
+func TestSelfImprovementCodingImpactPassesObservationsToDeterministicTracker(t *testing.T) {
+	var got genesis.SelfCorrectionCandidateRecord
+	deps := testSelfImprovementCodingDeps()
+	deps.RecordImpact = func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+		got = rec
+		rec.ImpactResult.Status = genesis.SelfCorrectionImpactVerified
+		return rec, nil
+	}
+	h := selfImprovementCodingImpact(deps)
+	params, _ := json.Marshal(map[string]any{
+		"id": "sc-1", "attemptId": "attempt-1", "observed": 79.5, "samples": 12,
+		"guardrailViolations": []string{}, "note": "p95 improved",
+	})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
+	payload := decodeSkillsPayload[map[string]any](t, resp)
+	if got.ID != "sc-1" || got.AttemptID != "attempt-1" || got.ImpactResult == nil ||
+		got.ImpactResult.Observed != 79.5 || got.ImpactResult.Samples != 12 {
+		t.Fatalf("impact observation not passed through: %+v", got)
+	}
+	if payload["impactStatus"] != genesis.SelfCorrectionImpactVerified {
+		t.Fatalf("impact response = %+v", payload)
+	}
+}
+
+func TestSelfImprovementCodingImpactRejectsMissingAttempt(t *testing.T) {
+	h := selfImprovementCodingImpact(SelfImprovementCodingDeps{
+		RecordImpact: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {
+			return rec, nil
+		},
+	})
+	params, _ := json.Marshal(map[string]any{"id": "sc-1", "observed": 79.5, "samples": 12})
+	resp := h(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Params: params})
+	if resp.Error == nil || resp.Error.Code != protocol.ErrMissingParam {
+		t.Fatalf("expected missing attemptId, got %+v", resp.Error)
+	}
+}
+
 func TestSelfImprovementCodingDispatchSavesProvenanceFields(t *testing.T) {
 	var got genesis.SelfCorrectionCandidateRecord
 	deps := testSelfImprovementCodingDeps()
@@ -362,6 +414,10 @@ func TestSelfImprovementCodingRecordPreservesSourceAndTargetFilesProposeOnly(t *
 		"targetFiles":    []string{"gateway-go/internal/domain/wiki"},
 		"proposedChange": "Stabilize and narrow the public contract.",
 		"source":         "health-finding:volatile-hub:46a381ef4981",
+		"impactContract": map[string]any{
+			"metric": "health.finding_present", "direction": "decrease",
+			"baseline": 1, "target": 0, "minSamples": 1,
+		},
 	})
 	resp := h(authedSkillsCtx(), &protocol.RequestFrame{
 		ID:     "1",
@@ -382,6 +438,9 @@ func TestSelfImprovementCodingRecordPreservesSourceAndTargetFilesProposeOnly(t *
 	}
 	if len(got.TargetFiles) != 1 || got.TargetFiles[0] != "gateway-go/internal/domain/wiki" {
 		t.Fatalf("target files = %+v", got.TargetFiles)
+	}
+	if got.ImpactContract == nil || got.ImpactContract.Metric != "health.finding_present" || got.ImpactContract.Target != 0 {
+		t.Fatalf("impact contract = %+v", got.ImpactContract)
 	}
 }
 

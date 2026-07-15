@@ -61,7 +61,7 @@ const chatStreamKeepaliveInterval = 15 * time.Second
 // chat pipeline's own turn deadline (server.DefaultTurnDeadline = 5m; not
 // imported here to avoid a server→nativeapi→server cycle) so the run's own
 // deadline fires first with a cleaner error and this is only a backstop.
-const chatStreamTurnDeadline = 6 * time.Minute
+const chatStreamTurnDeadline = chatport.InteractiveTurnDeadline
 
 // chatStreamResult is the terminal payload of a streamed chat turn.
 type chatStreamResult struct {

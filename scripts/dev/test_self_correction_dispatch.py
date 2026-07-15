@@ -67,6 +67,32 @@ class SelfCorrectionDispatchTest(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(out.getvalue(), "sc-1\ta1\tmerged\tsha1\t\n")
 
+    def test_impact_submits_observations_and_prints_deterministic_status(self):
+        response = FakeResponse({
+            "ok": True,
+            "payload": {"ok": True, "impactStatus": "verified"},
+        })
+        out = io.StringIO()
+        seen = {}
+
+        def urlopen(request, timeout):
+            seen["body"] = json.loads(request.data)
+            return response
+
+        with (
+            mock.patch.object(dispatch.urllib.request, "urlopen", side_effect=urlopen),
+            redirect_stdout(out),
+        ):
+            rc = dispatch.main([
+                "impact", "--id", "sc-1", "--attempt-id", "a1",
+                "--observed", "79.5", "--samples", "12",
+                "--guardrail-violation", "error_rate", "--note", "window complete",
+            ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue(), "verified\n")
+        self.assertEqual(seen["body"]["method"], "miniapp.self_improvement_coding.impact")
+        self.assertEqual(seen["body"]["params"]["guardrailViolations"], ["error_rate"])
+
     def test_list_json_preserves_authoritative_dispatch_fields(self):
         response = FakeResponse({
             "ok": True,

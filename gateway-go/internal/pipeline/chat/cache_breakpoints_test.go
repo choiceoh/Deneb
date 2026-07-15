@@ -31,7 +31,7 @@ func TestBuildTrailingCacheHookWritesTrailingMarkers(t *testing.T) {
 	}
 	// Last 2 messages (assistant + user) should carry ephemeral cache_control.
 	for _, idx := range []int{1, 2} {
-		blocks := decodeOrFail(t, out[idx].Content)
+		blocks := decodeOrFail(t, out[idx].Content.Bytes())
 		if len(blocks) == 0 {
 			t.Fatalf("msg[%d]: empty blocks", idx)
 		}
@@ -41,7 +41,7 @@ func TestBuildTrailingCacheHookWritesTrailingMarkers(t *testing.T) {
 		}
 	}
 	// Earlier message untouched.
-	blocks0 := decodeOrFail(t, out[0].Content)
+	blocks0 := decodeOrFail(t, out[0].Content.Bytes())
 	if len(blocks0) > 0 && blocks0[len(blocks0)-1].CacheControl != nil {
 		t.Errorf("msg[0]: unexpected cache_control on non-trailing message")
 	}
@@ -76,12 +76,12 @@ func TestBuildTrailingCacheHookIgnoresSystemMessages(t *testing.T) {
 	out := hook(msgs)
 	// user (0) + assistant (2) are the last 2 non-system.
 	for _, idx := range []int{0, 2} {
-		blocks := decodeOrFail(t, out[idx].Content)
+		blocks := decodeOrFail(t, out[idx].Content.Bytes())
 		if blocks[len(blocks)-1].CacheControl == nil {
 			t.Errorf("msg[%d]: expected cache_control on non-system trailing message", idx)
 		}
 	}
-	blocks := decodeOrFail(t, out[1].Content)
+	blocks := decodeOrFail(t, out[1].Content.Bytes())
 	if len(blocks) > 0 && blocks[len(blocks)-1].CacheControl != nil {
 		t.Errorf("system message marked unexpectedly")
 	}
@@ -95,7 +95,7 @@ func TestBuildTrailingCacheHookWritesMarkerOnLastBlock(t *testing.T) {
 	}
 	msg := llm.NewBlockMessage("user", blocks)
 	out := hook([]llm.Message{msg})
-	got := decodeOrFail(t, out[0].Content)
+	got := decodeOrFail(t, out[0].Content.Bytes())
 	if len(got) != 2 {
 		t.Fatalf("expected 2 blocks, got %d", len(got))
 	}
@@ -111,7 +111,7 @@ func TestBuildTrailingCacheHookWithFewerMessagesThanLimit(t *testing.T) {
 	hook := buildTrailingCacheHook(llm.APIModeAnthropic)
 	msgs := []llm.Message{llm.NewTextMessage("user", "alone")}
 	out := hook(msgs)
-	blocks := decodeOrFail(t, out[0].Content)
+	blocks := decodeOrFail(t, out[0].Content.Bytes())
 	if blocks[len(blocks)-1].CacheControl == nil {
 		t.Errorf("single message should still get marker (within limit)")
 	}
@@ -133,7 +133,7 @@ func TestBuildTrailingCacheHookAllowsToolResultBlockMarker(t *testing.T) {
 		{Type: "tool_result", ToolUseID: "tool_1", Content: "result text"},
 	})
 	out := hook([]llm.Message{msg})
-	got := decodeOrFail(t, out[0].Content)
+	got := decodeOrFail(t, out[0].Content.Bytes())
 	if got[0].CacheControl == nil || got[0].CacheControl.Type != "ephemeral" {
 		t.Errorf("tool_result block should accept ephemeral marker, got %+v", got[0].CacheControl)
 	}

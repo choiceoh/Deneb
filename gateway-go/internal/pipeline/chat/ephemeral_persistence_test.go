@@ -122,7 +122,7 @@ func TestBuildMessagePersister_FormatsMarketLetterTokensForDisplay(t *testing.T)
 		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
 	}
 	var text string
-	if err := json.Unmarshal(msgs[0].Content, &text); err != nil {
+	if err := json.Unmarshal(msgs[0].Content.Bytes(), &text); err != nil {
 		t.Fatalf("unmarshal content: %v", err)
 	}
 	if text != "1달러는 1,531원입니다." {
@@ -161,7 +161,7 @@ func TestBuildMessagePersister_FormatsTextBlocksOnlyPreservingToolUse(t *testing
 		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
 	}
 	var got []llm.ContentBlock
-	if err := json.Unmarshal(msgs[0].Content, &got); err != nil {
+	if err := json.Unmarshal(msgs[0].Content.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal blocks: %v", err)
 	}
 	if len(got) != 2 {
@@ -197,7 +197,7 @@ func TestBuildMessagePersister_BriefcasePreservesRawMarketTokens(t *testing.T) {
 		t.Fatalf("expected 1 persisted message, got %d", len(msgs))
 	}
 	var text string
-	if err := json.Unmarshal(msgs[0].Content, &text); err != nil {
+	if err := json.Unmarshal(msgs[0].Content.Bytes(), &text); err != nil {
 		t.Fatalf("unmarshal content: %v", err)
 	}
 	if !strings.Contains(text, "{{market:usd_krw}}") {

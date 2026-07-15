@@ -131,6 +131,35 @@ func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	})
 }
 
+// RegisterOfficeTool registers the eager `office` tool that reads and edits
+// Office documents (.docx/.xlsx/.pptx) through the officecli binary, with no
+// Office install required.
+//
+// Eager (not Deferred): the operator's core workflow is document work — reading
+// received .xlsx/.docx, filling templates, extracting figures — so the tool
+// should be on the wire without a fetch_tools round-trip. Its schema is compact
+// (one enum + three fields), unlike graphify's ~1,200-token coaching block.
+//
+// NOTE on mutation classification: office is deliberately NOT added to
+// toolport.mutationTools. That set invalidates the workspace grep cache after a
+// write, but office operates on binary Office files (usually outside the
+// workspace) that no grep result ever indexed — coarse per-name invalidation
+// would only bust the cache on read-only view/get calls for no benefit.
+func RegisterOfficeTool(registry toolport.ToolRegistrar, workspaceDir string) {
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "office",
+		Description: "Office 문서(.docx·.xlsx·.pptx) 읽기·편집 — Office 설치 없이 officecli로 구동. " +
+			"**읽기**: view(모드 outline/stats/text/annotated/issues/html/screenshot 등)·get(경로로 노드)·query(CSS 유사 셀렉터)·validate(스키마 검사)·dump(하위트리→재생 batch)·raw(부품 원본 XML)·help(스키마 레퍼런스). " +
+			"**쓰기**: create(빈 문서)·set(--prop로 속성)·add/remove/move/swap(요소)·import(CSV/TSV→xlsx)·merge(템플릿 {{key}}+JSON)·batch(한 번에 다건). " +
+			"경로는 1-based — 셀은 /<시트명>/<A1참조>(예: /Sheet1/A3), 구조 노드는 인덱스형(예: /slide[1]/shape[2], /body/paragraph[1]). " +
+			"수식은 자동 평가(350+ Excel 함수) — set args=[\"/Sheet1/B2\",\"--prop\",\"formula=SUM(B3:B9)\"]. " +
+			"각 명령은 독립 실행이라 반환 시 이미 디스크에 반영됨(read/다운로드가 즉시 최신본). " +
+			"정확한 verb·요소·--prop 키는 command=help로 조회(예: args=[\"xlsx\",\"set\",\"cell\"]).",
+		InputSchema: schema.OfficeToolSchema(),
+		Fn:          surface.ToolOffice(workspaceDir),
+	})
+}
+
 // NewGoalGlanceFunc builds the ambient standing-goal glance for the dynamic
 // system-prompt block. Re-exported so the chat parent does not import
 // domain/goals or the tools package solely for ambient wiring.
@@ -164,6 +193,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	}
 	RegisterRuntimeOpsTools(registry, runtimeOps)
 	RegisterGraphTool(registry, deps.WorkspaceDir)
+	RegisterOfficeTool(registry, deps.WorkspaceDir)
 	RegisterProcessTools(registry, &deps.Process)
 	RegisterWebTools(registry, deps.SpilloverStore)
 	RegisterSessionTools(registry, &deps.Sessions)

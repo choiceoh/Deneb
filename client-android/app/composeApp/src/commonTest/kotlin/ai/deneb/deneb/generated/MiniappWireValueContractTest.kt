@@ -2582,6 +2582,16 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "impactContract",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
+                ),
+                fieldValue(
+                    name = "impactResult",
+                    value = JsonObject(emptyMap()),
+                    expectation = Expectation.Object,
+                ),
+                fieldValue(
                     name = "evidenceKinds",
                     value = stringList,
                     expectation = Expectation.Exact,
@@ -2643,6 +2653,87 @@ class MiniappWireValueContractTest {
                 ),
             ),
             invalidField = "id",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SelfCorrectionImpactContract",
+            serializer = SelfCorrectionImpactContract.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "metric",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "direction",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "baseline",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "target",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "minSamples",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "observationWindowMs",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "guardrails",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "metric",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "SelfCorrectionImpactResult",
+            serializer = SelfCorrectionImpactResult.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "status",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "observed",
+                    value = JsonPrimitive(-12345.6789),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "samples",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "guardrailViolations",
+                    value = stringList,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "note",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "checkedAt",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "status",
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(

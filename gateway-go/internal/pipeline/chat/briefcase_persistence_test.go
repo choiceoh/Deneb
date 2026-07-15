@@ -8,10 +8,11 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
 )
 
 type failingAppendTranscript struct {
-	*MemoryTranscriptStore
+	*transcript.MemoryTranscriptStore
 }
 
 func (f *failingAppendTranscript) Append(string, ChatMessage) error {
@@ -21,7 +22,7 @@ func (f *failingAppendTranscript) Append(string, ChatMessage) error {
 func TestBriefcaseFailsBeforeModelWhenTranscriptPersistenceFails(t *testing.T) {
 	cfg := DefaultHandlerConfig()
 	cfg.LLMClient = llm.NewClient("http://127.0.0.1:1", "")
-	cfg.Transcript = &failingAppendTranscript{MemoryTranscriptStore: NewMemoryTranscriptStore()}
+	cfg.Transcript = &failingAppendTranscript{MemoryTranscriptStore: transcript.NewMemoryTranscriptStore()}
 	cfg.DefaultModel = "test-model"
 	cfg.DefaultSystem = "briefcase persistence test"
 	cfg.BriefcaseMode = true

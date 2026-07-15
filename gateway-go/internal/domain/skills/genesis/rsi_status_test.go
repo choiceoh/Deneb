@@ -493,6 +493,24 @@ func TestRSIStatusL4MetricsReflectDispatchLifecyclePhasesWithoutMarkerCounts(t *
 	}
 }
 
+func TestRSIStatusL4SeparatesSafetyFromImpactVerdicts(t *testing.T) {
+	tr := newTestTracker(t)
+	candidate := recordImpactCandidate(t, tr)
+	watchPassImpactCandidate(t, tr, candidate.ID, "attempt-impact")
+	if got := rsiMetricValue(tr.rsiAssessL4().Metrics, "효과 판정"); got != "확인 0 · 대기 1 · 효과없음 0 · 악화 0" {
+		t.Fatalf("pending impact metric = %q", got)
+	}
+	if _, err := tr.RecordSelfCorrectionImpact(SelfCorrectionCandidateRecord{
+		ID: candidate.ID, AttemptID: "attempt-impact",
+		ImpactResult: &SelfCorrectionImpactResult{Observed: 75, Samples: 10},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rsiMetricValue(tr.rsiAssessL4().Metrics, "효과 판정"); got != "확인 1 · 대기 0 · 효과없음 0 · 악화 0" {
+		t.Fatalf("verified impact metric = %q", got)
+	}
+}
+
 func rsiMetricValue(metrics []rsiMetric, label string) string {
 	for _, m := range metrics {
 		if m.Label == label {

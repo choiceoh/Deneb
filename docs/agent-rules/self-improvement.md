@@ -167,6 +167,18 @@ acceptance machinery stays forbidden at record time.
   local marker exclusions and execution facts; `dispatch_outcome.py` projects the
   authoritative phase onto a compatibility marker for worktree protection and
   older audits.
+- **Safety and usefulness are separate axes**: `watch_passed` still means the
+  merged deployment survived the rollback watch and derives review state
+  `applied`. A candidate may additionally declare an `impactContract` (metric,
+  increase/decrease direction, baseline, target, minimum samples, observation
+  window, and named guardrails). After `watch_passed`, its impact is derived as
+  `pending`; `miniapp.self_improvement_coding.impact` accepts observations for
+  the exact dispatch attempt and deterministic Go classifies the terminal
+  result as `verified`, `no_effect`, or `regressed`. Legacy candidates without
+  a contract remain valid and do not fabricate an impact verdict. The health
+  miner closes its own contracts from a fresh bench run; ad-hoc evaluators use
+  `self_correction_dispatch.py impact` rather than editing the append-only
+  ledger.
 - **Dispatch graduation (ladder)**: coding-dispatch.sh auto-dispatches only
   allowlisted source namespaces. **Graduated** (auto-dispatch → land through the
   full gate stack): `evolve-tool-gap`, `self-harness`, `health-finding`
@@ -210,6 +222,10 @@ acceptance machinery stays forbidden at record time.
 7. **L4 ledger corruption freezes review and dispatch** — a skipped terminal
    review or delivery row could resurrect vetoed work, so safety decisions must
    surface malformed/oversize rows instead of silently using a partial fold.
+8. **Impact never rewrites delivery truth** — an ineffective or regressed
+   result does not erase `watch_passed`/`applied`; it is independent evidence
+   for prioritization and later policy, and can only be recorded for the same
+   attempt after the safety watch passes.
 
 ## Where to Look Next
 
