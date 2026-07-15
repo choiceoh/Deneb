@@ -481,7 +481,7 @@ func TestTurnContextLoadIDsAndTimingStats(t *testing.T) {
 	if ids := tc.IDs(); len(ids) != 0 {
 		t.Fatalf("empty IDs = %#v", ids)
 	}
-	if stats, ok := tc.ToolTiming("grep"); ok || stats != (ToolTimingStats{}) {
+	if stats, ok := tc.toolTiming("grep"); ok || stats != (ToolTimingStats{}) {
 		t.Fatalf("empty timing = (%#v,%v)", stats, ok)
 	}
 
@@ -497,12 +497,12 @@ func TestTurnContextLoadIDsAndTimingStats(t *testing.T) {
 	if want := []string{"a", "b", "c", "d"}; !reflect.DeepEqual(ids, want) {
 		t.Fatalf("IDs = %#v, want %#v", ids, want)
 	}
-	stats, ok := tc.ToolTiming("grep")
+	stats, ok := tc.toolTiming("grep")
 	if !ok || stats.Count != 3 || stats.Mean != 10*time.Millisecond ||
 		stats.Min != 5*time.Millisecond || stats.Max != 15*time.Millisecond {
 		t.Fatalf("grep timing = %#v, ok=%v", stats, ok)
 	}
-	if _, ok := tc.ToolTiming("read"); ok {
+	if _, ok := tc.toolTiming("read"); ok {
 		t.Fatal("zero-duration result incorrectly contributed timing")
 	}
 }

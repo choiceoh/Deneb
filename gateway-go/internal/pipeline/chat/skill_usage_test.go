@@ -21,7 +21,7 @@ func (f *fakeUsageRecorder) RecordSkillUse(sessionKey, skillName string, success
 // which now attributes a completed run's outcome (the attribution moved from a
 // per-tool-turn hook to run end, #3679). Text is non-empty so an error-free turn
 // scores as a successful deliverable.
-func recordTurnSkillUsage(rec SkillUsageRecorder, log *SkillConsultLog, activities []agent.ToolActivity, sessionKey, model string) {
+func recordTurnSkillUsage(rec SkillUsageRecorder, log *skillConsultLog, activities []agent.ToolActivity, sessionKey, model string) {
 	recordRunSkillUsage(rec, log, &agent.AgentResult{ToolActivities: activities, Text: "done"}, nil, sessionKey, model)
 }
 

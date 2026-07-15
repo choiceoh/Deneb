@@ -214,7 +214,7 @@ func TestTurnContextToolTimingReturnsAggregatedStats(t *testing.T) {
 	tc.Store("t2", &TurnResult{ToolName: "grep", Duration: 200 * time.Millisecond})
 	tc.Store("t3", &TurnResult{ToolName: "find", Duration: 50 * time.Millisecond})
 
-	stats, ok := tc.ToolTiming("grep")
+	stats, ok := tc.toolTiming("grep")
 	if !ok {
 		t.Fatal("toolTiming returned false for grep")
 	}
@@ -233,7 +233,7 @@ func TestTurnContextToolTimingReturnsAggregatedStats(t *testing.T) {
 	}
 
 	// Unrecorded tool returns false.
-	if _, ok := tc.ToolTiming("exec"); ok {
+	if _, ok := tc.toolTiming("exec"); ok {
 		t.Error("toolTiming returned true for unrecorded tool")
 	}
 }

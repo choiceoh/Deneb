@@ -206,7 +206,7 @@ type persistedEvolveWatch struct {
 	Recurred      int              `json:"recurred,omitempty"`
 	BaselineUses  int              `json:"baselineUses,omitempty"`
 	BaselineFails int              `json:"baselineFails,omitempty"`
-	eProcess      *eProcess        `json:"eProcess,omitempty"`
+	EProcess      *eProcess        `json:"eProcess,omitempty"`
 	CreatedAt     int64            `json:"createdAt,omitempty"`
 }
 
