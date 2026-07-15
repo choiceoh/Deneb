@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.78](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.77...andromeda-v0.0.78) (2026-07-15)
+
+
+### 🐛 Bug Fixes
+
+* **health:** andromeda·kotlin 테스트 intent-naming (Wave1 PR-B) ([#3654](https://github.com/choiceoh/Deneb/issues/3654)) ([7b0af73](https://github.com/choiceoh/Deneb/commit/7b0af73db6b6a3a17f55ed3dde10e67e2b6415ec))
+
 ## [0.0.77](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.76...andromeda-v0.0.77) (2026-07-13)
 
 

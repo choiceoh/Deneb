@@ -1,5 +1,37 @@
 # Changelog
 
+## [4.105.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.104.0...deneb-v4.105.0) (2026-07-15)
+
+
+### ✨ Features
+
+* **chat:** append-only 선호 저장 + 위키 tombstone-forget 도구 ([#3664](https://github.com/choiceoh/Deneb/issues/3664)) ([e1b085b](https://github.com/choiceoh/Deneb/commit/e1b085b2532c87d97e574da63645ec3b2deb4246))
+* **chat:** harden stream recovery and recall retrieval ([#3671](https://github.com/choiceoh/Deneb/issues/3671)) ([f906585](https://github.com/choiceoh/Deneb/commit/f9065858694a0ffc3883f9eee013bd0bdb2abb35))
+* **chat:** 런타임 에이전트가 codegraph MCP로 자기 코드 조사 ([#3661](https://github.com/choiceoh/Deneb/issues/3661)) ([a8ad364](https://github.com/choiceoh/Deneb/commit/a8ad364541fd75782f63fd1b70370e4c31af2d86))
+* **codegraph:** 검색 결과에 폴더 CLAUDE.md 맥락 자동 첨부 ([#3665](https://github.com/choiceoh/Deneb/issues/3665)) ([723af4e](https://github.com/choiceoh/Deneb/commit/723af4e847bc6d19104a7684cef7e20750ea9ca9))
+* **codegraph:** 자기조사 인덱스 서치 최적화 (관련성·너지·신선도) ([#3663](https://github.com/choiceoh/Deneb/issues/3663)) ([f79d449](https://github.com/choiceoh/Deneb/commit/f79d4490456ca03de3f94084bef6df8cb897f9fc))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** record skill usage after run completion ([#3662](https://github.com/choiceoh/Deneb/issues/3662)) ([17631c2](https://github.com/choiceoh/Deneb/commit/17631c280b9481d5ace389d9752f8eebab457bc7))
+* **health:** andromeda·kotlin 테스트 intent-naming (Wave1 PR-B) ([#3654](https://github.com/choiceoh/Deneb/issues/3654)) ([7b0af73](https://github.com/choiceoh/Deneb/commit/7b0af73db6b6a3a17f55ed3dde10e67e2b6415ec))
+* **health:** llm·events typed contracts (Wave1 PR-A) ([#3653](https://github.com/choiceoh/Deneb/issues/3653)) ([ef1f1f9](https://github.com/choiceoh/Deneb/commit/ef1f1f992b86e69a955cd917ceedb2e38f05ebff))
+* **health:** server genesis 클러스터 skilllifecycle registrar 포트 (Wave1 PR-C) ([#3655](https://github.com/choiceoh/Deneb/issues/3655)) ([265a52b](https://github.com/choiceoh/Deneb/commit/265a52b9e4ebfb2916d70a41385887a4804bab8c))
+* **health:** wiki revive unexported-return 복구 (export 재개방) ([#3658](https://github.com/choiceoh/Deneb/issues/3658)) ([68ecdf8](https://github.com/choiceoh/Deneb/commit/68ecdf8fe37d9fe2f4397fe7e2c3102f2a838b99))
+* **health:** wiki 미사용 export unexport (Wave2 PR-E) ([#3657](https://github.com/choiceoh/Deneb/issues/3657)) ([3722f70](https://github.com/choiceoh/Deneb/commit/3722f70820e23fda38ee7a2a0cf7740babc25925))
+* **rsi:** count dispatch retry history ([#3651](https://github.com/choiceoh/Deneb/issues/3651)) ([e157e63](https://github.com/choiceoh/Deneb/commit/e157e63e2c8dfeb24ff8d8dcae4a8a7c3a902127))
+* **rsi:** harden dispatch accounting and recovery ([#3659](https://github.com/choiceoh/Deneb/issues/3659)) ([76063fb](https://github.com/choiceoh/Deneb/commit/76063fb63b3d0d466513816416c47f30258ad6a7))
+* 가동 점검 — 런타임 실증 버그 2건 + 드리머 데이터손실 2건 ([#3660](https://github.com/choiceoh/Deneb/issues/3660)) ([0e4de32](https://github.com/choiceoh/Deneb/commit/0e4de3236d53fcb966e8f21f620ee2731228d00e))
+* 가동 점검 후속 — genesis 로테이션/veto·RSI 패리티 3종·wiki dreamer ([#3666](https://github.com/choiceoh/Deneb/issues/3666)) ([bfd0de3](https://github.com/choiceoh/Deneb/commit/bfd0de3fcc5a593cbdbea7381d42ce5bb2ecba55))
+
+
+### 🔧 Internal
+
+* **rsi:** unify lifecycle orchestration ([#3670](https://github.com/choiceoh/Deneb/issues/3670)) ([a92a171](https://github.com/choiceoh/Deneb/commit/a92a1718253d7b4c6ddb54b81f94518a933d8ed7))
+* **server:** split composition roots + thin serverwire Ports ([#3667](https://github.com/choiceoh/Deneb/issues/3667)) ([37899c4](https://github.com/choiceoh/Deneb/commit/37899c460a7838840a124df58621b830991acfc5))
+* **wiki:** route consumers through stable wiki port ([#3668](https://github.com/choiceoh/Deneb/issues/3668)) ([866e88d](https://github.com/choiceoh/Deneb/commit/866e88d31e797424a44856c5e5043c2bb4dc2687))
+
 ## [4.104.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.103.0...deneb-v4.104.0) (2026-07-14)
 
 
