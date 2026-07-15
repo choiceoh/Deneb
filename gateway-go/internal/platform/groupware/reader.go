@@ -258,6 +258,7 @@ func ActApproval(ctx context.Context, cfg Config, docID, decision, comment strin
 		"DENEB_GROUPWARE_USER="+cfg.User,
 		"DENEB_GROUPWARE_PASSWORD="+cfg.Password,
 		"DENEB_GROUPWARE_COMPANY="+cfg.Company,
+		"DENEB_GROUPWARE_ACT=1",
 	)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

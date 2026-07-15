@@ -259,9 +259,19 @@ async function formatAttachments(docId) {
   let downloaded = 0;
   for (const f of list) {
     const name = f.dispFileNm || f.fileNm || f.filePath || "첨부";
-    const ext = f.fileExtsn || "";
+    const ext = String(f.fileExtsn || path.extname(String(f.filePath || "")) || "")
+      .replace(/^\./, "")
+      .toLowerCase();
     const size = f.fileSize != null ? `${f.fileSize}B` : "";
     lines.push(`- ${name}${ext ? `.${ext}` : ""}${size ? ` (${size})` : ""}`);
+    // Metadata-only for skipped types; do not burn the download budget on JPGs.
+    if (!wantExtract(ext)) {
+      const img = ["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"].includes(ext);
+      lines.push(
+        `  (${img ? "이미지 — OCR 생략 (DENEB_GROUPWARE_OCR=1 시 추출)" : "추출 미지원 형식"})`,
+      );
+      continue;
+    }
     if (downloaded >= MAX_ATTACH_DOWNLOAD) continue;
     downloaded += 1;
     try {
@@ -441,6 +451,10 @@ export async function readBoard(query) {
 
 /** docLineSts: 30=승인, 50=반려. Never call without an explicit operator decision. */
 export async function actApproval(docId, decision, comment = "") {
+  // Opt-in mutate: feed chips set this via Go; accidental CLI calls stay read-safe.
+  if (process.env.DENEB_GROUPWARE_ACT !== "1") {
+    throw new Error("act blocked — set DENEB_GROUPWARE_ACT=1 to allow Amaranth approve/reject");
+  }
   const id = String(docId || "").trim();
   if (!id) throw new Error("act requires --doc-id");
   const d = String(decision || "").trim().toLowerCase();

@@ -287,6 +287,7 @@ fields.
   settle; failure keeps card).
 - Confirm UI: title, doc no, amount, line, action; default-disable 전결/`1000`.
 - Dry-run: verify own line `app_sts==20` via `eap126A05` before any mutate.
+- Mutate requires `DENEB_GROUPWARE_ACT=1` (set by `ActApproval` / feed path only; CLI stays blocked).
 - First live mutate only on disposable / sandbox docs.
 - Audit: docID, docLineSts, actID, seqs, client, time, API result.
 
