@@ -106,6 +106,8 @@ internal val BROWSER_AD_HOST_SUFFIXES: Set<String> = setOf(
     "adfstat.yandex.ru",
     "adsdk.yandex.ru",
     "mc.yandex.ru",
+    "metrika.yandex.ru",
+    "informer.yandex.ru",
     "adriver.ru",
     "content.adriver.ru",
     "ad.adriver.ru",
@@ -172,6 +174,7 @@ private val BROWSER_AD_PATH_HOSTISH: List<String> = listOf(
     "viously.com",
     "facebook.com/tr",
     "connect.facebook.net",
+    "wprp.sovrn.com",
 )
 
 /** Query keys that almost always mean ad or tracking pixels. */
