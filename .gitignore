@@ -95,3 +95,5 @@ gateway-go/dream-once
 # Health Bench 3.0 live artifacts (baseline + runtime-cache are checked in)
 scripts/audit/health-v3-snapshot.json
 scripts/audit/health-v3-history.jsonl
+scripts/audit/rsi-bench-snapshot.json
+scripts/audit/rsi-bench-history.jsonl
