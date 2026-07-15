@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
 func TestSelfCorrectionReopenRejectedUnlessAppliedCooledAndFreshlyRecurring(t *testing.T) {
@@ -11,6 +13,13 @@ func TestSelfCorrectionReopenRejectedUnlessAppliedCooledAndFreshlyRecurring(t *t
 	src := "failure-cluster:deadbeef"
 	old := now.Add(-30 * 24 * time.Hour).UnixMilli() // older than the 14d cooldown
 	recent := now.Add(-1 * time.Hour).UnixMilli()
+	impactTwin := func(status string, createdAt, updatedAt, checkedAt int64) []SelfCorrectionCandidateRecord {
+		return []SelfCorrectionCandidateRecord{{
+			Source: src, Status: SelfCorrectionStatusApplied,
+			CreatedAt: createdAt, UpdatedAt: updatedAt,
+			ImpactResult: &rsilifecycle.ImpactResult{Status: status, CheckedAt: checkedAt},
+		}}
+	}
 
 	cases := []struct {
 		name        string
@@ -26,7 +35,13 @@ func TestSelfCorrectionReopenRejectedUnlessAppliedCooledAndFreshlyRecurring(t *t
 		{"superseded → block", []SelfCorrectionCandidateRecord{{Source: src, Status: selfCorrectionStatusSuperseded, CreatedAt: old}}, recent, true},
 		{"applied + cooled + fresh recurrence → REOPEN", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: old}}, recent, false},
 		{"applied but not cooled → block", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: recent}}, now.UnixMilli(), true},
+		{"applied recently despite old capture → block", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: old, UpdatedAt: recent}}, now.UnixMilli(), true},
 		{"applied + cooled but no fresh recurrence → block", []SelfCorrectionCandidateRecord{{Source: src, Status: SelfCorrectionStatusApplied, CreatedAt: old}}, old - 1000, true},
+		{"no effect + recurrence after verdict → REOPEN", impactTwin(selfCorrectionImpactNoEffect, recent, recent, recent), recent + 1, false},
+		{"regressed + recurrence after verdict → REOPEN", impactTwin(selfCorrectionImpactRegressed, recent, recent, recent), recent + 1, false},
+		{"no effect but recurrence predates verdict → block", impactTwin(selfCorrectionImpactNoEffect, old, recent, recent), recent - 1, true},
+		{"verified impact keeps cooldown → block", impactTwin(selfCorrectionImpactVerified, old, recent, recent), recent + 1, true},
+		{"malformed impact timestamp cannot waive cooldown", impactTwin(selfCorrectionImpactNoEffect, recent, recent, 0), now.UnixMilli(), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
