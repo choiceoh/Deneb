@@ -528,7 +528,16 @@ func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
 // fallbacks from creating a slug/ID/code variant of an existing page.
 func (wd *WikiDreamer) retargetDreamUpdate(u wikiUpdate) wikiUpdate {
 	if u.Action == "create" {
-		if existing := wd.findExistingPage(u); existing != "" {
+		// A create whose (already-normalized) path is itself an existing page must
+		// become an update: findExistingPage/FindSimilarPages seed seen{self:true},
+		// so the exact target is never returned as a "similar" match, and an
+		// unconverted create would fall through to createDreamPage → WritePage and
+		// overwrite the existing page's body wholesale with just u.Content.
+		if page, _ := wd.store.ReadPage(u.Path); page != nil {
+			wd.logger.Info("wiki-dream: create target already exists, converting to update",
+				"path", u.Path)
+			u.Action = "update"
+		} else if existing := wd.findExistingPage(u); existing != "" {
 			wd.logger.Info("wiki-dream: duplicate detected, converting to update",
 				"proposed", u.Path, "existing", existing)
 			u.Action = "update"

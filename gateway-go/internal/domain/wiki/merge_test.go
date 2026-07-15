@@ -217,3 +217,60 @@ func TestStore_MergePage_RejectsSelfMerge(t *testing.T) {
 		t.Error("MergePage(self, self) = nil error, want rejection")
 	}
 }
+
+func hasStr(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
+}
+
+// TestMergeFrontmatterInto_UnionsAnchorsAndFillsIdentity guards that a fold does
+// not silently drop the source page's identity/anchor keys before the source is
+// deleted: emails (동명이인 disambiguation), sites/kinds (현장/특성 recall +
+// digest grouping) union; PID (frozen person id) and client fill only when the
+// target lacks them and never overwrite the target's own values.
+func TestMergeFrontmatterInto_UnionsAnchorsAndFillsIdentity(t *testing.T) {
+	// Target has its own emails/sites and an empty PID/client; source carries
+	// distinct emails/sites/kinds plus a PID and client.
+	dst := Frontmatter{
+		Emails: []string{"kim@dst.com"},
+		Sites:  []string{"전북 군산시 옥구읍 수산리"},
+	}
+	src := Frontmatter{
+		Emails: []string{"kim@src.com"},
+		Sites:  []string{"전남 신안군 비금면"},
+		Kinds:  []string{"태양광"},
+		PID:    "pid-123",
+		Client: "금호타이어",
+	}
+	mergeFrontmatterInto(&dst, src)
+
+	if !hasStr(dst.Emails, "kim@dst.com") || !hasStr(dst.Emails, "kim@src.com") {
+		t.Errorf("emails not unioned: %v", dst.Emails)
+	}
+	if !hasStr(dst.Sites, "전북 군산시 옥구읍 수산리") || !hasStr(dst.Sites, "전남 신안군 비금면") {
+		t.Errorf("sites not unioned: %v", dst.Sites)
+	}
+	if !hasStr(dst.Kinds, "태양광") {
+		t.Errorf("kinds not carried from source: %v", dst.Kinds)
+	}
+	if dst.PID != "pid-123" {
+		t.Errorf("PID not filled from source: %q", dst.PID)
+	}
+	if dst.Client != "금호타이어" {
+		t.Errorf("client not filled from source: %q", dst.Client)
+	}
+
+	// Fill-only semantics: a target that already has PID/client keeps its own.
+	dst2 := Frontmatter{PID: "pid-dst", Client: "기아"}
+	mergeFrontmatterInto(&dst2, Frontmatter{PID: "pid-src", Client: "현대차"})
+	if dst2.PID != "pid-dst" {
+		t.Errorf("PID overwritten: %q, want pid-dst", dst2.PID)
+	}
+	if dst2.Client != "기아" {
+		t.Errorf("client overwritten: %q, want 기아", dst2.Client)
+	}
+}
