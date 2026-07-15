@@ -119,4 +119,19 @@ class BrowserAdBlockTest {
         assertFalse(shouldBlockBrowserAdRequest("https://aviation21.ru/na-iaz-vremya-podgotovki/", isForMainFrame = true))
         assertFalse(shouldBlockBrowserAdRequest("https://aviation21.ru/wp-content/uploads/2026/07/x.jpg"))
     }
+
+    @Test
+    fun `blocks eurasiantimes jetpack stats and video ad hosts`() {
+        assertTrue(shouldBlockBrowserAdRequest("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3080034919211163"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.taboola.com/libtrc/eurasiantimes/loader.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://stats.wp.com/e-202629.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://pixel.wp.com/t.gif"))
+        assertTrue(shouldBlockBrowserAdRequest("https://a.vdo.ai/core/x/ad.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://cdn.atlas5.co/script.js"))
+        assertTrue(shouldBlockBrowserAdRequest("https://www.googletagmanager.com/gtag/js?id=UA-71605101-1"))
+        // First-party Newspaper assets and the article stay.
+        assertFalse(shouldBlockBrowserAdRequest("https://www.eurasiantimes.com/unexpected-winner-from-strait-of-hormuz-blockade/", isForMainFrame = true))
+        assertFalse(shouldBlockBrowserAdRequest("https://www.eurasiantimes.com/wp-content/uploads/2026/07/x.jpg"))
+        assertFalse(shouldBlockBrowserAdRequest("https://www.eurasiantimes.com/_static/??/wp-content/plugins/td-composer/mobile/js/tagdiv_theme.min.js"))
+    }
 }
