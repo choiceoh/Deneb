@@ -146,9 +146,24 @@ class CodingDispatchStatusTest(unittest.TestCase):
             completed = record_status(path, "completed", now_ms=4)
             self.assertEqual(first["consecutiveFailures"], 1)
             self.assertEqual(second["consecutiveFailures"], 2)
-            self.assertEqual(dispatched["consecutiveFailures"], 0)
+            # A dispatch STARTING preserves the streak (only success resets it).
+            self.assertEqual(dispatched["consecutiveFailures"], 2)
             self.assertEqual(dispatched["lastDispatchAtMs"], 3)
+            self.assertEqual(completed["consecutiveFailures"], 0)
             self.assertEqual(completed["lastSuccessfulAtMs"], 4)
+
+    def test_dispatched_then_failed_streak_climbs_across_ticks(self):
+        # Real coding-dispatch.sh sequence: "dispatched" at session start, then the
+        # terminal "session_failed" at the end of the SAME tick. Repeated failing
+        # ticks must accumulate — the dispatched event must not reset the streak
+        # (which clamped 연속 배차 실패 to 1 forever).
+        with TemporaryDirectory() as td:
+            path = Path(td) / "status.json"
+            last: dict = {}
+            for tick in range(3):
+                record_status(path, "dispatched", candidate_id="sc-1", now_ms=tick * 2)
+                last = record_status(path, "session_failed", now_ms=tick * 2 + 1)
+            self.assertEqual(last["consecutiveFailures"], 3)
 
     def test_busy_tick_does_not_hide_existing_failure_streak(self):
         with TemporaryDirectory() as td:

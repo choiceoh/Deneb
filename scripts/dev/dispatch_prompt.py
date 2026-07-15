@@ -206,9 +206,16 @@ def main() -> int:
     marker["dispatchedAt"] = int(__import__("time").time() * 1000)
     if attempts:
         marker["attempts"] = attempts[-10:]
-    marker_path.write_text(
+    # Atomic write (tmp + rename) like dispatch_outcome.write_marker: a bare
+    # write_text interrupted mid-flight (OOM-kill, disk-full, the timer unit
+    # stopped mid-write) leaves a torn marker, and a corrupt marker fails closed
+    # in blocks_redispatch AND is preserved by dispatch_reclaim — permanently
+    # poisoning the candidate until a manual rm.
+    tmp_path = marker_path.with_name(marker_path.name + ".tmp")
+    tmp_path.write_text(
         json.dumps(marker, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    tmp_path.replace(marker_path)
 
     print(compose(candidate, contract))
     return 0

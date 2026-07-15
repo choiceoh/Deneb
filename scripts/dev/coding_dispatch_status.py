@@ -40,8 +40,11 @@ def record_status(
     if candidate_id:
         current["candidateId"] = candidate_id
     if result == "dispatched":
+        # A dispatch STARTING must not clear the failure streak: coding-dispatch.sh
+        # records "dispatched" at session start and the terminal "session_failed"
+        # at the end of the SAME tick, so resetting here clamped the streak to 1
+        # forever (every failing tick went 0→1). Only a real success resets it.
         current["lastDispatchAtMs"] = now_ms
-        current["consecutiveFailures"] = 0
     elif result in FAILURE_RESULTS:
         current["consecutiveFailures"] = int(current.get("consecutiveFailures") or 0) + 1
     elif result != "busy":
