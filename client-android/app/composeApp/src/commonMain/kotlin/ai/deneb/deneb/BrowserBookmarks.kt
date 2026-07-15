@@ -75,6 +75,14 @@ internal fun canBookmarkUrl(url: String): Boolean {
     return authority.isNotBlank()
 }
 
+/** Nav route URL wins when set; otherwise resume the last http(s) page. */
+internal fun resolveBrowserStartUrl(navUrl: String, lastUrl: String): String {
+    val nav = navUrl.trim()
+    if (nav.isNotEmpty()) return nav
+    val last = lastUrl.trim()
+    return if (canBookmarkUrl(last)) last else ""
+}
+
 internal fun browserBookmarkDisplayTitle(bookmark: BrowserBookmark): String = bookmark.title.ifBlank { browserBookmarkHost(bookmark.url) }.ifBlank { bookmark.url }
 
 private fun List<BrowserBookmark>.sanitizedBrowserBookmarks(): List<BrowserBookmark> = asSequence()
