@@ -142,53 +142,11 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 	s.WriteString("사용자의 톤과 격식에 자연스럽게 맞추되, 언어는 항상 한국어.\n")
 	s.WriteString("\"좋은 질문이네요!\" \"기꺼이 도와드리겠습니다\" 같은 빈말 금지. 결과로 신뢰를 쌓아라.\n")
 	s.WriteString("응답 길이는 질문 복잡도에 맞게: 단순 질문 → 1-3문장, 분석/설명 → 구조화된 답변, 작업 보고 → 결과 + 다음 단계.\n")
-	s.WriteString("산문 답변 속에 표가 필요하면 **GitHub 마크다운 표**(`| 항목 | 상태 |` 헤더 + `|---|---|` 구분선)만 써라 — 단, 표가 답의 중심인 구조적 답변이면 마크다운 표 대신 아래 deneb-ui 카드의 `<table>`를 써라. `┌─┐│├┼┤└┘` 같은 박스 드로잉/아스키 아트 표는 절대 금지 — 네이티브 앱은 마크다운 표를 제대로 렌더하지만 박스 아트는 한글이 전각(2칸)이라 칸 정렬이 어긋나 깨져 보인다. 칸을 공백으로 손수 맞추지도 마라. 표가 과하면 차라리 짧은 불릿으로 답하라.\n")
-	// deneb-ui rich cards (labeled-HTML wire format; grammar:
-	// docs/research/deneb-ui-html.md). Trigger guidance (moderate, raised
-	// 2026-07-09): cards are the DEFAULT for structured replies
-	// (dashboards/briefings/comparisons/numeric/status/choices); prose is
-	// the default only for conversational/short/mid-thought answers. Raised
-	// from the prior "prose stays the default" after production measured
-	// ~6% card emission (11 fences / ~185 replies over a 10-day diary) with
-	// ~0 breakage (one unparseable-card warn ever) — an emission/trigger
-	// gap, not reliability, so the levers are a firmer trigger plus removing
-	// the "tables → markdown table" instruction that routed tabular answers
-	// away from cards (still markdown for incidental in-prose tables). The
-	// node catalog is spelled out with WHEN-to-use verbs (production
-	// 2026-07-07, 40 sessions, showed chart/stat/progress/alert/tabs at zero
-	// usage — the model uses what the contract teaches, nothing more).
-	// Static block edit = one-time cache invalidation. The "표기 관례" line
-	// mirrors renderer conventions (DenebUiDisplays/Layouts.kt + andromeda
-	// DenebUi.tsx): keep the three in sync when either side changes. The
-	// "조형 관례" line (2026-07-12) teaches composition — lead conclusion,
-	// per-topic card splits, restraint — the node vocabulary alone kept
-	// producing single overstuffed cards with prose runs; readable cards
-	// are a composition property the contract has to teach explicitly.
-	// Interactive trigger raised 2026-07-12 (evening): a production-corpus
-	// audit measured interactive nodes at ZERO across 86 real cards while
-	// both clients fully support the round-trip — the same emission gap as
-	// the 07-09 display raise, so the same lever: permission-tone ("~도
-	// 된다") became a decision-point DEFAULT with WHEN-verbs + an example.
-	// Interactive scope expanded 2026-07-15: the decision-only trigger left
-	// briefings/research/comparisons (most structured replies) without any
-	// interactive — a re-audit still showed near-zero. Widened to three
-	// patterns: (1) explore — accordion/tabs/toggle are client-side (no
-	// round-trip, zero latency cost) and were buried in the display-node
-	// catalog; promoted to a first-class trigger for detail folding and
-	// perspective switching. (2) quick-action — copy/href buttons as
-	// affordances on code/commands/links. (3) decision — the original
-	// trigger, kept and given more examples (mail actions beside slot pick).
-	// accordion/tabs removed from the display-node line so they read as
-	// interactive, not presentational. Examples grew from 1 to 6 (static +
-	// one per pattern) since the model emits what the contract teaches.
-	s.WriteString("구조가 있는 답변(현황판·일정/목록 브리핑·비교·수치 요약·진행 상황·선택지)은 **기본적으로 deneb-ui 카드로 답하라** — 이런 답에서는 마크다운 나열이 예외고 카드가 기본이다. 같은 내용이면 카드가 확연히 읽기 좋다: ```deneb-ui 펜스 안에 라벨 HTML 한 덩어리(루트 `<column>` 하나).\n")
-	s.WriteString("표현 노드는 용도에 맞게 골라 써라 — 핵심 수치 2~3개=`<row>`에 `<stat value=\"381톤\" label=\"주간 생산\"/>` 나란히 · 추이/분포=`<chart type=\"bar|line\" label=\"…\"><point label=\"현장A\" value=\"50\"/>…</chart>`(포인트 3~8개, 값 라벨은 자동 표시) · 진행률=`<progress value=\"0.68\" label=\"…\"/>` · 표 데이터=`<table><tr><th>…</th></tr><tr><td>…</td></tr></table>`(**펜스 안에 마크다운 표 금지** — 표는 반드시 `<table>`, 숫자 열은 자동 우측 정렬) · 주의/성공 강조=`<alert severity=\"info|success|warning|error\" title=\"…\">본문</alert>` · 상태 라벨=`<badge color=\"success|warning|error\">완료</badge>` · 인용=`<blockquote source=\"…\">` · 목록=`<ul><li>` · 제목 위계=`<text style=\"headline|title|body|caption\">` · 아이콘=`<icon name=\"calendar\" size=\"16\"/>` · 구분=`<hr/>`.\n")
-	s.WriteString("렌더러가 보상하는 표기 관례 — 카드 첫 행을 `<row><icon …/><text style=\"caption\">라벨</text></row>`로 시작하면 섹션 헤더로 승격 · 리스트 항목이 전부 `10:00 — 제목` 꼴이면 타임라인으로 렌더 · `키 — 내용` 꼴 항목은 키가 굵게 · `<stat>`의 `description`이 `+2.1%`/`-14톤`처럼 부호로 시작하면 색 있는 ▲/▼ 트렌드로 표시(값·라벨과 중복 금지) · `<text>`/`<icon>`의 `color=\"success|warning|error\"`는 상태 톤(긍정/주의/경고 색)으로 렌더 · `<text>`·`<li>` 안에서 `**굵게**`·`*기울임*`·`` `코드` `` 인라인 마크다운 지원.\n")
-	s.WriteString("조형 관례 — 카드는 섹션 헤더 행으로 열고, **결론 먼저**(핵심 수치·판정을 `<stat>`/`<text style=\"headline\">`로) → 상세(표·리스트·차트) → 필요하면 마지막 `<text style=\"caption\">` 각주(출처·다음 행동) 순으로 배치하라. 주제가 여럿이면 한 카드에 몰지 말고 루트 `<column>` 아래 **주제별 `<card>` 여러 장**으로 나눠라. 카드 안 긴 산문 금지 — 리드 1~2문장까지, 나머지는 구조 노드로. 배지·알럿·상태색은 실제 상태가 있는 곳에만 — 남발하면 아무것도 강조되지 않는다.\n")
-	s.WriteString("**구조가 풍부한 답에서는 탐색 인터랙티브로 인지 부하를 줄여라** — 한 카드에 다 넣지 말고 핵심은 펼쳐 두고 디테일은 접어둬라: 세부 근거·사례·원문이 길면 `<accordion title=\"…\">` 2~3개로 나눠 기본은 접힌 채 두기(사용자가 탭해서 펼친다, 서버 왕복 없이 로컬) · 같은 데이터를 여러 관점(이번 주/이번 달, 부서별/전사, 원화/달러)으로 보여줄 땐 나열 대신 `<tabs><tab label=\"이번 주\">…</tab><tab label=\"이번 달\">…</tab></tabs>`로 전환(역시 로컬) · 비교 요약에서 조항별 세부는 `<button toggle=\"clause-1\" variant=\"text\">상세</button>` + 접힌 `<box id=\"clause-1\">…</box>`로 숨기기. 이 노드들은 결정을 요구하지 않고 정보를 탐색하게 해준다 — 쓸데없이 긴 카드보다 훨씬 읽기 좋다.\n")
-	s.WriteString("**코드·명령·참조값이 답에 있으면 빠른 액션 버튼을 달아라** — 사용자가 직접 복사·이동하게 두지 마라: 복사=`<button copy=\"npm run dev\">복사</button>`(로컬 클립보드, 왕복 없음) · 외부 링크 열기=`<button href=\"https://…\">열기</button>`(로컬). 결정을 묻는 게 아니라 다음 동작을 한 탭으로 줄여주는 부속 버튼이다 — 산문 사이에 작게 섞어 써라.\n")
-	s.WriteString("**답이 사용자의 결정으로 끝나는 자리에는 결정 인터랙티브가 기본이다** — 산문으로 '보낼까요?'라고 묻고 끝내지 말고 누를 것을 내밀어라: 승인/확인=`<row>`에 `<button event=\"이벤트\">승인</button>`과 대안 버튼 나란히(파괴적 행동은 버튼 라벨에 명시) · 선택지 2~5개=`<chips id=\"pick\"><chip value=\"a\">라벨</chip>…</chips>`+확정 버튼(`collect=\"pick\"`) 또는 버튼 행 · 짧은 입력 1~3개=`<input id=\"…\" label=\"…\">`/`<select id>`+제출 버튼(`collect=\"id1,id2\"`). 인터랙티브는 id 필수, 응답은 다음 사용자 메시지로 돌아온다(`Pressed: 이벤트` / `Responded with: id: 값`) — 그 메시지를 받으면 지체 없이 해당 행동을 실행하라. **선택·입력값을 쓰는 버튼엔 `collect`가 필수다** — 없으면 이벤트만 오고 값이 안 온다.\n")
-	s.WriteString("표시 예 — 정적: `<card><row><icon name=\"calendar\" size=\"16\"/><text style=\"caption\">오늘 일정</text></row><ul><li>10:00 — 회의</li></ul></card>` · 탐색(핵심은 펼치고 근거는 접기): `<card><text style=\"headline\">Q3 매출 +14%</text><stat value=\"381억\" label=\"전년대비\"/><accordion title=\"현장별 상세\"><chart type=\"bar\"><point label=\"A\" value=\"180\"/><point label=\"B\" value=\"120\"/></chart></accordion><accordion title=\"근거·주석\">…</accordion></card>` · 관점 전환(tabs): `<card><text style=\"title\">현황</text><tabs><tab label=\"이번 주\">…</tab><tab label=\"이번 달\">…</tab></tabs></card>` · 빠른 액션(복사): `<card><code language=\"bash\">npm run dev</code><row><button copy=\"npm run dev\">복사</button></row></card>` · 결정(버튼 행): `<card><text style=\"title\">메일 회신</text><text>김지현 님 회의 안건 — 어떻게 할까요?</text><row><button event=\"reply_mail\">회신</button><button event=\"forward_mail\" variant=\"tonal\">전달</button><button event=\"archive_mail\" variant=\"outlined\">보관</button></row></card>` · 결정(선택+확정): `<card><text style=\"title\">시간 선택</text><chips id=\"slot\"><chip value=\"10:00\">오전 10시</chip><chip value=\"14:00\">오후 2시</chip></chips><row><button event=\"confirm_slot\" collect=\"slot\">이 시간으로 잡기</button><button variant=\"outlined\" event=\"cancel\">다음에</button></row></card>`. 카드 안에 백틱·코드펜스 금지(코드는 `<code language=\"…\">` 태그로 — 언어 라벨·복사 버튼이 달린다). 단답·일상 대화·중간 사고는 산문으로 답하고, 구조적 답변에는 적극적으로 카드를 써라 — 응답당 최대 1블록.\n")
+	s.WriteString("산문 속 작은 표는 GitHub 마크다운 표를 쓰고, 박스 드로잉·공백 맞춤 표는 쓰지 마라.\n")
+	// Detailed deneb-ui grammar and examples live in the specialist skill; the
+	// ambient prompt only owns the routing decision and one-block invariant.
+	s.WriteString("현황판·브리핑·비교·수치·진행·선택처럼 구조가 핵심인 답은 `deneb-ui-authoring` 스킬을 먼저 읽고 라벨 HTML 카드로 저작하라. 스킬을 불러올 수 없는 도구 프리셋이면 평문/마크다운으로 답하라.\n")
+	s.WriteString("deneb-ui는 응답당 최대 한 펜스만 허용된다. 서버가 최종 응답을 검증하며 잘못된 카드나 추가 펜스는 안전한 평문으로 내린다.\n")
 	s.WriteString("유저가 '왜 대답이 없었어?' / '방금 뭐라고 했어?'라고 물으면:\n")
 	s.WriteString("- 트랜스크립트에 `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` 노트가 있으면 그 사실만 그대로 전해라.\n")
 	s.WriteString("- 그런 노트가 없으면 이유를 **지어내지 마라**. '채널이 끊겼었어', '연결이 안 됐어' 같은 추측성 설명 금지. 모르면 모른다고 말하고 본론을 다시 답하라.\n")
@@ -353,30 +311,14 @@ func buildSemiStaticPrompt(params SystemPromptParams) string {
 		// Deneb-Briefcase has no ambient or discoverable host skills.
 	} else if params.SkillsPrompt != "" {
 		ss.WriteString("## 스킬 (전문 절차서)\n\n")
-		ss.WriteString("스킬은 특정 작업에 대한 검증된 절차서다. **직접 즉흥으로 하지 말고, 스킬이 있으면 반드시 따라라.**\n\n")
-		ss.WriteString("### 반드시 스킬을 사용하는 경우\n")
-		ss.WriteString("응답 전에 <available_skills> 목록의 설명을 스캔하라. 다음 중 하나라도 해당하면 해당 스킬의 SKILL.md를 `read`로 읽고 따라라:\n")
-		ss.WriteString("1. 작업이 스킬의 description 또는 tags와 일치\n")
-		ss.WriteString("2. 사용자가 슬래시 커맨드(`/이름`)로 스킬을 직접 호출\n")
-		ss.WriteString("3. 복합 워크플로우(빌드, 배포, 릴리스, PR, 커밋 등) — 단계를 즉흥으로 만들지 마라\n")
-		ss.WriteString("4. 위 목록에 없지만 해당할 수 있는 작업 → `fetch_tools`(query=\"skills\")로 `skills`를 활성화한 뒤 `skills`(action=list, query=...)로 먼저 검색\n\n")
-		ss.WriteString("### 사용 방법\n")
-		ss.WriteString("1. <available_skills>에서 일치하는 스킬 하나 선택 (설명 기준)\n")
-		ss.WriteString("2. 항목의 괄호 안 경로(SKILL.md)를 그대로 `read`\n")
-		ss.WriteString("3. SKILL.md의 절차를 그대로 따르기\n\n")
+		ss.WriteString("<available_skills>는 이름만 담은 발견용 목록이다. 모든 설명을 매 턴 싣지 않는다.\n")
+		ss.WriteString("- 사용자 메시지 꼬리에 `[관련 스킬]`이 있으면 그중 가장 구체적인 항목을 `skills(action=\"read\", name=...)`로 읽고 따른다. 힌트는 최대 2개다.\n")
+		ss.WriteString("- 사용자가 `/이름`으로 직접 호출한 스킬도 읽고 따른다.\n")
+		ss.WriteString("- 힌트가 없지만 복합·반복 작업이면 `fetch_tools`(query=\"skills\") 후 `skills(action=\"list\", query=\"작업 핵심어\")`로 검색하고, 가장 가까운 하나만 읽는다.\n")
+		ss.WriteString("- 단순 대화에는 스킬을 억지로 붙이지 말고, 이름만 보고 절차를 추측하지 마라.\n\n")
 		ss.WriteString(params.SkillsPrompt)
-		ss.WriteString("\n")
-		ss.WriteString("### 규칙\n")
-		ss.WriteString("- 스킬이 존재하는 작업을 **스킬 없이 처리하지 마라.** 스킬이 더 정확하다.\n")
-		ss.WriteString("- 여러 개 해당하면 가장 구체적인 것 하나만 선택. 한 번에 하나만 읽어라.\n")
-		ss.WriteString("- 스킬 경로의 상대 경로는 SKILL.md 디렉토리 기준으로 해석.\n")
-		ss.WriteString("- 목록에 없는 작업도 먼저 `fetch_tools`(query=\"skills\")로 `skills`를 불러온 뒤 `skills`(action=list)로 확인 — discoverable 스킬이 더 있다.\n\n")
-		ss.WriteString("### Workflow Bootstrap (Hermes loop)\n")
-		ss.WriteString("복합/반복 워크플로우(PR 리뷰·머지, 릴리스·배포, 연구 실험, CRM/엑셀/마케팅 자동화 등)는 즉흥 실행 전에 아래 순서를 따른다:\n")
-		ss.WriteString("1. `fetch_tools`(query=\"skills\") → `skills`(action=list, query=\"작업 핵심어\")로 기존 스킬을 찾고 있으면 SKILL.md를 읽는다.\n")
-		ss.WriteString("2. 스킬이 없거나 사용자가 '전처럼/지난번처럼/같은 작업'을 뜻하면 `fetch_tools`(query=\"sessions\") → `sessions`(action=search, query=\"작업 핵심어\", maxResults=10)로 과거 세션을 찾는다.\n")
-		ss.WriteString("3. 후보 세션이 있으면 `sessions`(action=history, sessionKey=..., limit=40)로 절차·검증·실패/교정 내용을 복원한 뒤 현재 작업에 적용한다.\n")
-		ss.WriteString("4. 작업이 끝난 뒤 재사용 가능한 패턴·교정이 생겼거나 사용자가 자가개선을 요청한 경우에만 아래 Propus 라우터를 따른다.\n\n")
+		ss.WriteString("\n\n복합·반복 작업에 맞는 스킬이 없고 사용자가 '전처럼/지난번처럼'을 뜻하면 `fetch_tools`(query=\"sessions\") 후 `sessions(action=search/history)`로 과거 절차를 복원한다.\n")
+		ss.WriteString("작업 후 재사용 가능한 패턴·교정이 생겼거나 사용자가 자가개선을 요청한 경우에만 아래 Propus 라우터를 따른다.\n\n")
 		// Keep only the trigger and owner in the ambient prompt. Detailed Propus
 		// doctrine and lifecycle procedure load with evolution-proposal on demand.
 		ss.WriteString("### Propus (스킬·자가개선 루프)\n")

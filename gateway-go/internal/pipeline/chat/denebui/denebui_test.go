@@ -116,7 +116,8 @@ func TestValidateReturnsNoIssuesForValidBodies(t *testing.T) {
 			{"label":"A","children":[{"type":"text","value":"a"}]},
 			{"label":"B","children":[{"type":"alert","message":"hey","severity":"warning"}]}
 		]}`,
-		"ndjson": "{\"type\":\"text\",\"value\":\"a\"}\n{\"type\":\"text\",\"value\":\"b\"}",
+		"html chart": `<chart type="bar" label="생산"><point label="A" value="1200"/><point label="B" value="900"/></chart>`,
+		"ndjson":     "{\"type\":\"text\",\"value\":\"a\"}\n{\"type\":\"text\",\"value\":\"b\"}",
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {

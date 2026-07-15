@@ -88,6 +88,23 @@ func TestBundledEvolutionProposalRoutesPropusJustInTime(t *testing.T) {
 	}
 }
 
+func TestBundledDenebUIAuthoringHasPreciseTriggers(t *testing.T) {
+	skillsDir := filepath.Join("..", "..", "..", "..", "skills")
+	content, err := os.ReadFile(filepath.Join(skillsDir, "productivity", "deneb-ui-authoring", "SKILL.md"))
+	if err != nil {
+		t.Skipf("deneb-ui-authoring skill not found: %v", err)
+	}
+	meta := ResolveDenebMetadata(ParseFrontmatter(string(content)))
+	if meta == nil {
+		t.Fatal("deneb-ui-authoring metadata must resolve")
+	}
+	for _, want := range []string{"카드로", "버튼으로", "표로 보여"} {
+		if !containsString(meta.Triggers, want) {
+			t.Errorf("deneb-ui-authoring triggers = %#v, want %q", meta.Triggers, want)
+		}
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

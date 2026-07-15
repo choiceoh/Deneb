@@ -11,6 +11,7 @@ wire format changes (see `docs/agent-rules/denebui.md`).
 - `collapsed.go` — `CollapsedReportFence` (server-assembled collapsed cards)
 - `composition.go` — `CompositionAdvisories`
 - `card_health.go` — `ReportCardHealth`, `LooksStructuredWithoutCard`
+- `finalize.go` — `NormalizeFinalReply` (pre-delivery validity boundary)
 - `plaintext.go` — `PlainText`, `ReplaceFences`
 
 ## Dependency direction and invariants

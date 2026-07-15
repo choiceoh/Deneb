@@ -356,6 +356,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 			if err != nil {
 				return nil, err
 			}
+			normalizeRunCardReplies(result.AgentResult, params, deps, h.logger)
 			finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
 			res, err := h.buildSyncResult(model, result)
 			if err == nil {
@@ -608,6 +609,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 			if err != nil {
 				return nil, err
 			}
+			normalizeRunCardReplies(result.AgentResult, params, deps, h.logger)
 			finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
 			res, err := h.buildSyncResult(model, result)
 			if err == nil {

@@ -46,6 +46,7 @@ var (
 	keyboardTypes   = []string{"text", "number", "decimal", "email", "phone", "url"}
 	buttonVariants  = []string{"filled", "outlined", "text", "tonal"}
 	alertSeverities = []string{"info", "success", "warning", "error"}
+	chartTypes      = []string{"bar", "line"}
 	actionTypes     = []string{"callback", "toggle", "open_url", "copy_to_clipboard"}
 )
 
@@ -73,7 +74,8 @@ var nodeSpecs = map[string]nodeSpec{
 	"badge":    {},
 	"stat":     {},
 	"avatar":   {},
-	"table":    {}, // headers/rows are strings, not nodes
+	"table":    {},                                                    // headers/rows are strings, not nodes
+	"chart":    {enums: map[string][]string{"chartType": chartTypes}}, // labels/values are parallel arrays
 	// Interactive (id-bearing).
 	"button":      {actionFields: []string{"action"}, enums: map[string][]string{"variant": buttonVariants}},
 	"text_input":  {requireID: true, enums: map[string][]string{"keyboard": keyboardTypes}},
@@ -175,13 +177,23 @@ func isDenebUIFenceOpen(line string) bool {
 // ("…```deneb-ui<column>"). A remainder is accepted only when it starts with
 // '<' — prose that merely mentions the fence mid-sentence stays prose.
 func denebUIFenceOpenSplit(line string) (rest string, open bool) {
+	_, rest, open = denebUIFenceOpenParts(line)
+	return rest, open
+}
+
+// denebUIFenceOpenParts is the lossless form used by fence rewriters. prefix
+// is any prose before the opener and rest is same-line HTML after the info
+// string. The public extractor only needs rest, so denebUIFenceOpenSplit keeps
+// its smaller contract above.
+func denebUIFenceOpenParts(line string) (prefix, rest string, open bool) {
 	line = strings.TrimRight(line, " \t")
 	for from := 0; ; {
 		bt := strings.Index(line[from:], "```")
 		if bt < 0 {
-			return "", false
+			return "", "", false
 		}
-		j := from + bt
+		start := from + bt
+		j := start
 		for j < len(line) && line[j] == '`' {
 			j++
 		}
@@ -195,10 +207,10 @@ func denebUIFenceOpenSplit(line string) (rest string, open bool) {
 				m++
 			}
 			if m == len(line) {
-				return "", true
+				return strings.TrimSpace(line[:start]), "", true
 			}
 			if line[m] == '<' {
-				return line[m:], true
+				return strings.TrimSpace(line[:start]), line[m:], true
 			}
 		}
 		from = from + bt + 1
@@ -208,11 +220,22 @@ func denebUIFenceOpenSplit(line string) (rest string, open bool) {
 // splitGluedFenceClose detects a ``` run glued into an HTML body line
 // ("</column>``` 뒤 프로즈") and returns the body part before the run.
 func splitGluedFenceClose(line string) (pre string, closed bool) {
+	pre, _, closed = splitGluedFenceCloseParts(line)
+	return pre, closed
+}
+
+// splitGluedFenceCloseParts is the lossless form for rewriters that must keep
+// prose following an HTML fence close on the same line.
+func splitGluedFenceCloseParts(line string) (pre, suffix string, closed bool) {
 	bt := strings.Index(line, "```")
 	if bt < 0 {
-		return "", false
+		return "", "", false
 	}
-	return line[:bt], true
+	j := bt
+	for j < len(line) && line[j] == '`' {
+		j++
+	}
+	return line[:bt], strings.TrimSpace(line[j:]), true
 }
 
 // appendBodyLine appends a body fragment, skipping blank fragments.

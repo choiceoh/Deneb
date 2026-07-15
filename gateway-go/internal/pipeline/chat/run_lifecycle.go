@@ -31,6 +31,7 @@ func handleRunSuccess(
 	isSilent := applySilentReplyPolicy(params, result, logger)
 
 	substituteRunMarketTokens(result)
+	normalizeRunCardReplies(result, params, deps, logger)
 
 	persistAggregateAssistantText(params, deps, result, now, logger)
 
@@ -94,8 +95,7 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
 	maybeRecordRunDiary(deps, params, result, logger)
-	// deneb-ui card health: an invalid card degrades to a raw code block on the
-	// user's screen, so surface it in the operator log (model drift detector).
+	// deneb-ui card health observes the already-normalized final response.
 	if deps.reportCardHealth != nil {
 		deps.reportCardHealth(result.Text, params.SessionKey, logger)
 	}

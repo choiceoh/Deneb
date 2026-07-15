@@ -30,7 +30,7 @@ description: One-line description of what skills belong in this category.
 | Category | Description | Skills |
 |---|---|---|
 | `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, self-evolve, skill-creator, skill-evolution, skill-factory |
-| `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, session-logs, weekly-report |
+| `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, deneb-ui-authoring, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, session-logs, weekly-report |
 | `devops` | System monitoring, terminal management, infrastructure | (none — 2026-07 사용량 감사로 은퇴; 필요 시 git 히스토리에서 복원) |
 | `security` | Security, secrets management, and credential handling | (none) |
 | `integration` | External service connectivity, API bridges | (none) |
@@ -133,8 +133,8 @@ Not all sections are required for every skill. Use what makes sense for the comp
 The gateway uses 3-stage progressive disclosure to minimize token usage:
 
 1. **Stage 1 (discovery):** Only the frontmatter block is parsed for metadata (name, version, category, description, requirements). The body is not loaded.
-2. **Stage 2 (system prompt):** Name, category, description, and file path are injected into the LLM system prompt.
-3. **Stage 3 (on-demand):** The LLM reads the full SKILL.md body via file read when it needs the skill's workflow instructions.
+2. **Stage 2 (system prompt):** Only eligible skill names are injected. An exact frontmatter trigger may add a wire-only `[관련 스킬]` hint with a short description and read pointer for that turn.
+3. **Stage 3 (on-demand):** The LLM loads the full SKILL.md body with `skills(action=read)` when it needs the workflow instructions.
 
 ## Workspace Overrides Bundled (single-name precedence)
 

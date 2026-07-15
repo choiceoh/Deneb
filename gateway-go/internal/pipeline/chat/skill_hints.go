@@ -1,6 +1,6 @@
 // skill_hints.go — deterministic per-turn skill surfacing (auto-hint).
 //
-// The semi-static system prompt carries a compact skills index, but 30-day
+// The semi-static system prompt carries only a name manifest, but 30-day
 // production forensics (2026-07) showed the model almost never acts on it
 // unprompted: ~170 skill consults across 7,986 tool calls, and every consult
 // that did happen was force-summoned (mail cron) or name-obvious (topsolar-db).
@@ -107,7 +107,7 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 	names := make([]string, 0, len(hints))
 	b.WriteString("[관련 스킬 — 이 요청에 맞는 준비된 절차]")
 	for _, h := range hints {
-		fmt.Fprintf(&b, "\n- %s: %s → 해당하면 `skills(action=\"read\", name=%q)`로 절차를 로드해 그대로 따르라.",
+		fmt.Fprintf(&b, "\n- %s: %s → `skills(action=\"read\", name=%q)`로 절차와 필요한 도구를 함께 로드해 그대로 따르라.",
 			h.skill.Name, skillHintSummary(h.skill.Description), h.skill.Name)
 		names = append(names, h.skill.Name)
 	}
@@ -127,8 +127,8 @@ func presetAllowsSkillsTool(sessionToolPreset string) bool {
 }
 
 // skillHintSummary reduces a skill description to its first clause — the
-// "what it does" — dropping the "Use when/NOT for" tail the compact index
-// already carries. Cut at the EARLIEST clause separator, capped at 90 runes.
+// "what it does" — dropping the "Use when/NOT for" tail. Cut at the EARLIEST
+// clause separator, capped at 90 runes.
 func skillHintSummary(desc string) string {
 	desc = strings.TrimSpace(desc)
 	cut := len(desc)

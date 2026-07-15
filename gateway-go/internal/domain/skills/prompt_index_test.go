@@ -1,13 +1,11 @@
 package skills
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestBuildSkillsIndexRendersWithoutCategoryTagsAndRelatedSkills(t *testing.T) {
+func TestBuildSkillsIndexRendersNamesOnly(t *testing.T) {
 	in := []PromptSkill{{
 		Name:          "release",
 		Description:   "Release a new version",
@@ -20,16 +18,16 @@ func TestBuildSkillsIndexRendersWithoutCategoryTagsAndRelatedSkills(t *testing.T
 
 	for _, want := range []string{
 		"<available_skills>",
-		"- **release** (/path/SKILL.md): Release a new version",
+		"- release",
 		"</available_skills>",
 	} {
 		if !strings.Contains(result.Prompt, want) {
 			t.Errorf("missing %q in index prompt: %s", want, result.Prompt)
 		}
 	}
-	for _, forbid := range []string{"<skill>", "<name>", "<description>", "<location>", "devops", "git", "landpr"} {
+	for _, forbid := range []string{"<skill>", "<name>", "<description>", "<location>", "/path/SKILL.md", "Release a new version", "devops", "git", "landpr"} {
 		if strings.Contains(result.Prompt, forbid) {
-			t.Errorf("%s leaked into index format (line format / P5 strips it): %s", forbid, result.Prompt)
+			t.Errorf("%s leaked into name-only index: %s", forbid, result.Prompt)
 		}
 	}
 	if result.Compact {
@@ -78,65 +76,52 @@ func TestBuildSkillsIndexReturnsByteIdenticalOutputAcrossCalls(t *testing.T) {
 	}
 }
 
-func TestBuildSkillsIndex_FallsBackToCompactWhenIndexExceedsBudget(t *testing.T) {
-	// Long descriptions push the index past a tight budget; the builder
-	// should fall back to formatSkillsCompact (name + location only).
-	long := strings.Repeat("X", 1000)
+func TestBuildSkillsIndexTruncatesNameManifestAtBudget(t *testing.T) {
+	longA := strings.Repeat("a", 200)
+	longB := strings.Repeat("b", 200)
 	in := []PromptSkill{
-		{Name: "alpha", FilePath: "/p/a", Description: long},
-		{Name: "beta", FilePath: "/p/b", Description: long},
+		{Name: longA, FilePath: "/p/a", Description: strings.Repeat("X", 1000)},
+		{Name: longB, FilePath: "/p/b", Description: strings.Repeat("Y", 1000)},
 	}
 	limits := SkillsLimits{
 		MaxSkillsInPrompt:    150,
-		MaxSkillsPromptChars: 600, // tight enough to force compact fallback
+		MaxSkillsPromptChars: 400,
 	}
 	result := BuildSkillsIndex(in, limits)
-	if !result.Compact {
-		t.Errorf("expected compact fallback, got Compact=false; len=%d", len(result.Prompt))
+	if result.Compact || !result.Truncated {
+		t.Errorf("expected canonical truncated manifest, got compact=%v truncated=%v len=%d", result.Compact, result.Truncated, len(result.Prompt))
 	}
-	if strings.Contains(result.Prompt, long[:32]) {
-		t.Errorf("compact fallback should drop descriptions; got: %s", result.Prompt)
+	if result.Count != 1 {
+		t.Errorf("count = %d, want one name within budget", result.Count)
 	}
-	if !strings.Contains(result.Prompt, "- **alpha** (/p/a)") {
-		t.Errorf("compact fallback should keep name+location lines; got: %s", result.Prompt)
-	}
-}
-
-func TestBuildSkillsIndexNormalizesHomeDirectoryPaths(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		t.Skip("no home dir")
-	}
-	in := []PromptSkill{{
-		Name:        "managed",
-		Description: "lives in the catalog",
-		FilePath:    filepath.Join(home, ".deneb", "skills", "managed", "SKILL.md"),
-	}}
-	result := BuildSkillsIndex(in, DefaultSkillsLimits())
-	if !strings.Contains(result.Prompt, "(~/.deneb/skills/managed/SKILL.md)") {
-		t.Errorf("expected ~/-compacted location, got: %s", result.Prompt)
-	}
-	if strings.Contains(result.Prompt, home) {
-		t.Errorf("absolute home prefix leaked into index: %s", result.Prompt)
+	if !strings.Contains(result.Prompt, longA) || strings.Contains(result.Prompt, longB) {
+		t.Errorf("budgeted manifest should keep only the deterministic prefix: %s", result.Prompt)
 	}
 }
 
-func TestBuildSkillsIndexFormatsMultilineDescriptionOntoSingleLine(t *testing.T) {
+func TestBuildSkillsIndexIgnoresDescriptionAndPathChanges(t *testing.T) {
+	first := BuildSkillsIndex([]PromptSkill{{Name: "same", Description: "first", FilePath: "/one/SKILL.md"}}, DefaultSkillsLimits())
+	second := BuildSkillsIndex([]PromptSkill{{Name: "same", Description: "completely different", FilePath: "/two/SKILL.md"}}, DefaultSkillsLimits())
+	if first.Prompt != second.Prompt {
+		t.Fatalf("description/path edits must not churn ambient manifest:\nfirst=%q\nsecond=%q", first.Prompt, second.Prompt)
+	}
+}
+
+func TestBuildSkillsIndexFormatsMultilineNameOntoSingleLine(t *testing.T) {
 	in := []PromptSkill{{
-		Name:        "wrap",
-		Description: "first line\nsecond  line",
+		Name:        "first line\nsecond  line",
+		Description: "ignored",
 		FilePath:    "/p/SKILL.md",
 	}}
 	result := BuildSkillsIndex(in, DefaultSkillsLimits())
-	if !strings.Contains(result.Prompt, "- **wrap** (/p/SKILL.md): first line second line") {
-		t.Errorf("multi-line description should flatten onto the entry line, got: %s", result.Prompt)
+	if !strings.Contains(result.Prompt, "- first line second line") {
+		t.Errorf("multi-line name should flatten onto one entry line, got: %s", result.Prompt)
 	}
 }
 
 func TestBuildSkillsIndexReturnsSmallerOutputThanFullPrompt(t *testing.T) {
-	// P5 invariant: index is strictly smaller than the full format for any
-	// skill that carries category/tags/related_skills. If this regresses,
-	// P5's primary value (semi-static token reduction) is gone.
+	// Ambient discovery must remain strictly smaller than the full searchable
+	// catalog; purpose and paths load just in time through the skills tool.
 	in := []PromptSkill{{
 		Name:          "release",
 		Description:   "Release",

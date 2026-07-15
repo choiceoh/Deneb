@@ -136,7 +136,7 @@ func TestWriteCompactToolListSortsUncategorizedTools(t *testing.T) {
 func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 	params := SystemPromptParams{
 		WorkspaceDir: "/tmp",
-		SkillsPrompt: `<available_skills><skill><name>test-skill</name></skill></available_skills>`,
+		SkillsPrompt: "<available_skills>\n- test-skill\n</available_skills>",
 	}
 
 	prompt := buildSemiStaticPrompt(params)
@@ -148,6 +148,11 @@ func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "skills") {
 		t.Error("missing skills tool hint for discoverable skills")
+	}
+	for _, stale := range []string{"목록의 설명을 스캔", "항목의 괄호 안 경로"} {
+		if strings.Contains(prompt, stale) {
+			t.Errorf("stale eager-catalog instruction %q remains in prompt", stale)
+		}
 	}
 	for _, want := range []string{
 		"### Propus",
