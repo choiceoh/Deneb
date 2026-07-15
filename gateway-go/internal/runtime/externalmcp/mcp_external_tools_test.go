@@ -84,6 +84,22 @@ func TestRegisterMCPServerToolsCreatesNamespacedDeferredDefs(t *testing.T) {
 	}
 }
 
+func TestRegisterMCPServerToolsSkipsRedundantSelfPrefix(t *testing.T) {
+	registry := chat.NewToolRegistry()
+	spec := mcpServerSpec{Name: "codegraph", Label: "코드지도"}
+	tools := []mcpclient.ToolInfo{
+		{Name: "codegraph_explore", Description: "explore an area"}, // already self-prefixed
+		{Name: "codegraph", Description: "bare server-named tool"},  // equals the namespace
+		{Name: "node", Description: "one symbol"},                   // needs the prefix
+	}
+	names := registerMCPServerTools(registry, spec, tools, func(_ context.Context, _ string, _ json.RawMessage) (string, error) {
+		return "ok", nil
+	})
+	if len(names) != 3 || names[0] != "codegraph_explore" || names[1] != "codegraph" || names[2] != "codegraph_node" {
+		t.Fatalf("registered names = %v (want no double codegraph_codegraph_ prefix)", names)
+	}
+}
+
 func TestClampToolNameTruncatesWithoutCollision(t *testing.T) {
 	longA := "plaud_" + strings.Repeat("a", 60) + "_variant_one"
 	longB := "plaud_" + strings.Repeat("a", 60) + "_variant_two"

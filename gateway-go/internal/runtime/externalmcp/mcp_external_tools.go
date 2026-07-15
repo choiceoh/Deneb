@@ -177,7 +177,18 @@ func registerMCPServerTools(
 	}
 	names := make([]string, 0, len(tools))
 	for _, t := range tools {
-		name := clampToolName(spec.Name+"_"+sanitizeMCPToolName(t.Name), t.Name)
+		// Namespace each tool under the server name so tools from different
+		// servers can't collide and fetch_tools can group them by keyword. But
+		// when the remote name ALREADY carries that namespace (many servers
+		// self-prefix — e.g. codegraph advertises codegraph_explore), re-prefixing
+		// only yields codegraph_codegraph_explore: longer, no extra
+		// disambiguation, uglier in the deferred prompt listing. Skip it then.
+		sanitized := sanitizeMCPToolName(t.Name)
+		namespaced := spec.Name + "_" + sanitized
+		if sanitized == spec.Name || strings.HasPrefix(sanitized, spec.Name+"_") {
+			namespaced = sanitized
+		}
+		name := clampToolName(namespaced, t.Name)
 		names = append(names, name)
 		remote := t.Name
 		registry.RegisterTool(toolport.ToolDef{
