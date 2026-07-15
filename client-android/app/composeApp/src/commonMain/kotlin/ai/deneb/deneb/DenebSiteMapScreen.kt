@@ -693,6 +693,12 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
     val measurer = rememberTextMeasurer()
     // Cache the parsed province paths once — PathParser is not cheap and the data is static.
     val provincePaths = remember { KoreaGeo.provinces.map { PathParser().parsePathString(it.d).toPath() } }
+    // Pre-measure the 시도 labels once, not per redraw: pan/zoom re-invokes the draw lambda
+    // constantly, so lay the (static) labels out here and only position + draw in the loop.
+    val labelStyle = remember(labelColor) { TextStyle(color = labelColor, fontSize = 9.sp) }
+    val provinceLabels = remember(measurer, labelStyle) {
+        KoreaGeo.provinces.map { it to measurer.measure(it.key, labelStyle) }
+    }
 
     // 핀치 줌 + 팬 (데스크톱 휠 줌 대응). scale/offset을 graphicsLayer로 적용한다. 탭
     // 좌표는 graphicsLayer의 역변환을 거쳐 detectTapGestures로 전달되므로, 아래 히트
@@ -761,10 +767,9 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
                 drawPath(p, provinceStroke, style = Stroke(width = 1.2f, join = StrokeJoin.Round))
             }
             // 시도 labels — faint, centered on each province so the map is legible on its own
-            // (not just via the list). They scale/pan with the map since they're drawn here.
-            val labelStyle = TextStyle(color = labelColor, fontSize = 9.sp)
-            for (prov in KoreaGeo.provinces) {
-                val layout = measurer.measure(prov.key, labelStyle)
+            // (not just via the list). They scale/pan with the map since they're drawn here;
+            // layouts are pre-measured above so the draw path only positions + paints.
+            for ((prov, layout) in provinceLabels) {
                 drawText(
                     layout,
                     topLeft = Offset(prov.cx * s - layout.size.width / 2f, prov.cy * s - layout.size.height / 2f),
