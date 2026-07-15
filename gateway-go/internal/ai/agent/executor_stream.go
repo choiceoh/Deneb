@@ -141,6 +141,3 @@ func consumeStreamInto(ctx context.Context, events <-chan llm.StreamEvent, hooks
 		}
 	}
 }
-
-// executeOneTool runs a single tool call and returns the tool_result content block.
-// Used by both the legacy (post-stream) and streaming (during-stream) dispatch paths.

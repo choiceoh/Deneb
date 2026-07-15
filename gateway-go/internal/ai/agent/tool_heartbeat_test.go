@@ -57,10 +57,10 @@ func TestToolHeartbeat_FiresPeriodicallyThenStopsAfterReturn(t *testing.T) {
 	}
 	tools := &slowToolExecutor{execTime: 250 * time.Millisecond}
 
-	// executeOneTool runs the single tool call. With execTime=250ms and
+	// executeOneToolTracked runs the single tool call. With execTime=250ms and
 	// interval=50ms, we expect ~4-5 progress fires.
-	block := executeOneTool(context.Background(), tc, tools, hooks,
-		"", 0, slog.Default(), nil, nil)
+	block := executeOneToolTracked(context.Background(), tc, tools, hooks,
+		"", 0, slog.Default(), nil, nil).block
 
 	if block.IsError {
 		t.Fatalf("unexpected tool error: %q", block.Content)
@@ -108,8 +108,8 @@ func TestToolHeartbeat_NoFireWhenToolFinishesBeforeFirstTick(t *testing.T) {
 	}
 	tools := &slowToolExecutor{execTime: 10 * time.Millisecond}
 
-	_ = executeOneTool(context.Background(), tc, tools, hooks,
-		"", 0, slog.Default(), nil, nil)
+	_ = executeOneToolTracked(context.Background(), tc, tools, hooks,
+		"", 0, slog.Default(), nil, nil).block
 
 	// Give any in-flight heartbeat goroutine a chance to fire.
 	time.Sleep(150 * time.Millisecond)
@@ -137,8 +137,8 @@ func TestToolHeartbeat_NilHookIsSafe(t *testing.T) {
 
 	// No OnToolProgress in hooks — heartbeat goroutine should not spawn.
 	hooks := StreamHooks{}
-	block := executeOneTool(context.Background(), tc, tools, hooks,
-		"", 0, slog.Default(), nil, nil)
+	block := executeOneToolTracked(context.Background(), tc, tools, hooks,
+		"", 0, slog.Default(), nil, nil).block
 
 	if block.IsError {
 		t.Fatalf("unexpected tool error: %q", block.Content)
@@ -173,8 +173,8 @@ func TestToolHeartbeat_ConcurrentToolsIndependent(t *testing.T) {
 			Name:  "fake_tool",
 			Input: llm.FlexibleFromRaw([]byte(`{}`)),
 		}
-		_ = executeOneTool(context.Background(), tc, tools, hooks,
-			"", 0, slog.Default(), nil, nil)
+		_ = executeOneToolTracked(context.Background(), tc, tools, hooks,
+			"", 0, slog.Default(), nil, nil).block
 	}
 
 	mu.Lock()

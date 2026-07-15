@@ -21,13 +21,13 @@ func (unknownToolExecutor) Execute(_ context.Context, name string, _ json.RawMes
 
 // A hallucinated tool name is tagged unknownTool in turn.tool and folds into
 // the cross-session per-tool Unknown counter.
-func TestExecuteOneTool_TagsUnknownToolInAgentlog(t *testing.T) {
+func TestExecuteOneToolTracked_TagsUnknownToolInAgentlog(t *testing.T) {
 	w := agentlog.NewWriter(t.TempDir())
 	rl := agentlog.NewRunLogger(w, "client:test", "run1")
 
 	tc := llm.ContentBlock{Type: "tool_use", ID: "t1", Name: "frobnicate", Input: llm.FlexibleFromRaw([]byte(`{}`))}
-	block := executeOneTool(context.Background(), tc, unknownToolExecutor{}, StreamHooks{},
-		"", 0, slog.Default(), rl, nil)
+	block := executeOneToolTracked(context.Background(), tc, unknownToolExecutor{}, StreamHooks{},
+		"", 0, slog.Default(), rl, nil).block
 	if !block.IsError {
 		t.Fatalf("expected error result, got %+v", block)
 	}

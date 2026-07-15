@@ -1,6 +1,6 @@
 // executor_tool.go — single tool-call execution for one agent turn:
-// executeOneTool (timeout, heartbeat, hooks, result block assembly) and the
-// untrusted-output fencing applied to tool results. Split from executor.go
+// executeOneToolTracked (timeout, heartbeat, hooks, result block assembly) and
+// the untrusted-output fencing applied to tool results. Split from executor.go
 // (RunAgent core loop).
 package agent
 
@@ -20,22 +20,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
-
-func executeOneTool(
-	ctx context.Context,
-	tc llm.ContentBlock,
-	tools ToolExecutor,
-	hooks StreamHooks,
-	turnReason string,
-	turn int,
-	logger *slog.Logger,
-	runLog *agentlog.RunLogger,
-	loopDetector *ToolLoopDetector,
-) llm.ContentBlock {
-	return executeOneToolTracked(
-		ctx, tc, tools, hooks, turnReason, turn, logger, runLog, loopDetector,
-	).block
-}
 
 type toolCallExecution struct {
 	block       llm.ContentBlock
