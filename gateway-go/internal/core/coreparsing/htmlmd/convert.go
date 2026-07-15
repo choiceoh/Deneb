@@ -245,8 +245,12 @@ func scanCloseTag(inner string, gt int, tokens *[]token) int {
 // cursor position past the close tag, or end of input if none is found.
 func scanRawContent(input string, searchFrom int, nameLower string, tag tagName, tokens *[]token) int {
 	closeTag := "</" + nameLower + ">"
-	lowerRest := strings.ToLower(input[searchFrom:])
-	closeRel := strings.Index(lowerRest, closeTag)
+	// ASCII-fold search, NOT strings.ToLower: Unicode lowercasing can change byte
+	// length (e.g. 'İ' U+0130 → 3-byte "i̇"), which inflates the match index and
+	// makes it an invalid offset into input — raw <script>/<style>/<noscript>
+	// content carrying such a char then slices out of range. Tag names are ASCII,
+	// so a byte-length-preserving fold is both correct and sufficient.
+	closeRel := indexASCIIFold(input[searchFrom:], closeTag)
 	if closeRel < 0 {
 		// No closing tag found — rest is all suppressed content.
 		if searchFrom < len(input) {
@@ -260,6 +264,33 @@ func scanRawContent(input string, searchFrom int, nameLower string, tag tagName,
 	}
 	*tokens = append(*tokens, token{kind: tokenTagClose, tag: tag})
 	return contentEnd + len(closeTag)
+}
+
+// indexASCIIFold returns the byte index of the first ASCII-case-insensitive
+// match of needle (which must already be lowercase) in hay, or -1. Unlike
+// strings.Index(strings.ToLower(hay), needle) it never allocates a case-folded
+// copy, so the returned index is always a valid offset into hay even when hay
+// holds Unicode whose lowercase form differs in byte length.
+func indexASCIIFold(hay, needle string) int {
+	if len(needle) == 0 {
+		return 0
+	}
+	for i := 0; i+len(needle) <= len(hay); i++ {
+		j := 0
+		for ; j < len(needle); j++ {
+			c := hay[i+j]
+			if c >= 'A' && c <= 'Z' {
+				c += 'a' - 'A'
+			}
+			if c != needle[j] {
+				break
+			}
+		}
+		if j == len(needle) {
+			return i
+		}
+	}
+	return -1
 }
 
 // scanEntity processes an entity starting at pos ('&'). Returns new cursor.
