@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/chrono"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/core"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/domain"
@@ -48,8 +49,12 @@ func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldep
 	domain.RegisterContactsTool(registry, contactsDeps)
 }
 
-func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string) {
-	domain.RegisterWikiTools(registry, wikiDeps, workspaceDir)
+func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string, sessionCacheFlush SessionCacheFlushFn) {
+	domain.RegisterWikiTools(registry, wikiDeps, workspaceDir, sessionCacheFlush)
+}
+
+func RegisterPersonaTools(registry toolport.ToolRegistrar, workspaceDir string) {
+	domain.RegisterPersonaTools(registry, workspaceDir)
 }
 
 func RegisterNotebookTool(registry toolport.ToolRegistrar, deps *tooldeps.NotebookDeps) {
@@ -85,3 +90,4 @@ type ContactsDeps = tooldeps.ContactsDeps
 type WikiDeps = tooldeps.WikiDeps
 type NotebookDeps = tooldeps.NotebookDeps
 type SpilloverStore = tooldeps.SpilloverStore
+type SessionCacheFlushFn = wikitool.SessionCacheFlushFn

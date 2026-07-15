@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/chrono"
@@ -49,6 +51,8 @@ func allSchemaCases() []schemaCase {
 		{name: "skills", build: schema.SkillsToolSchema},
 		{name: "deal_ledger", build: schema.DealLedgerToolSchema},
 		{name: "wiki", build: schema.WikiToolSchema},
+		{name: "wiki_forget", build: schema.WikiForgetToolSchema},
+		{name: "preference", build: schema.PreferenceToolSchema},
 		{name: "notebook", build: schema.NotebookToolSchema},
 		{name: "contacts", build: schema.ContactsToolSchema},
 		{name: "calendar", build: schema.CalendarToolSchema},
@@ -527,7 +531,7 @@ func TestOptionalRegistrationsSkipUnavailableDependencies(t *testing.T) {
 		{name: "knowledge nil", run: func(r *mockRegistrar) { recall.RegisterKnowledgeTool(r, nil) }},
 		{name: "contacts empty", run: func(r *mockRegistrar) { RegisterContactsTool(r, &tooldeps.ContactsDeps{}) }},
 		{name: "calendar empty", run: func(r *mockRegistrar) { RegisterCalendarTool(r, &tooldeps.CalendarDeps{}) }},
-		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir()) }},
+		{name: "wiki empty", run: func(r *mockRegistrar) { RegisterWikiTools(r, &tooldeps.WikiDeps{}, t.TempDir(), nil) }},
 		{name: "notebook nil", run: func(r *mockRegistrar) { RegisterNotebookTool(r, nil) }},
 		{name: "notebook empty", run: func(r *mockRegistrar) { RegisterNotebookTool(r, &tooldeps.NotebookDeps{}) }},
 	}
@@ -636,6 +640,38 @@ func TestToolDefinitionsCanBeInvokedWithCancelledContextWithoutRegistrationPanic
 	for _, def := range reg.tools {
 		if def.Fn == nil {
 			t.Errorf("cancelled-context registration left %q without Fn", def.Name)
+		}
+	}
+}
+
+// TestRegisterWikiAndPersonaToolsExposePrivacySurfaces locks the agent tools that
+// #3679 accidentally vacated during a health fanout cut — preference (SOUL.md)
+// and wiki_forget (hard delete + session cache flush).
+func TestRegisterWikiAndPersonaToolsExposePrivacySurfaces(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	reg := &mockRegistrar{}
+	RegisterWikiTools(reg, &tooldeps.WikiDeps{Store: store}, dir, func(string) {})
+	RegisterPersonaTools(reg, dir)
+
+	got := map[string]toolport.ToolDef{}
+	for _, def := range reg.tools {
+		got[def.Name] = def
+	}
+	for _, name := range []string{"wiki", "wiki_forget", "preference"} {
+		def, ok := got[name]
+		if !ok {
+			t.Fatalf("missing required tool %q; registered=%v", name, reg.toolNames())
+		}
+		if def.Fn == nil {
+			t.Fatalf("%q registered without Fn", name)
+		}
+		if name != "wiki" && !def.Deferred {
+			t.Fatalf("%q should be deferred (destructive/occasional)", name)
 		}
 	}
 }

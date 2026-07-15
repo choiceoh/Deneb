@@ -150,7 +150,7 @@ PY
 fmt_dur() { printf '%d.%01ds' "$(( $1 / 1000 ))" "$(( ($1 % 1000) / 100 ))"; }
 
 GENERATED_CHECK_FILES=(
-  gateway-go/internal/pipeline/chat/toolreg/tool_schemas_gen.go
+  gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go
   gateway-go/internal/pipeline/chat/tool_classification_gen.go
   client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/generated/MiniappWireTypes.kt
 )

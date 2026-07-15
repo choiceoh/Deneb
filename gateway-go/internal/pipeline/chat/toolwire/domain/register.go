@@ -4,6 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
@@ -45,7 +46,7 @@ func RegisterContactsTool(registry toolport.ToolRegistrar, contactsDeps *tooldep
 // RegisterWikiTools registers wiki knowledge base tools for long-term knowledge
 // access (search, read, write, log). Project-specific tools provide structured
 // access to the "프로젝트" wiki category.
-func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string) {
+func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiDeps, workspaceDir string, sessionCacheFlush wikitool.SessionCacheFlushFn) {
 	// Wiki: unified knowledge base tool (search, read, write, log, daily, index, status).
 	if wikiDeps.Store != nil {
 		registry.RegisterTool(toolport.ToolDef{
@@ -68,7 +69,40 @@ func RegisterWikiTools(registry toolport.ToolRegistrar, wikiDeps *tooldeps.WikiD
 			Fn:          wikitool.ToolDealLedger(wikiDeps.Store),
 			Deferred:    true,
 		})
+
+		// wiki_forget: standalone HARD delete of a page (privacy/correctness).
+		// Separate tool (not a wiki action) so it stays out of the autonomous
+		// background presets' name-based allow-lists — a destructive delete must
+		// not be reachable from untrusted-content turns. Deferred: rare + destructive.
+		registry.RegisterTool(toolport.ToolDef{
+			Name: "wiki_forget",
+			Description: "위키 페이지를 영구 삭제(잊기) — 오정보·프라이버시로 사실을 지운다. path=페이지 경로, reason=사유(감사 로그 기록). " +
+				"close(아카이브)·supersedes(소프트 강등)와 달리 실제 제거해 검색·회상에서 사라진다. 파괴적이므로 먼저 wiki search로 정확한 경로를 확인하라. " +
+				"거래 원장 페이지(프로젝트/거래/…)는 재무 감사 기록이라 거부된다.",
+			InputSchema: schema.WikiForgetToolSchema(),
+			Fn:          wikitool.ToolWikiForget(wikiDeps, sessionCacheFlush),
+			Deferred:    true,
+		})
 	}
+}
+
+// RegisterPersonaTools registers the `preference` tool: an append-only path for
+// the agent to persist a durable standing preference / behavior rule into the
+// workspace SOUL.md. Append-only by contract (the agent can add but never
+// delete a rule — only the human operator rewrites SOUL.md), so the agent
+// cannot quietly erase its own standing constraints. Deferred so it stays out
+// of the eager prompt (persisting a preference is a deliberate, occasional act).
+func RegisterPersonaTools(registry toolport.ToolRegistrar, workspaceDir string) {
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "preference",
+		Description: "사용자의 서 있는 선호·행동 규칙을 SOUL.md(페르소나)에 영구 저장한다 (append-only). " +
+			"사용자가 '앞으로는 …해줘/…하지 마'처럼 지속 적용될 행동 방침을 말하면 이걸로 rule 한 줄을 남긴다. " +
+			"추가만 가능하고 삭제·수정은 사용자만 SOUL.md 편집으로 할 수 있다 — 에이전트가 자기 규칙을 지우지 못하게 하는 의도적 비대칭. " +
+			"반영은 다음 세션부터. 일회성 사실은 wiki, 사용자 개인정보는 wiki 사용자 카테고리를 쓰고, 이건 '어떻게 행동할지'에만 쓴다.",
+		InputSchema: schema.PreferenceToolSchema(),
+		Fn:          tools.ToolPersonaPref(workspaceDir),
+		Deferred:    true,
+	})
 }
 
 // RegisterNotebookTool registers the notebook tool — NotebookLM-style scoped

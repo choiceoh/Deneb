@@ -1843,6 +1843,36 @@ func MailArchiveToolSchema() map[string]any {
 	}
 }
 
+func PreferenceToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"rule": map[string]any{
+				"type":        "string",
+				"description": "저장할 서 있는 선호/행동 규칙 한 줄 (예: '보고는 항상 결론부터 3줄 요약으로', '주말엔 알림 최소화'). SOUL.md에 append-only로 추가되고 다음 세션부터 반영된다. 추가만 가능하며 삭제·수정은 사용자만 SOUL.md 편집으로 한다.",
+			},
+		},
+		"required": []string{"rule"},
+	}
+}
+
+func WikiForgetToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{
+				"type":        "string",
+				"description": "잊을(영구 삭제할) 위키 페이지 경로 (예: 인물/홍길동.md 또는 w: ref). 먼저 wiki search로 정확한 경로를 확인하라.",
+			},
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "잊는 사유 한 줄 — 감사 로그에 기록된다 (오정보·프라이버시 등).",
+			},
+		},
+		"required": []string{"path", "reason"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {

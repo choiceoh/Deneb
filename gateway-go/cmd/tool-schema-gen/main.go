@@ -3,9 +3,9 @@
 // Usage (from gateway-go/):
 //
 //	go run cmd/tool-schema-gen/main.go \
-//	    -json internal/pipeline/chat/toolreg/tool_schemas.json \
-//	    -out  internal/pipeline/chat/toolreg/tool_schemas_gen.go \
-//	    -pkg  toolreg
+//	    -json internal/pipeline/chat/toolwire/schema/tool_schemas.json \
+//	    -out  internal/pipeline/chat/toolwire/schema/tool_schemas_gen.go \
+//	    -pkg  schema
 //
 // Or via Makefile: make tool-schemas
 package main
@@ -276,8 +276,9 @@ func sortedKeys(m map[string]any) []string {
 }
 
 func camelCase(name string) string {
+	// PascalCase so generated *ToolSchema helpers are exported from package schema.
 	parts := strings.Split(name, "_")
-	for i := 1; i < len(parts); i++ {
+	for i := range parts {
 		if parts[i] != "" {
 			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
 		}

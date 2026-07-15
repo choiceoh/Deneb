@@ -15,6 +15,10 @@ func TestMutationOutcomeIsFailure(t *testing.T) {
 	}{
 		{"wiki write failure", "wiki", "위키 페이지 쓰기 실패: disk full", true},
 		{"wiki diary failure", "wiki", "일지 쓰기 실패: permission denied", true},
+		{"wiki_forget failure", "wiki_forget", "잊기 실패: wiki: forget: read: not found", true},
+		{"wiki forget marker not on wiki tool", "wiki", "잊기 실패: x", false},
+		{"preference cap failure", "preference", "선호 저장 실패: SOUL.md가 한도(8000B)에 도달", true},
+		{"preference save success not flagged", "preference", "선호를 SOUL.md에 저장했습니다: \"x\"", false},
 		{"wiki read success not flagged", "wiki", "# 문서 제목\n본문...", false},
 		{"cron run failure", "cron", "❌ **job1** 실행 실패 (2s): boom", true},
 		{"cron add success not flagged", "cron", "✅ 크론 작업 **job1** 추가 완료", false},
@@ -110,7 +114,7 @@ func TestMutationFailureError_StripsBanner(t *testing.T) {
 
 func TestMutationVerifyToolsReturnsSortedList(t *testing.T) {
 	got := mutationVerifyTools()
-	want := []string{"cron", "gateway", "notebook", "wiki"}
+	want := []string{"cron", "gateway", "notebook", "preference", "wiki", "wiki_forget"}
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
