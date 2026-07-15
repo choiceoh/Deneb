@@ -279,12 +279,16 @@ func sortedKeys(m map[string]any) []string {
 }
 
 func camelCase(name string) string {
-	// PascalCase so generated *ToolSchema helpers are exported from package schema.
 	parts := strings.Split(name, "_")
 	for i := range parts {
-		if parts[i] != "" {
-			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		if parts[i] == "" {
+			continue
 		}
+		if i == 0 {
+			parts[i] = strings.ToLower(parts[i][:1]) + parts[i][1:]
+			continue
+		}
+		parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
 	}
 	return strings.Join(parts, "")
 }
