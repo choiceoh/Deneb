@@ -159,12 +159,23 @@ func TestNextEpochRotatesProducerEvaluatorGenesisAndIgnoresActionRecords(t *test
 	if epoch != metaEpochProducer {
 		t.Fatalf("fourth cycle = %s, want producer (rotation wraps)", epoch)
 	}
-	// Operator adopt/reject records (Action != "") never consume an epoch.
-	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochGenesis, Artifact: artifact, Action: "adopted"}); err != nil {
+	// An operator adopt/reject feed-card record carries an EMPTY Epoch (matching
+	// workfeed_meta_proposal.go) and must not consume a rotation.
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Artifact: artifact, Action: "adopted"}); err != nil {
 		t.Fatal(err)
 	}
 	if epoch, _ = task.nextEpoch(); epoch != metaEpochProducer {
-		t.Fatalf("action record consumed an epoch: %s", epoch)
+		t.Fatalf("epochless action record consumed an epoch: %s", epoch)
+	}
+	// A successful auto-adoption stamps Action="auto_adopted" on the CYCLE record
+	// (which carries an Epoch) — it MUST still rotate. Otherwise a producer that
+	// keeps auto-adopting freezes rotation on producer and the evaluator/genesis
+	// prompts are never revised (the bug this guards).
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: artifact, Action: "auto_adopted"}); err != nil {
+		t.Fatal(err)
+	}
+	if epoch, _ = task.nextEpoch(); epoch != metaEpochEvaluator {
+		t.Fatalf("auto_adopted cycle did not rotate: got %s, want evaluator", epoch)
 	}
 }
 

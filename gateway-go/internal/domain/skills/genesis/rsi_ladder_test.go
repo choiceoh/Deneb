@@ -157,3 +157,23 @@ func TestLadderCalibrationRowReadyOnlyWhenAllEpochsReachBenchTarget(t *testing.T
 		t.Fatalf("all epochs at target must read READY: %+v", row)
 	}
 }
+
+// An auto_adopted cycle carries Action="auto_adopted" AND an Epoch + bench — it
+// must count toward calibration. Keying the skip off Action (instead of Epoch)
+// dropped exactly the succeeding cycles, stalling the row below target forever.
+func TestLadderCalibrationCountsAutoAdoptedCycles(t *testing.T) {
+	tr := newTestTracker(t)
+	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
+		for i := 0; i < ladderCalibrationBenchTarget; i++ {
+			if err := tr.LogMetaRevision(MetaRevisionRecord{
+				Epoch: epoch, Artifact: "a.md", Action: "auto_adopted",
+				BenchShadow: &producerBenchOutcome{Skills: 1},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if row := tr.ladderCalibrationRow(); row.State != ladderStateReady {
+		t.Fatalf("auto_adopted cycles with benches must count toward calibration: %+v", row)
+	}
+}
