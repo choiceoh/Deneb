@@ -31,7 +31,7 @@ type MorningLetterOpts struct {
 	GroupwareCollector func(context.Context) any // optional test/alternate collector
 }
 
-// ToolMorningLetter returns the morning_letter tool — collects 7 data sections
+// ToolMorningLetter returns the morning_letter tool — collects 8 data sections
 // in parallel and returns structured JSON for the LLM to compose the final letter.
 //
 // The LLM receives raw data and is responsible for formatting, tone, and
@@ -134,7 +134,11 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 	}
 	if len(results) > 7 {
 		if gw, ok := results[7].(groupwarePendingData); ok && gw.OK && gw.Count > 0 {
-			fmt.Fprintf(&sb, "- 미결 전자결재: %d건\n", gw.Count)
+			if gw.StaleCount > 0 {
+				fmt.Fprintf(&sb, "- 미결 전자결재: %d건 (방치 %d건)\n", gw.Count, gw.StaleCount)
+			} else {
+				fmt.Fprintf(&sb, "- 미결 전자결재: %d건\n", gw.Count)
+			}
 		}
 	}
 
@@ -210,15 +214,19 @@ type groupwarePendingData struct {
 	OK         bool                    `json:"ok"`
 	Configured bool                    `json:"configured"`
 	Count      int                     `json:"count,omitempty"`
+	StaleCount int                     `json:"stale_count,omitempty"` // escalation_level > 0
 	Items      []groupwarePendingEntry `json:"items,omitempty"`
 	Error      string                  `json:"error,omitempty"`
 }
 
 type groupwarePendingEntry struct {
-	DocID   string `json:"doc_id"`
-	Title   string `json:"title"`
-	Drafter string `json:"drafter,omitempty"`
-	Date    string `json:"date,omitempty"`
+	DocID           string `json:"doc_id"`
+	Title           string `json:"title"`
+	Drafter         string `json:"drafter,omitempty"`
+	Date            string `json:"date,omitempty"`
+	AgeHours        int    `json:"age_hours,omitempty"`
+	EscalationLevel int    `json:"escalation_level,omitempty"`
+	StaleLabel      string `json:"stale_label,omitempty"`
 }
 
 type deadlineData struct {
@@ -245,11 +253,22 @@ func fetchGroupwarePending(ctx context.Context) any {
 	if err != nil {
 		return groupwarePendingData{Configured: true, Error: err.Error()}
 	}
+	radar := groupware.LoadRadarDocMetaIndex(groupware.DefaultRadarStatePath(), time.Now())
 	items := make([]groupwarePendingEntry, 0, len(docs))
+	stale := 0
 	for _, doc := range docs {
-		items = append(items, groupwarePendingEntry{DocID: doc.DocID, Title: doc.Title, Drafter: doc.Drafter, Date: doc.Date})
+		entry := groupwarePendingEntry{DocID: doc.DocID, Title: doc.Title, Drafter: doc.Drafter, Date: doc.Date}
+		if meta, ok := radar[strings.TrimSpace(doc.DocID)]; ok {
+			entry.AgeHours = meta.AgeHours
+			entry.EscalationLevel = meta.EscalationLevel
+			entry.StaleLabel = meta.StaleLabel
+			if meta.EscalationLevel > 0 {
+				stale++
+			}
+		}
+		items = append(items, entry)
 	}
-	return groupwarePendingData{OK: true, Configured: true, Count: len(items), Items: items}
+	return groupwarePendingData{OK: true, Configured: true, Count: len(items), StaleCount: stale, Items: items}
 }
 
 func fetchWeather(ctx context.Context) any {

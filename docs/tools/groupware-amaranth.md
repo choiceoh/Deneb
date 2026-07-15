@@ -37,7 +37,7 @@ Product split (planned):
 
 | Concern | Surface |
 |---------|---------|
-| Read (list/body/line + attachment titles; selected attachment on demand) | Deferred tool `groupware` + phone enrich |
+| Read (list/body/line + attachment titles; selected attachment on demand; ERP sales/stock/po/receive/ship/price/people) | Eager chat tool `groupware` + phone enrich |
 | Radar (new/changed pending docs; positive done reconciliation) | `groupware-radar` periodic task → synchronous phone approval pipeline → work feed |
 | Write (승인/반려) | Work-feed chips → `miniapp.workfeed.action.run` — **not** the chat tool |
 
@@ -83,7 +83,7 @@ Pending cards are escalated without another LLM turn: at 4 hours the existing
 card becomes high priority and receives one bounded radar note/push; at 24 hours
 it becomes urgent. Each threshold fires once, callback failures retry, and the
 same `docId` card is updated rather than duplicated. Morning and evening letter
-data now include a `groupware_pending` section (count + title/drafter/date), so
+data now include a `groupware_pending` section (count + title/drafter/date + radar `age_hours`/`stale_label` when available), so
 regular briefings reflect the authoritative pending snapshot even without a
 phone notification.
 
@@ -354,7 +354,7 @@ ERP list endpoints and permission notes: [groupware-erp-api-map.md](./groupware-
 | `scripts/dev/groupware-reader/lib/client.mjs` | HMAC `apiPost` |
 | `scripts/dev/groupware-reader/lib/actions.mjs` | list/read adapters |
 | `gateway-go/internal/platform/groupware/` | Go runner (`Run`, `ReadApproval`) |
-| `gateway-go/.../runtimeops/groupware.go` | Deferred tool `groupware` |
+| `gateway-go/.../runtimeops/groupware.go` | Eager chat tool `groupware` |
 
 ## Roadmap snapshot
 

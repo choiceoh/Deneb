@@ -35,3 +35,17 @@ func TestGroupwarePendingDataJSONContract(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestLetterDiarySummariesIncludeStaleApprovals(t *testing.T) {
+	gw := groupwarePendingData{OK: true, Configured: true, Count: 3, StaleCount: 1}
+	morning := make([]any, 8)
+	morning[7] = gw
+	if got := formatMorningDiarySummary("오늘", morning); !strings.Contains(got, "방치 1건") {
+		t.Fatalf("morning %q", got)
+	}
+	evening := make([]any, 4)
+	evening[3] = gw
+	if got := formatEveningDiarySummary("오늘", evening); !strings.Contains(got, "방치 1건") {
+		t.Fatalf("evening %q", got)
+	}
+}

@@ -1,8 +1,8 @@
 ---
 name: morning-letter
-version: "1.1.0"
+version: "1.2.0"
 category: productivity
-description: "매일 아침 모닝레터 생성 및 발송. 날씨, 환율, 구리시세, 일정, 메일 요약을 수집해 아침 브리핑을 작성한다. Use when: 모닝레터, morning letter, 아침 브리핑, 오늘의 브리핑, daily briefing. NOT for: 일반 메일 분석, 회신 작성, 장문 회의록 정리."
+description: "매일 아침 모닝레터 생성 및 발송. 날씨, 환율, 구리시세, 일정, 메일, 미결 전자결재 요약을 수집해 아침 브리핑을 작성한다. Use when: 모닝레터, morning letter, 아침 브리핑, 오늘의 브리핑, daily briefing. NOT for: 일반 메일 분석, 회신 작성, 장문 회의록 정리."
 metadata:
   {
     "deneb":
@@ -31,8 +31,8 @@ metadata:
 
 ### 1단계: 데이터 수집
 
-`morning_letter` 도구를 호출한다. 파라미터 없이 호출하면 7개 섹션(날씨·환율·
-구리시세·일정·메일·마감·미해결질문)을 병렬 수집하여 JSON 데이터를 반환한다. **deferred
+`morning_letter` 도구를 호출한다. 파라미터 없이 호출하면 8개 섹션(날씨·환율·
+구리시세·일정·메일·마감·미해결질문·미결 전자결재)을 병렬 수집하여 JSON 데이터를 반환한다. **deferred
 도구**라 스키마가 안 보이면 `fetch_tools`로 `morning_letter`를 먼저 로드한다.
 
 ```json
@@ -48,6 +48,7 @@ metadata:
 - `sections.email`: 전일 수신 메일 목록 (발신자, 제목, 스니펫)
 - `sections.deadlines`: 위키에서 스캔한 임박 마감 목록 (`items`: title, category, due, days_left)
 - `sections.open_questions`: 7일 이상 열려 있는 프로젝트 미해결 질문 (`items`: project, question, asked, age_days) — 내부 소스로 답을 못 찾은 것들이니 "사람에게 확인할 것"으로 승격하는 섹션
+- `sections.groupware_pending`: 미결 전자결재 (`count`, `stale_count`, `items`: doc_id, title, drafter, date, age_hours, escalation_level, stale_label). `stale_label`이 있으면 방치(4h/24h) 건 — 카드에서 강조. 미설정(`configured:false`)이거나 0건이면 카드 생략
 
 각 섹션에 `ok: false`이면 해당 섹션 조회에 실패한 것이다.
 
@@ -94,18 +95,23 @@ metadata:
     <row><text style="body">부가세 신고</text><badge color="warning">D-2</badge></row>
     <row><text style="body">진코 선입금 상계</text><badge color="error">기한 초과</badge></row>
   </card>
+  <card>
+    <row><icon name="assignment" size="16"/><text style="caption">미결 전자결재 · 2건</text></row>
+    <ul><li>지출품의 — 김승리 <badge color="warning">4시간째 방치</badge></li><li>휴가신청 — 이대리</li></ul>
+  </card>
 </column>
 ```
 
 #### 슬롯 채우기 규칙
 
 - **마스트헤드**: 카드들 앞에 `text(headline)`로 날짜("M월 D일 요일" 꼴), 그 아래 `text(caption)`으로 `아침 레터 · 데네브`, 이어서 `<hr/>` 한 줄. 레터의 1면 제호다.
-- **카드 헤더**: 각 카드 첫 `row`는 `icon` + `text(caption)`. 아이콘 이름 **고정** — 날씨 `sunny`(흐림 `cloud`, 비 `water_drop`), 환율·구리 `payments`, 일정 `calendar`, 메일 `mail`, 마감 `alarm`.
+- **카드 헤더**: 각 카드 첫 `row`는 `icon` + `text(caption)`. 아이콘 이름 **고정** — 날씨 `sunny`(흐림 `cloud`, 비 `water_drop`), 환율·구리 `payments`, 일정 `calendar`, 메일 `mail`, 마감 `alarm`, 미결결재 `assignment`.
 - **날씨**: 기온 `text(headline)` + 체감 `text(caption)`를 한 `row`에. 그 아래 `최고 N° · 최저 N° · 강수 N%`를 `text(caption)` 한 줄. 마지막에 맥락 한마디 `text(body)`(강수 30%↑면 우산, 한파면 방한). **`stat`을 가로로 3개 늘어놓지 마라 — 폰 폭에서 깨진다.**
 - **환율·구리**: USD/KRW와 LME 구리를 `stat` 2개로 한 `row`(2칸). **EUR/KRW는 쓰지 않는다.** **시세 숫자를 직접 쓰지 마라** — 도구 JSON이 준 토큰(exchange `usd_krw_token`, copper `token`)을 스켈레톤처럼 `value`에 그대로 배치하면 발송 시 서버가 실측 숫자로 자동 치환한다. 토큰은 숫자만 치환되므로 구리 `value`는 `"${{market:copper}} /t"` 꼴로 단위를 감싼다(`label`은 `"LME 구리"`). `date` 필드가 오늘이 아니면 구리 `value`에 `"(X월 X일)"` 덧붙임. 섹션이 `ok: false`거나 토큰 필드가 없으면 그 stat 대신 `<text>조회 실패</text>`.
 - **일정**: `<ul>`, 각 항목 `<li>HH:MM — 제목</li>`, 시간순 최대 8건. 없으면 `<ul>` 대신 `<text>일정 없음</text>`.
 - **메일**: `<ul>`, 각 항목 `<li>발신자 — 제목 요약</li>`, 중요도순 상위 5건(길면 3건). 발신자는 이름만(`"이름 <메일>"` → `"이름"`). 없으면 `<text>수신 메일 없음</text>`.
 - **임박 마감**: 마감마다 `<row>`에 `<text style="body">` 제목 + `<badge>D-N</badge>`. `days_left`로 D-N(0=`"D-day"`, 음수=`"기한 초과"`), 오름차순. 긴급도를 배지 색으로: D-3 이하 `<badge color="warning">`, 기한 초과·D-day `<badge color="error">`, 그 외 색 없음. 결제기한·납기 누락 금지. **항목이 없으면 이 카드 전체를 생략한다.**
+- **미결 전자결재** (`groupware_pending`): `count>0`일 때만 카드. 아이콘 `assignment`. 각 항목 `<li>제목 — 기안자</li>`; `stale_label` 있으면 뒤에 `<badge color="warning">방치</badge>` 또는 배지 텍스트로 stale_label. `stale_count>0`이면 머리말/카드 캡션에 방치 건수 언급. **0건·미설정이면 카드 생략.**
 - **실패 섹션**(`ok:false`): 그 카드 본문에 `<text>조회 실패</text>`.
 - **전체 실패**: 모든 섹션 실패여도 머리말 한 줄 + 최소 카드(날짜)는 출력.
 

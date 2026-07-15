@@ -109,12 +109,12 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 	// Eager: ops asks about 재고/출고/매출/사원 often; fetch_tools round-trip was pure latency.
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "groupware",
-		Description: "아마란스(더존) 그룹웨어 읽기 전용 — 전자결재·게시판·매출마감·재고·발주·입고·출고·품목단가·사원. " +
-			"action=status|list|read|attachment|summary. " +
-			"area=approval|board|sales|stock|po|receive|ship|price|people. " +
+		Description: "아마란스 읽기 — 트리거: '모듈 재고'→stock, 'YTD/당월 매출'→sales summary, '인버터 단가'→price, " +
+			"'발주/입고/출고'→po|receive|ship, '김○○ 휴대폰/부서'→people, 미결·공지→approval|board. " +
+			"action=status|list|read|attachment|summary · area=approval|board|sales|stock|po|receive|ship|price|people. " +
 			"결재함 folder=pending|done|cc|total|all · ERP 기간 folder=ytd|month|today|year|last_year. " +
-			"query=키워드 또는 YYYYMMDD:YYYYMMDD · price는 모듈→M-/인버터→I- · people는 이름 필수(부서·직급/호칭·휴대폰·생년월일; 조회 시 위키 인물 보강·생성, 조직도 읽기 매칭). " +
-			"승인·반려·상신·전표 작성은 하지 않는다. DENEB_GROUPWARE_USER/PASSWORD 미설정 시 연동 꺼짐.",
+			"query=키워드 또는 YYYYMMDD:YYYYMMDD · price는 모듈→M-/인버터→I- · people는 이름 필수(위키 인물 보강·생성, org.json 읽기 매칭). " +
+			"승인·반려·상신·전표 작성 금지. DENEB_GROUPWARE_USER/PASSWORD 미설정 시 꺼짐.",
 		InputSchema: schema.GroupwareToolSchema(),
 		Fn:          set.Groupware,
 	})
@@ -307,8 +307,9 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	// 직급/직책. Deferred; loads {stateDir}/org.json on demand — empty file just
 	// reports unset, so no dep/nil-guard needed.
 	registry.RegisterTool(toolport.ToolDef{
-		Name:        "org",
-		Description: "조직도 조회(읽기 전용) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책 확인에 사용. query로 사람/팀/회사 이름 검색, 생략 시 전체 트리. 연락처(전화/메일)는 contacts 도구.",
+		Name: "org",
+		Description: "큐레이션 조직도(읽기 전용, org.json) — '1팀 팀장 누구'·'회사 조직 어떻게 되지'·직급/직책. " +
+			"query로 사람/팀/회사 검색, 생략 시 전체 트리. 라이브 휴대폰·부서·생년월일은 groupware(area=people); 번호↔이름은 contacts.",
 		InputSchema: schema.OrgToolSchema(),
 		Fn:          surface.ToolOrg(),
 		Deferred:    true,

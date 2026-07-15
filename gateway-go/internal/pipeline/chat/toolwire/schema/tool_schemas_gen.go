@@ -1691,12 +1691,12 @@ func GroupwareToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Read-only Amaranth: status|list|read|attachment|summary. sales summary=매출마감. stock/po/receive/ship/price/people accept list (summary=list). Never mutate.",
+				"description": "Read-only Amaranth. Triggers: 재고→stock, 매출→sales summary, 단가→price, 사원연락처→people, 결재/공지→approval|board. status|list|read|attachment|summary. Never mutate.",
 				"enum":        []string{"status", "list", "read", "attachment", "summary"},
 			},
 			"area": map[string]any{
 				"type":        "string",
-				"description": "Surface: approval|board|sales|stock|po|receive|ship|price|people. Korean: 전자결재·게시판·매출·재고·발주·입고·출고·단가·사원.",
+				"description": "Surface: approval|board|sales|stock|po|receive|ship|price|people. Prefer by trigger (재고=stock, 매출=sales, 사원=people, 결재=approval).",
 				"enum":        []string{"approval", "board", "sales", "stock", "po", "receive", "ship", "price", "people"},
 			},
 			"attachment": map[string]any{
