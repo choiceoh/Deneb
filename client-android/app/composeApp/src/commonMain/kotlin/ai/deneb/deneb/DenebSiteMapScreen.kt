@@ -317,14 +317,14 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         // Summary line
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("현장 ${shown.size}", style = DenebType.rowTitleStrong())
+            Text("현장 ${shown.size}", style = DenebType.rowTitleStrong)
             if (totalMw > 0) {
                 Spacer(Modifier.width(8.dp))
-                Text("총 ${capacityText(totalMw)}", style = DenebType.meta(), color = denebHint())
+                Text("총 ${capacityText(totalMw)}", style = DenebType.meta, color = denebHint())
             }
             if (unplaced.isNotEmpty()) {
                 Spacer(Modifier.width(8.dp))
-                Text("미배치 ${unplaced.size}", style = DenebType.meta(), color = denebHint())
+                Text("미배치 ${unplaced.size}", style = DenebType.meta, color = denebHint())
             }
         }
 
@@ -340,7 +340,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(9.dp).background(sourceColor(s), RoundedCornerShape(50)))
                         Spacer(Modifier.width(6.dp))
-                        Text(s, style = DenebType.meta())
+                        Text(s, style = DenebType.meta)
                     }
                 }
             }
@@ -349,7 +349,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                     selected = t in typeFilter,
                     onClick = { typeFilter = typeFilter.toggle(t) },
                 ) {
-                    Text(t, style = DenebType.meta())
+                    Text(t, style = DenebType.meta)
                 }
             }
         }
@@ -381,9 +381,9 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             unplaced.forEach { (site, project) ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(site, style = DenebType.rowSubtitle())
+                    Text(site, style = DenebType.rowSubtitle)
                     Spacer(Modifier.width(6.dp))
-                    Text(project, style = DenebType.meta(), color = denebHint())
+                    Text(project, style = DenebType.meta, color = denebHint())
                 }
             }
         }
@@ -394,7 +394,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         val sheetState = rememberModalBottomSheetState()
         ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
-                Text(pin.project, style = DenebType.subject())
+                Text(pin.project, style = DenebType.subject)
                 Spacer(Modifier.height(12.dp))
                 if (pin.client.isNotEmpty()) DetailRow("거래처", pin.client)
                 DetailRow("현장", pin.site)
@@ -409,7 +409,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                         selected = null
                         onOpenProject(path)
                     }) {
-                        Text("위키 열기", style = DenebType.button())
+                        Text("위키 열기", style = DenebType.button)
                     }
                 }
             }
@@ -422,9 +422,9 @@ private fun Set<String>.toggle(v: String): Set<String> = if (v in this) this - v
 @Composable
 private fun DetailRow(label: String, value: String) {
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Text(label, style = DenebType.meta(), color = denebHint())
+        Text(label, style = DenebType.meta, color = denebHint())
         Spacer(Modifier.height(2.dp))
-        Text(value, style = DenebType.body())
+        Text(value, style = DenebType.body)
     }
 }
 
@@ -443,13 +443,13 @@ private fun SiteRow(pin: SitePin, onClick: () -> Unit) {
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Text(pin.site, style = DenebType.rowTitle(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(pin.site, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 buildString {
                     append(pin.project)
                     if (pin.client.isNotEmpty()) append(" · ${pin.client}")
                 },
-                style = DenebType.meta(),
+                style = DenebType.meta,
                 color = denebHint(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -458,7 +458,7 @@ private fun SiteRow(pin: SitePin, onClick: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         Text(
             listOf(pin.source, capacityText(pin.capacity)).filter { it.isNotEmpty() }.joinToString(" · "),
-            style = DenebType.meta(),
+            style = DenebType.meta,
             color = denebHint(),
         )
     }
@@ -468,25 +468,25 @@ private fun SiteRow(pin: SitePin, onClick: () -> Unit) {
 @Composable
 private fun SiteMapLegend(sourcesPresent: List<String>, typesPresent: List<String>) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("색=에너지원", style = DenebType.meta(), color = denebHint())
+        Text("색=에너지원", style = DenebType.meta, color = denebHint())
         sourcesPresent.forEach { s ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(9.dp).background(sourceColor(s), RoundedCornerShape(50)))
                 Spacer(Modifier.width(4.dp))
-                Text(s, style = DenebType.meta())
+                Text(s, style = DenebType.meta)
             }
         }
-        Text("모양=특성", style = DenebType.meta(), color = denebHint())
+        Text("모양=특성", style = DenebType.meta, color = denebHint())
         typesPresent.forEach { t ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Canvas(Modifier.size(11.dp)) {
                     drawMark(shapeOfType(t), Offset(size.width / 2, size.height / 2), 4.5.dp.toPx(), sourceEtc)
                 }
                 Spacer(Modifier.width(4.dp))
-                Text(t, style = DenebType.meta())
+                Text(t, style = DenebType.meta)
             }
         }
-        Text("크기=용량", style = DenebType.meta(), color = denebHint())
+        Text("크기=용량", style = DenebType.meta, color = denebHint())
     }
 }
 
@@ -556,6 +556,7 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
 private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: Color) {
     when (shape) {
         "square" -> drawRect(color, topLeft = Offset(center.x - r, center.y - r), size = Size(r * 2, r * 2))
+
         "triangle" -> {
             val p = Path().apply {
                 moveTo(center.x, center.y - r * 1.15f)
@@ -565,6 +566,7 @@ private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: C
             }
             drawPath(p, color)
         }
+
         "diamond" -> {
             val p = Path().apply {
                 moveTo(center.x, center.y - r * 1.2f)
@@ -575,6 +577,7 @@ private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: C
             }
             drawPath(p, color)
         }
+
         else -> drawCircle(color, radius = r, center = center)
     }
 }

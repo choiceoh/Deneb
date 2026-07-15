@@ -228,9 +228,8 @@ private fun encodeStringList(values: List<String>): String = webViewJson.encodeT
 private fun jsStringLiteral(value: String): String = webViewJson.encodeToString(String.serializer(), value)
 
 /** Empty successful response used to drop ad/tracker subresource requests. */
-private fun emptyBlockedResponse(): WebResourceResponse =
-    WebResourceResponse(
-        "text/plain",
-        "utf-8",
-        ByteArrayInputStream(ByteArray(0)),
-    )
+private fun emptyBlockedResponse(): WebResourceResponse = WebResourceResponse(
+    "text/plain",
+    "utf-8",
+    ByteArrayInputStream(ByteArray(0)),
+)
