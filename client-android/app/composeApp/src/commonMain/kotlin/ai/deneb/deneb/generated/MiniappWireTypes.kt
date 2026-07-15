@@ -710,6 +710,8 @@ data class SelfCorrectionCandidate(
     val autoDispatch: Boolean = false,
     val reviewer: String = "",
     val reviewNote: String = "",
+    val impactContract: SelfCorrectionImpactContract? = null,
+    val impactResult: SelfCorrectionImpactResult? = null,
     val evidenceKinds: List<String> = emptyList(),
     val reviewActions: List<String> = emptyList(),
     val dispatchPhase: String = "",
@@ -722,6 +724,29 @@ data class SelfCorrectionCandidate(
     val outcomeNote: String = "",
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class SelfCorrectionImpactContract(
+    val metric: String = "",
+    val direction: String = "",
+    val baseline: Double = 0.0,
+    val target: Double = 0.0,
+    val minSamples: Int = 0,
+    val observationWindowMs: Long = 0L,
+    val guardrails: List<String> = emptyList(),
+)
+
+@Immutable
+@Serializable
+data class SelfCorrectionImpactResult(
+    val status: String = "",
+    val observed: Double = 0.0,
+    val samples: Int = 0,
+    val guardrailViolations: List<String> = emptyList(),
+    val note: String = "",
+    val checkedAt: Long = 0L,
 )
 
 @Immutable

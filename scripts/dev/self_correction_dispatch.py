@@ -99,6 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
     result.add_argument("--pr-url", default="")
     result.add_argument("--commit-sha", default="")
     result.add_argument("--note", default="")
+
+    impact = sub.add_parser("impact", help="record post-watch usefulness observations")
+    impact.add_argument("--id", required=True)
+    impact.add_argument("--attempt-id", required=True)
+    impact.add_argument("--observed", type=float, required=True)
+    impact.add_argument("--samples", type=int, required=True)
+    impact.add_argument("--guardrail-violation", action="append", default=[])
+    impact.add_argument("--note", default="")
     return parser
 
 
@@ -150,6 +158,26 @@ def main(argv: list[str] | None = None) -> int:
             if not phase:
                 raise RPCError("dispatch result returned no phase")
             print(phase)
+            return 0
+
+        if args.command == "impact":
+            payload = call_rpc(
+                args.url,
+                token,
+                "miniapp.self_improvement_coding.impact",
+                {
+                    "id": args.id,
+                    "attemptId": args.attempt_id,
+                    "observed": args.observed,
+                    "samples": args.samples,
+                    "guardrailViolations": args.guardrail_violation,
+                    "note": args.note,
+                },
+            )
+            status = str(payload.get("impactStatus") or "")
+            if not status:
+                raise RPCError("impact result returned no status")
+            print(status)
             return 0
 
         if args.command == "next":
