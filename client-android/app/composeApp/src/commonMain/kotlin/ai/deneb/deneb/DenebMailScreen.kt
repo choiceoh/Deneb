@@ -591,6 +591,7 @@ internal fun mailRowAnalysisStatusLabel(state: MailWorkState): String? = when (s
     "analyzing" -> "분석중"
     "queued" -> "대기"
     "stale" -> "재분석"
+    "review" -> "검토"
     "done" -> "분석"
     else -> null
 }
@@ -608,7 +609,7 @@ private fun mailRowMetaColor(message: MailMessage): Color = when {
 @Composable
 private fun mailRowAnalysisStatusColor(state: MailWorkState): Color = when (state.analysisStatus) {
     "failed" -> MaterialTheme.colorScheme.error
-    "analyzing", "queued", "stale" -> MaterialTheme.colorScheme.tertiary
+    "analyzing", "queued", "stale", "review" -> MaterialTheme.colorScheme.tertiary
     "done" -> MaterialTheme.colorScheme.primary
     else -> denebHint()
 }

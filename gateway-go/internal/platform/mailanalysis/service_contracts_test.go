@@ -505,6 +505,93 @@ func TestIngestMessageDeliveryPipelineContract(t *testing.T) {
 	}
 }
 
+func TestIngestMessageSenderReviewStopsBeforeBodyArchiveAndLLM(t *testing.T) {
+	var decided, reviewed *gmail.MessageDetail
+	var archived mailarchive.ContextMessage
+	svc := NewService(Config{
+		SenderTrustFn: func(msg *gmail.MessageDetail) SenderTrustDecision {
+			decided = msg
+			return SenderTrustDecision{Disposition: SenderReview, Reason: "  unknown\n sender  "}
+		},
+		OnSenderReview: func(msg *gmail.MessageDetail, decision SenderTrustDecision) error {
+			reviewed = msg
+			if decision.Reason != "unknown sender" {
+				t.Fatalf("review reason = %q", decision.Reason)
+			}
+			return nil
+		},
+		MailStoreSink: func(msg mailarchive.ContextMessage) (bool, error) {
+			archived = msg
+			return true, nil
+		},
+	}, quietMailLogger())
+	notifier := &recordingNotifier{}
+	svc.SetNotifier(notifier)
+
+	msg := &gmail.MessageDetail{
+		ID:          "review-1",
+		From:        "Unknown <unknown@example.test>",
+		Subject:     "do not ingest",
+		Body:        "private body",
+		Attachments: []gmail.AttachmentInfo{{Filename: "secret.pdf"}},
+		LargeAttachments: []gmail.LargeAttachmentRef{{
+			URL: "https://files.example.test/secret",
+		}},
+	}
+	res, err := svc.IngestMessage(context.Background(), msg, nil)
+	if err != nil || !reflect.DeepEqual(res, AnalysisResult{}) {
+		t.Fatalf("review ingest = %+v/%v", res, err)
+	}
+	for name, got := range map[string]*gmail.MessageDetail{"decision": decided, "review": reviewed} {
+		if got == nil || got.ID != msg.ID || got.From != msg.From {
+			t.Fatalf("%s metadata = %+v", name, got)
+		}
+		if got.Body != "" || len(got.Attachments) != 0 || len(got.LargeAttachments) != 0 {
+			t.Fatalf("%s crossed metadata-only boundary: %+v", name, got)
+		}
+	}
+	if archived.ID == "" || archived.Body != "" || len(archived.Attachments) != 0 || len(notifier.snapshot()) != 0 {
+		t.Fatalf("review archive was not metadata-only: archive=%+v notify=%#v", archived, notifier.snapshot())
+	}
+}
+
+func TestIngestMessageReviewRequiresDurableSink(t *testing.T) {
+	svc := NewService(Config{SenderTrustFn: func(*gmail.MessageDetail) SenderTrustDecision {
+		return SenderTrustDecision{Disposition: SenderReview}
+	}}, quietMailLogger())
+	_, err := svc.IngestMessage(context.Background(), &gmail.MessageDetail{ID: "review"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "review sink") {
+		t.Fatalf("missing review sink error = %v", err)
+	}
+}
+
+func TestPartitionPollMessagesPersistsReviewsWithoutFetchingBodies(t *testing.T) {
+	var reviewed []string
+	svc := NewService(Config{
+		SenderTrustFn: func(msg *gmail.MessageDetail) SenderTrustDecision {
+			if strings.Contains(msg.From, "unknown") {
+				return SenderTrustDecision{Disposition: SenderReview, Reason: "unknown"}
+			}
+			return SenderTrustDecision{Disposition: SenderTrusted}
+		},
+		OnSenderReview: func(msg *gmail.MessageDetail, _ SenderTrustDecision) error {
+			reviewed = append(reviewed, msg.ID)
+			return nil
+		},
+	}, quietMailLogger())
+	state := &PollState{}
+	trusted, count := svc.partitionPollMessages([]gmail.MessageSummary{
+		{ID: "known", From: "known@example.test", Subject: "known"},
+		{ID: "unknown", From: "unknown@example.test", Subject: "unknown", Snippet: "must stay out"},
+	}, state)
+	if count != 1 || len(trusted) != 1 || trusted[0].ID != "known" {
+		t.Fatalf("partition = trusted=%+v count=%d", trusted, count)
+	}
+	if !reflect.DeepEqual(reviewed, []string{"unknown"}) || !state.hasSeen("unknown") || state.hasSeen("known") {
+		t.Fatalf("reviewed=%v seen=%v", reviewed, state.SeenIDs)
+	}
+}
+
 func TestIngestMessageAnalysisFailureIsObservable(t *testing.T) {
 	q := newQueuedOpenAIServer(t, "upstream unavailable")
 	q.statuses = []int{503}

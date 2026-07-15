@@ -174,7 +174,7 @@ func applyMailWorkRow(row *mailRowOut, st mailwork.MessageState) {
 	row.FeedStatus = st.FeedStatus
 	row.CalendarProposalCount = st.CalendarProposalCount
 	row.TodoCount = st.TodoCount
-	row.WorkStateHint = st.LastError
+	row.WorkStateHint = st.Hint()
 }
 
 func applyMailWorkMessage(out *mailMessageOut, st mailwork.MessageState) {
@@ -186,7 +186,7 @@ func applyMailWorkMessage(out *mailMessageOut, st mailwork.MessageState) {
 	out.FeedStatus = st.FeedStatus
 	out.CalendarProposalCount = st.CalendarProposalCount
 	out.TodoCount = st.TodoCount
-	out.WorkStateHint = st.LastError
+	out.WorkStateHint = st.Hint()
 }
 
 func mailRelatedProjects(deps GmailDeps, msgID string) []ProjectRef {

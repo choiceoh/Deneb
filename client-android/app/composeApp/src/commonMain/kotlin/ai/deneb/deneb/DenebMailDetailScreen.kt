@@ -560,16 +560,24 @@ private fun MailWorkflowStatus(state: MailWorkState) {
     Text(
         parts.joinToString(" · "),
         style = DenebType.meta,
-        color = if (state.analysisStatus == "failed") MaterialTheme.colorScheme.error else denebHint(),
+        color = when (state.analysisStatus) {
+            "failed" -> MaterialTheme.colorScheme.error
+            "review" -> MaterialTheme.colorScheme.tertiary
+            else -> denebHint()
+        },
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
     )
-    if (state.analysisStatus == "failed" && state.hint.isNotBlank()) {
+    if ((state.analysisStatus == "failed" || state.analysisStatus == "review") && state.hint.isNotBlank()) {
         Spacer(Modifier.height(2.dp))
         Text(
             state.hint,
             style = DenebType.meta,
-            color = MaterialTheme.colorScheme.error,
+            color = if (state.analysisStatus == "failed") {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.tertiary
+            },
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
@@ -585,6 +593,8 @@ private fun mailWorkflowStatusParts(state: MailWorkState): List<String> = buildL
         "queued" -> add("분석 대기")
 
         "stale" -> add("재분석 필요")
+
+        "review" -> add("발신자 검토 필요")
 
         "done" -> add(
             when (state.analysisQuality) {
