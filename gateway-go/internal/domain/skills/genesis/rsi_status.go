@@ -311,7 +311,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 }
 
 func (t *Tracker) rsiAssessL4() rsiLayer {
-	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
+	cands, err := t.allSelfCorrectionCandidates()
 	if err != nil {
 		base := newRSILayer(rsilifecycle.LayerL4, nil)
 		base.State, base.Diagnosis = rsiStateIdle, "후보 저장소를 읽을 수 없습니다"
@@ -344,6 +344,7 @@ type l4Tally struct {
 	impactVerified  int
 	impactNoEffect  int
 	impactRegressed int
+	strategyBlocked int
 	oldestPendingAt int64
 }
 
@@ -354,8 +355,24 @@ func (l *l4Tally) markPending(createdAt int64) {
 	}
 }
 
+func (l *l4Tally) markDispatchCandidate(
+	record SelfCorrectionCandidateRecord,
+	impactPolicies map[string]*selfCorrectionImpactPolicy,
+) bool {
+	if !SelfCorrectionDispatchEligible(record) {
+		return false
+	}
+	if selfCorrectionImpactPolicyAllows(record, impactPolicies) {
+		l.markPending(record.CreatedAt)
+	} else {
+		l.strategyBlocked++
+	}
+	return true
+}
+
 func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tally {
 	tally := l4Tally{byScope: map[string]int{}}
+	impactPolicies := selfCorrectionImpactPolicies(mergeSelfCorrectionRecords(cands))
 	for _, c := range cands {
 		scope := strings.TrimSpace(c.Scope)
 		if scope == "" {
@@ -398,17 +415,14 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 				continue
 			}
 			tally.failed++
-			if (phase == rsilifecycle.DeliveryRolledBack || !t.DispatchMarkerBlocks(c.ID)) &&
-				SelfCorrectionDispatchEligible(c) {
-				tally.markPending(c.CreatedAt)
+			if phase == rsilifecycle.DeliveryRolledBack || !t.DispatchMarkerBlocks(c.ID) {
+				tally.markDispatchCandidate(c, impactPolicies)
 			}
 		case rsilifecycle.DeliveryQueued:
 			if !queued {
 				continue
 			}
-			if SelfCorrectionDispatchEligible(c) {
-				tally.markPending(c.CreatedAt)
-			} else {
+			if !tally.markDispatchCandidate(c, impactPolicies) {
 				// Code candidate from a source not yet in the dispatch
 				// allowlist (runtime-error, …): real L4 supply staged for
 				// review, not a wiring gap.
@@ -427,6 +441,7 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "진행 중", Value: strconv.Itoa(tally.inFlight)},
 		{Label: "감시 통과", Value: strconv.Itoa(tally.applied)},
 		{Label: "효과 판정", Value: rsiL4ImpactValue(tally)},
+		{Label: "전략 변경 필요", Value: strconv.Itoa(tally.strategyBlocked)},
 		{Label: "안전 종료", Value: strconv.Itoa(tally.declined)},
 		{Label: "실패/롤백", Value: strconv.Itoa(tally.failed)},
 		{Label: "검토 대기(비배차)", Value: strconv.Itoa(tally.staged)},
@@ -464,6 +479,8 @@ func rsiL4Verdict(tally l4Tally, total int, runtime codingDispatchRuntime) (stri
 		return rsiStateStarved, fmt.Sprintf("배차 대기 %d건 · 디스패처 %d회 연속 실패 (%s)", tally.dispatchable, runtime.ConsecutiveFailures, rsiDispatchTickValue(runtime))
 	case tally.dispatchable > 0:
 		return rsiStateIdle, fmt.Sprintf("배차 대기 %d건 · 아직 진행 중인 authoritative dispatch 없음 (%s)", tally.dispatchable, rsiDispatchTickValue(runtime))
+	case tally.strategyBlocked > 0:
+		return rsiStateStarved, fmt.Sprintf("효과없음·악화가 반복된 코드 후보 %d건 — 이전과 다른 수정 전략을 명시해야 재배차됩니다", tally.strategyBlocked)
 	case total == 0:
 		return rsiStateIdle, "아직 캡처된 자기교정 후보가 없습니다"
 	case tally.staged > 0:

@@ -310,6 +310,24 @@ func (t *Tracker) RecentSelfCorrectionCandidates(skillName, statusFilter string,
 	return out, nil
 }
 
+// allSelfCorrectionCandidates returns the complete folded ledger for internal
+// policy/status consumers that must agree with dispatch selection beyond the
+// bounded operator list view.
+func (t *Tracker) allSelfCorrectionCandidates() ([]SelfCorrectionCandidateRecord, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	merged, err := t.mergedSelfCorrectionCandidatesLocked()
+	if err != nil {
+		return nil, fmt.Errorf("genesis-tracker: load self-correction candidates: %w", err)
+	}
+	out := make([]SelfCorrectionCandidateRecord, 0, len(merged))
+	for _, record := range merged {
+		out = append(out, record)
+	}
+	return out, nil
+}
+
 func (t *Tracker) mergedSelfCorrectionCandidatesLocked() (map[string]SelfCorrectionCandidateRecord, error) {
 	merged := make(map[string]SelfCorrectionCandidateRecord)
 	err := t.scanSelfCorrectionRecords(func(rec SelfCorrectionCandidateRecord) {

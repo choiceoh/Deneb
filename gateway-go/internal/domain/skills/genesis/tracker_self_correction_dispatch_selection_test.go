@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
 func TestNextSelfCorrectionDispatchCandidateSearchesBeyondRecentViewLimit(t *testing.T) {
@@ -94,5 +96,120 @@ func TestSelfCorrectionDispatchEligibleCentralizesReviewDeliveryAndSurfacePolicy
 	retry.DispatchPhase = selfCorrectionDispatchFailed
 	if !SelfCorrectionDispatchEligible(retry) {
 		t.Fatal("failed candidate should be retryable before local residue checks")
+	}
+}
+
+func TestNextSelfCorrectionDispatchCandidatePrioritizesNegativeImpactFollowUp(t *testing.T) {
+	tracker := newTestTracker(t)
+	appendFunnel(t, tracker.selfCorrectionPath, dispatchImpactHistory(
+		"no-effect-old", "health-finding:no-effect", selfCorrectionImpactNoEffect, 100,
+	))
+	appendFunnel(t, tracker.selfCorrectionPath, dispatchImpactHistory(
+		"regressed-old", "health-finding:regressed", selfCorrectionImpactRegressed, 100,
+	))
+	for _, record := range []SelfCorrectionCandidateRecord{
+		{
+			ID: "newest-normal", Scope: "code", Status: SelfCorrectionStatusProposed,
+			Source: "health-finding:normal", ProposedChange: "fix normal", CreatedAt: 300,
+		},
+		{
+			ID: "no-effect-follow-up", Scope: "code", Status: SelfCorrectionStatusProposed,
+			Source: "health-finding:no-effect", ProposedChange: "fix no effect", CreatedAt: 200,
+		},
+		{
+			ID: "regressed-follow-up", Scope: "code", Status: SelfCorrectionStatusProposed,
+			Source: "health-finding:regressed", ProposedChange: "fix regression", CreatedAt: 100,
+		},
+	} {
+		appendFunnel(t, tracker.selfCorrectionPath, record)
+	}
+
+	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
+	if err != nil || !ok || got.ID != "regressed-follow-up" {
+		t.Fatalf("selected = %+v, ok=%v, err=%v", got, ok, err)
+	}
+	got, ok, err = tracker.NextSelfCorrectionDispatchCandidate([]string{"regressed-follow-up"})
+	if err != nil || !ok || got.ID != "no-effect-follow-up" {
+		t.Fatalf("selected after regression exclusion = %+v, ok=%v, err=%v", got, ok, err)
+	}
+}
+
+func TestNextSelfCorrectionDispatchCandidateRequiresStrategyShiftAfterRepeatedNegativeImpact(t *testing.T) {
+	tracker := newTestTracker(t)
+	source := "health-finding:repeat"
+	first := dispatchImpactHistory("negative-1", source, selfCorrectionImpactNoEffect, 100)
+	first.ProposedChange = "Narrow the cache key"
+	second := dispatchImpactHistory("negative-2", source, selfCorrectionImpactRegressed, 200)
+	second.ProposedChange = "Add a guard"
+	appendFunnel(t, tracker.selfCorrectionPath, first)
+	appendFunnel(t, tracker.selfCorrectionPath, second)
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "repeated-strategy", Scope: "code", Status: SelfCorrectionStatusProposed,
+		Source: source, ProposedChange: "  ADD   A GUARD ", CreatedAt: 400,
+	})
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "missing-strategy", Scope: "code", Status: SelfCorrectionStatusProposed,
+		Source: source, CreatedAt: 500,
+	})
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "fallback", Scope: "code", Status: SelfCorrectionStatusProposed,
+		Source: "health-finding:fallback", ProposedChange: "fix fallback", CreatedAt: 300,
+	})
+
+	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
+	if err != nil || !ok || got.ID != "fallback" {
+		t.Fatalf("repeated strategy selected = %+v, ok=%v, err=%v", got, ok, err)
+	}
+
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "shifted-strategy", Scope: "code", Status: SelfCorrectionStatusProposed,
+		Source: source, ProposedChange: "Replace the invalidation algorithm", CreatedAt: 600,
+	})
+	got, ok, err = tracker.NextSelfCorrectionDispatchCandidate(nil)
+	if err != nil || !ok || got.ID != "shifted-strategy" {
+		t.Fatalf("shifted strategy not selected = %+v, ok=%v, err=%v", got, ok, err)
+	}
+
+	candidates, err := tracker.allSelfCorrectionCandidates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tally := tracker.tallyL4Candidates(candidates)
+	if tally.strategyBlocked != 2 || tally.dispatchable != 2 {
+		t.Fatalf("L4 impact policy tally = %+v, want two blocked and two dispatchable", tally)
+	}
+}
+
+func TestLatestVerifiedImpactClearsNegativePriorityAndStrategyGate(t *testing.T) {
+	tracker := newTestTracker(t)
+	source := "health-finding:recovered"
+	for _, record := range []SelfCorrectionCandidateRecord{
+		dispatchImpactHistory("negative-1", source, selfCorrectionImpactNoEffect, 100),
+		dispatchImpactHistory("negative-2", source, selfCorrectionImpactRegressed, 200),
+		dispatchImpactHistory("verified", source, selfCorrectionImpactVerified, 300),
+		{
+			ID: "recovered-follow-up", Scope: "code", Status: SelfCorrectionStatusProposed,
+			Source: source, ProposedChange: "same strategy", CreatedAt: 400,
+		},
+		{
+			ID: "newer-normal", Scope: "code", Status: SelfCorrectionStatusProposed,
+			Source: "health-finding:normal", ProposedChange: "normal strategy", CreatedAt: 500,
+		},
+	} {
+		appendFunnel(t, tracker.selfCorrectionPath, record)
+	}
+
+	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
+	if err != nil || !ok || got.ID != "newer-normal" {
+		t.Fatalf("verified source retained stale negative priority: %+v, ok=%v, err=%v", got, ok, err)
+	}
+}
+
+func dispatchImpactHistory(id, source, status string, checkedAt int64) SelfCorrectionCandidateRecord {
+	return SelfCorrectionCandidateRecord{
+		ID: id, Scope: "code", Status: SelfCorrectionStatusApplied,
+		Source: source, ProposedChange: "same strategy", CreatedAt: checkedAt - 1,
+		DispatchPhase: selfCorrectionDispatchWatchPassed,
+		ImpactResult:  &rsilifecycle.ImpactResult{Status: status, CheckedAt: checkedAt},
 	}
 }
