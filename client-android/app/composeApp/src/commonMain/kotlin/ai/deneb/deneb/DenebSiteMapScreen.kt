@@ -56,13 +56,18 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -473,7 +478,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         // The map
         SiteMapCanvas(pins = shown, onPinTap = { select(it) })
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         SiteMapLegend(sourcesPresent, typesPresent)
 
         Spacer(Modifier.height(16.dp))
@@ -646,7 +651,14 @@ private fun InspectionBadge(sched: Sched, today: LocalDate) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SiteMapLegend(sourcesPresent: List<String>, typesPresent: List<String>) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Text("색=에너지원", style = DenebType.meta, color = denebHint())
         sourcesPresent.forEach { s ->
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -674,6 +686,11 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
     val provinceStroke = MaterialTheme.colorScheme.outlineVariant
     val provinceFill = MaterialTheme.colorScheme.surface
     val hairline = denebHairline()
+    // 핀 마크에 지도 배경색 링을 둘러 겹친 핀끼리, 그리고 지도면과 분리해 또렷하게 한다.
+    val pinBorder = MaterialTheme.colorScheme.surfaceContainerLow
+    // 시도 라벨 색(옅게)과 측정기 — 라벨을 캔버스에 직접 그려 줌/팬에 따라붙게 한다.
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    val measurer = rememberTextMeasurer()
     // Cache the parsed province paths once — PathParser is not cheap and the data is static.
     val provincePaths = remember { KoreaGeo.provinces.map { PathParser().parsePathString(it.d).toPath() } }
 
@@ -734,23 +751,34 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
                 },
         ) {
             val s = size.width / KoreaGeo.WIDTH
-            // Province outlines (scale the parsed paths into canvas space).
+            // Province outlines (scale the parsed paths into canvas space). Rounded joins
+            // smooth the coastline; a hair thicker than before so it reads as a clean edge.
             val matrix = Matrix().apply { scale(s, s) }
             for (base in provincePaths) {
                 val p = Path().apply { addPath(base) }
                 p.transform(matrix)
                 drawPath(p, provinceFill)
-                drawPath(p, provinceStroke, style = Stroke(width = 1f))
+                drawPath(p, provinceStroke, style = Stroke(width = 1.2f, join = StrokeJoin.Round))
             }
-            // Pins — halo + filled 특성 mark, sized by 용량, colored by 에너지원. 시도 labels
-            // are intentionally omitted at this scale (the legend + list carry naming).
+            // 시도 labels — faint, centered on each province so the map is legible on its own
+            // (not just via the list). They scale/pan with the map since they're drawn here.
+            val labelStyle = TextStyle(color = labelColor, fontSize = 9.sp)
+            for (prov in KoreaGeo.provinces) {
+                val layout = measurer.measure(prov.key, labelStyle)
+                drawText(
+                    layout,
+                    topLeft = Offset(prov.cx * s - layout.size.width / 2f, prov.cy * s - layout.size.height / 2f),
+                )
+            }
+            // Pins — halo + filled 특성 mark with a background-colored ring, sized by 용량,
+            // colored by 에너지원. Drawn last so they sit above the 시도 labels.
             for (pin in pins) {
                 val cx = pin.vx * s
                 val cy = pin.vy * s
                 val r = pin.radiusDp.dp.toPx()
                 val color = sourceColor(pin.source)
                 drawCircle(color, radius = r + 3.dp.toPx(), center = Offset(cx, cy), alpha = 0.16f)
-                drawMark(shapeOfType(pin.type), Offset(cx, cy), r, color)
+                drawMark(shapeOfType(pin.type), Offset(cx, cy), r, color, pinBorder)
             }
         }
         // 맞춤 — reset zoom/pan, shown only while zoomed in (mirrors the desktop button).
@@ -767,10 +795,17 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
 }
 
 // Draw a filled 특성 mark of radius r at [center]. circle=토지, square=루프탑,
-// diamond=수상, triangle=기타.
-private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: Color) {
+// diamond=수상, triangle=기타. When [border] is specified, a thin ring is stroked
+// around the fill so overlapping pins stay distinct against each other and the map.
+private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: Color, border: Color = Color.Unspecified) {
+    val ring = if (border != Color.Unspecified) Stroke(width = 1.5f, join = StrokeJoin.Round) else null
     when (shape) {
-        "square" -> drawRect(color, topLeft = Offset(center.x - r, center.y - r), size = Size(r * 2, r * 2))
+        "square" -> {
+            val tl = Offset(center.x - r, center.y - r)
+            val sz = Size(r * 2, r * 2)
+            drawRect(color, topLeft = tl, size = sz)
+            if (ring != null) drawRect(border, topLeft = tl, size = sz, style = ring)
+        }
 
         "triangle" -> {
             val p = Path().apply {
@@ -780,6 +815,7 @@ private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: C
                 close()
             }
             drawPath(p, color)
+            if (ring != null) drawPath(p, border, style = ring)
         }
 
         "diamond" -> {
@@ -791,8 +827,12 @@ private fun DrawScope.drawMark(shape: String, center: Offset, r: Float, color: C
                 close()
             }
             drawPath(p, color)
+            if (ring != null) drawPath(p, border, style = ring)
         }
 
-        else -> drawCircle(color, radius = r, center = center)
+        else -> {
+            drawCircle(color, radius = r, center = center)
+            if (ring != null) drawCircle(border, radius = r, center = center, style = ring)
+        }
     }
 }
