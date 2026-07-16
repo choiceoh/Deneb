@@ -90,16 +90,27 @@ func (v *SkillValidationEngine) runReplayExecutorWith(ctx context.Context, execu
 }
 
 func buildReplayExecutorPrompt(skillBody string, replay SkillReplayCaseRecord) (system, user string) {
-	system = `당신은 아래 SKILL 문서를 따르는 에이전트를 시뮬레이션하는 채점기입니다.
+	if strings.TrimSpace(skillBody) == "" {
+		system = `당신은 별도의 SKILL 문서를 제공받지 않은 에이전트를 시뮬레이션하는 채점기입니다.
+주어진 사용자 작업과 컨텍스트만으로 호출하게 될 게이트웨이 도구들을 "순서대로" 출력하세요.
+- 준비된 절차가 있다고 가정하지 말고, 작업을 수행하는 데 필요한 도구만 선택하세요.
+- 실제 게이트웨이 도구 이름을 쓰세요 (예: exec, gmail, wiki, web, fs). 셸/CLI 명령은 exec로 감싸고 핵심 인자(명령어·경로·쿼리)를 args에 적으세요.
+- 설명·주석·markdown 없이 JSON 객체 하나만 출력: {"tool_calls":[{"name":"<도구>","args":"<핵심 인자>"}]}`
+	} else {
+		system = `당신은 아래 SKILL 문서를 따르는 에이전트를 시뮬레이션하는 채점기입니다.
 주어진 사용자 작업에 대해, 이 SKILL의 절차를 그대로 따랐을 때 호출하게 될 게이트웨이 도구들을 "순서대로" 출력하세요.
 - 실제 게이트웨이 도구 이름을 쓰세요 (예: exec, gmail, wiki, web, fs). 셸/CLI 명령은 exec로 감싸고 핵심 인자(명령어·경로·쿼리)를 args에 적으세요.
 - SKILL이 지시하는 것만 최소한으로 출력하고, 추측으로 도구를 늘리지 마세요.
 - 설명·주석·markdown 없이 JSON 객체 하나만 출력: {"tool_calls":[{"name":"<도구>","args":"<핵심 인자>"}]}`
+	}
 
 	var b strings.Builder
-	b.WriteString("## SKILL\n")
-	b.WriteString(strings.TrimSpace(skillBody))
-	b.WriteString("\n\n## 사용자 작업\n")
+	if strings.TrimSpace(skillBody) != "" {
+		b.WriteString("## SKILL\n")
+		b.WriteString(strings.TrimSpace(skillBody))
+		b.WriteString("\n\n")
+	}
+	b.WriteString("## 사용자 작업\n")
 	b.WriteString(strings.TrimSpace(replay.Input))
 	if ctxLines := cleanReplayContextLines(replay.Context); len(ctxLines) > 0 {
 		b.WriteString("\n\n## 컨텍스트\n")

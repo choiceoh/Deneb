@@ -1,0 +1,15 @@
+{
+  "skill": "evolution-proposal",
+  "cases": [
+    {"name": "self-improvement", "message": "이 작업 흐름을 자가개선 후보로 검토해줘", "shouldTrigger": true},
+    {"name": "self-evolution", "message": "우리 에이전트 자기진화 방향을 제안해줘", "shouldTrigger": true},
+    {"name": "skillize", "message": "방금 절차를 스킬화할 가치가 있을까?", "shouldTrigger": true},
+    {"name": "create-skill", "message": "반복 업무용 스킬 생성 제안을 내줘", "shouldTrigger": true},
+    {"name": "evolve-skill", "message": "기존 배포 스킬 개선이 필요한지 봐줘", "shouldTrigger": true},
+    {"name": "ordinary-code", "message": "이 함수의 nil 오류를 고쳐줘", "shouldTrigger": false},
+    {"name": "one-off-note", "message": "오늘 회의 내용을 메모해줘", "shouldTrigger": false},
+    {"name": "feature-request", "message": "검색 화면에 필터를 추가해줘", "shouldTrigger": false},
+    {"name": "general-review", "message": "이 PR 코드 리뷰해줘", "shouldTrigger": false},
+    {"name": "deployment", "message": "테스트 통과하면 배포해줘", "shouldTrigger": false}
+  ]
+}

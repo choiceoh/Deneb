@@ -1,0 +1,15 @@
+{
+  "skill": "weekly-report",
+  "cases": [
+    {"name": "weekly-business-report", "message": "이번 주 주간업무보고 만들어줘", "shouldTrigger": true},
+    {"name": "weekly-report", "message": "기획조정실 주간보고를 PDF로 뽑아줘", "shouldTrigger": true},
+    {"name": "weekly-report-spaced", "message": "위키 데이터로 주간 보고 작성해줘", "shouldTrigger": true},
+    {"name": "next-week", "message": "실시와 예정이 들어간 주간업무보고 부탁해", "shouldTrigger": true},
+    {"name": "team-report", "message": "팀별 주간보고를 격자 양식으로 만들어줘", "shouldTrigger": true},
+    {"name": "daily", "message": "오늘 아침 브리핑을 만들어줘", "shouldTrigger": false},
+    {"name": "monthly", "message": "6월 월간 실적 보고서를 요약해줘", "shouldTrigger": false},
+    {"name": "meeting", "message": "이번 주 회의 내용을 정리해줘", "shouldTrigger": false},
+    {"name": "email", "message": "팀장에게 보낼 진행상황 메일을 써줘", "shouldTrigger": false},
+    {"name": "calendar", "message": "다음 주 업무 일정을 캘린더로 보여줘", "shouldTrigger": false}
+  ]
+}

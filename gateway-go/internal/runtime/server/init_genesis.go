@@ -543,8 +543,14 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				Catalog: s.skillCatalog,
 				Logger:  s.logger,
 			})
+			s.autonomousSvc.RegisterTask(&genesis.SkillAblationTask{
+				Engine:  workoutEngine,
+				Tracker: s.genesisTracker,
+				Catalog: s.skillCatalog,
+				Logger:  s.logger,
+			})
 		} else if replayExecutorEnabled() {
-			s.logger.Info("genesis: skill-workout lane disabled (non-production state dir)")
+			s.logger.Info("genesis: skill-workout/ablation lanes disabled (non-production state dir)")
 		}
 
 		// Event-driven evolve: after N new skills accumulate, run a cycle in

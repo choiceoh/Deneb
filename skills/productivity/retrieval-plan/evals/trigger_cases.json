@@ -1,0 +1,15 @@
+{
+  "skill": "retrieval-plan",
+  "cases": [
+    {"name": "circumstances", "message": "이 거래가 무산된 경위를 찾아줘", "shouldTrigger": true},
+    {"name": "what-happened", "message": "지난번 협상이 어떻게 됐던 건지 복원해줘", "shouldTrigger": true},
+    {"name": "timeline", "message": "프로젝트 의사결정 타임라인 정리해줘", "shouldTrigger": true},
+    {"name": "history", "message": "A사와의 접촉 이력 추적해줘", "shouldTrigger": true},
+    {"name": "timeline-polite", "message": "관련 사건의 타임라인 정리 부탁해", "shouldTrigger": true},
+    {"name": "single-fact", "message": "A사 대표 전화번호가 뭐야?", "shouldTrigger": false},
+    {"name": "timeline-color", "message": "타임라인 화면 색상을 바꿔줘", "shouldTrigger": false},
+    {"name": "resume", "message": "지원자 이력을 한 문단으로 요약해줘", "shouldTrigger": false},
+    {"name": "simple-wiki", "message": "위키에서 탑솔라 주소를 찾아줘", "shouldTrigger": false},
+    {"name": "general-why", "message": "왜 이 함수가 느린지 설명해줘", "shouldTrigger": false}
+  ]
+}

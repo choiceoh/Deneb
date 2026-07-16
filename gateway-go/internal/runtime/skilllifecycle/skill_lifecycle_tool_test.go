@@ -389,6 +389,26 @@ func TestSkillLifecycleValidationCaseWithoutSkillSteersToSelfCorrection(t *testi
 	}
 }
 
+func TestSkillLifecycleStatusIncludesAdvisoryAblationSummary(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	if err := tracker.RecordSkillAblation(genesis.SkillAblationRecord{
+		SkillName: "topsolar-db", Model: "test-model", Evaluated: true, CaseCount: 1, Trials: 3,
+		WithSkillPassed: 2, WithSkillTotal: 3, WithoutSkillPassed: 2, WithoutSkillTotal: 3,
+		WithSkillScore: 66.67, WithoutSkillScore: 66.67, Lift: 0,
+	}); err != nil {
+		t.Fatalf("RecordSkillAblation: %v", err)
+	}
+	backend := &skillLifecycleBackend{tracker: tracker}
+	status, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{SkillName: "topsolar-db"})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus: %v", err)
+	}
+	if status.AblationSummary == nil || status.AblationSummary.Runs != 1 ||
+		len(status.AblationSummary.NoLiftSkills) != 1 || status.AblationSummary.NoLiftSkills[0] != "topsolar-db" {
+		t.Fatalf("unexpected ablation status: %+v", status.AblationSummary)
+	}
+}
+
 func TestSkillLifecycleStatusReturnsCoveredWhenTieredFrontierEvidencePresent(t *testing.T) {
 	tracker := newSkillLifecycleTestTracker(t)
 	if err := tracker.LogGenesis("deploy-helper", "session", "telegram:1", "coding", "Deploy workflow"); err != nil {

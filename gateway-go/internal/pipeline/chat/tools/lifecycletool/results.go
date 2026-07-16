@@ -330,6 +330,8 @@ type SkillLifecycleStatusResult struct {
 	ValidationCasesError          string                                   `json:"validationCasesError,omitempty"`
 	ValidationCaseSummary         *genesis.SkillValidationCaseSummary      `json:"validationCaseSummary,omitempty"`
 	ValidationCaseSummaryError    string                                   `json:"validationCaseSummaryError,omitempty"`
+	AblationSummary               *genesis.SkillAblationSummary            `json:"ablationSummary,omitempty"`
+	AblationSummaryError          string                                   `json:"ablationSummaryError,omitempty"`
 	Opportunities                 *[]genesis.SkillOpportunityRecord        `json:"opportunities,omitempty"`
 	OpportunitiesError            string                                   `json:"opportunitiesError,omitempty"`
 	SelfCorrectionCandidates      *[]genesis.SelfCorrectionCandidateRecord `json:"selfCorrectionCandidates,omitempty"`

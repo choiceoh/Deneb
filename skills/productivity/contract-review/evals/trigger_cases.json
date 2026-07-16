@@ -1,0 +1,15 @@
+{
+  "skill": "contract-review",
+  "cases": [
+    {"name": "contract-document", "message": "첨부한 계약서 위험 조항을 봐줘", "shouldTrigger": true},
+    {"name": "contract-review", "message": "이번 공급 건 계약 검토 부탁해", "shouldTrigger": true},
+    {"name": "toxic-clause", "message": "여기 독소조항이 있는지 확인해줘", "shouldTrigger": true},
+    {"name": "agreement", "message": "이 약정서에서 불리한 조건을 찾아줘", "shouldTrigger": true},
+    {"name": "purchase-order", "message": "이 발주서 검토하고 리스크를 알려줘", "shouldTrigger": true},
+    {"name": "email", "message": "거래처 메일의 요청 사항을 요약해줘", "shouldTrigger": false},
+    {"name": "meeting", "message": "오늘 회의 결정 사항을 정리해줘", "shouldTrigger": false},
+    {"name": "quote", "message": "이 견적의 금액 합계가 맞는지 계산해줘", "shouldTrigger": false},
+    {"name": "legal-schedule", "message": "법무팀 이번 주 일정을 알려줘", "shouldTrigger": false},
+    {"name": "general-condition", "message": "이 조건의 뜻을 쉽게 설명해줘", "shouldTrigger": false}
+  ]
+}

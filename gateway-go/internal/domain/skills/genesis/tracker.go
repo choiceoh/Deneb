@@ -124,6 +124,7 @@ type Tracker struct {
 	opportunityPath     string
 	optimizerMemoryPath string
 	validationPath      string
+	ablationPath        string
 	selfCorrectionPath  string
 	// skillsRoot overrides the managed skills root used to resolve candidate
 	// target paths (tests); empty means skills.DefaultManagedSkillsDir().
@@ -244,6 +245,7 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 		opportunityPath:     filepath.Join(dir, "skill_opportunities.jsonl"),
 		optimizerMemoryPath: filepath.Join(dir, "skill_optimizer_memory.json"),
 		validationPath:      filepath.Join(dir, "skill_validation_cases.jsonl"),
+		ablationPath:        filepath.Join(dir, "skill_ablation.jsonl"),
 		selfCorrectionPath:  filepath.Join(dir, "self_correction_candidates.jsonl"),
 		stats:               make(map[string]*usageAgg),
 		recentErrors:        make(map[string][]string),
