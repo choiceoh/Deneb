@@ -48,7 +48,14 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 		{
 			name: "projects",
 			got:  srv.earlyProjectMethods(hub),
-			want: []string{"miniapp.project.digests", "miniapp.project.linked", "miniapp.project.site.setStatus", "miniapp.project.sites"},
+			want: []string{
+				"miniapp.project.digests",
+				"miniapp.project.linked",
+				"miniapp.project.site.ensure",
+				"miniapp.project.site.setStatus",
+				"miniapp.project.site.update",
+				"miniapp.project.sites",
+			},
 		},
 		{
 			name: "skills",

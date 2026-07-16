@@ -1,7 +1,9 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.ProjectDigestsOut
+import ai.deneb.deneb.generated.ProjectSiteEnsureOut
 import ai.deneb.deneb.generated.ProjectSiteSetStatusOut
+import ai.deneb.deneb.generated.ProjectSiteUpdateOut
 import ai.deneb.deneb.generated.ProjectSitesOut
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -41,5 +43,40 @@ suspend fun DenebGatewayClient.setProjectSiteStatus(path: String, status: String
     buildJsonObject {
         put("path", path)
         put("status", status)
+    },
+)
+
+/**
+ * Find or create a 현장 page for [address] under the project owning [path]
+ * (`miniapp.project.site.ensure`). Returns null on failure.
+ */
+suspend fun DenebGatewayClient.ensureProjectSite(path: String, address: String): ProjectSiteEnsureOut? = callRpc<ProjectSiteEnsureOut>(
+    "miniapp.project.site.ensure",
+    buildJsonObject {
+        put("path", path)
+        put("address", address)
+    },
+)
+
+/**
+ * Partial milestone update on an existing 현장 page (`miniapp.project.site.update`).
+ * Empty fields are left unchanged server-side. Returns null on failure.
+ */
+suspend fun DenebGatewayClient.updateProjectSite(
+    path: String,
+    contractDate: String = "",
+    constructionStart: String = "",
+    moduleDelivery: String = "",
+    preUseInspection: String = "",
+    completionInspection: String = "",
+): ProjectSiteUpdateOut? = callRpc<ProjectSiteUpdateOut>(
+    "miniapp.project.site.update",
+    buildJsonObject {
+        put("path", path)
+        put("contract_date", contractDate)
+        put("construction_start", constructionStart)
+        put("module_delivery", moduleDelivery)
+        put("pre_use_inspection", preUseInspection)
+        put("completion_inspection", completionInspection)
     },
 )

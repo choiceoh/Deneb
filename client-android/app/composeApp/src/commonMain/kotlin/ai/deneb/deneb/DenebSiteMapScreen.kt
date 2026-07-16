@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.ProjectSiteRow
 import ai.deneb.deneb.generated.ProjectSitesOut
+import ai.deneb.ui.DenebOutlinedTextField
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
@@ -35,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -69,6 +71,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -135,7 +138,7 @@ private fun capacityText(mw: Double): String {
 
 // 공정 일정 — the 현장 공통 포맷 milestone dates, in process order. Rendered as a
 // timeline in the detail sheet; the two 검사일 also drive 임박 검사 surfacing.
-private data class Sched(
+internal data class Sched(
     val contractDate: String,
     val constructionStart: String,
     val moduleDelivery: String,
@@ -216,11 +219,8 @@ private fun resolveSite(site: String): FloatArray? {
     return KoreaGeo.provinceCentroid[sido]
 }
 
-/** One placed pin — its viewBox coords plus the resolved encoding + detail fields. */
-private data class SitePin(
-    val vx: Float,
-    val vy: Float,
-    val radiusDp: Float,
+/** Shared detail fields for placed pins and unplaced rows — drives the bottom sheet. */
+private data class SiteDetail(
     val site: String,
     val project: String,
     val client: String,
@@ -233,6 +233,26 @@ private data class SitePin(
     val kinds: List<String>,
     val sched: Sched,
 )
+
+/** One placed pin — its viewBox coords plus the resolved encoding + detail fields. */
+private data class SitePin(
+    val vx: Float,
+    val vy: Float,
+    val radiusDp: Float,
+    val detail: SiteDetail,
+) {
+    val site get() = detail.site
+    val project get() = detail.project
+    val client get() = detail.client
+    val path get() = detail.path
+    val source get() = detail.source
+    val type get() = detail.type
+    val capacity get() = detail.capacity
+    val status get() = detail.status
+    val due get() = detail.due
+    val kinds get() = detail.kinds
+    val sched get() = detail.sched
+}
 
 // Lifecycle: 후보 → 계약 → 개설 → 준공. Default = 개설 only (공사중). Everything
 // else (계약·준공·후보·미분류 "") is gated behind an "… 포함" chip so the map
@@ -275,12 +295,57 @@ private fun statusVisible(
     else -> showUnclassified // "" and any unknown label
 }
 
-// An unplaceable 현장 — carries status so the 미배치 tray can apply the same
-// status gate, and its 공정 일정 so an imminent 검사 isn't hidden just because
-// the address doesn't resolve.
-private data class UnplacedSite(val site: String, val project: String, val status: String, val sched: Sched)
+// An unplaceable 현장 — same detail surface as a pin so the 미배치 tray can open
+// the full bottom sheet and apply the same status gate.
+private typealias UnplacedSite = SiteDetail
 
 private data class Placed(val pins: List<SitePin>, val unplaced: List<UnplacedSite>)
+
+private fun schedOf(r: ProjectSiteRow): Sched = Sched(
+    contractDate = r.contract_date.trim(),
+    constructionStart = r.construction_start.trim(),
+    moduleDelivery = r.module_delivery.trim(),
+    preUseInspection = r.pre_use_inspection.trim(),
+    completionInspection = r.completion_inspection.trim(),
+)
+
+private fun siteDetail(
+    site: String,
+    r: ProjectSiteRow,
+    source: String,
+    type: String,
+    status: String,
+    sched: Sched,
+): SiteDetail = SiteDetail(
+    site = site,
+    project = r.project,
+    client = r.client,
+    path = r.path,
+    source = source,
+    type = type,
+    capacity = r.capacity,
+    status = status,
+    due = r.due,
+    kinds = r.kinds,
+    sched = sched,
+)
+
+/** After a status write, auto-enable the matching "… 포함" chip so the pin stays visible. */
+private fun revealFilterForStatus(
+    status: String,
+    showContracted: (Boolean) -> Unit,
+    showCompleted: (Boolean) -> Unit,
+    showProspective: (Boolean) -> Unit,
+    showUnclassified: (Boolean) -> Unit,
+) {
+    when (status) {
+        STATUS_CONTRACT -> showContracted(true)
+        STATUS_COMPLETED -> showCompleted(true)
+        STATUS_PROSPECTIVE -> showProspective(true)
+        STATUS_UNDER_CONSTRUCTION -> Unit
+        else -> showUnclassified(true)
+    }
+}
 
 private fun placeSites(rows: List<ProjectSiteRow>): Placed {
     val pins = mutableListOf<SitePin>()
@@ -290,22 +355,17 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
         val (source, type) = primaryKind(r.kinds)
         val rad = radiusDpOf(r.capacity)
         val status = r.status.trim()
-        val sched = Sched(
-            contractDate = r.contract_date.trim(),
-            constructionStart = r.construction_start.trim(),
-            moduleDelivery = r.module_delivery.trim(),
-            preUseInspection = r.pre_use_inspection.trim(),
-            completionInspection = r.completion_inspection.trim(),
-        )
+        val sched = schedOf(r)
         // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
         if (r.sites.isEmpty()) {
-            unplaced.add(UnplacedSite("(주소 미기재)", r.project, status, sched))
+            unplaced.add(siteDetail("(주소 미기재)", r, source, type, status, sched))
             continue
         }
         for (site in r.sites) {
             val xy = resolveSite(site)
+            val rowDetail = siteDetail(site, r, source, type, status, sched)
             if (xy == null) {
-                unplaced.add(UnplacedSite(site, r.project, status, sched))
+                unplaced.add(rowDetail)
                 continue
             }
             val key = "${xy[0]},${xy[1]}"
@@ -318,17 +378,7 @@ private fun placeSites(rows: List<ProjectSiteRow>): Placed {
                     vx = (xy[0] + cos(ang) * spread).toFloat(),
                     vy = (xy[1] + sin(ang) * spread).toFloat(),
                     radiusDp = rad,
-                    site = site,
-                    project = r.project,
-                    client = r.client,
-                    path = r.path,
-                    source = source,
-                    type = type,
-                    capacity = r.capacity,
-                    status = status,
-                    due = r.due,
-                    kinds = r.kinds,
-                    sched = sched,
+                    detail = rowDetail,
                 ),
             )
         }
@@ -395,6 +445,27 @@ fun DenebSiteMapScreen(
                         rows = rows,
                         onOpenProject = onOpenProject,
                         setSiteStatus = { path, status -> client.setProjectSiteStatus(path, status)?.status },
+                        ensureSite = { path, address ->
+                            client.ensureProjectSite(path, address)?.let { it.path to it.status }
+                        },
+                        updateSite = { path, contractDate, constructionStart, moduleDelivery, preUseInspection, completionInspection ->
+                            client.updateProjectSite(
+                                path,
+                                contractDate,
+                                constructionStart,
+                                moduleDelivery,
+                                preUseInspection,
+                                completionInspection,
+                            )?.let { out ->
+                                Sched(
+                                    contractDate = out.contract_date.trim(),
+                                    constructionStart = out.construction_start.trim(),
+                                    moduleDelivery = out.module_delivery.trim(),
+                                    preUseInspection = out.pre_use_inspection.trim(),
+                                    completionInspection = out.completion_inspection.trim(),
+                                )
+                            }
+                        },
                         onSitesReload = { load() },
                     )
                 }
@@ -410,7 +481,8 @@ fun DenebSiteMapScreen(
  * The map + filters + list. Pure presentation over an already-fetched [rows]; the
  * shell owns fetch + loading/error/empty. Filter + selection state is local UI state.
  * [setSiteStatus] writes a 현장 page lifecycle and returns the normalized status
- * (null on failure); [onSitesReload] refreshes the parent list after a successful write.
+ * (null on failure); [ensureSite] finds or creates a 현장 page for an address;
+ * [updateSite] patches milestone dates; [onSitesReload] refreshes the parent list.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -418,6 +490,17 @@ internal fun SiteMapContent(
     rows: List<ProjectSiteRow>,
     onOpenProject: (String) -> Unit = {},
     setSiteStatus: (suspend (path: String, status: String) -> String?)? = null,
+    ensureSite: (suspend (path: String, address: String) -> Pair<String, String>?)? = null,
+    updateSite: (
+        suspend (
+            path: String,
+            contractDate: String,
+            constructionStart: String,
+            moduleDelivery: String,
+            preUseInspection: String,
+            completionInspection: String,
+        ) -> Sched?
+    )? = null,
     onSitesReload: (suspend () -> Unit)? = null,
 ) {
     val placed = remember(rows) { placeSites(rows) }
@@ -432,11 +515,11 @@ internal fun SiteMapContent(
     var showCompleted by remember { mutableStateOf(false) }
     var showProspective by remember { mutableStateOf(false) }
     var showUnclassified by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<SitePin?>(null) }
+    var selected by remember { mutableStateOf<SiteDetail?>(null) }
 
-    fun select(pin: SitePin) {
+    fun select(detail: SiteDetail) {
         haptics.tap()
-        selected = pin
+        selected = detail
     }
 
     val sourcesPresent = remember(pins) {
@@ -489,6 +572,12 @@ internal fun SiteMapContent(
             return up != null && up.days <= IMMINENT_DAYS
         }
         shown.count { imminent(it.sched) } + shownUnplaced.count { imminent(it.sched) }
+    }
+
+    val selectedPin = remember(selected, pins) {
+        selected?.let { d ->
+            pins.find { it.site == d.site && it.path == d.path && it.project == d.project }
+        }
     }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -558,7 +647,7 @@ internal fun SiteMapContent(
         Spacer(Modifier.height(12.dp))
 
         // The map
-        SiteMapCanvas(pins = shown, selected = selected, onPinTap = { select(it) })
+        SiteMapCanvas(pins = shown, selected = selectedPin, onPinTap = { select(it.detail) })
 
         Spacer(Modifier.height(10.dp))
         SiteMapLegend(sourcesPresent, typesPresent)
@@ -571,7 +660,7 @@ internal fun SiteMapContent(
         DenebSectionLabel("현장 목록")
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             shown.sortedByDescending { it.capacity }.forEach { pin ->
-                SiteRow(pin, today) { select(pin) }
+                SiteRow(pin, today) { select(pin.detail) }
             }
         }
     }
@@ -581,51 +670,131 @@ internal fun SiteMapContent(
         DenebSectionLabel("미배치 — 주소를 지도에 매칭하지 못한 현장")
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             shownUnplaced.forEach { u ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(u.site, style = DenebType.rowSubtitle)
-                    Spacer(Modifier.width(6.dp))
-                    Text(u.project, style = DenebType.meta, color = denebHint(), modifier = Modifier.weight(1f))
-                    InspectionBadge(u.sched, today)
-                }
+                UnplacedRow(u, today) { select(u) }
             }
         }
     }
 
     // Detail sheet (B3): 거래처/현장/상태(편집)/에너지원/특성/용량/마감 + 위키 열기.
-    selected?.let { pin ->
+    selected?.let { detail ->
         val sheetState = rememberModalBottomSheetState()
-        var statusBusy by remember(pin.path) { mutableStateOf(false) }
-        var statusError by remember(pin.path) { mutableStateOf<String?>(null) }
+        var statusBusy by remember(detail.path) { mutableStateOf(false) }
+        var statusError by remember(detail.path) { mutableStateOf<String?>(null) }
+        var ensureBusy by remember(detail.path) { mutableStateOf(false) }
+        var ensureError by remember(detail.path) { mutableStateOf<String?>(null) }
+        var pendingStatus by remember { mutableStateOf<String?>(null) }
+        var showDateConfirm by remember { mutableStateOf(false) }
+        var dateConfirmMessage by remember { mutableStateOf("") }
+
+        suspend fun applyStatusChange(newStatus: String, setDateToday: Boolean) {
+            statusBusy = true
+            statusError = null
+            val next = setSiteStatus?.invoke(detail.path, newStatus)
+            if (next == null) {
+                statusError = "상태 변경에 실패했습니다."
+                statusBusy = false
+                return
+            }
+            var newSched = detail.sched
+            if (setDateToday && updateSite != null) {
+                val todayStr = today.toString()
+                newSched = when (newStatus) {
+                    STATUS_CONTRACT -> detail.sched.copy(contractDate = todayStr)
+                    STATUS_UNDER_CONSTRUCTION -> detail.sched.copy(constructionStart = todayStr)
+                    else -> detail.sched
+                }
+                val updated = updateSite.invoke(
+                    detail.path,
+                    newSched.contractDate,
+                    newSched.constructionStart,
+                    newSched.moduleDelivery,
+                    newSched.preUseInspection,
+                    newSched.completionInspection,
+                )
+                if (updated != null) newSched = updated
+            }
+            revealFilterForStatus(
+                next,
+                { showContracted = it },
+                { showCompleted = it },
+                { showProspective = it },
+                { showUnclassified = it },
+            )
+            selected = detail.copy(status = next, sched = newSched)
+            onSitesReload?.invoke()
+            statusBusy = false
+        }
+
+        fun requestStatusChange(choice: StatusChoice) {
+            if (statusBusy || detail.status == choice.value) return
+            when {
+                choice.value == STATUS_CONTRACT &&
+                    detail.sched.contractDate.isEmpty() &&
+                    updateSite != null -> {
+                    pendingStatus = choice.value
+                    dateConfirmMessage = "계약일을 오늘로 넣을까요?"
+                    showDateConfirm = true
+                }
+
+                choice.value == STATUS_UNDER_CONSTRUCTION &&
+                    detail.sched.constructionStart.isEmpty() &&
+                    updateSite != null -> {
+                    pendingStatus = choice.value
+                    dateConfirmMessage = "공사개시일을 오늘로 넣을까요?"
+                    showDateConfirm = true
+                }
+
+                else -> scope.launch { applyStatusChange(choice.value, setDateToday = false) }
+            }
+        }
+
+        if (showDateConfirm) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDateConfirm = false
+                    pendingStatus = null
+                },
+                title = { Text("일정 확인", style = DenebType.rowTitle) },
+                text = { Text(dateConfirmMessage, style = DenebType.body) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val status = pendingStatus
+                            showDateConfirm = false
+                            pendingStatus = null
+                            if (status != null) scope.launch { applyStatusChange(status, setDateToday = true) }
+                        },
+                    ) { Text("예", style = DenebType.button) }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            val status = pendingStatus
+                            showDateConfirm = false
+                            pendingStatus = null
+                            if (status != null) scope.launch { applyStatusChange(status, setDateToday = false) }
+                        },
+                    ) { Text("아니오", style = DenebType.button) }
+                },
+            )
+        }
+
         ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
-                Text(pin.project, style = DenebType.subject)
+                Text(detail.project, style = DenebType.subject)
                 Spacer(Modifier.height(12.dp))
-                if (pin.client.isNotEmpty()) DetailRow("거래처", pin.client)
-                DetailRow("현장", pin.site)
-                if (isSitePagePath(pin.path) && setSiteStatus != null) {
+                if (detail.client.isNotEmpty()) DetailRow("거래처", detail.client)
+                DetailRow("현장", detail.site)
+                if (isSitePagePath(detail.path) && setSiteStatus != null) {
                     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                         Text("상태", style = DenebType.meta, color = denebHint())
                         Spacer(Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             STATUS_CHOICES.forEach { choice ->
                                 DenebChip(
-                                    selected = pin.status == choice.value,
+                                    selected = detail.status == choice.value,
                                     enabled = !statusBusy,
-                                    onClick = {
-                                        if (statusBusy || pin.status == choice.value) return@DenebChip
-                                        scope.launch {
-                                            statusBusy = true
-                                            statusError = null
-                                            val next = setSiteStatus(pin.path, choice.value)
-                                            if (next == null) {
-                                                statusError = "상태 변경에 실패했습니다."
-                                            } else {
-                                                selected = pin.copy(status = next)
-                                                onSitesReload?.invoke()
-                                            }
-                                            statusBusy = false
-                                        }
-                                    },
+                                    onClick = { requestStatusChange(choice) },
                                 ) {
                                     Text(choice.label, style = DenebType.meta)
                                 }
@@ -641,17 +810,69 @@ internal fun SiteMapContent(
                         }
                     }
                 } else {
-                    DetailRow("상태", pin.status.ifEmpty { "미분류" })
+                    DetailRow("상태", detail.status.ifEmpty { "미분류" })
                 }
-                if (pin.source.isNotEmpty()) DetailRow("에너지원", pin.source)
-                if (pin.type.isNotEmpty()) DetailRow("특성", typeLabel(pin.type))
-                DetailRow("용량", capacityText(pin.capacity))
-                DetailRow("마감", pin.due.ifEmpty { "미정" })
-                ScheduleTimeline(pin.sched, today)
-                if (pin.path.isNotEmpty()) {
+                if (
+                    !isSitePagePath(detail.path) &&
+                    detail.site != "(주소 미기재)" &&
+                    ensureSite != null
+                ) {
+                    TextButton(
+                        enabled = !ensureBusy,
+                        onClick = {
+                            scope.launch {
+                                ensureBusy = true
+                                ensureError = null
+                                val result = ensureSite(detail.path, detail.site)
+                                if (result == null) {
+                                    ensureError = "현장 페이지를 만들지 못했습니다."
+                                } else {
+                                    val (newPath, newStatus) = result
+                                    revealFilterForStatus(
+                                        newStatus,
+                                        { showContracted = it },
+                                        { showCompleted = it },
+                                        { showProspective = it },
+                                        { showUnclassified = it },
+                                    )
+                                    selected = detail.copy(path = newPath, status = newStatus)
+                                    onSitesReload?.invoke()
+                                }
+                                ensureBusy = false
+                            }
+                        },
+                    ) {
+                        Text(
+                            if (ensureBusy) "만드는 중…" else "현장 페이지 만들기",
+                            style = DenebType.button,
+                        )
+                    }
+                    ensureError?.let { err ->
+                        Text(err, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                if (detail.source.isNotEmpty()) DetailRow("에너지원", detail.source)
+                if (detail.type.isNotEmpty()) DetailRow("특성", typeLabel(detail.type))
+                DetailRow("용량", capacityText(detail.capacity))
+                DetailRow("마감", detail.due.ifEmpty { "미정" })
+                if (isSitePagePath(detail.path) && updateSite != null) {
+                    EditableScheduleSection(
+                        path = detail.path,
+                        sched = detail.sched,
+                        today = today,
+                        enabled = !statusBusy,
+                        updateSite = updateSite,
+                        onSchedUpdated = { updated -> selected = detail.copy(sched = updated) },
+                        onReload = { scope.launch { onSitesReload?.invoke() } },
+                        scope = scope,
+                    )
+                } else {
+                    ScheduleTimeline(detail.sched, today)
+                }
+                if (detail.path.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = {
-                        val path = pin.path
+                        val path = detail.path
                         selected = null
                         onOpenProject(path)
                     }) {
@@ -681,17 +902,182 @@ private fun DetailRow(label: String, value: String) {
     }
 }
 
+@Composable
+private fun UnplacedRow(detail: SiteDetail, today: LocalDate, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .denebPressable(onClick = onClick)
+            .padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val color = sourceColor(detail.source)
+        Canvas(Modifier.size(14.dp)) {
+            drawMark(shapeOfType(detail.type), Offset(size.width / 2, size.height / 2), 5.dp.toPx(), color)
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(detail.site, style = DenebType.rowTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                buildString {
+                    append(detail.project)
+                    if (detail.client.isNotEmpty()) append(" · ${detail.client}")
+                },
+                style = DenebType.meta,
+                color = denebHint(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        InspectionBadge(detail.sched, today)
+        Text(
+            listOf(detail.source, capacityText(detail.capacity)).filter { it.isNotEmpty() }.joinToString(" · "),
+            style = DenebType.meta,
+            color = denebHint(),
+        )
+    }
+}
+
+@Composable
+private fun EditableScheduleSection(
+    path: String,
+    sched: Sched,
+    today: LocalDate,
+    enabled: Boolean,
+    updateSite: suspend (
+        path: String,
+        contractDate: String,
+        constructionStart: String,
+        moduleDelivery: String,
+        preUseInspection: String,
+        completionInspection: String,
+    ) -> Sched?,
+    onSchedUpdated: (Sched) -> Unit,
+    onReload: () -> Unit,
+    scope: CoroutineScope,
+) {
+    var contractDate by remember(sched) { mutableStateOf(sched.contractDate) }
+    var constructionStart by remember(sched) { mutableStateOf(sched.constructionStart) }
+    var moduleDelivery by remember(sched) { mutableStateOf(sched.moduleDelivery) }
+    var preUseInspection by remember(sched) { mutableStateOf(sched.preUseInspection) }
+    var completionInspection by remember(sched) { mutableStateOf(sched.completionInspection) }
+    var schedBusy by remember { mutableStateOf(false) }
+    var schedError by remember { mutableStateOf<String?>(null) }
+
+    fun save() {
+        scope.launch {
+            schedBusy = true
+            schedError = null
+            val updated = updateSite(
+                path,
+                contractDate.trim(),
+                constructionStart.trim(),
+                moduleDelivery.trim(),
+                preUseInspection.trim(),
+                completionInspection.trim(),
+            )
+            if (updated == null) {
+                schedError = "공정 일정 저장에 실패했습니다."
+            } else {
+                contractDate = updated.contractDate
+                constructionStart = updated.constructionStart
+                moduleDelivery = updated.moduleDelivery
+                preUseInspection = updated.preUseInspection
+                completionInspection = updated.completionInspection
+                onSchedUpdated(updated)
+                onReload()
+            }
+            schedBusy = false
+        }
+    }
+
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Text("공정 일정", style = DenebType.meta, color = denebHint())
+        Spacer(Modifier.height(6.dp))
+        DenebOutlinedTextField(
+            value = contractDate,
+            onValueChange = { contractDate = it },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled && !schedBusy,
+            label = { Text("계약", style = DenebType.meta) },
+            placeholder = { Text("YYYY-MM-DD", style = DenebType.hint) },
+            singleLine = true,
+        )
+        Spacer(Modifier.height(6.dp))
+        DenebOutlinedTextField(
+            value = constructionStart,
+            onValueChange = { constructionStart = it },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled && !schedBusy,
+            label = { Text("공사개시", style = DenebType.meta) },
+            placeholder = { Text("YYYY-MM-DD", style = DenebType.hint) },
+            singleLine = true,
+        )
+        Spacer(Modifier.height(6.dp))
+        DenebOutlinedTextField(
+            value = moduleDelivery,
+            onValueChange = { moduleDelivery = it },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled && !schedBusy,
+            label = { Text("모듈입고", style = DenebType.meta) },
+            placeholder = { Text("기간 또는 날짜", style = DenebType.hint) },
+            singleLine = true,
+        )
+        Spacer(Modifier.height(6.dp))
+        DenebOutlinedTextField(
+            value = preUseInspection,
+            onValueChange = { preUseInspection = it },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled && !schedBusy,
+            label = { Text("사용전검사", style = DenebType.meta) },
+            placeholder = { Text("YYYY-MM-DD", style = DenebType.hint) },
+            singleLine = true,
+        )
+        Spacer(Modifier.height(6.dp))
+        DenebOutlinedTextField(
+            value = completionInspection,
+            onValueChange = { completionInspection = it },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled && !schedBusy,
+            label = { Text("준공검사", style = DenebType.meta) },
+            placeholder = { Text("YYYY-MM-DD", style = DenebType.hint) },
+            singleLine = true,
+        )
+        val preview = Sched(
+            contractDate = contractDate,
+            constructionStart = constructionStart,
+            moduleDelivery = moduleDelivery,
+            preUseInspection = preUseInspection,
+            completionInspection = completionInspection,
+        )
+        if (preview.anyFilled()) {
+            Spacer(Modifier.height(8.dp))
+            ScheduleTimeline(preview, today, showHeading = false)
+        }
+        Spacer(Modifier.height(8.dp))
+        TextButton(enabled = enabled && !schedBusy, onClick = { save() }) {
+            Text(if (schedBusy) "저장 중…" else "저장", style = DenebType.button)
+        }
+        schedError?.let { err ->
+            Text(err, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
 // 공정 일정 — a small timeline of the five milestone dates in process order. Blank
 // milestones stay visible (dimmed) so what's left to fill is obvious; a parseable
 // date shows its D-day, past dates read 완료, and the nearest upcoming 검사 is
 // error-hued. Renders nothing when the whole schedule is blank (fallback rows).
 @Composable
-private fun ScheduleTimeline(sched: Sched, today: LocalDate) {
+private fun ScheduleTimeline(sched: Sched, today: LocalDate, showHeading: Boolean = true) {
     if (!sched.anyFilled()) return
     val up = upcomingInspection(sched, today)
     Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Text("공정 일정", style = DenebType.meta, color = denebHint())
-        Spacer(Modifier.height(6.dp))
+        if (showHeading) {
+            Text("공정 일정", style = DenebType.meta, color = denebHint())
+            Spacer(Modifier.height(6.dp))
+        }
         sched.milestones().forEach { m ->
             val has = m.date.isNotEmpty()
             val days = if (has) parseYmd(m.date)?.let { today.daysUntil(it) } else null

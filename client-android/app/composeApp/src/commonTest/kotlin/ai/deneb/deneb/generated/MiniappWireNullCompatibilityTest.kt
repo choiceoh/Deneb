@@ -2020,6 +2020,24 @@ class MiniappWireNullCompatibilityTest {
             field = "summary",
         ),
         nullContract(
+            name = "ProjectSiteEnsureOut.path",
+            serializer = ProjectSiteEnsureOut.serializer(),
+            empty = ProjectSiteEnsureOut(),
+            field = "path",
+        ),
+        nullContract(
+            name = "ProjectSiteEnsureOut.created",
+            serializer = ProjectSiteEnsureOut.serializer(),
+            empty = ProjectSiteEnsureOut(),
+            field = "created",
+        ),
+        nullContract(
+            name = "ProjectSiteEnsureOut.status",
+            serializer = ProjectSiteEnsureOut.serializer(),
+            empty = ProjectSiteEnsureOut(),
+            field = "status",
+        ),
+        nullContract(
             name = "ProjectSiteRow.project",
             serializer = ProjectSiteRow.serializer(),
             empty = ProjectSiteRow(),
@@ -2108,6 +2126,48 @@ class MiniappWireNullCompatibilityTest {
             serializer = ProjectSiteSetStatusOut.serializer(),
             empty = ProjectSiteSetStatusOut(),
             field = "status",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.path",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "path",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.status",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "status",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.contract_date",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "contract_date",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.construction_start",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "construction_start",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.module_delivery",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "module_delivery",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.pre_use_inspection",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "pre_use_inspection",
+        ),
+        nullContract(
+            name = "ProjectSiteUpdateOut.completion_inspection",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            empty = ProjectSiteUpdateOut(),
+            field = "completion_inspection",
         ),
         nullContract(
             name = "ProjectSitesOut.sites",

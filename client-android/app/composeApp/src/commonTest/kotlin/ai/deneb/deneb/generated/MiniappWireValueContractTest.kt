@@ -2142,6 +2142,29 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "ProjectSiteEnsureOut",
+            serializer = ProjectSiteEnsureOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "created",
+                    value = JsonPrimitive(true),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "status",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "path",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "ProjectSiteRow",
             serializer = ProjectSiteRow.serializer(),
             fields = listOf(
@@ -2225,6 +2248,49 @@ class MiniappWireValueContractTest {
                 ),
                 fieldValue(
                     name = "status",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "path",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "ProjectSiteUpdateOut",
+            serializer = ProjectSiteUpdateOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "status",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "contract_date",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "construction_start",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "module_delivery",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "pre_use_inspection",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "completion_inspection",
                     value = boundaryText,
                     expectation = Expectation.Exact,
                 ),
