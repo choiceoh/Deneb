@@ -119,6 +119,114 @@ func TestGroupwareRadarCallbacksBlocksFeedWhenAnalyzeFails(t *testing.T) {
 	}
 }
 
+func TestPublishApprovalCCFeedUrgentOnlyChiplessCard(t *testing.T) {
+	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	s := &Server{MemorySubsystem: &MemorySubsystem{workFeedStore: store}}
+	doc := groupware.ApprovalSummary{DocID: "42", Title: "긴급 계약 변경", Folder: "cc"}
+
+	// attention/routine stay silent — knowledge filing already happened.
+	rec := &groupware.ApprovalAnalysisRecord{DocID: "42", Analysis: "**요지** — 일반 경비\nIMPORTANCE: attention", Importance: "attention"}
+	if err := s.publishApprovalCCFeed(context.Background(), doc, rec); err != nil {
+		t.Fatal(err)
+	}
+	if _, active, err := store.FindActiveBySourceRef(workfeed.SourceGroupwareApproval, "42"); err != nil || active {
+		t.Fatalf("attention cc must not card; active=%v err=%v", active, err)
+	}
+
+	// urgent gets one informational card: no chips, no question.
+	rec = &groupware.ApprovalAnalysisRecord{DocID: "42", Analysis: "**요지** — 긴급 계약 변경 통지\nIMPORTANCE: urgent", Importance: "urgent"}
+	if err := s.publishApprovalCCFeed(context.Background(), doc, rec); err != nil {
+		t.Fatal(err)
+	}
+	item, active, err := store.FindActiveBySourceRef(workfeed.SourceGroupwareApproval, "42")
+	if err != nil || !active {
+		t.Fatalf("urgent cc card missing; active=%v err=%v", active, err)
+	}
+	if item.Question {
+		t.Fatalf("cc card must not ask: %+v", item)
+	}
+	// The store decorates generic actions (open/snooze/…) — what must never
+	// appear on a cc card is the 승인/반려 pair (someone else's decision).
+	for _, action := range item.Actions {
+		if action.ID == groupwareApprovalActionApprove || action.ID == groupwareApprovalActionReject {
+			t.Fatalf("cc card carries approval chip %q: %+v", action.ID, item.Actions)
+		}
+	}
+	if !strings.HasPrefix(item.Title, "수신참조 · ") {
+		t.Fatalf("cc card title = %q", item.Title)
+	}
+	if strings.Contains(item.Body, "IMPORTANCE:") {
+		t.Fatalf("machine trailer leaked into body: %q", item.Body)
+	}
+	if item.Metadata["folder"] != "cc" {
+		t.Fatalf("cc card metadata = %v", item.Metadata)
+	}
+
+	// Duplicate urgent publish is a no-op while the card is active.
+	if err := s.publishApprovalCCFeed(context.Background(), doc, rec); err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := store.List(10, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("duplicate publish appended a second card: %d", len(items))
+	}
+
+	// Missing analysis is an error so the radar keeps the doc retryable.
+	if err := s.publishApprovalCCFeed(context.Background(), doc, nil); err == nil {
+		t.Fatal("nil record must error")
+	}
+}
+
+func TestGroupwareRadarCCCallbackAnalyzesThenPublishes(t *testing.T) {
+	var order []string
+	onCC := groupwareRadarCCCallback(
+		func(_ context.Context, doc groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
+			order = append(order, "analyze")
+			return &groupware.ApprovalAnalysisRecord{DocID: doc.DocID, Analysis: "분석"}, nil
+		},
+		func(_ context.Context, _ groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) error {
+			order = append(order, "publish")
+			if rec == nil || rec.Analysis != "분석" {
+				t.Fatalf("publish rec = %#v", rec)
+			}
+			return nil
+		},
+	)
+	if err := onCC(context.Background(), groupware.ApprovalSummary{DocID: "9", Folder: "cc"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(order, ","); got != "analyze,publish" {
+		t.Fatalf("order = %q", got)
+	}
+
+	failing := groupwareRadarCCCallback(
+		func(context.Context, groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
+			return nil, errors.New("analysis unavailable")
+		},
+		func(context.Context, groupware.ApprovalSummary, *groupware.ApprovalAnalysisRecord) error {
+			t.Fatal("publish must not run when analyze fails")
+			return nil
+		},
+	)
+	if err := failing(context.Background(), groupware.ApprovalSummary{DocID: "9"}); err == nil {
+		t.Fatal("expected analyze failure to propagate")
+	}
+}
+
+func TestGroupwareRadarCCMaxPerCycleOverride(t *testing.T) {
+	t.Setenv("DENEB_GROUPWARE_RADAR_CC_MAX_PER_CYCLE", "4")
+	if got := groupwareRadarCCMaxPerCycle(); got != 4 {
+		t.Fatalf("got %d", got)
+	}
+	t.Setenv("DENEB_GROUPWARE_RADAR_CC_MAX_PER_CYCLE", "0")
+	if got := groupwareRadarCCMaxPerCycle(); got != groupware.DefaultRadarCCMaxPerCycle {
+		t.Fatalf("default %d", got)
+	}
+}
+
 func TestGroupwareRadarMaxPerCyclePositiveOverride(t *testing.T) {
 	t.Setenv("DENEB_GROUPWARE_RADAR_MAX_PER_CYCLE", "5")
 	if got := groupwareRadarMaxPerCycle(); got != 5 {

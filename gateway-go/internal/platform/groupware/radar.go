@@ -19,10 +19,18 @@ import (
 )
 
 const (
-	RadarTaskName                  = "groupware-radar"
-	DefaultRadarInterval           = 10 * time.Minute
-	DefaultRadarMaxPerCycle        = 3
-	DefaultRadarMaxEscalations     = 3
+	RadarTaskName              = "groupware-radar"
+	DefaultRadarInterval       = 10 * time.Minute
+	DefaultRadarMaxPerCycle    = 3
+	DefaultRadarMaxEscalations = 3
+	// DefaultRadarCCMaxPerCycle bounds 수신참조 ingests per cycle — the cc lane
+	// is knowledge accumulation (not action relay), so it drains slower and
+	// never competes with the pending lane for LLM budget.
+	DefaultRadarCCMaxPerCycle = 2
+	// radarCCRetention prunes cc tracking entries that fell off the list this
+	// long ago. cc docs never "resolve" (no done reconciliation), so age is the
+	// only exit.
+	radarCCRetention               = 30 * 24 * time.Hour
 	RadarEscalationLevelFourHours  = 1
 	RadarEscalationLevelTwentyFour = 2
 	// RadarListFailAlertAfter consecutive list failures surface one ops feed
@@ -47,11 +55,16 @@ type RadarConfig struct {
 	Interval       time.Duration
 	MaxPerCycle    int
 	MaxEscalations int
+	CCMaxPerCycle  int
 	List           RadarListFunc
 	Now            func() time.Time
 	OnPending      func(context.Context, ApprovalSummary) error
 	OnEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
 	OnResolved     func(context.Context, ApprovalSummary) error
+	// OnCCNew fires once per newly observed 수신참조 document (informational
+	// lane: no escalation, no resolution). Nil disables cc scanning entirely —
+	// the cc folder is not even listed.
+	OnCCNew func(context.Context, ApprovalSummary) error
 	// OnListFailed fires once when list pending/done has failed
 	// RadarListFailAlertAfter times in a row. Nil disables the alert.
 	OnListFailed func(ctx context.Context, folder string, streak int, err error) error
@@ -65,11 +78,13 @@ type Radar struct {
 	interval       time.Duration
 	maxPerCycle    int
 	maxEscalations int
+	ccMaxPerCycle  int
 	list           RadarListFunc
 	now            func() time.Time
 	onPending      func(context.Context, ApprovalSummary) error
 	onEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
 	onResolved     func(context.Context, ApprovalSummary) error
+	onCCNew        func(context.Context, ApprovalSummary) error
 	onListFailed   func(ctx context.Context, folder string, streak int, err error) error
 
 	// scanMu serializes scan cycles: the autonomous service already serializes
@@ -89,6 +104,12 @@ type radarState struct {
 	ListFailAlerted bool                     `json:"listFailAlerted,omitempty"`
 	LastListError   string                   `json:"lastListError,omitempty"`
 	LastListFolder  string                   `json:"lastListFolder,omitempty"`
+	// CCDocs tracks 수신참조 documents (informational lane — one-shot ingest,
+	// no escalation/resolution). CCSeededAt marks the silent first contact:
+	// the historical cc backlog is absorbed without callbacks so a cold start
+	// never floods analysis or the feed.
+	CCDocs     map[string]radarDocState `json:"ccDocs,omitempty"`
+	CCSeededAt int64                    `json:"ccSeededAt,omitempty"`
 }
 
 type radarDocState struct {
@@ -121,17 +142,23 @@ func NewRadar(cfg RadarConfig) *Radar {
 	if now == nil {
 		now = time.Now
 	}
+	ccMaxPerCycle := cfg.CCMaxPerCycle
+	if ccMaxPerCycle <= 0 {
+		ccMaxPerCycle = DefaultRadarCCMaxPerCycle
+	}
 	return &Radar{
 		reader:         cfg.Reader,
 		statePath:      strings.TrimSpace(cfg.StatePath),
 		interval:       interval,
 		maxPerCycle:    maxPerCycle,
 		maxEscalations: maxEscalations,
+		ccMaxPerCycle:  ccMaxPerCycle,
 		list:           list,
 		now:            now,
 		onPending:      cfg.OnPending,
 		onEscalated:    cfg.OnEscalated,
 		onResolved:     cfg.OnResolved,
+		onCCNew:        cfg.OnCCNew,
 		onListFailed:   cfg.OnListFailed,
 	}
 }
@@ -305,10 +332,75 @@ func (r *Radar) scan(ctx context.Context) error {
 		delete(state.Docs, id)
 	}
 
+	// 수신참조 lane last: a cc hiccup must never starve the action lane, and
+	// the pending/done work above is already reflected in state even when cc
+	// listing fails.
+	if r.onCCNew != nil {
+		runErrs = append(runErrs, r.scanCC(ctx, &state, nowMs)...)
+	}
+
 	if err := saveRadarState(r.statePath, state); err != nil {
 		runErrs = append(runErrs, err)
 	}
 	return errors.Join(runErrs...)
+}
+
+// scanCC diffs the 수신참조 folder and fires OnCCNew once per newly observed
+// document. cc documents are informational (someone else's approval line): no
+// escalation, no done reconciliation, and fingerprint churn — status moving as
+// other approvers act — never re-triggers ingestion.
+func (r *Radar) scanCC(ctx context.Context, state *radarState, nowMs int64) []error {
+	ccDocs, err := r.list(ctx, r.reader, "cc", radarApprovalListLimit)
+	if err != nil {
+		return []error{fmt.Errorf("list cc approvals: %w", err)}
+	}
+	if state.CCDocs == nil {
+		state.CCDocs = make(map[string]radarDocState)
+	}
+	sortApprovalSummaries(ccDocs)
+	// First contact absorbs the historical backlog silently.
+	seeding := state.CCSeededAt == 0
+	if seeding {
+		state.CCSeededAt = nowMs
+	}
+	var errs []error
+	seen := make(map[string]struct{}, len(ccDocs))
+	attempted := 0
+	for _, doc := range ccDocs {
+		id := strings.TrimSpace(doc.DocID)
+		if id == "" {
+			continue
+		}
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+		stored, exists := state.CCDocs[id]
+		if !exists {
+			stored.Fingerprint = approvalFingerprint(doc)
+			stored.FirstSeenAt = nowMs
+			stored.Notified = seeding
+		}
+		stored.LastSeenAt = nowMs
+		if !stored.Notified && attempted < r.ccMaxPerCycle {
+			attempted++
+			if err := r.onCCNew(ctx, doc); err != nil {
+				errs = append(errs, fmt.Errorf("cc approval %s: %w", id, err))
+			} else {
+				stored.Notified = true
+			}
+		}
+		state.CCDocs[id] = stored
+	}
+	for id, stored := range state.CCDocs {
+		if _, still := seen[id]; still {
+			continue
+		}
+		if nowMs-stored.LastSeenAt > radarCCRetention.Milliseconds() {
+			delete(state.CCDocs, id)
+		}
+	}
+	return errs
 }
 
 func (r *Radar) noteListFailure(ctx context.Context, state radarState, folder string, listErr error) error {

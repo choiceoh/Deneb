@@ -24,6 +24,41 @@ func DefaultRadarStatePath() string {
 	return filepath.Join(config.ResolveStateDir(), RadarStateFileName)
 }
 
+// DefaultApprovalAnalysisDir returns the approval-analysis cache directory the
+// radar writes ({stateDir}/cache/approval_analysis) — letters read it for
+// zero-LLM-cost gists.
+func DefaultApprovalAnalysisDir() string {
+	return filepath.Join(config.ResolveStateDir(), "cache", "approval_analysis")
+}
+
+// LoadRadarCCFirstSeenIndex reads radar state and returns docID → FirstSeenAt
+// (unix ms) for tracked 수신참조 documents. Missing/unreadable state yields an
+// empty map — cc enrichment is always best-effort.
+func LoadRadarCCFirstSeenIndex(statePath string) map[string]int64 {
+	out := make(map[string]int64)
+	path := strings.TrimSpace(statePath)
+	if path == "" {
+		return out
+	}
+	state, err := loadRadarState(path)
+	if err != nil {
+		return out
+	}
+	for id, doc := range state.CCDocs {
+		id = strings.TrimSpace(id)
+		if id == "" || doc.FirstSeenAt <= 0 {
+			continue
+		}
+		// The seed scan absorbs the historical backlog in one stamp — those
+		// docs are not "new" for letters/briefings.
+		if state.CCSeededAt > 0 && doc.FirstSeenAt == state.CCSeededAt {
+			continue
+		}
+		out[id] = doc.FirstSeenAt
+	}
+	return out
+}
+
 // LoadRadarDocMetaIndex reads radar state and returns docID → age/escalation meta.
 // Missing or unreadable state yields an empty map (never an error for callers
 // that treat enrichment as best-effort).
