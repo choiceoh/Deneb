@@ -207,12 +207,16 @@ class AppSettingsStateAndCacheTest {
 
         assertNull(settings.getCachedTranscript("a"))
         assertEquals("b", raw.getString(AppSettings.KEY_TX_CACHE_LRU, ""))
+
+        settings.removeCachedTranscript("b")
+
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_LRU))
     }
 
     @Test
-    fun corruptBlankLruLinesAreIgnoredDuringNextInsertion() {
+    fun corruptBlankAndDuplicateLruLinesAreRepairedDuringNextInsertion() {
         val (raw, settings) = fixture {
-            putString(AppSettings.KEY_TX_CACHE_LRU, "\nold\n\n")
+            putString(AppSettings.KEY_TX_CACHE_LRU, "\nold\nold\n\n")
             putString(AppSettings.KEY_TX_CACHE_PREFIX + "old", "old-body")
         }
 

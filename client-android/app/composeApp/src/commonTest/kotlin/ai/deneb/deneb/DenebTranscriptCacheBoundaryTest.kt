@@ -12,6 +12,21 @@ import kotlin.test.assertTrue
 
 class DenebTranscriptCacheBoundaryTest {
 
+    private val cacheOwner = "gateway#account"
+
+    /** Most codec-boundary cases exercise the messages array; wrap those rows in
+     *  the same owner envelope used by the settings-backed cache. */
+    private fun decodeCachedTranscript(json: String): List<History>? {
+        val payload = if (json.trimStart().startsWith("[")) {
+            """{"owner":"$cacheOwner","messages":$json}"""
+        } else {
+            json
+        }
+        return ai.deneb.deneb.decodeCachedTranscript(payload, cacheOwner)
+    }
+
+    private fun encodeCachedTranscript(transcript: List<History>): String? = ai.deneb.deneb.encodeCachedTranscript(transcript, cacheOwner)
+
     private fun history(
         role: History.Role,
         content: String,
@@ -29,6 +44,20 @@ class DenebTranscriptCacheBoundaryTest {
         for (payload in listOf("", "not-json", "{", "{}", "null", "42", "\"text\"")) {
             assertNull(decodeCachedTranscript(payload), payload)
         }
+    }
+
+    @Test
+    fun ownerMismatchRejectsOtherwiseValidTranscript() {
+        val encoded = encodeCachedTranscript(listOf(history(History.Role.USER, "private")))!!
+
+        assertNull(ai.deneb.deneb.decodeCachedTranscript(encoded, "different-owner"))
+    }
+
+    @Test
+    fun legacyUnscopedTranscriptIsRejected() {
+        val legacy = """[{"role":"user","content":"private","ts":1}]"""
+
+        assertNull(ai.deneb.deneb.decodeCachedTranscript(legacy, cacheOwner))
     }
 
     @Test

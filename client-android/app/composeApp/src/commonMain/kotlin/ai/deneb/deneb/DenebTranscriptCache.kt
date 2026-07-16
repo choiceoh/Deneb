@@ -3,7 +3,6 @@ package ai.deneb.deneb
 import ai.deneb.ui.chat.History
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
 
 /**
  * Local transcript cache (cache-then-network): a reopened session renders
@@ -15,23 +14,23 @@ import kotlinx.serialization.json.Json
  *
  * Text-only by design: attachment bytes (base64 images) are NOT cached — they'd
  * bloat the settings store, and the network fetch restores them moments later.
- * Storage + LRU eviction live in AppSettings (encrypted at rest).
+ * Storage + LRU eviction live in AppSettings (encrypted at rest), while the
+ * shared owner envelope prevents another gateway/account's cache from rendering.
  */
 
 // Skip caching a transcript whose serialized text exceeds this — a runaway
 // session shouldn't bloat the settings store; it simply stays network-only.
 internal const val TX_CACHE_MAX_CHARS = 256 * 1024
 
-private val txCacheJson = Json { ignoreUnknownKeys = true }
-
 @Serializable
 private data class CachedTxMsg(val role: String, val content: String, val ts: Long = 0)
 
 private val txCacheSerializer = ListSerializer(CachedTxMsg.serializer())
+private const val TX_CACHE_PAYLOAD_KEY = "messages"
 
 /** Decode one persisted transcript cache payload without touching settings. */
-internal fun decodeCachedTranscript(json: String): List<History>? {
-    val msgs = runCatching { txCacheJson.decodeFromString(txCacheSerializer, json) }.getOrNull() ?: return null
+internal fun decodeCachedTranscript(json: String, expectedOwner: String): List<History>? {
+    val msgs = decodeOwnedCache(json, expectedOwner, TX_CACHE_PAYLOAD_KEY, txCacheSerializer) ?: return null
     if (msgs.isEmpty()) return null
     return msgs.map {
         History(
@@ -43,7 +42,7 @@ internal fun decodeCachedTranscript(json: String): List<History>? {
 }
 
 /** Encode a bounded text-only cache payload, or null when it should be evicted. */
-internal fun encodeCachedTranscript(transcript: List<History>): String? {
+internal fun encodeCachedTranscript(transcript: List<History>, owner: String): String? {
     val msgs = transcript.mapNotNull { h ->
         if (h.content.isBlank()) return@mapNotNull null
         CachedTxMsg(
@@ -53,20 +52,23 @@ internal fun encodeCachedTranscript(transcript: List<History>): String? {
         )
     }
     if (msgs.isEmpty()) return null
-    return txCacheJson.encodeToString(txCacheSerializer, msgs).takeIf { it.length <= TX_CACHE_MAX_CHARS }
+    return encodeOwnedCache(owner, TX_CACHE_PAYLOAD_KEY, txCacheSerializer, msgs)
+        .takeIf { it.length <= TX_CACHE_MAX_CHARS }
 }
 
 /** Cached transcript for [key] as History rows, or null when absent/undecodable.
  *  Text-only (no attachments) — enough to render the bubbles instantly. */
 internal fun DenebGatewayClient.loadCachedTranscript(key: String): List<History>? {
     val json = appSettings.getCachedTranscript(key) ?: return null
-    return decodeCachedTranscript(json)
+    val decoded = decodeCachedTranscript(json, mailCacheOwner(gatewayUrl, clientToken))
+    if (decoded == null) appSettings.removeCachedTranscript(key)
+    return decoded
 }
 
 /** Persist [transcript] (text-only) for [key]. Blank-content rows (e.g. image-only
  *  proactive cards) are dropped; an all-blank transcript clears the slot. */
 internal fun DenebGatewayClient.storeCachedTranscript(key: String, transcript: List<History>) {
-    val json = encodeCachedTranscript(transcript)
+    val json = encodeCachedTranscript(transcript, mailCacheOwner(gatewayUrl, clientToken))
     if (json == null) {
         // No cache-worthy text remains, or the authoritative transcript outgrew
         // the budget. Drop an existing entry instead of rendering a stale snapshot.

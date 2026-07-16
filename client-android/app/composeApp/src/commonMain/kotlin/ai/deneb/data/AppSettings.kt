@@ -384,18 +384,27 @@ class AppSettings(internal val settings: Settings) {
     fun putCachedTranscript(sessionKey: String, json: String) {
         settings.putString(KEY_TX_CACHE_PREFIX + sessionKey, json)
         // Most-recent-first LRU; evict overflow keys' payloads so the store is bounded.
-        val next = (listOf(sessionKey) + txCacheLru().filterNot { it == sessionKey }).take(TX_CACHE_MAX_SESSIONS)
-        txCacheLru().filterNot { it in next }.forEach { settings.remove(KEY_TX_CACHE_PREFIX + it) }
-        settings.putString(KEY_TX_CACHE_LRU, next.joinToString("\n"))
+        val current = txCacheLru()
+        val next = (listOf(sessionKey) + current.filterNot { it == sessionKey }).take(TX_CACHE_MAX_SESSIONS)
+        current.filterNot { it in next }.forEach { settings.remove(KEY_TX_CACHE_PREFIX + it) }
+        writeTxCacheLru(next)
     }
 
     fun removeCachedTranscript(sessionKey: String) {
         settings.remove(KEY_TX_CACHE_PREFIX + sessionKey)
-        settings.putString(KEY_TX_CACHE_LRU, txCacheLru().filterNot { it == sessionKey }.joinToString("\n"))
+        writeTxCacheLru(txCacheLru().filterNot { it == sessionKey })
     }
 
     // sessionKeys never contain a newline, so "\n" is a safe list separator.
-    private fun txCacheLru(): List<String> = settings.getStringOrNull(KEY_TX_CACHE_LRU)?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+    private fun txCacheLru(): List<String> = settings.getStringOrNull(KEY_TX_CACHE_LRU)
+        ?.split("\n")
+        ?.filter { it.isNotBlank() }
+        ?.distinct()
+        ?: emptyList()
+
+    private fun writeTxCacheLru(keys: List<String>) {
+        if (keys.isEmpty()) settings.remove(KEY_TX_CACHE_LRU) else settings.putString(KEY_TX_CACHE_LRU, keys.joinToString("\n"))
+    }
 
     // Default inbox mail-list cache (single key — only the no-query inbox view is
     // cached, for instant mail-tab render). Encrypted at rest like the transcript cache.
