@@ -44,12 +44,15 @@ function toEvent(eventName: string, data: Record<string, unknown>): ProactiveEve
 }
 
 // Subscribe until the signal aborts or the stream ends. Resolves on clean end.
+// The client-kind header identifies this subscription as a DESKTOP: the gateway
+// keys two behaviors on it — the FCM fallback must not be suppressed by a
+// desktop connection, and workstation-control dispatch requires ≥1 desktop.
 export async function subscribeEvents(
   cfg: GatewayConfig,
   handlers: EventHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  const body = await streamFetch(cfg, "events", { signal });
+  const body = await streamFetch(cfg, "events", { signal, headers: { "X-Deneb-Client-Kind": "desktop" } });
   evLog.info("stream open");
   handlers.onOpen?.();
 
