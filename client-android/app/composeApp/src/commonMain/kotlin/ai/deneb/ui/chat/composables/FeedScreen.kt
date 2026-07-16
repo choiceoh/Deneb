@@ -13,6 +13,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBannerEnter
 import ai.deneb.ui.denebBannerExit
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebSiblingSwipe
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.animation.AnimatedVisibility
@@ -94,18 +95,26 @@ internal fun FeedScreen(
     initialOpenItemId: String? = null,
     initialOpenItemCreatedAtMs: Long = 0L,
     onOpenApprovals: (() -> Unit)? = null,
-    onOpenMail: (() -> Unit)? = null,
 ) {
+    val haptics = rememberHaptics()
+    val openApprovals: (() -> Unit)? = onOpenApprovals?.let { open ->
+        {
+            haptics.tap()
+            open()
+        }
+    }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .denebSiblingSwipe(onSwipeLeft = openApprovals),
+    ) {
     DenebScreenScaffold(
         title = "피드",
         onBack = {},
         showBack = false,
-        // 결재·메일 are the feed's 동형 siblings (same day-paged list shape) —
-        // Zune-style dimmed pivots next to the title jump straight there.
-        titlePivot = {
-            onOpenApprovals?.let { DenebTitlePivot("결재", onClick = it) }
-            onOpenMail?.let { DenebTitlePivot("메일", onClick = it) }
-        },
+        // 결재 is the feed's 동형 sibling (same day-paged list shape) — Zune-style
+        // dimmed pivot + left swipe jump straight there.
+        titlePivot = openApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
     ) {
         // Keep the selected date independent of the loaded item list. A ranged fetch
         // for today can legitimately return zero items; if selectedDate were derived
@@ -132,7 +141,6 @@ internal fun FeedScreen(
         // say so — the feed is the 업무 home, and a silent failure reads as "피드
         // 없음" while the server has every card (2026-07-05 field report).
         var loadFailed by remember { mutableStateOf(false) }
-        val haptics = rememberHaptics()
         val refreshScope = rememberCoroutineScope()
         val loadSelectedDay: suspend () -> Unit = {
             loadFailed = !onLoadDateRange(
@@ -264,6 +272,7 @@ internal fun FeedScreen(
                 )
             }
         }
+    }
     }
 }
 

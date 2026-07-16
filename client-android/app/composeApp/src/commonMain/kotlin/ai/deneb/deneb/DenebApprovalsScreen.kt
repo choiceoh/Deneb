@@ -7,6 +7,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebSiblingSwipe
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,7 +78,6 @@ fun DenebApprovalsScreen(
     onBack: () -> Unit,
     onOpenDetail: (GroupwareApprovalRow) -> Unit = {},
     onOpenFeed: (() -> Unit)? = null,
-    onOpenMail: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var rows by remember { mutableStateOf<List<GroupwareApprovalRow>?>(null) }
@@ -88,6 +88,12 @@ fun DenebApprovalsScreen(
     var refreshing by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
+    val openFeed: (() -> Unit)? = onOpenFeed?.let { open ->
+        {
+            haptics.tap()
+            open()
+        }
+    }
 
     suspend fun load(clear: Boolean = true) {
         failed = false
@@ -127,14 +133,16 @@ fun DenebApprovalsScreen(
     val canPrev = selectedDate > minDate
     val canNext = selectedDate < today
 
+    Box(
+        Modifier
+            .fillMaxSize()
+            .denebSiblingSwipe(onSwipeRight = openFeed),
+    ) {
     DenebScreenScaffold(
         title = "결재",
         onBack = onBack,
         tabBar = navigationTabBar,
-        titlePivot = {
-            onOpenFeed?.let { DenebTitlePivot("피드", onClick = it) }
-            onOpenMail?.let { DenebTitlePivot("메일", onClick = it) }
-        },
+        titlePivot = openFeed?.let { open -> { DenebTitlePivot("피드", onClick = open) } },
     ) {
         if (!pendingOnly) {
             ApprovalsDateBar(
@@ -212,6 +220,7 @@ fun DenebApprovalsScreen(
                 }
             }
         }
+    }
     }
 }
 

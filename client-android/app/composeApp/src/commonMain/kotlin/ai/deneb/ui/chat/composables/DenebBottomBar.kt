@@ -121,7 +121,7 @@ private val moreTab = DenebTabItem(
 val denebBottomTabs: List<DenebTabItem> = listOf(feedTab, mailTab, chatTab, calendarTab, moreTab)
 
 // Routes that show the bottom bar. The bar stays on 채팅(home) and on every 더보기 SECTION
-// — 메일·달력·검색·할일·일기·카테고리·조직도·현황·연락처·노트북·파일·브라우저·설정 — so you can
+// — 메일·달력·결재·검색·할일·일기·카테고리·조직도·현황·연락처·노트북·파일·브라우저·설정 — so you can
 // tab-switch without backing out first. Excluded on purpose: deep DETAILS reached *from* a
 // section (a specific mail/event/wiki page/person, settings sub-screens like fleet/skill/
 // cron) — those are data-class/arg routes that drill down and keep their own ← back nav.
@@ -131,6 +131,7 @@ val denebBottomBarRoutes: Set<String> = setOf(
     ROUTE_MORE,
     "deneb_mail",
     "deneb_calendar",
+    "deneb_approvals",
     "deneb_search",
     "deneb_diary",
     "deneb_categories",
