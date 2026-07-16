@@ -2,6 +2,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.Attachment
 import ai.deneb.getBackgroundDispatcher
+import ai.deneb.shareTextToApps
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -42,6 +43,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -145,6 +148,7 @@ internal fun BotMessage(
     reasoningSegments: ImmutableList<String> = persistentListOf(),
     isStreaming: Boolean = false,
     attachments: ImmutableList<Attachment> = persistentListOf(),
+    timestampMs: Long = 0,
 ) {
     val haptics = rememberHaptics()
     val parseSource = rememberStreamingParseSource(message, isStreaming)
@@ -256,6 +260,10 @@ internal fun BotMessage(
     if (message.isEmpty()) return
     val clipboard = LocalClipboardManager.current
     var copied by remember(message) { mutableStateOf(false) }
+    // ⋯ 시트 상태/스코프는 여기(함수 수명)에 — 시트가 닫히며 액션이 실행되므로,
+    // if-블록 안의 스코프면 dismiss 리컴포지션이 공유 코루틴을 취소한다.
+    var moreSheetOpen by remember { mutableStateOf(false) }
+    val moreScope = rememberCoroutineScope()
     LaunchedEffect(copied) {
         if (copied) {
             delay(1500)
@@ -308,8 +316,25 @@ internal fun BotMessage(
                     onClick = onRegenerate,
                 )
             }
+            // ⋯ — the message action sheet (공유·보낸 시각). Bot bodies keep their
+            // inline SelectionContainer (drag-select works there), so the sheet rides
+            // an explicit button instead of long-press.
+            SmallIconButton(
+                imageVector = Icons.Filled.MoreHoriz,
+                contentDescription = "메시지 더보기",
+                onClick = { moreSheetOpen = true },
+            )
             Spacer(Modifier.weight(1f))
         }
+    }
+    if (moreSheetOpen) {
+        MessageActionsSheet(
+            timestampMs = timestampMs,
+            actions = listOf(
+                MessageSheetAction(Icons.Filled.Share, "공유") { moreScope.launch { shareTextToApps(message) } },
+            ),
+            onDismiss = { moreSheetOpen = false },
+        )
     }
 }
 
