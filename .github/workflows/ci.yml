@@ -252,12 +252,19 @@ jobs:
           path: gateway-go/gateway
           retention-days: 1
 
-  go-unit:
+  # Package-sharded unit tests: GHA ARM runners are ~2–4 cores, so one
+  # `go test ./...` wall is dominated by sequential compile of heavy packages.
+  # Four shards cut the unit wall roughly with the number of runners.
+  go-unit-shard:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Go (unit)
+    name: Go (unit ${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     defaults:
       run:
         working-directory: gateway-go
@@ -273,14 +280,54 @@ jobs:
 
       # No coverprofile here — atomic coverage was ~2× unit wall with no PR gate.
       # Nightly Drift emits the coverage artifact.
-      - name: Test
-        run: CGO_ENABLED=0 go test -count=1 ./...
+      - name: Test shard
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: "4"
+        run: |
+          set -euo pipefail
+          mapfile -t pkgs < <(go list ./...)
+          selected=()
+          for i in "${!pkgs[@]}"; do
+            if (( i % SHARDS == SHARD )); then
+              selected+=("${pkgs[i]}")
+            fi
+          done
+          echo "shard ${SHARD}/${SHARDS}: ${#selected[@]} packages"
+          if [ "${#selected[@]}" -eq 0 ]; then
+            echo "empty shard — nothing to test"
+            exit 0
+          fi
+          CGO_ENABLED=0 go test -count=1 "${selected[@]}"
+
+  # Aggregate check name "Go (unit)" + race/runtime-health (small; keep off the
+  # sharded critical path's compile fan-out).
+  # No defaults.working-directory here: the require step runs before checkout,
+  # and gateway-go/ does not exist yet on a fresh runner.
+  go-unit:
+    name: Go (unit)
+    needs: [go-unit-shard]
+    if: always() && needs.go-unit-shard.result != 'skipped'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    steps:
+      - name: Require unit shards
+        run: test "${{ needs.go-unit-shard.result }}" = "success"
+
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: gateway-go/go.sum
 
       - name: Test runtime-health audit
-        working-directory: .
         run: make runtime-health-test
 
       - name: Race test (concurrency core)
+        working-directory: gateway-go
         run: >-
           CGO_ENABLED=1 go test -race -count=1
           ./internal/core/corecache

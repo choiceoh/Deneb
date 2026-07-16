@@ -107,6 +107,12 @@ func TestManagerStopCancelsAndJoinsBackgroundProcess(t *testing.T) {
 }
 
 func TestManagerStopKillsTermIgnoringProcessGroup(t *testing.T) {
+	// Child traps TERM; production WaitDelay is 5s before pipe teardown. Shrink
+	// so this contract test still proves group SIGKILL without dominating the suite.
+	prev := gracefulStopDelay
+	gracefulStopDelay = 50 * time.Millisecond
+	t.Cleanup(func() { gracefulStopDelay = prev })
+
 	manager := NewManager(testLogger())
 	t.Cleanup(manager.Stop)
 	pidFile := t.TempDir() + "/process-group.pid"

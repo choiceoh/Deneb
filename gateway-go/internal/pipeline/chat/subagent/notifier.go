@@ -35,11 +35,11 @@ type RunParams = runstate.Params
 // subagentNotifyChCap is the buffer size for per-parent notification channels.
 const subagentNotifyChCap = 20
 
-// Debounced queue constants.
-const (
-	notifyDebounceMs = 1000 // 1s debounce window — batches concurrent completions.
-	notifyQueueCap   = 20   // max pending notifications before overflow summarize.
-)
+// Debounced queue knobs. notifyDebounceMs is a var so unit tests can shrink the
+// 1s production window without sleeping through it (TestMain in notifier_test).
+var notifyDebounceMs = 1000 // 1s debounce window — batches concurrent completions.
+
+const notifyQueueCap = 20 // max pending notifications before overflow summarize.
 
 // notifyQueue collects child completion notifications for a parent session
 // and flushes them as a batch after the debounce window expires.

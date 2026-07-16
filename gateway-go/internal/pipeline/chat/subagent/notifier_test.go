@@ -2,6 +2,7 @@ package subagent
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -9,6 +10,12 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
+
+func TestMain(m *testing.M) {
+	// Production debounce is 1s; tests only need the timer semantics.
+	notifyDebounceMs = 50
+	os.Exit(m.Run())
+}
 
 func TestNotifyQueueEmitsSingleItem(t *testing.T) {
 	var flushed []notifyItem
@@ -97,8 +104,8 @@ func TestNotifyQueueFlushesOnceWhenEnqueuedWithinWindow(t *testing.T) {
 	// First enqueue.
 	q.enqueue(notifyItem{childKey: "child:1", label: "a", status: session.StatusDone})
 
-	// Wait 500ms (less than debounce), enqueue another.
-	time.Sleep(500 * time.Millisecond)
+	// Wait less than the (test-shrunk) debounce, enqueue another.
+	time.Sleep(20 * time.Millisecond)
 	q.enqueue(notifyItem{childKey: "child:2", label: "b", status: session.StatusDone})
 
 	// Should get only one flush with both items.
@@ -109,7 +116,7 @@ func TestNotifyQueueFlushesOnceWhenEnqueuedWithinWindow(t *testing.T) {
 	}
 
 	// Wait to ensure no extra flushes.
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(80 * time.Millisecond)
 
 	mu.Lock()
 	defer mu.Unlock()

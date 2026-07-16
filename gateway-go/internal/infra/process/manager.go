@@ -24,7 +24,9 @@ import (
 
 // gracefulStopDelay is the maximum time os/exec gives the direct child to
 // exit after SIGTERM before forcing it down and releasing its pipes.
-const gracefulStopDelay = 5 * time.Second
+// Tests that assert TERM-ignoring children shrink this via t.Cleanup so the
+// suite does not wait the full production grace on every Stop().
+var gracefulStopDelay = 5 * time.Second
 
 // RunStatus represents the current state of a managed process.
 type RunStatus string

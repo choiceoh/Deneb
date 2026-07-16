@@ -395,12 +395,16 @@ func handleMissingChannelReply(params RunParams, deps runDeps, replyText string,
 	persistReplyDeliveryFailure(deps, params.SessionKey, params.Delivery.Channel, nil, logger)
 }
 
+// channelReplyRetryDelay is the pause before one channel-reply retry.
+// Tests shrink this via TestMain.
+var channelReplyRetryDelay = 500 * time.Millisecond
+
 func sendChannelReply(ctx context.Context, params RunParams, deps runDeps, replyText string, logger *slog.Logger) {
 	err := deps.callbacks.replyFunc(ctx, params.Delivery, replyText)
 	if err != nil {
 		logger.Warn("channel reply failed, retrying once",
 			"error", err, "channel", params.Delivery.Channel)
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(channelReplyRetryDelay)
 		err = deps.callbacks.replyFunc(ctx, params.Delivery, replyText)
 	}
 	if err == nil {

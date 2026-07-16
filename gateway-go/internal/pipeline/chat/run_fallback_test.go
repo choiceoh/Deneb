@@ -51,7 +51,7 @@ func TestRunAgentWithFallback_StallDegradesToEmptyTimeoutResult(t *testing.T) {
 		// server.Close from hanging the suite if cancellation never arrives.
 		select {
 		case <-r.Context().Done():
-		case <-time.After(1 * time.Second):
+		case <-time.After(300 * time.Millisecond):
 		}
 	}))
 	defer server.Close()
