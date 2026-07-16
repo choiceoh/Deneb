@@ -50,7 +50,9 @@ suspend fun DenebGatewayClient.fetchCategories(force: Boolean = false): WikiCate
             totalPages = p.totalPages,
             totalBytes = p.totalBytes,
         )
-    }
+        // Offline: the mirror's rollup, outside the session cache so a hit
+        // can't mask the next online fetch (null with no mirror → retry UI).
+    } ?: wikiMirror.categories()
 }
 
 /** Pages within one category (`memory.list_in_category`); blank lists all.
@@ -70,7 +72,9 @@ suspend fun DenebGatewayClient.fetchCategoryPages(category: String, force: Boole
             .filter { it.path.isNotBlank() }
             .distinctByLast { it.path }
             .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
-    }
+        // Offline: the mirror's listing, outside the session cache so a hit
+        // can't mask the next online fetch (empty → null → retry UI).
+    } ?: wikiMirror.listCategory(if (category == "(root)") "" else category).ifEmpty { null }
 }
 
 /** The category a wiki path files under (its leading directory), for targeted
@@ -158,24 +162,14 @@ suspend fun DenebGatewayClient.moveCategoryPages(paths: List<String>, targetCate
 /** Full wiki/memory page by path (`miniapp.memory.get_page`). Session-cached
  *  per path (bounded) so re-opening a just-read page is instant; a save to the
  *  path invalidates, so the post-save refetch is always fresh. */
-suspend fun DenebGatewayClient.fetchWikiPage(path: String, force: Boolean = false): WikiPage? {
-    return sectionCaches.wikiPages.getOrLoad(path, force) {
-        val p = callRpc<WikiPagePayload>(
-            "miniapp.memory.get_page",
-            buildJsonObject { put("path", path) },
-        ) ?: return@getOrLoad null
-        WikiPage(
-            path = p.path,
-            title = p.title.ifBlank { p.path },
-            summary = p.summary,
-            category = p.category,
-            tags = p.tags,
-            updated = p.updated,
-            body = p.body,
-            code = p.code,
-        )
-    }
-}
+suspend fun DenebGatewayClient.fetchWikiPage(path: String, force: Boolean = false): WikiPage? = sectionCaches.wikiPages.getOrLoad(path, force) {
+    callRpc<WikiPagePayload>(
+        "miniapp.memory.get_page",
+        buildJsonObject { put("path", path) },
+    )?.toWikiPage(fallbackPath = path)
+    // Offline: the mirror's copy (whole corpus on disk, WikiMirror.kt),
+    // outside the session cache so the next online view refetches fresh.
+} ?: wikiMirror.get(path)
 
 /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */
 suspend fun DenebGatewayClient.saveWikiPage(
@@ -215,7 +209,9 @@ suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, b
         ?.takeIf { it.isNotBlank() }
 }
 
-/** Unified search across wiki, diary and people (`miniapp.search.all`). */
+/** Unified search across wiki, diary and people (`miniapp.search.all`).
+ *  Offline, wiki hits come from the on-device mirror (diary/people need the
+ *  gateway); null only when there's no mirror either, so the screen retries. */
 suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
     val p = callRpc<SearchAllResult>(
         "miniapp.search.all",
@@ -223,7 +219,9 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
             put("query", query)
             put("limit", 20)
         },
-    ) ?: return null
+    ) ?: return wikiMirror.search(query)
+        .ifEmpty { null }
+        ?.let { SearchResults(wiki = it, diary = emptyList(), people = emptyList()) }
     return SearchResults(
         wiki = p.wiki.filter { it.path.isNotBlank() }
             .map { SearchHit(it.path, it.title.ifBlank { it.path }, it.snippet.ifBlank { it.summary }, it.category) },

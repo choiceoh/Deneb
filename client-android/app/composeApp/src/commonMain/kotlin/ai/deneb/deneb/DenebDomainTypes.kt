@@ -301,8 +301,10 @@ data class PersonHit(
     val wikiSummary: String = "",
 )
 
-/** Full wiki/memory page for the page view. */
+/** Full wiki/memory page for the page view. Serializable so the offline wiki
+ *  mirror can persist whole pages (WikiMirror.kt shards). */
 @Immutable
+@Serializable
 data class WikiPage(
     val path: String,
     val title: String,

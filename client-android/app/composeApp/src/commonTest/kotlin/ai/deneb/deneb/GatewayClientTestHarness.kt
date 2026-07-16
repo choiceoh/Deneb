@@ -199,6 +199,23 @@ internal data class GatewayClientFixture(
     val client: DenebGatewayClient,
 )
 
+/** In-memory wiki-mirror storage so tests never read — or wipe (foreign-owner
+ *  load path) — the machine's real mirror files. Pass a prior fixture's
+ *  instance to simulate a restart over the same mirror disk. */
+internal class MemoryWikiMirrorFiles : WikiMirrorFiles {
+    val files = mutableMapOf<String, String>()
+
+    override fun read(name: String): String? = files[name]
+
+    override fun write(name: String, content: String) {
+        files[name] = content
+    }
+
+    override fun delete(name: String) {
+        files.remove(name)
+    }
+}
+
 internal fun gatewayClientFixture(
     token: String = "test-token",
     url: String = "https://gateway.example",
@@ -206,6 +223,7 @@ internal fun gatewayClientFixture(
     // Pass a prior fixture's settings to simulate a process restart over the same
     // disk (cache-then-network seeding); default is a fresh store.
     settings: AppSettings = AppSettings(MapSettings()),
+    wikiMirrorFiles: WikiMirrorFiles = MemoryWikiMirrorFiles(),
 ): GatewayClientFixture {
     settings.settings.putString(DenebGatewayClient.KEY_TOKEN, token)
     settings.settings.putString(DenebGatewayClient.KEY_URL, url)
@@ -214,6 +232,7 @@ internal fun gatewayClientFixture(
         SmsDraftStore(settings),
         SmsSender(),
         transport.httpClient,
+        wikiMirrorFiles,
     )
     return GatewayClientFixture(settings, transport, client)
 }

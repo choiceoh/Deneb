@@ -111,6 +111,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.move_page":        memoryMovePage(deps),
 		"miniapp.memory.categories":       memoryCategories(deps),
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
+		"miniapp.memory.mirror":           memoryMirror(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
 	}
 }
