@@ -8,7 +8,7 @@ import { readJsonSSE } from "./sse";
 import { log } from "./log";
 import { getJSON, setJSON } from "./storage";
 import { isTauri } from "./tauri";
-import type { MailAttachment, PromptDetailOut, PromptListResponse, PromptRow } from "./types";
+import type { MailAttachment, ProjectSiteSetStatusOut, PromptDetailOut, PromptListResponse, PromptRow } from "./types";
 
 const rpcLog = log.child("rpc");
 const chatLog = log.child("chat");
@@ -183,6 +183,12 @@ export const updatePrompt = (cfg: GatewayConfig, id: string, text: string) =>
 
 export const resetPrompt = (cfg: GatewayConfig, id: string) =>
   callRpc<PromptDetailOut>(cfg, "miniapp.prompts.reset", { id });
+
+// --- Project sites (miniapp.project.site.*) ---
+
+/** Set a 현장 page lifecycle status (후보/계약/개설/준공, or "" = 미분류). */
+export const setProjectSiteStatus = (cfg: GatewayConfig, path: string, status: string) =>
+  callRpc<ProjectSiteSetStatusOut>(cfg, "miniapp.project.site.setStatus", { path, status });
 
 // --- Sessions (miniapp.sessions.*) — conversation history drawer ---
 

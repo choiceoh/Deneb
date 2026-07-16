@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { ProjectSiteRow } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
+import { setProjectSiteStatus } from "@/gateway";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { GridNotice } from "@/components/Grid";
 import { Modal, Detail } from "@/components/Modal";
@@ -63,6 +64,23 @@ const STATUS_UNDER_CONSTRUCTION = "개설";
 const STATUS_CONTRACT = "계약";
 const STATUS_COMPLETED = "준공";
 const STATUS_PROSPECTIVE = "후보";
+
+// Lifecycle choices for the detail-sheet editor ("" = 미분류). Order follows the
+// pipeline 후보 → 계약 → 개설 → 준공, with clear-to-미분류 last.
+const STATUS_CHOICES: { value: string; label: string }[] = [
+  { value: STATUS_PROSPECTIVE, label: "후보" },
+  { value: STATUS_CONTRACT, label: "계약" },
+  { value: STATUS_UNDER_CONSTRUCTION, label: "개설" },
+  { value: STATUS_COMPLETED, label: "준공" },
+  { value: "", label: "미분류" },
+];
+
+/** Path-shape check for 프로젝트/<name>/현장/<site>.md — editable status surface. */
+function isSitePagePath(path?: string): boolean {
+  if (!path) return false;
+  const parts = path.replace(/\\/g, "/").split("/");
+  return parts.length === 4 && parts[0] === "프로젝트" && parts[2] === "현장" && parts[3].endsWith(".md");
+}
 
 function statusVisible(
   status: string,
@@ -288,7 +306,7 @@ function ddayText(days: number): string {
 }
 
 export function SiteMapPane() {
-  const { connected, openWiki } = useWorkspace();
+  const { connected, openWiki, cfg } = useWorkspace();
   const { result, query } = useCachedList<ProjectSiteRow>("sitemap", connected);
   const { pins, unplaced } = useMemo(() => placeSites(result?.data ?? []), [result?.data]);
 
@@ -300,6 +318,29 @@ export function SiteMapPane() {
   const [showProspective, setShowProspective] = useState(false);
   const [showUnclassified, setShowUnclassified] = useState(false);
   const [selected, setSelected] = useState<Pin | null>(null);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const setSelectedPin = (pin: Pin | null) => {
+    setStatusError(null);
+    setSelected(pin);
+  };
+
+  const applySiteStatus = async (next: string) => {
+    const path = selected?.path;
+    if (!selected || !path || !isSitePagePath(path) || statusBusy || next === selected.status) return;
+    setStatusBusy(true);
+    setStatusError(null);
+    try {
+      const out = await setProjectSiteStatus(cfg, path, next);
+      setSelected({ ...selected, status: out.status ?? "" });
+      await query.refetch();
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "상태 변경에 실패했습니다.");
+    } finally {
+      setStatusBusy(false);
+    }
+  };
 
   // Wheel-zoom + drag-pan via a controlled viewBox. Full extent = the whole map;
   // scrolling the wheel zooms toward the cursor, dragging pans (only meaningful
@@ -618,7 +659,7 @@ export function SiteMapPane() {
                 transform={`translate(${pin.x.toFixed(1)},${pin.y.toFixed(1)})`}
                 onClick={() => {
                   if (pannedRef.current) return;
-                  setSelected(pin);
+                  setSelectedPin(pin);
                 }}
                 style={{ cursor: "pointer" }}
               >
@@ -674,7 +715,7 @@ export function SiteMapPane() {
                 key={i}
                 type="button"
                 className="fade-up"
-                onClick={() => setSelected(pin)}
+                onClick={() => setSelectedPin(pin)}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr auto",
@@ -742,7 +783,7 @@ export function SiteMapPane() {
       {selected && (
         <Modal
           title={selected.project}
-          onClose={() => setSelected(null)}
+          onClose={() => setSelectedPin(null)}
           footer={
             selected.path ? (
               <button
@@ -750,7 +791,7 @@ export function SiteMapPane() {
                 className="btn btn-accent"
                 onClick={() => {
                   openWiki(selected.path as string);
-                  setSelected(null);
+                  setSelectedPin(null);
                 }}
               >
                 위키 열기
@@ -760,7 +801,22 @@ export function SiteMapPane() {
         >
           {selected.client && <Detail label="거래처" value={selected.client} />}
           <Detail label="현장" value={selected.site} />
-          {selected.status && <Detail label="상태" value={selected.status} />}
+          {isSitePagePath(selected.path) ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>상태</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {STATUS_CHOICES.map((c) => (
+                  <Chip key={c.label} on={selected.status === c.value} onClick={() => void applySiteStatus(c.value)}>
+                    {c.label}
+                  </Chip>
+                ))}
+              </div>
+              {statusBusy && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>저장 중…</div>}
+              {statusError && <div style={{ fontSize: 12, color: "var(--due)", marginTop: 6 }}>{statusError}</div>}
+            </div>
+          ) : (
+            <Detail label="상태" value={selected.status || "미분류"} />
+          )}
           {selected.source && <Detail label="에너지원" value={selected.source} />}
           {selected.type && <Detail label="특성" value={typeLabel(selected.type)} />}
           <Detail label="용량" value={capacityText(selected.capacity)} />

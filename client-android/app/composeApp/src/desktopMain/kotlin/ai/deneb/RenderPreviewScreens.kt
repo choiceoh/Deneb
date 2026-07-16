@@ -102,7 +102,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "현장 지도", onBack = {}) {
                 Column(Modifier.fillMaxWidth()) {
-                    SiteMapContent(sampleSites) {}
+                    SiteMapContent(sampleSites)
                 }
             }
         }

@@ -2080,6 +2080,18 @@ class MiniappWireNullCompatibilityTest {
             field = "completion_inspection",
         ),
         nullContract(
+            name = "ProjectSiteSetStatusOut.path",
+            serializer = ProjectSiteSetStatusOut.serializer(),
+            empty = ProjectSiteSetStatusOut(),
+            field = "path",
+        ),
+        nullContract(
+            name = "ProjectSiteSetStatusOut.status",
+            serializer = ProjectSiteSetStatusOut.serializer(),
+            empty = ProjectSiteSetStatusOut(),
+            field = "status",
+        ),
+        nullContract(
             name = "ProjectSitesOut.sites",
             serializer = ProjectSitesOut.serializer(),
             empty = ProjectSitesOut(),

@@ -361,6 +361,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("project", "client", "path", "due", "sites", "kinds", "capacity", "status", "contract_date", "construction_start", "module_delivery", "pre_use_inspection", "completion_inspection"),
         ),
         contract(
+            name = "ProjectSiteSetStatusOut",
+            serializer = ProjectSiteSetStatusOut.serializer(),
+            empty = ProjectSiteSetStatusOut(),
+            fields = listOf("path", "status"),
+        ),
+        contract(
             name = "ProjectSitesOut",
             serializer = ProjectSitesOut.serializer(),
             empty = ProjectSitesOut(),

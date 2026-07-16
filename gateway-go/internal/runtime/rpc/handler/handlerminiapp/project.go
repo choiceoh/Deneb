@@ -21,11 +21,12 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// ProjectStatusSource yields each project's parsed 현재 상태 digest. Satisfied by
-// the wiki store (*wiki.Store.ProjectStatuses).
+// ProjectStatusSource yields each project's parsed 현재 상태 digest and 현장 list,
+// and can update a 현장 page's lifecycle status. Satisfied by the wiki store.
 type ProjectStatusSource interface {
 	ProjectStatuses() ([]wiki.ProjectStatus, error)
 	ProjectSites() ([]wiki.ProjectSite, error)
+	SetSiteStatus(path, status string) error
 }
 
 // ProjectLinkedNotebook / ProjectLinkedWorkItem are the minimal item projections
@@ -134,6 +135,15 @@ type ProjectSitesOut struct {
 	Sites []ProjectSiteRow `json:"sites"`
 }
 
+// ProjectSiteSetStatusOut is the miniapp.project.site.setStatus response: the
+// path written and the normalized status ("" = 미분류).
+//
+//deneb:wire
+type ProjectSiteSetStatusOut struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
 // ProjectLinkedOut is the miniapp.project.linked response: the IDs of items
 // linked to one project, grouped by type, resolved server-side. Clients filter
 // their already-fetched lists by these IDs instead of running a local heuristic.
@@ -158,10 +168,44 @@ func ProjectMethods(deps ProjectDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.project.digests": projectDigests(deps),
-		"miniapp.project.linked":  projectLinked(deps),
-		"miniapp.project.sites":   projectSites(deps),
+		"miniapp.project.digests":        projectDigests(deps),
+		"miniapp.project.linked":         projectLinked(deps),
+		"miniapp.project.sites":          projectSites(deps),
+		"miniapp.project.site.setStatus": projectSiteSetStatus(deps),
 	}
+}
+
+// projectSiteSetStatus sets the lifecycle status on a 현장 page (후보/계약/개설/준공,
+// or "" to clear to 미분류). Only real 현장 pages are writable — 대표페이지 fallback
+// pins have no per-site page to update.
+func projectSiteSetStatus(deps ProjectDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Path   string `json:"path"`
+		Status string `json:"status"`
+	}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		path := strings.TrimSpace(p.Path)
+		if path == "" {
+			return rpcerr.MissingParam("path").Response(req.ID)
+		}
+		src, err := deps.Wiki()
+		if err != nil {
+			return rpcerr.WrapUnavailable("project site status unavailable", err).Response(req.ID)
+		}
+		if err := src.SetSiteStatus(path, p.Status); err != nil {
+			msg := err.Error()
+			switch {
+			case strings.Contains(msg, "not a site page"), strings.Contains(msg, "invalid status"):
+				return rpcerr.InvalidRequest(msg).Response(req.ID)
+			case strings.Contains(msg, "not found"):
+				return rpcerr.NotFound("site page " + rpcutil.TruncateForError(path)).Response(req.ID)
+			default:
+				return rpcerr.WrapUnavailable("project site status update failed", err).Response(req.ID)
+			}
+		}
+		status, _ := wiki.NormalizeSiteStatus(p.Status)
+		return rpcutil.RespondOK(req.ID, ProjectSiteSetStatusOut{Path: path, Status: status})
+	})
 }
 
 // projectSites lists every active project that carries a 현장, for the 현장 지도.

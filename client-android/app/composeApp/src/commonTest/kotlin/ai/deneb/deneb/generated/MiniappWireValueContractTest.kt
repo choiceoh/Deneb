@@ -2192,6 +2192,24 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "ProjectSiteSetStatusOut",
+            serializer = ProjectSiteSetStatusOut.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "path",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "status",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "path",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "ProjectSitesOut",
             serializer = ProjectSitesOut.serializer(),
             fields = listOf(
