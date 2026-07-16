@@ -51,6 +51,24 @@ func CalendarChanged(eventID string) AppendInput {
 	}
 }
 
+// WikiChanged signals that the wiki page at relPath was written or deleted
+// server-side (agent tool, miniapp RPC, dreamer). The client invalidates its
+// page/category snapshots for the path and refetches on next view, so this
+// carries no payload — only the path for targeting.
+func WikiChanged(relPath string) AppendInput {
+	return AppendInput{
+		Type:     TypeWikiChanged,
+		EntityID: relPath,
+	}
+}
+
+// OrgChanged signals that the org chart was saved. The chart also derives the
+// dashboard's part lanes, so the client drops both snapshots and refetches on
+// next view — no payload needed.
+func OrgChanged() AppendInput {
+	return AppendInput{Type: TypeOrgChanged}
+}
+
 // WorkFeedCreated builds a work-feed creation event.
 func WorkFeedCreated(item workfeed.Item) AppendInput {
 	return workFeedItem(TypeWorkFeedCreated, item)

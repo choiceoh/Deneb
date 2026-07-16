@@ -128,6 +128,56 @@ class SectionCacheContractTest {
     }
 
     @Test
+    fun wikiChangedSyncEventInvalidatesWikiSnapshots() = runTest {
+        val f = gatewayClientFixture()
+        // Prime the wiki caches (page body + category list).
+        f.transport.enqueueRpc(wikiPagePayload("프로젝트/딜", body = "before"))
+        f.transport.enqueueRpc(pagesPayload("프로젝트/딜"))
+        f.client.fetchWikiPage("프로젝트/딜")
+        f.client.fetchCategoryPages("프로젝트")
+
+        // One sync page carrying the server's wiki.changed, then the empty-feed
+        // heal refetch syncNativeState always runs afterwards.
+        f.transport.enqueueRpc(
+            """{"events":[{"seq":1,"type":"wiki.changed","entityId":"프로젝트/딜","timestampMs":1}],"cursor":1,"hasMore":false}""",
+        )
+        f.transport.enqueueRpc("""{"items":[]}""")
+        f.client.syncNativeState()
+
+        // Both snapshots dropped: the next reads go back to the network.
+        f.transport.enqueueRpc(wikiPagePayload("프로젝트/딜", body = "after"))
+        f.transport.enqueueRpc(pagesPayload("프로젝트/딜"))
+        assertEquals("after", f.client.fetchWikiPage("프로젝트/딜")?.body)
+        f.client.fetchCategoryPages("프로젝트")
+        // Method-scoped counts (syncNativeState also warms the home caches):
+        // 2 page reads + 2 list reads = both snapshots really went back out.
+        assertEquals(2, f.transport.requests.count { it.rpcMethod == "miniapp.memory.get_page" })
+        assertEquals(2, f.transport.requests.count { it.rpcMethod == "miniapp.memory.list_in_category" })
+    }
+
+    @Test
+    fun orgChangedSyncEventInvalidatesOrgAndDashboard() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc("""{"nodes":[{"id":"a","name":"before"}]}""")
+        f.transport.enqueueRpc(lanesPayload("before"))
+        f.client.fetchOrg()
+        f.client.fetchDashboardLanes()
+
+        f.transport.enqueueRpc(
+            """{"events":[{"seq":1,"type":"org.changed","timestampMs":1}],"cursor":1,"hasMore":false}""",
+        )
+        f.transport.enqueueRpc("""{"items":[]}""")
+        f.client.syncNativeState()
+
+        f.transport.enqueueRpc("""{"nodes":[{"id":"a","name":"after"}]}""")
+        f.transport.enqueueRpc(lanesPayload("after"))
+        assertEquals("after", f.client.fetchOrg()?.nodes?.single()?.name)
+        assertEquals("after", f.client.fetchDashboardLanes()?.lanes?.single()?.key)
+        assertEquals(2, f.transport.requests.count { it.rpcMethod == "miniapp.org.get" })
+        assertEquals(2, f.transport.requests.count { it.rpcMethod == "miniapp.dashboard.lanes" })
+    }
+
+    @Test
     fun orgSaveInvalidatesTheOrgCache() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc("""{"nodes":[{"id":"a","name":"before"}]}""")

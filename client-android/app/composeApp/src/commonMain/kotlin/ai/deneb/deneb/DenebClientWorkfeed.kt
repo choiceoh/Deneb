@@ -504,6 +504,28 @@ private fun DenebGatewayClient.applyNativeSyncEvent(event: NativeSyncEvent, relo
                 reloadSessions += event.sessionKey
             }
         }
+
+        // Server-side wiki write/delete (agent tool, RPC, dreamer): drop the touched
+        // page/category snapshots so the next view refetches instead of serving the
+        // TTL-stale copy. Pure invalidation — no fetch here (the surface fetches on
+        // view), so a burst of dreamer writes costs nothing beyond map removals.
+        "wiki.changed" -> {
+            val path = event.entityId
+            if (path.isNotBlank()) {
+                sectionCaches.wikiPages.invalidate(path)
+                sectionCaches.categoryPages.invalidate(path.substringBeforeLast('/', missingDelimiterValue = ""))
+            }
+            // Page counts and cross-category lists (생성·이동·재분류) drift too —
+            // cheap full drop; the next 카테고리 view refetches.
+            sectionCaches.categories.invalidate()
+        }
+
+        // Org-chart save (this client, another client, the desktop workstation):
+        // the chart also derives the dashboard's part lanes, so drop both.
+        "org.changed" -> {
+            sectionCaches.org.invalidate()
+            sectionCaches.dashboard.invalidate()
+        }
     }
 }
 

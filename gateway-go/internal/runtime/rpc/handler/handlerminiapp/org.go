@@ -58,6 +58,10 @@ type OrgDeps struct {
 	// the two are never written back into org.json. A nil LookupContact (no
 	// contacts store) simply disables enrichment; the editor still works.
 	LookupContact func(name string) (phones, emails []string)
+	// NotifyChanged, when set, fires once after a successful save — the
+	// native-sync mirror (org.changed), so other clients drop their org/dashboard
+	// snapshots instead of waiting out their TTL. Nil disables (tests).
+	NotifyChanged func()
 	// ResolvePeople maps member display names to their 인물 wiki page relPaths in
 	// one call (one disk scan for the whole chart), so the GET response can link
 	// each member to their knowledge page. Read-only, GET-only, never persisted.
@@ -189,6 +193,9 @@ func orgSave(deps OrgDeps) rpcutil.HandlerFunc {
 		}
 		if err := atomicfile.WriteFile(deps.SavePath(), data, nil); err != nil {
 			return rpcerr.WrapUnavailable("org chart write failed", err).Response(req.ID)
+		}
+		if deps.NotifyChanged != nil {
+			deps.NotifyChanged()
 		}
 		return rpcutil.RespondOK(req.ID, OrgSaveOut{
 			Saved:     true,
