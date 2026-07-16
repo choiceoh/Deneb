@@ -363,3 +363,26 @@ func TestOrgSave_DropsInboundContacts(t *testing.T) {
 func bytesContains(b []byte, sub string) bool {
 	return strings.Contains(string(b), sub)
 }
+
+func TestOrgSave_NotifiesChangeOnSuccessOnly(t *testing.T) {
+	deps, _ := fakeOrgDeps(t)
+	fired := 0
+	deps.NotifyChanged = func() { fired++ }
+
+	// Validation failure (node with a missing parent) must not notify.
+	bad := OrgTreeOut{Nodes: []OrgNodeOut{{ID: "a", Name: "고아", ParentID: "ghost"}}}
+	if resp := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", bad)); resp.OK {
+		t.Fatal("invalid tree unexpectedly saved")
+	}
+	if fired != 0 {
+		t.Fatalf("notify fired %d times on a rejected save, want 0", fired)
+	}
+
+	// Successful save notifies exactly once (the native-sync org.changed mirror).
+	if resp := orgSave(deps)(authedCtx(), reqWith(t, "miniapp.org.save", validWireTree())); !resp.OK {
+		t.Fatalf("valid save failed: %+v", resp.Error)
+	}
+	if fired != 1 {
+		t.Fatalf("notify fired %d times on a successful save, want 1", fired)
+	}
+}

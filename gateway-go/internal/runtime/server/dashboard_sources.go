@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerminiapp"
@@ -92,6 +93,17 @@ func (s *Server) orgDeps() handlerminiapp.OrgDeps {
 		Load:          func() (org.OrgTree, error) { return org.Load() },
 		SavePath:      org.ResolvePath,
 		LookupContact: orgContactLookup(s.contactsStore),
+		// Native-sync mirror: a saved chart (this client, another client, the
+		// desktop workstation) makes every client drop its org/dashboard
+		// snapshots. Warn on append failure — clients heal via TTL revalidation.
+		NotifyChanged: func() {
+			if s.nativeSyncStore == nil {
+				return
+			}
+			if _, err := s.nativeSyncStore.Append(nativesync.OrgChanged()); err != nil {
+				s.logger.Warn("native sync: org change append failed", "error", err)
+			}
+		},
 		// Read s.wikiStore lazily at GET time (not orgDeps() time): the org editor
 		// registers before the wiki store is wired, so capturing the field's value
 		// here would freeze a nil. A nil store at call time simply yields no person

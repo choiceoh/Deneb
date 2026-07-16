@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -65,6 +66,12 @@ type Store struct {
 
 	// writeMu serializes page-body writers; see the type doc for the hierarchy.
 	writeMu sync.Mutex
+
+	// changeCh, when set via SetChangeObserver, receives the relPath of every
+	// meaningful page write/delete (backlink/merge maintenance excluded) for the
+	// native-sync mirror. Guarded by writeMu: set once at wiring time, and both
+	// emit sites (writePageLocked, deletePageLocked) already hold writeMu.
+	changeCh chan string
 
 	// dealMu serializes appends/reads of the typed deal-record ledger
 	// (.deals.jsonl), independent of page writes. See deal_records.go.
@@ -268,7 +275,50 @@ func (s *Store) writePageLocked(relPath string, page *Page) error {
 		return err
 	}
 	_ = s.appendLog(op, relPath+" — "+page.Meta.Title) // best-effort: audit log is non-critical
+	s.notifyChangedLocked(relPath)
 	return nil
+}
+
+// SetChangeObserver registers fn, invoked with a written/deleted page's relPath
+// after each meaningful mutation (WritePage/UpdatePage/DeletePage and the move
+// built on them — backlink/merge maintenance excluded). fn runs on a dedicated
+// drain goroutine, never under the store's locks, and the goroutine ends with
+// ctx (concurrency rules 3–5). Emission is a non-blocking send into a bounded
+// buffer, so a slow observer can never stall a wiki write — a dropped event just
+// means the client falls back to its TTL revalidation. Set once at wiring time,
+// before the store is used concurrently.
+func (s *Store) SetChangeObserver(ctx context.Context, fn func(relPath string)) {
+	ch := make(chan string, 256)
+	s.writeMu.Lock()
+	s.changeCh = ch
+	s.writeMu.Unlock()
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in wiki change observer", "panic", r)
+			}
+		}()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case relPath := <-ch:
+				fn(relPath)
+			}
+		}
+	}()
+}
+
+// notifyChangedLocked queues a change for the observer's drain goroutine. The
+// caller holds writeMu (which also guards changeCh). Non-blocking by design.
+func (s *Store) notifyChangedLocked(relPath string) {
+	if s.changeCh == nil {
+		return
+	}
+	select {
+	case s.changeCh <- relPath:
+	default:
+	}
 }
 
 // UpdatePage atomically reads the page at relPath, hands it to mutate, and writes
@@ -392,6 +442,7 @@ func (s *Store) deletePageLocked(relPath string) error {
 
 	// Remove backlinks: remove relPath from each formerly-related page.
 	s.maintainBacklinks(relPath, oldRelated, nil)
+	s.notifyChangedLocked(relPath)
 	return nil
 }
 

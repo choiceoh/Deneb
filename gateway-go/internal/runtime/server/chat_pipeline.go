@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/org"
 	domskills "github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -94,6 +95,20 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 			s.wikiStore = wikiStore
 			chatCfg.Memory.Wiki = wikiStore
 			s.logger.Info("wiki knowledge base enabled", "dir", wikiCfg.Dir)
+
+			// Mirror meaningful wiki writes/deletes onto the native-sync stream so
+			// clients drop their page/category snapshots promptly instead of waiting
+			// out their TTL (the calendar observer's pattern). The store is the
+			// single choke point every writer funnels through: agent tools, miniapp
+			// RPCs, the dreamer. Append failure is Warn, not Error — clients heal
+			// via TTL revalidation, so no user-observable loss.
+			if s.nativeSyncStore != nil {
+				wikiStore.SetChangeObserver(s.ShutdownCtx(), func(relPath string) {
+					if _, err := s.nativeSyncStore.Append(nativesync.WikiChanged(relPath)); err != nil {
+						s.logger.Warn("native sync: wiki change append failed", "path", relPath, "error", err)
+					}
+				})
+			}
 
 			// Wiki dreamer.
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)

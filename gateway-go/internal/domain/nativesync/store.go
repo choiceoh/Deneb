@@ -33,6 +33,15 @@ const (
 	// out its background warm throttle. Carries only the event ID — the client
 	// refreshes the whole upcoming list, so no per-field payload is needed.
 	TypeCalendarChanged = "calendar.changed"
+	// TypeWikiChanged signals a meaningful wiki page write or delete (agent tools,
+	// miniapp RPCs, the dreamer's main writes — backlink maintenance excluded).
+	// EntityID carries the page's relPath so the client invalidates just the
+	// touched page/category snapshots and refetches on next view — no payload.
+	TypeWikiChanged = "wiki.changed"
+	// TypeOrgChanged signals an org-chart save (this client, another client, or
+	// the desktop workstation). The client drops its org/dashboard snapshots and
+	// refetches on next view.
+	TypeOrgChanged = "org.changed"
 )
 
 // ErrInvalidEvent reports an append without an event type.
