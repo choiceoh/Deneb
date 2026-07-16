@@ -381,7 +381,13 @@ export function SiteMapPane() {
       contracted: count((s) => s === STATUS_CONTRACT),
       completed: count((s) => s === STATUS_COMPLETED),
       prospective: count((s) => s === STATUS_PROSPECTIVE),
-      unclassified: count((s) => s !== STATUS_UNDER_CONSTRUCTION && s !== STATUS_CONTRACT && s !== STATUS_COMPLETED && s !== STATUS_PROSPECTIVE),
+      unclassified: count(
+        (s) =>
+          s !== STATUS_UNDER_CONSTRUCTION &&
+          s !== STATUS_CONTRACT &&
+          s !== STATUS_COMPLETED &&
+          s !== STATUS_PROSPECTIVE,
+      ),
     };
   }, [pins, unplaced]);
 
@@ -402,9 +408,7 @@ export function SiteMapPane() {
   // leaks into the tray/count.
   const shownUnplaced = useMemo(
     () =>
-      unplaced.filter((u) =>
-        statusVisible(u.status, showContracted, showCompleted, showProspective, showUnclassified),
-      ),
+      unplaced.filter((u) => statusVisible(u.status, showContracted, showCompleted, showProspective, showUnclassified)),
     [unplaced, showContracted, showCompleted, showProspective, showUnclassified],
   );
   // 임박 검사 — how many 현장 have a 검사일 within IMMINENT_DAYS. Unplaced 현장 count too:

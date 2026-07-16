@@ -419,8 +419,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
     }
 
     val statusCounts = remember(pins, unplaced) {
-        fun count(want: (String) -> Boolean) =
-            pins.count { want(it.status) } + unplaced.count { want(it.status) }
+        fun count(want: (String) -> Boolean) = pins.count { want(it.status) } + unplaced.count { want(it.status) }
         StatusCounts(
             contracted = count { it == STATUS_CONTRACT },
             completed = count { it == STATUS_COMPLETED },
