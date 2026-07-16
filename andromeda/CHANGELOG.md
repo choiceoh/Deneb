@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.92](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.91...andromeda-v0.0.92) (2026-07-16)
+
+
+### ✨ Features
+
+* **andromeda:** consume gateway change-feed (mail/approvals/wiki) in native-sync catch-up ([#3851](https://github.com/choiceoh/Deneb/issues/3851)) ([17696ff](https://github.com/choiceoh/Deneb/commit/17696ff101ee2286737bd48d0379af9b5df2fb88))
+
 ## [0.0.91](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.90...andromeda-v0.0.91) (2026-07-16)
 
 

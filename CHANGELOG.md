@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.120.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.119.0...deneb-v4.120.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **andromeda:** consume gateway change-feed (mail/approvals/wiki) in native-sync catch-up ([#3851](https://github.com/choiceoh/Deneb/issues/3851)) ([17696ff](https://github.com/choiceoh/Deneb/commit/17696ff101ee2286737bd48d0379af9b5df2fb88))
+* **browser:** Readability식 본문 스코어로 CMS 셀렉터 미히트 시 primary root 승격 ([#3843](https://github.com/choiceoh/Deneb/issues/3843)) ([0d0c3e8](https://github.com/choiceoh/Deneb/commit/0d0c3e83d56f73c2ceab6d9f8aec2d16d109395e))
+* **deploy:** systemd socket activation for the gateway HTTP listener (zero refused window) ([#3844](https://github.com/choiceoh/Deneb/issues/3844)) ([9fba108](https://github.com/choiceoh/Deneb/commit/9fba108e70a2f81b2b6e5b36c45e01a32f63556f))
+
+
+### 🐛 Bug Fixes
+
+* **deploy:** deploy-watch records inherited candidates under their own deploy head ([#3847](https://github.com/choiceoh/Deneb/issues/3847)) ([b56da8d](https://github.com/choiceoh/Deneb/commit/b56da8dbacb3dcc4e2193be64828e499b6f8b3b0))
+
+
+### ⚡ Performance
+
+* **native:** coalesce section cache loads ([#3849](https://github.com/choiceoh/Deneb/issues/3849)) ([e1687e9](https://github.com/choiceoh/Deneb/commit/e1687e98bfd24b2cc8bc764356f2b7bd8a293b54))
+* **textsearch:** Hangul posting expansion + hoist IDF to cut mail_archive latency ([#3846](https://github.com/choiceoh/Deneb/issues/3846)) ([d28853b](https://github.com/choiceoh/Deneb/commit/d28853b6859f37147211a84ba54e0126e55fb879))
+
 ## [4.119.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.118.0...deneb-v4.119.0) (2026-07-16)
 
 
