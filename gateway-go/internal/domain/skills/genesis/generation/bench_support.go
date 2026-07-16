@@ -27,7 +27,7 @@ func (s *Service) ShadowGenerate(ctx context.Context, systemPrompt, userPrompt s
 		Model:          s.resolveModel(""),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(systemPrompt),
-		MaxTokens:      2048,
+		MaxTokens:      generationMaxTokens,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 }
