@@ -234,13 +234,33 @@ private data class SitePin(
     val sched: Sched,
 )
 
-// 후보(prospective) 현장 are hidden by default — the map is for real, contracted
-// sites. A "" status (미분류, e.g. 대표페이지 fallback rows) is always shown; only an
-// explicit 후보 is gated behind the toggle.
-private const val PROSPECTIVE = "후보"
+// Lifecycle: 후보 → 계약 → 개설 → 준공. Default = 개설 only (공사중). Everything
+// else (계약·준공·후보·미분류 "") is gated behind an "… 포함" chip so the map
+// opens on active construction sites. 대표페이지 fallback rows carry status ""
+// (미분류) — they used to always show, which flooded the map before 현장 pages
+// carried a real status.
+private const val STATUS_UNDER_CONSTRUCTION = "개설"
+private const val STATUS_CONTRACT = "계약"
+private const val STATUS_COMPLETED = "준공"
+private const val STATUS_PROSPECTIVE = "후보"
 
-// An unplaceable 현장 — carries status so the 미배치 tray can hide 후보 too, and its
-// 공정 일정 so an imminent 검사 isn't hidden just because the address doesn't resolve.
+private fun statusVisible(
+    status: String,
+    showContracted: Boolean,
+    showCompleted: Boolean,
+    showProspective: Boolean,
+    showUnclassified: Boolean,
+): Boolean = when (status) {
+    STATUS_UNDER_CONSTRUCTION -> true
+    STATUS_CONTRACT -> showContracted
+    STATUS_COMPLETED -> showCompleted
+    STATUS_PROSPECTIVE -> showProspective
+    else -> showUnclassified // "" and any unknown label
+}
+
+// An unplaceable 현장 — carries status so the 미배치 tray can apply the same
+// status gate, and its 공정 일정 so an imminent 검사 isn't hidden just because
+// the address doesn't resolve.
 private data class UnplacedSite(val site: String, val project: String, val status: String, val sched: Sched)
 
 private data class Placed(val pins: List<SitePin>, val unplaced: List<UnplacedSite>)
@@ -378,7 +398,10 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
 
     var sourceFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
     var typeFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showContracted by remember { mutableStateOf(false) }
+    var showCompleted by remember { mutableStateOf(false) }
     var showProspective by remember { mutableStateOf(false) }
+    var showUnclassified by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<SitePin?>(null) }
 
     fun select(pin: SitePin) {
@@ -395,20 +418,33 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         typeOrder.filter { it in present }
     }
 
-    val prospectiveCount = remember(pins, unplaced) {
-        pins.count { it.status == PROSPECTIVE } + unplaced.count { it.status == PROSPECTIVE }
+    val statusCounts = remember(pins, unplaced) {
+        fun count(want: (String) -> Boolean) = pins.count { want(it.status) } + unplaced.count { want(it.status) }
+        StatusCounts(
+            contracted = count { it == STATUS_CONTRACT },
+            completed = count { it == STATUS_COMPLETED },
+            prospective = count { it == STATUS_PROSPECTIVE },
+            unclassified = count {
+                it != STATUS_UNDER_CONSTRUCTION &&
+                    it != STATUS_CONTRACT &&
+                    it != STATUS_COMPLETED &&
+                    it != STATUS_PROSPECTIVE
+            },
+        )
     }
 
-    val shown = remember(pins, sourceFilter, typeFilter, showProspective) {
+    val shown = remember(pins, sourceFilter, typeFilter, showContracted, showCompleted, showProspective, showUnclassified) {
         pins.filter {
-            (showProspective || it.status != PROSPECTIVE) &&
+            statusVisible(it.status, showContracted, showCompleted, showProspective, showUnclassified) &&
                 (sourceFilter.isEmpty() || it.source in sourceFilter) &&
                 (typeFilter.isEmpty() || typeLabel(it.type) in typeFilter)
         }
     }
-    // 미배치 hides 후보 too (unless the toggle is on) so a hidden candidate never leaks in.
-    val shownUnplaced = remember(unplaced, showProspective) {
-        unplaced.filter { showProspective || it.status != PROSPECTIVE }
+    // 미배치 applies the same status gate so a hidden site never leaks in.
+    val shownUnplaced = remember(unplaced, showContracted, showCompleted, showProspective, showUnclassified) {
+        unplaced.filter {
+            statusVisible(it.status, showContracted, showCompleted, showProspective, showUnclassified)
+        }
     }
     val totalMw = remember(shown) { shown.sumOf { it.capacity } }
     // Re-derive "today" whenever the fetched rows change (keyed on [rows]) so a
@@ -467,9 +503,24 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
                     Text(t, style = DenebType.meta)
                 }
             }
-            if (prospectiveCount > 0) {
+            if (statusCounts.contracted > 0) {
+                DenebChip(selected = showContracted, onClick = { showContracted = !showContracted }) {
+                    Text("계약 포함 ${statusCounts.contracted}", style = DenebType.meta)
+                }
+            }
+            if (statusCounts.completed > 0) {
+                DenebChip(selected = showCompleted, onClick = { showCompleted = !showCompleted }) {
+                    Text("준공 포함 ${statusCounts.completed}", style = DenebType.meta)
+                }
+            }
+            if (statusCounts.prospective > 0) {
                 DenebChip(selected = showProspective, onClick = { showProspective = !showProspective }) {
-                    Text("후보 포함 $prospectiveCount", style = DenebType.meta)
+                    Text("후보 포함 ${statusCounts.prospective}", style = DenebType.meta)
+                }
+            }
+            if (statusCounts.unclassified > 0) {
+                DenebChip(selected = showUnclassified, onClick = { showUnclassified = !showUnclassified }) {
+                    Text("미분류 포함 ${statusCounts.unclassified}", style = DenebType.meta)
                 }
             }
         }
@@ -539,6 +590,13 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         }
     }
 }
+
+private data class StatusCounts(
+    val contracted: Int,
+    val completed: Int,
+    val prospective: Int,
+    val unclassified: Int,
+)
 
 private fun Set<String>.toggle(v: String): Set<String> = if (v in this) this - v else this + v
 
