@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.119.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.118.0...deneb-v4.119.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **deploy:** turn-aware idle gate — swap when no agent run is in flight ([#3842](https://github.com/choiceoh/Deneb/issues/3842)) ([fd0bb5b](https://github.com/choiceoh/Deneb/commit/fd0bb5b1af048aa8d124d0ca93cc583b9870c088))
+* **gateway:** mail/approvals change-feed — arrival + cross-client mutations push-invalidate (Phase B-2) ([#3841](https://github.com/choiceoh/Deneb/issues/3841)) ([d9db2d5](https://github.com/choiceoh/Deneb/commit/d9db2d5d9d54481b455a0df226caa3ad4148a5a5))
+* **gateway:** wiki/org change-feed over nativesync — push invalidation for client snapshots (Phase B-1) ([#3840](https://github.com/choiceoh/Deneb/issues/3840)) ([6bdc901](https://github.com/choiceoh/Deneb/commit/6bdc9015b0ff273b4ec21b7dbf7041cc6ce7caeb))
+* **groupware:** agent judges PROJECT_FILE for approval→project wiki ([#3829](https://github.com/choiceoh/Deneb/issues/3829)) ([61e8f13](https://github.com/choiceoh/Deneb/commit/61e8f13fa128455d09933978354a9c03d4d277e7))
+* **groupware:** ingest 수신참조 approvals into knowledge lane + letter highlights ([#3835](https://github.com/choiceoh/Deneb/issues/3835)) ([74612d1](https://github.com/choiceoh/Deneb/commit/74612d1eacc7048cbd1f5dc0398e0676c19cfe2d))
+* **native:** disk-backed section snapshots — instant cold start, offline last-known (Phase A) ([#3839](https://github.com/choiceoh/Deneb/issues/3839)) ([3b2bc1d](https://github.com/choiceoh/Deneb/commit/3b2bc1d2b44d821455b4dbe9582294a0f51b0293))
+* **native:** session-cache the wiki browse loop (category page lists + page bodies) ([#3838](https://github.com/choiceoh/Deneb/issues/3838)) ([472fe6e](https://github.com/choiceoh/Deneb/commit/472fe6e0e03a9834b13b0aee5006d7594ba7499f))
+* **native:** session-cache the 더보기 section fetches (2min TTL, force on PTR, invalidate on mutation) ([#3837](https://github.com/choiceoh/Deneb/issues/3837)) ([2f88d94](https://github.com/choiceoh/Deneb/commit/2f88d941dd09dfc903a4aeb6f57f36097acef787))
+* **native:** silent stale-while-revalidate on live-tab re-activation (mail 60s · calendar 120s) ([#3836](https://github.com/choiceoh/Deneb/issues/3836)) ([8a0a28f](https://github.com/choiceoh/Deneb/commit/8a0a28f4fcafc61cc6a77f416f2534964e99e146))
+* **native:** 하단 탭 상시-알라이브 전환 (LiveTabPane) — 즉시 전환·상태 보존 ([#3834](https://github.com/choiceoh/Deneb/issues/3834)) ([7bc60c8](https://github.com/choiceoh/Deneb/commit/7bc60c8116ca4975dc84fea5db5c6789b546fa8d))
+
+
+### 🐛 Bug Fixes
+
+* **genesis:** unstarve generation token budget + L4 dispatch contract discipline ([#3833](https://github.com/choiceoh/Deneb/issues/3833)) ([1761539](https://github.com/choiceoh/Deneb/commit/1761539882167eb0a33430b8646da831bc071b24))
+* **mail:** sender review gates bulk noise only; keep bodies readable ([#3831](https://github.com/choiceoh/Deneb/issues/3831)) ([33a513b](https://github.com/choiceoh/Deneb/commit/33a513b763c70460433a1f7f9029f6de7fb2c726))
+
 ## [4.118.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.117.0...deneb-v4.118.0) (2026-07-16)
 
 
