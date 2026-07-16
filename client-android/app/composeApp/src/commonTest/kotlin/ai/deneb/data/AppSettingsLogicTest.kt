@@ -54,6 +54,7 @@ class AppSettingsLogicTest {
         s.putCachedMailList("mail")
         s.putCachedWorkFeed("feed")
         s.putCachedCalendar("cal")
+        s.putCachedApprovalsList("approvals")
         s.setSoulText("keep me")
         s.setThemeMode(ThemeMode.Dark)
 
@@ -63,6 +64,7 @@ class AppSettingsLogicTest {
         assertNull(s.getCachedMailList())
         assertNull(s.getCachedWorkFeed())
         assertNull(s.getCachedCalendar())
+        assertNull(s.getCachedApprovalsList())
         // Non-cache preferences are untouched.
         assertEquals("keep me", s.getSoulText())
         assertEquals(ThemeMode.Dark, s.getThemeMode())

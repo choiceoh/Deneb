@@ -5,19 +5,115 @@ import ai.deneb.deneb.generated.GroupwareApprovalAnalysisOut
 import ai.deneb.deneb.generated.GroupwareApprovalGetResponse
 import ai.deneb.deneb.generated.GroupwareApprovalRow
 import ai.deneb.deneb.generated.GroupwareApprovalsListResponse
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
+/** First-page size persisted to settings (matches the approvals screen page). */
+internal const val APPROVALS_PERSIST_PAGE_SIZE = 20
+
+// Session-scoped list cache. Fixed page sizes (20/40/…/100) make the key
+// trivial: one entry per folder, and a larger fetch satisfies a smaller
+// read via take(limit). Mirrors gmail listCache TTL — long enough for
+// list ↔ detail / feed ↔ approvals hops, short enough that new 미결 show up.
+private const val APPROVAL_LIST_CACHE_TTL_MS = 30_000L
+
+private data class CachedApprovalsList(
+    val folder: String,
+    val rows: List<GroupwareApprovalRow>,
+    val atMs: Long,
+)
+
+private var approvalListCache: CachedApprovalsList? = null
+
+/** Drop the in-memory list cache (disk cache is patched separately on act). */
+fun invalidateApprovalsListCache() {
+    approvalListCache = null
+}
+
+/**
+ * Last fetched rows for [folder], any age — for painting the screen before a
+ * network roundtrip. Null when this session never loaded that folder.
+ */
+fun peekCachedApprovals(folder: String = "total"): List<GroupwareApprovalRow>? {
+    val hit = approvalListCache ?: return null
+    if (hit.folder != folder) return null
+    return hit.rows
+}
+
+private fun freshCachedApprovals(folder: String, limit: Int, nowMs: Long): List<GroupwareApprovalRow>? {
+    val hit = approvalListCache ?: return null
+    if (hit.folder != folder) return null
+    if (nowMs - hit.atMs > APPROVAL_LIST_CACHE_TTL_MS) return null
+    if (hit.rows.size < limit) return null
+    return hit.rows.take(limit)
+}
+
+private fun markApprovalActed(rows: List<GroupwareApprovalRow>, docId: String): List<GroupwareApprovalRow> = rows.map { row -> if (row.docId == docId) row.copy(canAct = false) else row }
+
+// --- Settings-backed first-page cache (cache-then-network, like mail) -----
+// Only folder=total undated lists are persisted. Owner fingerprint prevents a
+// prior gateway/account cache from rendering under new credentials.
+private val approvalsCacheJson = Json { ignoreUnknownKeys = true }
+
+@Serializable
+private data class ApprovalsCacheEnvelope(
+    val owner: String = "",
+    val rows: List<GroupwareApprovalRow> = emptyList(),
+)
+
+internal fun encodeApprovalsCache(rows: List<GroupwareApprovalRow>, owner: String): String = approvalsCacheJson.encodeToString(
+    ApprovalsCacheEnvelope(owner = owner, rows = rows.take(APPROVALS_PERSIST_PAGE_SIZE)),
+)
+
+internal fun decodeApprovalsCache(json: String, expectedOwner: String): List<GroupwareApprovalRow>? = runCatching {
+    approvalsCacheJson.decodeFromString<ApprovalsCacheEnvelope>(json)
+}.getOrNull()
+    ?.takeIf { it.owner == expectedOwner }
+    ?.rows
+    ?.take(APPROVALS_PERSIST_PAGE_SIZE)
+    ?.takeIf { it.isNotEmpty() }
+
+internal fun DenebGatewayClient.loadCachedApprovals(): List<GroupwareApprovalRow>? {
+    val json = appSettings.getCachedApprovalsList() ?: return null
+    return decodeApprovalsCache(json, mailCacheOwner(gatewayUrl, clientToken))
+}
+
+internal fun DenebGatewayClient.storeCachedApprovals(rows: List<GroupwareApprovalRow>) {
+    appSettings.putCachedApprovalsList(
+        encodeApprovalsCache(rows, mailCacheOwner(gatewayUrl, clientToken)),
+    )
+}
+
+/**
+ * Apply a membership/canAct change to the persisted first page so a kill before
+ * the next refresh can't resurrect a still-미결 row. No-op when there's no cache.
+ */
+internal fun DenebGatewayClient.patchCachedApprovals(
+    transform: (List<GroupwareApprovalRow>) -> List<GroupwareApprovalRow>,
+) {
+    val cached = loadCachedApprovals() ?: return
+    storeCachedApprovals(transform(cached))
+}
+
 /**
  * Recent 전체 결재 (`miniapp.groupware.approvals.list`, folder=total by default).
- * Optional [date] (YYYY-MM-DD) asks the gateway to return only that day's rows —
- * matching the 메일/피드 day-pager. Null on transport/auth failure.
+ * Optional [date] (YYYY-MM-DD) asks the gateway to return only that day's rows.
+ * Undated reads hit the session list cache when a large-enough page is fresh;
+ * [forceRefresh] bypasses the cache (pull-to-refresh). Null on transport/auth failure.
  */
 suspend fun DenebGatewayClient.fetchApprovals(
     folder: String = "total",
     limit: Int = 100,
     date: String? = null,
+    forceRefresh: Boolean = false,
 ): List<GroupwareApprovalRow>? {
+    val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    if (!forceRefresh && date.isNullOrBlank()) {
+        freshCachedApprovals(folder, limit, nowMs)?.let { return it }
+    }
     val p = callRpc<GroupwareApprovalsListResponse>(
         "miniapp.groupware.approvals.list",
         buildJsonObject {
@@ -26,7 +122,14 @@ suspend fun DenebGatewayClient.fetchApprovals(
             if (!date.isNullOrBlank()) put("date", date)
         },
     ) ?: return null
-    return p.approvals.filter { it.docId.isNotBlank() }
+    val rows = p.approvals.filter { it.docId.isNotBlank() }
+    if (date.isNullOrBlank()) {
+        approvalListCache = CachedApprovalsList(folder = folder, rows = rows, atMs = nowMs)
+        // Persist the first page for cold-start paint (folder=total only — the
+        // screen's default view; other folders aren't cached).
+        if (folder == "total") storeCachedApprovals(rows)
+    }
+    return rows
 }
 
 /**
@@ -40,14 +143,22 @@ suspend fun DenebGatewayClient.actApproval(
 ): GroupwareApprovalActResponse? {
     val id = docId.trim()
     if (id.isEmpty()) return null
-    return callRpc(
+    val out = callRpc<GroupwareApprovalActResponse>(
         "miniapp.groupware.approvals.act",
         buildJsonObject {
             put("docId", id)
             put("decision", decision)
             if (comment.isNotBlank()) put("comment", comment)
         },
-    )
+    ) ?: return null
+    if (out.ok) {
+        val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        approvalListCache = approvalListCache?.let { hit ->
+            hit.copy(rows = markApprovalActed(hit.rows, id), atMs = nowMs)
+        }
+        patchCachedApprovals { markApprovalActed(it, id) }
+    }
+    return out
 }
 
 // Session-scoped body cache: opening the same 결재 twice (list ↔ detail hops)

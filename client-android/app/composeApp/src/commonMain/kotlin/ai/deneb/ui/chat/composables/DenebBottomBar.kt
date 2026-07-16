@@ -187,7 +187,12 @@ fun DenebBottomBar(
             },
     ) {
         denebBottomTabs.forEach { tab ->
-            val selected = currentRoute == tab.route
+            // 결재 is a 피드 pivot sibling — keep the 피드 tab highlighted so the bar
+            // still reads "you are here" in the feed cluster.
+            val selected = when (tab.route) {
+                ROUTE_FEED -> currentRoute == ROUTE_FEED || currentRoute == "deneb_approvals"
+                else -> currentRoute == tab.route
+            }
             NavigationBarItem(
                 selected = selected,
                 onClick = {
