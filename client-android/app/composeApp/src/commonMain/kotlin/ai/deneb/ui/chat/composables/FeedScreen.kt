@@ -461,6 +461,4 @@ private fun FeedRowWithBody(
 }
 
 /** True when a feed card can deep-link into [DenebApprovalDetail] via refId. */
-internal fun canOpenApprovalDetail(item: WorkFeedItem): Boolean =
-    item.source == "groupware-approval" && item.refId.isNotBlank()
-
+internal fun canOpenApprovalDetail(item: WorkFeedItem): Boolean = item.source == "groupware-approval" && item.refId.isNotBlank()
