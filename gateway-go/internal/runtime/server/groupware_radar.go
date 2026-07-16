@@ -49,6 +49,7 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 		OnPending:      onPending,
 		OnEscalated:    onEscalated,
 		OnResolved:     onResolved,
+		OnListFailed:   s.notifyGroupwareRadarListFailed,
 	})
 	s.autonomousSvc.RegisterTask(task)
 	s.groupwareRadarActive = true
@@ -231,6 +232,59 @@ func (s *Server) notifyGroupwareRadarEscalation(_ context.Context, doc groupware
 	content := fmt.Sprintf("전자결재 방치 알림\n\n**%s** · %s 미결입니다. 확인이 필요합니다.", strings.TrimSpace(doc.Title), label)
 	_, err = s.proactiveRelay.RelayNativeToOptions("", content, proactive.Options{WorkFeedSource: workfeed.SourceGroupwareApproval, RefID: doc.DocID, ForceQuestion: true, Actions: groupwareApprovalActions()})
 	return err
+}
+
+// notifyGroupwareRadarListFailed posts one ops card after repeated Amaranth list
+// failures so the outage is visible in the feed, not only journald.
+func (s *Server) notifyGroupwareRadarListFailed(_ context.Context, folder string, streak int, listErr error) error {
+	feed := s.nativeWorkFeedStore()
+	if feed == nil {
+		return errors.New("work-feed store unavailable")
+	}
+	refID := groupware.RadarListFailRefID
+	active, err := feed.HasActiveSourceRef(workfeed.SourceProactive, refID)
+	if err != nil {
+		return err
+	}
+	if active {
+		return nil
+	}
+	detail := ""
+	if listErr != nil {
+		detail = strings.TrimSpace(listErr.Error())
+	}
+	summary := fmt.Sprintf("미결 목록 %d회 연속 실패 (%s)", streak, strings.TrimSpace(folder))
+	body := fmt.Sprintf(
+		"전자결재 레이더가 Amaranth 목록을 읽지 못했습니다.\n\n- 폴더: %s\n- 연속 실패: %d회\n- 오류: %s\n\n다음 주기에 자동 재시도합니다. 로그인·세션·리더 스크립트를 확인하세요.",
+		strings.TrimSpace(folder), streak, detail,
+	)
+	item := workfeed.Item{
+		Source:   workfeed.SourceProactive,
+		Title:    "전자결재 레이더 장애",
+		Summary:  summary,
+		Body:     body,
+		RefID:    refID,
+		Priority: workfeed.PriorityHigh,
+	}
+	out, err := feed.Append(item)
+	if err != nil {
+		return err
+	}
+	if s.logger != nil {
+		s.logger.Error("groupware radar list failed — feed alert posted",
+			"folder", folder, "streak", streak, "err", detail)
+	}
+	preview := strings.TrimSpace(out.Summary)
+	if preview == "" {
+		preview = out.Title
+	}
+	proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+		Title: "Deneb",
+		Body:  preview,
+		Kind:  proactive.PushKindWorkfeed,
+		Ref:   out.ID,
+	})
+	return nil
 }
 
 func groupwareEscalationLabel(level int, age time.Duration) string {

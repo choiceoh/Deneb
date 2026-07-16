@@ -350,6 +350,15 @@ internal fun AppContent(
                                                 },
                                                 // Zune-style title pivot + left swipe → 결재.
                                                 onOpenApprovals = { navigateToDenebSection(navController, DenebApprovals) },
+                                                onOpenApprovalDetail = { docId, title ->
+                                                    navController.navigate(
+                                                        DenebApprovalDetail(
+                                                            docId = docId,
+                                                            title = title,
+                                                            canAct = true,
+                                                        ),
+                                                    )
+                                                },
                                             )
                                             // Feed-card 정정 피드백은 위키를 고치는 ephemeral 에이전트 턴을 돌린다.
                                             // 시트는 낙관적으로 먼저 닫히므로, 돌아온 1~3줄 보고를 여기 스낵바로 띄운다.

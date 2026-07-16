@@ -19,6 +19,7 @@ import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -96,6 +97,8 @@ internal fun FeedScreen(
     initialOpenItemId: String? = null,
     initialOpenItemCreatedAtMs: Long = 0L,
     onOpenApprovals: (() -> Unit)? = null,
+    // groupware-approval cards: open the Amaranth detail for item.refId.
+    onOpenApprovalDetail: ((docId: String, title: String) -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
     val openApprovals: (() -> Unit)? = onOpenApprovals?.let { open ->
@@ -231,12 +234,26 @@ internal fun FeedScreen(
 
                     else -> LazyColumn(Modifier.fillMaxSize()) {
                         items(unread, key = { it.id }) { item ->
-                            FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
+                            FeedRowWithBody(
+                                item,
+                                expandedId == item.id,
+                                open,
+                                onRunAction,
+                                onAnswer,
+                                onOpenApprovalDetail,
+                            ) { actionItem = it }
                         }
                         if (read.isNotEmpty()) {
                             item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
                             items(read, key = { it.id }) { item ->
-                                FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
+                                FeedRowWithBody(
+                                    item,
+                                    expandedId == item.id,
+                                    open,
+                                    onRunAction,
+                                    onAnswer,
+                                    onOpenApprovalDetail,
+                                ) { actionItem = it }
                             }
                         }
                     }
@@ -384,6 +401,7 @@ private fun FeedRowWithBody(
     onOpen: (String) -> Unit,
     onRunAction: (String, String) -> Unit,
     onAnswer: (WorkFeedItem, String, String?, String?) -> Unit,
+    onOpenApprovalDetail: ((docId: String, title: String) -> Unit)?,
     onLongAction: (WorkFeedItem) -> Unit,
 ) {
     val usesInlineApprovalActions = remember(item) { item.hasInlineApprovalActions() }
@@ -418,8 +436,31 @@ private fun FeedRowWithBody(
             )
         }
     }
+    if (expanded && canOpenApprovalDetail(item) && onOpenApprovalDetail != null) {
+        val haptics = rememberHaptics()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(
+                onClick = {
+                    haptics.tap()
+                    onOpenApprovalDetail(item.refId.trim(), item.title.trim())
+                },
+            ) {
+                Text("결재 상세", style = DenebType.button)
+            }
+        }
+    }
     // A question card the agent is waiting on: inline answer chips / reply field.
     if (expanded && item.question && !usesInlineApprovalActions) {
         WorkFeedAnswerBlock(item = item, onAnswer = onAnswer)
     }
 }
+
+/** True when a feed card can deep-link into [DenebApprovalDetail] via refId. */
+internal fun canOpenApprovalDetail(item: WorkFeedItem): Boolean =
+    item.source == "groupware-approval" && item.refId.isNotBlank()
+

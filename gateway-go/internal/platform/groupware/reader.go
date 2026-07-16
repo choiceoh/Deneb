@@ -231,7 +231,7 @@ func ListApprovals(ctx context.Context, cfg Config, folder string, limit int) ([
 		JSON:   true,
 	})
 	if err != nil {
-		return nil, err
+		return nil, wrapGroupwareRunError(out, err)
 	}
 	return parseApprovalSummaries(out)
 }
@@ -257,9 +257,22 @@ func ListBoardPosts(ctx context.Context, cfg Config, limit int) ([]BoardSummary,
 		JSON:   true,
 	})
 	if err != nil {
-		return nil, err
+		return nil, wrapGroupwareRunError(out, err)
 	}
 	return parseBoardSummaries(out)
+}
+
+// wrapGroupwareRunError keeps the reader's Korean diagnostic (stdout/stderr) on
+// the returned error — bare "exit status 1" is useless in radar logs.
+func wrapGroupwareRunError(out string, err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.TrimSpace(out)
+	if msg == "" {
+		return err
+	}
+	return fmt.Errorf("%s: %w", msg, err)
 }
 
 func parseBoardSummaries(raw string) ([]BoardSummary, error) {

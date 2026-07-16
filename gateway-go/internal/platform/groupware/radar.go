@@ -24,8 +24,14 @@ const (
 	DefaultRadarMaxEscalations     = 3
 	RadarEscalationLevelFourHours  = 1
 	RadarEscalationLevelTwentyFour = 2
-	radarApprovalListLimit         = 50
-	radarIntervalMinutesEnv        = "DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES"
+	// RadarListFailAlertAfter consecutive list failures surface one ops feed
+	// card (then stay quiet until recovery) so Amaranth/auth outages aren't
+	// only a journal line.
+	RadarListFailAlertAfter = 3
+	radarApprovalListLimit  = 50
+	radarIntervalMinutesEnv = "DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES"
+	// RadarListFailRefID is the durable work-feed ref for list-failure alerts.
+	RadarListFailRefID = "groupware-radar-list"
 )
 
 var radarKST = time.FixedZone("KST", 9*60*60)
@@ -45,6 +51,9 @@ type RadarConfig struct {
 	OnPending      func(context.Context, ApprovalSummary) error
 	OnEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
 	OnResolved     func(context.Context, ApprovalSummary) error
+	// OnListFailed fires once when list pending/done has failed
+	// RadarListFailAlertAfter times in a row. Nil disables the alert.
+	OnListFailed func(ctx context.Context, folder string, streak int, err error) error
 }
 
 // Radar deterministically diffs pending approval snapshots and reconciles cards
@@ -60,13 +69,18 @@ type Radar struct {
 	onPending      func(context.Context, ApprovalSummary) error
 	onEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
 	onResolved     func(context.Context, ApprovalSummary) error
+	onListFailed   func(ctx context.Context, folder string, streak int, err error) error
 }
 
 var _ autonomous.PeriodicTask = (*Radar)(nil)
 
 type radarState struct {
-	Docs       map[string]radarDocState `json:"docs"`
-	LastPollAt int64                    `json:"lastPollAt,omitempty"`
+	Docs            map[string]radarDocState `json:"docs"`
+	LastPollAt      int64                    `json:"lastPollAt,omitempty"`
+	ListFailStreak  int                      `json:"listFailStreak,omitempty"`
+	ListFailAlerted bool                     `json:"listFailAlerted,omitempty"`
+	LastListError   string                   `json:"lastListError,omitempty"`
+	LastListFolder  string                   `json:"lastListFolder,omitempty"`
 }
 
 type radarDocState struct {
@@ -110,6 +124,7 @@ func NewRadar(cfg RadarConfig) *Radar {
 		onPending:      cfg.OnPending,
 		onEscalated:    cfg.OnEscalated,
 		onResolved:     cfg.OnResolved,
+		onListFailed:   cfg.OnListFailed,
 	}
 }
 
@@ -146,12 +161,13 @@ func (r *Radar) Run(ctx context.Context) error {
 	}
 	pending, err := r.list(ctx, r.reader, "pending", radarApprovalListLimit)
 	if err != nil {
-		return fmt.Errorf("list pending approvals: %w", err)
+		return r.noteListFailure(ctx, state, "pending", err)
 	}
 	done, err := r.list(ctx, r.reader, "done", radarApprovalListLimit)
 	if err != nil {
-		return fmt.Errorf("list done approvals: %w", err)
+		return r.noteListFailure(ctx, state, "done", err)
 	}
+	r.clearListFailure(&state)
 
 	sortApprovalSummaries(pending)
 	sortApprovalSummaries(done)
@@ -269,6 +285,35 @@ func (r *Radar) Run(ctx context.Context) error {
 		runErrs = append(runErrs, err)
 	}
 	return errors.Join(runErrs...)
+}
+
+func (r *Radar) noteListFailure(ctx context.Context, state radarState, folder string, listErr error) error {
+	wrapped := fmt.Errorf("list %s approvals: %w", folder, listErr)
+	state.ListFailStreak++
+	state.LastListError = wrapped.Error()
+	state.LastListFolder = folder
+	shouldAlert := state.ListFailStreak >= RadarListFailAlertAfter && !state.ListFailAlerted && r.onListFailed != nil
+	if shouldAlert {
+		if alertErr := r.onListFailed(ctx, folder, state.ListFailStreak, wrapped); alertErr != nil {
+			_ = saveRadarState(r.statePath, state)
+			return errors.Join(wrapped, fmt.Errorf("list-failure alert: %w", alertErr))
+		}
+		state.ListFailAlerted = true
+	}
+	if saveErr := saveRadarState(r.statePath, state); saveErr != nil {
+		return errors.Join(wrapped, saveErr)
+	}
+	return wrapped
+}
+
+func (r *Radar) clearListFailure(state *radarState) {
+	if state == nil {
+		return
+	}
+	state.ListFailStreak = 0
+	state.ListFailAlerted = false
+	state.LastListError = ""
+	state.LastListFolder = ""
 }
 
 func radarEscalationLevel(age time.Duration) int {
