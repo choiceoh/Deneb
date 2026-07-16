@@ -330,9 +330,11 @@ test("resolveSalesPeriod explicit range", () => {
   assert.equal(p.to, "20260331");
 });
 
-test("formatWon uses eok/man", () => {
-  assert.match(formatWon(294031347655), /억/);
-  assert.match(formatWon(12345), /12,345원/);
+test("formatWon uses eok/man without raw-digit paren", () => {
+  assert.equal(formatWon(294031347655), "2,940억 3,134만 7,655원");
+  assert.equal(formatWon(12345), "1만 2,345원");
+  assert.equal(formatWon(500), "500원");
+  assert.ok(!formatWon(12345).includes("("));
 });
 
 test("resolveErpPeriod aliases resolveSalesPeriod", () => {
