@@ -302,15 +302,14 @@ jobs:
 
   # Aggregate check name "Go (unit)" + race/runtime-health (small; keep off the
   # sharded critical path's compile fan-out).
+  # No defaults.working-directory here: the require step runs before checkout,
+  # and gateway-go/ does not exist yet on a fresh runner.
   go-unit:
     name: Go (unit)
     needs: [go-unit-shard]
     if: always() && needs.go-unit-shard.result != 'skipped'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
-    defaults:
-      run:
-        working-directory: gateway-go
     steps:
       - name: Require unit shards
         run: test "${{ needs.go-unit-shard.result }}" = "success"
@@ -325,10 +324,10 @@ jobs:
           cache-dependency-path: gateway-go/go.sum
 
       - name: Test runtime-health audit
-        working-directory: .
         run: make runtime-health-test
 
       - name: Race test (concurrency core)
+        working-directory: gateway-go
         run: >-
           CGO_ENABLED=1 go test -race -count=1
           ./internal/core/corecache
