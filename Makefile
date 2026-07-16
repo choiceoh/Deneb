@@ -3,7 +3,7 @@
 # Pure Go gateway build (Rust core has been removed).
 
 .PHONY: all \
-       go go-run go-dev go-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole briefcase briefcase-test briefcase-smoke \
+       go go-run go-dev go-test skill-eval-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole briefcase briefcase-test briefcase-smoke \
        test clean check check-go fmt generate generate-check \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
@@ -104,6 +104,15 @@ go-dev:
 
 go-test:
 	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -p $(GO_PAR) -count=1 ./...
+
+# Focused skill-eval gate. The authoritative go-test/CI command already runs
+# these tests; this target gives skill authors a fast local check for real
+# frontmatter trigger fixtures and with-skill/no-skill ablation contracts.
+skill-eval-test:
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -count=1 ./internal/domain/skills \
+		-run 'TestBundledSkillTriggerEvals|TestMatchSkillTriggers'
+	cd gateway-go && $(GO_ENV) CGO_ENABLED=0 go test -count=1 ./internal/domain/skills/genesis \
+		-run 'TestEvaluateAblation|TestTrackerSkillAblation|TestSkillAblationTask|TestBuildReplayExecutorPromptHasExplicitNoSkillControl'
 
 # Cached test variant for the fast inner-loop gate (make ci/fast): drops
 # -count=1 so Go's test cache serves unchanged packages and only re-runs what a

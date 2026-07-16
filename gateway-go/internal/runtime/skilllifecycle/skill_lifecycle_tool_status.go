@@ -109,6 +109,8 @@ type skillLifecycleCommonStatus struct {
 	validationCasesErr string
 	validationSummary  genesis.SkillValidationCaseSummary
 	validationErr      string
+	ablationSummary    genesis.SkillAblationSummary
+	ablationErr        string
 	opportunities      []genesis.SkillOpportunityRecord
 	opportunitiesErr   string
 	selfCorrections    []genesis.SelfCorrectionCandidateRecord
@@ -120,6 +122,7 @@ func (b *skillLifecycleBackend) collectSkillLifecycleCommonStatus(skillName stri
 	usageQuality, usageQualityErr := b.usageQualitySummary(skillName)
 	validationCases, validationCasesErr := b.recentSkillValidationCases(skillName, limit)
 	validationSummary, validationErr := b.validationCaseSummary(skillName)
+	ablationSummary, ablationErr := b.skillAblationSummary(skillName)
 	opportunities, opportunitiesErr := b.recentSkillOpportunities(skillName, limit)
 	selfCorrections, selfCorrectionsErr := b.recentSelfCorrectionCandidates(skillName, limit)
 	return skillLifecycleCommonStatus{
@@ -131,6 +134,8 @@ func (b *skillLifecycleBackend) collectSkillLifecycleCommonStatus(skillName stri
 		validationCasesErr: validationCasesErr,
 		validationSummary:  validationSummary,
 		validationErr:      validationErr,
+		ablationSummary:    ablationSummary,
+		ablationErr:        ablationErr,
 		opportunities:      opportunities,
 		opportunitiesErr:   opportunitiesErr,
 		selfCorrections:    selfCorrections,
@@ -147,6 +152,8 @@ func (s skillLifecycleCommonStatus) addToStatus(status *chattools.SkillLifecycle
 	status.ValidationCasesError = s.validationCasesErr
 	status.ValidationCaseSummary = lifecycleValue(s.validationSummary)
 	status.ValidationCaseSummaryError = s.validationErr
+	status.AblationSummary = lifecycleValue(s.ablationSummary)
+	status.AblationSummaryError = s.ablationErr
 	status.Opportunities = lifecycleValue(s.opportunities)
 	status.OpportunitiesError = s.opportunitiesErr
 	status.SelfCorrectionCandidates = lifecycleValue(s.selfCorrections)
@@ -211,6 +218,18 @@ func (b *skillLifecycleBackend) validationCaseSummary(skillName string) (genesis
 			"skill", skillName, "error", err)
 	}
 	return genesis.SkillValidationCaseSummary{}, err.Error()
+}
+
+func (b *skillLifecycleBackend) skillAblationSummary(skillName string) (genesis.SkillAblationSummary, string) {
+	summary, err := b.tracker.SkillAblationSummary(skillName)
+	if err == nil {
+		return summary, ""
+	}
+	if b.logger != nil {
+		b.logger.Warn("skill lifecycle: ablation summary unavailable",
+			"skill", skillName, "error", err)
+	}
+	return genesis.SkillAblationSummary{SkillName: strings.TrimSpace(skillName)}, err.Error()
 }
 
 func (b *skillLifecycleBackend) recentSkillOpportunities(skillName string, limit int) ([]genesis.SkillOpportunityRecord, string) {

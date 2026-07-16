@@ -1,0 +1,15 @@
+{
+  "skill": "deep-research",
+  "cases": [
+    {"name": "deep-research", "message": "이 주제를 딥리서치해서 결론을 내줘", "shouldTrigger": true},
+    {"name": "deep-research-spaced", "message": "시장 진입안을 딥 리서치로 조사해줘", "shouldTrigger": true},
+    {"name": "cross-validation", "message": "이 기술 선택을 모델들로 교차검증해줘", "shouldTrigger": true},
+    {"name": "many-models", "message": "여러 모델에게 물어보고 답을 종합해줘", "shouldTrigger": true},
+    {"name": "cross-check", "message": "두 가설을 크로스체크해서 모순을 찾아줘", "shouldTrigger": true},
+    {"name": "simple-search", "message": "서울 오늘 날씨를 검색해줘", "shouldTrigger": false},
+    {"name": "single-source", "message": "이 공식 문서 한 페이지만 요약해줘", "shouldTrigger": false},
+    {"name": "quick-answer", "message": "Go 최신 버전이 뭔지 짧게 답해줘", "shouldTrigger": false},
+    {"name": "code-debug", "message": "이 스택 트레이스 원인을 찾아줘", "shouldTrigger": false},
+    {"name": "general-research", "message": "태양광 시장 규모를 조사해줘", "shouldTrigger": false}
+  ]
+}

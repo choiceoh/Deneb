@@ -1,0 +1,15 @@
+{
+  "skill": "fact-check",
+  "cases": [
+    {"name": "fact-check", "message": "이 브리핑 수치를 팩트체크해줘", "shouldTrigger": true},
+    {"name": "fact-check-spaced", "message": "발송 전에 팩트 체크 한 번 해줘", "shouldTrigger": true},
+    {"name": "verify-facts", "message": "날짜와 금액을 사실 확인해줘", "shouldTrigger": true},
+    {"name": "evidence", "message": "이 주장에 근거 있어? 출처까지 확인해줘", "shouldTrigger": true},
+    {"name": "are-you-sure", "message": "대표이사가 바뀌었다는 게 확실해?", "shouldTrigger": true},
+    {"name": "opinion", "message": "이 디자인이 더 좋아 보이는지 의견 줘", "shouldTrigger": false},
+    {"name": "rewrite", "message": "문장을 자신감 있는 어조로 다듬어줘", "shouldTrigger": false},
+    {"name": "brainstorm", "message": "신제품 이름을 열 개 제안해줘", "shouldTrigger": false},
+    {"name": "summary", "message": "보고서의 핵심 세 줄만 뽑아줘", "shouldTrigger": false},
+    {"name": "decision", "message": "이 거래를 진행할지 추천해줘", "shouldTrigger": false}
+  ]
+}

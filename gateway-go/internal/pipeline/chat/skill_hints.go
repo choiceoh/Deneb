@@ -18,7 +18,6 @@ package chat
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
@@ -61,55 +60,18 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 	if !presetAllowsSkillsTool(sessionToolPreset) {
 		return "", nil
 	}
-	message := strings.ToLower(strings.TrimSpace(params.Message))
-	if message == "" || len(resolved) == 0 {
-		return "", nil
-	}
-
-	type hint struct {
-		skill skills.PromptSkill
-		score int // rune length of the matched trigger — longer = more specific
-	}
-	var hints []hint
-	for _, s := range resolved {
-		if s.DisableModelInvocation || len(s.Triggers) == 0 {
-			continue
-		}
-		best := 0
-		for _, t := range s.Triggers {
-			t = strings.ToLower(strings.TrimSpace(t))
-			n := len([]rune(t))
-			if n < 2 { // single-rune triggers are noise
-				continue
-			}
-			if n > best && strings.Contains(message, t) {
-				best = n
-			}
-		}
-		if best > 0 {
-			hints = append(hints, hint{skill: s, score: best})
-		}
-	}
+	hints := skills.MatchSkillTriggers(params.Message, resolved, maxSkillHints)
 	if len(hints) == 0 {
 		return "", nil
-	}
-	sort.SliceStable(hints, func(i, j int) bool {
-		if hints[i].score != hints[j].score {
-			return hints[i].score > hints[j].score
-		}
-		return hints[i].skill.Name < hints[j].skill.Name
-	})
-	if len(hints) > maxSkillHints {
-		hints = hints[:maxSkillHints]
 	}
 
 	var b strings.Builder
 	names := make([]string, 0, len(hints))
 	b.WriteString("[관련 스킬 — 이 요청에 맞는 준비된 절차]")
-	for _, h := range hints {
+	for _, skill := range hints {
 		fmt.Fprintf(&b, "\n- %s: %s → `skills(action=\"read\", name=%q)`로 절차와 필요한 도구를 함께 로드해 그대로 따르라.",
-			h.skill.Name, skillHintSummary(h.skill.Description), h.skill.Name)
-		names = append(names, h.skill.Name)
+			skill.Name, skillHintSummary(skill.Description), skill.Name)
+		names = append(names, skill.Name)
 	}
 	return b.String(), names
 }

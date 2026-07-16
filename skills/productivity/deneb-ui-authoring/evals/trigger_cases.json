@@ -1,0 +1,15 @@
+{
+  "skill": "deneb-ui-authoring",
+  "cases": [
+    {"name": "card", "message": "이 결과를 카드로 정리해줘", "shouldTrigger": true},
+    {"name": "buttons", "message": "승인과 반려를 버튼으로 보여줘", "shouldTrigger": true},
+    {"name": "dashboard", "message": "서버 상태를 대시보드로 만들어줘", "shouldTrigger": true},
+    {"name": "choices", "message": "세 가지 안을 선택지로 제시해줘", "shouldTrigger": true},
+    {"name": "table", "message": "월별 매출을 표로 보여줘", "shouldTrigger": true},
+    {"name": "credit-card", "message": "법인카드 결제 내역을 확인해줘", "shouldTrigger": false},
+    {"name": "broken-button", "message": "저장 버튼이 왜 안 눌리는지 고쳐줘", "shouldTrigger": false},
+    {"name": "dashboard-data", "message": "대시보드 데이터 오류 원인을 찾아줘", "shouldTrigger": false},
+    {"name": "explain-options", "message": "가능한 선택지를 글로 설명해줘", "shouldTrigger": false},
+    {"name": "small-table", "message": "표현을 조금 더 자연스럽게 다듬어줘", "shouldTrigger": false}
+  ]
+}

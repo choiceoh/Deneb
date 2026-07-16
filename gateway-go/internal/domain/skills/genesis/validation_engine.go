@@ -148,15 +148,7 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 	if err != nil {
 		return SkillBehaviorResult{}, err
 	}
-	evaluable := make([]SkillValidationCaseRecord, 0, len(cases))
-	for _, tc := range cases {
-		if replayBehaviorEvaluable(tc.Replay) {
-			evaluable = append(evaluable, tc)
-			if len(evaluable) >= replayBehaviorMaxCases {
-				break
-			}
-		}
-	}
+	evaluable := replayBehaviorCases(cases, replayBehaviorMaxCases)
 	if len(evaluable) == 0 {
 		return SkillBehaviorResult{}, nil
 	}
@@ -216,6 +208,23 @@ func (v *SkillValidationEngine) EvaluateBehavior(ctx context.Context, skillName,
 // a user task to simulate and at least one assertion to score the resulting plan.
 func replayBehaviorEvaluable(r SkillReplayCaseRecord) bool {
 	return strings.TrimSpace(r.Input) != "" && r.hasAssertions()
+}
+
+func replayBehaviorCases(cases []SkillValidationCaseRecord, limit int) []SkillValidationCaseRecord {
+	if limit <= 0 {
+		limit = len(cases)
+	}
+	evaluable := make([]SkillValidationCaseRecord, 0, min(limit, len(cases)))
+	for _, testCase := range cases {
+		if !replayBehaviorEvaluable(testCase.Replay) {
+			continue
+		}
+		evaluable = append(evaluable, testCase)
+		if len(evaluable) >= limit {
+			break
+		}
+	}
+	return evaluable
 }
 
 // ValidateCandidate runs selector-side held-out validation. No stored cases is a

@@ -1,0 +1,15 @@
+{
+  "skill": "kb-interview",
+  "cases": [
+    {"name": "knowledge-interview", "message": "우리 영업 노하우를 지식 인터뷰로 끌어내자", "shouldTrigger": true},
+    {"name": "organize-by-interview", "message": "내 경험을 인터뷰로 정리해줘", "shouldTrigger": true},
+    {"name": "competitors", "message": "내가 아는 경쟁사 정리부터 해보자", "shouldTrigger": true},
+    {"name": "market-segments", "message": "태양광 시장 세분 문서를 같이 만들자", "shouldTrigger": true},
+    {"name": "only-in-head", "message": "머릿속에만 있는 거래처 정보를 문서화하자", "shouldTrigger": true},
+    {"name": "job-interview", "message": "채용 인터뷰 질문 열 개 만들어줘", "shouldTrigger": false},
+    {"name": "web-research", "message": "웹에서 경쟁 구도를 조사해줘", "shouldTrigger": false},
+    {"name": "simple-dictation", "message": "이 메모를 그대로 위키에 옮겨줘", "shouldTrigger": false},
+    {"name": "known-facts", "message": "이미 정리된 제품 목록을 요약해줘", "shouldTrigger": false},
+    {"name": "email-summary", "message": "거래처 메일 핵심만 요약해줘", "shouldTrigger": false}
+  ]
+}

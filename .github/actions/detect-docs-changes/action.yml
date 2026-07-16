@@ -11,6 +11,9 @@ outputs:
   docs_changed:
     description: "'true' if any changed file is under docs/ or is markdown"
     value: ${{ steps.check.outputs.docs_changed }}
+  skills_changed:
+    description: "'true' if any changed file is under skills/"
+    value: ${{ steps.check.outputs.skills_changed }}
 
 runs:
   using: composite
@@ -32,7 +35,18 @@ runs:
         if [ "$CHANGED" = "UNKNOWN" ] || [ -z "$CHANGED" ]; then
           echo "docs_only=false" >> "$GITHUB_OUTPUT"
           echo "docs_changed=false" >> "$GITHUB_OUTPUT"
+          # The focused skill gate is cheap; fail safe when scope is unknown.
+          echo "skills_changed=true" >> "$GITHUB_OUTPUT"
           exit 0
+        fi
+
+        # SKILL.md is operational prompt code even though it is Markdown. Keep
+        # a dedicated signal so skill-only PRs run their evals while the heavy
+        # Go job may still use the existing docs-only optimization.
+        if echo "$CHANGED" | grep -qE '^skills/'; then
+          echo "skills_changed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "skills_changed=false" >> "$GITHUB_OUTPUT"
         fi
 
         # Check if any changed file is a doc

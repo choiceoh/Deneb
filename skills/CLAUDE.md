@@ -13,6 +13,7 @@ skills/
     DESCRIPTION.md            # Category description (YAML frontmatter)
     <skill-name>/
       SKILL.md                # Skill definition (required)
+      evals/trigger_cases.json # Required with triggers: 5 positive + 5 negative prompts
       scripts/                # Optional helper scripts
       references/             # Optional reference docs
 ```
@@ -107,6 +108,13 @@ each trigger a specific Korean substring ("계약서", "독소조항") — gener
 ("검토", "정리") over-fire on everyday messages. No triggers = the skill stays
 discoverable via the compact index only (fine for cron-summoned or meta skills).
 
+Every bundled skill that declares `triggers` must also keep
+`evals/trigger_cases.json` beside `SKILL.md`, with at least five realistic
+positive prompts and five nearby negative prompts. `make skill-eval-test` reads
+the real frontmatter and runs the production matcher; the full Go CI gate runs
+the same test with `-count=1`, so sidecar-only changes cannot be hidden by the
+Go test cache.
+
 ### Description Field Convention
 
 Use the pattern: `"What it does. Use when: (triggers). NOT for: (anti-patterns)."`
@@ -158,7 +166,9 @@ bundled (repo `skills/`)** for the same skill name. Two practical consequences:
 3. Add standard frontmatter with name, version, category, description
 4. Add `tags` and `related_skills` in metadata for discoverability
 5. Write body following the recommended section structure
-6. The gateway discovers and loads skills automatically via `gateway-go/internal/domain/skills/`
+6. If the skill declares `triggers`, add `evals/trigger_cases.json` with at least 5 positive and 5 negative prompts
+7. Run `make skill-eval-test`
+8. The gateway discovers and loads skills automatically via `gateway-go/internal/domain/skills/`
 
 ## Adding a New Category
 

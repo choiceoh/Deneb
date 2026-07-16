@@ -1,0 +1,15 @@
+{
+  "skill": "decision-premortem",
+  "cases": [
+    {"name": "premortem", "message": "이 프로젝트가 실패했다고 보고 사전부검해줘", "shouldTrigger": true},
+    {"name": "premortem-loan", "message": "투자 전에 프리모템을 돌려보자", "shouldTrigger": true},
+    {"name": "need-decision", "message": "둘 중 하나를 결정해야 하는데 도와줘", "shouldTrigger": true},
+    {"name": "accept-or-not", "message": "이 제안을 받을까 말까 판단해줘", "shouldTrigger": true},
+    {"name": "risks", "message": "A안의 리스크 짚어주고 반대 논리도 써줘", "shouldTrigger": true},
+    {"name": "past-decision", "message": "어제 결정한 내용을 회의록에 적어줘", "shouldTrigger": false},
+    {"name": "simple-fact", "message": "A안 예산이 얼마인지 알려줘", "shouldTrigger": false},
+    {"name": "calendar", "message": "결재 회의 일정을 잡아줘", "shouldTrigger": false},
+    {"name": "status", "message": "현재 프로젝트 위험도를 숫자로 보여줘", "shouldTrigger": false},
+    {"name": "summary", "message": "두 제안서의 핵심 내용을 요약해줘", "shouldTrigger": false}
+  ]
+}
