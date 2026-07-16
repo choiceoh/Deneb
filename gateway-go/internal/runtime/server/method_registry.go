@@ -506,8 +506,8 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				return body, nil
 			},
 			Cache: approvalCache,
-			Analyze: func(ctx context.Context, title, body string) (string, string, error) {
-				return s.completeApprovalAnalysis(ctx, title, body)
+			Analyze: func(ctx context.Context, docID, title, date, body string) (string, string, error) {
+				return s.completeApprovalAnalysis(ctx, docID, title, date, body)
 			},
 			ListERP: func(ctx context.Context, area, folder, query string, limit int) (string, error) {
 				cfg, ok := groupware.FromEnv()

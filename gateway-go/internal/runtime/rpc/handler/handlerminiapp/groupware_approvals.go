@@ -36,6 +36,10 @@ const approvalAnalyzeSystemPrompt = `당신은 Topsolar Amaranth 전자결재 �
 3. **리스크 / 확인 포인트** — 승인 전 볼 것
 4. **권고** — 승인·조건부·반려 중 하나와 한 줄 이유
 
+입력에 "과거 단가·경비 이력" 섹션이 주어지면 **단가 비교** 섹션을 추가하고,
+이번 결재의 단가/금액을 과거 이력과 비교해 변동(오름/내림/동일)과 유불리를 짚으세요.
+이력에 없는 수치를 지어내지 말고, 이력 섹션이 없으면 이 섹션은 생략하세요.
+
 마지막 줄에 정확히 다음 형식으로 중요도를 적으세요:
 IMPORTANCE: urgent|attention|routine`
 
@@ -46,8 +50,10 @@ type GroupwareApprovalsDeps struct {
 	Act  func(ctx context.Context, docID, decision, comment string) (string, error)
 	// Get fetches one document body; folder is a best-effort box hint ("" = scan).
 	Get func(ctx context.Context, docID, folder string) (body string, err error)
-	// Analyze runs the LLM on title+body. Nil → analyze RPC returns UNAVAILABLE.
-	Analyze func(ctx context.Context, title, body string) (analysis, importance string, err error)
+	// Analyze runs the LLM on title+body. docID/date thread through so the
+	// price-memory loop can file the approved cost onto the deal ledger
+	// idempotently. Nil → analyze RPC returns UNAVAILABLE.
+	Analyze func(ctx context.Context, docID, title, date, body string) (analysis, importance string, err error)
 	Cache   *groupware.ApprovalAnalysisStore
 	// ListERP powers miniapp.groupware.erp.list (stock/po/…/people/board).
 	ListERP func(ctx context.Context, area, folder, query string, limit int) (string, error)
@@ -265,7 +271,7 @@ func groupwareApprovalsAnalyze(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc 
 			title = firstNonEmptyLine(body)
 		}
 		start := time.Now()
-		analysis, importance, err := deps.Analyze(ctx, title, body)
+		analysis, importance, err := deps.Analyze(ctx, docID, title, strings.TrimSpace(p.Date), body)
 		dur := time.Since(start)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("analyze groupware approval", err).Response(req.ID)
