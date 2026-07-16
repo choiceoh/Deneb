@@ -435,7 +435,17 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcutil.HandlerFunc {
 	return []map[string]rpcutil.HandlerFunc{
 		withMailAliases(handlermail.GmailMethods(handlermail.GmailDeps{
-			Client:        s.miniappMailClientFactory(denebDir),
+			Client: s.miniappMailClientFactory(denebDir),
+			// Native-sync mirror: archive/trash from one client force-warms the
+			// mail list on the others. Warn on failure — TTL revalidation backstops.
+			NotifyChanged: func(messageID string) {
+				if s.nativeSyncStore == nil {
+					return
+				}
+				if _, err := s.nativeSyncStore.Append(nativesync.MailChanged(messageID)); err != nil {
+					s.logger.Warn("native sync: mail change append failed", "messageId", messageID, "error", err)
+				}
+			},
 			AnalysisCache: handlermail.NewAnalysisStore(filepath.Join(denebDir, "cache", "mail_analysis")),
 			WorkState:     mailwork.New(filepath.Join(denebDir, "mail_work_state.json")),
 			MailStore: func() handlermail.MailStoreReader {

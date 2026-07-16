@@ -177,6 +177,52 @@ class SectionCacheContractTest {
         assertEquals(2, f.transport.requests.count { it.rpcMethod == "miniapp.dashboard.lanes" })
     }
 
+    // Enqueue exactly one sync.pull page. The fan-out syncNativeState runs
+    // afterwards (feed heal + home-cache warm) hits the harness fallback — the
+    // requests are still recorded (which is what the assertions count), and the
+    // client tolerates the failed refreshes. No padding: leftover replies would
+    // shift the NEXT phase's queue and feed the wrong payload to the wrong call.
+    private fun enqueueSyncPage(f: GatewayClientFixture, cursor: Long, events: String) {
+        f.transport.enqueueRpc("""{"events":[$events],"cursor":$cursor,"hasMore":false}""")
+    }
+
+    @Test
+    fun mailChangedSyncEventForcesMailWarmPastThrottle() = runTest {
+        val f = gatewayClientFixture()
+        fun mailFetches() = f.transport.requests.count { it.rpcMethod == "miniapp.mail.list_recent" }
+
+        // First sync: the home warm runs (cold throttle) — baseline mail fetch.
+        enqueueSyncPage(f, cursor = 1, events = "")
+        f.client.syncNativeState()
+        val baseline = mailFetches()
+
+        // mail.changed clears the warm throttle: the mail list refetches NOW.
+        enqueueSyncPage(f, cursor = 2, events = """{"seq":2,"type":"mail.changed","entityId":"k1","timestampMs":1}""")
+        f.client.syncNativeState()
+        assertEquals(baseline + 1, mailFetches())
+
+        // No event: the throttle holds — no extra mail fetch.
+        enqueueSyncPage(f, cursor = 3, events = "")
+        f.client.syncNativeState()
+        assertEquals(baseline + 1, mailFetches())
+    }
+
+    @Test
+    fun approvalsChangedSyncEventInvalidatesApprovalsListCache() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc("""{"approvals":[{"docId":"d1","title":"t","canAct":false}],"nextAfterDocId":""}""")
+        f.client.fetchApprovals()
+        f.client.fetchApprovals() // TTL cache hit — still one network read
+
+        enqueueSyncPage(f, cursor = 1, events = """{"seq":1,"type":"approvals.changed","entityId":"d1","timestampMs":1}""")
+        f.client.syncNativeState()
+
+        // Cache dropped: the next read goes back to the network and sees drift.
+        f.transport.enqueueRpc("""{"approvals":[{"docId":"d2","title":"t2","canAct":false}],"nextAfterDocId":""}""")
+        assertEquals("d2", f.client.fetchApprovals()?.single()?.docId)
+        assertEquals(2, f.transport.requests.count { it.rpcMethod == "miniapp.groupware.approvals.list" })
+    }
+
     @Test
     fun orgSaveInvalidatesTheOrgCache() = runTest {
         val f = gatewayClientFixture()

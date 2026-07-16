@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
@@ -45,6 +46,33 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 	if os.Getenv("DENEB_GROUPWARE_RADAR_CC_DISABLE") != "1" {
 		onCCNew = groupwareRadarCCCallback(s.prepareApprovalBeforeFeed, s.publishApprovalCCFeed)
 	}
+	// Native-sync mirror: list drift the radar just observed (new pending,
+	// resolution, new 수신참조) drops the clients' approvals snapshot so the 결재
+	// surface refetches on next view. Escalation is NOT drift — the row set is
+	// unchanged — so it stays unwrapped. Warn on failure: TTL backstops.
+	notifySync := func(docID string) {
+		if s.nativeSyncStore == nil {
+			return
+		}
+		if _, err := s.nativeSyncStore.Append(nativesync.ApprovalsChanged(docID)); err != nil {
+			s.logger.Warn("native sync: approvals change append failed", "docId", docID, "error", err)
+		}
+	}
+	wrapNotify := func(fn func(context.Context, groupware.ApprovalSummary) error) func(context.Context, groupware.ApprovalSummary) error {
+		if fn == nil {
+			return nil
+		}
+		return func(ctx context.Context, doc groupware.ApprovalSummary) error {
+			if err := fn(ctx, doc); err != nil {
+				return err
+			}
+			notifySync(doc.DocID)
+			return nil
+		}
+	}
+	onPending = wrapNotify(onPending)
+	onResolved = wrapNotify(onResolved)
+	onCCNew = wrapNotify(onCCNew)
 	task := groupware.NewRadar(groupware.RadarConfig{
 		Reader:         reader,
 		StatePath:      filepath.Join(stateDir, groupwareRadarStateFile),

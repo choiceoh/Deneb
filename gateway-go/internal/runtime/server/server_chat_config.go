@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -380,8 +381,18 @@ func (s *Server) processLMTPQueueItem(ctx context.Context, svc *mailanalysis.Ser
 	}
 	actx, cancel := context.WithTimeout(ctx, lmtpAnalysisItemTimeout)
 	defer cancel()
-	_, err = svc.IngestMessage(actx, msg.Detail, msg.AttachmentBytes)
-	return err
+	if _, err = svc.IngestMessage(actx, msg.Detail, msg.AttachmentBytes); err != nil {
+		return err
+	}
+	// New mail is now in the store — mirror it to clients (mail.changed) so
+	// their lists force-warm instead of waiting out the activation TTL. Warn on
+	// failure: the TTL revalidation backstops, no user-observable loss.
+	if s.nativeSyncStore != nil {
+		if _, appendErr := s.nativeSyncStore.Append(nativesync.MailChanged(item.Key)); appendErr != nil {
+			s.logger.Warn("native sync: mail arrival append failed", "key", item.Key, "error", appendErr)
+		}
+	}
+	return nil
 }
 
 func sleepOrDone(ctx context.Context, d time.Duration) bool {

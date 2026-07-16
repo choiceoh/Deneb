@@ -58,6 +58,11 @@ type nativeMailStatusClient interface {
 // UNAVAILABLE responses instead.
 type GmailDeps struct {
 	Client func() (GmailClient, error)
+	// NotifyChanged, when set, fires after an inbox-membership mutation succeeds
+	// (archive/trash — NOT mark_read, which keeps membership and the list cache)
+	// so other clients force-warm their mail list via the native-sync mirror
+	// (mail.changed). Nil disables (tests).
+	NotifyChanged func(messageID string)
 	// Priority scores one inbox row into a glanceable tier + short hint
 	// (domain/mailpriority). Nil disables row priority — rows ship with
 	// empty fields and the native inbox renders no marker.
@@ -473,8 +478,12 @@ func gmailTrash(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			return MapGmailError(req.ID, "mail trash failed", err)
 		}
 		// Trashing removes the message from the inbox — drop the cached
-		// list so the next fetch no longer includes it.
+		// list so the next fetch no longer includes it, and mirror the
+		// membership change to other clients.
 		cache.invalidate()
+		if deps.NotifyChanged != nil {
+			deps.NotifyChanged(p.ID)
+		}
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
 	})
 }
@@ -504,8 +513,12 @@ func modifyLabelsHandler(deps GmailDeps, cache *listCache, removeLabels []string
 			return MapGmailError(req.ID, "mail modify labels failed", err)
 		}
 		// Invalidate when this action changes inbox membership (archive
-		// passes a cache; mark_read passes nil, a no-op).
+		// passes a cache; mark_read passes nil, a no-op). The same membership
+		// change is mirrored to other clients via mail.changed.
 		cache.invalidate()
+		if cache != nil && deps.NotifyChanged != nil {
+			deps.NotifyChanged(p.ID)
+		}
 		// Re-fetch metadata for the updated label list. Skipped silently
 		// on failure — the action itself succeeded.
 		labels := []string{}
