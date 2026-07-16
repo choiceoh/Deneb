@@ -119,7 +119,8 @@ func groupwareRadarCallbacks(
 }
 
 // publishApprovalAnalysisFeed posts the prepared analysis as the work-feed card
-// (승인/반려 chips). Skips the phone-event judgment turn.
+// (승인/반려 chips). Title/Summary/Body carry the analysis explicitly — no second
+// LLM turn and no heuristic re-titling of the report blob.
 func (s *Server) publishApprovalAnalysisFeed(_ context.Context, doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) error {
 	if rec == nil || strings.TrimSpace(rec.Analysis) == "" {
 		return fmt.Errorf("groupware approval %s analysis missing for feed", strings.TrimSpace(doc.DocID))
@@ -131,64 +132,90 @@ func (s *Server) publishApprovalAnalysisFeed(_ context.Context, doc groupware.Ap
 	if docID == "" {
 		return fmt.Errorf("groupware approval feed missing docId")
 	}
-	content := formatApprovalAnalysisFeed(doc, rec)
-	delivered, err := s.proactiveRelay.RelayNativeToOptions("", content, proactive.Options{
-		WorkFeedSource: workfeed.SourceGroupwareApproval,
-		RefID:          docID,
-		ForceQuestion:  true,
-		Actions:        groupwareApprovalActions(),
-	})
-	if err != nil {
-		return err
+	feed := s.nativeWorkFeedStore()
+	if feed == nil {
+		return errors.New("work-feed store unavailable")
 	}
-	if !delivered {
-		return fmt.Errorf("groupware approval %s feed relay did not deliver", docID)
-	}
-	return nil
-}
-
-func formatApprovalAnalysisFeed(doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) string {
 	title := strings.TrimSpace(doc.Title)
-	if title == "" && rec != nil {
+	if title == "" {
 		title = strings.TrimSpace(rec.Title)
 	}
 	if title == "" {
 		title = "전자결재"
 	}
-	drafter := strings.TrimSpace(doc.Drafter)
-	if drafter == "" && rec != nil {
-		drafter = strings.TrimSpace(rec.Drafter)
+	analysisBody := stripApprovalImportanceMarker(rec.Analysis)
+	summary := approvalAnalysisGlance(analysisBody)
+	meta := map[string]string{}
+	if imp := strings.TrimSpace(rec.Importance); imp != "" {
+		meta["importance"] = imp
 	}
-	date := strings.TrimSpace(doc.Date)
-	if date == "" && rec != nil {
-		date = strings.TrimSpace(rec.Date)
+	item := workfeed.Item{
+		Source:   workfeed.SourceGroupwareApproval,
+		Title:    title,
+		Summary:  summary,
+		Body:     analysisBody,
+		RefID:    docID,
+		Question: true,
+		Actions:  groupwareApprovalActions(),
+		Metadata: meta,
+		Priority: approvalImportancePriority(rec.Importance),
 	}
-	var meta []string
-	if drafter != "" {
-		meta = append(meta, "기안 "+drafter)
+	out, err := feed.Append(item)
+	if err != nil {
+		return err
 	}
-	if date != "" {
-		meta = append(meta, date)
+	preview := strings.TrimSpace(out.Summary)
+	if preview == "" {
+		preview = out.Title
 	}
-	if no := strings.TrimSpace(doc.DocNo); no != "" {
-		meta = append(meta, no)
-	}
-	if rec != nil {
-		if imp := strings.TrimSpace(rec.Importance); imp != "" {
-			meta = append(meta, "중요도 "+imp)
+	proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+		Title: "Deneb",
+		Body:  preview,
+		Kind:  proactive.PushKindWorkfeed,
+		Ref:   out.ID,
+	})
+	return nil
+}
+
+// approvalAnalysisGlance pulls the 요지 line for the collapsed feed row.
+func approvalAnalysisGlance(analysis string) string {
+	for _, line := range strings.Split(analysis, "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" {
+			continue
+		}
+		lower := strings.ToLower(t)
+		switch {
+		case strings.HasPrefix(t, "**요지**"),
+			strings.HasPrefix(t, "요지"),
+			strings.Contains(lower, "**요지**"):
+			t = strings.TrimPrefix(t, "-")
+			t = strings.TrimSpace(t)
+			t = strings.TrimPrefix(t, "**요지**")
+			t = strings.TrimSpace(t)
+			t = strings.TrimPrefix(t, "요지")
+			t = strings.TrimSpace(t)
+			t = strings.TrimLeft(t, "：:.—- ")
+			t = strings.TrimSpace(t)
+			if t != "" {
+				return workfeed.Preview(t, 240)
+			}
 		}
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "## %s\n", title)
-	if len(meta) > 0 {
-		b.WriteString(strings.Join(meta, " · "))
-		b.WriteByte('\n')
+	return workfeed.Preview(analysis, 240)
+}
+
+func approvalImportancePriority(importance string) int {
+	switch strings.TrimSpace(strings.ToLower(importance)) {
+	case "urgent":
+		return workfeed.PriorityUrgent
+	case "attention":
+		return workfeed.PriorityHigh
+	case "routine":
+		return workfeed.PriorityLow
+	default:
+		return 0
 	}
-	b.WriteByte('\n')
-	if rec != nil {
-		b.WriteString(stripApprovalImportanceMarker(rec.Analysis))
-	}
-	return strings.TrimSpace(b.String())
 }
 
 func (s *Server) notifyGroupwareRadarEscalation(_ context.Context, doc groupware.ApprovalSummary, level int, age time.Duration) error {
