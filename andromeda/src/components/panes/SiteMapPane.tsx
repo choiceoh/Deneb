@@ -53,10 +53,30 @@ const MILESTONES: { key: keyof Sched; label: string; inspection?: boolean }[] = 
   { key: "completionInspection", label: "준공검사", inspection: true },
 ];
 
-// 후보(prospective) 현장 are hidden by default — the map is for real, contracted
-// sites ("계약해서 개설된 현장"). A "" status (미분류, e.g. 대표페이지 fallback rows)
-// is always shown; only an explicit 후보 is gated behind the toggle.
-const PROSPECTIVE = "후보";
+// Lifecycle: 후보 → 계약 → 개설 → 준공. Default = 개설 only (공사중). Everything
+// else (계약·준공·후보·미분류 "") is gated behind an "… 포함" chip so the map
+// opens on active construction sites, not the whole pipeline + completed work.
+// 대표페이지 fallback rows carry status "" (미분류) — they used to always show,
+// which made every flat Meta.Sites pin appear "all at once" before 현장 pages
+// carried a real status.
+const STATUS_UNDER_CONSTRUCTION = "개설";
+const STATUS_CONTRACT = "계약";
+const STATUS_COMPLETED = "준공";
+const STATUS_PROSPECTIVE = "후보";
+
+function statusVisible(
+  status: string,
+  showContracted: boolean,
+  showCompleted: boolean,
+  showProspective: boolean,
+  showUnclassified: boolean,
+): boolean {
+  if (status === STATUS_UNDER_CONSTRUCTION) return true;
+  if (status === STATUS_CONTRACT) return showContracted;
+  if (status === STATUS_COMPLETED) return showCompleted;
+  if (status === STATUS_PROSPECTIVE) return showProspective;
+  return showUnclassified; // "" and any unknown label
+}
 
 // 에너지원 → color. The warm-Zen palette is deliberately narrow, so we map the
 // four sources onto the theme's semantic tokens rather than inventing hues:
@@ -132,7 +152,7 @@ function resolveSite(site: string): [number, number] | null {
 interface Unplaced {
   site: string;
   project: string;
-  status: string; // carried so the 미배치 tray can hide 후보 too
+  status: string; // carried so the 미배치 tray applies the same status gate
   sched: Sched; // 공정 일정 — so an imminent 검사 isn't hidden by an unresolved address
 }
 
@@ -275,7 +295,10 @@ export function SiteMapPane() {
   const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [sidoFilter, setSidoFilter] = useState<string | null>(null);
+  const [showContracted, setShowContracted] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [showProspective, setShowProspective] = useState(false);
+  const [showUnclassified, setShowUnclassified] = useState(false);
   const [selected, setSelected] = useState<Pin | null>(null);
 
   // Wheel-zoom + drag-pan via a controlled viewBox. Full extent = the whole map;
@@ -351,26 +374,38 @@ export function SiteMapPane() {
     return TYPE_ORDER.filter((k) => s.has(k));
   }, [pins]);
 
-  const prospectiveCount = useMemo(() => pins.filter((p) => p.status === PROSPECTIVE).length, [pins]);
+  const statusCounts = useMemo(() => {
+    const count = (want: (s: string) => boolean) =>
+      pins.filter((p) => want(p.status)).length + unplaced.filter((u) => want(u.status)).length;
+    return {
+      contracted: count((s) => s === STATUS_CONTRACT),
+      completed: count((s) => s === STATUS_COMPLETED),
+      prospective: count((s) => s === STATUS_PROSPECTIVE),
+      unclassified: count((s) => s !== STATUS_UNDER_CONSTRUCTION && s !== STATUS_CONTRACT && s !== STATUS_COMPLETED && s !== STATUS_PROSPECTIVE),
+    };
+  }, [pins, unplaced]);
 
   const shown = useMemo(
     () =>
       pins.filter(
         (p) =>
-          (showProspective || p.status !== PROSPECTIVE) &&
+          statusVisible(p.status, showContracted, showCompleted, showProspective, showUnclassified) &&
           (sourceFilter.size === 0 || sourceFilter.has(p.source)) &&
           (typeFilter.size === 0 || typeFilter.has(typeLabel(p.type))) &&
           (!sidoFilter || p.sido === sidoFilter),
       ),
-    [pins, sourceFilter, typeFilter, sidoFilter, showProspective],
+    [pins, sourceFilter, typeFilter, sidoFilter, showContracted, showCompleted, showProspective, showUnclassified],
   );
 
   const totalMw = useMemo(() => shown.reduce((sum, p) => sum + (p.capacity || 0), 0), [shown]);
-  // 미배치 hides 후보 too (unless the toggle is on), so a hidden candidate site never
+  // 미배치 applies the same status gate so a hidden (준공/후보/미분류) site never
   // leaks into the tray/count.
   const shownUnplaced = useMemo(
-    () => unplaced.filter((u) => showProspective || u.status !== PROSPECTIVE),
-    [unplaced, showProspective],
+    () =>
+      unplaced.filter((u) =>
+        statusVisible(u.status, showContracted, showCompleted, showProspective, showUnclassified),
+      ),
+    [unplaced, showContracted, showCompleted, showProspective, showUnclassified],
   );
   // 임박 검사 — how many 현장 have a 검사일 within IMMINENT_DAYS. Unplaced 현장 count too:
   // an approaching 검사 must not be hidden just because the address doesn't resolve.
@@ -451,9 +486,24 @@ export function SiteMapPane() {
             {sidoFilter} ✕
           </Chip>
         )}
-        {prospectiveCount > 0 && (
+        {statusCounts.contracted > 0 && (
+          <Chip on={showContracted} onClick={() => setShowContracted((v) => !v)}>
+            계약 포함 {statusCounts.contracted}
+          </Chip>
+        )}
+        {statusCounts.completed > 0 && (
+          <Chip on={showCompleted} onClick={() => setShowCompleted((v) => !v)}>
+            준공 포함 {statusCounts.completed}
+          </Chip>
+        )}
+        {statusCounts.prospective > 0 && (
           <Chip on={showProspective} onClick={() => setShowProspective((v) => !v)}>
-            후보 포함 {prospectiveCount}
+            후보 포함 {statusCounts.prospective}
+          </Chip>
+        )}
+        {statusCounts.unclassified > 0 && (
+          <Chip on={showUnclassified} onClick={() => setShowUnclassified((v) => !v)}>
+            미분류 포함 {statusCounts.unclassified}
           </Chip>
         )}
         {filtered && (
