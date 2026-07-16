@@ -50,20 +50,44 @@ suspend fun DenebGatewayClient.actApproval(
     )
 }
 
-/** Document body (`miniapp.groupware.approvals.get`). Null on failure. */
+// Session-scoped body cache: opening the same 결재 twice (list ↔ detail hops)
+// must not pay the reader roundtrip again. The gateway keeps its own 10-minute
+// disk cache; this only bridges in-session navigation.
+private const val APPROVAL_BODY_CACHE_MAX = 24
+private const val APPROVAL_BODY_CACHE_TTL_MS = 5 * 60 * 1000L
+
+private data class CachedApprovalBody(val body: ApprovalBody, val atMs: Long)
+
+private val approvalBodyCache = LinkedHashMap<String, CachedApprovalBody>()
+
+/**
+ * Document body (`miniapp.groupware.approvals.get`). Null on failure.
+ * [folder] is the list row's box hint — the gateway skips the 4-folder scan.
+ */
 suspend fun DenebGatewayClient.fetchApprovalBody(
     docId: String,
     title: String? = null,
+    folder: String? = null,
 ): ApprovalBody? {
     val id = docId.trim()
     if (id.isEmpty()) return null
-    return callRpc<GroupwareApprovalGetResponse>(
+    val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
+    approvalBodyCache[id]?.let { hit ->
+        if (nowMs - hit.atMs <= APPROVAL_BODY_CACHE_TTL_MS) return hit.body
+    }
+    val fetched = callRpc<GroupwareApprovalGetResponse>(
         "miniapp.groupware.approvals.get",
         buildJsonObject {
             put("docId", id)
             if (!title.isNullOrBlank()) put("title", title)
+            if (!folder.isNullOrBlank()) put("folder", folder)
         },
-    )?.let { ApprovalBody(docId = it.docId, title = it.title, body = it.body) }
+    )?.let { ApprovalBody(docId = it.docId, title = it.title, body = it.body) } ?: return null
+    approvalBodyCache[id] = CachedApprovalBody(fetched, nowMs)
+    while (approvalBodyCache.size > APPROVAL_BODY_CACHE_MAX) {
+        approvalBodyCache.remove(approvalBodyCache.keys.first())
+    }
+    return fetched
 }
 
 /** Instant cached analysis (no LLM) if one was already produced. */

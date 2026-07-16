@@ -85,6 +85,8 @@ data class DenebApprovalDetail(
     val drafter: String = "",
     val date: String = "",
     val canAct: Boolean = false,
+    // List row's box (pending|done|cc|total) — reader folder hint for a fast cold open.
+    val folder: String = "",
 )
 
 @Serializable

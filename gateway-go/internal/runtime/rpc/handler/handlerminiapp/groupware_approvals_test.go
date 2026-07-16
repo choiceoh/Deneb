@@ -200,9 +200,12 @@ func TestGroupwareApprovalsGetAndAnalyzeCache(t *testing.T) {
 	h := GroupwareApprovalsMethods(GroupwareApprovalsDeps{
 		List: func(context.Context, string, int) ([]groupware.ApprovalSummary, error) { return nil, nil },
 		Act:  func(context.Context, string, string, string) (string, error) { return "", nil },
-		Get: func(_ context.Context, docID string) (string, error) {
+		Get: func(_ context.Context, docID, folder string) (string, error) {
 			if docID != "42" {
 				t.Fatalf("docId = %q", docID)
+			}
+			if folder != "" && folder != "pending" {
+				t.Fatalf("folder hint = %q", folder)
 			}
 			return "본문 내용\n금액 100", nil
 		},

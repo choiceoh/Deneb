@@ -56,13 +56,16 @@ func (s *Server) analyzeApprovalBestEffort(ctx context.Context, doc groupware.Ap
 	if !ok {
 		return
 	}
-	body, err := groupware.ReadApprovalByDocID(ctx, cfg, docID)
+	body, err := groupware.ReadApprovalByDocIDIn(ctx, cfg, docID, doc.Folder)
 	if err != nil || strings.TrimSpace(body) == "" {
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval analysis skipped", "docId", docID, "err", err)
 		}
 		return
 	}
+	// Prewarm the body cache — the card's detail open right after the
+	// notification is the hottest path.
+	_ = groupware.NewApprovalBodyStore(filepath.Join(s.denebDir, "cache", "approval_body")).Save(docID, body)
 	title := strings.TrimSpace(doc.Title)
 	if title == "" {
 		title = firstNonEmptyLine(body)
@@ -76,7 +79,7 @@ func (s *Server) analyzeApprovalBestEffort(ctx context.Context, doc groupware.Ap
 		return
 	}
 	importance := normalizeApprovalImportance(analysis)
-	_ = cache.Save(&groupware.ApprovalAnalysisRecord{
+	rec := &groupware.ApprovalAnalysisRecord{
 		DocID:         docID,
 		Title:         title,
 		Drafter:       strings.TrimSpace(doc.Drafter),
@@ -86,7 +89,10 @@ func (s *Server) analyzeApprovalBestEffort(ctx context.Context, doc groupware.Ap
 		DurationMs:    time.Since(start).Milliseconds(),
 		PromptVersion: groupware.ApprovalAnalysisPromptVersion,
 		CreatedAt:     time.Now().UTC(),
-	})
+	}
+	_ = cache.Save(rec)
+	// 결재 gist joins the project memory trail (로그.md `결재` op) — best-effort.
+	s.logApprovalAnalysisToWiki(rec)
 }
 
 func truncateRunes(s string, max int) string {

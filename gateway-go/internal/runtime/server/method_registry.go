@@ -464,6 +464,7 @@ func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcut
 
 func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) []map[string]rpcutil.HandlerFunc {
 	approvalCache := groupware.NewApprovalAnalysisStore(filepath.Join(denebDir, "cache", "approval_analysis"))
+	approvalBodyCache := groupware.NewApprovalBodyStore(filepath.Join(denebDir, "cache", "approval_body"))
 	return []map[string]rpcutil.HandlerFunc{
 		s.earlyProjectMethods(hub),
 		handlerminiapp.OrgMethods(s.orgDeps()),
@@ -486,12 +487,23 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return groupware.ActApproval(ctx, cfg, docID, decision, comment)
 			},
-			Get: func(ctx context.Context, docID string) (string, error) {
+			Get: func(ctx context.Context, docID, folder string) (string, error) {
+				// Read-through body cache: repeated detail opens skip the
+				// Playwright roundtrip; the folder hint skips the 4-box scan
+				// on a cold open.
+				if body := approvalBodyCache.Load(docID); body != "" {
+					return body, nil
+				}
 				cfg, ok := groupware.FromEnv()
 				if !ok {
 					return "", fmt.Errorf("groupware credentials unset")
 				}
-				return groupware.ReadApprovalByDocID(ctx, cfg, docID)
+				body, err := groupware.ReadApprovalByDocIDIn(ctx, cfg, docID, folder)
+				if err != nil {
+					return "", err
+				}
+				_ = approvalBodyCache.Save(docID, body)
+				return body, nil
 			},
 			Cache: approvalCache,
 			Analyze: func(ctx context.Context, title, body string) (string, string, error) {
@@ -511,6 +523,7 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				}
 				return groupware.ReadBoardPost(ctx, cfg, query)
 			},
+			LogWiki: s.logApprovalAnalysisToWiki,
 		}),
 	}
 }

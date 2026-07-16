@@ -221,10 +221,10 @@ function ApprovalDetail({
   );
   const [body] = useAsyncOnOpen(
     async () => {
-      const r = await fetchApprovalBody(cfg, docId, doc.title);
+      const r = await fetchApprovalBody(cfg, docId, doc.title, doc.folder);
       return r?.body ?? "";
     },
-    [cfg, docId, doc.title],
+    [cfg, docId, doc.title, doc.folder],
     { enabled: connected && Boolean(docId) },
   );
   const [analyzing, setAnalyzing] = useState(false);
