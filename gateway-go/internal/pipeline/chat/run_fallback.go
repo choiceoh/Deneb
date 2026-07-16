@@ -369,6 +369,10 @@ func (t *fallbackTurn) compactionRecovery(ctx context.Context, compactAttempt in
 	return true, nil
 }
 
+// transientRetryBackoff is the pause before a single transient-HTTP retry.
+// Tests shrink this via TestMain — production keeps the live 2.5s settle time.
+var transientRetryBackoff = 2500 * time.Millisecond
+
 // retryTransient retries once, after a short backoff, on transient HTTP
 // failures: 500/502/503/521/529/429 plus transport timeouts.
 //
@@ -391,7 +395,7 @@ func (t *fallbackTurn) retryTransient(ctx context.Context) (aborted bool, err er
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()
-	case <-time.After(2500 * time.Millisecond):
+	case <-time.After(transientRetryBackoff):
 	}
 	t.agentResult, t.runErr = agent.RunAgent(ctx, t.cfg, t.messages, t.client, t.deps.tools, t.hooks, t.logger, t.runLog)
 	if t.runErr != nil {
