@@ -51,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -476,7 +477,7 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         Spacer(Modifier.height(12.dp))
 
         // The map
-        SiteMapCanvas(pins = shown, onPinTap = { select(it) })
+        SiteMapCanvas(pins = shown, selected = selected, onPinTap = { select(it) })
 
         Spacer(Modifier.height(10.dp))
         SiteMapLegend(sourcesPresent, typesPresent)
@@ -682,23 +683,20 @@ private fun SiteMapLegend(sourcesPresent: List<String>, typesPresent: List<Strin
 }
 
 @Composable
-private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
+private fun SiteMapCanvas(pins: List<SitePin>, selected: SitePin?, onPinTap: (SitePin) -> Unit) {
     val provinceStroke = MaterialTheme.colorScheme.outlineVariant
     val provinceFill = MaterialTheme.colorScheme.surface
     val hairline = denebHairline()
     // 핀 마크에 지도 배경색 링을 둘러 겹친 핀끼리, 그리고 지도면과 분리해 또렷하게 한다.
     val pinBorder = MaterialTheme.colorScheme.surfaceContainerLow
-    // 시도 라벨 색(옅게)과 측정기 — 라벨을 캔버스에 직접 그려 줌/팬에 따라붙게 한다.
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+    // 핀을 눌렀을 때만 그 현장 이름을 지도 위 라벨로 띄운다 — 평소엔 지도를 비워 깔끔하게.
+    // (시도 라벨을 상시 표시하지 않는다.) 라벨은 알약 배경 위 읽기 쉬운 텍스트.
+    val labelText = MaterialTheme.colorScheme.onSurface
+    val labelBg = MaterialTheme.colorScheme.surfaceContainerHighest
     val measurer = rememberTextMeasurer()
+    val labelStyle = remember(labelText) { TextStyle(color = labelText, fontSize = 11.sp) }
     // Cache the parsed province paths once — PathParser is not cheap and the data is static.
     val provincePaths = remember { KoreaGeo.provinces.map { PathParser().parsePathString(it.d).toPath() } }
-    // Pre-measure the 시도 labels once, not per redraw: pan/zoom re-invokes the draw lambda
-    // constantly, so lay the (static) labels out here and only position + draw in the loop.
-    val labelStyle = remember(labelColor) { TextStyle(color = labelColor, fontSize = 9.sp) }
-    val provinceLabels = remember(measurer, labelStyle) {
-        KoreaGeo.provinces.map { it to measurer.measure(it.key, labelStyle) }
-    }
 
     // 핀치 줌 + 팬 (데스크톱 휠 줌 대응). scale/offset을 graphicsLayer로 적용한다. 탭
     // 좌표는 graphicsLayer의 역변환을 거쳐 detectTapGestures로 전달되므로, 아래 히트
@@ -766,17 +764,8 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
                 drawPath(p, provinceFill)
                 drawPath(p, provinceStroke, style = Stroke(width = 1.2f, join = StrokeJoin.Round))
             }
-            // 시도 labels — faint, centered on each province so the map is legible on its own
-            // (not just via the list). They scale/pan with the map since they're drawn here;
-            // layouts are pre-measured above so the draw path only positions + paints.
-            for ((prov, layout) in provinceLabels) {
-                drawText(
-                    layout,
-                    topLeft = Offset(prov.cx * s - layout.size.width / 2f, prov.cy * s - layout.size.height / 2f),
-                )
-            }
             // Pins — halo + filled 특성 mark with a background-colored ring, sized by 용량,
-            // colored by 에너지원. Drawn last so they sit above the 시도 labels.
+            // colored by 에너지원.
             for (pin in pins) {
                 val cx = pin.vx * s
                 val cy = pin.vy * s
@@ -784,6 +773,24 @@ private fun SiteMapCanvas(pins: List<SitePin>, onPinTap: (SitePin) -> Unit) {
                 val color = sourceColor(pin.source)
                 drawCircle(color, radius = r + 3.dp.toPx(), center = Offset(cx, cy), alpha = 0.16f)
                 drawMark(shapeOfType(pin.type), Offset(cx, cy), r, color, pinBorder)
+            }
+            // 선택된 현장 이름 라벨 — 핀을 눌렀을 때만, 그 핀 옆에 알약 배경으로 (상시 아님).
+            // Only when the selected pin is currently shown; measured on demand (single label).
+            val sel = selected
+            if (sel != null && pins.any { it === sel }) {
+                val name = sel.site.trim().substringAfterLast(' ').ifBlank { sel.project }
+                val layout = measurer.measure(name, labelStyle)
+                val padX = 6.dp.toPx()
+                val padY = 3.dp.toPx()
+                val lx = sel.vx * s + sel.radiusDp.dp.toPx() + 5.dp.toPx()
+                val ly = sel.vy * s - layout.size.height / 2f
+                drawRoundRect(
+                    color = labelBg,
+                    topLeft = Offset(lx - padX, ly - padY),
+                    size = Size(layout.size.width + padX * 2, layout.size.height + padY * 2),
+                    cornerRadius = CornerRadius(5.dp.toPx()),
+                )
+                drawText(layout, topLeft = Offset(lx, ly))
             }
         }
         // 맞춤 — reset zoom/pan, shown only while zoomed in (mirrors the desktop button).
