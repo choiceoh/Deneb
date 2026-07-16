@@ -15,7 +15,10 @@
  *    localStorage so reload/back/revisit and repeated site chrome can apply
  *    known translations before asking the gateway again.
  *  - Body-first + viewport-first: article/main/body candidates near the current
- *    viewport are shipped before menus, footers, and off-screen text.
+ *    viewport are shipped before menus, footers, and off-screen text. Known CMS
+ *    CONTENT_SELECTORS still win; when none match, a Readability-style score
+ *    (text/paragraph density, link density, class noise — keep in sync with
+ *    BrowserContentScore.kt) promotes a primary root without a new site patch.
  *  - When a text node is part of a paragraph/list/table block, ship a small
  *    same-block context envelope. The gateway translates only the node text, but
  *    can use the context for better terminology and sentence flow.
@@ -466,6 +469,76 @@
     return ((el && (el.innerText || el.textContent)) || '').trim().length;
   }
 
+  // Keep numeric formula in sync with BrowserContentScore.kt (MIN_CONTENT_SCORE=20).
+  var MIN_CONTENT_SCORE = 20;
+  var POSITIVE_CLASS_RE = /article|content|story|post|entry|body|markup|full[-_]?story|td[-_]?post|available[-_]?content|postbody|post[-_]?content/gi;
+  var NEGATIVE_CLASS_RE = /nav|menu|sidebar|aside|footer|header|comment|related|share|social|promo|banner|ads?|subscribe|widget|cookie|consent|newsletter|recommend|popular|trending/gi;
+
+  function countReMatches(re, text) {
+    if (!text) return 0;
+    var n = 0;
+    re.lastIndex = 0;
+    while (re.exec(text)) {
+      n++;
+      if (n > 8) break;
+    }
+    return n;
+  }
+
+  /** Metrics for one candidate element (mirrors ContentScoreMetrics). */
+  function contentMetrics(el) {
+    var textLen = textLength(el);
+    var linkTextLength = 0;
+    try {
+      var links = el.querySelectorAll('a');
+      for (var i = 0; i < links.length; i++) {
+        linkTextLength += textLength(links[i]);
+      }
+    } catch (e) {}
+    var paragraphCount = 0;
+    try {
+      paragraphCount = el.querySelectorAll('p').length;
+    } catch (e2) {}
+    var className = '';
+    if (el.className) {
+      className = typeof el.className === 'string' ? el.className : (el.className.baseVal || String(el.className));
+    }
+    return {
+      tag: (el.tagName || '').toUpperCase(),
+      className: className,
+      id: el.id || '',
+      textLength: textLen,
+      linkTextLength: linkTextLength,
+      paragraphCount: paragraphCount
+    };
+  }
+
+  /** Readability-inspired score — keep in sync with scoreContentCandidate (Kotlin). */
+  function scoreContentCandidate(m) {
+    if (!m || m.textLength < 80) return -1e9;
+    var score = 0;
+    var tag = m.tag;
+    if (tag === 'ARTICLE' || tag === 'MAIN') score += 30;
+    else if (tag === 'SECTION') score += 15;
+    else if (tag === 'DIV') score += 5;
+
+    var classId = (m.className || '') + ' ' + (m.id || '');
+    var positiveHits = Math.min(countReMatches(POSITIVE_CLASS_RE, classId), 3);
+    score += positiveHits * 25;
+    var negativeHits = Math.min(countReMatches(NEGATIVE_CLASS_RE, classId), 4);
+    score -= negativeHits * 40;
+
+    score += Math.min(m.paragraphCount * 3, 50);
+    score += Math.min(Math.floor(m.textLength / 100), 40);
+
+    var denom = Math.max(m.textLength, 1);
+    var linkDensity = m.linkTextLength / denom;
+    if (linkDensity > 0.35) score -= 50;
+    else if (linkDensity > 0.2) score -= 20;
+
+    return score;
+  }
+
   function contentRank(el) {
     if (!el || !el.matches) return CONTENT_SELECTORS.length;
     for (var i = 0; i < CONTENT_SELECTORS.length; i++) {
@@ -474,6 +547,50 @@
       } catch (e) {}
     }
     return CONTENT_SELECTORS.length;
+  }
+
+  function pushRootIfFree(roots, el) {
+    if (!el || textLength(el) < 80) return false;
+    for (var j = 0; j < roots.length; j++) {
+      if (roots[j] === el || roots[j].contains(el) || el.contains(roots[j])) return false;
+    }
+    roots.push(el);
+    return true;
+  }
+
+  function isSkippableContentCandidate(el) {
+    if (!el || !el.matches) return true;
+    try {
+      if (el.matches(SKIP_SELECTOR)) return true;
+    } catch (e) {}
+    return skipParent(el);
+  }
+
+  /**
+   * Score article/main/section/div candidates when CONTENT_SELECTORS miss.
+   * Returns elements sorted by score descending (already filtered by MIN_CONTENT_SCORE).
+   */
+  function scoredContentElements(doc) {
+    var nodes;
+    try {
+      nodes = doc.querySelectorAll('article, main, section, div');
+    } catch (e) {
+      return [];
+    }
+    var scored = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (isSkippableContentCandidate(el)) continue;
+      var m = contentMetrics(el);
+      var score = scoreContentCandidate(m);
+      if (score < MIN_CONTENT_SCORE) continue;
+      scored.push({ el: el, score: score, textLength: m.textLength });
+    }
+    scored.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.textLength - a.textLength;
+    });
+    return scored;
   }
 
   function contentRoots(doc) {
@@ -492,16 +609,14 @@
       return textLength(b) - textLength(a);
     });
     for (var i = 0; i < candidates.length && roots.length < 12; i++) {
-      var el = candidates[i];
-      if (!el || textLength(el) < 80) continue;
-      var nested = false;
-      for (var j = 0; j < roots.length; j++) {
-        if (roots[j] === el || roots[j].contains(el) || el.contains(roots[j])) {
-          nested = true;
-          break;
-        }
+      pushRootIfFree(roots, candidates[i]);
+    }
+    // Selector miss (or only thin chrome matched): promote Readability-scored bodies.
+    if (roots.length === 0) {
+      var scored = scoredContentElements(doc);
+      for (var s = 0; s < scored.length && roots.length < 12; s++) {
+        pushRootIfFree(roots, scored[s].el);
       }
-      if (!nested) roots.push(el);
     }
     return roots;
   }
