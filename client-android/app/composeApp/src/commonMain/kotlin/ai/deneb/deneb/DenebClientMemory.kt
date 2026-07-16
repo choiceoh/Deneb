@@ -58,20 +58,19 @@ suspend fun DenebGatewayClient.fetchCategories(force: Boolean = false): WikiCate
  *  misleading "empty category". Session-cached per category so browsing back
  *  and forth within the TTL skips the network; wiki writes invalidate. */
 suspend fun DenebGatewayClient.fetchCategoryPages(category: String, force: Boolean = false): List<WikiPageRef>? {
-    if (!force) sectionCaches.categoryPages.fresh(category)?.let { return it }
-    val p = callRpc<MemoryListPayload>(
-        "miniapp.memory.list_in_category",
-        buildJsonObject {
-            put("category", category)
-            put("limit", 200)
-        },
-    ) ?: return null
-    val out = p.pages
-        .filter { it.path.isNotBlank() }
-        .distinctByLast { it.path }
-        .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
-    sectionCaches.categoryPages.store(category, out)
-    return out
+    return sectionCaches.categoryPages.getOrLoad(category, force) {
+        val p = callRpc<MemoryListPayload>(
+            "miniapp.memory.list_in_category",
+            buildJsonObject {
+                put("category", category)
+                put("limit", 200)
+            },
+        ) ?: return@getOrLoad null
+        p.pages
+            .filter { it.path.isNotBlank() }
+            .distinctByLast { it.path }
+            .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
+    }
 }
 
 /** The category a wiki path files under (its leading directory), for targeted
@@ -160,23 +159,22 @@ suspend fun DenebGatewayClient.moveCategoryPages(paths: List<String>, targetCate
  *  per path (bounded) so re-opening a just-read page is instant; a save to the
  *  path invalidates, so the post-save refetch is always fresh. */
 suspend fun DenebGatewayClient.fetchWikiPage(path: String, force: Boolean = false): WikiPage? {
-    if (!force) sectionCaches.wikiPages.fresh(path)?.let { return it }
-    val p = callRpc<WikiPagePayload>(
-        "miniapp.memory.get_page",
-        buildJsonObject { put("path", path) },
-    ) ?: return null
-    val out = WikiPage(
-        path = p.path,
-        title = p.title.ifBlank { p.path },
-        summary = p.summary,
-        category = p.category,
-        tags = p.tags,
-        updated = p.updated,
-        body = p.body,
-        code = p.code,
-    )
-    sectionCaches.wikiPages.store(path, out)
-    return out
+    return sectionCaches.wikiPages.getOrLoad(path, force) {
+        val p = callRpc<WikiPagePayload>(
+            "miniapp.memory.get_page",
+            buildJsonObject { put("path", path) },
+        ) ?: return@getOrLoad null
+        WikiPage(
+            path = p.path,
+            title = p.title.ifBlank { p.path },
+            summary = p.summary,
+            category = p.category,
+            tags = p.tags,
+            updated = p.updated,
+            body = p.body,
+            code = p.code,
+        )
+    }
 }
 
 /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */

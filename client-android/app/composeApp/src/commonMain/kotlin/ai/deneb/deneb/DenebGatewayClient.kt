@@ -245,16 +245,8 @@ class DenebGatewayClient private constructor(
     // bounds staleness and force=true (pull-to-refresh, after an edit) bypasses
     // it. Accessed only from the screen's Main-scoped coroutines.
 
-    /** Cached events for [key] if still within the TTL, else null. */
-    internal fun cachedCalendarRange(key: String): List<CalendarEvent>? = sectionCaches.calendarRanges.fresh(key)
-
     /** Last-known events for [key] regardless of age — the cold-start stale paint. */
     internal fun peekCalendarRange(key: String): List<CalendarEvent>? = sectionCaches.calendarRanges.peek(key)
-
-    /** Store a freshly-fetched range under [key], stamped now. */
-    internal fun storeCalendarRange(key: String, events: List<CalendarEvent>) {
-        sectionCaches.calendarRanges.store(key, events)
-    }
 
     // Native-client handshake snapshot: gateway version, active model, and
     // feature flags exposed by miniapp.client.hello.
