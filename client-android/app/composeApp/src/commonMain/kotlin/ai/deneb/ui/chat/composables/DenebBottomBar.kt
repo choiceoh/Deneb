@@ -76,6 +76,12 @@ data class DenebTabItem(
 const val ROUTE_FEED = "deneb_feed"
 const val ROUTE_HOME = "home"
 const val ROUTE_MORE = "deneb_more"
+const val ROUTE_MAIL = "deneb_mail"
+const val ROUTE_CALENDAR = "deneb_calendar"
+
+// The NavHost resting stub (DenebMain): the live tab pane shows through it, so the
+// bar is visible there and moves laterally (crossfade) to/from bar-keeping sections.
+const val ROUTE_MAIN = "deneb_main"
 
 // The five tabs. 피드 = work briefing home; 채팅 = the assistant conversation (center);
 // 더보기 = the section hub list; 메일·달력 jump into their section (which keeps the bar).
@@ -89,7 +95,7 @@ private val feedTab = DenebTabItem(
 )
 private val mailTab = DenebTabItem(
     "메일",
-    "deneb_mail",
+    ROUTE_MAIL,
     DenebMail,
     Icons.Outlined.EmailOutlined,
     Icons.Filled.EmailFilled,
@@ -103,7 +109,7 @@ private val chatTab = DenebTabItem(
 )
 private val calendarTab = DenebTabItem(
     "달력",
-    "deneb_calendar",
+    ROUTE_CALENDAR,
     DenebCalendar,
     Icons.Outlined.CalendarMonthOutlined,
     Icons.Filled.CalendarMonthFilled,
@@ -126,11 +132,12 @@ val denebBottomTabs: List<DenebTabItem> = listOf(feedTab, mailTab, chatTab, cale
 // section (a specific mail/event/wiki page/person, settings sub-screens like fleet/skill/
 // cron) — those are data-class/arg routes that drill down and keep their own ← back nav.
 val denebBottomBarRoutes: Set<String> = setOf(
+    ROUTE_MAIN,
     ROUTE_FEED,
     ROUTE_HOME,
     ROUTE_MORE,
-    "deneb_mail",
-    "deneb_calendar",
+    ROUTE_MAIL,
+    ROUTE_CALENDAR,
     "deneb_approvals",
     "deneb_search",
     "deneb_diary",
