@@ -8,6 +8,8 @@
 //   - BM25-based relevance scoring
 //   - Snippet extraction with match highlighting
 //   - AND/OR query modes with automatic fallback
+//   - Hangul index-time key expansion (particle/substring) so Korean queries
+//     hit posting lists instead of scanning the vocabulary
 package textsearch
 
 import (
@@ -18,11 +20,16 @@ import (
 	"unicode"
 )
 
+// maxORCandidates bounds how many documents OR-mode will score. Rarest query
+// tokens fill the set first so BM25-dominant hits stay, while a flood of
+// common Hangul postings cannot drag a search into multi-second territory.
+const maxORCandidates = 512
+
 // Index is a thread-safe in-memory full-text search index.
 type Index struct {
 	mu       sync.RWMutex
 	docs     map[string]*document           // docID -> document
-	inverted map[string]map[string]struct{} // token -> set of docIDs
+	inverted map[string]map[string]struct{} // token/expansion key -> set of docIDs
 	totalLen int                            // sum of all document lengths (for BM25 avgdl)
 }
 
@@ -39,6 +46,22 @@ type document struct {
 	// path and hidden-free UpsertFields calls pay nothing).
 	snippetSrc []string
 	tokens     int // total token count
+	// Cached tokenization so search never re-tokenizes bodies under the read
+	// lock. tokList is the flat (unweighted) path; fieldToks is per-field for
+	// UpsertFields. indexKeys lists every inverted key this doc posted under
+	// (surface tokens + Hangul expansions) so Remove is exact.
+	tokList   []string
+	fieldToks [][]string
+	indexKeys []string
+}
+
+// termStats is the per-query-token posting + IDF, computed once before the
+// candidate scoring loop (calling matchingDocs inside that loop was O(C·Q·V)).
+type termStats struct {
+	token string
+	docs  map[string]struct{}
+	idf   float64
+	df    int
 }
 
 // Field is one searchable text field with a term-frequency boost for
@@ -178,16 +201,40 @@ func (idx *Index) upsert(id string, fields []string, weights []float64, snippetS
 		idx.removeDoc(old)
 	}
 
-	tokens := tokenize(strings.Join(fields, " "))
-	doc := &document{id: id, fields: fields, weights: weights, snippetSrc: snippetSrc, tokens: len(tokens)}
+	doc := &document{id: id, fields: fields, weights: weights, snippetSrc: snippetSrc}
+	keySet := make(map[string]struct{}, 16)
+	addKeys := func(toks []string) {
+		for _, tok := range toks {
+			for _, k := range expandIndexKeys(tok) {
+				keySet[k] = struct{}{}
+			}
+		}
+	}
+	if weights == nil {
+		doc.tokList = tokenize(strings.Join(fields, " "))
+		doc.tokens = len(doc.tokList)
+		addKeys(doc.tokList)
+	} else {
+		doc.fieldToks = make([][]string, len(fields))
+		for i, f := range fields {
+			doc.fieldToks[i] = tokenize(f)
+			doc.tokens += len(doc.fieldToks[i])
+			addKeys(doc.fieldToks[i])
+		}
+	}
+	doc.indexKeys = make([]string, 0, len(keySet))
+	for k := range keySet {
+		doc.indexKeys = append(doc.indexKeys, k)
+	}
+
 	idx.docs[id] = doc
 	idx.totalLen += doc.tokens
 
-	for _, tok := range tokens {
-		if idx.inverted[tok] == nil {
-			idx.inverted[tok] = make(map[string]struct{})
+	for _, k := range doc.indexKeys {
+		if idx.inverted[k] == nil {
+			idx.inverted[k] = make(map[string]struct{})
 		}
-		idx.inverted[tok][id] = struct{}{}
+		idx.inverted[k][id] = struct{}{}
 	}
 }
 
@@ -204,12 +251,11 @@ func (idx *Index) Remove(id string) {
 
 func (idx *Index) removeDoc(doc *document) {
 	idx.totalLen -= doc.tokens
-	tokens := tokenize(strings.Join(doc.fields, " "))
-	for _, tok := range tokens {
-		if set, ok := idx.inverted[tok]; ok {
+	for _, k := range doc.indexKeys {
+		if set, ok := idx.inverted[k]; ok {
 			delete(set, doc.id)
 			if len(set) == 0 {
-				delete(idx.inverted, tok)
+				delete(idx.inverted, k)
 			}
 		}
 	}
@@ -268,21 +314,36 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 		return nil
 	}
 
-	// Collect candidate documents.
-	candidates := idx.collectCandidates(queryTokens, andMode)
+	n := float64(len(idx.docs))
+	terms := make([]termStats, 0, len(queryTokens))
+	for _, qt := range queryTokens {
+		docs := idx.matchingDocs(qt)
+		df := len(docs)
+		if df == 0 {
+			if andMode {
+				return nil
+			}
+			continue
+		}
+		idf := math.Log(1 + (n-float64(df)+0.5)/(float64(df)+0.5))
+		terms = append(terms, termStats{token: qt, docs: docs, idf: idf, df: df})
+	}
+	if len(terms) == 0 {
+		return nil
+	}
+
+	candidates := collectCandidates(terms, andMode)
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	// Score each candidate using BM25.
 	avgdl := float64(idx.totalLen) / float64(len(idx.docs))
-	n := float64(len(idx.docs))
 
 	type scored struct {
 		id    string
 		score float64
 	}
-	var results []scored
+	results := make([]scored, 0, len(candidates))
 
 	for docID := range candidates {
 		doc := idx.docs[docID]
@@ -291,36 +352,14 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 		}
 
 		dl := float64(doc.tokens)
-		// Flat docs keep the single joined-token pass; weighted docs (UpsertFields)
-		// count term frequency per field so each match scales by its field boost
-		// (BM25F-lite: a title/summary hit outweighs the same word buried in prose).
-		var docTokens []string
-		var fieldTokens [][]string
-		if doc.weights == nil {
-			docTokens = tokenize(strings.Join(doc.fields, " "))
-		} else {
-			fieldTokens = make([][]string, len(doc.fields))
-			for i, f := range doc.fields {
-				fieldTokens[i] = tokenize(f)
-			}
-		}
-
 		var score float64
-		for _, qt := range queryTokens {
-			matchIDs := idx.matchingDocs(qt)
-			df := float64(len(matchIDs))
-			if df == 0 {
-				continue
-			}
-			// BM25+ IDF (always positive, even for very common terms)
-			idf := math.Log(1 + (n-df+0.5)/(df+0.5))
-			// BM25 TF component (k1=1.2, b=0.75)
+		for _, t := range terms {
 			var termTF float64
 			if doc.weights == nil {
-				termTF = float64(matchedTermFrequency(docTokens, qt))
+				termTF = float64(matchedTermFrequency(doc.tokList, t.token))
 			} else {
-				for i, toks := range fieldTokens {
-					if c := matchedTermFrequency(toks, qt); c > 0 {
+				for i, toks := range doc.fieldToks {
+					if c := matchedTermFrequency(toks, t.token); c > 0 {
 						termTF += float64(c) * doc.weights[i]
 					}
 				}
@@ -329,7 +368,7 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 				continue
 			}
 			tfScore := (termTF * 2.2) / (termTF + 1.2*(1-0.75+0.75*(dl/avgdl)))
-			score += idf * tfScore
+			score += t.idf * tfScore
 		}
 
 		if score > 0 {
@@ -368,23 +407,27 @@ func (idx *Index) search(queryTokens []string, andMode bool, limit int) []Hit {
 	return hits
 }
 
-// collectCandidates finds document IDs matching the query tokens.
-func (idx *Index) collectCandidates(queryTokens []string, andMode bool) map[string]struct{} {
+// collectCandidates builds the doc set to score. AND intersects postings
+// (rarest-first for smaller intermediate sets). OR unions rarest-first and
+// stops at maxORCandidates so common Hangul tokens cannot flood scoring.
+func collectCandidates(terms []termStats, andMode bool) map[string]struct{} {
+	ordered := append([]termStats(nil), terms...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].df != ordered[j].df {
+			return ordered[i].df < ordered[j].df
+		}
+		return ordered[i].token < ordered[j].token
+	})
+
 	if andMode {
-		// AND: intersection of all token posting lists.
-		var result map[string]struct{}
-		for _, qt := range queryTokens {
-			matchIDs := idx.matchingDocs(qt)
-			if result == nil {
-				result = make(map[string]struct{}, len(matchIDs))
-				for id := range matchIDs {
-					result[id] = struct{}{}
-				}
-			} else {
-				for id := range result {
-					if _, ok := matchIDs[id]; !ok {
-						delete(result, id)
-					}
+		result := make(map[string]struct{}, len(ordered[0].docs))
+		for id := range ordered[0].docs {
+			result[id] = struct{}{}
+		}
+		for _, t := range ordered[1:] {
+			for id := range result {
+				if _, ok := t.docs[id]; !ok {
+					delete(result, id)
 				}
 			}
 			if len(result) == 0 {
@@ -394,11 +437,13 @@ func (idx *Index) collectCandidates(queryTokens []string, andMode bool) map[stri
 		return result
 	}
 
-	// OR: union of all token posting lists.
-	result := make(map[string]struct{})
-	for _, qt := range queryTokens {
-		for id := range idx.matchingDocs(qt) {
+	result := make(map[string]struct{}, min(maxORCandidates, len(ordered[0].docs)))
+	for _, t := range ordered {
+		for id := range t.docs {
 			result[id] = struct{}{}
+			if len(result) >= maxORCandidates {
+				return result
+			}
 		}
 	}
 	return result
@@ -496,32 +541,45 @@ func (idx *Index) QueryMaxRarity(query string) float64 {
 }
 
 // matchingDocs returns all document IDs matching a token. Latin and numeric
-// tokens stay exact. Hangul additionally supports compound-word substring
-// matches and a conservative set of trailing Korean particles so natural
-// queries such as "대한전선은" match an indexed "대한전선". A one-syllable
-// substring is deliberately rejected because it floods a Korean corpus with
-// accidental matches.
+// tokens stay exact. Hangul resolves via index-time expansion keys (exact,
+// particle-stripped base, substrings ≥ 2 runes) plus a query-side particle
+// trim so "대한전선은" hits the posting for "대한전선".
 func (idx *Index) matchingDocs(token string) map[string]struct{} {
-	// Exact match first.
-	if set, ok := idx.inverted[token]; ok && !containsHangul(token) {
-		return set
+	if !containsHangul(token) {
+		return idx.inverted[token]
 	}
 
-	// Hangul requires a vocabulary scan because a query can match the middle of
-	// a compound token or carry a grammatical particle absent from the index.
-	if containsHangul(token) {
-		merged := make(map[string]struct{})
+	merged := make(map[string]struct{})
+	add := func(key string) {
+		if key == "" {
+			return
+		}
+		for id := range idx.inverted[key] {
+			merged[id] = struct{}{}
+		}
+	}
+	add(token)
+	if base := trimHangulParticle(token); base != token {
+		add(base)
+	}
+	// One-syllable Hangul prefix ("레" → "레시피") is not expansion-keyed
+	// (would flood). Fall back to a bounded prefix scan over surface-length
+	// keys only when the query itself is a single Hangul syllable.
+	if len([]rune(token)) == 1 && len(merged) == 0 {
 		for indexToken, set := range idx.inverted {
-			if hangulTokenMatches(indexToken, token) {
+			if !containsHangul(indexToken) {
+				continue
+			}
+			// Expansion keys are themselves substrings; only consider keys that
+			// could be surface tokens (prefix match against the query).
+			if strings.HasPrefix(indexToken, token) {
 				for id := range set {
 					merged[id] = struct{}{}
 				}
 			}
 		}
-		return merged
 	}
-
-	return idx.inverted[token]
+	return merged
 }
 
 // tokenize splits text into lowercase tokens.
@@ -551,54 +609,6 @@ func isTokenChar(r rune) bool {
 		return true
 	}
 	return false
-}
-
-func containsHangul(s string) bool {
-	for _, r := range s {
-		if r >= 0xAC00 && r <= 0xD7A3 {
-			return true
-		}
-	}
-	return false
-}
-
-var hangulParticles = []string{
-	"으로부터", "에게서", "이라도", "이든지", "이라면", "이랑", "으로", "에서", "에게", "부터", "까지", "처럼", "보다", "마다", "조차", "마저",
-	"은", "는", "이", "가", "을", "를", "에", "의", "로", "와", "과", "도", "만", "랑",
-}
-
-func hangulTokenMatches(indexToken, queryToken string) bool {
-	if indexToken == queryToken {
-		return true
-	}
-	queryBase := trimHangulParticle(queryToken)
-	for _, query := range []string{queryToken, queryBase} {
-		if query == "" {
-			continue
-		}
-		// Preserve the original Hangul-prefix behavior ("레시" -> "레시피")
-		// and add safe compound-token recall ("행위허가" -> "개발행위허가").
-		if strings.HasPrefix(indexToken, query) {
-			return true
-		}
-		if len([]rune(query)) >= 2 && strings.Contains(indexToken, query) {
-			return true
-		}
-	}
-	return false
-}
-
-func trimHangulParticle(token string) string {
-	for _, suffix := range hangulParticles {
-		if !strings.HasSuffix(token, suffix) {
-			continue
-		}
-		base := strings.TrimSuffix(token, suffix)
-		if len([]rune(base)) >= 2 {
-			return base
-		}
-	}
-	return token
 }
 
 func termFrequencies(tokens []string) map[string]int {
