@@ -170,6 +170,7 @@ data class GroupwareApprovalRow(
 data class GroupwareApprovalsListResponse(
     val approvals: List<GroupwareApprovalRow> = emptyList(),
     val folder: String = "",
+    val nextAfterDocId: String = "",
 )
 
 @Immutable

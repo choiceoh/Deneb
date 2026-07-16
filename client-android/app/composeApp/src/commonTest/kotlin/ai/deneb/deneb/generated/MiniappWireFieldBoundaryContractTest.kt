@@ -709,6 +709,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "GroupwareApprovalsListResponse.nextAfterDocId",
+            serializer = GroupwareApprovalsListResponse.serializer(),
+            field = "nextAfterDocId",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "GroupwareBoardPostResponse.query",
             serializer = GroupwareBoardPostResponse.serializer(),
             field = "query",

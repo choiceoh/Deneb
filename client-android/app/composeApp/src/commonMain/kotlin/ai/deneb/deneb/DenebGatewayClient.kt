@@ -195,6 +195,20 @@ class DenebGatewayClient private constructor(
     internal val _denebMailNextToken = MutableStateFlow<String?>(null)
     val denebMailNextToken: StateFlow<String?> = _denebMailNextToken
 
+    // Recent 결재 list (folder=total). Detail act patches this so the list
+    // recomposes without a refetch when the operator returns.
+    internal val _denebApprovals = MutableStateFlow<List<ai.deneb.deneb.generated.GroupwareApprovalRow>>(emptyList())
+    val denebApprovals: StateFlow<List<ai.deneb.deneb.generated.GroupwareApprovalRow>> = _denebApprovals
+
+    // afterDocId cursor for load-more; null when no further page.
+    internal val _denebApprovalsNextAfter = MutableStateFlow<String?>(null)
+    val denebApprovalsNextAfter: StateFlow<String?> = _denebApprovalsNextAfter
+
+    // True once the first network (or seed) paint has landed — distinguishes
+    // "still loading" from "genuinely empty".
+    internal val _denebApprovalsReady = MutableStateFlow(false)
+    val denebApprovalsReady: StateFlow<Boolean> = _denebApprovalsReady
+
     // Mail query behind the current mail list (null = default inbox view).
     // Set by refreshMail on success; loadMoreMail must send the same query or
     // the next page would come from a different result set than the cursor.
@@ -367,6 +381,10 @@ class DenebGatewayClient private constructor(
         _denebMailNextToken.value = null
         denebMailActiveQuery = null
         locallyReadMailIds.clear()
+        _denebApprovals.value = emptyList()
+        _denebApprovalsNextAfter.value = null
+        _denebApprovalsReady.value = false
+        invalidateApprovalsListCache()
         _denebWorkFeed.value = emptyList()
         _workFeedLoaded.value = false
         _hasUnreadWorkReport.value = false

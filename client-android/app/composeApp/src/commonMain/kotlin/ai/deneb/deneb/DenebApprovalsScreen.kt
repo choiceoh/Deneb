@@ -32,8 +32,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,17 +48,11 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
-private const val APPROVALS_PAGE_SIZE = APPROVALS_PERSIST_PAGE_SIZE
-
-/** Gateway `maxApprovalsLimit` — requesting more is clamped server-side. */
-private const val APPROVALS_MAX_LIMIT = 100
-
 /**
  * 최근 전체 결재 surface (`miniapp.groupware.approvals.list`, folder=total).
- * Starts with the newest [APPROVALS_PAGE_SIZE] rows (미결 on top, 최근 below);
- * scrolling to the end raises the limit by another page until [APPROVALS_MAX_LIMIT].
- * First page is persisted in settings (mail-style) for cold-start paint.
- * Row tap → detail.
+ * First page from StateFlow (seeded from settings cache); near-end scroll
+ * appends via afterDocId. Detail act patches the same flow so 미결 moves
+ * without a refetch. Row tap → detail.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,26 +63,15 @@ fun DenebApprovalsScreen(
     onOpenFeed: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    val seed = remember {
-        peekCachedApprovals("total") ?: client.loadCachedApprovals()
+    remember {
+        client.seedApprovalsFromCache()
+        true
     }
-    var rows by remember { mutableStateOf(seed) }
+    val rows by client.denebApprovals.collectAsState()
+    val nextAfter by client.denebApprovalsNextAfter.collectAsState()
+    val ready by client.denebApprovalsReady.collectAsState()
     var failed by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
-    var pageLimit by remember {
-        mutableIntStateOf(
-            seed?.size
-                ?.coerceAtLeast(APPROVALS_PAGE_SIZE)
-                ?.let { ((it + APPROVALS_PAGE_SIZE - 1) / APPROVALS_PAGE_SIZE) * APPROVALS_PAGE_SIZE }
-                ?.coerceAtMost(APPROVALS_MAX_LIMIT)
-                ?: APPROVALS_PAGE_SIZE,
-        )
-    }
-    var hasMore by remember {
-        mutableStateOf(
-            seed != null && seed.size >= pageLimit && pageLimit < APPROVALS_MAX_LIMIT,
-        )
-    }
     var loadingMore by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
@@ -100,26 +83,16 @@ fun DenebApprovalsScreen(
         }
     }
 
-    suspend fun load(
-        clear: Boolean = true,
-        limit: Int = pageLimit,
-        forceRefresh: Boolean = false,
-    ) {
+    suspend fun load(forceRefresh: Boolean = false) {
         failed = false
-        if (clear) rows = null
         val fetched = client.fetchApprovals(
             folder = "total",
-            limit = limit,
+            limit = APPROVALS_PERSIST_PAGE_SIZE,
             forceRefresh = forceRefresh,
         )
         if (fetched == null) {
             failed = true
         } else {
-            rows = fetched
-            pageLimit = limit
-            hasMore = fetched.size >= limit && limit < APPROVALS_MAX_LIMIT
-            // Prefetch 미결 bodies in the background — the pending doc is the one
-            // the operator opens next, and the cold reader roundtrip is seconds.
             fetched.filter { it.canAct }.take(4).forEach { doc ->
                 scope.launch { client.fetchApprovalBody(doc.docId, doc.title, doc.folder) }
             }
@@ -127,21 +100,17 @@ fun DenebApprovalsScreen(
     }
 
     suspend fun loadMore() {
-        if (!hasMore || loadingMore || refreshing) return
+        if (nextAfter == null || loadingMore || refreshing) return
         loadingMore = true
         try {
-            load(
-                clear = false,
-                limit = (pageLimit + APPROVALS_PAGE_SIZE).coerceAtMost(APPROVALS_MAX_LIMIT),
-            )
+            client.loadMoreApprovals(folder = "total", limit = APPROVALS_PERSIST_PAGE_SIZE)
         } finally {
             loadingMore = false
         }
     }
 
-    // Seed paints immediately; network refresh only when cache is cold/stale.
-    LaunchedEffect(Unit) { load(clear = rows == null) }
-    LaunchedEffect(listState, hasMore) {
+    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(listState, nextAfter) {
         snapshotFlow {
             val layout = listState.layoutInfo
             val lastVisible = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -151,13 +120,13 @@ fun DenebApprovalsScreen(
         }
     }
 
-    val list = rows
-    val pendingRows = remember(list) {
-        list?.filter { it.canAct }?.sortedByDescending { it.docId }.orEmpty()
+    val pendingRows = remember(rows) {
+        rows.filter { it.canAct }.sortedByDescending { it.docId }
     }
-    val recentRows = remember(list) {
-        list?.filterNot { it.canAct }?.sortedByDescending { it.docId }.orEmpty()
+    val recentRows = remember(rows) {
+        rows.filterNot { it.canAct }.sortedByDescending { it.docId }
     }
+    val hasMore = nextAfter != null
 
     DenebSiblingSwipeHost(onSwipeRight = openFeed) {
         DenebScreenScaffold(
@@ -177,20 +146,19 @@ fun DenebApprovalsScreen(
                     haptics.refresh()
                     scope.launch {
                         refreshing = true
-                        pageLimit = APPROVALS_PAGE_SIZE
-                        load(clear = false, limit = APPROVALS_PAGE_SIZE, forceRefresh = true)
+                        load(forceRefresh = true)
                         refreshing = false
                     }
                 },
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
                 when {
-                    failed -> DenebError(
+                    failed && rows.isEmpty() -> DenebError(
                         "결재 목록을 불러오지 못했습니다.",
-                        onRetry = { scope.launch { load() } },
+                        onRetry = { scope.launch { load(forceRefresh = true) } },
                     )
 
-                    list == null -> DenebLoading()
+                    !ready && rows.isEmpty() -> DenebLoading()
 
                     pendingRows.isEmpty() && recentRows.isEmpty() -> Column(
                         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),

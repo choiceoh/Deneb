@@ -99,9 +99,10 @@ func GroupwareApprovalsMethods(deps GroupwareApprovalsDeps) map[string]rpcutil.H
 
 func groupwareApprovalsList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 	type params struct {
-		Folder string `json:"folder,omitempty"`
-		Limit  int    `json:"limit,omitempty"`
-		Date   string `json:"date,omitempty"`
+		Folder     string `json:"folder,omitempty"`
+		Limit      int    `json:"limit,omitempty"`
+		Date       string `json:"date,omitempty"`
+		AfterDocID string `json:"afterDocId,omitempty"`
 	}
 	return bindAuthenticatedOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		folder := strings.TrimSpace(strings.ToLower(p.Folder))
@@ -118,6 +119,13 @@ func groupwareApprovalsList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 		if limit > maxApprovalsLimit {
 			limit = maxApprovalsLimit
 		}
+		afterID := strings.TrimSpace(p.AfterDocID)
+		// Amaranth has no cursor — a follow-up page must scan past afterDocId,
+		// so pull the max window once and slice. First page stays cheap (limit).
+		fetchLimit := limit
+		if afterID != "" {
+			fetchLimit = maxApprovalsLimit
+		}
 		dayKey := ""
 		if d := strings.TrimSpace(p.Date); d != "" {
 			key, ok := approvalDayKey(d)
@@ -126,13 +134,13 @@ func groupwareApprovalsList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 			}
 			dayKey = key
 		}
-		docs, err := deps.List(ctx, folder, limit)
+		docs, err := deps.List(ctx, folder, fetchLimit)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("list groupware approvals", err).Response(req.ID)
 		}
 		// Amaranth "total" rows ship empty status/folder=total, so canAct would
 		// always be false without cross-checking the pending box.
-		pendingByID := approvalPendingIndex(ctx, deps, folder, limit)
+		pendingByID := approvalPendingIndex(ctx, deps, folder, fetchLimit)
 		rows := make([]GroupwareApprovalRow, 0, len(docs))
 		for _, doc := range docs {
 			if dayKey != "" {
@@ -160,9 +168,33 @@ func groupwareApprovalsList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 				CanAct:  canAct,
 			})
 		}
+		if afterID != "" {
+			cut := -1
+			for i := range rows {
+				if strings.TrimSpace(rows[i].DocID) == afterID {
+					cut = i
+					break
+				}
+			}
+			if cut < 0 {
+				// Stale cursor (doc left the window) — empty page, no further cursor.
+				rows = nil
+			} else {
+				rows = rows[cut+1:]
+			}
+		}
+		nextAfter := ""
+		if len(rows) > limit {
+			nextAfter = strings.TrimSpace(rows[limit-1].DocID)
+			rows = rows[:limit]
+		} else if afterID == "" && len(rows) >= limit {
+			// First page filled the request — more may exist beyond this fetch.
+			nextAfter = strings.TrimSpace(rows[len(rows)-1].DocID)
+		}
 		return rpcutil.RespondOK(req.ID, GroupwareApprovalsListResponse{
-			Approvals: rows,
-			Folder:    folder,
+			Approvals:      rows,
+			Folder:         folder,
+			NextAfterDocID: nextAfter,
 		})
 	})
 }

@@ -526,6 +526,12 @@ class MiniappWireNullCompatibilityTest {
             field = "folder",
         ),
         nullContract(
+            name = "GroupwareApprovalsListResponse.nextAfterDocId",
+            serializer = GroupwareApprovalsListResponse.serializer(),
+            empty = GroupwareApprovalsListResponse(),
+            field = "nextAfterDocId",
+        ),
+        nullContract(
             name = "GroupwareBoardPostResponse.query",
             serializer = GroupwareBoardPostResponse.serializer(),
             empty = GroupwareBoardPostResponse(),
