@@ -189,11 +189,15 @@ type AgentsConfig struct {
 	// lightweight and fallback roles (used by gmail-poll, genesis, pilot,
 	// and the chat fallback chain). Empty leaves the built-in default
 	// (the local vLLM model) in place. Format: "provider/model".
-	LightweightModel string                `json:"lightweightModel,omitempty"`
-	CodingModel      string                `json:"codingModel,omitempty"`
-	FallbackModel    string                `json:"fallbackModel,omitempty"`
-	DefaultSystem    string                `json:"defaultSystem,omitempty"`
-	Defaults         *AgentsDefaultsConfig `json:"defaults,omitempty"`
+	LightweightModel string `json:"lightweightModel,omitempty"`
+	CodingModel      string `json:"codingModel,omitempty"`
+	// Main2Model is the opt-in second main-tier model (mutual failover pair
+	// with defaultModel): main-grade quality for background/bulk work so the
+	// flagship subscription is reserved for interactive turns.
+	Main2Model    string                `json:"main2Model,omitempty"`
+	FallbackModel string                `json:"fallbackModel,omitempty"`
+	DefaultSystem string                `json:"defaultSystem,omitempty"`
+	Defaults      *AgentsDefaultsConfig `json:"defaults,omitempty"`
 	// ProactiveEscalateThreshold tunes the heartbeat's proactive intervention
 	// cadence — the minimum signal score before the agent speaks up unprompted
 	// ("능동적이되 침해적이지 않게"). Unset/<=0 keeps the calibrated default (40).

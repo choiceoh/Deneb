@@ -205,6 +205,13 @@ func CodingModel(logger *slog.Logger) string {
 	return agentRoleModel("codingModel", logger)
 }
 
+// Main2Model reads the optional agents.main2Model override from deneb.json —
+// the second main-tier model (mutual failover pair with main). Empty leaves
+// RoleMain2 absent, keeping the single-main behavior.
+func Main2Model(logger *slog.Logger) string {
+	return agentRoleModel("main2Model", logger)
+}
+
 // TinyModel reads the optional per-role override agents.tinyModel from
 // deneb.json. Empty leaves the registry's lightweight model for that role (the
 // prior single-tier behavior).
