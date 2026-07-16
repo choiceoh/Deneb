@@ -1,6 +1,6 @@
 ---
 name: evolution-proposal
-version: "1.0.8"
+version: "1.0.9"
 category: coding
 description: "Propose, record, and execute self-evolution after a meaningful workflow via the skill_lifecycle tool. Use when: (1) a completed task may deserve a reusable skill, (2) the user asks for skill genesis, self-evolution, or an evolution proposal, (3) an existing skill should be evolved instead of creating a new one. NOT for: ordinary coding work, one-off notes, or directly authoring a SKILL.md without first deciding the route."
 metadata:
@@ -71,23 +71,39 @@ batch-review. Use `pin`, `unpin`,
 `archive`, or `restore` only for agent-created skills whose curator state needs
 explicit operator control.
 
-## Procedure
+## Minimum Process
 
-1. State the candidate pattern in one sentence.
-2. Check existing skills with `skills` action `list`; read the closest match if any.
-3. If a close match exists, prefer `Evolve`; if detailed config/code snippets are the reusable part, preserve them inside the existing skill or a support file.
-4. Decide the route using the table above.
-5. Load `skill_lifecycle` with `fetch_tools` if the schema is not visible.
-6. If the session history is unclear, call `skill_lifecycle` action `status` first and review recent lifecycle records plus `selfCorrectionCandidates`.
-7. Record the decision with `skill_lifecycle` action `propose`.
-8. If route is `Genesis`, pass `execute=true` or call action `genesis`; omit `sessionKey` to use the current session, or pass a concise `dreamSummary`.
-9. If route is `Evolve`, pass `execute=true` with `skillName` and put the concrete improvement directive in `reason`/`evidence`; tie the directive to one supported failure mechanism, editable surface, expected behavior change, and regression risk. The evolver will persist those Self-Harness audit fields when the candidate supplies them. For direct action `evolve`, pass the same directive as `finding`.
-10. If the reusable workflow is being implemented with `code_action`, pass `promoteToSkill` in the same call once the pattern is clear. It records a `skill_lifecycle` proposal after the Python run succeeds and skips promotion when the script fails.
-11. If route is `Create`, load `skill-factory` and create a concise `SKILL.md` with `skills` action `create`.
-12. If the durable detail is a command/config/code reference, add it with `skills` action `write_file` under `references/`, `templates/`, `scripts/`, or `assets/`.
-13. If the task exposed a concrete failure that can be replayed from a stored transcript, record it with `skill_lifecycle` action `validation_case_from_session` before or after evolve; pass `skillName`, `sessionKey`, and a short `description`. Use manual `validation_case` only when the invariant needs extra replay fields (`input`, `requiredActions`, `forbiddenActions`, `expectedToolCalls`, `forbiddenToolCalls`, `requiredObservations`, `forbiddenObservations`, `requireOrder`) that the transcript cannot prove by itself.
-14. If you notice a plausible correction but cannot safely apply and validate it now, record it with `skill_lifecycle` action `self_correction` using `title`, `evidence`, `targetFiles`, `proposedChange`, and `risk`; do not mutate files in that action.
-15. For executed `Genesis`/`Evolve` routes, call `skill_lifecycle` action `status` with `limit: 5` when you need an audit trail.
+Keep the dependency order, but do not run every possible lifecycle action as one
+long checklist:
+
+1. **Frame and route.** State one candidate and its evidence. Use `skills` action
+   `list`, read only the closest match, and choose exactly one route. If history
+   or duplicate risk is unclear, inspect `skill_lifecycle` action `status`,
+   including `rejectedEdits`, `validationCases`, and `selfCorrectionCandidates`.
+2. **Record and execute once.** Load `skill_lifecycle` with `fetch_tools` only
+   when its schema is not visible, record action `propose`, then execute only the
+   chosen route:
+   - **Genesis:** pass `execute=true` to `propose` or call action `genesis`;
+     omit `sessionKey` for the current session, or pass a concise `dreamSummary`.
+   - **Evolve:** pass `execute=true` with `skillName` and a concrete directive in
+     `reason`/`evidence`. Tie it to one supported failure mechanism, editable
+     surface, expected behavior change, and regression risk. For direct action
+     `evolve`, pass the same directive as `finding`.
+   - **Create:** load `skill-factory`, then use `skills` action `create` for a
+     concise `SKILL.md`.
+   - **No-op:** report why existing coverage is sufficient.
+   - When a successful `code_action` itself proves the reusable workflow, pass
+     `promoteToSkill` in that same call. It records the proposal only after the
+     Python run succeeds.
+3. **Keep only needed follow-up.** Put durable command/config/code detail under
+   `references/`, `templates/`, `scripts/`, or `assets/` with `skills` action
+   `write_file`. Add `validation_case_from_session` only for a replayable failure;
+   use manual `validation_case` only for extra invariants the transcript cannot
+   prove. Queue unsafe or deferred code changes with action `self_correction` and
+   its evidence/target/risk fields; do not mutate files in that action. Query
+   `status` with `limit: 5` only when an audit trail is needed.
+4. **Report the outcome.** Say what changed, what was queued, or why it was a
+   no-op.
 
 ### Next-State Feedback
 
@@ -103,7 +119,6 @@ actionable part into one of:
 
 Do not present this as model training. In Deneb it is an auditable queue:
 external feedback -> structured hint -> batch review -> focused validation.
-16. Report what changed, what was only queued, or why no change was made.
 
 ## Proposal Template
 
@@ -217,6 +232,7 @@ Typical manual held-out replay case:
 - Deferred correction route: `skill_lifecycle` status shows the candidate in `selfCorrectionCandidates` until a reviewer marks it accepted/rejected/superseded/applied with `self_correction_review`.
 
 ## Changelog
+- v1.0.9: Replaced the incidental 16-step linear checklist with a four-part minimum path and route-specific actions; preserved lifecycle, replay, and audit gates.
 - v1.0.8: Added precise auto-surfacing triggers and just-in-time activation for lifecycle tools; this skill now owns the detailed Propus procedure instead of the ambient system prompt.
 - v1.0.7: Added deferred self-correction queue guidance.
 - v1.0.6: Noted persisted Self-Harness audit fields for evolve routes.
