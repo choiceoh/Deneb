@@ -12,14 +12,13 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 const groupwareRadarStateFile = "groupware_radar_state.json"
 
 func (s *Server) registerGroupwareRadarTask(homeDir string) {
-	if os.Getenv("DENEB_GROUPWARE_RADAR_DISABLE") == "1" || s.autonomousSvc == nil || s.chatHandler == nil {
+	if os.Getenv("DENEB_GROUPWARE_RADAR_DISABLE") == "1" || s.autonomousSvc == nil {
 		return
 	}
 	reader, configured := groupware.FromEnv()
@@ -38,9 +37,7 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 
 	onPending, onEscalated, onResolved := groupwareRadarCallbacks(
 		feed,
-		func(ctx context.Context, source, text string) error {
-			return phoneevents.New(s.phoneEventHandlerConfig()).IngestApprovalSync(ctx, source, text)
-		},
+		s.publishApprovalAnalysisFeed,
 		s.notifyGroupwareRadarEscalation,
 		s.prepareApprovalBeforeFeed,
 	)
@@ -63,14 +60,14 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 }
 
 type (
-	groupwareRadarIngest        func(context.Context, string, string) error
+	groupwareRadarPublishFeed   func(context.Context, groupware.ApprovalSummary, *groupware.ApprovalAnalysisRecord) error
 	groupwareRadarEscalate      func(context.Context, groupware.ApprovalSummary, int, time.Duration) error
-	groupwareRadarBeforePending func(context.Context, groupware.ApprovalSummary) error
+	groupwareRadarBeforePending func(context.Context, groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error)
 )
 
 func groupwareRadarCallbacks(
 	feed *nativeWorkFeedStore,
-	ingest groupwareRadarIngest,
+	publish groupwareRadarPublishFeed,
 	escalate groupwareRadarEscalate,
 	beforePending groupwareRadarBeforePending,
 ) (
@@ -86,21 +83,20 @@ func groupwareRadarCallbacks(
 		if active {
 			return nil
 		}
-		// 조회→분석→(유의미하면)위키, then feed. Analysis failure keeps the
-		// doc retryable so a bare notification card never lands first.
+		// 조회→분석→(유의미하면)위키 → 분석 본문으로 피드. No second LLM turn.
+		var rec *groupware.ApprovalAnalysisRecord
 		if beforePending != nil {
-			if err := beforePending(ctx, doc); err != nil {
+			rec, err = beforePending(ctx, doc)
+			if err != nil {
 				return err
 			}
 		}
-		if ingest == nil {
-			return errors.New("groupware radar approval ingester unavailable")
+		if publish == nil {
+			return errors.New("groupware radar approval publisher unavailable")
 		}
-		if err := ingest(ctx, "groupware-radar", formatGroupwareRadarNotification(doc)); err != nil {
+		if err := publish(ctx, doc, rec); err != nil {
 			return err
 		}
-		// Relay work-feed append is historically best-effort. Verify the durable
-		// RefID postcondition so radar state is not marked notified after a lost card.
 		active, err = feed.HasActiveSourceRef(workfeed.SourceGroupwareApproval, doc.DocID)
 		if err != nil {
 			return err
@@ -120,6 +116,79 @@ func groupwareRadarCallbacks(
 		return feed.AckBySourceRef(workfeed.SourceGroupwareApproval, doc.DocID)
 	}
 	return onPending, onEscalated, onResolved
+}
+
+// publishApprovalAnalysisFeed posts the prepared analysis as the work-feed card
+// (승인/반려 chips). Skips the phone-event judgment turn.
+func (s *Server) publishApprovalAnalysisFeed(_ context.Context, doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) error {
+	if rec == nil || strings.TrimSpace(rec.Analysis) == "" {
+		return fmt.Errorf("groupware approval %s analysis missing for feed", strings.TrimSpace(doc.DocID))
+	}
+	docID := strings.TrimSpace(doc.DocID)
+	if docID == "" {
+		docID = strings.TrimSpace(rec.DocID)
+	}
+	if docID == "" {
+		return fmt.Errorf("groupware approval feed missing docId")
+	}
+	content := formatApprovalAnalysisFeed(doc, rec)
+	delivered, err := s.proactiveRelay.RelayNativeToOptions("", content, proactive.Options{
+		WorkFeedSource: workfeed.SourceGroupwareApproval,
+		RefID:          docID,
+		ForceQuestion:  true,
+		Actions:        groupwareApprovalActions(),
+	})
+	if err != nil {
+		return err
+	}
+	if !delivered {
+		return fmt.Errorf("groupware approval %s feed relay did not deliver", docID)
+	}
+	return nil
+}
+
+func formatApprovalAnalysisFeed(doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) string {
+	title := strings.TrimSpace(doc.Title)
+	if title == "" && rec != nil {
+		title = strings.TrimSpace(rec.Title)
+	}
+	if title == "" {
+		title = "전자결재"
+	}
+	drafter := strings.TrimSpace(doc.Drafter)
+	if drafter == "" && rec != nil {
+		drafter = strings.TrimSpace(rec.Drafter)
+	}
+	date := strings.TrimSpace(doc.Date)
+	if date == "" && rec != nil {
+		date = strings.TrimSpace(rec.Date)
+	}
+	var meta []string
+	if drafter != "" {
+		meta = append(meta, "기안 "+drafter)
+	}
+	if date != "" {
+		meta = append(meta, date)
+	}
+	if no := strings.TrimSpace(doc.DocNo); no != "" {
+		meta = append(meta, no)
+	}
+	if rec != nil {
+		if imp := strings.TrimSpace(rec.Importance); imp != "" {
+			meta = append(meta, "중요도 "+imp)
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "## %s\n", title)
+	if len(meta) > 0 {
+		b.WriteString(strings.Join(meta, " · "))
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')
+	if rec != nil {
+		b.WriteString(stripApprovalImportanceMarker(rec.Analysis))
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func (s *Server) notifyGroupwareRadarEscalation(_ context.Context, doc groupware.ApprovalSummary, level int, age time.Duration) error {
@@ -146,18 +215,6 @@ func groupwareEscalationLabel(level int, age time.Duration) string {
 		hours = 4
 	}
 	return fmt.Sprintf("%d시간째", hours)
-}
-
-func formatGroupwareRadarNotification(doc groupware.ApprovalSummary) string {
-	return strings.Join([]string{
-		"종류: 전자결재",
-		"상태: " + strings.TrimSpace(doc.Status),
-		"제목: " + strings.TrimSpace(doc.Title),
-		"문서ID: " + strings.TrimSpace(doc.DocID),
-		"문서번호: " + strings.TrimSpace(doc.DocNo),
-		"기안: " + strings.TrimSpace(doc.Drafter),
-		"기안일: " + strings.TrimSpace(doc.Date),
-	}, "\n")
 }
 
 func groupwareRadarMaxPerCycle() int {
