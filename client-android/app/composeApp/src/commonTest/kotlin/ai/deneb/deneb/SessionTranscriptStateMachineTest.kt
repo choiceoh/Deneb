@@ -459,6 +459,28 @@ class SessionTranscriptStateMachineTest {
     }
 
     @Test
+    fun unusableCachedTranscriptIsRemovedAfterFirstMiss() {
+        val f = gatewayClientFixture()
+        f.settings.putCachedTranscript("client:main", "not-json")
+
+        assertNull(f.client.loadCachedTranscript("client:main"))
+        assertNull(f.settings.getCachedTranscript("client:main"))
+    }
+
+    @Test
+    fun cachedTranscriptFromAnotherOwnerIsRemovedWithoutRendering() {
+        val prior = gatewayClientFixture(token = "prior-token")
+        prior.client.storeCachedTranscript(
+            "client:main",
+            listOf(History(role = History.Role.ASSISTANT, content = "prior private answer")),
+        )
+        val current = gatewayClientFixture(token = "current-token", settings = prior.settings)
+
+        assertNull(current.client.loadCachedTranscript("client:main"))
+        assertNull(current.settings.getCachedTranscript("client:main"))
+    }
+
+    @Test
     fun failedInPlaceReloadKeepsLiveView() = runTest {
         val f = gatewayClientFixture()
         val live = History(id = "live", role = History.Role.ASSISTANT, content = "live answer")
