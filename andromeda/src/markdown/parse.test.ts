@@ -63,6 +63,18 @@ describe("tables", () => {
   it("is a paragraph without the separator row", () => {
     expect(parseBlocks("| a | b |\n| 1 | 2 |")[0].type).toBe("para");
   });
+  // Amaranth 결재 / chat caption glued to a table with no blank line — native
+  // BlockScanner interrupts the paragraph so the table still renders.
+  it("interrupts a paragraph when a GFM table starts on the next line", () => {
+    const blocks = parseBlocks("[물류]결재양식Table · 발주정보\n| 순번 | 거래처 |\n| --- | --- |\n| 1 | 금비 |");
+    expect(blocks.map((b) => b.type)).toEqual(["para", "table"]);
+    expect(blocks[0]).toEqual({ type: "para", text: "[물류]결재양식Table · 발주정보" });
+    expect(blocks[1]).toMatchObject({
+      type: "table",
+      header: ["순번", "거래처"],
+      rows: [["1", "금비"]],
+    });
+  });
 });
 
 describe("blockquotes", () => {

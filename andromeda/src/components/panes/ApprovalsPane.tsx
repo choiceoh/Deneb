@@ -339,7 +339,11 @@ function ApprovalDetail({
       ) : (
         <div className="approval-doc">
           <div className="mail-body">
-            {sections.body ? <Markdown text={sections.body} /> : <div className="mail-detail-empty">본문 없음</div>}
+            {sections.body || body ? (
+              <Markdown text={sections.body || body || ""} />
+            ) : (
+              <div className="mail-detail-empty">본문 없음</div>
+            )}
           </div>
 
           {/* Reference sections live below the read: 결재선·첨부 fold at the bottom. */}
