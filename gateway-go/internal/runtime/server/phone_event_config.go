@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 
@@ -14,14 +15,14 @@ import (
 // POST /api/event/ingest — both doors must behave identically.
 func (s *Server) phoneEventHandlerConfig() phoneevents.Config {
 	return phoneevents.Config{
-		ChatHandler:             s.chatHandler,
-		Relay:                   &s.proactiveRelay,
-		ShutdownContext:         s.ShutdownCtx(),
-		Logger:                  s.logger,
-		Ledger:                  s.phoneEventLedgerInstance(),
-		OnLocationPlace:         s.siteVisitOnLocation(),
-		BrowserEnrich:           s.approvalBrowserEnrich,
-		DeferElectronicApproval: s.groupwareRadarActive,
+		ChatHandler:         s.chatHandler,
+		Relay:               &s.proactiveRelay,
+		ShutdownContext:     s.ShutdownCtx(),
+		Logger:              s.logger,
+		Ledger:              s.phoneEventLedgerInstance(),
+		OnLocationPlace:     s.siteVisitOnLocation(),
+		BrowserEnrich:       s.approvalBrowserEnrich,
+		TriggerApprovalScan: s.triggerGroupwareRadarScan,
 		ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
 			if s.phoneActions == nil {
 				return false
@@ -29,6 +30,18 @@ func (s *Server) phoneEventHandlerConfig() phoneevents.Config {
 			return s.phoneActions.resolve(phoneActionResult{ID: res.ID, OK: res.OK, Error: res.Error})
 		},
 	}
+}
+
+// triggerGroupwareRadarScan runs one on-demand radar scan for a phone
+// electronic-approval notification. Errors (radar unregistered — dev without
+// credentials — or a reader failure) make the phone handler fall back to the
+// plain notification relay, so approvals stay observable either way.
+func (s *Server) triggerGroupwareRadarScan(ctx context.Context) error {
+	radar := s.groupwareRadar
+	if radar == nil {
+		return errors.New("groupware radar unavailable")
+	}
+	return radar.TriggerScan(ctx)
 }
 
 // approvalBrowserEnrich prefers srv4 Amaranth login (DENEB_GROUPWARE_USER/PASSWORD)

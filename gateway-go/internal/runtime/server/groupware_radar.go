@@ -52,7 +52,7 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 		OnListFailed:   s.notifyGroupwareRadarListFailed,
 	})
 	s.autonomousSvc.RegisterTask(task)
-	s.groupwareRadarActive = true
+	s.groupwareRadar = task
 	s.logger.Info("groupware radar task registered",
 		"interval", task.Interval(),
 		"maxPerCycle", groupwareRadarMaxPerCycle(),
