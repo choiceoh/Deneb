@@ -203,8 +203,10 @@ internal fun gatewayClientFixture(
     token: String = "test-token",
     url: String = "https://gateway.example",
     transport: GatewayHttpHarness = GatewayHttpHarness(),
+    // Pass a prior fixture's settings to simulate a process restart over the same
+    // disk (cache-then-network seeding); default is a fresh store.
+    settings: AppSettings = AppSettings(MapSettings()),
 ): GatewayClientFixture {
-    val settings = AppSettings(MapSettings())
     settings.settings.putString(DenebGatewayClient.KEY_TOKEN, token)
     settings.settings.putString(DenebGatewayClient.KEY_URL, url)
     val client = DenebGatewayClient(

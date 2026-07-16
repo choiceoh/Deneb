@@ -57,7 +57,8 @@ fun DenebCategoryPagesScreen(
     onOpenCategory: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var pages by remember(category) { mutableStateOf<List<WikiPageRef>?>(null) }
+    // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
+    var pages by remember(category) { mutableStateOf(client.sectionCaches.categoryPages.peek(category)) }
     var subFolders by remember(category) { mutableStateOf<List<CategoryNode>>(emptyList()) }
     // Top-level taxonomy categories, populated on load — the move picker's options.
     var topCategories by remember(category) { mutableStateOf<List<String>>(emptyList()) }
@@ -81,9 +82,8 @@ fun DenebCategoryPagesScreen(
 
     suspend fun load() {
         loadFailed = false
-        pages = null
         val fetched = client.fetchCategoryPages(category)
-        if (fetched == null) loadFailed = true else pages = fetched
+        if (fetched == null) loadFailed = pages == null else pages = fetched
         // One categories fetch feeds both the sub-folder rows and the move
         // picker's options.
         val cats = client.fetchCategories()?.categories ?: emptyList()

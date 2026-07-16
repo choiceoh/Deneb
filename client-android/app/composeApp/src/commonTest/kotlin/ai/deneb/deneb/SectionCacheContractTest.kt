@@ -87,6 +87,47 @@ class SectionCacheContractTest {
     }
 
     @Test
+    fun diskSnapshotSurvivesRestartAsStalePeekOnly() = runTest {
+        val f1 = gatewayClientFixture()
+        f1.transport.enqueueRpc(lanesPayload("persisted"))
+        f1.client.fetchDashboardLanes()
+
+        // Same settings store = same disk; new client = process restart.
+        val f2 = gatewayClientFixture(settings = f1.settings)
+        f2.transport.enqueueRpc(lanesPayload("network"))
+
+        // Peek paints the last-known snapshot instantly…
+        assertEquals("persisted", f2.client.sectionCaches.dashboard.peek()?.lanes?.single()?.key)
+        // …but it is never fresh: the fetch still goes to the network.
+        assertEquals("network", f2.client.fetchDashboardLanes()?.lanes?.single()?.key)
+        assertEquals(1, f2.transport.requests.size)
+    }
+
+    @Test
+    fun diskSnapshotRejectsAnotherAccountsOwner() = runTest {
+        val f1 = gatewayClientFixture(token = "token-a")
+        f1.transport.enqueueRpc(lanesPayload("account-a"))
+        f1.client.fetchDashboardLanes()
+
+        val f2 = gatewayClientFixture(token = "token-b", settings = f1.settings)
+
+        assertNull(f2.client.sectionCaches.dashboard.peek())
+    }
+
+    @Test
+    fun calendarRangeSnapshotSeedsPeekAcrossRestart() = runTest {
+        val f1 = gatewayClientFixture()
+        f1.transport.enqueueRpc("""{"events":[{"id":"ev1","summary":"s","start":"2026-07-01T09:00:00+09:00","end":"","allDay":false,"local":false,"category":""}]}""")
+        f1.client.fetchCalendarRange("2026-07-01", "2026-08-01")
+
+        val f2 = gatewayClientFixture(settings = f1.settings)
+
+        assertEquals("ev1", f2.client.peekCalendarRange("2026-07-01|2026-08-01")?.single()?.id)
+        // Disk-seeded entries are stale by definition — never served as fresh.
+        assertNull(f2.client.cachedCalendarRange("2026-07-01|2026-08-01"))
+    }
+
+    @Test
     fun orgSaveInvalidatesTheOrgCache() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc("""{"nodes":[{"id":"a","name":"before"}]}""")

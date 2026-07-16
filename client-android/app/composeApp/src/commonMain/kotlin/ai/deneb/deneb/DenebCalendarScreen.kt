@@ -145,6 +145,9 @@ fun DenebCalendarScreen(
     suspend fun loadMonth(m: CalMonth, force: Boolean) {
         if (!force && cache[m] != null) return
         val (from, to) = gridRangeIso(buildMonthGrid(m), tz)
+        // Instant stale paint: the disk-seeded client range cache shows the
+        // last-known dots/bars while the authoritative fetch runs below.
+        if (cache[m] == null) client.peekCalendarRange("$from|$to")?.let { cache[m] = it }
         val ev = client.fetchCalendarRange(from, to, force = force)
         if (ev == null) {
             failed[m] = true

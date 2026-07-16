@@ -39,16 +39,16 @@ fun DenebDiaryScreen(
     onBack: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var entries by remember { mutableStateOf<List<DiaryEntry>?>(null) }
+    // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
+    var entries by remember { mutableStateOf(client.sectionCaches.diary.peek()) }
     var loadFailed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
         loadFailed = false
-        entries = null
         val e = client.fetchRecentDiary()
-        entries = e
-        loadFailed = e == null
+        if (e != null) entries = e
+        loadFailed = e == null && entries == null
     }
     LaunchedEffect(Unit) { load() }
 

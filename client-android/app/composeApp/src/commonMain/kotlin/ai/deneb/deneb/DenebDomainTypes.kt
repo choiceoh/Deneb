@@ -291,6 +291,7 @@ data class SearchHit(val path: String, val title: String, val snippet: String, v
  *  wiki person, or both (matched server-side — see miniapp.people.list). A row
  *  with a blank [email] and zero [messageCount] is wiki-only. */
 @Immutable
+@Serializable
 data class PersonHit(
     val name: String,
     val email: String,
@@ -315,10 +316,12 @@ data class WikiPage(
 
 /** A wiki category with its page count, for the category browser. */
 @Immutable
+@Serializable
 data class WikiCategory(val name: String, val pageCount: Int)
 
 /** All wiki categories plus corpus totals. */
 @Immutable
+@Serializable
 data class WikiCategories(
     val categories: List<WikiCategory>,
     val totalPages: Int,
@@ -327,6 +330,7 @@ data class WikiCategories(
 
 /** A page reference within a category listing (tap -> wiki page). */
 @Immutable
+@Serializable
 data class WikiPageRef(
     val path: String,
     val title: String,
@@ -337,6 +341,7 @@ data class WikiPageRef(
 /** One diary entry for the recent-diary timeline. [header] is the entry's
  *  heading (often a date/time); [file] is the source diary file. */
 @Immutable
+@Serializable
 data class DiaryEntry(
     val header: String,
     val content: String,
