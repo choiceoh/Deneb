@@ -12,8 +12,6 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -156,13 +154,7 @@ suspend fun DenebGatewayClient.refreshMailNativeStatus(): MailNativeStatus? {
 // from rendering under the current URL/token if credential migration or a manual
 // settings edit bypassed the normal cache purge path. The network refresh above
 // overwrites with the authoritative list.
-private val mailCacheJson = Json { ignoreUnknownKeys = true }
-
-@Serializable
-private data class MailCacheEnvelope(
-    val owner: String = "",
-    val rows: List<MailMessage> = emptyList(),
-)
+private val mailCacheCodec = OwnedListCacheCodec("rows", MailMessage.serializer(), MAIL_LIST_PAGE_SIZE)
 
 internal fun mailCacheOwner(url: String, token: String): String {
     val normalizedUrl = url.trim().trimEnd('/')
@@ -175,17 +167,9 @@ private fun stableMailCacheFingerprint(value: String): String {
     return "${value.length}:$hash"
 }
 
-internal fun encodeMailCache(rows: List<MailMessage>, owner: String): String = mailCacheJson.encodeToString(
-    MailCacheEnvelope(owner = owner, rows = rows.take(MAIL_LIST_PAGE_SIZE)),
-)
+internal fun encodeMailCache(rows: List<MailMessage>, owner: String): String = mailCacheCodec.encode(rows, owner)
 
-internal fun decodeMailCache(json: String, expectedOwner: String): List<MailMessage>? = runCatching {
-    mailCacheJson.decodeFromString<MailCacheEnvelope>(json)
-}.getOrNull()
-    ?.takeIf { it.owner == expectedOwner }
-    ?.rows
-    ?.take(MAIL_LIST_PAGE_SIZE)
-    ?.takeIf { it.isNotEmpty() }
+internal fun decodeMailCache(json: String, expectedOwner: String): List<MailMessage>? = mailCacheCodec.decode(json, expectedOwner)
 
 internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? {
     val json = appSettings.getCachedMailList() ?: return null
