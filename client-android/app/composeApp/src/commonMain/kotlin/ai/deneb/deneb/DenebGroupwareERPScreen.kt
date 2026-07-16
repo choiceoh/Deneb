@@ -64,13 +64,13 @@ private val erpAreas = listOf(
     ErpArea("board", "게시판"),
 )
 
-// 매출 기간 (reader sales folder → 요약 집계; 빈 값 = 최근 목록).
+// 매출 기간 (reader sales folder). 기본(빈 값) = 연초~오늘 누계 — ytd/올해/오늘
+// 탭은 중복이라 뺐고, 비교에 실제로 쓰는 전년동기·상반기를 올렸다 (2026-07-16).
 private val salesPeriods = listOf(
-    "" to "최근",
-    "today" to "오늘",
+    "" to "누계",
     "month" to "이번 달",
-    "ytd" to "연초부터",
-    "year" to "올해",
+    "h1" to "상반기",
+    "yoy" to "전년동기",
     "last_year" to "작년",
 )
 
