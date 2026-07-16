@@ -251,8 +251,7 @@ function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>
   // Korean 어절 per line — the native table's dense-mode parity (production lesson).
   // Wide tables (5+ cols, e.g. 발주서) sticky the first column while scrolling.
   const colCount = Math.max(block.header.length, ...block.rows.map((r) => r.length), 0);
-  const cls =
-    "md-table" + (colCount >= 3 ? " md-table-dense" : "") + (colCount >= 5 ? " md-table-sticky" : "");
+  const cls = "md-table" + (colCount >= 3 ? " md-table-dense" : "") + (colCount >= 5 ? " md-table-sticky" : "");
   const colCls = (j: number): string | undefined => {
     const parts = [cellClass(j), j === 0 && colCount >= 5 ? "md-sticky-col" : undefined].filter(Boolean);
     return parts.length ? parts.join(" ") : undefined;
