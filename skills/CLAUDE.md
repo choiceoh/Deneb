@@ -122,11 +122,13 @@ Recommended sections (adapted from hermes-agent):
 | `# Title` | Skill name and one-line summary |
 | `## When to Use` | Trigger conditions and use cases |
 | `## Quick Reference` | Common commands, API calls, or patterns |
-| `## Procedure` | Step-by-step workflow instructions |
+| `## Procedure` | Outcome, decision points, tools, and only the ordering that is genuinely mandatory |
 | `## Pitfalls` | Known failure modes, edge cases, workarounds |
 | `## Verification` | How to confirm the skill's output is correct |
 
-Not all sections are required for every skill. Use what makes sense for the complexity.
+Not all sections are required for every skill. Prefer 2–4 observable `Verification`
+criteria over vague quality language, and let the agent choose the method unless
+order itself is a safety, compliance, audit, or deterministic contract.
 
 ## Progressive Loading
 

@@ -11,7 +11,7 @@ import (
 var (
 	genCleanResp = `{"skip": false, "skill": {"name": "mail-to-wiki-sync", "category": "productivity",
 		"description": "발주 메일을 위키에 반영. Use when: 발주 메일 정리. NOT for: 열람.",
-		"body": "# 동기화\n\n## When to Use\n발주 메일이 쌓였을 때 실행한다.\n\n## Procedure\n1. 메일을 검색한다.\n2. 위키에 반영한다.\n3. 재조회로 검증한다.\n\n## Pitfalls\n중복 페이지 주의.\n\n## Verification\n재조회. ` + strings.Repeat("상세 절차 설명. ", 60) + `"}}`
+		"body": "# 동기화\n\n## When to Use\n발주 메일이 쌓였을 때 실행한다.\n\n## Procedure\n1. 메일을 검색한다.\n2. 위키에 반영한다.\n3. 재조회로 검증한다.\n\n## Pitfalls\n중복 페이지 주의.\n\n## Verification\n- 각 발주 메일의 식별자가 위키에 정확히 한 번 있다.\n- 누락 및 중복 건수가 0이다. ` + strings.Repeat("상세 절차 설명. ", 60) + `"}}`
 	genVagueResp = `{"skip": false, "skill": {"name": "be-careful", "category": "productivity",
 		"description": "신중하게",
 		"body": "맥락을 잘 살펴서 신중하게 작업하라."}}`

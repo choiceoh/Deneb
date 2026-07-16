@@ -190,22 +190,43 @@ func TestSkillSpecificityIssuesPassesWellFormedAndRejectsVagueSkills(t *testing.
 		t.Fatal("vague skill must be rejected")
 	}
 	joined := strings.Join(issues, "; ")
-	for _, want := range []string{"너무 짧음", "When to Use", "Procedure", "단계", "트리거"} {
+	for _, want := range []string{"너무 짧음", "When to Use", "Procedure", "Verification", "실행 지시", "트리거"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("expected issue mentioning %q, got: %s", want, joined)
 		}
 	}
 }
 
-func TestHasActionableStepReturnsNumberedStepsAndInlineCodeNotProse(t *testing.T) {
-	if !hasActionableStep("1. 먼저 빌드한다\n2. 배포한다") {
+func TestHasActionableInstructionSupportsOrderedAndHighFreedomContracts(t *testing.T) {
+	if !hasActionableInstruction("1. 먼저 빌드한다\n2. 배포한다") {
 		t.Error("numbered steps should count as actionable")
 	}
-	if !hasActionableStep("실행: `make go` 로 빌드") {
+	if !hasActionableInstruction("실행: `make go` 로 빌드") {
 		t.Error("inline code should count as actionable")
 	}
-	if hasActionableStep("맥락을 잘 살펴보세요. 신중하게 판단하세요.") {
+	if !hasActionableInstruction("- supplied transcript를 결정의 근거로 사용한다\n- 누락된 날짜는 추측하지 않고 질문으로 남긴다") {
+		t.Error("two concrete decision criteria should support a high-freedom task")
+	}
+	if hasActionableInstruction("- 신중히 판단한다\n- 잘 처리한다") {
 		t.Error("pure prose must not count as actionable")
+	}
+}
+
+func TestSkillSpecificityIssuesAcceptsOutcomeDrivenProcedure(t *testing.T) {
+	skill := &GeneratedSkill{
+		Name:        "decision-brief",
+		Description: "의사결정 브리프를 작성한다. Use when: 여러 근거에서 결론과 후속 조치를 정리할 때.",
+		Body: "# 의사결정 브리프\n\n## When to Use\n회의 기록과 계획 문서에서 결정을 정리해야 할 때 사용한다. 단순 축약에는 사용하지 않는다.\n\n" +
+			"## Procedure\n기대 결과는 의사결정자가 바로 승인 여부를 판단할 수 있는 브리프다.\n" +
+			"- 회의 기록은 결정의 근거로, 계획 문서는 날짜와 예산의 근거로 사용한다.\n" +
+			"- 제공되지 않은 사실은 추측하지 않고 공개 질문으로 남긴다.\n" +
+			"결론에는 선택지별 영향과 권고안을 넣되, 자료에 없는 배경 설명은 추가하지 않는다. 대상 독자가 한 번 읽고 승인하거나 질문을 돌려보낼 수 있는 밀도로 작성한다.\n\n" +
+			"## Pitfalls\n배경 설명이 결론을 가리지 않게 한다. 수치와 날짜를 바꾸지 않는다.\n\n" +
+			"## Verification\n- 각 결정에는 담당자 또는 공개 질문이 연결되어 있다.\n" +
+			"- 모든 날짜와 수치는 제공된 근거와 정확히 일치한다.",
+	}
+	if issues := skillSpecificityIssues(skill); len(issues) != 0 {
+		t.Fatalf("outcome-driven high-freedom skill should pass, got issues: %v", issues)
 	}
 }
 
