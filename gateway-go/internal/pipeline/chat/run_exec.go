@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/metrics"
@@ -143,6 +144,18 @@ func executeAgentRun(
 	assembleMs := time.Since(assembleStart).Milliseconds()
 
 	messages, tailForSystem, autoLoadedSkills := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
+
+	// Stage 2.5: difficulty model routing — an obviously-simple interactive
+	// main turn rides main2 (second main-tier subscription) when configured,
+	// reserving the flagship for analysis-grade turns. Decided here (not in
+	// resolveModel) because the heuristic needs the assembled history, and
+	// BEFORE any consumer of the resolution (APC diag, tuning, cache policy)
+	// so downstream — including the mutual main2→main fallback chain — runs
+	// exactly as a native main2 turn. See difficulty_route.go.
+	if rt := difficultyModelRoute(deps.registry, params, sessionSpawnedBy(cachedSession), messages, initialRole, providerID, model, logger); rt != nil {
+		model, providerID, initialRole = rt.model, rt.providerID, modelrole.RoleMain2
+		client = rt.client
+	}
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
 	systemPrompt := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
