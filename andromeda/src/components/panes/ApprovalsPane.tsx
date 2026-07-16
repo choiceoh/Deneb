@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
@@ -14,6 +14,7 @@ import {
 import { parseApprovalDocBody, parseAttachmentRows } from "@/approvalBody";
 import { useAction } from "@/useAction";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
+import { usePaneTarget } from "@/usePaneTarget";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { DayPager } from "@/components/DayPager";
 import { Column, Grid, GridNotice } from "@/components/Grid";
@@ -55,6 +56,26 @@ export function ApprovalsPane() {
   const rows = (result?.data ?? []).map((a) => ({ ...a, id: a.docId ?? a.id }));
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const { run, error, busy } = useAction(() => void query.refetch());
+
+  // Deep link (오늘 KPI/섹션 · workspace 커맨드): query="pending" opens the 미결
+  // inbox; an id selects that document (waits for rows to load — return false
+  // keeps the target pending until data arrives).
+  usePaneTarget(
+    "approvals",
+    useCallback(
+      (target) => {
+        if (target.query === "pending") setPendingOnly(true);
+        if (target.id != null) {
+          if (!rows.some((a) => String(a.id) === String(target.id))) return rows.length === 0 ? false : undefined;
+          setSelectedId(String(target.id));
+        }
+      },
+      // rows is rebuilt each render; keying on its length is enough for the
+      // "retry once data lands" contract without thrashing the effect.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [rows.length],
+    ),
+  );
 
   // eslint-disable-next-line react-hooks/purity -- wall-clock for day pager bounds
   const nowMs = Date.now();
