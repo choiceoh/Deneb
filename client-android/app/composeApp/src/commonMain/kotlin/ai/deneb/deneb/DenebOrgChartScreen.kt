@@ -82,8 +82,8 @@ fun DenebOrgChartScreen(
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
-    suspend fun load() {
-        val fetched = client.fetchOrg()
+    suspend fun load(force: Boolean = false) {
+        val fetched = client.fetchOrg(force)
         if (fetched == null) {
             loadOk = false
         } else {
@@ -144,7 +144,7 @@ fun DenebOrgChartScreen(
                     haptics.refresh()
                     scope.launch {
                         refreshing = true
-                        load()
+                        load(force = true)
                         refreshing = false
                     }
                 }

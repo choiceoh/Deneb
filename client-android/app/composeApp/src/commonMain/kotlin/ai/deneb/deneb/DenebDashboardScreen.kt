@@ -72,8 +72,8 @@ fun DenebDashboardScreen(
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
-    suspend fun load() {
-        val fetched: DashboardOut? = client.fetchDashboardLanes()
+    suspend fun load(force: Boolean = false) {
+        val fetched: DashboardOut? = client.fetchDashboardLanes(force)
         if (fetched == null) {
             loadOk = false
         } else {
@@ -90,7 +90,7 @@ fun DenebDashboardScreen(
                 haptics.refresh()
                 scope.launch {
                     refreshing = true
-                    load()
+                    load(force = true)
                     refreshing = false
                 }
             },

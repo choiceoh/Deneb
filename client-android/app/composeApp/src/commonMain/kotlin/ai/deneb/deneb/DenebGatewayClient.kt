@@ -232,6 +232,11 @@ class DenebGatewayClient private constructor(
     internal val _denebCalProposals = MutableStateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>>(emptyList())
     val denebCalProposals: StateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>> = _denebCalProposals
 
+    // Session caches for the 더보기 section list fetches (카테고리·사람·연락처·일기·
+    // 노트북·현황·조직도) — see DenebClientSessionCache.kt. Instance-scoped so a
+    // fresh client (test harness, credential switch) starts cold.
+    internal val sectionCaches = SectionCaches()
+
     // Calendar month cache (range-key → when-fetched + events). The calendar
     // screen's own cache is composition-scoped, so every tab switch back to the
     // calendar re-hit Google for the visible month + both neighbors (~270ms each).
