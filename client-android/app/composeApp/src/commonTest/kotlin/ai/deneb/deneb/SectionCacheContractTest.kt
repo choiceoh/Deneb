@@ -51,6 +51,41 @@ class SectionCacheContractTest {
         assertEquals(2, f.transport.requests.size)
     }
 
+    private fun pagesPayload(vararg paths: String) = """{"pages":[${paths.joinToString(",") { """{"path":"$it","title":"$it","summary":"","updated":""}""" }}]}"""
+
+    private fun wikiPagePayload(path: String, body: String) = """{"path":"$path","title":"$path","summary":"","category":"","tags":[],"updated":"","body":"$body","code":""}"""
+
+    @Test
+    fun categoryPagesCachePerKeyAndReuse() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(pagesPayload("프로젝트/a"))
+        f.transport.enqueueRpc(pagesPayload("업무/b"))
+
+        assertEquals(listOf("프로젝트/a"), f.client.fetchCategoryPages("프로젝트")?.map { it.path })
+        assertEquals(listOf("프로젝트/a"), f.client.fetchCategoryPages("프로젝트")?.map { it.path })
+        assertEquals(listOf("업무/b"), f.client.fetchCategoryPages("업무")?.map { it.path })
+
+        assertEquals(2, f.transport.requests.size)
+    }
+
+    @Test
+    fun wikiPageSaveInvalidatesPageAndItsCategoryList() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(wikiPagePayload("프로젝트/딜", body = "before"))
+        f.transport.enqueueRpc(pagesPayload("프로젝트/딜"))
+        f.transport.enqueueRpc("{}") // write_page ack
+        f.transport.enqueueRpc(wikiPagePayload("프로젝트/딜", body = "after"))
+        f.transport.enqueueRpc(pagesPayload("프로젝트/딜"))
+
+        assertEquals("before", f.client.fetchWikiPage("프로젝트/딜")?.body)
+        f.client.fetchCategoryPages("프로젝트")
+        f.client.saveWikiPage("프로젝트/딜", body = "after")
+        assertEquals("after", f.client.fetchWikiPage("프로젝트/딜")?.body)
+        f.client.fetchCategoryPages("프로젝트")
+
+        assertEquals(5, f.transport.requests.size)
+    }
+
     @Test
     fun orgSaveInvalidatesTheOrgCache() = runTest {
         val f = gatewayClientFixture()

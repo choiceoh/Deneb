@@ -55,8 +55,10 @@ suspend fun DenebGatewayClient.fetchCategories(force: Boolean = false): WikiCate
 
 /** Pages within one category (`memory.list_in_category`); blank lists all.
  *  Null on a fetch failure so the screen can offer retry instead of showing a
- *  misleading "empty category". */
-suspend fun DenebGatewayClient.fetchCategoryPages(category: String): List<WikiPageRef>? {
+ *  misleading "empty category". Session-cached per category so browsing back
+ *  and forth within the TTL skips the network; wiki writes invalidate. */
+suspend fun DenebGatewayClient.fetchCategoryPages(category: String, force: Boolean = false): List<WikiPageRef>? {
+    if (!force) sectionCaches.categoryPages.fresh(category)?.let { return it }
     val p = callRpc<MemoryListPayload>(
         "miniapp.memory.list_in_category",
         buildJsonObject {
@@ -64,11 +66,17 @@ suspend fun DenebGatewayClient.fetchCategoryPages(category: String): List<WikiPa
             put("limit", 200)
         },
     ) ?: return null
-    return p.pages
+    val out = p.pages
         .filter { it.path.isNotBlank() }
         .distinctByLast { it.path }
         .map { WikiPageRef(it.path, it.title.ifBlank { it.path }, it.summary, it.updated) }
+    sectionCaches.categoryPages.store(category, out)
+    return out
 }
+
+/** The category a wiki path files under (its leading directory), for targeted
+ *  category-list invalidation on a write. */
+private fun wikiCategoryOf(path: String): String = path.substringBeforeLast('/', missingDelimiterValue = "")
 
 private const val DIARY_RECENT_DEFAULT_LIMIT = 30
 
@@ -100,6 +108,10 @@ suspend fun DenebGatewayClient.deleteCategoryPages(paths: List<String>): Boolean
     val uniquePaths = paths.distinct()
     if (uniquePaths.isEmpty()) return true
     sectionCaches.categories.invalidate()
+    uniquePaths.forEach { path ->
+        sectionCaches.wikiPages.invalidate(path)
+        sectionCaches.categoryPages.invalidate(wikiCategoryOf(path))
+    }
     val resp = callRpc<DeletePagesPayload>(
         "miniapp.memory.delete_pages",
         buildJsonObject {
@@ -115,6 +127,10 @@ suspend fun DenebGatewayClient.deleteCategoryPages(paths: List<String>): Boolean
  *  target (no overwrite); returns true only when the move actually happened. */
 suspend fun DenebGatewayClient.moveWikiPage(from: String, to: String): Boolean {
     sectionCaches.categories.invalidate()
+    for (path in listOf(from, to)) {
+        sectionCaches.wikiPages.invalidate(path)
+        sectionCaches.categoryPages.invalidate(wikiCategoryOf(path))
+    }
     val resp = callRpc<MovePagePayload>(
         "miniapp.memory.move_page",
         buildJsonObject {
@@ -140,13 +156,16 @@ suspend fun DenebGatewayClient.moveCategoryPages(paths: List<String>, targetCate
     return moved
 }
 
-/** Full wiki/memory page by path (`miniapp.memory.get_page`). */
-suspend fun DenebGatewayClient.fetchWikiPage(path: String): WikiPage? {
+/** Full wiki/memory page by path (`miniapp.memory.get_page`). Session-cached
+ *  per path (bounded) so re-opening a just-read page is instant; a save to the
+ *  path invalidates, so the post-save refetch is always fresh. */
+suspend fun DenebGatewayClient.fetchWikiPage(path: String, force: Boolean = false): WikiPage? {
+    if (!force) sectionCaches.wikiPages.fresh(path)?.let { return it }
     val p = callRpc<WikiPagePayload>(
         "miniapp.memory.get_page",
         buildJsonObject { put("path", path) },
     ) ?: return null
-    return WikiPage(
+    val out = WikiPage(
         path = p.path,
         title = p.title.ifBlank { p.path },
         summary = p.summary,
@@ -156,6 +175,8 @@ suspend fun DenebGatewayClient.fetchWikiPage(path: String): WikiPage? {
         body = p.body,
         code = p.code,
     )
+    sectionCaches.wikiPages.store(path, out)
+    return out
 }
 
 /** Overwrite a wiki page; non-null title/summary/tags also update frontmatter. */
@@ -165,20 +186,26 @@ suspend fun DenebGatewayClient.saveWikiPage(
     title: String? = null,
     summary: String? = null,
     tags: List<String>? = null,
-): Boolean = callRpc<JsonObject>(
-    "miniapp.memory.write_page",
-    buildJsonObject {
-        put("path", path)
-        put("body", body)
-        if (title != null) put("title", title)
-        if (summary != null) put("summary", summary)
-        if (tags != null) putJsonArray("tags") { tags.forEach { add(it) } }
-    },
-) != null
+): Boolean {
+    // The page body changed and its title/summary feed the category list rows.
+    sectionCaches.wikiPages.invalidate(path)
+    sectionCaches.categoryPages.invalidate(wikiCategoryOf(path))
+    return callRpc<JsonObject>(
+        "miniapp.memory.write_page",
+        buildJsonObject {
+            put("path", path)
+            put("body", body)
+            if (title != null) put("title", title)
+            if (summary != null) put("summary", summary)
+            if (tags != null) putJsonArray("tags") { tags.forEach { add(it) } }
+        },
+    ) != null
+}
 
 /** Create a new wiki page (`miniapp.memory.create_page`); returns its path. */
 suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, body: String): String? {
     sectionCaches.categories.invalidate()
+    sectionCaches.categoryPages.invalidate(category)
     return callRpc<WikiPagePayload>(
         "miniapp.memory.create_page",
         buildJsonObject {
