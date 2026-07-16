@@ -3,6 +3,8 @@ package ai.deneb.ui
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +29,14 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.abs
 
 // Deneb's component idiom in native Compose (design refresh, 2026-06): a calm
 // monochrome AMOLED base structured with GROUPED INSET CARDS ([DenebGroup] +
@@ -175,7 +180,7 @@ fun DenebScreenScaffold(
     tabBar: (@Composable () -> Unit)? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
     // Zune-style pivot labels rendered right after the title (dimmed, tappable) —
-    // sibling surfaces one tap away (피드 ⇄ 결재 ⇄ 그룹웨어). See [DenebTitlePivot].
+    // sibling surfaces one tap away (피드 ⇄ 결재). See [DenebTitlePivot].
     titlePivot: (@Composable RowScope.() -> Unit)? = null,
     maxContentWidth: Dp = DenebMaxContentWidth,
     showBack: Boolean = true,
@@ -276,4 +281,48 @@ fun DenebTitlePivot(label: String, onClick: () -> Unit) {
             .clickable(onClickLabel = "$label 화면으로", role = Role.Button, onClick = onClick)
             .handCursor(),
     )
+}
+
+/**
+ * Horizontal sibling swipe for the 피드 ⇄ 결재 pivot pair (same destinations as
+ * [DenebTitlePivot] taps). Vertical-dominant drags yield to list scroll / PTR;
+ * screen-edge starts yield to the system back gesture. A clearly-horizontal
+ * drag past 72dp fires [onSwipeLeft] (finger left → next sibling) or
+ * [onSwipeRight] (finger right → previous sibling).
+ */
+fun Modifier.denebSiblingSwipe(
+    onSwipeLeft: (() -> Unit)? = null,
+    onSwipeRight: (() -> Unit)? = null,
+): Modifier {
+    if (onSwipeLeft == null && onSwipeRight == null) return this
+    return pointerInput(onSwipeLeft, onSwipeRight) {
+        val edge = 36.dp.toPx()
+        val commit = 72.dp.toPx()
+        val slop = viewConfiguration.touchSlop
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (down.position.x <= edge || down.position.x >= size.width - edge) {
+                return@awaitEachGesture
+            }
+            var dx = 0f
+            var dy = 0f
+            var horizontal = false
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) break
+                val delta = change.positionChange()
+                dx += delta.x
+                dy += delta.y
+                if (!horizontal) {
+                    if (abs(dy) > slop && abs(dy) >= abs(dx)) return@awaitEachGesture
+                    if (abs(dx) > slop && abs(dx) > abs(dy)) horizontal = true
+                }
+                if (horizontal) change.consume()
+            }
+            when {
+                horizontal && dx <= -commit -> onSwipeLeft?.invoke()
+                horizontal && dx >= commit -> onSwipeRight?.invoke()
+            }
+        }
+    }
 }

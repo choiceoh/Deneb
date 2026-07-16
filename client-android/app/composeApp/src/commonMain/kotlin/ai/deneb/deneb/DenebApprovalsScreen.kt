@@ -7,6 +7,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebSiblingSwipe
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,7 +78,6 @@ fun DenebApprovalsScreen(
     onBack: () -> Unit,
     onOpenDetail: (GroupwareApprovalRow) -> Unit = {},
     onOpenFeed: (() -> Unit)? = null,
-    onOpenMail: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     var rows by remember { mutableStateOf<List<GroupwareApprovalRow>?>(null) }
@@ -88,6 +88,12 @@ fun DenebApprovalsScreen(
     var refreshing by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
+    val openFeed: (() -> Unit)? = onOpenFeed?.let { open ->
+        {
+            haptics.tap()
+            open()
+        }
+    }
 
     suspend fun load(clear: Boolean = true) {
         failed = false
@@ -127,87 +133,90 @@ fun DenebApprovalsScreen(
     val canPrev = selectedDate > minDate
     val canNext = selectedDate < today
 
-    DenebScreenScaffold(
-        title = "결재",
-        onBack = onBack,
-        tabBar = navigationTabBar,
-        titlePivot = {
-            onOpenFeed?.let { DenebTitlePivot("피드", onClick = it) }
-            onOpenMail?.let { DenebTitlePivot("메일", onClick = it) }
-        },
+    Box(
+        Modifier
+            .fillMaxSize()
+            .denebSiblingSwipe(onSwipeRight = openFeed),
     ) {
-        if (!pendingOnly) {
-            ApprovalsDateBar(
-                label = approvalsDateLabel(selectedDate, today),
-                countLabel = when {
-                    dayRows.isEmpty() -> null
-                    pendingCount > 0 -> "${dayRows.size}건 · 미결 $pendingCount"
-                    else -> "${dayRows.size}건"
-                },
-                canGoPrev = canPrev,
-                canGoNext = canNext,
-                showToday = selectedDate != today,
-                onPrev = { if (canPrev) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
-                onNext = { if (canNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
-                onToday = { selectedDate = today },
-            )
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        DenebScreenScaffold(
+            title = "결재",
+            onBack = onBack,
+            tabBar = navigationTabBar,
+            titlePivot = openFeed?.let { open -> { DenebTitlePivot("피드", onClick = open) } },
         ) {
-            PendingOnlyToggle(
-                count = pendingRows.size,
-                active = pendingOnly,
-                onToggle = {
-                    haptics.tap()
-                    pendingOnly = !pendingOnly
-                },
-            )
-            if (pendingOnly) {
-                Text("전체 기간의 미결 문서", style = DenebType.meta, color = denebHint())
-            }
-        }
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = {
-                haptics.refresh()
-                scope.launch {
-                    refreshing = true
-                    load(clear = false)
-                    refreshing = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        ) {
-            when {
-                failed -> DenebError(
-                    "결재 목록을 불러오지 못했습니다.",
-                    onRetry = { scope.launch { load() } },
+            if (!pendingOnly) {
+                ApprovalsDateBar(
+                    label = approvalsDateLabel(selectedDate, today),
+                    countLabel = when {
+                        dayRows.isEmpty() -> null
+                        pendingCount > 0 -> "${dayRows.size}건 · 미결 $pendingCount"
+                        else -> "${dayRows.size}건"
+                    },
+                    canGoPrev = canPrev,
+                    canGoNext = canNext,
+                    showToday = selectedDate != today,
+                    onPrev = { if (canPrev) selectedDate = selectedDate.minus(1, DateTimeUnit.DAY) },
+                    onNext = { if (canNext) selectedDate = selectedDate.plus(1, DateTimeUnit.DAY) },
+                    onToday = { selectedDate = today },
                 )
-
-                list == null -> DenebLoading()
-
-                shownRows.isEmpty() -> Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                ) {
-                    DenebEmpty(
-                        if (pendingOnly) "미결 문서가 없습니다" else approvalsEmptyLabel(selectedDate, today),
-                    )
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PendingOnlyToggle(
+                    count = pendingRows.size,
+                    active = pendingOnly,
+                    onToggle = {
+                        haptics.tap()
+                        pendingOnly = !pendingOnly
+                    },
+                )
+                if (pendingOnly) {
+                    Text("전체 기간의 미결 문서", style = DenebType.meta, color = denebHint())
                 }
+            }
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = {
+                    haptics.refresh()
+                    scope.launch {
+                        refreshing = true
+                        load(clear = false)
+                        refreshing = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
+                when {
+                    failed -> DenebError(
+                        "결재 목록을 불러오지 못했습니다.",
+                        onRetry = { scope.launch { load() } },
+                    )
 
-                else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(shownRows, key = { it.docId }) { doc ->
-                        ApprovalRow(
-                            doc = doc,
-                            showDate = pendingOnly,
-                            onOpen = {
-                                haptics.tap()
-                                onOpenDetail(doc)
-                            },
+                    list == null -> DenebLoading()
+
+                    shownRows.isEmpty() -> Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    ) {
+                        DenebEmpty(
+                            if (pendingOnly) "미결 문서가 없습니다" else approvalsEmptyLabel(selectedDate, today),
                         )
-                        HorizontalDivider(color = denebHairline(), thickness = 0.5.dp)
+                    }
+
+                    else -> LazyColumn(Modifier.fillMaxSize()) {
+                        items(shownRows, key = { it.docId }) { doc ->
+                            ApprovalRow(
+                                doc = doc,
+                                showDate = pendingOnly,
+                                onOpen = {
+                                    haptics.tap()
+                                    onOpenDetail(doc)
+                                },
+                            )
+                            HorizontalDivider(color = denebHairline(), thickness = 0.5.dp)
+                        }
                     }
                 }
             }
