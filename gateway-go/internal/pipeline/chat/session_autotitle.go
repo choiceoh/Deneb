@@ -49,6 +49,11 @@ func isAutoTitleSession(sessionKey string) bool {
 	return false
 }
 
+// IsAutoTitleSessionKey is the exported eligibility check for callers outside
+// the chat package (the server's restart-backfill titles restored sessions with
+// the same scope this live path uses).
+func IsAutoTitleSessionKey(sessionKey string) bool { return isAutoTitleSession(sessionKey) }
+
 const sessionTitleSystemPrompt = "다음 대화를 보고 주제를 한국어 명사구 제목으로 요약하라. " +
 	"3~6단어, 한 줄, 따옴표·마침표·번호 매기기·\"제목:\" 같은 접두어 없이 제목 텍스트만 출력하라."
 
@@ -83,7 +88,7 @@ func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *Sync
 		ctx, cancel := context.WithTimeout(context.Background(), sessionTitleTimeout)
 		defer cancel()
 
-		title := generateSessionTitle(ctx, userMsg, reply)
+		title := GenerateSessionTitle(ctx, userMsg, reply)
 		if title == "" {
 			return
 		}
@@ -99,10 +104,11 @@ func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *Sync
 	})
 }
 
-// generateSessionTitle asks the lightweight model for a short Korean title,
-// falling back to a heuristic (the first line of the user message) when the model
-// is unavailable or returns nothing usable.
-func generateSessionTitle(ctx context.Context, userMsg, reply string) string {
+// GenerateSessionTitle asks the tiny model for a short Korean title, falling
+// back to a heuristic (the first line of the user message) when the model is
+// unavailable or returns nothing usable. Exported for the server's restart
+// backfill (restored sessions lost their labels before the sidecar store).
+func GenerateSessionTitle(ctx context.Context, userMsg, reply string) string {
 	prompt := "사용자: " + capRunes(userMsg, sessionTitleInputCap)
 	if r := strings.TrimSpace(reply); r != "" {
 		prompt += "\n어시스턴트: " + capRunes(r, sessionTitleReplyCap)
@@ -119,9 +125,12 @@ func generateSessionTitle(ctx context.Context, userMsg, reply string) string {
 // cleanSessionTitle normalizes a model/heuristic title to a single tidy line.
 func cleanSessionTitle(s string) string {
 	s = strings.TrimSpace(firstLine(s))
-	// The model sometimes still prefixes "제목:" or wraps the title in quotes
-	// despite the instruction — strip those.
+	// The model sometimes still prefixes "제목:", echoes the prompt's speaker
+	// tags ("사용자:"/"어시스턴트:"), or wraps the title in quotes despite the
+	// instruction — strip those.
 	s = strings.TrimSpace(strings.TrimPrefix(s, "제목:"))
+	s = strings.TrimSpace(strings.TrimPrefix(s, "사용자:"))
+	s = strings.TrimSpace(strings.TrimPrefix(s, "어시스턴트:"))
 	s = strings.TrimSpace(strings.Trim(s, "\"'`“”‘’"))
 	s = strings.TrimRight(s, ".。")
 	s = strings.Join(strings.Fields(s), " ") // collapse internal whitespace/newlines
