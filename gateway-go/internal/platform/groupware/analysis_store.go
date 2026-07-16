@@ -16,7 +16,8 @@ import (
 // ApprovalAnalysisPromptVersion bumps when the approval-analysis prompt changes
 // in a way that should invalidate cached results.
 // v2: price-memory loop — 과거 단가·경비 이력 주입 + 단가 비교 섹션.
-const ApprovalAnalysisPromptVersion = "v2"
+// v3: selected attachments (계약/견적/…) downloaded+OCR'd into the analysis prompt.
+const ApprovalAnalysisPromptVersion = "v3"
 
 // ApprovalAnalysisRecord is the on-disk shape of one cached 전자결재 analysis.
 type ApprovalAnalysisRecord struct {
