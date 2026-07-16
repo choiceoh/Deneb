@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // TestWithCORS_Preflight verifies a browser CORS preflight (OPTIONS + Origin) is
@@ -15,7 +14,8 @@ import (
 // the mux/auth, since the preflight carries no client token and would otherwise
 // be rejected as unauthenticated.
 func TestWithCORS_Preflight(t *testing.T) {
-	h := withCORS(testutil.Must(New(":0")).buildMux())
+	t.Parallel()
+	h := withCORS(sharedReadOnlyServer(t).buildMux())
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/miniapp/rpc", nil)
 	req.Header.Set("Origin", "http://localhost:1420")
@@ -39,7 +39,8 @@ func TestWithCORS_Preflight(t *testing.T) {
 // passes through to the handler AND carries Access-Control-Allow-Origin so the
 // browser exposes the response.
 func TestWithCORS_ActualRequestEchoesOrigin(t *testing.T) {
-	h := withCORS(testutil.Must(New(":0")).buildMux())
+	t.Parallel()
+	h := withCORS(sharedReadOnlyServer(t).buildMux())
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req.Header.Set("Origin", "http://localhost:1420")
@@ -57,7 +58,8 @@ func TestWithCORS_ActualRequestEchoesOrigin(t *testing.T) {
 // TestWithCORS_NoOriginUnaffected verifies native (Origin-less) clients are left
 // untouched: no CORS headers, and an OPTIONS is NOT short-circuited.
 func TestWithCORS_NoOriginUnaffected(t *testing.T) {
-	h := withCORS(testutil.Must(New(":0")).buildMux())
+	t.Parallel()
+	h := withCORS(sharedReadOnlyServer(t).buildMux())
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()

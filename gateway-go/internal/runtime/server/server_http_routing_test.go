@@ -5,16 +5,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
 // TestBuildMux_RegistersExpectedRoutes verifies that buildMux registers all
 // expected routes. This is a component-level test that runs independently of
 // the full server startup sequence.
 func TestBuildMuxReturnsExpectedStatusPerRoute(t *testing.T) {
-	srv := testutil.Must(New(":0"))
-	mux := srv.buildMux()
+	t.Parallel()
+	mux := sharedReadOnlyServer(t).buildMux()
 
 	tests := []struct {
 		method   string
@@ -38,6 +36,7 @@ func TestBuildMuxReturnsExpectedStatusPerRoute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequestWithContext(context.Background(), tt.method, tt.path, nil)
 			w := httptest.NewRecorder()
 			mux.ServeHTTP(w, req)

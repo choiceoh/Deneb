@@ -569,7 +569,12 @@ func newQueuedOpenAIServer(t *testing.T, outputs ...string) *queuedOpenAIServer 
 
 func (q *queuedOpenAIServer) Close() { q.server.Close() }
 
-func (q *queuedOpenAIServer) Client() *llm.Client { return llm.NewClient(q.server.URL, "key") }
+// Client returns an LLM client pointed at the fake server with retries disabled.
+// Production defaults (maxRetries=6, baseDelay=1s) turn a single 503 into ~60s of
+// backoff — fine for live traffic, lethal for unit tests that assert failure paths.
+func (q *queuedOpenAIServer) Client() *llm.Client {
+	return llm.NewClient(q.server.URL, "key", llm.WithRetry(0, 0, 0))
+}
 
 func TestCallLocalLLMJSONContractAndSchemaFallback(t *testing.T) {
 	t.Run("valid strict", func(t *testing.T) {

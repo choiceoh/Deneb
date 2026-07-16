@@ -235,7 +235,8 @@ var requiredMethods = []string{
 // methods are registered after server.New(). If this test fails, a method was
 // likely removed from method_registry.go without removing it from the handler.
 func TestMethodRegistryReturnsNoMissingRequiredMethods(t *testing.T) {
-	srv := testutil.Must(New(":0"))
+	t.Parallel()
+	srv := sharedReadOnlyServer(t)
 	registered := make(map[string]struct{})
 	for _, m := range srv.dispatcher.Methods() {
 		registered[m] = struct{}{}
@@ -266,7 +267,8 @@ func TestMethodRegistryReturnsNoMissingRequiredMethods(t *testing.T) {
 // The role rows come from the registry (not provider config), so a populated
 // roles list proves the controller saw the session-phase registry.
 func TestMethodRegistryModelsListReturnsPopulatedRoles(t *testing.T) {
-	srv := testutil.Must(New(":0"))
+	t.Parallel()
+	srv := sharedReadOnlyServer(t)
 	ctx := clientauth.WithContext(context.Background(), &clientauth.Identity{})
 	resp := srv.dispatcher.Dispatch(ctx, &protocol.RequestFrame{
 		ID:     "test-models-roles",

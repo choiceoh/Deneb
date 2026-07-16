@@ -40,6 +40,7 @@ func newCronRunRequest(body string) *http.Request {
 }
 
 func TestHandleCronRun_MissingName(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	mux := srv.buildMux()
 
@@ -52,6 +53,7 @@ func TestHandleCronRun_MissingName(t *testing.T) {
 }
 
 func TestHandleCronRun_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	mux := srv.buildMux()
 
@@ -64,6 +66,7 @@ func TestHandleCronRun_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleCronRun_UnknownName(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	installCleanCronService(t, srv)
 	mux := srv.buildMux()
@@ -84,6 +87,7 @@ func TestHandleCronRun_UnknownName(t *testing.T) {
 }
 
 func TestHandleCronRunReturnsOKForMatchingJobName(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	svc := installCleanCronService(t, srv)
 	finished := make(chan cron.CronEvent, 1)
@@ -131,6 +135,7 @@ func TestHandleCronRunReturnsOKForMatchingJobName(t *testing.T) {
 }
 
 func TestHandleCronRunReturns503WhenCronServiceNil(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	srv.cronService = nil
 	mux := srv.buildMux()
@@ -154,6 +159,7 @@ func TestHandleCronRunReturns503WhenCronServiceNil(t *testing.T) {
 // the cron store cannot be parsed, the handler must surface 500 rather
 // than translating the load failure into a misleading 404 "job not found".
 func TestHandleCronRunReturns500OnCorruptStore(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	storePath := filepath.Join(t.TempDir(), "jobs.json")
 	if err := os.WriteFile(storePath, []byte("{not valid json"), 0o600); err != nil {
@@ -182,6 +188,7 @@ func TestHandleCronRunReturns500OnCorruptStore(t *testing.T) {
 }
 
 func TestHandleCronRunReturns403ForNonLoopbackCaller(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New(":0"))
 	mux := srv.buildMux()
 
@@ -199,6 +206,7 @@ func TestHandleCronRunReturns403ForNonLoopbackCaller(t *testing.T) {
 }
 
 func TestIsLoopbackRemoteReturnsTrueOnlyForLocalAddresses(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		addr string
 		want bool
