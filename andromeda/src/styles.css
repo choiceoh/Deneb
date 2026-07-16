@@ -1723,6 +1723,23 @@ textarea {
 .md-table tbody tr:nth-child(even) td {
   background: var(--panel-sunken);
 }
+/* Wide tables (5+ cols): pin the first column while the rest scroll —
+   발주서/품의 표에서 순번·품명이 가로 스크롤에 가려지지 않게. */
+.md-table-sticky th.md-sticky-col,
+.md-table-sticky td.md-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--line);
+  background: var(--panel);
+}
+.md-table-sticky thead th.md-sticky-col {
+  background: var(--panel-sunken);
+  z-index: 2;
+}
+.md-table-sticky tbody tr:nth-child(even) td.md-sticky-col {
+  background: var(--panel-sunken);
+}
 .md-codeblock {
   overflow: hidden;
   background: var(--panel);
@@ -2282,6 +2299,11 @@ textarea {
   font-size: 13px;
   line-height: 1.7;
 }
+/* Markdown inside mail/approval bodies owns its own whitespace — pre-wrap on
+   the wrapper would stack blank lines between <p> and break table cell wrap. */
+.mail-body .md {
+  white-space: normal;
+}
 
 /* mail detail: action bar + enrichment cards (분석 · 발신자 · 질문) */
 .mail-actions {
@@ -2502,6 +2524,9 @@ textarea {
   font-size: 13px;
   line-height: 1.5;
   color: var(--ink);
+}
+.approval-doc-block .md {
+  white-space: normal;
 }
 .approval-doc .mail-card > .mail-card-title {
   margin-bottom: 6px;

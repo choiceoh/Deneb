@@ -17,6 +17,7 @@
 // is the single math dependency.
 import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
 import katex from "katex";
+import { normalizeMarkdown } from "@/markdown/normalize";
 import { type Block, type ListItem, parseBlocks } from "@/markdown/parse";
 import { Icon } from "./Icon";
 
@@ -248,13 +249,20 @@ function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>
   const cellClass = (j: number): string | undefined => (numeric[j] ? "md-num" : undefined);
   // Dense tables (3+ columns) drop the type one rung so narrow columns fit whole
   // Korean 어절 per line — the native table's dense-mode parity (production lesson).
+  // Wide tables (5+ cols, e.g. 발주서) sticky the first column while scrolling.
   const colCount = Math.max(block.header.length, ...block.rows.map((r) => r.length), 0);
+  const cls =
+    "md-table" + (colCount >= 3 ? " md-table-dense" : "") + (colCount >= 5 ? " md-table-sticky" : "");
+  const colCls = (j: number): string | undefined => {
+    const parts = [cellClass(j), j === 0 && colCount >= 5 ? "md-sticky-col" : undefined].filter(Boolean);
+    return parts.length ? parts.join(" ") : undefined;
+  };
   return (
-    <table className={"md-table" + (colCount >= 3 ? " md-table-dense" : "")}>
+    <table className={cls}>
       <thead>
         <tr>
           {block.header.map((h, j) => (
-            <th key={j} className={cellClass(j)} style={cellStyle(j)}>
+            <th key={j} className={colCls(j)} style={cellStyle(j)}>
               {renderInline(h, `${blockKey}-h${j}`)}
             </th>
           ))}
@@ -264,7 +272,7 @@ function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>
         {block.rows.map((row, r) => (
           <tr key={r}>
             {row.map((c, j) => (
-              <td key={j} className={cellClass(j)} style={cellStyle(j)}>
+              <td key={j} className={colCls(j)} style={cellStyle(j)}>
                 {renderInline(c, `${blockKey}-${r}-${j}`)}
               </td>
             ))}
@@ -276,8 +284,9 @@ function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>
 }
 
 // Render Markdown text as safe React nodes. Plain text with no Markdown renders
-// as a single <p>, so a bare reply stays a clean paragraph.
+// as a single <p>, so a bare reply stays a clean paragraph. Runs the native-parity
+// normalizers (HTML blocks → box tables → separator-less pipes) first.
 export function Markdown({ text }: { text: string }) {
-  const blocks = parseBlocks(text);
+  const blocks = useMemo(() => parseBlocks(normalizeMarkdown(text)), [text]);
   return <div className="md">{blocks.map((b, i) => renderBlock(b, `b${i}`))}</div>;
 }

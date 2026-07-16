@@ -359,7 +359,11 @@ function ApprovalDetail({
                 {!lineOpen && lineTeaser ? <span className="mail-card-teaser">{lineTeaser}</span> : null}
                 <span className="mail-card-caret">{lineOpen ? "▾" : "▸"}</span>
               </button>
-              {lineOpen ? <pre className="approval-doc-block">{sections.line}</pre> : null}
+              {lineOpen ? (
+                <div className="mail-body approval-doc-block">
+                  <Markdown text={sections.line} />
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -375,7 +379,11 @@ function ApprovalDetail({
                 {!attachOpen && attachTeaser ? <span className="mail-card-teaser">{attachTeaser}</span> : null}
                 <span className="mail-card-caret">{attachOpen ? "▾" : "▸"}</span>
               </button>
-              {attachOpen ? <pre className="approval-doc-block">{sections.attachments}</pre> : null}
+              {attachOpen ? (
+                <div className="mail-body approval-doc-block">
+                  <Markdown text={sections.attachments} />
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
