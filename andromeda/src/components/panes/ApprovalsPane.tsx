@@ -3,14 +3,24 @@ import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
 import { addDays, dayLabel, errText, startOfDay } from "@/format";
-import { analyzeApproval, cachedApprovalAnalysis, fetchApprovalAttachment, fetchApprovalBody } from "@/gateway";
+import {
+  analyzeApproval,
+  approvalAttachmentUrl,
+  cachedApprovalAnalysis,
+  fetchApprovalAttachment,
+  fetchApprovalBody,
+  fetchGatewayBlob,
+} from "@/gateway";
 import { parseApprovalDocBody, parseAttachmentRows } from "@/approvalBody";
 import { useAction } from "@/useAction";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { DayPager } from "@/components/DayPager";
 import { Column, Grid, GridNotice } from "@/components/Grid";
+import { FileViewer } from "@/components/FileViewer";
+import { viewKindFor } from "@/components/fileView";
 import { Markdown } from "@/components/Markdown";
+import { Field, Modal } from "@/components/Modal";
 
 // Recent 전체 결재 snapshot; day-pager filters client-side (Amaranth list has no
 // date-range API). Mirrors mail/feed lookback so empty days never trap the pager.
@@ -87,14 +97,41 @@ export function ApprovalsPane() {
     setSelectedId(undefined);
   }
 
-  async function act(doc: GroupwareApprovalRow, decision: "approve" | "reject") {
+  const [rejectDoc, setRejectDoc] = useState<GroupwareApprovalRow | null>(null);
+  const [rejectComment, setRejectComment] = useState("");
+
+  async function actApprove(doc: GroupwareApprovalRow) {
     const id = String(doc.docId ?? "").trim();
     if (!id) return;
-    const label = decision === "approve" ? "승인" : "반려";
     const title = doc.title || "이 결재 문서";
-    if (!window.confirm(`${label}할까요?\n\n${title} (doc ${id})\n그룹웨어에 즉시 반영됩니다.`)) return;
-    const result = await run(APPROVALS_RPC.act, { docId: id, decision });
+    if (!window.confirm(`승인할까요?\n\n${title} (doc ${id})\n그룹웨어에 즉시 반영됩니다.`)) return;
+    const result = await run(APPROVALS_RPC.act, { docId: id, decision: "approve" });
     if (result !== undefined) setSelectedId(undefined);
+  }
+
+  function openReject(doc: GroupwareApprovalRow) {
+    setRejectComment("");
+    setRejectDoc(doc);
+  }
+
+  function closeReject() {
+    if (busy) return;
+    setRejectDoc(null);
+    setRejectComment("");
+  }
+
+  async function submitReject() {
+    if (!rejectDoc || busy) return;
+    const id = String(rejectDoc.docId ?? "").trim();
+    if (!id) return;
+    const comment = rejectComment.trim();
+    const params: Record<string, unknown> = { docId: id, decision: "reject" };
+    if (comment) params.comment = comment;
+    const result = await run(APPROVALS_RPC.act, params);
+    if (result !== undefined) {
+      closeReject();
+      setSelectedId(undefined);
+    }
   }
 
   const columns: Column<GroupwareApprovalRow>[] = [
@@ -176,14 +213,54 @@ export function ApprovalsPane() {
               <ApprovalDetail
                 doc={selected}
                 busy={busy}
-                onApprove={() => void act(selected, "approve")}
-                onReject={() => void act(selected, "reject")}
+                onApprove={() => void actApprove(selected)}
+                onReject={() => openReject(selected)}
                 onClose={() => setSelectedId(undefined)}
               />
             ) : null
           }
         />
       </GridNotice>
+      {rejectDoc && (
+        <Modal
+          title="결재 반려"
+          onClose={closeReject}
+          footer={
+            <>
+              <button className="btn" onClick={closeReject} disabled={busy}>
+                취소
+              </button>
+              <button className="btn btn-accent" onClick={() => void submitReject()} disabled={busy}>
+                {busy ? "반려 중…" : "반려"}
+              </button>
+            </>
+          }
+        >
+          <div className="workfeed-detail-meta">문서</div>
+          <div className="workfeed-detail-title">{rejectDoc.title || "이 결재 문서"}</div>
+          {rejectDoc.docId && <p className="pane-status">doc {rejectDoc.docId}</p>}
+          <p>그룹웨어에 즉시 반영됩니다.</p>
+          <Field label="반려 사유 (선택)">
+            <textarea
+              className="field"
+              rows={4}
+              value={rejectComment}
+              maxLength={500}
+              autoFocus
+              disabled={busy}
+              onChange={(e) => setRejectComment(e.target.value)}
+            />
+          </Field>
+          <div className="pane-status" aria-live="polite">
+            {rejectComment.length}/500
+          </div>
+          {error && (
+            <p className="pane-error" role="alert">
+              오류: {error}
+            </p>
+          )}
+        </Modal>
+      )}
     </>
   );
 }
@@ -232,6 +309,7 @@ function ApprovalDetail({
   const [attachBusy, setAttachBusy] = useState("");
   const [attachErr, setAttachErr] = useState("");
   const [attachPreview, setAttachPreview] = useState<{ name: string; text: string } | null>(null);
+  const [viewer, setViewer] = useState<{ index: number; name: string } | null>(null);
   const sections = useMemo(() => parseApprovalDocBody(body ?? ""), [body]);
   const attachmentRows = useMemo(() => parseAttachmentRows(sections.attachments), [sections.attachments]);
 
@@ -401,34 +479,77 @@ function ApprovalDetail({
                 <div className="mail-body approval-doc-block">
                   {attachmentRows.length ? (
                     <div className="mail-attachments">
-                      {attachmentRows.map((row) => (
-                        <button
-                          key={row.index}
-                          type="button"
-                          className="mail-attachment"
-                          disabled={!connected || Boolean(attachBusy)}
-                          onClick={() => void openAttachment(row)}
-                          title="첨부 내용 열기 (OCR/추출)"
-                        >
-                          <span>{row.name}</span>
-                          <span>{attachBusy === row.name ? "여는 중…" : row.meta || "열기"}</span>
-                        </button>
-                      ))}
+                      {attachmentRows.map((row) => {
+                        const previewable = viewKindFor(row.name) !== "none";
+                        return previewable ? (
+                          <button
+                            key={row.index}
+                            type="button"
+                            className="mail-attachment"
+                            disabled={!connected}
+                            onClick={() => setViewer({ index: row.index, name: row.name })}
+                            title="첨부 미리보기"
+                          >
+                            <span>{row.name}</span>
+                            <span>{row.meta || "열기"}</span>
+                          </button>
+                        ) : (
+                          <a
+                            key={row.index}
+                            className="mail-attachment"
+                            href={approvalAttachmentUrl(cfg, docId, String(row.index), { filename: row.name })}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={row.name}
+                            title="첨부 다운로드"
+                          >
+                            <span>{row.name}</span>
+                            <span>{row.meta || "다운로드"}</span>
+                          </a>
+                        );
+                      })}
                     </div>
                   ) : (
                     <Markdown text={sections.attachments} />
                   )}
                   {attachErr ? <div className="mail-card-line error">{attachErr}</div> : null}
+                  {attachBusy ? <div className="mail-card-line">추출 중… {attachBusy}</div> : null}
                   {attachPreview ? (
                     <div className="mail-card" style={{ marginTop: 8 }}>
                       <div className="mail-card-head">
-                        <span className="mail-card-title">{attachPreview.name}</span>
+                        <span className="mail-card-title">{attachPreview.name} · 추출</span>
                         <button className="row-btn" type="button" onClick={() => setAttachPreview(null)}>
                           닫기
                         </button>
                       </div>
                       <div className="mail-body approval-doc-block">
                         <Markdown text={attachPreview.text} />
+                      </div>
+                    </div>
+                  ) : null}
+                  {viewer ? (
+                    <div className="mail-attachment-preview">
+                      <FileViewer
+                        name={viewer.name}
+                        load={() =>
+                          fetchGatewayBlob(
+                            approvalAttachmentUrl(cfg, docId, String(viewer.index), { filename: viewer.name }),
+                          )
+                        }
+                        downloadUrl={approvalAttachmentUrl(cfg, docId, String(viewer.index), { filename: viewer.name })}
+                      />
+                      <div className="mail-card-head" style={{ marginTop: 8 }}>
+                        <button className="row-btn" type="button" onClick={() => setViewer(null)}>
+                          미리보기 닫기
+                        </button>
+                        <button
+                          className="row-btn"
+                          type="button"
+                          disabled={!connected || Boolean(attachBusy)}
+                          onClick={() => void openAttachment(viewer)}
+                        >
+                          텍스트 추출
+                        </button>
                       </div>
                     </div>
                   ) : null}

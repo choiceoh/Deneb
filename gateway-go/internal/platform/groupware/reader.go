@@ -45,10 +45,11 @@ const (
 type Action string
 
 const (
-	ActionList       Action = "list"
-	ActionRead       Action = "read"
-	ActionAttachment Action = "attachment" // explicitly selected attachment only
-	ActionSummary    Action = "summary"    // sales closing totals
+	ActionList               Action = "list"
+	ActionRead               Action = "read"
+	ActionAttachment         Action = "attachment"          // OCR / extracted text
+	ActionAttachmentDownload Action = "attachment-download" // raw bytes as JSON envelope
+	ActionSummary            Action = "summary"             // sales closing totals
 	// ActionAct is mutate (approve/reject). Not exposed on the chat tool —
 	// work-feed chips call ActApproval directly.
 	ActionAct Action = "act"

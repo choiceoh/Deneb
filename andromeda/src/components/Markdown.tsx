@@ -211,7 +211,16 @@ function ChoiceChips({ text, onChoice }: { text: string; onChoice?: (text: strin
     )
     .filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customText, setCustomText] = useState("");
   if (!options.length) return null;
+  const submitCustom = () => {
+    const answer = customText.trim();
+    if (!answer || !onChoice) return;
+    setCustomText("");
+    setCustomOpen(false);
+    onChoice(answer);
+  };
   return (
     <div className="md-choices" role="group" aria-label="선택지">
       {options.map((opt) =>
@@ -225,6 +234,32 @@ function ChoiceChips({ text, onChoice }: { text: string; onChoice?: (text: strin
           </span>
         ),
       )}
+      {onChoice ? (
+        customOpen ? (
+          <span className="md-choice-custom">
+            <input
+              className="md-choice-input"
+              value={customText}
+              autoFocus
+              placeholder="직접 입력"
+              onChange={(e) => setCustomText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitCustom();
+                }
+              }}
+            />
+            <button type="button" className="md-choice" onClick={submitCustom} disabled={!customText.trim()}>
+              전송
+            </button>
+          </span>
+        ) : (
+          <button type="button" className="md-choice md-choice-other" onClick={() => setCustomOpen(true)}>
+            직접 입력
+          </button>
+        )
+      ) : null}
     </div>
   );
 }

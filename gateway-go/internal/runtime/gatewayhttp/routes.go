@@ -30,14 +30,15 @@ type MailAttachmentClient interface {
 
 // Config is the client HTTP surface's complete runtime contract.
 type Config struct {
-	Dispatcher        *rpc.Dispatcher
-	ChatHandler       chatport.SyncStreamRunner
-	PushHub           *proactive.Hub
-	ShutdownContext   context.Context
-	Logger            *slog.Logger
-	AttachmentFactory func() (MailAttachmentClient, error)
-	Fleet             *sparkfleet.Client
-	Version           string
+	Dispatcher                  *rpc.Dispatcher
+	ChatHandler                 chatport.SyncStreamRunner
+	PushHub                     *proactive.Hub
+	ShutdownContext             context.Context
+	Logger                      *slog.Logger
+	AttachmentFactory           func() (MailAttachmentClient, error)
+	GroupwareAttachmentDownload nativeapi.GroupwareAttachmentDownload
+	Fleet                       *sparkfleet.Client
+	Version                     string
 }
 
 // FleetAlertConfig is the narrow composition contract for SparkFleet's
@@ -55,12 +56,13 @@ type FleetAlertConfig struct {
 func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 	nativeHandler := func() *nativeapi.Handler {
 		return nativeapi.New(nativeapi.Config{
-			Dispatcher:        cfg.Dispatcher,
-			ChatHandler:       cfg.ChatHandler,
-			PushHub:           cfg.PushHub,
-			ShutdownContext:   cfg.ShutdownContext,
-			Logger:            cfg.Logger,
-			AttachmentFactory: adaptAttachmentFactory(cfg.AttachmentFactory),
+			Dispatcher:                  cfg.Dispatcher,
+			ChatHandler:                 cfg.ChatHandler,
+			PushHub:                     cfg.PushHub,
+			ShutdownContext:             cfg.ShutdownContext,
+			Logger:                      cfg.Logger,
+			AttachmentFactory:           adaptAttachmentFactory(cfg.AttachmentFactory),
+			GroupwareAttachmentDownload: cfg.GroupwareAttachmentDownload,
 		})
 	}
 
@@ -75,6 +77,9 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 	})
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", func(w http.ResponseWriter, r *http.Request) {
 		nativeHandler().GmailAttachment(w, r)
+	})
+	mux.HandleFunc("GET /api/v1/miniapp/groupware/approval/attachment", func(w http.ResponseWriter, r *http.Request) {
+		nativeHandler().GroupwareApprovalAttachment(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/files/download", func(w http.ResponseWriter, r *http.Request) {
 		nativeHandler().FilesDownload(w, r)
@@ -101,6 +106,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		"/api/v1/miniapp/chat/stream",
 		"/api/v1/miniapp/events",
 		"/api/v1/miniapp/gmail/attachment",
+		"/api/v1/miniapp/groupware/approval/attachment",
 		"/api/v1/files/download",
 	)
 }

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Markdown } from "./Markdown";
 
 describe("Markdown", () => {
@@ -167,6 +168,14 @@ describe("Markdown", () => {
     render(<Markdown text={"```choices\n승인\n반려\n```"} />);
     expect(screen.getByText("승인")).toHaveClass("md-choice");
     expect(screen.getByText("반려")).toHaveClass("md-choice");
+  });
+
+  it("calls onChoice when a choices chip is clicked", async () => {
+    const onChoice = vi.fn();
+    render(<Markdown text={"```choices\n승인\n반려\n```"} onChoice={onChoice} />);
+    await userEvent.click(screen.getByRole("button", { name: "승인" }));
+    expect(onChoice).toHaveBeenCalledWith("승인");
+    expect(screen.getByRole("button", { name: "직접 입력" })).toBeInTheDocument();
   });
 
   it("rewrites footnotes via normalizeMarkdown", () => {

@@ -13,6 +13,7 @@ import {
   listCalendarProposals,
   listPrompts,
   mailAttachmentUrl,
+  approvalAttachmentUrl,
   recentSessions,
   sessionTranscript,
   setModel,
@@ -69,6 +70,17 @@ describe("gateway URL helpers", () => {
       mimeType: "application/octet-stream",
       clientToken: CFG.token,
     });
+  });
+
+  it("builds a groupware approval attachment download URL", () => {
+    const url = new URL(
+      approvalAttachmentUrl(CFG, "99178", "1", { filename: "영수증.pdf", mimeType: "application/pdf" }),
+    );
+    expect(url.pathname).toBe("/api/v1/miniapp/groupware/approval/attachment");
+    expect(url.searchParams.get("docId")).toBe("99178");
+    expect(url.searchParams.get("attachment")).toBe("1");
+    expect(url.searchParams.get("filename")).toBe("영수증.pdf");
+    expect(url.searchParams.get("clientToken")).toBe(CFG.token);
   });
 
   it("when prefers explicit attachment wire fields", () => {

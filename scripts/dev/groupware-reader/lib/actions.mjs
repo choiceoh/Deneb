@@ -616,6 +616,80 @@ export async function readApprovalAttachment(docId, selector) {
   return `${header}\n\n(${got.note || "텍스트 추출 결과 없음"})`;
 }
 
+function mimeFromExt(ext) {
+  switch (String(ext || "").toLowerCase()) {
+    case "pdf":
+      return "application/pdf";
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "tif":
+    case "tiff":
+      return "image/tiff";
+    case "bmp":
+      return "image/bmp";
+    case "txt":
+    case "log":
+    case "csv":
+    case "md":
+      return "text/plain; charset=utf-8";
+    case "hwp":
+      return "application/x-hwp";
+    case "hwpx":
+      return "application/hwp+zip";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+/** Download raw ECM bytes (no OCR) for the HTTP attachment route. */
+export async function downloadApprovalAttachmentBinary(docId, selector) {
+  const id = String(docId || "").trim();
+  if (!id) throw new Error("attachment-download requires --doc-id");
+  const list = await fetchAttachList(id);
+  if (!list.length) throw new Error(`첨부가 없습니다: docId=${id}`);
+  const file = selectAttachment(list, selector);
+  const fileSn = file.fileKey ?? file.fileSn;
+  const name = attachmentName(file);
+  const ext = String(file.fileExtsn || path.extname(String(file.filePath || "")) || "")
+    .replace(/^\./, "")
+    .toLowerCase();
+  const size = Number(file.fileSize || 0);
+  if (!fileSn) {
+    return { filename: name, mimeType: mimeFromExt(ext), size, base64: "", error: "fileKey 없음" };
+  }
+  if (size > MAX_ATTACH_BYTES) {
+    return {
+      filename: name,
+      mimeType: mimeFromExt(ext),
+      size,
+      base64: "",
+      error: `용량 초과(${size}B)`,
+    };
+  }
+  const out = await apiPostMaybeBinary("/ecm/ecm001A03", {
+    moduleGbn: "EAP",
+    authKeyMap: authKeyMap(docId),
+    fileSn: Number(fileSn) || fileSn,
+  });
+  if (!out.binary || !out.buffer?.length) {
+    const msg = out.json?.resultMsg || `download failed (${out.status})`;
+    return { filename: name, mimeType: mimeFromExt(ext), size, base64: "", error: String(msg).slice(0, 120) };
+  }
+  return {
+    filename: name,
+    mimeType: mimeFromExt(ext),
+    size: out.buffer.length,
+    base64: Buffer.from(out.buffer).toString("base64"),
+  };
+}
+
 function formatLine(lines) {
   if (!lines.length) return "";
   const rows = lines.map((l, i) => {
