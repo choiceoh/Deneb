@@ -14,13 +14,14 @@ import (
 // POST /api/event/ingest — both doors must behave identically.
 func (s *Server) phoneEventHandlerConfig() phoneevents.Config {
 	return phoneevents.Config{
-		ChatHandler:     s.chatHandler,
-		Relay:           &s.proactiveRelay,
-		ShutdownContext: s.ShutdownCtx(),
-		Logger:          s.logger,
-		Ledger:          s.phoneEventLedgerInstance(),
-		OnLocationPlace: s.siteVisitOnLocation(),
-		BrowserEnrich:   s.approvalBrowserEnrich,
+		ChatHandler:             s.chatHandler,
+		Relay:                   &s.proactiveRelay,
+		ShutdownContext:         s.ShutdownCtx(),
+		Logger:                  s.logger,
+		Ledger:                  s.phoneEventLedgerInstance(),
+		OnLocationPlace:         s.siteVisitOnLocation(),
+		BrowserEnrich:           s.approvalBrowserEnrich,
+		DeferElectronicApproval: s.groupwareRadarActive,
 		ResolvePhoneAction: func(res phoneevents.ActionResult) bool {
 			if s.phoneActions == nil {
 				return false

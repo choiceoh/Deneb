@@ -40,28 +40,41 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, title, body strin
 	return strings.TrimSpace(out), "", nil
 }
 
-// analyzeApprovalBestEffort reads + analyzes a pending approval after the
-// radar feed card is durable. Cache hits and LLM/reader failures are silent —
-// the card must stay notified.
-func (s *Server) analyzeApprovalBestEffort(ctx context.Context, doc groupware.ApprovalSummary) {
+// prepareApprovalBeforeFeed reads + analyzes a pending approval before the
+// radar posts a work-feed card. Cache hits succeed immediately. Reader/LLM
+// failures return an error so onPending stays retryable (no bare notification
+// card). Meaningful analyses (urgent/attention) append to the project wiki log.
+func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.ApprovalSummary) error {
 	docID := strings.TrimSpace(doc.DocID)
-	if docID == "" || s.denebDir == "" {
-		return
+	if docID == "" {
+		return fmt.Errorf("groupware approval analysis missing docId")
+	}
+	if s.denebDir == "" {
+		return fmt.Errorf("groupware approval analysis cache unavailable")
 	}
 	cache := groupware.NewApprovalAnalysisStore(filepath.Join(s.denebDir, "cache", "approval_analysis"))
 	if rec, err := cache.Load(docID); err == nil && rec != nil {
-		return
+		if approvalAnalysisMeaningfulForWiki(rec.Importance) {
+			s.logApprovalAnalysisToWiki(rec)
+		}
+		return nil
 	}
 	cfg, ok := groupware.FromEnv()
 	if !ok {
-		return
+		return fmt.Errorf("groupware credentials unset")
 	}
 	body, err := groupware.ReadApprovalByDocIDIn(ctx, cfg, docID, doc.Folder)
-	if err != nil || strings.TrimSpace(body) == "" {
+	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn("groupware radar approval analysis skipped", "docId", docID, "err", err)
+			s.logger.Warn("groupware radar approval read failed", "docId", docID, "err", err)
 		}
-		return
+		return fmt.Errorf("groupware approval %s read failed: %w", docID, err)
+	}
+	if strings.TrimSpace(body) == "" {
+		if s.logger != nil {
+			s.logger.Warn("groupware radar approval body empty", "docId", docID)
+		}
+		return fmt.Errorf("groupware approval %s body empty", docID)
 	}
 	// Prewarm the body cache — the card's detail open right after the
 	// notification is the hottest path.
@@ -72,11 +85,17 @@ func (s *Server) analyzeApprovalBestEffort(ctx context.Context, doc groupware.Ap
 	}
 	start := time.Now()
 	analysis, _, err := s.completeApprovalAnalysis(ctx, title, body)
-	if err != nil || strings.TrimSpace(analysis) == "" {
+	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval analysis failed", "docId", docID, "err", err)
 		}
-		return
+		return fmt.Errorf("groupware approval %s analysis failed: %w", docID, err)
+	}
+	if strings.TrimSpace(analysis) == "" {
+		if s.logger != nil {
+			s.logger.Warn("groupware radar approval analysis empty", "docId", docID)
+		}
+		return fmt.Errorf("groupware approval %s analysis empty", docID)
 	}
 	importance := normalizeApprovalImportance(analysis)
 	rec := &groupware.ApprovalAnalysisRecord{
@@ -90,9 +109,25 @@ func (s *Server) analyzeApprovalBestEffort(ctx context.Context, doc groupware.Ap
 		PromptVersion: groupware.ApprovalAnalysisPromptVersion,
 		CreatedAt:     time.Now().UTC(),
 	}
-	_ = cache.Save(rec)
-	// 결재 gist joins the project memory trail (로그.md `결재` op) — best-effort.
-	s.logApprovalAnalysisToWiki(rec)
+	if err := cache.Save(rec); err != nil && s.logger != nil {
+		s.logger.Warn("groupware radar approval analysis cache save failed", "docId", docID, "err", err)
+	}
+	if approvalAnalysisMeaningfulForWiki(importance) {
+		s.logApprovalAnalysisToWiki(rec)
+	}
+	return nil
+}
+
+// approvalAnalysisMeaningfulForWiki reports whether an analysis is worth a
+// project 로그.md trail. routine noise stays in the approval cache only;
+// UniqueProjectInText still gates the write inside logApprovalAnalysisToWiki.
+func approvalAnalysisMeaningfulForWiki(importance string) bool {
+	switch strings.TrimSpace(strings.ToLower(importance)) {
+	case "urgent", "attention":
+		return true
+	default:
+		return false
+	}
 }
 
 func truncateRunes(s string, max int) string {
