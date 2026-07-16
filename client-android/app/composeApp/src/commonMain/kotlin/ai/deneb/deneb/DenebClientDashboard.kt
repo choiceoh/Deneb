@@ -19,5 +19,12 @@ import kotlinx.serialization.json.buildJsonObject
  * Fetch the part-grouped work dashboard (`miniapp.dashboard.lanes`, no params).
  * Returns null on a fetch failure so the screen can tell a real "no work" from a
  * network error instead of spinning forever (mirrors [refreshCalendar]).
+ * Session-cached so re-entering the section within the TTL skips the network;
+ * pull-to-refresh passes force=true.
  */
-suspend fun DenebGatewayClient.fetchDashboardLanes(): DashboardOut? = callRpc<DashboardOut>("miniapp.dashboard.lanes", buildJsonObject {})
+suspend fun DenebGatewayClient.fetchDashboardLanes(force: Boolean = false): DashboardOut? {
+    if (!force) sectionCaches.dashboard.fresh()?.let { return it }
+    val out = callRpc<DashboardOut>("miniapp.dashboard.lanes", buildJsonObject {}) ?: return null
+    sectionCaches.dashboard.store(out)
+    return out
+}

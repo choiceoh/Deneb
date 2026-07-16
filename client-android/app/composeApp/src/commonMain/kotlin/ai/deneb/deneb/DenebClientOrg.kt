@@ -27,8 +27,15 @@ import kotlinx.serialization.json.put
  * empty tree (the operator builds it); a corrupt file surfaces as a fetch failure.
  * Returns null on a fetch failure so the screen tells a real "empty chart" from a
  * network error instead of spinning forever (mirrors [fetchDashboardLanes]).
+ * Session-cached so re-entering the section within the TTL skips the network;
+ * pull-to-refresh passes force=true and a save invalidates.
  */
-suspend fun DenebGatewayClient.fetchOrg(): OrgTreeOut? = callRpc<OrgTreeOut>("miniapp.org.get", buildJsonObject {})
+suspend fun DenebGatewayClient.fetchOrg(force: Boolean = false): OrgTreeOut? {
+    if (!force) sectionCaches.org.fresh()?.let { return it }
+    val out = callRpc<OrgTreeOut>("miniapp.org.get", buildJsonObject {}) ?: return null
+    sectionCaches.org.store(out)
+    return out
+}
 
 /**
  * Persist an edited chart (`miniapp.org.save`). The whole node list is sent as the
@@ -41,21 +48,27 @@ suspend fun DenebGatewayClient.fetchOrg(): OrgTreeOut? = callRpc<OrgTreeOut>("mi
  * is always present even for an empty chart — the shared jsonCodec omits default
  * values, and an empty list is the OrgTreeOut default.
  */
-suspend fun DenebGatewayClient.saveOrg(nodes: List<OrgNodeOut>): String? = rpcWrite(
-    "miniapp.org.save",
-    buildJsonObject {
-        put("nodes", jsonCodec.encodeToJsonElement(ListSerializer(OrgNodeOut.serializer()), nodes))
-    },
-)
+suspend fun DenebGatewayClient.saveOrg(nodes: List<OrgNodeOut>): String? {
+    sectionCaches.org.invalidate()
+    return rpcWrite(
+        "miniapp.org.save",
+        buildJsonObject {
+            put("nodes", jsonCodec.encodeToJsonElement(ListSerializer(OrgNodeOut.serializer()), nodes))
+        },
+    )
+}
 
 /**
  * Convenience: save and parse the ack into the typed [OrgSaveOut] (saved / nodeCount
  * / hasLanes). Returns null on any failure so callers that want the ack detail can
  * fall back to a generic error; most callers use [saveOrg] (error-string) directly.
  */
-suspend fun DenebGatewayClient.saveOrgAck(nodes: List<OrgNodeOut>): OrgSaveOut? = callRpc<OrgSaveOut>(
-    "miniapp.org.save",
-    buildJsonObject {
-        put("nodes", jsonCodec.encodeToJsonElement(ListSerializer(OrgNodeOut.serializer()), nodes))
-    },
-)
+suspend fun DenebGatewayClient.saveOrgAck(nodes: List<OrgNodeOut>): OrgSaveOut? {
+    sectionCaches.org.invalidate()
+    return callRpc<OrgSaveOut>(
+        "miniapp.org.save",
+        buildJsonObject {
+            put("nodes", jsonCodec.encodeToJsonElement(ListSerializer(OrgNodeOut.serializer()), nodes))
+        },
+    )
+}
