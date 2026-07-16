@@ -5522,11 +5522,27 @@ button.mail-attachment {
 .cmdk-item {
   display: flex;
   align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  border-radius: 8px;
+  color: var(--ink-2);
+}
+/* 행 본체는 진짜 버튼 — 래퍼가 아니라 이 버튼이 클릭 표면이다 (option 안 중첩
+ * 버튼 금지 규칙). 보조 버튼(.cmdk-aux)은 형제로 나란히 선다. */
+.cmdk-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
   gap: 10px;
   padding: 8px 10px;
+  border: none;
   border-radius: 8px;
+  background: transparent;
+  color: inherit;
   font-size: 13.5px;
-  color: var(--ink-2);
+  font-family: var(--font);
+  text-align: left;
   cursor: pointer;
 }
 .cmdk-item.active {

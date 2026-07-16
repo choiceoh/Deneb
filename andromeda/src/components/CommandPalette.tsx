@@ -67,6 +67,11 @@ export function CommandPalette() {
   const [wikiRes, setWikiRes] = useState<{ q: string; hits: WikiPage[] }>({ q: "", hits: [] });
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Monotonic fetch sequence: only the latest in-flight memory.search may write
+  // wikiRes, so a slow earlier response can't clobber a newer result (the tag
+  // check below already hides wrong-query hits; this keeps right-query hits from
+  // being wiped by a late straggler).
+  const wikiSeq = useRef(0);
 
   useEffect(() => inputRef.current?.focus(), []);
 
@@ -77,14 +82,16 @@ export function CommandPalette() {
     const q = query.trim();
     if (!connected || q.length < 2) return;
     const timer = setTimeout(() => {
+      const seq = ++wikiSeq.current;
       callRpc<{ results?: WikiPage[]; pages?: WikiPage[] } | WikiPage[]>(cfg, MEMORY_RPC.search, { query: q })
         .then((data) => {
+          if (seq !== wikiSeq.current) return; // stale straggler — a newer fetch owns the state
           const list = Array.isArray(data) ? data : (data?.results ?? data?.pages ?? []);
           setWikiRes({ q, hits: list.slice(0, 5) });
         })
         .catch((e) => {
           palLog.debug("wiki quick-open failed", errText(e));
-          setWikiRes({ q, hits: [] });
+          if (seq === wikiSeq.current) setWikiRes({ q, hits: [] });
         });
     }, 250);
     return () => clearTimeout(timer);
@@ -274,30 +281,26 @@ export function CommandPalette() {
             aria-label="명령 입력"
           />
         </div>
-        <div className="cmdk-list" ref={listRef} role="listbox" aria-label="명령 목록">
+        {/* 행은 진짜 <button> 두 개(본 동작 + 보조 동작)를 나란히 둔 래퍼 —
+            role=option 안에 버튼을 중첩하는 무효 ARIA를 피한다. 화살표/Enter는
+            입력창의 onKeyDown이 처리하고, 하이라이트는 시각적 표시일 뿐이다. */}
+        <div className="cmdk-list" ref={listRef} aria-label="명령 목록">
           {rows.length === 0 && <div className="cmdk-empty">일치하는 명령이 없습니다</div>}
           {rows.map((row, i) => (
             <div
               key={row.key}
               className={"cmdk-item" + (i === activeIdx ? " active" : "")}
-              role="option"
-              aria-selected={i === activeIdx}
               onMouseEnter={() => setActive(i)}
-              onClick={() => runRow(row)}
             >
-              <span className="cmdk-ico">
-                <Icon name={row.icon} size={14} />
-              </span>
-              <span className="cmdk-label">{row.label}</span>
-              {row.hint && <span className="cmdk-hint">{row.hint}</span>}
+              <button className="cmdk-item-main" tabIndex={-1} onClick={() => runRow(row)}>
+                <span className="cmdk-ico">
+                  <Icon name={row.icon} size={14} />
+                </span>
+                <span className="cmdk-label">{row.label}</span>
+                {row.hint && <span className="cmdk-hint">{row.hint}</span>}
+              </button>
               {row.aux && (
-                <button
-                  className="row-btn cmdk-aux"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    row.aux!.run();
-                  }}
-                >
+                <button className="row-btn cmdk-aux" onClick={() => row.aux!.run()}>
                   {row.aux.label}
                 </button>
               )}
