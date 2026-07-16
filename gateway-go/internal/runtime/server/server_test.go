@@ -16,7 +16,8 @@ import (
 )
 
 func TestHealthEndpointReturnsOKWithWorkerPoolStats(t *testing.T) {
-	srv := testutil.Must(New(":0"))
+	t.Parallel()
+	srv := sharedReadOnlyServer(t)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
@@ -186,6 +187,8 @@ func TestHealthEndpointReturnsUsageQualityAndPropusSignals(t *testing.T) {
 }
 
 func TestReadyEndpoint(t *testing.T) {
+	t.Parallel()
+	// Mutates ready — cannot share the read-only fixture.
 	srv := testutil.Must(New(":0"))
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ready", nil)
@@ -204,6 +207,7 @@ func TestReadyEndpoint(t *testing.T) {
 }
 
 func TestServerStartStop(t *testing.T) {
+	t.Parallel()
 	srv := testutil.Must(New("127.0.0.1:0"))
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
