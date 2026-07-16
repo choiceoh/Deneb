@@ -69,7 +69,19 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 		return nil, fmt.Errorf("groupware approval analysis cache unavailable")
 	}
 	cache := groupware.NewApprovalAnalysisStore(filepath.Join(s.denebDir, "cache", "approval_analysis"))
+	bodyStore := groupware.NewApprovalBodyStore(filepath.Join(s.denebDir, "cache", "approval_body"))
 	if rec, err := cache.Load(docID); err == nil && rec != nil {
+		// Analysis may outlive the body TTL — rewarm so the feed-card → detail
+		// hop still skips Playwright when the operator opens later.
+		if bodyStore.Load(docID) == "" {
+			if cfg, ok := groupware.FromEnv(); ok {
+				if body, rerr := groupware.ReadApprovalByDocIDIn(ctx, cfg, docID, doc.Folder); rerr == nil && strings.TrimSpace(body) != "" {
+					_ = bodyStore.Save(docID, body)
+				} else if s.logger != nil && rerr != nil {
+					s.logger.Warn("groupware radar approval body rewarm failed", "docId", docID, "err", rerr)
+				}
+			}
+		}
 		if approvalAnalysisMeaningfulForWiki(rec.Importance) {
 			s.logApprovalAnalysisToWiki(rec)
 		}
@@ -94,7 +106,7 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 	}
 	// Prewarm the body cache — the card's detail open right after the
 	// notification is the hottest path.
-	_ = groupware.NewApprovalBodyStore(filepath.Join(s.denebDir, "cache", "approval_body")).Save(docID, body)
+	_ = bodyStore.Save(docID, body)
 	title := strings.TrimSpace(doc.Title)
 	if title == "" {
 		title = firstNonEmptyLine(body)

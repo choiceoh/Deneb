@@ -3,11 +3,69 @@ package handlerminiapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
+
+func TestGroupwareApprovalsList_AfterDocIdPages(t *testing.T) {
+	docs := make([]groupware.ApprovalSummary, 0, 45)
+	for i := 1; i <= 45; i++ {
+		docs = append(docs, groupware.ApprovalSummary{
+			DocID:  fmt.Sprintf("%02d", i),
+			Title:  fmt.Sprintf("품의 %d", i),
+			Date:   "2026-07-16",
+			Status: "결재완료",
+			Folder: "done",
+		})
+	}
+	var gotLimit int
+	h := GroupwareApprovalsMethods(GroupwareApprovalsDeps{
+		List: func(_ context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error) {
+			gotLimit = limit
+			if folder == "pending" {
+				return nil, nil
+			}
+			if limit > len(docs) {
+				return docs, nil
+			}
+			return docs[:limit], nil
+		},
+		Act: func(context.Context, string, string, string) (string, error) { return "", nil },
+	})["miniapp.groupware.approvals.list"]
+
+	first := h(authedCtx(), reqWith(t, "miniapp.groupware.approvals.list", map[string]any{
+		"folder": "total",
+		"limit":  20,
+	}))
+	var page1 GroupwareApprovalsListResponse
+	decode(t, first, &page1)
+	if gotLimit != 20 {
+		t.Fatalf("first fetch limit=%d, want 20", gotLimit)
+	}
+	if len(page1.Approvals) != 20 || page1.NextAfterDocID != "20" {
+		t.Fatalf("page1 len=%d next=%q", len(page1.Approvals), page1.NextAfterDocID)
+	}
+
+	second := h(authedCtx(), reqWith(t, "miniapp.groupware.approvals.list", map[string]any{
+		"folder":     "total",
+		"limit":      20,
+		"afterDocId": page1.NextAfterDocID,
+	}))
+	var page2 GroupwareApprovalsListResponse
+	decode(t, second, &page2)
+	if gotLimit != maxApprovalsLimit {
+		t.Fatalf("afterDocId fetch limit=%d, want %d", gotLimit, maxApprovalsLimit)
+	}
+	if len(page2.Approvals) != 20 || page2.Approvals[0].DocID != "21" {
+		t.Fatalf("page2 first=%v len=%d", page2.Approvals[0], len(page2.Approvals))
+	}
+	if page2.NextAfterDocID != "40" {
+		t.Fatalf("page2 next=%q, want 40", page2.NextAfterDocID)
+	}
+}
 
 func TestGroupwareApprovalsList_DefaultsToTotalAndFiltersDate(t *testing.T) {
 	var folders []string

@@ -10,10 +10,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
-// ApprovalBodyTTL bounds body-cache freshness: the document text itself is
-// immutable once submitted, but the embedded 결재선 progress lines change as
-// approvers act, so a cached body ages out quickly.
-const ApprovalBodyTTL = 10 * time.Minute
+// ApprovalBodyTTL bounds body-cache freshness. Document prose is immutable
+// once submitted; 결재선 progress lines can drift, but a multi-hour window is
+// worth the detail-open hit rate after radar prewarm (operators often open
+// hours after the feed card). A 10-minute TTL expired before most opens.
+const ApprovalBodyTTL = 6 * time.Hour
 
 // ApprovalBodyRecord is the on-disk shape of one cached 전자결재 body.
 type ApprovalBodyRecord struct {

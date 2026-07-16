@@ -148,7 +148,7 @@ class MiniappWireDescriptorContractTest {
             name = "GroupwareApprovalsListResponse",
             serializer = GroupwareApprovalsListResponse.serializer(),
             empty = GroupwareApprovalsListResponse(),
-            fields = listOf("approvals", "folder"),
+            fields = listOf("approvals", "folder", "nextAfterDocId"),
         ),
         contract(
             name = "GroupwareBoardPostResponse",

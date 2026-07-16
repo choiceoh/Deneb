@@ -612,6 +612,11 @@ class MiniappWireValueContractTest {
                     value = boundaryText,
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "nextAfterDocId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "approvals",
             invalidValue = JsonObject(mapOf("not" to JsonPrimitive("a-list"))),

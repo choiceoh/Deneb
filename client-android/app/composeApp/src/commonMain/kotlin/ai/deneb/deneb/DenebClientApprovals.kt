@@ -5,6 +5,7 @@ import ai.deneb.deneb.generated.GroupwareApprovalAnalysisOut
 import ai.deneb.deneb.generated.GroupwareApprovalGetResponse
 import ai.deneb.deneb.generated.GroupwareApprovalRow
 import ai.deneb.deneb.generated.GroupwareApprovalsListResponse
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -14,15 +15,17 @@ import kotlinx.serialization.json.put
 /** First-page size persisted to settings (matches the approvals screen page). */
 internal const val APPROVALS_PERSIST_PAGE_SIZE = 20
 
-// Session-scoped list cache. Fixed page sizes (20/40/…/100) make the key
-// trivial: one entry per folder, and a larger fetch satisfies a smaller
-// read via take(limit). Mirrors gmail listCache TTL — long enough for
-// list ↔ detail / feed ↔ approvals hops, short enough that new 미결 show up.
+/** Gateway `maxApprovalsLimit` — requesting more is clamped server-side. */
+internal const val APPROVALS_MAX_LIMIT = 100
+
+// Session-scoped list cache for undated first-page reads (TTL). Larger pages
+// and afterDocId loads always hit the network.
 private const val APPROVAL_LIST_CACHE_TTL_MS = 30_000L
 
 private data class CachedApprovalsList(
     val folder: String,
     val rows: List<GroupwareApprovalRow>,
+    val nextAfterDocId: String?,
     val atMs: Long,
 )
 
@@ -43,19 +46,17 @@ fun peekCachedApprovals(folder: String = "total"): List<GroupwareApprovalRow>? {
     return hit.rows
 }
 
-private fun freshCachedApprovals(folder: String, limit: Int, nowMs: Long): List<GroupwareApprovalRow>? {
+private fun freshCachedApprovalsPage(folder: String, limit: Int, nowMs: Long): CachedApprovalsList? {
     val hit = approvalListCache ?: return null
     if (hit.folder != folder) return null
     if (nowMs - hit.atMs > APPROVAL_LIST_CACHE_TTL_MS) return null
-    if (hit.rows.size < limit) return null
-    return hit.rows.take(limit)
+    if (hit.rows.size < limit && hit.nextAfterDocId != null) return null
+    return hit.copy(rows = hit.rows.take(limit))
 }
 
 private fun markApprovalActed(rows: List<GroupwareApprovalRow>, docId: String): List<GroupwareApprovalRow> = rows.map { row -> if (row.docId == docId) row.copy(canAct = false) else row }
 
 // --- Settings-backed first-page cache (cache-then-network, like mail) -----
-// Only folder=total undated lists are persisted. Owner fingerprint prevents a
-// prior gateway/account cache from rendering under new credentials.
 private val approvalsCacheJson = Json { ignoreUnknownKeys = true }
 
 @Serializable
@@ -87,10 +88,6 @@ internal fun DenebGatewayClient.storeCachedApprovals(rows: List<GroupwareApprova
     )
 }
 
-/**
- * Apply a membership/canAct change to the persisted first page so a kill before
- * the next refresh can't resurrect a still-미결 row. No-op when there's no cache.
- */
 internal fun DenebGatewayClient.patchCachedApprovals(
     transform: (List<GroupwareApprovalRow>) -> List<GroupwareApprovalRow>,
 ) {
@@ -98,21 +95,37 @@ internal fun DenebGatewayClient.patchCachedApprovals(
     storeCachedApprovals(transform(cached))
 }
 
+/** Seed StateFlow from session/disk cache for an instant paint. */
+internal fun DenebGatewayClient.seedApprovalsFromCache() {
+    if (_denebApprovalsReady.value && _denebApprovals.value.isNotEmpty()) return
+    val seed = peekCachedApprovals("total") ?: loadCachedApprovals() ?: return
+    _denebApprovals.value = seed
+    _denebApprovalsReady.value = true
+    // Unknown whether more pages exist until the network refresh lands.
+    if (_denebApprovalsNextAfter.value == null && seed.size >= APPROVALS_PERSIST_PAGE_SIZE) {
+        _denebApprovalsNextAfter.value = seed.lastOrNull()?.docId
+    }
+}
+
 /**
  * Recent 전체 결재 (`miniapp.groupware.approvals.list`, folder=total by default).
- * Optional [date] (YYYY-MM-DD) asks the gateway to return only that day's rows.
- * Undated reads hit the session list cache when a large-enough page is fresh;
- * [forceRefresh] bypasses the cache (pull-to-refresh). Null on transport/auth failure.
+ * Replaces [_denebApprovals] on a first-page fetch; use [loadMoreApprovals] to append.
+ * [forceRefresh] bypasses the session TTL cache (pull-to-refresh).
  */
 suspend fun DenebGatewayClient.fetchApprovals(
     folder: String = "total",
-    limit: Int = 100,
+    limit: Int = APPROVALS_PERSIST_PAGE_SIZE,
     date: String? = null,
     forceRefresh: Boolean = false,
 ): List<GroupwareApprovalRow>? {
     val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
     if (!forceRefresh && date.isNullOrBlank()) {
-        freshCachedApprovals(folder, limit, nowMs)?.let { return it }
+        freshCachedApprovalsPage(folder, limit, nowMs)?.let { hit ->
+            _denebApprovals.value = hit.rows
+            _denebApprovalsNextAfter.value = hit.nextAfterDocId
+            _denebApprovalsReady.value = true
+            return hit.rows
+        }
     }
     val p = callRpc<GroupwareApprovalsListResponse>(
         "miniapp.groupware.approvals.list",
@@ -123,13 +136,59 @@ suspend fun DenebGatewayClient.fetchApprovals(
         },
     ) ?: return null
     val rows = p.approvals.filter { it.docId.isNotBlank() }
+    val nextAfter = p.nextAfterDocId.ifBlank { null }
     if (date.isNullOrBlank()) {
-        approvalListCache = CachedApprovalsList(folder = folder, rows = rows, atMs = nowMs)
-        // Persist the first page for cold-start paint (folder=total only — the
-        // screen's default view; other folders aren't cached).
+        approvalListCache = CachedApprovalsList(
+            folder = folder,
+            rows = rows,
+            nextAfterDocId = nextAfter,
+            atMs = nowMs,
+        )
         if (folder == "total") storeCachedApprovals(rows)
+        _denebApprovals.value = rows
+        _denebApprovalsNextAfter.value = nextAfter
+        _denebApprovalsReady.value = true
     }
     return rows
+}
+
+/** Append the next page using [denebApprovalsNextAfter]. No-op when exhausted. */
+suspend fun DenebGatewayClient.loadMoreApprovals(
+    folder: String = "total",
+    limit: Int = APPROVALS_PERSIST_PAGE_SIZE,
+) {
+    val after = _denebApprovalsNextAfter.value ?: return
+    if (_denebApprovals.value.size >= APPROVALS_MAX_LIMIT) {
+        _denebApprovalsNextAfter.value = null
+        return
+    }
+    val p = callRpc<GroupwareApprovalsListResponse>(
+        "miniapp.groupware.approvals.list",
+        buildJsonObject {
+            put("folder", folder)
+            put("limit", limit)
+            put("afterDocId", after)
+        },
+    ) ?: return
+    val page = p.approvals.filter { it.docId.isNotBlank() }
+    if (page.isEmpty()) {
+        _denebApprovalsNextAfter.value = null
+        return
+    }
+    val seen = _denebApprovals.value.mapTo(HashSet()) { it.docId }
+    val appended = page.filter { it.docId !in seen }
+    val merged = (_denebApprovals.value + appended).take(APPROVALS_MAX_LIMIT)
+    _denebApprovals.value = merged
+    _denebApprovalsNextAfter.value = when {
+        merged.size >= APPROVALS_MAX_LIMIT -> null
+        else -> p.nextAfterDocId.ifBlank { null }
+    }
+    // Keep session cache as first page only; persist stays first page too.
+    approvalListCache = approvalListCache?.copy(
+        rows = merged.take(APPROVALS_PERSIST_PAGE_SIZE).ifEmpty { merged },
+        nextAfterDocId = _denebApprovalsNextAfter.value,
+        atMs = kotlin.time.Clock.System.now().toEpochMilliseconds(),
+    )
 }
 
 /**
@@ -153,6 +212,7 @@ suspend fun DenebGatewayClient.actApproval(
     ) ?: return null
     if (out.ok) {
         val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        _denebApprovals.update { markApprovalActed(it, id) }
         approvalListCache = approvalListCache?.let { hit ->
             hit.copy(rows = markApprovalActed(hit.rows, id), atMs = nowMs)
         }
@@ -162,8 +222,8 @@ suspend fun DenebGatewayClient.actApproval(
 }
 
 // Session-scoped body cache: opening the same 결재 twice (list ↔ detail hops)
-// must not pay the reader roundtrip again. The gateway keeps its own 10-minute
-// disk cache; this only bridges in-session navigation.
+// must not pay the reader roundtrip again. The gateway keeps its own disk
+// cache; this only bridges in-session navigation.
 private const val APPROVAL_BODY_CACHE_MAX = 24
 private const val APPROVAL_BODY_CACHE_TTL_MS = 5 * 60 * 1000L
 

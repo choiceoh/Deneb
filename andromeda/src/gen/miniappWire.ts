@@ -133,6 +133,7 @@ export interface GroupwareApprovalRow {
 export interface GroupwareApprovalsListResponse {
   approvals?: GroupwareApprovalRow[]
   folder?: string
+  nextAfterDocId?: string
 }
 
 export interface GroupwareBoardPostResponse {

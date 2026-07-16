@@ -18,11 +18,13 @@ type GroupwareApprovalRow struct {
 }
 
 // GroupwareApprovalsListResponse is the miniapp.groupware.approvals.list payload.
+// NextAfterDocID is set when another page may exist; pass it back as afterDocId.
 //
 //deneb:wire
 type GroupwareApprovalsListResponse struct {
-	Approvals []GroupwareApprovalRow `json:"approvals"`
-	Folder    string                 `json:"folder"`
+	Approvals      []GroupwareApprovalRow `json:"approvals"`
+	Folder         string                 `json:"folder"`
+	NextAfterDocID string                 `json:"nextAfterDocId,omitempty"`
 }
 
 // GroupwareApprovalActResponse is the miniapp.groupware.approvals.act payload.
