@@ -33,12 +33,13 @@ func TestBuildSystemPromptRendersRequiredSections(t *testing.T) {
 	// Check required sections exist.
 	sections := []string{
 		"You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb).",
-		"## 소통",
-		"## 태도",
-		"## 행동 원칙",
-		"## 실행 우선",
+		"## Role",
+		"## Communication",
+		"## Attitude",
+		"## Action Principles",
+		"## Execution Bias",
 		"## Trust and Respect",
-		"## 안전",
+		"## Safety",
 		"## Tooling",
 		"## Tool Usage",
 		"## 위키 — 너의 외부 메모리",
@@ -61,11 +62,12 @@ func TestBuildSystemPromptRendersRequiredSections(t *testing.T) {
 func TestBuildSystemPromptRendersWorkPersona(t *testing.T) {
 	tools := []ToolDef{{Name: "read"}, {Name: "wiki"}, {Name: "exec"}}
 
-	// 업무 workspace: Nev persona + 비서실장 + 위키 외부메모리 all present. The
-	// retired 챗봇 neutral-assistant identity must never render — every
+	// Business workspace: Nev persona + chief-of-staff role + wiki external
+	// memory all present. The retired neutral-assistant identity must never
+	// render — every
 	// non-coding session gets the single chief-of-staff persona.
 	work := BuildSystemPrompt(SystemPromptParams{ToolDefs: tools})
-	for _, want := range []string{"You are Nev", "비서실장", "## 위키 — 너의 외부 메모리", "## 작업 기억"} {
+	for _, want := range []string{"You are Nev", "chief-of-staff", "## 위키 — 너의 외부 메모리", "## 작업 기억"} {
 		if !strings.Contains(work, want) {
 			t.Errorf("업무 prompt regression — missing %q", want)
 		}
@@ -76,21 +78,39 @@ func TestBuildSystemPromptRendersWorkPersona(t *testing.T) {
 	if strings.Contains(work, "helpful, knowledgeable AI assistant") {
 		t.Error("업무 prompt must not carry the retired 챗봇 neutral identity")
 	}
-	if !strings.Contains(work, "비효율적이거나 어색한 것은 지적하라") {
+	if !strings.Contains(work, "Call out inefficient or awkward choices") {
 		t.Error("업무 prompt lost its proactive-critique attitude line")
 	}
 }
 
-// TestBuildSystemPromptRendersPolarisSectionWhenToolPresent pins the tool-conditional 회상 coaching:
+func TestEnglishControlPromptPreservesKoreanContracts(t *testing.T) {
+	prompt := BuildSystemPrompt(SystemPromptParams{
+		ToolDefs: []ToolDef{{Name: "gateway"}, {Name: "mail_archive"}, {Name: "groupware"}},
+	})
+
+	for _, want := range []string{
+		"Always respond in Korean.",
+		"'왜 대답이 없었어?'",
+		"[SYSTEM: ... 전송이 확인되지 않았습니다 ...]",
+		"'상태'·'재시작'·'업데이트'·'설정 변경'",
+		"재고·출고·입고·발주",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("English control prompt lost Korean contract %q", want)
+		}
+	}
+}
+
+// TestBuildSystemPromptRendersPolarisSectionWhenToolPresent pins the tool-conditional recall coaching:
 // coaching a model to call polaris when the preset withholds the tool produces
 // failed tool-call loops, so the section renders only when the tool is present.
 func TestBuildSystemPromptRendersPolarisSectionWhenToolPresent(t *testing.T) {
 	with := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}, {Name: "polaris"}}})
-	if !strings.Contains(with, "## 회상 (polaris)") {
+	if !strings.Contains(with, "## Recall (polaris)") {
 		t.Error("polaris-carrying prompt missing 회상 section")
 	}
 	without := BuildSystemPrompt(SystemPromptParams{ToolDefs: []ToolDef{{Name: "read"}}})
-	if strings.Contains(without, "## 회상 (polaris)") {
+	if strings.Contains(without, "## Recall (polaris)") {
 		t.Error("polaris-less prompt must not coach the polaris tool")
 	}
 }
@@ -140,7 +160,7 @@ func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 	}
 
 	prompt := buildSemiStaticPrompt(params)
-	if !strings.Contains(prompt, "## 스킬") {
+	if !strings.Contains(prompt, "## Skills") {
 		t.Error("missing skills section")
 	}
 	if !strings.Contains(prompt, "test-skill") {
@@ -156,8 +176,8 @@ func TestBuildSystemPromptRendersSkillsAndThinPropusRouter(t *testing.T) {
 	}
 	for _, want := range []string{
 		"### Propus",
-		"`evolution-proposal` SKILL.md를 읽고",
-		"상세 doctrine·route·검증·자가수정 queue·rollback 규칙의 유일한 소유자는 `evolution-proposal`",
+		"Read and follow `evolution-proposal` SKILL.md",
+		"`evolution-proposal` is the sole owner of detailed doctrine",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("missing thin Propus router content %q", want)
@@ -192,7 +212,7 @@ func TestBuildSystemPromptRendersSkillsSectionWithoutSkills(t *testing.T) {
 
 	prompt := BuildSystemPrompt(params)
 	// Even without always-skills, the skills section appears with skills tool hint.
-	if !strings.Contains(prompt, "## 스킬") {
+	if !strings.Contains(prompt, "## Skills") {
 		t.Error("skills section should always appear with skills tool hint")
 	}
 	if !strings.Contains(prompt, "skills") {
