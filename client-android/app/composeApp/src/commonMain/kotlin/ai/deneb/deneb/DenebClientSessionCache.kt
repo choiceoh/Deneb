@@ -5,6 +5,8 @@ import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.deneb.generated.DashboardOut
 import ai.deneb.deneb.generated.NotebookSummaryOut
 import ai.deneb.deneb.generated.OrgTreeOut
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -35,10 +37,29 @@ internal class SessionCache<T : Any>(
     private var at: TimeSource.Monotonic.ValueTimeMark? = null
     private var value: T? = null
     private var diskChecked = false
+    private var invalidationVersion = 0L
+    private val loadMutex = Mutex()
 
     /** The cached value while it is younger than the TTL, else null. A disk-seeded
      *  value is never fresh — it paints, but the fetch still goes out. */
-    fun fresh(): T? = value?.takeIf { at?.let { mark -> mark.elapsedNow() < ttl } == true }
+    private fun fresh(): T? = value?.takeIf { at?.let { mark -> mark.elapsedNow() < ttl } == true }
+
+    /**
+     * Reuse the fresh value or run one loader at a time. The second cache check
+     * after acquiring the mutex collapses concurrent non-forced entries onto the
+     * first request. A failed/cancelled loader leaves the cache untouched, and an
+     * invalidation during loading prevents that now-stale result from being cached.
+     */
+    suspend fun getOrLoad(force: Boolean = false, load: suspend () -> T?): T? {
+        if (!force) fresh()?.let { return it }
+        return loadMutex.withLock {
+            if (!force) fresh()?.let { return@withLock it }
+            val version = invalidationVersion
+            val loaded = load() ?: return@withLock null
+            if (version == invalidationVersion) store(loaded)
+            loaded
+        }
+    }
 
     /** Last-known value regardless of age — memory first, then one lazy disk read.
      *  For the screens' instant stale paint on cold start. */
@@ -51,7 +72,7 @@ internal class SessionCache<T : Any>(
         return value
     }
 
-    fun store(v: T) {
+    private fun store(v: T) {
         value = v
         at = TimeSource.Monotonic.markNow()
         diskChecked = true
@@ -59,6 +80,7 @@ internal class SessionCache<T : Any>(
     }
 
     fun invalidate() {
+        invalidationVersion++
         value = null
         at = null
         diskChecked = true

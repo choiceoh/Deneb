@@ -30,11 +30,8 @@ import kotlinx.serialization.json.put
  * Session-cached so re-entering the section within the TTL skips the network;
  * pull-to-refresh passes force=true and a save invalidates.
  */
-suspend fun DenebGatewayClient.fetchOrg(force: Boolean = false): OrgTreeOut? {
-    if (!force) sectionCaches.org.fresh()?.let { return it }
-    val out = callRpc<OrgTreeOut>("miniapp.org.get", buildJsonObject {}) ?: return null
-    sectionCaches.org.store(out)
-    return out
+suspend fun DenebGatewayClient.fetchOrg(force: Boolean = false): OrgTreeOut? = sectionCaches.org.getOrLoad(force) {
+    callRpc<OrgTreeOut>("miniapp.org.get", buildJsonObject {})
 }
 
 /**
