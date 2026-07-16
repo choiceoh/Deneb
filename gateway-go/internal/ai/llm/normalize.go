@@ -51,6 +51,93 @@ func NormalizeMessages(messages []Message) []Message {
 	return result
 }
 
+// RepairToolPairing heals tool_use/tool_result pairing that history pruning or
+// compaction can break. Strict backends reject both defects (observed live:
+// kimi 400 "tool_call_ids did not have response messages" on a 151-message
+// session, which silently demoted every main-role turn to the fallback model):
+//
+//   - forward orphan — an assistant tool_use whose result message was pruned:
+//     a synthetic tool_result ("unavailable") is inserted right after the
+//     assistant message, preserving what the model said.
+//   - reverse orphan — a tool_result whose originating tool_use was pruned:
+//     the block is dropped (a result may not precede or float without its
+//     use); a message left empty is removed by DropEmptyMessages.
+//
+// Run it BEFORE NormalizeMessages so an inserted user message merges into an
+// adjacent one. The input slice is not modified.
+func RepairToolPairing(messages []Message) []Message {
+	// Pass 1: index each tool_use by id, and mark ids whose result appears in
+	// a LATER message (the only placement strict backends accept).
+	useAt := make(map[string]int)
+	resolved := make(map[string]bool)
+	reverseOrphans := false
+	for i := range messages {
+		for _, b := range ContentToBlocks(messages[i].Content) {
+			switch b.Type {
+			case "tool_use":
+				if b.ID != "" {
+					useAt[b.ID] = i
+				}
+			case "tool_result":
+				if at, ok := useAt[b.ToolUseID]; ok && at < i {
+					resolved[b.ToolUseID] = true
+				} else {
+					reverseOrphans = true
+				}
+			}
+		}
+	}
+	forwardOrphans := len(resolved) < len(useAt)
+	if !forwardOrphans && !reverseOrphans {
+		return messages
+	}
+
+	out := make([]Message, 0, len(messages)+1)
+	for i := range messages {
+		msg := messages[i]
+		blocks := ContentToBlocks(msg.Content)
+		if reverseOrphans {
+			kept := make([]ContentBlock, 0, len(blocks))
+			for _, b := range blocks {
+				if b.Type == "tool_result" {
+					if at, ok := useAt[b.ToolUseID]; !ok || at >= i {
+						continue // orphaned result: its tool_use is gone
+					}
+				}
+				kept = append(kept, b)
+			}
+			if len(kept) != len(blocks) {
+				if len(kept) == 0 {
+					// Stripped to nothing: drop the message outright — the
+					// OpenAI path has no DropEmptyMessages pass, and an empty
+					// message is its own rejection risk.
+					continue
+				}
+				blocks = kept
+				msg.Content = marshalBlocks(kept)
+			}
+		}
+		out = append(out, msg)
+		// Synthesize results for this message's unresolved tool_use ids so the
+		// pair is complete where the backend expects it: immediately after.
+		var synth []ContentBlock
+		for _, b := range blocks {
+			if b.Type == "tool_use" && b.ID != "" && !resolved[b.ID] && useAt[b.ID] == i {
+				synth = append(synth, ContentBlock{
+					Type:      "tool_result",
+					ToolUseID: b.ID,
+					Content:   "[tool result unavailable: pruned from history]",
+					IsError:   true,
+				})
+			}
+		}
+		if len(synth) > 0 {
+			out = append(out, Message{Role: "user", Content: marshalBlocks(synth)})
+		}
+	}
+	return out
+}
+
 // DropEmptyMessages removes messages that carry no usable content — no
 // non-blank text and no structural block (tool_use, tool_result, image,
 // thinking). Anthropic rejects such messages ("... must not be empty"); they
