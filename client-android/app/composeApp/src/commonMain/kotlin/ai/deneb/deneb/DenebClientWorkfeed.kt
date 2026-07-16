@@ -106,7 +106,10 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // cron, or another client) rides the sync stream as a calendar.changed event.
     // It carries no payload — the client just refetches — so we collect it as a
     // flag here and force the post-gate warm to refresh, bypassing the throttle.
+    // mail.changed (LMTP arrival, archive/trash from another client) forces the
+    // same warm — it refreshes both home caches, which is the point.
     var calendarChanged = false
+    var mailChanged = false
     nativeSyncGate.withLock {
         var cursor = nativeSyncCursor
         var keepGoing = true
@@ -134,6 +137,7 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
             payload.events.forEach { ev ->
                 applyNativeSyncEvent(ev, reloadSessions)
                 if (ev.type == "calendar.changed") calendarChanged = true
+                if (ev.type == "mail.changed") mailChanged = true
             }
             val nextCursor = payload.cursor.coerceAtLeast(cursor)
             if (nextCursor > nativeSyncCursor) {
@@ -175,10 +179,10 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     if (_denebWorkFeed.value.isEmpty()) {
         refreshWorkFeed()
     }
-    // A calendar.changed event arrived: clear the throttle so the warm below refreshes
-    // now rather than waiting out DenebGatewayClient.HOME_WARM_INTERVAL — the home calendar glance should
-    // reflect a just-created/edited event immediately.
-    if (calendarChanged) lastHomeWarm = null
+    // A calendar.changed/mail.changed event arrived: clear the throttle so the warm
+    // below refreshes now rather than waiting out DenebGatewayClient.HOME_WARM_INTERVAL —
+    // the home glance (and an open mail tab) should reflect the change immediately.
+    if (calendarChanged || mailChanged) lastHomeWarm = null
     // Reaching here means the gateway answered the pull, so it's reachable: warm the
     // rest of the home so the offline shell stays RECENT, not just last-visited. The
     // feed is already current (incremental sync events + the cold-prime above), but
@@ -526,6 +530,11 @@ private fun DenebGatewayClient.applyNativeSyncEvent(event: NativeSyncEvent, relo
             sectionCaches.org.invalidate()
             sectionCaches.dashboard.invalidate()
         }
+
+        // Approval-list drift the groupware radar observed (new pending, resolution,
+        // new 수신참조): drop the list caches so the next 결재 view refetches.
+        // (mail.changed is handled as a force-warm flag in syncNativeState, not here.)
+        "approvals.changed" -> invalidateApprovalsListCache()
     }
 }
 

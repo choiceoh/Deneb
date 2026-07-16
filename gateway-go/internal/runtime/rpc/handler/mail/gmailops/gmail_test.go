@@ -1037,3 +1037,32 @@ func lastN(s string, n int) string {
 	}
 	return s[len(s)-n:]
 }
+
+// The native-sync mirror contract: inbox-membership mutations (archive/trash)
+// notify with the message id so other clients force-warm their list; mark_read
+// stays silent (membership unchanged, server list cache intentionally kept).
+func TestMutationsNotifyChanged_MarkReadStaysSilent(t *testing.T) {
+	var calls int
+	client := inboxStub(&calls)
+	var notified []string
+	deps := depsFor(client)
+	deps.NotifyChanged = func(id string) { notified = append(notified, id) }
+	cache := newListCache(30 * time.Second)
+
+	if resp := gmailMarkRead(deps)(authedCtx(), reqWith(t, "miniapp.gmail.mark_read", map[string]any{"id": "m1"})); !resp.OK {
+		t.Fatalf("mark_read failed: %+v", resp.Error)
+	}
+	if len(notified) != 0 {
+		t.Fatalf("mark_read notified %v, want silence", notified)
+	}
+
+	if resp := gmailArchive(deps, cache)(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"})); !resp.OK {
+		t.Fatalf("archive failed: %+v", resp.Error)
+	}
+	if resp := gmailTrash(deps, cache)(authedCtx(), reqWith(t, "miniapp.gmail.trash", map[string]any{"id": "m2"})); !resp.OK {
+		t.Fatalf("trash failed: %+v", resp.Error)
+	}
+	if len(notified) != 2 || notified[0] != "m1" || notified[1] != "m2" {
+		t.Fatalf("notified = %v, want [m1 m2]", notified)
+	}
+}

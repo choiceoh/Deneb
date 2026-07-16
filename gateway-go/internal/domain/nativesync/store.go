@@ -42,6 +42,16 @@ const (
 	// the desktop workstation). The client drops its org/dashboard snapshots and
 	// refetches on next view.
 	TypeOrgChanged = "org.changed"
+	// TypeMailChanged signals the mail list drifted server-side — a new LMTP
+	// delivery, or an archive/trash from another client. The client force-warms
+	// its mail cache (bypassing the home-warm throttle, like calendar.changed).
+	// mark_read deliberately does NOT emit: it leaves inbox membership intact and
+	// the server's 30s list cache would serve the same rows anyway.
+	TypeMailChanged = "mail.changed"
+	// TypeApprovalsChanged signals the groupware radar observed approval-list
+	// drift (new pending, resolution, new 수신참조). The client drops its
+	// approvals list cache and refetches on next view.
+	TypeApprovalsChanged = "approvals.changed"
 )
 
 // ErrInvalidEvent reports an append without an event type.

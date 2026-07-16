@@ -69,6 +69,25 @@ func OrgChanged() AppendInput {
 	return AppendInput{Type: TypeOrgChanged}
 }
 
+// MailChanged signals a server-side mail-list drift (LMTP delivery, archive/
+// trash from another client). messageID is for traceability only — the client
+// refreshes the whole list, so no payload.
+func MailChanged(messageID string) AppendInput {
+	return AppendInput{
+		Type:     TypeMailChanged,
+		EntityID: messageID,
+	}
+}
+
+// ApprovalsChanged signals approval-list drift observed by the groupware radar
+// (new pending, resolution, new 수신참조). docID is for traceability only.
+func ApprovalsChanged(docID string) AppendInput {
+	return AppendInput{
+		Type:     TypeApprovalsChanged,
+		EntityID: docID,
+	}
+}
+
 // WorkFeedCreated builds a work-feed creation event.
 func WorkFeedCreated(item workfeed.Item) AppendInput {
 	return workFeedItem(TypeWorkFeedCreated, item)
