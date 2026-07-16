@@ -39,7 +39,6 @@ import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -233,24 +232,28 @@ class DenebGatewayClient private constructor(
     val denebCalProposals: StateFlow<List<ai.deneb.deneb.generated.CalendarProposalOut>> = _denebCalProposals
 
     // Session caches for the 더보기 section list fetches (카테고리·사람·연락처·일기·
-    // 노트북·현황·조직도) — see DenebClientSessionCache.kt. Instance-scoped so a
-    // fresh client (test harness, credential switch) starts cold.
-    internal val sectionCaches = SectionCaches()
+    // 노트북·현황·조직도), the wiki browse loop, and the calendar month grid —
+    // see DenebClientSessionCache.kt. Instance-scoped so a fresh client (test
+    // harness) starts cold; disk snapshots are owner-fingerprinted per account.
+    internal val sectionCaches = SectionCaches(appSettings) { mailCacheOwner(gatewayUrl, clientToken) }
 
     // Calendar month cache (range-key → when-fetched + events). The calendar
     // screen's own cache is composition-scoped, so every tab switch back to the
     // calendar re-hit Google for the visible month + both neighbors (~270ms each).
-    // This client-level cache survives navigation, making a rapid re-open instant;
-    // a short TTL bounds staleness and force=true (pull-to-refresh, after an edit)
-    // bypasses it. Accessed only from the screen's Main-scoped coroutines.
-    private val calRangeCache = mutableMapOf<String, Pair<TimeSource.Monotonic.ValueTimeMark, List<CalendarEvent>>>()
+    // This client-level cache survives navigation (and, disk-backed, restarts —
+    // the grid paints the last-known dots instantly on cold start); a short TTL
+    // bounds staleness and force=true (pull-to-refresh, after an edit) bypasses
+    // it. Accessed only from the screen's Main-scoped coroutines.
 
     /** Cached events for [key] if still within the TTL, else null. */
-    internal fun cachedCalendarRange(key: String): List<CalendarEvent>? = calRangeCache[key]?.takeIf { it.first.elapsedNow() < CAL_RANGE_TTL }?.second
+    internal fun cachedCalendarRange(key: String): List<CalendarEvent>? = sectionCaches.calendarRanges.fresh(key)
+
+    /** Last-known events for [key] regardless of age — the cold-start stale paint. */
+    internal fun peekCalendarRange(key: String): List<CalendarEvent>? = sectionCaches.calendarRanges.peek(key)
 
     /** Store a freshly-fetched range under [key], stamped now. */
     internal fun storeCalendarRange(key: String, events: List<CalendarEvent>) {
-        calRangeCache[key] = TimeSource.Monotonic.markNow() to events
+        sectionCaches.calendarRanges.store(key, events)
     }
 
     // Native-client handshake snapshot: gateway version, active model, and
@@ -398,7 +401,7 @@ class DenebGatewayClient private constructor(
         _denebScheduledTasks.value = emptyList()
         _denebCalendar.value = emptyList()
         _denebCalProposals.value = emptyList()
-        calRangeCache.clear()
+        sectionCaches.clearAll()
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()
@@ -670,12 +673,6 @@ class DenebGatewayClient private constructor(
         // run minutes — and the poll cadence.
         const val STREAM_RECOVERY_BUDGET_MS = 90_000L
         const val STREAM_RECOVERY_POLL_MS = 3_000L
-
-        // How long a fetched calendar month is served from the client cache before
-        // a re-open refetches. Short enough that an event added elsewhere surfaces
-        // soon (and pull-to-refresh / edits force immediately), long enough that
-        // rapid tab-switching back to the calendar is instant.
-        val CAL_RANGE_TTL = 120.seconds
 
         // Minimum gap between background warms of the calendar + mail caches (see
         // warmHomeCachesThrottled). Frequent enough that a backgrounded app keeps a

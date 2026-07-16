@@ -432,6 +432,20 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_APPROVALS_CACHE, json)
     }
 
+    // Section snapshot cache (one key per browse surface — 카테고리·사람·연락처·일기·
+    // 노트북·현황·조직도·위키 목록·달력 월그리드), the disk backing behind the client's
+    // SessionCache slots (DenebClientSessionCache.kt). Owner-fingerprinted envelopes
+    // like mail/feed, so a prior account's snapshot can't render under new credentials.
+    fun getCachedSection(key: String): String? = settings.getStringOrNull(KEY_SECTION_CACHE_PREFIX + key)
+
+    fun putCachedSection(key: String, json: String) {
+        settings.putString(KEY_SECTION_CACHE_PREFIX + key, json)
+    }
+
+    fun removeCachedSection(key: String) {
+        settings.remove(KEY_SECTION_CACHE_PREFIX + key)
+    }
+
     /**
      * Purge ALL cached private content (every transcript + the inbox list). Called
      * when the gateway URL or client token changes: those cache keys are global, so
@@ -449,6 +463,7 @@ class AppSettings(internal val settings: Settings) {
         settings.keys
             .filter {
                 it.startsWith(KEY_TX_CACHE_PREFIX) ||
+                    it.startsWith(KEY_SECTION_CACHE_PREFIX) ||
                     it == KEY_TX_CACHE_LRU ||
                     it == KEY_MAIL_CACHE ||
                     it == KEY_WORK_FEED_CACHE ||
@@ -516,6 +531,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_WORK_FEED_CACHE = "work_feed_cache"
         const val KEY_CALENDAR_CACHE = "calendar_cache"
         const val KEY_APPROVALS_CACHE = "approvals_list_cache"
+        const val KEY_SECTION_CACHE_PREFIX = "section_cache:"
         const val KEY_TX_CACHE_PREFIX = "tx_cache:"
         const val KEY_TX_CACHE_LRU = "tx_cache_lru"
         const val TX_CACHE_MAX_SESSIONS = 12

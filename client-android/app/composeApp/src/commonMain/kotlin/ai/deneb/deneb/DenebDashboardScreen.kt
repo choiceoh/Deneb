@@ -65,7 +65,9 @@ fun DenebDashboardScreen(
     onOpenWorkFeedItem: (String, Long) -> Unit = { _, _ -> },
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var lanes by remember { mutableStateOf<List<LaneOut>>(emptyList()) }
+    // Disk/session snapshot paints instantly (cache-then-network); load() refreshes
+    // (the loading/error branches below already guard on lanes.isEmpty()).
+    var lanes by remember { mutableStateOf(client.sectionCaches.dashboard.peek()?.lanes ?: emptyList()) }
     // null = load in flight, true = ok, false = fetch failed (mirrors DenebTodoScreen).
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
     var refreshing by remember { mutableStateOf(false) }

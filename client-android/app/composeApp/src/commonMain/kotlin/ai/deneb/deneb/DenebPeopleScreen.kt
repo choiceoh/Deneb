@@ -48,7 +48,8 @@ fun DenebPeopleScreen(
     onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var people by remember { mutableStateOf<List<PersonHit>?>(null) }
+    // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
+    var people by remember { mutableStateOf(client.sectionCaches.people.peek()) }
     var failed by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
@@ -57,9 +58,8 @@ fun DenebPeopleScreen(
     // fetch error offers retry instead of the misleading "no contacts" empty line.
     suspend fun load() {
         failed = false
-        people = null
         val fetched = client.fetchPeople()
-        if (fetched == null) failed = true else people = fetched
+        if (fetched == null) failed = people == null else people = fetched
     }
     LaunchedEffect(Unit) { load() }
 

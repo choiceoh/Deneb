@@ -1,7 +1,6 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.NotebookOut
-import ai.deneb.deneb.generated.NotebookSummaryOut
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
@@ -39,7 +38,8 @@ fun DenebNotebooksScreen(
     initialOpenId: String? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var notebooks by remember { mutableStateOf<List<NotebookSummaryOut>?>(null) }
+    // Disk/session snapshot paints instantly (cache-then-network); loadList() refreshes.
+    var notebooks by remember { mutableStateOf(client.sectionCaches.notebooks.peek()) }
     var listFailed by remember { mutableStateOf(false) }
     var openId by remember { mutableStateOf(initialOpenId) }
     var detail by remember { mutableStateOf<NotebookOut?>(null) }
@@ -48,10 +48,9 @@ fun DenebNotebooksScreen(
 
     suspend fun loadList() {
         listFailed = false
-        notebooks = null
         val n = client.fetchNotebooks()
-        notebooks = n
-        listFailed = n == null
+        if (n != null) notebooks = n
+        listFailed = n == null && notebooks == null
     }
 
     suspend fun loadDetail(id: String) {

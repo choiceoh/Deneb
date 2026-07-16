@@ -44,7 +44,8 @@ fun DenebContactsScreen(
     onBack: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var contacts by remember { mutableStateOf<List<ContactRow>?>(null) }
+    // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
+    var contacts by remember { mutableStateOf(client.sectionCaches.contacts.peek()) }
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -52,9 +53,8 @@ fun DenebContactsScreen(
     // retry instead of the misleading "no contacts" empty line.
     suspend fun load() {
         failed = false
-        contacts = null
         val fetched = client.fetchContacts()
-        if (fetched == null) failed = true else contacts = fetched
+        if (fetched == null) failed = contacts == null else contacts = fetched
     }
     LaunchedEffect(Unit) { load() }
 

@@ -51,17 +51,19 @@ fun DenebCategoriesScreen(
     onOpenPeople: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
-    var data by remember { mutableStateOf<WikiCategories?>(null) }
+    // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
+    var data by remember { mutableStateOf(client.sectionCaches.categories.peek()) }
     var loadFailed by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
         loadFailed = false
-        data = null
         val d = client.fetchCategories()
-        data = d
-        loadFailed = d == null
+        if (d != null) data = d
+        // A failed refresh keeps the last-known snapshot on screen (offline-first);
+        // the full-screen error is only for a first load with nothing to show.
+        loadFailed = d == null && data == null
     }
     LaunchedEffect(Unit) { load() }
 

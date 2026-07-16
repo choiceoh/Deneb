@@ -66,7 +66,9 @@ fun DenebOrgChartScreen(
 ) {
     // The working tree (mutated by edits) and the baseline loaded from the gateway
     // (for the dirty check + the save target). null baseline = not loaded yet.
-    var nodes by remember { mutableStateOf<List<OrgNodeOut>>(emptyList()) }
+    // Disk/session snapshot paints instantly (view-only: edit affordances stay
+    // gated on loadOk == true, so stale data can't be edited and saved back).
+    var nodes by remember { mutableStateOf(client.sectionCaches.org.peek()?.nodes ?: emptyList()) }
     var baseline by remember { mutableStateOf<List<OrgNodeOut>?>(null) }
     // null = load in flight, true = loaded ok, false = fetch failed.
     var loadOk by remember { mutableStateOf<Boolean?>(null) }
