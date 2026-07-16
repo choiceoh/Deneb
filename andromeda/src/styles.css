@@ -5577,3 +5577,203 @@ button.mail-attachment {
 .cmdk-aux {
   flex: 0 0 auto;
 }
+
+/* ---- 오늘 cockpit ---- */
+
+/* KPI strip — 숫자 타이포가 위계를 진다 (카드 안 박스 금지 규칙: 테두리/배경 없는
+ * borderless 타일, 구분은 여백·헤어라인만). */
+.kpi-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin: 10px 0 4px;
+}
+.kpi {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.kpi + .kpi {
+  border-left: 1px solid var(--line);
+  border-radius: 0 10px 10px 0;
+}
+.kpi:hover {
+  background: var(--panel-sunken);
+}
+.kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.kpi.zero .kpi-value {
+  color: var(--muted-2);
+  font-weight: 600;
+}
+.kpi.danger .kpi-value {
+  color: var(--due);
+}
+.kpi.warn .kpi-value {
+  color: var(--accent-deep);
+}
+.kpi-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-2);
+  margin-left: 2px;
+}
+.kpi-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.kpi-hint {
+  font-size: 11.5px;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Day timeline — 07~20시 가로 트랙, 시간 눈금 + 일정 블록 + 현재 시각 마커. */
+.tl-empty {
+  color: var(--muted-2);
+  font-size: 13px;
+  margin: 6px 0 2px;
+}
+.tl-allday {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.tl-chip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.tl-chip:hover {
+  background: var(--panel-sunken);
+}
+.tl-track {
+  position: relative;
+  margin-top: 2px;
+}
+.tl-hour {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--line);
+}
+.tl-hour-label {
+  position: absolute;
+  top: 0;
+  left: 3px;
+  font-size: 10px;
+  color: var(--faint);
+}
+.tl-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  z-index: 2;
+}
+.tl-block {
+  position: absolute;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-size: 11.5px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  z-index: 1;
+}
+.tl-block:hover {
+  outline: 1.5px solid var(--accent);
+}
+.tl-block.clamped {
+  border-left: 3px solid var(--accent);
+}
+.tl-block-time {
+  color: var(--accent-deep);
+  font-weight: 600;
+  font-size: 10.5px;
+  flex-shrink: 0;
+}
+.tl-block-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Deadline radar — D-day 뱃지 타이포 + 한 줄 행. */
+.radar {
+  display: flex;
+  flex-direction: column;
+}
+.radar-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 4px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.radar-row:hover {
+  background: var(--panel-sunken);
+}
+.radar-dday {
+  flex: 0 0 52px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 12px;
+}
+.radar-dday.warn {
+  color: var(--accent-deep);
+}
+.radar-dday.danger {
+  color: var(--due);
+}
+.radar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.radar-meta {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  font-size: 11.5px;
+}

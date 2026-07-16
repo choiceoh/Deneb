@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import type { CalEvent, Cron, Mail, MarketQuote, Person, ProjectDigest, Todo, View, WorkItem } from "@/types";
+import type {
+  CalEvent,
+  Cron,
+  GroupwareApprovalRow,
+  Mail,
+  MarketQuote,
+  Person,
+  ProjectDigest,
+  Todo,
+  View,
+  WorkItem,
+} from "@/types";
 import { useCachedList } from "@/cachedList";
 import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
 import { moveItem, orderedItems } from "@/listReorder";
@@ -9,6 +20,17 @@ import { Icon, type IconName } from "@/components/Icon";
 import { GridNotice } from "@/components/Grid";
 import { type PaneTarget, useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { workfeedSourceLabel } from "@/workfeedSource";
+import { DayTimelineCard, DeadlineRadar, KpiStrip } from "./TodayCockpit";
+import {
+  buildDayTimeline,
+  buildDeadlineRadar,
+  buildKpis,
+  kpiText,
+  radarText,
+  TIMELINE_END_HOUR,
+  TIMELINE_START_HOUR,
+  timelineText,
+} from "./todayData";
 
 // "오늘" dashboard — the workstation's landing pane. It adds NO new gateway
 // plumbing: it fans out the existing list resources (calendar/mail/todo/workfeed)
@@ -24,19 +46,37 @@ const MAX = 6; // a briefing is a glance; the full list lives in each resource's
 // The catalog of sections the dashboard can show (== each brief's `view`). Users
 // pick WHICH appear (and in what order) from the inline editor; the original four
 // show by default, the rest are opt-in.
-const SECTIONS = ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"] as const;
+const SECTIONS = [
+  "timeline",
+  "calendar",
+  "approvals",
+  "mail",
+  "todo",
+  "workfeed",
+  "radar",
+  "progress",
+  "people",
+  "crons",
+  "market",
+] as const;
 type SectionKey = (typeof SECTIONS)[number];
 const SECTION_LABEL: Record<SectionKey, string> = {
+  timeline: "타임라인",
   calendar: "일정",
+  approvals: "결재",
   mail: "메일",
   todo: "할일",
   workfeed: "피드",
+  radar: "마감",
   progress: "진행",
   people: "연락처",
   crons: "크론",
   market: "시장",
 };
-const DEFAULT_VISIBLE: SectionKey[] = ["calendar", "mail", "todo", "workfeed"];
+// The cockpit trio (타임라인·결재·마감) is default-on: being listed here means it
+// also appears for EXISTING users (readHidden only auto-hides fresh sections
+// absent from this list).
+const DEFAULT_VISIBLE: SectionKey[] = ["timeline", "calendar", "approvals", "mail", "todo", "workfeed", "radar"];
 const TODAY_ORDER_KEY = "andromeda.todayOrder";
 const TODAY_HIDDEN_KEY = "andromeda.todayHidden";
 // Sections the user has set to span two columns (a wider card). Per device.
@@ -140,12 +180,24 @@ export function TodayPane() {
   const work = useCachedList<WorkItem>("workfeed", connected);
   // Opt-in sections fetch only while shown — hidden ones stay idle.
   const visible = (k: SectionKey) => !hidden.includes(k);
-  const prog = useCachedList<ProjectDigest>("progress", connected && visible("progress"));
+  // 결재는 KPI(미결 수)가 항상 필요해 섹션 표시와 무관하게 fetch. 파라미터는
+  // ApprovalsPane과 동일하게 맞춰 리스트 캐시를 공유한다.
+  const appr = useCachedList<GroupwareApprovalRow>("approvals", connected, {
+    meta: { rpcParams: { folder: "total", limit: 100 } }, // == ApprovalsPane (shared cache entry)
+  });
+  // 다이제스트는 마감 레이더와 진행 섹션 둘 다의 소스.
+  const prog = useCachedList<ProjectDigest>("progress", connected && (visible("progress") || visible("radar")));
   const ppl = useCachedList<Person>("people", connected && visible("people"));
   const cron = useCachedList<Cron>("crons", connected && visible("crons"));
   const market = useCachedList<MarketQuote>("market", connected && visible("market"));
 
   const events = cal.result?.data ?? [];
+  const approvals = appr.result?.data ?? [];
+  // 미결 먼저, 그다음 최신 문서순 — 결재 섹션 표시용.
+  const approvalRows = [...approvals].sort((a, b) => {
+    if (Boolean(a.canAct) !== Boolean(b.canAct)) return a.canAct ? -1 : 1;
+    return String(b.docId ?? "").localeCompare(String(a.docId ?? ""));
+  });
   // Recent mail, unread first — robust if `isUnread` is absent (order is just preserved).
   const mails = [...(mail.result?.data ?? [])].sort(
     (a, b) => Number(Boolean(b.isUnread)) - Number(Boolean(a.isUnread)),
@@ -167,7 +219,52 @@ export function TodayPane() {
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
+  // Cockpit derivations (pure, todayData.ts): KPI counts, the day timeline, and
+  // the merged deadline radar.
+  const unreadMails = mails.filter((m) => m.isUnread).length;
+  const kpis = buildKpis({ approvals, workItems: items, events, todos, unreadMails, now });
+  const timeline = buildDayTimeline(events, now);
+  const radar = buildDeadlineRadar(digests, todos, now);
+
   const briefs: Brief[] = [
+    {
+      // 특수 렌더(타임라인 그림) — lines는 AI 프로젝션 경로에서 별도 처리.
+      key: "timeline",
+      label: "타임라인",
+      icon: "calendar",
+      view: "calendar",
+      empty: "",
+      query: cal.query,
+      total: timeline.blocks.length + timeline.allDay.length,
+      lines: [],
+    },
+    {
+      key: "approvals",
+      label: "결재",
+      icon: "approvals",
+      view: "approvals",
+      empty: "결재 문서 없음",
+      query: appr.query,
+      total: approvalRows.length,
+      lines: approvalRows.slice(0, MAX).map((a) => ({
+        title: a.title ?? "(제목 없음)",
+        meta:
+          [a.canAct ? "미결" : a.status, a.drafter ? `기안 ${a.drafter}` : ""].filter(Boolean).join(" · ") || undefined,
+        accent: Boolean(a.canAct),
+        target: { view: "approvals", id: a.docId },
+      })),
+    },
+    {
+      // 특수 렌더(마감 레이더) — 프로젝트 due + 할일 due 통합 D-day.
+      key: "radar",
+      label: "마감",
+      icon: "progress",
+      view: "progress",
+      empty: "",
+      query: prog.query,
+      total: radar.length,
+      lines: [],
+    },
     {
       key: "calendar",
       label: "일정",
@@ -288,9 +385,24 @@ export function TodayPane() {
     .map((k) => byKey[k])
     .filter((b): b is Brief => Boolean(b));
 
-  // The full briefing the AI panel reads — exactly what's on screen (customized), as text.
-  const body = shown.map(sectionText).filter(Boolean).join("\n\n");
-  useRegisterPane(undefined, body ? `[오늘 브리핑]\n${body}` : "");
+  // The full briefing the AI panel reads — exactly what's on screen (customized),
+  // as text: KPI 지표 한 줄 + 각 섹션(타임라인·레이더는 전용 직렬화).
+  const body = shown
+    .map((b) => {
+      if (b.key === "timeline") {
+        const t = timelineText(timeline);
+        return t ? `[오늘 타임라인]\n${t}` : "";
+      }
+      if (b.key === "radar") {
+        const t = radarText(radar);
+        return t ? `[마감 레이더]\n${t}` : "";
+      }
+      return sectionText(b);
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  const projection = [connected ? `[오늘 지표] ${kpiText(kpis)}` : "", body].filter(Boolean).join("\n\n");
+  useRegisterPane(undefined, projection ? `[오늘 브리핑]\n${projection}` : "");
 
   const today = new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", weekday: "short" });
 
@@ -348,6 +460,8 @@ export function TodayPane() {
         </div>
       )}
 
+      {connected && <KpiStrip kpis={kpis} onOpen={(target) => openPane(target.view, target)} />}
+
       {!connected ? (
         <p style={{ color: "var(--muted-2)", fontSize: 13 }}>미연결</p>
       ) : shown.length === 0 ? (
@@ -360,6 +474,26 @@ export function TodayPane() {
             b.key === "market" ? (
               // 시장은 일반 행 대신 큼직한 시세 타일 카드로 — 값을 크게, 등락을 색으로.
               <MarketCard key={b.key} quotes={quotes} query={market.query} index={i} />
+            ) : b.key === "timeline" ? (
+              // 오늘의 시간 형상 — 07~20시 트랙에 일정 블록 + 현재 시각 마커.
+              <CockpitCard key={b.key} brief={b} index={i} wide onNav={() => setView("calendar")}>
+                <DayTimelineCard
+                  timeline={timeline}
+                  startHour={TIMELINE_START_HOUR}
+                  endHour={TIMELINE_END_HOUR}
+                  onOpen={(target) => openPane(target.view, target)}
+                />
+              </CockpitCard>
+            ) : b.key === "radar" ? (
+              <CockpitCard
+                key={b.key}
+                brief={b}
+                index={i}
+                wide={wide.includes(b.key)}
+                onNav={() => setView("progress")}
+              >
+                <DeadlineRadar entries={radar} onOpen={(target) => openPane(target.view, target)} />
+              </CockpitCard>
             ) : (
               <Section
                 key={b.key}
@@ -374,6 +508,40 @@ export function TodayPane() {
         </div>
       )}
     </>
+  );
+}
+
+// Shared chrome for the cockpit's special cards (타임라인·마감 레이더): the
+// standard today-card header + GridNotice for loading/error, with the visual
+// body supplied by the caller (empty states live inside the widgets).
+function CockpitCard({
+  brief,
+  index,
+  wide,
+  onNav,
+  children,
+}: {
+  brief: Brief;
+  index: number;
+  wide?: boolean;
+  onNav: () => void;
+  children: ReactNode;
+}) {
+  const { label, icon, total, query } = brief;
+  return (
+    <section className={"today-card fade-up" + (wide ? " wide" : "")} style={{ animationDelay: `${index * 60}ms` }}>
+      <button className="today-head" onClick={onNav} aria-label={`${label} 열기`} title={`${label} 열기`}>
+        <Icon name={icon} size={15} className="ico" />
+        <span className="today-head-label">{label}</span>
+        {total > 0 && <span className="today-count">{total}</span>}
+        <span className="today-arrow">
+          <Icon name="arrow-right" size={14} />
+        </span>
+      </button>
+      <GridNotice query={query} count={1} empty="">
+        {children}
+      </GridNotice>
+    </section>
   );
 }
 

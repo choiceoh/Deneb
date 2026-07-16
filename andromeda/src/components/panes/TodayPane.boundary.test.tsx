@@ -72,16 +72,64 @@ describe("TodayPane boundary behavior", () => {
     });
 
     it("shows a dedicated state when the user hides all sections", async () => {
-      setDashboardState("Order", ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"]);
-      setDashboardState("Hidden", ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"]);
+      setDashboardState("Order", [
+        "timeline",
+        "calendar",
+        "approvals",
+        "mail",
+        "todo",
+        "workfeed",
+        "radar",
+        "progress",
+        "people",
+        "crons",
+        "market",
+      ]);
+      setDashboardState("Hidden", [
+        "timeline",
+        "calendar",
+        "approvals",
+        "mail",
+        "todo",
+        "workfeed",
+        "radar",
+        "progress",
+        "people",
+        "crons",
+        "market",
+      ]);
       renderToday();
       expect(await screen.findByText("표시할 섹션이 없습니다 — 편집에서 켜세요.")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "편집" })).toBeEnabled();
     });
 
     it("lets the editor recover a dashboard whose sections are all hidden", async () => {
-      setDashboardState("Order", ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"]);
-      setDashboardState("Hidden", ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"]);
+      setDashboardState("Order", [
+        "timeline",
+        "calendar",
+        "approvals",
+        "mail",
+        "todo",
+        "workfeed",
+        "radar",
+        "progress",
+        "people",
+        "crons",
+        "market",
+      ]);
+      setDashboardState("Hidden", [
+        "timeline",
+        "calendar",
+        "approvals",
+        "mail",
+        "todo",
+        "workfeed",
+        "radar",
+        "progress",
+        "people",
+        "crons",
+        "market",
+      ]);
       renderToday({ todo: [{ id: "recover", title: "다시 표시할 할일", done: false }] });
       await openEditor();
       await userEvent.click(screen.getByRole("checkbox", { name: "할일" }));
@@ -178,9 +226,15 @@ describe("TodayPane boundary behavior", () => {
           { id: "bad", title: "기한 불명", done: false, due: "invalid" },
         ],
       });
-      expect((await screen.findByText("기한 지남")).closest("button")).toHaveClass("accent");
-      expect(screen.getByText("기한 남음").closest("button")).not.toHaveClass("accent");
-      expect(screen.getByText("기한 불명").closest("button")).not.toHaveClass("accent");
+      expect((await screen.findByText("기한 지남", { selector: ".today-row-title" })).closest("button")).toHaveClass(
+        "accent",
+      );
+      expect(screen.getByText("기한 남음", { selector: ".today-row-title" }).closest("button")).not.toHaveClass(
+        "accent",
+      );
+      expect(screen.getByText("기한 불명", { selector: ".today-row-title" }).closest("button")).not.toHaveClass(
+        "accent",
+      );
     });
 
     it.each([
@@ -225,7 +279,9 @@ describe("TodayPane boundary behavior", () => {
           },
         ],
       });
-      await userEvent.click(await screen.findByRole("button", { name: /자정 전 회의/ }));
+      await userEvent.click(
+        (await screen.findAllByTitle("일정에서 열기")).find((el) => el.textContent?.includes("자정 전 회의"))!,
+      );
       expect(screen.getByTestId("target")).toHaveTextContent('"dayKey":"2026-7-11"');
     });
 
@@ -261,7 +317,19 @@ describe("TodayPane boundary behavior", () => {
         .getAllByRole("checkbox")
         .filter((box) => box.parentElement?.classList.contains("today-editor-label"))
         .map((box) => box.parentElement?.textContent);
-      expect(labels).toEqual(["메일", "할일", "일정", "피드", "진행", "연락처", "크론", "시장"]);
+      expect(labels).toEqual([
+        "메일",
+        "할일",
+        "타임라인",
+        "일정",
+        "결재",
+        "피드",
+        "마감",
+        "진행",
+        "연락처",
+        "크론",
+        "시장",
+      ]);
     });
 
     it("recovers from non-array order, hidden, and wide values", async () => {
@@ -272,7 +340,10 @@ describe("TodayPane boundary behavior", () => {
       expect(await screen.findByText("복구 확인")).toBeInTheDocument();
       const editor = await openEditor();
       expect(within(editor).getByRole("checkbox", { name: "메일" })).toBeChecked();
-      expect(document.querySelector(".today-card.wide")).toBeNull();
+      // 타임라인 카드만 상시 wide — 저장된 wide 값(불량 42)은 무시된다.
+      const wides = [...document.querySelectorAll(".today-card.wide")];
+      expect(wides).toHaveLength(1);
+      expect(wides[0].textContent).toContain("타임라인");
     });
 
     it("keeps newly introduced optional sections hidden for old saved orders", async () => {
@@ -284,7 +355,19 @@ describe("TodayPane boundary behavior", () => {
     });
 
     it("restores a hidden section and persists a unique hidden list", async () => {
-      setDashboardState("Order", ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"]);
+      setDashboardState("Order", [
+        "timeline",
+        "calendar",
+        "approvals",
+        "mail",
+        "todo",
+        "workfeed",
+        "radar",
+        "progress",
+        "people",
+        "crons",
+        "market",
+      ]);
       setDashboardState("Hidden", ["mail", "mail", "market"]);
       renderToday({ mail: [{ id: "m", subject: "복원한 메일", from: "x@example.com" }] });
       const editor = await openEditor();
@@ -298,16 +381,16 @@ describe("TodayPane boundary behavior", () => {
       const editor = await openEditor();
       await userEvent.click(within(editor).getByRole("button", { name: "메일 위로" }));
       const stored = JSON.parse(localStorage.getItem("andromeda.todayOrder") ?? "[]") as string[];
-      expect(stored.slice(0, 4)).toEqual(["mail", "calendar", "todo", "workfeed"]);
-      expect(new Set(stored).size).toBe(8);
+      expect(stored.slice(0, 4)).toEqual(["timeline", "calendar", "mail", "approvals"]);
+      expect(new Set(stored).size).toBe(11);
     });
 
     it("when disables moves beyond both order boundaries", async () => {
       renderToday();
       const editor = await openEditor();
-      expect(within(editor).getByRole("button", { name: "일정 위로" })).toBeDisabled();
+      expect(within(editor).getByRole("button", { name: "타임라인 위로" })).toBeDisabled();
       expect(within(editor).getByRole("button", { name: "시장 아래로" })).toBeDisabled();
-      expect(within(editor).getByRole("button", { name: "일정 아래로" })).toBeEnabled();
+      expect(within(editor).getByRole("button", { name: "타임라인 아래로" })).toBeEnabled();
       expect(within(editor).getByRole("button", { name: "시장 위로" })).toBeEnabled();
     });
 
@@ -382,8 +465,10 @@ describe("TodayPane boundary behavior", () => {
       setDashboardState("Order", ["market"]);
       setDashboardState("Hidden", []);
       renderToday({ market: [{ symbol: "TEST", label: "테스트 지수", price, changePct }] });
-      expect(await screen.findByText(shownPrice)).toBeInTheDocument();
-      expect(screen.getByText(change).closest(".market-tile")).toHaveClass(tone);
+      const tile = (await screen.findByText("테스트 지수")).closest(".market-tile") as HTMLElement;
+      expect(within(tile).getByText(shownPrice)).toBeInTheDocument();
+      expect(within(tile).getByText(change)).toBeInTheDocument();
+      expect(tile).toHaveClass(tone);
     });
 
     it("preserves market tiles non-interactive because no destination pane exists", async () => {
@@ -426,10 +511,24 @@ describe("TodayPane boundary behavior", () => {
     });
 
     it("clears the AI projection when every dashboard section is hidden", async () => {
-      setDashboardState("Hidden", ["calendar", "mail", "todo", "workfeed", "progress", "people", "crons", "market"]);
+      setDashboardState("Hidden", [
+        "timeline",
+        "calendar",
+        "approvals",
+        "mail",
+        "todo",
+        "workfeed",
+        "radar",
+        "progress",
+        "people",
+        "crons",
+        "market",
+      ]);
       renderToday({ mail: [{ id: "m", subject: "숨긴 메일", from: "x@example.com" }] });
       expect(await screen.findByText(/표시할 섹션이 없습니다/)).toBeInTheDocument();
-      expect(screen.getByTestId("ai-text").textContent).toBe("");
+      // 섹션 본문은 비지만 KPI 지표 줄은 남는다 — 스트립이 화면에도 계속 떠 있다.
+      expect(screen.getByTestId("ai-text").textContent).toContain("오늘 지표");
+      expect(screen.getByTestId("ai-text").textContent).not.toContain("숨긴 메일");
     });
   });
 });

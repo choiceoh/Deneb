@@ -223,6 +223,16 @@ export function eventDayKeys(start: CalTimestamp | undefined, end: CalTimestamp 
   return keys;
 }
 
+// The local instant (epoch ms) a TIMED stamp starts, or null for all-day /
+// missing / unparseable values (the 오늘 cockpit timeline places only timed
+// events; all-day ones render as chips).
+export function eventStartMs(v: CalTimestamp | undefined): number | null {
+  const s = calStamp(v);
+  if (!s.iso || s.allDay) return null;
+  const t = new Date(s.iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
 // The local instant (epoch ms) an event is OVER, or null if it carries no usable
 // time. Lets the calendar drop already-ended events from the upcoming list.
 // All-day end.date is exclusive (Google) so it already marks the over-instant; an

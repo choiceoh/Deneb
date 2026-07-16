@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TodayPane } from "./TodayPane";
 import { cachedListStorageKey } from "@/cachedList";
@@ -156,9 +156,8 @@ describe("TodayPane (오늘 대시보드)", () => {
     await screen.findByText(/예산 검토/);
 
     await userEvent.click(screen.getByRole("button", { name: "편집" }));
-    // Default editor order == catalog order; index 1 is 메일.
-    const wideToggles = screen.getAllByRole("checkbox", { name: "넓게" });
-    await userEvent.click(wideToggles[1]);
+    const mailRow = screen.getByRole("checkbox", { name: "메일" }).closest(".today-editor-row") as HTMLElement;
+    await userEvent.click(within(mailRow).getByRole("checkbox", { name: "넓게" }));
 
     expect(JSON.parse(localStorage.getItem("andromeda.todayWide") ?? "[]")).toContain("mail");
     expect(container.querySelector(".today-card.wide")).toBeTruthy();

@@ -200,4 +200,4 @@ Releases are automated from Conventional Commits — no manual version bumping.
 
 Phase 0–1 done (connection, workstation MVP, mail/calendar/todo grids, two-way AI).
 Phase 2 in progress (wiki editor, unified search, more resources — skeletons in).
-Foundation laid: tests/CI, Tauri shell, events layer, logging, lint. **Next:** capture (OCR/ASR), then dashboards/multi-window (Phase 3).
+Foundation laid: tests/CI, Tauri shell, events layer, logging, lint. Phase 3 partials: 오늘 cockpit (KPI 스트립·타임라인·마감 레이더 — `todayData.ts`+`TodayCockpit.tsx`), tiled workspace + command bus + palette. **Next:** capture (OCR/ASR), multi-window.
