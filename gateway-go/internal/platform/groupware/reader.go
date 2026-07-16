@@ -449,7 +449,8 @@ func defaultReaderJS() string {
 	}
 	if exe, err := os.Executable(); err == nil && exe != "" {
 		dir := filepath.Dir(exe)
-		candidates = append(candidates,
+		candidates = append(
+			candidates,
 			filepath.Join(dir, "..", "scripts", "dev", "groupware-reader", "read.mjs"),
 			filepath.Join(dir, "scripts", "dev", "groupware-reader", "read.mjs"),
 		)

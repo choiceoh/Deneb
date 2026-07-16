@@ -332,10 +332,12 @@ export const analyzeApproval = (
     date: opts.date,
   });
 
-export const fetchApprovalBody = (cfg: GatewayConfig, docId: string, title?: string) =>
+export const fetchApprovalBody = (cfg: GatewayConfig, docId: string, title?: string, folder?: string) =>
   callRpc<{ docId?: string; title?: string; body?: string }>(cfg, "miniapp.groupware.approvals.get", {
     docId,
     title,
+    // Box hint from the list row — the gateway reader skips the 4-folder scan.
+    folder,
   });
 
 export const listGroupwareERP = (

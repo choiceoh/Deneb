@@ -97,6 +97,11 @@ fun DenebApprovalsScreen(
             failed = true
         } else {
             rows = fetched
+            // Prefetch 미결 bodies in the background — the pending doc is the one
+            // the operator opens next, and the cold reader roundtrip is seconds.
+            fetched.filter { it.canAct }.take(4).forEach { doc ->
+                scope.launch { client.fetchApprovalBody(doc.docId, doc.title, doc.folder) }
+            }
         }
     }
     LaunchedEffect(Unit) { load() }

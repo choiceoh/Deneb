@@ -630,6 +630,7 @@ internal fun AppContent(
                                                             drafter = doc.drafter,
                                                             date = doc.date,
                                                             canAct = doc.canAct,
+                                                            folder = doc.folder,
                                                         ),
                                                     )
                                                 },
@@ -649,6 +650,7 @@ internal fun AppContent(
                                                 drafter = route.drafter,
                                                 date = route.date,
                                                 canAct = route.canAct,
+                                                folder = route.folder,
                                                 onBack = { navController.navigateUp() },
                                                 onActed = { navController.navigateUp() },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,

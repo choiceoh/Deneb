@@ -44,7 +44,8 @@ IMPORTANCE: urgent|attention|routine`
 type GroupwareApprovalsDeps struct {
 	List func(ctx context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error)
 	Act  func(ctx context.Context, docID, decision, comment string) (string, error)
-	Get  func(ctx context.Context, docID string) (body string, err error)
+	// Get fetches one document body; folder is a best-effort box hint ("" = scan).
+	Get func(ctx context.Context, docID, folder string) (body string, err error)
 	// Analyze runs the LLM on title+body. Nil → analyze RPC returns UNAVAILABLE.
 	Analyze func(ctx context.Context, title, body string) (analysis, importance string, err error)
 	Cache   *groupware.ApprovalAnalysisStore
@@ -52,6 +53,8 @@ type GroupwareApprovalsDeps struct {
 	ListERP func(ctx context.Context, area, folder, query string, limit int) (string, error)
 	// ReadBoard powers miniapp.groupware.board.get (one post body by id/title).
 	ReadBoard func(ctx context.Context, query string) (string, error)
+	// LogWiki mirrors a fresh analysis into the project wiki log (best-effort).
+	LogWiki func(rec *groupware.ApprovalAnalysisRecord)
 }
 
 // GroupwareApprovalsMethods returns the miniapp.groupware.* map, or nil when
@@ -191,13 +194,16 @@ func groupwareApprovalsGet(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 	type params struct {
 		DocID string `json:"docId"`
 		Title string `json:"title,omitempty"`
+		// Folder hint from the list row (pending|done|cc|total) — lets the
+		// reader skip the 4-folder scan on a cold open.
+		Folder string `json:"folder,omitempty"`
 	}
 	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		docID := strings.TrimSpace(p.DocID)
 		if docID == "" {
 			return rpcerr.MissingParam("docId").Response(req.ID)
 		}
-		body, err := deps.Get(ctx, docID)
+		body, err := deps.Get(ctx, docID, strings.TrimSpace(p.Folder))
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("get groupware approval", err).Response(req.ID)
 		}
@@ -250,7 +256,7 @@ func groupwareApprovalsAnalyze(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc 
 		if deps.Analyze == nil {
 			return rpcerr.Unavailable("approval analysis pipeline unavailable").Response(req.ID)
 		}
-		body, err := deps.Get(ctx, docID)
+		body, err := deps.Get(ctx, docID, "")
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("get groupware approval for analyze", err).Response(req.ID)
 		}
@@ -282,6 +288,9 @@ func groupwareApprovalsAnalyze(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc 
 		}
 		if deps.Cache != nil {
 			_ = deps.Cache.Save(rec)
+		}
+		if deps.LogWiki != nil {
+			deps.LogWiki(rec)
 		}
 		return rpcutil.RespondOK(req.ID, analysisOutFromRecord(rec, false))
 	})

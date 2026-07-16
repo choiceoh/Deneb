@@ -69,6 +69,7 @@ fun DenebApprovalDetailScreen(
     drafter: String = "",
     date: String = "",
     canAct: Boolean = false,
+    folder: String = "",
     onBack: () -> Unit,
     onActed: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
@@ -90,7 +91,7 @@ fun DenebApprovalDetailScreen(
         body = null
         coroutineScope {
             val analysisDeferred = async { client.fetchCachedApprovalAnalysis(docId) }
-            val fetched = client.fetchApprovalBody(docId, title)
+            val fetched = client.fetchApprovalBody(docId, title, folder)
             body = fetched
             loadFailed = fetched == null
             if (fetched != null) {
