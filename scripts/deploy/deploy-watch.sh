@@ -40,6 +40,7 @@ DEPLOYED_HEAD="${1:-}"
 DISPATCH_RPC="$PROD_DIR/scripts/dev/self_correction_dispatch.py"
 TRACKED_IDS=()
 TRACKED_ATTEMPTS=()
+TRACKED_HEADS=()
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
@@ -69,10 +70,16 @@ record_dispatch_event() {
 # Carry every unresolved dispatch whose merged commit is included in this head.
 # "deployed" rows are inherited from a superseded watcher; "merged" rows cross
 # the deploy boundary here for the first time.
+#
+# Per-candidate deploy head: the tracker's provenance guard pins deployHead per
+# attempt, so an INHERITED candidate (deployed under an earlier head, its watch
+# superseded by this one) must be recorded under ITS OWN recorded head — using
+# this watcher's head conflicted and permanently lost the watch_passed ledger
+# event on every rapid-deploy day (observed 2026-07-16: 8 deploys, events lost).
 track_dispatch_candidates() {
-    local cid attempt phase commit_sha _prior_head
+    local cid attempt phase commit_sha prior_head
     [[ -f "$DISPATCH_RPC" ]] || return 0
-    while IFS=$'\t' read -r cid attempt phase commit_sha _prior_head; do
+    while IFS=$'\t' read -r cid attempt phase commit_sha prior_head; do
         [[ -n "$cid" && -n "$attempt" && -n "$commit_sha" ]] || continue
         if ! git -C "$PROD_DIR" merge-base --is-ancestor "$commit_sha" "$DEPLOYED_HEAD" 2>/dev/null; then
             continue
@@ -80,10 +87,13 @@ track_dispatch_candidates() {
         TRACKED_IDS+=("$cid")
         TRACKED_ATTEMPTS+=("$attempt")
         if [[ "$phase" == "merged" ]]; then
+            TRACKED_HEADS+=("$DEPLOYED_HEAD")
             record_dispatch_event --id "$cid" --phase deployed --attempt-id "$attempt" \
                 --commit-sha "$commit_sha" --deploy-head "$DEPLOYED_HEAD" \
                 --note "candidate included in deployed main head" \
                 || log "WARN: failed to record deployed event for $cid"
+        else
+            TRACKED_HEADS+=("${prior_head:-$DEPLOYED_HEAD}")
         fi
     done < <(python3 "$DISPATCH_RPC" --state-dir "$STATE_DIR" list \
         --phase merged --phase deployed 2>>"$LOG_FILE" || true)
@@ -93,11 +103,14 @@ track_dispatch_candidates() {
 }
 
 record_tracked_candidates() {
-    local phase="$1" note="$2" i
+    local phase="$1" note="$2" i head
     [[ -f "$DISPATCH_RPC" ]] || return 0
     for i in "${!TRACKED_IDS[@]}"; do
+        # The candidate's OWN deploy head (see track_dispatch_candidates) — the
+        # provenance guard rejects any other value for an inherited candidate.
+        head="${TRACKED_HEADS[$i]:-$DEPLOYED_HEAD}"
         record_dispatch_event --id "${TRACKED_IDS[$i]}" --phase "$phase" \
-            --attempt-id "${TRACKED_ATTEMPTS[$i]}" --deploy-head "$DEPLOYED_HEAD" --note "$note" \
+            --attempt-id "${TRACKED_ATTEMPTS[$i]}" --deploy-head "$head" --note "$note" \
             || log "WARN: failed to record $phase event for ${TRACKED_IDS[$i]}"
     done
 }
