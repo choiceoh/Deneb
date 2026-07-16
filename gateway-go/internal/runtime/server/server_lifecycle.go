@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/sdsocket"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -43,10 +44,22 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 
 	mux := s.buildMux()
 
-	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", s.addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+	// Prefer the systemd socket-activated listener (deneb-http.socket,
+	// FileDescriptorName=http): systemd keeps the socket bound across SIGUSR1
+	// hot-swaps, so connections arriving during a deploy queue in the kernel
+	// backlog instead of getting refused. Opt-in — without the socket unit this
+	// resolves false and the gateway binds s.addr itself, exactly as before.
+	var ln net.Listener
+	if sdln, ok := sdsocket.Listener("http"); ok {
+		s.logger.Info("http listener: systemd socket-activated (survives hot-swaps)", "addr", sdln.Addr().String())
+		ln = sdln
+	} else {
+		var lc net.ListenConfig
+		bound, err := lc.Listen(ctx, "tcp", s.addr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		}
+		ln = bound
 	}
 
 	s.httpServer = &http.Server{

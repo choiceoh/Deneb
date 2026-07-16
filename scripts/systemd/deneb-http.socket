@@ -1,0 +1,26 @@
+# deneb-http.socket — systemd owns the gateway HTTP socket so it survives the
+# SIGUSR1 hot-restarts (every auto-deploy restarts the gateway). Connections
+# arriving during a restart queue in the kernel backlog and are accepted when
+# the gateway comes back, instead of "connection refused" — combined with the
+# turn-aware idle gate (wait-idle.sh), a deploy's outage window collapses from
+# drain+boot to effectively zero refused connections.
+#
+# The gateway picks this fd up via the sd_listen_fds protocol (matched by
+# FileDescriptorName=http); see gateway-go/internal/infra/sdsocket. Without
+# this unit the gateway binds the port itself (the code is a no-op when
+# LISTEN_* is unset), so this is purely opt-in.
+#
+# Install / cut over: scripts/systemd/setup-http-socket.sh
+[Unit]
+Description=Deneb gateway HTTP socket (survives hot-swaps)
+
+[Socket]
+# Must match the service's --bind all --port 18789 (wildcard listen).
+ListenStream=18789
+FileDescriptorName=http
+Service=deneb-gateway.service
+# Generous backlog so a client burst during the restart window isn't dropped.
+Backlog=512
+
+[Install]
+WantedBy=sockets.target
