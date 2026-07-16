@@ -56,6 +56,52 @@ func TestChatCompletions_ForwardsRewritesInjectsKeyAndStreams(t *testing.T) {
 	}
 }
 
+// Per-entry profile headers reach the upstream, and the auth/protocol pins
+// applied after them win on conflict — a headers block can never clobber
+// authentication (the kimi coding endpoint's User-Agent gate is the
+// motivating profile).
+func TestMessages_EntryHeadersSentAndAuthWins(t *testing.T) {
+	var gotUA, gotKey, gotVer string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		gotKey = r.Header.Get("x-api-key")
+		gotVer = r.Header.Get("anthropic-version")
+		_, _ = io.WriteString(w, `{"type":"message"}`)
+	}))
+	defer upstream.Close()
+
+	rt := quietRouter(config{Models: []modelEntry{{
+		Name:          "kimi-for-coding",
+		URL:           upstream.URL + "/v1",
+		Key:           "real-key",
+		Protocol:      "anthropic",
+		UpstreamModel: "kimi-for-coding",
+		Headers: map[string]string{
+			"User-Agent": "claude-code/2.1.142",
+			"x-api-key":  "profile-must-not-win",
+		},
+	}}})
+	srv := httptest.NewServer(rt.handler())
+	defer srv.Close()
+
+	body := `{"model":"kimi-for-coding","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}`
+	resp, err := http.Post(srv.URL+"/v1/messages", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if gotUA != "claude-code/2.1.142" {
+		t.Errorf("upstream User-Agent = %q, want profile header", gotUA)
+	}
+	if gotKey != "real-key" {
+		t.Errorf("upstream x-api-key = %q, want auth to win over profile header", gotKey)
+	}
+	if gotVer == "" {
+		t.Errorf("anthropic-version pin missing upstream")
+	}
+}
+
 func TestChatCompletions_UnknownModelIs404(t *testing.T) {
 	rt := quietRouter(config{Models: []modelEntry{{Name: "dsv4", URL: "http://127.0.0.1:1/v1", UpstreamModel: "dsv4"}}})
 	srv := httptest.NewServer(rt.handler())
