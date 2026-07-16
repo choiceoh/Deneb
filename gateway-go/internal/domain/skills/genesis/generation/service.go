@@ -39,6 +39,15 @@ import (
 // identical skills are rejected.
 const skillDedupThreshold = 0.82
 
+// generationMaxTokens bounds one skill-generation completion. Shared by the
+// production Generate/GenerateFromDream paths and the L2 genesis shadow bench
+// (bench_support.go) so the bench stays a byte-faithful mirror of production.
+// 2048 truncated real outputs mid-JSON (meta-evolution ledger observed
+// content_chars=2837 at completion_tokens=2048) — a full Korean SKILL.md JSON
+// runs to several thousand tokens (persist size guard is 15KB), and glm-class
+// models draw reasoning tokens from this same budget.
+const generationMaxTokens = 8192
+
 // ErrSkillDeduped is returned by Persist when the generated skill is too
 // similar to an existing skill and was intentionally not written. Callers
 // must treat this as a no-op, not a failure.
@@ -356,7 +365,7 @@ func (s *Service) Generate(ctx context.Context, sctx SessionContext) (*Generated
 		Model:          s.resolveModel(sctx.Model),
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
-		MaxTokens:      2048,
+		MaxTokens:      generationMaxTokens,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
@@ -391,7 +400,7 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 		Model:          s.cfg.Model,
 		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
 		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
-		MaxTokens:      2048,
+		MaxTokens:      generationMaxTokens,
 		Stream:         true,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
