@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.113.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.112.0...deneb-v4.113.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **client:** 그룹웨어 플랫 탭·게시판 본문 시트·새로고침 ([#3790](https://github.com/choiceoh/Deneb/issues/3790)) ([24629d4](https://github.com/choiceoh/Deneb/commit/24629d495e188e50fbc4c87dc640d52992030ae7))
+
+
+### ⚡ Performance
+
+* **chat:** translate stable prompt controls to English ([#3793](https://github.com/choiceoh/Deneb/issues/3793)) ([30ab0bf](https://github.com/choiceoh/Deneb/commit/30ab0bf89a161ce1a179e830097d8b1d1b8d0bd1))
+
 ## [4.112.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.111.0...deneb-v4.112.0) (2026-07-15)
 
 

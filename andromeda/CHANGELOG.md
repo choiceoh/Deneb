@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.86](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.85...andromeda-v0.0.86) (2026-07-16)
+
+
+### ✨ Features
+
+* **client:** 그룹웨어 플랫 탭·게시판 본문 시트·새로고침 ([#3790](https://github.com/choiceoh/Deneb/issues/3790)) ([24629d4](https://github.com/choiceoh/Deneb/commit/24629d495e188e50fbc4c87dc640d52992030ae7))
+
 ## [0.0.85](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.84...andromeda-v0.0.85) (2026-07-15)
 
 
