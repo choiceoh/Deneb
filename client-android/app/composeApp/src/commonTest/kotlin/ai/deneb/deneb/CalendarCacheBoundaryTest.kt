@@ -85,6 +85,14 @@ class CalendarCacheBoundaryTest {
     }
 
     @Test
+    fun nonStringOwnerFailsClosed() {
+        val event = """{"id":"e","title":"T","location":"L","start":"S","end":"E","allDay":false}"""
+        for (owner in listOf("null", "42", "true", "{}", "[]")) {
+            assertNull(decodeCalendarCache("""{"owner":$owner,"events":[$event]}""", ""), owner)
+        }
+    }
+
+    @Test
     fun missingEventsDefaultsEmptyAndReturnsNull() {
         assertNull(decodeCalendarCache("""{"owner":"owner"}""", "owner"))
     }

@@ -1,8 +1,6 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.chat.WorkFeedItem
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 // --- Work-feed (업무 home) cache (cache-then-network) ----------------------------
 // Mirrors the mail cache (DenebClientMail): the recent feed is persisted, owner-
@@ -12,28 +10,15 @@ import kotlinx.serialization.json.Json
 // [mailCacheOwner] (the url#token account fingerprint — not mail-specific) so a
 // prior account's feed can't render under new credentials.
 
-private val workFeedCacheJson = Json { ignoreUnknownKeys = true }
-
 // Cap the cached feed so the settings entry stays small; the home only ever shows
 // a few days of recent items.
 private const val WORK_FEED_CACHE_MAX = 80
 
-@Serializable
-private data class WorkFeedCacheEnvelope(
-    val owner: String = "",
-    val items: List<WorkFeedItem> = emptyList(),
-)
+private val workFeedCacheCodec = OwnedListCacheCodec("items", WorkFeedItem.serializer(), WORK_FEED_CACHE_MAX)
 
-internal fun encodeWorkFeedCache(items: List<WorkFeedItem>, owner: String): String = workFeedCacheJson.encodeToString(
-    WorkFeedCacheEnvelope(owner = owner, items = items.take(WORK_FEED_CACHE_MAX)),
-)
+internal fun encodeWorkFeedCache(items: List<WorkFeedItem>, owner: String): String = workFeedCacheCodec.encode(items, owner)
 
-internal fun decodeWorkFeedCache(json: String, expectedOwner: String): List<WorkFeedItem>? = runCatching { workFeedCacheJson.decodeFromString<WorkFeedCacheEnvelope>(json) }
-    .getOrNull()
-    ?.takeIf { it.owner == expectedOwner }
-    ?.items
-    ?.take(WORK_FEED_CACHE_MAX)
-    ?.takeIf { it.isNotEmpty() }
+internal fun decodeWorkFeedCache(json: String, expectedOwner: String): List<WorkFeedItem>? = workFeedCacheCodec.decode(json, expectedOwner)
 
 internal fun DenebGatewayClient.loadCachedWorkFeed(): List<WorkFeedItem>? {
     val json = appSettings.getCachedWorkFeed() ?: return null

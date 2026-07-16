@@ -11,11 +11,6 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -206,7 +201,8 @@ internal class SessionCacheMap<K : Any, V : Any>(
  * (url#token fingerprint, [mailCacheOwner]) makes a prior gateway/account's
  * snapshot decode to null instead of rendering under new credentials; a
  * credential switch also purges via AppSettings.clearCachedContent (prefix).
- * All I/O is best-effort: a corrupt/oversized entry just misses.
+ * All I/O is best-effort: corrupt, foreign-owner, and oversized entries miss
+ * and are removed so they are not reparsed or rendered on later restarts.
  */
 internal class SectionDiskSlot<T : Any>(
     private val appSettings: AppSettings,
@@ -216,20 +212,19 @@ internal class SectionDiskSlot<T : Any>(
 ) {
     fun load(): T? {
         val raw = appSettings.getCachedSection(key) ?: return null
-        return runCatching {
-            val obj = sectionCacheJson.parseToJsonElement(raw).jsonObject
-            if (obj["owner"]?.jsonPrimitive?.content != owner()) return@runCatching null
-            obj["value"]?.let { sectionCacheJson.decodeFromJsonElement(serializer, it) }
-        }.getOrNull()
+        val decoded = decodeOwnedCache(raw, owner(), "value", serializer)
+        if (decoded == null) clear()
+        return decoded
     }
 
     fun save(value: T) {
         runCatching {
-            val json = buildJsonObject {
-                put("owner", owner())
-                put("value", sectionCacheJson.encodeToJsonElement(serializer, value))
-            }.toString()
-            if (json.length <= MAX_SECTION_CACHE_CHARS) appSettings.putCachedSection(key, json)
+            val json = encodeOwnedCache(owner(), "value", serializer, value)
+            if (json.length <= MAX_SECTION_CACHE_CHARS) {
+                appSettings.putCachedSection(key, json)
+            } else {
+                appSettings.removeCachedSection(key)
+            }
         }
     }
 
@@ -237,8 +232,6 @@ internal class SectionDiskSlot<T : Any>(
         runCatching { appSettings.removeCachedSection(key) }
     }
 }
-
-private val sectionCacheJson = Json { ignoreUnknownKeys = true }
 
 // Backstop against one pathological snapshot bloating the settings store.
 private const val MAX_SECTION_CACHE_CHARS = 256 * 1024
@@ -254,30 +247,41 @@ internal class SectionCaches(
     private val owner: () -> String,
 ) {
     private fun <T : Any> slot(key: String, serializer: KSerializer<T>) = SectionDiskSlot(appSettings, key, serializer, owner)
+    private fun <T : Any> cache(key: String, serializer: KSerializer<T>): SessionCache<T> = SessionCache(SectionCacheTtl, slot(key, serializer))
 
-    val categories = SessionCache(SectionCacheTtl, slot("categories", WikiCategories.serializer()))
-    val diary = SessionCache(SectionCacheTtl, slot("diary", ListSerializer(DiaryEntry.serializer())))
-    val people = SessionCache(SectionCacheTtl, slot("people", ListSerializer(PersonHit.serializer())))
-    val contacts = SessionCache(SectionCacheTtl, slot("contacts", ListSerializer(ContactRow.serializer())))
-    val dashboard = SessionCache(SectionCacheTtl, slot("dashboard", DashboardOut.serializer()))
-    val org = SessionCache(SectionCacheTtl, slot("org", OrgTreeOut.serializer()))
-    val notebooks = SessionCache(SectionCacheTtl, slot("notebooks", ListSerializer(NotebookSummaryOut.serializer())))
+    private fun <V : Any> diskMapCache(
+        key: String,
+        valueSerializer: KSerializer<V>,
+        diskMaxEntries: Int = 8,
+    ): SessionCacheMap<String, V> = SessionCacheMap(
+        SectionCacheTtl,
+        disk = slot(key, MapSerializer(String.serializer(), valueSerializer)),
+        diskMaxEntries = diskMaxEntries,
+    )
+
+    val categories = cache("categories", WikiCategories.serializer())
+    val diary = cache("diary", ListSerializer(DiaryEntry.serializer()))
+    val people = cache("people", ListSerializer(PersonHit.serializer()))
+    val contacts = cache("contacts", ListSerializer(ContactRow.serializer()))
+    val dashboard = cache("dashboard", DashboardOut.serializer())
+    val org = cache("org", OrgTreeOut.serializer())
+    val notebooks = cache("notebooks", ListSerializer(NotebookSummaryOut.serializer()))
 
     // Wiki browse loop: category → page list → page body. Wiki writes (save/
     // create/delete/move) invalidate the touched keys in DenebClientMemory.kt.
     // Page bodies stay memory-only (large, and staleness matters when editing).
-    val categoryPages = SessionCacheMap(
-        SectionCacheTtl,
-        disk = slot("category_pages", MapSerializer(String.serializer(), ListSerializer(WikiPageRef.serializer()))),
+    val categoryPages = diskMapCache(
+        "category_pages",
+        ListSerializer(WikiPageRef.serializer()),
     )
     val wikiPages = SessionCacheMap<String, WikiPage>(SectionCacheTtl, maxEntries = 24)
 
     // Calendar month-grid ranges (range-key → events): the last few viewed months
     // persist, so the grid paints dots instantly on cold start while the month
     // fetch runs. Replaces the old in-memory-only calRangeCache.
-    val calendarRanges = SessionCacheMap(
-        SectionCacheTtl,
-        disk = slot("calendar_ranges", MapSerializer(String.serializer(), ListSerializer(CalendarEvent.serializer()))),
+    val calendarRanges = diskMapCache(
+        "calendar_ranges",
+        ListSerializer(CalendarEvent.serializer()),
         diskMaxEntries = 4,
     )
 

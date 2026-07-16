@@ -6,9 +6,6 @@ import ai.deneb.deneb.generated.GroupwareApprovalGetResponse
 import ai.deneb.deneb.generated.GroupwareApprovalRow
 import ai.deneb.deneb.generated.GroupwareApprovalsListResponse
 import kotlinx.coroutines.flow.update
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -57,25 +54,11 @@ private fun freshCachedApprovalsPage(folder: String, limit: Int, nowMs: Long): C
 private fun markApprovalActed(rows: List<GroupwareApprovalRow>, docId: String): List<GroupwareApprovalRow> = rows.map { row -> if (row.docId == docId) row.copy(canAct = false) else row }
 
 // --- Settings-backed first-page cache (cache-then-network, like mail) -----
-private val approvalsCacheJson = Json { ignoreUnknownKeys = true }
+private val approvalsCacheCodec = OwnedListCacheCodec("rows", GroupwareApprovalRow.serializer(), APPROVALS_PERSIST_PAGE_SIZE)
 
-@Serializable
-private data class ApprovalsCacheEnvelope(
-    val owner: String = "",
-    val rows: List<GroupwareApprovalRow> = emptyList(),
-)
+internal fun encodeApprovalsCache(rows: List<GroupwareApprovalRow>, owner: String): String = approvalsCacheCodec.encode(rows, owner)
 
-internal fun encodeApprovalsCache(rows: List<GroupwareApprovalRow>, owner: String): String = approvalsCacheJson.encodeToString(
-    ApprovalsCacheEnvelope(owner = owner, rows = rows.take(APPROVALS_PERSIST_PAGE_SIZE)),
-)
-
-internal fun decodeApprovalsCache(json: String, expectedOwner: String): List<GroupwareApprovalRow>? = runCatching {
-    approvalsCacheJson.decodeFromString<ApprovalsCacheEnvelope>(json)
-}.getOrNull()
-    ?.takeIf { it.owner == expectedOwner }
-    ?.rows
-    ?.take(APPROVALS_PERSIST_PAGE_SIZE)
-    ?.takeIf { it.isNotEmpty() }
+internal fun decodeApprovalsCache(json: String, expectedOwner: String): List<GroupwareApprovalRow>? = approvalsCacheCodec.decode(json, expectedOwner)
 
 internal fun DenebGatewayClient.loadCachedApprovals(): List<GroupwareApprovalRow>? {
     val json = appSettings.getCachedApprovalsList() ?: return null

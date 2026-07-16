@@ -1,11 +1,15 @@
 package ai.deneb.deneb
 
+import ai.deneb.data.AppSettings
+import com.russhwolf.settings.MapSettings
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
+import kotlinx.serialization.builtins.serializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -216,6 +220,28 @@ class SectionCacheContractTest {
         val f2 = gatewayClientFixture(token = "token-b", settings = f1.settings)
 
         assertNull(f2.client.sectionCaches.dashboard.peek())
+        assertNull(f2.settings.getCachedSection("dashboard"))
+    }
+
+    @Test
+    fun corruptDiskSnapshotIsRemovedAfterFirstMiss() = runTest {
+        val f = gatewayClientFixture()
+        f.settings.putCachedSection("dashboard", "not-json")
+
+        assertNull(f.client.sectionCaches.dashboard.peek())
+        assertNull(f.settings.getCachedSection("dashboard"))
+    }
+
+    @Test
+    fun oversizedSnapshotRemovesOlderUsableValue() {
+        val settings = AppSettings(MapSettings())
+        val slot = SectionDiskSlot(settings, "large", String.serializer()) { "owner" }
+        slot.save("small")
+        assertNotNull(settings.getCachedSection("large"))
+
+        slot.save("x".repeat(300_000))
+
+        assertNull(settings.getCachedSection("large"))
     }
 
     @Test
