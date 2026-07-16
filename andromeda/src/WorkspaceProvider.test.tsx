@@ -4,14 +4,14 @@ import userEvent from "@testing-library/user-event";
 
 import { useContext } from "react";
 import { WorkspaceProvider } from "./WorkspaceProvider";
-import { FeedCtx, useAiFeed, useWorkspace } from "./workspaceContext";
+import { FeedWriteCtx, useAiFeed, useWorkspace } from "./workspaceContext";
 
 const cfg = { url: "http://gateway.test", token: "secret" };
 
 function Probe() {
   const value = useWorkspace();
   const { aiText, activeResource } = useAiFeed();
-  const feed = useContext(FeedCtx)!;
+  const feed = useContext(FeedWriteCtx)!;
   return (
     <div>
       <output data-testid="connected">{String(value.connected)}</output>

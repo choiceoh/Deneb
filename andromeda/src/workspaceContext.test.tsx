@@ -1,17 +1,31 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { feedValue, workspaceValue, type FeedValue, type WorkspaceValue } from "@/test/workspace";
-import { Ctx, FeedCtx, TileCtx, useAiFeed, useRegisterPane, useWorkspace } from "./workspaceContext";
+import {
+  feedValue,
+  feedWriters,
+  workspaceValue,
+  type FeedValue,
+  type FeedWriters,
+  type WorkspaceValue,
+} from "@/test/workspace";
+import { Ctx, FeedCtx, FeedWriteCtx, TileCtx, useAiFeed, useRegisterPane, useWorkspace } from "./workspaceContext";
 import type { View } from "./types";
 
-function wrapper(value: WorkspaceValue, feed: FeedValue, tile: View | null = null) {
+function wrapper(
+  value: WorkspaceValue,
+  feed: FeedValue,
+  tile: View | null = null,
+  writers: FeedWriters = feedWriters(),
+) {
   return function WorkspaceWrapper({ children }: { children: ReactNode }) {
     return (
       <Ctx.Provider value={value}>
-        <FeedCtx.Provider value={feed}>
-          <TileCtx.Provider value={tile}>{children}</TileCtx.Provider>
-        </FeedCtx.Provider>
+        <FeedWriteCtx.Provider value={writers}>
+          <FeedCtx.Provider value={feed}>
+            <TileCtx.Provider value={tile}>{children}</TileCtx.Provider>
+          </FeedCtx.Provider>
+        </FeedWriteCtx.Provider>
       </Ctx.Provider>
     );
   };
@@ -46,45 +60,45 @@ describe("useAiFeed", () => {
 
 describe("useRegisterPane", () => {
   it("publishes under its tile slot on mount and when the projection changes", () => {
-    const feed = feedValue();
+    const writers = feedWriters();
     const { rerender } = renderHook(({ resource, text }) => useRegisterPane(resource, text), {
-      wrapper: wrapper(workspaceValue(), feed, "mail"),
+      wrapper: wrapper(workspaceValue(), feedValue(), "mail", writers),
       initialProps: { resource: "mail" as string | undefined, text: "first" },
     });
-    expect(feed.registerPane).toHaveBeenLastCalledWith("mail", "mail", "first");
+    expect(writers.registerPane).toHaveBeenLastCalledWith("mail", "mail", "first");
 
     act(() => rerender({ resource: "mail", text: "second" }));
-    expect(feed.registerPane).toHaveBeenLastCalledWith("mail", "mail", "second");
+    expect(writers.registerPane).toHaveBeenLastCalledWith("mail", "mail", "second");
 
     act(() => rerender({ resource: undefined, text: "detached" }));
-    expect(feed.registerPane).toHaveBeenLastCalledWith("mail", undefined, "detached");
-    expect(feed.registerPane).toHaveBeenCalledTimes(3);
+    expect(writers.registerPane).toHaveBeenLastCalledWith("mail", undefined, "detached");
+    expect(writers.registerPane).toHaveBeenCalledTimes(3);
   });
 
   it("falls back to the current view when no tile slot is provided", () => {
-    const feed = feedValue();
+    const writers = feedWriters();
     renderHook(() => useRegisterPane("wiki", "body"), {
-      wrapper: wrapper(workspaceValue({ view: "wiki" }), feed, null),
+      wrapper: wrapper(workspaceValue({ view: "wiki" }), feedValue(), null, writers),
     });
-    expect(feed.registerPane).toHaveBeenLastCalledWith("wiki", "wiki", "body");
+    expect(writers.registerPane).toHaveBeenLastCalledWith("wiki", "wiki", "body");
   });
 
   it("does not republish when resource and text stay equal", () => {
-    const feed = feedValue();
+    const writers = feedWriters();
     const { rerender } = renderHook(() => useRegisterPane("wiki", "same"), {
-      wrapper: wrapper(workspaceValue(), feed, "wiki"),
+      wrapper: wrapper(workspaceValue(), feedValue(), "wiki", writers),
     });
     rerender();
-    expect(feed.registerPane).toHaveBeenCalledTimes(1);
+    expect(writers.registerPane).toHaveBeenCalledTimes(1);
   });
 
   it("unregisters its slot on unmount", () => {
-    const feed = feedValue();
+    const writers = feedWriters();
     const { unmount } = renderHook(() => useRegisterPane("mail", "text"), {
-      wrapper: wrapper(workspaceValue(), feed, "mail"),
+      wrapper: wrapper(workspaceValue(), feedValue(), "mail", writers),
     });
-    expect(feed.unregisterPane).not.toHaveBeenCalled();
+    expect(writers.unregisterPane).not.toHaveBeenCalled();
     unmount();
-    expect(feed.unregisterPane).toHaveBeenCalledWith("mail");
+    expect(writers.unregisterPane).toHaveBeenCalledWith("mail");
   });
 });

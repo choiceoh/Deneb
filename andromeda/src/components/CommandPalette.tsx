@@ -192,18 +192,21 @@ export function CommandPalette() {
         },
         200,
       );
-      push(
-        {
-          key: "ask:q",
-          icon: "chat",
-          label: `데네브에게 묻기: ${q}`,
-          run: () => {
-            setAiCollapsed(false);
-            if (!askDeneb(q)) palLog.warn("ask sink unavailable");
+      // 채팅 탭에서는 이 행을 내리지 않는다 — 그 화면의 큰 컴포저가 곧 데네브이고,
+      // ask 싱크(측면 AIPanel)는 chat 뷰에서 숨겨져 답이 보이지 않게 된다.
+      if (view !== "chat")
+        push(
+          {
+            key: "ask:q",
+            icon: "chat",
+            label: `데네브에게 묻기: ${q}`,
+            run: () => {
+              setAiCollapsed(false);
+              if (!askDeneb(q)) palLog.warn("ask sink unavailable");
+            },
           },
-        },
-        190,
-      );
+          190,
+        );
     }
 
     out.sort((a, b) => b.score - a.score);

@@ -35,6 +35,12 @@ describe("parseWorkspaceCommand", () => {
       kind: "wiki",
       path: "인물/김호수.md",
     });
+    // The events stream's standard ref field also carries the page for an
+    // explicit wiki open (WikiPane consumes wikiTarget, not a pane-target id).
+    expect(parseWorkspaceCommand({ action: "open", view: "wiki", ref: "projects/foo.md" })).toEqual({
+      kind: "wiki",
+      path: "projects/foo.md",
+    });
   });
 
   it("parses split/focus/close", () => {
@@ -46,6 +52,11 @@ describe("parseWorkspaceCommand", () => {
     expect(parseWorkspaceCommand({ action: "focus", pane: "todo" })).toEqual({ kind: "focus", view: "todo" });
     expect(parseWorkspaceCommand({ action: "close", view: "mail" })).toEqual({ kind: "close", view: "mail" });
     expect(parseWorkspaceCommand({ action: "close" })).toEqual({ kind: "close", view: undefined });
+  });
+
+  it("rejects a close naming an unknown view instead of closing the focused tile", () => {
+    expect(parseWorkspaceCommand({ action: "close", view: "bogus" })).toBeNull();
+    expect(parseWorkspaceCommand({ action: "close", pane: "nonsense" })).toBeNull();
   });
 
   it("rejects splits of non-tileable views", () => {

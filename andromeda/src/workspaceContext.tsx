@@ -115,20 +115,29 @@ export interface PaneFeed {
   text: string;
 }
 
-interface FeedCtxValue {
+// Reader and writer live in SEPARATE contexts on purpose: the read value
+// (aiText) changes on every editor keystroke, and if registration rode in the
+// same context every pane calling useRegisterPane would re-render on any other
+// tile's keystroke — exactly the cascade the split is meant to kill. The writer
+// value is two stable callbacks, so registering panes never re-render from it.
+interface FeedReadValue {
   // The AI-panel projection: focused tile's text first, other visible tiles
   // appended with headers (WorkspaceProvider derives it from the tile set).
   aiText: string;
   // The focused pane's backing resource — what the AI's mutating tool calls
   // should refresh.
   activeResource?: string;
+}
+
+interface FeedWriteValue {
   registerPane: (view: View, resource: string | undefined, text: string) => void;
   unregisterPane: (view: View) => void;
 }
 
-export const FeedCtx = createContext<FeedCtxValue | null>(null);
+export const FeedCtx = createContext<FeedReadValue | null>(null);
+export const FeedWriteCtx = createContext<FeedWriteValue | null>(null);
 
-export function useAiFeed(): { aiText: string; activeResource?: string } {
+export function useAiFeed(): FeedReadValue {
   const c = useContext(FeedCtx);
   if (!c) throw new Error("useAiFeed must be used within <WorkspaceProvider>");
   return c;
@@ -144,7 +153,7 @@ export const TileCtx = createContext<View | null>(null);
 // pane keeps its own feed registered; the provider assembles the AI text from
 // the tile set. Unregisters on unmount so closed tiles drop out of the feed.
 export function useRegisterPane(resource: string | undefined, text: string): void {
-  const feed = useContext(FeedCtx);
+  const feed = useContext(FeedWriteCtx);
   const tile = useContext(TileCtx);
   if (!feed) throw new Error("useRegisterPane must be used within <WorkspaceProvider>");
   const { registerPane, unregisterPane } = feed;

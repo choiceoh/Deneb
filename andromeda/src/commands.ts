@@ -38,10 +38,14 @@ export function isWorkspaceCommandKind(kind: string | undefined): boolean {
 // chat or mutate data. Returns null for anything malformed.
 export function parseWorkspaceCommand(raw: Record<string, unknown>): WorkspaceCommand | null {
   const action = asStr(raw.action) ?? asStr(raw.verb);
-  const view = asView(raw.view) ?? asView(raw.pane);
+  const rawView = asStr(raw.view) ?? asStr(raw.pane);
+  const view = asView(rawView);
   switch (action) {
     case "open": {
-      const path = asStr(raw.path);
+      // Wiki opens ride the wiki channel (WikiPane consumes wikiTarget, not a
+      // pane-target id) — accept the page path in either `path` or, for an
+      // explicit wiki view, the event stream's standard `ref` field.
+      const path = asStr(raw.path) ?? (view === "wiki" ? asStr(raw.ref) : undefined);
       if (path && (view === "wiki" || !view)) return { kind: "wiki", path };
       if (!view) return null;
       return { kind: "open", view, ref: asStr(raw.ref), query: asStr(raw.query) };
@@ -53,6 +57,11 @@ export function parseWorkspaceCommand(raw: Record<string, unknown>): WorkspaceCo
     case "split":
       return view && isTileable(view) ? { kind: "split", view, ref: asStr(raw.ref) } : null;
     case "close":
+      // A close naming an UNKNOWN view is malformed — drop it rather than
+      // falling through to "close the focused tile" (a drifted gateway command
+      // must not mutate the layout). Omitting the view stays the intentional
+      // close-focused form.
+      if (rawView && !view) return null;
       return { kind: "close", view: view ?? undefined };
     case "focus":
       return view ? { kind: "focus", view } : null;

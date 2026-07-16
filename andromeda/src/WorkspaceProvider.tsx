@@ -5,7 +5,15 @@ import { PANES, paneLabel } from "./components/panes";
 import { getJSON, setJSON } from "./storage";
 import { closeInTiles, focusedTile, isTileable, MAX_TILES, openInTiles, sanitizeTiles, splitInTiles } from "./tiling";
 import type { View } from "./types";
-import { Ctx, FeedCtx, type NotebookTop, type PaneFeed, type PaneTarget, type SavedLayout } from "./workspaceContext";
+import {
+  Ctx,
+  FeedCtx,
+  FeedWriteCtx,
+  type NotebookTop,
+  type PaneFeed,
+  type PaneTarget,
+  type SavedLayout,
+} from "./workspaceContext";
 
 const HIDDEN_VIEWS_KEY = "andromeda.hiddenPanes";
 const VIEW_KEYS: ReadonlySet<View> = new Set(PANES.map((p) => p.key));
@@ -266,10 +274,11 @@ export function WorkspaceProvider({
     return { aiText: parts.join("\n\n"), activeResource: feeds.get(view)?.resource };
   }, [feeds, tiles, view]);
 
-  const feedValue = useMemo(
-    () => ({ aiText, activeResource, registerPane, unregisterPane }),
-    [aiText, activeResource, registerPane, unregisterPane],
-  );
+  // Reader (per-keystroke churn, consumed by AIPanel) and writer (two stable
+  // callbacks, consumed by every registering pane) stay separate so a keystroke
+  // in one tile never re-renders the other tiles through their registration.
+  const feedValue = useMemo(() => ({ aiText, activeResource }), [aiText, activeResource]);
+  const feedWriteValue = useMemo(() => ({ registerPane, unregisterPane }), [registerPane, unregisterPane]);
 
   const value = useMemo(
     () => ({
@@ -342,7 +351,9 @@ export function WorkspaceProvider({
 
   return (
     <Ctx.Provider value={value}>
-      <FeedCtx.Provider value={feedValue}>{children}</FeedCtx.Provider>
+      <FeedWriteCtx.Provider value={feedWriteValue}>
+        <FeedCtx.Provider value={feedValue}>{children}</FeedCtx.Provider>
+      </FeedWriteCtx.Provider>
     </Ctx.Provider>
   );
 }

@@ -4,10 +4,11 @@
 // context grows a field.
 import type { ComponentProps, ReactNode } from "react";
 import { vi } from "vitest";
-import { Ctx, FeedCtx } from "@/workspaceContext";
+import { Ctx, FeedCtx, FeedWriteCtx } from "@/workspaceContext";
 
 export type WorkspaceValue = NonNullable<ComponentProps<typeof Ctx.Provider>["value"]>;
 export type FeedValue = NonNullable<ComponentProps<typeof FeedCtx.Provider>["value"]>;
+export type FeedWriters = NonNullable<ComponentProps<typeof FeedWriteCtx.Provider>["value"]>;
 
 export const testCfg = { url: "http://gateway.test", token: "secret" };
 
@@ -55,6 +56,12 @@ export function feedValue(overrides: Partial<FeedValue> = {}): FeedValue {
   return {
     aiText: "",
     activeResource: undefined,
+    ...overrides,
+  };
+}
+
+export function feedWriters(overrides: Partial<FeedWriters> = {}): FeedWriters {
+  return {
     registerPane: vi.fn(),
     unregisterPane: vi.fn(),
     ...overrides,
@@ -64,15 +71,19 @@ export function feedValue(overrides: Partial<FeedValue> = {}): FeedValue {
 export function WorkspaceStub({
   value,
   feed,
+  writers,
   children,
 }: {
   value?: WorkspaceValue;
   feed?: FeedValue;
+  writers?: FeedWriters;
   children: ReactNode;
 }) {
   return (
     <Ctx.Provider value={value ?? workspaceValue()}>
-      <FeedCtx.Provider value={feed ?? feedValue()}>{children}</FeedCtx.Provider>
+      <FeedWriteCtx.Provider value={writers ?? feedWriters()}>
+        <FeedCtx.Provider value={feed ?? feedValue()}>{children}</FeedCtx.Provider>
+      </FeedWriteCtx.Provider>
     </Ctx.Provider>
   );
 }
