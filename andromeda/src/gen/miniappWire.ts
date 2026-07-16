@@ -499,6 +499,11 @@ export interface ProjectSiteRow {
   completion_inspection?: string
 }
 
+export interface ProjectSiteSetStatusOut {
+  path?: string
+  status?: string
+}
+
 export interface ProjectSitesOut {
   sites?: ProjectSiteRow[]
 }

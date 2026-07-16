@@ -78,6 +78,11 @@ const (
 	QueryKindHyDE      = wiki.QueryKindHyDE
 )
 
+// NormalizeSiteStatus accepts 후보/계약/개설/준공 or "" (미분류).
+func NormalizeSiteStatus(status string) (string, error) {
+	return wiki.NormalizeSiteStatus(status)
+}
+
 // Tier1Store is the prompt-injection read surface for high-importance pages.
 type Tier1Store interface {
 	Tier1Pages(minImportance float64) []Tier1Result

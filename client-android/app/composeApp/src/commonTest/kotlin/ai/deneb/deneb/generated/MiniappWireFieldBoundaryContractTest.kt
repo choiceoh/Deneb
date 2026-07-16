@@ -2781,6 +2781,22 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "ProjectSiteSetStatusOut.path",
+            serializer = ProjectSiteSetStatusOut.serializer(),
+            field = "path",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
+            name = "ProjectSiteSetStatusOut.status",
+            serializer = ProjectSiteSetStatusOut.serializer(),
+            field = "status",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "ProjectSitesOut.sites",
             serializer = ProjectSitesOut.serializer(),
             field = "sites",

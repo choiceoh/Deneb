@@ -1,8 +1,10 @@
 package ai.deneb.deneb
 
 import ai.deneb.deneb.generated.ProjectDigestsOut
+import ai.deneb.deneb.generated.ProjectSiteSetStatusOut
 import ai.deneb.deneb.generated.ProjectSitesOut
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Project surface of [DenebGatewayClient] (`miniapp.project.*`). An extension so
@@ -28,3 +30,16 @@ suspend fun DenebGatewayClient.fetchProjectDigests(): ProjectDigestsOut? = callR
  * [fetchProjectDigests]).
  */
 suspend fun DenebGatewayClient.fetchProjectSites(): ProjectSitesOut? = callRpc<ProjectSitesOut>("miniapp.project.sites", buildJsonObject {})
+
+/**
+ * Set a 현장 page's lifecycle status (`miniapp.project.site.setStatus`).
+ * [status] is 후보/계약/개설/준공, or "" to clear to 미분류. Only real 현장 pages
+ * are writable — 대표페이지 fallback pins reject. Returns null on failure.
+ */
+suspend fun DenebGatewayClient.setProjectSiteStatus(path: String, status: String): ProjectSiteSetStatusOut? = callRpc<ProjectSiteSetStatusOut>(
+    "miniapp.project.site.setStatus",
+    buildJsonObject {
+        put("path", path)
+        put("status", status)
+    },
+)

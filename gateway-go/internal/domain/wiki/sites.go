@@ -29,6 +29,49 @@ type SiteFields struct {
 	Note                 string   // freeform note appended under the standard body
 }
 
+// ValidSiteStatuses are the lifecycle values a 현장 page may carry. Empty string is
+// also valid and means 미분류 (the status frontmatter key is omitted on render).
+var ValidSiteStatuses = []string{"후보", "계약", "개설", "준공"}
+
+// NormalizeSiteStatus trims status and accepts 후보/계약/개설/준공 or "" (미분류).
+// Any other value is rejected so free-form labels can't sneak onto the map filter.
+func NormalizeSiteStatus(status string) (string, error) {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return "", nil
+	}
+	for _, v := range ValidSiteStatuses {
+		if status == v {
+			return status, nil
+		}
+	}
+	return "", fmt.Errorf("invalid status %q (want 후보/계약/개설/준공 or empty)", status)
+}
+
+// SetSiteStatus sets (or clears) the lifecycle status on an existing 현장 page.
+// Unlike UpsertSitePage, empty status clears Meta.Status (미분류) rather than
+// leaving it unchanged. Rejects non-현장 paths and unknown status labels.
+func (s *Store) SetSiteStatus(path, status string) error {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" {
+		return fmt.Errorf("path is required")
+	}
+	if !IsProjectSitePage(path) {
+		return fmt.Errorf("not a site page: %s", path)
+	}
+	normalized, err := NormalizeSiteStatus(status)
+	if err != nil {
+		return err
+	}
+	return s.UpdatePage(path, func(cur *Page) (*Page, error) {
+		if cur == nil {
+			return nil, fmt.Errorf("site page not found: %s", path)
+		}
+		cur.Meta.Status = normalized
+		return cur, nil
+	})
+}
+
 // UpsertSitePage creates or edits a 현장 page in the 현장 공통 포맷. Non-empty fields
 // overwrite; empty fields are preserved (partial edit). A newly created page gets a
 // standard body scaffold. Returns the page path so the caller can link/report it.

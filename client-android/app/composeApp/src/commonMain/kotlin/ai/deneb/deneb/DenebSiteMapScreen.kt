@@ -244,6 +244,23 @@ private const val STATUS_CONTRACT = "계약"
 private const val STATUS_COMPLETED = "준공"
 private const val STATUS_PROSPECTIVE = "후보"
 
+// Lifecycle choices for the detail-sheet editor ("" = 미분류).
+private data class StatusChoice(val value: String, val label: String)
+
+private val STATUS_CHOICES = listOf(
+    StatusChoice(STATUS_PROSPECTIVE, "후보"),
+    StatusChoice(STATUS_CONTRACT, "계약"),
+    StatusChoice(STATUS_UNDER_CONSTRUCTION, "개설"),
+    StatusChoice(STATUS_COMPLETED, "준공"),
+    StatusChoice("", "미분류"),
+)
+
+/** Path-shape check for 프로젝트/<name>/현장/<site>.md — editable status surface. */
+private fun isSitePagePath(path: String): Boolean {
+    val parts = path.trim().replace('\\', '/').split('/')
+    return parts.size == 4 && parts[0] == "프로젝트" && parts[2] == "현장" && parts[3].endsWith(".md")
+}
+
 private fun statusVisible(
     status: String,
     showContracted: Boolean,
@@ -374,7 +391,12 @@ fun DenebSiteMapScreen(
 
                     rows.isEmpty() -> DenebEmpty("현장이 있는 프로젝트가 없습니다.")
 
-                    else -> SiteMapContent(rows, onOpenProject)
+                    else -> SiteMapContent(
+                        rows = rows,
+                        onOpenProject = onOpenProject,
+                        setSiteStatus = { path, status -> client.setProjectSiteStatus(path, status)?.status },
+                        onSitesReload = { load() },
+                    )
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -387,14 +409,22 @@ fun DenebSiteMapScreen(
 /**
  * The map + filters + list. Pure presentation over an already-fetched [rows]; the
  * shell owns fetch + loading/error/empty. Filter + selection state is local UI state.
+ * [setSiteStatus] writes a 현장 page lifecycle and returns the normalized status
+ * (null on failure); [onSitesReload] refreshes the parent list after a successful write.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) -> Unit) {
+internal fun SiteMapContent(
+    rows: List<ProjectSiteRow>,
+    onOpenProject: (String) -> Unit = {},
+    setSiteStatus: (suspend (path: String, status: String) -> String?)? = null,
+    onSitesReload: (suspend () -> Unit)? = null,
+) {
     val placed = remember(rows) { placeSites(rows) }
     val pins = placed.pins
     val unplaced = placed.unplaced
     val haptics = rememberHaptics()
+    val scope = rememberCoroutineScope()
 
     var sourceFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
     var typeFilter by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -561,16 +591,58 @@ internal fun SiteMapContent(rows: List<ProjectSiteRow>, onOpenProject: (String) 
         }
     }
 
-    // Detail sheet (B3): 거래처/현장/에너지원/특성/용량/마감 + 위키 열기.
+    // Detail sheet (B3): 거래처/현장/상태(편집)/에너지원/특성/용량/마감 + 위키 열기.
     selected?.let { pin ->
         val sheetState = rememberModalBottomSheetState()
+        var statusBusy by remember(pin.path) { mutableStateOf(false) }
+        var statusError by remember(pin.path) { mutableStateOf<String?>(null) }
         ModalBottomSheet(onDismissRequest = { selected = null }, sheetState = sheetState) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
                 Text(pin.project, style = DenebType.subject)
                 Spacer(Modifier.height(12.dp))
                 if (pin.client.isNotEmpty()) DetailRow("거래처", pin.client)
                 DetailRow("현장", pin.site)
-                if (pin.status.isNotEmpty()) DetailRow("상태", pin.status)
+                if (isSitePagePath(pin.path) && setSiteStatus != null) {
+                    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        Text("상태", style = DenebType.meta, color = denebHint())
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            STATUS_CHOICES.forEach { choice ->
+                                DenebChip(
+                                    selected = pin.status == choice.value,
+                                    enabled = !statusBusy,
+                                    onClick = {
+                                        if (statusBusy || pin.status == choice.value) return@DenebChip
+                                        scope.launch {
+                                            statusBusy = true
+                                            statusError = null
+                                            val next = setSiteStatus(pin.path, choice.value)
+                                            if (next == null) {
+                                                statusError = "상태 변경에 실패했습니다."
+                                            } else {
+                                                selected = pin.copy(status = next)
+                                                onSitesReload?.invoke()
+                                            }
+                                            statusBusy = false
+                                        }
+                                    },
+                                ) {
+                                    Text(choice.label, style = DenebType.meta)
+                                }
+                            }
+                        }
+                        if (statusBusy) {
+                            Spacer(Modifier.height(6.dp))
+                            Text("저장 중…", style = DenebType.meta, color = denebHint())
+                        }
+                        statusError?.let { err ->
+                            Spacer(Modifier.height(6.dp))
+                            Text(err, style = DenebType.meta, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                } else {
+                    DetailRow("상태", pin.status.ifEmpty { "미분류" })
+                }
                 if (pin.source.isNotEmpty()) DetailRow("에너지원", pin.source)
                 if (pin.type.isNotEmpty()) DetailRow("특성", typeLabel(pin.type))
                 DetailRow("용량", capacityText(pin.capacity))

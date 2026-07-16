@@ -608,6 +608,13 @@ data class ProjectSiteRow(
 
 @Immutable
 @Serializable
+data class ProjectSiteSetStatusOut(
+    val path: String = "",
+    val status: String = "",
+)
+
+@Immutable
+@Serializable
 data class ProjectSitesOut(
     val sites: List<ProjectSiteRow> = emptyList(),
 )

@@ -110,6 +110,10 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
 
   "miniapp.project.digests": () => ({ digests: fx.digests }),
   "miniapp.project.sites": () => ({ sites: fx.projectSites }),
+  "miniapp.project.site.setStatus": (p) => ({
+    path: String(p.path ?? ""),
+    status: typeof p.status === "string" ? p.status : "",
+  }),
 
   "miniapp.crons.list": () => ({ jobs: fx.crons, total: fx.crons.length }),
   "miniapp.crons.update": (p) => ({ ...p }),

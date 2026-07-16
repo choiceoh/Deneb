@@ -132,6 +132,40 @@ func TestProjectAnchor_MatchesBySiteNameMentionIgnoresUnrelatedText(t *testing.T
 	}
 }
 
+// TestSetSiteStatus_SetsAndClears: SetSiteStatus overwrites lifecycle including clear
+// to 미분류 (empty), and rejects non-현장 paths / unknown labels.
+func TestSetSiteStatus_SetsAndClears(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+
+	path, err := store.UpsertSitePage("군산수산리", "수산리", SiteFields{
+		Address: "전북 군산시 옥구읍 수산리", Status: "계약",
+	})
+	if err != nil {
+		t.Fatalf("UpsertSitePage: %v", err)
+	}
+	if err := store.SetSiteStatus(path, "개설"); err != nil {
+		t.Fatalf("SetSiteStatus 개설: %v", err)
+	}
+	page := testutil.Must(store.ReadPage(path))
+	if page.Meta.Status != "개설" {
+		t.Fatalf("status = %q, want 개설", page.Meta.Status)
+	}
+	if err := store.SetSiteStatus(path, ""); err != nil {
+		t.Fatalf("SetSiteStatus clear: %v", err)
+	}
+	page = testutil.Must(store.ReadPage(path))
+	if page.Meta.Status != "" {
+		t.Fatalf("cleared status = %q, want empty", page.Meta.Status)
+	}
+	if err := store.SetSiteStatus("프로젝트/군산수산리/대표.md", "개설"); err == nil {
+		t.Fatal("expected reject for 대표페이지 path")
+	}
+	if err := store.SetSiteStatus(path, "공사중"); err == nil {
+		t.Fatal("expected reject for unknown status label")
+	}
+}
+
 // TestUpsertSitePage_CreateThenPartialEdit: create a 현장 page in the 공통 포맷, then
 // a partial edit sets a later milestone without clobbering the earlier fields.
 func TestUpsertSitePage_CreateThenPartialEdit(t *testing.T) {
