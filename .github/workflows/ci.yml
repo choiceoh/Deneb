@@ -160,13 +160,18 @@ jobs:
       - name: Test skill trigger and ablation contracts
         run: make skill-eval-test
 
-  # ── Go gateway ──────────────────────────────────────────────────
-  go:
+  # ── Go gateway (parallel lanes) ─────────────────────────────────
+  # Wall time was ~6m with build→lint→unit+cover→integration tags in one
+  # job. Split into three concurrent jobs; a thin "Go" aggregator keeps the
+  # historical required-check name. Coverprofile lives on Nightly Drift
+  # (atomic covermode slowed every PR without gating on the number).
+
+  go-static:
     needs: [docs-scope]
     if: needs.docs-scope.outputs.docs_only != 'true'
-    name: Go
+    name: Go (static)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 15
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: gateway-go
@@ -227,39 +232,6 @@ jobs:
           # Prefer PR base / push before SHA over HEAD~1 (merge commits make HEAD~1 wrong).
           args: --new-from-rev=${{ github.event.pull_request.base.sha || github.event.before || 'HEAD~1' }}
 
-      - name: Test (coverage)
-        run: CGO_ENABLED=0 go test -count=1 -coverprofile=coverage.out -covermode=atomic ./...
-
-      - name: Test runtime-health audit
-        working-directory: .
-        run: make runtime-health-test
-
-      # Absolute coverage floor removed: it did not catch behavior regressions and
-      # Health Bench already treats raw coverage as non-scoring diagnostic evidence.
-      - name: Report coverage total
-        run: |
-          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $NF}' | tr -d '%')
-          echo "Total coverage: ${TOTAL}%"
-          echo "coverage_total=${TOTAL}" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-coverage
-          path: gateway-go/coverage.out
-          retention-days: 7
-
-      - name: Test (integration)
-        run: CGO_ENABLED=0 go test -count=1 -tags=integration ./...
-
-      - name: Race test (concurrency core)
-        run: >-
-          CGO_ENABLED=1 go test -race -count=1
-          ./internal/core/corecache
-          ./internal/ai/provider
-          ./internal/pipeline/chat/streaming
-          ./internal/runtime/events
-
       - name: Build gateway binary
         run: CGO_ENABLED=0 go build -o gateway ./cmd/gateway/
 
@@ -280,9 +252,82 @@ jobs:
           path: gateway-go/gateway
           retention-days: 1
 
+  go-unit:
+    needs: [docs-scope]
+    if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Go (unit)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: gateway-go
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: gateway-go/go.sum
+
+      # No coverprofile here — atomic coverage was ~2× unit wall with no PR gate.
+      # Nightly Drift emits the coverage artifact.
+      - name: Test
+        run: CGO_ENABLED=0 go test -count=1 ./...
+
+      - name: Test runtime-health audit
+        working-directory: .
+        run: make runtime-health-test
+
+      - name: Race test (concurrency core)
+        run: >-
+          CGO_ENABLED=1 go test -race -count=1
+          ./internal/core/corecache
+          ./internal/ai/provider
+          ./internal/pipeline/chat/streaming
+          ./internal/runtime/events
+
+  go-integration:
+    needs: [docs-scope]
+    if: needs.docs-scope.outputs.docs_only != 'true'
+    name: Go (integration tags)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: gateway-go
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: gateway-go/go.sum
+
+      - name: Test (integration tags)
+        run: CGO_ENABLED=0 go test -count=1 -tags=integration ./...
+
+  # Aggregate so rulesets / land scripts that expect check name "Go" still work.
+  go:
+    name: Go
+    needs: [go-static, go-unit, go-integration]
+    if: always() && needs.go-static.result != 'skipped'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 2
+    steps:
+      - name: Require parallel Go lanes
+        run: |
+          set -euo pipefail
+          test "${{ needs.go-static.result }}" = "success"
+          test "${{ needs.go-unit.result }}" = "success"
+          test "${{ needs.go-integration.result }}" = "success"
+
   # ── Integration (end-to-end gateway test) ────────────────────
   integration:
-    needs: [go]
+    needs: [go-static]
     name: Integration (gateway e2e)
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 10

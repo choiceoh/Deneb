@@ -26,9 +26,11 @@ jobs:
   go-gate:
     # Mirrors the local `make check` surfaces the PR lane misses: gofumpt over
     # the full tree (ci.yml checks plain gofmt + diff-mode golangci only).
-    name: go (gofumpt + vet + test)
+    # Coverage artifact also lives here — PR CI dropped atomic covermode to cut
+    # unit wall (~2×) with no PR coverage floor.
+    name: go (gofumpt + vet + test + coverage)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,16 +48,34 @@ jobs:
         working-directory: gateway-go
         run: go vet ./...
 
-      - name: Test
+      - name: Test with coverage
         working-directory: gateway-go
-        run: CGO_ENABLED=0 go test -count=1 ./...
+        run: CGO_ENABLED=0 go test -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Report coverage total
+        working-directory: gateway-go
+        run: |
+          TOTAL=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $NF}' | tr -d '%')
+          echo "Total coverage: ${TOTAL}%"
+          echo "coverage_total=${TOTAL}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: gateway-go/coverage.out
+          retention-days: 14
 
   kotlin:
     # Same gate as kotlin-lint.yml, which triggers on pull_request only —
     # direct pushes to main skip it entirely. Nightly closes that hole.
+    # Self-hosted gx10 keeps ~/.gradle + ~/android-sdk warm (matches PR lane).
     name: kotlin (spotless + detekt + desktopTest + android compile)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, gx10]
     timeout-minutes: 25
+    env:
+      ANDROID_HOME: /home/choiceoh/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-21-openjdk-arm64
     defaults:
       run:
         working-directory: client-android/app
@@ -64,32 +84,19 @@ jobs:
         with:
           submodules: false
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5.5.0
-        with:
-          distribution: temurin
-          java-version: "21"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: spotlessCheck
-        run: ./gradlew spotlessCheck --no-daemon
-
-      - name: detekt
-        run: ./gradlew detekt --no-daemon
-
-      - name: Full native client unit suite
-        run: ./gradlew desktopTest --no-daemon
-
-      - name: Native client integration contracts
-        run: ./gradlew :composeApp:integrationTest --no-daemon
-
-      - name: android compile (composeApp androidMain + androidApp fossRelease)
-        run: |
-          ./gradlew --no-daemon \
-            :composeApp:compileAndroidMain \
-            :androidApp:compileFossReleaseKotlin
+      - name: spotless + detekt + desktopTest + android compile
+        # desktopTest already includes Gateway*/DenebUiBlockIntegrationTest —
+        # no separate integrationTest re-run (that was pure wall waste).
+        run: >
+          ./gradlew
+          spotlessCheck
+          detekt
+          desktopTest
+          :composeApp:compileAndroidMain
+          :androidApp:compileFossReleaseKotlin
 
   andromeda:
     name: andromeda (pnpm verify)

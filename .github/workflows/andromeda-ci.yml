@@ -1,18 +1,19 @@
 name: Andromeda CI
 
 # Desktop client (andromeda/) verify + wire-drift, in the monorepo.
-# - verify runs on andromeda changes; wire-drift also runs on gateway-go changes
-#   (a gateway contract change must re-check the committed TS wire types).
+# - verify/rust heavy work runs only when andromeda/** changes; gateway-only PRs
+#   get a ~seconds success stub so required checks stay green without ~2.5m waste.
+# - wire-drift also runs on gateway-go changes (a gateway contract change must
+#   re-check the committed TS wire types).
 # - wire-drift needs no Deneb clone / DENEB_DIR: gen-wire auto-detects ../gateway-go
-#   from andromeda/ (scripts/gen-wire.mjs). paths is workflow-level, so verify also
-#   fires on gateway-only changes; split into two workflows if that waste matters.
+#   from andromeda/ (scripts/gen-wire.mjs).
 
 on:
   push:
     branches: [main]
-    paths: ["andromeda/**", "gateway-go/**"]
+    paths: ["andromeda/**", "gateway-go/**", ".github/workflows/andromeda-ci.yml"]
   pull_request:
-    paths: ["andromeda/**", "gateway-go/**"]
+    paths: ["andromeda/**", "gateway-go/**", ".github/workflows/andromeda-ci.yml"]
 
 # Cancel superseded runs (rapid pushes to a PR) — every other CI workflow
 # (ci.yml, sbom.yml, docs.yml, generate-check.yml) already does this; andromeda
@@ -24,43 +25,111 @@ concurrency:
 permissions:
   contents: read
 
-defaults:
-  run:
-    working-directory: andromeda
-
 jobs:
-  verify:
+  scope:
+    name: path scope
     runs-on: ubuntu-latest
+    outputs:
+      andromeda: ${{ steps.check.outputs.andromeda }}
+      gateway: ${{ steps.check.outputs.gateway }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Ensure base commit
+        uses: ./.github/actions/ensure-base-commit
+        with:
+          base-sha: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+          fetch-ref: ${{ github.event_name == 'push' && github.ref_name || github.event.pull_request.base.ref }}
+
+      - name: Detect andromeda vs gateway paths
+        id: check
+        env:
+          BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_SHA:-}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "andromeda=true" >> "$GITHUB_OUTPUT"
+            echo "gateway=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${BASE_SHA}" HEAD -- 'andromeda/**' '.github/workflows/andromeda-ci.yml' | grep -q .; then
+            echo "andromeda=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andromeda=false" >> "$GITHUB_OUTPUT"
+          fi
+          if git diff --name-only "${BASE_SHA}" HEAD -- 'gateway-go/**' '.github/workflows/andromeda-ci.yml' | grep -q .; then
+            echo "gateway=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gateway=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  verify:
+    needs: [scope]
+    # Always conclude (never job-skip) so required "verify" checks stay mergeable
+    # on gateway-only PRs; heavy steps are gated below.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andromeda
+    steps:
+      - name: Skip heavy verify (no andromeda changes)
+        if: needs.scope.outputs.andromeda != 'true'
+        working-directory: .
+        run: echo "No andromeda/** changes — verify not required for this diff."
+
+      - uses: actions/checkout@v7
+        if: needs.scope.outputs.andromeda == 'true'
 
       - name: Setup pnpm
+        if: needs.scope.outputs.andromeda == 'true'
         uses: pnpm/action-setup@v6
         with:
           package_json_file: andromeda/package.json
 
       - name: Setup Node
+        if: needs.scope.outputs.andromeda == 'true'
         uses: actions/setup-node@v7.0.0
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: andromeda/pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-      - run: pnpm run lint
-      - run: pnpm run format:check
-      - run: pnpm run test
+      - if: needs.scope.outputs.andromeda == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: needs.scope.outputs.andromeda == 'true'
+        run: pnpm run typecheck
+      - if: needs.scope.outputs.andromeda == 'true'
+        run: pnpm run lint
+      - if: needs.scope.outputs.andromeda == 'true'
+        run: pnpm run format:check
+      - if: needs.scope.outputs.andromeda == 'true'
+        run: pnpm run test
       - name: Mock gateway integration contract
+        if: needs.scope.outputs.andromeda == 'true'
         run: pnpm run test:integration
-      - run: pnpm run build
+      - if: needs.scope.outputs.andromeda == 'true'
+        run: pnpm run build
 
   rust:
+    needs: [scope]
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andromeda
     steps:
+      - name: Skip heavy rust (no andromeda changes)
+        if: needs.scope.outputs.andromeda != 'true'
+        working-directory: .
+        run: echo "No andromeda/** changes — rust lane not required for this diff."
+
       - uses: actions/checkout@v7
+        if: needs.scope.outputs.andromeda == 'true'
 
       - name: Install Tauri Linux dependencies
+        if: needs.scope.outputs.andromeda == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
@@ -75,26 +144,35 @@ jobs:
             wget
 
       - name: Setup Rust
+        if: needs.scope.outputs.andromeda == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
 
       - name: Cache Rust build
+        if: needs.scope.outputs.andromeda == 'true'
         uses: swatinem/rust-cache@v2
         with:
           workspaces: andromeda/src-tauri -> target
 
       - name: Check Rust crate
+        if: needs.scope.outputs.andromeda == 'true'
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
 
       - name: Lint Rust crate
+        if: needs.scope.outputs.andromeda == 'true'
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Test Rust crate
+        if: needs.scope.outputs.andromeda == 'true'
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
 
   wire-drift:
+    needs: [scope]
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andromeda
     steps:
       - uses: actions/checkout@v7
 

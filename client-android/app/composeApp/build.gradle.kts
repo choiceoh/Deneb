@@ -189,6 +189,12 @@ tasks.register<Test>("integrationTest") {
     shouldRunAfter(desktopTestTask)
 }
 
+// Parallelize JVM tests across forks (desktopTest dominates kotlin-lint wall).
+// Cap at 4 so ARM hosts with warm Gradle don't thrash under memory pressure.
+tasks.withType<Test>().configureEach {
+    maxParallelForks = minOf(4, (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1))
+}
+
 compose.desktop {
     application {
         // The desktop JVM target is the headless mobile-UI verification substrate

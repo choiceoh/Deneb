@@ -9,15 +9,18 @@
 #     accepted pre-existing findings live in config/detekt-baseline.xml —
 #     baseline updates need operator approval per docs/agent-rules/testing.md)
 #   - full desktopTest: every deterministic shared/common and desktop JVM test,
-#     including generated wire compatibility contracts
+#     including generated wire compatibility contracts (covers the Gateway* /
+#     DenebUiBlockIntegrationTest set — no separate integrationTest re-run)
 #   - android compile: :composeApp:compileAndroidMain + :androidApp:compileFossReleaseKotlin.
 #     compileKotlinDesktop only type-checks the desktop source set, so commonMain
 #     code that resolves only on the Android target (#2698) and stale androidApp
-#     references (#2702) compiled clean here yet broke publish-apk. These are the
-#     exact tasks the fossRelease APK build depends on. ubuntu-latest ships the
-#     Android SDK (ANDROID_HOME=/usr/local/lib/android/sdk), so no SDK setup is
-#     needed; it is x86_64 so Kotlin/Native is supported (the Android compile does
-#     not use it regardless).
+#     references (#2702) compiled clean here yet broke publish-apk.
+#
+# Runs on the srv4 self-hosted runner (gx10 label) so the host ~/.gradle and
+# ~/android-sdk stay warm — cold ubuntu-latest was ~7m wall. Same trust model as
+# publish-apk.yml: same-repo agent/operator PRs only (never fork PRs on this host).
+# One gradle invocation keeps a single daemon; changelog-only diffs take the
+# light lane (spotless+detekt) so patch-note PRs don't pay desktopTest.
 name: kotlin-lint
 
 on:
@@ -37,8 +40,11 @@ permissions:
 jobs:
   lint:
     name: spotless + detekt + full desktopTest
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, gx10]
     timeout-minutes: 20
+    env:
+      ANDROID_HOME: /home/choiceoh/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-21-openjdk-arm64
     defaults:
       run:
         working-directory: client-android/app
@@ -46,32 +52,57 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: false
+          fetch-depth: 1
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5.5.0
+      - name: Ensure base commit
+        if: github.event.pull_request.base.sha != ''
+        uses: ./.github/actions/ensure-base-commit
         with:
-          distribution: temurin
-          java-version: "21"
+          base-sha: ${{ github.event.pull_request.base.sha }}
+          fetch-ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Detect heavy vs light native paths
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        working-directory: .
+        run: |
+          set -euo pipefail
+          # Heavy: anything that can change compiled code or the gradle graph.
+          # Light: changelog fragments / docs / this workflow alone.
+          # workflow_dispatch (no PR base) always takes the heavy lane.
+          if [ -z "${BASE_SHA:-}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${BASE_SHA}" HEAD -- \
+              'client-android/**/*.kt' \
+              'client-android/**/*.kts' \
+              'client-android/**/*.toml' \
+              'client-android/**/gradle*' \
+              'client-android/**/*.xml' \
+              'client-android/**/*.pro' \
+              'client-android/**/*.properties' \
+              | grep -q .; then
+            echo "heavy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "heavy=false" >> "$GITHUB_OUTPUT"
+            echo "Light lane: no compiled native sources changed."
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: spotlessCheck
-        run: ./gradlew spotlessCheck --no-daemon
+      - name: spotless + detekt (light)
+        if: steps.scope.outputs.heavy != 'true'
+        run: ./gradlew spotlessCheck detekt
 
-      - name: detekt
-        run: ./gradlew detekt --no-daemon
-
-      - name: Full native client unit suite
-        run: ./gradlew desktopTest --no-daemon
-
-      - name: Native client integration contracts
-        run: ./gradlew :composeApp:integrationTest --no-daemon
-
-      # Android compile gate — catches breaks the desktop path cannot see (see the
-      # file header). ubuntu-latest pre-sets ANDROID_HOME, so no SDK setup step.
-      - name: android compile (composeApp androidMain + androidApp fossRelease)
-        run: |
-          ./gradlew --no-daemon \
-            :composeApp:compileAndroidMain \
-            :androidApp:compileFossReleaseKotlin
+      - name: spotless + detekt + desktopTest + android compile
+        if: steps.scope.outputs.heavy == 'true'
+        run: >
+          ./gradlew
+          spotlessCheck
+          detekt
+          desktopTest
+          :composeApp:compileAndroidMain
+          :androidApp:compileFossReleaseKotlin
