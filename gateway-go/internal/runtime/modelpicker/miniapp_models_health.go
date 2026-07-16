@@ -62,14 +62,21 @@ func (s *Controller) miniappModelHealthProbes(
 		if isLocalURL(baseURL) {
 			// Local providers are probed once by discoverMiniappLocalModels and
 			// reused here; a non-empty served list means up + enumerable.
-			models := localDiscovered[provider.name]
-			probes[provider.name] = providerModelProbe{
-				checked:   true,
-				reachable: len(models) > 0,
-				listed:    len(models) > 0,
-				models:    models,
+			if models := localDiscovered[provider.name]; len(models) > 0 {
+				probes[provider.name] = providerModelProbe{
+					checked:   true,
+					reachable: true,
+					listed:    true,
+					models:    models,
+				}
+				continue
 			}
-			continue
+			// Local URL but nothing enumerable: an Anthropic-front loopback
+			// route (e.g. kimi behind the wormhole router) has no OpenAI
+			// /models, so discovery is empty by design. Fall through to the
+			// plain reachability probe — the same "reachable is never a false
+			// offline" contract remote Anthropic endpoints get. A genuinely
+			// dead local endpoint still fails that probe → offline.
 		}
 		// Every remote provider with a resolvable endpoint (built-in cloud or
 		// configured custom) gets a live reachability probe — previously only

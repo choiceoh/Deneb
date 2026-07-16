@@ -254,6 +254,34 @@ func TestProbeModelsClassifiedHandlesMalformedResponses(t *testing.T) {
 	}
 }
 
+// A local (loopback) provider that local discovery cannot enumerate — an
+// Anthropic-front route on the wormhole router has no OpenAI /models — must
+// fall back to the plain reachability probe instead of reading as a false
+// "offline". A genuinely dead local endpoint must still probe unreachable.
+func TestMiniappModelHealthProbes_LocalAnthropicFrontFallsBackToReachability(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r) // wormhole loopback: /models does not exist on the anthropic front
+	}))
+	defer srv.Close()
+
+	s := &Controller{}
+	probes := s.miniappModelHealthProbes(context.Background(), []providerSpec{
+		{name: "kimi", baseURL: srv.URL},
+		{name: "dead", baseURL: "http://127.0.0.1:1"},
+		{name: "vllm", baseURL: srv.URL},
+	}, map[string][]string{"vllm": {"served-model"}})
+
+	if p := probes["kimi"]; !p.checked || !p.reachable || p.listed {
+		t.Fatalf("kimi probe = %+v, want checked+reachable without a list", p)
+	}
+	if p := probes["dead"]; !p.checked || p.reachable {
+		t.Fatalf("dead probe = %+v, want checked+unreachable", p)
+	}
+	if p := probes["vllm"]; !p.listed || !p.reachable || len(p.models) != 1 {
+		t.Fatalf("vllm probe = %+v, want discovery list preserved", p)
+	}
+}
+
 func TestProbeModelsClassifiedHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
