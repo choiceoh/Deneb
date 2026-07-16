@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.OnLiveTabActivation
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -77,6 +78,7 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.todayIn
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Month-grid calendar (`miniapp.calendar.list_range`): a tappable month grid on
@@ -200,6 +202,15 @@ fun DenebCalendarScreen(
     val visible = monthForPage(pagerState.currentPage)
     val selMonth = monthOf(selected)
     val selEvents = cache[selMonth]
+
+    // Always-alive tab: the entry fetches run once per app session, so returning
+    // to the tab after a while silently refreshes what pull-to-refresh would —
+    // the selected month, to-dos, and proposals — while the rendered grid stays up.
+    OnLiveTabActivation(CalendarRevalidateAfter) {
+        loadMonth(selMonth, force = true)
+        loadTodos()
+        client.refreshCalendarProposals()
+    }
 
     // The day list is driven by the selected day's month (it differs from the
     // swiped-to month only for the moment a trailing-cell tap is animating the
@@ -822,3 +833,7 @@ private fun dayTimeLabel(event: CalendarEvent, day: LocalDate, tz: TimeZone): St
     if (startDate != null && startDate != day) return "계속"
     return stampOf(event.start, false)?.time ?: "—"
 }
+
+// How stale the calendar may be before a tab re-activation silently refreshes it —
+// wider than mail (events churn less); matches the client range-cache TTL scale.
+private val CalendarRevalidateAfter = 120.seconds
