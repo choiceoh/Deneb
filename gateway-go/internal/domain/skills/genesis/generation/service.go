@@ -483,8 +483,8 @@ func (s *Service) judgeGenerated(ctx context.Context, skill *GeneratedSkill) (pa
 
 // skillSpecificityIssues returns the reasons a generated skill is too vague to
 // be worth persisting, or nil if it passes. The checks mirror the structure the
-// genesis prompt asks for (When to Use / Procedure / Pitfalls / Verification,
-// description with a "Use when" trigger) and target the vagueness failure mode.
+// genesis prompt asks for (When to Use / Procedure / Verification, description
+// with a "Use when" trigger) and target the vagueness failure mode.
 func skillSpecificityIssues(skill *GeneratedSkill) []string {
 	var issues []string
 	body := strings.TrimSpace(skill.Body)
@@ -493,17 +493,22 @@ func skillSpecificityIssues(skill *GeneratedSkill) []string {
 	if n := len([]rune(body)); n < 400 {
 		issues = append(issues, fmt.Sprintf("본문이 너무 짧음(%d자<400)", n))
 	}
-	// The two load-bearing sections: a skill must say WHEN it applies and HOW
-	// to run it. Pitfalls/Verification are recommended but not hard-required to
-	// avoid false rejects of otherwise-actionable skills.
+	// The load-bearing contract says WHEN the skill applies, HOW to act, and
+	// what observable state means DONE. Pitfalls remains optional.
 	if !strings.Contains(lower, "when to use") {
 		issues = append(issues, "When to Use 섹션 누락(트리거 불명)")
 	}
 	if !strings.Contains(lower, "procedure") {
 		issues = append(issues, "Procedure 섹션 누락(절차 없음)")
 	}
-	if !hasActionableStep(body) {
-		issues = append(issues, "구체적 단계 부재(번호 절차/도구 호출/명령어 없음)")
+	if !strings.Contains(lower, "verification") {
+		issues = append(issues, "Verification 섹션 누락(완료 기준 없음)")
+	}
+	if !hasActionableInstruction(sectionBody(body, "procedure")) {
+		issues = append(issues, "구체적 실행 지시 부재(도구/명령/구조화된 판단 기준 없음)")
+	}
+	if !hasActionableInstruction(sectionBody(body, "verification")) {
+		issues = append(issues, "관찰 가능한 완료 기준 부재")
 	}
 	desc := strings.ToLower(skill.Description)
 	if !strings.Contains(desc, "use when") && !strings.Contains(skill.Description, "트리거") && !strings.Contains(desc, "when:") {
@@ -512,20 +517,48 @@ func skillSpecificityIssues(skill *GeneratedSkill) []string {
 	return issues
 }
 
-// hasActionableStep reports whether a skill body contains a concrete step — a
-// numbered list item, or an inline code/command reference — as opposed to pure
-// vague prose ("read the context carefully").
-func hasActionableStep(body string) bool {
-	if strings.Contains(body, "`") { // inline code or command
+// hasActionableInstruction accepts exact commands, mandatory ordered steps, or
+// two structured decision/boundary criteria. This keeps vague prose out without
+// forcing every high-freedom task into an invented step-by-step recipe.
+func hasActionableInstruction(body string) bool {
+	if strings.Contains(body, "`") { // inline tool, command, field, or exact check
 		return true
 	}
+	bullets := 0
 	for _, line := range strings.Split(body, "\n") {
 		t := strings.TrimSpace(line)
 		if len(t) >= 2 && t[0] >= '1' && t[0] <= '9' && (t[1] == '.' || t[1] == ')') {
 			return true
 		}
+		if strings.HasPrefix(t, "- ") && len([]rune(strings.TrimSpace(t[2:]))) >= 12 {
+			bullets++
+		}
 	}
-	return false
+	return bullets >= 2
+}
+
+// sectionBody returns the content below a level-two heading until the next
+// level-two heading. Heading matching is case-insensitive.
+func sectionBody(body, name string) string {
+	want := strings.ToLower(strings.TrimSpace(name))
+	var out strings.Builder
+	inSection := false
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			heading := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(trimmed, "## ")))
+			if inSection && heading != want {
+				break
+			}
+			inSection = heading == want
+			continue
+		}
+		if inSection {
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
 }
 
 // Persist writes a generated skill to disk and registers it in the catalog.

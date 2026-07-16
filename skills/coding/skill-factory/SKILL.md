@@ -1,6 +1,6 @@
 ---
 name: skill-factory
-version: "1.0.0"
+version: "1.0.1"
 category: coding
 description: "Automatically extract reusable skills from complex workflows. Use when: (1) you just completed a multi-step task that could recur, (2) you notice a repeated pattern across sessions, (3) the user says 'make this a skill' or 'remember how to do this'. NOT for: one-off tasks, simple operations, or tasks already covered by existing skills."
 metadata:
@@ -42,6 +42,9 @@ Review the just-completed workflow. Ask:
 - What pitfalls did I encounter?
 - Would a future agent benefit from these instructions?
 
+Capture only context that would change a future result. Separate reusable
+decisions and constraints from incidental session history.
+
 ### Step 2: Choose Category
 
 | If the skill is about... | Category |
@@ -79,9 +82,9 @@ Follow the standard body structure:
 
 1. **When to Use** — Concrete trigger conditions from the workflow
 2. **Quick Reference** — The key commands/patterns extracted
-3. **Procedure** — Step-by-step from the actual workflow, generalized
+3. **Procedure** — Expected outcome, decision points, tools, and 2–4 essential boundaries; number steps only when order is mandatory
 4. **Pitfalls** — Errors encountered and how to avoid them
-5. **Verification** — How to confirm the workflow succeeded
+5. **Verification** — 2–4 observable pass/fail conditions that define done
 
 ### Step 5: Validate
 
@@ -89,6 +92,8 @@ Follow the standard body structure:
 - Is the description specific enough for the LLM to know when to load it?
 - Are the tags useful for discovery?
 - Is the procedure generalizable (no hardcoded paths/values)?
+- Does it let the agent choose a better method where order is not part of the contract?
+- Are the completion checks binary enough to self-verify?
 
 ## Nudging Protocol
 
@@ -104,3 +109,7 @@ If yes, offer to the user: "이 워크플로우를 스킬로 저장할까요?" I
 - Do NOT create skills with hardcoded credentials, paths, or user-specific data
 - Do NOT create overly broad skills ("do everything") — narrow scope, deep quality
 - Do NOT create skills for tasks the LLM already handles well without instructions
+
+## Changelog
+
+- v1.0.1: Extract outcome contracts and binary completion criteria instead of replaying incidental step order.
