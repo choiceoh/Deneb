@@ -7,6 +7,7 @@ import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Contract of the section fetch caches (DenebClientSessionCache.kt): a re-entry
@@ -108,6 +109,70 @@ class SectionCacheContractTest {
     }
 
     @Test
+    fun concurrentCategoryPageFetchesShareOneInFlightRequest() = runTest {
+        val f = gatewayClientFixture()
+        val release = CompletableDeferred<Unit>()
+        f.transport.enqueueRpc(pagesPayload("프로젝트/a"), gate = release)
+        f.transport.enqueueRpc(pagesPayload("프로젝트/duplicate"))
+
+        val first = async { f.client.fetchCategoryPages("프로젝트") }
+        f.transport.awaitRequestCount(1)
+        val second = async { f.client.fetchCategoryPages("프로젝트") }
+        yield()
+
+        assertEquals(1, f.transport.requests.size)
+        release.complete(Unit)
+        assertEquals(first.await(), second.await())
+        assertEquals(1, f.transport.requests.size)
+    }
+
+    @Test
+    fun differentCategoryPageKeysLoadConcurrently() = runTest {
+        val cache = SessionCacheMap<String, String>(SectionCacheTtl)
+        val releaseProject = CompletableDeferred<Unit>()
+        val projectStarted = CompletableDeferred<Unit>()
+        val workStarted = CompletableDeferred<Unit>()
+
+        val project = async {
+            cache.getOrLoad("프로젝트") {
+                projectStarted.complete(Unit)
+                releaseProject.await()
+                "프로젝트/a"
+            }
+        }
+        projectStarted.await()
+        val work = async {
+            cache.getOrLoad("업무") {
+                workStarted.complete(Unit)
+                "업무/b"
+            }
+        }
+        yield()
+
+        assertTrue(workStarted.isCompleted)
+        releaseProject.complete(Unit)
+        assertEquals("프로젝트/a", project.await())
+        assertEquals("업무/b", work.await())
+    }
+
+    @Test
+    fun invalidationDuringCategoryFetchPreventsStaleRecache() = runTest {
+        val f = gatewayClientFixture()
+        val release = CompletableDeferred<Unit>()
+        f.transport.enqueueRpc(pagesPayload("프로젝트/stale"), gate = release)
+        f.transport.enqueueRpc(pagesPayload("프로젝트/fresh"))
+
+        val pending = async { f.client.fetchCategoryPages("프로젝트") }
+        f.transport.awaitRequestCount(1)
+        f.client.sectionCaches.categoryPages.invalidate("프로젝트")
+        release.complete(Unit)
+
+        assertEquals(listOf("프로젝트/stale"), pending.await()?.map { it.path })
+        assertEquals(listOf("프로젝트/fresh"), f.client.fetchCategoryPages("프로젝트")?.map { it.path })
+        assertEquals(2, f.transport.requests.size)
+    }
+
+    @Test
     fun wikiPageSaveInvalidatesPageAndItsCategoryList() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(wikiPagePayload("프로젝트/딜", body = "before"))
@@ -162,8 +227,13 @@ class SectionCacheContractTest {
         val f2 = gatewayClientFixture(settings = f1.settings)
 
         assertEquals("ev1", f2.client.peekCalendarRange("2026-07-01|2026-08-01")?.single()?.id)
-        // Disk-seeded entries are stale by definition — never served as fresh.
-        assertNull(f2.client.cachedCalendarRange("2026-07-01|2026-08-01"))
+        // Disk-seeded entries are stale by definition — the fetch still goes to the network.
+        f2.transport.enqueueRpc("""{"events":[{"id":"network","summary":"s","start":"2026-07-01T09:00:00+09:00","end":"","allDay":false,"local":false,"category":""}]}""")
+        assertEquals(
+            "network",
+            f2.client.fetchCalendarRange("2026-07-01", "2026-08-01")?.single()?.id,
+        )
+        assertEquals(1, f2.transport.requests.size)
     }
 
     @Test

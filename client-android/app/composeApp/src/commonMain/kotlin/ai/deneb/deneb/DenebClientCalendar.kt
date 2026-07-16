@@ -49,20 +49,19 @@ suspend fun DenebGatewayClient.fetchCalendarRange(
     force: Boolean = false,
 ): List<CalendarEvent>? {
     val key = "$fromIso|$toIso"
-    if (!force) cachedCalendarRange(key)?.let { return it }
-    val payload = callRpc<CalListPayload>(
-        "miniapp.calendar.list_range",
-        buildJsonObject {
-            put("from", fromIso)
-            put("to", toIso)
-        },
-    ) ?: return null
-    val events = payload.events
-        .filter { it.id.isNotBlank() }
-        .distinctByLast { it.id }
-        .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
-    storeCalendarRange(key, events)
-    return events
+    return sectionCaches.calendarRanges.getOrLoad(key, force) {
+        val payload = callRpc<CalListPayload>(
+            "miniapp.calendar.list_range",
+            buildJsonObject {
+                put("from", fromIso)
+                put("to", toIso)
+            },
+        ) ?: return@getOrLoad null
+        payload.events
+            .filter { it.id.isNotBlank() }
+            .distinctByLast { it.id }
+            .map { CalendarEvent(it.id, it.summary, it.location, it.start, it.end, it.allDay, it.local, it.category) }
+    }
 }
 
 /**

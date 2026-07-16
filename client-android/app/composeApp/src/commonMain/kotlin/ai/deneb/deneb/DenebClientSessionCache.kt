@@ -92,12 +92,39 @@ internal class SessionCache<T : Any>(
  *  cache scale. */
 internal val SectionCacheTtl = 120.seconds
 
+/** Per-key mutexes with waiter accounting, removed as soon as the last user
+ *  leaves. Same-key loads coalesce without serializing unrelated keys or
+ *  retaining every key visited during a long session. */
+private class KeyedMutex<K : Any> {
+    private class Entry {
+        val mutex = Mutex()
+        var users = 0
+    }
+
+    private val guard = Mutex()
+    private val entries = mutableMapOf<K, Entry>()
+
+    suspend fun <T> withLock(key: K, action: suspend () -> T): T {
+        val entry = guard.withLock {
+            entries.getOrPut(key) { Entry() }.also { it.users++ }
+        }
+        try {
+            return entry.mutex.withLock { action() }
+        } finally {
+            guard.withLock {
+                entry.users--
+                if (entry.users == 0 && entries[key] === entry) entries.remove(key)
+            }
+        }
+    }
+}
+
 /**
  * Keyed [SessionCache] variant for per-argument fetches (category → page list,
- * path → page body, month range → events). Bounded FIFO-evicted so page bodies
- * can't grow without limit across a long session. With [disk] set, the most
- * recent [diskMaxEntries] entries persist across restarts and seed lazily as
- * stale (paintable via [peek], never [fresh]).
+ * path → page body, month range → events). Bounded by least-recently-stored
+ * eviction so page bodies can't grow without limit across a long session. With
+ * [disk] set, the most recent [diskMaxEntries] entries persist across restarts
+ * and seed lazily as stale (paintable via [peek], never fresh).
  */
 internal class SessionCacheMap<K : Any, V : Any>(
     private val ttl: Duration,
@@ -108,6 +135,8 @@ internal class SessionCacheMap<K : Any, V : Any>(
     // null mark = disk-seeded (stale by definition).
     private val entries = LinkedHashMap<K, Pair<TimeSource.Monotonic.ValueTimeMark?, V>>()
     private var diskChecked = false
+    private var invalidationVersion = 0L
+    private val loadMutex = KeyedMutex<K>()
 
     private fun seedFromDisk() {
         if (diskChecked) return
@@ -115,10 +144,23 @@ internal class SessionCacheMap<K : Any, V : Any>(
         disk?.load()?.forEach { (k, v) -> if (k !in entries) entries[k] = null to v }
     }
 
-    fun fresh(key: K): V? {
+    private fun fresh(key: K): V? {
         seedFromDisk()
         val (mark, v) = entries[key] ?: return null
         return v.takeIf { mark != null && mark.elapsedNow() < ttl }
+    }
+
+    /** Reuse a fresh value or run one loader for [key]. Other keys remain
+     *  independent, and invalidation while loading prevents stale recaching. */
+    suspend fun getOrLoad(key: K, force: Boolean = false, load: suspend () -> V?): V? {
+        if (!force) fresh(key)?.let { return it }
+        return loadMutex.withLock(key) locked@{
+            if (!force) fresh(key)?.let { return@locked it }
+            val version = invalidationVersion
+            val loaded = load() ?: return@locked null
+            if (version == invalidationVersion) store(key, loaded)
+            loaded
+        }
     }
 
     /** Last-known value for [key] regardless of age — the cold-start stale paint. */
@@ -127,7 +169,7 @@ internal class SessionCacheMap<K : Any, V : Any>(
         return entries[key]?.second
     }
 
-    fun store(key: K, value: V) {
+    private fun store(key: K, value: V) {
         seedFromDisk()
         entries.remove(key)
         entries[key] = TimeSource.Monotonic.markNow() to value
@@ -136,12 +178,14 @@ internal class SessionCacheMap<K : Any, V : Any>(
     }
 
     fun invalidate(key: K) {
+        invalidationVersion++
         seedFromDisk()
         if (entries.remove(key) != null) persist()
     }
 
     /** Full reset (credential switch): drop memory and the disk snapshot. */
     fun clear() {
+        invalidationVersion++
         entries.clear()
         diskChecked = true
         disk?.clear()
