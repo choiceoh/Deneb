@@ -42,15 +42,15 @@ internal suspend fun DenebGatewayClient.refreshMemories() {
 /** All wiki categories with page counts + corpus totals (`memory.categories`).
  *  Session-cached so re-entering the section within the TTL skips the network. */
 suspend fun DenebGatewayClient.fetchCategories(force: Boolean = false): WikiCategories? {
-    if (!force) sectionCaches.categories.fresh()?.let { return it }
-    val p = callRpc<CategoriesPayload>("miniapp.memory.categories", buildJsonObject {}) ?: return null
-    val out = WikiCategories(
-        categories = p.categories.map { WikiCategory(it.name, it.pageCount) },
-        totalPages = p.totalPages,
-        totalBytes = p.totalBytes,
-    )
-    sectionCaches.categories.store(out)
-    return out
+    return sectionCaches.categories.getOrLoad(force) {
+        val p = callRpc<CategoriesPayload>("miniapp.memory.categories", buildJsonObject {})
+            ?: return@getOrLoad null
+        WikiCategories(
+            categories = p.categories.map { WikiCategory(it.name, it.pageCount) },
+            totalPages = p.totalPages,
+            totalBytes = p.totalBytes,
+        )
+    }
 }
 
 /** Pages within one category (`memory.list_in_category`); blank lists all.
@@ -89,14 +89,14 @@ suspend fun DenebGatewayClient.fetchRecentDiary(
     force: Boolean = false,
 ): List<DiaryEntry>? {
     val cacheable = limit == DIARY_RECENT_DEFAULT_LIMIT
-    if (!force && cacheable) sectionCaches.diary.fresh()?.let { return it }
-    val p = callRpc<DiaryRecentPayload>(
-        "miniapp.memory.diary_recent",
-        buildJsonObject { put("limit", limit) },
-    ) ?: return null
-    val out = p.entries.map { DiaryEntry(header = it.header, content = it.content, file = it.file) }
-    if (cacheable) sectionCaches.diary.store(out)
-    return out
+    suspend fun load(): List<DiaryEntry>? {
+        val p = callRpc<DiaryRecentPayload>(
+            "miniapp.memory.diary_recent",
+            buildJsonObject { put("limit", limit) },
+        ) ?: return null
+        return p.entries.map { DiaryEntry(header = it.header, content = it.content, file = it.file) }
+    }
+    return if (cacheable) sectionCaches.diary.getOrLoad(force, ::load) else load()
 }
 
 /** Delete one or more wiki pages by path (`miniapp.memory.delete_pages`).
@@ -241,39 +241,34 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
  *  fetch failure so the screen can offer retry instead of a misleading "empty".
  *  Session-cached so re-entering the section within the TTL skips the network. */
 suspend fun DenebGatewayClient.fetchPeople(force: Boolean = false): List<PersonHit>? {
-    if (!force) sectionCaches.people.fresh()?.let { return it }
-    val p = callRpc<PeopleListPayload>(
-        "miniapp.people.list",
-        buildJsonObject { put("limit", 60) },
-    ) ?: return null
-    val out = p.people
-        .filter { it.email.isNotBlank() || it.name.isNotBlank() }
-        .distinctByLast { it.email.ifBlank { it.name } }
-        .map {
-            PersonHit(
-                name = it.name.ifBlank { it.email },
-                email = it.email,
-                messageCount = it.messageCount,
-                lastSubject = it.lastSubject,
-                wikiPath = it.wikiPath,
-                wikiSummary = it.wikiSummary,
-            )
-        }
-    sectionCaches.people.store(out)
-    return out
+    return sectionCaches.people.getOrLoad(force) {
+        val p = callRpc<PeopleListPayload>(
+            "miniapp.people.list",
+            buildJsonObject { put("limit", 60) },
+        ) ?: return@getOrLoad null
+        p.people
+            .filter { it.email.isNotBlank() || it.name.isNotBlank() }
+            .distinctByLast { it.email.ifBlank { it.name } }
+            .map {
+                PersonHit(
+                    name = it.name.ifBlank { it.email },
+                    email = it.email,
+                    messageCount = it.messageCount,
+                    lastSubject = it.lastSubject,
+                    wikiPath = it.wikiPath,
+                    wikiSummary = it.wikiSummary,
+                )
+            }
+    }
 }
 
 /** The full device address book (miniapp.contacts.list) for the 전체 연락처 browser:
  *  every synced contact (name + phones/emails/org), unsorted — the screen sections it
  *  alphabetically (ㄱㄴㄷ). Null on transport/auth failure or an unconfigured store.
  *  Session-cached so re-entering the section within the TTL skips the network. */
-suspend fun DenebGatewayClient.fetchContacts(force: Boolean = false): List<ContactRow>? {
-    if (!force) sectionCaches.contacts.fresh()?.let { return it }
-    val p = callRpc<ContactsListPayload>(
+suspend fun DenebGatewayClient.fetchContacts(force: Boolean = false): List<ContactRow>? = sectionCaches.contacts.getOrLoad(force) {
+    callRpc<ContactsListPayload>(
         "miniapp.contacts.list",
         buildJsonObject {},
-    ) ?: return null
-    val out = p.contacts.filter { it.name.isNotBlank() }
-    sectionCaches.contacts.store(out)
-    return out
+    )?.contacts?.filter { it.name.isNotBlank() }
 }

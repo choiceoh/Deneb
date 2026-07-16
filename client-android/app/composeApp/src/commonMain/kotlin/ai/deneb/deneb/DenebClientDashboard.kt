@@ -22,9 +22,6 @@ import kotlinx.serialization.json.buildJsonObject
  * Session-cached so re-entering the section within the TTL skips the network;
  * pull-to-refresh passes force=true.
  */
-suspend fun DenebGatewayClient.fetchDashboardLanes(force: Boolean = false): DashboardOut? {
-    if (!force) sectionCaches.dashboard.fresh()?.let { return it }
-    val out = callRpc<DashboardOut>("miniapp.dashboard.lanes", buildJsonObject {}) ?: return null
-    sectionCaches.dashboard.store(out)
-    return out
+suspend fun DenebGatewayClient.fetchDashboardLanes(force: Boolean = false): DashboardOut? = sectionCaches.dashboard.getOrLoad(force) {
+    callRpc<DashboardOut>("miniapp.dashboard.lanes", buildJsonObject {})
 }

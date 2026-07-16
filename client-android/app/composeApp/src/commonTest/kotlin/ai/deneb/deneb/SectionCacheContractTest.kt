@@ -1,6 +1,9 @@
 package ai.deneb.deneb
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,6 +28,42 @@ class SectionCacheContractTest {
 
         assertEquals(first, second)
         assertEquals(1, f.transport.requests.size)
+    }
+
+    @Test
+    fun concurrentDashboardFetchesShareOneInFlightRequest() = runTest {
+        val f = gatewayClientFixture()
+        val release = CompletableDeferred<Unit>()
+        f.transport.enqueueRpc(lanesPayload("one"), gate = release)
+        f.transport.enqueueRpc(lanesPayload("duplicate"))
+
+        val first = async { f.client.fetchDashboardLanes() }
+        f.transport.awaitRequestCount(1)
+        val second = async { f.client.fetchDashboardLanes() }
+        yield()
+
+        assertEquals(1, f.transport.requests.size)
+        release.complete(Unit)
+        assertEquals("one", first.await()?.lanes?.single()?.key)
+        assertEquals("one", second.await()?.lanes?.single()?.key)
+        assertEquals(1, f.transport.requests.size)
+    }
+
+    @Test
+    fun invalidationDuringDashboardFetchPreventsStaleRecache() = runTest {
+        val f = gatewayClientFixture()
+        val release = CompletableDeferred<Unit>()
+        f.transport.enqueueRpc(lanesPayload("stale"), gate = release)
+        f.transport.enqueueRpc(lanesPayload("fresh"))
+
+        val pending = async { f.client.fetchDashboardLanes() }
+        f.transport.awaitRequestCount(1)
+        f.client.sectionCaches.dashboard.invalidate()
+        release.complete(Unit)
+
+        assertEquals("stale", pending.await()?.lanes?.single()?.key)
+        assertEquals("fresh", f.client.fetchDashboardLanes()?.lanes?.single()?.key)
+        assertEquals(2, f.transport.requests.size)
     }
 
     @Test

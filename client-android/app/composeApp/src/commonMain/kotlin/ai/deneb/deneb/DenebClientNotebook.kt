@@ -17,11 +17,8 @@ import kotlinx.serialization.json.put
  *  screen can offer retry instead of a misleading "empty". Session-cached so
  *  re-entering the section within the TTL skips the network (this surface is
  *  read-only — notebook mutation happens in the agent path). */
-suspend fun DenebGatewayClient.fetchNotebooks(force: Boolean = false): List<NotebookSummaryOut>? {
-    if (!force) sectionCaches.notebooks.fresh()?.let { return it }
-    val p = callRpc<NotebookListOut>("miniapp.notebook.list", buildJsonObject {}) ?: return null
-    sectionCaches.notebooks.store(p.notebooks)
-    return p.notebooks
+suspend fun DenebGatewayClient.fetchNotebooks(force: Boolean = false): List<NotebookSummaryOut>? = sectionCaches.notebooks.getOrLoad(force) {
+    callRpc<NotebookListOut>("miniapp.notebook.list", buildJsonObject {})?.notebooks
 }
 
 /** One notebook with its pinned sources, by id. Null on miss/failure. */
