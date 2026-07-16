@@ -71,18 +71,23 @@ type Config struct {
 	// enrichment (bridge off / busy / failure) — judgment still runs on the
 	// notification text alone.
 	BrowserEnrich func(ctx context.Context, source, text string) string
+	// DeferElectronicApproval, when true, drops phone electronic-approval
+	// notifications before the judgment turn — the groupware radar owns
+	// analyze→wiki→feed for those docs (Gmail-poll parity).
+	DeferElectronicApproval bool
 }
 
 // Handler accepts phone telemetry and runs proactive judgment turns.
 type Handler struct {
-	chatHandler        chatport.SyncRunner
-	relay              *proactive.Relay
-	resolvePhoneAction func(ActionResult) bool
-	shutdownContext    context.Context
-	logger             *slog.Logger
-	ledger             *Ledger
-	onLocationPlace    func(payload string)
-	browserEnrich      func(ctx context.Context, source, text string) string
+	chatHandler             chatport.SyncRunner
+	relay                   *proactive.Relay
+	resolvePhoneAction      func(ActionResult) bool
+	shutdownContext         context.Context
+	logger                  *slog.Logger
+	ledger                  *Ledger
+	onLocationPlace         func(payload string)
+	browserEnrich           func(ctx context.Context, source, text string) string
+	deferElectronicApproval bool
 }
 
 // New creates a phone-event handler.
@@ -92,14 +97,15 @@ func New(cfg Config) *Handler {
 		shutdownContext = context.Background()
 	}
 	return &Handler{
-		chatHandler:        cfg.ChatHandler,
-		relay:              cfg.Relay,
-		resolvePhoneAction: cfg.ResolvePhoneAction,
-		shutdownContext:    shutdownContext,
-		logger:             cfg.Logger,
-		ledger:             cfg.Ledger,
-		onLocationPlace:    cfg.OnLocationPlace,
-		browserEnrich:      cfg.BrowserEnrich,
+		chatHandler:             cfg.ChatHandler,
+		relay:                   cfg.Relay,
+		resolvePhoneAction:      cfg.ResolvePhoneAction,
+		shutdownContext:         shutdownContext,
+		logger:                  cfg.Logger,
+		ledger:                  cfg.Ledger,
+		onLocationPlace:         cfg.OnLocationPlace,
+		browserEnrich:           cfg.BrowserEnrich,
+		deferElectronicApproval: cfg.DeferElectronicApproval,
 	}
 }
 
@@ -425,6 +431,13 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
+	}
+	// Groupware radar owns analyze→wiki→feed for electronic approvals.
+	// Phone pushes would otherwise post a bare notification card first.
+	if s.deferElectronicApproval && isElectronicApprovalEvent(source, text) {
+		s.logger.Info("phone-event: electronic approval skipped (groupware radar covers)",
+			"source", source)
+		return
 	}
 	// Ledger BEFORE the tiny gate: the gate is tuned for push-worthiness, not
 	// memory-worthiness — a "routine" KakaoTalk work message is correctly

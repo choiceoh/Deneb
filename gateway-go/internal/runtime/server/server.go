@@ -249,6 +249,11 @@ type Server struct {
 	// re-resolving — single source of truth.
 	denebDir string
 
+	// groupwareRadarActive is set when registerGroupwareRadarTask successfully
+	// registers the Amaranth poll task. Phone electronic-approval notifications
+	// then defer to the radar (analyze→wiki→feed) instead of posting a bare card.
+	groupwareRadarActive bool
+
 	// promptStore persists operator-editable prompt overrides surfaced in the
 	// native Settings prompt corner. nil only if initialization is skipped in tests.
 	promptStore *prompts.Store

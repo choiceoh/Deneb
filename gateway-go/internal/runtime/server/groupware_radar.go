@@ -42,7 +42,7 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 			return phoneevents.New(s.phoneEventHandlerConfig()).IngestApprovalSync(ctx, source, text)
 		},
 		s.notifyGroupwareRadarEscalation,
-		s.analyzeApprovalBestEffort,
+		s.prepareApprovalBeforeFeed,
 	)
 	task := groupware.NewRadar(groupware.RadarConfig{
 		Reader:         reader,
@@ -54,6 +54,7 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 		OnResolved:     onResolved,
 	})
 	s.autonomousSvc.RegisterTask(task)
+	s.groupwareRadarActive = true
 	s.logger.Info("groupware radar task registered",
 		"interval", task.Interval(),
 		"maxPerCycle", groupwareRadarMaxPerCycle(),
@@ -62,16 +63,16 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 }
 
 type (
-	groupwareRadarIngest       func(context.Context, string, string) error
-	groupwareRadarEscalate     func(context.Context, groupware.ApprovalSummary, int, time.Duration) error
-	groupwareRadarAfterPending func(context.Context, groupware.ApprovalSummary)
+	groupwareRadarIngest        func(context.Context, string, string) error
+	groupwareRadarEscalate      func(context.Context, groupware.ApprovalSummary, int, time.Duration) error
+	groupwareRadarBeforePending func(context.Context, groupware.ApprovalSummary) error
 )
 
 func groupwareRadarCallbacks(
 	feed *nativeWorkFeedStore,
 	ingest groupwareRadarIngest,
 	escalate groupwareRadarEscalate,
-	afterPending groupwareRadarAfterPending,
+	beforePending groupwareRadarBeforePending,
 ) (
 	func(context.Context, groupware.ApprovalSummary) error,
 	func(context.Context, groupware.ApprovalSummary, int, time.Duration) error,
@@ -84,6 +85,13 @@ func groupwareRadarCallbacks(
 		}
 		if active {
 			return nil
+		}
+		// 조회→분석→(유의미하면)위키, then feed. Analysis failure keeps the
+		// doc retryable so a bare notification card never lands first.
+		if beforePending != nil {
+			if err := beforePending(ctx, doc); err != nil {
+				return err
+			}
 		}
 		if ingest == nil {
 			return errors.New("groupware radar approval ingester unavailable")
@@ -99,11 +107,6 @@ func groupwareRadarCallbacks(
 		}
 		if !active {
 			return fmt.Errorf("groupware approval %s relay completed without active card", doc.DocID)
-		}
-		// AI analysis is best-effort after the feed card is durable — failures
-		// must not roll back the notified state (메일 poll 패리티).
-		if afterPending != nil {
-			afterPending(ctx, doc)
 		}
 		return nil
 	}

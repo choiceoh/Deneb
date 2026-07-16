@@ -63,6 +63,15 @@ func TestLogApprovalAnalysisToWiki_SkipsWithoutUniqueProject(t *testing.T) {
 	}
 }
 
+func TestApprovalAnalysisMeaningfulForWiki(t *testing.T) {
+	if !approvalAnalysisMeaningfulForWiki("urgent") || !approvalAnalysisMeaningfulForWiki("attention") {
+		t.Fatal("urgent/attention must be meaningful")
+	}
+	if approvalAnalysisMeaningfulForWiki("routine") || approvalAnalysisMeaningfulForWiki("") {
+		t.Fatal("routine/empty must not be meaningful")
+	}
+}
+
 func TestApprovalAnalysisExcerptBounds(t *testing.T) {
 	long := strings.Repeat("가나다라마바사아자차", 100)
 	out := approvalAnalysisExcerpt(long)

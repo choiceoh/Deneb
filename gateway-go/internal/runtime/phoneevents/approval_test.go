@@ -1,6 +1,9 @@
 package phoneevents
 
-import "testing"
+import (
+	"log/slog"
+	"testing"
+)
 
 func TestExtractGroupwareDocID(t *testing.T) {
 	t.Parallel()
@@ -17,4 +20,13 @@ func TestExtractGroupwareDocID(t *testing.T) {
 	if got := extractGroupwareDocID("no id here"); got != "" {
 		t.Fatalf("empty: got %q", got)
 	}
+}
+
+func TestIngestAsyncDefersElectronicApprovalWhenRadarOwns(t *testing.T) {
+	h := New(Config{
+		DeferElectronicApproval: true,
+		Logger:                  slog.New(slog.DiscardHandler),
+	})
+	// Must return without panicking on nil chat/relay — defer short-circuits first.
+	h.IngestAsync("notification", "groupware", "종류: 전자결재\n제목: 품의\n문서ID: 7")
 }
