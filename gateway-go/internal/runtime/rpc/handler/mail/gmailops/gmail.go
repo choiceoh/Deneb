@@ -355,11 +355,12 @@ func gmailGet(deps GmailDeps) rpcutil.HandlerFunc {
 
 		// Serve the body from the local mailstore when present (no API round-trip).
 		// get is a body-open — the list already showed authoritative label/star
-		// state, which the store doesn't mirror. Fall back to Gmail on a miss.
+		// state, which the store doesn't mirror. Fall back to Gmail on a miss or
+		// when the store only has an empty-body review stub.
 		var msg *gmail.MessageDetail
 		if deps.MailStore != nil {
 			if ms := deps.MailStore(); ms != nil {
-				if cm, ok := ms.Read(p.ID, "", nil); ok {
+				if cm, ok := ms.Read(p.ID, "", nil); ok && strings.TrimSpace(cm.Body) != "" {
 					msg = detailFromContext(cm)
 				}
 			}
