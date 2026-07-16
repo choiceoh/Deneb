@@ -346,6 +346,13 @@ export const fetchApprovalBody = (cfg: GatewayConfig, docId: string, title?: str
     folder,
   });
 
+/** OCR / extracted text for one Amaranth attachment (1-based index or filename). */
+export const fetchApprovalAttachment = (cfg: GatewayConfig, docId: string, attachment: string) =>
+  callRpc<{ docId?: string; attachment?: string; text?: string }>(cfg, "miniapp.groupware.approvals.attachment", {
+    docId,
+    attachment,
+  });
+
 export const listGroupwareERP = (
   cfg: GatewayConfig,
   area: string,

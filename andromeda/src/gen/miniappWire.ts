@@ -107,6 +107,12 @@ export interface GroupwareApprovalAnalysisOut {
   createdAt?: string
 }
 
+export interface GroupwareApprovalAttachmentResponse {
+  docId?: string
+  attachment?: string
+  text?: string
+}
+
 export interface GroupwareApprovalGetResponse {
   docId?: string
   title?: string

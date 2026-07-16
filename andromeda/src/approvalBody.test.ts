@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseApprovalDocBody } from "./approvalBody";
+import { parseApprovalDocBody, parseAttachmentRows } from "./approvalBody";
 
 const SAMPLE = `[그룹웨어 전자결재 · 전체결재문서]
 조회: 99178
@@ -40,5 +40,14 @@ describe("parseApprovalDocBody", () => {
     expect(s.body).toBe("그냥 본문만");
     expect(s.line).toBe("");
     expect(s.attachments).toBe("");
+  });
+
+  it("parses numbered attachment rows for open actions", () => {
+    const s = parseApprovalDocBody(SAMPLE);
+    const rows = parseAttachmentRows(s.attachments);
+    expect(rows).toEqual([
+      { index: 1, name: "영수증.pdf", meta: "12KB", raw: "1. 영수증.pdf · 12KB" },
+      { index: 2, name: "견적.xlsx", meta: "", raw: "2. 견적.xlsx" },
+    ]);
   });
 });

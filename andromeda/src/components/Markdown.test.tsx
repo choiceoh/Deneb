@@ -138,11 +138,41 @@ describe("Markdown", () => {
     expect(container.querySelector("table.md-table")).not.toBeNull();
   });
 
-  it("sticks the first column on wide tables (5+ cols)", () => {
+  it("sticks the first column on wide tables (5+ cols) inside a scroll wrapper", () => {
     const header = "| a | b | c | d | e |\n| --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 |";
     const { container } = render(<Markdown text={header} />);
+    expect(container.querySelector(".md-table-scroll")).not.toBeNull();
     expect(container.querySelector("table.md-table-sticky")).not.toBeNull();
     expect(container.querySelector("th.md-sticky-col")).not.toBeNull();
+  });
+
+  it("promotes a following 합계 line into the table caption", () => {
+    const md = "| 항목 | 금액 |\n| --- | --- |\n| A | 1 |\n\n합계 1원";
+    const { container } = render(<Markdown text={md} />);
+    expect(container.querySelector("caption.md-table-caption")).toHaveTextContent("합계 1원");
+    expect(container.querySelectorAll("p")).toHaveLength(0);
+  });
+
+  it("renders setext headings and <details>", () => {
+    const { container } = render(
+      <Markdown text={"Title\n====\n\n<details><summary>더보기</summary>\n숨김\n</details>"} />,
+    );
+    expect(container.querySelector("h3")).toHaveTextContent("Title");
+    const details = container.querySelector("details.md-details");
+    expect(details).not.toBeNull();
+    expect(details?.querySelector("summary")).toHaveTextContent("더보기");
+  });
+
+  it("renders ```choices as chips", () => {
+    render(<Markdown text={"```choices\n승인\n반려\n```"} />);
+    expect(screen.getByText("승인")).toHaveClass("md-choice");
+    expect(screen.getByText("반려")).toHaveClass("md-choice");
+  });
+
+  it("rewrites footnotes via normalizeMarkdown", () => {
+    const { container } = render(<Markdown text={"참고[^1]\n\n[^1]: 각주 본문"} />);
+    expect(container.textContent).toContain("참고¹");
+    expect(container.textContent).toContain("¹ 각주 본문");
   });
 
   it("renders block content inside a blockquote", () => {

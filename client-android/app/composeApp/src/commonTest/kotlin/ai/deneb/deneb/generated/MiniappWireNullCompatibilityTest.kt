@@ -430,6 +430,24 @@ class MiniappWireNullCompatibilityTest {
             field = "createdAt",
         ),
         nullContract(
+            name = "GroupwareApprovalAttachmentResponse.docId",
+            serializer = GroupwareApprovalAttachmentResponse.serializer(),
+            empty = GroupwareApprovalAttachmentResponse(),
+            field = "docId",
+        ),
+        nullContract(
+            name = "GroupwareApprovalAttachmentResponse.attachment",
+            serializer = GroupwareApprovalAttachmentResponse.serializer(),
+            empty = GroupwareApprovalAttachmentResponse(),
+            field = "attachment",
+        ),
+        nullContract(
+            name = "GroupwareApprovalAttachmentResponse.text",
+            serializer = GroupwareApprovalAttachmentResponse.serializer(),
+            empty = GroupwareApprovalAttachmentResponse(),
+            field = "text",
+        ),
+        nullContract(
             name = "GroupwareApprovalGetResponse.docId",
             serializer = GroupwareApprovalGetResponse.serializer(),
             empty = GroupwareApprovalGetResponse(),

@@ -16,7 +16,8 @@ export type Block =
   | { type: "code"; lang: string; text: string }
   | { type: "list"; ordered: boolean; start?: number; items: ListItem[] }
   | { type: "quote"; children: Block[] }
-  | { type: "table"; header: string[]; align: Align[]; rows: string[][] }
+  | { type: "table"; header: string[]; align: Align[]; rows: string[][]; caption?: string }
+  | { type: "details"; summary: string; open: boolean; children: Block[] }
   | { type: "mathBlock"; text: string }
   | { type: "hr" }
   | { type: "para"; text: string };
@@ -24,9 +25,15 @@ export type Block =
 const FENCE = /^ {0,3}(?:```|~~~)(.*)$/;
 const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
 const HR = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const SETEXT_H1 = /^\s{0,3}=+\s*$/;
+const SETEXT_H2 = /^\s{0,3}-+\s*$/;
 const QUOTE = /^ {0,3}>\s?(.*)$/;
 const LIST_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/;
 const TABLE_SEP = /^\s*\|?(?:\s*:?-+:?\s*\|)+(?:\s*:?-+:?\s*)?\|?\s*$/;
+const DETAILS_OPEN = /<details\b([^>]*)>/i;
+const DETAILS_CLOSE = /<\/details>/i;
+const SUMMARY = /<summary\b[^>]*>([\s\S]*?)<\/summary>/i;
+const TOTAL_CAPTION = /^합\s*계/;
 
 // Visual width of a line's leading whitespace (tabs → 4) for nesting decisions.
 function indentWidth(line: string): number {
@@ -66,6 +73,13 @@ function looksLikeTableStart(line: string, next: string): boolean {
   if (!line.includes("|") || !next.includes("-")) return false;
   if (!TABLE_SEP.test(next)) return false;
   return splitRow(line).length === splitRow(next).length;
+}
+
+function isBlockOpener(line: string, next?: string): boolean {
+  if (FENCE.test(line) || HEADING.test(line) || HR.test(line) || LIST_ITEM.test(line) || QUOTE.test(line)) return true;
+  if (DETAILS_OPEN.test(line)) return true;
+  if (next !== undefined && looksLikeTableStart(line, next)) return true;
+  return false;
 }
 
 // Consume one list (and its nested children) starting at lines[start]. Returns
@@ -134,6 +148,53 @@ function parseList(lines: string[], start: number): { block: Block; next: number
   return { block: { type: "list", ordered, start: startNum, items }, next: i };
 }
 
+function parseDetails(lines: string[], start: number): { block: Block; next: number } {
+  const open = DETAILS_OPEN.exec(lines[start]);
+  if (!open) {
+    return { block: { type: "para", text: lines[start] }, next: start + 1 };
+  }
+  const initiallyOpen = /\bopen\b/i.test(open[1] ?? "");
+  const collected: string[] = [];
+  let i = start;
+  while (i < lines.length) {
+    let ln = lines[i];
+    if (i === start) ln = ln.slice(open.index! + open[0].length);
+    const close = DETAILS_CLOSE.exec(ln);
+    if (close) {
+      collected.push(ln.slice(0, close.index));
+      i++;
+      break;
+    }
+    collected.push(ln);
+    i++;
+  }
+  let body = collected.join("\n");
+  let summary = "세부 내용";
+  const sm = SUMMARY.exec(body);
+  if (sm) {
+    summary = sm[1].trim() || summary;
+    body = body.slice(0, sm.index) + body.slice(sm.index! + sm[0].length);
+  }
+  const children = parseBlocks(body.replace(/^\n+|\n+$/g, ""));
+  return { block: { type: "details", summary, open: initiallyOpen, children }, next: i };
+}
+
+/** Fold a following "합계 …" paragraph into the preceding table's caption. */
+export function promoteTableCaptions(blocks: Block[]): Block[] {
+  const out: Block[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const next = blocks[i + 1];
+    if (b.type === "table" && next?.type === "para" && TOTAL_CAPTION.test(next.text.trim())) {
+      out.push({ ...b, caption: next.text.trim() });
+      i++;
+      continue;
+    }
+    out.push(b);
+  }
+  return out;
+}
+
 // Line-based block parser. Blank lines separate blocks; fences, lists, quotes,
 // and tables consume their own runs of consecutive lines.
 export function parseBlocks(src: string): Block[] {
@@ -184,9 +245,36 @@ export function parseBlocks(src: string): Block[] {
       i++;
       continue;
     }
+    // Setext headings (native BlockScanner parity) — before bare HR so
+    // "Title\n---" becomes h2, while a lone "---" stays a rule.
+    if (
+      i + 1 < lines.length &&
+      !LIST_ITEM.test(line) &&
+      !QUOTE.test(line) &&
+      !HR.test(line) &&
+      !DETAILS_OPEN.test(line)
+    ) {
+      const next = lines[i + 1];
+      if (SETEXT_H1.test(next)) {
+        blocks.push({ type: "heading", level: 1, text: line.trim() });
+        i += 2;
+        continue;
+      }
+      if (SETEXT_H2.test(next)) {
+        blocks.push({ type: "heading", level: 2, text: line.trim() });
+        i += 2;
+        continue;
+      }
+    }
     if (HR.test(line)) {
       blocks.push({ type: "hr" });
       i++;
+      continue;
+    }
+    if (DETAILS_OPEN.test(line)) {
+      const { block, next } = parseDetails(lines, i);
+      blocks.push(block);
+      i = next;
       continue;
     }
     // Table: a pipe row immediately followed by a |:--|--:| separator.
@@ -217,16 +305,18 @@ export function parseBlocks(src: string): Block[] {
     while (
       i < lines.length &&
       lines[i].trim() !== "" &&
-      !FENCE.test(lines[i]) &&
-      !HEADING.test(lines[i]) &&
-      !HR.test(lines[i]) &&
-      !LIST_ITEM.test(lines[i]) &&
-      !QUOTE.test(lines[i]) &&
-      !(i + 1 < lines.length && looksLikeTableStart(lines[i], lines[i + 1]))
+      !isBlockOpener(lines[i], lines[i + 1]) &&
+      // Setext underline ends a one-line paragraph as a heading instead.
+      !(
+        i + 1 < lines.length &&
+        para.length === 0 &&
+        !HR.test(lines[i]) &&
+        (SETEXT_H1.test(lines[i + 1]) || SETEXT_H2.test(lines[i + 1]))
+      )
     ) {
       para.push(lines[i++]);
     }
-    blocks.push({ type: "para", text: para.join("\n") });
+    if (para.length) blocks.push({ type: "para", text: para.join("\n") });
   }
-  return blocks;
+  return promoteTableCaptions(blocks);
 }

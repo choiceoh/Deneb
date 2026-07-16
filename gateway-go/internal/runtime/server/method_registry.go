@@ -505,6 +505,13 @@ func (s *Server) earlyPlanningMethods(hub *rpcutil.GatewayHub, denebDir string) 
 				_ = approvalBodyCache.Save(docID, body)
 				return body, nil
 			},
+			Attach: func(ctx context.Context, docID, selector string) (string, error) {
+				cfg, ok := groupware.FromEnv()
+				if !ok {
+					return "", fmt.Errorf("groupware credentials unset")
+				}
+				return groupware.ReadApprovalAttachment(ctx, cfg, docID, selector)
+			},
 			Cache: approvalCache,
 			Analyze: func(ctx context.Context, docID, title, date, body string) (string, string, error) {
 				return s.completeApprovalAnalysis(ctx, docID, title, date, body)

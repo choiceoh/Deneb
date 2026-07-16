@@ -152,3 +152,25 @@ describe("paragraphs", () => {
     expect(parseBlocks("   \n\n")).toEqual([]);
   });
 });
+
+describe("native parity extras", () => {
+  it("parses setext headings", () => {
+    expect(parseBlocks("Alpha\n=====\n\nBeta\n-----")).toEqual([
+      { type: "heading", level: 1, text: "Alpha" },
+      { type: "heading", level: 2, text: "Beta" },
+    ]);
+  });
+
+  it("parses <details> with summary", () => {
+    const [block] = parseBlocks("<details>\n<summary>열기</summary>\n\n안쪽\n</details>");
+    expect(block).toMatchObject({ type: "details", summary: "열기", open: false });
+    if (block.type === "details") {
+      expect(block.children).toEqual([{ type: "para", text: "안쪽" }]);
+    }
+  });
+
+  it("promotes a 합계 paragraph into the table caption", () => {
+    const [block] = parseBlocks("| a | b |\n| --- | --- |\n| 1 | 2 |\n\n합계 3");
+    expect(block).toMatchObject({ type: "table", caption: "합계 3" });
+  });
+});

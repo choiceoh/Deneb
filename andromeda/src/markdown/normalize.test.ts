@@ -53,8 +53,15 @@ describe("normalizeBoxTables", () => {
 });
 
 describe("normalizeMarkdown", () => {
-  it("chains html → box → pipe so separator-less tables parse", () => {
+  it("chains footnotes → html → box → pipe so separator-less tables parse", () => {
     const blocks = parseBlocks(normalizeMarkdown("| A | B |\n| 1 | 2 |"));
     expect(blocks[0].type).toBe("table");
+  });
+
+  it("rewrites footnotes before later passes", () => {
+    const out = normalizeMarkdown("본문[^a]\n\n[^a]: 각주");
+    expect(out).toContain("¹");
+    expect(out).toContain("각주");
+    expect(out).not.toContain("[^a]");
   });
 });
