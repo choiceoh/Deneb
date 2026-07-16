@@ -3,9 +3,11 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.consumeFeedItemOpen
 import ai.deneb.deneb.DenebEmpty
 import ai.deneb.deneb.DenebLoading
+import ai.deneb.ui.DenebFeedApprovalPage
+import ai.deneb.ui.DenebFeedApprovalPivots
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
-import ai.deneb.ui.DenebTitlePivot
+import ai.deneb.ui.DenebSiblingSwipeHost
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.WorkFeedAction
 import ai.deneb.ui.chat.WorkFeedItem
@@ -13,7 +15,6 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBannerEnter
 import ai.deneb.ui.denebBannerExit
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebSiblingSwipe
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.animation.AnimatedVisibility
@@ -103,18 +104,17 @@ internal fun FeedScreen(
             open()
         }
     }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .denebSiblingSwipe(onSwipeLeft = openApprovals),
-    ) {
+    DenebSiblingSwipeHost(onSwipeLeft = openApprovals) {
         DenebScreenScaffold(
             title = "피드",
             onBack = {},
             showBack = false,
-            // 결재 is the feed's 동형 sibling (same day-paged list shape) — Zune-style
-            // dimmed pivot + left swipe jump straight there.
-            titlePivot = openApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
+            titleContent = {
+                DenebFeedApprovalPivots(
+                    active = DenebFeedApprovalPage.Feed,
+                    onOpenApprovals = openApprovals,
+                )
+            },
         ) {
             // Keep the selected date independent of the loaded item list. A ranged fetch
             // for today can legitimately return zero items; if selectedDate were derived

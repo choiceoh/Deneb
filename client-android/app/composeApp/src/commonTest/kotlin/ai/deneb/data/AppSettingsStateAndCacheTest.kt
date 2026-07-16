@@ -236,12 +236,13 @@ class AppSettingsStateAndCacheTest {
     }
 
     @Test
-    fun clearCachedContentRemovesAllFourCacheFamilies() {
+    fun clearCachedContentRemovesAllFiveCacheFamilies() {
         val (_, settings) = fixture()
         settings.putCachedTranscript("session", "chat")
         settings.putCachedMailList("mail")
         settings.putCachedWorkFeed("feed")
         settings.putCachedCalendar("calendar")
+        settings.putCachedApprovalsList("approvals")
 
         settings.clearCachedContent()
 
@@ -249,6 +250,7 @@ class AppSettingsStateAndCacheTest {
         assertNull(settings.getCachedMailList())
         assertNull(settings.getCachedWorkFeed())
         assertNull(settings.getCachedCalendar())
+        assertNull(settings.getCachedApprovalsList())
     }
 
     @Test

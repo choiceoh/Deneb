@@ -2,6 +2,7 @@ package ai.deneb.ui
 
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -23,19 +24,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 // Deneb's component idiom in native Compose (design refresh, 2026-06): a calm
@@ -182,6 +188,9 @@ fun DenebScreenScaffold(
     // Zune-style pivot labels rendered right after the title (dimmed, tappable) —
     // sibling surfaces one tap away (피드 ⇄ 결재). See [DenebTitlePivot].
     titlePivot: (@Composable RowScope.() -> Unit)? = null,
+    // Full title-row replacement (e.g. fixed-order [DenebFeedApprovalPivots]). When
+    // set, [title] and [titlePivot] are ignored.
+    titleContent: (@Composable RowScope.() -> Unit)? = null,
     maxContentWidth: Dp = DenebMaxContentWidth,
     showBack: Boolean = true,
     fillWidth: Boolean = false,
@@ -242,15 +251,19 @@ fun DenebScreenScaffold(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f),
                             ) {
-                                Text(
-                                    text = title,
-                                    style = DenebType.viewTitle,
-                                    color = MaterialTheme.colorScheme.onBackground,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false),
-                                )
-                                titlePivot?.invoke(this)
+                                if (titleContent != null) {
+                                    titleContent()
+                                } else {
+                                    Text(
+                                        text = title,
+                                        style = DenebType.viewTitle,
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                    )
+                                    titlePivot?.invoke(this)
+                                }
                             }
                             if (actions != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically, content = actions)
@@ -265,21 +278,136 @@ fun DenebScreenScaffold(
 }
 
 /**
- * Zune-HD-style pivot label for [DenebScreenScaffold]'s `titlePivot` slot: a
- * dimmed sibling-surface title sitting right of the active one (피드 **결재**).
- * Tapping jumps to that surface — the 동형 UI pair reads as one pivot header.
+ * Zune-HD-style pivot label: dimmed when idle, ink when selected. Used by
+ * [DenebFeedApprovalPivots] so 피드|결재 always share one header order.
  */
 @Composable
-fun DenebTitlePivot(label: String, onClick: () -> Unit) {
+fun DenebTitlePivot(
+    label: String,
+    selected: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    leading: Boolean = false,
+) {
+    val color = if (selected) {
+        MaterialTheme.colorScheme.onBackground
+    } else {
+        denebHint().copy(alpha = 0.55f)
+    }
     Text(
         text = label,
         style = DenebType.viewTitle,
-        color = denebHint().copy(alpha = 0.55f),
+        color = color,
         maxLines = 1,
         modifier = Modifier
-            .padding(start = 14.dp)
-            .clickable(onClickLabel = "$label 화면으로", role = Role.Button, onClick = onClick)
-            .handCursor(),
+            .padding(start = if (leading) 0.dp else 14.dp)
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clickable(onClickLabel = "$label 화면으로", role = Role.Button, onClick = onClick)
+                        .handCursor()
+                } else {
+                    Modifier
+                },
+            ),
+    )
+}
+
+/** Which page of the 피드⇄결재 pivot pair is active. */
+enum class DenebFeedApprovalPage { Feed, Approvals }
+
+/**
+ * Fixed-order pivot header: always **피드** then **결재**, active ink / idle dimmed.
+ * Tapping the idle sibling navigates; the active label is not clickable.
+ */
+@Composable
+fun RowScope.DenebFeedApprovalPivots(
+    active: DenebFeedApprovalPage,
+    onOpenFeed: (() -> Unit)? = null,
+    onOpenApprovals: (() -> Unit)? = null,
+) {
+    DenebTitlePivot(
+        label = "피드",
+        selected = active == DenebFeedApprovalPage.Feed,
+        onClick = onOpenFeed.takeIf { active != DenebFeedApprovalPage.Feed },
+        leading = true,
+    )
+    DenebTitlePivot(
+        label = "결재",
+        selected = active == DenebFeedApprovalPage.Approvals,
+        onClick = onOpenApprovals.takeIf { active != DenebFeedApprovalPage.Approvals },
+    )
+}
+
+// Sibling-swipe motion tokens (spatial channel — see DenebMotion springs for settle).
+private val SiblingSwipeCommit = 72.dp
+private val SiblingSwipeMaxTravel = 110.dp
+private val SiblingSwipeEdge = 36.dp
+private const val SiblingSwipeResistance = 0.6f
+
+/**
+ * Follow-the-finger host for the 피드 ⇄ 결재 pivot pair. The content tracks a
+ * horizontal drag (damped + clamped), springs back on release, and fires
+ * [onSwipeLeft]/[onSwipeRight] past the commit distance. Vertical-dominant
+ * drags yield to list scroll / PTR; screen-edge starts yield to system back.
+ */
+@Composable
+fun DenebSiblingSwipeHost(
+    modifier: Modifier = Modifier,
+    onSwipeLeft: (() -> Unit)? = null,
+    onSwipeRight: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    if (onSwipeLeft == null && onSwipeRight == null) {
+        Box(modifier.fillMaxSize(), content = { content() })
+        return
+    }
+    val dragX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val maxTravel = with(density) { SiblingSwipeMaxTravel.toPx() }
+    val commit = with(density) { SiblingSwipeCommit.toPx() }
+    val edge = with(density) { SiblingSwipeEdge.toPx() }
+    val minX = if (onSwipeLeft != null) -maxTravel else 0f
+    val maxX = if (onSwipeRight != null) maxTravel else 0f
+
+    Box(
+        modifier
+            .fillMaxSize()
+            .graphicsLayer { translationX = dragX.value }
+            .pointerInput(onSwipeLeft, onSwipeRight, minX, maxX, commit, edge) {
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (down.position.x <= edge || down.position.x >= size.width - edge) {
+                        return@awaitEachGesture
+                    }
+                    var dx = 0f
+                    var dy = 0f
+                    var horizontal = false
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val delta = change.positionChange()
+                        dx += delta.x
+                        dy += delta.y
+                        if (!horizontal) {
+                            if (abs(dy) > slop && abs(dy) >= abs(dx)) return@awaitEachGesture
+                            if (abs(dx) > slop && abs(dx) > abs(dy)) horizontal = true
+                        }
+                        if (horizontal) {
+                            change.consume()
+                            val resisted = (dx * SiblingSwipeResistance).coerceIn(minX, maxX)
+                            scope.launch { dragX.snapTo(resisted) }
+                        }
+                    }
+                    val committedLeft = horizontal && dx <= -commit && onSwipeLeft != null
+                    val committedRight = horizontal && dx >= commit && onSwipeRight != null
+                    if (committedLeft) onSwipeLeft?.invoke()
+                    if (committedRight) onSwipeRight?.invoke()
+                    scope.launch { dragX.animateTo(0f, denebSpatialSpring()) }
+                }
+            },
+        content = { content() },
     )
 }
 

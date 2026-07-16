@@ -424,6 +424,14 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_CALENDAR_CACHE, json)
     }
 
+    // Default approvals-list cache (single key — folder=total first page, for an
+    // instant 결재 render after process death). Owner-fingerprinted like mail/feed.
+    fun getCachedApprovalsList(): String? = settings.getStringOrNull(KEY_APPROVALS_CACHE)
+
+    fun putCachedApprovalsList(json: String) {
+        settings.putString(KEY_APPROVALS_CACHE, json)
+    }
+
     /**
      * Purge ALL cached private content (every transcript + the inbox list). Called
      * when the gateway URL or client token changes: those cache keys are global, so
@@ -439,7 +447,14 @@ class AppSettings(internal val settings: Settings) {
     @OptIn(ExperimentalSettingsApi::class)
     fun clearCachedContent() {
         settings.keys
-            .filter { it.startsWith(KEY_TX_CACHE_PREFIX) || it == KEY_TX_CACHE_LRU || it == KEY_MAIL_CACHE || it == KEY_WORK_FEED_CACHE || it == KEY_CALENDAR_CACHE }
+            .filter {
+                it.startsWith(KEY_TX_CACHE_PREFIX) ||
+                    it == KEY_TX_CACHE_LRU ||
+                    it == KEY_MAIL_CACHE ||
+                    it == KEY_WORK_FEED_CACHE ||
+                    it == KEY_CALENDAR_CACHE ||
+                    it == KEY_APPROVALS_CACHE
+            }
             .forEach { settings.remove(it) }
     }
 
@@ -500,6 +515,7 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_MAIL_CACHE = "mail_list_cache"
         const val KEY_WORK_FEED_CACHE = "work_feed_cache"
         const val KEY_CALENDAR_CACHE = "calendar_cache"
+        const val KEY_APPROVALS_CACHE = "approvals_list_cache"
         const val KEY_TX_CACHE_PREFIX = "tx_cache:"
         const val KEY_TX_CACHE_LRU = "tx_cache_lru"
         const val TX_CACHE_MAX_SESSIONS = 12
