@@ -100,6 +100,11 @@ type Store struct {
 	// on page write/delete (see invalidateGraphCorpus).
 	graphMu    sync.RWMutex
 	graphCache *graphCorpus
+	// graphGen bumps on every invalidation. loadGraphCorpus captures the
+	// generation before building and only publishes the cache when it is
+	// unchanged — a write/delete during a slow build must not reinstall a
+	// pre-mutation snapshot (e.g. a wiki_forget followed by recall).
+	graphGen uint64
 }
 
 // SearchOptions fixes search-time inputs that production normally obtains

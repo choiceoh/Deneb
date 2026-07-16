@@ -263,6 +263,7 @@ func (s *Store) loadGraphCorpus(ctx context.Context) (graphCorpus, error) {
 		s.graphMu.RUnlock()
 		return cached, nil
 	}
+	buildGen := s.graphGen
 	s.graphMu.RUnlock()
 
 	relPaths, err := s.ListPages("")
@@ -282,7 +283,9 @@ func (s *Store) loadGraphCorpus(ctx context.Context) (graphCorpus, error) {
 	}
 
 	s.graphMu.Lock()
-	s.graphCache = &corpus
+	if s.graphGen == buildGen {
+		s.graphCache = &corpus
+	}
 	s.graphMu.Unlock()
 	return corpus, nil
 }
@@ -294,6 +297,7 @@ func (s *Store) invalidateGraphCorpus() {
 		return
 	}
 	s.graphMu.Lock()
+	s.graphGen++
 	s.graphCache = nil
 	s.graphMu.Unlock()
 }
