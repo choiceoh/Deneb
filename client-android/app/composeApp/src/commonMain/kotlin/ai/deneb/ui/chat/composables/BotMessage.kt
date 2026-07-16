@@ -8,6 +8,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
 import ai.deneb.ui.denebFadeEnter
 import ai.deneb.ui.denebFadeExit
+import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
@@ -38,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
@@ -149,6 +152,7 @@ internal fun BotMessage(
     isStreaming: Boolean = false,
     attachments: ImmutableList<Attachment> = persistentListOf(),
     timestampMs: Long = 0,
+    variantNav: VariantNav? = null,
 ) {
     val haptics = rememberHaptics()
     val parseSource = rememberStreamingParseSource(message, isStreaming)
@@ -316,6 +320,31 @@ internal fun BotMessage(
                     onClick = onRegenerate,
                 )
             }
+            // ‹ n/N › — navigate the last answer's regenerate variants. Arrows
+            // only render where a step exists (no disabled-state ambiguity at
+            // this glyph size); the fraction reads current/total.
+            if (variantNav != null) {
+                if (variantNav.index > 0) {
+                    SmallIconButton(
+                        imageVector = Icons.Filled.ChevronLeft,
+                        contentDescription = "이전 답변",
+                        onClick = { variantNav.onSelect(variantNav.index - 1) },
+                    )
+                }
+                Text(
+                    text = "${variantNav.index + 1}/${variantNav.total}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = denebHint(),
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                )
+                if (variantNav.index < variantNav.total - 1) {
+                    SmallIconButton(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = "다음 답변",
+                        onClick = { variantNav.onSelect(variantNav.index + 1) },
+                    )
+                }
+            }
             // ⋯ — the message action sheet (공유·보낸 시각). Bot bodies keep their
             // inline SelectionContainer (drag-select works there), so the sheet rides
             // an explicit button instead of long-press.
@@ -417,3 +446,11 @@ private fun ReasoningBlockquote(
         }
     }
 }
+
+// ‹ n/N › navigation over the last answer's regenerate variants
+// (ChatUiState.lastAnswerVariants). index is 0-based; total-1 == the live answer.
+internal data class VariantNav(
+    val index: Int,
+    val total: Int,
+    val onSelect: (Int) -> Unit,
+)

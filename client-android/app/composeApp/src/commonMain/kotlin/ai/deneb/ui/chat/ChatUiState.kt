@@ -110,6 +110,13 @@ data class ChatUiState(
     // One-shot scroll target: set when opening a proactive work-feed card jumps
     // into client:main, consumed by the chat list once the message is visible.
     val pendingScrollToMessageId: String? = null,
+    // Previous versions of the LAST answer, stashed when 다시 생성 replaces it —
+    // navigable ‹ n/N ›. Live-session only (a reload rebuilds from the transcript,
+    // which appends regenerated turns sequentially instead). Cleared on any new
+    // question / session switch. lastAnswerVariantIndex ∈ [0, variants.size]:
+    // variants.size selects the live (newest) answer.
+    val lastAnswerVariants: ImmutableList<History> = persistentListOf(),
+    val lastAnswerVariantIndex: Int = 0,
     val smsDrafts: ImmutableList<SmsDraft> = persistentListOf(),
     val snackbarMessage: StringResource? = null,
     // Free-text agent report from a feed-card feedback turn (gateway returns "what I

@@ -75,6 +75,8 @@ class ChatViewModel(
         removeFile = ::removeFile,
         startNewChat = ::startNewChat,
         regenerate = ::regenerate,
+        editResendLast = ::editResendLast,
+        selectAnswerVariant = ::selectAnswerVariant,
         cancel = ::cancel,
         cancelPendingQuestions = ::cancelPendingQuestions,
         selectService = ::selectService,
@@ -247,6 +249,8 @@ class ChatViewModel(
     }
 
     private fun ask(question: String?) {
+        // A NEW question makes the previous answer's ‹ n/N › stash meaningless.
+        if (question != null) clearAnswerVariants()
         // The typed-send path: on failure restore the text so it can be edited and
         // resent rather than retyped. retry() passes null, so it carries no restore.
         askInternal(question, null, restoreText = question)
@@ -349,6 +353,7 @@ class ChatViewModel(
     // back into the input instead (the user may want to rephrase).
     private fun drainPendingQuestion() {
         val next = _state.value.pendingQuestions.firstOrNull() ?: return
+        clearAnswerVariants() // a queued NEW question, same as ask()
         _state.update { it.copy(pendingQuestions = it.pendingQuestions.drop(1).toImmutableList()) }
         // A drained programmatic prompt keeps its no-restore semantics: if THIS
         // turn fails, its text must not land in the input box either.
@@ -372,6 +377,7 @@ class ChatViewModel(
         .joinToString("\n\n").ifBlank { null }
 
     private fun clearHistory() {
+        clearAnswerVariants()
         dataRepository.clearHistory()
         _state.update {
             it.copy(error = null)
@@ -478,15 +484,60 @@ class ChatViewModel(
             ?.content
             ?.takeIf { it.isNotBlank() }
             ?: return
+        // Stash the answer being replaced so ‹ n/N › can navigate back to it —
+        // the pop below only rewinds the VISIBLE history, so without a stash the
+        // previous version is simply gone.
+        stashLastAnswerVariant()
         dataRepository.popLastExchange()
         // Re-ask via askInternal (not ask) with no restore text: regenerate is a
         // button, so a failure shouldn't dump the re-asked text into the input box.
         askInternal(lastUser, null, restoreText = null)
     }
 
+    // 마지막 사용자 메시지를 고친 텍스트로 다시 보낸다 — regenerate와 동일한 되감기에
+    // 텍스트만 다르다. 질문이 바뀌므로 이전 답변 변형은 무의미해져 함께 비운다.
+    private fun editResendLast(newText: String) {
+        val text = newText.trim()
+        if (text.isEmpty() || _state.value.isLoading) return
+        val hasUser = dataRepository.chatHistory.value.any { it.role == History.Role.USER }
+        if (!hasUser) return
+        clearAnswerVariants()
+        dataRepository.popLastExchange()
+        // 실패 시 고친 텍스트가 입력창으로 복원되도록 restoreText를 싣는다 (ask와 동일).
+        askInternal(text, null, restoreText = text)
+    }
+
+    private fun selectAnswerVariant(index: Int) {
+        _state.update {
+            val clamped = index.coerceIn(0, it.lastAnswerVariants.size)
+            it.copy(lastAnswerVariantIndex = clamped)
+        }
+    }
+
+    private fun stashLastAnswerVariant() {
+        val previous = dataRepository.chatHistory.value.lastRenderedAssistant() ?: return
+        _state.update {
+            val variants = (it.lastAnswerVariants + previous).toImmutableList()
+            // Index parks on the new LIVE answer (== variants.size) so regenerate
+            // always shows the fresh reply; ‹ steps back into the stash.
+            it.copy(lastAnswerVariants = variants, lastAnswerVariantIndex = variants.size)
+        }
+    }
+
+    private fun clearAnswerVariants() {
+        _state.update {
+            if (it.lastAnswerVariants.isEmpty() && it.lastAnswerVariantIndex == 0) {
+                it
+            } else {
+                it.copy(lastAnswerVariants = persistentListOf(), lastAnswerVariantIndex = 0)
+            }
+        }
+    }
+
     private fun loadConversation(id: String) {
         currentJob?.cancel()
         currentJob = null
+        clearAnswerVariants() // variants are per-live-answer, never cross sessions
         dataRepository.loadConversation(id)
         _state.update {
             // Queued messages belong to the conversation they were sent in — they
@@ -681,6 +732,7 @@ class ChatViewModel(
     private fun startNewChat() {
         currentJob?.cancel()
         currentJob = null
+        clearAnswerVariants()
         dataRepository.startNewChat()
         _state.update {
             // Same queue hygiene as loadConversation: never carry queued messages

@@ -14,6 +14,12 @@ data class ChatActions(
     val removeFile: (PlatformFile) -> Unit,
     val startNewChat: () -> Unit,
     val regenerate: () -> Unit,
+    // 마지막 사용자 메시지를 고쳐 다시 보낸다 — regenerate와 같은 시맨틱(마지막 교환을
+    // 로컬에서 되감고 재질의)에 텍스트만 바뀐다. 마지막 메시지 한정: 그 이전을 편집하면
+    // 이후 대화가 서버 컨텍스트에 남아 정직하지 않다 (transcript truncation RPC 부재).
+    val editResendLast: (String) -> Unit,
+    // ‹ n/N › — 다시 생성으로 대체된 이전 답변들 사이를 오간다 (ChatUiState.lastAnswerVariants).
+    val selectAnswerVariant: (Int) -> Unit,
     val cancel: () -> Unit,
     // Drops the messages queued while a reply was streaming (ChatUiState.pendingQuestions).
     val cancelPendingQuestions: () -> Unit,

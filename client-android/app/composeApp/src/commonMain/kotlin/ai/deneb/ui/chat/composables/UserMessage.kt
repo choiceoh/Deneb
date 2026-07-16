@@ -27,11 +27,13 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +64,8 @@ internal fun UserMessage(
     message: String,
     attachments: ImmutableList<Attachment> = persistentListOf(),
     timestampMs: Long = 0,
+    // 마지막 사용자 메시지에서만 non-null — 편집 후 다시 보내기 (regenerate 시맨틱).
+    onEditResend: ((String) -> Unit)? = null,
 ) {
     val showFullScreen = LocalShowFullScreenImage.current
     val haptics = rememberHaptics()
@@ -73,6 +77,7 @@ internal fun UserMessage(
     // long-press, with text selection as a menu entry (dialog).
     var sheetOpen by remember { mutableStateOf(false) }
     var selectTextOpen by remember { mutableStateOf(false) }
+    var editOpen by remember { mutableStateOf(false) }
     // Borderless gray bubble for "my message": a neutral surfaceVariant container in
     // both light (#E1E7EE) and OLED dark (#2A2F35) — no accent wash, no hairline ring.
     val cs = MaterialTheme.colorScheme
@@ -90,6 +95,9 @@ internal fun UserMessage(
                     },
                 )
                 add(MessageSheetAction(Icons.Filled.SelectAll, "텍스트 선택") { selectTextOpen = true })
+                if (onEditResend != null) {
+                    add(MessageSheetAction(Icons.Filled.Edit, "편집 후 다시 보내기") { editOpen = true })
+                }
                 add(MessageSheetAction(Icons.Filled.Share, "공유") { scope.launch { shareTextToApps(message) } })
             },
             onDismiss = { sheetOpen = false },
@@ -97,6 +105,16 @@ internal fun UserMessage(
     }
     if (selectTextOpen) {
         SelectTextDialog(text = message, onDismiss = { selectTextOpen = false })
+    }
+    if (editOpen && onEditResend != null) {
+        EditResendDialog(
+            initial = message,
+            onSend = { edited ->
+                editOpen = false
+                onEditResend(edited)
+            },
+            onDismiss = { editOpen = false },
+        )
     }
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -202,6 +220,32 @@ internal fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
+        },
+    )
+}
+
+// 편집 후 다시 보내기 — 마지막 질문을 고쳐 재질의한다. 보내기는 텍스트가 비어 있지
+// 않을 때만; 취소는 아무것도 바꾸지 않는다.
+@Composable
+internal fun EditResendDialog(initial: String, onSend: (String) -> Unit, onDismiss: () -> Unit) {
+    var draft by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = draft.trim().isNotEmpty(),
+                onClick = { onSend(draft.trim()) },
+            ) { Text("보내기") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        text = {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2,
+                maxLines = 8,
+            )
         },
     )
 }
