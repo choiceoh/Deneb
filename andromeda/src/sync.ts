@@ -44,12 +44,22 @@ export function saveSyncCursor(cursor: number): void {
 
 // Native-sync event type → the Refine resource list(s) to refetch. The type is
 // "<base>.<verb>" (e.g. "workfeed.created"); we key off the base. Types with no
-// desktop list resource (transcript.appended — the chat owns its own history)
-// map to nothing. Reuses relatedResourcesForResource so calendar fans out to its
-// dashboard + month lists exactly like the AI-mutation refresh path.
+// desktop list resource (transcript.appended — the chat owns its own history;
+// org.changed — no desktop org pane yet) map to nothing. Reuses
+// relatedResourcesForResource so calendar fans out to its dashboard + month
+// lists and wiki fans out to search/notebook, exactly like the AI-mutation
+// refresh path.
+//
+// mail/approvals/wiki ride the gateway change feed (nativesync wiki.changed /
+// mail.changed / approvals.changed): a mail archived on the phone, an approval
+// the radar resolved, or a wiki page the agent wrote lands here within one
+// poll instead of waiting out the 60s list cache.
 const SYNC_TYPE_BASE_RESOURCE: Record<string, string> = {
   workfeed: "workfeed",
   calendar: "calendar",
+  mail: "mail",
+  approvals: "approvals",
+  wiki: "wiki",
 };
 
 export function resourcesForSyncEventType(type: string): string[] {
