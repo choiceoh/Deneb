@@ -96,6 +96,7 @@ class WorkFeedNativeSyncStateMachineTest {
         client.lastHomeWarm = TimeSource.Monotonic.markNow()
         client.lastUsageForward = TimeSource.Monotonic.markNow()
         client.lastLocationForward = TimeSource.Monotonic.markNow()
+        client.lastWikiMirrorRefresh = TimeSource.Monotonic.markNow()
     }
 
     @Test
@@ -533,11 +534,13 @@ class WorkFeedNativeSyncStateMachineTest {
             ai.deneb.data.SmsDraftStore(f.settings),
             ai.deneb.sms.SmsSender(),
             transport.httpClient,
+            MemoryWikiMirrorFiles(),
         )
         restarted._denebWorkFeed.value = listOf(item("seed"))
         restarted.lastHomeWarm = TimeSource.Monotonic.markNow()
         restarted.lastUsageForward = TimeSource.Monotonic.markNow()
         restarted.lastLocationForward = TimeSource.Monotonic.markNow()
+        restarted.lastWikiMirrorRefresh = TimeSource.Monotonic.markNow()
         transport.enqueueRpc(syncPayload(cursor = 42))
 
         restarted.syncNativeState()

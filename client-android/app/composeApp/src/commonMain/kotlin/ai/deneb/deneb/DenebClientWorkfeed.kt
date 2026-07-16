@@ -110,6 +110,9 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // same warm — it refreshes both home caches, which is the point.
     var calendarChanged = false
     var mailChanged = false
+    // wiki.changed carries the touched path: collected here (not applied inside
+    // the gate — each repair is an RPC) and fed to the offline mirror below.
+    val wikiChangedPaths = linkedSetOf<String>()
     nativeSyncGate.withLock {
         var cursor = nativeSyncCursor
         var keepGoing = true
@@ -138,6 +141,7 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
                 applyNativeSyncEvent(ev, reloadSessions)
                 if (ev.type == "calendar.changed") calendarChanged = true
                 if (ev.type == "mail.changed") mailChanged = true
+                if (ev.type == "wiki.changed" && ev.entityId.isNotBlank()) wikiChangedPaths += ev.entityId
             }
             val nextCursor = payload.cursor.coerceAtLeast(cursor)
             if (nextCursor > nativeSyncCursor) {
@@ -190,6 +194,12 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // then rendered a days-old glance on the next cold open. Throttled so bursty SSE
     // frames don't storm; each refresh owner-fingerprints + persists its own cache.
     warmHomeCachesThrottled()
+    // Offline wiki mirror upkeep, inline like the warms above (this is already
+    // a background coroutine; a detached launch would race the test harness):
+    // targeted repairs for the pages this drain saw change, then the throttled
+    // full refresh (seeds a fresh install, repairs anything the events missed).
+    if (wikiChangedPaths.isNotEmpty()) updateWikiMirrorPaths(wikiChangedPaths)
+    ensureWikiMirrorFresh()
     maybeForwardUsageDigest()
     maybeForwardLocation()
     return true

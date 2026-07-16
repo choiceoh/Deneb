@@ -76,17 +76,21 @@ class DenebGatewayClient private constructor(
     private val smsDraftStore: SmsDraftStore,
     private val smsSender: SmsSender,
     injectedHttp: (() -> io.ktor.client.HttpClient)?,
+    // Injectable so tests never touch (or wipe) the machine's real mirror
+    // files; null = the platform app-files directory.
+    wikiMirrorFiles: WikiMirrorFiles?,
 ) : DataRepository {
 
     constructor(appSettings: AppSettings, smsDraftStore: SmsDraftStore, smsSender: SmsSender) :
-        this(appSettings, smsDraftStore, smsSender, null)
+        this(appSettings, smsDraftStore, smsSender, null, null)
 
     internal constructor(
         appSettings: AppSettings,
         smsDraftStore: SmsDraftStore,
         smsSender: SmsSender,
         http: io.ktor.client.HttpClient,
-    ) : this(appSettings, smsDraftStore, smsSender, { http })
+        wikiMirrorFiles: WikiMirrorFiles? = null,
+    ) : this(appSettings, smsDraftStore, smsSender, { http }, wikiMirrorFiles)
 
     internal val jsonCodec = Json {
         ignoreUnknownKeys = true
@@ -236,6 +240,17 @@ class DenebGatewayClient private constructor(
     // see DenebClientSessionCache.kt. Instance-scoped so a fresh client (test
     // harness) starts cold; disk snapshots are owner-fingerprinted per account.
     internal val sectionCaches = SectionCaches(appSettings) { mailCacheOwner(gatewayUrl, clientToken) }
+
+    // Offline wiki mirror (WikiMirror.kt): the whole corpus on disk, bulk-seeded
+    // from miniapp.memory.mirror and kept current by wiki.changed sync events.
+    // The 위키 read paths fall back here when the network fetch fails.
+    internal val wikiMirror = WikiMirrorStore(wikiMirrorFiles ?: platformWikiMirrorFiles()) { mailCacheOwner(gatewayUrl, clientToken) }
+    internal var wikiMirrorRefreshInFlight = false
+
+    // Attempt throttle for the mirror's full refresh (same shape as
+    // lastHomeWarm): bounds retry pressure when the pull keeps failing, and
+    // lets sync contract tests pre-arm it to keep request sequences exact.
+    internal var lastWikiMirrorRefresh: TimeSource.Monotonic.ValueTimeMark? = null
 
     // Calendar month cache (range-key → when-fetched + events). The calendar
     // screen's own cache is composition-scoped, so every tab switch back to the
@@ -394,6 +409,9 @@ class DenebGatewayClient private constructor(
         _denebCalendar.value = emptyList()
         _denebCalProposals.value = emptyList()
         sectionCaches.clearAll()
+        // The mirror holds account A's whole wiki on disk; wipe it eagerly (its
+        // owner fingerprint would also reject it lazily, but why keep the bytes).
+        scope.launch { wikiMirror.clear() }
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()

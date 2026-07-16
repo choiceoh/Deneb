@@ -189,6 +189,29 @@ internal data class WikiPagePayload(
     val body: String = "",
 )
 
+// Bulk page export for the offline wiki mirror (miniapp.memory.mirror).
+// Row shape mirrors WikiPagePayload minus `related` (the mirror doesn't
+// render related links).
+@Serializable
+internal data class WikiMirrorPayload(
+    val pages: List<WikiMirrorPageRow> = emptyList(),
+    val nextCursor: String = "",
+    val hasMore: Boolean = false,
+    val total: Int = 0,
+)
+
+@Serializable
+internal data class WikiMirrorPageRow(
+    val path: String = "",
+    val title: String = "",
+    val summary: String = "",
+    val category: String = "",
+    val code: String = "",
+    val tags: List<String> = emptyList(),
+    val updated: String = "",
+    val body: String = "",
+)
+
 // Capture results: the gateway runs OCR / ASR / contacts-extract and the agent
 // turn, returning the surfaced text.
 @Serializable
