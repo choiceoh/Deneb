@@ -269,6 +269,26 @@ Probe from Node (same HMAC client as eap/board):
 
 Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies under `/logis`, `/purchase`, `/financial` (date keys differ per screen).
 
+## Field-level facts confirmed live (2026-07-16)
+
+Verified against full-history reads (2020→) while porting this contract into
+`choiceoh/solarflow` (`rpa/amaranth-reader`). These are payload facts, not
+guesses — reuse instead of re-probing:
+
+| Screen | Confirmed facts |
+|--------|-----------------|
+| 출고 `blf0050` | Line seq is **`isuSq`** (not `isuSeq`). Amounts `isuUm`/`isugAm`/`isuvAm`/`isuhAm`. `isureqNb` (출고요청번호) filled ~99% — the only path to 현장명 for module wholesale rows (`pjtNm` is filled only on 유지관리/공사 rows; module rows carry customer `trNm`/`trAddr` only). ~10.6k rows 2020→. |
+| 매출마감 `blg0070` | **`isuNb`+`isuSq` join each closing line to its 출고 line** (`clsNb` is the closing number — never matches 출고번호). Line seq `clsSq`. **Partial closings are normal** (one 출고 → many closings). `trNm` often empty (only `trCd`) — resolve customer via the joined 출고. Rows carry **cost/profit columns** (Amaranth's own realized margin — treat as ground truth). ~7.7k rows 2023→. |
+| 입고 `pof0020` | Line seq **`rcvSq`**; unit price **`rcvUm`** (not `unitAm`); PO link `poNb`; location `lcNm`; remarks `dRemarkDc`/`hRemarkDc`. ~1.7k rows 2020→. |
+| 현재고 `pom0010` | Also carries `iopenQt`/`ircvQt`/`iisuQt` (기초/입고누계/출고누계) beside `jegoQt`/`gayongQt`. Quantities only — 금액/재고단가 lives in the 수불부 screen (uncaptured). |
+| 미수채권 `bll0030` | Works as per-customer as-of balance: `cardCd`/`cardNm`/`arAmRest` (기준일=`toDt`). |
+| 발주 `poc0030` / 매입마감 `pog0050` | Both return live rows over full range (45 / 591) with the documented bodies plus the paging block. |
+| 창고 코드 | `A200`/`A400`/`F100` match SolarFlow warehouse codes 1:1; `J100`/`J200`/`J300` are business-type virtual warehouses (공사매출/유지관리/임대매출), not physical. `divNm` is 100% 탑솔라(주) on this login. |
+
+Still uncaptured (SPA-body capture via Playwright request hook needed): 주문
+`blc0030`, 수금 `blh0040`, 지급 `poh0040`, 재고수불부(금액판), 출고요청 상세
+(현장명 소스).
+
 ## Wiring note (Deneb)
 
 | Today | ERP |
