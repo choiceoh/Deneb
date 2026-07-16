@@ -34,6 +34,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -249,10 +250,11 @@ type Server struct {
 	// re-resolving — single source of truth.
 	denebDir string
 
-	// groupwareRadarActive is set when registerGroupwareRadarTask successfully
+	// groupwareRadar is set when registerGroupwareRadarTask successfully
 	// registers the Amaranth poll task. Phone electronic-approval notifications
-	// then defer to the radar (analyze→wiki→feed) instead of posting a bare card.
-	groupwareRadarActive bool
+	// then trigger an on-demand radar scan (analyze→wiki→feed with 승인/반려
+	// chips) instead of posting a bare notification card.
+	groupwareRadar *groupware.Radar
 
 	// promptStore persists operator-editable prompt overrides surfaced in the
 	// native Settings prompt corner. nil only if initialization is skipped in tests.

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
@@ -70,6 +71,13 @@ type Radar struct {
 	onEscalated    func(context.Context, ApprovalSummary, int, time.Duration) error
 	onResolved     func(context.Context, ApprovalSummary) error
 	onListFailed   func(ctx context.Context, folder string, streak int, err error) error
+
+	// scanMu serializes scan cycles: the autonomous service already serializes
+	// periodic Runs, but TriggerScan (phone-notification trigger) can arrive
+	// concurrently. Held across the whole scan INCLUDING callbacks — callbacks
+	// must never call back into the Radar (they don't: they read/analyze/post
+	// feed cards).
+	scanMu sync.Mutex
 }
 
 var _ autonomous.PeriodicTask = (*Radar)(nil)
@@ -143,14 +151,30 @@ func IsRadarBusinessHours(at time.Time) bool {
 	return minute >= 8*60+30 && minute < 19*60
 }
 
-// Run polls pending and done snapshots once. The autonomous service serializes
-// task cycles, so Radar intentionally has no mutex and never holds a lock across
-// callbacks.
+// Run polls pending and done snapshots once (periodic cycle). Outside business
+// hours it is a no-op — overnight/weekend approvals wait for the morning cycle
+// or a phone-notification TriggerScan.
 func (r *Radar) Run(ctx context.Context) error {
-	now := r.now()
-	if !IsRadarBusinessHours(now) {
+	if !IsRadarBusinessHours(r.now()) {
 		return nil
 	}
+	return r.scan(ctx)
+}
+
+// TriggerScan runs one on-demand scan cycle immediately — the phone-notification
+// trigger ("결재 도착" push proves the user cares right now), so it bypasses the
+// business-hours gate. Same dedup as the periodic cycle: existing active cards
+// and already-notified docs are skipped, so duplicate pushes are cheap no-ops.
+func (r *Radar) TriggerScan(ctx context.Context) error {
+	return r.scan(ctx)
+}
+
+// scan is the shared cycle body. scanMu serializes periodic and triggered scans.
+func (r *Radar) scan(ctx context.Context) error {
+	r.scanMu.Lock()
+	defer r.scanMu.Unlock()
+
+	now := r.now()
 	if r.statePath == "" {
 		return errors.New("groupware radar state path is required")
 	}

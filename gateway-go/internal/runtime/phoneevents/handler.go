@@ -71,23 +71,27 @@ type Config struct {
 	// enrichment (bridge off / busy / failure) — judgment still runs on the
 	// notification text alone.
 	BrowserEnrich func(ctx context.Context, source, text string) string
-	// DeferElectronicApproval, when true, drops phone electronic-approval
-	// notifications before the judgment turn — the groupware radar owns
-	// analyze→wiki→feed for those docs (Gmail-poll parity).
-	DeferElectronicApproval bool
+	// TriggerApprovalScan, if set, runs one on-demand groupware-radar scan when
+	// an electronic-approval notification arrives. The radar owns read→analyze→
+	// feed for approvals (analysis body + 승인/반려 chips), so the phone push is
+	// only a trigger, never a card source — a plain notification relay card
+	// would carry no approval chips. On scan error the handler falls back to
+	// the notification-relay judgment so a reader outage degrades to a
+	// buttonless card instead of silence.
+	TriggerApprovalScan func(ctx context.Context) error
 }
 
 // Handler accepts phone telemetry and runs proactive judgment turns.
 type Handler struct {
-	chatHandler             chatport.SyncRunner
-	relay                   *proactive.Relay
-	resolvePhoneAction      func(ActionResult) bool
-	shutdownContext         context.Context
-	logger                  *slog.Logger
-	ledger                  *Ledger
-	onLocationPlace         func(payload string)
-	browserEnrich           func(ctx context.Context, source, text string) string
-	deferElectronicApproval bool
+	chatHandler         chatport.SyncRunner
+	relay               *proactive.Relay
+	resolvePhoneAction  func(ActionResult) bool
+	shutdownContext     context.Context
+	logger              *slog.Logger
+	ledger              *Ledger
+	onLocationPlace     func(payload string)
+	browserEnrich       func(ctx context.Context, source, text string) string
+	triggerApprovalScan func(ctx context.Context) error
 }
 
 // New creates a phone-event handler.
@@ -97,15 +101,15 @@ func New(cfg Config) *Handler {
 		shutdownContext = context.Background()
 	}
 	return &Handler{
-		chatHandler:             cfg.ChatHandler,
-		relay:                   cfg.Relay,
-		resolvePhoneAction:      cfg.ResolvePhoneAction,
-		shutdownContext:         shutdownContext,
-		logger:                  cfg.Logger,
-		ledger:                  cfg.Ledger,
-		onLocationPlace:         cfg.OnLocationPlace,
-		browserEnrich:           cfg.BrowserEnrich,
-		deferElectronicApproval: cfg.DeferElectronicApproval,
+		chatHandler:         cfg.ChatHandler,
+		relay:               cfg.Relay,
+		resolvePhoneAction:  cfg.ResolvePhoneAction,
+		shutdownContext:     shutdownContext,
+		logger:              cfg.Logger,
+		ledger:              cfg.Ledger,
+		onLocationPlace:     cfg.OnLocationPlace,
+		browserEnrich:       cfg.BrowserEnrich,
+		triggerApprovalScan: cfg.TriggerApprovalScan,
 	}
 }
 
@@ -432,11 +436,24 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	if source == "" {
 		source = "(미상)"
 	}
-	// Groupware radar owns analyze→wiki→feed for electronic approvals.
-	// Phone pushes would otherwise post a bare notification card first.
-	if s.deferElectronicApproval && isElectronicApprovalEvent(source, text) {
-		s.logger.Info("phone-event: electronic approval skipped (groupware radar covers)",
-			"source", source)
+	// Groupware radar owns analyze→wiki→feed for electronic approvals — the
+	// phone push is only a trigger. Run one on-demand radar scan now (dedup
+	// and state live in the radar), instead of relaying a bare notification
+	// card that would carry no 승인/반려 chips. Fallback: a failed scan (reader
+	// outage) degrades to the old notification relay — signal over silence.
+	if s.triggerApprovalScan != nil && isElectronicApprovalEvent(source, text) {
+		s.logger.Info("phone-event: electronic approval → groupware radar scan", "source", source)
+		safego.GoWithSlog(s.logger, "phone-event-approval-scan", func() {
+			ctx, cancel := context.WithTimeout(s.shutdownContext, phoneEventApprovalDeadline)
+			defer cancel()
+			if err := s.triggerApprovalScan(ctx); err != nil {
+				s.logger.Warn("phone-event: approval radar scan failed; falling back to notification relay",
+					"source", source, "error", err)
+				_, _ = s.processJudgment(ctx, eventType, source, text)
+				return
+			}
+			s.logger.Info("phone-event: approval radar scan ok", "source", source)
+		})
 		return
 	}
 	// Ledger BEFORE the tiny gate: the gate is tuned for push-worthiness, not
@@ -458,36 +475,6 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 		defer cancel()
 		_, _ = s.processJudgment(ctx, eventType, source, text)
 	})
-}
-
-// IngestApprovalSync validates a structured e-approval notification and runs the
-// same enrich → judgment → work-feed relay used by phone ingestion. It does not
-// append a synthetic phone ledger entry and returns only after delivery succeeds.
-func (s *Handler) IngestApprovalSync(ctx context.Context, source, text string) error {
-	source = strings.TrimSpace(source)
-	if source == "" {
-		source = "(미상)"
-	}
-	text = strings.TrimSpace(text)
-	if !isElectronicApprovalEvent(source, text) {
-		return errors.New("structured electronic approval notification required")
-	}
-	if extractGroupwareDocID(text) == "" {
-		return errors.New("structured electronic approval docId required")
-	}
-	if ctx == nil {
-		ctx = s.shutdownContext
-	}
-	ctx, cancel := context.WithTimeout(ctx, phoneEventApprovalDeadline)
-	defer cancel()
-	delivered, err := s.processJudgment(ctx, "notification", source, text)
-	if err != nil {
-		return err
-	}
-	if !delivered {
-		return errors.New("electronic approval work-feed relay did not deliver")
-	}
-	return nil
 }
 
 // processJudgment owns the expensive shared path after source-specific early

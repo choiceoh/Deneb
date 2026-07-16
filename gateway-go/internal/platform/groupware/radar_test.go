@@ -47,6 +47,49 @@ func TestRadarIntervalEnvironment(t *testing.T) {
 	}
 }
 
+func TestRadarTriggerScanBypassesBusinessHours(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	sunday := time.Date(2026, 7, 12, 21, 0, 0, 0, radarKST)
+	var calls []string
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return sunday },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return []ApprovalSummary{approval("9", "nine")}, nil
+			}
+			return nil, nil
+		},
+		OnPending: func(_ context.Context, doc ApprovalSummary) error {
+			calls = append(calls, doc.DocID)
+			return nil
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+
+	// The periodic cycle stays gated off-hours…
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("off-hours periodic Run must not process: %v", calls)
+	}
+	// …but the phone-notification trigger scans immediately.
+	if err := radar.TriggerScan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(calls, []string{"9"}) {
+		t.Fatalf("TriggerScan calls = %v", calls)
+	}
+	// Dedup carries over: a duplicate push is a cheap no-op.
+	if err := radar.TriggerScan(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("duplicate trigger re-notified: %v", calls)
+	}
+}
+
 func TestRadarFirstRunCapUnchangedAndChange(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "radar.json")
 	pending := []ApprovalSummary{
