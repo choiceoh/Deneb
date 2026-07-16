@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
@@ -27,8 +30,19 @@ func (s *Server) buildMux() *http.ServeMux {
 		ShutdownContext:   s.ShutdownCtx(),
 		Logger:            s.logger,
 		AttachmentFactory: s.newMiniappMailAttachmentClient,
-		Fleet:             s.fleet,
-		Version:           s.version,
+		GroupwareAttachmentDownload: func(ctx context.Context, docID, attachment string) (string, string, []byte, error) {
+			cfg, ok := groupware.FromEnv()
+			if !ok {
+				return "", "", nil, fmt.Errorf("groupware credentials unset")
+			}
+			file, err := groupware.DownloadApprovalAttachment(ctx, cfg, docID, attachment)
+			if err != nil {
+				return "", "", nil, err
+			}
+			return file.Filename, file.MimeType, file.Data, nil
+		},
+		Fleet:   s.fleet,
+		Version: s.version,
 	}
 	// Keep route discovery available to lightweight tests and diagnostics that
 	// construct a zero-value Server without the full RPC/chat bootstrap.

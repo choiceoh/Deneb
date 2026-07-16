@@ -378,6 +378,23 @@ export const fetchApprovalAttachment = (cfg: GatewayConfig, docId: string, attac
     attachment,
   });
 
+/** Binary download URL for one Amaranth attachment (query-token auth, mail parity). */
+export function approvalAttachmentUrl(
+  cfg: GatewayConfig,
+  docId: string,
+  attachment: string,
+  opts: { filename?: string; mimeType?: string } = {},
+): string {
+  const q = new URLSearchParams({
+    docId,
+    attachment,
+    clientToken: cfg.token,
+  });
+  if (opts.filename) q.set("filename", opts.filename);
+  if (opts.mimeType) q.set("mimeType", opts.mimeType);
+  return `${base(cfg.url)}/api/v1/miniapp/groupware/approval/attachment?${q.toString()}`;
+}
+
 export const listGroupwareERP = (
   cfg: GatewayConfig,
   area: string,

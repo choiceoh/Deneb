@@ -211,8 +211,22 @@ func TestGroupwareApprovalsAct_ApproveAndReject(t *testing.T) {
 	if !out.OK || out.DocID != "99178" || out.Decision != "approve" {
 		t.Fatalf("unexpected act response: %+v", out)
 	}
-	if gotDoc != "99178" || gotDecision != "승인" || gotComment != "확인" {
+	// Approve drops comment (work-feed parity — only reject carries a reason).
+	if gotDoc != "99178" || gotDecision != "승인" || gotComment != "" {
 		t.Fatalf("act args = %q %q %q", gotDoc, gotDecision, gotComment)
+	}
+
+	resp = h(authedCtx(), reqWith(t, "miniapp.groupware.approvals.act", map[string]any{
+		"docId":    "99178",
+		"decision": "reject",
+		"comment":  " 사유 <확인>  ",
+	}))
+	decode(t, resp, &out)
+	if !out.OK || out.Decision != "reject" {
+		t.Fatalf("unexpected reject response: %+v", out)
+	}
+	if gotDecision != "reject" || gotComment != "사유 확인" {
+		t.Fatalf("reject args = %q %q", gotDecision, gotComment)
 	}
 
 	resp = h(authedCtx(), reqWith(t, "miniapp.groupware.approvals.act", map[string]any{

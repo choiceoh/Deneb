@@ -1730,6 +1730,24 @@ textarea {
 .md-choice-static {
   cursor: default;
 }
+.md-choice-other {
+  border-style: dashed;
+}
+.md-choice-custom {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.md-choice-input {
+  min-width: 10em;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-ctl);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92em;
+}
 /* Dense tables (3+ columns): a smaller type rung + tighter cells so narrow
    columns fit whole Korean 어절 per line (native dense-mode parity). */
 .md-table-dense {

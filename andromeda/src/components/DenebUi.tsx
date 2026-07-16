@@ -991,7 +991,7 @@ export function AssistantText({
         if (seg.kind === "md")
           return (
             <div key={i} className="assistant-segment assistant-segment-md">
-              <Markdown text={seg.text} />
+              <Markdown text={seg.text} onChoice={busy ? undefined : onUiSubmit} />
             </div>
           );
         if (seg.kind === "ui-pending") {

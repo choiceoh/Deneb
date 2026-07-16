@@ -216,7 +216,13 @@ func groupwareApprovalsAct(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 		default:
 			return rpcerr.InvalidRequest("decision must be approve|reject").Response(req.ID)
 		}
-		out, err := deps.Act(ctx, docID, decision, strings.TrimSpace(p.Comment))
+		comment := strings.TrimSpace(p.Comment)
+		if decision == "reject" || decision == "반려" {
+			comment = groupware.SanitizeApprovalComment(comment)
+		} else {
+			comment = ""
+		}
+		out, err := deps.Act(ctx, docID, decision, comment)
 		if err != nil {
 			return rpcerr.WrapDependencyFailed("act groupware approval", err).Response(req.ID)
 		}

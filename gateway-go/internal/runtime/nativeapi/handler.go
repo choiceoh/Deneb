@@ -58,22 +58,24 @@ func Authenticator(logger *slog.Logger) func(http.ResponseWriter, *http.Request)
 
 // Config supplies the gateway-owned dependencies used by native HTTP handlers.
 type Config struct {
-	Dispatcher        *rpc.Dispatcher
-	ChatHandler       chatport.SyncStreamRunner
-	PushHub           *proactive.Hub
-	ShutdownContext   context.Context
-	Logger            *slog.Logger
-	AttachmentFactory func() (MailAttachmentClient, error)
+	Dispatcher                  *rpc.Dispatcher
+	ChatHandler                 chatport.SyncStreamRunner
+	PushHub                     *proactive.Hub
+	ShutdownContext             context.Context
+	Logger                      *slog.Logger
+	AttachmentFactory           func() (MailAttachmentClient, error)
+	GroupwareAttachmentDownload GroupwareAttachmentDownload
 }
 
 // Handler serves the authenticated native-client HTTP surface.
 type Handler struct {
-	dispatcher        *rpc.Dispatcher
-	chatHandler       chatport.SyncStreamRunner
-	pushHub           *proactive.Hub
-	shutdownContext   context.Context
-	logger            *slog.Logger
-	attachmentFactory func() (MailAttachmentClient, error)
+	dispatcher                  *rpc.Dispatcher
+	chatHandler                 chatport.SyncStreamRunner
+	pushHub                     *proactive.Hub
+	shutdownContext             context.Context
+	logger                      *slog.Logger
+	attachmentFactory           func() (MailAttachmentClient, error)
+	groupwareAttachmentDownload GroupwareAttachmentDownload
 }
 
 // New creates a native-client HTTP handler set.
@@ -83,12 +85,13 @@ func New(cfg Config) *Handler {
 		shutdownContext = context.Background()
 	}
 	return &Handler{
-		dispatcher:        cfg.Dispatcher,
-		chatHandler:       cfg.ChatHandler,
-		pushHub:           cfg.PushHub,
-		shutdownContext:   shutdownContext,
-		logger:            cfg.Logger,
-		attachmentFactory: cfg.AttachmentFactory,
+		dispatcher:                  cfg.Dispatcher,
+		chatHandler:                 cfg.ChatHandler,
+		pushHub:                     cfg.PushHub,
+		shutdownContext:             shutdownContext,
+		logger:                      cfg.Logger,
+		attachmentFactory:           cfg.AttachmentFactory,
+		groupwareAttachmentDownload: cfg.GroupwareAttachmentDownload,
 	}
 }
 

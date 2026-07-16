@@ -2,6 +2,8 @@ package groupware
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -97,4 +99,65 @@ func ReadApprovalAttachment(ctx context.Context, cfg Config, docID, selector str
 		return "", fmt.Errorf("attachment %s not found for doc %s", selector, docID)
 	}
 	return out, nil
+}
+
+// ApprovalAttachmentFile is one ECM file downloaded for HTTP streaming.
+type ApprovalAttachmentFile struct {
+	Filename string
+	MimeType string
+	Data     []byte
+}
+
+type attachmentDownloadJSON struct {
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	Size     int    `json:"size"`
+	Base64   string `json:"base64"`
+	Error    string `json:"error,omitempty"`
+}
+
+// DownloadApprovalAttachment fetches raw ECM bytes for one selected file
+// (1-based index or filename). Used by the miniapp HTTP download route — not
+// the text-extract RPC.
+func DownloadApprovalAttachment(ctx context.Context, cfg Config, docID, selector string) (ApprovalAttachmentFile, error) {
+	docID = strings.TrimSpace(docID)
+	selector = strings.TrimSpace(selector)
+	if docID == "" {
+		return ApprovalAttachmentFile{}, fmt.Errorf("doc id required")
+	}
+	if selector == "" {
+		return ApprovalAttachmentFile{}, fmt.Errorf("attachment selector required")
+	}
+	out, err := Run(ctx, cfg, Request{
+		Area:       AreaApproval,
+		Action:     ActionAttachmentDownload,
+		DocID:      docID,
+		Attachment: selector,
+	})
+	if err != nil {
+		return ApprovalAttachmentFile{}, err
+	}
+	var envelope attachmentDownloadJSON
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		return ApprovalAttachmentFile{}, fmt.Errorf("parse attachment download: %w", err)
+	}
+	if envelope.Error != "" {
+		return ApprovalAttachmentFile{}, fmt.Errorf("%s", envelope.Error)
+	}
+	if envelope.Base64 == "" {
+		return ApprovalAttachmentFile{}, fmt.Errorf("attachment empty for doc %s", docID)
+	}
+	data, err := base64.StdEncoding.DecodeString(envelope.Base64)
+	if err != nil {
+		return ApprovalAttachmentFile{}, fmt.Errorf("decode attachment: %w", err)
+	}
+	name := strings.TrimSpace(envelope.Filename)
+	if name == "" {
+		name = "attachment"
+	}
+	mime := strings.TrimSpace(envelope.MimeType)
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	return ApprovalAttachmentFile{Filename: name, MimeType: mime, Data: data}, nil
 }

@@ -39,6 +39,7 @@ import {
   normalizeFolder,
   readApproval,
   readApprovalAttachment,
+  downloadApprovalAttachmentBinary,
   readBoard,
   summarySales,
   listStock,
@@ -110,13 +111,13 @@ async function main() {
   } else if (erpAreas.includes(area)) {
     if (action === "summary") action = "list";
     if (action !== "list") die(`${area} action must be list|summary (got ${action})`);
-  } else if (!["list", "read", "attachment", "act"].includes(action)) {
+  } else if (!["list", "read", "attachment", "attachment-download", "act"].includes(action)) {
     die(`unknown --action ${action}`);
   }
-  if (["attachment", "act"].includes(action) && area !== "approval") {
+  if (["attachment", "attachment-download", "act"].includes(action) && area !== "approval") {
     die(`${action} is only valid for --area approval`);
   }
-  if (area === "approval" && !["attachment", "act"].includes(action) && !["pending", "done", "cc", "total", "all"].includes(folder)) {
+  if (area === "approval" && !["attachment", "attachment-download", "act"].includes(action) && !["pending", "done", "cc", "total", "all"].includes(folder)) {
     die(`unknown --folder ${folder}`);
   }
   if (jsonOutput && action !== "list") {
@@ -150,6 +151,11 @@ async function main() {
     out = await actApproval(docId || query, decision, comment);
   } else if (action === "attachment") {
     out = await readApprovalAttachment(docId, attachment || query);
+  } else if (action === "attachment-download") {
+    out = await downloadApprovalAttachmentBinary(docId, attachment || query);
+    console.log(JSON.stringify(out));
+    console.error(`ok ${Date.now() - t0}ms session=${loadSession() ? "cached" : "none"}`);
+    return;
   } else if (area === "board") {
     out =
       action === "list"
