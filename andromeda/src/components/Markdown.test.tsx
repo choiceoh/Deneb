@@ -133,6 +133,18 @@ describe("Markdown", () => {
     expect(screen.getByRole("columnheader", { name: "R" })).toHaveStyle({ textAlign: "right" });
   });
 
+  it("recovers a separator-less pipe table via normalizeMarkdown", () => {
+    const { container } = render(<Markdown text={"| A | B |\n| 1 | 2 |"} />);
+    expect(container.querySelector("table.md-table")).not.toBeNull();
+  });
+
+  it("sticks the first column on wide tables (5+ cols)", () => {
+    const header = "| a | b | c | d | e |\n| --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 |";
+    const { container } = render(<Markdown text={header} />);
+    expect(container.querySelector("table.md-table-sticky")).not.toBeNull();
+    expect(container.querySelector("th.md-sticky-col")).not.toBeNull();
+  });
+
   it("renders block content inside a blockquote", () => {
     const { container } = render(<Markdown text={"> - a\n> - b"} />);
     const quote = container.querySelector("blockquote");
