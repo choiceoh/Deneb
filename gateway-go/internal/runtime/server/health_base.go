@@ -82,6 +82,14 @@ func (s *Server) collectBaseHealth() map[string]any {
 		"uptime_ms":  uptime.Milliseconds(),
 		"subsystems": subsystems,
 		"sessions":   s.sessions.Count(),
+		// The deploy idle gate (scripts/deploy/wait-idle.sh) polls this before a
+		// hot-swap: swapping while a turn runs turns the graceful drain into
+		// minutes of downtime, so the deploy waits (bounded) for zero first.
+		// Source: the chat AbortTracker — the exact population the drain waits
+		// for (sync + streaming turns; nil before the session phase = 0).
+		"activity": map[string]any{
+			"active_turns": s.chatHandler.ActiveRunCount(),
+		},
 		"workers": map[string]int{
 			"processes": activeProcesses,
 			"cron":      cronTasks,

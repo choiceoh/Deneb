@@ -155,6 +155,16 @@ func (at *AbortTracker) signalDrainedLocked() {
 }
 
 // HasActiveRun reports whether at least one run is active for the session.
+// ActiveRunCount returns accepted-but-unfinished runs (registered actives plus
+// admissions not yet registered) — the same population the shutdown drain waits
+// for, exposed via /health so the deploy idle gate can wait BEFORE the swap
+// instead of spending the drain window (downtime for new requests) on it.
+func (at *AbortTracker) ActiveRunCount() int {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	return len(at.running) + at.admissions
+}
+
 func (at *AbortTracker) HasActiveRun(sessionKey string) bool {
 	at.mu.Lock()
 	defer at.mu.Unlock()

@@ -466,6 +466,16 @@ func (h *Handler) SteerQueue() *SteerQueue {
 	return h.steer
 }
 
+// ActiveRunCount reports accepted-but-unfinished agent runs (streaming and
+// sync alike) — the same population the shutdown drain waits for. /health
+// exposes it so the deploy idle gate can wait for zero before a hot-swap.
+func (h *Handler) ActiveRunCount() int {
+	if h == nil || h.abort == nil {
+		return 0
+	}
+	return h.abort.ActiveRunCount()
+}
+
 // SetCheckpointRoot configures the directory under which file-edit snapshots
 // are written (one subdirectory per SessionKey). Pass empty string to
 // disable snapshotting entirely. Safe to call at any time; new runs pick up
