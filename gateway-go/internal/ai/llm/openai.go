@@ -21,10 +21,12 @@ import (
 func (c *Client) StreamChat(ctx context.Context, req ChatRequest) (<-chan StreamEvent, error) {
 	req.Stream = true
 
-	// Normalize messages: merge consecutive same-role messages that may
-	// arise from mid-loop compaction or post-compaction restoration.
-	// Applied right before the API call so callers' slices stay untouched.
-	req.Messages = NormalizeMessages(req.Messages)
+	// Normalize messages: repair tool_use/tool_result pairing broken by
+	// pruning/compaction (strict backends 400 on orphans), then merge
+	// consecutive same-role messages that may arise from mid-loop compaction
+	// or the repair's inserted results. Applied right before the API call so
+	// callers' slices stay untouched.
+	req.Messages = NormalizeMessages(RepairToolPairing(req.Messages))
 
 	if c.apiMode == APIModeAnthropic {
 		return c.streamChatAnthropic(ctx, req)

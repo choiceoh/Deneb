@@ -38,8 +38,8 @@ func TestSessionLabelStore_RoundTripAndCorruptFile(t *testing.T) {
 func TestSnapshotSessionLabels_FiltersToRestorableLabeled(t *testing.T) {
 	sessions := []*session.Session{
 		{Key: "client:main:abc", Label: "제트 여객기 이야기"}, // kept
-		{Key: "client:main:empty", Label: "  "},        // no label
-		{Key: "cron:job", Label: "크론 라벨"},              // not restorable
+		{Key: "client:main:empty", Label: "  "},       // no label
+		{Key: "cron:job", Label: "크론 라벨"},             // not restorable
 		nil,
 	}
 	got := snapshotSessionLabels(sessions)
