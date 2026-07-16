@@ -257,6 +257,11 @@ internal fun ChatMessageList(
             }
 
             val lastAssistantId = remember(uiState.history) { uiState.history.lastRenderedAssistant()?.id }
+            // 마지막 사용자 메시지만 편집-재전송 대상 (서버 transcript truncation 부재 —
+            // regenerate와 같은 로컬 되감기 시맨틱이 정직하게 성립하는 유일한 위치).
+            val lastUserId = remember(uiState.history) {
+                uiState.history.lastOrNull { it.role == History.Role.USER }?.id
+            }
             // The streaming caret belongs only on the answer currently being written
             // — not on a finished reply while the NEXT turn is still thinking, when
             // that finished reply is still the last assistant message. True only once
@@ -521,6 +526,11 @@ internal fun ChatMessageList(
                                             message = history.content,
                                             attachments = history.attachments,
                                             timestampMs = history.timestampMs,
+                                            onEditResend = if (history.id == lastUserId && !uiState.isLoading) {
+                                                actions.editResendLast
+                                            } else {
+                                                null
+                                            },
                                         )
                                     }
                                 }
@@ -530,10 +540,21 @@ internal fun ChatMessageList(
                                         val isLastAssistant = history.id == lastAssistantId
                                         val frozen = frozenByAssistantId[history.id]
                                         val pairedUserId = userIdByAssistantId[history.id]
+                                        // ‹ n/N › — an older variant selected? Swap the DISPLAYED
+                                        // body only; streaming/frozen/reasoning stay keyed to the
+                                        // live row (variants are settled answers by construction).
+                                        val variantShown = if (
+                                            isLastAssistant &&
+                                            uiState.lastAnswerVariantIndex < uiState.lastAnswerVariants.size
+                                        ) {
+                                            uiState.lastAnswerVariants[uiState.lastAnswerVariantIndex]
+                                        } else {
+                                            null
+                                        }
                                         BotMessage(
-                                            message = history.content,
-                                            attachments = history.attachments,
-                                            timestampMs = history.timestampMs,
+                                            message = (variantShown ?: history).content,
+                                            attachments = (variantShown ?: history).attachments,
+                                            timestampMs = (variantShown ?: history).timestampMs,
                                             textToSpeech = textToSpeech,
                                             isSpeaking = uiState.isSpeaking && uiState.isSpeakingContentId == history.id,
                                             setIsSpeaking = {
@@ -556,6 +577,17 @@ internal fun ChatMessageList(
                                             },
                                             reasoningSegments = reasoningSegmentsByAssistantId[history.id] ?: persistentListOf(),
                                             isStreaming = isLastAssistant && isResponseStreaming,
+                                            variantNav = if (
+                                                isLastAssistant && uiState.lastAnswerVariants.isNotEmpty() && !uiState.isLoading
+                                            ) {
+                                                VariantNav(
+                                                    index = uiState.lastAnswerVariantIndex,
+                                                    total = uiState.lastAnswerVariants.size + 1,
+                                                    onSelect = actions.selectAnswerVariant,
+                                                )
+                                            } else {
+                                                null
+                                            },
                                         )
                                         if (history.id == uiState.stoppedMessageId) {
                                             // The user stopped this answer mid-stream;
