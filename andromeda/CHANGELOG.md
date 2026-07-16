@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.87](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.86...andromeda-v0.0.87) (2026-07-16)
+
+
+### ✨ Features
+
+* **groupware:** default 모듈·인버터 scope + sales period tabs rework ([#3794](https://github.com/choiceoh/Deneb/issues/3794)) ([e6a3cb8](https://github.com/choiceoh/Deneb/commit/e6a3cb8645af677d7afc0485f554473ad66c0bcd))
+
 ## [0.0.86](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.85...andromeda-v0.0.86) (2026-07-16)
 
 
