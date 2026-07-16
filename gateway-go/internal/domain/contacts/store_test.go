@@ -73,6 +73,9 @@ func TestLookupEmailIsCaseInsensitiveAndMissesUnknown(t *testing.T) {
 	if !s.HasEmail("akim@bohae.co.kr") || s.HasEmail("x@y.z") {
 		t.Errorf("HasEmail must still report presence correctly after the index change")
 	}
+	if !s.HasDomain("marsh.com") || !s.HasDomain("BOHAE.CO.KR") || s.HasDomain("nowhere.com") {
+		t.Errorf("HasDomain must index contact email hosts")
+	}
 }
 
 func TestSearchMatchesFieldsAndReturnsEmptyForNoMatch(t *testing.T) {

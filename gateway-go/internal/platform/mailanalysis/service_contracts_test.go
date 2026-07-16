@@ -505,7 +505,7 @@ func TestIngestMessageDeliveryPipelineContract(t *testing.T) {
 	}
 }
 
-func TestIngestMessageSenderReviewStopsBeforeBodyArchiveAndLLM(t *testing.T) {
+func TestIngestMessageSenderReviewStopsBeforeLLMButKeepsBodyReadable(t *testing.T) {
 	var decided, reviewed *gmail.MessageDetail
 	var archived mailarchive.ContextMessage
 	svc := NewService(Config{
@@ -550,8 +550,9 @@ func TestIngestMessageSenderReviewStopsBeforeBodyArchiveAndLLM(t *testing.T) {
 			t.Fatalf("%s crossed metadata-only boundary: %+v", name, got)
 		}
 	}
-	if archived.ID == "" || archived.Body != "" || len(archived.Attachments) != 0 || len(notifier.snapshot()) != 0 {
-		t.Fatalf("review archive was not metadata-only: archive=%+v notify=%#v", archived, notifier.snapshot())
+	// Operator review needs the body; trust only gates autonomous LLM intake.
+	if archived.ID == "" || archived.Body != msg.Body || len(notifier.snapshot()) != 0 {
+		t.Fatalf("review archive must keep body and skip notify: archive=%+v notify=%#v", archived, notifier.snapshot())
 	}
 }
 

@@ -136,3 +136,29 @@ func TestSinceFilter_ReturnsOnlyMessagesOnOrAfterSince(t *testing.T) {
 		t.Fatalf("Search since got %d, want just 'new'", len(got))
 	}
 }
+
+func TestPutUpgradesEmptyBodyStub(t *testing.T) {
+	dir := t.TempDir()
+	s, err := mailstore.New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := mkMsg("1", "<mid1@x>", "subject", "", "Mon, 02 Jun 2026 10:00:00 +0900")
+	if created, err := s.Put(empty); err != nil || !created {
+		t.Fatalf("empty Put: created=%v err=%v", created, err)
+	}
+	if _, ok := s.Read("1", "", nil); ok {
+		t.Fatal("empty-body stub must miss on Read")
+	}
+	full := mkMsg("1", "<mid1@x>", "subject", "real body", "Mon, 02 Jun 2026 10:00:00 +0900")
+	if created, err := s.Put(full); err != nil || !created {
+		t.Fatalf("upgrade Put: created=%v err=%v", created, err)
+	}
+	got, ok := s.Read("1", "", nil)
+	if !ok || got.Body != "real body" {
+		t.Fatalf("upgraded Read = ok=%v body=%q", ok, got.Body)
+	}
+	if again, _ := s.Put(full); again {
+		t.Fatal("full→full Put must stay idempotent")
+	}
+}

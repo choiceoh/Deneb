@@ -48,6 +48,11 @@ func isFreemailDomain(domain string) bool {
 	return ok
 }
 
+// IsFreemailDomain reports whether domain is a consumer mail host. Used by
+// mail sender-trust so a contacts-book domain allowlist never trusts every
+// gmail.com/naver.com sender.
+func IsFreemailDomain(domain string) bool { return isFreemailDomain(domain) }
+
 // ActiveCounterpartyDomains returns the lowercase sender domains of
 // project-linked mail-analysis pages created on/after cutoff (YYYY-MM-DD;
 // lexical compare — Created is the analysis day and, unlike Updated, is not

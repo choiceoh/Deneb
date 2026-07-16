@@ -94,8 +94,12 @@ func (s *Store) Put(msg mailarchive.ContextMessage) (created bool, err error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.byKey[key]; ok {
-		return false, nil // already stored — idempotent
+	if existing, ok := s.byKey[key]; ok {
+		// Allow a one-way upgrade when a prior metadata-only review stub left an
+		// empty body. Full→full and full→empty remain idempotent no-ops.
+		if strings.TrimSpace(existing.Body) != "" || strings.TrimSpace(msg.Body) == "" {
+			return false, nil
+		}
 	}
 	if aerr := jsonlstore.Append(s.shardPath(msg), msg); aerr != nil {
 		return false, fmt.Errorf("mailstore: append: %w", aerr)

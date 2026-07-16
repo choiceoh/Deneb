@@ -73,20 +73,31 @@ func (s *Store) Read(messageID, query string, mailboxes []string) (mailarchive.C
 	return s.readLocked(messageID, query, mailboxes)
 }
 
+// bodyHitLocked returns a stored message only when it has a readable body.
+// Empty-body review stubs are treated as misses so callers fall back to IMAP/
+// Gmail instead of serving a permanently blank open.
+func (s *Store) bodyHitLocked(key string, mailboxes []string) (mailarchive.ContextMessage, bool) {
+	msg, ok := s.byKey[key]
+	if !ok || !matchMailbox(msg, mailboxes) || strings.TrimSpace(msg.Body) == "" {
+		return mailarchive.ContextMessage{}, false
+	}
+	return msg, true
+}
+
 func (s *Store) readLocked(messageID, query string, mailboxes []string) (mailarchive.ContextMessage, bool) {
 	if id := strings.TrimSpace(messageID); id != "" {
 		if key, ok := s.byLoc[id]; ok { // it's a locator
-			if msg := s.byKey[key]; matchMailbox(msg, mailboxes) {
+			if msg, ok := s.bodyHitLocked(key, mailboxes); ok {
 				return msg, true
 			}
 		}
 		if key, ok := s.byMsgID[mailarchive.NormalizeMsgID(id)]; ok { // it's a Message-ID
-			if msg := s.byKey[key]; matchMailbox(msg, mailboxes) {
+			if msg, ok := s.bodyHitLocked(key, mailboxes); ok {
 				return msg, true
 			}
 		}
 		if key, ok := s.byID[id]; ok { // bare ContextMessage.ID (sanitized Message-ID or fallback)
-			if msg := s.byKey[key]; matchMailbox(msg, mailboxes) {
+			if msg, ok := s.bodyHitLocked(key, mailboxes); ok {
 				return msg, true
 			}
 		}

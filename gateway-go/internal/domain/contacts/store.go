@@ -37,11 +37,12 @@ type Store struct {
 	byEmail map[string][]int // lowercased email -> contact indices (homonyms keep
 	// distinct addresses, so an email resolves to the ONE identity that owns it —
 	// this is the join key that name matching cannot disambiguate)
+	byDomain map[string][]int // lowercased domain -> contact indices
 }
 
 // NewStore loads the snapshot from path (an empty store if the file is absent).
 func NewStore(path string) (*Store, error) {
-	s := &Store{path: path, byPhone: map[string][]int{}, byEmail: map[string][]int{}}
+	s := &Store{path: path, byPhone: map[string][]int{}, byEmail: map[string][]int{}, byDomain: map[string][]int{}}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -193,14 +194,22 @@ func (s *Store) reindexLocked() {
 	}
 	s.byPhone = idx
 	emails := make(map[string][]int, len(s.all))
+	domains := make(map[string][]int, len(s.all))
 	for i := range s.all {
 		for _, e := range s.all[i].Emails {
-			if key := strings.ToLower(strings.TrimSpace(e)); key != "" {
-				emails[key] = append(emails[key], i)
+			key := strings.ToLower(strings.TrimSpace(e))
+			if key == "" {
+				continue
+			}
+			emails[key] = append(emails[key], i)
+			if at := strings.LastIndexByte(key, '@'); at >= 0 && at+1 < len(key) {
+				domain := key[at+1:]
+				domains[domain] = append(domains[domain], i)
 			}
 		}
 	}
 	s.byEmail = emails
+	s.byDomain = domains
 }
 
 // HasEmail reports whether any contact carries the address (case-insensitive
@@ -213,6 +222,19 @@ func (s *Store) HasEmail(email string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.byEmail[key]) > 0
+}
+
+// HasDomain reports whether any contact carries an address at domain
+// (case-insensitive). Used by mail sender-trust so a known company domain in
+// the address book is not treated as a first-seen unknown sender.
+func (s *Store) HasDomain(domain string) bool {
+	key := strings.ToLower(strings.TrimSpace(domain))
+	if key == "" || s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.byDomain[key]) > 0
 }
 
 // LookupEmail returns every contact that carries the address (case-insensitive

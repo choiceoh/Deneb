@@ -71,18 +71,19 @@ type Config struct {
 	// callback is only for native workflow observability.
 	OnAnalysisFailed func(msg *gmail.MessageDetail, err error)
 
-	// SenderTrustFn runs on metadata only, before autonomous intake fetches or
-	// stores a body. nil preserves the legacy trusted-by-default behavior.
+	// SenderTrustFn runs on metadata only, before autonomous intake analyzes a
+	// body. nil preserves the legacy trusted-by-default behavior.
 	SenderTrustFn func(msg *gmail.MessageDetail) SenderTrustDecision
 
-	// OnSenderReview persists a metadata-only review item when SenderTrustFn
-	// returns SenderReview. A review item is terminal for autonomous intake but
-	// remains manually analyzable from the mail detail screen.
+	// OnSenderReview persists a workflow review item when SenderTrustFn returns
+	// SenderReview. Review is terminal for autonomous LLM intake but the operator
+	// must still be able to read the body (manual analysis / mail_archive).
 	OnSenderReview func(msg *gmail.MessageDetail, decision SenderTrustDecision) error
 
-	// MailStoreSink, when set, mirrors trusted mail into the local mailstore so it
-	// is searchable via mail_archive without an API round-trip. Review items are
-	// mirrored with metadata only. Best-effort and idempotent by Message-ID.
+	// MailStoreSink, when set, mirrors mail into the local mailstore so it is
+	// searchable via mail_archive without an API round-trip. Best-effort and
+	// idempotent by Message-ID. Callers must not put empty-body stubs: Put is
+	// idempotent and would permanently shadow a later full copy.
 	MailStoreSink func(mailarchive.ContextMessage) (bool, error)
 
 	// ProjectsFn lists registered project wiki pages so analysis can cite
@@ -359,7 +360,8 @@ func (s *Service) partitionPollMessages(messages []gmail.MessageSummary, pollSta
 			s.log.Warn("발신자 검토 상태 저장 실패; 다음 폴링에서 재시도", "id", summary.ID, "error", err)
 			continue
 		}
-		s.mirrorMessage("Gmail", metadata)
+		// Do not mailstore-put a metadata-only stub: Put is idempotent, so an
+		// empty body would permanently hide the real message from get/archive.
 		pollState.markSeen(summary.ID)
 		reviewed++
 		s.log.Info("미확인 발신자 메일 검토 대기", "id", summary.ID, "from", oneLine(summary.From))
@@ -609,7 +611,10 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 		if err := s.recordSenderReview(msg, decision); err != nil {
 			return AnalysisResult{}, err
 		}
-		s.mirrorMessage("INBOX", messageMetadataOnly(msg))
+		// Keep the full body readable for operator review. Trust gates autonomous
+		// LLM intake only — stripping the body made mail_archive/get return empty
+		// forever (mailstore Put is idempotent).
+		s.mirrorMessage("INBOX", msg)
 		s.log.Info("미확인 발신자 메일 검토 대기", "id", msg.ID, "from", oneLine(msg.From))
 		return AnalysisResult{}, nil
 	}
@@ -619,8 +624,6 @@ func (s *Service) IngestMessage(ctx context.Context, msg *gmail.MessageDetail, a
 	gmailClient := s.gmailClient
 	s.mu.Unlock()
 
-	// Only trusted mail enters the searchable local archive. The upstream MTA
-	// remains the record for review items, whose Deneb state is metadata-only.
 	s.mirrorMessage("INBOX", msg)
 
 	// 대용량첨부: resolve large-file download links in the HTML body into real

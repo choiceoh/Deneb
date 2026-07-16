@@ -95,6 +95,20 @@ var (
 	addrRe = regexp.MustCompile(`<([^<>]+@[^<>]+)>`)
 )
 
+// IsBulkNoise reports whether from/subject look like clear newsletter, promo,
+// or machine-generated mail (noreply, [광고], unsubscribe, …). Shared with
+// mail sender-trust so autonomous intake only gates those, not unknown
+// business counterparties. reason is a short Korean label when true.
+func IsBulkNoise(from, subject string) (bool, string) {
+	if machineSenderRe.MatchString(from) {
+		return true, "자동발신/뉴스레터 주소"
+	}
+	if noiseRe.MatchString(subject) {
+		return true, "광고·뉴스레터·인증 메일"
+	}
+	return false, ""
+}
+
 // Score rates one inbox row from its list-time fields (no body fetch) and
 // returns the tier plus a short Korean hint naming the strongest signals —
 // empty hint for TierNone.
@@ -104,7 +118,7 @@ func (s *Scorer) Score(from, subject, snippet string) (Tier, string) {
 
 	// Demotions win outright: machine senders and ad/security-link mail
 	// are routine no matter what vocabulary they carry.
-	if machineSenderRe.MatchString(from) || noiseRe.MatchString(text) {
+	if ok, _ := IsBulkNoise(from, text); ok {
 		return TierNone, ""
 	}
 
