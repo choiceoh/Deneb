@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ProjectSiteRow } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
@@ -1047,10 +1047,9 @@ function MilestoneField({
   busy?: boolean;
   onCommit: (value: string) => void;
 }) {
+  // Parent remounts this field via key when the committed value changes, so the
+  // draft does not need an effect-driven sync (react-hooks/set-state-in-effect).
   const [draft, setDraft] = useState(value);
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
   return (
     <input
       type={milestoneKey === "moduleDelivery" ? "text" : "date"}
@@ -1123,6 +1122,7 @@ function ScheduleTimeline({
               </span>
               {editable ? (
                 <MilestoneField
+                  key={`${m.key}:${date}`}
                   milestoneKey={m.key}
                   value={date}
                   busy={busy}
