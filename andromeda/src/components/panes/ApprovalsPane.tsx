@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
@@ -283,15 +283,29 @@ function ApprovalDetail({
   const [view, setView] = useState<"analysis" | "body">("analysis");
   const [lineOpen, setLineOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  // fetch = analysis_cached round-trip; run = analyze after miss (Get+LLM possible).
+  // Treating any null as "분석 중… (수십 초)" made cache hits look like cold LLM runs.
+  const [analysisPhase, setAnalysisPhase] = useState<"idle" | "fetch" | "run">("idle");
+  const analysisLoadGen = useRef(0);
   const [analysis, setAnalysis] = useAsyncOnOpen(
     async () => {
-      const cached = await cachedApprovalAnalysis(cfg, docId);
-      if (cached?.analysis?.trim()) return cached;
-      return analyzeApproval(cfg, docId, {
-        title: doc.title,
-        drafter: doc.drafter,
-        date: doc.date,
-      });
+      const gen = ++analysisLoadGen.current;
+      const setPhase = (phase: "idle" | "fetch" | "run") => {
+        if (analysisLoadGen.current === gen) setAnalysisPhase(phase);
+      };
+      setPhase("fetch");
+      try {
+        const cached = await cachedApprovalAnalysis(cfg, docId);
+        if (cached?.analysis?.trim()) return cached;
+        setPhase("run");
+        return await analyzeApproval(cfg, docId, {
+          title: doc.title,
+          drafter: doc.drafter,
+          date: doc.date,
+        });
+      } finally {
+        setPhase("idle");
+      }
     },
     [cfg, docId, doc.title, doc.drafter, doc.date],
     { enabled: connected && Boolean(docId) },
@@ -312,6 +326,9 @@ function ApprovalDetail({
   const [viewer, setViewer] = useState<{ index: number; name: string } | null>(null);
   const sections = useMemo(() => parseApprovalDocBody(body ?? ""), [body]);
   const attachmentRows = useMemo(() => parseAttachmentRows(sections.attachments), [sections.attachments]);
+  const analysisRunning = analyzing || analysisPhase === "run";
+  const analysisFetching =
+    analysisPhase === "fetch" || (connected && analysis === null && !analysisErr && !analysisRunning);
 
   async function openAttachment(row: { index: number; name: string }) {
     setAttachBusy(row.name);
@@ -398,20 +415,22 @@ function ApprovalDetail({
 
       {view === "analysis" ? (
         <div className="mail-card">
-          {(importance || (text && !analyzing)) && (
+          {(importance || (text && !analysisRunning)) && (
             <div className="mail-card-head">
               {importance && (
                 <span className={"mail-badge" + (HOT_IMPORTANCE.test(importance) ? " hot" : "")}>{importance}</span>
               )}
-              {text && !analyzing && (
+              {text && !analysisRunning && (
                 <button className="row-btn" onClick={() => void rerun()} disabled={!connected} title="다시 분석">
                   다시 분석
                 </button>
               )}
             </div>
           )}
-          {analyzing || (connected && analysis === null && !analysisErr) ? (
+          {analysisRunning ? (
             <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
+          ) : analysisFetching ? (
+            <div className="mail-card-line">분석 불러오는 중…</div>
           ) : analysisErr ? (
             <div className="mail-card-line error">
               {analysisErr}{" "}
