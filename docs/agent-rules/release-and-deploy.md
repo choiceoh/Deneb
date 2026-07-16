@@ -23,6 +23,12 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   `DENEB_DEPLOY_IDLE_WAIT_SEC`, 0=비활성; 타임아웃 시 그대로 진행 — 배포를 영구
   차단하지 않음). 활성 턴 중 스왑하면 graceful drain 전체가 신규 요청 정전이
   되므로, idle에서 스왑해 정전 창을 부팅 시간(~수 초)으로 줄인다.
+- **HTTP 소켓 액티베이션** (opt-in, `scripts/systemd/setup-http-socket.sh`):
+  `deneb-http.socket`(FileDescriptorName=http)이 게이트웨이 HTTP 소켓을 systemd
+  소유로 옮겨 핫스왑 중 신규 연결이 거부 대신 커널 백로그에 대기 — idle 게이트와
+  합쳐 배포 정전 창이 사실상 0. sd_listen_fds 처리는 `infra/sdsocket`(LMTP와 공유,
+  activation env 1회 캡처라 두 소비자가 서로의 env를 지우지 못함). 유닛 없으면
+  게이트웨이가 스스로 바인드(무변화). 롤백은 setup 스크립트 말미 출력 참조.
 - Go 툴체인은 srv4 **유저 공간** `~/go-sdk/go` (sudo 없이 tarball 설치 — 이 호스트는
   passwordless sudo 가 없다; 서비스 유닛 PATH 에 반영). `loginctl enable-linger`
   활성 상태라 세션이 없어도 user 유닛이 상주한다.

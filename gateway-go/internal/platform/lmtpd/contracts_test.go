@@ -648,35 +648,3 @@ func TestCountFilesAndRemoveIfExistsContracts(t *testing.T) {
 		t.Fatal("removing non-empty/dir should fail")
 	}
 }
-
-func TestSelectListenFDBoundaryAndMalformedInputs(t *testing.T) {
-	pid := os.Getpid()
-	for _, tt := range []struct {
-		name      string
-		listenPID string
-		fds       string
-		names     string
-		wantFD    int
-		wantOK    bool
-	}{
-		{name: "missing pid", fds: "1"},
-		{name: "missing fds", listenPID: fmt.Sprint(pid)},
-		{name: "bad pid", listenPID: "bad", fds: "1"},
-		{name: "other pid", listenPID: fmt.Sprint(pid + 1), fds: "1"},
-		{name: "bad fds", listenPID: fmt.Sprint(pid), fds: "bad"},
-		{name: "zero fds", listenPID: fmt.Sprint(pid), fds: "0"},
-		{name: "negative fds", listenPID: fmt.Sprint(pid), fds: "-1"},
-		{name: "single unnamed", listenPID: fmt.Sprint(pid), fds: "1", wantFD: 3, wantOK: true},
-		{name: "single wrong name fallback", listenPID: fmt.Sprint(pid), fds: "1", names: "other", wantFD: 3, wantOK: true},
-		{name: "second named", listenPID: fmt.Sprint(pid), fds: "3", names: "one:lmtp:three", wantFD: 4, wantOK: true},
-		{name: "multiple no match", listenPID: fmt.Sprint(pid), fds: "2", names: "one:two"},
-		{name: "fewer names", listenPID: fmt.Sprint(pid), fds: "3", names: "one"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			fd, ok := selectListenFD(pid, tt.listenPID, tt.fds, tt.names, "lmtp")
-			if fd != tt.wantFD || ok != tt.wantOK {
-				t.Fatalf("selectListenFD = %d/%v, want %d/%v", fd, ok, tt.wantFD, tt.wantOK)
-			}
-		})
-	}
-}
