@@ -82,6 +82,7 @@ type discoveredSkill struct {
 	BaseDir  string
 	Source   SkillSource
 	Content  string // raw SKILL.md content (frontmatter only for progressive loading)
+	Body     string // instruction body retained for exact-trigger JIT injection
 	Category string // parent category directory name (empty for flat layout)
 }
 
@@ -204,6 +205,7 @@ func DiscoverWorkspaceSkills(cfg DiscoverConfig) []SkillEntry {
 			Frontmatter: fm,
 			Metadata:    ResolveDenebMetadata(fm),
 			Invocation:  ptrInvocationPolicy(ResolveSkillInvocationPolicy(fm)),
+			Body:        ds.Body,
 		}
 		// Resolve skill type from frontmatter (default: prompt).
 		if t, ok := fm["type"]; ok && IsValidSkillType(t) {
@@ -268,6 +270,7 @@ func LoadSkillEntry(dir string, source SkillSource) (*SkillEntry, error) {
 		Frontmatter: fm,
 		Metadata:    ResolveDenebMetadata(fm),
 		Invocation:  ptrInvocationPolicy(ResolveSkillInvocationPolicy(fm)),
+		Body:        jitSkillInstructionBody(string(data)),
 	}
 	if t, ok := fm["type"]; ok && IsValidSkillType(t) {
 		entry.Skill.Type = SkillType(t)
@@ -367,14 +370,16 @@ func loadRootSkill(rootSkillMd, baseDir, rootDir, rootRealPath string, source Sk
 	if err != nil {
 		return nil
 	}
-	name, desc := extractSkillNameAndDesc(string(content), filepath.Base(baseDir))
+	raw := string(content)
+	name, desc := extractSkillNameAndDesc(raw, filepath.Base(baseDir))
 	return []discoveredSkill{{
 		Name:     name,
 		Desc:     desc,
 		FilePath: rootSkillMd,
 		BaseDir:  baseDir,
 		Source:   source,
-		Content:  string(content),
+		Content:  raw,
+		Body:     jitSkillInstructionBody(raw),
 	}}
 }
 
@@ -425,14 +430,16 @@ func loadSingleSkill(skillMdPath, skillDir, rootDir, rootRealPath, category stri
 		return nil
 	}
 
-	// Progressive loading: extract only the frontmatter block for metadata.
-	// The full body is read on demand by the LLM via the file path.
-	header, _ := ExtractFrontmatterBlock(string(content))
+	// Progressive loading: metadata keeps only the frontmatter block. The
+	// instruction body is retained separately for bounded exact-trigger JIT
+	// injection, never the ambient prompt.
+	raw := string(content)
+	header, _ := ExtractFrontmatterBlock(raw)
 	if header == "" {
-		header = string(content)
+		header = raw
 	}
 
-	skillName, desc := extractSkillNameAndDesc(string(content), filepath.Base(skillDir))
+	skillName, desc := extractSkillNameAndDesc(raw, filepath.Base(skillDir))
 	return &discoveredSkill{
 		Name:     skillName,
 		Desc:     desc,
@@ -440,8 +447,43 @@ func loadSingleSkill(skillMdPath, skillDir, rootDir, rootRealPath, category stri
 		BaseDir:  skillDir,
 		Source:   source,
 		Content:  header,
+		Body:     jitSkillInstructionBody(raw),
 		Category: category,
 	}
+}
+
+// jitSkillInstructionBody retains bodies only for model-invocable prompt
+// skills with explicit triggers. This keeps the frozen snapshot proportional
+// to the small auto-load roster rather than every discovered SKILL.md.
+func jitSkillInstructionBody(content string) string {
+	fm := ParseFrontmatter(content)
+	metadata := ResolveDenebMetadata(fm)
+	if metadata == nil || len(metadata.Triggers) == 0 || ResolveSkillInvocationPolicy(fm).DisableModelInvocation {
+		return ""
+	}
+	if skillType, ok := fm["type"]; ok && IsValidSkillType(skillType) && SkillType(skillType) != SkillTypePrompt {
+		return ""
+	}
+	_, offset := ExtractFrontmatterBlock(content)
+	if offset > 0 && offset < len(content) {
+		return operationalSkillBody(content[offset:])
+	}
+	if offset >= len(content) {
+		return ""
+	}
+	return operationalSkillBody(content)
+}
+
+// operationalSkillBody drops the terminal changelog: version history is
+// useful to reviewers but never an execution instruction. Earlier changelog
+// examples remain intact because only the last section is removed.
+func operationalSkillBody(body string) string {
+	body = strings.TrimSpace(body)
+	const marker = "\n## Changelog"
+	if i := strings.LastIndex(body, marker); i >= 0 && !strings.Contains(body[i+len(marker):], "\n## ") {
+		body = strings.TrimSpace(body[:i])
+	}
+	return body
 }
 
 // resolveNestedSkillsRoot detects if dir has a nested skills/ subdirectory

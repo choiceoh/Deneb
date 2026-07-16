@@ -8,10 +8,11 @@
 //
 // This matcher closes that gap: a skill declares Korean utterance triggers in
 // its frontmatter (metadata.deneb.triggers), and when the user's message
-// contains one, a short pointer rides the wire-only tail of the last user
-// message (run_tail_inject.go) telling the model the procedure exists and how
-// to load it. Deterministic — no LLM call (model-roles.md dogma 4), no I/O
-// (in-memory skills snapshot), APC-safe (tail addition, prompt-cache.md §1.5).
+// contains one, its bounded instruction body rides the wire-only tail of the
+// last user message (run_tail_inject.go). This avoids a fragile model-initiated
+// read hop while keeping unrelated skills out of the prompt. Deterministic —
+// no LLM call (model-roles.md dogma 4), no per-turn I/O (frozen in-memory
+// snapshot), APC-safe (tail addition, prompt-cache.md §1.5).
 // Opt-in per skill: no triggers, no hint — tags/descriptions are deliberately
 // NOT mined (generic taxonomy words like "검토" would over-fire).
 package chat
@@ -24,9 +25,16 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
 
-// maxSkillHints caps how many skills one turn may surface — a hint is a nudge,
-// not a menu.
-const maxSkillHints = 2
+const (
+	// maxSkillHints caps how many skills one turn may surface — exact triggers
+	// select procedures, not a menu.
+	maxSkillHints = 2
+	// Individual and aggregate caps keep JIT context bounded. Oversized bodies
+	// fall back to the existing explicit read pointer instead of truncating an
+	// instruction contract mid-step.
+	maxAutoLoadedSkillBodyBytes  = 15_000
+	maxAutoLoadedSkillTotalBytes = 20_000
+)
 
 // cachedResolvedSkills returns the resolved skills of the last-built snapshot,
 // or nil before the first prompt build (hints simply stay off until then).
@@ -37,48 +45,74 @@ func cachedResolvedSkills() []skills.PromptSkill {
 	return nil
 }
 
-// buildSkillHints returns the tail-addition block pointing at skills whose
-// triggers match the user message, plus the matched skill names (for the
-// hint-fired measurement event — joined against skill_usage.jsonl this yields
-// the hint→consult conversion rate). Both empty when nothing matches. Skipped
+// buildSkillHints returns the tail-addition block for skills whose triggers
+// match the user message, the matched names, and the subset whose bodies were
+// loaded directly. Empty bodies and cap overflows keep the explicit read
+// fallback. All outputs are empty when nothing matches. Skipped
 // for system-internal runs (session "system:*" — skill-review forks carry
 // SKILL.md bodies as messages, which would self-trigger on their own trigger
 // lists) and for recall-suppressed runs (ephemeral probes share the same "no
 // side context" intent).
 //
-// sessionToolPreset is the run's effective preset: the hint instructs a
-// `skills(action="read")` call, so a preset whose allow-list excludes the
-// skills tool (btw:* runs use "conversation") would turn the hint into a
-// guaranteed tool-not-allowed error — no hint beats a hint at a blocked door.
-func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string) {
+// sessionToolPreset is the run's effective preset. Keep the historical skills
+// tool gate so restricted side runs do not acquire new procedural context.
+func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skills.PromptSkill) (string, []string, []string) {
 	if params.EphemeralUser || params.SkipRecall {
-		return "", nil
+		return "", nil, nil
 	}
 	if strings.HasPrefix(params.SessionKey, "system:") {
-		return "", nil
+		return "", nil, nil
 	}
 	if !presetAllowsSkillsTool(sessionToolPreset) {
-		return "", nil
+		return "", nil, nil
 	}
 	hints := skills.MatchSkillTriggers(params.Message, resolved, maxSkillHints)
 	if len(hints) == 0 {
-		return "", nil
+		return "", nil, nil
 	}
 
-	var b strings.Builder
+	var loaded, fallback strings.Builder
 	names := make([]string, 0, len(hints))
-	b.WriteString("[관련 스킬 — 이 요청에 맞는 준비된 절차]")
+	autoLoaded := make([]string, 0, len(hints))
+	loadedBytes := 0
 	for _, skill := range hints {
-		fmt.Fprintf(&b, "\n- %s: %s → `skills(action=\"read\", name=%q)`로 절차와 필요한 도구를 함께 로드해 그대로 따르라.",
-			skill.Name, skillHintSummary(skill.Description), skill.Name)
 		names = append(names, skill.Name)
+		body := strings.TrimSpace(skill.Body)
+		if body != "" && len(body) <= maxAutoLoadedSkillBodyBytes && loadedBytes+len(body) <= maxAutoLoadedSkillTotalBytes {
+			if loaded.Len() == 0 {
+				loaded.WriteString("[Auto-loaded skills — exact trigger match]")
+			}
+			safeName := strings.Join(strings.Fields(skill.Name), " ")
+			fmt.Fprintf(&loaded, "\n\n--- %s instructions begin ---\n%s\n--- %s instructions end ---", safeName, body, safeName)
+			if len(skill.RequiresTools) > 0 {
+				fmt.Fprintf(&loaded, "\nRequired tools: %s. Activate missing schemas with `fetch_tools` before use.", strings.Join(skill.RequiresTools, ", "))
+			}
+			autoLoaded = append(autoLoaded, skill.Name)
+			loadedBytes += len(body)
+			continue
+		}
+		if fallback.Len() == 0 {
+			fallback.WriteString("[Related skills — load on demand]")
+		}
+		fmt.Fprintf(&fallback, "\n- %s: %s → `skills(action=\"read\", name=%q)`로 필요한 절차만 로드하라.",
+			skill.Name, skillHintSummary(skill.Description), skill.Name)
 	}
-	return b.String(), names
+	if loaded.Len() > 0 {
+		loaded.WriteString("\n\nApply only the procedure and completion criteria needed for this request. Preserve dependencies and safety gates; do not force an order on independent checks.")
+	}
+	parts := make([]string, 0, 2)
+	if loaded.Len() > 0 {
+		parts = append(parts, loaded.String())
+	}
+	if fallback.Len() > 0 {
+		parts = append(parts, fallback.String())
+	}
+	return strings.Join(parts, "\n\n"), names, autoLoaded
 }
 
 // presetAllowsSkillsTool reports whether the run's effective tool preset
-// permits calling the `skills` tool the hint points at. An empty/unknown
-// preset means no restriction (AllowedTools nil).
+// admits skill context and its read fallback. An empty/unknown preset means no
+// restriction (AllowedTools nil).
 func presetAllowsSkillsTool(sessionToolPreset string) bool {
 	allowed := toolwire.AllowedTools(sessionToolPreset)
 	if allowed == nil {

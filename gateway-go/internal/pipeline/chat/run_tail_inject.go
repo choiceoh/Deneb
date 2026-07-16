@@ -58,7 +58,7 @@ const autoDeliveryDirective = `[전달 정책 — 이번 턴]
 // recall evidence + the 업무 feed digest otherwise — never both, so the
 // notebook's "이 자료 위주로" scope is not diluted by recall/feed (recall is also
 // suppressed upstream in run_prepare.go; the feed is withheld here). Then the
-// skill hint (procedure pointer — orthogonal to reference material, so it rides
+// skill context (orthogonal to reference material, so it rides
 // both branches; skill_hints.go) and the delivery directive (current-turn
 // policy). Empty strings are omitted.
 func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skillHints string) []string {

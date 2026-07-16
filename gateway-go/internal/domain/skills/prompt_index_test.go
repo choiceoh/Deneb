@@ -13,6 +13,7 @@ func TestBuildSkillsIndexRendersNamesOnly(t *testing.T) {
 		Category:      "devops",
 		Tags:          []string{"git", "tag"},
 		RelatedSkills: []string{"landpr"},
+		Body:          "SECRET PROCEDURE BODY",
 	}}
 	result := BuildSkillsIndex(in, DefaultSkillsLimits())
 
@@ -25,7 +26,7 @@ func TestBuildSkillsIndexRendersNamesOnly(t *testing.T) {
 			t.Errorf("missing %q in index prompt: %s", want, result.Prompt)
 		}
 	}
-	for _, forbid := range []string{"<skill>", "<name>", "<description>", "<location>", "/path/SKILL.md", "Release a new version", "devops", "git", "landpr"} {
+	for _, forbid := range []string{"<skill>", "<name>", "<description>", "<location>", "/path/SKILL.md", "Release a new version", "devops", "git", "landpr", "SECRET PROCEDURE BODY"} {
 		if strings.Contains(result.Prompt, forbid) {
 			t.Errorf("%s leaked into name-only index: %s", forbid, result.Prompt)
 		}

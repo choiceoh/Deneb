@@ -142,7 +142,7 @@ func executeAgentRun(
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
 	assembleMs := time.Since(assembleStart).Milliseconds()
 
-	messages, tailForSystem := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
+	messages, tailForSystem, autoLoadedSkills := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
 
 	// Stage 3: Finalize system prompt (budget optimization, coordinator suggestion, tier-1 injection).
 	systemPrompt := finalizePrompt(prep.SystemPrompt, tailForSystem, prep.Tier1Wiki, deps.contextCfg, sessionToolPreset, params.Message)
@@ -175,6 +175,9 @@ func executeAgentRun(
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
 	cfg, spawnFlag, execStats, skillConsults := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
+	for _, name := range autoLoadedSkills {
+		skillConsults.Add(name)
+	}
 	cfg.Model = model // set the resolved model
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.
@@ -677,10 +680,10 @@ func ephemeralNeedsExplicitAppend(params RunParams, prep prepResult) bool {
 // the notebook tool's open action), its pinned sources ride the same tail so
 // the turn is grounded primarily in those sources (broad recall is suppressed
 // for bound sessions in prepareContextAndPrompt — the notebook is the
-// explicit scope). Skill hints are gated on the run's effective preset: a
+// explicit scope). Skill context is gated on the run's effective preset: a
 // preset without the skills tool (btw "conversation", code: "coding") must
-// not receive a hint that instructs a blocked call.
-func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string) {
+// not acquire a new procedure outside its restricted role.
+func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string, []string) {
 	notebookGrounding := ""
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
@@ -692,18 +695,19 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	}
 	var skillHints string
 	var hintedSkills []string
+	var autoLoadedSkills []string
 	if !deps.briefcaseMode {
-		skillHints, hintedSkills = buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
+		skillHints, hintedSkills, autoLoadedSkills = buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
 	}
 	if len(hintedSkills) > 0 {
-		// Measurement anchor for the auto-hint experiment: joining these events
-		// with skill_usage.jsonl (same session, consult after this ts) yields the
-		// hint→consult conversion rate. Rare by construction (trigger match), so
-		// Info + one agentlog event per fire is not spam.
-		deps.logger.Info("skill hints injected",
-			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","))
+		// Keep the historical event name for dashboards while distinguishing
+		// direct JIT loads from read-pointer fallbacks.
+		deps.logger.Info("skill context injected",
+			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","),
+			"autoLoaded", strings.Join(autoLoadedSkills, ","))
 		agentlog.LogTyped(deps.agentLog, params.SessionKey, "run.skillhints", map[string]any{
-			"skills": hintedSkills,
+			"skills":     hintedSkills,
+			"autoLoaded": autoLoadedSkills,
 		})
 	}
 	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
@@ -712,7 +716,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if !tailInjected {
 		tailForSystem = strings.Join(tailAdds, "\n\n")
 	}
-	return messages, tailForSystem
+	return messages, tailForSystem, autoLoadedSkills
 }
 
 // wireBeforeAPICall assembles cfg.BeforeAPICall and applies the provider's

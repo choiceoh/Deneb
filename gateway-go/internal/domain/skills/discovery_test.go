@@ -25,6 +25,7 @@ func TestDiscoverWorkspaceSkillsReturnsSingleWorkspaceSkill(t *testing.T) {
 	content := `---
 name: test-skill
 description: A test skill
+metadata: {"deneb":{"triggers":["테스트절차"]}}
 ---
 # Test Skill
 
@@ -47,6 +48,32 @@ This is a test skill.
 	}
 	if entries[0].Skill.Source != SourceWorkspace {
 		t.Errorf("got %q, want source workspace", entries[0].Skill.Source)
+	}
+	if entries[0].Body != "# Test Skill\n\nThis is a test skill." {
+		t.Errorf("instruction body = %q", entries[0].Body)
+	}
+}
+
+func TestJITSkillInstructionBodyKeepsOnlyTriggeredOperationalPromptBody(t *testing.T) {
+	triggered := `---
+name: test
+metadata: {"deneb":{"triggers":["테스트절차"]}}
+---
+# Procedure
+
+Do the work.
+
+## Changelog
+- v1.0.1: history only
+`
+	if got := jitSkillInstructionBody(triggered); got != "# Procedure\n\nDo the work." {
+		t.Fatalf("triggered operational body = %q", got)
+	}
+	if got := jitSkillInstructionBody("---\nname: plain\n---\n# Procedure"); got != "" {
+		t.Fatalf("triggerless body retained: %q", got)
+	}
+	if got := jitSkillInstructionBody("---\nname: local\ntype: local\nmetadata: {\"deneb\":{\"triggers\":[\"로컬절차\"]}}\n---\n# Procedure"); got != "" {
+		t.Fatalf("non-prompt body retained: %q", got)
 	}
 }
 
