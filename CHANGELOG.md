@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.118.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.117.0...deneb-v4.118.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **andromeda:** 결재 반려 사유·첨부 바이너리·choices 배선 ([#3823](https://github.com/choiceoh/Deneb/issues/3823)) ([0149415](https://github.com/choiceoh/Deneb/commit/0149415f387efc1d8a00ce78df6cdeb986e4be55))
+* **groupware:** phone approval push triggers radar scan instead of relay card ([#3825](https://github.com/choiceoh/Deneb/issues/3825)) ([3b8afcc](https://github.com/choiceoh/Deneb/commit/3b8afcc7aa871de195d105a02484a214f32f3bb6))
+* **groupware:** radar list-fail feed alert + feed→approval deep-link ([#3824](https://github.com/choiceoh/Deneb/issues/3824)) ([29c0b81](https://github.com/choiceoh/Deneb/commit/29c0b8146803793c9d2833031592993dbf4c0355))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 결재 분석 로딩 문구 — 캐시조회 vs LLM 구분 ([#3828](https://github.com/choiceoh/Deneb/issues/3828)) ([94c0fd0](https://github.com/choiceoh/Deneb/commit/94c0fd0013e7a326a21281c973591909e75b3fb0))
+
 ## [4.117.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.116.0...deneb-v4.117.0) (2026-07-16)
 
 
