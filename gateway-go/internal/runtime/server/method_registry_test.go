@@ -186,6 +186,10 @@ var requiredMethods = []string{
 	"miniapp.project.sites",
 	// Set lifecycle status on a 현장 page (후보/계약/개설/준공 / clear).
 	"miniapp.project.site.setStatus",
+	// Create (or find) a 현장 page for one address under a project.
+	"miniapp.project.site.ensure",
+	// Partial milestone / field update on an existing 현장 page.
+	"miniapp.project.site.update",
 	// Org chart editor — Load/SavePath are always wired (org.Load / ResolvePath),
 	// so these register unconditionally.
 	"miniapp.org.get",

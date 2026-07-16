@@ -590,6 +590,14 @@ data class ProjectRef(
 
 @Immutable
 @Serializable
+data class ProjectSiteEnsureOut(
+    val path: String = "",
+    val created: Boolean = false,
+    val status: String = "",
+)
+
+@Immutable
+@Serializable
 data class ProjectSiteRow(
     val project: String = "",
     val client: String = "",
@@ -611,6 +619,18 @@ data class ProjectSiteRow(
 data class ProjectSiteSetStatusOut(
     val path: String = "",
     val status: String = "",
+)
+
+@Immutable
+@Serializable
+data class ProjectSiteUpdateOut(
+    val path: String = "",
+    val status: String = "",
+    val contract_date: String = "",
+    val construction_start: String = "",
+    val module_delivery: String = "",
+    val pre_use_inspection: String = "",
+    val completion_inspection: String = "",
 )
 
 @Immutable

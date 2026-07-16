@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectSiteRow } from "@/types";
 import { serializeList } from "@/aiText";
 import { useCachedList } from "@/cachedList";
-import { setProjectSiteStatus } from "@/gateway";
+import { ensureProjectSite, setProjectSiteStatus, updateProjectSite } from "@/gateway";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { GridNotice } from "@/components/Grid";
 import { Modal, Detail } from "@/components/Modal";
@@ -19,12 +19,9 @@ import { KOREA_W, KOREA_H, PROVINCES, SIGUNGU, EUPMYEON, PROVINCE_CENTROID } fro
 
 type Shape = "circle" | "square" | "triangle" | "diamond";
 
-interface Pin {
-  x: number;
-  y: number;
-  r: number; // radius = 용량 (MW) scaled
+// Shared detail payload for map pins and 미배치 rows (both open the same modal).
+interface SiteDetail {
   site: string;
-  sido: string;
   project: string;
   client?: string;
   path?: string;
@@ -35,6 +32,13 @@ interface Pin {
   status: string; // 현장 lifecycle (후보/계약/개설/준공); "" = 미분류
   due?: string; // kept for the detail card only — not a visual dimension
   sched: Sched; // 공정 일정 milestone dates (detail-only)
+}
+
+interface Pin extends SiteDetail {
+  x: number;
+  y: number;
+  r: number; // radius = 용량 (MW) scaled
+  sido: string;
 }
 
 // 공정 일정 — the 현장 공통 포맷 milestone dates, in process order. Rendered as a
@@ -80,6 +84,35 @@ function isSitePagePath(path?: string): boolean {
   if (!path) return false;
   const parts = path.replace(/\\/g, "/").split("/");
   return parts.length === 4 && parts[0] === "프로젝트" && parts[2] === "현장" && parts[3].endsWith(".md");
+}
+
+function hasRealAddress(site: string): boolean {
+  const s = site.trim();
+  return s !== "" && s !== "(주소 미기재)";
+}
+
+function todayYmd(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function schedFromUpdate(out: {
+  contract_date?: string;
+  construction_start?: string;
+  module_delivery?: string;
+  pre_use_inspection?: string;
+  completion_inspection?: string;
+}): Sched {
+  return {
+    contractDate: (out.contract_date ?? "").trim(),
+    constructionStart: (out.construction_start ?? "").trim(),
+    moduleDelivery: (out.module_delivery ?? "").trim(),
+    preUseInspection: (out.pre_use_inspection ?? "").trim(),
+    completionInspection: (out.completion_inspection ?? "").trim(),
+  };
 }
 
 function statusVisible(
@@ -167,21 +200,14 @@ function resolveSite(site: string): [number, number] | null {
   return PROVINCE_CENTROID[sido] ?? null;
 }
 
-interface Unplaced {
-  site: string;
-  project: string;
-  status: string; // carried so the 미배치 tray applies the same status gate
-  sched: Sched; // 공정 일정 — so an imminent 검사 isn't hidden by an unresolved address
-}
-
 interface Placed {
   pins: Pin[];
-  unplaced: Unplaced[];
+  unplaced: SiteDetail[];
 }
 
 function placeSites(rows: ProjectSiteRow[]): Placed {
   const pins: Pin[] = [];
-  const unplaced: Unplaced[] = [];
+  const unplaced: SiteDetail[] = [];
   const seen = new Map<string, number>();
   for (const r of rows) {
     const project = r.project ?? "";
@@ -196,17 +222,29 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
       preUseInspection: (r.pre_use_inspection ?? "").trim(),
       completionInspection: (r.completion_inspection ?? "").trim(),
     };
+    const detailBase: Omit<SiteDetail, "site"> = {
+      project,
+      client: r.client,
+      path: r.path,
+      kinds,
+      source,
+      type,
+      capacity,
+      status,
+      due: r.due,
+      sched,
+    };
     const rad = radiusOf(capacity);
     const siteList = r.sites ?? [];
     // A 현장 page with no address yet (empty sites) still surfaces — as a 미배치 row.
     if (siteList.length === 0) {
-      unplaced.push({ site: "(주소 미기재)", project, status, sched });
+      unplaced.push({ ...detailBase, site: "(주소 미기재)" });
       continue;
     }
     for (const site of siteList) {
       const xy = resolveSite(site);
       if (!xy) {
-        unplaced.push({ site, project, status, sched });
+        unplaced.push({ ...detailBase, site });
         continue;
       }
       const key = `${xy[0]},${xy[1]}`;
@@ -215,21 +253,12 @@ function placeSites(rows: ProjectSiteRow[]): Placed {
       const ang = n * 2.399;
       const spread = n === 0 ? 0 : rad + 4 + n * 1.5;
       pins.push({
+        ...detailBase,
         x: xy[0] + Math.cos(ang) * spread,
         y: xy[1] + Math.sin(ang) * spread,
         r: rad,
         site,
         sido: site.trim().split(/\s+/)[0],
-        project,
-        client: r.client,
-        path: r.path,
-        kinds,
-        source,
-        type,
-        capacity,
-        status: (r.status ?? "").trim(),
-        due: r.due,
-        sched,
       });
     }
   }
@@ -317,26 +346,87 @@ export function SiteMapPane() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [showProspective, setShowProspective] = useState(false);
   const [showUnclassified, setShowUnclassified] = useState(false);
-  const [selected, setSelected] = useState<Pin | null>(null);
+  const [selected, setSelected] = useState<SiteDetail | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  const setSelectedPin = (pin: Pin | null) => {
+  const setSelectedPin = (pin: SiteDetail | null) => {
     setStatusError(null);
     setSelected(pin);
+  };
+
+  const revealStatusFilter = (status: string) => {
+    if (status === STATUS_CONTRACT) setShowContracted(true);
+    else if (status === STATUS_COMPLETED) setShowCompleted(true);
+    else if (status === STATUS_PROSPECTIVE) setShowProspective(true);
+    else if (status !== STATUS_UNDER_CONSTRUCTION) setShowUnclassified(true);
   };
 
   const applySiteStatus = async (next: string) => {
     const path = selected?.path;
     if (!selected || !path || !isSitePagePath(path) || statusBusy || next === selected.status) return;
+    let fillDate: { key: "contract_date" | "construction_start"; value: string } | null = null;
+    if (next === STATUS_CONTRACT && !selected.sched.contractDate.trim()) {
+      if (window.confirm("계약일을 오늘로 넣을까요?")) fillDate = { key: "contract_date", value: todayYmd() };
+    } else if (next === STATUS_UNDER_CONSTRUCTION && !selected.sched.constructionStart.trim()) {
+      if (window.confirm("공사개시일을 오늘로 넣을까요?")) fillDate = { key: "construction_start", value: todayYmd() };
+    }
     setStatusBusy(true);
     setStatusError(null);
     try {
       const out = await setProjectSiteStatus(cfg, path, next);
-      setSelected({ ...selected, status: out.status ?? "" });
+      let sched = selected.sched;
+      if (fillDate) {
+        const updated = await updateProjectSite(cfg, path, { [fillDate.key]: fillDate.value });
+        sched = schedFromUpdate(updated);
+      }
+      const status = out.status ?? "";
+      revealStatusFilter(status);
+      setSelected({ ...selected, status, sched });
       await query.refetch();
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : "상태 변경에 실패했습니다.");
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  const ensureSelectedSite = async () => {
+    if (!selected?.path || !hasRealAddress(selected.site) || statusBusy || isSitePagePath(selected.path)) return;
+    setStatusBusy(true);
+    setStatusError(null);
+    try {
+      const out = await ensureProjectSite(cfg, selected.path, selected.site);
+      setSelected({ ...selected, path: out.path, status: out.status ?? "" });
+      await query.refetch();
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "현장 페이지 생성에 실패했습니다.");
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  const applyMilestone = async (key: keyof Sched, value: string) => {
+    const path = selected?.path;
+    if (!selected || !path || !isSitePagePath(path) || statusBusy) return;
+    const wireKey =
+      key === "contractDate"
+        ? "contract_date"
+        : key === "constructionStart"
+          ? "construction_start"
+          : key === "moduleDelivery"
+            ? "module_delivery"
+            : key === "preUseInspection"
+              ? "pre_use_inspection"
+              : "completion_inspection";
+    setStatusBusy(true);
+    setStatusError(null);
+    try {
+      const updated = await updateProjectSite(cfg, path, { [wireKey]: value });
+      setSelected({ ...selected, sched: schedFromUpdate(updated) });
+      await query.refetch();
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : "일정 저장에 실패했습니다.");
     } finally {
       setStatusBusy(false);
     }
@@ -766,14 +856,29 @@ export function SiteMapPane() {
           </div>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 4 }}>
             {shownUnplaced.map((u, i) => (
-              <li
-                key={i}
-                style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--muted)" }}
-              >
-                <span style={{ minWidth: 0 }}>
-                  {u.site} <span style={{ color: "var(--faint)" }}>· {u.project}</span>
-                </span>
-                <InspectionBadge sched={u.sched} />
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPin(u)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    fontSize: 12,
+                    color: "var(--muted)",
+                    background: "none",
+                    border: "none",
+                    padding: "4px 0",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ minWidth: 0, flex: 1 }}>
+                    {u.site} <span style={{ color: "var(--faint)" }}>· {u.project}</span>
+                  </span>
+                  <InspectionBadge sched={u.sched} />
+                </button>
               </li>
             ))}
           </ul>
@@ -811,18 +916,36 @@ export function SiteMapPane() {
                   </Chip>
                 ))}
               </div>
-              {statusBusy && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>저장 중…</div>}
-              {statusError && <div style={{ fontSize: 12, color: "var(--due)", marginTop: 6 }}>{statusError}</div>}
             </div>
           ) : (
-            <Detail label="상태" value={selected.status || "미분류"} />
+            <div style={{ marginBottom: 12 }}>
+              <Detail label="상태" value={selected.status || "미분류"} />
+              {selected.path && hasRealAddress(selected.site) && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={statusBusy}
+                  onClick={() => void ensureSelectedSite()}
+                  style={{ marginTop: 4 }}
+                >
+                  현장 페이지 만들기
+                </button>
+              )}
+            </div>
           )}
+          {statusBusy && <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>저장 중…</div>}
+          {statusError && <div style={{ fontSize: 12, color: "var(--due)", marginBottom: 8 }}>{statusError}</div>}
           {selected.source && <Detail label="에너지원" value={selected.source} />}
           {selected.type && <Detail label="특성" value={typeLabel(selected.type)} />}
           <Detail label="용량" value={capacityText(selected.capacity)} />
           {selected.kinds.length > 0 && <Detail label="분류" value={selected.kinds.join(", ")} />}
           <Detail label="마감" value={selected.due || "미정"} />
-          <ScheduleTimeline sched={selected.sched} />
+          <ScheduleTimeline
+            sched={selected.sched}
+            editable={isSitePagePath(selected.path)}
+            busy={statusBusy}
+            onChange={(key, value) => void applyMilestone(key, value)}
+          />
         </Modal>
       )}
     </>
@@ -913,13 +1036,60 @@ function InspectionBadge({ sched }: { sched: Sched }) {
   );
 }
 
-// 공정 일정 — a small vertical timeline of the five milestone dates in process
-// order. Blank milestones stay visible (dimmed) so the operator sees what's left
-// to fill; a parseable date shows its D-day, and the nearest upcoming 검사 is
-// accented. Renders nothing when the whole schedule is blank (fallback rows).
-function ScheduleTimeline({ sched }: { sched: Sched }) {
+function MilestoneField({
+  milestoneKey,
+  value,
+  busy,
+  onCommit,
+}: {
+  milestoneKey: keyof Sched;
+  value: string;
+  busy?: boolean;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  return (
+    <input
+      type={milestoneKey === "moduleDelivery" ? "text" : "date"}
+      value={draft}
+      disabled={busy}
+      placeholder={milestoneKey === "moduleDelivery" ? "기간 가능" : undefined}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft.trim() !== value.trim()) onCommit(draft.trim());
+      }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        fontSize: 12,
+        padding: "3px 6px",
+        border: "1px solid var(--line-2)",
+        borderRadius: "var(--radius-ctl)",
+        background: "var(--panel)",
+        color: "var(--ink)",
+      }}
+    />
+  );
+}
+
+// 공정 일정 — vertical timeline. Site pages always show (editable inputs); fallback
+// rows only render when at least one milestone is filled (read-only).
+function ScheduleTimeline({
+  sched,
+  editable,
+  busy,
+  onChange,
+}: {
+  sched: Sched;
+  editable?: boolean;
+  busy?: boolean;
+  onChange?: (key: keyof Sched, value: string) => void;
+}) {
   const filled = MILESTONES.some((m) => sched[m.key].trim() !== "");
-  if (!filled) return null;
+  if (!editable && !filled) return null;
   const up = upcomingInspection(sched);
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
@@ -948,10 +1118,19 @@ function ScheduleTimeline({ sched }: { sched: Sched }) {
                       : "var(--line-2)",
                 }}
               />
-              <span style={{ fontSize: 12, color: has ? "var(--ink-2)" : "var(--faint)", minWidth: 64 }}>
+              <span style={{ fontSize: 12, color: has || editable ? "var(--ink-2)" : "var(--faint)", minWidth: 64 }}>
                 {m.label}
               </span>
-              <span style={{ fontSize: 12, color: has ? "var(--ink)" : "var(--faint)" }}>{date || "미정"}</span>
+              {editable ? (
+                <MilestoneField
+                  milestoneKey={m.key}
+                  value={date}
+                  busy={busy}
+                  onCommit={(value) => onChange?.(m.key, value)}
+                />
+              ) : (
+                <span style={{ fontSize: 12, color: has ? "var(--ink)" : "var(--faint)" }}>{date || "미정"}</span>
+              )}
               {days !== null && (
                 <span
                   style={{

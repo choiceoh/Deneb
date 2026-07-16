@@ -72,6 +72,128 @@ func (s *Store) SetSiteStatus(path, status string) error {
 	})
 }
 
+// EnsureSitePage finds or creates a 현장 page for address under the project that
+// owns projectPath (대표페이지 or any path under 프로젝트/<folder>/…). Idempotent:
+// an existing page whose address matches returns that path with created=false.
+// New stubs copy 거래처·kinds from the project 대표페이지 when available.
+func (s *Store) EnsureSitePage(projectPath, address string) (path string, created bool, err error) {
+	projectPath = filepath.ToSlash(strings.TrimSpace(projectPath))
+	address = normalizeSiteName(address)
+	if projectPath == "" {
+		return "", false, fmt.Errorf("path is required")
+	}
+	if address == "" {
+		return "", false, fmt.Errorf("address is required")
+	}
+	folder, ok := ProjectNameOf(projectPath)
+	if !ok {
+		return "", false, fmt.Errorf("not a project path: %s", projectPath)
+	}
+	paths, err := s.ListPages(projectCategoryPrefix)
+	if err != nil {
+		return "", false, fmt.Errorf("list project pages: %w", err)
+	}
+	usedNames := make(map[string]bool)
+	for _, p := range paths {
+		if !IsProjectSitePage(p) {
+			continue
+		}
+		pageFolder, ok := ProjectNameOf(p)
+		if !ok || pageFolder != folder {
+			continue
+		}
+		usedNames[strings.TrimSuffix(filepath.Base(p), ".md")] = true
+		page, readErr := s.ReadPage(p)
+		if readErr != nil || page == nil {
+			continue
+		}
+		if normalizeSiteName(page.Meta.Address) == address {
+			return p, false, nil
+		}
+	}
+	var client string
+	var kinds []string
+	for _, ref := range s.knownProjects() {
+		refFolder, ok := ProjectNameOf(ref.Path)
+		if ok && refFolder == folder {
+			client, kinds = ref.Client, ref.Kinds
+			break
+		}
+	}
+	name := deriveSiteName(address, usedNames)
+	path, err = s.UpsertSitePage(folder, name, SiteFields{
+		Address: address, Client: client, Kinds: kinds,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return path, true, nil
+}
+
+// UpdateSitePage applies non-empty SiteFields to an existing 현장 page (partial
+// edit by path). Unlike UpsertSitePage it refuses to create missing pages, and
+// unlike SetSiteStatus an empty Status field leaves Meta.Status unchanged.
+func (s *Store) UpdateSitePage(path string, f SiteFields) error {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" {
+		return fmt.Errorf("path is required")
+	}
+	if !IsProjectSitePage(path) {
+		return fmt.Errorf("not a site page: %s", path)
+	}
+	return s.UpdatePage(path, func(cur *Page) (*Page, error) {
+		if cur == nil {
+			return nil, fmt.Errorf("site page not found: %s", path)
+		}
+		applySiteFields(cur, f, false)
+		return cur, nil
+	})
+}
+
+// applySiteFields copies non-empty SiteFields onto page. created controls whether
+// an empty body gets the standard scaffold (Upsert create path only).
+func applySiteFields(page *Page, f SiteFields, created bool) {
+	if f.Client != "" {
+		page.Meta.Client = f.Client
+	}
+	if f.Address != "" {
+		page.Meta.Address = normalizeSiteName(f.Address)
+	}
+	if f.Status != "" {
+		page.Meta.Status = strings.TrimSpace(f.Status)
+	}
+	if f.Capacity > 0 {
+		page.Meta.Capacity = f.Capacity
+	}
+	if len(f.Kinds) > 0 {
+		page.Meta.Kinds = normalizeKinds(f.Kinds)
+	}
+	if f.ContractDate != "" {
+		page.Meta.ContractDate = strings.TrimSpace(f.ContractDate)
+	}
+	if f.ConstructionStart != "" {
+		page.Meta.ConstructionStart = strings.TrimSpace(f.ConstructionStart)
+	}
+	if f.ModuleDelivery != "" {
+		page.Meta.ModuleDelivery = strings.TrimSpace(f.ModuleDelivery)
+	}
+	if f.PreUseInspection != "" {
+		page.Meta.PreUseInspection = strings.TrimSpace(f.PreUseInspection)
+	}
+	if f.CompletionInspection != "" {
+		page.Meta.CompletionInspection = strings.TrimSpace(f.CompletionInspection)
+	}
+	if f.Summary != "" {
+		page.Meta.Summary = strings.TrimSpace(f.Summary)
+	}
+	if created && strings.TrimSpace(page.Body) == "" {
+		page.Body = siteBodyScaffold(page.Meta.Title)
+	}
+	if note := strings.TrimSpace(f.Note); note != "" {
+		page.Body = strings.TrimRight(page.Body, "\n") + "\n\n" + note + "\n"
+	}
+}
+
 // UpsertSitePage creates or edits a 현장 page in the 현장 공통 포맷. Non-empty fields
 // overwrite; empty fields are preserved (partial edit). A newly created page gets a
 // standard body scaffold. Returns the page path so the caller can link/report it.
@@ -89,45 +211,7 @@ func (s *Store) UpsertSitePage(project, name string, f SiteFields) (string, erro
 			page = NewPage(name, projectCategoryPrefix, nil)
 			page.Meta.Type = "site"
 		}
-		if f.Client != "" {
-			page.Meta.Client = f.Client
-		}
-		if f.Address != "" {
-			page.Meta.Address = normalizeSiteName(f.Address)
-		}
-		if f.Status != "" {
-			page.Meta.Status = strings.TrimSpace(f.Status)
-		}
-		if f.Capacity > 0 {
-			page.Meta.Capacity = f.Capacity
-		}
-		if len(f.Kinds) > 0 {
-			page.Meta.Kinds = normalizeKinds(f.Kinds)
-		}
-		if f.ContractDate != "" {
-			page.Meta.ContractDate = strings.TrimSpace(f.ContractDate)
-		}
-		if f.ConstructionStart != "" {
-			page.Meta.ConstructionStart = strings.TrimSpace(f.ConstructionStart)
-		}
-		if f.ModuleDelivery != "" {
-			page.Meta.ModuleDelivery = strings.TrimSpace(f.ModuleDelivery)
-		}
-		if f.PreUseInspection != "" {
-			page.Meta.PreUseInspection = strings.TrimSpace(f.PreUseInspection)
-		}
-		if f.CompletionInspection != "" {
-			page.Meta.CompletionInspection = strings.TrimSpace(f.CompletionInspection)
-		}
-		if f.Summary != "" {
-			page.Meta.Summary = strings.TrimSpace(f.Summary)
-		}
-		if created && strings.TrimSpace(page.Body) == "" {
-			page.Body = siteBodyScaffold(name)
-		}
-		if note := strings.TrimSpace(f.Note); note != "" {
-			page.Body = strings.TrimRight(page.Body, "\n") + "\n\n" + note + "\n"
-		}
+		applySiteFields(page, f, created)
 		return page, nil
 	})
 	if err != nil {

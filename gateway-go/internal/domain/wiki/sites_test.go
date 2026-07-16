@@ -166,6 +166,64 @@ func TestSetSiteStatus_SetsAndClears(t *testing.T) {
 	}
 }
 
+// TestEnsureSitePage_CreatesThenIdempotent: EnsureSitePage bootstraps one stub from a
+// 대표페이지 path + address, copies 거래처·kinds, and returns the same path on repeat.
+func TestEnsureSitePage_CreatesThenIdempotent(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+
+	rep := "프로젝트/군산수산리/대표.md"
+	mustWrite(t, store, rep, &Page{
+		Meta: Frontmatter{
+			Title: "군산 수산리 태양광", Type: "project", Client: "금호",
+			Sites: []string{"전북 군산시 옥구읍 수산리"},
+			Kinds: []string{"태양광/토지"},
+		},
+		Body: "# 군산",
+	})
+	path, created, err := store.EnsureSitePage(rep, "전라북도 군산시 옥구읍 수산리.")
+	if err != nil {
+		t.Fatalf("EnsureSitePage: %v", err)
+	}
+	if !created || path != SitePagePath("군산수산리", "수산리") {
+		t.Fatalf("created=%v path=%q, want new 수산리 page", created, path)
+	}
+	page := testutil.Must(store.ReadPage(path))
+	if page.Meta.Address != "전북 군산시 옥구읍 수산리" || page.Meta.Client != "금호" ||
+		len(page.Meta.Kinds) != 1 || page.Meta.Kinds[0] != "태양광/토지" {
+		t.Errorf("stub meta = %+v", page.Meta)
+	}
+	again, created2, err := store.EnsureSitePage(rep, "전북 군산시 옥구읍 수산리")
+	if err != nil || created2 || again != path {
+		t.Fatalf("idempotent EnsureSitePage = (%q,%v,%v), want (%q,false,nil)", again, created2, err, path)
+	}
+}
+
+// TestUpdateSitePage_PartialMilestones: UpdateSitePage writes milestone dates by path
+// without clobbering status/address, and rejects 대표페이지 paths.
+func TestUpdateSitePage_PartialMilestones(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+
+	path, err := store.UpsertSitePage("군산수산리", "수산리", SiteFields{
+		Address: "전북 군산시 옥구읍 수산리", Status: "계약", ContractDate: "2026-06-01",
+	})
+	if err != nil {
+		t.Fatalf("UpsertSitePage: %v", err)
+	}
+	if err := store.UpdateSitePage(path, SiteFields{ConstructionStart: "2026-07-10"}); err != nil {
+		t.Fatalf("UpdateSitePage: %v", err)
+	}
+	page := testutil.Must(store.ReadPage(path))
+	if page.Meta.ConstructionStart != "2026-07-10" || page.Meta.Status != "계약" ||
+		page.Meta.ContractDate != "2026-06-01" {
+		t.Errorf("after update meta = %+v", page.Meta)
+	}
+	if err := store.UpdateSitePage("프로젝트/군산수산리/대표.md", SiteFields{ContractDate: "2026-01-01"}); err == nil {
+		t.Fatal("expected reject for 대표페이지 path")
+	}
+}
+
 // TestUpsertSitePage_CreateThenPartialEdit: create a 현장 page in the 공통 포맷, then
 // a partial edit sets a later milestone without clobbering the earlier fields.
 func TestUpsertSitePage_CreateThenPartialEdit(t *testing.T) {

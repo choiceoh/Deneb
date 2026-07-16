@@ -483,6 +483,12 @@ export interface ProjectRef {
   summary?: string
 }
 
+export interface ProjectSiteEnsureOut {
+  path?: string
+  created?: boolean
+  status?: string
+}
+
 export interface ProjectSiteRow {
   project?: string
   client?: string
@@ -502,6 +508,16 @@ export interface ProjectSiteRow {
 export interface ProjectSiteSetStatusOut {
   path?: string
   status?: string
+}
+
+export interface ProjectSiteUpdateOut {
+  path?: string
+  status?: string
+  contract_date?: string
+  construction_start?: string
+  module_delivery?: string
+  pre_use_inspection?: string
+  completion_inspection?: string
 }
 
 export interface ProjectSitesOut {

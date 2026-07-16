@@ -16,6 +16,11 @@ type fakeProjectStatusSource struct {
 	setStatusErr  error
 	lastSetPath   string
 	lastSetStatus string
+	ensurePath    string
+	ensureCreated bool
+	ensureErr     error
+	updateErr     error
+	lastUpdate    wiki.SiteFields
 }
 
 func (f *fakeProjectStatusSource) ProjectStatuses() ([]wiki.ProjectStatus, error) {
@@ -30,6 +35,22 @@ func (f *fakeProjectStatusSource) SetSiteStatus(path, status string) error {
 	f.lastSetPath = path
 	f.lastSetStatus = status
 	return f.setStatusErr
+}
+
+func (f *fakeProjectStatusSource) EnsureSitePage(projectPath, address string) (string, bool, error) {
+	if f.ensureErr != nil {
+		return "", false, f.ensureErr
+	}
+	if f.ensurePath != "" {
+		return f.ensurePath, f.ensureCreated, nil
+	}
+	return "프로젝트/x/현장/y.md", true, nil
+}
+
+func (f *fakeProjectStatusSource) UpdateSitePage(path string, fields wiki.SiteFields) error {
+	f.lastSetPath = path
+	f.lastUpdate = fields
+	return f.updateErr
 }
 
 func projectDepsFor(src ProjectStatusSource, factoryErr error) ProjectDeps {
@@ -53,6 +74,8 @@ func TestProjectMethods_RegistersWithWiki(t *testing.T) {
 		"miniapp.project.digests",
 		"miniapp.project.sites",
 		"miniapp.project.site.setStatus",
+		"miniapp.project.site.ensure",
+		"miniapp.project.site.update",
 	} {
 		if _, ok := m[name]; !ok {
 			t.Fatalf("%s not registered with a wiki factory", name)
