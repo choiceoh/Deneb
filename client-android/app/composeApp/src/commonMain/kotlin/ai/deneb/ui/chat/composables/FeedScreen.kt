@@ -108,171 +108,171 @@ internal fun FeedScreen(
             .fillMaxSize()
             .denebSiblingSwipe(onSwipeLeft = openApprovals),
     ) {
-    DenebScreenScaffold(
-        title = "피드",
-        onBack = {},
-        showBack = false,
-        // 결재 is the feed's 동형 sibling (same day-paged list shape) — Zune-style
-        // dimmed pivot + left swipe jump straight there.
-        titlePivot = openApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
-    ) {
-        // Keep the selected date independent of the loaded item list. A ranged fetch
-        // for today can legitimately return zero items; if selectedDate were derived
-        // from items, the empty response would remove the date bar and trap the user
-        // on today with no way to request yesterday.
-        val tz = remember { TimeZone.currentSystemDefault() }
-        val today = remember { Clock.System.todayIn(tz) }
-        val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
-        val initialDate = remember(initialOpenItemId, initialOpenItemCreatedAtMs, today) {
-            if (initialOpenItemId.isNullOrBlank() || initialOpenItemCreatedAtMs <= 0L) {
-                today
-            } else {
-                localDateOf(initialOpenItemCreatedAtMs)
-            }
-        }
-        var selectedDateIso by rememberSaveable(initialOpenItemId) { mutableStateOf(initialDate.toString()) }
-        val selectedDate = runCatching { LocalDate.parse(selectedDateIso) }.getOrDefault(today)
-        var expandedId by rememberSaveable(initialOpenItemId) { mutableStateOf<String?>(null) }
-        var pendingOpenItemId by rememberSaveable(initialOpenItemId) {
-            mutableStateOf(initialOpenItemId?.trim()?.takeIf(String::isNotEmpty))
-        }
-        val nav = feedDateNavState(selectedDate, today, dates)
-        // A day-fetch that fails (boot race, gateway mid-redeploy, VPN waking) must
-        // say so — the feed is the 업무 home, and a silent failure reads as "피드
-        // 없음" while the server has every card (2026-07-05 field report).
-        var loadFailed by remember { mutableStateOf(false) }
-        val refreshScope = rememberCoroutineScope()
-        val loadSelectedDay: suspend () -> Unit = {
-            loadFailed = !onLoadDateRange(
-                dayStartMs(selectedDate, tz),
-                dayStartMs(selectedDate.plus(1, DateTimeUnit.DAY), tz),
-            )
-        }
-        LaunchedEffect(selectedDate) { loadSelectedDay() }
-
-        FeedDateBar(
-            label = feedDateLabel(selectedDate, today),
-            canGoPrev = nav.canGoPrev,
-            canGoNext = nav.canGoNext,
-            onPrev = {
-                if (nav.canGoPrev) selectedDateIso = selectedDate.minus(1, DateTimeUnit.DAY).toString()
-            },
-            onNext = {
-                if (nav.canGoNext) selectedDateIso = selectedDate.plus(1, DateTimeUnit.DAY).toString()
-            },
-        )
-
-        AnimatedVisibility(visible = loadFailed, enter = denebBannerEnter, exit = denebBannerExit) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-            ) {
-                Text(
-                    "피드를 불러오지 못했습니다",
-                    style = DenebType.meta,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { refreshScope.launch { loadSelectedDay() } }) { Text("다시 시도") }
-            }
-        }
-
-        // Partition by a snapshot of seenIds taken when the feed's items load, not
-        // live: tapping a row marks it seen (onMarkSeen) and expands it inline, and a
-        // live re-partition would yank the tapped item from 안읽음 (top) down into the
-        // 읽음 section mid-tap, so it expanded out of view and couldn't be read. Read
-        // items re-sort into 읽음 the next time the feed's data reloads.
-        val seenSnapshot = remember(items) { seenIds }
-        val dayItems = items.filter { localDateOf(it.createdAtMs) == selectedDate }
-        // Read = opened on this device (seen-set) OR on any device (gateway readAtMs,
-        // arrives via List/sync) — so a card read on the desktop reads here too. The
-        // seen-set stays snapshotted so the just-tapped row doesn't yank mid-tap.
-        val unread = dayItems.filterNot { seenSnapshot.contains(it.id) || it.readAtMs > 0L }
-        val read = dayItems.filter { seenSnapshot.contains(it.id) || it.readAtMs > 0L }
-        var actionItem by remember { mutableStateOf<WorkFeedItem?>(null) }
-        var feedbackItem by remember { mutableStateOf<WorkFeedItem?>(null) }
-
-        val open: (String) -> Unit = { id ->
-            expandedId = if (expandedId == id) null else id
-            onMarkSeen(id)
-        }
-        LaunchedEffect(pendingOpenItemId, items) {
-            val consumption = consumeFeedItemOpen(pendingOpenItemId, items.map(WorkFeedItem::id))
-            pendingOpenItemId = consumption.pendingItemId
-            val itemId = consumption.openedItemId ?: return@LaunchedEffect
-            val item = items.firstOrNull { it.id == itemId } ?: return@LaunchedEffect
-            selectedDateIso = localDateOf(item.createdAtMs).toString()
-            expandedId = itemId
-            onMarkSeen(itemId)
-        }
-
-        // Pull-to-refresh is the feed's user-driven recovery path. The empty state
-        // scrolls so the gesture works there too. The spinner tracks the actual
-        // fetch (no fixed window), and a failure raises the banner above.
-        var refreshing by remember { mutableStateOf(false) }
-        PullToRefreshBox(
-            isRefreshing = refreshing,
-            onRefresh = {
-                haptics.refresh()
-                refreshScope.launch {
-                    refreshing = true
-                    loadSelectedDay()
-                    refreshing = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth().weight(1f),
+        DenebScreenScaffold(
+            title = "피드",
+            onBack = {},
+            showBack = false,
+            // 결재 is the feed's 동형 sibling (same day-paged list shape) — Zune-style
+            // dimmed pivot + left swipe jump straight there.
+            titlePivot = openApprovals?.let { open -> { DenebTitlePivot("결재", onClick = open) } },
         ) {
-            when {
-                items.isEmpty() && !loaded -> DenebLoading()
-
-                dayItems.isEmpty() -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    DenebEmpty(feedEmptyLabel(selectedDate, today))
+            // Keep the selected date independent of the loaded item list. A ranged fetch
+            // for today can legitimately return zero items; if selectedDate were derived
+            // from items, the empty response would remove the date bar and trap the user
+            // on today with no way to request yesterday.
+            val tz = remember { TimeZone.currentSystemDefault() }
+            val today = remember { Clock.System.todayIn(tz) }
+            val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
+            val initialDate = remember(initialOpenItemId, initialOpenItemCreatedAtMs, today) {
+                if (initialOpenItemId.isNullOrBlank() || initialOpenItemCreatedAtMs <= 0L) {
+                    today
+                } else {
+                    localDateOf(initialOpenItemCreatedAtMs)
                 }
+            }
+            var selectedDateIso by rememberSaveable(initialOpenItemId) { mutableStateOf(initialDate.toString()) }
+            val selectedDate = runCatching { LocalDate.parse(selectedDateIso) }.getOrDefault(today)
+            var expandedId by rememberSaveable(initialOpenItemId) { mutableStateOf<String?>(null) }
+            var pendingOpenItemId by rememberSaveable(initialOpenItemId) {
+                mutableStateOf(initialOpenItemId?.trim()?.takeIf(String::isNotEmpty))
+            }
+            val nav = feedDateNavState(selectedDate, today, dates)
+            // A day-fetch that fails (boot race, gateway mid-redeploy, VPN waking) must
+            // say so — the feed is the 업무 home, and a silent failure reads as "피드
+            // 없음" while the server has every card (2026-07-05 field report).
+            var loadFailed by remember { mutableStateOf(false) }
+            val refreshScope = rememberCoroutineScope()
+            val loadSelectedDay: suspend () -> Unit = {
+                loadFailed = !onLoadDateRange(
+                    dayStartMs(selectedDate, tz),
+                    dayStartMs(selectedDate.plus(1, DateTimeUnit.DAY), tz),
+                )
+            }
+            LaunchedEffect(selectedDate) { loadSelectedDay() }
 
-                else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(unread, key = { it.id }) { item ->
-                        FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
+            FeedDateBar(
+                label = feedDateLabel(selectedDate, today),
+                canGoPrev = nav.canGoPrev,
+                canGoNext = nav.canGoNext,
+                onPrev = {
+                    if (nav.canGoPrev) selectedDateIso = selectedDate.minus(1, DateTimeUnit.DAY).toString()
+                },
+                onNext = {
+                    if (nav.canGoNext) selectedDateIso = selectedDate.plus(1, DateTimeUnit.DAY).toString()
+                },
+            )
+
+            AnimatedVisibility(visible = loadFailed, enter = denebBannerEnter, exit = denebBannerExit) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                ) {
+                    Text(
+                        "피드를 불러오지 못했습니다",
+                        style = DenebType.meta,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { refreshScope.launch { loadSelectedDay() } }) { Text("다시 시도") }
+                }
+            }
+
+            // Partition by a snapshot of seenIds taken when the feed's items load, not
+            // live: tapping a row marks it seen (onMarkSeen) and expands it inline, and a
+            // live re-partition would yank the tapped item from 안읽음 (top) down into the
+            // 읽음 section mid-tap, so it expanded out of view and couldn't be read. Read
+            // items re-sort into 읽음 the next time the feed's data reloads.
+            val seenSnapshot = remember(items) { seenIds }
+            val dayItems = items.filter { localDateOf(it.createdAtMs) == selectedDate }
+            // Read = opened on this device (seen-set) OR on any device (gateway readAtMs,
+            // arrives via List/sync) — so a card read on the desktop reads here too. The
+            // seen-set stays snapshotted so the just-tapped row doesn't yank mid-tap.
+            val unread = dayItems.filterNot { seenSnapshot.contains(it.id) || it.readAtMs > 0L }
+            val read = dayItems.filter { seenSnapshot.contains(it.id) || it.readAtMs > 0L }
+            var actionItem by remember { mutableStateOf<WorkFeedItem?>(null) }
+            var feedbackItem by remember { mutableStateOf<WorkFeedItem?>(null) }
+
+            val open: (String) -> Unit = { id ->
+                expandedId = if (expandedId == id) null else id
+                onMarkSeen(id)
+            }
+            LaunchedEffect(pendingOpenItemId, items) {
+                val consumption = consumeFeedItemOpen(pendingOpenItemId, items.map(WorkFeedItem::id))
+                pendingOpenItemId = consumption.pendingItemId
+                val itemId = consumption.openedItemId ?: return@LaunchedEffect
+                val item = items.firstOrNull { it.id == itemId } ?: return@LaunchedEffect
+                selectedDateIso = localDateOf(item.createdAtMs).toString()
+                expandedId = itemId
+                onMarkSeen(itemId)
+            }
+
+            // Pull-to-refresh is the feed's user-driven recovery path. The empty state
+            // scrolls so the gesture works there too. The spinner tracks the actual
+            // fetch (no fixed window), and a failure raises the banner above.
+            var refreshing by remember { mutableStateOf(false) }
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = {
+                    haptics.refresh()
+                    refreshScope.launch {
+                        refreshing = true
+                        loadSelectedDay()
+                        refreshing = false
                     }
-                    if (read.isNotEmpty()) {
-                        item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
-                        items(read, key = { it.id }) { item ->
+                },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
+                when {
+                    items.isEmpty() && !loaded -> DenebLoading()
+
+                    dayItems.isEmpty() -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        DenebEmpty(feedEmptyLabel(selectedDate, today))
+                    }
+
+                    else -> LazyColumn(Modifier.fillMaxSize()) {
+                        items(unread, key = { it.id }) { item ->
                             FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
+                        }
+                        if (read.isNotEmpty()) {
+                            item { DenebSectionLabel("읽음", Modifier.padding(start = 12.dp)) }
+                            items(read, key = { it.id }) { item ->
+                                FeedRowWithBody(item, expandedId == item.id, open, onRunAction, onAnswer) { actionItem = it }
+                            }
                         }
                     }
                 }
             }
-        }
 
-        actionItem?.let { item ->
-            ModalBottomSheet(onDismissRequest = { actionItem = null }) {
-                WorkFeedActionSheetContent(
-                    item = item,
-                    onFeedback = {
-                        actionItem = null
-                        feedbackItem = item
-                    },
-                    onRewrite = {
-                        actionItem = null
-                        onRewrite(item.id)
-                    },
-                    onAsk = {
-                        actionItem = null
-                        onAsk(item.id)
-                    },
-                )
+            actionItem?.let { item ->
+                ModalBottomSheet(onDismissRequest = { actionItem = null }) {
+                    WorkFeedActionSheetContent(
+                        item = item,
+                        onFeedback = {
+                            actionItem = null
+                            feedbackItem = item
+                        },
+                        onRewrite = {
+                            actionItem = null
+                            onRewrite(item.id)
+                        },
+                        onAsk = {
+                            actionItem = null
+                            onAsk(item.id)
+                        },
+                    )
+                }
+            }
+
+            feedbackItem?.let { item ->
+                ModalBottomSheet(onDismissRequest = { feedbackItem = null }) {
+                    WorkFeedFeedbackSheetContent(
+                        item = item,
+                        onSubmit = { text -> onSubmitFeedback(item.id, text) },
+                        onClose = { feedbackItem = null },
+                    )
+                }
             }
         }
-
-        feedbackItem?.let { item ->
-            ModalBottomSheet(onDismissRequest = { feedbackItem = null }) {
-                WorkFeedFeedbackSheetContent(
-                    item = item,
-                    onSubmit = { text -> onSubmitFeedback(item.id, text) },
-                    onClose = { feedbackItem = null },
-                )
-            }
-        }
-    }
     }
 }
 
