@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SEARCH_RPC } from "@/resources";
+import { usePaneTarget } from "@/usePaneTarget";
 import { projectList } from "@/aiText";
 import type { SearchHit } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -43,8 +44,25 @@ export function SearchPane() {
   );
   useRegisterPane(SEARCH_RESOURCE, aiText);
 
-  async function run() {
-    const query = q.trim();
+  // Deep-link query (⌘K 팔레트 "통합 검색: q" · 데네브 workspace 커맨드): open with
+  // the query prefilled and already running. The latest `run` rides a ref
+  // (updated post-commit) so a long-mounted pane never fires a stale closure —
+  // e.g. after the gateway URL/token changed while this pane stayed mounted.
+  const runRef = useRef(run);
+  useEffect(() => {
+    runRef.current = run;
+  });
+  usePaneTarget(
+    "search",
+    useCallback((target) => {
+      if (!target.query) return;
+      setQ(target.query);
+      void runRef.current(target.query);
+    }, []),
+  );
+
+  async function run(raw = q) {
+    const query = raw.trim();
     if (!query || !connected) return;
     setSearched(true);
     const r = await callCached<SearchCacheResponse>(

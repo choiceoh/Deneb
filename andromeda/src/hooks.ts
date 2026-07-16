@@ -383,10 +383,25 @@ function retrySeconds(ms: number): string {
 // Subscribes to the proactive event stream while connected, keeping the most
 // recent events. One abortable loop owns both the active stream and its retry
 // timer, preventing duplicate subscriptions across reconnects/config changes.
-export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
+export function useEvents(
+  cfg: GatewayConfig,
+  connected: boolean,
+  // Optional frame interceptor, called before an event is listed: return a
+  // (possibly rewritten) event to show it as a nudge, or null to swallow it.
+  // ProactivePanel uses this to execute gateway-pushed workspace commands and
+  // replace them with a human-readable "화면 조정" notice — hooks.ts stays free
+  // of the command grammar (commands.ts imports the pane registry).
+  intercept?: (ev: ProactiveEvent) => ProactiveEvent | null,
+): EventsState {
   const [events, setEvents] = useState<ProactiveEvent[]>([]);
   const [status, setStatus] = useState("");
   const invalidate = useInvalidate();
+  // Latest interceptor without re-subscribing the SSE loop on each render
+  // (updated post-commit — refs must not be written during render).
+  const interceptRef = useRef(intercept);
+  useEffect(() => {
+    interceptRef.current = intercept;
+  });
 
   // Reflect connection flips in the status line during render (react.dev
   // "adjusting state when props change") — the effect below only owns the
@@ -419,8 +434,10 @@ export function useEvents(cfg: GatewayConfig, connected: boolean): EventsState {
               },
               // The gateway's push payload is title+body only (no ts), so stamp the
               // arrival time here — the panel renders it as a relative "N분 전".
-              onEvent: (ev) => {
+              onEvent: (rawEv) => {
                 if (signal.aborted) return;
+                const ev = interceptRef.current ? interceptRef.current(rawEv) : rawEv;
+                if (!ev) return;
                 setEvents((prev) => [{ ...ev, ts: ev.ts ?? Date.now() }, ...prev].slice(0, 50));
                 // A nudge means its backing data just changed server-side. Refresh the
                 // affected resource list(s) now so the feed/grid updates with the

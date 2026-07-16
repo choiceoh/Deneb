@@ -1,4 +1,3 @@
-import { type ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -47,74 +46,49 @@ vi.mock("./AIPanel", () => ({
   },
 }));
 vi.mock("./panes/FilesPane", () => ({
-  FilesPane: (props: { active: boolean }) => {
-    mocks.filesPane(props);
-    return (
-      <div data-testid="files-pane" data-active={props.active}>
-        files pane
-      </div>
-    );
+  FilesPane: () => {
+    mocks.filesPane();
+    return <div data-testid="files-pane">files pane</div>;
   },
 }));
-vi.mock("./panes", () => ({
-  PANES: [
+vi.mock("./panes", () => {
+  const PANES = [
     { key: "today", label: "오늘", shortcut: "1", Component: () => <div>today pane</div> },
     { key: "wiki", label: "위키", shortcut: "2", Component: () => <div>wiki pane</div> },
     { key: "notebook", label: "노트북", shortcut: "3", Component: () => <div>notebook pane</div> },
     { key: "files", label: "파일", shortcut: "4", Component: () => <div>generic files pane</div> },
     { key: "chat", label: "채팅", shortcut: "5", Component: () => <div>generic chat pane</div> },
     { key: "progress", label: "진행", shortcut: "c", Component: () => <div>progress pane</div> },
-  ],
+  ];
+  return {
+    PANES,
+    paneLabel: (key: string) => PANES.find((p) => p.key === key)?.label ?? key,
+    orderedViews: () => PANES.map((p) => p.key),
+  };
+});
+// Workstation renders the palette only when paletteOpen — stub it out so this
+// suite stays a shell test (CommandPalette has its own suite).
+vi.mock("./CommandPalette", () => ({
+  CommandPalette: () => <div data-testid="command-palette" />,
 }));
 
 import { Workstation } from "./Workstation";
-import { Ctx } from "@/workspaceContext";
+import { workspaceValue, WorkspaceStub, testCfg as cfg } from "@/test/workspace";
 import type { View } from "@/types";
 
-type WorkspaceValue = NonNullable<ComponentProps<typeof Ctx.Provider>["value"]>;
-const cfg = { url: "http://gateway.test", token: "secret" };
-
-function workspace(overrides: Partial<WorkspaceValue> = {}): WorkspaceValue {
-  return {
-    connected: true,
-    cfg,
-    setCfg: vi.fn(),
-    view: "today",
-    setView: vi.fn(),
-    paneTarget: null,
-    openPane: vi.fn(),
-    consumePaneTarget: vi.fn(),
-    aiText: "",
-    activeResource: undefined,
-    registerPane: vi.fn(),
-    wikiTarget: null,
-    openWiki: vi.fn(),
-    consumeWikiTarget: vi.fn(),
-    noteSink: null,
-    setNoteSink: vi.fn(),
-    hiddenViews: [],
-    toggleViewHidden: vi.fn(),
-    viewOrder: [],
-    setViewOrder: vi.fn(),
-    notebookTop: "default",
-    setNotebookTop: vi.fn(),
-    ...overrides,
-  };
-}
+const workspace = workspaceValue;
 
 function renderWorkstation(value = workspace(), gateway = cfg) {
   return render(
-    <Ctx.Provider value={value}>
+    <WorkspaceStub value={value}>
       <Workstation cfg={gateway} />
-    </Ctx.Provider>,
+    </WorkspaceStub>,
   );
 }
 
-// 우측 데네브 패널은 기본 접힘 — 열림 상태 동작을 검증하는 테스트는 먼저 우측 탭으로 연다.
-async function renderWithPanelOpen(value = workspace()) {
-  const result = renderWorkstation(value);
-  await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
-  return result;
+// 우측 데네브 패널 접힘은 이제 컨텍스트 소유(aiCollapsed) — 열림 동작 검증은 오버라이드로.
+function renderWithPanelOpen(value = workspace({ aiCollapsed: false })) {
+  return renderWorkstation(value);
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -181,7 +155,7 @@ describe("Workstation composition", () => {
 
 describe("Workstation AI panel controls", () => {
   it("hides work pane when AI panel expands", async () => {
-    await renderWithPanelOpen();
+    renderWithPanelOpen();
     expect(screen.getByText("today pane")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
@@ -191,33 +165,37 @@ describe("Workstation AI panel controls", () => {
   });
 
   it("restores the work pane after narrowing AI", async () => {
-    await renderWithPanelOpen();
+    renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     expect(screen.getByText("today pane")).toBeInTheDocument();
     expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-expanded", "false");
   });
 
-  it("collapses side AI without shrinking work pane width", async () => {
-    await renderWithPanelOpen();
+  // 접힘 상태는 이제 컨텍스트(aiCollapsed) 소유 — Workstation은 setAiCollapsed를 쏘고,
+  // 표시는 스텁 값으로 검증한다(상태 전이는 WorkspaceProvider 테스트의 몫).
+  it("requests collapse when the AI collapse button clicks", async () => {
+    const setAiCollapsed = vi.fn();
+    renderWithPanelOpen(workspace({ aiCollapsed: false, setAiCollapsed }));
 
     await userEvent.click(screen.getByRole("button", { name: "collapse AI" }));
 
+    expect(setAiCollapsed).toHaveBeenCalledWith(true);
     expect(screen.getByText("today pane")).toBeInTheDocument();
-    expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "true");
-    expect(screen.getByRole("button", { name: "Deneb 패널 열기" })).toBeInTheDocument();
   });
 
-  it("restores collapsed AI panel when edge tab reopens it", async () => {
-    await renderWithPanelOpen();
-    await userEvent.click(screen.getByRole("button", { name: "collapse AI" }));
+  it("shows the edge tab while collapsed and requests reopen on click", async () => {
+    const setAiCollapsed = vi.fn();
+    renderWorkstation(workspace({ setAiCollapsed })); // 기본 접힘
+    expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "true");
+
     await userEvent.click(screen.getByRole("button", { name: "Deneb 패널 열기" }));
-    expect(screen.getByTestId("ai-panel")).toHaveAttribute("data-hidden", "false");
-    expect(screen.queryByRole("button", { name: "Deneb 패널 열기" })).not.toBeInTheDocument();
+
+    expect(setAiCollapsed).toHaveBeenCalledWith(false);
   });
 
   it("resets expansion when collapsing an expanded panel", async () => {
-    await renderWithPanelOpen();
+    renderWithPanelOpen();
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     // Expanded AIPanel intentionally has no collapse button; narrow first, then collapse.
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
@@ -298,28 +276,27 @@ describe("Workstation persistent files pane", () => {
 
   it("renders dedicated files pane when files view first visited", () => {
     renderWorkstation(workspace({ view: "files" }));
-    expect(screen.getByTestId("files-pane")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("files-pane")).toBeInTheDocument();
     expect(screen.queryByText("generic files pane")).not.toBeInTheDocument();
   });
 
   it("preserves files mount and hides pane when switching views", () => {
     const initial = workspace({ view: "files" });
     const { rerender } = renderWorkstation(initial);
-    expect(screen.getByTestId("files-pane")).toHaveAttribute("data-active", "true");
+    expect(screen.getByTestId("files-pane")).toBeInTheDocument();
 
     rerender(
-      <Ctx.Provider value={workspace({ view: "wiki" })}>
+      <WorkspaceStub value={workspace({ view: "wiki" })}>
         <Workstation cfg={cfg} />
-      </Ctx.Provider>,
+      </WorkspaceStub>,
     );
 
     expect(screen.getByText("wiki pane")).toBeInTheDocument();
-    expect(screen.getByTestId("files-pane")).toHaveAttribute("data-active", "false");
     expect(screen.getByTestId("files-pane").closest("main")).toHaveStyle({ display: "none" });
   });
 
   it("hides files while AI is expanded without unmounting it", async () => {
-    await renderWithPanelOpen(workspace({ view: "files" }));
+    renderWithPanelOpen(workspace({ aiCollapsed: false, view: "files" }));
     await userEvent.click(screen.getByRole("button", { name: "toggle expand" }));
     expect(screen.getByTestId("files-pane")).toBeInTheDocument();
     expect(screen.getByTestId("files-pane").closest("main")).toHaveStyle({ display: "none" });
@@ -332,9 +309,9 @@ describe("Workstation persistent files pane", () => {
 
     const nextCfg = { url: "http://second.test", token: "second" };
     rerender(
-      <Ctx.Provider value={workspace({ view: "files", cfg: nextCfg })}>
+      <WorkspaceStub value={workspace({ view: "files", cfg: nextCfg })}>
         <Workstation cfg={nextCfg} />
-      </Ctx.Provider>,
+      </WorkspaceStub>,
     );
 
     const second = screen.getByTestId("files-pane").closest("main");

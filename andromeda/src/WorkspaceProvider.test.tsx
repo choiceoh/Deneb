@@ -2,21 +2,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { useContext } from "react";
 import { WorkspaceProvider } from "./WorkspaceProvider";
-import { useWorkspace } from "./workspaceContext";
+import { FeedWriteCtx, useAiFeed, useWorkspace } from "./workspaceContext";
 
 const cfg = { url: "http://gateway.test", token: "secret" };
 
 function Probe() {
   const value = useWorkspace();
+  const { aiText, activeResource } = useAiFeed();
+  const feed = useContext(FeedWriteCtx)!;
   return (
     <div>
       <output data-testid="connected">{String(value.connected)}</output>
       <output data-testid="cfg">{`${value.cfg.url}|${value.cfg.token}`}</output>
       <output data-testid="view">{value.view}</output>
+      <output data-testid="tiles">{value.tiles.join(",")}</output>
+      <output data-testid="layouts">{value.layouts.map((l) => `${l.name}:${l.views.join("+")}`).join("|")}</output>
       <output data-testid="pane-target">{value.paneTarget ? JSON.stringify(value.paneTarget) : "none"}</output>
-      <output data-testid="ai-text">{value.aiText}</output>
-      <output data-testid="active-resource">{value.activeResource ?? "none"}</output>
+      <output data-testid="ai-text">{aiText}</output>
+      <output data-testid="active-resource">{activeResource ?? "none"}</output>
       <output data-testid="wiki-target">{value.wikiTarget ?? "none"}</output>
       <output data-testid="sink">{value.noteSink ? "set" : "none"}</output>
       <output data-testid="hidden">{value.hiddenViews.join(",")}</output>
@@ -27,7 +32,9 @@ function Probe() {
       <button onClick={() => value.openPane("todo")}>open todo</button>
       <button onClick={() => value.openPane("files", { path: "/projects/design.md", id: 7 })}>open file target</button>
       <button onClick={value.consumePaneTarget}>consume pane target</button>
-      <button onClick={() => value.registerPane("wiki", "semantic wiki text")}>register pane</button>
+      <button onClick={() => feed.registerPane(value.view, "wiki", "semantic wiki text")}>register pane</button>
+      <button onClick={() => feed.registerPane("wiki", "wiki", "위키 본문")}>register wiki feed</button>
+      <button onClick={() => feed.registerPane("mail", "mail", "메일 목록")}>register mail feed</button>
       <button onClick={() => value.openWiki("projects/deneb.md")}>open wiki</button>
       <button onClick={value.consumeWikiTarget}>consume wiki target</button>
       <button onClick={() => value.setNoteSink(async (text) => text === "ok")}>set sink</button>
@@ -38,6 +45,15 @@ function Probe() {
       <button onClick={() => value.setNotebookTop("folded")}>fold notebook</button>
       <button onClick={() => value.setNotebookTop("expanded")}>expand notebook</button>
       <button onClick={() => value.setCfg({ url: "http://changed.test", token: "changed" })}>set config</button>
+      <button onClick={() => value.splitPane("wiki")}>split wiki</button>
+      <button onClick={() => value.splitPane("mail")}>split mail</button>
+      <button onClick={() => value.splitPane("calendar")}>split calendar</button>
+      <button onClick={() => value.closePane("wiki")}>close wiki</button>
+      <button onClick={() => value.closePane()}>close focused</button>
+      <button onClick={() => value.applyLayout(["wiki", "mail"])}>apply wiki mail layout</button>
+      <button onClick={() => value.saveLayout("아침 루틴")}>save layout</button>
+      <button onClick={() => value.runCommand({ kind: "layout", views: ["wiki", "todo"] })}>run layout command</button>
+      <button onClick={() => value.runCommand({ kind: "open", view: "mail" })}>run open command</button>
     </div>
   );
 }
@@ -162,6 +178,87 @@ describe("WorkspaceProvider core state", () => {
     );
     expect(screen.getByTestId("cfg")).toHaveTextContent("http://second.test|second");
     expect(screen.getByTestId("view")).toHaveTextContent("mail");
+  });
+});
+
+describe("WorkspaceProvider tiled workspace", () => {
+  it("splits into a new focused tile and closes back", async () => {
+    renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "split wiki" }));
+    expect(screen.getByTestId("tiles")).toHaveTextContent("today,wiki");
+    expect(screen.getByTestId("view")).toHaveTextContent("wiki");
+
+    await userEvent.click(screen.getByRole("button", { name: "close wiki" }));
+    expect(screen.getByTestId("tiles")).toHaveTextContent(/^today$/);
+    expect(screen.getByTestId("view")).toHaveTextContent("today");
+  });
+
+  it("setView replaces the focused slot, preserving the split", async () => {
+    renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "split wiki" }));
+    await userEvent.click(screen.getByRole("button", { name: "set mail" }));
+    expect(screen.getByTestId("tiles")).toHaveTextContent("today,mail");
+    expect(screen.getByTestId("view")).toHaveTextContent("mail");
+  });
+
+  it("caps at three tiles by replacing the last non-focused slot", async () => {
+    renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "split wiki" }));
+    await userEvent.click(screen.getByRole("button", { name: "split mail" }));
+    expect(screen.getByTestId("tiles")).toHaveTextContent("today,wiki,mail");
+
+    await userEvent.click(screen.getByRole("button", { name: "split calendar" }));
+    expect(screen.getByTestId("tiles")).toHaveTextContent("today,calendar,mail");
+    expect(screen.getByTestId("view")).toHaveTextContent("calendar");
+  });
+
+  it("persists tiles + focus and restores them on next launch", async () => {
+    const first = renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "split wiki" }));
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("andromeda.tiles") ?? "{}")).toEqual({
+        tiles: ["today", "wiki"],
+        focused: "wiki",
+      }),
+    );
+    first.unmount();
+
+    renderProvider();
+    expect(screen.getByTestId("tiles")).toHaveTextContent("today,wiki");
+    expect(screen.getByTestId("view")).toHaveTextContent("wiki");
+  });
+
+  it("merges visible tile feeds focused-first with 화면 headers", async () => {
+    renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "register wiki feed" }));
+    await userEvent.click(screen.getByRole("button", { name: "register mail feed" }));
+    await userEvent.click(screen.getByRole("button", { name: "apply wiki mail layout" }));
+
+    expect(screen.getByTestId("ai-text")).toHaveTextContent("위키 본문");
+    expect(screen.getByTestId("ai-text")).toHaveTextContent("[분할 화면: 메일]");
+    expect(screen.getByTestId("active-resource")).toHaveTextContent("wiki");
+  });
+
+  it("saves and lists named layouts", async () => {
+    renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "split wiki" }));
+    await userEvent.click(screen.getByRole("button", { name: "save layout" }));
+    expect(screen.getByTestId("layouts")).toHaveTextContent("아침 루틴:today+wiki");
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("andromeda.layouts") ?? "[]")).toEqual([
+        { name: "아침 루틴", views: ["today", "wiki"] },
+      ]),
+    );
+  });
+
+  it("runs workspace commands through the bus", async () => {
+    renderProvider();
+    await userEvent.click(screen.getByRole("button", { name: "run layout command" }));
+    expect(screen.getByTestId("tiles")).toHaveTextContent("wiki,todo");
+
+    await userEvent.click(screen.getByRole("button", { name: "run open command" }));
+    expect(screen.getByTestId("view")).toHaveTextContent("mail");
+    expect(screen.getByTestId("tiles")).toHaveTextContent("mail,todo");
   });
 });
 

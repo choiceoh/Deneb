@@ -3,11 +3,12 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DataProvider } from "@refinedev/core";
 import { fakeProvider, renderWithProviders } from "@/test/util";
-import { useWorkspace } from "@/workspaceContext";
+import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { TodayPane } from "./TodayPane";
 
 function WorkspaceState() {
-  const { view, paneTarget, aiText } = useWorkspace();
+  const { view, paneTarget } = useWorkspace();
+  const { aiText } = useAiFeed();
   return (
     <div>
       <output data-testid="view">{view}</output>
