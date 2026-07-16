@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.91](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.90...andromeda-v0.0.91) (2026-07-16)
+
+
+### ✨ Features
+
+* **andromeda:** 결재 반려 사유·첨부 바이너리·choices 배선 ([#3823](https://github.com/choiceoh/Deneb/issues/3823)) ([0149415](https://github.com/choiceoh/Deneb/commit/0149415f387efc1d8a00ce78df6cdeb986e4be55))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 결재 분석 로딩 문구 — 캐시조회 vs LLM 구분 ([#3828](https://github.com/choiceoh/Deneb/issues/3828)) ([94c0fd0](https://github.com/choiceoh/Deneb/commit/94c0fd0013e7a326a21281c973591909e75b3fb0))
+
 ## [0.0.90](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.89...andromeda-v0.0.90) (2026-07-16)
 
 
