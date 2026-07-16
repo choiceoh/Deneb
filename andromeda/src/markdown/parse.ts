@@ -58,6 +58,16 @@ function cellAlign(spec: string): Align {
   return undefined;
 }
 
+// GFM tables may interrupt a paragraph (GitHub behavior — Amaranth 결재 본문 and
+// chat/feed often put a table right under a caption with no blank line). Same
+// check the native BlockScanner.looksLikeTableStart uses: pipe row + separator
+// with matching cell counts.
+function looksLikeTableStart(line: string, next: string): boolean {
+  if (!line.includes("|") || !next.includes("-")) return false;
+  if (!TABLE_SEP.test(next)) return false;
+  return splitRow(line).length === splitRow(next).length;
+}
+
 // Consume one list (and its nested children) starting at lines[start]. Returns
 // the parsed block plus the index of the first line past it. Items collect their
 // own indented continuation/child lines, which are dedented and parsed as blocks
@@ -180,7 +190,7 @@ export function parseBlocks(src: string): Block[] {
       continue;
     }
     // Table: a pipe row immediately followed by a |:--|--:| separator.
-    if (line.includes("|") && i + 1 < lines.length && TABLE_SEP.test(lines[i + 1]) && lines[i + 1].includes("-")) {
+    if (i + 1 < lines.length && looksLikeTableStart(line, lines[i + 1])) {
       const header = splitRow(line);
       const align = splitRow(lines[i + 1]).map(cellAlign);
       i += 2;
@@ -201,7 +211,8 @@ export function parseBlocks(src: string): Block[] {
       i = next;
       continue;
     }
-    // Paragraph: consume until a blank line or the start of another block.
+    // Paragraph: consume until a blank line or the start of another block
+    // (including a GFM table that interrupts mid-paragraph — native parity).
     const para: string[] = [];
     while (
       i < lines.length &&
@@ -210,7 +221,8 @@ export function parseBlocks(src: string): Block[] {
       !HEADING.test(lines[i]) &&
       !HR.test(lines[i]) &&
       !LIST_ITEM.test(lines[i]) &&
-      !QUOTE.test(lines[i])
+      !QUOTE.test(lines[i]) &&
+      !(i + 1 < lines.length && looksLikeTableStart(lines[i], lines[i + 1]))
     ) {
       para.push(lines[i++]);
     }
