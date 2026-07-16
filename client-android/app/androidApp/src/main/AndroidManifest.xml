@@ -42,13 +42,24 @@
 
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <!-- Share-sheet capture: receive text shared from any app into the Deneb chat. -->
+            <!-- Share-sheet capture: receive text/image/audio/document shared from
+                 any app into the Deneb chat. PDF rides the same document-capture
+                 path as the in-app picker (gateway extraction). -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="audio/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+            </intent-filter>
+            <!-- Multi-image share: several receipt photos / scan pages at once. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
             <meta-data
                 android:name="android.app.shortcuts"
