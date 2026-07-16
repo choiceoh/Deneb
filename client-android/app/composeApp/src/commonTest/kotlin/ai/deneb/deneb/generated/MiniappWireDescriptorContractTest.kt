@@ -145,6 +145,12 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("approvals", "folder"),
         ),
         contract(
+            name = "GroupwareBoardPostResponse",
+            serializer = GroupwareBoardPostResponse.serializer(),
+            empty = GroupwareBoardPostResponse(),
+            fields = listOf("query", "text"),
+        ),
+        contract(
             name = "GroupwareERPListResponse",
             serializer = GroupwareERPListResponse.serializer(),
             empty = GroupwareERPListResponse(),

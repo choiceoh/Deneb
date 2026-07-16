@@ -685,6 +685,22 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "GroupwareBoardPostResponse.query",
+            serializer = GroupwareBoardPostResponse.serializer(),
+            field = "query",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
+            name = "GroupwareBoardPostResponse.text",
+            serializer = GroupwareBoardPostResponse.serializer(),
+            field = "text",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "GroupwareERPListResponse.area",
             serializer = GroupwareERPListResponse.serializer(),
             field = "area",

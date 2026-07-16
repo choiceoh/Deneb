@@ -3,12 +3,14 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.components.DenebChip
+import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.handCursor
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,17 +21,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -86,8 +93,10 @@ internal fun erpTextToMarkdown(raw: String): String {
 }
 
 /**
- * 그룹웨어 ERP 스냅샷 (`miniapp.groupware.erp.list`) — 영역 칩 + 마크다운 결과.
+ * 그룹웨어 ERP 스냅샷 (`miniapp.groupware.erp.list`) — 영역 칩 + 네이티브 행,
+ * 게시판 글 탭 → 본문 시트, 당겨서 새로고침.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DenebGroupwareERPScreen(
     client: DenebGatewayClient,
@@ -99,6 +108,10 @@ fun DenebGroupwareERPScreen(
     var salesPeriod by remember { mutableStateOf("") }
     var text by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var refreshing by remember { mutableStateOf(false) }
+    // Board post sheet: query being fetched → text (null while loading).
+    var boardQuery by remember { mutableStateOf<String?>(null) }
+    var boardText by remember { mutableStateOf<String?>(null) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
@@ -106,9 +119,9 @@ fun DenebGroupwareERPScreen(
     // unqueried auto-fetch would just surface a dependency error.
     fun needsQuery() = selected.key == "people" && query.isBlank()
 
-    suspend fun load() {
+    suspend fun load(clear: Boolean = true) {
         failed = false
-        text = null
+        if (clear) text = null
         if (needsQuery()) return
         val q = if (selected.searchable) query.trim().ifBlank { null } else null
         val folder = if (selected.key == "sales") salesPeriod.ifBlank { null } else null
@@ -126,29 +139,40 @@ fun DenebGroupwareERPScreen(
         load()
     }
 
+    fun openBoardPost(row: ErpBlock.Row) {
+        val q = row.refId.ifBlank { row.title }
+        if (q.isBlank()) return
+        haptics.tap()
+        boardQuery = q
+        boardText = null
+        scope.launch {
+            val resp = client.fetchBoardPost(q)
+            if (boardQuery == q) {
+                boardText = resp?.text ?: "게시글을 불러오지 못했습니다."
+            }
+        }
+    }
+
     DenebScreenScaffold(title = "그룹웨어", onBack = onBack, tabBar = navigationTabBar) {
         Column(Modifier.fillMaxSize()) {
-            Text(
-                "Amaranth ERP 조회 · 결재는 「결재」에서",
-                style = DenebType.meta,
-                color = denebHint(),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
+            // Flat text switcher (design-system view transition, mail 정리본·원문
+            // parity) — a row of bordered 48dp chips read as buttons, not tabs.
             Row(
                 Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 erpAreas.forEach { area ->
-                    DenebChip(
-                        selected = selected.key == area.key,
+                    ErpFlatTab(
+                        label = area.label,
+                        active = selected.key == area.key,
                         onClick = {
                             haptics.tap()
                             selected = area
                         },
-                    ) { Text(area.label, style = DenebType.button) }
+                    )
                 }
             }
             if (selected.key == "sales") {
@@ -156,46 +180,52 @@ fun DenebGroupwareERPScreen(
                     Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(horizontal = 24.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     salesPeriods.forEach { (key, label) ->
-                        DenebChip(
-                            selected = salesPeriod == key,
+                        ErpFlatTab(
+                            label = label,
+                            active = salesPeriod == key,
+                            compact = true,
                             onClick = {
                                 haptics.tap()
                                 salesPeriod = key
                                 scope.launch { load() }
                             },
-                        ) { Text(label, style = DenebType.button) }
+                        )
                     }
                 }
             }
             if (selected.searchable) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = { Text(selected.hint.ifBlank { "검색어" }) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    TextButton(
-                        onClick = {
-                            haptics.tap()
-                            scope.launch { load() }
-                        },
-                    ) { Text("검색") }
-                }
+                // Flat underline search (mail parity) — the boxed OutlinedTextField +
+                // TextButton pair looked like a form dropped into the list.
+                DenebUnderlineSearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = selected.hint.ifBlank { "검색어" },
+                    textStyle = DenebType.rowTitle,
+                    clearable = true,
+                    onSearch = {
+                        haptics.tap()
+                        scope.launch { load() }
+                    },
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+                )
             }
             Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().weight(1f)) {
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = {
+                    haptics.refresh()
+                    scope.launch {
+                        refreshing = true
+                        load(clear = false)
+                        refreshing = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) {
                 val snapshot = text
                 when {
                     failed -> DenebError(
@@ -209,17 +239,90 @@ fun DenebGroupwareERPScreen(
 
                     snapshot == "(데이터 없음)" -> DenebEmpty("결과 없음")
 
-                    else -> ErpSnapshotContent(snapshot)
+                    else -> ErpSnapshotContent(
+                        snapshot = snapshot,
+                        onOpenRow = if (selected.key == "board") ::openBoardPost else null,
+                    )
                 }
             }
         }
+    }
+
+    // 게시판 글 본문 시트 — 목록만 보이고 열 수 없던 화면을 완결시킨다.
+    boardQuery?.let {
+        ModalBottomSheet(onDismissRequest = { boardQuery = null }) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+            ) {
+                val post = boardText
+                if (post == null) {
+                    DenebLoading()
+                } else {
+                    val sections = remember(post) { parseApprovalDocBody(post) }
+                    Text(
+                        sections.title.ifBlank { "게시글" },
+                        style = DenebType.cardTitle,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SelectionContainer {
+                        MarkdownContent(
+                            content = sections.body.ifBlank { post },
+                            modifier = Modifier.fillMaxWidth(),
+                            baseStyle = DenebType.body,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+// Flat text tab (design-system view switcher, mail 정리본·원문 parity): active in
+// the cool primary accent with a short underline, inactive muted — no borders.
+@Composable
+private fun ErpFlatTab(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    compact: Boolean = false,
+) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClickLabel = "$label 조회", role = Role.Button, onClick = onClick)
+            .handCursor()
+            .padding(vertical = 6.dp, horizontal = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            label,
+            style = (if (compact) DenebType.meta else DenebType.rowTitle).copy(
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (active) MaterialTheme.colorScheme.primary else denebHint(),
+        )
+        Spacer(Modifier.height(3.dp))
+        Box(
+            Modifier
+                .width(if (compact) 14.dp else 18.dp)
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(
+                    if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                ),
+        )
     }
 }
 
 // Structured render of the reader snapshot: summary card, section labels, native
 // rows. Falls back to markdown for shapes the parser doesn't recognize.
 @Composable
-private fun ErpSnapshotContent(snapshot: String) {
+private fun ErpSnapshotContent(snapshot: String, onOpenRow: ((ErpBlock.Row) -> Unit)? = null) {
     val blocks = remember(snapshot) { parseErpSnapshot(snapshot) }
     if (blocks.isEmpty()) {
         Column(
@@ -267,8 +370,17 @@ private fun ErpSnapshotContent(snapshot: String) {
                 )
 
                 is ErpBlock.Row -> {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        SelectionContainer {
+                    val rowModifier = if (onOpenRow != null) {
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(onClickLabel = "게시글 열기", role = Role.Button) { onOpenRow(block) }
+                            .handCursor()
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    } else {
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                    }
+                    Column(rowModifier) {
+                        val rowContent: @Composable () -> Unit = {
                             Column {
                                 Text(
                                     block.title,
@@ -288,6 +400,8 @@ private fun ErpSnapshotContent(snapshot: String) {
                                 }
                             }
                         }
+                        // Tappable rows skip SelectionContainer — it swallows taps.
+                        if (onOpenRow != null) rowContent() else SelectionContainer { rowContent() }
                     }
                     if (i < blocks.lastIndex && blocks[i + 1] is ErpBlock.Row) {
                         HorizontalDivider(

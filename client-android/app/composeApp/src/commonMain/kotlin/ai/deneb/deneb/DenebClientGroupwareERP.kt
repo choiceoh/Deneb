@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.deneb.generated.GroupwareBoardPostResponse
 import ai.deneb.deneb.generated.GroupwareERPListResponse
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -21,5 +22,15 @@ suspend fun DenebGatewayClient.fetchERP(
             if (!query.isNullOrBlank()) put("query", query)
             if (limit != null && limit > 0) put("limit", limit)
         },
+    )
+}
+
+/** One 게시판 post body by id/title (`miniapp.groupware.board.get`). Null on failure. */
+suspend fun DenebGatewayClient.fetchBoardPost(query: String): GroupwareBoardPostResponse? {
+    val q = query.trim()
+    if (q.isEmpty()) return null
+    return callRpc(
+        "miniapp.groupware.board.get",
+        buildJsonObject { put("query", q) },
     )
 }

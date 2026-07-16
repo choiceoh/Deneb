@@ -50,6 +50,8 @@ type GroupwareApprovalsDeps struct {
 	Cache   *groupware.ApprovalAnalysisStore
 	// ListERP powers miniapp.groupware.erp.list (stock/po/…/people/board).
 	ListERP func(ctx context.Context, area, folder, query string, limit int) (string, error)
+	// ReadBoard powers miniapp.groupware.board.get (one post body by id/title).
+	ReadBoard func(ctx context.Context, query string) (string, error)
 }
 
 // GroupwareApprovalsMethods returns the miniapp.groupware.* map, or nil when
@@ -71,6 +73,9 @@ func GroupwareApprovalsMethods(deps GroupwareApprovalsDeps) map[string]rpcutil.H
 	}
 	if deps.ListERP != nil {
 		m["miniapp.groupware.erp.list"] = groupwareERPList(deps)
+	}
+	if deps.ReadBoard != nil {
+		m["miniapp.groupware.board.get"] = groupwareBoardGet(deps)
 	}
 	return m
 }
@@ -104,40 +109,40 @@ func groupwareApprovalsList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 			}
 			dayKey = key
 		}
-			docs, err := deps.List(ctx, folder, limit)
-			if err != nil {
-				return rpcerr.WrapDependencyFailed("list groupware approvals", err).Response(req.ID)
-			}
-			// Amaranth "total" rows ship empty status/folder=total, so canAct would
-			// always be false without cross-checking the pending box.
-			pendingByID := approvalPendingIndex(ctx, deps, folder, limit)
-			rows := make([]GroupwareApprovalRow, 0, len(docs))
-			for _, doc := range docs {
-				if dayKey != "" {
-					got, ok := approvalDayKey(doc.Date)
-					if !ok || got != dayKey {
-						continue
-					}
+		docs, err := deps.List(ctx, folder, limit)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("list groupware approvals", err).Response(req.ID)
+		}
+		// Amaranth "total" rows ship empty status/folder=total, so canAct would
+		// always be false without cross-checking the pending box.
+		pendingByID := approvalPendingIndex(ctx, deps, folder, limit)
+		rows := make([]GroupwareApprovalRow, 0, len(docs))
+		for _, doc := range docs {
+			if dayKey != "" {
+				got, ok := approvalDayKey(doc.Date)
+				if !ok || got != dayKey {
+					continue
 				}
-				status := doc.Status
-				canAct := approvalCanAct(doc)
-				if pend, ok := pendingByID[strings.TrimSpace(doc.DocID)]; ok {
-					canAct = true
-					if strings.TrimSpace(status) == "" {
-						status = pend.Status
-					}
-				}
-				rows = append(rows, GroupwareApprovalRow{
-					DocID:   doc.DocID,
-					Title:   doc.Title,
-					DocNo:   doc.DocNo,
-					Drafter: doc.Drafter,
-					Date:    doc.Date,
-					Status:  status,
-					Folder:  doc.Folder,
-					CanAct:  canAct,
-				})
 			}
+			status := doc.Status
+			canAct := approvalCanAct(doc)
+			if pend, ok := pendingByID[strings.TrimSpace(doc.DocID)]; ok {
+				canAct = true
+				if strings.TrimSpace(status) == "" {
+					status = pend.Status
+				}
+			}
+			rows = append(rows, GroupwareApprovalRow{
+				DocID:   doc.DocID,
+				Title:   doc.Title,
+				DocNo:   doc.DocNo,
+				Drafter: doc.Drafter,
+				Date:    doc.Date,
+				Status:  status,
+				Folder:  doc.Folder,
+				CanAct:  canAct,
+			})
+		}
 		return rpcutil.RespondOK(req.ID, GroupwareApprovalsListResponse{
 			Approvals: rows,
 			Folder:    folder,
@@ -311,6 +316,23 @@ func groupwareERPList(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 			Query:  strings.TrimSpace(p.Query),
 			Text:   text,
 		})
+	})
+}
+
+func groupwareBoardGet(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
+	type params struct {
+		Query string `json:"query"`
+	}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		query := strings.TrimSpace(p.Query)
+		if query == "" {
+			return rpcerr.MissingParam("query").Response(req.ID)
+		}
+		text, err := deps.ReadBoard(ctx, query)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("read groupware board post", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, GroupwareBoardPostResponse{Query: query, Text: text})
 	})
 }
 

@@ -273,6 +273,20 @@ func parseBoardSummaries(raw string) ([]BoardSummary, error) {
 	return summaries, nil
 }
 
+// ReadBoardPost fetches one 게시판 post body by id or title keyword (reader
+// area=board action=read).
+func ReadBoardPost(ctx context.Context, cfg Config, query string) (string, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", fmt.Errorf("board query required")
+	}
+	return Run(ctx, cfg, Request{
+		Area:   AreaBoard,
+		Action: ActionRead,
+		Query:  query,
+	})
+}
+
 // ReadApproval logs into Amaranth on srv4 and returns the document text matching notiText.
 // Searches 미결 → 기결 → 수신참조 → 전체결재문서 (folder=all). Empty string = skip / failure.
 func ReadApproval(ctx context.Context, cfg Config, source, notiText string) string {
