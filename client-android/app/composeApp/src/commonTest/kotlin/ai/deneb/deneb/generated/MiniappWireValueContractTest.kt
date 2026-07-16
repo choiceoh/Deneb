@@ -505,6 +505,29 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "GroupwareApprovalAttachmentResponse",
+            serializer = GroupwareApprovalAttachmentResponse.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "docId",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "attachment",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "text",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "docId",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
             name = "GroupwareApprovalGetResponse",
             serializer = GroupwareApprovalGetResponse.serializer(),
             fields = listOf(

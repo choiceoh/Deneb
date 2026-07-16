@@ -207,6 +207,7 @@ var requiredMethods = []string{
 	"miniapp.groupware.approvals.list",
 	"miniapp.groupware.approvals.act",
 	"miniapp.groupware.approvals.get",
+	"miniapp.groupware.approvals.attachment",
 	"miniapp.groupware.approvals.analysis_cached",
 	"miniapp.groupware.approvals.analyze",
 	"miniapp.groupware.erp.list",

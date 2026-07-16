@@ -77,3 +77,13 @@ type GroupwareBoardPostResponse struct {
 	Query string `json:"query"`
 	Text  string `json:"text"`
 }
+
+// GroupwareApprovalAttachmentResponse is miniapp.groupware.approvals.attachment
+// (OCR/extracted text for one selected file — not a binary download).
+//
+//deneb:wire
+type GroupwareApprovalAttachmentResponse struct {
+	DocID      string `json:"docId"`
+	Attachment string `json:"attachment"`
+	Text       string `json:"text"`
+}

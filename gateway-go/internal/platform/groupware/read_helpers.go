@@ -72,3 +72,29 @@ func ListERP(ctx context.Context, cfg Config, area, folder, query string, limit 
 		Limit:  limit,
 	})
 }
+
+// ReadApprovalAttachment downloads one Amaranth attachment (by 1-based index or
+// filename) and returns the reader text (OCR/extracted body or a calm note).
+func ReadApprovalAttachment(ctx context.Context, cfg Config, docID, selector string) (string, error) {
+	docID = strings.TrimSpace(docID)
+	selector = strings.TrimSpace(selector)
+	if docID == "" {
+		return "", fmt.Errorf("doc id required")
+	}
+	if selector == "" {
+		return "", fmt.Errorf("attachment selector required")
+	}
+	out, err := Run(ctx, cfg, Request{
+		Area:       AreaApproval,
+		Action:     ActionAttachment,
+		DocID:      docID,
+		Attachment: selector,
+	})
+	if err != nil {
+		return "", err
+	}
+	if out == "" || strings.HasPrefix(out, "그룹웨어 리더:") || strings.HasPrefix(out, "그룹웨어 읽기 실패") {
+		return "", fmt.Errorf("attachment %s not found for doc %s", selector, docID)
+	}
+	return out, nil
+}

@@ -138,6 +138,14 @@ data class GroupwareApprovalAnalysisOut(
 
 @Immutable
 @Serializable
+data class GroupwareApprovalAttachmentResponse(
+    val docId: String = "",
+    val attachment: String = "",
+    val text: String = "",
+)
+
+@Immutable
+@Serializable
 data class GroupwareApprovalGetResponse(
     val docId: String = "",
     val title: String = "",

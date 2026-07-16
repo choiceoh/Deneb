@@ -41,6 +41,30 @@ function countAttachRows(block: string): number {
   return block.split("\n").filter((l) => /^\s*\d+\.\s/.test(l)).length;
 }
 
+export type ApprovalAttachmentRow = {
+  /** 1-based index as printed by the reader (also a valid RPC selector). */
+  index: number;
+  name: string;
+  meta: string;
+  raw: string;
+};
+
+/** Parse "1. 영수증.pdf · 12KB" rows from the 첨부 block. */
+export function parseAttachmentRows(block: string): ApprovalAttachmentRow[] {
+  const rows: ApprovalAttachmentRow[] = [];
+  for (const line of (block ?? "").split("\n")) {
+    const m = /^\s*(\d+)\.\s+(.+)$/.exec(line);
+    if (!m) continue;
+    const rest = m[2].trim();
+    const parts = rest.split(/\s+·\s+/);
+    const name = (parts[0] ?? rest).trim();
+    const meta = parts.slice(1).join(" · ").trim();
+    if (!name) continue;
+    rows.push({ index: Number(m[1]), name, meta, raw: line.trim() });
+  }
+  return rows;
+}
+
 /** Parse reader blob; unknown shapes fall through with body = full text. */
 export function parseApprovalDocBody(raw: string): ApprovalDocSections {
   const text = (raw ?? "").replace(/\r\n/g, "\n");

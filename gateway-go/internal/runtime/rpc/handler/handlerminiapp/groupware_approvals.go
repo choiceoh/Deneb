@@ -44,12 +44,14 @@ const approvalAnalyzeSystemPrompt = `당신은 Topsolar Amaranth 전자결재 �
 IMPORTANCE: urgent|attention|routine`
 
 // GroupwareApprovalsDeps wires Amaranth list/act/get/analyze. List+Act required;
-// Get/Cache/Analyze optional (get/analyze RPCs register only when present).
+// Get/Cache/Analyze/Attach optional (those RPCs register only when present).
 type GroupwareApprovalsDeps struct {
 	List func(ctx context.Context, folder string, limit int) ([]groupware.ApprovalSummary, error)
 	Act  func(ctx context.Context, docID, decision, comment string) (string, error)
 	// Get fetches one document body; folder is a best-effort box hint ("" = scan).
 	Get func(ctx context.Context, docID, folder string) (body string, err error)
+	// Attach fetches one attachment's extracted text (OCR / parser).
+	Attach func(ctx context.Context, docID, selector string) (text string, err error)
 	// Analyze runs the LLM on title+body. docID/date thread through so the
 	// price-memory loop can file the approved cost onto the deal ledger
 	// idempotently. Nil → analyze RPC returns UNAVAILABLE.
@@ -75,6 +77,9 @@ func GroupwareApprovalsMethods(deps GroupwareApprovalsDeps) map[string]rpcutil.H
 	}
 	if deps.Get != nil {
 		m["miniapp.groupware.approvals.get"] = groupwareApprovalsGet(deps)
+	}
+	if deps.Attach != nil {
+		m["miniapp.groupware.approvals.attachment"] = groupwareApprovalsAttachment(deps)
 	}
 	if deps.Get != nil && deps.Cache != nil {
 		m["miniapp.groupware.approvals.analysis_cached"] = groupwareApprovalsAnalysisCached(deps)
@@ -217,6 +222,32 @@ func groupwareApprovalsGet(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
 			DocID: docID,
 			Title: strings.TrimSpace(p.Title),
 			Body:  body,
+		})
+	})
+}
+
+func groupwareApprovalsAttachment(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc {
+	type params struct {
+		DocID      string `json:"docId"`
+		Attachment string `json:"attachment"`
+	}
+	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		docID := strings.TrimSpace(p.DocID)
+		if docID == "" {
+			return rpcerr.MissingParam("docId").Response(req.ID)
+		}
+		attachment := strings.TrimSpace(p.Attachment)
+		if attachment == "" {
+			return rpcerr.MissingParam("attachment").Response(req.ID)
+		}
+		text, err := deps.Attach(ctx, docID, attachment)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("get groupware approval attachment", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, GroupwareApprovalAttachmentResponse{
+			DocID:      docID,
+			Attachment: attachment,
+			Text:       text,
 		})
 	})
 }

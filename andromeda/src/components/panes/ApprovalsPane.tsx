@@ -3,8 +3,8 @@ import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
 import { APPROVALS_RPC } from "@/resources";
 import { addDays, dayLabel, errText, startOfDay } from "@/format";
-import { analyzeApproval, cachedApprovalAnalysis, fetchApprovalBody } from "@/gateway";
-import { parseApprovalDocBody } from "@/approvalBody";
+import { analyzeApproval, cachedApprovalAnalysis, fetchApprovalAttachment, fetchApprovalBody } from "@/gateway";
+import { parseApprovalDocBody, parseAttachmentRows } from "@/approvalBody";
 import { useAction } from "@/useAction";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -229,7 +229,25 @@ function ApprovalDetail({
   );
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisErr, setAnalysisErr] = useState("");
+  const [attachBusy, setAttachBusy] = useState("");
+  const [attachErr, setAttachErr] = useState("");
+  const [attachPreview, setAttachPreview] = useState<{ name: string; text: string } | null>(null);
   const sections = useMemo(() => parseApprovalDocBody(body ?? ""), [body]);
+  const attachmentRows = useMemo(() => parseAttachmentRows(sections.attachments), [sections.attachments]);
+
+  async function openAttachment(row: { index: number; name: string }) {
+    setAttachBusy(row.name);
+    setAttachErr("");
+    setAttachPreview(null);
+    try {
+      const r = await fetchApprovalAttachment(cfg, docId, String(row.index));
+      setAttachPreview({ name: row.name, text: r?.text?.trim() || "(내용 없음)" });
+    } catch (e) {
+      setAttachErr(errText(e));
+    } finally {
+      setAttachBusy("");
+    }
+  }
 
   async function rerun() {
     setAnalyzing(true);
@@ -381,7 +399,39 @@ function ApprovalDetail({
               </button>
               {attachOpen ? (
                 <div className="mail-body approval-doc-block">
-                  <Markdown text={sections.attachments} />
+                  {attachmentRows.length ? (
+                    <div className="mail-attachments">
+                      {attachmentRows.map((row) => (
+                        <button
+                          key={row.index}
+                          type="button"
+                          className="mail-attachment"
+                          disabled={!connected || Boolean(attachBusy)}
+                          onClick={() => void openAttachment(row)}
+                          title="첨부 내용 열기 (OCR/추출)"
+                        >
+                          <span>{row.name}</span>
+                          <span>{attachBusy === row.name ? "여는 중…" : row.meta || "열기"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <Markdown text={sections.attachments} />
+                  )}
+                  {attachErr ? <div className="mail-card-line error">{attachErr}</div> : null}
+                  {attachPreview ? (
+                    <div className="mail-card" style={{ marginTop: 8 }}>
+                      <div className="mail-card-head">
+                        <span className="mail-card-title">{attachPreview.name}</span>
+                        <button className="row-btn" type="button" onClick={() => setAttachPreview(null)}>
+                          닫기
+                        </button>
+                      </div>
+                      <div className="mail-body approval-doc-block">
+                        <Markdown text={attachPreview.text} />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

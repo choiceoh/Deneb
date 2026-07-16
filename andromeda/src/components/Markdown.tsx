@@ -200,20 +200,59 @@ function renderList(b: Extract<Block, { type: "list" }>, key: string): ReactNode
   );
 }
 
-function renderBlock(b: Block, key: string): ReactNode {
+function ChoiceChips({ text, onChoice }: { text: string; onChoice?: (text: string) => void }) {
+  const options = text
+    .split("\n")
+    .map((l) =>
+      l
+        .trim()
+        .replace(/^[-*]\s+/, "")
+        .trim(),
+    )
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i);
+  if (!options.length) return null;
+  return (
+    <div className="md-choices" role="group" aria-label="선택지">
+      {options.map((opt) =>
+        onChoice ? (
+          <button key={opt} type="button" className="md-choice" onClick={() => onChoice(opt)}>
+            {opt}
+          </button>
+        ) : (
+          <span key={opt} className="md-choice md-choice-static">
+            {opt}
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
+function renderBlock(b: Block, key: string, onChoice?: (text: string) => void): ReactNode {
   switch (b.type) {
     case "heading": {
       const Tag = `h${Math.min(b.level + 2, 6)}` as "h3" | "h4" | "h5" | "h6";
       return <Tag key={key}>{renderInline(b.text, key)}</Tag>;
     }
     case "code":
+      if (b.lang.trim().toLowerCase() === "choices") {
+        return <ChoiceChips key={key} text={b.text} onChoice={onChoice} />;
+      }
       return <CodeBlock key={key} lang={b.lang} text={b.text} />;
     case "hr":
       return <hr key={key} />;
     case "quote":
-      return <blockquote key={key}>{b.children.map((c, j) => renderBlock(c, `${key}-${j}`))}</blockquote>;
+      return <blockquote key={key}>{b.children.map((c, j) => renderBlock(c, `${key}-${j}`, onChoice))}</blockquote>;
     case "list":
       return renderList(b, key);
+    case "details":
+      return (
+        <details key={key} className="md-details" open={b.open || undefined}>
+          <summary>{renderInline(b.summary, `${key}-s`)}</summary>
+          <div className="md-details-body">{b.children.map((c, j) => renderBlock(c, `${key}-${j}`, onChoice))}</div>
+        </details>
+      );
     case "mathBlock":
       return (
         <div
@@ -256,36 +295,43 @@ function MdTable({ block, blockKey }: { block: Extract<Block, { type: "table" }>
     const parts = [cellClass(j), j === 0 && colCount >= 5 ? "md-sticky-col" : undefined].filter(Boolean);
     return parts.length ? parts.join(" ") : undefined;
   };
+  // Scroll wrapper keeps a real `table` layout so `position: sticky` on the
+  // first column works — `display: block` on the table itself breaks sticky.
   return (
-    <table className={cls}>
-      <thead>
-        <tr>
-          {block.header.map((h, j) => (
-            <th key={j} className={colCls(j)} style={cellStyle(j)}>
-              {renderInline(h, `${blockKey}-h${j}`)}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {block.rows.map((row, r) => (
-          <tr key={r}>
-            {row.map((c, j) => (
-              <td key={j} className={colCls(j)} style={cellStyle(j)}>
-                {renderInline(c, `${blockKey}-${r}-${j}`)}
-              </td>
+    <div className="md-table-scroll">
+      <table className={cls}>
+        {block.caption ? (
+          <caption className="md-table-caption">{renderInline(block.caption, `${blockKey}-cap`)}</caption>
+        ) : null}
+        <thead>
+          <tr>
+            {block.header.map((h, j) => (
+              <th key={j} className={colCls(j)} style={cellStyle(j)}>
+                {renderInline(h, `${blockKey}-h${j}`)}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {block.rows.map((row, r) => (
+            <tr key={r}>
+              {row.map((c, j) => (
+                <td key={j} className={colCls(j)} style={cellStyle(j)}>
+                  {renderInline(c, `${blockKey}-${r}-${j}`)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 // Render Markdown text as safe React nodes. Plain text with no Markdown renders
 // as a single <p>, so a bare reply stays a clean paragraph. Runs the native-parity
-// normalizers (HTML blocks → box tables → separator-less pipes) first.
-export function Markdown({ text }: { text: string }) {
+// normalizers (footnotes → HTML blocks → box tables → separator-less pipes) first.
+export function Markdown({ text, onChoice }: { text: string; onChoice?: (text: string) => void }) {
   const blocks = useMemo(() => parseBlocks(normalizeMarkdown(text)), [text]);
-  return <div className="md">{blocks.map((b, i) => renderBlock(b, `b${i}`))}</div>;
+  return <div className="md">{blocks.map((b, i) => renderBlock(b, `b${i}`, onChoice))}</div>;
 }
