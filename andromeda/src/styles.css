@@ -5597,15 +5597,22 @@ button.mail-attachment {
   gap: 2px;
   padding: 10px 14px;
   border: none;
-  border-radius: 10px;
+  /* Segmented strip: only the outer ends get radii; middles stay square so
+   * hover washes tile seamlessly against the hairline separators. */
+  border-radius: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
   transition: background 0.12s ease;
 }
+.kpi:first-child {
+  border-radius: 10px 0 0 10px;
+}
+.kpi:last-child {
+  border-radius: 0 10px 10px 0;
+}
 .kpi + .kpi {
   border-left: 1px solid var(--line);
-  border-radius: 0 10px 10px 0;
 }
 .kpi:hover {
   background: var(--panel-sunken);

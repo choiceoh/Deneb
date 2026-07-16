@@ -224,7 +224,10 @@ export function TodayPane() {
   const unreadMails = mails.filter((m) => m.isUnread).length;
   const kpis = buildKpis({ approvals, workItems: items, events, todos, unreadMails, now });
   const timeline = buildDayTimeline(events, now);
-  const radar = buildDeadlineRadar(digests, todos, now);
+  // Full radar for honest counts; the card shows the top slice (Brief.total
+  // contract — header count = 전체, 표시만 캡).
+  const radarAll = buildDeadlineRadar(digests, todos, now);
+  const radar = radarAll.slice(0, 8);
 
   const briefs: Brief[] = [
     {
@@ -262,7 +265,7 @@ export function TodayPane() {
       view: "progress",
       empty: "",
       query: prog.query,
-      total: radar.length,
+      total: radarAll.length,
       lines: [],
     },
     {
@@ -395,7 +398,8 @@ export function TodayPane() {
       }
       if (b.key === "radar") {
         const t = radarText(radar);
-        return t ? `[마감 레이더]\n${t}` : "";
+        const more = radarAll.length > radar.length ? `\n- …외 ${radarAll.length - radar.length}건` : "";
+        return t ? `[마감 레이더]\n${t}${more}` : "";
       }
       return sectionText(b);
     })

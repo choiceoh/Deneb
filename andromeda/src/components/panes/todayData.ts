@@ -216,31 +216,37 @@ function startOfDayMs(ms: number): number {
 // Best-effort parse of a digest's free-form due string. Accepts RFC3339/ISO
 // dates and Korean "M월 D일" (nearest future occurrence). Anything else → null
 // (the radar shows only what it can honestly place on a calendar).
+// A real calendar day — new Date(y, m, d) silently NORMALIZES overflow
+// ("13월 40일" would roll forward), so accept only components that round-trip.
+function ymdMs(year: number, month: number, day: number): number | null {
+  const d = new Date(year, month - 1, day);
+  const ok = d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+  return ok ? d.getTime() : null;
+}
+
 export function parseDueMs(raw: string | undefined, now: number): number | null {
   if (!raw) return null;
   const s = raw.trim();
   const iso = s.match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
-  if (iso) {
-    const t = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])).getTime();
-    return Number.isNaN(t) ? null : t;
-  }
+  if (iso) return ymdMs(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   const kr = s.match(/(?:(\d{4})년\s*)?(\d{1,2})월\s*(\d{1,2})일/);
   if (kr) {
     const year = kr[1] ? Number(kr[1]) : new Date(now).getFullYear();
-    let t = new Date(year, Number(kr[2]) - 1, Number(kr[3])).getTime();
+    let t = ymdMs(year, Number(kr[2]), Number(kr[3]));
     // Un-yeared dates more than ~6 months past roll to next year (a "1월 10일"
     // seen in December means the coming January).
-    if (!kr[1] && t < startOfDayMs(now) - 180 * DAY_MS)
-      t = new Date(year + 1, Number(kr[2]) - 1, Number(kr[3])).getTime();
-    return Number.isNaN(t) ? null : t;
+    if (t != null && !kr[1] && t < startOfDayMs(now) - 180 * DAY_MS) t = ymdMs(year + 1, Number(kr[2]), Number(kr[3]));
+    return t;
   }
   const parsed = Date.parse(s);
   return Number.isNaN(parsed) ? null : parsed;
 }
 
 // Merge project-digest deadlines and open todo due dates into one D-day-sorted
-// radar. Window: overdue (kept, most urgent first) through +30 days.
-export function buildDeadlineRadar(digests: ProjectDigest[], todos: Todo[], now: number, cap = 8): DeadlineEntry[] {
+// radar. Window: overdue (kept, most urgent first) through +30 days. Returns
+// the FULL list — display truncation is the card's job, so header counts stay
+// honest (Brief.total contract).
+export function buildDeadlineRadar(digests: ProjectDigest[], todos: Todo[], now: number): DeadlineEntry[] {
   const today = startOfDayMs(now);
   const out: DeadlineEntry[] = [];
 
@@ -250,7 +256,9 @@ export function buildDeadlineRadar(digests: ProjectDigest[], todos: Todo[], now:
     const dday = Math.round((startOfDayMs(ms) - today) / DAY_MS);
     if (dday > 30) continue;
     out.push({
-      key: `p:${d.code ?? d.project}`,
+      // path is the stable unique identity other panes key on; code/project can
+      // collide across digests.
+      key: `p:${d.path ?? d.code ?? d.project}`,
       title: d.project,
       kind: "프로젝트",
       dday,
@@ -275,7 +283,7 @@ export function buildDeadlineRadar(digests: ProjectDigest[], todos: Todo[], now:
   }
 
   out.sort((a, b) => a.dday - b.dday || a.title.localeCompare(b.title));
-  return out.slice(0, cap);
+  return out;
 }
 
 export function ddayLabel(dday: number): string {

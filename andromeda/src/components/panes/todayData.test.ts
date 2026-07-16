@@ -106,6 +106,12 @@ describe("parseDueMs", () => {
     expect(parseDueMs(undefined, NOW)).toBeNull();
   });
 
+  it("rejects overflow components instead of letting Date normalize them", () => {
+    expect(parseDueMs("2026-13-40", NOW)).toBeNull();
+    expect(parseDueMs("2026-02-30", NOW)).toBeNull();
+    expect(parseDueMs("13월 40일", NOW)).toBeNull();
+  });
+
   it("rolls an un-yeared past date into next year", () => {
     const december = new Date(2026, 11, 20).getTime();
     expect(parseDueMs("1월 10일", december)).toBe(new Date(2027, 0, 10).getTime());
@@ -133,12 +139,21 @@ describe("buildDeadlineRadar", () => {
     expect(radarText(radar)).toContain("D+1 [할일] 서류 제출");
   });
 
-  it("caps the list", () => {
+  it("returns the FULL list — display truncation is the card's job (honest totals)", () => {
     const todos: Todo[] = Array.from({ length: 12 }, (_, i) => ({
       id: i,
       title: `t${i}`,
       due: new Date(2026, 6, 18 + (i % 5)).toISOString(),
     }));
-    expect(buildDeadlineRadar([], todos, NOW, 8)).toHaveLength(8);
+    expect(buildDeadlineRadar([], todos, NOW)).toHaveLength(12);
+  });
+
+  it("keys project entries by path first so same-named digests don't collide", () => {
+    const digests: ProjectDigest[] = [
+      { project: "증축", due: "2026-07-20", path: "프로젝트/A/증축.md" },
+      { project: "증축", due: "2026-07-21", path: "프로젝트/B/증축.md" },
+    ];
+    const keys = buildDeadlineRadar(digests, [], NOW).map((e) => e.key);
+    expect(new Set(keys).size).toBe(2);
   });
 });
