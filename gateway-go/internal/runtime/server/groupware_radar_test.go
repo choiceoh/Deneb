@@ -12,26 +12,23 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 )
 
-func TestFormatApprovalAnalysisFeed(t *testing.T) {
-	doc := groupware.ApprovalSummary{
-		DocID: "99178", Title: "구매 품의", DocNo: "EAP-42", Drafter: "홍길동",
-		Date: "2026-07-16", Status: "결재대기",
+func TestApprovalAnalysisGlanceAndPriority(t *testing.T) {
+	analysis := "**요지** — 구매 단가 확인 필요\n**핵심**\n- 금액 3억\nIMPORTANCE: attention"
+	body := stripApprovalImportanceMarker(analysis)
+	if got := approvalAnalysisGlance(body); got != "구매 단가 확인 필요" {
+		t.Fatalf("glance = %q", got)
 	}
-	rec := &groupware.ApprovalAnalysisRecord{
-		DocID: "99178", Title: "구매 품의", Drafter: "홍길동", Date: "2026-07-16",
-		Analysis: "요지: 구매\nIMPORTANCE: attention\n핵심: 단가 확인", Importance: "attention",
+	if strings.Contains(body, "IMPORTANCE:") {
+		t.Fatal("IMPORTANCE should be stripped from body")
 	}
-	got := formatApprovalAnalysisFeed(doc, rec)
-	for _, want := range []string{
-		"## 구매 품의", "기안 홍길동", "2026-07-16", "EAP-42", "중요도 attention",
-		"요지: 구매", "핵심: 단가 확인",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("feed missing %q:\n%s", want, got)
-		}
+	if approvalImportancePriority("urgent") != workfeed.PriorityUrgent {
+		t.Fatal("urgent priority")
 	}
-	if strings.Contains(got, "IMPORTANCE:") {
-		t.Fatalf("IMPORTANCE marker should be stripped:\n%s", got)
+	if approvalImportancePriority("attention") != workfeed.PriorityHigh {
+		t.Fatal("attention priority")
+	}
+	if approvalImportancePriority("routine") != workfeed.PriorityLow {
+		t.Fatal("routine priority")
 	}
 }
 
