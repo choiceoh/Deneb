@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -325,5 +326,81 @@ func TestRadarEscalationFailureRetriesAndStateMigrationPreservesAge(t *testing.T
 	}
 	if attempts != 2 {
 		t.Fatalf("attempts %d", attempts)
+	}
+}
+
+func TestRadarListFailureStreakAlertsOnce(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	alerts := 0
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return radarMonday },
+		List: func(context.Context, Config, string, int) ([]ApprovalSummary, error) {
+			return nil, errors.New("exit status 1")
+		},
+		OnListFailed: func(_ context.Context, folder string, streak int, err error) error {
+			alerts++
+			if folder != "pending" {
+				t.Fatalf("folder=%q", folder)
+			}
+			if streak != RadarListFailAlertAfter {
+				t.Fatalf("streak=%d", streak)
+			}
+			if err == nil || !strings.Contains(err.Error(), "exit status 1") {
+				t.Fatalf("err=%v", err)
+			}
+			return nil
+		},
+	})
+	for i := 0; i < RadarListFailAlertAfter; i++ {
+		if err := radar.Run(context.Background()); err == nil {
+			t.Fatal("expected list failure")
+		}
+	}
+	if alerts != 1 {
+		t.Fatalf("alerts=%d want 1", alerts)
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.ListFailAlerted || state.ListFailStreak != RadarListFailAlertAfter {
+		t.Fatalf("state=%+v", state)
+	}
+	// Further failures stay quiet.
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected list failure")
+	}
+	if alerts != 1 {
+		t.Fatalf("alerts after quiet=%d", alerts)
+	}
+}
+
+func TestRadarListFailureClearsOnSuccess(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	fail := true
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return radarMonday },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if fail {
+				return nil, errors.New("boom")
+			}
+			return nil, nil
+		},
+		OnPending:  func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+	_ = radar.Run(context.Background())
+	fail = false
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ListFailStreak != 0 || state.ListFailAlerted || state.LastListError != "" {
+		t.Fatalf("uncleared failure state: %+v", state)
 	}
 }
