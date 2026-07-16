@@ -120,6 +120,13 @@ func (s *Server) initAndListen(ctx context.Context) (net.Listener, error) {
 	// then re-enqueue any runs that were interrupted by a crash or restart.
 	// Both phases run in one goroutine so the ordering is fixed — auto-resume
 	// reads the sessions that restoreAndWakeSessions just populated.
+	// Keep conversation titles durable across the frequent hot-swap restarts:
+	// a periodic sweep persists session labels to the sidecar store that
+	// restoreAndWakeSessions reads back (session_labels.go). Started here — not
+	// inside restore — so labels of sessions created AFTER startup persist even
+	// when nothing was restored.
+	s.startSessionLabelPersistence()
+
 	s.safeGo("session-restore", func() {
 		s.restoreAndWakeSessions(ctx)
 		// Restore the persisted per-session prompt snapshots into the live

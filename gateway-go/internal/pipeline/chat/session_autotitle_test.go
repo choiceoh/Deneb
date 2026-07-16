@@ -13,6 +13,8 @@ func TestCleanSessionTitleNormalizesRawText(t *testing.T) {
 	}{
 		{"plain", "세금계산서 정리", "세금계산서 정리"},
 		{"strips 제목 prefix", "제목: 오늘 일정 요약", "오늘 일정 요약"},
+		{"strips echoed speaker tag", "사용자: 견적 검토 요청", "견적 검토 요청"},
+		{"strips echoed assistant tag", "어시스턴트: 견적 검토 결과", "견적 검토 결과"},
 		{"strips wrapping quotes", "\"메일 분석 결과\"", "메일 분석 결과"},
 		{"strips smart quotes", "“프로젝트 현황”", "프로젝트 현황"},
 		{"first line only", "회의록 정리\n추가 설명은 무시", "회의록 정리"},

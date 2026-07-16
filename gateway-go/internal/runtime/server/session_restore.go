@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 )
 
 // restoreAndWakeSessions scans the transcript directory for persisted user
@@ -29,6 +30,15 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 		}
 		return
 	}
+
+	// Stored conversation titles survive the restart (the manager is in-memory
+	// and hot-swap restarts are frequent); sessions the store doesn't know get
+	// queued for a one-shot title backfill below. See session_labels.go.
+	storedLabels := map[string]string{}
+	if path, pathErr := sessionLabelStorePath(); pathErr == nil {
+		storedLabels = loadSessionLabels(path)
+	}
+	var untitled []string
 
 	var restored int
 	for _, entry := range entries {
@@ -56,11 +66,17 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 			updatedAt = time.Now().UnixMilli()
 		}
 
+		label := storedLabels[sessionKey]
+		if label == "" && chat.IsAutoTitleSessionKey(sessionKey) {
+			untitled = append(untitled, sessionKey)
+		}
+
 		if err := s.sessions.Set(&session.Session{
 			Key:       sessionKey,
 			Kind:      session.KindDirect,
 			Status:    session.StatusDone,
 			Channel:   channel,
+			Label:     label,
 			UpdatedAt: updatedAt,
 		}); err != nil {
 			s.logger.Warn("session restore: failed to restore session",
@@ -69,6 +85,8 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 		}
 		restored++
 	}
+
+	s.backfillSessionTitles(transcriptDir, sortSessionKeysNewestFirst(transcriptDir, untitled))
 
 	if restored == 0 {
 		return
