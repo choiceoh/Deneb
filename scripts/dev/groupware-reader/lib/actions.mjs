@@ -968,6 +968,29 @@ export function resolveSalesPeriod(folder = "", query = "", now = new Date()) {
       label: `${ly}년 (전년)`,
     };
   }
+  // 전년동기: 작년 1/1 ~ 작년 오늘 날짜 — YTD 와 YoY 로 맞비교하는 창.
+  if (["yoy", "전년동기", "전년동기간"].includes(key)) {
+    const ly = y - 1;
+    return {
+      from: ymd(ly, 1, 1),
+      to: ymd(ly, m, d),
+      label: `${ly}년 동기 (${ymdDash(ymd(ly, 1, 1))} ~ ${ymdDash(ymd(ly, m, d))})`,
+    };
+  }
+  if (["h1", "상반기"].includes(key)) {
+    return {
+      from: ymd(y, 1, 1),
+      to: ymd(y, 6, 30),
+      label: `${y}년 상반기`,
+    };
+  }
+  if (["h2", "하반기"].includes(key)) {
+    return {
+      from: ymd(y, 7, 1),
+      to: ymd(y, 12, 31),
+      label: `${y}년 하반기`,
+    };
+  }
   // default ytd
   return {
     from: ymd(y, 1, 1),
@@ -1028,8 +1051,6 @@ export async function summarySales(folder = "ytd", query = "") {
     ? r.json.resultData
     : r.json?.resultData?.data || [];
   const supply = sumField(rows, "clsgAm");
-  const vat = sumField(rows, "clsvAm");
-  const total = sumField(rows, "clshAm");
   const qty = sumField(rows, "clsQt");
 
   // Top by item (aggregate lines) — supply only
@@ -1056,25 +1077,19 @@ export async function summarySales(folder = "ytd", query = "") {
     .slice(0, 8)
     .map((x, i) => `${i + 1}. ${x.nm} · ${formatWon(x.am)} · 수량 ${Number(x.qt).toLocaleString("ko-KR")} · 라인 ${x.lines}${x.itemCd ? ` · ${x.itemCd}` : ""}`);
 
+  // 공급가액 single-figure discipline: VAT/합계 blocks and the API-source footer
+  // read as noise on the operator surface, so they stay out (2026-07-16 요청).
   const lines = [
-    "매출마감 요약 (영업관리 · Amaranth · 공급가액 기준)",
+    "매출",
     `기간: ${period.label}`,
     `건수: ${rows.length.toLocaleString("ko-KR")}`,
     `공급가액: ${formatWon(supply)}`,
     `수량합: ${qty.toLocaleString("ko-KR")}`,
-    "",
-    "참고(부가세 포함 합계는 보통 쓰지 않음):",
-    `부가세: ${formatWon(vat)}`,
-    `합계: ${formatWon(total)}`,
   ];
   if (top.length) {
     lines.push("", "공급가액 상위 항목:");
     lines.push(...top);
   }
-  lines.push(
-    "",
-    "출처: POST /logis/blg0070/0lo00001 · 필드는 clsgAm(공급가액). 재무제표·원장이 아님.",
-  );
   return lines.join("\n");
 }
 
@@ -1308,13 +1323,28 @@ export function unitPrices(row) {
 function prepareErpQuery(query) {
   const view = parseErpView(query);
   const split = splitErpQuery(view.query);
-  const expanded = expandItemFilter(split.filter);
-  return { mode: view.mode, ...split, expanded };
+  // `전체`/`all` opts out of the default 모듈·인버터 scope without text-matching.
+  const all = /^(전체|all)$/i.test(split.filter);
+  const filter = all ? "" : split.filter;
+  const expanded = expandItemFilter(filter);
+  return { mode: view.mode, periodQuery: split.periodQuery, filter, expanded, scopeDefault: !all && !filter };
+}
+
+/** Operator surface default: 모듈(M-)·인버터(I-)만. 검색어/`전체`는 전 품목. */
+export function applyDefaultItemScope(rows, scoped) {
+  if (!scoped) return rows;
+  return (rows || []).filter((x) => /^(m-|i-)/i.test(String(x?.itemCd || "")));
+}
+
+function scopeNote(scoped, filtNote) {
+  if (filtNote) return ` · 필터: ${filtNote}`;
+  if (scoped) return " · 필터: 모듈·인버터(기본 — 전체는 query=전체)";
+  return "";
 }
 
 /** 현재고현황 — POST /purchase/pom0010/0pu00000 (품목 집계, 창고 합산) */
 export async function listStock(folder = "ytd", query = "", limit = 20) {
-  const { filter, expanded } = prepareErpQuery(query);
+  const { filter, expanded, scopeDefault } = prepareErpQuery(query);
   const period = resolveErpPeriod(folder || "ytd", "");
   const yyyy = period.from.slice(0, 4);
   const body = {
@@ -1343,8 +1373,11 @@ export async function listStock(folder = "ytd", query = "", limit = 20) {
   };
   const r = await apiPost("/purchase/pom0010/0pu00000", body);
   assertOk(r, "현재고");
-  const raw = rowsOf(r.json).filter((x) =>
-    matchItemFilter(x, filter, ["itemCd", "itemNm", "itemDc", "itemgrpNm", "whNm", "lcNm", "lNm", "mNm"]),
+  const raw = applyDefaultItemScope(
+    rowsOf(r.json).filter((x) =>
+      matchItemFilter(x, filter, ["itemCd", "itemNm", "itemDc", "itemgrpNm", "whNm", "lcNm", "lNm", "mNm"]),
+    ),
+    scopeDefault,
   );
   const rows = aggregateStockByItem(raw).filter((x) => x.jegoQt !== 0 || x.gayongQt !== 0);
   const shown = rows.slice(0, capLimit(limit));
@@ -1352,7 +1385,7 @@ export async function listStock(folder = "ytd", query = "", limit = 20) {
   const lines = renderHeader(
     "현재고 요약 (구매/자재 · Amaranth · 품목 집계)",
     [
-      `기준연도: ${yyyy}${filtNote ? ` · 필터: ${filtNote}` : ""}`,
+      `기준연도: ${yyyy}${scopeNote(scopeDefault, filtNote)}`,
       `원본행: ${raw.length.toLocaleString("ko-KR")} · 집계품목: ${rows.length.toLocaleString("ko-KR")} · 재고수량합: ${fmtQty(sumField(rows, "jegoQt"))}`,
     ],
     "재고 상위(창고 합산):",
@@ -1394,7 +1427,7 @@ function formatRawLine(i, x, { nmFields, amtField, qtyField, dtField }) {
 
 /** 발주현황 — POST /purchase/poc0030/0pu00001 */
 export async function listPurchaseOrders(folder = "ytd", query = "", limit = 20) {
-  const { mode, periodQuery, filter, expanded } = prepareErpQuery(query);
+  const { mode, periodQuery, filter, expanded, scopeDefault } = prepareErpQuery(query);
   const period = resolveErpPeriod(folder || "ytd", periodQuery);
   const body = {
     ...emptyPeriodBody(),
@@ -1429,8 +1462,11 @@ export async function listPurchaseOrders(folder = "ytd", query = "", limit = 20)
   };
   const r = await apiPost("/purchase/poc0030/0pu00001", body);
   assertOk(r, "발주현황");
-  const raw = rowsOf(r.json).filter((x) =>
-    matchItemFilter(x, filter, ["itemCd", "itemNm", "trNm", "poNb", "plnNm", "deptNm", "itemgrpNm"]),
+  const raw = applyDefaultItemScope(
+    rowsOf(r.json).filter((x) =>
+      matchItemFilter(x, filter, ["itemCd", "itemNm", "trNm", "poNb", "plnNm", "deptNm", "itemgrpNm"]),
+    ),
+    scopeDefault,
   );
   const amtField = raw.some((x) => x.pohAm != null) ? "pohAm" : raw.some((x) => x.pogAm != null) ? "pogAm" : "exchAm";
   const rows = mode === "lines" ? null : aggregateByItem(raw, { qtyField: "poQt", amtField });
@@ -1442,7 +1478,7 @@ export async function listPurchaseOrders(folder = "ytd", query = "", limit = 20)
   const lines = renderHeader(
     `발주현황 요약 (구매/자재 · Amaranth · 공급가액 우선 · ${mode === "lines" ? "전표라인" : "품목 집계"})`,
     [
-      `기간: ${period.label}${filtNote ? ` · 필터: ${filtNote}` : ""}`,
+      `기간: ${period.label}${scopeNote(scopeDefault, filtNote)}`,
       `라인: ${raw.length.toLocaleString("ko-KR")}${mode === "items" ? ` · 집계품목: ${rows.length.toLocaleString("ko-KR")}` : ""} · 발주수량합: ${fmtQty(sumField(raw, "poQt"))} · 금액합: ${formatWon(sumField(raw, amtField))}`,
     ],
     mode === "lines" ? "금액 상위(라인):" : "금액 상위(품목 합산):",
@@ -1463,7 +1499,7 @@ export async function listPurchaseOrders(folder = "ytd", query = "", limit = 20)
 
 /** 입고현황 — POST /purchase/pof0020/0pu00002 */
 export async function listReceiving(folder = "month", query = "", limit = 20) {
-  const { mode, periodQuery, filter, expanded } = prepareErpQuery(query);
+  const { mode, periodQuery, filter, expanded, scopeDefault } = prepareErpQuery(query);
   const period = resolveErpPeriod(folder || "month", periodQuery);
   const body = {
     readType: "data",
@@ -1505,8 +1541,11 @@ export async function listReceiving(folder = "month", query = "", limit = 20) {
   };
   const r = await apiPost("/purchase/pof0020/0pu00002", body);
   assertOk(r, "입고현황");
-  const raw = rowsOf(r.json).filter((x) =>
-    matchItemFilter(x, filter, ["itemCd", "itemNm", "trNm", "rcvNb", "plnNm", "whNm", "itemgrpNm"]),
+  const raw = applyDefaultItemScope(
+    rowsOf(r.json).filter((x) =>
+      matchItemFilter(x, filter, ["itemCd", "itemNm", "trNm", "rcvNb", "plnNm", "whNm", "itemgrpNm"]),
+    ),
+    scopeDefault,
   );
   const amtField = "rcvgAm";
   const rows = mode === "lines" ? null : aggregateByItem(raw, { qtyField: "rcvQt", amtField });
@@ -1518,7 +1557,7 @@ export async function listReceiving(folder = "month", query = "", limit = 20) {
   const lines = renderHeader(
     `입고현황 요약 (구매/자재 · Amaranth · 공급가액 · ${mode === "lines" ? "전표라인" : "품목 집계"})`,
     [
-      `기간: ${period.label}${filtNote ? ` · 필터: ${filtNote}` : ""}`,
+      `기간: ${period.label}${scopeNote(scopeDefault, filtNote)}`,
       `라인: ${raw.length.toLocaleString("ko-KR")}${mode === "items" ? ` · 집계품목: ${rows.length.toLocaleString("ko-KR")}` : ""} · 입고수량합: ${fmtQty(sumField(raw, "rcvQt"))} · 공급가액합: ${formatWon(sumField(raw, amtField))}`,
     ],
     mode === "lines" ? "금액 상위(라인):" : "금액 상위(품목 합산):",
@@ -1539,7 +1578,7 @@ export async function listReceiving(folder = "month", query = "", limit = 20) {
 
 /** 출고현황 — POST /logis/blf0050/0lo00001 */
 export async function listShipments(folder = "month", query = "", limit = 20) {
-  const { mode, periodQuery, filter, expanded } = prepareErpQuery(query);
+  const { mode, periodQuery, filter, expanded, scopeDefault } = prepareErpQuery(query);
   const period = resolveErpPeriod(folder || "month", periodQuery);
   const body = {
     readType: "data",
@@ -1584,8 +1623,11 @@ export async function listShipments(folder = "month", query = "", limit = 20) {
   };
   const r = await apiPost("/logis/blf0050/0lo00001", body);
   assertOk(r, "출고현황");
-  const raw = rowsOf(r.json).filter((x) =>
-    matchItemFilter(x, filter, ["itemCd", "itemNm", "trNm", "isuNb", "plnNm", "whNm", "itemgrpNm", "attrNm"]),
+  const raw = applyDefaultItemScope(
+    rowsOf(r.json).filter((x) =>
+      matchItemFilter(x, filter, ["itemCd", "itemNm", "trNm", "isuNb", "plnNm", "whNm", "itemgrpNm", "attrNm"]),
+    ),
+    scopeDefault,
   );
   const amtField = raw.some((x) => x.isugAm != null) ? "isugAm" : "exchAm";
   const rows = mode === "lines" ? null : aggregateByItem(raw, { qtyField: "isuQt", amtField });
@@ -1597,7 +1639,7 @@ export async function listShipments(folder = "month", query = "", limit = 20) {
   const lines = renderHeader(
     `출고현황 요약 (영업관리 · Amaranth · 공급가액 · ${mode === "lines" ? "전표라인" : "품목 집계"})`,
     [
-      `기간: ${period.label}${filtNote ? ` · 필터: ${filtNote}` : ""}`,
+      `기간: ${period.label}${scopeNote(scopeDefault, filtNote)}`,
       `라인: ${raw.length.toLocaleString("ko-KR")}${mode === "items" ? ` · 집계품목: ${rows.length.toLocaleString("ko-KR")}` : ""} · 출고수량합: ${fmtQty(sumField(raw, "isuQt"))} · 금액합: ${formatWon(sumField(raw, amtField))}`,
     ],
     mode === "lines" ? "금액 상위(라인):" : "금액 상위(품목 합산):",
@@ -1625,7 +1667,7 @@ export async function listShipments(folder = "month", query = "", limit = 20) {
 
 /** 품목단가등록 — POST /logis/bsb0010/0lo00001 */
 export async function listItemPrices(folder = "", query = "", limit = 20) {
-  const { filter, expanded } = prepareErpQuery(query);
+  const { filter, expanded, scopeDefault } = prepareErpQuery(query);
   const body = {
     pagingDirection: "",
     rowCountPerPage: 2500,
@@ -1646,8 +1688,11 @@ export async function listItemPrices(folder = "", query = "", limit = 20) {
   };
   const r = await apiPost("/logis/bsb0010/0lo00001", body);
   assertOk(r, "품목단가");
-  let rows = rowsOf(r.json).filter((x) =>
-    matchItemFilter(x, filter, ["itemCd", "itemNm", "itemDc", "attrNm", "itemgrpNm"]),
+  let rows = applyDefaultItemScope(
+    rowsOf(r.json).filter((x) =>
+      matchItemFilter(x, filter, ["itemCd", "itemNm", "itemDc", "attrNm", "itemgrpNm"]),
+    ),
+    scopeDefault,
   );
   rows = [...rows].sort((a, b) => unitPrices(b).any - unitPrices(a).any);
   if (!filter) {
@@ -1659,7 +1704,7 @@ export async function listItemPrices(folder = "", query = "", limit = 20) {
   const lines = renderHeader(
     "품목단가 요약 (물류공통 · Amaranth · 구매/표준/기준)",
     [
-      filtNote ? `필터: ${filtNote}` : "필터: (단가 있는 품목 상위)",
+      filtNote ? `필터: ${filtNote}` : "필터: 모듈·인버터 단가 상위 (전체는 query=전체)",
       `매칭: ${rows.length.toLocaleString("ko-KR")}건`,
     ],
     "단가 목록:",

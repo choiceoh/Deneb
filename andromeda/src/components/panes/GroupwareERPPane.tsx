@@ -17,13 +17,13 @@ const AREAS: { id: string; label: string; queryable?: boolean; hint?: string }[]
   { id: "board", label: "게시판" },
 ];
 
-// 매출 기간 (reader sales folder → 요약 집계; 빈 값 = 최근 목록).
+// 매출 기간 (reader sales folder). 기본(빈 값) = 연초~오늘 누계 — ytd/올해/오늘
+// 탭은 중복이라 뺐고, 비교에 실제로 쓰는 전년동기·상반기를 올렸다 (2026-07-16).
 const SALES_PERIODS: { id: string; label: string }[] = [
-  { id: "", label: "최근" },
-  { id: "today", label: "오늘" },
+  { id: "", label: "누계" },
   { id: "month", label: "이번 달" },
-  { id: "ytd", label: "연초부터" },
-  { id: "year", label: "올해" },
+  { id: "h1", label: "상반기" },
+  { id: "yoy", label: "전년동기" },
   { id: "last_year", label: "작년" },
 ];
 

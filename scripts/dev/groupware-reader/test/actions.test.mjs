@@ -20,6 +20,7 @@ import {
   resolveSalesPeriod,
   resolveErpPeriod,
   formatWon,
+  applyDefaultItemScope,
   splitErpQuery,
   parseErpView,
   capLimit,
@@ -295,6 +296,32 @@ test("resolveSalesPeriod month/today/last_year", () => {
   assert.equal(resolveSalesPeriod("today", "", now).from, "20260716");
   assert.equal(resolveSalesPeriod("작년", "", now).from, "20250101");
   assert.equal(resolveSalesPeriod("작년", "", now).to, "20251231");
+});
+
+test("applyDefaultItemScope keeps 모듈·인버터 only when scoped", () => {
+  const rows = [
+    { itemCd: "M-LR0615-03" },
+    { itemCd: "I-OP3000-01" },
+    { itemCd: "C-CABLE-01" },
+    { itemCd: "S-공사-00001" },
+  ];
+  assert.deepEqual(
+    applyDefaultItemScope(rows, true).map((x) => x.itemCd),
+    ["M-LR0615-03", "I-OP3000-01"],
+  );
+  assert.equal(applyDefaultItemScope(rows, false).length, 4);
+});
+
+test("resolveSalesPeriod yoy/h1/h2 comparison windows", () => {
+  const now = new Date("2026-07-16T01:00:00+09:00");
+  const yoy = resolveSalesPeriod("yoy", "", now);
+  assert.equal(yoy.from, "20250101");
+  assert.equal(yoy.to, "20250716");
+  assert.match(yoy.label, /동기/);
+  const h1 = resolveSalesPeriod("상반기", "", now);
+  assert.deepEqual({ from: h1.from, to: h1.to }, { from: "20260101", to: "20260630" });
+  const h2 = resolveSalesPeriod("h2", "", now);
+  assert.deepEqual({ from: h2.from, to: h2.to }, { from: "20260701", to: "20261231" });
 });
 
 test("resolveSalesPeriod explicit range", () => {
