@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.88](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.87...andromeda-v0.0.88) (2026-07-16)
+
+
+### ✨ Features
+
+* **groupware:** approval body cache + folder hint + wiki log of analyses ([#3796](https://github.com/choiceoh/Deneb/issues/3796)) ([d8eda32](https://github.com/choiceoh/Deneb/commit/d8eda32ac0425e1d42f07b27e836761b4d84eab8))
+
 ## [0.0.87](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.86...andromeda-v0.0.87) (2026-07-16)
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.115.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.114.0...deneb-v4.115.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **groupware:** approval body cache + folder hint + wiki log of analyses ([#3796](https://github.com/choiceoh/Deneb/issues/3796)) ([d8eda32](https://github.com/choiceoh/Deneb/commit/d8eda32ac0425e1d42f07b27e836761b4d84eab8))
+* **skills:** prefer outcome-driven task contracts ([#3797](https://github.com/choiceoh/Deneb/issues/3797)) ([4808df2](https://github.com/choiceoh/Deneb/commit/4808df28ec45fec2201405f716847bdbc0d9cad0))
+
 ## [4.114.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.113.0...deneb-v4.114.0) (2026-07-16)
 
 
