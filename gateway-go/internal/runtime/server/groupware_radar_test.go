@@ -12,36 +12,46 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 )
 
-func TestFormatGroupwareRadarNotification(t *testing.T) {
+func TestFormatApprovalAnalysisFeed(t *testing.T) {
 	doc := groupware.ApprovalSummary{
 		DocID: "99178", Title: "구매 품의", DocNo: "EAP-42", Drafter: "홍길동",
-		Date: "2026-07-16", Status: "결재대기", Folder: "pending",
+		Date: "2026-07-16", Status: "결재대기",
 	}
-	got := formatGroupwareRadarNotification(doc)
+	rec := &groupware.ApprovalAnalysisRecord{
+		DocID: "99178", Title: "구매 품의", Drafter: "홍길동", Date: "2026-07-16",
+		Analysis: "요지: 구매\nIMPORTANCE: attention\n핵심: 단가 확인", Importance: "attention",
+	}
+	got := formatApprovalAnalysisFeed(doc, rec)
 	for _, want := range []string{
-		"종류: 전자결재", "상태: 결재대기", "제목: 구매 품의", "문서ID: 99178",
-		"문서번호: EAP-42", "기안: 홍길동", "기안일: 2026-07-16",
+		"## 구매 품의", "기안 홍길동", "2026-07-16", "EAP-42", "중요도 attention",
+		"요지: 구매", "핵심: 단가 확인",
 	} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("notification missing %q:\n%s", want, got)
+			t.Fatalf("feed missing %q:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "IMPORTANCE:") {
+		t.Fatalf("IMPORTANCE marker should be stripped:\n%s", got)
 	}
 }
 
 func TestGroupwareRadarCallbacksDedupeAndResolveByRefID(t *testing.T) {
 	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	feed := &nativeWorkFeedStore{store: store}
-	ingestCalls := 0
-	onPending, _, onResolved := groupwareRadarCallbacks(feed, func(_ context.Context, source, text string) error {
-		ingestCalls++
-		if source != "groupware-radar" || !strings.Contains(text, "문서ID: 7") {
-			t.Fatalf("ingest source=%q text=%q", source, text)
+	publishCalls := 0
+	onPending, _, onResolved := groupwareRadarCallbacks(feed, func(_ context.Context, doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) error {
+		publishCalls++
+		if doc.DocID != "7" || rec == nil || rec.Analysis != "analysis" {
+			t.Fatalf("publish doc=%q rec=%v", doc.DocID, rec)
 		}
 		_, err := store.Append(workfeed.Item{
-			ID: "approval-card", Source: workfeed.SourceGroupwareApproval, RefID: "7", Body: "analysis",
+			ID: "approval-card", Source: workfeed.SourceGroupwareApproval, RefID: "7", Body: rec.Analysis,
 		})
 		return err
-	}, func(context.Context, groupware.ApprovalSummary, int, time.Duration) error { return nil }, nil)
+	}, func(context.Context, groupware.ApprovalSummary, int, time.Duration) error { return nil },
+		func(_ context.Context, doc groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
+			return &groupware.ApprovalAnalysisRecord{DocID: doc.DocID, Analysis: "analysis"}, nil
+		})
 	doc := groupware.ApprovalSummary{DocID: "7", Title: "품의", Status: "미결"}
 	if err := onPending(context.Background(), doc); err != nil {
 		t.Fatal(err)
@@ -49,8 +59,8 @@ func TestGroupwareRadarCallbacksDedupeAndResolveByRefID(t *testing.T) {
 	if err := onPending(context.Background(), doc); err != nil {
 		t.Fatal(err)
 	}
-	if ingestCalls != 1 {
-		t.Fatalf("ingest calls = %d, want phone+poll RefID no-op", ingestCalls)
+	if publishCalls != 1 {
+		t.Fatalf("publish calls = %d, want RefID no-op", publishCalls)
 	}
 	if err := onResolved(context.Background(), doc); err != nil {
 		t.Fatal(err)
@@ -68,40 +78,43 @@ func TestGroupwareRadarCallbacksAnalyzeBeforeFeed(t *testing.T) {
 	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	feed := &nativeWorkFeedStore{store: store}
 	var order []string
-	onPending, _, _ := groupwareRadarCallbacks(feed, func(context.Context, string, string) error {
-		order = append(order, "ingest")
+	onPending, _, _ := groupwareRadarCallbacks(feed, func(_ context.Context, doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) error {
+		order = append(order, "publish")
+		if rec == nil || rec.Analysis != "분석본문" {
+			t.Fatalf("publish missing analysis: %#v", rec)
+		}
 		_, err := store.Append(workfeed.Item{
-			ID: "approval-card", Source: workfeed.SourceGroupwareApproval, RefID: "9", Body: "card",
+			ID: "approval-card", Source: workfeed.SourceGroupwareApproval, RefID: doc.DocID, Body: rec.Analysis,
 		})
 		return err
-	}, nil, func(context.Context, groupware.ApprovalSummary) error {
+	}, nil, func(context.Context, groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
 		order = append(order, "analyze")
-		return nil
+		return &groupware.ApprovalAnalysisRecord{DocID: "9", Analysis: "분석본문"}, nil
 	})
 	if err := onPending(context.Background(), groupware.ApprovalSummary{DocID: "9", Title: "품의"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(order, ","); got != "analyze,ingest" {
-		t.Fatalf("order = %q, want analyze then ingest", got)
+	if got := strings.Join(order, ","); got != "analyze,publish" {
+		t.Fatalf("order = %q, want analyze then publish", got)
 	}
 }
 
 func TestGroupwareRadarCallbacksBlocksFeedWhenAnalyzeFails(t *testing.T) {
 	store := workfeed.NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	feed := &nativeWorkFeedStore{store: store}
-	ingestCalls := 0
-	onPending, _, _ := groupwareRadarCallbacks(feed, func(context.Context, string, string) error {
-		ingestCalls++
+	publishCalls := 0
+	onPending, _, _ := groupwareRadarCallbacks(feed, func(context.Context, groupware.ApprovalSummary, *groupware.ApprovalAnalysisRecord) error {
+		publishCalls++
 		return nil
-	}, nil, func(context.Context, groupware.ApprovalSummary) error {
-		return errors.New("analysis unavailable")
+	}, nil, func(context.Context, groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
+		return nil, errors.New("analysis unavailable")
 	})
 	err := onPending(context.Background(), groupware.ApprovalSummary{DocID: "11", Title: "품의"})
 	if err == nil || !strings.Contains(err.Error(), "analysis unavailable") {
 		t.Fatalf("err = %v", err)
 	}
-	if ingestCalls != 0 {
-		t.Fatalf("ingest must not run when analyze fails; calls=%d", ingestCalls)
+	if publishCalls != 0 {
+		t.Fatalf("publish must not run when analyze fails; calls=%d", publishCalls)
 	}
 	active, aerr := feed.HasActiveSourceRef(workfeed.SourceGroupwareApproval, "11")
 	if aerr != nil || active {

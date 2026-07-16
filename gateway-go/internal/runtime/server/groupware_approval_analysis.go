@@ -41,40 +41,40 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, title, body strin
 }
 
 // prepareApprovalBeforeFeed reads + analyzes a pending approval before the
-// radar posts a work-feed card. Cache hits succeed immediately. Reader/LLM
+// radar posts a work-feed card. Cache hits return the stored record. Reader/LLM
 // failures return an error so onPending stays retryable (no bare notification
 // card). Meaningful analyses (urgent/attention) append to the project wiki log.
-func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.ApprovalSummary) error {
+func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
 	docID := strings.TrimSpace(doc.DocID)
 	if docID == "" {
-		return fmt.Errorf("groupware approval analysis missing docId")
+		return nil, fmt.Errorf("groupware approval analysis missing docId")
 	}
 	if s.denebDir == "" {
-		return fmt.Errorf("groupware approval analysis cache unavailable")
+		return nil, fmt.Errorf("groupware approval analysis cache unavailable")
 	}
 	cache := groupware.NewApprovalAnalysisStore(filepath.Join(s.denebDir, "cache", "approval_analysis"))
 	if rec, err := cache.Load(docID); err == nil && rec != nil {
 		if approvalAnalysisMeaningfulForWiki(rec.Importance) {
 			s.logApprovalAnalysisToWiki(rec)
 		}
-		return nil
+		return rec, nil
 	}
 	cfg, ok := groupware.FromEnv()
 	if !ok {
-		return fmt.Errorf("groupware credentials unset")
+		return nil, fmt.Errorf("groupware credentials unset")
 	}
 	body, err := groupware.ReadApprovalByDocIDIn(ctx, cfg, docID, doc.Folder)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval read failed", "docId", docID, "err", err)
 		}
-		return fmt.Errorf("groupware approval %s read failed: %w", docID, err)
+		return nil, fmt.Errorf("groupware approval %s read failed: %w", docID, err)
 	}
 	if strings.TrimSpace(body) == "" {
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval body empty", "docId", docID)
 		}
-		return fmt.Errorf("groupware approval %s body empty", docID)
+		return nil, fmt.Errorf("groupware approval %s body empty", docID)
 	}
 	// Prewarm the body cache — the card's detail open right after the
 	// notification is the hottest path.
@@ -89,13 +89,13 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval analysis failed", "docId", docID, "err", err)
 		}
-		return fmt.Errorf("groupware approval %s analysis failed: %w", docID, err)
+		return nil, fmt.Errorf("groupware approval %s analysis failed: %w", docID, err)
 	}
 	if strings.TrimSpace(analysis) == "" {
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval analysis empty", "docId", docID)
 		}
-		return fmt.Errorf("groupware approval %s analysis empty", docID)
+		return nil, fmt.Errorf("groupware approval %s analysis empty", docID)
 	}
 	importance := normalizeApprovalImportance(analysis)
 	rec := &groupware.ApprovalAnalysisRecord{
@@ -109,13 +109,16 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 		PromptVersion: groupware.ApprovalAnalysisPromptVersion,
 		CreatedAt:     time.Now().UTC(),
 	}
-	if err := cache.Save(rec); err != nil && s.logger != nil {
-		s.logger.Warn("groupware radar approval analysis cache save failed", "docId", docID, "err", err)
+	if err := cache.Save(rec); err != nil {
+		if s.logger != nil {
+			s.logger.Warn("groupware radar approval analysis cache save failed", "docId", docID, "err", err)
+		}
+		return nil, fmt.Errorf("groupware approval %s analysis cache save failed: %w", docID, err)
 	}
 	if approvalAnalysisMeaningfulForWiki(importance) {
 		s.logApprovalAnalysisToWiki(rec)
 	}
-	return nil
+	return rec, nil
 }
 
 // approvalAnalysisMeaningfulForWiki reports whether an analysis is worth a
@@ -128,6 +131,19 @@ func approvalAnalysisMeaningfulForWiki(importance string) bool {
 	default:
 		return false
 	}
+}
+
+// stripApprovalImportanceMarker drops the machine IMPORTANCE: trailer so feed
+// and wiki bodies stay human-readable (중요도는 meta/필드에 따로 실린다).
+func stripApprovalImportanceMarker(analysis string) string {
+	var kept []string
+	for _, line := range strings.Split(analysis, "\n") {
+		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(line)), "IMPORTANCE:") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
 func truncateRunes(s string, max int) string {

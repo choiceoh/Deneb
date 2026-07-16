@@ -88,14 +88,7 @@ func (e errSentinel) Error() string { return string(e) }
 // approvalAnalysisExcerpt keeps the gist: the IMPORTANCE marker line drops
 // (already surfaced as 중요도), and the remainder is rune-bounded.
 func approvalAnalysisExcerpt(analysis string) string {
-	var kept []string
-	for _, line := range strings.Split(analysis, "\n") {
-		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(line)), "IMPORTANCE:") {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	out := strings.TrimSpace(strings.Join(kept, "\n"))
+	out := stripApprovalImportanceMarker(analysis)
 	if utf8.RuneCountInString(out) > approvalWikiExcerptMaxRunes {
 		out = string([]rune(out)[:approvalWikiExcerptMaxRunes]) + "\n…(전문은 결재 상세에서)"
 	}
