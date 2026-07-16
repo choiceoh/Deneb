@@ -1010,7 +1010,8 @@ export function formatWon(n) {
   if (eok) parts.push(`${eok.toLocaleString("ko-KR")}억`);
   if (man) parts.push(`${man.toLocaleString("ko-KR")}만`);
   if (rest || parts.length === 0) parts.push(`${rest.toLocaleString("ko-KR")}`);
-  return `${sign}${parts.join(" ")}원 (${v.toLocaleString("ko-KR")}원)`;
+  // Human 억/만 only — the raw digit paren duplicated the same figure (2026-07-16).
+  return `${sign}${parts.join(" ")}원`;
 }
 
 function sumField(rows, field) {
@@ -1051,46 +1052,15 @@ export async function summarySales(folder = "ytd", query = "") {
     ? r.json.resultData
     : r.json?.resultData?.data || [];
   const supply = sumField(rows, "clsgAm");
-  const qty = sumField(rows, "clsQt");
 
-  // Top by item (aggregate lines) — supply only
-  const byItem = new Map();
-  for (const x of rows) {
-    const am = Number(x?.clsgAm) || 0;
-    if (am <= 0) continue;
-    const key = String(x.itemCd || x.itemNm || x.attrNm || "").trim() || "_";
-    const cur = byItem.get(key) || {
-      nm: x.itemNm || x.attrNm || x.trNm || "(품목없음)",
-      itemCd: x.itemCd || "",
-      am: 0,
-      qt: 0,
-      lines: 0,
-    };
-    cur.am += am;
-    cur.qt += Number(x.clsQt) || 0;
-    cur.lines += 1;
-    if (!cur.nm && (x.itemNm || x.attrNm)) cur.nm = x.itemNm || x.attrNm;
-    byItem.set(key, cur);
-  }
-  const top = [...byItem.values()]
-    .sort((a, b) => b.am - a.am)
-    .slice(0, 8)
-    .map((x, i) => `${i + 1}. ${x.nm} · ${formatWon(x.am)} · 수량 ${Number(x.qt).toLocaleString("ko-KR")} · 라인 ${x.lines}${x.itemCd ? ` · ${x.itemCd}` : ""}`);
-
-  // 공급가액 single-figure discipline: VAT/합계 blocks and the API-source footer
-  // read as noise on the operator surface, so they stay out (2026-07-16 요청).
-  const lines = [
+  // Operator surface: 기간 + 건수 + 매출 only.
+  // 수량합·상위 항목·VAT/합계 are noise (2026-07-16).
+  return [
     "매출",
     `기간: ${period.label}`,
     `건수: ${rows.length.toLocaleString("ko-KR")}`,
-    `공급가액: ${formatWon(supply)}`,
-    `수량합: ${qty.toLocaleString("ko-KR")}`,
-  ];
-  if (top.length) {
-    lines.push("", "공급가액 상위 항목:");
-    lines.push(...top);
-  }
-  return lines.join("\n");
+    `매출: ${formatWon(supply)}`,
+  ].join("\n");
 }
 
 
