@@ -10,7 +10,30 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+func TestBridgeExposesLegacyToolResultReceiptStore(t *testing.T) {
+	t.Parallel()
+	legacy := chattranscript.NewCachedTranscriptStore(chattranscript.NewMemoryTranscriptStore(), 0)
+	bridge := NewBridge(legacy, newStrictTestStore(t), strictTestLogger())
+	receipts := chatport.ResolveToolResultReceiptStore(bridge)
+	if receipts == nil {
+		t.Fatal("Polaris bridge did not expose legacy receipt store")
+	}
+	if err := receipts.AppendToolResultReceipt("client:bridge", chatport.ToolResultReceipt{
+		ToolUseID: "tool-1", Content: "done",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := receipts.LoadToolResultReceipts("client:bridge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Content != "done" {
+		t.Fatalf("bridge receipts = %+v", got)
+	}
+}
 
 func TestStrictBridgeReturnsAppendFailure(t *testing.T) {
 	t.Parallel()

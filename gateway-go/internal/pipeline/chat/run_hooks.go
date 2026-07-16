@@ -25,6 +25,33 @@ func wireStreamHooks(
 	typingSignaler chatport.TypingSignaler,
 ) *streaming.Streamer {
 	var deltaTranslit *streaming.Streamer
+
+	// Persist each completed tool call before any UI observer sees it. The
+	// executor later commits the canonical ordered tool_result batch; this
+	// receipt exists only to bridge a process crash between completion and that
+	// batch write. Ephemeral and Briefcase runs deliberately keep their existing
+	// isolated persistence semantics.
+	if !deps.briefcaseMode && !params.EphemeralAssistant {
+		if receipts := chatport.ResolveToolResultReceiptStore(deps.transcript); receipts != nil {
+			hc.OnToolResult(func(name, toolUseID, result string, isErr bool) {
+				receipt := chatport.ToolResultReceipt{
+					ToolUseID:   toolUseID,
+					ToolName:    name,
+					Content:     result,
+					IsError:     isErr,
+					CompletedAt: deps.now().UnixMilli(),
+				}
+				if err := receipts.AppendToolResultReceipt(params.SessionKey, receipt); err != nil && deps.logger != nil {
+					deps.logger.Warn("tool result recovery receipt persist failed",
+						"session", params.SessionKey,
+						"tool", name,
+						"toolUseId", toolUseID,
+						"error", err)
+				}
+			})
+		}
+	}
+
 	// Broadcaster: SSE streaming deltas. Read Sino-Korean Hanja as Hangul
 	// live (報告書 → 보고서) so a Chinese-lineage model's stream doesn't flash Hanja
 	// before the final settle. The Streamer is stream-safe (carries fence/word

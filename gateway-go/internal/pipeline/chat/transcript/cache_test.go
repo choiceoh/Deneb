@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -178,5 +179,24 @@ func TestCachedTranscriptStore_AppendBeforeFirstLoadRemainsComplete(t *testing.T
 	testutil.NoError(t, err)
 	if total != 2 || len(msgs) != 2 {
 		t.Fatalf("first Load = %d messages (total %d), want 2", len(msgs), total)
+	}
+}
+
+func TestCachedTranscriptStoreExposesInnerToolResultReceiptStore(t *testing.T) {
+	inner := NewMemoryTranscriptStore()
+	cache := NewCachedTranscriptStore(inner, time.Minute)
+	receipts := chatport.ResolveToolResultReceiptStore(cache)
+	if receipts == nil {
+		t.Fatal("cached transcript did not expose receipt store")
+	}
+	if err := receipts.AppendToolResultReceipt("session", chatport.ToolResultReceipt{
+		ToolUseID: "tool-1", Content: "done",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := inner.LoadToolResultReceipts("session")
+	testutil.NoError(t, err)
+	if len(got) != 1 || got[0].Content != "done" {
+		t.Fatalf("inner receipts = %+v", got)
 	}
 }

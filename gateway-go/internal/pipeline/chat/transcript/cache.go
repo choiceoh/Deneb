@@ -9,6 +9,8 @@ package transcript
 import (
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // defaultTranscriptCacheTTL is extended to 60s for single-user DGX Spark
@@ -24,7 +26,10 @@ type transcriptCacheEntry struct {
 }
 
 // Compile-time interface compliance.
-var _ TranscriptStore = (*CachedTranscriptStore)(nil)
+var (
+	_ TranscriptStore                         = (*CachedTranscriptStore)(nil)
+	_ chatport.ToolResultReceiptStoreProvider = (*CachedTranscriptStore)(nil)
+)
 
 // CachedTranscriptStore wraps a TranscriptStore with a per-session TTL cache.
 type CachedTranscriptStore struct {
@@ -111,6 +116,12 @@ func (c *CachedTranscriptStore) Delete(sessionKey string) error {
 	c.mu.Unlock()
 
 	return err
+}
+
+// ToolResultReceiptStore exposes the optional crash-recovery capability of the
+// wrapped store without making receipt writes part of the transcript cache.
+func (c *CachedTranscriptStore) ToolResultReceiptStore() chatport.ToolResultReceiptStore {
+	return chatport.ResolveToolResultReceiptStore(c.inner)
 }
 
 // ListKeys passes through to the inner store.

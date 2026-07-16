@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
@@ -26,8 +27,10 @@ var newTextChatMessage = toolport.NewTextChatMessage
 
 // Compile-time interface compliance.
 var (
-	_ toolport.TranscriptStore = (*FileTranscriptStore)(nil)
-	_ toolport.TranscriptStore = (*MemoryTranscriptStore)(nil)
+	_ toolport.TranscriptStore        = (*FileTranscriptStore)(nil)
+	_ toolport.TranscriptStore        = (*MemoryTranscriptStore)(nil)
+	_ chatport.ToolResultReceiptStore = (*FileTranscriptStore)(nil)
+	_ chatport.ToolResultReceiptStore = (*MemoryTranscriptStore)(nil)
 )
 
 // FileTranscriptStore stores transcripts as JSONL files on disk.
@@ -200,6 +203,9 @@ func (s *FileTranscriptStore) Delete(sessionKey string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete transcript: %w", err)
 	}
+	if err := os.Remove(s.toolResultReceiptPath(sessionKey)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete tool result receipts: %w", err)
+	}
 	return nil
 }
 
@@ -320,14 +326,16 @@ func (s *FileTranscriptStore) Search(query string, maxResults int) ([]SearchResu
 
 // MemoryTranscriptStore is an in-memory transcript store for testing.
 type MemoryTranscriptStore struct {
-	mu       sync.Mutex
-	sessions map[string][]ChatMessage
+	mu          sync.Mutex
+	sessions    map[string][]ChatMessage
+	toolResults map[string][]chatport.ToolResultReceipt
 }
 
 // NewMemoryTranscriptStore creates an in-memory transcript store.
 func NewMemoryTranscriptStore() *MemoryTranscriptStore {
 	return &MemoryTranscriptStore{
-		sessions: make(map[string][]ChatMessage),
+		sessions:    make(map[string][]ChatMessage),
+		toolResults: make(map[string][]chatport.ToolResultReceipt),
 	}
 }
 
@@ -362,6 +370,7 @@ func (s *MemoryTranscriptStore) Delete(sessionKey string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.sessions, sessionKey)
+	delete(s.toolResults, sessionKey)
 	return nil
 }
 

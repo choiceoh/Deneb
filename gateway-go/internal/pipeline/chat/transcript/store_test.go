@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
@@ -179,6 +180,73 @@ func TestFileTranscriptStore_ConcurrentAppendKeepsEveryJSONRecord(t *testing.T) 
 		if !seen[want] {
 			t.Errorf("missing concurrent record %q", want)
 		}
+	}
+}
+
+func TestFileTranscriptStoreToolResultReceiptsSurviveTornTailAndDelete(t *testing.T) {
+	dir := t.TempDir()
+	store := NewFileTranscriptStore(dir)
+	key := "client:receipt"
+	for _, receipt := range []chatport.ToolResultReceipt{
+		{ToolUseID: "tool-1", ToolName: "read", Content: "first", CompletedAt: 11},
+		{ToolUseID: "tool-2", ToolName: "search", Content: "second", IsError: true, CompletedAt: 12},
+	} {
+		if err := store.AppendToolResultReceipt(key, receipt); err != nil {
+			t.Fatalf("AppendToolResultReceipt: %v", err)
+		}
+	}
+
+	receiptPath := store.toolResultReceiptPath(key)
+	f, err := os.OpenFile(receiptPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`{"toolUseId":`); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	receipts, err := store.LoadToolResultReceipts(key)
+	testutil.NoError(t, err)
+	if len(receipts) != 2 {
+		t.Fatalf("LoadToolResultReceipts = %d records, want 2", len(receipts))
+	}
+	if receipts[0].ToolUseID != "tool-1" || receipts[0].Content != "first" {
+		t.Fatalf("first receipt = %+v", receipts[0])
+	}
+	if receipts[1].ToolUseID != "tool-2" || !receipts[1].IsError {
+		t.Fatalf("second receipt = %+v", receipts[1])
+	}
+
+	if err := store.DeleteToolResultReceipts(key); err != nil {
+		t.Fatalf("DeleteToolResultReceipts: %v", err)
+	}
+	receipts, err = store.LoadToolResultReceipts(key)
+	testutil.NoError(t, err)
+	if len(receipts) != 0 {
+		t.Fatalf("receipts remain after delete: %+v", receipts)
+	}
+}
+
+func TestFileTranscriptStoreDeleteAlsoDeletesToolResultReceipts(t *testing.T) {
+	store := NewFileTranscriptStore(t.TempDir())
+	const key = "client:delete-receipts"
+	if err := store.Append(key, NewTextChatMessage("user", "hello", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendToolResultReceipt(key, chatport.ToolResultReceipt{
+		ToolUseID: "tool-1", ToolName: "read", Content: "done",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete(key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(store.toolResultReceiptPath(key)); !os.IsNotExist(err) {
+		t.Fatalf("receipt file still exists after transcript delete: %v", err)
 	}
 }
 
