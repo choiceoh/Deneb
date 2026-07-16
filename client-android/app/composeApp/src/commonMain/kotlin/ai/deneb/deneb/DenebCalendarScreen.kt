@@ -102,6 +102,7 @@ fun DenebCalendarScreen(
     onOpenTodo: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     val tz = remember { TimeZone.currentSystemDefault() }
     val today = remember { Clock.System.todayIn(tz) }
     // The grid is a finite, lazy pager of months centered on the current month:
@@ -120,27 +121,27 @@ fun DenebCalendarScreen(
     // to it (no blank grid flashing in). `failed` records a per-month fetch error so
     // retry targets just that month. Both observable, so a late fetch recomposes the
     // page that shows it.
-    val cache = remember { mutableStateMapOf<CalMonth, List<CalendarEvent>>() }
-    val failed = remember { mutableStateMapOf<CalMonth, Boolean>() }
-    var selected by remember { mutableStateOf(today) }
-    var refreshing by remember { mutableStateOf(false) }
+    val cache = remember(credentialEpoch) { mutableStateMapOf<CalMonth, List<CalendarEvent>>() }
+    val failed = remember(credentialEpoch) { mutableStateMapOf<CalMonth, Boolean>() }
+    var selected by remember(credentialEpoch) { mutableStateOf(today) }
+    var refreshing by remember(credentialEpoch) { mutableStateOf(false) }
     val haptics = rememberHaptics()
     // To-dos are independent of the visible month (a to-do has at most one due
     // date), so they're fetched once and filtered to the selected day below.
-    var todos by remember { mutableStateOf<List<Todo>>(emptyList()) }
+    var todos by remember(credentialEpoch) { mutableStateOf<List<Todo>>(emptyList()) }
 
     // Calendar proposals (the bell): schedule-worthy items mail analysis surfaced,
     // shown as a count badge on the bell and an expanding popup the user accepts
     // from. Fetched once on entry and re-fetched after each accept/reject.
     val proposals by client.denebCalProposals.collectAsState()
-    var showProposals by remember { mutableStateOf(false) }
+    var showProposals by remember(credentialEpoch) { mutableStateOf(false) }
     // Ids with an accept/reject RPC in flight: their row buttons disable so a fast
     // double-tap can't fire a second accept (which the server also guards against,
     // but this stops the duplicate request — and a spurious "이미 처리됨" — at the source).
-    var busyProposals by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var busyProposals by remember(credentialEpoch) { mutableStateOf<Set<String>>(emptySet()) }
     // Last accept/reject failure, shown in the popup so a failed action isn't silent.
-    var proposalError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { client.refreshCalendarProposals() }
+    var proposalError by remember(credentialEpoch) { mutableStateOf<String?>(null) }
+    LaunchedEffect(credentialEpoch) { client.refreshCalendarProposals() }
 
     suspend fun loadMonth(m: CalMonth, force: Boolean) {
         if (!force && cache[m] != null) return
@@ -161,7 +162,7 @@ fun DenebCalendarScreen(
     }
     // To-dos load once and refresh on pull-to-refresh / toggle, independent of the
     // month so paging never drops them.
-    LaunchedEffect(Unit) { loadTodos() }
+    LaunchedEffect(credentialEpoch) { loadTodos() }
 
     // Optimistic toggle: flip locally so the checkbox responds instantly, then
     // persist and re-fetch to settle completion state.
@@ -178,7 +179,7 @@ fun DenebCalendarScreen(
     // updates mid-drag (past halfway), so the next month is usually fetched before
     // the swipe settles. Launched on the screen scope (not this effect's) so a fast
     // flick past a month doesn't cancel its in-flight fetch.
-    LaunchedEffect(pagerState.currentPage) {
+    LaunchedEffect(pagerState.currentPage, credentialEpoch) {
         for (off in intArrayOf(0, -1, 1)) {
             val m = monthForPage(pagerState.currentPage + off)
             if (cache[m] == null && failed[m] != true) {
@@ -191,7 +192,7 @@ fun DenebCalendarScreen(
     // it lands there, else the month's first day. Skipped when the selection is
     // already in the settled month — that's a trailing/leading-cell tap from an
     // adjacent month, whose exact pick we must keep.
-    LaunchedEffect(pagerState.settledPage) {
+    LaunchedEffect(pagerState.settledPage, credentialEpoch) {
         val m = monthForPage(pagerState.settledPage)
         if (monthOf(selected) != m) {
             selected = if (today.year == m.year && today.month.ordinal + 1 == m.month) {

@@ -16,6 +16,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,23 +65,24 @@ fun DenebOrgChartScreen(
     navigationTabBar: (@Composable () -> Unit)? = null,
     onOpenPersonWiki: (String) -> Unit = {}, // open a searched member's 인물 wiki page
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // The working tree (mutated by edits) and the baseline loaded from the gateway
     // (for the dirty check + the save target). null baseline = not loaded yet.
     // Disk/session snapshot paints instantly (view-only: edit affordances stay
     // gated on loadOk == true, so stale data can't be edited and saved back).
-    var nodes by remember { mutableStateOf(client.sectionCaches.org.peek()?.nodes ?: emptyList()) }
-    var baseline by remember { mutableStateOf<List<OrgNodeOut>?>(null) }
+    var nodes by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.org.peek()?.nodes ?: emptyList()) }
+    var baseline by remember(credentialEpoch) { mutableStateOf<List<OrgNodeOut>?>(null) }
     // null = load in flight, true = loaded ok, false = fetch failed.
-    var loadOk by remember { mutableStateOf<Boolean?>(null) }
-    var refreshing by remember { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
-    var notice by remember { mutableStateOf<String?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var loadOk by remember(credentialEpoch) { mutableStateOf<Boolean?>(null) }
+    var refreshing by remember(credentialEpoch) { mutableStateOf(false) }
+    var saving by remember(credentialEpoch) { mutableStateOf(false) }
+    var notice by remember(credentialEpoch) { mutableStateOf<String?>(null) }
+    var error by remember(credentialEpoch) { mutableStateOf<String?>(null) }
     // The node being edited in the bottom sheet (its id), or null when closed.
-    var editingId by remember { mutableStateOf<String?>(null) }
+    var editingId by remember(credentialEpoch) { mutableStateOf<String?>(null) }
     // View-first: the chart opens read-only (tap a row to fold, no edit affordances).
     // 편집 in the header flips this on to reveal the +/pencil glyphs + add-root + tap-to-edit.
-    var editMode by remember { mutableStateOf(false) }
+    var editMode by remember(credentialEpoch) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
@@ -94,7 +96,7 @@ fun DenebOrgChartScreen(
             loadOk = true
         }
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(credentialEpoch) { load() }
 
     val dirty = baseline != null && nodes != baseline
     val requestBack = rememberDiscardGuard(dirty, onBack)

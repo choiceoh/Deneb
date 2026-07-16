@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +40,10 @@ fun DenebDiaryScreen(
     onBack: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
-    var entries by remember { mutableStateOf(client.sectionCaches.diary.peek()) }
-    var loadFailed by remember { mutableStateOf(false) }
+    var entries by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.diary.peek()) }
+    var loadFailed by remember(credentialEpoch) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun load() {
@@ -50,7 +52,7 @@ fun DenebDiaryScreen(
         if (e != null) entries = e
         loadFailed = e == null && entries == null
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(credentialEpoch) { load() }
 
     DenebScreenScaffold(title = "최근 일기", onBack = onBack, tabBar = navigationTabBar) {
         val list = entries

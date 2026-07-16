@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,9 +45,10 @@ fun DenebContactsScreen(
     onBack: () -> Unit,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
-    var contacts by remember { mutableStateOf(client.sectionCaches.contacts.peek()) }
-    var failed by remember { mutableStateOf(false) }
+    var contacts by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.contacts.peek()) }
+    var failed by remember(credentialEpoch) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // null = first load in flight; failed takes priority so a fetch error offers
@@ -56,7 +58,7 @@ fun DenebContactsScreen(
         val fetched = client.fetchContacts()
         if (fetched == null) failed = contacts == null else contacts = fetched
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(credentialEpoch) { load() }
 
     DenebScreenScaffold(title = "전체 연락처", onBack = onBack, tabBar = navigationTabBar) {
         val list = contacts

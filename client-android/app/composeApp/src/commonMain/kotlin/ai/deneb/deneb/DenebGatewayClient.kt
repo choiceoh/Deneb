@@ -356,9 +356,16 @@ class DenebGatewayClient private constructor(
     // landing in that window is honored. (The transport itself is fenced separately, by
     // credential-value comparison inside callRpc.) Bumped by [onCredentialsChanged].
     // @Volatile so a caller resuming on a background/Ktor thread sees the UI-thread bump.
+    private val _credentialEpoch = MutableStateFlow(0)
+    val credentialEpoch: StateFlow<Int> = _credentialEpoch.asStateFlow()
+
     @Volatile
     internal var credEpoch: Int = 0
         private set
+        set(value) {
+            field = value
+            _credentialEpoch.value = value
+        }
 
     /**
      * Apply a gateway URL/token change atomically (all synchronous, no suspension) so

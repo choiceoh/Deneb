@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,12 +39,13 @@ fun DenebNotebooksScreen(
     initialOpenId: String? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); loadList() refreshes.
-    var notebooks by remember { mutableStateOf(client.sectionCaches.notebooks.peek()) }
-    var listFailed by remember { mutableStateOf(false) }
-    var openId by remember { mutableStateOf(initialOpenId) }
-    var detail by remember { mutableStateOf<NotebookOut?>(null) }
-    var detailFailed by remember { mutableStateOf(false) }
+    var notebooks by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.notebooks.peek()) }
+    var listFailed by remember(credentialEpoch) { mutableStateOf(false) }
+    var openId by remember(initialOpenId, credentialEpoch) { mutableStateOf(initialOpenId) }
+    var detail by remember(credentialEpoch) { mutableStateOf<NotebookOut?>(null) }
+    var detailFailed by remember(credentialEpoch) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun loadList() {
@@ -62,7 +64,7 @@ fun DenebNotebooksScreen(
         detailFailed = nb == null
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(initialOpenId, credentialEpoch) {
         loadList()
         if (initialOpenId != null) loadDetail(initialOpenId)
     }

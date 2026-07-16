@@ -140,4 +140,19 @@ class SectionCacheContractTest {
 
         assertEquals(3, f.transport.requests.size)
     }
+
+    @Test
+    fun credentialChangeBumpsEpochAndClearsSectionSnapshots() = runTest {
+        val f = gatewayClientFixture(token = "token-a")
+        f.transport.enqueueRpc(lanesPayload("account-a"))
+
+        assertEquals("account-a", f.client.fetchDashboardLanes()?.lanes?.single()?.key)
+        assertEquals("account-a", f.client.sectionCaches.dashboard.peek()?.lanes?.single()?.key)
+
+        f.client.onCredentialsChanged("https://other.example", "token-b")
+
+        assertEquals(1, f.client.credentialEpoch.value)
+        assertNull(f.client.sectionCaches.dashboard.peek())
+        assertNull(f.settings.getCachedSection("dashboard"))
+    }
 }

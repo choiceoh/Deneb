@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,9 +49,10 @@ fun DenebPeopleScreen(
     onOpenWiki: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
-    var people by remember { mutableStateOf(client.sectionCaches.people.peek()) }
-    var failed by remember { mutableStateOf(false) }
+    var people by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.people.peek()) }
+    var failed by remember(credentialEpoch) { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
@@ -61,7 +63,7 @@ fun DenebPeopleScreen(
         val fetched = client.fetchPeople()
         if (fetched == null) failed = people == null else people = fetched
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(credentialEpoch) { load() }
 
     // Sub-screen of categories on every platform (no drawer/sidebar entry of its
     // own), so the back affordance stays on desktop too.

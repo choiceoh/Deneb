@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,9 +52,10 @@ fun DenebCategoriesScreen(
     onOpenPeople: () -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
-    var data by remember { mutableStateOf(client.sectionCaches.categories.peek()) }
-    var loadFailed by remember { mutableStateOf(false) }
+    var data by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.categories.peek()) }
+    var loadFailed by remember(credentialEpoch) { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
@@ -65,7 +67,7 @@ fun DenebCategoriesScreen(
         // the full-screen error is only for a first load with nothing to show.
         loadFailed = d == null && data == null
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(credentialEpoch) { load() }
 
     DenebScreenScaffold(
         title = "카테고리",

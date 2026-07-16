@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,12 +66,13 @@ fun DenebDashboardScreen(
     onOpenWorkFeedItem: (String, Long) -> Unit = { _, _ -> },
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes
     // (the loading/error branches below already guard on lanes.isEmpty()).
-    var lanes by remember { mutableStateOf(client.sectionCaches.dashboard.peek()?.lanes ?: emptyList()) }
+    var lanes by remember(credentialEpoch) { mutableStateOf(client.sectionCaches.dashboard.peek()?.lanes ?: emptyList()) }
     // null = load in flight, true = ok, false = fetch failed (mirrors DenebTodoScreen).
-    var loadOk by remember { mutableStateOf<Boolean?>(null) }
-    var refreshing by remember { mutableStateOf(false) }
+    var loadOk by remember(credentialEpoch) { mutableStateOf<Boolean?>(null) }
+    var refreshing by remember(credentialEpoch) { mutableStateOf(false) }
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
 
@@ -83,7 +85,7 @@ fun DenebDashboardScreen(
             loadOk = true
         }
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(credentialEpoch) { load() }
 
     DenebScreenScaffold(title = "파트별 업무 현황", onBack = onBack, tabBar = navigationTabBar) {
         PullToRefreshBox(

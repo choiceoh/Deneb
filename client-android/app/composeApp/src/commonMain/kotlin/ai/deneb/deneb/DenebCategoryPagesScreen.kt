@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,23 +58,24 @@ fun DenebCategoryPagesScreen(
     onOpenCategory: (String) -> Unit = {},
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
+    val credentialEpoch by client.credentialEpoch.collectAsState()
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
-    var pages by remember(category) { mutableStateOf(client.sectionCaches.categoryPages.peek(category)) }
-    var subFolders by remember(category) { mutableStateOf<List<CategoryNode>>(emptyList()) }
+    var pages by remember(category, credentialEpoch) { mutableStateOf(client.sectionCaches.categoryPages.peek(category)) }
+    var subFolders by remember(category, credentialEpoch) { mutableStateOf<List<CategoryNode>>(emptyList()) }
     // Top-level taxonomy categories, populated on load — the move picker's options.
-    var topCategories by remember(category) { mutableStateOf<List<String>>(emptyList()) }
-    var loadFailed by remember(category) { mutableStateOf(false) }
+    var topCategories by remember(category, credentialEpoch) { mutableStateOf<List<String>>(emptyList()) }
+    var loadFailed by remember(category, credentialEpoch) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
 
     // Multi-select state. selected holds page paths (the delete/move key). busy
     // guards the in-flight action so a double-tap can't fire twice; confirmDelete
     // gates the destructive delete, and showMovePicker the reclassify dialog.
-    var selecting by remember(category) { mutableStateOf(false) }
-    val selected = remember(category) { mutableStateListOf<String>() }
-    var busy by remember(category) { mutableStateOf(false) }
-    var confirmDelete by remember(category) { mutableStateOf(false) }
-    var showMovePicker by remember(category) { mutableStateOf(false) }
+    var selecting by remember(category, credentialEpoch) { mutableStateOf(false) }
+    val selected = remember(category, credentialEpoch) { mutableStateListOf<String>() }
+    var busy by remember(category, credentialEpoch) { mutableStateOf(false) }
+    var confirmDelete by remember(category, credentialEpoch) { mutableStateOf(false) }
+    var showMovePicker by remember(category, credentialEpoch) { mutableStateOf(false) }
 
     fun clearSelection() {
         selecting = false
@@ -97,7 +99,7 @@ fun DenebCategoryPagesScreen(
             .distinct()
             .sorted()
     }
-    LaunchedEffect(category) { load() }
+    LaunchedEffect(category, credentialEpoch) { load() }
 
     fun runDelete() {
         if (busy) return
