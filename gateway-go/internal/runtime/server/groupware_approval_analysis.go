@@ -28,6 +28,10 @@ const (
 // the ledger, and filed — so the NEXT approval of the same 품목/경비 sees this
 // one. The exact deltas are appended below the analysis so the card carries
 // deterministic figures regardless of the model's narrative.
+//
+// When a unique project matches, a "## 프로젝트 후보" section asks the model for
+// PROJECT_FILE: yes|no (orthogonal to IMPORTANCE). That judgment gates
+// project-wiki prose; the deal ledger always files when cost facts exist.
 func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, date, body string) (string, string, error) {
 	client, model, _, _ := s.mailAnalysisModels()
 	if client == nil || strings.TrimSpace(model) == "" {
@@ -56,6 +60,9 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 		if hist := s.wikiStore.PriceHistoryContext(title + "\n" + enriched); hist != "" {
 			user += "\n\n## 과거 단가·경비 이력 (사내 원장 · 공급가액 기준)\n" + hist
 		}
+		if ref, ok := resolveApprovalProject(s.wikiStore, title, enriched); ok {
+			user += "\n\n## 프로젝트 후보\n「" + ref.Name + "」에 매칭됨. 이 프로젝트 로그/현재 상태에 남길지 PROJECT_FILE로 답할 것."
+		}
 	}
 	out, err := client.Complete(ctx, llm.ChatRequest{
 		Model:     model,
@@ -68,7 +75,8 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 		return "", "", err
 	}
 	analysis := strings.TrimSpace(out)
-	if deltas := s.fileApprovalCost(ctx, docID, title, date, enriched); len(deltas) > 0 {
+	projectFile := normalizeApprovalProjectFile(analysis)
+	if deltas := s.fileApprovalCost(ctx, docID, title, date, enriched, projectFile); len(deltas) > 0 {
 		analysis += "\n\n**단가 이력 대조 (자동)**\n- " + strings.Join(deltas, "\n- ")
 	}
 	return analysis, "", nil
@@ -77,7 +85,8 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 // prepareApprovalBeforeFeed reads + analyzes a pending approval before the
 // radar posts a work-feed card. Cache hits return the stored record. Reader/LLM
 // failures return an error so onPending stays retryable (no bare notification
-// card). Meaningful analyses (urgent/attention) append to the project wiki log.
+// card). When ProjectFile is yes and a project uniquely matches, appends to
+// 로그.md and 대표페이지 현재 상태.
 func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.ApprovalSummary) (*groupware.ApprovalAnalysisRecord, error) {
 	docID := strings.TrimSpace(doc.DocID)
 	if docID == "" {
@@ -100,9 +109,9 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 				}
 			}
 		}
-		if approvalAnalysisMeaningfulForWiki(rec.Importance) {
-			s.logApprovalAnalysisToWiki(rec)
-		}
+		// Prefer cached body for project matching; fall back to empty (title-only).
+		body := bodyStore.Load(docID)
+		s.logApprovalAnalysisToWiki(rec, body)
 		return rec, nil
 	}
 	cfg, ok := groupware.FromEnv()
@@ -151,6 +160,7 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 		Date:          strings.TrimSpace(doc.Date),
 		Analysis:      analysis,
 		Importance:    importance,
+		ProjectFile:   normalizeApprovalProjectFile(analysis),
 		DurationMs:    time.Since(start).Milliseconds(),
 		PromptVersion: groupware.ApprovalAnalysisPromptVersion,
 		CreatedAt:     time.Now().UTC(),
@@ -161,30 +171,17 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 		}
 		return nil, fmt.Errorf("groupware approval %s analysis cache save failed: %w", docID, err)
 	}
-	if approvalAnalysisMeaningfulForWiki(importance) {
-		s.logApprovalAnalysisToWiki(rec)
-	}
+	s.logApprovalAnalysisToWiki(rec, body)
 	return rec, nil
 }
 
-// approvalAnalysisMeaningfulForWiki reports whether an analysis is worth a
-// project 로그.md trail. routine noise stays in the approval cache only;
-// UniqueProjectInText still gates the write inside logApprovalAnalysisToWiki.
-func approvalAnalysisMeaningfulForWiki(importance string) bool {
-	switch strings.TrimSpace(strings.ToLower(importance)) {
-	case "urgent", "attention":
-		return true
-	default:
-		return false
-	}
-}
-
-// stripApprovalImportanceMarker drops the machine IMPORTANCE: trailer so feed
-// and wiki bodies stay human-readable (중요도는 meta/필드에 따로 실린다).
+// stripApprovalImportanceMarker drops machine trailers (IMPORTANCE / PROJECT_FILE)
+// so feed and wiki bodies stay human-readable.
 func stripApprovalImportanceMarker(analysis string) string {
 	var kept []string
 	for _, line := range strings.Split(analysis, "\n") {
-		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(line)), "IMPORTANCE:") {
+		upper := strings.ToUpper(strings.TrimSpace(line))
+		if strings.HasPrefix(upper, "IMPORTANCE:") || strings.HasPrefix(upper, "PROJECT_FILE:") {
 			continue
 		}
 		kept = append(kept, line)
@@ -228,4 +225,18 @@ func normalizeApprovalImportance(analysis string) string {
 		}
 	}
 	return "attention"
+}
+
+// normalizeApprovalProjectFile reports whether the analysis trailer asks to
+// file to the project wiki. Only an explicit "yes" counts — missing/other →
+// false (fail-closed against wiki noise).
+func normalizeApprovalProjectFile(analysis string) bool {
+	for _, line := range strings.Split(analysis, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToUpper(line), "PROJECT_FILE:") {
+			part := strings.ToLower(strings.TrimSpace(line[len("PROJECT_FILE:"):]))
+			return strings.HasPrefix(part, "yes")
+		}
+	}
+	return false
 }

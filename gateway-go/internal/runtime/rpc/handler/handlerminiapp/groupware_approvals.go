@@ -43,8 +43,14 @@ const approvalAnalyzeSystemPrompt = `당신은 Topsolar Amaranth 전자결재 �
 이번 결재의 단가/금액을 과거 이력과 비교해 변동(오름/내림/동일)과 유불리를 짚으세요.
 이력에 없는 수치를 지어내지 말고, 이력 섹션이 없으면 이 섹션은 생략하세요.
 
-마지막 줄에 정확히 다음 형식으로 중요도를 적으세요:
-IMPORTANCE: urgent|attention|routine`
+입력에 "## 프로젝트 후보" 섹션이 있으면 그 프로젝트의 진행 로그/현재 상태에
+남길 가치가 있는지 판단하세요. 프로젝트 진행·발주·계약·일정·용량·리스크에
+남는 사실이 있으면 yes. 단순 경비·전사 공통·프로젝트와 무관하면 no.
+IMPORTANCE(푸시 긴급도)와 무관합니다. 후보 섹션이 없으면 PROJECT_FILE은 no.
+
+마지막에 정확히 다음 두 줄을 적으세요:
+IMPORTANCE: urgent|attention|routine
+PROJECT_FILE: yes|no`
 
 // GroupwareApprovalsDeps wires Amaranth list/act/get/analyze. List+Act required;
 // Get/Cache/Analyze/Attach optional (those RPCs register only when present).
@@ -64,8 +70,9 @@ type GroupwareApprovalsDeps struct {
 	ListERP func(ctx context.Context, area, folder, query string, limit int) (string, error)
 	// ReadBoard powers miniapp.groupware.board.get (one post body by id/title).
 	ReadBoard func(ctx context.Context, query string) (string, error)
-	// LogWiki mirrors a fresh analysis into the project wiki log (best-effort).
-	LogWiki func(rec *groupware.ApprovalAnalysisRecord)
+	// LogWiki mirrors a fresh analysis into the project wiki log + 현재 상태
+	// (best-effort). body fuels UniqueProjectInText when the title alone is vague.
+	LogWiki func(rec *groupware.ApprovalAnalysisRecord, body string)
 }
 
 // GroupwareApprovalsMethods returns the miniapp.groupware.* map, or nil when
@@ -360,6 +367,7 @@ func groupwareApprovalsAnalyze(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc 
 			Date:          strings.TrimSpace(p.Date),
 			Analysis:      analysis,
 			Importance:    importance,
+			ProjectFile:   normalizeProjectFile(analysis),
 			DurationMs:    dur.Milliseconds(),
 			PromptVersion: groupware.ApprovalAnalysisPromptVersion,
 			CreatedAt:     now,
@@ -368,7 +376,7 @@ func groupwareApprovalsAnalyze(deps GroupwareApprovalsDeps) rpcutil.HandlerFunc 
 			_ = deps.Cache.Save(rec)
 		}
 		if deps.LogWiki != nil {
-			deps.LogWiki(rec)
+			deps.LogWiki(rec, body)
 		}
 		return rpcutil.RespondOK(req.ID, analysisOutFromRecord(rec, false))
 	})
@@ -501,6 +509,19 @@ func firstNonEmptyLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// normalizeProjectFile reports whether the analysis trailer asks to file to the
+// project wiki. Only an explicit "yes" counts — missing/other → false (fail-closed).
+func normalizeProjectFile(analysis string) bool {
+	for _, line := range strings.Split(analysis, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToUpper(line), "PROJECT_FILE:") {
+			part := strings.ToLower(strings.TrimSpace(line[len("PROJECT_FILE:"):]))
+			return strings.HasPrefix(part, "yes")
+		}
+	}
+	return false
 }
 
 func normalizeImportance(explicit, analysis string) string {

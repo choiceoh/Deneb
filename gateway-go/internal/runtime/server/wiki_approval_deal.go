@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // fileApprovalCost extracts quote-verified cost facts (품목 라인아이템 또는
@@ -19,7 +20,10 @@ import (
 // against the ledger's prior prices, and files the record. Returns the delta
 // lines (nil when nothing comparable) so the caller can append them to the
 // analysis — deterministic 단가 비교 independent of the model's narrative.
-func (s *Server) fileApprovalCost(ctx context.Context, docID, title, date, body string) []string {
+//
+// projectFile gates only the project 현재 상태 cost bullet (agent judgment);
+// the deal ledger always upserts when cost facts exist.
+func (s *Server) fileApprovalCost(ctx context.Context, docID, title, date, body string, projectFile bool) []string {
 	if s == nil || s.wikiStore == nil || strings.TrimSpace(docID) == "" {
 		return nil
 	}
@@ -55,16 +59,17 @@ func (s *Server) fileApprovalCost(ctx context.Context, docID, title, date, body 
 		})
 	}
 	var related []string
-	if ref, ok := s.wikiStore.UniqueProjectInText(title); ok {
+	if ref, ok := resolveApprovalProject(s.wikiStore, title, body); ok {
 		related = []string{ref.Path}
 	}
+	sourceRef := "approval:" + strings.TrimSpace(docID)
 	input := wiki.DealPageInput{
 		Counterparty:    counterparty,
 		DocType:         facts.DocKind,
 		Amount:          facts.Amount.Value,
 		Date:            strings.TrimSpace(date),
 		Items:           items,
-		SourceRef:       "approval:" + strings.TrimSpace(docID),
+		SourceRef:       sourceRef,
 		RelatedProjects: related,
 		LineItems:       lineItems,
 		ExpenseKind:     facts.ExpenseKind,
@@ -74,12 +79,57 @@ func (s *Server) fileApprovalCost(ctx context.Context, docID, title, date, body 
 	// (DetectRequote's contract — otherwise the new row is its own previous).
 	deltas := s.wikiStore.PriceDeltaLines(input)
 
-	relPath, created, err := s.wikiStore.UpsertDealPage(input, time.Now())
+	now := time.Now()
+	relPath, created, err := s.wikiStore.UpsertDealPage(input, now)
 	if err != nil {
 		s.logger.Warn("결재→원장: 거래 페이지 저장 실패", "docId", docID, "counterparty", counterparty, "error", err)
 		return deltas
 	}
 	s.logger.Info("결재→원장: 결재 비용 파일링", "docId", docID, "path", relPath,
 		"created", created, "lineItems", len(lineItems), "expenseKind", facts.ExpenseKind)
+
+	if projectFile {
+		s.appendApprovalCostToProjects(related, title, counterparty, facts.Amount.Value, deltas, docID, now)
+	}
 	return deltas
+}
+
+// appendApprovalCostToProjects surfaces cost/delta glance lines on linked
+// project 대표페이지 현재 상태. Separate ref from the analysis status bullet
+// so both can coexist (approval: vs approval-cost:).
+func (s *Server) appendApprovalCostToProjects(projects []string, title, counterparty, amount string, deltas []string, docID string, now time.Time) {
+	if s == nil || s.wikiStore == nil || len(projects) == 0 {
+		return
+	}
+	line := approvalCostStatusLine(title, counterparty, amount, deltas)
+	if line == "" {
+		return
+	}
+	ref := "approval-cost:" + strings.TrimSpace(docID)
+	for _, p := range projects {
+		if err := s.wikiStore.AppendProjectStatusLine(p, line, ref, now); err != nil && s.logger != nil {
+			s.logger.Warn("결재→원장: 프로젝트 상태줄 기록 실패", "docId", docID, "project", p, "error", err)
+		}
+	}
+}
+
+func approvalCostStatusLine(title, counterparty, amount string, deltas []string) string {
+	if len(deltas) > 0 {
+		// First delta is the highest-signal glance (품목 단가 or 경비 중앙값).
+		return textutil.TruncateRunes(approvalLogText(deltas[0]), 80, "...")
+	}
+	parts := make([]string, 0, 3)
+	parts = append(parts, "결재 비용")
+	if c := strings.TrimSpace(counterparty); c != "" {
+		parts = append(parts, c)
+	}
+	if a := strings.TrimSpace(amount); a != "" {
+		parts = append(parts, a)
+	} else if t := strings.TrimSpace(title); t != "" {
+		parts = append(parts, textutil.TruncateRunes(approvalLogText(t), 40, "..."))
+	}
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.Join(parts, " ")
 }
