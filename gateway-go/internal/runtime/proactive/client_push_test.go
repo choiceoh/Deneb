@@ -103,3 +103,27 @@ func TestPushPreviewFirstLineTruncatesLongInput(t *testing.T) {
 		t.Fatalf("pushPreview rune len = %d, want 141", n)
 	}
 }
+
+func TestClientPushHub_DesktopSubscriberCount(t *testing.T) {
+	h := newClientPushHub()
+	if got := h.desktopSubscriberCount(); got != 0 {
+		t.Fatalf("desktopSubscriberCount empty = %d, want 0", got)
+	}
+	// Mobile and unknown subscribers must not count as desktops — the
+	// workstation-control gate keys on an actual Andromeda connection.
+	_, unsubMobile := h.subscribe(kindMobile)
+	defer unsubMobile()
+	_, unsubUnknown := h.subscribe(kindUnknown)
+	defer unsubUnknown()
+	if got := h.desktopSubscriberCount(); got != 0 {
+		t.Fatalf("desktopSubscriberCount with mobile+unknown = %d, want 0", got)
+	}
+	_, unsubDesk := h.subscribe(kindDesktop)
+	if got := h.desktopSubscriberCount(); got != 1 {
+		t.Fatalf("desktopSubscriberCount with one desktop = %d, want 1", got)
+	}
+	unsubDesk()
+	if got := h.desktopSubscriberCount(); got != 0 {
+		t.Fatalf("desktopSubscriberCount after unsubscribe = %d, want 0", got)
+	}
+}

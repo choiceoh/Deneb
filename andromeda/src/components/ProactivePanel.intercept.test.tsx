@@ -41,6 +41,19 @@ describe("ProactivePanel workspace-command intercept", () => {
     expect(nudge?.body).toContain("메일");
   });
 
+  it("parses the gateway's data-nested command frame (workstation tool wire shape)", () => {
+    const { value, intercept } = mountAndGrabIntercept();
+    const nudge = intercept({
+      id: "e4",
+      kind: "workspace",
+      title: "화면 조정",
+      raw: { title: "화면 조정", body: "layout", data: { action: "layout", views: "mail,calendar" } },
+    });
+
+    expect(value.runCommand).toHaveBeenCalledWith({ kind: "layout", views: ["mail", "calendar"] });
+    expect(nudge?.body).toContain("메일 · 일정");
+  });
+
   it("swallows malformed control frames without running anything", () => {
     const { value, intercept } = mountAndGrabIntercept();
     const nudge = intercept({ id: "e2", kind: "workspace", raw: { action: "split", view: "settings" } });

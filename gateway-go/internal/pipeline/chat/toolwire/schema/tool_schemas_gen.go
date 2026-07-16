@@ -1765,6 +1765,39 @@ func PhoneWriteToolSchema() map[string]any {
 	}
 }
 
+func WorkstationToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "open(화면 열기) | split(분할 추가) | close(분할 닫기) | focus(포커스 이동) | layout(분할 구성 일괄 지정) | wiki(위키 페이지 열기)",
+			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "위키 페이지 경로 (action=wiki 또는 open+위키)",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "view=search일 때 주입할 검색어 — 열리면서 바로 검색 실행",
+			},
+			"ref": map[string]any{
+				"type":        "string",
+				"description": "열 항목의 리소스 id (예: 메일 id) — 해당 pane이 그 항목을 바로 연다",
+			},
+			"view": map[string]any{
+				"type":        "string",
+				"description": "대상 pane 키 (open/split/focus/close): today|projects|progress|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe|sitemap",
+			},
+			"views": map[string]any{
+				"type":        "string",
+				"description": "layout 전용 — 쉼표로 구분한 pane 키 1~3개, 왼쪽부터 배치 (예: \"mail,calendar\")",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func WorkfeedToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

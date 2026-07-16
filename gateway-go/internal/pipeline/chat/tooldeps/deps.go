@@ -195,6 +195,11 @@ type CoreToolDeps struct {
 	// in-app Intent execution (the phone_write Intent ops). nil = no app channel
 	// wired, so those actions report unavailable instead of dropping silently.
 	PhoneActionSender func(ctx context.Context, action string, args map[string]string) error
+	// WorkstationCommandSender delivers a validated workspace command (open/
+	// split/close/focus/layout/wiki) to connected desktop workstations over the
+	// events push channel. nil = no desktop channel wired, so the workstation
+	// tool reports unavailable.
+	WorkstationCommandSender func(ctx context.Context, action string, args map[string]string) error
 	// SkillsCatalogDirs are the skill catalog roots that live outside the
 	// workspace (managed ~/.deneb/skills, personal ~/.agents/skills). The
 	// read tool accepts them as extra allowed roots so the SKILL.md

@@ -26,7 +26,12 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
   const intercept = useCallback(
     (ev: ProactiveEvent): ProactiveEvent | null => {
       if (!isWorkspaceCommandKind(ev.kind)) return ev;
-      const cmd = parseWorkspaceCommand(ev.raw);
+      // The gateway's workstation tool carries the command in the frame's
+      // `data` map (like phone_action frames); tolerate top-level fields too.
+      const nested = ev.raw.data;
+      const src =
+        nested && typeof nested === "object" && !Array.isArray(nested) ? (nested as Record<string, unknown>) : ev.raw;
+      const cmd = parseWorkspaceCommand(src);
       if (!cmd) {
         nudgeLog.warn("malformed workspace command dropped", JSON.stringify(ev.raw));
         return null;

@@ -52,6 +52,11 @@ const (
 	// (open_url/share/…) rather than rendering as a notification — Data carries
 	// the action + args.
 	pushKindPhoneAction = "phone_action"
+	// pushKindWorkspace marks a desktop workstation-control frame (the
+	// `workstation` chat tool): Data carries the screen command (action + view/
+	// views/ref/path/query). Andromeda executes it through its command bus and
+	// shows a "화면 조정" nudge; other clients ignore the kind.
+	pushKindWorkspace = "workspace"
 )
 
 // PushKindWorkfeed opens a work-feed item from a native push.
@@ -62,6 +67,9 @@ const PushKindFleet = pushKindFleet
 
 // PushKindPhoneAction identifies a native phone command frame.
 const PushKindPhoneAction = pushKindPhoneAction
+
+// PushKindWorkspace identifies a desktop workstation-control frame.
+const PushKindWorkspace = pushKindWorkspace
 
 // clientKind identifies the device class behind an /events subscription so the
 // FCM fallback can fire on "no MOBILE client connected" rather than "no client
@@ -202,6 +210,25 @@ func (h *clientPushHub) mobileSubscriberCount() int {
 
 // MobileSubscriberCount reports connected Android clients.
 func (h *clientPushHub) MobileSubscriberCount() int { return h.mobileSubscriberCount() }
+
+// desktopSubscriberCount reports how many connected clients identified as
+// desktop (Andromeda, X-Deneb-Client-Kind: desktop). Workstation-control
+// dispatch gates on THIS — a mobile-only connection must not read as "screen
+// arranged" (the phone has no workspace executor).
+func (h *clientPushHub) desktopSubscriberCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	n := 0
+	for _, s := range h.subs {
+		if s.kind == kindDesktop {
+			n++
+		}
+	}
+	return n
+}
+
+// DesktopSubscriberCount reports connected desktop (Andromeda) clients.
+func (h *clientPushHub) DesktopSubscriberCount() int { return h.desktopSubscriberCount() }
 
 // publishProactive fans ev out to all connected SSE clients and, when no MOBILE
 // client holds a live connection, also delivers {Title, Body} via FCM so a

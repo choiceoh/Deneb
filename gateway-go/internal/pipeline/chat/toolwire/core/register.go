@@ -231,6 +231,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	RegisterChronoTools(registry)
 	RegisterMediaTools(registry, deps.WorkspaceDir)
 	RegisterPhoneTools(registry, deps.PhoneActionSender)
+	RegisterWorkstationTool(registry, deps.WorkstationCommandSender)
 
 	// Standing goal (Ralph loop). Eager: the agent must discover it to set a
 	// goal on a multi-step request. Once set, the server's goalTask advances it
@@ -348,6 +349,21 @@ func RegisterPhoneTools(registry toolport.ToolRegistrar, send runtimeops.PhoneAc
 		InputSchema: schema.PhoneWriteToolSchema(),
 		Fn:          runtimeops.ToolPhoneWrite(send),
 		Deferred:    true,
+	})
+}
+
+// RegisterWorkstationTool registers the desktop workstation-control tool. The
+// command travels over the events push channel (Kind=workspace) to connected
+// Andromeda clients, which validate + execute it through their command bus and
+// show a visible "화면 조정" nudge. Eager (not Deferred): the tool exists for
+// interactive "화면에 띄워줘/나란히 보여줘" turns, where a fetch_tools round
+// trip would cost more than the small schema does.
+func RegisterWorkstationTool(registry toolport.ToolRegistrar, send runtimeops.WorkstationCommandFunc) {
+	registry.RegisterTool(toolport.ToolDef{
+		Name:        "workstation",
+		Description: "데스크톱 워크스테이션(Andromeda)의 화면을 직접 조종한다 — 자료를 말로 설명하는 대신 화면에 띄워줄 때. action: open(화면 열기, view 또는 위키 path) | split(현재 화면 옆에 분할로 추가, view — 최대 3분할) | close(분할 닫기, view 생략=포커스) | focus(포커스 이동, view) | layout(분할 구성 일괄 지정, views=\"mail,calendar\") | wiki(위키 페이지 열기, path). view 키: today|projects|progress|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe|sitemap. search는 query로 검색어 주입 가능. 데스크톱 앱이 연결돼 있어야 하며, 사용자가 화면 배치를 요청하거나 '보여줘/띄워줘'류 요청일 때 사용.",
+		InputSchema: schema.WorkstationToolSchema(),
+		Fn:          runtimeops.ToolWorkstation(send),
 	})
 }
 
