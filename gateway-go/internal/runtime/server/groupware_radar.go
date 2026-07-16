@@ -41,14 +41,20 @@ func (s *Server) registerGroupwareRadarTask(homeDir string) {
 		s.notifyGroupwareRadarEscalation,
 		s.prepareApprovalBeforeFeed,
 	)
+	var onCCNew func(context.Context, groupware.ApprovalSummary) error
+	if os.Getenv("DENEB_GROUPWARE_RADAR_CC_DISABLE") != "1" {
+		onCCNew = groupwareRadarCCCallback(s.prepareApprovalBeforeFeed, s.publishApprovalCCFeed)
+	}
 	task := groupware.NewRadar(groupware.RadarConfig{
 		Reader:         reader,
 		StatePath:      filepath.Join(stateDir, groupwareRadarStateFile),
 		MaxPerCycle:    groupwareRadarMaxPerCycle(),
 		MaxEscalations: groupwareRadarMaxEscalations(),
+		CCMaxPerCycle:  groupwareRadarCCMaxPerCycle(),
 		OnPending:      onPending,
 		OnEscalated:    onEscalated,
 		OnResolved:     onResolved,
+		OnCCNew:        onCCNew,
 		OnListFailed:   s.notifyGroupwareRadarListFailed,
 	})
 	s.autonomousSvc.RegisterTask(task)
@@ -119,6 +125,77 @@ func groupwareRadarCallbacks(
 	return onPending, onEscalated, onResolved
 }
 
+// groupwareRadarCCCallback is the 수신참조 ingest: analyze (which files wiki
+// prose and deal-ledger costs as side effects), then hand the record to the
+// cc publisher. Analysis/read failures return an error so the radar keeps the
+// doc retryable.
+func groupwareRadarCCCallback(
+	prepare groupwareRadarBeforePending,
+	publish groupwareRadarPublishFeed,
+) func(context.Context, groupware.ApprovalSummary) error {
+	return func(ctx context.Context, doc groupware.ApprovalSummary) error {
+		if prepare == nil || publish == nil {
+			return errors.New("groupware radar cc pipeline unavailable")
+		}
+		rec, err := prepare(ctx, doc)
+		if err != nil {
+			return err
+		}
+		return publish(ctx, doc, rec)
+	}
+}
+
+// publishApprovalCCFeed surfaces a 수신참조 analysis. cc documents belong to
+// someone else's approval line, so the knowledge filing (project wiki + deal
+// ledger) that happened during analysis IS the deliverable: only urgent ones
+// additionally get a feed card — chip-less, question-less, push-less — and
+// nothing escalates.
+func (s *Server) publishApprovalCCFeed(_ context.Context, doc groupware.ApprovalSummary, rec *groupware.ApprovalAnalysisRecord) error {
+	if rec == nil || strings.TrimSpace(rec.Analysis) == "" {
+		return fmt.Errorf("groupware cc %s analysis missing", strings.TrimSpace(doc.DocID))
+	}
+	if strings.TrimSpace(strings.ToLower(rec.Importance)) != "urgent" {
+		return nil // silent ingest — wiki/ledger already filed
+	}
+	docID := strings.TrimSpace(doc.DocID)
+	if docID == "" {
+		docID = strings.TrimSpace(rec.DocID)
+	}
+	if docID == "" {
+		return fmt.Errorf("groupware cc feed missing docId")
+	}
+	feed := s.nativeWorkFeedStore()
+	if feed == nil {
+		return errors.New("work-feed store unavailable")
+	}
+	active, err := feed.HasActiveSourceRef(workfeed.SourceGroupwareApproval, docID)
+	if err != nil {
+		return err
+	}
+	if active {
+		return nil
+	}
+	title := strings.TrimSpace(doc.Title)
+	if title == "" {
+		title = strings.TrimSpace(rec.Title)
+	}
+	if title == "" {
+		title = "전자결재"
+	}
+	analysisBody := stripApprovalImportanceMarker(rec.Analysis)
+	item := workfeed.Item{
+		Source:   workfeed.SourceGroupwareApproval,
+		Title:    "수신참조 · " + title,
+		Summary:  approvalAnalysisGlance(analysisBody),
+		Body:     analysisBody,
+		RefID:    docID,
+		Metadata: map[string]string{"importance": rec.Importance, "folder": "cc"},
+		Priority: workfeed.PriorityHigh,
+	}
+	_, err = feed.Append(item)
+	return err
+}
+
 // publishApprovalAnalysisFeed posts the prepared analysis as the work-feed card
 // (승인/반려 chips). Title/Summary/Body carry the analysis explicitly — no second
 // LLM turn and no heuristic re-titling of the report blob.
@@ -180,28 +257,8 @@ func (s *Server) publishApprovalAnalysisFeed(_ context.Context, doc groupware.Ap
 
 // approvalAnalysisGlance pulls the 요지 line for the collapsed feed row.
 func approvalAnalysisGlance(analysis string) string {
-	for _, line := range strings.Split(analysis, "\n") {
-		t := strings.TrimSpace(line)
-		if t == "" {
-			continue
-		}
-		lower := strings.ToLower(t)
-		switch {
-		case strings.HasPrefix(t, "**요지**"),
-			strings.HasPrefix(t, "요지"),
-			strings.Contains(lower, "**요지**"):
-			t = strings.TrimPrefix(t, "-")
-			t = strings.TrimSpace(t)
-			t = strings.TrimPrefix(t, "**요지**")
-			t = strings.TrimSpace(t)
-			t = strings.TrimPrefix(t, "요지")
-			t = strings.TrimSpace(t)
-			t = strings.TrimLeft(t, "：:.—- ")
-			t = strings.TrimSpace(t)
-			if t != "" {
-				return workfeed.Preview(t, 240)
-			}
-		}
+	if gist := groupware.ApprovalAnalysisGistLine(analysis); gist != "" {
+		return workfeed.Preview(gist, 240)
 	}
 	return workfeed.Preview(analysis, 240)
 }
@@ -312,4 +369,12 @@ func groupwareRadarMaxEscalations() int {
 		return value
 	}
 	return groupware.DefaultRadarMaxEscalations
+}
+
+func groupwareRadarCCMaxPerCycle() int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv("DENEB_GROUPWARE_RADAR_CC_MAX_PER_CYCLE")))
+	if err == nil && value > 0 {
+		return value
+	}
+	return groupware.DefaultRadarCCMaxPerCycle
 }

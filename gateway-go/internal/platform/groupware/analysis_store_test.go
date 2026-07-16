@@ -50,3 +50,22 @@ func TestApprovalAnalysisStore_RoundTripAndVersionSkew(t *testing.T) {
 		t.Fatalf("empty dir store should no-op, got=%v err=%v", got, err)
 	}
 }
+
+func TestApprovalAnalysisGistLine(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, analysis, want string
+	}{
+		{"bold marker", "**요지** — 구매 단가 확인 필요\n**핵심**\n- 3억", "구매 단가 확인 필요"},
+		{"bullet plain", "- 요지: 휴가 신청 통지\nIMPORTANCE: routine", "휴가 신청 통지"},
+		{"absent", "핵심만 있는 분석\nIMPORTANCE: attention", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ApprovalAnalysisGistLine(tc.analysis); got != tc.want {
+				t.Fatalf("gist = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -36,6 +36,28 @@ type ApprovalAnalysisRecord struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
+// ApprovalAnalysisGistLine extracts the 요지 line from an analysis body — the
+// one-line gist feed cards and letters lead with. Empty when absent.
+func ApprovalAnalysisGistLine(analysis string) string {
+	for _, line := range strings.Split(analysis, "\n") {
+		t := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+		if t == "" {
+			continue
+		}
+		if !strings.HasPrefix(t, "**요지**") && !strings.HasPrefix(t, "요지") &&
+			!strings.Contains(strings.ToLower(t), "**요지**") {
+			continue
+		}
+		t = strings.TrimSpace(strings.TrimPrefix(t, "**요지**"))
+		t = strings.TrimSpace(strings.TrimPrefix(t, "요지"))
+		t = strings.TrimSpace(strings.TrimLeft(t, "：:.—- "))
+		if t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
 // ApprovalAnalysisStore is a per-docId JSON cache rooted at a directory.
 // A zero value (or nil pointer) is a valid no-op store.
 type ApprovalAnalysisStore struct {

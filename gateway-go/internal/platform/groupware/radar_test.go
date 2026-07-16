@@ -254,6 +254,165 @@ func TestRadarRequiresPositiveDoneBeforeResolution(t *testing.T) {
 	}
 }
 
+func TestRadarCCSeedsSilentlyThenIngestsNewOnce(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	cc := []ApprovalSummary{approval("100", "backlog A"), approval("101", "backlog B")}
+	var ccCalls []string
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return radarMonday },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "cc" {
+				return append([]ApprovalSummary(nil), cc...), nil
+			}
+			return nil, nil
+		},
+		OnPending:  func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+		OnCCNew: func(_ context.Context, doc ApprovalSummary) error {
+			ccCalls = append(ccCalls, doc.DocID)
+			return nil
+		},
+	})
+
+	// First contact absorbs the historical backlog without callbacks.
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(ccCalls) != 0 {
+		t.Fatalf("seed run must not ingest: %v", ccCalls)
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.CCSeededAt == 0 || !state.CCDocs["100"].Notified || !state.CCDocs["101"].Notified {
+		t.Fatalf("seed state = %+v", state)
+	}
+
+	// A doc appearing after the seed ingests exactly once…
+	cc = append(cc, approval("102", "new cc doc"))
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ccCalls, []string{"102"}) {
+		t.Fatalf("cc calls = %v", ccCalls)
+	}
+	// …and fingerprint churn (other approvers acting) never re-triggers.
+	cc[2].Status = "완결"
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(ccCalls) != 1 {
+		t.Fatalf("fingerprint churn re-ingested: %v", ccCalls)
+	}
+}
+
+func TestRadarCCCapAndFailureStaysRetryable(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	var cc []ApprovalSummary
+	var calls []string
+	failFirst := true
+	radar := NewRadar(RadarConfig{
+		StatePath:     statePath,
+		CCMaxPerCycle: 1,
+		Now:           func() time.Time { return radarMonday },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "cc" {
+				return append([]ApprovalSummary(nil), cc...), nil
+			}
+			return nil, nil
+		},
+		OnPending:  func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+		OnCCNew: func(_ context.Context, doc ApprovalSummary) error {
+			calls = append(calls, doc.DocID)
+			if failFirst {
+				failFirst = false
+				return errors.New("analysis failed")
+			}
+			return nil
+		},
+	})
+	// Seed on an empty folder, then three docs arrive.
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cc = []ApprovalSummary{approval("1", "a"), approval("2", "b"), approval("3", "c")}
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected cc ingest failure")
+	}
+	if !reflect.DeepEqual(calls, []string{"1"}) {
+		t.Fatalf("cap-1 first cycle calls = %v", calls)
+	}
+	state, _ := loadRadarState(statePath)
+	if state.CCDocs["1"].Notified {
+		t.Fatal("failed ingest marked notified")
+	}
+	for range 3 {
+		if err := radar.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(calls, []string{"1", "1", "2", "3"}) {
+		t.Fatalf("backlog drain calls = %v", calls)
+	}
+}
+
+func TestRadarCCPrunesAfterRetentionAndFirstSeenIndexSkipsSeeded(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	now := radarMonday
+	cc := []ApprovalSummary{approval("5", "seeded old")}
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Now:       func() time.Time { return now },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "cc" {
+				return append([]ApprovalSummary(nil), cc...), nil
+			}
+			return nil, nil
+		},
+		OnPending:  func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+		OnCCNew:    func(context.Context, ApprovalSummary) error { return nil },
+	})
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Post-seed arrival is "new" for letters; the seeded doc is not.
+	now = now.Add(time.Hour)
+	cc = append(cc, approval("6", "fresh"))
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	idx := LoadRadarCCFirstSeenIndex(statePath)
+	if _, ok := idx["5"]; ok {
+		t.Fatalf("seeded doc leaked into first-seen index: %v", idx)
+	}
+	if _, ok := idx["6"]; !ok {
+		t.Fatalf("fresh doc missing from first-seen index: %v", idx)
+	}
+
+	// Entries that fell off the list prune only after retention.
+	cc = nil
+	now = now.Add(time.Hour)
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, _ := loadRadarState(statePath)
+	if len(state.CCDocs) != 2 {
+		t.Fatalf("pre-retention prune: %+v", state.CCDocs)
+	}
+	now = now.Add(radarCCRetention + time.Hour)
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	state, _ = loadRadarState(statePath)
+	if len(state.CCDocs) != 0 {
+		t.Fatalf("post-retention entries remain: %+v", state.CCDocs)
+	}
+}
+
 func TestRadarStateFileMode0600(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "nested", "radar.json")
 	radar := NewRadar(RadarConfig{

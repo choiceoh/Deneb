@@ -26,9 +26,10 @@ import (
 
 // MorningLetterOpts holds optional configuration for the morning letter tool.
 type MorningLetterOpts struct {
-	DiaryDir           string                    // wiki diary directory; empty = no diary logging
-	WikiDir            string                    // wiki root directory; empty = no deadline/open-question scans
-	GroupwareCollector func(context.Context) any // optional test/alternate collector
+	DiaryDir             string                    // wiki diary directory; empty = no diary logging
+	WikiDir              string                    // wiki root directory; empty = no deadline/open-question scans
+	GroupwareCollector   func(context.Context) any // optional test/alternate collector
+	GroupwareCCCollector func(context.Context) any // optional test/alternate 수신참조 collector
 }
 
 // ToolMorningLetter returns the morning_letter tool — collects 8 data sections
@@ -43,11 +44,15 @@ type MorningLetterOpts struct {
 func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 	var diaryDir, wikiDir string
 	groupwareCollector := fetchGroupwarePending
+	groupwareCCCollector := fetchGroupwareCC
 	if len(opts) > 0 {
 		diaryDir = opts[0].DiaryDir
 		wikiDir = opts[0].WikiDir
 		if opts[0].GroupwareCollector != nil {
 			groupwareCollector = opts[0].GroupwareCollector
+		}
+		if opts[0].GroupwareCCCollector != nil {
+			groupwareCCCollector = opts[0].GroupwareCCCollector
 		}
 	}
 
@@ -63,9 +68,10 @@ func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 			{5, func(_ context.Context) any { return fetchDeadlines(wikiDir, now) }},
 			{6, func(_ context.Context) any { return fetchOpenQuestions(wikiDir, now) }},
 			{7, groupwareCollector},
+			{8, groupwareCCCollector},
 		}
 
-		results := collectLetterSections(ctx, 8, collectors)
+		results := collectLetterSections(ctx, 9, collectors)
 		dateStr := koreanDate(now)
 		envelope := map[string]any{
 			"date":      dateStr,
@@ -82,6 +88,7 @@ func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 				"deadlines":         results[5],
 				"open_questions":    results[6],
 				"groupware_pending": results[7],
+				"groupware_cc":      results[8],
 			},
 		}
 
@@ -139,6 +146,11 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 			} else {
 				fmt.Fprintf(&sb, "- 미결 전자결재: %d건\n", gw.Count)
 			}
+		}
+	}
+	if len(results) > 8 {
+		if cc, ok := results[8].(groupwareCCData); ok && cc.OK && cc.Count > 0 {
+			fmt.Fprintf(&sb, "- 수신참조 신규: %d건\n", cc.Count)
 		}
 	}
 
@@ -229,6 +241,23 @@ type groupwarePendingEntry struct {
 	StaleLabel      string `json:"stale_label,omitempty"`
 }
 
+type groupwareCCData struct {
+	OK         bool               `json:"ok"`
+	Configured bool               `json:"configured"`
+	Count      int                `json:"count,omitempty"` // new cc docs inside the highlight window
+	Items      []groupwareCCEntry `json:"items,omitempty"`
+	Error      string             `json:"error,omitempty"`
+}
+
+type groupwareCCEntry struct {
+	DocID      string `json:"doc_id"`
+	Title      string `json:"title"`
+	Drafter    string `json:"drafter,omitempty"`
+	Date       string `json:"date,omitempty"`
+	Importance string `json:"importance,omitempty"` // from the radar's cached analysis
+	Gist       string `json:"gist,omitempty"`       // 요지 line from the cached analysis
+}
+
 type deadlineData struct {
 	OK    bool            `json:"ok"`
 	Items []deadlineEntry `json:"items,omitempty"`
@@ -269,6 +298,54 @@ func fetchGroupwarePending(ctx context.Context) any {
 		items = append(items, entry)
 	}
 	return groupwarePendingData{OK: true, Configured: true, Count: len(items), StaleCount: stale, Items: items}
+}
+
+// ccHighlightWindow bounds which 수신참조 docs count as "new" for the letter —
+// wide enough that weekend arrivals (first seen by Monday's radar scan, after
+// the letter) still make the next morning's letter.
+const ccHighlightWindow = 36 * time.Hour
+
+// ccHighlightMaxItems bounds the letter section (Count still reports the total).
+const ccHighlightMaxItems = 5
+
+// fetchGroupwareCC surfaces 수신참조 docs the radar first saw inside the
+// highlight window, enriched from the cached analysis (importance + 요지) —
+// zero LLM cost at letter time. No radar state yet → empty (but OK) section.
+func fetchGroupwareCC(ctx context.Context) any {
+	cfg, ok := groupware.FromEnv()
+	if !ok {
+		return groupwareCCData{Configured: false}
+	}
+	firstSeen := groupware.LoadRadarCCFirstSeenIndex(groupware.DefaultRadarStatePath())
+	if len(firstSeen) == 0 {
+		return groupwareCCData{OK: true, Configured: true}
+	}
+	docs, err := groupware.ListApprovals(ctx, cfg, "cc", 20)
+	if err != nil {
+		return groupwareCCData{Configured: true, Error: err.Error()}
+	}
+	store := groupware.NewApprovalAnalysisStore(groupware.DefaultApprovalAnalysisDir())
+	cutoff := time.Now().Add(-ccHighlightWindow).UnixMilli()
+	items := make([]groupwareCCEntry, 0, ccHighlightMaxItems)
+	recent := 0
+	for _, doc := range docs {
+		id := strings.TrimSpace(doc.DocID)
+		seenAt, tracked := firstSeen[id]
+		if id == "" || !tracked || seenAt < cutoff {
+			continue
+		}
+		recent++
+		if len(items) >= ccHighlightMaxItems {
+			continue
+		}
+		entry := groupwareCCEntry{DocID: id, Title: doc.Title, Drafter: doc.Drafter, Date: doc.Date}
+		if rec, lerr := store.Load(id); lerr == nil && rec != nil {
+			entry.Importance = rec.Importance
+			entry.Gist = groupware.ApprovalAnalysisGistLine(rec.Analysis)
+		}
+		items = append(items, entry)
+	}
+	return groupwareCCData{OK: true, Configured: true, Count: recent, Items: items}
 }
 
 func fetchWeather(ctx context.Context) any {
