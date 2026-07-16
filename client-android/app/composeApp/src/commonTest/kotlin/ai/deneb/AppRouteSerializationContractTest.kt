@@ -101,8 +101,8 @@ class AppRouteSerializationContractTest {
         {
             assertOpaqueRoutePreservesArguments(
                 serialName = "deneb_approval_detail",
-                fieldNames = listOf("docId", "title", "drafter", "date", "canAct"),
-                inputJson = """{"docId":"doc-한글 /?#","title":"품의","drafter":"홍길동","date":"2026-07-16","canAct":true}""",
+                fieldNames = listOf("docId", "title", "drafter", "date", "canAct", "folder"),
+                inputJson = """{"docId":"doc-한글 /?#","title":"품의","drafter":"홍길동","date":"2026-07-16","canAct":true,"folder":"pending"}""",
                 serializer = DenebApprovalDetail.serializer(),
             )
         },
@@ -227,7 +227,7 @@ class AppRouteSerializationContractTest {
         },
         {
             assertOpaqueRouteIgnoresFutureMetadata(
-                inputJson = """{"docId":"doc-한글 /?#","title":"품의","drafter":"홍길동","date":"2026-07-16","canAct":true}""",
+                inputJson = """{"docId":"doc-한글 /?#","title":"품의","drafter":"홍길동","date":"2026-07-16","canAct":true,"folder":"pending"}""",
                 serializer = DenebApprovalDetail.serializer(),
             )
         },
