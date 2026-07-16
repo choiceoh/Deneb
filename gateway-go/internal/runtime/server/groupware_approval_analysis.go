@@ -33,9 +33,27 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 	if client == nil || strings.TrimSpace(model) == "" {
 		return "", "", fmt.Errorf("main-role model unavailable")
 	}
+	// Best-effort: download+OCR selected attachments (계약/견적/…) and inject
+	// before the LLM. Failures leave analysis body-only — same shape as before.
+	attach := ""
+	if cfg, ok := groupware.FromEnv(); ok {
+		attach = groupware.LoadApprovalAttachmentsForAnalysis(ctx, cfg, docID, body)
+		if attach != "" && s.logger != nil {
+			s.logger.Info("approval analysis attachments injected",
+				"docId", docID,
+				"chars", utf8.RuneCountInString(attach))
+		}
+	}
+	enriched := body
+	if attach != "" {
+		enriched = body + attach
+	}
 	user := fmt.Sprintf("제목: %s\n\n본문:\n%s", strings.TrimSpace(title), truncateRunes(body, approvalAnalysisBodyMaxRune))
+	if attach != "" {
+		user += attach
+	}
 	if s.wikiStore != nil {
-		if hist := s.wikiStore.PriceHistoryContext(title + "\n" + body); hist != "" {
+		if hist := s.wikiStore.PriceHistoryContext(title + "\n" + enriched); hist != "" {
 			user += "\n\n## 과거 단가·경비 이력 (사내 원장 · 공급가액 기준)\n" + hist
 		}
 	}
@@ -50,7 +68,7 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 		return "", "", err
 	}
 	analysis := strings.TrimSpace(out)
-	if deltas := s.fileApprovalCost(ctx, docID, title, date, body); len(deltas) > 0 {
+	if deltas := s.fileApprovalCost(ctx, docID, title, date, enriched); len(deltas) > 0 {
 		analysis += "\n\n**단가 이력 대조 (자동)**\n- " + strings.Join(deltas, "\n- ")
 	}
 	return analysis, "", nil
