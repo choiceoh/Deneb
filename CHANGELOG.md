@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.114.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.113.0...deneb-v4.114.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **groupware:** default 모듈·인버터 scope + sales period tabs rework ([#3794](https://github.com/choiceoh/Deneb/issues/3794)) ([e6a3cb8](https://github.com/choiceoh/Deneb/commit/e6a3cb8645af677d7afc0485f554473ad66c0bcd))
+
 ## [4.113.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.112.0...deneb-v4.113.0) (2026-07-16)
 
 
