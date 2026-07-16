@@ -1,6 +1,6 @@
 ---
 name: decision-premortem
-version: "1.0.1"
+version: "1.0.2"
 category: productivity
 description: "결정·선택지를 적대적으로 반증해 의사결정 품질을 높인다 — 유리/불리 근거 정리 + 사전부검('실패했다 가정, 원인은?') + 자기 추천에 대한 악마의 변호인 + 결정을 뒤집을 미지수. Use when: '이거 결정해야 하는데', 'A안 B안 뭐가 나아', '이 딜 받을까', '사전부검', '리스크 짚어줘', 되돌리기 어려운 선택. NOT for: 단순 사실 확인(fact-check), 일반 메일 분석(email-analysis)."
 metadata:
@@ -40,16 +40,22 @@ user-invocable: true
 1. **결정을 고정한다.** 무엇을 정하는지, 선택지와 실제 이해관계가 무엇인지,
    **되돌릴 수 있는지**(reversibility) 한 번에 적는다. 가역 결정이면 짧게 끝내고,
    비가역 결정일 때만 아래 검증을 전부 수행한다.
-2. **추천을 압박 검증한다.** 다음 결과를 빠짐없이 만들되 고정된 실행 순서를 강요하지
-   않는다.
-   - 각 선택지의 유리/불리 근거와 무게(강/중/약). 메일·거래·사람·위키 등 실제
-     컨텍스트를 쓰고, 한쪽 근거만 있으면 자료를 더 찾는다.
-   - "6개월 뒤 실패했다"고 가정한 가장 그럴듯한 원인 3개.
-   - Deneb가 기울어진 추천의 **정반대**를 변호하는 한 문단.
-   - 결론을 뒤집을 미지수 1~2개와 확인 방법. 확인 가능하면
-     `web`/`wiki`/`mail_archive`를 쓰고 사실 검증은 `fact-check`로 잇는다.
+2. **추천을 압박 검증한다.** 아래 완료 조건을 실제 컨텍스트로 채운다. 결과 사이에
+   의존성이 없으면 고정된 실행 순서를 강요하지 않는다.
 3. **권고한다.** 위 반증을 통과한 결론만 한 줄로 제시하고, 남은 미지수가 크면 조건부
    권고로 표시한다.
+
+### 완료 조건
+
+비가역 결정은 아래 라벨이 **실제 답변에 모두 보일 때만 완료**다. 간결함은 각 블록을
+1~3줄로 줄이는 것이지 라벨을 합치거나 생략하는 것이 아니다. 표시 순서는 자유다.
+
+- **근거** — 선택지별 유리/불리 근거와 무게(강/중/약)
+- **실패 원인** — 6개월 뒤 실패를 가정한 원인 정확히 3개
+- **반대 논거** — 현재 추천의 정반대를 지지하는 가장 강한 논거
+- **뒤집을 미지수** — 결론을 바꿀 미지수 1~2개와 확인 방법. 필요하면
+  `web`/`wiki`/`mail_archive`를 쓰고 사실 검증은 `fact-check`로 잇는다.
+- **권고** — 반증을 통과한 결론 한 줄
 
 ## Pitfalls
 
@@ -66,4 +72,5 @@ user-invocable: true
 
 ## Changelog
 
+- v1.0.2: Added observable done criteria after a GLM-5.2 live probe omitted three required challenge results when asked to be concise.
 - v1.0.1: Preserved the frame-test-decide dependency while turning four independent challenge checks into an unordered result contract.

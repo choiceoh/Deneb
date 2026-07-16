@@ -5,8 +5,8 @@ import (
 	"sync"
 )
 
-// SkillConsultLog records which skills the agent consulted (read via the
-// `skills` tool's read action) during a single agent run. It feeds the
+// SkillConsultLog records which skills the agent consulted (JIT-injected or
+// read via the `skills` tool) during a single agent run. It feeds the
 // Propus Evolver a real usage and success-rate signal: the run loop
 // drains it per turn and attributes that turn's outcome (clean vs. a tool
 // error) to each skill consulted, calling RecordUsage. Without this the

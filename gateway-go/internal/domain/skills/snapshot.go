@@ -155,6 +155,7 @@ func entriesToPromptSkills(entries []SkillEntry) []PromptSkill {
 			Version:                entry.Skill.Version,
 			Type:                   entry.Skill.Type,
 			DisableModelInvocation: disableModel,
+			Body:                   entry.Body,
 		}
 		if entry.Metadata != nil {
 			ps.Tags = entry.Metadata.Tags

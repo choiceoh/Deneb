@@ -48,6 +48,10 @@ type SkillEntry struct {
 	Frontmatter ParsedFrontmatter      `json:"frontmatter,omitempty"`
 	Metadata    *DenebSkillMetadata    `json:"metadata,omitempty"`
 	Invocation  *SkillInvocationPolicy `json:"invocation,omitempty"`
+	// Body is the instruction section after frontmatter. It stays out of
+	// serialized snapshots and ambient prompts; exact-trigger turns may inject
+	// it just in time without a second filesystem read.
+	Body string `json:"-"`
 }
 
 // SkillSnapshot represents a point-in-time view of the skill catalog.

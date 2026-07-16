@@ -66,10 +66,10 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 
 	snapshot := skills.BuildWorkspaceSkillSnapshot(cfg)
 	if snapshot != nil {
-		// Keep only names in the ambient semi-static manifest. Exact trigger
-		// matches add at most two descriptions in the per-turn tail; unmatched
-		// complex work searches the skills tool on demand. The full body and
-		// required deferred tools arrive together when the selected skill is read.
+		// Keep only names in the ambient semi-static manifest. Exact triggers
+		// load at most two bounded bodies in the per-turn tail; unmatched complex
+		// work searches the skills tool on demand. Oversized bodies and auxiliary
+		// files retain the explicit read path.
 		indexResult := skills.BuildSkillsIndex(snapshot.ResolvedSkills, skills.DefaultSkillsLimits())
 		skillsCache.prompt = indexResult.Prompt
 		skillsCache.snapshot = snapshot

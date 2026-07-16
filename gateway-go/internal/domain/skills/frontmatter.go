@@ -40,8 +40,8 @@ type DenebSkillMetadata struct {
 	Homepage   string   `json:"homepage,omitempty"`
 	Tags       []string `json:"tags,omitempty"`
 	// Triggers are Korean utterance keywords for per-turn auto-surfacing: when a
-	// user message contains one, the chat pipeline appends a wire-only hint
-	// pointing at this skill (chat/skill_hints.go). Precision-curated and
+	// user message contains one, the chat pipeline appends bounded wire-only
+	// instruction context for that skill (chat/skill_hints.go). Precision-curated and
 	// deliberately separate from Tags — tags are broad discovery taxonomy
 	// ("검토", "review") that would over-fire as substring triggers.
 	Triggers         []string           `json:"triggers,omitempty"`

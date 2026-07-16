@@ -14,6 +14,7 @@ func hintSkills() []skills.PromptSkill {
 			Name:        "contract-review",
 			Description: "계약서·약정서·발주서 등 문서를 고정 조항 체크리스트로 검토해 우리에게 불리한 위험 조항을 빠짐없이 드러낸다 — 조항별 존재/부재를 강제한다. Use when: 계약 검토.",
 			Triggers:    []string{"계약서", "독소조항", "공급계약"},
+			Body:        "# Contract Review\n\n## Completion\n- 위험 조항\n- 권고",
 		},
 		{
 			Name:        "meeting-minutes",
@@ -30,10 +31,10 @@ func hintSkills() []skills.PromptSkill {
 	}
 }
 
-// TestBuildSkillHints_MatchAndFormat: a trigger hit produces the hint block
-// with the skill name, first-clause summary, and an explicit read call.
+// TestBuildSkillHints_MatchAndFormat: a trigger hit injects the bounded body
+// directly, without relying on a model-initiated read hop.
 func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
-	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills())
+	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "이 계약서 검토해줘"}, "", hintSkills())
 	if out == "" {
 		t.Fatal("expected a hint for 계약서")
 	}
@@ -43,12 +44,11 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 	if !strings.Contains(out, "contract-review") {
 		t.Errorf("hint missing skill name:\n%s", out)
 	}
-	if !strings.Contains(out, `skills(action="read", name="contract-review")`) {
-		t.Errorf("hint missing explicit read call:\n%s", out)
+	if len(loaded) != 1 || loaded[0] != "contract-review" {
+		t.Errorf("auto-loaded names = %v, want [contract-review]", loaded)
 	}
-	// First clause only — the " — " tail of the description must be cut.
-	if strings.Contains(out, "존재/부재를 강제") || strings.Contains(out, "Use when") {
-		t.Errorf("hint should carry only the first clause of the description:\n%s", out)
+	if !strings.Contains(out, "## Completion") || strings.Contains(out, `skills(action="read"`) {
+		t.Errorf("hint should carry the body without a read hop:\n%s", out)
 	}
 	// Unrelated skills must not ride along.
 	if strings.Contains(out, "meeting-minutes") || strings.Contains(out, "github") {
@@ -60,12 +60,9 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 // longest-trigger (most specific) ones.
 func TestBuildSkillHintsTruncatesAtCap(t *testing.T) {
 	msg := "회의록이랑 계약서, 그리고 팩트체크까지 — 독소조항 있는지 확실해?"
-	out, names := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
+	out, names, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: msg}, "", hintSkills())
 	if out == "" || len(names) == 0 || len(names) > maxSkillHints {
 		t.Fatalf("expected capped hints, names=%v", names)
-	}
-	if n := strings.Count(out, "\n- "); n > maxSkillHints {
-		t.Errorf("hints = %d, cap is %d:\n%s", n, maxSkillHints, out)
 	}
 	// contract-review matched "독소조항" (4 runes) — must survive the cap.
 	if !strings.Contains(out, "contract-review") {
@@ -73,10 +70,42 @@ func TestBuildSkillHintsTruncatesAtCap(t *testing.T) {
 	}
 }
 
+// TestBuildSkillHintsFallsBackForUnavailableBody: oversized bodies retain the
+// explicit read path; instructions are never silently truncated.
+func TestBuildSkillHintsFallsBackForUnavailableBody(t *testing.T) {
+	resolved := []skills.PromptSkill{{
+		Name:        "large-skill",
+		Description: "large procedure — details",
+		Triggers:    []string{"큰절차"},
+		Body:        strings.Repeat("x", maxAutoLoadedSkillBodyBytes+1),
+	}}
+	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "큰절차 실행"}, "", resolved)
+	if len(names) != 1 || len(loaded) != 0 {
+		t.Fatalf("names=%v loaded=%v, want one match and no auto-load", names, loaded)
+	}
+	if !strings.Contains(out, `skills(action="read", name="large-skill")`) {
+		t.Errorf("oversized skill missing read fallback:\n%s", out)
+	}
+}
+
+func TestBuildSkillHintsCapsAggregateBodyBytes(t *testing.T) {
+	resolved := []skills.PromptSkill{
+		{Name: "alpha", Description: "alpha", Triggers: []string{"알파절차"}, Body: strings.Repeat("a", 11_000)},
+		{Name: "beta", Description: "beta", Triggers: []string{"베타절차"}, Body: strings.Repeat("b", 11_000)},
+	}
+	out, names, loaded := buildSkillHints(RunParams{SessionKey: "client:main", Message: "알파절차 베타절차"}, "", resolved)
+	if len(names) != 2 || len(loaded) != 1 || loaded[0] != "alpha" {
+		t.Fatalf("names=%v loaded=%v, want two matches and one deterministic load", names, loaded)
+	}
+	if !strings.Contains(out, `skills(action="read", name="beta")`) {
+		t.Errorf("aggregate overflow missing read fallback")
+	}
+}
+
 // TestBuildSkillHintsReturnsEmptyWhenGated: system sessions (skill-review forks would
 // self-trigger on SKILL.md bodies), ephemeral/recall-suppressed runs, empty
-// messages, triggerless catalogs, and skills-tool-less presets (the hint would
-// instruct a blocked call) all yield no hint.
+// messages, triggerless catalogs, and skills-tool-less presets all yield no
+// hint.
 func TestBuildSkillHintsReturnsEmptyWhenGated(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -93,16 +122,16 @@ func TestBuildSkillHintsReturnsEmptyWhenGated(t *testing.T) {
 		{"conversation preset (btw)", RunParams{SessionKey: "btw:abc123", Message: "계약서 검토"}, "conversation"},
 	}
 	for _, tc := range cases {
-		if out, names := buildSkillHints(tc.params, tc.preset, hintSkills()); out != "" || len(names) != 0 {
+		if out, names, loaded := buildSkillHints(tc.params, tc.preset, hintSkills()); out != "" || len(names) != 0 || len(loaded) != 0 {
 			t.Errorf("%s: expected no hint, got:\n%s", tc.name, out)
 		}
 	}
-	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, "", nil); out != "" {
+	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서"}, "", nil); out != "" {
 		t.Errorf("nil catalog: expected no hint, got:\n%s", out)
 	}
 	// The self-review preset DOES allow the skills tool — the preset gate must
 	// key on the allow-list, not blanket-suppress preset runs.
-	if out, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills()); out == "" {
+	if out, _, _ := buildSkillHints(RunParams{SessionKey: "client:main", Message: "계약서 검토"}, "self-review", hintSkills()); out == "" {
 		t.Error("self-review preset allows the skills tool; hint should fire")
 	}
 }
@@ -120,7 +149,7 @@ func TestSkillHintSummaryTruncatesAtSeparatorAndCap(t *testing.T) {
 
 // TestBuildTailAdditionsPreservesHintPosition: the hint rides after reference
 // material and before the directives, in both the recall and notebook branches
-// (a procedure pointer is orthogonal to reference material, so unlike
+// (skill context is orthogonal to reference material, so unlike
 // recall/feed it is NOT suppressed by notebook grounding).
 func TestBuildTailAdditionsPreservesHintPosition(t *testing.T) {
 	adds := buildTailAdditions(RunParams{AutoDeliveredOutput: true}, "recall", "", "힌트")

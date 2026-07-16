@@ -34,6 +34,9 @@ type PromptSkill struct {
 	// (chat/tool_skill_required_tools.go).
 	RequiresTools          []string `json:"requiresTools,omitempty"`
 	DisableModelInvocation bool     `json:"disableModelInvocation,omitempty"`
+	// Body is retained in the in-memory snapshot for exact-trigger JIT
+	// injection. It is never serialized or rendered in the ambient catalog.
+	Body string `json:"-"`
 }
 
 // PromptResult is the output of prompt building.
@@ -130,7 +133,7 @@ func formatSkillsCompact(skills []PromptSkill) string {
 }
 
 // formatSkillsNameIndex renders the ambient catalog as names only. Purpose,
-// location, and procedure arrive just in time through an exact-trigger hint or
+// location and procedure arrive just in time through exact-trigger context or
 // skills(action=list/read). Paying every skill's description and path on every
 // turn made the semi-static block grow linearly with the catalog even though a
 // turn normally consults zero or one skill.
