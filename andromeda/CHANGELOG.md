@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.90](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.89...andromeda-v0.0.90) (2026-07-16)
+
+
+### ✨ Features
+
+* **andromeda:** approval attachments + markdown parity (sticky/합계/footnotes) ([#3819](https://github.com/choiceoh/Deneb/issues/3819)) ([6c54c7a](https://github.com/choiceoh/Deneb/commit/6c54c7a4679187e6ca1759c691d9b318370a0d1e))
+* **sitemap:** 상세에서 현장 상태 칩으로 변경 ([#3814](https://github.com/choiceoh/Deneb/issues/3814)) ([1f04a07](https://github.com/choiceoh/Deneb/commit/1f04a075a69b2cd6230c50d8b62b7523f8d47b96))
+* **sitemap:** 현장 페이지 생성·일정 편집·미배치 상세 ([#3820](https://github.com/choiceoh/Deneb/issues/3820)) ([4f84126](https://github.com/choiceoh/Deneb/commit/4f8412678328fb623816f842b67de7a4d63d3d38))
+
 ## [0.0.89](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.88...andromeda-v0.0.89) (2026-07-16)
 
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.117.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.116.0...deneb-v4.117.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **andromeda:** approval attachments + markdown parity (sticky/합계/footnotes) ([#3819](https://github.com/choiceoh/Deneb/issues/3819)) ([6c54c7a](https://github.com/choiceoh/Deneb/commit/6c54c7a4679187e6ca1759c691d9b318370a0d1e))
+* **client:** 결재 최근목록·무한스크롤·settings 캐시와 피드 스와이프 폴리시 ([#3818](https://github.com/choiceoh/Deneb/issues/3818)) ([6e6ac08](https://github.com/choiceoh/Deneb/commit/6e6ac0808826e2f20d0e66f0990082da12e919ec))
+* **groupware:** approval price memory — item/expense cost capture + prompt injection ([#3815](https://github.com/choiceoh/Deneb/issues/3815)) ([e4fb1b2](https://github.com/choiceoh/Deneb/commit/e4fb1b21f4994a5ec1e55f305f052a2d6ff7b0e5))
+* **groupware:** inject selected approval attachments into analysis prompt ([#3822](https://github.com/choiceoh/Deneb/issues/3822)) ([6f761a5](https://github.com/choiceoh/Deneb/commit/6f761a53aae62bef7485cdb634e0bac52bbdfd28))
+* **runtime:** recover completed tools after restart ([#3817](https://github.com/choiceoh/Deneb/issues/3817)) ([764e1e9](https://github.com/choiceoh/Deneb/commit/764e1e9aec672b899327040834a54a151e356722))
+* **sitemap:** 상세에서 현장 상태 칩으로 변경 ([#3814](https://github.com/choiceoh/Deneb/issues/3814)) ([1f04a07](https://github.com/choiceoh/Deneb/commit/1f04a075a69b2cd6230c50d8b62b7523f8d47b96))
+* **sitemap:** 현장 페이지 생성·일정 편집·미배치 상세 ([#3820](https://github.com/choiceoh/Deneb/issues/3820)) ([4f84126](https://github.com/choiceoh/Deneb/commit/4f8412678328fb623816f842b67de7a4d63d3d38))
+
+
+### 🐛 Bug Fixes
+
+* **groupware:** attach analysis fields on approval feed cards ([#3810](https://github.com/choiceoh/Deneb/issues/3810)) ([b6c02cc](https://github.com/choiceoh/Deneb/commit/b6c02cc68f20456ace0d8605ff26f44f5a7f2f30))
+* **skills:** auto-load exact trigger procedures ([#3812](https://github.com/choiceoh/Deneb/issues/3812)) ([0d695c6](https://github.com/choiceoh/Deneb/commit/0d695c67d75e764d16c59ad387b9467cd6546fa0))
+* **wiki:** discard stale graph corpus cache after concurrent forget ([#3816](https://github.com/choiceoh/Deneb/issues/3816)) ([6988b6c](https://github.com/choiceoh/Deneb/commit/6988b6c79215ab659ce9e4773141a3b80e25a606))
+
 ## [4.116.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.115.0...deneb-v4.116.0) (2026-07-16)
 
 
