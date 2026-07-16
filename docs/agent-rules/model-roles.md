@@ -15,14 +15,17 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 >
 > 2026-07-07 가용성 사실: dsv4 는 **srv2 단일노드 `vllm-dsv4`**(sparkfleet launch 가 복구 경로), wormhole 의 dsv4 별칭 2종에 **엔트리별 fallback→qwen3.6**(srv4 로컬)이 걸려 있어 dsv4 다운에도 lightweight/tiny 는 생존한다. **adaptive effort router 는 전 wormhole 모델 개통**(deneb.json `providers.wormhole.routing.enabled` + `DENEB_ADAPTIVE_EFFORT=1`) — 단순 대화 턴은 glm 도 thinking-off 로 ~5s. kimi 프로바이더는 402(멤버십 만료, 운영자 갱신 대기).
 
-| 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-04 스냅샷) |
+| 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-17 스냅샷) |
 |---|---|---|---|
-| main | `RoleMain` | 대화·분석·도구호출·생성물 합성·**추론급 품질 종합** (가장 강력) | ⚠️ **클라우드** (glm-5.2, ≥06-28) |
+| main | `RoleMain` | **대화형** 턴 — 사용자 대면 최고 지능 (가장 강력) | ⚠️ **클라우드** (kimi/kimi-for-coding 구독제, ≥07-17) |
+| main2 | `RoleMain2` | **opt-in 제2 메인** — main급 품질이 필요하지만 플래그십일 필요 없는 배경 종합·벌크 부하. **main과 상호 폴백 페어**: main 죽으면 main2가, main2 죽으면 main이 1순위로 이어받아(같은 티어 품질 보존) 그다음에야 lightweight로 강등. 미설정 시 체인에서 자동 스킵(단일 main 동작) | 클라우드 (wormhole/glm-5.2 구독제) |
 | coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | 클라우드 (glm-5.2) |
 | lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (wormhole/dsv4-nothink@srv2 — qwen3.6에서 교체) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
-| fallback | `RoleFallback` | 폴백 체인 | 로컬 (wormhole/deepseek-v4-flash@srv2) |
+| fallback | `RoleFallback` | 폴백 체인 **최종 안전망** (상호 main 페어 도입 후 별도 클라우드 종량제 지정은 은퇴 — 로컬로 충분) | 로컬 (wormhole/deepseek-v4-flash@srv2) |
 | vision | `RoleVision` | 이미지 턴 (#2510) | 클라우드 (google/gemini-3.5-flash) |
+
+> ★ **main/main2 분리는 모델 분리지 페르소나 분리가 아니다** (2026-07-17, 운영자 설계): 단일 비서 페르소나 원칙은 그대로 — 두 구독제(kimi·glm)에 트래픽을 나누고 서로가 서로의 1순위 폴백이 되는 가용성 페어일 뿐이다. 체인: main→main2→lightweight→fallback / main2→main→lightweight→fallback. 배경 main-급 임무의 main2 재배치는 임무→역할 표의 각 행이 소관.
 
 > ⚠️ **analysis 역할은 2026-07-07 제거됐다.** 과거 `analysis → glm-5.2`(클라우드, main·chatbot·coding과 공유)라 요약류 헬퍼 콜을 얹으면 클라우드로 새던 함정의 근원이었다 — 컴팩션·youtube 요약이 실제로 이렇게 샜다가 #2508/#2509로 lightweight(로컬)로 환원됐다. 이제 **내부/배경 요약은 lightweight(로컬), 사용자가 읽는 품질 종합은 main**으로 이분된다. analysis와 동일 모델(glm-5.2)이라 제거는 동작상 무변화였다.
 >

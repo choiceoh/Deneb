@@ -198,6 +198,52 @@ func TestNewRegistryWithOptions_KimiBehindWormhole(t *testing.T) {
 	}
 }
 
+// Main1/main2 mutual failover pair: main2 is opt-in, resolves like other
+// roles, and each main's chain starts with the other main (same-tier quality
+// before degrading to lightweight).
+func TestNewRegistryWithOptions_Main2MutualFailoverPair(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:  "kimi/kimi-for-coding",
+		Main2Model: "zai/glm-5.2",
+		Providers: map[string]ProviderResolved{
+			"kimi": {BaseURL: "http://127.0.0.1:18800", APIKey: "t", APIMode: "anthropic"},
+			"zai":  {BaseURL: "https://api.z.ai/api/anthropic", APIKey: "k", APIMode: "anthropic"},
+		},
+	})
+
+	if cfg := reg.Config(RoleMain2); cfg.Model != "glm-5.2" || cfg.ProviderID != "zai" {
+		t.Fatalf("main2 config = %+v", cfg)
+	}
+	// Role-name resolution: "main2" resolves when configured.
+	if id, role, ok := reg.ResolveModel("main2"); !ok || role != RoleMain2 || id != "zai/glm-5.2" {
+		t.Fatalf("ResolveModel(main2) = (%s, %s, %v)", id, role, ok)
+	}
+	// Chain heads: main → main2 first, main2 → main first.
+	if chain := reg.FallbackChain(RoleMain); chain[1] != RoleMain2 {
+		t.Fatalf("main chain = %v", chain)
+	}
+	if chain := reg.FallbackChain(RoleMain2); chain[1] != RoleMain {
+		t.Fatalf("main2 chain = %v", chain)
+	}
+}
+
+// Unconfigured main2 stays absent: "main2" falls through as a raw model name
+// and the role has no config/client, so the fallback walk skips it.
+func TestNewRegistryWithOptions_Main2AbsentByDefault(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel: "zai/main-model",
+	})
+	if cfg := reg.Config(RoleMain2); cfg.Model != "" {
+		t.Fatalf("unconfigured main2 = %+v, want absent", cfg)
+	}
+	if _, _, ok := reg.ResolveModel("main2"); ok {
+		t.Fatalf("ResolveModel(main2) resolved for unconfigured role")
+	}
+	if c := reg.Client(RoleMain2); c != nil {
+		t.Fatalf("unconfigured main2 has a client")
+	}
+}
+
 func TestNewRegistryWithOptions_UnsetRolesDefaultToVllm(t *testing.T) {
 	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
 		MainModel:      "zai/main-model",
@@ -218,7 +264,10 @@ func TestFallbackChain(t *testing.T) {
 		role Role
 		want []Role
 	}{
-		{RoleMain, []Role{RoleMain, RoleLightweight, RoleFallback}},
+		// Main2 sits in the chain unconditionally; the fallback walk skips it
+		// when unconfigured (nil client), preserving single-main behavior.
+		{RoleMain, []Role{RoleMain, RoleMain2, RoleLightweight, RoleFallback}},
+		{RoleMain2, []Role{RoleMain2, RoleMain, RoleLightweight, RoleFallback}},
 		{RoleCoding, []Role{RoleCoding, RoleMain, RoleFallback}},
 		{RoleLightweight, []Role{RoleLightweight, RoleFallback}},
 		{RoleFallback, []Role{RoleFallback}},

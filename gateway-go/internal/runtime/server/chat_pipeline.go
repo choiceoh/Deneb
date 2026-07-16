@@ -46,6 +46,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 	reg := modelrole.NewRegistryWithOptions(s.logger, modelrole.RegistryOptions{
 		MainModel:        chatCfg.DefaultModel,
 		LocalVllmModel:   localVllmModel,
+		Main2Model:       configresolve.Main2Model(s.logger),
 		LightweightModel: configresolve.LightweightModel(s.logger),
 		TinyModel:        configresolve.TinyModel(s.logger),
 		CodingModel:      configresolve.CodingModel(s.logger),

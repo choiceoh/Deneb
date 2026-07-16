@@ -27,7 +27,14 @@ import (
 type Role string
 
 const (
-	RoleMain        Role = "main"
+	RoleMain Role = "main"
+	// RoleMain2 is the opt-in SECOND main-tier model: main-grade quality for
+	// work that doesn't need the flagship (background synthesis, bulk load),
+	// splitting traffic across two subscriptions. Main and Main2 are each
+	// other's FIRST fallback (mutual failover pair) so either subscription
+	// outage degrades to the other main-tier model before any smaller role.
+	// Absent unless agents.main2Model is configured.
+	RoleMain2       Role = "main2"
 	RoleTiny        Role = "tiny"        // smallest model: trivial classification/extraction
 	RoleLightweight Role = "lightweight" // mid model: bounded summarization
 	// RoleCoding is the opt-in model used for code-writing/editing work such as
@@ -101,8 +108,12 @@ type RoutingOverride struct {
 
 // RegistryOptions configures NewRegistryWithOptions.
 type RegistryOptions struct {
-	MainModel        string // "provider/model"; empty → local vLLM
-	LocalVllmModel   string // served model name for the local vLLM default
+	MainModel      string // "provider/model"; empty → local vLLM
+	LocalVllmModel string // served model name for the local vLLM default
+	// Main2Model overrides RoleMain2 (second main-tier model; mutual failover
+	// pair with main). Empty → the role is absent and the main fallback chain
+	// skips straight to lightweight as before. Format: "provider/model".
+	Main2Model       string
 	LightweightModel string // override for RoleLightweight; empty → local vLLM
 	TinyModel        string // override for RoleTiny; empty → same as lightweight
 	// CodingModel overrides RoleCoding (code-writing/editing work). Empty → the
@@ -259,6 +270,11 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.CodingModel != "" {
 		models[RoleCoding] = resolveModelConfig(opts.CodingModel, opts.Providers)
 	}
+	// Main2 is OPT-IN like coding/vision: present only when configured, so an
+	// unconfigured deployment keeps the single-main behavior.
+	if opts.Main2Model != "" {
+		models[RoleMain2] = resolveModelConfig(opts.Main2Model, opts.Providers)
+	}
 	// Vision role is OPT-IN: present only when configured, so an
 	// unconfigured deployment leaves image turns on the main model.
 	if opts.VisionModel != "" {
@@ -280,6 +296,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	}
 	if _, ok := models[RoleVision]; ok {
 		reconcileRoles = append(reconcileRoles, RoleVision)
+	}
+	if _, ok := models[RoleMain2]; ok {
+		reconcileRoles = append(reconcileRoles, RoleMain2)
 	}
 	for _, role := range reconcileRoles {
 		cfg := models[role]
@@ -319,6 +338,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	logger.Info(
 		"modelrole: registry initialized",
 		"main", logModelAlias(models[RoleMain]),
+		"main2", logModelAlias(models[RoleMain2]),
 		"tiny", logModelAlias(models[RoleTiny]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
 		"coding", logModelAlias(models[RoleCoding]),
@@ -498,7 +518,9 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	case RoleMain, RoleTiny, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
-	case RoleCoding:
+	case RoleCoding, RoleMain2:
+		// Opt-in roles resolve only when configured; otherwise the literal
+		// string falls through as a raw model name.
 		role = Role(modelOrRole)
 		if id := r.FullModelID(role); id != "" {
 			return id, role, true
@@ -516,7 +538,9 @@ func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	// lightweight default maps that shared model back to the lightweight role
 	// (preserving prior behavior); an explicitly configured tiny model
 	// still matches its own role.
-	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision} {
+	// Main2 scans last so a model shared with a legacy role (e.g. glm serving
+	// both coding and main2) keeps mapping to the role it mapped to before.
+	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -537,7 +561,13 @@ func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 func (r *Registry) FallbackChain(role Role) []Role {
 	switch role {
 	case RoleMain:
-		return []Role{RoleMain, RoleLightweight, RoleFallback}
+		// Main2 (when configured) is main's FIRST fallback: a same-tier model
+		// keeps quality before degrading to lightweight. Unconfigured, the
+		// walk skips it (nil client) and the chain behaves as before.
+		return []Role{RoleMain, RoleMain2, RoleLightweight, RoleFallback}
+	case RoleMain2:
+		// Mutual failover pair: main2's first fallback is main.
+		return []Role{RoleMain2, RoleMain, RoleLightweight, RoleFallback}
 	case RoleTiny:
 		return []Role{RoleTiny, RoleLightweight, RoleFallback}
 	case RoleLightweight:
