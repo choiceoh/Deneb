@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.116.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.115.0...deneb-v4.116.0) (2026-07-16)
+
+
+### ✨ Features
+
+* **client:** swipe between feed and approvals, drop mail from pivot ([#3807](https://github.com/choiceoh/Deneb/issues/3807)) ([d79e9db](https://github.com/choiceoh/Deneb/commit/d79e9dbc0e72656d7f766486632cfddd89c4d648))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** interrupt paragraphs for GFM tables in approval bodies ([#3800](https://github.com/choiceoh/Deneb/issues/3800)) ([931c649](https://github.com/choiceoh/Deneb/commit/931c6490c3e64f2b878fef6126d1b04585cec96d))
+* **andromeda:** markdown normalizers + approval body polish ([#3806](https://github.com/choiceoh/Deneb/issues/3806)) ([fb42ff6](https://github.com/choiceoh/Deneb/commit/fb42ff6488cae02ecab611e9b73c8b8e1e182d06))
+* **groupware:** analyze and wiki before approval feed cards ([#3803](https://github.com/choiceoh/Deneb/issues/3803)) ([c88c695](https://github.com/choiceoh/Deneb/commit/c88c6957e268a736f2d18bbdf320f412c4857dac))
+* **groupware:** publish approval analysis directly to feed ([#3808](https://github.com/choiceoh/Deneb/issues/3808)) ([14a3bda](https://github.com/choiceoh/Deneb/commit/14a3bda1a35b72bb1243fa5f5481e3c97969ad5e))
+* **groupware:** 매출 요약을 기간·건수·매출만 표시하고 금액 괄호 숫자 제거 ([#3805](https://github.com/choiceoh/Deneb/issues/3805)) ([ce82342](https://github.com/choiceoh/Deneb/commit/ce823429099778229a0f380a2c05e48f2cfa8b3c))
+* **sitemap:** 기본 필터를 공사중(개설)만 표시 ([#3802](https://github.com/choiceoh/Deneb/issues/3802)) ([323742c](https://github.com/choiceoh/Deneb/commit/323742cb35fa1b3ca52f6c9b43e20b6fa3ba3e62))
+
+
+### 🔧 Internal
+
+* **skills:** preserve only required process ([#3801](https://github.com/choiceoh/Deneb/issues/3801)) ([735a159](https://github.com/choiceoh/Deneb/commit/735a1591461ddc90d9ac0cb882046adcefac97e5))
+
 ## [4.115.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.114.0...deneb-v4.115.0) (2026-07-16)
 
 

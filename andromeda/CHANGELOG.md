@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.89](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.88...andromeda-v0.0.89) (2026-07-16)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** interrupt paragraphs for GFM tables in approval bodies ([#3800](https://github.com/choiceoh/Deneb/issues/3800)) ([931c649](https://github.com/choiceoh/Deneb/commit/931c6490c3e64f2b878fef6126d1b04585cec96d))
+* **andromeda:** markdown normalizers + approval body polish ([#3806](https://github.com/choiceoh/Deneb/issues/3806)) ([fb42ff6](https://github.com/choiceoh/Deneb/commit/fb42ff6488cae02ecab611e9b73c8b8e1e182d06))
+* **sitemap:** 기본 필터를 공사중(개설)만 표시 ([#3802](https://github.com/choiceoh/Deneb/issues/3802)) ([323742c](https://github.com/choiceoh/Deneb/commit/323742cb35fa1b3ca52f6c9b43e20b6fa3ba3e62))
+
 ## [0.0.88](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.87...andromeda-v0.0.88) (2026-07-16)
 
 
