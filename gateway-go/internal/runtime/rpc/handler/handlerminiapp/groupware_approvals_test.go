@@ -210,10 +210,10 @@ func TestGroupwareApprovalsGetAndAnalyzeCache(t *testing.T) {
 			return "본문 내용\n금액 100", nil
 		},
 		Cache: cache,
-		Analyze: func(_ context.Context, title, body string) (string, string, error) {
+		Analyze: func(_ context.Context, docID, title, _, body string) (string, string, error) {
 			analyzeCalls++
-			if title == "" || body == "" {
-				t.Fatalf("empty analyze input title=%q body=%q", title, body)
+			if docID == "" || title == "" || body == "" {
+				t.Fatalf("empty analyze input docID=%q title=%q body=%q", docID, title, body)
 			}
 			return "## 요지\nok\nIMPORTANCE: urgent", "urgent", nil
 		},

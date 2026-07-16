@@ -25,6 +25,20 @@ import (
 // 거래 pages. The dot prefix + .jsonl suffix keep it out of the .md page index.
 const dealRecordsFile = ".deals.jsonl"
 
+// DealLineItem is one 품목/용역 row of a filed document — the item-level price
+// memory a multi-item 결재 문서 (발주품의·지출결의) carries that the single
+// document-level UnitPrice term cannot. Money fields are free-text 공급가액 as
+// written in the source; Quote is the verbatim source line backing the figures
+// (same audit contract as QuotedTerm).
+type DealLineItem struct {
+	Name      string `json:"name"`                // 품목/용역명
+	Spec      string `json:"spec,omitempty"`      // 규격/사양
+	Qty       string `json:"qty,omitempty"`       // 수량 (free-text: "2,000장")
+	UnitPrice string `json:"unitPrice,omitempty"` // 단가 (free-text: "145원/W")
+	Amount    string `json:"amount,omitempty"`    // 라인 금액 (free-text, 공급가액)
+	Quote     string `json:"quote,omitempty"`     // verbatim source line (audit)
+}
+
 // DealRecord is one filed business document as typed, computable fields — the
 // structured counterpart of the prose entry dealEntryLine renders.
 type DealRecord struct {
@@ -43,8 +57,15 @@ type DealRecord struct {
 	// Terms are the quote-verified commercial terms (물량·단가·지급조건·하자보수·
 	// 지체상금, deal_terms.go) — nil on rows filed before the fact layer or when
 	// the mail carried none that survived verification.
-	Terms      *DealTerms `json:"terms,omitempty"`
-	RecordedAt int64      `json:"recordedAt"` // unix milli
+	Terms *DealTerms `json:"terms,omitempty"`
+	// LineItems are the per-item quote-verified rows of the document (결재
+	// 파일링이 채움; 메일 파일링은 문서 단위 Terms만) — 품목 단가 기억의 단위.
+	LineItems []DealLineItem `json:"lineItems,omitempty"`
+	// ExpenseKind is the normalized recurring-expense category (주유비·식대·
+	// 월 용역료 …) for 경비형 documents without per-item unit prices. It keys the
+	// amount time-series comparison ("이번 주유비가 최근 중앙값 대비 +35%").
+	ExpenseKind string `json:"expenseKind,omitempty"`
+	RecordedAt  int64  `json:"recordedAt"` // unix milli
 }
 
 // dealRecordFrom builds a typed record from the write-time input, parsing the
@@ -74,6 +95,8 @@ func dealRecordFrom(in DealPageInput, now time.Time) DealRecord {
 		Summary:      strings.TrimSpace(in.Summary),
 		SourceRef:    strings.TrimSpace(in.SourceRef),
 		Projects:     textutil.DedupeStrings(projects),
+		LineItems:    append([]DealLineItem(nil), in.LineItems...),
+		ExpenseKind:  strings.TrimSpace(in.ExpenseKind),
 		RecordedAt:   now.UnixMilli(),
 	}
 	if !in.Terms.Empty() {

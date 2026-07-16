@@ -21,12 +21,24 @@ const (
 // completeApprovalAnalysis runs the LLM over one 전자결재 document (메일
 // stage-2 / main role). Importance is left empty so the handler can parse
 // IMPORTANCE: from the analysis body.
-func (s *Server) completeApprovalAnalysis(ctx context.Context, title, body string) (string, string, error) {
+//
+// Price-memory loop (결재 단가 기억): the ledger's matching price history is
+// injected into the prompt BEFORE the LLM sees the document, and after the
+// analysis the document's own cost is extracted (quote-gated), diffed against
+// the ledger, and filed — so the NEXT approval of the same 품목/경비 sees this
+// one. The exact deltas are appended below the analysis so the card carries
+// deterministic figures regardless of the model's narrative.
+func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, date, body string) (string, string, error) {
 	client, model, _, _ := s.mailAnalysisModels()
 	if client == nil || strings.TrimSpace(model) == "" {
 		return "", "", fmt.Errorf("main-role model unavailable")
 	}
 	user := fmt.Sprintf("제목: %s\n\n본문:\n%s", strings.TrimSpace(title), truncateRunes(body, approvalAnalysisBodyMaxRune))
+	if s.wikiStore != nil {
+		if hist := s.wikiStore.PriceHistoryContext(title + "\n" + body); hist != "" {
+			user += "\n\n## 과거 단가·경비 이력 (사내 원장 · 공급가액 기준)\n" + hist
+		}
+	}
 	out, err := client.Complete(ctx, llm.ChatRequest{
 		Model:     model,
 		System:    llm.SystemString(handlerminiapp.ApprovalAnalyzeSystemPrompt()),
@@ -37,7 +49,11 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, title, body strin
 	if err != nil {
 		return "", "", err
 	}
-	return strings.TrimSpace(out), "", nil
+	analysis := strings.TrimSpace(out)
+	if deltas := s.fileApprovalCost(ctx, docID, title, date, body); len(deltas) > 0 {
+		analysis += "\n\n**단가 이력 대조 (자동)**\n- " + strings.Join(deltas, "\n- ")
+	}
+	return analysis, "", nil
 }
 
 // prepareApprovalBeforeFeed reads + analyzes a pending approval before the
@@ -84,7 +100,7 @@ func (s *Server) prepareApprovalBeforeFeed(ctx context.Context, doc groupware.Ap
 		title = firstNonEmptyLine(body)
 	}
 	start := time.Now()
-	analysis, _, err := s.completeApprovalAnalysis(ctx, title, body)
+	analysis, _, err := s.completeApprovalAnalysis(ctx, docID, title, doc.Date, body)
 	if err != nil {
 		if s.logger != nil {
 			s.logger.Warn("groupware radar approval analysis failed", "docId", docID, "err", err)

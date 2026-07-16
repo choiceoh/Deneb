@@ -41,6 +41,12 @@ type DealPageInput struct {
 	// extractor (nil when none survived) — persisted on the ledger record and
 	// echoed compactly (물량·단가) in the prose entry.
 	Terms *DealTerms
+	// LineItems are the per-item quote-verified rows (결재 파일링) — persisted
+	// on the ledger record and echoed compactly in the prose entry.
+	LineItems []DealLineItem
+	// ExpenseKind is the recurring-expense category for 경비형 documents
+	// (주유비 등) — keys the amount time-series recall.
+	ExpenseKind string
 }
 
 // UpsertDealPage files a business document onto its counterparty's deal page,
@@ -149,6 +155,25 @@ func dealEntryLine(in DealPageInput, today string) string {
 		if v := strings.TrimSpace(in.Terms.UnitPrice.Value); v != "" {
 			parts = append(parts, "단가 "+v)
 		}
+	}
+	if k := strings.TrimSpace(in.ExpenseKind); k != "" {
+		parts = append(parts, "경비 "+k)
+	}
+	// Per-item unit prices, compact echo (up to 3; full rows on the ledger).
+	for i, li := range in.LineItems {
+		if i >= 3 {
+			parts = append(parts, fmt.Sprintf("외 %d개 품목", len(in.LineItems)-3))
+			break
+		}
+		name := strings.TrimSpace(li.Name)
+		if name == "" {
+			continue
+		}
+		p := name
+		if up := strings.TrimSpace(li.UnitPrice); up != "" {
+			p += " " + up
+		}
+		parts = append(parts, p)
 	}
 	head := strings.Join(parts, " · ")
 	if head == "" {

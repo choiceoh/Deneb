@@ -115,29 +115,7 @@ func verifyDealFacts(facts *DealFacts, source string, logger *slog.Logger) *Deal
 	}
 	normSource := stripSpaces(source)
 	check := func(name string, f *QuotedFact) {
-		f.Value = strings.TrimSpace(f.Value)
-		f.Quote = strings.TrimSpace(f.Quote)
-		if f.Value == "" {
-			f.Quote = ""
-			return
-		}
-		reason := ""
-		switch {
-		case f.Quote == "":
-			reason = "인용 없음"
-		case !strings.Contains(normSource, stripSpaces(f.Quote)):
-			reason = "인용이 원문에 없음"
-		case !digitsCoveredBy(f.Value, f.Quote):
-			reason = "값의 숫자가 인용에 없음"
-		}
-		if reason == "" {
-			return
-		}
-		if logger != nil {
-			logger.Warn("mail→deal: 거래 조건 인용 검증 실패로 드롭",
-				"field", name, "value", f.Value, "reason", reason)
-		}
-		f.Value, f.Quote = "", ""
+		verifyQuotedFact("mail→deal: 거래 조건 인용 검증 실패로 드롭", name, f, normSource, logger)
 	}
 	check("capacityMW", &facts.CapacityMW)
 	check("unitPrice", &facts.UnitPrice)
