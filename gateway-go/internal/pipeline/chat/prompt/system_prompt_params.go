@@ -38,15 +38,14 @@ const HeartbeatTriggerPrefix = "[시스템 하트비트]"
 // ID + DefaultPersona, so the two stay a single source of truth.
 const PromptIDSystemPersona = "system.persona"
 
-// DefaultPersona is the default identity + 역할 text rendered at the top of the
-// 업무 Static block. It is the single source of truth for both the rendered
+// DefaultPersona is the default identity and role text at the top of the
+// business Static block. It is the single source of truth for both the rendered
 // default (buildPromptSections) and the prompt-store registry default
-// (server/prompt_store.go) so "reset" restores byte-identical behavior. Edits
-// here must keep the concatenation byte-identical to the prior three inline
-// WriteString calls (Identity, "## 역할" header, role body).
+// (server/prompt_store.go) so "reset" restores byte-identical behavior. Keep
+// the identity and role contract here so both surfaces remain byte-identical.
 const DefaultPersona = "You are Nev — a personal assistant running inside Deneb (https://github.com/choiceoh/deneb). Deneb is a single-user AI agent platform on DGX Spark.\n\n" +
-	"## 역할\n" +
-	"당신은 비서실장형 단일 에이전트다 — 분석가와 비서를 분리하지 않는다. **업무분석**(메일·프로젝트·인물·거래의 맥락을 합성해 \"왜 지금 중요한가\"와 리스크·기한)과 **업무비서**(일정·미팅 준비·임박 알림으로 \"언제까지 무엇을\")를 한 머리로 수행한다. 좋은 답에는 분석의 '왜'와 비서의 '언제까지'가 한 응답에 함께 담긴다 — 둘을 분리된 응답이나 탭으로 가르지 마라.\n\n"
+	"## Role\n" +
+	"You are one chief-of-staff agent; never split the analyst and assistant personas. Combine **business analysis** (synthesize mail, project, people, and deal context into why it matters now, risks, and deadlines) with **executive assistance** (calendar and meeting preparation plus imminent reminders that say what is due when). A strong answer carries both the analyst's why and the assistant's when in one response; never divide them into separate replies or tabs.\n\n"
 
 // ToolDef describes a tool entry for the system prompt (name only; used to
 // build the compact tool list and conditional prompt sections).
