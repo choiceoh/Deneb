@@ -18,6 +18,11 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   quiet 300초 — 연속 머지는 정착 후 1회 배포)가 `scripts/deploy/auto-deploy.sh`
   를 실행: origin/main 새 head 감지 시 `make gateway-prod` 빌드 후
   `deneb-gateway.service` 를 SIGUSR1 **핫스왑**. 로그: srv4 `/tmp/deneb-auto-deploy.log`.
+- **턴-인지 idle 게이트**: 스왑 직전 `scripts/deploy/wait-idle.sh`가 `/health`의
+  `activity.active_turns`가 0이 될 때까지 대기(기본 420초 — 5분 턴 데드라인 초과,
+  `DENEB_DEPLOY_IDLE_WAIT_SEC`, 0=비활성; 타임아웃 시 그대로 진행 — 배포를 영구
+  차단하지 않음). 활성 턴 중 스왑하면 graceful drain 전체가 신규 요청 정전이
+  되므로, idle에서 스왑해 정전 창을 부팅 시간(~수 초)으로 줄인다.
 - Go 툴체인은 srv4 **유저 공간** `~/go-sdk/go` (sudo 없이 tarball 설치 — 이 호스트는
   passwordless sudo 가 없다; 서비스 유닛 PATH 에 반영). `loginctl enable-linger`
   활성 상태라 세션이 없어도 user 유닛이 상주한다.

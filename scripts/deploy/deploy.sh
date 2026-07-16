@@ -71,6 +71,10 @@ restart_with_systemd() {
     before_pid="$(systemd_main_pid)"
 
     if systemctl --user is-active --quiet "$GATEWAY_SERVICE"; then
+        # Turn-aware swap: wait (bounded) for in-flight agent turns to finish so
+        # the graceful drain — which is downtime for new requests — is instant
+        # instead of minutes. Timeout proceeds anyway; never blocks a deploy.
+        "$(dirname "${BASH_SOURCE[0]}")/wait-idle.sh" "$PROD_PORT" "${DENEB_DEPLOY_IDLE_WAIT_SEC:-420}" || true
         echo "==> hot restarting $GATEWAY_SERVICE with SIGUSR1 (old pid $before_pid)"
         if ! systemctl --user kill --kill-who=main -s SIGUSR1 "$GATEWAY_SERVICE"; then
             echo "    SIGUSR1 failed; falling back to systemctl restart"

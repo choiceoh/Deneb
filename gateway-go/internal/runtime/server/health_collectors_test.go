@@ -22,6 +22,8 @@ func TestCollectBaseHealthPreservesRequiredContract(t *testing.T) {
 		"status": {}, "version": {}, "model": {}, "uptime": {},
 		"uptime_ms": {}, "subsystems": {}, "sessions": {}, "workers": {},
 		"providers": {}, "rpc": {},
+		// activity.active_turns feeds the deploy idle gate (wait-idle.sh).
+		"activity": {},
 	}
 	if len(health) != len(wantKeys) {
 		t.Fatalf("base health keys = %v, want exactly %v", health, wantKeys)

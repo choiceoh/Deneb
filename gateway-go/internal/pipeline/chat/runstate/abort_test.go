@@ -243,3 +243,36 @@ func TestAbortTrackerHasOtherActiveRunIgnoresFinishingRun(t *testing.T) {
 		t.Fatal("cleaned-up successor still reported active")
 	}
 }
+
+// The /health activity contract: the deploy idle gate reads the exact
+// population the drain waits for — admissions count until registered, active
+// runs count until cleanup, and an idle tracker reads zero.
+func TestActiveRunCountTracksAdmissionsAndRuns(t *testing.T) {
+	tracker := NewAbortTracker()
+	t.Cleanup(tracker.Close)
+
+	if got := tracker.ActiveRunCount(); got != 0 {
+		t.Fatalf("idle ActiveRunCount = %d, want 0", got)
+	}
+
+	if !tracker.AcquireAdmission() {
+		t.Fatal("admission rejected on idle tracker")
+	}
+	if got := tracker.ActiveRunCount(); got != 1 {
+		t.Fatalf("ActiveRunCount after admission = %d, want 1", got)
+	}
+
+	entry, _ := abortEntry("client:main", "run-counted")
+	if !tracker.RegisterAdmitted(entry.ClientRun, entry) {
+		t.Fatal("admitted run could not register")
+	}
+	tracker.ReleaseAdmission()
+	if got := tracker.ActiveRunCount(); got != 1 {
+		t.Fatalf("ActiveRunCount after register = %d, want 1 (admission handed off to run)", got)
+	}
+
+	tracker.Cleanup(entry.ClientRun)
+	if got := tracker.ActiveRunCount(); got != 0 {
+		t.Fatalf("ActiveRunCount after cleanup = %d, want 0", got)
+	}
+}
