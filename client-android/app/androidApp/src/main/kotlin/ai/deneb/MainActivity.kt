@@ -14,6 +14,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -330,6 +331,10 @@ class MainActivity : ComponentActivity() {
     // the chat screen, so the capture appears immediately on launch. This is a
     // native-only capability the retired Telegram bot couldn't offer.
     private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SEND_MULTIPLE) {
+            if (intent.type?.startsWith("image/") == true) handleSharedImages(intent)
+            return
+        }
         if (intent?.action != Intent.ACTION_SEND) return
         if (intent.type?.startsWith("image/") == true) {
             handleSharedImage(intent)
@@ -337,6 +342,10 @@ class MainActivity : ComponentActivity() {
         }
         if (intent.type?.startsWith("audio/") == true) {
             handleSharedAudio(intent)
+            return
+        }
+        if (isSharedDocumentMime(intent.type)) {
+            handleSharedDocument(intent)
             return
         }
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
@@ -347,6 +356,10 @@ class MainActivity : ComponentActivity() {
         // Clear so a configuration change doesn't re-send the capture.
         intent.removeExtra(Intent.EXTRA_TEXT)
     }
+
+    // Document mimes the share filter accepts — mirrors the in-app picker's
+    // document route (PDF/CSV → gateway extraction via captureDocument).
+    private fun isSharedDocumentMime(mime: String?): Boolean = mime == "application/pdf" || mime == "text/csv" || mime == "text/comma-separated-values"
 
     // Shared image -> gateway OCR -> chat. Reads the image bytes (a temporary read
     // grant rides with the share) and hands them to the gateway, which OCRs via the
@@ -387,6 +400,61 @@ class MainActivity : ComponentActivity() {
         val client = get<DataRepository>() as? DenebGatewayClient ?: return
         lifecycleScope.launch { client.captureAudio(bytes, mime) }
         intent.removeExtra(Intent.EXTRA_STREAM)
+    }
+
+    // Shared document (PDF/CSV) -> gateway extraction -> chat. Same path as the
+    // in-app picker (captureDocumentFromPlatformFile): a contract PDF shared from
+    // mail/KakaoTalk lands in the chat as extracted text plus one agent turn.
+    private fun handleSharedDocument(intent: Intent) {
+        @Suppress("DEPRECATION")
+        val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (uri == null) return
+        val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+        if (bytes == null || bytes.isEmpty()) return
+        val mime = intent.type ?: "application/pdf"
+        val name = sharedDisplayName(uri) ?: if (mime == "application/pdf") "shared.pdf" else "shared.csv"
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        lifecycleScope.launch { client.captureDocument(bytes, name, mime) }
+        intent.removeExtra(Intent.EXTRA_STREAM)
+    }
+
+    // Multiple shared images (several receipt photos / scan pages): each rides the
+    // existing single-image OCR path, sequentially so turns don't interleave.
+    // Capped — a huge gallery share should not queue dozens of agent turns.
+    private fun handleSharedImages(intent: Intent) {
+        @Suppress("DEPRECATION")
+        val uris: List<Uri> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+        }.orEmpty().filterNotNull().take(SHARED_IMAGES_MAX)
+        if (uris.isEmpty()) return
+        val mime = intent.type ?: "image/*"
+        val client = get<DataRepository>() as? DenebGatewayClient ?: return
+        lifecycleScope.launch {
+            for (uri in uris) {
+                val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                if (bytes == null || bytes.isEmpty()) continue
+                client.captureImage(bytes, mime)
+            }
+        }
+        intent.removeExtra(Intent.EXTRA_STREAM)
+    }
+
+    // Display name for a shared content URI (the PDF's real filename when the
+    // sender provides one — the extraction prompt and transcript read better).
+    private fun sharedDisplayName(uri: Uri): String? = runCatching {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    private companion object {
+        const val SHARED_IMAGES_MAX = 5
     }
 }
 
