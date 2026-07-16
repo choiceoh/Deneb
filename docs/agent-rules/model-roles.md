@@ -18,14 +18,16 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-17 스냅샷) |
 |---|---|---|---|
 | main | `RoleMain` | **대화형** 턴 — 사용자 대면 최고 지능 (가장 강력) | ⚠️ **클라우드** (kimi/kimi-for-coding 구독제, ≥07-17) |
-| main2 | `RoleMain2` | **opt-in 제2 메인** — main급 품질이 필요하지만 플래그십일 필요 없는 배경 종합·벌크 부하. **main과 상호 폴백 페어**: main 죽으면 main2가, main2 죽으면 main이 1순위로 이어받아(같은 티어 품질 보존) 그다음에야 lightweight로 강등. 미설정 시 체인에서 자동 스킵(단일 main 동작) | 클라우드 (wormhole/glm-5.2 구독제) |
+| main2 | `RoleMain2` | **opt-in 제2 메인** — main급 품질의 **난이도-라우팅 수신자**: 명백히 단순한 대화 턴(볼륨 대부분)이 여기로 흘러 플래그십 쿼터를 분석급 턴에 보존. **main과 상호 폴백 페어**: main 죽으면 main2가, main2 죽으면 main이 1순위로 이어받아(같은 티어 품질 보존) 그다음에야 lightweight로 강등. 미설정 시 체인 자동 스킵+라우팅 off(단일 main 동작) | 클라우드 (wormhole/glm-5.2 구독제) |
 | coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | 클라우드 (glm-5.2) |
 | lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (wormhole/dsv4-nothink@srv2 — qwen3.6에서 교체) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
 | fallback | `RoleFallback` | 폴백 체인 **최종 안전망** (상호 main 페어 도입 후 별도 클라우드 종량제 지정은 은퇴 — 로컬로 충분) | 로컬 (wormhole/deepseek-v4-flash@srv2) |
 | vision | `RoleVision` | 이미지 턴 (#2510) | 클라우드 (google/gemini-3.5-flash) |
 
-> ★ **main/main2 분리는 모델 분리지 페르소나 분리가 아니다** (2026-07-17, 운영자 설계): 단일 비서 페르소나 원칙은 그대로 — 두 구독제(kimi·glm)에 트래픽을 나누고 서로가 서로의 1순위 폴백이 되는 가용성 페어일 뿐이다. 체인: main→main2→lightweight→fallback / main2→main→lightweight→fallback. 배경 main-급 임무의 main2 재배치는 임무→역할 표의 각 행이 소관.
+> ★ **main/main2 분리는 모델 분리지 페르소나 분리가 아니다** (2026-07-17, 운영자 설계): 단일 비서 페르소나 원칙은 그대로 — 두 구독제(kimi·glm)에 트래픽을 나누고 서로가 서로의 1순위 폴백이 되는 가용성 페어. 체인: main→main2→lightweight→fallback / main2→main→lightweight→fallback.
+>
+> ★ **분배 축은 난이도다 — "대화형 vs 배경"이 아니다** (운영자 정정, 2026-07-17): 배경 임무도 고난이도가 많고(딥리서치·병합판정), 대화 턴의 대부분은 단순하다. 구현은 `difficulty_route.go`(chat) — effort router의 캘리브레이션된 단순성 휴리스틱(router.Decide: 짧은 대화체 + 무거운 최근 문맥 없음)으로 **명백-단순 대화 턴만 main2로 스왑**. 자동화(cron/heartbeat/acp)·서브에이전트·명시 모델 지정·첨부 턴은 제외. 조립 후·클라이언트 사용 전에 스왑하므로 하류(캐시 정책·튜닝·폴백)는 네이티브 main2 턴과 동일하고, 오판(false-simple)의 실패는 main2→main 상호 체인으로 플래그십에 낙하 — main 티어 밑으로는 절대 안 떨어진다. 게이트: `DENEB_ADAPTIVE_EFFORT` on + `agents.main2Model` 설정. **2:1 비율 거버너**(운영자 지시): main-티어 턴 카운터(인메모리)로 main2 점유율을 1/(1+2)=1/3로 캡 — 단순 턴이라도 main2가 제 몫을 채웠으면 main1 유지("ratio" 로그), 전 턴이 단순하면 정확히 3턴마다 1턴이 main2(결정적, 무작위성 없음). 분석/자동화 턴이 많은 날은 main2가 1/3 **미만**으로 내려간다(초과는 불가). **배경 main 임무(모닝레터·위키 리서치/리뷰·메일 stage2)는 main 유지** — glm 시절 품질이 실증됐어도 난이도 축에선 main급이 맞고, 재배치는 이 표의 행 단위로만.
 
 > ⚠️ **analysis 역할은 2026-07-07 제거됐다.** 과거 `analysis → glm-5.2`(클라우드, main·chatbot·coding과 공유)라 요약류 헬퍼 콜을 얹으면 클라우드로 새던 함정의 근원이었다 — 컴팩션·youtube 요약이 실제로 이렇게 샜다가 #2508/#2509로 lightweight(로컬)로 환원됐다. 이제 **내부/배경 요약은 lightweight(로컬), 사용자가 읽는 품질 종합은 main**으로 이분된다. analysis와 동일 모델(glm-5.2)이라 제거는 동작상 무변화였다.
 >
