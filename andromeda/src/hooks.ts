@@ -396,9 +396,12 @@ export function useEvents(
   const [events, setEvents] = useState<ProactiveEvent[]>([]);
   const [status, setStatus] = useState("");
   const invalidate = useInvalidate();
-  // Latest interceptor without re-subscribing the SSE loop on each render.
+  // Latest interceptor without re-subscribing the SSE loop on each render
+  // (updated post-commit — refs must not be written during render).
   const interceptRef = useRef(intercept);
-  interceptRef.current = intercept;
+  useEffect(() => {
+    interceptRef.current = intercept;
+  });
 
   // Reflect connection flips in the status line during render (react.dev
   // "adjusting state when props change") — the effect below only owns the

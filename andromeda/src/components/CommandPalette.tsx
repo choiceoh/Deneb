@@ -34,6 +34,10 @@ function matchScore(query: string, text: string): number {
   return idx < 0 ? -1 : 1000 - idx * 10 - text.length;
 }
 
+// Stable empty-hits identity so the rows memo doesn't churn on every render
+// while the wiki tag and the live query disagree.
+const NO_HITS: WikiPage[] = [];
+
 export function CommandPalette() {
   const {
     connected,
@@ -57,7 +61,10 @@ export function CommandPalette() {
   } = useWorkspace();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const [wikiHits, setWikiHits] = useState<WikiPage[]>([]);
+  // Wiki quick-open results, tagged with the query they answer. Hits derive
+  // below: a tag that no longer matches the live query renders as empty — no
+  // synchronous setState in the effect, and stale responses drop naturally.
+  const [wikiRes, setWikiRes] = useState<{ q: string; hits: WikiPage[] }>({ q: "", hits: [] });
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -65,27 +72,25 @@ export function CommandPalette() {
 
   const close = () => setPaletteOpen(false);
 
-  // Wiki quick-open: debounce keystrokes into memory.search; stale responses
-  // are dropped by comparing against the current query at resolve time.
+  // Wiki quick-open: debounce keystrokes into memory.search.
   useEffect(() => {
     const q = query.trim();
-    if (!connected || q.length < 2) {
-      setWikiHits([]);
-      return;
-    }
+    if (!connected || q.length < 2) return;
     const timer = setTimeout(() => {
       callRpc<{ results?: WikiPage[]; pages?: WikiPage[] } | WikiPage[]>(cfg, MEMORY_RPC.search, { query: q })
         .then((data) => {
           const list = Array.isArray(data) ? data : (data?.results ?? data?.pages ?? []);
-          setWikiHits(list.slice(0, 5));
+          setWikiRes({ q, hits: list.slice(0, 5) });
         })
         .catch((e) => {
           palLog.debug("wiki quick-open failed", errText(e));
-          setWikiHits([]);
+          setWikiRes({ q, hits: [] });
         });
     }, 250);
     return () => clearTimeout(timer);
   }, [query, cfg, connected]);
+
+  const wikiHits = wikiRes.q === query.trim() ? wikiRes.hits : NO_HITS;
 
   const rows = useMemo(() => {
     const q = query.trim();

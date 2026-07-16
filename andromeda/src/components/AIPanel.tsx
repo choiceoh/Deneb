@@ -95,10 +95,12 @@ export function AIPanel({
   }
 
   // 팔레트의 "데네브에게 묻기"가 이 패널로 프롬프트를 쏠 수 있게 submit을 등록한다.
-  // 최신 클로저는 ref로 따라가고, 등록 자체는 stable 래퍼 1회 — 렌더마다 재등록하지 않는다.
-  // 스트리밍 중(busy)이면 submit 가드가 그대로 무시한다(입력 유실보다 단순함 우선).
+  // 최신 클로저는 ref로 따라가고(커밋 후 갱신 — 렌더 중 ref 대입 금지 규칙), 등록
+  // 자체는 stable 래퍼 1회. 스트리밍 중(busy)이면 submit 가드가 그대로 무시한다.
   const submitRef = useRef(submit);
-  submitRef.current = submit;
+  useEffect(() => {
+    submitRef.current = submit;
+  });
   useEffect(() => {
     setAskSink((text) => submitRef.current(text));
     return () => setAskSink(null);
