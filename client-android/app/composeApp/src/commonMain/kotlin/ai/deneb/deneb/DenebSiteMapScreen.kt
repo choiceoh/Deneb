@@ -777,7 +777,7 @@ private fun SiteMapCanvas(pins: List<SitePin>, selected: SitePin?, onPinTap: (Si
             // 선택된 현장 이름 라벨 — 핀을 눌렀을 때만, 그 핀 옆에 알약 배경으로 (상시 아님).
             // Only when the selected pin is currently shown; measured on demand (single label).
             val sel = selected
-            if (sel != null && pins.any { it === sel }) {
+            if (sel != null && pins.contains(sel)) {
                 val name = sel.site.trim().substringAfterLast(' ').ifBlank { sel.project }
                 val layout = measurer.measure(name, labelStyle)
                 val padX = 6.dp.toPx()
