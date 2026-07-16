@@ -7,7 +7,7 @@ describe("normalizeHtmlBlocks", () => {
     expect(normalizeHtmlBlocks("<h2>제목</h2>")).toBe("## 제목");
     expect(normalizeHtmlBlocks("<hr/>")).toBe("---");
     expect(normalizeHtmlBlocks("<ul>\n<li>첫째</li>\n<li>둘째</li>\n</ul>")).toBe("- 첫째\n- 둘째");
-    expect(normalizeHtmlBlocks("<ol start=\"3\">\n<li>x</li>\n<li>y</li>\n</ol>")).toBe("3. x\n4. y");
+    expect(normalizeHtmlBlocks('<ol start="3">\n<li>x</li>\n<li>y</li>\n</ol>')).toBe("3. x\n4. y");
     expect(normalizeHtmlBlocks("<blockquote>인용</blockquote>")).toBe("> 인용");
   });
   it("leaves fenced HTML and mid-line tags alone", () => {
