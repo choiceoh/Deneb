@@ -172,6 +172,16 @@ actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extensio
     root.presentViewController(activityVC, animated = true, completion = null)
 }
 
+actual suspend fun shareTextToApps(text: String) {
+    if (text.isBlank()) return
+    val activityVC = platform.UIKit.UIActivityViewController(
+        activityItems = listOf(text),
+        applicationActivities = null,
+    )
+    val root = platform.UIKit.UIApplication.sharedApplication.keyWindow?.rootViewController ?: return
+    root.presentViewController(activityVC, animated = true, completion = null)
+}
+
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
 actual fun sendHeartbeatNotification(title: String, body: String) {
     // The authorization completion runs asynchronously on a system queue, so it's outside the

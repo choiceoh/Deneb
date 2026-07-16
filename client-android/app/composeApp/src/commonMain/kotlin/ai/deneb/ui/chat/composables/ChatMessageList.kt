@@ -520,6 +520,7 @@ internal fun ChatMessageList(
                                         UserMessage(
                                             message = history.content,
                                             attachments = history.attachments,
+                                            timestampMs = history.timestampMs,
                                         )
                                     }
                                 }
@@ -532,6 +533,7 @@ internal fun ChatMessageList(
                                         BotMessage(
                                             message = history.content,
                                             attachments = history.attachments,
+                                            timestampMs = history.timestampMs,
                                             textToSpeech = textToSpeech,
                                             isSpeaking = uiState.isSpeaking && uiState.isSpeakingContentId == history.id,
                                             setIsSpeaking = {

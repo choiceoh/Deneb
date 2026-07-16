@@ -173,6 +173,16 @@ actual suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
 // Desktop has no OS share sheet — export via the same save dialog.
 actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String) = saveFileToDevice(bytes, baseName, extension)
 
+// Desktop has no OS share sheet — copying to the clipboard is the closest
+// useful equivalent (paste into any app).
+actual suspend fun shareTextToApps(text: String) {
+    if (text.isBlank()) return
+    runCatching {
+        val selection = java.awt.datatransfer.StringSelection(text)
+        java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+    }
+}
+
 /**
  * Posts a native OS notification. Each platform has its own surface:
  *   - macOS: `osascript` invokes the user-facing Notification Center.

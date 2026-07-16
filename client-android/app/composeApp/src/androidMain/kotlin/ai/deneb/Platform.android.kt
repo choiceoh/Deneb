@@ -313,6 +313,17 @@ actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extensio
     context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
+actual suspend fun shareTextToApps(text: String) {
+    if (text.isBlank()) return
+    val context: Context by inject(Context::class.java)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    // Started from the application Context (no Activity), so the chooser needs NEW_TASK.
+    context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+}
+
 // postAgentNotification shows a local notification on the agent's own channel —
 // the app-permission successor of termux-notification. Channel is created
 // idempotently; POST_NOTIFICATIONS may be revoked on 13+, in which case notify()

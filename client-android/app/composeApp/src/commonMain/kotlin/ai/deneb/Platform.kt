@@ -84,6 +84,12 @@ expect suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
 // two export actions.
 expect suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String)
 
+// Share plain text to other apps (a chat message shared onward to 메신저/mail).
+// Android = ACTION_SEND chooser, iOS = UIActivityViewController; desktop copies
+// to the clipboard (no OS share sheet), web is a stub. Best-effort like
+// shareImageToApps.
+expect suspend fun shareTextToApps(text: String)
+
 /**
  * Fires a background push notification for a heartbeat that produced a non-trivial
  * response. Android additionally wires a tap-to-open-heartbeat deep link via its

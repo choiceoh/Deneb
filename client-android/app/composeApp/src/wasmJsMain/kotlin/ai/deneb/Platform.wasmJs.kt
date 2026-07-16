@@ -83,6 +83,9 @@ actual suspend fun saveFileToDevice(bytes: ByteArray, baseName: String, extensio
 // No web share sheet wired — fall back to the browser download.
 actual suspend fun shareImageToApps(bytes: ByteArray, baseName: String, extension: String) = saveFileToDevice(bytes, baseName, extension)
 
+// No web share wiring (matches the notification stubs).
+actual suspend fun shareTextToApps(text: String) = Unit
+
 // Web notifications API isn't wired up; stub.
 actual fun sendHeartbeatNotification(title: String, body: String) = Unit
 
