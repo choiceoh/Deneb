@@ -12,9 +12,11 @@ package server
 //                   next startup.
 //
 // Resume action: when a marker survives AND the session transcript does not
-// end in a "logically done" state, we inject a new user-role message on the
-// transcript that instructs the agent to pick up where it left off. No
-// existing transcript content is modified — the prompt cache is preserved
+// end in a "logically done" state, a dangling tool_use turn is first balanced
+// from per-call completion receipts (missing calls become explicit interrupted
+// results). We then inject a new user-role message that instructs the agent to
+// pick up where it left off. Existing transcript content is never modified —
+// both recovery records are tail appends, preserving the prior prompt prefix
 // (see docs/agent-rules/prompt-cache.md, Rule A).
 //
 // Safety gates:
@@ -39,6 +41,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
+	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/sessionstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
@@ -169,14 +173,22 @@ func (t transcriptTailShape) isLogicallyDone() bool {
 // Corrupt/unparseable tails are classified as tailUnknown — we do NOT
 // resume them, to avoid acting on ambiguous state.
 func analyzeTranscriptTail(path string) (transcriptTailShape, error) {
+	observation, err := inspectTranscriptTail(path)
+	if err != nil {
+		return tailUnknown, err
+	}
+	return classifyTranscriptTail(observation), nil
+}
+
+func inspectTranscriptTail(path string) (transcriptTailObservation, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return tailEmpty, nil
+			return transcriptTailObservation{}, nil
 		}
-		return tailUnknown, err
+		return transcriptTailObservation{}, err
 	}
-	return classifyTranscriptTail(lastTranscriptObservation(data)), nil
+	return lastTranscriptObservation(data), nil
 }
 
 type transcriptEnvelope struct {
@@ -188,9 +200,15 @@ type transcriptEnvelope struct {
 type transcriptTailObservation struct {
 	role          string
 	blockTypes    []string
+	toolUses      []pendingToolUse
 	stringContent bool
 	sawMessage    bool
 	sawCorrupt    bool
+}
+
+type pendingToolUse struct {
+	id   string
+	name string
 }
 
 func lastTranscriptObservation(data []byte) transcriptTailObservation {
@@ -236,6 +254,8 @@ func observeTranscriptMessage(message transcriptEnvelope) transcriptTailObservat
 	}
 	var blocks []struct {
 		Type string `json:"type"`
+		ID   string `json:"id,omitempty"`
+		Name string `json:"name,omitempty"`
 	}
 	if json.Unmarshal(message.Content, &blocks) != nil {
 		return observation
@@ -243,6 +263,9 @@ func observeTranscriptMessage(message transcriptEnvelope) transcriptTailObservat
 	for _, block := range blocks {
 		if block.Type != "" {
 			observation.blockTypes = append(observation.blockTypes, block.Type)
+		}
+		if block.Type == "tool_use" && block.ID != "" {
+			observation.toolUses = append(observation.toolUses, pendingToolUse{id: block.ID, name: block.Name})
 		}
 	}
 	return observation
@@ -298,6 +321,9 @@ type autoResumeOptions struct {
 	MaxAge      time.Duration
 	MaxAttempts int
 	Now         func() time.Time
+	// TranscriptStore is the live production stack (cache + Polaris bridge).
+	// Tests may omit it to use the file-backed transcript directory directly.
+	TranscriptStore chatport.TranscriptStore
 	// DispatchFn is the async resume sender. Defaulted to chatHandler.Send
 	// in production; swappable in tests.
 	DispatchFn func(ctx context.Context, sessionKey, channel, to string) error
@@ -324,11 +350,12 @@ func autoResumeEnabled() bool {
 // the in-memory manager by the time we scan.
 func (s *Server) autoResumeInterruptedRuns(ctx context.Context) {
 	opts := autoResumeOptions{
-		Enabled:     autoResumeEnabled(),
-		MaxAge:      resumeMaxAge,
-		MaxAttempts: resumeMaxAttempts,
-		Now:         time.Now,
-		DispatchFn:  s.dispatchResumeMessage,
+		Enabled:         autoResumeEnabled(),
+		MaxAge:          resumeMaxAge,
+		MaxAttempts:     resumeMaxAttempts,
+		Now:             time.Now,
+		TranscriptStore: s.genesisTranscripts,
+		DispatchFn:      s.dispatchResumeMessage,
 	}
 	s.autoResumeInterruptedRunsWithOpts(ctx, opts)
 }
@@ -359,6 +386,13 @@ func (s *Server) autoResumeInterruptedRunsWithOpts(ctx context.Context, opts aut
 	}
 
 	transcriptDir := transcriptBaseDir()
+	transcriptStore := opts.TranscriptStore
+	if transcriptStore == nil {
+		// Minimal test/partial-init servers may not have the production Polaris
+		// bridge. The file store remains the authoritative fallback.
+		transcriptStore = chattranscript.NewFileTranscriptStore(transcriptDir)
+	}
+	receiptStore := chatport.ResolveToolResultReceiptStore(transcriptStore)
 	nowMs := opts.Now().UnixMilli()
 	maxAgeMs := opts.MaxAge.Milliseconds()
 
@@ -396,18 +430,44 @@ func (s *Server) autoResumeInterruptedRunsWithOpts(ctx context.Context, opts aut
 		// probably from a race where the terminal event fired but the
 		// delete did not flush to disk.
 		transcriptPath := filepath.Join(transcriptDir, m.SessionKey+".jsonl")
-		shape, tailErr := analyzeTranscriptTail(transcriptPath)
+		observation, tailErr := inspectTranscriptTail(transcriptPath)
 		if tailErr != nil {
 			logger.Warn("auto-resume: transcript read failed",
 				"session", m.SessionKey, "error", tailErr)
 			_ = store.Delete(m.SessionKey)
 			continue
 		}
+		shape := classifyTranscriptTail(observation)
+		if shape != tailEndAssistantToolUse && receiptStore != nil {
+			// Any receipts beside a non-dangling tail are leftovers from a
+			// batch that already reached the canonical transcript.
+			if cleanupErr := receiptStore.DeleteToolResultReceipts(m.SessionKey); cleanupErr != nil {
+				logger.Warn("auto-resume: stale tool result receipt cleanup failed",
+					"session", m.SessionKey, "error", cleanupErr)
+			}
+		}
 		if shape.isLogicallyDone() {
 			logger.Info("auto-resume: transcript already done, dropping marker",
 				"session", m.SessionKey, "tail", tailShapeString(shape))
 			_ = store.Delete(m.SessionKey)
 			continue
+		}
+
+		if shape == tailEndAssistantToolUse {
+			stats, recoveryErr := recoverInterruptedToolTurn(
+				transcriptStore, m.SessionKey, observation, m.StartedAt, nowMs,
+			)
+			if recoveryErr != nil {
+				// Preserve the previous generic resume behavior if recovery state
+				// itself is unreadable; auto-resume must not become less available.
+				logger.Warn("auto-resume: tool result recovery failed; resuming generically",
+					"session", m.SessionKey, "error", recoveryErr)
+			} else {
+				logger.Info("auto-resume: reconstructed interrupted tool turn",
+					"session", m.SessionKey,
+					"recovered", stats.recovered,
+					"missing", stats.missing)
+			}
 		}
 
 		// Commit the decision: bump attempt counter BEFORE dispatch so a

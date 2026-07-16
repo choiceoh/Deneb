@@ -10,7 +10,10 @@ import (
 )
 
 // Compile-time interface compliance.
-var _ chatport.TranscriptStore = (*Bridge)(nil)
+var (
+	_ chatport.TranscriptStore                = (*Bridge)(nil)
+	_ chatport.ToolResultReceiptStoreProvider = (*Bridge)(nil)
+)
 
 // Bridge wraps an existing TranscriptStore and dual-writes to the Polaris Store.
 // It implements the TranscriptStore interface as a drop-in replacement.
@@ -114,6 +117,13 @@ func (b *Bridge) Delete(sessionKey string) error {
 		}
 	}
 	return nil
+}
+
+// ToolResultReceiptStore exposes the legacy JSONL store's optional
+// crash-recovery journal. Polaris mirrors canonical transcript messages only;
+// ephemeral receipts remain beside the legacy transcript.
+func (b *Bridge) ToolResultReceiptStore() chatport.ToolResultReceiptStore {
+	return chatport.ResolveToolResultReceiptStore(b.legacy)
 }
 
 // ListKeys delegates to the legacy store.

@@ -106,3 +106,45 @@ type TranscriptStore interface {
 	Search(query string, maxResults int) ([]SearchResult, error)
 	CloneRecent(srcKey, dstKey string, limit int) error
 }
+
+// ToolResultReceipt is the durable completion record for one tool call. It is
+// intentionally separate from the transcript: the executor still commits the
+// canonical tool_result message as one ordered batch, while this receipt lets a
+// restarted gateway recover calls that completed between those two writes.
+type ToolResultReceipt struct {
+	ToolUseID   string `json:"toolUseId"`
+	ToolName    string `json:"toolName"`
+	Content     string `json:"content"`
+	IsError     bool   `json:"isError,omitempty"`
+	CompletedAt int64  `json:"completedAt"`
+}
+
+// ToolResultReceiptStore is an optional crash-recovery capability attached to
+// transcript stores. Receipts are ephemeral run state, not conversation
+// history: callers delete them after the ordered tool_result batch is durable.
+type ToolResultReceiptStore interface {
+	AppendToolResultReceipt(sessionKey string, receipt ToolResultReceipt) error
+	LoadToolResultReceipts(sessionKey string) ([]ToolResultReceipt, error)
+	DeleteToolResultReceipts(sessionKey string) error
+}
+
+// ToolResultReceiptStoreProvider lets transcript decorators expose the receipt
+// capability of their wrapped store without widening TranscriptStore itself.
+type ToolResultReceiptStoreProvider interface {
+	ToolResultReceiptStore() ToolResultReceiptStore
+}
+
+// ResolveToolResultReceiptStore unwraps an optional receipt capability from a
+// transcript implementation or decorator.
+func ResolveToolResultReceiptStore(store TranscriptStore) ToolResultReceiptStore {
+	if store == nil {
+		return nil
+	}
+	if provider, ok := store.(ToolResultReceiptStoreProvider); ok {
+		return provider.ToolResultReceiptStore()
+	}
+	if receipts, ok := store.(ToolResultReceiptStore); ok {
+		return receipts
+	}
+	return nil
+}

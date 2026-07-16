@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	chattranscript "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/transcript"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // writeTranscriptLine appends one JSON line to a transcript file under tmpHome.
@@ -149,6 +151,83 @@ func TestAnalyzeTranscriptTailIgnoresTornTrailingLine(t *testing.T) {
 	// Torn trailing line is ignored; the last complete message was the user.
 	if shape != tailEndUserText {
 		t.Errorf("got %s want %s", tailShapeString(shape), tailShapeString(tailEndUserText))
+	}
+}
+
+func TestRecoverInterruptedToolTurnReusesCompletedCallsAndMarksMissingCalls(t *testing.T) {
+	t.Parallel()
+	tmpHome := t.TempDir()
+	const sessionKey = "client:recover-tools"
+	writeTranscriptLine(
+		t, tmpHome, sessionKey,
+		`{"role":"user","content":"do it","timestamp":1700000001000}`,
+		`{"role":"assistant","content":[{"type":"tool_use","id":"tool-1","name":"read","input":{}},{"type":"tool_use","id":"tool-2","name":"search","input":{}}],"timestamp":1700000001500}`,
+	)
+	dir := filepath.Join(tmpHome, ".deneb", "transcripts")
+	path := filepath.Join(dir, sessionKey+".jsonl")
+	observation, err := inspectTranscriptTail(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shape := classifyTranscriptTail(observation); shape != tailEndAssistantToolUse {
+		t.Fatalf("tail = %s, want end_assistant_tool_use", tailShapeString(shape))
+	}
+
+	store := chattranscript.NewFileTranscriptStore(dir)
+	if err := store.AppendToolResultReceipt(sessionKey, chatport.ToolResultReceipt{
+		ToolUseID: "tool-1", ToolName: "read", Content: "already completed", CompletedAt: 10,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A receipt from an older run must not be reused even if a provider repeats
+	// the same tool_use ID and tool name.
+	if err := store.AppendToolResultReceipt(sessionKey, chatport.ToolResultReceipt{
+		ToolUseID: "tool-2", ToolName: "search", Content: "stale result", CompletedAt: 5,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := recoverInterruptedToolTurn(store, sessionKey, observation, 6, 1_700_000_002_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.recovered != 1 || stats.missing != 1 {
+		t.Fatalf("recovery stats = %+v, want recovered=1 missing=1", stats)
+	}
+
+	messages, _, err := store.Load(sessionKey, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) == 0 {
+		t.Fatal("recovered transcript is empty")
+	}
+	last := messages[len(messages)-1]
+	var blocks []recoveredToolResultBlock
+	if err := json.Unmarshal(last.Content, &blocks); err != nil {
+		t.Fatalf("decode recovered blocks: %v", err)
+	}
+	if len(blocks) != 2 {
+		t.Fatalf("recovered blocks = %+v", blocks)
+	}
+	if blocks[0].ToolUseID != "tool-1" || blocks[0].Content != "already completed" || blocks[0].IsError {
+		t.Fatalf("completed call was not reused: %+v", blocks[0])
+	}
+	if blocks[1].ToolUseID != "tool-2" || blocks[1].Content != interruptedToolResult || !blocks[1].IsError {
+		t.Fatalf("missing call was not marked interrupted: %+v", blocks[1])
+	}
+	shape, err := analyzeTranscriptTail(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shape != tailEndToolResult {
+		t.Fatalf("tail after recovery = %s, want end_tool_result", tailShapeString(shape))
+	}
+	receipts, err := store.LoadToolResultReceipts(sessionKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(receipts) != 0 {
+		t.Fatalf("receipts remain after recovery: %+v", receipts)
 	}
 }
 

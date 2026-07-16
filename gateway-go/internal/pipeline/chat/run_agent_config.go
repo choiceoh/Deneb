@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // parallelSafeToolVet returns the executor's parallel-turn vet backed by the
@@ -686,8 +687,32 @@ func buildMessagePersister(
 		if err := deps.transcript.Append(params.SessionKey, chatMsg); err != nil {
 			logger.Error("per-turn message persist failed", "role", msg.Role, "error", err)
 			deps.strictErrors.Record(err)
+			return
+		}
+		if msg.Role == "user" && contentHasToolResult(content.Bytes()) {
+			if receipts := chatport.ResolveToolResultReceiptStore(deps.transcript); receipts != nil {
+				if err := receipts.DeleteToolResultReceipts(params.SessionKey); err != nil {
+					logger.Warn("tool result recovery receipt cleanup failed",
+						"session", params.SessionKey, "error", err)
+				}
+			}
 		}
 	}
+}
+
+func contentHasToolResult(content []byte) bool {
+	var blocks []struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(content, &blocks); err != nil {
+		return false
+	}
+	for _, block := range blocks {
+		if block.Type == "tool_result" {
+			return true
+		}
+	}
+	return false
 }
 
 // verifyGateObservingPersister wraps the per-turn persister so the verification
