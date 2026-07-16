@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 // WorkstationCommandFunc delivers a validated workspace command to connected
