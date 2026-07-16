@@ -25,8 +25,17 @@ describe("resourcesForSyncEventType", () => {
     expect(resourcesForSyncEventType("calendar.changed")).toEqual(["calendar", "calendar-range"]);
   });
 
+  it("maps the gateway change-feed domains (mail/approvals/wiki) to their lists", () => {
+    expect(resourcesForSyncEventType("mail.changed")).toEqual(["mail"]);
+    expect(resourcesForSyncEventType("approvals.changed")).toEqual(["approvals"]);
+    // Wiki fans out like the AI-mutation refresh path: page lists, search, notebooks.
+    expect(resourcesForSyncEventType("wiki.changed")).toEqual(["wiki", "search", "notebook"]);
+  });
+
   it("ignores event types with no desktop list resource", () => {
     expect(resourcesForSyncEventType("transcript.appended")).toEqual([]);
+    // No desktop org pane yet — org.changed intentionally maps to nothing.
+    expect(resourcesForSyncEventType("org.changed")).toEqual([]);
     expect(resourcesForSyncEventType("nonsense")).toEqual([]);
   });
 });
