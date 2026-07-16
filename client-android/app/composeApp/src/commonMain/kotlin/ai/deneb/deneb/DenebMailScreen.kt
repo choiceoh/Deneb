@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebSectionLabel
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.OnLiveTabActivation
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.DenebUnderlineSearchField
 import ai.deneb.ui.components.rememberHaptics
@@ -68,6 +69,7 @@ import kotlinx.datetime.daysUntil
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Native mail triage backed by `miniapp.mail.list_recent`, in the Deneb idiom:
@@ -117,6 +119,14 @@ fun DenebMailScreen(
         // local-archive state) still shows when the live fetch can't.
         loadOk = client.refreshMail()
         if (loadOk != true) client.refreshMailNativeStatus()
+    }
+
+    // Always-alive tab: the entry fetch above runs once per app session, so
+    // re-validate silently when the tab is re-activated after a while. The list
+    // stays on screen; only a success flips loadOk (a background failure must not
+    // degrade an already-rendered list into the error state).
+    OnLiveTabActivation(MailRevalidateAfter) {
+        if (client.refreshMail(activeQuery)) loadOk = true
     }
 
     fun runSearch(raw: String) {
@@ -712,3 +722,7 @@ private fun mailPipelineStatusParts(pipeline: MailNativePipeline): List<String> 
     if (pipeline.calendarCandidates > 0) add("일정 ${pipeline.calendarCandidates}")
     if (pipeline.todoCandidates > 0) add("할일 ${pipeline.todoCandidates}")
 }
+
+// How stale the mail list may be before a tab re-activation silently refreshes it.
+// Above the gateway's 30s list cache so a revalidation usually returns fresh rows.
+private val MailRevalidateAfter = 60.seconds
