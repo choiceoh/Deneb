@@ -57,7 +57,8 @@ export const PANES: PaneDef[] = [
   { key: "workfeed", label: "피드", shortcut: "9", Component: WorkfeedPane },
   { key: "approvals", label: "결재", shortcut: "a", Component: ApprovalsPane },
   { key: "groupware", label: "그룹웨어", shortcut: "u", Component: GroupwareERPPane },
-  { key: "skills", label: "스킬", shortcut: "k", Component: SkillsPane },
+  // ⌘K is the command palette (Workstation intercepts it), so skills sits on I.
+  { key: "skills", label: "스킬", shortcut: "i", Component: SkillsPane },
   { key: "rsi", label: "자가개선", shortcut: "r", Component: RsiPane },
   { key: "observe", label: "관찰", shortcut: "o", Component: ObservePane },
   { key: "sitemap", label: "현장 지도", shortcut: "g", Component: SiteMapPane },

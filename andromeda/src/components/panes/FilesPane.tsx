@@ -8,7 +8,7 @@ import type { FileEntry } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
 import { color, ellipsis, muted } from "@/theme";
 import { fmtDate } from "@/format";
-import { useWorkspace } from "@/workspaceContext";
+import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 import { FileViewer } from "@/components/FileViewer";
 import { textToBase64 } from "@/components/fileView";
@@ -26,10 +26,9 @@ interface PreviewFile {
 }
 
 // FilesPane stays mounted across pane switches (Workstation renders it like
-// chat/code) so an open preview + its unsaved edits survive a switch-away. `active`
-// is true only while 파일 is the current view.
-export function FilesPane({ active = true }: { active?: boolean }) {
-  const { connected, cfg, registerPane } = useWorkspace();
+// chat/code) so an open preview + its unsaved edits survive a switch-away.
+export function FilesPane() {
+  const { connected, cfg } = useWorkspace();
   const { call, callCached, readCache, status, setStatus, busy } = useCachedRpc(cfg, FILES_RESOURCE);
   const [rootSnapshot] = useState(() => readCache<FilesListResponse>(FILES_RPC.list, filesListParams("")));
   const [path, setPath] = useState(rootSnapshot?.data.path ?? "");
@@ -53,15 +52,11 @@ export function FilesPane({ active = true }: { active?: boolean }) {
     entries,
     (e) => `- ${isFolder(e) ? "[폴더] " : ""}${entryPath(e)}${e.size ? ` (${formatBytes(e.size)})` : ""}`,
   );
-  // Publish the file listing to the AI panel only while active. Because the pane
-  // stays mounted while hidden (to preserve an open preview/edits), an unconditional
-  // registration would clobber the visible pane's AI context. Guarding on
-  // `active` is also race-safe on switch-away: it's a no-op, so the newly active
-  // pane's registration wins regardless of effect order.
-  useEffect(() => {
-    if (active) registerPane(FILES_RESOURCE, aiText);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, aiText]);
+  // Publish the file listing to the AI panel. Feeds are keyed per pane slot
+  // (Workstation wraps this always-mounted pane in TileCtx "files"), so staying
+  // registered while hidden can't clobber the visible pane's AI context — the
+  // provider only reads the "files" feed while 파일 is the current view.
+  useRegisterPane(FILES_RESOURCE, aiText);
 
   useEffect(() => {
     if (!connected) return;

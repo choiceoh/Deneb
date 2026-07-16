@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { type GatewayConfig } from "@/gateway";
 import { useChat } from "@/hooks";
@@ -6,7 +6,7 @@ import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurf
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
 import { useStickyScroll } from "@/useStickyScroll";
-import { useWorkspace } from "@/workspaceContext";
+import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { AssistantBody, AssistantTurnActions } from "./AssistantBody";
 import { ChatComposer, ScrollToBottomButton } from "./ChatComposer";
 import { Icon } from "./Icon";
@@ -44,7 +44,8 @@ export function AIPanel({
   // 셀이 정하므로 width/flex를 지정하지 않고, 넓어진 만큼 대화 폭을 가독성 있게 가운데 정렬한다.
   placement?: "side" | "bottom";
 }) {
-  const { aiText, activeResource, connected, noteSink } = useWorkspace();
+  const { connected, noteSink, setAskSink } = useWorkspace();
+  const { aiText, activeResource } = useAiFeed();
   const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
   const [input, setInput] = useState("");
   // Per-answer save-to-notebook progress (turn id → state). "saved" flips the
@@ -92,6 +93,16 @@ export function AIPanel({
     pin(); // a fresh send always rides down to the latest
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
   }
+
+  // 팔레트의 "데네브에게 묻기"가 이 패널로 프롬프트를 쏠 수 있게 submit을 등록한다.
+  // 최신 클로저는 ref로 따라가고, 등록 자체는 stable 래퍼 1회 — 렌더마다 재등록하지 않는다.
+  // 스트리밍 중(busy)이면 submit 가드가 그대로 무시한다(입력 유실보다 단순함 우선).
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    setAskSink((text) => submitRef.current(text));
+    return () => setAskSink(null);
+  }, [setAskSink]);
 
   // 노트에 저장: 성공해야만 저장됨으로 표시한다 — sink(RPC)가 실패하면 실패 상태로
   // 남겨 같은 버튼으로 재시도할 수 있다 (과거엔 발사 후 무조건 저장됨으로 위장했다).

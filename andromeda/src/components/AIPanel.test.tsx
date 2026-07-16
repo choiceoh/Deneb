@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -38,42 +38,22 @@ vi.mock("./ProactivePanel", () => ({
 }));
 
 import { AIPanel } from "./AIPanel";
-import { Ctx } from "@/workspaceContext";
+import { Ctx, FeedCtx } from "@/workspaceContext";
+import { feedValue, testCfg, workspaceValue, type WorkspaceValue } from "@/test/workspace";
 
-type WorkspaceValue = NonNullable<ComponentProps<typeof Ctx.Provider>["value"]>;
+const cfg = testCfg;
 
-const cfg = { url: "http://gateway.test", token: "secret" };
+const workspace = workspaceValue;
 
-function workspace(overrides: Partial<WorkspaceValue> = {}): WorkspaceValue {
-  return {
-    connected: true,
-    cfg,
-    setCfg: vi.fn(),
-    view: "today",
-    setView: vi.fn(),
-    paneTarget: null,
-    openPane: vi.fn(),
-    consumePaneTarget: vi.fn(),
-    aiText: "현재 프로젝트의 설계 메모",
-    activeResource: "wiki",
-    registerPane: vi.fn(),
-    wikiTarget: null,
-    openWiki: vi.fn(),
-    consumeWikiTarget: vi.fn(),
-    noteSink: null,
-    setNoteSink: vi.fn(),
-    hiddenViews: [],
-    toggleViewHidden: vi.fn(),
-    viewOrder: [],
-    setViewOrder: vi.fn(),
-    notebookTop: "default",
-    setNotebookTop: vi.fn(),
-    ...overrides,
-  };
-}
-
+// AI 피드는 별도 컨텍스트(FeedCtx) — 이 스위트의 기본 피드는 위키 설계 메모를 흉내낸다.
 function wrapper(value: WorkspaceValue, children: ReactNode) {
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <FeedCtx.Provider value={feedValue({ aiText: "현재 프로젝트의 설계 메모", activeResource: "wiki" })}>
+        {children}
+      </FeedCtx.Provider>
+    </Ctx.Provider>
+  );
 }
 
 const assistantTurn: ChatTurn = {

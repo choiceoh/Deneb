@@ -1,19 +1,42 @@
+import { useCallback } from "react";
+import { describeCommand, isWorkspaceCommandKind, parseWorkspaceCommand } from "@/commands";
 import type { ProactiveEvent } from "@/events";
 import { fmtMailDate } from "@/format";
 import type { GatewayConfig } from "@/gateway";
 import { useEvents } from "@/hooks";
+import { log } from "@/log";
 import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
 import { type ProactiveNav, proactiveNav } from "./proactiveNav";
+
+const nudgeLog = log.child("proactive");
 
 // Proactive nudges pushed by Deneb (events SSE). Sits atop the AI panel; renders
 // nothing until something arrives, so it stays out of the way when quiet. A pile
 // of nudges gets a header (count + 모두 지우기); each shows its title/body and a
 // relative receipt time, with a warm accent rule on its left. A nudge that
 // carries a deep-link target (gateway kind+ref) is clickable → opens its pane.
+//
+// This is also where Deneb drives the workstation: a pushed `workspace` event
+// parses into a command (open/split/focus/layout — screen verbs only), executes
+// through the command bus, and is replaced by a visible "화면 조정" nudge so a
+// machine-driven rearrangement is never silent.
 export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
-  const { connected, openPane, openWiki } = useWorkspace();
-  const { events, status, dismiss, clearAll } = useEvents(cfg, connected);
+  const { connected, openPane, openWiki, runCommand } = useWorkspace();
+  const intercept = useCallback(
+    (ev: ProactiveEvent): ProactiveEvent | null => {
+      if (!isWorkspaceCommandKind(ev.kind)) return ev;
+      const cmd = parseWorkspaceCommand(ev.raw);
+      if (!cmd) {
+        nudgeLog.warn("malformed workspace command dropped", JSON.stringify(ev.raw));
+        return null;
+      }
+      runCommand(cmd);
+      return { ...ev, kind: "workspace", title: ev.title ?? "화면 조정", body: describeCommand(cmd) };
+    },
+    [runCommand],
+  );
+  const { events, status, dismiss, clearAll } = useEvents(cfg, connected, intercept);
 
   const onNavigate = (nav: ProactiveNav) => {
     if (nav.view === "wiki" && nav.ref) openWiki(nav.ref);

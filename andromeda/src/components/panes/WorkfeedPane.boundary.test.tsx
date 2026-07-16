@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { DataProvider } from "@refinedev/core";
 import type { WorkItem } from "@/types";
 import { fakeProvider, renderWithProviders } from "@/test/util";
-import { useWorkspace } from "@/workspaceContext";
+import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { WorkfeedPane } from "./WorkfeedPane";
 
 type RpcCall = { method: string; params: Record<string, unknown> };
@@ -628,7 +628,7 @@ describe("WorkfeedPane boundary behavior", () => {
 
     it("publishes only the selected day with titles, sources and bodies", async () => {
       function Projection() {
-        const { aiText } = useWorkspace();
+        const { aiText } = useAiFeed();
         return <output data-testid="projection">{aiText}</output>;
       }
       renderWithProviders(

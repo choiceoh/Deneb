@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { SEARCH_RPC } from "@/resources";
+import { usePaneTarget } from "@/usePaneTarget";
 import { projectList } from "@/aiText";
 import type { SearchHit } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -43,8 +44,25 @@ export function SearchPane() {
   );
   useRegisterPane(SEARCH_RESOURCE, aiText);
 
-  async function run() {
-    const query = q.trim();
+  // Deep-link query (⌘K 팔레트 "통합 검색: q" · 데네브 workspace 커맨드): open with
+  // the query prefilled and already running.
+  usePaneTarget(
+    "search",
+    useCallback(
+      (target) => {
+        if (!target.query) return;
+        setQ(target.query);
+        void run(target.query);
+      },
+      // run은 렌더마다 새 함수지만 의존값(connected·callCached)은 안정 — 타깃 소비는
+      // paneTarget 변경 시에만 재실행되면 충분하다.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [connected],
+    ),
+  );
+
+  async function run(raw = q) {
+    const query = raw.trim();
     if (!query || !connected) return;
     setSearched(true);
     const r = await callCached<SearchCacheResponse>(

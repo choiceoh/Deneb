@@ -3,7 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ProjectLinkedOut } from "@/types";
 import { fakeProvider, renderWithProviders } from "@/test/util";
-import { useWorkspace } from "@/workspaceContext";
+import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { ProjectHomePane } from "./ProjectHomePane";
 
 type RpcCall = { method: string; params: Record<string, unknown> };
@@ -118,7 +118,8 @@ function installGateway(
 }
 
 function WorkspaceProbe() {
-  const { view, paneTarget, wikiTarget, aiText } = useWorkspace();
+  const { view, paneTarget, wikiTarget } = useWorkspace();
+  const { aiText } = useAiFeed();
   return (
     <div>
       <output data-testid="view">{view}</output>

@@ -1,13 +1,19 @@
 // Workstation state shared across the three columns, and the mechanism by which
-// the active pane publishes its content to the AI panel.
+// mounted panes publish their content to the AI panel.
 //
-// The "well-structured back end" principle (workspace.ts): the active pane
-// serializes its current content to TEXT and PUSHES it here; the AI panel reads
-// the latest text — no vision, no cross-pane data coupling. Only the active pane
-// is mounted (Workstation renders one at a time), so whoever is mounted owns the
-// AI context and names the resource the AI's tool calls should invalidate.
+// Two contexts on purpose:
+//  - Ctx (navigation/layout/commands) — changes on user navigation, rarely.
+//  - FeedCtx (pane→AI text projections) — changes on every keystroke of an open
+//    editor. Splitting them keeps editor keystrokes from re-rendering the rail,
+//    the shell, and every pane (the old single-context cascade).
+//
+// The "well-structured back end" principle: every MOUNTED pane serializes its
+// content to TEXT and pushes it here, keyed by its tile (TileCtx). The AI reads
+// the focused tile's text first, then the other visible tiles — what you see is
+// what the AI sees, across the whole split.
 import { createContext, useContext, useEffect } from "react";
 import type { GatewayConfig } from "./gateway";
+import type { WorkspaceCommand } from "./commands";
 import type { View } from "./types";
 
 export interface PaneTarget {
@@ -15,11 +21,17 @@ export interface PaneTarget {
   id?: string | number;
   dayKey?: string;
   path?: string;
+  query?: string; // query-driven panes (search): run this query on open
 }
 
 // 노트북 상단(자료) 영역의 3단계 높이 — 접힘(바)·기본(30%)·확대(70%). 바 버튼이
 // 접힘→기본→확대→접힘 순으로 순환시키고, Workstation이 그리드 상단 행을 이 값으로 맞춘다.
 export type NotebookTop = "folded" | "default" | "expanded";
+
+export interface SavedLayout {
+  name: string;
+  views: View[];
+}
 
 interface WorkspaceCtx {
   connected: boolean;
@@ -31,14 +43,34 @@ interface WorkspaceCtx {
   setCfg: (c: GatewayConfig) => void;
   view: View;
   setView: (v: View) => void;
+  // Tiled workspace: the work area hosts 1–3 panes side by side. `tiles` is the
+  // current tile set; the focused tile is `view` when tileable (falls back to
+  // tiles[0] while a non-tile surface like settings/chat is up).
+  tiles: View[];
+  splitPane: (v: View, target?: Omit<PaneTarget, "view">) => void;
+  closePane: (v?: View) => void;
+  applyLayout: (views: View[]) => void;
+  // Named layouts (localStorage): capture the current tile set, re-apply later.
+  layouts: SavedLayout[];
+  saveLayout: (name: string) => void;
+  deleteLayout: (name: string) => void;
+  // The command bus: palette / shortcuts / gateway pushes all execute through
+  // this single entry point.
+  runCommand: (cmd: WorkspaceCommand) => void;
+  // ⌘K command palette visibility (rendered by Workstation).
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+  // 우측 데네브 패널 접힘 — 커맨드(팔레트·데네브에게 묻기)가 패널을 다시 열 수 있도록
+  // 컨텍스트로 승격 (Workstation 로컬 state였다).
+  aiCollapsed: boolean;
+  setAiCollapsed: (collapsed: boolean) => void;
+  // "데네브에게 묻기" sink: AIPanel registers a submit function; the palette
+  // sends a prompt through it (opens the panel first via setAiCollapsed).
+  askDeneb: (text: string) => boolean;
+  setAskSink: (sink: ((text: string) => void) | null) => void;
   paneTarget: PaneTarget | null;
   openPane: (view: View, target?: Omit<PaneTarget, "view">) => void;
   consumePaneTarget: () => void;
-  // Pushed by the active pane: its content serialized for the AI, and the Refine
-  // resource (if any) backing it — used to refresh after the AI mutates data.
-  aiText: string;
-  activeResource?: string;
-  registerPane: (resource: string | undefined, text: string) => void;
   // Cross-pane "open this wiki page" channel: 인물 카드·검색 결과·노트북이 위키 경로를
   // 넘기면 위키 pane으로 전환하고 해당 페이지를 연다. WikiPane이 마운트되어 소비한다.
   wikiTarget: string | null;
@@ -76,13 +108,50 @@ export function useWorkspace(): WorkspaceCtx {
   return c;
 }
 
-// Called by the active pane to publish its AI-text projection and backing
-// resource whenever its content changes.
+// ---- Pane→AI feed (fast-changing, own context) ----
+
+export interface PaneFeed {
+  resource?: string;
+  text: string;
+}
+
+interface FeedCtxValue {
+  // The AI-panel projection: focused tile's text first, other visible tiles
+  // appended with headers (WorkspaceProvider derives it from the tile set).
+  aiText: string;
+  // The focused pane's backing resource — what the AI's mutating tool calls
+  // should refresh.
+  activeResource?: string;
+  registerPane: (view: View, resource: string | undefined, text: string) => void;
+  unregisterPane: (view: View) => void;
+}
+
+export const FeedCtx = createContext<FeedCtxValue | null>(null);
+
+export function useAiFeed(): { aiText: string; activeResource?: string } {
+  const c = useContext(FeedCtx);
+  if (!c) throw new Error("useAiFeed must be used within <WorkspaceProvider>");
+  return c;
+}
+
+// Which tile slot a pane is mounted in. Workstation provides one per tile (and
+// for the single-pane render); panes never read it directly — useRegisterPane
+// does. null = outside any tile (defensive default: register as the current view).
+export const TileCtx = createContext<View | null>(null);
+
+// Called by a mounted pane to publish its AI-text projection and backing
+// resource whenever its content changes. Tile-aware: in a split, every mounted
+// pane keeps its own feed registered; the provider assembles the AI text from
+// the tile set. Unregisters on unmount so closed tiles drop out of the feed.
 export function useRegisterPane(resource: string | undefined, text: string): void {
-  const { registerPane } = useWorkspace();
+  const feed = useContext(FeedCtx);
+  const tile = useContext(TileCtx);
+  if (!feed) throw new Error("useRegisterPane must be used within <WorkspaceProvider>");
+  const { registerPane, unregisterPane } = feed;
+  const { view } = useWorkspace();
+  const slot = tile ?? view;
   useEffect(() => {
-    registerPane(resource, text);
-    // registerPane is stable enough; re-run when the projection or resource changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resource, text]);
+    registerPane(slot, resource, text);
+  }, [registerPane, slot, resource, text]);
+  useEffect(() => () => unregisterPane(slot), [unregisterPane, slot]);
 }

@@ -1,51 +1,29 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { Ctx, useRegisterPane, useWorkspace } from "./workspaceContext";
+import { describe, expect, it } from "vitest";
+import { feedValue, workspaceValue, type FeedValue, type WorkspaceValue } from "@/test/workspace";
+import { Ctx, FeedCtx, TileCtx, useAiFeed, useRegisterPane, useWorkspace } from "./workspaceContext";
+import type { View } from "./types";
 
-type WorkspaceValue = NonNullable<ComponentProps<typeof Ctx.Provider>["value"]>;
-
-function workspaceValue(overrides: Partial<WorkspaceValue> = {}): WorkspaceValue {
-  return {
-    connected: true,
-    cfg: { url: "http://gateway", token: "token" },
-    setCfg: vi.fn(),
-    view: "today",
-    setView: vi.fn(),
-    paneTarget: null,
-    openPane: vi.fn(),
-    consumePaneTarget: vi.fn(),
-    aiText: "",
-    activeResource: undefined,
-    registerPane: vi.fn(),
-    wikiTarget: null,
-    openWiki: vi.fn(),
-    consumeWikiTarget: vi.fn(),
-    noteSink: null,
-    setNoteSink: vi.fn(),
-    hiddenViews: [],
-    toggleViewHidden: vi.fn(),
-    viewOrder: [],
-    setViewOrder: vi.fn(),
-    notebookTop: "default",
-    setNotebookTop: vi.fn(),
-    ...overrides,
-  };
-}
-
-function wrapper(value: WorkspaceValue) {
+function wrapper(value: WorkspaceValue, feed: FeedValue, tile: View | null = null) {
   return function WorkspaceWrapper({ children }: { children: ReactNode }) {
-    return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+    return (
+      <Ctx.Provider value={value}>
+        <FeedCtx.Provider value={feed}>
+          <TileCtx.Provider value={tile}>{children}</TileCtx.Provider>
+        </FeedCtx.Provider>
+      </Ctx.Provider>
+    );
   };
 }
 
 describe("useWorkspace", () => {
   it("returns the nearest workspace value", () => {
-    const value = workspaceValue({ aiText: "active page", activeResource: "wiki" });
-    const { result } = renderHook(() => useWorkspace(), { wrapper: wrapper(value) });
+    const value = workspaceValue({ view: "wiki", tiles: ["wiki", "mail"] });
+    const { result } = renderHook(() => useWorkspace(), { wrapper: wrapper(value, feedValue()) });
     expect(result.current).toBe(value);
-    expect(result.current.aiText).toBe("active page");
-    expect(result.current.activeResource).toBe("wiki");
+    expect(result.current.view).toBe("wiki");
+    expect(result.current.tiles).toEqual(["wiki", "mail"]);
   });
 
   it("fails clearly outside a provider", () => {
@@ -53,29 +31,60 @@ describe("useWorkspace", () => {
   });
 });
 
+describe("useAiFeed", () => {
+  it("exposes the AI projection and active resource", () => {
+    const feed = feedValue({ aiText: "active page", activeResource: "wiki" });
+    const { result } = renderHook(() => useAiFeed(), { wrapper: wrapper(workspaceValue(), feed) });
+    expect(result.current.aiText).toBe("active page");
+    expect(result.current.activeResource).toBe("wiki");
+  });
+
+  it("fails clearly outside a provider", () => {
+    expect(() => renderHook(() => useAiFeed())).toThrow("useAiFeed must be used within <WorkspaceProvider>");
+  });
+});
+
 describe("useRegisterPane", () => {
-  it("publishes on mount and when the projection changes", () => {
-    const registerPane = vi.fn();
-    const value = workspaceValue({ registerPane });
+  it("publishes under its tile slot on mount and when the projection changes", () => {
+    const feed = feedValue();
     const { rerender } = renderHook(({ resource, text }) => useRegisterPane(resource, text), {
-      wrapper: wrapper(value),
+      wrapper: wrapper(workspaceValue(), feed, "mail"),
       initialProps: { resource: "mail" as string | undefined, text: "first" },
     });
-    expect(registerPane).toHaveBeenLastCalledWith("mail", "first");
+    expect(feed.registerPane).toHaveBeenLastCalledWith("mail", "mail", "first");
 
     act(() => rerender({ resource: "mail", text: "second" }));
-    expect(registerPane).toHaveBeenLastCalledWith("mail", "second");
+    expect(feed.registerPane).toHaveBeenLastCalledWith("mail", "mail", "second");
 
     act(() => rerender({ resource: undefined, text: "detached" }));
-    expect(registerPane).toHaveBeenLastCalledWith(undefined, "detached");
-    expect(registerPane).toHaveBeenCalledTimes(3);
+    expect(feed.registerPane).toHaveBeenLastCalledWith("mail", undefined, "detached");
+    expect(feed.registerPane).toHaveBeenCalledTimes(3);
+  });
+
+  it("falls back to the current view when no tile slot is provided", () => {
+    const feed = feedValue();
+    renderHook(() => useRegisterPane("wiki", "body"), {
+      wrapper: wrapper(workspaceValue({ view: "wiki" }), feed, null),
+    });
+    expect(feed.registerPane).toHaveBeenLastCalledWith("wiki", "wiki", "body");
   });
 
   it("does not republish when resource and text stay equal", () => {
-    const registerPane = vi.fn();
-    const value = workspaceValue({ registerPane });
-    const { rerender } = renderHook(() => useRegisterPane("wiki", "same"), { wrapper: wrapper(value) });
+    const feed = feedValue();
+    const { rerender } = renderHook(() => useRegisterPane("wiki", "same"), {
+      wrapper: wrapper(workspaceValue(), feed, "wiki"),
+    });
     rerender();
-    expect(registerPane).toHaveBeenCalledTimes(1);
+    expect(feed.registerPane).toHaveBeenCalledTimes(1);
+  });
+
+  it("unregisters its slot on unmount", () => {
+    const feed = feedValue();
+    const { unmount } = renderHook(() => useRegisterPane("mail", "text"), {
+      wrapper: wrapper(workspaceValue(), feed, "mail"),
+    });
+    expect(feed.unregisterPane).not.toHaveBeenCalled();
+    unmount();
+    expect(feed.unregisterPane).toHaveBeenCalledWith("mail");
   });
 });

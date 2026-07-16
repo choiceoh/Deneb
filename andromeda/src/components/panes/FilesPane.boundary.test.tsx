@@ -63,8 +63,8 @@ function installGateway(
   );
 }
 
-function renderFiles(connected = true, active = true) {
-  return renderWithProviders(<FilesPane active={active} />, {
+function renderFiles(connected = true) {
+  return renderWithProviders(<FilesPane />, {
     connected,
     cfg: connected ? { url: "http://test", token: "tok" } : { url: "", token: "" },
   });
