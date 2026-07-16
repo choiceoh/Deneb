@@ -2,11 +2,13 @@ package server
 
 import (
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // approvalWikiExcerptMaxRunes bounds the analysis gist that lands in 로그.md —
@@ -14,13 +16,42 @@ import (
 // trail readable.
 const approvalWikiExcerptMaxRunes = 480
 
+// resolveApprovalProject pins an approval to exactly one active project.
+// Title first (short, high-precision); if no unique hit, title+body so a
+// body-only site/project mention still files. Ambiguous matches stay silent
+// (추측 금지 — UniqueProjectInText's specificity-tie rule).
+func resolveApprovalProject(store *wiki.Store, title, body string) (wiki.ProjectRef, bool) {
+	if store == nil {
+		return wiki.ProjectRef{}, false
+	}
+	title = strings.TrimSpace(title)
+	if title != "" {
+		if ref, ok := store.UniqueProjectInText(title); ok {
+			return ref, true
+		}
+	}
+	hay := title
+	if b := strings.TrimSpace(body); b != "" {
+		if hay != "" {
+			hay += "\n"
+		}
+		hay += b
+	}
+	if hay == "" {
+		return wiki.ProjectRef{}, false
+	}
+	return store.UniqueProjectInText(hay)
+}
+
 // logApprovalAnalysisToWiki appends the approval-analysis gist to the owning
 // project's 로그.md as a `결재` op (layout rule: 결재 events append to the log,
-// never a new page). Deterministic project match only — no unique project in
-// the title means silent skip (추측 금지). Idempotent per docId via a ref
-// marker in the section body. Best-effort: failures never disturb the caller.
-func (s *Server) logApprovalAnalysisToWiki(rec *groupware.ApprovalAnalysisRecord) {
-	if s == nil || s.wikiStore == nil || rec == nil {
+// never a new page) and prepends a glance bullet on the 대표페이지 현재 상태.
+// Requires rec.ProjectFile (agent judgment) AND a unique project match.
+// Idempotent per docId. Best-effort: failures never disturb the caller.
+//
+// body is optional matching fuel (title alone often omits the site/project name).
+func (s *Server) logApprovalAnalysisToWiki(rec *groupware.ApprovalAnalysisRecord, body string) {
+	if s == nil || s.wikiStore == nil || rec == nil || !rec.ProjectFile {
 		return
 	}
 	docID := strings.TrimSpace(rec.DocID)
@@ -29,7 +60,7 @@ func (s *Server) logApprovalAnalysisToWiki(rec *groupware.ApprovalAnalysisRecord
 	if docID == "" || title == "" || analysis == "" {
 		return
 	}
-	ref, ok := s.wikiStore.UniqueProjectInText(title)
+	ref, ok := resolveApprovalProject(s.wikiStore, title, body)
 	if !ok {
 		return
 	}
@@ -75,6 +106,21 @@ func (s *Server) logApprovalAnalysisToWiki(rec *groupware.ApprovalAnalysisRecord
 	if err == nil && s.logger != nil {
 		s.logger.Info("approval analysis logged to wiki", "docId", docID, "project", project)
 	}
+
+	// Glance surface (메일 패리티): 대표페이지 현재 상태 — digest/모아보기.
+	s.appendApprovalStatusToProject(ref.Path, title, "approval:"+docID)
+}
+
+// appendApprovalStatusToProject prepends one dated bullet on the project's
+// 대표페이지 현재 상태. Idempotent by ref (dealRefMarker). Best-effort.
+func (s *Server) appendApprovalStatusToProject(repPath, title, ref string) {
+	if s == nil || s.wikiStore == nil {
+		return
+	}
+	line := "결재: " + textutil.TruncateRunes(approvalLogText(title), 60, "...")
+	if err := s.wikiStore.AppendProjectStatusLine(repPath, line, ref, time.Now()); err != nil && s.logger != nil {
+		s.logger.Warn("approval→project 현재 상태 갱신 실패", "path", repPath, "ref", ref, "error", err)
+	}
 }
 
 // errApprovalLogDuplicate aborts UpdatePage without a warning — the section is
@@ -85,8 +131,8 @@ type errSentinel string
 
 func (e errSentinel) Error() string { return string(e) }
 
-// approvalAnalysisExcerpt keeps the gist: the IMPORTANCE marker line drops
-// (already surfaced as 중요도), and the remainder is rune-bounded.
+// approvalAnalysisExcerpt keeps the gist: machine trailers (IMPORTANCE /
+// PROJECT_FILE) drop, and the remainder is rune-bounded.
 func approvalAnalysisExcerpt(analysis string) string {
 	out := stripApprovalImportanceMarker(analysis)
 	if utf8.RuneCountInString(out) > approvalWikiExcerptMaxRunes {

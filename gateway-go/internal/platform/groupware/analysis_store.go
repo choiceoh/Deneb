@@ -17,16 +17,20 @@ import (
 // in a way that should invalidate cached results.
 // v2: price-memory loop — 과거 단가·경비 이력 주입 + 단가 비교 섹션.
 // v3: selected attachments (계약/견적/…) downloaded+OCR'd into the analysis prompt.
-const ApprovalAnalysisPromptVersion = "v3"
+// v4: PROJECT_FILE trailer — agent judges whether to file to project wiki.
+const ApprovalAnalysisPromptVersion = "v4"
 
 // ApprovalAnalysisRecord is the on-disk shape of one cached 전자결재 analysis.
 type ApprovalAnalysisRecord struct {
-	DocID         string    `json:"docId"`
-	Title         string    `json:"title,omitempty"`
-	Drafter       string    `json:"drafter,omitempty"`
-	Date          string    `json:"date,omitempty"`
-	Analysis      string    `json:"analysis"`
-	Importance    string    `json:"importance,omitempty"`
+	DocID      string `json:"docId"`
+	Title      string `json:"title,omitempty"`
+	Drafter    string `json:"drafter,omitempty"`
+	Date       string `json:"date,omitempty"`
+	Analysis   string `json:"analysis"`
+	Importance string `json:"importance,omitempty"`
+	// ProjectFile is the model's judgment that this approval is worth appending
+	// to the matched project's 로그.md / 현재 상태 (orthogonal to Importance).
+	ProjectFile   bool      `json:"projectFile,omitempty"`
 	DurationMs    int64     `json:"durationMs"`
 	PromptVersion string    `json:"promptVersion"`
 	CreatedAt     time.Time `json:"createdAt"`
