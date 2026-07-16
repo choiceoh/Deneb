@@ -35,7 +35,10 @@ function isDataLine(line: string): boolean {
 }
 
 function splitDataCells(line: string): string[] {
-  const cells = line.trim().split(VERTICAL_SPLIT).map((c) => c.trim());
+  const cells = line
+    .trim()
+    .split(VERTICAL_SPLIT)
+    .map((c) => c.trim());
   if (cells.length && cells[0] === "") cells.shift();
   if (cells.length && cells[cells.length - 1] === "") cells.pop();
   return cells;
