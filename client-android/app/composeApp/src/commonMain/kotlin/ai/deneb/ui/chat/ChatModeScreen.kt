@@ -83,18 +83,23 @@ internal fun ChatModeScreen(
     // rests just above the input while older messages scroll behind it.
     var bottomOverlayHeightPx by remember { mutableStateOf(0) }
 
+    // The chat stays composed while another tab is selected (LiveTabPane) — a
+    // hidden tab must never intercept system back, so both drawer handlers AND
+    // with the active flag.
+    val tabActive = ai.deneb.ui.LocalLiveTabActive.current
+
     // Left navigation drawer (analysis surfaces): opened by the top-bar
     // hamburger or a left-edge swipe; system back closes it before exiting.
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
-    ai.deneb.PlatformBackHandler(enabled = drawerState.isOpen) {
+    ai.deneb.PlatformBackHandler(enabled = tabActive && drawerState.isOpen) {
         drawerScope.launch { drawerState.close() }
     }
 
     // Right-side session selector: opened by the top-bar session button or a
     // right-edge swipe (mirroring the left drawer); dismissed by scrim or back.
     val sessionDrawerState = rememberDrawerState(DrawerValue.Closed)
-    ai.deneb.PlatformBackHandler(enabled = sessionDrawerState.isOpen) {
+    ai.deneb.PlatformBackHandler(enabled = tabActive && sessionDrawerState.isOpen) {
         drawerScope.launch { sessionDrawerState.close() }
     }
     // Reload the session list whenever the session drawer starts opening, so it

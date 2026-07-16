@@ -3,6 +3,14 @@ package ai.deneb
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+// The NavHost's resting start destination. Renders nothing: the five bottom-bar
+// tabs live OUTSIDE the NavHost in an always-alive pane (LiveTabPane, App.kt) that
+// shows through this transparent stub, so tab switches never rebuild a screen.
+// Pushed routes (sections, details) slide over the pane.
+@Serializable
+@SerialName("deneb_main")
+object DenebMain
+
 @Serializable
 @SerialName("home")
 object Home

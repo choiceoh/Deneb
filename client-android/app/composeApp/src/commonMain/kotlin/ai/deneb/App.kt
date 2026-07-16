@@ -53,13 +53,23 @@ import ai.deneb.tools.SetupSmsPermissionHandler
 import ai.deneb.tools.SetupSmsSendPermissionHandler
 import ai.deneb.tools.SmsPermissionController
 import ai.deneb.tools.SmsSendPermissionController
+import ai.deneb.ui.LiveTab
+import ai.deneb.ui.LiveTabPane
 import ai.deneb.ui.LocalSharedTransitionScope
 import ai.deneb.ui.Theme
 import ai.deneb.ui.chat.ChatScreen
 import ai.deneb.ui.chat.ChatViewModel
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.FeedScreen
+import ai.deneb.ui.chat.composables.ROUTE_CALENDAR
+import ai.deneb.ui.chat.composables.ROUTE_FEED
+import ai.deneb.ui.chat.composables.ROUTE_HOME
+import ai.deneb.ui.chat.composables.ROUTE_MAIL
+import ai.deneb.ui.chat.composables.ROUTE_MAIN
+import ai.deneb.ui.chat.composables.ROUTE_MORE
 import ai.deneb.ui.chat.composables.denebBottomBarRoutes
+import ai.deneb.ui.chat.composables.denebLiveTabRequests
+import ai.deneb.ui.chat.composables.isDenebLiveTab
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.denebComposable
@@ -97,6 +107,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -138,14 +149,46 @@ internal fun AppContent(
 ) {
     val appSettings = koinInject<AppSettings>()
     val denebClient = koinInject<DataRepository>() as? DenebGatewayClient
+
+    // Live-tab pane state: which of the five bottom-bar tabs is showing. The tabs
+    // render outside the NavHost (LiveTabPane) and stay alive across switches, so
+    // selection is plain state — saved like a nav route would be.
+    var selectedTabRoute by rememberSaveable { mutableStateOf(ROUTE_FEED) }
+    // Pending 피드 deep-open (phone push / dashboard tap). seq bumps per request so
+    // FeedScreen (alive across switches) re-arms even for the same item id.
+    var feedOpenRequest by remember { mutableStateOf<FeedOpenRequest?>(null) }
+
+    /** Select a live tab by its destination and return the NavHost to the resting
+     *  stub, so the pane is what's on screen. Non-tab destinations are ignored. */
+    fun openLiveTab(dest: Any) {
+        selectedTabRoute = when (dest) {
+            is DenebFeed -> ROUTE_FEED
+            Home -> ROUTE_HOME
+            DenebMail -> ROUTE_MAIL
+            DenebCalendar -> ROUTE_CALENDAR
+            DenebMore -> ROUTE_MORE
+            else -> return
+        }
+        if (dest is DenebFeed && !dest.openItemId.isNullOrBlank()) {
+            feedOpenRequest = FeedOpenRequest(
+                itemId = dest.openItemId,
+                createdAtMs = dest.openItemCreatedAtMs,
+                seq = (feedOpenRequest?.seq ?: 0L) + 1L,
+            )
+        }
+        navController.popBackStack(DenebMain, inclusive = false)
+    }
+
+    // Tab switches requested by callers that only hold a NavHostController (the
+    // desktop harness shortcuts via navigateToDenebSection) arrive on this bus.
+    LaunchedEffect(navController) {
+        denebLiveTabRequests.collect { dest -> openLiveTab(dest) }
+    }
+
     LaunchedEffect(openWorkFeedItemId) {
         val itemId = openWorkFeedItemId?.trim()?.takeIf(String::isNotEmpty)
             ?: return@LaunchedEffect
-        navigateToDenebSection(
-            navController,
-            DenebFeed(openItemId = itemId),
-            restoreState = false,
-        )
+        openLiveTab(DenebFeed(openItemId = itemId))
         onWorkFeedItemConsumed(itemId)
     }
 
@@ -223,7 +266,9 @@ internal fun AppContent(
                 val systemUriHandler = LocalUriHandler.current
                 val currentBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = currentBackStackEntry?.destination?.route?.substringBefore('?')
-                val isHome = currentRoute == "home"
+                // "Home" = the chat tab showing through the resting stub (the tabs
+                // live outside the NavHost, so the chat is never a nav route).
+                val isHome = currentRoute == ROUTE_MAIN && selectedTabRoute == ROUTE_HOME
 
                 val navigationTabBar: @Composable () -> Unit = {
                     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -231,12 +276,7 @@ internal fun AppContent(
                     SingleChoiceSegmentedButtonRow {
                         SegmentedButton(
                             selected = isHome,
-                            onClick = {
-                                navController.navigate(Home) {
-                                    popUpTo(Home) { inclusive = true }
-                                    launchSingleTop = true
-                                }
-                            },
+                            onClick = { openLiveTab(Home) },
                             shape = SegmentedButtonDefaults.itemShape(index = if (isRtl) count - 1 else 0, count = count),
                             modifier = Modifier.handCursor(),
                         ) {
@@ -246,7 +286,7 @@ internal fun AppContent(
                             selected = !isHome,
                             onClick = {
                                 navController.navigate(DenebConfig) {
-                                    popUpTo(Home)
+                                    popUpTo(DenebMain)
                                     launchSingleTop = true
                                 }
                             },
@@ -303,74 +343,19 @@ internal fun AppContent(
                             CompositionLocalProvider(LocalSharedTransitionScope provides this) {
                                 NavHost(
                                     navController,
-                                    // Launch into the 피드 home — the work feed is the app's
-                                    // main screen; the chat is one tab away.
-                                    startDestination = DenebFeed(),
-                                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                                    // Rest on the transparent stub — the five tabs render in
+                                    // the always-alive LiveTabPane beneath this NavHost, and
+                                    // pushed sections/details slide over it. No background
+                                    // here: the host Box paints it, and the stub must stay
+                                    // see-through for the pane.
+                                    startDestination = DenebMain,
+                                    modifier = Modifier.fillMaxSize(),
                                     enterTransition = { denebNavEnter() },
                                     exitTransition = { denebNavExit() },
                                     popEnterTransition = { denebNavPopEnter() },
                                     popExitTransition = { denebNavPopExit() },
                                 ) {
-                                    denebComposable<Home> {
-                                        ChatScreen(
-                                            viewModel = chatViewModel,
-                                            // Deneb chat is text-first — the TTS instance App
-                                            // still configures above is not wired into chat.
-                                            textToSpeech = null,
-                                            navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                        )
-                                    }
-                                    denebComposable<DenebFeed> { entry ->
-                                        val feedRoute = entry.toRoute<DenebFeed>()
-                                        Box(Modifier.fillMaxSize()) {
-                                            FeedScreen(
-                                                items = feedState.workFeed,
-                                                loaded = feedState.workFeedLoaded,
-                                                seenIds = feedSeenIds,
-                                                initialOpenItemId = feedRoute.openItemId,
-                                                initialOpenItemCreatedAtMs = feedRoute.openItemCreatedAtMs,
-                                                onMarkSeen = { id ->
-                                                    appSettings.markFeedSeen(id)
-                                                    feedSeenIds = appSettings.getFeedSeenIds()
-                                                    // Also stamp it read on the gateway so the
-                                                    // desktop and a reinstall see it as read.
-                                                    feedState.actions.markWorkFeedRead(id)
-                                                },
-                                                onLoadDateRange = feedState.actions.refreshWorkFeedRange,
-                                                onRunAction = feedState.actions.runWorkFeedAction,
-                                                onAnswer = feedState.actions.answerWorkFeed,
-                                                onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
-                                                onRewrite = feedState.actions.rewriteWorkFeedCard,
-                                                // 해당 피드 질문: open the card's dedicated chat (context injected)
-                                                // and jump to the chat screen so the user can ask there.
-                                                onAsk = { id ->
-                                                    feedState.actions.openWorkFeedItem(id)
-                                                    navigateToDenebSection(navController, Home)
-                                                },
-                                                // Zune-style title pivot + left swipe → 결재.
-                                                onOpenApprovals = { navigateToDenebSection(navController, DenebApprovals) },
-                                                onOpenApprovalDetail = { docId, title ->
-                                                    navController.navigate(
-                                                        DenebApprovalDetail(
-                                                            docId = docId,
-                                                            title = title,
-                                                            canAct = true,
-                                                        ),
-                                                    )
-                                                },
-                                            )
-                                            // Feed-card 정정 피드백은 위키를 고치는 ephemeral 에이전트 턴을 돌린다.
-                                            // 시트는 낙관적으로 먼저 닫히므로, 돌아온 1~3줄 보고를 여기 스낵바로 띄운다.
-                                            val feedbackSnackbar = remember { SnackbarHostState() }
-                                            LaunchedEffect(feedState.feedbackResultText) {
-                                                val msg = feedState.feedbackResultText ?: return@LaunchedEffect
-                                                feedState.actions.clearFeedbackResult()
-                                                feedbackSnackbar.showSnackbar(msg, duration = SnackbarDuration.Long)
-                                            }
-                                            SnackbarHost(feedbackSnackbar, Modifier.align(Alignment.BottomCenter))
-                                        }
-                                    }
+                                    denebComposable<DenebMain> { Box(Modifier.fillMaxSize()) }
                                     denebComposable<DenebConfig> {
                                         DenebConfigScreen(
                                             appSettings = appSettings,
@@ -387,29 +372,6 @@ internal fun AppContent(
                                             DenebFleetScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
-                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                            )
-                                        }
-                                    }
-                                    denebComposable<DenebMail> {
-                                        denebClient?.let { client ->
-                                            DenebMailScreen(
-                                                client = client,
-                                                onBack = { navController.navigateUp() },
-                                                onOpenDetail = { id -> navController.navigate(DenebMailDetail(id)) },
-                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                            )
-                                        }
-                                    }
-                                    denebComposable<DenebCalendar> {
-                                        denebClient?.let { client ->
-                                            DenebCalendarScreen(
-                                                client = client,
-                                                onBack = { navController.navigateUp() },
-                                                onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
-                                                onAddEvent = { date -> navController.navigate(DenebCalendarAdd(date.toString())) },
-                                                onAddTodo = { date -> navController.navigate(DenebTodoAdd(date.toString())) },
-                                                onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }
@@ -448,7 +410,7 @@ internal fun AppContent(
                                                 // the templated message and jump to the chat to watch it.
                                                 onAskInChat = { msg ->
                                                     feedState.actions.ask(msg)
-                                                    navController.navigate(Home)
+                                                    openLiveTab(Home)
                                                 },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
@@ -489,16 +451,6 @@ internal fun AppContent(
                                             )
                                         }
                                     }
-                                    denebComposable<DenebMore> {
-                                        DenebMoreScreen(
-                                            onBack = { navController.navigateUp() },
-                                            onOpen = { dest -> navController.navigate(dest) },
-                                            // Read fresh on entry: returning here after toggling tiles in
-                                            // 설정 re-executes this composable, so the grid reflects the
-                                            // latest hidden set without an observable flow.
-                                            hiddenTiles = appSettings.getHiddenMoreTiles(),
-                                        )
-                                    }
                                     denebComposable<DenebNotebooks> { entry ->
                                         denebClient?.let { client ->
                                             DenebNotebooksScreen(
@@ -515,13 +467,11 @@ internal fun AppContent(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
                                                 onOpenWorkFeedItem = { itemId, createdAtMs ->
-                                                    navigateToDenebSection(
-                                                        navController,
+                                                    openLiveTab(
                                                         DenebFeed(
                                                             openItemId = itemId,
                                                             openItemCreatedAtMs = createdAtMs,
                                                         ),
-                                                        restoreState = false,
                                                     )
                                                 },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
@@ -640,7 +590,7 @@ internal fun AppContent(
                                                         ),
                                                     )
                                                 },
-                                                onOpenFeed = { navigateToDenebSection(navController, DenebFeed()) },
+                                                onOpenFeed = { openLiveTab(DenebFeed()) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }
@@ -760,6 +710,105 @@ internal fun AppContent(
                         }
                     }
                 }
+                // The five always-alive tabs (LiveTabPane). Built here — not in the
+                // NavHost — so a tab switch is a crossfade between already-composed
+                // screens: no rebuild, no entry refetch, every remember survives.
+                val liveTabs = listOf(
+                    LiveTab(ROUTE_FEED) {
+                        Box(Modifier.fillMaxSize()) {
+                            FeedScreen(
+                                items = feedState.workFeed,
+                                loaded = feedState.workFeedLoaded,
+                                seenIds = feedSeenIds,
+                                initialOpenItemId = feedOpenRequest?.itemId,
+                                initialOpenItemCreatedAtMs = feedOpenRequest?.createdAtMs ?: 0L,
+                                openRequestKey = feedOpenRequest?.seq ?: 0L,
+                                onMarkSeen = { id ->
+                                    appSettings.markFeedSeen(id)
+                                    feedSeenIds = appSettings.getFeedSeenIds()
+                                    // Also stamp it read on the gateway so the
+                                    // desktop and a reinstall see it as read.
+                                    feedState.actions.markWorkFeedRead(id)
+                                },
+                                onLoadDateRange = feedState.actions.refreshWorkFeedRange,
+                                onRunAction = feedState.actions.runWorkFeedAction,
+                                onAnswer = feedState.actions.answerWorkFeed,
+                                onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
+                                onRewrite = feedState.actions.rewriteWorkFeedCard,
+                                // 해당 피드 질문: open the card's dedicated chat (context injected)
+                                // and jump to the chat screen so the user can ask there.
+                                onAsk = { id ->
+                                    feedState.actions.openWorkFeedItem(id)
+                                    openLiveTab(Home)
+                                },
+                                // Zune-style title pivot + left swipe → 결재.
+                                onOpenApprovals = { navigateToDenebSection(navController, DenebApprovals) },
+                                onOpenApprovalDetail = { docId, title ->
+                                    navController.navigate(
+                                        DenebApprovalDetail(
+                                            docId = docId,
+                                            title = title,
+                                            canAct = true,
+                                        ),
+                                    )
+                                },
+                            )
+                            // Feed-card 정정 피드백은 위키를 고치는 ephemeral 에이전트 턴을 돌린다.
+                            // 시트는 낙관적으로 먼저 닫히므로, 돌아온 1~3줄 보고를 여기 스낵바로 띄운다.
+                            val feedbackSnackbar = remember { SnackbarHostState() }
+                            LaunchedEffect(feedState.feedbackResultText) {
+                                val msg = feedState.feedbackResultText ?: return@LaunchedEffect
+                                feedState.actions.clearFeedbackResult()
+                                feedbackSnackbar.showSnackbar(msg, duration = SnackbarDuration.Long)
+                            }
+                            SnackbarHost(feedbackSnackbar, Modifier.align(Alignment.BottomCenter))
+                        }
+                    },
+                    LiveTab(ROUTE_MAIL) {
+                        denebClient?.let { client ->
+                            DenebMailScreen(
+                                client = client,
+                                onBack = { openLiveTab(DenebFeed()) },
+                                onOpenDetail = { id -> navController.navigate(DenebMailDetail(id)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    },
+                    LiveTab(ROUTE_HOME) {
+                        ChatScreen(
+                            viewModel = chatViewModel,
+                            // Deneb chat is text-first — the TTS instance App
+                            // still configures above is not wired into chat.
+                            textToSpeech = null,
+                            navigationTabBar = if (showTabBar) navigationTabBar else null,
+                        )
+                    },
+                    LiveTab(ROUTE_CALENDAR) {
+                        denebClient?.let { client ->
+                            DenebCalendarScreen(
+                                client = client,
+                                onBack = { openLiveTab(DenebFeed()) },
+                                onOpenEvent = { id -> navController.navigate(DenebCalendarEvent(id)) },
+                                onAddEvent = { date -> navController.navigate(DenebCalendarAdd(date.toString())) },
+                                onAddTodo = { date -> navController.navigate(DenebTodoAdd(date.toString())) },
+                                onOpenTodo = { id -> navController.navigate(DenebTodoEdit(id)) },
+                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                            )
+                        }
+                    },
+                    LiveTab(ROUTE_MORE) {
+                        // The hub is alive now — it no longer re-executes on entry, so
+                        // re-read the hidden-tile set on every nav change (covers
+                        // returning from 설정 where tiles were just toggled).
+                        val hiddenTiles = remember(currentBackStackEntry) { appSettings.getHiddenMoreTiles() }
+                        DenebMoreScreen(
+                            onBack = { openLiveTab(DenebFeed()) },
+                            onOpen = { dest -> navController.navigate(dest) },
+                            hiddenTiles = hiddenTiles,
+                        )
+                    },
+                )
+
                 // The native client is mobile-only (the desktop workstation is a
                 // separate app, Andromeda). Dock the super-app bottom bar under the
                 // content on top-level sections (project_superapp_vision). Pushed detail
@@ -777,6 +826,9 @@ internal fun AppContent(
                         Modifier
                             .weight(1f)
                             .fillMaxWidth()
+                            // The screen background lives here now (not on the NavHost),
+                            // so the transparent resting stub shows the pane beneath.
+                            .background(MaterialTheme.colorScheme.background)
                             .then(
                                 if (showBar) {
                                     Modifier.consumeWindowInsets(WindowInsets.navigationBars)
@@ -785,15 +837,28 @@ internal fun AppContent(
                                 },
                             ),
                     ) {
+                        // System back at the resting stub steps to 피드 before exiting
+                        // the app (mirrors the old popUpTo-start stack). Composed before
+                        // the pane so tab-internal handlers (chat drawers) win when both
+                        // are enabled.
+                        PlatformBackHandler(enabled = route == ROUTE_MAIN && selectedTabRoute != ROUTE_FEED) {
+                            openLiveTab(DenebFeed())
+                        }
+                        LiveTabPane(
+                            selectedRoute = selectedTabRoute,
+                            tabs = liveTabs,
+                            modifier = Modifier.fillMaxSize(),
+                        )
                         navHost(Modifier.fillMaxSize())
                     }
                     if (showBar) {
                         DenebBottomBar(
-                            currentRoute = route,
-                            // 더보기 always lands on the hub root — don't restore the last
-                            // section drilled into it (검색·할일·…), so pressing 더보기 from a
-                            // detail returns to 더보기, not back onto the detail.
-                            onNavigate = { dest -> navigateToDenebSection(navController, dest, restoreState = dest != DenebMore) },
+                            // At the resting stub the bar highlights the live tab; on a
+                            // pushed bar-keeping section it highlights by route as before.
+                            currentRoute = if (route == ROUTE_MAIN) selectedTabRoute else route,
+                            onNavigate = { dest ->
+                                if (isDenebLiveTab(dest)) openLiveTab(dest) else navigateToDenebSection(navController, dest)
+                            },
                             feedUnread = feedUnread,
                         )
                     }
@@ -802,3 +867,7 @@ internal fun AppContent(
         }
     }
 }
+
+/** A pending 피드 deep-open (phone push / dashboard tap). [seq] bumps per request so
+ *  the always-alive FeedScreen re-arms even when the same item is opened twice. */
+private data class FeedOpenRequest(val itemId: String, val createdAtMs: Long, val seq: Long)

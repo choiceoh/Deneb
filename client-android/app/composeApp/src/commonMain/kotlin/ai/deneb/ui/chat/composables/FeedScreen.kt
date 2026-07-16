@@ -96,6 +96,10 @@ internal fun FeedScreen(
     onAsk: (String) -> Unit,
     initialOpenItemId: String? = null,
     initialOpenItemCreatedAtMs: Long = 0L,
+    // Bumped by the host per open request. The screen stays alive across tab
+    // switches (LiveTabPane), so re-opening the SAME item needs a fresh key to
+    // re-arm the rememberSaveable consumption below.
+    openRequestKey: Long = 0L,
     onOpenApprovals: (() -> Unit)? = null,
     // groupware-approval cards: open the Amaranth detail for item.refId.
     onOpenApprovalDetail: ((docId: String, title: String) -> Unit)? = null,
@@ -133,10 +137,10 @@ internal fun FeedScreen(
                     localDateOf(initialOpenItemCreatedAtMs)
                 }
             }
-            var selectedDateIso by rememberSaveable(initialOpenItemId) { mutableStateOf(initialDate.toString()) }
+            var selectedDateIso by rememberSaveable(initialOpenItemId, openRequestKey) { mutableStateOf(initialDate.toString()) }
             val selectedDate = runCatching { LocalDate.parse(selectedDateIso) }.getOrDefault(today)
-            var expandedId by rememberSaveable(initialOpenItemId) { mutableStateOf<String?>(null) }
-            var pendingOpenItemId by rememberSaveable(initialOpenItemId) {
+            var expandedId by rememberSaveable(initialOpenItemId, openRequestKey) { mutableStateOf<String?>(null) }
+            var pendingOpenItemId by rememberSaveable(initialOpenItemId, openRequestKey) {
                 mutableStateOf(initialOpenItemId?.trim()?.takeIf(String::isNotEmpty))
             }
             val nav = feedDateNavState(selectedDate, today, dates)

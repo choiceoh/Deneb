@@ -152,7 +152,14 @@ go_tab() {
 more_section() {
   local name="$1" label="$2" anchor="$3" do_scroll="${4:-}" b
   "$NA" tap "$TAB_MORE_X" "$BBAR_Y" >/dev/null 2>&1 || true   # open the 더보기 menu
-  "$NA" wait-for "$label" 6 >/dev/null 2>&1 || true            # section row rendered
+  # The hub list has outgrown one viewport (그룹웨어·현장 지도·RSI rows) and — being a
+  # live tab — keeps its scroll across visits. Reset to the top (no-op when already
+  # there), then scroll toward the tail when the row (설정) still isn't visible.
+  "$NA" scroll up 5 >/dev/null 2>&1 || true
+  if ! "$NA" wait-for "$label" 6 >/dev/null 2>&1; then
+    "$NA" scroll down 3 >/dev/null 2>&1 || true
+    "$NA" wait-for "$label" 4 >/dev/null 2>&1 || true
+  fi
   b="$(log_lines)"
   "$NA" taptext "$label" >/dev/null 2>&1 || true               # open the section by its text
   settle "$anchor"
