@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -340,7 +341,11 @@ fun DenebMailScreen(
                         } else if (mail.isEmpty()) {
                             item(key = "empty") {
                                 Box(Modifier.padding(horizontal = 24.dp)) {
-                                    DenebEmpty(if (activeQuery != null) "검색 결과 없음" else "최근 30일 메일 없음")
+                                    DenebEmpty(
+                                        if (activeQuery != null) "검색 결과 없음" else "최근 30일 메일 없음",
+                                        icon = Icons.Outlined.Email,
+                                        hint = if (activeQuery != null) null else "새 메일이 도착하면 여기에 정리됩니다",
+                                    )
                                 }
                             }
                         }

@@ -18,33 +18,33 @@ import androidx.compose.ui.unit.em
 // Not @Composable: takes the resolved ColorScheme so callers can cache the result
 // with remember(inlines, colors). Building the AnnotatedString on every streaming
 // token (it was rebuilt per recomposition) was a measurable hot-path cost.
-internal fun List<InlineNode>.toAnnotatedString(colors: ColorScheme): AnnotatedString = buildAnnotatedString { appendInlines(this@toAnnotatedString, colors) }
+internal fun List<InlineNode>.toAnnotatedString(colors: ColorScheme, monoFamily: FontFamily): AnnotatedString = buildAnnotatedString { appendInlines(this@toAnnotatedString, colors, monoFamily) }
 
-private fun AnnotatedString.Builder.appendInlines(nodes: List<InlineNode>, colors: ColorScheme) {
-    for (n in nodes) appendInline(n, colors)
+private fun AnnotatedString.Builder.appendInlines(nodes: List<InlineNode>, colors: ColorScheme, monoFamily: FontFamily) {
+    for (n in nodes) appendInline(n, colors, monoFamily)
 }
 
-private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: ColorScheme) {
+private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: ColorScheme, monoFamily: FontFamily) {
     when (node) {
         is Text -> append(node.value)
 
         is Strong -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Strike -> withStyle(
             // Struck text is "removed" — mute it so a correction's old value recedes.
             SpanStyle(textDecoration = TextDecoration.LineThrough, color = colors.onSurfaceVariant),
         ) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Underline -> withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Highlight -> withStyle(
@@ -52,20 +52,20 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
             // text color is left as-is so the highlight reads as emphasis, not a recolor.
             SpanStyle(background = colors.primary.copy(alpha = 0.30f)),
         ) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Superscript -> withStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Subscript -> withStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em)) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is InlineCode -> withStyle(
             SpanStyle(
-                fontFamily = FontFamily.Monospace,
+                fontFamily = monoFamily,
                 background = colors.surfaceVariant,
             ),
         ) {
@@ -90,14 +90,14 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
                 ),
             ),
         ) {
-            appendInlines(node.children, colors)
+            appendInlines(node.children, colors, monoFamily)
         }
 
         is Image -> append(node.alt)
 
         LineBreak -> append('\n')
 
-        is InlineMath -> withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) {
+        is InlineMath -> withStyle(SpanStyle(fontFamily = monoFamily)) {
             // Fallback path: if math reaches the AnnotatedString builder it means the caller
             // didn't use [InlineContent]. Emit the raw LaTeX so nothing is lost.
             append(node.latex)

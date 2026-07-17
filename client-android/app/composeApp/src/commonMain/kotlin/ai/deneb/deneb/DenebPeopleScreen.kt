@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -75,7 +77,7 @@ fun DenebPeopleScreen(
 
             list == null -> DenebLoading()
 
-            list.isEmpty() -> DenebEmpty("표시할 사람이 없습니다.")
+            list.isEmpty() -> DenebEmpty("표시할 사람이 없습니다.", icon = Icons.Outlined.Person, hint = "메일을 주고받은 사람이 자동으로 정리됩니다")
 
             else -> {
                 // Recent Gmail counterparties vs. wiki-only people (no recent

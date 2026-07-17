@@ -4,6 +4,7 @@ import ai.deneb.deneb.generated.SkillDetailResponse
 import ai.deneb.deneb.generated.SkillLifecycleEvent
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -39,7 +40,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -335,7 +335,7 @@ internal fun SkillDetailContent(
                 onValueChange = onDraftChange,
                 enabled = !actionBusy,
                 label = { Text("SKILL.md") },
-                textStyle = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
+                textStyle = DenebType.snippet.copy(fontFamily = JetBrainsMonoFamily()),
                 modifier = Modifier.fillMaxWidth().heightIn(min = 360.dp),
             )
         } else {

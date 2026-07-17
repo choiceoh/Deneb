@@ -1,12 +1,16 @@
 package ai.deneb.deneb
 
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.SkeletonList
+import ai.deneb.ui.denebHint
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -18,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -56,7 +61,7 @@ fun DenebError(text: String, onRetry: (() -> Unit)? = null) {
         Text(
             text,
             color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium,
+            style = DenebType.body,
             textAlign = TextAlign.Center,
         )
         if (onRetry != null) {
@@ -72,17 +77,44 @@ fun DenebError(text: String, onRetry: (() -> Unit)? = null) {
  * by every Deneb screen. Centered for the same edge-press reason as DenebError.
  */
 @Composable
-fun DenebEmpty(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+fun DenebEmpty(
+    text: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    // Designed-empty upgrades (backward compatible — bare-text call sites keep
+    // their old rendering): a quiet leading icon names the surface, a hint line
+    // says what will appear here, so an empty tab reads intentional, not broken.
+    icon: ImageVector? = null,
+    hint: String? = null,
+) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = denebHint(),
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+        }
         Text(
             text,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium,
+            style = DenebType.body,
             textAlign = TextAlign.Center,
         )
+        if (hint != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                hint,
+                color = denebHint(),
+                style = DenebType.meta,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onAction) { Text(actionLabel) }

@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -135,7 +137,7 @@ fun SearchContent(
             r == null -> Unit
 
             r.wiki.isEmpty() && r.diary.isEmpty() && r.people.isEmpty() ->
-                DenebEmpty("검색 결과가 없습니다")
+                DenebEmpty("검색 결과가 없습니다", icon = Icons.Outlined.Search, hint = "위키·메일·사람을 한 번에 찾습니다")
 
             else -> {
                 if (r.wiki.isNotEmpty()) {

@@ -1,5 +1,6 @@
 package ai.deneb.ui.markdown
 
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -31,13 +32,14 @@ internal fun InlineContent(
     textAlign: TextAlign = TextAlign.Unspecified,
 ) {
     val colors = MaterialTheme.colorScheme
+    val monoFamily = JetBrainsMonoFamily()
     if (!containsMath(inlines)) {
         // Cache the AnnotatedString. The remember() avoids a rebuild per streaming token;
         // cachedAnnotatedString additionally survives LazyColumn item disposal, so scrolling
         // the message back into view reuses it instead of rebuilding the spans (keyed by the
         // cached inline-list + colors references, so a theme change still refreshes it).
-        val annotated = remember(inlines, colors) {
-            cachedAnnotatedString(inlines, colors) { inlines.toAnnotatedString(colors) }
+        val annotated = remember(inlines, colors, monoFamily) {
+            cachedAnnotatedString(inlines, colors) { inlines.toAnnotatedString(colors, monoFamily) }
         }
         Text(
             text = annotated,
@@ -60,8 +62,8 @@ internal fun InlineContent(
         for (seg in segments) {
             when (seg) {
                 is InlineSegment.TextRun -> Text(
-                    text = remember(seg, colors) {
-                        seg.nodes.toAnnotatedString(colors).flattenNewlines()
+                    text = remember(seg, colors, monoFamily) {
+                        seg.nodes.toAnnotatedString(colors, monoFamily).flattenNewlines()
                     },
                     style = style,
                     textAlign = textAlign,

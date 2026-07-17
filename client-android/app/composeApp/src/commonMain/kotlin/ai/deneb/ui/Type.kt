@@ -7,6 +7,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import deneb.composeapp.generated.resources.Res
+import deneb.composeapp.generated.resources.jetbrains_mono_bold
+import deneb.composeapp.generated.resources.jetbrains_mono_regular
 import deneb.composeapp.generated.resources.pretendard_bold
 import deneb.composeapp.generated.resources.pretendard_extralight
 import deneb.composeapp.generated.resources.pretendard_light
@@ -19,9 +21,18 @@ import org.jetbrains.compose.resources.Font
  * Pretendard — the app's fixed UI typeface across every platform (Android, iOS,
  * desktop, web). Bundled as static OTF weights so text renders identically
  * regardless of the device's system font. Korean-first, so Pretendard's wide
- * Hangul coverage is the point. Code/terminal text stays FontFamily.Monospace
+ * Hangul coverage is the point. Code/terminal text uses the bundled JetBrains Mono (JetBrainsMonoFamily)
  * because those call sites override fontFamily locally.
  */
+// Bundled code font — frontier apps ship a designed mono (system Roboto Mono
+// reads generic next to the branded Pretendard body). OFL license:
+// client-android/app/THIRD_PARTY_LICENSES/JetBrainsMono-OFL.txt
+@Composable
+fun JetBrainsMonoFamily(): FontFamily = FontFamily(
+    Font(Res.font.jetbrains_mono_regular, FontWeight.Normal),
+    Font(Res.font.jetbrains_mono_bold, FontWeight.Bold),
+)
+
 @Composable
 fun PretendardFontFamily(): FontFamily = FontFamily(
     Font(Res.font.pretendard_extralight, FontWeight.ExtraLight),

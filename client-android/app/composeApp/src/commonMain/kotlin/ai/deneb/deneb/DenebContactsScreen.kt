@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,7 +65,7 @@ fun DenebContactsScreen(
         when {
             failed -> DenebError("연락처를 불러오지 못했습니다.", onRetry = { scope.launch { load() } })
             list == null -> DenebLoading()
-            list.isEmpty() -> DenebEmpty("연락처가 없습니다.")
+            list.isEmpty() -> DenebEmpty("연락처가 없습니다.", icon = Icons.Outlined.Person, hint = "주소록이 동기화되면 여기에 나타납니다")
             else -> ContactsList(list)
         }
     }

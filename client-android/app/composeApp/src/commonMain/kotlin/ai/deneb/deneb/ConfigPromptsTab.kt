@@ -7,6 +7,7 @@ import ai.deneb.deneb.generated.TopicDocOut
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.icons.outlined.Article
@@ -47,7 +48,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -490,7 +490,7 @@ internal fun PromptStyleEditor(
             onValueChange = onDraft,
             readOnly = readOnly || saving,
             label = { Text("내용") },
-            textStyle = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
+            textStyle = DenebType.snippet.copy(fontFamily = JetBrainsMonoFamily()),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 360.dp),

@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -247,7 +247,7 @@ private fun FleetJobRow(job: FleetJob, expanded: Boolean, onToggle: () -> Unit, 
             ) {
                 Text(
                     job.log.takeLast(2000),
-                    style = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
+                    style = DenebType.snippet.copy(fontFamily = JetBrainsMonoFamily()),
                     modifier = Modifier.padding(8.dp),
                 )
             }
