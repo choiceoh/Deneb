@@ -48,6 +48,11 @@ import (
 // authentication package's wire name.
 const ClientTokenHeader = clientauth.Header
 
+// ClientKindHeader tags a client surface (e.g. "desktop") on SSE subscribe
+// requests. Browser-context clients (Tauri webview, vite dev) send it from a
+// CORS-enforced origin, so it must stay in the CORS allow-list (routes.go).
+const ClientKindHeader = "X-Deneb-Client-Kind"
+
 // Authenticator binds the native client authentication adapter to a logger for
 // sibling HTTP surfaces that share the same token contract.
 func Authenticator(logger *slog.Logger) func(http.ResponseWriter, *http.Request) (*clientauth.Identity, bool) {

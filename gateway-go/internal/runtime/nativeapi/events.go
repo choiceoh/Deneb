@@ -57,7 +57,7 @@ func (s *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	kind := proactive.ClientKindFromHeader(r.Header.Get("X-Deneb-Client-Kind"))
+	kind := proactive.ClientKindFromHeader(r.Header.Get(ClientKindHeader))
 	events, unsubscribe := s.pushHub.Subscribe(kind)
 	defer unsubscribe()
 	if s.logger != nil {
