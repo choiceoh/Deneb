@@ -24,13 +24,14 @@ class SmsStoreTest {
     )
 
     @Test
-    fun missingAndMalformedSyncStateUseDefaults() {
+    fun missingAndMalformedSyncStateUseDefaultsAndMalformedStorageIsCleared() {
         val f = fixture()
         assertEquals(SmsSyncState(), f.store.getSyncState())
 
         for (raw in listOf("broken", "{}[]", "[1]")) {
             f.settings.setSmsSyncStateJson(raw)
             assertEquals(SmsSyncState(), f.store.getSyncState(), raw)
+            assertEquals("", f.settings.getSmsSyncStateJson(), raw)
         }
     }
 

@@ -16,15 +16,12 @@ class SmsStore(private val appSettings: AppSettings) {
         keyOf = { it.id },
     )
 
-    fun getSyncState(): SmsSyncState {
-        val raw = appSettings.getSmsSyncStateJson()
-        if (raw.isEmpty()) return SmsSyncState()
-        return try {
-            json.decodeFromString<SmsSyncState>(raw)
-        } catch (_: Exception) {
-            SmsSyncState()
-        }
-    }
+    fun getSyncState(): SmsSyncState = mutex.loadStoredJsonOrDefault(
+        readJson = appSettings::getSmsSyncStateJson,
+        clearMalformed = { appSettings.setSmsSyncStateJson("") },
+        defaultValue = ::SmsSyncState,
+        decode = json::decodeFromString,
+    )
 
     suspend fun updateSyncState(state: SmsSyncState) = mutex.withLock {
         appSettings.setSmsSyncStateJson(json.encodeToString(state))
