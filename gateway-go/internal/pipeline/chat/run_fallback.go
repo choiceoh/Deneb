@@ -66,13 +66,24 @@ func healthyFallbackExists(reg *modelrole.Registry, role modelrole.Role, failedM
 	return false
 }
 
-// isStalledResult reports whether an agent run timed out without emitting any
-// text — the signature of a stalled LLM stream (the inner per-run timeout fired
-// before a single token arrived). A turn that timed out after producing text is
-// left alone: the user already got a partial answer, so falling back would only
-// discard it.
+// isStalledResult reports whether an agent run timed out without emitting
+// ANYTHING — the signature of a stalled LLM stream (timeout before a single
+// token, no completed rounds). Two shapes are deliberately excluded:
+//
+//   - timed out after producing text: the user already got a partial answer;
+//     falling back would only discard it.
+//   - timed out mid-work after tool rounds (Turns > 1 — a tool round always
+//     leaves Turns >= 2, the same pin isEmptyFinalResult uses): the model was
+//     alive and productive, its budget just ran out. Automation turns narrate
+//     nothing (all output goes to tool inputs), so "no visible text" alone
+//     cannot mean "stalled". Re-running such a run on a fallback model repeats
+//     the committed tools' side effects and feeds the circuit breaker a fault
+//     the model didn't commit (live 2026-07-17: a mailpoll run filed wiki
+//     pages on k3[1m] for 6 rounds, hit the 360s stage-2 budget with zero
+//     prose, was misread as a stall, and glm re-ran the whole analysis).
 func isStalledResult(r *agent.AgentResult) bool {
-	return r != nil && r.StopReason == "timeout" && strings.TrimSpace(r.AllText) == ""
+	return r != nil && r.StopReason == "timeout" && r.Turns <= 1 &&
+		strings.TrimSpace(r.AllText) == ""
 }
 
 // isEmptyFinalResult reports whether a "successful" run is an accidental
@@ -243,9 +254,16 @@ func (t *fallbackTurn) runInitialAttempt(ctx context.Context) {
 		return
 	}
 	t.agentResult, t.runErr = agent.RunAgent(ctx, t.cfg, t.messages, t.client, t.deps.tools, t.hooks, t.logger, t.runLog)
-	if t.runErr == nil && isStalledResult(t.agentResult) {
+	switch {
+	case t.runErr == nil && isStalledResult(t.agentResult):
 		t.logger.Warn("model stalled (no output before timeout); engaging fallback chain",
 			"model", t.cfg.Model, "stopReason", t.agentResult.StopReason)
+	case t.runErr == nil && t.agentResult != nil && t.agentResult.StopReason == "timeout" &&
+		t.agentResult.Turns > 1 && strings.TrimSpace(t.agentResult.AllText) == "":
+		// Not a stall: the model worked through tool rounds and ran out of
+		// budget. No fallback — a re-run would repeat committed side effects.
+		t.logger.Warn("run budget exhausted mid-work; not engaging fallback",
+			"model", t.cfg.Model, "turns", t.agentResult.Turns)
 	}
 	t.synthStall(true)
 }
