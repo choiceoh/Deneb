@@ -266,8 +266,11 @@ func TestFallbackChain(t *testing.T) {
 	}{
 		// Main2 sits in the chain unconditionally; the fallback walk skips it
 		// when unconfigured (nil client), preserving single-main behavior.
-		{RoleMain, []Role{RoleMain, RoleMain2, RoleLightweight, RoleFallback}},
-		{RoleMain2, []Role{RoleMain2, RoleMain, RoleLightweight, RoleFallback}},
+		// Same-tier quality ladder before local degradation: main2 (opt-in),
+		// then the coding subscription, then lightweight (operator call
+		// 2026-07-17: kimi outage must land on glm coding, not local).
+		{RoleMain, []Role{RoleMain, RoleMain2, RoleCoding, RoleLightweight, RoleFallback}},
+		{RoleMain2, []Role{RoleMain2, RoleMain, RoleCoding, RoleLightweight, RoleFallback}},
 		{RoleCoding, []Role{RoleCoding, RoleMain, RoleFallback}},
 		{RoleLightweight, []Role{RoleLightweight, RoleFallback}},
 		{RoleFallback, []Role{RoleFallback}},
