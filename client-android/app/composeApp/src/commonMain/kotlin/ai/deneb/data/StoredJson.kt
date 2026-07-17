@@ -6,14 +6,14 @@ import kotlinx.coroutines.sync.Mutex
 internal inline fun <T> decodeStoredJsonOrDefault(
     raw: String,
     defaultValue: () -> T,
-    onMalformed: () -> Unit = {},
+    onMalformed: (Exception) -> Unit = {},
     decode: (String) -> T,
 ): T {
     if (raw.isEmpty()) return defaultValue()
     return try {
         decode(raw)
-    } catch (_: Exception) {
-        runCatching(onMalformed)
+    } catch (error: Exception) {
+        runCatching { onMalformed(error) }
         defaultValue()
     }
 }
@@ -27,6 +27,7 @@ internal inline fun <T> Mutex.loadStoredJsonOrDefault(
     readJson: () -> String,
     clearMalformed: () -> Unit,
     defaultValue: () -> T,
+    onMalformed: (Exception) -> Unit = {},
     decode: (String) -> T,
 ): T {
     val canRepair = tryLock()
@@ -34,7 +35,10 @@ internal inline fun <T> Mutex.loadStoredJsonOrDefault(
         decodeStoredJsonOrDefault(
             raw = readJson(),
             defaultValue = defaultValue,
-            onMalformed = { if (canRepair) clearMalformed() },
+            onMalformed = { error ->
+                runCatching { onMalformed(error) }
+                if (canRepair) clearMalformed()
+            },
             decode = decode,
         )
     } finally {
