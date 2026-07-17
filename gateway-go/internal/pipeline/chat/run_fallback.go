@@ -469,6 +469,11 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	// multiple roles (e.g. main == lightweight), and re-running a model that
 	// just stalled only burns the budget.
 	triedModels := map[string]bool{t.cfg.Model: true}
+	// The role whose failure this iteration recovers from. NOT chain[i-1]:
+	// that can be a rung skipped without an attempt (unassigned model / no
+	// client), which blamed dormant main2 for main's failures in the journal
+	// (observed 2026-07-17 while diagnosing kimi fallbacks).
+	failedRole := t.initialRole
 	for i := 1; i < len(chain); i++ {
 		if fbCtx.Err() != nil {
 			break
@@ -485,7 +490,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 		}
 		triedModels[fbCfg.Model] = true
 		t.logger.Warn("model failed, trying fallback",
-			"failedRole", string(chain[i-1]),
+			"failedRole", string(failedRole),
 			"nextRole", string(fbRole),
 			"nextModel", fbCfg.Model,
 			"error", t.runErr)
@@ -526,6 +531,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 			t.fellBack = true
 			return
 		}
+		failedRole = fbRole
 		if fbCtx.Err() == nil {
 			// Only count failures the model itself produced — a spent fallback
 			// budget says nothing about the model's health.

@@ -6,8 +6,10 @@ package chat
 // prerequisite safety net for decomposing run_fallback.go.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -252,5 +254,63 @@ func TestIsEmptyFinalResult(t *testing.T) {
 				t.Errorf("isEmptyFinalResult() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The "model failed, trying fallback" log must blame the role that actually
+// failed, never chain[i-1] — that can be a rung skipped without an attempt
+// (unassigned model / no client). Observed live 2026-07-17: main (kimi)
+// failed while main2 was dormant (unset), yet every walk log line said
+// failedRole=main2, muddying the diagnosis.
+func TestRunAgentWithFallback_FailedRoleLogSkipsUnassignedRungs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"boom"}}`))
+	}))
+	defer server.Close()
+
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel: "test/m-main",
+		// Main2Model deliberately unset: the main chain's second rung is
+		// skipped without an attempt — the shape that used to get blamed.
+		CodingModel:      "test/m-coding",
+		LightweightModel: "test/m-light",
+		FallbackModel:    "test/m-fb",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {BaseURL: server.URL, APIKey: "k"},
+		},
+	})
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	cfg := agent.AgentConfig{
+		Model:     "m-main",
+		MaxTurns:  2,
+		Timeout:   5 * time.Second,
+		MaxTokens: 128,
+	}
+	messages := []llm.Message{llm.NewTextMessage("user", "hello")}
+	client := llm.NewClient(server.URL, "test-key")
+	runLog := agentlog.NewRunLogger(nil, "test-session", "test-run")
+
+	_, _, _, err := runAgentWithFallback(
+		context.Background(), cfg, messages, client,
+		runDeps{registry: reg, logger: logger},
+		"test", modelrole.RoleMain, nil, agent.StreamHooks{}, logger, runLog,
+	)
+	if err == nil {
+		t.Fatal("want error: every model in the chain 400s")
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "failedRole=main2") {
+		t.Errorf("skipped rung blamed for the failure:\n%s", logs)
+	}
+	if !strings.Contains(logs, "failedRole=main nextRole=coding") {
+		t.Errorf("first walk line should blame main and target coding:\n%s", logs)
+	}
+	if !strings.Contains(logs, "failedRole=coding nextRole=lightweight") {
+		t.Errorf("second walk line should advance the blame to coding:\n%s", logs)
 	}
 }
