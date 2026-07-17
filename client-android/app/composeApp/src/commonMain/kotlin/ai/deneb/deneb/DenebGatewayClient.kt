@@ -409,8 +409,9 @@ class DenebGatewayClient private constructor(
         _denebCalendar.value = emptyList()
         _denebCalProposals.value = emptyList()
         sectionCaches.clearAll()
-        // The mirror holds account A's whole wiki on disk; wipe it eagerly (its
-        // owner fingerprint would also reject it lazily, but why keep the bytes).
+        // The mirror holds account A's whole wiki on disk; wipe memory synchronously
+        // (offline fallbacks consult the hot map) then delete shards on a worker.
+        wikiMirror.evictMemoryForCredentialSwitch()
         scope.launch { wikiMirror.clear() }
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
