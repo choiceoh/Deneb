@@ -955,6 +955,68 @@ textarea {
 .ai-send-stop:hover:not(:disabled) {
   background: var(--due);
 }
+/* ‹n/N› 답변 변형 페이저 — 마지막 답변 액션 행에 붙는 조용한 카운터. */
+.variant-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.variant-nav .variant-count {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 26px;
+  text-align: center;
+}
+
+/* AI 패널 designed empty — quiet pitch + mouse-first suggestion chips. */
+.ai-empty-suggest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: auto 0;
+  padding: 24px 16px;
+}
+
+.ai-empty-suggest p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.suggest-chip {
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: var(--ink);
+}
+
+/* 위키 무선택 designed empty — 죽은 빈 에디터 대신 안내 + 행동. */
+.wiki-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.wiki-empty p {
+  font-size: 14px;
+  color: var(--ink);
+  margin: 6px 0 0;
+}
+
+.wiki-empty span {
+  font-size: 12px;
+}
+
+.wiki-empty .btn {
+  margin-top: 8px;
+}
+
 /* Update nudge — bottom-right floating pill; above panes, below modals. */
 .update-nudge {
   position: fixed;

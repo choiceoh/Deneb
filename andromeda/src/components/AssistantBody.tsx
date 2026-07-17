@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import type { AttachmentPart, ChatTurn } from "@/hooks";
+import type { AttachmentPart, ChatTurn, VariantView } from "@/hooks";
 import { printClosest } from "@/print";
 import { DenebStatus } from "./DenebStatus";
 import { AssistantText } from "./DenebUi";
@@ -103,20 +103,62 @@ export function AssistantTurnActions({
   lastId,
   busy,
   onRegenerate,
+  variants,
+  onVariant,
   children,
 }: {
   turn: ChatTurn;
   lastId?: string;
   busy: boolean;
   onRegenerate: () => void;
+  variants?: VariantView | null;
+  onVariant?: (dir: -1 | 1) => void;
   children?: ReactNode;
 }) {
+  const [copied, setCopied] = useState(false);
   if (turn.role !== "assistant") return null;
+  async function copyAnswer() {
+    try {
+      await navigator.clipboard.writeText(turn.text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — no-op */
+    }
+  }
   return (
     <>
+      {turn.id === lastId && variants && onVariant && !busy && turn.status !== "streaming" && (
+        <span className="variant-nav no-print">
+          <button
+            className="row-btn"
+            disabled={variants.index === 0}
+            onClick={() => onVariant(-1)}
+            title="이전 답변 변형"
+          >
+            ‹
+          </button>
+          <span className="variant-count">
+            {variants.index + 1}/{variants.count}
+          </span>
+          <button
+            className="row-btn"
+            disabled={variants.index === variants.count - 1}
+            onClick={() => onVariant(1)}
+            title="다음 답변 변형"
+          >
+            ›
+          </button>
+        </span>
+      )}
       {turn.id === lastId && turn.parts && turn.canRegenerate !== false && !busy && turn.status !== "streaming" && (
         <button className="row-btn ai-regen no-print" onClick={onRegenerate} title="다시 생성">
           <Icon name="refresh" size={12} /> 다시 생성
+        </button>
+      )}
+      {turn.status !== "streaming" && turn.text.trim().length > 0 && (
+        <button className="row-btn ai-copy no-print" onClick={() => void copyAnswer()} title="답변 전체를 복사">
+          <Icon name={copied ? "check" : "copy"} size={12} /> {copied ? "복사됨" : "복사"}
         </button>
       )}
       {turn.status !== "streaming" && (turn.text.trim().length > 0 || (turn.parts?.length ?? 0) > 0) && (

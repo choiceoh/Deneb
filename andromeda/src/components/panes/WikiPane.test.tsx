@@ -96,7 +96,8 @@ describe("WikiPane", () => {
   it("creates a new page through title/category and opens it in the editor", async () => {
     renderWithProviders(<WikiPane />, { connected: true });
 
-    await userEvent.click(screen.getByRole("button", { name: /새 페이지/ }));
+    // Two 새 페이지 affordances now exist (toolbar + designed empty) — either opens the modal.
+    await userEvent.click(screen.getAllByRole("button", { name: /새 페이지/ })[0]);
     await userEvent.type(screen.getByPlaceholderText(/Andromeda 개선 노트/), "새 페이지");
     await userEvent.type(screen.getByPlaceholderText(/projects/), "projects");
     await userEvent.click(screen.getByRole("button", { name: "생성" }));

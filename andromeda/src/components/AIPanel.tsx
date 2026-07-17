@@ -9,6 +9,7 @@ import { useStickyScroll } from "@/useStickyScroll";
 import { useAiFeed, useWorkspace } from "@/workspaceContext";
 import { AssistantBody, AssistantTurnActions } from "./AssistantBody";
 import { ChatComposer, ScrollToBottomButton } from "./ChatComposer";
+import { EditResendModal } from "./EditResendModal";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
@@ -46,7 +47,24 @@ export function AIPanel({
 }) {
   const { connected, noteSink, setAskSink } = useWorkspace();
   const { aiText, activeResource } = useAiFeed();
-  const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
+  const {
+    thinking,
+    busy,
+    stoppable,
+    turns,
+    send,
+    capture,
+    stop,
+    regenerate,
+    editResend,
+    variants,
+    selectVariant,
+    clear,
+    setTurns,
+  } = useChat(cfg);
+  // 마지막 사용자 메시지만 편집-재전송 가능 (마지막 교환 대체 시맨틱).
+  const [editingMsg, setEditingMsg] = useState<string | null>(null);
+  const lastUserId = [...turns].reverse().find((t) => t.role === "user")?.id;
   const [input, setInput] = useState("");
   // Per-answer save-to-notebook progress (turn id → state). "saved" flips the
   // button to a done state so a double-click can't pin the same answer twice;
@@ -227,7 +245,19 @@ export function AIPanel({
         onScroll={onScroll}
       >
         {turns.length === 0 ? (
-          connected ? null : (
+          connected ? (
+            // Designed empty: the side panel reads the focused pane's projection,
+            // so pitch that instead of a blank column. Chips send immediately —
+            // mouse-first affordance (the user doesn't use shortcuts).
+            <div className="ai-empty-suggest">
+              <p>지금 보고 있는 화면을 함께 봅니다</p>
+              {["이 화면 요약해줘", "여기서 눈에 띄는 점은?", "오늘 뭐부터 하면 좋을까?"].map((s) => (
+                <button key={s} className="btn suggest-chip" onClick={() => submit(s)} disabled={busy}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : (
             <div className="ai-empty">게이트웨이 연결 대기 중</div>
           )
         ) : (
@@ -245,7 +275,23 @@ export function AIPanel({
                 ) : (
                   <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
                 )}
-                <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate}>
+                {turn.role === "user" && turn.id === lastUserId && !busy && (
+                  <button
+                    className="row-btn ai-edit no-print"
+                    onClick={() => setEditingMsg(turn.text)}
+                    title="이 메시지를 수정해 다시 보내기"
+                  >
+                    <Icon name="pencil" size={12} /> 수정
+                  </button>
+                )}
+                <AssistantTurnActions
+                  turn={turn}
+                  lastId={lastId}
+                  busy={busy}
+                  onRegenerate={regenerate}
+                  variants={variants}
+                  onVariant={selectVariant}
+                >
                   {/* Save this answer into the open notebook as a cited note — shown only
                     while a notebook pane has registered a sink (the notebook's output
                     loop: material made with the AI stays with the deal). 저장됨 only
@@ -295,6 +341,9 @@ export function AIPanel({
         onPick={onPick}
         onAttachFiles={(files) => void attachFiles(files)}
       />
+      {editingMsg !== null && (
+        <EditResendModal initial={editingMsg} onClose={() => setEditingMsg(null)} onResend={editResend} />
+      )}
     </aside>
   );
 }

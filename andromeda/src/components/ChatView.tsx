@@ -10,6 +10,7 @@ import { useWorkspace } from "@/workspaceContext";
 import { AssistantBody, AssistantTurnActions } from "./AssistantBody";
 import { ChatComposer, ScrollToBottomButton } from "./ChatComposer";
 import { DenebStar } from "./DenebStar";
+import { EditResendModal } from "./EditResendModal";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
@@ -23,7 +24,24 @@ import { SessionDrawer } from "./SessionDrawer";
 // surface 공통 동작은 useChatSurface/ChatComposer/AssistantBody 공유 모듈에서 온다.
 export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?: boolean }) {
   const { connected } = useWorkspace();
-  const { thinking, busy, stoppable, turns, send, capture, stop, regenerate, clear, setTurns } = useChat(cfg);
+  const {
+    thinking,
+    busy,
+    stoppable,
+    turns,
+    send,
+    capture,
+    stop,
+    regenerate,
+    editResend,
+    variants,
+    selectVariant,
+    clear,
+    setTurns,
+  } = useChat(cfg);
+  // 마지막 사용자 메시지만 편집-재전송 가능 (마지막 교환 대체 시맨틱).
+  const [editingMsg, setEditingMsg] = useState<string | null>(null);
+  const lastUserId = [...turns].reverse().find((t) => t.role === "user")?.id;
   const [input, setInput] = useState("");
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -135,7 +153,23 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
                   ) : (
                     <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
                   )}
-                  <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate} />
+                  {turn.role === "user" && turn.id === lastUserId && !busy && (
+                    <button
+                      className="row-btn ai-edit no-print"
+                      onClick={() => setEditingMsg(turn.text)}
+                      title="이 메시지를 수정해 다시 보내기"
+                    >
+                      <Icon name="pencil" size={12} /> 수정
+                    </button>
+                  )}
+                  <AssistantTurnActions
+                    turn={turn}
+                    lastId={lastId}
+                    busy={busy}
+                    onRegenerate={regenerate}
+                    variants={variants}
+                    onVariant={selectVariant}
+                  />
                 </div>
               ))}
             </>
@@ -158,6 +192,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           onPick={onPick}
           onAttachFiles={(files) => void attachFiles(files)}
         />
+        {editingMsg !== null && (
+          <EditResendModal initial={editingMsg} onClose={() => setEditingMsg(null)} onResend={editResend} />
+        )}
       </main>
 
       <aside className="panel chat-sessions">

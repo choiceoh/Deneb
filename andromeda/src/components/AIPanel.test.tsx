@@ -81,6 +81,9 @@ function chatState(overrides: Partial<ChatState> = {}): ChatState {
     capture: vi.fn(async () => {}),
     stop: vi.fn(),
     regenerate: vi.fn(),
+    editResend: vi.fn(),
+    variants: null,
+    selectVariant: vi.fn(),
     clear: vi.fn(),
     setTurns: vi.fn(),
     ...overrides,
@@ -145,10 +148,11 @@ describe("AIPanel shell", () => {
     expect(screen.getByRole("button", { name: "파일 첨부" })).toBeDisabled();
   });
 
-  it("keeps a connected empty transcript visually quiet", () => {
+  it("pitches the screen-aware suggestions on a connected empty transcript", () => {
     render(wrapper(workspace(), <AIPanel cfg={cfg} />));
     expect(screen.queryByText("게이트웨이 연결 대기 중")).not.toBeInTheDocument();
-    expect(screen.getByRole("log", { name: "Deneb 대화" })).toBeEmptyDOMElement();
+    expect(screen.getByText("지금 보고 있는 화면을 함께 봅니다")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "이 화면 요약해줘" })).toBeEnabled();
   });
 
   it("hides without unmounting when the parent changes views", () => {

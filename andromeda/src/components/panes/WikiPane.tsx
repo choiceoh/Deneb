@@ -6,6 +6,7 @@ import type { WikiCategory, WikiDiaryEntry, WikiPage } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
 import { color, muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
+import { Icon } from "@/components/Icon";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { DeleteModal, OneFieldModal } from "./commonModals";
 import { MovePageModal, type NewPageDraft, NewPageModal, UnsavedWikiModal } from "./WikiModals";
@@ -501,14 +502,27 @@ export function WikiPane() {
                 {status && <span className="pane-status">{status}</span>}
               </div>
             </div>
-            <MarkdownEditor
-              value={content}
-              onChange={editContent}
-              preview={preview}
-              disabled={!path}
-              fill
-              ariaLabel="위키 미리보기"
-            />
+            {path ? (
+              <MarkdownEditor
+                value={content}
+                onChange={editContent}
+                preview={preview}
+                disabled={false}
+                fill
+                ariaLabel="위키 미리보기"
+              />
+            ) : (
+              // No page selected: a designed empty beats a dead blank editor
+              // under an armed-looking toolbar.
+              <div className="wiki-empty">
+                <Icon name="wiki" size={28} />
+                <p>페이지를 선택하세요</p>
+                <span>왼쪽 트리에서 페이지를 고르거나 새로 시작하세요</span>
+                <button className="btn" onClick={() => setCreating(true)}>
+                  새 페이지
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
