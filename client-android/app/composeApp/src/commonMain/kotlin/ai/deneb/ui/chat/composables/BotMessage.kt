@@ -105,7 +105,27 @@ private const val STREAM_PARSE_INTERVAL_MS = 96L
 // exact end of the flowing text (inside the current paragraph/list item) — the
 // frontier-app cursor cue. Free: the streaming body is re-parsed each sample
 // tick anyway, and the glyph vanishes with the final (exact) parse on settle.
-private const val STREAM_CARET = "▍" // ▍
+private const val STREAM_CARET = "▍"
+
+// Appends the caret only where it cannot corrupt the markdown:
+//  - inside an UNCLOSED code fence (``` / ~~~, any length ≥3) → no caret; a ▍
+//    there reads as code content, not a cursor.
+//  - when the text ends ON a fence line → caret goes on its OWN line: "```" +
+//    "▍" would scan as a NEW opener with info-string "▍", unclosing the block
+//    that just closed. (Line-toggle fence tracking is an approximation of
+//    CommonMark — good enough for a transient glyph that lives for one sample
+//    tick and never reaches the settled parse.)
+internal fun appendStreamCaret(text: String): String {
+    var openFence = false
+    for (rawLine in text.lineSequence()) {
+        val line = rawLine.trimStart()
+        if (line.startsWith("```") || line.startsWith("~~~")) openFence = !openFence
+    }
+    if (openFence) return text
+    val lastLine = text.substringAfterLast('\n').trimStart()
+    val endsOnFenceLine = lastLine.startsWith("```") || lastLine.startsWith("~~~")
+    return if (endsOnFenceLine) text + "\n" + STREAM_CARET else text + STREAM_CARET
+}
 
 @Composable
 private fun rememberStreamingParseSource(message: String, isStreaming: Boolean): String {
@@ -124,10 +144,7 @@ private fun rememberStreamingParseSource(message: String, isStreaming: Boolean):
         }
     }
     if (!isStreaming) return message
-    // Keep the caret out of an unclosed code fence — a stray ▍ inside code reads
-    // as content, not cursor (odd number of ``` fences == inside one).
-    val insideFence = sampled.split("```").size % 2 == 0
-    return if (insideFence) sampled else sampled + STREAM_CARET
+    return appendStreamCaret(sampled)
 }
 
 // rememberMessageDocument turns a (possibly streaming) body into its parsed document while
