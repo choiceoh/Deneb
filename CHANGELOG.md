@@ -1,5 +1,54 @@
 # Changelog
 
+## [4.121.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.120.0...deneb-v4.121.0) (2026-07-17)
+
+
+### ✨ Features
+
+* **agent:** reduce repeated skill workflow overhead ([#3888](https://github.com/choiceoh/Deneb/issues/3888)) ([4492c03](https://github.com/choiceoh/Deneb/commit/4492c031bf3263ad53b7ebc03de12246011b4596))
+* **android:** predictive back 제스처 옵트인 ([#3873](https://github.com/choiceoh/Deneb/issues/3873)) ([d2c0d3e](https://github.com/choiceoh/Deneb/commit/d2c0d3e5e2b47f199e4b74f5bc482aaabd42c631))
+* **android:** 공유 타깃 확장 — PDF·CSV 문서와 다중 이미지 공유 수신 ([#3866](https://github.com/choiceoh/Deneb/issues/3866)) ([d181122](https://github.com/choiceoh/Deneb/commit/d181122c910024d6a982768079a5566530e8a047))
+* **android:** 콜드 스타트 마감 — SplashScreen 커스텀 exit + 클라우드 프로파일 ([#3881](https://github.com/choiceoh/Deneb/issues/3881)) ([68a1f96](https://github.com/choiceoh/Deneb/commit/68a1f967a55f2b5e7adb6df43db46b0da3f67882))
+* **andromeda:** 오늘 콕핏 — KPI 스트립·일정 타임라인·마감 레이더·결재 섹션 ([#3863](https://github.com/choiceoh/Deneb/issues/3863)) ([527d5a5](https://github.com/choiceoh/Deneb/commit/527d5a5450584024453313185385c4bafbda10f4))
+* **andromeda:** 타일 분할 워크스페이스·커맨드 팔레트·데네브 화면 조종 버스 ([#3850](https://github.com/choiceoh/Deneb/issues/3850)) ([58c6d1b](https://github.com/choiceoh/Deneb/commit/58c6d1b6a243a1a31c524a01ea07a92d48289d73))
+* **chat:** difficulty-based main/main2 routing — simple turns ride the second subscription ([#3872](https://github.com/choiceoh/Deneb/issues/3872)) ([23fd950](https://github.com/choiceoh/Deneb/commit/23fd950e6fa1a5323c630fc4a3fe8b8233db4a13))
+* **gateway:** workstation 챗 도구 — 데네브가 안드로메다 화면을 직접 조종 ([#3861](https://github.com/choiceoh/Deneb/issues/3861)) ([fb2c5df](https://github.com/choiceoh/Deneb/commit/fb2c5dfc406c95148ced8f10dc735d4ff5fb7441))
+* **modelrole:** main2 role — mutual failover pair for two main-tier subscriptions ([#3869](https://github.com/choiceoh/Deneb/issues/3869)) ([7ad4080](https://github.com/choiceoh/Deneb/commit/7ad4080e5facab3090d9fb26a0570c7cf6990977))
+* **native:** JetBrains Mono 코드 폰트 번들 + 빈 상태 마감 (아이콘·안내) ([#3884](https://github.com/choiceoh/Deneb/issues/3884)) ([9555e93](https://github.com/choiceoh/Deneb/commit/9555e9327f6f26ebbd3a25e4d288264aad3a445d))
+* **native:** offline wiki mirror — full corpus on device, change-feed incremental sync ([#3862](https://github.com/choiceoh/Deneb/issues/3862)) ([bb963e8](https://github.com/choiceoh/Deneb/commit/bb963e814b4a1ef8c07f3a11514f3200707ae8e9))
+* **native:** 메시지 등장 애니메이션 — 새 버블 페이드+정착 (animateItem) ([#3882](https://github.com/choiceoh/Deneb/issues/3882)) ([0dd548e](https://github.com/choiceoh/Deneb/commit/0dd548e5f34111d237c88bee97894dfebd24d6d2))
+* **native:** 메시지 액션 메뉴 — 사용자 버블 롱프레스·봇 ⋯ 시트 (복사·텍스트 선택·공유·보낸 시각) ([#3868](https://github.com/choiceoh/Deneb/issues/3868)) ([002e636](https://github.com/choiceoh/Deneb/commit/002e636a058c4214e23e4dd19e66701a666d0480))
+* **native:** 스트리밍 질감 — 부드러운 높이 성장 + 인라인 캐럿 ([#3876](https://github.com/choiceoh/Deneb/issues/3876)) ([3ef5c11](https://github.com/choiceoh/Deneb/commit/3ef5c11a2883e2a8b3029bb98aca8e5840d964e2))
+* **native:** 편집 후 다시 보내기 + 응답 변형 ‹ n/N › 탐색 ([#3870](https://github.com/choiceoh/Deneb/issues/3870)) ([37ebd0a](https://github.com/choiceoh/Deneb/commit/37ebd0a222631c85b6df6d3cc2c7b1c5e029fe6b))
+
+
+### 🐛 Bug Fixes
+
+* **android:** block cross-account wiki mirror serve on credential switch ([#3877](https://github.com/choiceoh/Deneb/issues/3877)) ([538f766](https://github.com/choiceoh/Deneb/commit/538f766d7065fff774aec6b217ebbc3908df599a))
+* **android:** self-heal pending queues ([#3883](https://github.com/choiceoh/Deneb/issues/3883)) ([a4a9bcb](https://github.com/choiceoh/Deneb/commit/a4a9bcbb822c7605c8fa417b985e0652d3bb643b))
+* **gateway:** CORS 허용 헤더에 X-Deneb-Client-Kind 추가 ([#3890](https://github.com/choiceoh/Deneb/issues/3890)) ([71070a5](https://github.com/choiceoh/Deneb/commit/71070a5d659b172e8cabce054e80f5c0227bb27b))
+* **gateway:** 대화 제목 영속화 — 재시작마다 드로어가 세션 키로 회귀하던 결함 ([#3865](https://github.com/choiceoh/Deneb/issues/3865)) ([d8d2ba7](https://github.com/choiceoh/Deneb/commit/d8d2ba7ff1c05931cafef2765849431c514fe610))
+* **llm:** repair orphaned tool_use/tool_result pairing before provider send ([#3867](https://github.com/choiceoh/Deneb/issues/3867)) ([29d2edb](https://github.com/choiceoh/Deneb/commit/29d2edb507750e28d21c0112c859e33cbe2b6437))
+* **modelpicker:** local anthropic-front providers fall back to reachability probe (false offline) ([#3864](https://github.com/choiceoh/Deneb/issues/3864)) ([a7ba1b6](https://github.com/choiceoh/Deneb/commit/a7ba1b6363da26c217da37c1927c5e6b096b0df3))
+
+
+### ⚡ Performance
+
+* **ci:** Go unit 샤딩 + 테스트 sleep 축소 ([#3853](https://github.com/choiceoh/Deneb/issues/3853)) ([298bcb8](https://github.com/choiceoh/Deneb/commit/298bcb81d724a08965d59cf42c4352f0e6dbaad1))
+* **llm:** kimi K2.7 profile — cache_control 재개·usage 과소계량 수리·wormhole 엔트리 헤더 ([#3875](https://github.com/choiceoh/Deneb/issues/3875)) ([816e1d4](https://github.com/choiceoh/Deneb/commit/816e1d48a66d31ba8f91b8438bc952aa021d72e3))
+* **native:** FontFamily 프로바이더 remember 메모이제이션 (리컴포지션 캐시 무효화 방지) ([#3887](https://github.com/choiceoh/Deneb/issues/3887)) ([ce4964a](https://github.com/choiceoh/Deneb/commit/ce4964a1588fedf99b2867f56892b33ea4db3e66))
+
+
+### 🔧 Internal
+
+* **android:** coalesce keyed section cache loads ([#3855](https://github.com/choiceoh/Deneb/issues/3855)) ([bb844a2](https://github.com/choiceoh/Deneb/commit/bb844a2befe55d7549bd87c4c53f2bd4c8bf51ea))
+* **android:** harden transcript cache ownership ([#3874](https://github.com/choiceoh/Deneb/issues/3874)) ([9a8e2b9](https://github.com/choiceoh/Deneb/commit/9a8e2b99cf7ea9a462419d2309099da6739c6e7d))
+* **android:** reuse owned cache envelopes ([#3871](https://github.com/choiceoh/Deneb/issues/3871)) ([b010431](https://github.com/choiceoh/Deneb/commit/b010431cd57b5ec9cce8d2ac2f733c886ea9337d))
+* **android:** reuse stored JSON recovery for memories ([#3889](https://github.com/choiceoh/Deneb/issues/3889)) ([9068e6d](https://github.com/choiceoh/Deneb/commit/9068e6ddced334f71911f6962429faab29b35ad7))
+* **android:** self-heal persistent caches ([#3878](https://github.com/choiceoh/Deneb/issues/3878)) ([1683108](https://github.com/choiceoh/Deneb/commit/1683108ba866820132cbbeb16fd7f55e0ca1648c))
+* **android:** unify stored JSON recovery ([#3885](https://github.com/choiceoh/Deneb/issues/3885)) ([52c1b93](https://github.com/choiceoh/Deneb/commit/52c1b93c53dbc99dfebb4bca8b289b71527964f2))
+* **deps:** Refine·extended-icons·play-review 제거 및 DIY 대체 ([#3879](https://github.com/choiceoh/Deneb/issues/3879)) ([b33e6c6](https://github.com/choiceoh/Deneb/commit/b33e6c66cd00f659c371567694f5333a19e716b7))
+
 ## [4.120.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.119.0...deneb-v4.120.0) (2026-07-16)
 
 
