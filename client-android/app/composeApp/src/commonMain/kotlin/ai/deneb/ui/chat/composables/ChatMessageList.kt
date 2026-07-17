@@ -16,6 +16,8 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.denebFadeEnter
 import ai.deneb.ui.denebFadeExit
+import ai.deneb.ui.denebSnappySpring
+import ai.deneb.ui.denebSpatialSpring
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
@@ -516,7 +518,19 @@ internal fun ChatMessageList(
                         // The list itself stays full width so the mouse wheel works from the
                         // margins and the scrollbar hugs the pane edge; the LazyColumn's
                         // CenterHorizontally centers the capped rows.
-                        Column(denebContentWidthModifier()) {
+                        //
+                        // animateItem: a newly inserted row (my sent bubble, the reply row)
+                        // fades in and settles into place instead of popping — the send
+                        // moment reads as continuous. First composition doesn't animate, so
+                        // a cold transcript load stays instant; a session switch fades only
+                        // the ~visible rows (keys change), which reads as a soft page-in.
+                        Column(
+                            denebContentWidthModifier().animateItem(
+                                fadeInSpec = denebSnappySpring(),
+                                placementSpec = denebSpatialSpring(),
+                                fadeOutSpec = denebSnappySpring(),
+                            ),
+                        ) {
                             when (history.role) {
                                 History.Role.USER -> {
                                     // Submissions are shown by the paired assistant's frozen deneb-ui card
