@@ -1710,6 +1710,26 @@ class MiniappWireValueContractTest {
                     value = boundaryText,
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "runs24h",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "inputTokens24h",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "outputTokens24h",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cacheReadTokens24h",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "id",
             invalidValue = JsonObject(emptyMap()),

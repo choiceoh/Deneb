@@ -274,7 +274,7 @@ class MiniappWireDescriptorContractTest {
             name = "ModelOption",
             serializer = ModelOption.serializer(),
             empty = ModelOption(),
-            fields = listOf("id", "label", "provider", "display", "health", "current", "custom", "deletable", "unhealthy", "note"),
+            fields = listOf("id", "label", "provider", "display", "health", "current", "custom", "deletable", "unhealthy", "note", "runs24h", "inputTokens24h", "outputTokens24h", "cacheReadTokens24h"),
         ),
         contract(
             name = "ModelSection",

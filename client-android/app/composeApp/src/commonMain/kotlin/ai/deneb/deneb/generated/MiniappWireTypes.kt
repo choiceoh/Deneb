@@ -461,6 +461,10 @@ data class ModelOption(
     val deletable: Boolean = false,
     val unhealthy: Boolean = false,
     val note: String = "",
+    val runs24h: Int = 0,
+    val inputTokens24h: Long = 0L,
+    val outputTokens24h: Long = 0L,
+    val cacheReadTokens24h: Long = 0L,
 )
 
 @Immutable

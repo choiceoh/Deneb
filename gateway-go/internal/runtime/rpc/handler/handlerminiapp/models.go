@@ -37,6 +37,14 @@ type ModelOption struct {
 	// latest scorecard window (runs, p95, cache hit, fallback/stall counts,
 	// calibration probe, tuned output floor). Empty when no data yet.
 	Note string `json:"note,omitempty"`
+	// Rolling 24h usage from the agent run log (models the gateway actually
+	// drove; all zero for an unused model, and omitted on the wire). Cache
+	// reads are separate from InputTokens24h so a caching provider's savings
+	// are visible in the picker.
+	Runs24h            int   `json:"runs24h,omitempty"`
+	InputTokens24h     int64 `json:"inputTokens24h,omitempty"`
+	OutputTokens24h    int64 `json:"outputTokens24h,omitempty"`
+	CacheReadTokens24h int64 `json:"cacheReadTokens24h,omitempty"`
 }
 
 // ModelSection groups selectable models by role/provider.

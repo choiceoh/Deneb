@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modeltuner"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -129,7 +130,20 @@ type Controller struct {
 	roleHealthVerdicts          func() map[string]string
 	refreshCodingModelConsumers func()
 	providerConfigs             func() map[string]chatport.ProviderConfig
+	usageStats                  func(sinceMs int64) []agentlog.ModelStat
+
+	// usageCache memoizes the 24h usage aggregation: usageStats folds every
+	// agent-log file on each call, which is too heavy per list render.
+	usageCache struct {
+		mu      sync.Mutex
+		byModel map[string]agentlog.ModelStat
+		builtAt time.Time
+	}
 }
+
+// usageCacheTTL bounds how stale the picker's 24h usage figures can be. The
+// screen is an on-demand settings view; a minute of staleness is invisible.
+const usageCacheTTL = time.Minute
 
 // ControllerConfig contains the live model-system boundaries used by Controller.
 type ControllerConfig struct {
@@ -139,6 +153,9 @@ type ControllerConfig struct {
 	RoleHealthVerdicts          func() map[string]string
 	RefreshCodingModelConsumers func()
 	ProviderConfigs             func() map[string]chatport.ProviderConfig
+	// UsageStats aggregates per-model run/token counters since a cutoff
+	// (agentlog.Writer.AggregateByModel). nil = no usage enrichment.
+	UsageStats func(sinceMs int64) []agentlog.ModelStat
 }
 
 // NewController constructs a model-picker controller.
@@ -150,7 +167,41 @@ func NewController(cfg ControllerConfig) *Controller {
 		roleHealthVerdicts:          cfg.RoleHealthVerdicts,
 		refreshCodingModelConsumers: cfg.RefreshCodingModelConsumers,
 		providerConfigs:             cfg.ProviderConfigs,
+		usageStats:                  cfg.UsageStats,
 	}
+}
+
+// usage24h returns the last-24h per-model usage keyed by "provider/model" AND
+// bare model name (stats may omit the provider), memoized for usageCacheTTL.
+func (s *Controller) usage24h() map[string]agentlog.ModelStat {
+	if s.usageStats == nil {
+		return nil
+	}
+	s.usageCache.mu.Lock()
+	defer s.usageCache.mu.Unlock()
+	if s.usageCache.byModel != nil && time.Since(s.usageCache.builtAt) < usageCacheTTL {
+		return s.usageCache.byModel
+	}
+	cutoff := time.Now().Add(-24 * time.Hour).UnixMilli()
+	byModel := make(map[string]agentlog.ModelStat)
+	for _, st := range s.usageStats(cutoff) {
+		if st.Model == "" {
+			continue
+		}
+		key := st.Model
+		if st.Provider != "" {
+			key = st.Provider + "/" + st.Model
+		}
+		byModel[key] = st
+		// Bare-name fallback: keep the row with more runs when two providers
+		// serve the same model name.
+		if prior, ok := byModel[st.Model]; !ok || st.Runs > prior.Runs {
+			byModel[st.Model] = st
+		}
+	}
+	s.usageCache.byModel = byModel
+	s.usageCache.builtAt = time.Now()
+	return byModel
 }
 
 func (s *Controller) chatReady() bool {
@@ -192,6 +243,7 @@ func (s *Controller) listMiniappModels(ctx context.Context) ([]handlerminiapp.Mo
 	// call — the picker is an on-demand screen) + circuit-breaker state.
 	scorecard := modeltuner.LoadScorecard(modeltuner.DefaultStatePath())
 	hidden := config.LoadHiddenModels(config.ResolveConfigPath())
+	usage := s.usage24h()
 
 	out := make([]handlerminiapp.ModelSection, 0, len(snapshot.sections))
 	for _, section := range snapshot.sections {
@@ -210,17 +262,25 @@ func (s *Controller) listMiniappModels(ctx context.Context) ([]handlerminiapp.Mo
 				unhealthy = s.modelRegistry.ModelUnhealthy(modelName)
 				tunedFloor = s.modelRegistry.TunedMaxTokens(modelName)
 			}
+			stat, ok := usage[entry.fullID]
+			if !ok {
+				stat = usage[modelName]
+			}
 			models = append(models, handlerminiapp.ModelOption{
-				ID:        entry.fullID,
-				Label:     entry.label,
-				Provider:  entry.provider,
-				Display:   entry.display,
-				Health:    snapshot.health[entry.fullID],
-				Current:   entry.fullID == current,
-				Custom:    isMiniappCustomProvider(entry.provider),
-				Deletable: isMiniappDeletableProvider(entry.provider),
-				Unhealthy: unhealthy,
-				Note:      scorecard.NoteFor(modelName, tunedFloor),
+				ID:                 entry.fullID,
+				Label:              entry.label,
+				Provider:           entry.provider,
+				Display:            entry.display,
+				Health:             snapshot.health[entry.fullID],
+				Current:            entry.fullID == current,
+				Custom:             isMiniappCustomProvider(entry.provider),
+				Deletable:          isMiniappDeletableProvider(entry.provider),
+				Unhealthy:          unhealthy,
+				Note:               scorecard.NoteFor(modelName, tunedFloor),
+				Runs24h:            stat.Runs,
+				InputTokens24h:     stat.InputTokens,
+				OutputTokens24h:    stat.OutputTokens,
+				CacheReadTokens24h: stat.CacheReadTokens,
 			})
 		}
 		if len(models) > 0 {

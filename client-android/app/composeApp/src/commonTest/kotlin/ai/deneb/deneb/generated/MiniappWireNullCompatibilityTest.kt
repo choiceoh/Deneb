@@ -1642,6 +1642,30 @@ class MiniappWireNullCompatibilityTest {
             field = "note",
         ),
         nullContract(
+            name = "ModelOption.runs24h",
+            serializer = ModelOption.serializer(),
+            empty = ModelOption(),
+            field = "runs24h",
+        ),
+        nullContract(
+            name = "ModelOption.inputTokens24h",
+            serializer = ModelOption.serializer(),
+            empty = ModelOption(),
+            field = "inputTokens24h",
+        ),
+        nullContract(
+            name = "ModelOption.outputTokens24h",
+            serializer = ModelOption.serializer(),
+            empty = ModelOption(),
+            field = "outputTokens24h",
+        ),
+        nullContract(
+            name = "ModelOption.cacheReadTokens24h",
+            serializer = ModelOption.serializer(),
+            empty = ModelOption(),
+            field = "cacheReadTokens24h",
+        ),
+        nullContract(
             name = "ModelSection.title",
             serializer = ModelSection.serializer(),
             empty = ModelSection(),

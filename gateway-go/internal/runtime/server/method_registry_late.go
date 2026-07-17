@@ -178,6 +178,8 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			ProviderConfigs: func() map[string]chatport.ProviderConfig {
 				return configresolve.LoadProviderConfigs(s.logger)
 			},
+			// 24h per-model usage for the picker rows (nil-safe on the writer).
+			UsageStats: s.agentLogWriter.AggregateByModel,
 		}).Methods(),
 
 		// --- Skill genesis (depends on chatHandler for LLM client) ---
