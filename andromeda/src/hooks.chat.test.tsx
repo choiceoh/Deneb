@@ -315,3 +315,59 @@ describe("useChat capture", () => {
     expect(result.current.turns).toEqual([]);
   });
 });
+
+describe("useChat variants & editResend", () => {
+  function answerWith(text: string) {
+    return streamWith((handlers) => {
+      handlers.onDelta?.(text);
+      handlers.onDone?.({ text });
+    });
+  }
+
+  it("stashes the replaced answer on regenerate and pages back with ‹/›", async () => {
+    mocks.chatStream.mockImplementation(answerWith("첫 번째 답"));
+    const { result } = renderHook(() => useChat(CFG));
+    await act(async () => result.current.send("질문"));
+    expect(result.current.variants).toBeNull();
+
+    mocks.chatStream.mockImplementation(answerWith("두 번째 답"));
+    await act(async () => result.current.regenerate());
+    await waitFor(() => expect(result.current.variants).toEqual({ index: 1, count: 2 }));
+    expect(result.current.turns.at(-1)?.text).toBe("두 번째 답");
+
+    act(() => result.current.selectVariant(-1));
+    expect(result.current.turns.at(-1)?.text).toBe("첫 번째 답");
+    expect(result.current.variants).toEqual({ index: 0, count: 2 });
+
+    act(() => result.current.selectVariant(1));
+    expect(result.current.turns.at(-1)?.text).toBe("두 번째 답");
+  });
+
+  it("clears the variant pager when a fresh user message is sent", async () => {
+    mocks.chatStream.mockImplementation(answerWith("A"));
+    const { result } = renderHook(() => useChat(CFG));
+    await act(async () => result.current.send("질문"));
+    mocks.chatStream.mockImplementation(answerWith("B"));
+    await act(async () => result.current.regenerate());
+    await waitFor(() => expect(result.current.variants).toEqual({ index: 1, count: 2 }));
+
+    mocks.chatStream.mockImplementation(answerWith("새 답"));
+    await act(async () => result.current.send("완전히 새 질문"));
+    expect(result.current.variants).toBeNull();
+  });
+
+  it("editResend replaces the trailing exchange with the edited message", async () => {
+    mocks.chatStream.mockImplementation(answerWith("원래 답"));
+    const { result } = renderHook(() => useChat(CFG));
+    await act(async () => result.current.send("원래 질문"));
+
+    mocks.chatStream.mockImplementation(answerWith("고친 답"));
+    await act(async () => result.current.editResend("고친 질문"));
+
+    const userTurns = result.current.turns.filter((t) => t.role === "user");
+    expect(userTurns).toHaveLength(1);
+    expect(userTurns[0]?.text).toBe("고친 질문");
+    expect(result.current.turns.at(-1)?.text).toBe("고친 답");
+    expect(result.current.variants).toBeNull();
+  });
+});

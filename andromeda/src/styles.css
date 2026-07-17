@@ -955,6 +955,20 @@ textarea {
 .ai-send-stop:hover:not(:disabled) {
   background: var(--due);
 }
+/* ‹n/N› 답변 변형 페이저 — 마지막 답변 액션 행에 붙는 조용한 카운터. */
+.variant-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.variant-nav .variant-count {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 26px;
+  text-align: center;
+}
+
 /* AI 패널 designed empty — quiet pitch + mouse-first suggestion chips. */
 .ai-empty-suggest {
   display: flex;

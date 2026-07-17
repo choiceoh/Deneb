@@ -35,6 +35,7 @@ export type IconName =
   | "settings"
   | "check"
   | "copy"
+  | "pencil"
   | "stop"
   | "refresh"
   | "history"
@@ -199,6 +200,7 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   check: <path d="M5 12.5l4.2 4.2L19 7" />,
+  pencil: <path d="M12 20h8.5M16.7 3.8a2.1 2.1 0 0 1 3 3L7.5 19l-4 1 1-4Z" />,
   copy: (
     <>
       <rect x="8" y="8" width="11.5" height="12.5" rx="2.2" />

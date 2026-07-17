@@ -57,6 +57,13 @@ export interface SendOpts {
   caption?: string;
 }
 
+// ‹n/N› pager state for the newest answer's regenerate variants (live session
+// only — mirrors the native client's #3870 semantics).
+export interface VariantView {
+  index: number;
+  count: number;
+}
+
 export interface ChatState {
   thinking: string;
   busy: boolean;
@@ -68,6 +75,10 @@ export interface ChatState {
   capture: (file: { name: string; mimeType: string; base64: string }, opts?: SendOpts) => Promise<void>;
   stop: () => void;
   regenerate: () => void;
+  // Edit the last user message and resend it (drops the trailing exchange).
+  editResend: (message: string) => void;
+  variants: VariantView | null;
+  selectVariant: (dir: -1 | 1) => void;
   clear: () => void;
   setTurns: (turns: ChatTurn[]) => void;
 }
@@ -84,12 +95,26 @@ export function useChat(cfg: GatewayConfig): ChatState {
   // Regenerate). Refs, not state — changing them must not re-render.
   const abortRef = useRef<AbortController | null>(null);
   const lastSendRef = useRef<{ message: string; opts: SendOpts } | null>(null);
+  // Regenerate variants of the newest answer (#3870 parity). prevAnswers holds
+  // the stashed older versions; newestAnswer snapshots the live one while the
+  // user pages back. All live-session-local: any fresh user send resets them.
+  const prevAnswersRef = useRef<ChatTurn[]>([]);
+  const newestAnswerRef = useRef<ChatTurn | null>(null);
+  const keepVariantsRef = useRef(false);
+  const [variants, setVariants] = useState<VariantView | null>(null);
+
+  function resetVariants() {
+    prevAnswersRef.current = [];
+    newestAnswerRef.current = null;
+    setVariants(null);
+  }
 
   function clear() {
     if (busy) return;
     setThinking("");
     setTurns([]);
     lastSendRef.current = null;
+    resetVariants();
   }
 
   function stop() {
@@ -100,19 +125,60 @@ export function useChat(cfg: GatewayConfig): ChatState {
     const last = lastSendRef.current;
     if (!last || busy) return;
     // Replace the previous answer: drop the trailing assistant+user pair, then
-    // re-run the same message (send re-appends both).
-    setTurns((prev) => {
-      const copy = [...prev];
-      if (copy.at(-1)?.role === "assistant") copy.pop();
-      if (copy.at(-1)?.role === "user") copy.pop();
-      return copy;
-    });
+    // re-run the same message (send re-appends both). The dropped answer is
+    // stashed so ‹n/N› can page back to it. Stash from the closure snapshot —
+    // NOT inside the setTurns updater (updaters run deferred and must stay pure,
+    // and send()'s finally reads the ref before an updater would have run).
+    const copy = [...turns];
+    const tail = copy.at(-1);
+    if (tail?.role === "assistant") {
+      if (tail.status !== "streaming") prevAnswersRef.current = [...prevAnswersRef.current, tail];
+      copy.pop();
+    }
+    if (copy.at(-1)?.role === "user") copy.pop();
+    setTurns(copy);
+    newestAnswerRef.current = null;
+    keepVariantsRef.current = true;
     void send(last.message, last.opts);
+  }
+
+  // Edit the last user message and resend: same trailing-exchange replacement as
+  // regenerate, but with new text — so the old answer thread (and its variants)
+  // no longer applies.
+  function editResend(message: string) {
+    const last = lastSendRef.current;
+    const msg = message.trim();
+    if (!last || busy || !msg) return;
+    const copy = [...turns];
+    if (copy.at(-1)?.role === "assistant") copy.pop();
+    if (copy.at(-1)?.role === "user") copy.pop();
+    setTurns(copy);
+    void send(msg, last.opts);
+  }
+
+  // Page the newest answer across its regenerate variants. Index count-1 is the
+  // live answer; anything below swaps a stashed snapshot into the tail slot.
+  function selectVariant(dir: -1 | 1) {
+    if (busy || !variants) return;
+    const target = variants.index + dir;
+    if (target < 0 || target >= variants.count) return;
+    const tail = turns.at(-1);
+    if (!tail || tail.role !== "assistant") return;
+    if (variants.index === variants.count - 1) newestAnswerRef.current = tail;
+    const replacement = target === variants.count - 1 ? newestAnswerRef.current : prevAnswersRef.current[target];
+    if (!replacement) return;
+    setTurns([...turns.slice(0, -1), replacement]);
+    setVariants({ ...variants, index: target });
   }
 
   async function send(message: string, opts: SendOpts = {}) {
     const msg = message.trim();
     if (!msg || busy) return;
+    if (keepVariantsRef.current) {
+      keepVariantsRef.current = false;
+    } else {
+      resetVariants();
+    }
     lastSendRef.current = { message: msg, opts };
     const assistantId = chatTurnId();
     setThinking("");
@@ -217,6 +283,9 @@ export function useChat(cfg: GatewayConfig): ChatState {
       if (!failed && !stopped) patch((turn) => (turn.status === "streaming" ? { ...turn, status: "done" } : turn));
       abortRef.current = null;
       setBusy(false);
+      // Regenerated answer settled → surface the ‹n/N› pager (newest selected).
+      const stashed = prevAnswersRef.current.length;
+      setVariants(stashed > 0 ? { index: stashed, count: stashed + 1 } : null);
     }
   }
 
@@ -226,6 +295,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
   // final text), so it appends a user label and fills the assistant reply.
   async function capture(file: { name: string; mimeType: string; base64: string }, opts: SendOpts = {}) {
     if (busy || !file.base64) return;
+    resetVariants(); // a new exchange begins — the pager belonged to the old tail
     const mimeType = file.mimeType || "application/octet-stream";
     const kind: CaptureKind = mimeType.startsWith("image/")
       ? "image"
@@ -309,6 +379,13 @@ export function useChat(cfg: GatewayConfig): ChatState {
     }
   }
 
+  // External setTurns (session switch / transcript load) starts a fresh thread —
+  // stashed variants belong to the previous one.
+  function setTurnsExternal(next: ChatTurn[]) {
+    resetVariants();
+    setTurns(next);
+  }
+
   return {
     thinking,
     busy,
@@ -318,8 +395,11 @@ export function useChat(cfg: GatewayConfig): ChatState {
     capture,
     stop,
     regenerate,
+    editResend,
+    variants,
+    selectVariant,
     clear,
-    setTurns,
+    setTurns: setTurnsExternal,
   };
 }
 
