@@ -85,8 +85,11 @@ func buildAnthropicRequestBody(req ChatRequest) ([]byte, error) {
 	// empty") and requires strict user/assistant alternation. vLLM tolerates
 	// empties, so they accumulate in history and only break a fallback to an
 	// Anthropic-style provider (e.g. kimi-for-coding). Drop first so any
-	// adjacency the drop creates is merged away.
-	msgs := NormalizeMessages(DropEmptyMessages(req.Messages))
+	// adjacency the drop creates is merged away. Order tool_result blocks
+	// first within user messages LAST — the merge is what produces the
+	// [text, tool_result] shape strict backends reject (see
+	// OrderToolResultsFirst).
+	msgs := OrderToolResultsFirst(NormalizeMessages(DropEmptyMessages(req.Messages)))
 	areq.Messages = make([]anthropicMessage, 0, len(msgs))
 	for _, m := range msgs {
 		content, err := sanitizeAnthropicContent(m.Content)
