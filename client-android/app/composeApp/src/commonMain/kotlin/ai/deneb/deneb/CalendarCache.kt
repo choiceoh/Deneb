@@ -15,10 +15,11 @@ internal fun encodeCalendarCache(events: List<CalendarEvent>, owner: String): St
 
 internal fun decodeCalendarCache(json: String, expectedOwner: String): List<CalendarEvent>? = calendarCacheCodec.decode(json, expectedOwner)
 
-internal fun DenebGatewayClient.loadCachedCalendar(): List<CalendarEvent>? {
-    val json = appSettings.getCachedCalendar() ?: return null
-    return decodeCalendarCache(json, mailCacheOwner(gatewayUrl, clientToken))
-}
+internal fun DenebGatewayClient.loadCachedCalendar(): List<CalendarEvent>? = loadCachedOrClear(
+    appSettings.getCachedCalendar(),
+    { decodeCalendarCache(it, mailCacheOwner(gatewayUrl, clientToken)) },
+    appSettings::removeCachedCalendar,
+)
 
 internal fun DenebGatewayClient.storeCachedCalendar(events: List<CalendarEvent>) {
     appSettings.putCachedCalendar(encodeCalendarCache(events, mailCacheOwner(gatewayUrl, clientToken)))

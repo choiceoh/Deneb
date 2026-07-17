@@ -58,12 +58,11 @@ internal fun encodeCachedTranscript(transcript: List<History>, owner: String): S
 
 /** Cached transcript for [key] as History rows, or null when absent/undecodable.
  *  Text-only (no attachments) — enough to render the bubbles instantly. */
-internal fun DenebGatewayClient.loadCachedTranscript(key: String): List<History>? {
-    val json = appSettings.getCachedTranscript(key) ?: return null
-    val decoded = decodeCachedTranscript(json, mailCacheOwner(gatewayUrl, clientToken))
-    if (decoded == null) appSettings.removeCachedTranscript(key)
-    return decoded
-}
+internal fun DenebGatewayClient.loadCachedTranscript(key: String): List<History>? = loadCachedOrClear(
+    appSettings.getCachedTranscript(key),
+    { decodeCachedTranscript(it, mailCacheOwner(gatewayUrl, clientToken)) },
+    { appSettings.removeCachedTranscript(key) },
+)
 
 /** Persist [transcript] (text-only) for [key]. Blank-content rows (e.g. image-only
  *  proactive cards) are dropped; an all-blank transcript clears the slot. */

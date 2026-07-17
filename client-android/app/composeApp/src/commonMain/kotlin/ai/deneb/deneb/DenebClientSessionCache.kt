@@ -210,12 +210,11 @@ internal class SectionDiskSlot<T : Any>(
     private val serializer: KSerializer<T>,
     private val owner: () -> String,
 ) {
-    fun load(): T? {
-        val raw = appSettings.getCachedSection(key) ?: return null
-        val decoded = decodeOwnedCache(raw, owner(), "value", serializer)
-        if (decoded == null) clear()
-        return decoded
-    }
+    fun load(): T? = loadCachedOrClear(
+        appSettings.getCachedSection(key),
+        { decodeOwnedCache(it, owner(), "value", serializer) },
+        ::clear,
+    )
 
     fun save(value: T) {
         runCatching {

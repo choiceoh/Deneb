@@ -171,10 +171,11 @@ internal fun encodeMailCache(rows: List<MailMessage>, owner: String): String = m
 
 internal fun decodeMailCache(json: String, expectedOwner: String): List<MailMessage>? = mailCacheCodec.decode(json, expectedOwner)
 
-internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? {
-    val json = appSettings.getCachedMailList() ?: return null
-    return decodeMailCache(json, mailCacheOwner(gatewayUrl, clientToken))
-}
+internal fun DenebGatewayClient.loadCachedMail(): List<MailMessage>? = loadCachedOrClear(
+    appSettings.getCachedMailList(),
+    { decodeMailCache(it, mailCacheOwner(gatewayUrl, clientToken)) },
+    appSettings::removeCachedMailList,
+)
 
 internal fun DenebGatewayClient.storeCachedMail(rows: List<MailMessage>) {
     appSettings.putCachedMailList(encodeMailCache(rows, mailCacheOwner(gatewayUrl, clientToken)))

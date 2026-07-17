@@ -42,6 +42,20 @@ internal fun <T : Any> decodeOwnedCache(
     ownedCacheJson.decodeFromJsonElement(serializer, payload)
 }.getOrNull()
 
+/** Decode a persisted cache entry and discard it after the first unusable read.
+ *  Absent entries stay a read-only miss; corrupt, empty, legacy, and foreign-owner
+ *  entries are cleared so later cold starts do not parse the same payload again. */
+internal inline fun <T : Any> loadCachedOrClear(
+    raw: String?,
+    decode: (String) -> T?,
+    clear: () -> Unit,
+): T? {
+    val json = raw ?: return null
+    val decoded = decode(json)
+    if (decoded == null) clear()
+    return decoded
+}
+
 /** Reusable bounded-list policy shared by mail, feed, calendar, and approvals. */
 internal class OwnedListCacheCodec<T : Any>(
     private val payloadKey: String,
