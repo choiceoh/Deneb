@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func quietRouter(cfg config) *router {
@@ -57,15 +58,19 @@ func TestChatCompletions_ForwardsRewritesInjectsKeyAndStreams(t *testing.T) {
 }
 
 // Per-entry profile headers reach the upstream, and the auth/protocol pins
-// applied after them win on conflict — a headers block can never clobber
-// authentication (the kimi coding endpoint's User-Agent gate is the
-// motivating profile).
+// applied after them win on conflict — a headers block can never clobber or
+// duplicate authentication (a UA/header-gated endpoint like the kimi coding
+// endpoint is the motivating profile).
 func TestMessages_EntryHeadersSentAndAuthWins(t *testing.T) {
-	var gotUA, gotKey, gotVer string
+	type captured struct{ ua, key, ver, auth string }
+	capCh := make(chan captured, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotUA = r.Header.Get("User-Agent")
-		gotKey = r.Header.Get("x-api-key")
-		gotVer = r.Header.Get("anthropic-version")
+		capCh <- captured{
+			ua:   r.Header.Get("User-Agent"),
+			key:  r.Header.Get("x-api-key"),
+			ver:  r.Header.Get("anthropic-version"),
+			auth: r.Header.Get("Authorization"),
+		}
 		_, _ = io.WriteString(w, `{"type":"message"}`)
 	}))
 	defer upstream.Close()
@@ -77,8 +82,9 @@ func TestMessages_EntryHeadersSentAndAuthWins(t *testing.T) {
 		Protocol:      "anthropic",
 		UpstreamModel: "kimi-for-coding",
 		Headers: map[string]string{
-			"User-Agent": "claude-code/2.1.142",
-			"x-api-key":  "profile-must-not-win",
+			"User-Agent":    "deneb-wormhole/1",
+			"x-api-key":     "profile-must-not-win",
+			"Authorization": "Bearer stray-credential",
 		},
 	}}})
 	srv := httptest.NewServer(rt.handler())
@@ -90,14 +96,26 @@ func TestMessages_EntryHeadersSentAndAuthWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (upstream never reached?)", resp.StatusCode)
+	}
 
-	if gotUA != "claude-code/2.1.142" {
-		t.Errorf("upstream User-Agent = %q, want profile header", gotUA)
+	var got captured
+	select {
+	case got = <-capCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream handler never captured a request")
 	}
-	if gotKey != "real-key" {
-		t.Errorf("upstream x-api-key = %q, want auth to win over profile header", gotKey)
+	if got.ua != "deneb-wormhole/1" {
+		t.Errorf("upstream User-Agent = %q, want profile header", got.ua)
 	}
-	if gotVer == "" {
+	if got.key != "real-key" {
+		t.Errorf("upstream x-api-key = %q, want auth to win over profile header", got.key)
+	}
+	if got.auth != "" {
+		t.Errorf("upstream Authorization = %q, want stray profile credential cleared", got.auth)
+	}
+	if got.ver == "" {
 		t.Errorf("anthropic-version pin missing upstream")
 	}
 }

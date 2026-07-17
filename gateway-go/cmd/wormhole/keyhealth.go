@@ -108,6 +108,12 @@ func probeKeyAuth(ctx context.Context, client *http.Client, e modelEntry) keyHea
 		return st
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Entry-profile headers, exactly like the traffic path (doUpstream): a
+	// UA/header-gated endpoint must see the same identity from the health
+	// probe, or the probe reports a false key failure.
+	for k, v := range e.Headers {
+		req.Header.Set(k, v)
+	}
 	applyUpstreamAuth(req, e, req) // clientReq=req: anthropic-version falls back to the default
 	resp, err := client.Do(req)
 	if err != nil {

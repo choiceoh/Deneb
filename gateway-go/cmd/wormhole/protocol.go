@@ -32,6 +32,10 @@ func (e modelEntry) protocol() string {
 func applyUpstreamAuth(upReq *http.Request, entry modelEntry, clientReq *http.Request) {
 	if entry.protocol() == protocolAnthropic {
 		if entry.Key != "" {
+			// The configured key owns authentication: drop a credential the
+			// entry's profile headers may have injected on the OTHER scheme,
+			// so the upstream never sees two competing credentials.
+			upReq.Header.Del("Authorization")
 			upReq.Header.Set("x-api-key", entry.Key)
 		}
 		ver := clientReq.Header.Get("anthropic-version")
@@ -45,6 +49,7 @@ func applyUpstreamAuth(upReq *http.Request, entry modelEntry, clientReq *http.Re
 		return
 	}
 	if entry.Key != "" {
+		upReq.Header.Del("x-api-key")
 		upReq.Header.Set("Authorization", "Bearer "+entry.Key)
 	}
 }
