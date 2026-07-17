@@ -558,6 +558,7 @@ private enum class ModelHealth(val color: Color, val suffix: String) {
  *  lightweight / fallback). */
 private enum class ModelRole(val wire: String, val label: String, val desc: String) {
     MAIN("main", "메인", "대화·분석·도구 호출을 담당하는 기본 모델"),
+    MAIN2("main2", "메인2", "제2 메인 — 단순 대화 턴을 분담하고(난이도 라우팅), 메인과 서로의 1순위 폴백이 되는 동급 모델. 미설정이면 메인 단독"),
     CODING("coding", "코딩", "코드 수정·구현자 서브에이전트·스킬 진화 패치를 담당하는 전용 모델. 미설정이면 기존 기본 모델을 사용"),
     VISION("vision", "비전", "사진·스크린샷 등 이미지가 포함된 대화를 처리하는 멀티모달 모델. 미설정이면 메인 모델(이미지 무시)을 사용"),
     TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),

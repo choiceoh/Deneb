@@ -248,7 +248,7 @@ func (s *Controller) setMiniappModel(ctx context.Context, role, requested string
 	// "모델 전환에 실패했어요") because this case list wasn't updated alongside the
 	// picker. Keep all three lists in sync.
 	switch role {
-	case "main", "tiny", "lightweight", "coding", "fallback", "vision":
+	case "main", "main2", "tiny", "lightweight", "coding", "fallback", "vision":
 	default:
 		return "", rpcerr.InvalidRequest("unknown model role: " + role)
 	}
@@ -327,6 +327,12 @@ func (s *Controller) roleMiniappModels() []handlerminiapp.RoleModel {
 		if m := s.chatHandler.DefaultModel(); m != "" {
 			out[0].Model = m
 		}
+	}
+	// Main2 role is opt-in like coding/vision: report it only when assigned so
+	// the picker shows "미설정" until an operator binds the second main-tier
+	// model (mutual failover pair + difficulty-routing receiver).
+	if m2 := s.modelRegistry.FullModelID(modelrole.RoleMain2); m2 != "" {
+		out = append(out, handlerminiapp.RoleModel{Role: string(modelrole.RoleMain2), Model: m2})
 	}
 	// Coding role is opt-in: report it only after assignment so the native
 	// picker can show "미설정" until an operator binds a code-editing model.

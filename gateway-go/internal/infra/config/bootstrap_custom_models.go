@@ -372,6 +372,7 @@ func clearRolesReferencingModel(raw map[string]any, fullModelID string) []string
 	}
 	fields := []struct{ field, role string }{
 		{"defaultModel", "main"},
+		{"main2Model", "main2"},
 		{"tinyModel", "tiny"},
 		{"lightweightModel", "lightweight"},
 		{"codingModel", "coding"},

@@ -37,6 +37,7 @@ func PersistDefaultModel(configPath, model string, logger *slog.Logger) error {
 // given modelrole role, preserving all other fields:
 //
 //	main        → agents.defaultModel
+//	main2       → agents.main2Model
 //	tiny        → agents.tinyModel
 //	lightweight → agents.lightweightModel
 //	coding      → agents.codingModel
@@ -49,6 +50,8 @@ func PersistRoleModel(configPath, role, model string, logger *slog.Logger) error
 	switch role {
 	case "main", "":
 		field = "defaultModel"
+	case "main2":
+		field = "main2Model"
 	case "tiny":
 		field = "tinyModel"
 	case "lightweight":

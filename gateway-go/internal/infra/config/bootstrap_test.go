@@ -517,6 +517,35 @@ func TestDeleteCustomProviderModel(t *testing.T) {
 		}
 	})
 
+	t.Run("main2 role persists and clears like the others", func(t *testing.T) {
+		// The picker's role gate has repeatedly drifted behind new roles; pin
+		// main2 through the same persist→delete-clear round trip.
+		tmp := t.TempDir()
+		cfgPath := filepath.Join(tmp, "deneb.json")
+		if _, err := PersistCustomProviderModel(cfgPath, "http://127.0.0.1:8000/v1", "second-main", CustomModelMeta{}, logger); err != nil {
+			t.Fatal(err)
+		}
+		if err := PersistRoleModel(cfgPath, "main2", "custom/second-main", logger); err != nil {
+			t.Fatal(err)
+		}
+		var written map[string]any
+		if err := json.Unmarshal(testutil.Must(os.ReadFile(cfgPath)), &written); err != nil {
+			t.Fatal(err)
+		}
+		agents, _ := written["agents"].(map[string]any)
+		if agents["main2Model"] != "custom/second-main" {
+			t.Fatalf("agents.main2Model = %v, want custom/second-main", agents["main2Model"])
+		}
+
+		res, err := DeleteCustomProviderModel(cfgPath, "custom/second-main", logger)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.ClearedRoles) != 1 || res.ClearedRoles[0] != "main2" {
+			t.Fatalf("ClearedRoles = %v, want [main2]", res.ClearedRoles)
+		}
+	})
+
 	t.Run("clears role binding pointing at the deleted model", func(t *testing.T) {
 		tmp := t.TempDir()
 		cfgPath := filepath.Join(tmp, "deneb.json")
