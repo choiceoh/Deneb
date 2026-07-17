@@ -20,10 +20,11 @@ internal fun encodeWorkFeedCache(items: List<WorkFeedItem>, owner: String): Stri
 
 internal fun decodeWorkFeedCache(json: String, expectedOwner: String): List<WorkFeedItem>? = workFeedCacheCodec.decode(json, expectedOwner)
 
-internal fun DenebGatewayClient.loadCachedWorkFeed(): List<WorkFeedItem>? {
-    val json = appSettings.getCachedWorkFeed() ?: return null
-    return decodeWorkFeedCache(json, mailCacheOwner(gatewayUrl, clientToken))
-}
+internal fun DenebGatewayClient.loadCachedWorkFeed(): List<WorkFeedItem>? = loadCachedOrClear(
+    appSettings.getCachedWorkFeed(),
+    { decodeWorkFeedCache(it, mailCacheOwner(gatewayUrl, clientToken)) },
+    appSettings::removeCachedWorkFeed,
+)
 
 internal fun DenebGatewayClient.storeCachedWorkFeed(items: List<WorkFeedItem>) {
     appSettings.putCachedWorkFeed(encodeWorkFeedCache(items, mailCacheOwner(gatewayUrl, clientToken)))

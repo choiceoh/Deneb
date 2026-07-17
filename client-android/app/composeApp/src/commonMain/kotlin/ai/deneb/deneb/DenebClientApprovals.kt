@@ -60,10 +60,11 @@ internal fun encodeApprovalsCache(rows: List<GroupwareApprovalRow>, owner: Strin
 
 internal fun decodeApprovalsCache(json: String, expectedOwner: String): List<GroupwareApprovalRow>? = approvalsCacheCodec.decode(json, expectedOwner)
 
-internal fun DenebGatewayClient.loadCachedApprovals(): List<GroupwareApprovalRow>? {
-    val json = appSettings.getCachedApprovalsList() ?: return null
-    return decodeApprovalsCache(json, mailCacheOwner(gatewayUrl, clientToken))
-}
+internal fun DenebGatewayClient.loadCachedApprovals(): List<GroupwareApprovalRow>? = loadCachedOrClear(
+    appSettings.getCachedApprovalsList(),
+    { decodeApprovalsCache(it, mailCacheOwner(gatewayUrl, clientToken)) },
+    appSettings::removeCachedApprovalsList,
+)
 
 internal fun DenebGatewayClient.storeCachedApprovals(rows: List<GroupwareApprovalRow>) {
     appSettings.putCachedApprovalsList(

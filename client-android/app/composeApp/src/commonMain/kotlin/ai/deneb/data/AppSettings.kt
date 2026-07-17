@@ -414,6 +414,10 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_MAIL_CACHE, json)
     }
 
+    fun removeCachedMailList() {
+        settings.remove(KEY_MAIL_CACHE)
+    }
+
     // Work-feed (업무 home) cache (single key — the recent feed, for an instant feed
     // render and, crucially, an offline-first launcher home: the feed shows the
     // last-known briefing when the gateway is unreachable. Owner-fingerprinted like
@@ -422,6 +426,10 @@ class AppSettings(internal val settings: Settings) {
 
     fun putCachedWorkFeed(json: String) {
         settings.putString(KEY_WORK_FEED_CACHE, json)
+    }
+
+    fun removeCachedWorkFeed() {
+        settings.remove(KEY_WORK_FEED_CACHE)
     }
 
     // Upcoming-calendar cache (single key — the now-anchored look-ahead list, for an
@@ -433,12 +441,20 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_CALENDAR_CACHE, json)
     }
 
+    fun removeCachedCalendar() {
+        settings.remove(KEY_CALENDAR_CACHE)
+    }
+
     // Default approvals-list cache (single key — folder=total first page, for an
     // instant 결재 render after process death). Owner-fingerprinted like mail/feed.
     fun getCachedApprovalsList(): String? = settings.getStringOrNull(KEY_APPROVALS_CACHE)
 
     fun putCachedApprovalsList(json: String) {
         settings.putString(KEY_APPROVALS_CACHE, json)
+    }
+
+    fun removeCachedApprovalsList() {
+        settings.remove(KEY_APPROVALS_CACHE)
     }
 
     // Section snapshot cache (one key per browse surface — 카테고리·사람·연락처·일기·
