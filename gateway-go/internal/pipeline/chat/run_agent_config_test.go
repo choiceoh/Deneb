@@ -248,6 +248,34 @@ func TestBuildAgentConfig_PreservesCombinedPolicyAndHookContracts(t *testing.T) 
 	}
 }
 
+func TestBuildAgentConfig_PreloadsExactTriggerDeferredTools(t *testing.T) {
+	registry := NewToolRegistry()
+	registry.RegisterTool(ToolDef{Name: "read", Description: "read"})
+	registry.RegisterTool(ToolDef{Name: "wiki", Description: "wiki", Deferred: true})
+	registry.RegisterTool(ToolDef{Name: "morning_letter", Description: "briefing", Deferred: true})
+
+	acd := agentConfigDeps{
+		Tools:                registry,
+		ReplayDeferredTools:  []string{"wiki"},
+		InitialDeferredTools: []string{"morning_letter", "wiki"},
+	}
+	cfg, _, _, _ := buildAgentConfig(
+		RunParams{SessionKey: "cron:morning-letter:1"},
+		runDeps{}, nil, nil, "", acd, slog.Default(),
+	)
+	if got := toolNames(cfg.Tools); !slices.Equal(got, []string{"read", "wiki", "morning_letter"}) {
+		t.Fatalf("initial tools = %v, want replay then exact-trigger capability", got)
+	}
+	ctx := cfg.OnTurnInit(context.Background())
+	activated := toolport.DeferredActivationFromContext(ctx)
+	if activated == nil {
+		t.Fatal("turn context missing deferred activation")
+	}
+	if got := activated.ActivatedNames(); !slices.Equal(got, []string{"wiki", "morning_letter"}) {
+		t.Fatalf("seeded deferred tools = %v, want stable deduplicated order", got)
+	}
+}
+
 func toolNames(tools []llm.Tool) []string {
 	names := make([]string, 0, len(tools))
 	for _, tool := range tools {

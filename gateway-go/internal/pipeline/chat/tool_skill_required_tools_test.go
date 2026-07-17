@@ -20,7 +20,25 @@ func requiredToolsRegistry() *ToolRegistry {
 func requiredToolsCatalog() []skills.PromptSkill {
 	return []skills.PromptSkill{
 		{Name: "graph-analysis", RequiresTools: []string{"graphify", "exec", "ghost-tool"}},
+		{Name: "notebook-analysis", RequiresTools: []string{"notebook", "graphify"}},
 		{Name: "plain-skill"},
+	}
+}
+
+func TestSkillRequiredDeferredToolsResolvesStableDeduplicatedBundle(t *testing.T) {
+	got := skillRequiredDeferredTools(
+		requiredToolsRegistry(),
+		[]string{"notebook-analysis", "graph-analysis"},
+		requiredToolsCatalog(),
+		"",
+	)
+	if strings.Join(got, ",") != "graphify,notebook" {
+		t.Fatalf("bundle = %v, want stable catalog order [graphify notebook]", got)
+	}
+	if restricted := skillRequiredDeferredTools(
+		requiredToolsRegistry(), []string{"graph-analysis"}, requiredToolsCatalog(), "conversation",
+	); len(restricted) != 0 {
+		t.Fatalf("restricted preset bundle = %v, want empty", restricted)
 	}
 }
 

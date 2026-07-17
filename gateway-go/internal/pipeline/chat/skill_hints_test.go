@@ -11,10 +11,11 @@ import (
 func hintSkills() []skills.PromptSkill {
 	return []skills.PromptSkill{
 		{
-			Name:        "contract-review",
-			Description: "계약서·약정서·발주서 등 문서를 고정 조항 체크리스트로 검토해 우리에게 불리한 위험 조항을 빠짐없이 드러낸다 — 조항별 존재/부재를 강제한다. Use when: 계약 검토.",
-			Triggers:    []string{"계약서", "독소조항", "공급계약"},
-			Body:        "# Contract Review\n\n## Completion\n- 위험 조항\n- 권고",
+			Name:          "contract-review",
+			Description:   "계약서·약정서·발주서 등 문서를 고정 조항 체크리스트로 검토해 우리에게 불리한 위험 조항을 빠짐없이 드러낸다 — 조항별 존재/부재를 강제한다. Use when: 계약 검토.",
+			Triggers:      []string{"계약서", "독소조항", "공급계약"},
+			RequiresTools: []string{"graphify"},
+			Body:          "# Contract Review\n\n## Completion\n- 위험 조항\n- 권고",
 		},
 		{
 			Name:        "meeting-minutes",
@@ -49,6 +50,9 @@ func TestBuildSkillHints_MatchAndFormat(t *testing.T) {
 	}
 	if !strings.Contains(out, "## Completion") || strings.Contains(out, `skills(action="read"`) {
 		t.Errorf("hint should carry the body without a read hop:\n%s", out)
+	}
+	if strings.Contains(out, "fetch_tools") || strings.Contains(out, "Required tools:") {
+		t.Errorf("auto-loaded capability must not ask the model for a fetch hop:\n%s", out)
 	}
 	// Unrelated skills must not ride along.
 	if strings.Contains(out, "meeting-minutes") || strings.Contains(out, "github") {

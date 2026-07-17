@@ -1,0 +1,15 @@
+{
+  "skill": "morning-letter",
+  "cases": [
+    {"name": "korean-name", "message": "오늘 모닝레터 작성해줘", "shouldTrigger": true},
+    {"name": "morning-briefing", "message": "아침 브리핑 보여줘", "shouldTrigger": true},
+    {"name": "today-briefing", "message": "오늘의 브리핑 만들어줘", "shouldTrigger": true},
+    {"name": "english-name", "message": "morning letter 부탁해", "shouldTrigger": true},
+    {"name": "briefing-refresh", "message": "모닝레터 다시 생성해줘", "shouldTrigger": true},
+    {"name": "email-summary", "message": "어제 온 메일만 요약해줘", "shouldTrigger": false},
+    {"name": "weather", "message": "오늘 날씨와 강수확률 알려줘", "shouldTrigger": false},
+    {"name": "calendar", "message": "오늘 일정을 캘린더에서 확인해줘", "shouldTrigger": false},
+    {"name": "weekly-briefing", "message": "이번 주 업무 브리핑을 작성해줘", "shouldTrigger": false},
+    {"name": "meeting-briefing", "message": "회의 전에 핵심만 브리핑해줘", "shouldTrigger": false}
+  ]
+}
