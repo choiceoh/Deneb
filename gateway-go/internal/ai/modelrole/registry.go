@@ -561,13 +561,16 @@ func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 func (r *Registry) FallbackChain(role Role) []Role {
 	switch role {
 	case RoleMain:
-		// Main2 (when configured) is main's FIRST fallback: a same-tier model
-		// keeps quality before degrading to lightweight. Unconfigured, the
-		// walk skips it (nil client) and the chain behaves as before.
-		return []Role{RoleMain, RoleMain2, RoleLightweight, RoleFallback}
+		// Same-tier failover first: main2 (when configured), then the coding
+		// model — a main-grade subscription that keeps answer quality — before
+		// degrading to the local lightweight tier (operator call, 2026-07-17:
+		// "키미 죽으면 로컬 경량 말고 코딩으로"). Unconfigured roles are
+		// skipped by the walk (nil client).
+		return []Role{RoleMain, RoleMain2, RoleCoding, RoleLightweight, RoleFallback}
 	case RoleMain2:
-		// Mutual failover pair: main2's first fallback is main.
-		return []Role{RoleMain2, RoleMain, RoleLightweight, RoleFallback}
+		// Mutual failover pair: main2's first fallback is main, then the same
+		// quality ladder as main.
+		return []Role{RoleMain2, RoleMain, RoleCoding, RoleLightweight, RoleFallback}
 	case RoleTiny:
 		return []Role{RoleTiny, RoleLightweight, RoleFallback}
 	case RoleLightweight:
