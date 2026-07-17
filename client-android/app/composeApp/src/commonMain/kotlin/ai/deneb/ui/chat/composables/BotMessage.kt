@@ -10,6 +10,7 @@ import ai.deneb.ui.denebFadeEnter
 import ai.deneb.ui.denebFadeExit
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebShrinkOut
+import ai.deneb.ui.denebSnappySpring
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
@@ -19,6 +20,7 @@ import ai.deneb.ui.markdown.MarkdownDocument
 import ai.deneb.ui.markdown.parseMarkdown
 import ai.deneb.ui.markdown.parseMarkdownCached
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -99,6 +101,32 @@ import org.jetbrains.compose.resources.stringResource
 // byte-identical to having parsed every token.
 private const val STREAM_PARSE_INTERVAL_MS = 96L
 
+// Streaming caret: appended to the PARSE SOURCE, so it renders inline at the
+// exact end of the flowing text (inside the current paragraph/list item) — the
+// frontier-app cursor cue. Free: the streaming body is re-parsed each sample
+// tick anyway, and the glyph vanishes with the final (exact) parse on settle.
+private const val STREAM_CARET = "▍"
+
+// Appends the caret only where it cannot corrupt the markdown:
+//  - inside an UNCLOSED code fence (``` / ~~~, any length ≥3) → no caret; a ▍
+//    there reads as code content, not a cursor.
+//  - when the text ends ON a fence line → caret goes on its OWN line: "```" +
+//    "▍" would scan as a NEW opener with info-string "▍", unclosing the block
+//    that just closed. (Line-toggle fence tracking is an approximation of
+//    CommonMark — good enough for a transient glyph that lives for one sample
+//    tick and never reaches the settled parse.)
+internal fun appendStreamCaret(text: String): String {
+    var openFence = false
+    for (rawLine in text.lineSequence()) {
+        val line = rawLine.trimStart()
+        if (line.startsWith("```") || line.startsWith("~~~")) openFence = !openFence
+    }
+    if (openFence) return text
+    val lastLine = text.substringAfterLast('\n').trimStart()
+    val endsOnFenceLine = lastLine.startsWith("```") || lastLine.startsWith("~~~")
+    return if (endsOnFenceLine) text + "\n" + STREAM_CARET else text + STREAM_CARET
+}
+
 @Composable
 private fun rememberStreamingParseSource(message: String, isStreaming: Boolean): String {
     val latest = rememberUpdatedState(message)
@@ -115,7 +143,8 @@ private fun rememberStreamingParseSource(message: String, isStreaming: Boolean):
             delay(STREAM_PARSE_INTERVAL_MS)
         }
     }
-    return if (isStreaming) sampled else message
+    if (!isStreaming) return message
+    return appendStreamCaret(sampled)
 }
 
 // rememberMessageDocument turns a (possibly streaming) body into its parsed document while
@@ -195,6 +224,18 @@ internal fun BotMessage(
                             onUiCallback = denebUiCallback,
                             frozen = effectiveFrozen,
                             modifier = Modifier.fillMaxWidth()
+                                // While streaming, glide the height between sampled
+                                // reflows instead of jumping a chunk at a time — the
+                                // single biggest "flows vs stutters" cue. Settled rows
+                                // skip the modifier entirely (no layout-animation cost
+                                // on history, and no size animation on transcript load).
+                                .then(
+                                    if (isStreaming) {
+                                        Modifier.animateContentSize(animationSpec = denebSnappySpring())
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 .padding(start = 16.dp, top = answerTopPadding, end = 16.dp, bottom = 8.dp),
                         )
                     }
