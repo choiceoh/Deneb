@@ -123,6 +123,20 @@ class WikiMirrorStoreTest {
     }
 
     @Test
+    fun inMemoryMirrorRejectsForeignOwnerOnRead() = runTest {
+        val files = MemoryMirrorFiles()
+        var currentOwner = "gw#token-a"
+        val s = store(files) { currentOwner }
+        s.replaceAll(listOf(page("a/secret.md")), nowMs = 1)
+
+        // Credential switch before async clear() finishes — must not serve A's page.
+        currentOwner = "gw#token-b"
+        assertNull(s.get("a/secret.md"))
+        assertEquals(0, s.pageCount())
+        assertNull(s.search("secret").ifEmpty { null })
+    }
+
+    @Test
     fun clearDropsMemoryAndDisk() = runTest {
         val files = MemoryMirrorFiles()
         val s = store(files)

@@ -135,11 +135,21 @@ internal class WikiMirrorStore(
         if (pages.remove(path) != null) persistShardLocked(shardOf(path))
     }
 
-    /** Credential switch: drop memory and disk so account B never sees A's wiki. */
-    suspend fun clear(): Unit = mutex.withLock {
+    /** Drop hot pages immediately on credential switch (non-suspend). Disk wipe
+     *  follows via [clear]; reads are owner-guarded in [loadLocked] meanwhile. */
+    fun evictMemoryForCredentialSwitch() {
         pages = mutableMapOf()
         meta = WikiMirrorMeta()
         loaded = true
+    }
+
+    /** Credential switch: drop memory and disk so account B never sees A's wiki. */
+    suspend fun clear(): Unit = mutex.withLock {
+        evictMemoryForCredentialSwitch()
+        clearDiskLocked()
+    }
+
+    private fun clearDiskLocked() {
         runCatching {
             files.delete(META_FILE)
             for (shard in 0 until SHARD_COUNT) files.delete(shardFile(shard))
@@ -147,7 +157,15 @@ internal class WikiMirrorStore(
     }
 
     private fun loadLocked() {
-        if (loaded) return
+        if (loaded) {
+            // Credentials can switch while pages stay hot in memory (clear() is async).
+            // Never serve account A's corpus under account B's owner fingerprint.
+            if (meta.owner.isNotEmpty() && meta.owner != owner()) {
+                pages = mutableMapOf()
+                meta = WikiMirrorMeta()
+            }
+            return
+        }
         loaded = true
         val rawMeta = runCatching { files.read(META_FILE) }.getOrNull()
         val storedMeta = rawMeta?.let { runCatching { mirrorJson.decodeFromString(WikiMirrorMeta.serializer(), it) }.getOrNull() }
