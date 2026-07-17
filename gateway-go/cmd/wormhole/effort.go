@@ -52,6 +52,7 @@ const (
 // Ares isn't double-routed — but a static "off" entry applies regardless, because
 // the caller picked that entry BY NAME and no-thinking is its contract.
 func (rt *router) applyThinking(entry modelEntry, body []byte, noEffort bool) []byte {
+	entry = normalizeEntry(entry)
 	if noEffort && entry.ThinkingMode != thinkingModeOff {
 		return body
 	}
@@ -65,6 +66,9 @@ func (rt *router) applyThinking(entry modelEntry, body []byte, noEffort bool) []
 // reasoningStyleGLM is the z.ai / GLM-5.x native reasoning dialect (see modelEntry.Reasoning).
 const reasoningStyleGLM = "glm"
 
+// reasoningStyleDeepSeek is the api.deepseek.com native reasoning dialect.
+const reasoningStyleDeepSeek = "deepseek"
+
 // applyReasoning runs the cloud-dialect reasoning router for one resolved model.
 // Unlike applyThinking (vLLM chat_template_kwargs — owned by the Deneb gateway and
 // suppressed by X-Wormhole-No-Effort), this normalizes a cloud model's NATIVE
@@ -72,6 +76,7 @@ const reasoningStyleGLM = "glm"
 // the translation can happen and there is no double-routing to suppress. No-op
 // unless the entry declares a reasoning style.
 func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
+	entry = normalizeEntry(entry)
 	if entry.Reasoning == "" {
 		return body
 	}
@@ -80,6 +85,27 @@ func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
 		rt.log.Info("reasoning routed off", "model", entry.Name, "style", entry.Reasoning, "reason", reason)
 	}
 	return out
+}
+
+// normalizeEntry applies builtin profile packs to a model entry. The dsv4 pack
+// sets toggleKwarg "thinking" when absent so aliases like dsv4-nothink inherit
+// effort routing without repeating the kwarg name in config.
+func normalizeEntry(entry modelEntry) modelEntry {
+	if isDsv4Profile(entry) && entry.ToggleKwarg == "" {
+		entry.ToggleKwarg = "thinking"
+	}
+	return entry
+}
+
+func normalizeReasoningStyle(style string) string {
+	switch strings.ToLower(strings.TrimSpace(style)) {
+	case "glm":
+		return reasoningStyleGLM
+	case "deepseek", "dsv4":
+		return reasoningStyleDeepSeek
+	default:
+		return strings.ToLower(strings.TrimSpace(style))
+	}
 }
 
 // reasoningRoute classifies the request's effort (same Ares Decide() as the
@@ -92,9 +118,18 @@ func (rt *router) applyReasoning(entry modelEntry, body []byte) []byte {
 //	"high" as MAX, so the on-path must pin "high" — forwarding the gateway's "low"
 //	would silently run GLM at its deepest (max) reasoning.
 func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
-	if entry.Reasoning != reasoningStyleGLM {
+	entry = normalizeEntry(entry)
+	switch normalizeReasoningStyle(entry.Reasoning) {
+	case reasoningStyleGLM:
+		return reasoningRouteGLM(body, entry)
+	case reasoningStyleDeepSeek:
+		return reasoningRouteDeepSeek(body, entry)
+	default:
 		return body, "", false // unknown/empty style → leave the body untouched
 	}
+}
+
+func reasoningRouteGLM(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
 	// Explicit caller intent wins over Ares. The Deneb gateway translates its
 	// thinking config to reasoning_effort on the OpenAI path ("low" = thinking
 	// disabled, its documented minimal-reasoning floor). Ares used to override
@@ -128,19 +163,45 @@ func reasoningRoute(body []byte, entry modelEntry) (out []byte, reason string, t
 	return b, d.Reason, false
 }
 
+func reasoningRouteDeepSeek(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
+	if eff := getBodyStringField(body, "reasoning_effort"); eff != "" {
+		switch strings.ToLower(eff) {
+		case "high", "max":
+			b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
+			b = setBodyField(b, "reasoning_effort", strings.ToLower(eff))
+			return b, "explicit-" + eff, false
+		default:
+			b := setBodyField(body, "thinking", map[string]string{"type": "disabled"})
+			b = deleteBodyField(b, "reasoning_effort")
+			return b, "explicit-" + eff, true
+		}
+	}
+	d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
+	if d.ThinkingOff {
+		b := setBodyField(body, "thinking", map[string]string{"type": "disabled"})
+		b = deleteBodyField(b, "reasoning_effort")
+		return b, d.Reason, true
+	}
+	effort := reasoningEffortValue(entry)
+	b := setBodyField(body, "thinking", map[string]string{"type": "enabled"})
+	b = setBodyField(b, "reasoning_effort", effort)
+	return b, d.Reason, false
+}
+
 // thinkingRoute classifies the request's effort and, for a model with a thinking
 // toggle, injects chat_template_kwargs to skip the thinking phase — in the
 // direction the entry's ThinkingMode selects. Returns the (possibly modified)
 // body and a short reason tag for the log (empty reason = the model has no
 // toggle, so nothing was classified).
 func thinkingRoute(body []byte, entry modelEntry) (out []byte, reason string, thinkingOff bool) {
+	entry = normalizeEntry(entry)
 	if entry.ToggleKwarg == "" {
 		return body, "", false // model has no per-request thinking switch
 	}
 	switch entry.ThinkingMode {
 	case thinkingModeOff:
 		// Static no-thinking variant — no classification, always off.
-		return injectKwarg(body, entry.ToggleKwarg, false), "mode-off", true
+		return injectThinkingOff(body, entry), "mode-off", true
 	case thinkingModeOffUnlessHard:
 		// Inverted bias: default off; only a CLEAR hardness signal keeps the
 		// model's thinking. The ambiguous middle (long, context-heavy) routes
@@ -149,16 +210,16 @@ func thinkingRoute(body []byte, entry modelEntry) (out []byte, reason string, th
 		// needing the thinking phase.
 		d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
 		if hardReason(d.Reason) {
-			return body, d.Reason, false
+			return maybeInjectReasoningEffort(body, entry), d.Reason, false
 		}
-		return injectKwarg(body, entry.ToggleKwarg, false), d.Reason, true
+		return injectThinkingOff(body, entry), d.Reason, true
 	default:
 		// Judge with thinking-on bias (historical behavior).
 		d := ares.Decide(ares.DefaultProfile(), effortRequest(body))
 		if !d.ThinkingOff {
-			return body, d.Reason, false // hard/long/structured → keep thinking on
+			return maybeInjectReasoningEffort(body, entry), d.Reason, false // hard/long/structured → keep thinking on
 		}
-		return injectKwarg(body, entry.ToggleKwarg, false), d.Reason, true
+		return injectThinkingOff(body, entry), d.Reason, true
 	}
 }
 
@@ -168,6 +229,34 @@ func thinkingRoute(body []byte, entry modelEntry) (out []byte, reason string, th
 // structured (code/multiline) input.
 func hardReason(reason string) bool {
 	return reason == "attachments" || reason == "structured" || strings.HasPrefix(reason, "hard-signal:")
+}
+
+func wantsReasoningEffortKwarg(entry modelEntry) bool {
+	return isDsv4Profile(entry) || entry.ReasoningEffort != "" || entry.ToggleKwarg == "thinking"
+}
+
+func reasoningEffortValue(entry modelEntry) string {
+	switch strings.ToLower(strings.TrimSpace(entry.ReasoningEffort)) {
+	case "max":
+		return "max"
+	default:
+		return "high"
+	}
+}
+
+func maybeInjectReasoningEffort(body []byte, entry modelEntry) []byte {
+	if !wantsReasoningEffortKwarg(entry) {
+		return body
+	}
+	return injectKwargString(body, kwargReasoningEffort, reasoningEffortValue(entry))
+}
+
+func injectThinkingOff(body []byte, entry modelEntry) []byte {
+	out := injectKwarg(body, entry.ToggleKwarg, false)
+	if wantsReasoningEffortKwarg(entry) {
+		out = deleteKwarg(out, kwargReasoningEffort)
+	}
+	return out
 }
 
 // injectKwarg sets chat_template_kwargs.<key> = val on the request body, merging
@@ -187,6 +276,64 @@ func injectKwarg(body []byte, key string, val bool) []byte {
 		return body
 	}
 	kwargs[key] = enc
+	kwargsEnc, err := json.Marshal(kwargs)
+	if err != nil {
+		return body
+	}
+	fields["chat_template_kwargs"] = kwargsEnc
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// injectKwargString sets chat_template_kwargs.<key> = val (string) on the request
+// body, merging into any kwargs the client already sent.
+func injectKwargString(body []byte, key, val string) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return body
+	}
+	kwargs := map[string]json.RawMessage{}
+	if raw, ok := fields["chat_template_kwargs"]; ok {
+		_ = json.Unmarshal(raw, &kwargs)
+	}
+	enc, err := json.Marshal(val)
+	if err != nil {
+		return body
+	}
+	kwargs[key] = enc
+	kwargsEnc, err := json.Marshal(kwargs)
+	if err != nil {
+		return body
+	}
+	fields["chat_template_kwargs"] = kwargsEnc
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// deleteKwarg removes chat_template_kwargs.<key> when present.
+func deleteKwarg(body []byte, key string) []byte {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return body
+	}
+	raw, ok := fields["chat_template_kwargs"]
+	if !ok {
+		return body
+	}
+	kwargs := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &kwargs); err != nil {
+		return body
+	}
+	if _, ok := kwargs[key]; !ok {
+		return body
+	}
+	delete(kwargs, key)
 	kwargsEnc, err := json.Marshal(kwargs)
 	if err != nil {
 		return body

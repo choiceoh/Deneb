@@ -3,6 +3,8 @@ package main
 import (
 	"log/slog"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
 )
 
 // validateConfig returns human-readable warnings about a config that would load
@@ -39,6 +41,22 @@ func validateConfig(cfg config) []string {
 		}
 		if e.ThinkingMode != thinkingModeJudge && e.ToggleKwarg == "" {
 			warns = append(warns, "model "+e.Name+" sets thinkingMode but no toggleKwarg (the model's thinking switch name) — no thinking routing will happen")
+		}
+		if p := strings.ToLower(strings.TrimSpace(e.Profile)); p != "" && p != dsv4ProfileName {
+			warns = append(warns, "model "+e.Name+" has unknown profile "+e.Profile+` (want "dsv4") — profile optimizations will not apply`)
+		}
+		if re := strings.ToLower(strings.TrimSpace(e.ReasoningEffort)); re != "" && re != "high" && re != "max" {
+			warns = append(warns, "model "+e.Name+" has unknown reasoningEffort "+e.ReasoningEffort+` (want "high" or "max") — it will default to "high"`)
+		}
+		if rs := normalizeReasoningStyle(e.Reasoning); e.Reasoning != "" && rs != reasoningStyleGLM && rs != reasoningStyleDeepSeek {
+			warns = append(warns, "model "+e.Name+" has unknown reasoning style "+e.Reasoning+` (want "glm" or "deepseek"/"dsv4") — cloud reasoning routing will not apply`)
+		}
+		norm := normalizeEntry(e)
+		if isDsv4Profile(e) && norm.ToggleKwarg == "" && e.Reasoning == "" {
+			warns = append(warns, "model "+e.Name+` has profile "dsv4" but no toggleKwarg or reasoning style — neither local nor cloud effort routing will apply`)
+		}
+		if modelcaps.DeepSeekV4Model(e.Name) && !isDsv4Profile(e) && e.ToggleKwarg == "" && e.Reasoning == "" {
+			warns = append(warns, "model "+e.Name+" looks like DeepSeek V4 but has no profile/toggleKwarg/reasoning — consider profile \"dsv4\" or toggleKwarg \"thinking\" for effort routing")
 		}
 		proto := e.protocol()
 		// The anthropic /v1 gotcha: wormhole appends only "/messages" to the entry

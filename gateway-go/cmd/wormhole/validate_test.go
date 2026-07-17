@@ -24,7 +24,7 @@ func TestValidateConfig_ReturnsWarningsForInvalidEntries(t *testing.T) {
 		},
 		{
 			name:      "openai url needs no /v1 suffix check",
-			cfg:       config{Models: []modelEntry{{Name: "dsv4", URL: "http://127.0.0.1:8000/v1"}}},
+			cfg:       config{Models: []modelEntry{{Name: "dsv4", URL: "http://127.0.0.1:8000/v1", ToggleKwarg: "thinking"}}},
 			wantClean: true,
 		},
 		{
@@ -46,6 +46,26 @@ func TestValidateConfig_ReturnsWarningsForInvalidEntries(t *testing.T) {
 			name:       "empty url",
 			cfg:        config{Models: []modelEntry{{Name: "x", URL: ""}}},
 			wantSubstr: "empty url",
+		},
+		{
+			name:       "unknown profile",
+			cfg:        config{Models: []modelEntry{{Name: "x", URL: "http://a/v1", Profile: "gpt4"}}},
+			wantSubstr: "unknown profile",
+		},
+		{
+			name:       "unknown reasoning effort",
+			cfg:        config{Models: []modelEntry{{Name: "x", URL: "http://a/v1", ReasoningEffort: "medium"}}},
+			wantSubstr: "unknown reasoningEffort",
+		},
+		{
+			name:       "unknown reasoning style",
+			cfg:        config{Models: []modelEntry{{Name: "x", URL: "http://a/v1", Reasoning: "openai"}}},
+			wantSubstr: "unknown reasoning style",
+		},
+		{
+			name:       "dsv4-looking name without profile",
+			cfg:        config{Models: []modelEntry{{Name: "dsv4-nothink", URL: "http://a/v1"}}},
+			wantSubstr: "looks like DeepSeek V4",
 		},
 	}
 	for _, c := range cases {

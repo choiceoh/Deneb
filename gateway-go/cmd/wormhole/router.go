@@ -252,6 +252,7 @@ func (rt *router) shapeFor(entry modelEntry, body []byte, proto string, r *http.
 		out = rt.applyThinking(entry, out, noEffortRouting(r))
 		out = rt.applyReasoning(entry, out)
 	}
+	out = applyDsv4Profile(entry, out)
 	return out
 }
 
@@ -316,6 +317,7 @@ func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Re
 			out = rt.applyThinking(entry, out, noEffortRouting(r))
 			out = rt.applyReasoning(entry, out)
 		}
+		out = applyDsv4Profile(entry, out)
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
 		if err != nil {
 			rt.recordCircuitFailure(entry.Name, false, 0)

@@ -35,15 +35,20 @@ func TestThinkingRoute_KeepsThinkingWhenTurnIsHard(t *testing.T) {
 	if off {
 		t.Error("a hard-signal turn should keep thinking on")
 	}
-	if bytes.Contains(out, []byte("chat_template_kwargs")) {
-		t.Error("no injection expected on a hard turn")
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	kw, _ := m["chat_template_kwargs"].(map[string]any)
+	if kw["reasoning_effort"] != "high" {
+		t.Errorf("expected chat_template_kwargs.reasoning_effort=high on hard turn, got %v", m["chat_template_kwargs"])
 	}
 }
 
 func TestThinkingRoute_StaticOffAlwaysInjectsWhenHard(t *testing.T) {
 	entry := modelEntry{Name: "dsv4-nothink", ToggleKwarg: "thinking", ThinkingMode: thinkingModeOff}
 	// "분석" is a hard signal — the judge mode would keep thinking; static off must not.
-	body := []byte(`{"model":"dsv4-nothink","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
+	body := []byte(`{"model":"dsv4-nothink","messages":[{"role":"user","content":"이거 분석해줘"}],"chat_template_kwargs":{"reasoning_effort":"high"}}`)
 	out, reason, off := thinkingRoute(body, entry)
 	if !off || reason != "mode-off" {
 		t.Fatalf("mode off must always inject; off=%v reason=%q", off, reason)
@@ -55,6 +60,9 @@ func TestThinkingRoute_StaticOffAlwaysInjectsWhenHard(t *testing.T) {
 	kw, _ := m["chat_template_kwargs"].(map[string]any)
 	if kw["thinking"] != false {
 		t.Errorf("expected chat_template_kwargs.thinking=false, got %v", m["chat_template_kwargs"])
+	}
+	if _, ok := kw["reasoning_effort"]; ok {
+		t.Errorf("reasoning_effort must be removed when thinking is off, got %v", m["chat_template_kwargs"])
 	}
 }
 
@@ -73,11 +81,19 @@ func TestThinkingRoute_OffUnlessHardModeWithMixedSignals(t *testing.T) {
 		t.Error("expected kwargs injection on the ambiguous-middle turn")
 	}
 
-	// A clear hard signal keeps the model's thinking (no injection).
+	// A clear hard signal keeps the model's thinking and injects reasoning_effort.
 	hard := []byte(`{"model":"dsv4-auto","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
 	out, reason, off = thinkingRoute(hard, entry)
-	if off || bytes.Contains(out, []byte("chat_template_kwargs")) {
+	if off {
 		t.Errorf("hard-signal turn must keep thinking; off=%v reason=%q", off, reason)
+	}
+	var hm map[string]any
+	if err := json.Unmarshal(out, &hm); err != nil {
+		t.Fatal(err)
+	}
+	kw, _ := hm["chat_template_kwargs"].(map[string]any)
+	if kw["reasoning_effort"] != "high" {
+		t.Errorf("expected reasoning_effort=high on hard turn, got %v", hm["chat_template_kwargs"])
 	}
 
 	// Structured (code-fenced) input also counts as clearly hard.
@@ -176,8 +192,8 @@ func TestThinkingRoute_KeepsThinkingWhenContextIsHeavy(t *testing.T) {
 			if off {
 				t.Errorf("short follow-up in a heavy thread must keep thinking; reason=%q", reason)
 			}
-			if bytes.Contains(out, []byte("chat_template_kwargs")) {
-				t.Error("no injection expected when thinking is kept")
+			if !bytes.Contains(out, []byte(`"reasoning_effort":"high"`)) {
+				t.Errorf("expected reasoning_effort on heavy thread, got %s", out)
 			}
 			if reason != "context-heavy" {
 				t.Errorf("reason = %q, want context-heavy", reason)
@@ -229,6 +245,23 @@ func TestThinkingRoute_WritesThinkingFalseOnForward(t *testing.T) {
 		strings.NewReader(`{"model":"dsv4","messages":[{"role":"user","content":"hi"}]}`))
 	if !strings.Contains(gotBody, `"thinking":false`) {
 		t.Errorf("a simple request should reach the upstream with thinking:false; upstream saw: %s", gotBody)
+	}
+}
+
+func TestThinkingRoute_InjectsReasoningEffortOnHardTurn(t *testing.T) {
+	entry := modelEntry{Name: "dsv4", Profile: "dsv4", ReasoningEffort: "max", ThinkingMode: thinkingModeOffUnlessHard}
+	body := []byte(`{"model":"dsv4","messages":[{"role":"user","content":"이거 분석해줘"}]}`)
+	out, _, off := thinkingRoute(body, entry)
+	if off {
+		t.Fatal("hard turn must keep thinking on")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	kw, _ := m["chat_template_kwargs"].(map[string]any)
+	if kw["reasoning_effort"] != "max" {
+		t.Errorf("expected reasoning_effort=max, got %v", m["chat_template_kwargs"])
 	}
 }
 
@@ -323,5 +356,53 @@ func TestReasoningRoute_NoStylePreservesBody(t *testing.T) {
 	out, reason, off := reasoningRoute(body, entry)
 	if off || reason != "" || !bytes.Equal(out, body) {
 		t.Errorf("no reasoning style must be a no-op; off=%v reason=%q changed=%v", off, reason, !bytes.Equal(out, body))
+	}
+}
+
+func TestReasoningRoute_DeepSeekOffWithSimpleTurn(t *testing.T) {
+	entry := modelEntry{Name: "deepseek-v4", Reasoning: "deepseek"}
+	body := []byte(`{"model":"deepseek-v4","messages":[{"role":"user","content":"안녕"}],"reasoning_effort":"low"}`)
+	out, _, off := reasoningRoute(body, entry)
+	if !off {
+		t.Fatal("simple turn should route deepseek reasoning off")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	if think, _ := m["thinking"].(map[string]any); think["type"] != "disabled" {
+		t.Errorf("expected thinking.type=disabled, got %v", m["thinking"])
+	}
+}
+
+func TestReasoningRoute_DeepSeekKeepsMaxExplicit(t *testing.T) {
+	entry := modelEntry{Name: "deepseek-v4", Reasoning: "dsv4"}
+	body := []byte(`{"model":"deepseek-v4","messages":[{"role":"user","content":"안녕"}],"reasoning_effort":"max"}`)
+	out, reason, off := reasoningRoute(body, entry)
+	if off || reason != "explicit-max" {
+		t.Fatalf("explicit max must stay enabled (off=%v reason=%q)", off, reason)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["reasoning_effort"] != "max" {
+		t.Errorf("expected reasoning_effort=max, got %v", m["reasoning_effort"])
+	}
+}
+
+func TestReasoningRoute_DeepSeekUsesEntryDefaultEffort(t *testing.T) {
+	entry := modelEntry{Name: "deepseek-v4", Reasoning: "deepseek", ReasoningEffort: "max"}
+	body := []byte(`{"model":"deepseek-v4","messages":[{"role":"user","content":"이 데이터를 심층 분석해줘"}]}`)
+	out, _, off := reasoningRoute(body, entry)
+	if off {
+		t.Fatal("hard turn should keep deepseek reasoning on")
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["reasoning_effort"] != "max" {
+		t.Errorf("expected reasoning_effort=max from entry default, got %v", m["reasoning_effort"])
 	}
 }

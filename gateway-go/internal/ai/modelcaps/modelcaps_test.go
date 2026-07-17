@@ -50,8 +50,10 @@ func TestThinkingToggleKwargAllowsVLLMDeniesOtherProviders(t *testing.T) {
 	for _, c := range []struct{ p, m string }{
 		{"vllm", "deepseek-v4-flash"},
 		{"vllm", "DeepSeek-V4-Flash"},     // case-insensitive
+		{"vllm", "dsv4-nothink"},          // dsv4 alias token
 		{"wormhole", "deepseek-v4-flash"}, // main routed via wormhole/dsv4 must still route
 		{"wormhole-vllm", "deepseek-v4"},  // wormhole alias prefix
+		{"wormhole", "wormhole/dsv4"},     // provider-prefixed alias id
 	} {
 		if got := ThinkingToggleKwarg(c.p, c.m); got != "thinking" {
 			t.Errorf("ThinkingToggleKwarg(%q,%q) = %q, want \"thinking\"", c.p, c.m, got)
@@ -71,5 +73,24 @@ func TestThinkingToggleKwargAllowsVLLMDeniesOtherProviders(t *testing.T) {
 	}
 	if Builtin("wormhole", "deepseek-v4-flash").ThinkingToggleKwarg != "thinking" {
 		t.Error("Builtin must surface the toggle kwarg for wormhole/dsv4")
+	}
+}
+
+func TestDeepSeekV4ModelRecognizesAliases(t *testing.T) {
+	for _, m := range []string{
+		"deepseek-v4-flash",
+		"wormhole/dsv4",
+		"dsv4-nothink",
+		"local/dsv4",
+		"custom-dsv4",
+	} {
+		if !DeepSeekV4Model(m) {
+			t.Errorf("DeepSeekV4Model(%q) = false, want true", m)
+		}
+	}
+	for _, m := range []string{"step3p7", "adsv4extra", "glm-5.2", "deepseek-r1"} {
+		if DeepSeekV4Model(m) {
+			t.Errorf("DeepSeekV4Model(%q) = true, want false", m)
+		}
 	}
 }

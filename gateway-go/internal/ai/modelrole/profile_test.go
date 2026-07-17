@@ -17,6 +17,8 @@ func TestProfileForReturnsReasoningAndSamplingFlags(t *testing.T) {
 		{"qwen36 alias", "qwen36", true, true},
 		{"qwq: reasoning, no sampling", "qwq-32b", true, false},
 		{"deepseek-v4: sampling, reasoning stays false", "deepseek-v4-flash", false, true},
+		{"dsv4 alias: sampling", "dsv4-nothink", false, true},
+		{"wormhole dsv4 alias: sampling", "wormhole/dsv4", false, true},
 		{"deepseek-v4 provider-prefixed", "vllm/deepseek-v4-flash", false, true},
 		{"deepseek-r1: reasoning", "deepseek-r1", true, false},
 		{"gpt-oss: reasoning", "gpt-oss-120b", true, false},

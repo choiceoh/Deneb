@@ -1,6 +1,10 @@
 package modelrole
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelcaps"
+)
 
 // Profile holds model-specific tuning the gateway applies whenever a given model
 // is selected: whether the model emits a reasoning channel, and vendor-
@@ -53,7 +57,7 @@ func ProfileFor(model string) Profile {
 			TopK:        ptr(20),
 		}
 
-	case strings.Contains(m, "deepseek-v4"), strings.Contains(m, "deepseek_v4"):
+	case modelcaps.DeepSeekV4Model(model):
 		// DeepSeek-V4 family (deepseek-v4-flash is the self-hosted main model):
 		// recommended sampling temp 0.6 / top_p 0.95 (model card; the shipped
 		// generation_config.json says 1.0/1.0, which loops on long agentic

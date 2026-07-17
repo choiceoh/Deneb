@@ -61,16 +61,28 @@ type modelEntry struct {
 	//                       middle (long, context-heavy) routes off — "노추론
 	//                       기본, 추론은 필요할 때만".
 	ThinkingMode string `json:"thinkingMode,omitempty"`
+	// Profile selects a builtin optimization pack for this entry. Currently:
+	//   "dsv4" — DeepSeek V4: sets toggleKwarg "thinking" when absent, injects
+	//   chat_template_kwargs.reasoning_effort on the thinking-on path, and pins
+	//   vendor sampling (temp 0.6 / top_p 0.95) when thinking is off.
+	Profile string `json:"profile,omitempty"`
+	// ReasoningEffort is the default reasoning_effort for dsv4 entries on the
+	// thinking-on path (local chat_template_kwargs or cloud body field). "" or
+	// "high" (default) or "max".
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	// Reasoning selects a cloud model's NATIVE reasoning dialect for effort
 	// routing — for backends that don't use vLLM's chat_template_kwargs toggle.
 	// Unlike ToggleKwarg, this runs even under X-Wormhole-No-Effort, because the
 	// Deneb gateway can't express these params itself (so wormhole is the only
 	// place the translation can happen — there's no double-routing to avoid).
-	// Currently one style:
+	// Supported styles:
 	//   "glm" — z.ai / GLM-5.x. Per-turn, like dsv4: an obviously-simple turn →
 	//   thinking:{"type":"disabled"} (off); otherwise reasoning_effort:"high"
 	//   (on). GLM honors only reasoning_effort high|max and resolves anything but
 	//   an explicit "high" to MAX, so on-mode pins "high" rather than leaking max.
+	//   "deepseek" (alias "dsv4") — api.deepseek.com. Like GLM but honors "max"
+	//   without pinning it to "high"; explicit high|max → enabled+that value;
+	//   other explicit efforts → disabled (gateway low=off contract).
 	Reasoning string `json:"reasoning,omitempty"`
 	// Fallback names another configured entry to fail over to when THIS
 	// entry's upstream stays unreachable or returns a transient status after the

@@ -16,13 +16,16 @@ import (
 func (rt *router) lookup(name string) (modelEntry, bool) {
 	if e, ok := rt.cur().models[name]; ok {
 		if e.Fleet {
-			return rt.resolveFleetEntry(e)
+			e, ok = rt.resolveFleetEntry(e)
+			if !ok {
+				return modelEntry{}, false
+			}
 		}
-		return e, true
+		return normalizeEntry(e), true
 	}
 	if f := rt.fleet.Load(); f != nil {
 		if e, ok := (*f)[name]; ok {
-			return e, true
+			return normalizeEntry(e), true
 		}
 	}
 	return modelEntry{}, false

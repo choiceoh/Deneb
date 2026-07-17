@@ -76,11 +76,37 @@ func ThinkingToggleKwarg(providerID, model string) string {
 	if !ServesVllmBacked(providerID) {
 		return ""
 	}
-	m := strings.ToLower(model)
-	if strings.Contains(m, "deepseek-v4") || strings.Contains(m, "deepseek_v4") {
+	if DeepSeekV4Model(model) {
 		return "thinking"
 	}
 	return ""
+}
+
+// DeepSeekV4Model reports whether model names a DeepSeek V4 family model.
+// Matches deepseek-v4/deepseek_v4 spellings and dsv4 when it appears as a
+// token (dsv4-, -dsv4, /dsv4, or the bare id) — not arbitrary substrings.
+func DeepSeekV4Model(model string) bool {
+	raw := strings.ToLower(strings.TrimSpace(model))
+	if raw == "" {
+		return false
+	}
+	if strings.Contains(raw, "deepseek-v4") || strings.Contains(raw, "deepseek_v4") {
+		return true
+	}
+	id := raw
+	if i := strings.LastIndex(raw, "/"); i >= 0 {
+		id = raw[i+1:]
+	}
+	switch {
+	case id == "dsv4", strings.HasPrefix(id, "dsv4-"):
+		return true
+	case strings.HasSuffix(id, "-dsv4"):
+		return true
+	case strings.Contains(raw, "/dsv4"):
+		return true
+	default:
+		return false
+	}
 }
 
 // ServesVllmBacked reports whether a provider id forwards requests to a vLLM
