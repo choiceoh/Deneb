@@ -1,6 +1,6 @@
 ---
 name: morning-letter
-version: "1.2.0"
+version: "1.2.1"
 category: productivity
 description: "매일 아침 모닝레터 생성 및 발송. 날씨, 환율, 구리시세, 일정, 메일, 미결 전자결재 요약을 수집해 아침 브리핑을 작성한다. Use when: 모닝레터, morning letter, 아침 브리핑, 오늘의 브리핑, daily briefing. NOT for: 일반 메일 분석, 회신 작성, 장문 회의록 정리."
 metadata:
@@ -9,6 +9,8 @@ metadata:
       {
         "emoji": "🌅",
         "tags": ["briefing", "daily", "morning", "summary"],
+        "triggers": ["모닝레터", "아침 브리핑", "오늘의 브리핑", "morning letter"],
+        "requires_tools": ["morning_letter"],
       },
   }
 ---
@@ -31,9 +33,10 @@ metadata:
 
 ### 1단계: 데이터 수집
 
-`morning_letter` 도구를 호출한다. 파라미터 없이 호출하면 8개 섹션(날씨·환율·
-구리시세·일정·메일·마감·미해결질문·미결 전자결재)을 병렬 수집하여 JSON 데이터를 반환한다. **deferred
-도구**라 스키마가 안 보이면 `fetch_tools`로 `morning_letter`를 먼저 로드한다.
+`morning_letter` 도구를 바로 한 번 호출한다. 정확한 트리거로 이 스킬이 자동
+로드되면 필수 도구 스키마도 첫 요청부터 함께 활성화된다. 파라미터 없이 호출하면
+8개 섹션(날씨·환율·구리시세·일정·메일·마감·미해결질문·미결 전자결재)을 병렬
+수집하여 JSON 데이터를 반환한다.
 
 ```json
 {"tool": "morning_letter"}
@@ -51,6 +54,12 @@ metadata:
 - `sections.groupware_pending`: 미결 전자결재 (`count`, `stale_count`, `items`: doc_id, title, drafter, date, age_hours, escalation_level, stale_label). `stale_label`이 있으면 방치(4h/24h) 건 — 카드에서 강조. 미설정(`configured:false`)이거나 0건이면 카드 생략
 
 각 섹션에 `ok: false`이면 해당 섹션 조회에 실패한 것이다.
+
+반환된 섹션을 해당 데이터의 정본으로 사용한다. `calendar`·`mail_archive`·`wiki`로
+같은 일정·메일·마감·미해결질문을 다시 수집하지 마라. 프롬프트가 위키의 운용 규칙이나
+프로젝트 맥락 확인을 별도로 요구하면 그 확인은 유지하되, `morning_letter` 호출 뒤에는
+중복 조회하지 않는다. 특정 섹션이 `ok:false`이고 결과에 꼭 필요할 때만 그 섹션 하나를
+개별 도구로 보완한다.
 
 미해결 질문 카드 규칙: `open_questions.items`가 비어 있지 않으면 마감 카드 뒤에
 "확인 필요" 카드를 하나 추가한다 — 항목마다 `{project}: {question} ({age_days}일째)`

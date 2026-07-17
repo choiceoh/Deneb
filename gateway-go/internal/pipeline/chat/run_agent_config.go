@@ -61,6 +61,9 @@ type agentConfigDeps struct {
 	// activated in earlier runs (replayActivatedTools, deferred_replay.go);
 	// they re-enter this run's Tools array and pre-seed DeferredActivation.
 	ReplayDeferredTools []string
+	// InitialDeferredTools are required by exact-trigger skills auto-loaded for
+	// this turn. They enter the first provider request without a fetch_tools hop.
+	InitialDeferredTools []string
 }
 
 // agentExecutionPolicy is the resolved, immutable execution policy for one
@@ -253,6 +256,21 @@ func appendReplayedDeferredTools(registry *ToolRegistry, tools []llm.Tool, repla
 	return tools
 }
 
+func mergeDeferredToolNames(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	var merged []string
+	for _, group := range groups {
+		for _, name := range group {
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			merged = append(merged, name)
+		}
+	}
+	return merged
+}
+
 func resolveAgentExecutionPolicy(params RunParams, deps runDeps, cachedSession *session.Session, configuredMaxTokens int) agentExecutionPolicy {
 	maxTurns, timeout := resolveAgentRunLimits(params, deps, cachedSession)
 	maxOutputRecovery, maxOutputScaleFactors, streamIdleTimeout, parallelSafeTool := resolveAgentOutputPolicy(deps.briefcaseMode)
@@ -388,8 +406,9 @@ func buildAgentConfig(
 	acd agentConfigDeps,
 	logger *slog.Logger,
 ) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolport.ToolExecStats, skillConsults *SkillConsultLog) {
-	tools := buildAgentTools(acd.Tools, sessionToolPreset, acd.ReplayDeferredTools)
-	state := newAgentRunState(acd.ReplayDeferredTools)
+	initialDeferredTools := mergeDeferredToolNames(acd.ReplayDeferredTools, acd.InitialDeferredTools)
+	tools := buildAgentTools(acd.Tools, sessionToolPreset, initialDeferredTools)
+	state := newAgentRunState(initialDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)
 	turnHooks := newAgentTurnHooks(params, deps, acd, sessionToolPreset)
 

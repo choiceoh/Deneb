@@ -143,7 +143,7 @@ func executeAgentRun(
 	messages := assembleMessages(ctx, params, deps, prep, mr, logger, cHooks)
 	assembleMs := time.Since(assembleStart).Milliseconds()
 
-	messages, tailForSystem, autoLoadedSkills := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
+	messages, tailForSystem, autoLoadedSkills, autoActivatedTools := applyTailAdditions(params, deps, prep, sessionToolPreset, messages)
 
 	// Stage 2.5: difficulty model routing — an obviously-simple interactive
 	// main turn rides main2 (second main-tier subscription) when configured,
@@ -185,6 +185,7 @@ func executeAgentRun(
 
 	// Stage 4: Build tool list and agent config.
 	acd := buildAgentConfigDeps(deps, messages, sessionToolPreset, logger)
+	acd.InitialDeferredTools = autoActivatedTools
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
 	cfg, spawnFlag, execStats, skillConsults := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
@@ -696,7 +697,7 @@ func ephemeralNeedsExplicitAppend(params RunParams, prep prepResult) bool {
 // explicit scope). Skill context is gated on the run's effective preset: a
 // preset without the skills tool (btw "conversation", code: "coding") must
 // not acquire a new procedure outside its restricted role.
-func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string, []string) {
+func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, sessionToolPreset string, messages []llm.Message) ([]llm.Message, string, []string, []string) {
 	notebookGrounding := ""
 	if nbID, updated, ok := activeGroundingNotebook(deps, params.SessionKey); ok {
 		if g, hit := cachedNotebookGrounding(params.SessionKey, nbID, updated); hit {
@@ -709,18 +710,23 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	var skillHints string
 	var hintedSkills []string
 	var autoLoadedSkills []string
+	var autoActivatedTools []string
 	if !deps.briefcaseMode {
-		skillHints, hintedSkills, autoLoadedSkills = buildSkillHints(params, sessionToolPreset, cachedResolvedSkills())
+		resolved := cachedResolvedSkills()
+		skillHints, hintedSkills, autoLoadedSkills = buildSkillHints(params, sessionToolPreset, resolved)
+		autoActivatedTools = skillRequiredDeferredTools(deps.tools, autoLoadedSkills, resolved, sessionToolPreset)
 	}
 	if len(hintedSkills) > 0 {
 		// Keep the historical event name for dashboards while distinguishing
 		// direct JIT loads from read-pointer fallbacks.
 		deps.logger.Info("skill context injected",
 			"session", params.SessionKey, "skills", strings.Join(hintedSkills, ","),
-			"autoLoaded", strings.Join(autoLoadedSkills, ","))
+			"autoLoaded", strings.Join(autoLoadedSkills, ","),
+			"autoActivatedTools", strings.Join(autoActivatedTools, ","))
 		agentlog.LogTyped(deps.agentLog, params.SessionKey, "run.skillhints", map[string]any{
-			"skills":     hintedSkills,
-			"autoLoaded": autoLoadedSkills,
+			"skills":             hintedSkills,
+			"autoLoaded":         autoLoadedSkills,
+			"autoActivatedTools": autoActivatedTools,
 		})
 	}
 	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
@@ -729,7 +735,7 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	if !tailInjected {
 		tailForSystem = strings.Join(tailAdds, "\n\n")
 	}
-	return messages, tailForSystem, autoLoadedSkills
+	return messages, tailForSystem, autoLoadedSkills, autoActivatedTools
 }
 
 // wireBeforeAPICall assembles cfg.BeforeAPICall and applies the provider's

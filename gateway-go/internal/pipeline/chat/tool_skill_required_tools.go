@@ -27,6 +27,44 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
 
+// skillRequiredDeferredTools resolves the deferred capability bundle for the
+// named skills. Ordering follows the resolved catalog and each skill's
+// requires_tools declaration; duplicates, eager tools, unknown tools, and
+// preset-excluded tools are omitted.
+func skillRequiredDeferredTools(registry *ToolRegistry, skillNames []string, resolved []skills.PromptSkill, preset string) []string {
+	if registry == nil || len(skillNames) == 0 || len(resolved) == 0 {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(skillNames))
+	for _, name := range skillNames {
+		wanted[name] = struct{}{}
+	}
+	allowed := toolwire.AllowedTools(preset)
+	seen := make(map[string]struct{})
+	var names []string
+	for _, skill := range resolved {
+		if _, ok := wanted[skill.Name]; !ok {
+			continue
+		}
+		for _, name := range skill.RequiresTools {
+			if _, ok := registry.DeferredToolDef(name); !ok {
+				continue
+			}
+			if allowed != nil {
+				if _, ok := allowed[name]; !ok {
+					continue
+				}
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // activateSkillRequiredTools activates the named skill's requires_tools that
 // are deferred, preset-allowed, and not yet active. Returns a short notice to
 // append to the tool output, or "" when nothing was activated. Eager and
@@ -41,29 +79,10 @@ func activateSkillRequiredTools(ctx context.Context, registry *ToolRegistry, ski
 	if da == nil {
 		return ""
 	}
-	var required []string
-	for _, s := range resolved {
-		if s.Name == skillName {
-			required = s.RequiresTools
-			break
-		}
-	}
-	if len(required) == 0 {
-		return ""
-	}
-	// Same preset gate as fetch_tools: a restricted run must not activate a
-	// tool Execute would reject anyway. nil allowed = no restriction.
-	allowed := toolwire.AllowedTools(toolport.ToolPresetFromContext(ctx))
 	var names []string
-	for _, name := range required {
-		if _, ok := registry.DeferredToolDef(name); !ok {
-			continue
-		}
-		if allowed != nil {
-			if _, ok := allowed[name]; !ok {
-				continue
-			}
-		}
+	for _, name := range skillRequiredDeferredTools(
+		registry, []string{skillName}, resolved, toolport.ToolPresetFromContext(ctx),
+	) {
 		if da.IsActive(name) {
 			continue
 		}

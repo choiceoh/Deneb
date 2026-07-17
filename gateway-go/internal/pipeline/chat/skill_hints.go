@@ -84,9 +84,6 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 			}
 			safeName := strings.Join(strings.Fields(skill.Name), " ")
 			fmt.Fprintf(&loaded, "\n\n--- %s instructions begin ---\n%s\n--- %s instructions end ---", safeName, body, safeName)
-			if len(skill.RequiresTools) > 0 {
-				fmt.Fprintf(&loaded, "\nRequired tools: %s. Activate missing schemas with `fetch_tools` before use.", strings.Join(skill.RequiresTools, ", "))
-			}
 			autoLoaded = append(autoLoaded, skill.Name)
 			loadedBytes += len(body)
 			continue
