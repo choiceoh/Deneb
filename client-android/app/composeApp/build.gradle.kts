@@ -100,7 +100,6 @@ kotlin {
             implementation(libs.ktor.client.android)
             implementation(libs.koin.android)
             implementation(libs.material)
-            implementation(libs.bouncycastle.provider)
             // FusedLocationProvider for on-demand location sensing (foss flavor only
             // declares the permission; readCurrentLocation gates on it at runtime).
             implementation(libs.play.services.location)
@@ -108,7 +107,6 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.compose.material3)
             implementation(libs.compose.material.icons.core)
-            implementation(libs.compose.material.icons.extended)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
@@ -145,14 +143,11 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.coil.svg)
             implementation(libs.coil.network.ktor3)
-
-            implementation(libs.reorderable)
         }
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.ktor.client.cio)
-            implementation(libs.bouncycastle.provider)
             implementation(libs.slf4j.nop)
             // Compose UI test API powers the headless semantics inspector (ui-inspect.sh /
             // the previewInspect task): it dumps the semantics tree as TEXT and drives nodes
@@ -201,9 +196,8 @@ compose.desktop {
         // (renderPreviews + native-app.sh `:composeApp:run`), not a shipped product —
         // the desktop workstation is a separate app (Andromeda). So only the run
         // entrypoint is configured. The installer packaging (nativeDistributions:
-        // MSI/DMG/Deb/Rpm/AppImage) and its release-proguard (+ the BouncyCastle
-        // signed-jar restore that only mattered for that proguard pass) were removed
-        // with the desktop product.
+        // MSI/DMG/Deb/Rpm/AppImage) and its release-proguard were removed with the
+        // desktop product.
         mainClass = "ai.deneb.MainKt"
     }
 }

@@ -28,15 +28,15 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.automirrored.filled.Chat as ChatFilled
-import androidx.compose.material.icons.automirrored.outlined.Chat as ChatOutlined
-import androidx.compose.material.icons.filled.CalendarMonth as CalendarMonthFilled
+import ai.deneb.ui.icons.automirrored.filled.Chat as ChatFilled
+import ai.deneb.ui.icons.automirrored.outlined.Chat as ChatOutlined
+import ai.deneb.ui.icons.filled.CalendarMonth as CalendarMonthFilled
 import androidx.compose.material.icons.filled.Email as EmailFilled
-import androidx.compose.material.icons.filled.MoreHoriz as MoreFilled
+import ai.deneb.ui.icons.filled.MoreHoriz as MoreFilled
 import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
-import androidx.compose.material.icons.outlined.CalendarMonth as CalendarMonthOutlined
+import ai.deneb.ui.icons.outlined.CalendarMonth as CalendarMonthOutlined
 import androidx.compose.material.icons.outlined.Email as EmailOutlined
-import androidx.compose.material.icons.outlined.MoreHoriz as MoreOutlined
+import ai.deneb.ui.icons.outlined.MoreHoriz as MoreOutlined
 import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
 
 /**

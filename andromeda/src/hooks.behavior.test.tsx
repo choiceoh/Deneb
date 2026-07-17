@@ -1,7 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { denebAuthProvider } from "./authProvider";
 import type { GatewayConfig } from "./gateway";
 import { useFileDrop } from "./useFileDrop";
 import { useRpc } from "./useRpc";
@@ -28,73 +27,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("denebAuthProvider", () => {
-  it.each([
-    [{ url: "", token: "" }, false],
-    [{ url: "http://gateway.test", token: "" }, false],
-    [{ url: "", token: "secret" }, false],
-    [connected, true],
-  ] as const)("when derives configured state from both credentials: %j", async (cfg, configured) => {
-    const provider = denebAuthProvider(cfg);
-
-    await expect(provider.login({})).resolves.toEqual({ success: configured });
-    const check = await provider.check();
-    expect(check.authenticated).toBe(configured);
-    if (!configured) {
-      expect(check.error).toEqual({ name: "미연결", message: "게이트웨이 URL/토큰을 입력하세요" });
-    }
-  });
-
-  it("always allows the local logout operation", async () => {
-    await expect(denebAuthProvider(connected).logout({})).resolves.toEqual({ success: true });
-    await expect(denebAuthProvider({ url: "", token: "" }).logout({})).resolves.toEqual({ success: true });
-  });
-
-  it("returns Refine errors unchanged", async () => {
-    const error = new Error("permission denied");
-    await expect(denebAuthProvider(connected).onError(error)).resolves.toEqual({ error });
-  });
-
-  it("does not ping when credentials are incomplete", async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
-
-    await expect(denebAuthProvider({ url: "http://gateway.test", token: "" }).getIdentity?.()).resolves.toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("when turns gateway health into the Refine identity", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => rpcResponse({ version: "2.7.1", model: "provider/smart" })),
-    );
-
-    await expect(denebAuthProvider(connected).getIdentity?.()).resolves.toEqual({
-      name: "게이트웨이 v2.7.1",
-      model: "provider/smart",
-    });
-  });
-
-  it("uses a question mark when an older gateway omits its version", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => rpcResponse({ model: "local/tiny" })),
-    );
-
-    await expect(denebAuthProvider(connected).getIdentity?.()).resolves.toEqual({
-      name: "게이트웨이 v?",
-      model: "local/tiny",
-    });
-  });
-
-  it.each([
-    ["network failure", () => Promise.reject(new Error("when offline"))],
-    ["bad response", () => Promise.resolve(failedResponse("not ready"))],
-  ])("fails identity lookup closed on %s", async (_label, implementation) => {
-    vi.stubGlobal("fetch", vi.fn(implementation));
-    await expect(denebAuthProvider(connected).getIdentity?.()).resolves.toBeNull();
-  });
-});
 
 type DragLike = {
   dataTransfer?: {

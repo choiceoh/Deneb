@@ -204,6 +204,5 @@ export function resourceDef(name: string): ResourceDef {
   return r;
 }
 
-// Metadata for <Refine resources={...}> — keeps Refine's resource awareness in
-// sync with the registry without hand-maintaining a second list.
+// Label map derived from the registry (tests + pane chrome).
 export const refineResources = RESOURCE_DEFS.map((r) => ({ name: r.name, meta: { label: r.label } }));

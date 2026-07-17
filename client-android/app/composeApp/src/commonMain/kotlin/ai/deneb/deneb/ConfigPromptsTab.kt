@@ -24,10 +24,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.Article
-import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.TextSnippet
+import ai.deneb.ui.icons.outlined.Article
+import ai.deneb.ui.icons.outlined.Restore
+import ai.deneb.ui.icons.outlined.Save
+import ai.deneb.ui.icons.outlined.TextSnippet
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon

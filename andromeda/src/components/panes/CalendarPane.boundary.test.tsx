@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DataProvider } from "@refinedev/core";
+import type { DataProvider } from "@/crud";
 import type { CalEvent } from "@/types";
 import { monthLabel } from "@/format";
 import { fakeProvider, renderWithProviders } from "@/test/util";

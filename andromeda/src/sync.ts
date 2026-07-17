@@ -11,7 +11,7 @@
 // them — so reconciling just means invalidating the affected resource list(s) so
 // they refetch.
 import { useEffect } from "react";
-import { useInvalidate } from "@refinedev/core";
+import { useInvalidate } from "@/crud";
 
 import { clearCachedResource } from "./cachedList";
 import { errText } from "./format";

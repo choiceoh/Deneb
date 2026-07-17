@@ -55,14 +55,6 @@
 -keep class coil3.** { *; }
 -dontwarn coil3.**
 
-# BouncyCastle ships as a cryptographically signed JCE provider jar.
-# -keep alone is not enough: ProGuard still rewrites the jar, stripping the
-# META-INF signatures (BCKEY.SF / BCKEY.DSA) and invalidating per-class
-# SHA-256 digests. A Gradle doLast in build.gradle.kts copies the original
-# signed jar back over the ProGuard output; the -keep rule is still needed
-# so ProGuard does not report "missing class" warnings for the rest of the app.
--keep class org.bouncycastle.** { *; }
--dontwarn org.bouncycastle.**
 
 # JNA — FileKit uses it on Windows (Shell32 IFileDialog / IShellItem COM) and
 # macOS (Cocoa Foundation bindings). JNA resolves native symbols by exact
@@ -165,10 +157,6 @@
 -keep class kotlinx.collections.immutable.** { *; }
 -dontwarn kotlinx.collections.immutable.**
 
-# sh.calvin.reorderable — Compose drag-to-reorder library; scope types are
-# referenced from composable parameters in the app.
--keep class sh.calvin.reorderable.** { *; }
--dontwarn sh.calvin.reorderable.**
 
 # nl.marc-apps:tts — TextToSpeech instance type leaks into app signatures.
 -keep class nl.marc_apps.tts.** { *; }

@@ -1,10 +1,8 @@
 import type { ReactNode } from "react";
-import { Refine } from "@refinedev/core";
+import { DataProviderScope } from "@/crud";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { denebAuthProvider } from "./authProvider";
-import { refineResources } from "./resources";
 import { fakeProvider } from "./test/util";
 import { useAction } from "./useAction";
 import { WorkspaceProvider } from "./WorkspaceProvider";
@@ -13,16 +11,11 @@ const cfg = { url: "http://test", token: "tok" };
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
-    <Refine
-      dataProvider={fakeProvider()}
-      authProvider={denebAuthProvider(cfg)}
-      resources={refineResources}
-      options={{ disableTelemetry: true }}
-    >
+    <DataProviderScope dataProvider={fakeProvider()}>
       <WorkspaceProvider connected cfg={cfg} setCfg={() => {}}>
         {children}
       </WorkspaceProvider>
-    </Refine>
+    </DataProviderScope>
   );
 }
 
@@ -65,3 +58,4 @@ describe("useAction", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
+

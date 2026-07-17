@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DataProvider } from "@refinedev/core";
+import type { DataProvider } from "@/crud";
 import { MailPane } from "./MailPane";
 import { cachedListStorageKey, cachedOneStorageKey } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";

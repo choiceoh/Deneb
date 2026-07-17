@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCreate, useInvalidate, useUpdate } from "@refinedev/core";
+import { useCreate, useInvalidate, useUpdate } from "@/crud";
 
 import type { CalEvent } from "@/types";
 import { serializeList } from "@/aiText";

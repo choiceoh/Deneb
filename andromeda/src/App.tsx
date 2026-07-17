@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Refine } from "@refinedev/core";
+import { DataProviderScope } from "@/crud";
 import { type GatewayConfig, loadConfig, saveConfig } from "./gateway";
 import { denebDataProvider } from "./dataProvider";
-import { denebAuthProvider } from "./authProvider";
-import { refineResources } from "./resources";
 import { readDesktopToken } from "./tauri";
 import { checkForUpdates } from "./updater";
 import { errText } from "./format";
@@ -12,13 +10,11 @@ import { WorkspaceProvider } from "./WorkspaceProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Workstation } from "./components/Workstation";
 
-// App owns the gateway config and the Refine providers (data + auth, both derived
-// from it). The workstation UI lives under <Refine> + <WorkspaceProvider>, where
-// data hooks and shared workstation state are available.
+// App owns the gateway config and the DIY data provider derived from it.
+// The workstation UI lives under <DataProviderScope> + <WorkspaceProvider>.
 export function App() {
   const [cfg, setCfg] = useState<GatewayConfig>(loadConfig());
   const dataProvider = useMemo(() => denebDataProvider(cfg), [cfg]);
-  const authProvider = useMemo(() => denebAuthProvider(cfg), [cfg]);
   const connected = Boolean(cfg.url && cfg.token);
 
   // Desktop auto-update: check GitHub Releases for a newer signed build on launch.
@@ -49,16 +45,11 @@ export function App() {
 
   return (
     <ErrorBoundary>
-      <Refine
-        dataProvider={dataProvider}
-        authProvider={authProvider}
-        resources={refineResources}
-        options={{ disableTelemetry: true }}
-      >
+      <DataProviderScope dataProvider={dataProvider}>
         <WorkspaceProvider connected={connected} cfg={cfg} setCfg={setCfg}>
           <Workstation cfg={cfg} />
         </WorkspaceProvider>
-      </Refine>
+      </DataProviderScope>
     </ErrorBoundary>
   );
 }

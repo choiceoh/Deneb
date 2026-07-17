@@ -34,11 +34,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.CheckBox
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.outlined.BrokenImage
-import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
+import ai.deneb.ui.icons.filled.CheckBox
+import ai.deneb.ui.icons.filled.ChevronRight
+import ai.deneb.ui.icons.filled.ExpandMore
+import ai.deneb.ui.icons.outlined.BrokenImage
+import ai.deneb.ui.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
