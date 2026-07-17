@@ -89,7 +89,7 @@ jobs:
           # preserves full history for the version/changelog tooling.
           ref: ${{ needs.release-please.outputs.tag }}
           fetch-depth: 0
-      - uses: actions/setup-go@v6.5.0
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: "1.25"
           cache-dependency-path: gateway-go/go.sum
