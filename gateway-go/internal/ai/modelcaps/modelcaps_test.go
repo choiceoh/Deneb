@@ -16,14 +16,12 @@ func TestIsOpenAIReasoningModelAllowsKnownDeniesCompatible(t *testing.T) {
 }
 
 func TestRejectsCacheControl(t *testing.T) {
-	for _, p := range []string{"kimi", "KIMI", " kimi ", "kimi-code", "kimi-coding", "Kimi-Subagent"} {
-		if !RejectsCacheControl(p) {
-			t.Errorf("RejectsCacheControl(%q) = false, want true", p)
-		}
-	}
-	// "kimimaru" has no hyphen boundary; Anthropic-wire providers that accept
-	// cache_control (mimo, zai) must not match.
-	for _, p := range []string{"mimo", "mimo-plan", "zai", "anthropic", "openai", "kimimaru", ""} {
+	// Kimi K2.7's coding endpoint now ACCEPTS cache_control (live-verified
+	// 2026-07-17: repeat call returned cache_read_input_tokens with no 400),
+	// so no provider strips markers anymore — the strip silently discarded
+	// every prefix-cache hit on the subscription. The seam stays for the next
+	// genuinely rejecting endpoint.
+	for _, p := range []string{"kimi", "KIMI", "kimi-code", "kimi-subagent", "mimo", "mimo-plan", "zai", "anthropic", "openai", ""} {
 		if RejectsCacheControl(p) {
 			t.Errorf("RejectsCacheControl(%q) = true, want false", p)
 		}
@@ -32,8 +30,8 @@ func TestRejectsCacheControl(t *testing.T) {
 
 func TestBuiltinMapsKnownProvidersReturnsZeroForUnknown(t *testing.T) {
 	c := Builtin("kimi", "kimi-for-coding")
-	if !c.RejectsCacheControl || c.Reasoning {
-		t.Errorf("kimi builtin = %+v, want RejectsCacheControl only", c)
+	if c.RejectsCacheControl || c.Reasoning {
+		t.Errorf("kimi builtin = %+v, want fully permissive (markers accepted since K2.7)", c)
 	}
 	c = Builtin("openai", "o3-mini")
 	if !c.Reasoning || c.RejectsCacheControl {

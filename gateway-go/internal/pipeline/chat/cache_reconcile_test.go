@@ -115,11 +115,11 @@ func TestStripMessageCacheMarkersHook_NoMarkersReturnsInputSlice(t *testing.T) {
 	}
 }
 
-// TestReconcileFallbackCacheMarkers_RejectingProviderStrips verifies a
-// fallback onto a marker-rejecting provider (Kimi) strips the system markers
-// AND neutralizes markers the inherited hook chain attaches — otherwise every
-// fallback attempt 400s.
-func TestReconcileFallbackCacheMarkers_RejectingProviderStrips(t *testing.T) {
+// TestReconcileFallbackCacheMarkers_KimiKeepsMarkers pins the K2.7 reality:
+// kimi ACCEPTS cache_control (live-verified 2026-07-17), so a fallback onto it
+// must KEEP the system markers and the trailing hook — stripping would discard
+// every prefix-cache hit and re-bill the full system prompt per attempt.
+func TestReconcileFallbackCacheMarkers_KimiKeepsMarkers(t *testing.T) {
 	cfg := agent.AgentConfig{
 		System: markedSystemBlocks(t),
 		// Original provider was Anthropic-mode (zai): trailing hook installed.
@@ -131,8 +131,8 @@ func TestReconcileFallbackCacheMarkers_RejectingProviderStrips(t *testing.T) {
 	reconcileFallbackCacheMarkers(&cfg, runDeps{}, "zai", "glm-5-turbo",
 		"kimi", "kimi-for-coding", origClient, fbClient, discardLogger())
 
-	if bytes.Contains(cfg.System, []byte("cache_control")) {
-		t.Error("system markers survived; Kimi rejects them with 400")
+	if !bytes.Contains(cfg.System, []byte("cache_control")) {
+		t.Error("system markers stripped; kimi accepts them since K2.7")
 	}
 	msgs := []llm.Message{
 		llm.NewTextMessage("user", "q1"),
@@ -140,8 +140,8 @@ func TestReconcileFallbackCacheMarkers_RejectingProviderStrips(t *testing.T) {
 		llm.NewTextMessage("user", "q2"),
 	}
 	out := cfg.BeforeAPICall(msgs)
-	if got := countCacheMarkers(t, out); got != 0 {
-		t.Errorf("hook chain leaves %d markers on messages, want 0", got)
+	if got := countCacheMarkers(t, out); got == 0 {
+		t.Error("trailing hook neutralized; kimi fallback should run cached")
 	}
 }
 

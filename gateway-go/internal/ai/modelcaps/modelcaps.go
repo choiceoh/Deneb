@@ -129,14 +129,15 @@ func IsOpenAIReasoningModel(model string) bool {
 
 // RejectsCacheControl reports whether a provider speaks the Anthropic
 // Messages wire but REJECTS cache_control markers with an HTTP 400 (not
-// merely ignores them). Kimi's coding endpoint is the known case: it is
-// routed through the Anthropic client yet faults when any cache_control
-// field is present. MiMo/z.ai are NOT included — they accept the markers.
-//
-// Matches the bare "kimi" id and any Kimi alias/remap carrying it as a
-// prefix: catalog aliases like "kimi-code"/"kimi-coding" and the
-// "<provider>-subagent" remap applied to spawned sessions ("kimi-subagent").
+// merely ignores them). No current provider does: Kimi's coding endpoint was
+// the known case, but as of K2.7 it ACCEPTS the markers and serves them —
+// live-verified 2026-07-17 (repeat call: input=0, cache_read_input_tokens=
+// 1463, no 400), so stripping there threw away every prefix-cache hit and
+// re-billed the full 30k+ system prompt each turn against the subscription
+// quota. The seam stays for the next picky endpoint; keep any new entry
+// backed by a live repro, and remember the strip's cost is invisible (turns
+// still succeed — just slower and quota-hungrier).
 func RejectsCacheControl(providerID string) bool {
-	id := strings.ToLower(strings.TrimSpace(providerID))
-	return id == "kimi" || strings.HasPrefix(id, "kimi-")
+	_ = providerID
+	return false
 }

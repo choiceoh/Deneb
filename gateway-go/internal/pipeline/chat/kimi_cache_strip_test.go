@@ -7,18 +7,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 )
 
-func TestIsCacheIncompatibleProviderReturnsTrueOnlyForKimiVariants(t *testing.T) {
-	// Bare id, casing/whitespace, catalog aliases (kimi-code/kimi-coding) and the
-	// "<provider>-subagent" remap (kimi-subagent) all route through the Anthropic
-	// client and reject cache_control, so all must match.
-	for _, p := range []string{"kimi", "KIMI", " kimi ", "kimi-code", "kimi-coding", "Kimi-Subagent", "kimi-anything"} {
-		if !isCacheIncompatibleProvider(p) {
-			t.Errorf("%q should be cache-incompatible", p)
-		}
-	}
-	// MiMo/z.ai are Anthropic-wire too but accept cache_control — must NOT match.
-	// "kimimaru" has no hyphen boundary, so it must not match the kimi- prefix.
-	for _, p := range []string{"mimo", "mimo-plan", "zai", "anthropic", "openai", "kimimaru", ""} {
+func TestIsCacheIncompatibleProviderHasNoRejectingProviders(t *testing.T) {
+	// Kimi K2.7's coding endpoint ACCEPTS cache_control since 2026-07 (live-
+	// verified: repeat call returns cache_read_input_tokens, no 400) — the old
+	// kimi strip silently discarded every prefix-cache hit and re-billed the
+	// full system prompt each turn. No provider rejects markers today; the
+	// seam (and the strip machinery it gates) stays for the next one.
+	for _, p := range []string{"kimi", "KIMI", "kimi-code", "kimi-subagent", "mimo", "mimo-plan", "zai", "anthropic", "openai", ""} {
 		if isCacheIncompatibleProvider(p) {
 			t.Errorf("%q should NOT be cache-incompatible", p)
 		}
