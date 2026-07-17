@@ -52,6 +52,7 @@ case "$*" in
   *127.0.0.1:18800*) code="${WORMHOLE_CODE:-200}" ;;
   *100.105.145.6:18011*) code="${OCR_CODE:-200}" ;;
   *100.105.145.6:18013*) code="${ASR_CODE:-200}" ;;
+  *100.105.145.6:8000*) code="${QWEN_CODE:-200}" ;;
   *100.125.220.117:8000*) code="${DSV4_CODE:-200}" ;;
   *deneb.topworks.ltd*) code="${TUNNEL_CODE:-200}" ;;
   *) code="${DEFAULT_HTTP_CODE:-500}" ;;
@@ -302,6 +303,7 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
             OCR_CODE="503",
             ASR_CODE="503",
             DSV4_CODE="503",
+            QWEN_CODE="503",
             MAIL_RUNNING="0",
             SMTP_OK="0",
             DATA_ERRORS="2",
@@ -310,7 +312,7 @@ printf 'Signer #1 certificate SHA-256 digest: %s\n' "${CERT_GOT:-AABBCC}"
             RULE_SIZE="25000",
         )
         self.assertEqual(proc.returncode, 1)
-        self.assertEqual(self.result(proc), (10, 9))
+        self.assertEqual(self.result(proc), (10, 10))
         self.assertIn("FAIL 항목은", proc.stderr)
         self.assertIn("maddy DATA 거부 인입=2 아카이브=1", proc.stdout)
         self.assertIn("rules.md 25000B > 20KB", proc.stdout)
