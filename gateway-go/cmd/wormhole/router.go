@@ -383,6 +383,11 @@ func (rt *router) doUpstream(r *http.Request, entry modelEntry, body []byte, pat
 		return nil, err
 	}
 	upReq.Header.Set("Content-Type", "application/json")
+	// Entry-profile headers first, then auth/protocol pins — the pins win on
+	// conflict so a headers block can never break authentication.
+	for k, v := range entry.Headers {
+		upReq.Header.Set(k, v)
+	}
 	applyUpstreamAuth(upReq, entry, r)
 	return rt.client.Do(upReq)
 }

@@ -252,8 +252,10 @@ func TestResolveThinkingConfigReturnsDisabledForOffAliases(t *testing.T) {
 
 func TestModelCapabilityWithConfigOverridesCacheRejection(t *testing.T) {
 	t.Run("builtin without registry", func(t *testing.T) {
-		if !modelCapability(runDeps{}, "kimi", "kimi-for-coding").RejectsCacheControl {
-			t.Error("kimi must reject cache_control by default")
+		// Kimi accepts markers since K2.7 (live-verified 2026-07-17) — no
+		// provider rejects by builtin anymore; only a config override can.
+		if modelCapability(runDeps{}, "kimi", "kimi-for-coding").RejectsCacheControl {
+			t.Error("kimi must accept cache_control by default since K2.7")
 		}
 		if modelCapability(runDeps{}, "zai", "glm-5-turbo").RejectsCacheControl {
 			t.Error("zai must accept cache_control by default")

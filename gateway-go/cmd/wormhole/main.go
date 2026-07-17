@@ -106,6 +106,15 @@ type modelEntry struct {
 	// the model; with neither a live backend nor a static url the entry is unroutable
 	// (clean 404 / auto-fallback) — never a stale pin to a dead node.
 	Fleet bool `json:"fleet,omitempty"`
+	// Headers are extra request headers sent to THIS entry's upstream on every
+	// call — the per-entry profile for picky endpoints. Motivating case: coding-
+	// subscription providers (Kimi Code, MiMo Token Plan) admit only recognized
+	// coding agents by User-Agent; wormhole builds upstream requests fresh (no
+	// inbound header passthrough), so without this the upstream sees Go's default
+	// UA and an enforcement change bricks the entry. Auth and protocol pins
+	// (x-api-key/Authorization, anthropic-version/-beta) are applied AFTER these
+	// and win on conflict — a headers block can never break authentication.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // config is the wormhole config file (default ~/.wormhole/config.json). Token and

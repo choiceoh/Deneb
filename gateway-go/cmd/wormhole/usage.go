@@ -208,22 +208,26 @@ func (u *usageTail) finish() {
 	u.done(u.tail)
 }
 
-// usageObjectPattern locates "usage" JSON objects in a response tail. SSE
-// streams repeat interim usage frames on some backends; the LAST match is the
-// final cumulative count, so parseUsageTail takes the last parseable one.
+// usageObjectPattern locates "usage" JSON objects in a response tail.
 var usageObjectPattern = regexp.MustCompile(`"usage"\s*:\s*\{`)
 
 // parseUsageTail extracts (inputTokens, outputTokens) from a response tail —
 // OpenAI dialect (prompt_tokens/completion_tokens) and Anthropic dialect
 // (input_tokens/output_tokens) both parse; missing/garbled usage returns zeros.
+//
+// Frames are merged FIELD-WISE with max, not frame-wise last-wins: an
+// Anthropic stream carries input_tokens only in message_start while the final
+// message_delta carries only the (cumulative) output count, so taking the last
+// frame under-reported input ~16x for kimi-for-coding (gateway 30,503 vs
+// ledger 1,828, live 2026-07-17). Counts are cumulative in both dialects, so
+// per-field max is the true total for interim-repeating OpenAI streams too.
 func parseUsageTail(tail []byte) (in, out int64) {
-	locs := usageObjectPattern.FindAllIndex(tail, -1)
-	for i := len(locs) - 1; i >= 0; i-- {
-		start := bytes.IndexByte(tail[locs[i][0]:], '{')
+	for _, loc := range usageObjectPattern.FindAllIndex(tail, -1) {
+		start := bytes.IndexByte(tail[loc[0]:], '{')
 		if start < 0 {
 			continue
 		}
-		obj := balancedJSONObject(tail[locs[i][0]+start:])
+		obj := balancedJSONObject(tail[loc[0]+start:])
 		if obj == nil {
 			continue
 		}
@@ -236,13 +240,14 @@ func parseUsageTail(tail []byte) (in, out int64) {
 		if json.Unmarshal(obj, &u) != nil {
 			continue
 		}
-		in = u.PromptTokens + u.InputTokens
-		out = u.CompletionTokens + u.OutputTokens
-		if in > 0 || out > 0 {
-			return in, out
+		if v := u.PromptTokens + u.InputTokens; v > in {
+			in = v
+		}
+		if v := u.CompletionTokens + u.OutputTokens; v > out {
+			out = v
 		}
 	}
-	return 0, 0
+	return in, out
 }
 
 // balancedJSONObject returns the shortest prefix of b (which must start at
