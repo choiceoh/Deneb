@@ -1,4 +1,4 @@
-import type { DataProvider } from "@refinedev/core";
+import type { DataProvider } from "./crud";
 import { type GatewayConfig, callRpc } from "./gateway";
 import { resourceDef } from "./resources";
 
@@ -23,12 +23,11 @@ function rpcParams(meta: unknown): Record<string, unknown> {
   return params && typeof params === "object" && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
 }
 
-// Deneb-backed Refine data provider. Resource↔RPC wiring lives in resources.ts;
-// this file is just the generic glue from Refine's CRUD contract to callRpc().
+// Deneb-backed data provider. Resource↔RPC wiring lives in resources.ts;
+// this file is just the generic glue from the DIY CRUD contract to callRpc().
 //
 // RPC payloads are dynamic, so the provider works in `any` at this boundary and
-// Refine re-applies the caller's TData on the way out (its CRUD methods are
-// generic over caller-supplied TData).
+// callers re-apply TData on the way out.
 export function denebDataProvider(cfg: GatewayConfig): DataProvider {
   return {
     getApiUrl: () => cfg.url,

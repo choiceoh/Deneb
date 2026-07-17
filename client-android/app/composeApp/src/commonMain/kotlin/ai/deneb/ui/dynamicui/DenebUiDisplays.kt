@@ -7,6 +7,8 @@ import ai.deneb.ui.denebOnSuccessContainer
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.denebSuccessContainer
 import ai.deneb.ui.denebWarningContainer
+import ai.deneb.ui.icons.filled.Image
+import ai.deneb.ui.icons.filled.Map
 import ai.deneb.ui.markdown.InlineTokenizer
 import ai.deneb.ui.markdown.MarkdownContent
 import ai.deneb.ui.markdown.toAnnotatedString
@@ -39,8 +41,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider

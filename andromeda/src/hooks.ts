@@ -1,7 +1,7 @@
 // Reusable stateful hooks: the AI chat stream machine, gateway health check, and
 // the proactive events subscription.
 import { useEffect, useRef, useState } from "react";
-import { useInvalidate } from "@refinedev/core";
+import { useInvalidate } from "@/crud";
 import { clearCachedResource } from "./cachedList";
 import { type ChatToolEvent, type GatewayConfig, callRpc, chatStream, ping } from "./gateway";
 import { type ProactiveEvent, subscribeEvents } from "./events";

@@ -7,7 +7,7 @@
 // TodoPane, or multi-resource fan-out like TodayPane) still keep that extra
 // wiring themselves — this only covers the common fetch+select+project spine.
 import { useMemo, useState } from "react";
-import { type BaseRecord } from "@refinedev/core";
+import { type BaseRecord } from "@/crud";
 import { serializeList } from "./aiText";
 import { useCachedList } from "./cachedList";
 import { useRegisterPane, useWorkspace } from "./workspaceContext";

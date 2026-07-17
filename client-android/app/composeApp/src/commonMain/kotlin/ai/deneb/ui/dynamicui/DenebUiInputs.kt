@@ -7,6 +7,9 @@ import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.filled.AccessTime
+import ai.deneb.ui.icons.filled.ContentCopy
+import ai.deneb.ui.icons.filled.Map
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
@@ -22,10 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults

@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   clearCachedResource: vi.fn(),
 }));
 
-vi.mock("@refinedev/core", () => ({ useInvalidate: () => mocks.invalidate }));
+vi.mock("@/crud", () => ({ useInvalidate: () => mocks.invalidate }));
 vi.mock("./gateway", () => ({
   chatStream: mocks.chatStream,
   callRpc: mocks.callRpc,

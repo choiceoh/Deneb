@@ -189,5 +189,4 @@ dependencies {
     implementation(libs.tts.compose)
     implementation(libs.compose.components.uiToolingPreview)
     debugImplementation(libs.compose.ui.tooling)
-    "playStoreImplementation"(libs.play.review)
 }

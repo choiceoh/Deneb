@@ -4,7 +4,7 @@
 // invalidating the Refine "workfeed" list, so we assert the list refetches.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { waitFor } from "@testing-library/react";
-import { type DataProvider, useList } from "@refinedev/core";
+import { type DataProvider, useList } from "@/crud";
 
 import type { GatewayConfig } from "@/gateway";
 import { useEvents } from "@/hooks";

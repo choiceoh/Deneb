@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DataProvider } from "@refinedev/core";
+import type { DataProvider } from "@/crud";
 import { fakeProvider, renderWithProviders } from "@/test/util";
 import { TodoPane } from "./TodoPane";
 

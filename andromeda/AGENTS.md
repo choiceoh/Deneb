@@ -11,7 +11,7 @@ for the Deneb gateway (a single-agent personal assistant). Three columns: nav +
 work area (grids/editors) + Deneb AI collaboration. Data and AI come from the
 Deneb gateway over `miniapp.*` RPC, `chat/stream` (SSE), and `events` (SSE).
 
-Stack: **Tauri 2** (Rust desktop shell) + **React 18** + **Refine** (headless
+Stack: **Tauri 2** (Rust desktop shell) + **React 19** + **DIY CRUD** (headless
 admin framework) + **Vite**. Design rationale (why/what): [`docs/DESIGN.md`](docs/DESIGN.md).
 UI·UX design system (how it looks/behaves — tokens, components, patterns): [`docs/UI-UX.md`](docs/UI-UX.md).
 Design philosophy (the beliefs behind the system + how to judge a design): [`docs/DESIGN-PHILOSOPHY.md`](docs/DESIGN-PHILOSOPHY.md).
@@ -41,12 +41,12 @@ Gateway (Deneb)  ──miniapp.* RPC──▶  gateway.ts (callRpc)
                        ┌──────────────────┼───────────────────┐
                        ▼                   ▼                   ▼
               dataProvider.ts        chatStream()         events.ts
-            (Refine CRUD glue)      (AI SSE stream)    (proactive SSE)
+            (DIY CRUD glue)      (AI SSE stream)    (proactive SSE)
                        │                   │                   │
                   resources.ts          hooks.ts (useChat / useEvents / useGatewayStatus)
             (resource↔RPC registry)        │
                        ▼                   ▼
-         Refine useList/useCreate…    components/  (Workstation · Sidebar · AIPanel ·
+         useList/useCreate… (crud.ts)    components/  (Workstation · Sidebar · AIPanel ·
                        │                   ProactivePanel · Grid · panes/*)
                        ▼                   │
                  panes/*  ◀──── workspaceContext.tsx (active pane pushes its
@@ -61,9 +61,8 @@ Gateway (Deneb)  ──miniapp.* RPC──▶  gateway.ts (callRpc)
 | `events.ts`            | Proactive push SSE client (`subscribeEvents`).                                                                                                                                                                                                 |
 | `sse.ts`               | Shared SSE frame reader (`readSSE`) used by both `chatStream` and `events.ts`.                                                                                                                                                                 |
 | `aiText.ts`            | `serializeList` — the counted-header + one-line-per-row projection list panes push to the AI.                                                                                                                                                  |
-| `dataProvider.ts`      | Refine `DataProvider` — generic CRUD→RPC glue, **derived from `resources.ts`**.                                                                                                                                                                |
-| `resources.ts`         | **Single source of truth** for resource↔RPC mapping + Refine resource metadata. Query-driven RPCs (memory/search) live here as constants, not CRUD.                                                                                            |
-| `authProvider.ts`      | Token-based Refine auth provider (DESIGN §4).                                                                                                                                                                                                  |
+| `dataProvider.ts`      | `DataProvider` (crud.ts) — generic CRUD→RPC glue, **derived from `resources.ts`**.                                                                                                                                                             |
+| `resources.ts`         | **Single source of truth** for resource↔RPC mapping + resource metadata. Query-driven RPCs (memory/search) live here as constants, not CRUD.                                                                                                   |
 | `workspaceContext.tsx` | Shared workstation state + the mechanism where the active pane publishes its serialized content to the AI panel (`useRegisterPane`). Holds `cfg` for query-driven panes. Also the cross-pane `openWiki(path)` channel (인물·검색 → 위키 pane). |
 | `hooks.ts`             | `useChat`, `useEvents`, `useGatewayStatus`.                                                                                                                                                                                                    |
 | `log.ts`               | Namespaced, leveled logger (see Logging).                                                                                                                                                                                                      |
@@ -108,7 +107,7 @@ grid rows open one:
 2. Render `{sel && <DetailModal …/>}` as a sibling. Build the modal from
    `components/Modal` primitives: `<Modal title footer>`, `<Field label>` for edit
    inputs, `<Detail label value>` for read-only rows.
-3. **Edit/create** → drive writes through Refine (`useCreate`/`useUpdate`) so the
+3. **Edit/create** → drive writes through `useCreate`/`useUpdate` (crud.ts) so the
    resource's existing RPC wiring applies; close on `onSuccess`. See `CalendarPane`
    (create + edit + read-only Google detail) and `TodoPane` (due/note edit).
 4. **Read-only detail** → just lay out `<Detail>` rows. See `PeoplePane` (인물 카드,

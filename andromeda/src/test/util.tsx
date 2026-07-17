@@ -2,10 +2,8 @@
 // provider so panes can be exercised against fixtures (no gateway/network).
 import type { ReactElement } from "react";
 import { render } from "@testing-library/react";
-import { Refine, type DataProvider } from "@refinedev/core";
+import { DataProviderScope, type DataProvider } from "@/crud";
 import type { GatewayConfig } from "@/gateway";
-import { denebAuthProvider } from "@/authProvider";
-import { refineResources } from "@/resources";
 import { WorkspaceProvider } from "@/WorkspaceProvider";
 
 // A DataProvider backed by in-memory fixtures keyed by resource name.
@@ -37,25 +35,10 @@ export function renderWithProviders(
   const connected = opts.connected ?? false;
   const cfg: GatewayConfig = opts.cfg ?? (connected ? { url: "http://test", token: "tok" } : { url: "", token: "" });
   return render(
-    <Refine
-      dataProvider={opts.dataProvider ?? fakeProvider()}
-      authProvider={denebAuthProvider(cfg)}
-      resources={refineResources}
-      options={{
-        disableTelemetry: true,
-        // Refine otherwise reuses its default QueryClient across test renders.
-        // A fresh client keeps resource data and failures from one test from
-        // satisfying the next test's identically-keyed useList call.
-        reactQuery: {
-          clientConfig: {
-            defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-          },
-        },
-      }}
-    >
+    <DataProviderScope dataProvider={opts.dataProvider ?? fakeProvider()}>
       <WorkspaceProvider connected={connected} cfg={cfg} setCfg={opts.setCfg ?? (() => {})}>
         {ui}
       </WorkspaceProvider>
-    </Refine>,
+    </DataProviderScope>,
   );
 }

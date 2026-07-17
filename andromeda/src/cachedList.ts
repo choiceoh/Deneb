@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { type BaseKey, type BaseRecord, useList, useOne } from "@refinedev/core";
+import { type BaseKey, type BaseRecord, useList, useOne } from "@/crud";
 
 import { clearCachedRpcResource } from "./rpcCache";
 import { getJSON, setJSON } from "./storage";

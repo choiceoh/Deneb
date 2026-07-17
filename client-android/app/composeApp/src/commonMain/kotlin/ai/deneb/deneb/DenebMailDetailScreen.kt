@@ -17,6 +17,7 @@ import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
@@ -40,7 +41,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator

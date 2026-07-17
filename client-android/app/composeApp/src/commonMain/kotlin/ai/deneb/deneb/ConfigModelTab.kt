@@ -8,6 +8,7 @@ import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.settings.SettingsCard
 import ai.deneb.ui.statusDanger
 import ai.deneb.ui.statusSuccess
@@ -33,7 +34,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api

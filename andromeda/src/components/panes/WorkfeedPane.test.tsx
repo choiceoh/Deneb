@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { DataProvider } from "@refinedev/core";
+import type { DataProvider } from "@/crud";
 import { fakeProvider, renderWithProviders } from "@/test/util";
 import { startOfDay } from "@/format";
 import { WorkfeedPane } from "./WorkfeedPane";
