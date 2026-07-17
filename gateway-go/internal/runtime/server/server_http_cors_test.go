@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
 )
 
 // TestWithCORS_Preflight verifies a browser CORS preflight (OPTIONS + Origin) is
@@ -32,6 +33,11 @@ func TestWithCORS_Preflight(t *testing.T) {
 	}
 	if got := w.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, clientauth.Header) {
 		t.Errorf("Allow-Headers = %q, must include %s", got, clientauth.Header)
+	}
+	// The desktop client tags its events subscription from a CORS-enforced
+	// webview origin — dropping this header silently kills the workstation loop.
+	if got := w.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, nativeapi.ClientKindHeader) {
+		t.Errorf("Allow-Headers = %q, must include %s", got, nativeapi.ClientKindHeader)
 	}
 }
 
