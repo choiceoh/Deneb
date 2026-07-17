@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 
-import { type GatewayConfig, type SessionRow, deleteSession, recentSessions, sessionTranscript } from "@/gateway";
+import {
+  TRANSCRIPT_MAX,
+  type GatewayConfig,
+  type SessionRow,
+  type TranscriptMsg,
+  deleteSession,
+  recentSessions,
+  sessionTranscript,
+} from "@/gateway";
 import { type ChatTurn } from "@/hooks";
 import { errText } from "@/format";
 
@@ -27,6 +35,9 @@ export function useSessions(
   const [sessionKey, setSessionKey] = useState(mainKey);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionErr, setSessionErr] = useState("");
+  // Older messages the initial transcript load left behind (server returns the
+  // most recent N of `total`). null = nothing hidden / nothing loaded yet.
+  const [hiddenHistory, setHiddenHistory] = useState<{ key: string; count: number } | null>(null);
 
   // Clear the list the moment the connection drops — adjusted during render
   // (https://react.dev/learn/you-might-not-need-an-effect) instead of inside the
@@ -72,7 +83,26 @@ export function useSessions(
     // mint a fresh key when the caller provides one (채팅 탭 → 새 대화마다 새
     // client:main:<id>), else reuse the single main session (work panel → client:main).
     setSessionKey(opts?.newKey ? opts.newKey() : mainKey);
+    setHiddenHistory(null);
     chat.clear();
+  }
+
+  const toTurns = (msgs: TranscriptMsg[], key: string): ChatTurn[] =>
+    msgs.map((m, i) => ({
+      id: m.id || `tr-${key}-${i}`,
+      role: m.role === "user" ? "user" : "assistant",
+      text: m.content,
+      status: "done" as const,
+    }));
+
+  async function loadTranscript(key: string, limit?: number) {
+    const { messages, total } = await sessionTranscript(cfg, key, limit);
+    chat.setTurns(toTurns(messages, key));
+    const hidden = total - messages.length;
+    // The server clamps at TRANSCRIPT_MAX, so once we've loaded that much there
+    // is no way to page further — drop the affordance instead of lying.
+    setHiddenHistory(hidden > 0 && messages.length < TRANSCRIPT_MAX ? { key, count: hidden } : null);
+    setSessionErr("");
   }
 
   // Switch conversations: load the picked session's transcript and continue it.
@@ -81,16 +111,19 @@ export function useSessions(
     setSessionsOpen(false);
     setSessionKey(key);
     try {
-      const msgs = await sessionTranscript(cfg, key);
-      chat.setTurns(
-        msgs.map((m, i) => ({
-          id: m.id || `tr-${key}-${i}`,
-          role: m.role === "user" ? "user" : "assistant",
-          text: m.content,
-          status: "done" as const,
-        })),
-      );
-      setSessionErr("");
+      await loadTranscript(key);
+    } catch (e) {
+      setSessionErr(errText(e));
+    }
+  }
+
+  // "이전 대화 더 불러오기" — refetch the same session at the server cap. The
+  // transcript is the source of truth, so wholesale replace is safe (gated on
+  // !busy: no in-flight turn to clobber).
+  async function loadOlderTurns() {
+    if (busy || !hiddenHistory) return;
+    try {
+      await loadTranscript(hiddenHistory.key, TRANSCRIPT_MAX);
     } catch (e) {
       setSessionErr(errText(e));
     }
@@ -114,10 +147,12 @@ export function useSessions(
     sessionKey,
     sessionsOpen,
     sessionErr,
+    hiddenHistory,
     toggleSessions,
     refreshSessions,
     selectSession,
     removeSession,
     newChat,
+    loadOlderTurns,
   };
 }

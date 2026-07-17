@@ -134,12 +134,15 @@ export function Detail({ label, value, multiline }: { label: string; value: Reac
 export function ModalFooter({
   action,
   canSubmit = true,
+  busy = false,
   status,
   onClose,
   onSubmit,
 }: {
   action: string;
   canSubmit?: boolean;
+  /** Mutation in flight — disables the submit button (double-click guard) and shows a spinner. */
+  busy?: boolean;
   status?: string;
   onClose: () => void;
   onSubmit: () => void;
@@ -154,7 +157,13 @@ export function ModalFooter({
       <button className="btn" onClick={onClose}>
         취소
       </button>
-      <button className="btn btn-accent" onClick={onSubmit} disabled={!canSubmit}>
+      <button
+        className="btn btn-accent"
+        onClick={onSubmit}
+        disabled={!canSubmit || busy}
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        {busy && <span className="tool-spin" style={{ width: 12, height: 12, flexShrink: 0 }} />}
         {action}
       </button>
     </>

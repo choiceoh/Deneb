@@ -81,6 +81,23 @@ export function ApprovalsPane() {
   const nowMs = Date.now();
   const todayMs = startOfDay(nowMs);
 
+  // Land on the latest day that actually has documents: entering on an empty
+  // "오늘 0건" while the cockpit shows a full approval list reads broken. One
+  // shot on first data, render-phase adjustment (same pattern as useSessions
+  // prevConnected); only while still parked on today — manual paging wins.
+  const [landed, setLanded] = useState(false);
+  if (!landed && rows.length > 0) {
+    setLanded(true);
+    if (dayMs === todayMs) {
+      const days = rows.map((a) => approvalDayMs(a.date) ?? todayMs);
+      if (!days.includes(todayMs)) {
+        const past = days.filter((d) => d < todayMs);
+        const target = past.length > 0 ? Math.max(...past) : Math.min(...days);
+        if (Number.isFinite(target)) setDayMs(target);
+      }
+    }
+  }
+
   // Inline filter like WorkfeedPane — avoid useMemo+todayMs (React Compiler
   // preserve-manual-memoization rejects a render-time clock dep).
   const dayRows = rows

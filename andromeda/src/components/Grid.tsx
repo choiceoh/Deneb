@@ -141,7 +141,12 @@ export function GridNotice({
           불러오기 실패: {errText(query.error)}
         </span>
         {retry && (
-          <button className="row-btn" onClick={retry} style={{ color: "var(--clay)", flexShrink: 0 }} title="다시 시도">
+          <button
+            className="row-btn"
+            onClick={retry}
+            style={{ color: "var(--accent)", flexShrink: 0 }}
+            title="다시 시도"
+          >
             다시 시도
           </button>
         )}

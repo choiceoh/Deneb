@@ -32,7 +32,17 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   // 새 대화를 막는다 (useSessions 인자로 들어가야 해서 파이프라인 훅 밖에 산다).
   const [attaching, setAttaching] = useState(false);
   // 업무 네임스페이스(client:*)로 스코프 — 모바일 업무 드로어와 같은 세션 공간.
-  const { sessions, sessionKey, sessionErr, selectSession, removeSession, newChat, refreshSessions } = useSessions(
+  const {
+    sessions,
+    sessionKey,
+    sessionErr,
+    hiddenHistory,
+    selectSession,
+    removeSession,
+    newChat,
+    refreshSessions,
+    loadOlderTurns,
+  } = useSessions(
     cfg,
     connected,
     busy || attaching,
@@ -111,17 +121,24 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
               {connected && <span className="chat-greeting-sub">무엇이든 편하게 물어보세요</span>}
             </div>
           ) : (
-            turns.map((turn) => (
-              <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
-                <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
-                {turn.role === "user" ? (
-                  <div className="ai-turn-body">{turn.text}</div>
-                ) : (
-                  <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
-                )}
-                <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate} />
-              </div>
-            ))
+            <>
+              {hiddenHistory && (
+                <button className="btn history-more" onClick={() => void loadOlderTurns()}>
+                  이전 대화 {hiddenHistory.count}개 더 불러오기
+                </button>
+              )}
+              {turns.map((turn) => (
+                <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
+                  <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
+                  {turn.role === "user" ? (
+                    <div className="ai-turn-body">{turn.text}</div>
+                  ) : (
+                    <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
+                  )}
+                  <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate} />
+                </div>
+              ))}
+            </>
           )}
         </div>
 

@@ -4,6 +4,7 @@ import { serializeList } from "@/aiText";
 import { useCachedList, useCachedOne } from "@/cachedList";
 import { MAIL_RPC } from "@/resources";
 import { color, ellipsis } from "@/theme";
+import { callRpc } from "@/gateway";
 import { addDays, dayLabel, fmtMailDate, senderName, startOfDay } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
@@ -27,7 +28,7 @@ function gmailDay(dayMs: number): string {
 }
 
 export function MailPane() {
-  const { connected } = useWorkspace();
+  const { connected, cfg } = useWorkspace();
   // The day currently in view (local midnight). Lands on today; ← / → step it. The
   // inbox is browsed one day at a time (like the work feed) rather than one flat
   // unread list: each day fetches that day's inbox (read + unread) via a Gmail
@@ -61,6 +62,34 @@ export function MailPane() {
       mountedRef.current = false;
     };
   }, []);
+
+  // Land on the newest inbox day: mornings often have no mail *today* yet, and
+  // an empty "오늘 0건" first paint reads broken next to a cockpit full of
+  // recent mail. One probe (newest inbox mail regardless of day) decides where
+  // to land; fires once, and only while still parked on today's empty result —
+  // manual paging wins after that.
+  const landedRef = useRef(false);
+  useEffect(() => {
+    if (landedRef.current || !connected || query.isLoading || query.isError) return;
+    if (fetchedMails === undefined) return;
+    const today = startOfDay();
+    if (dayMs !== today || fetchedMails.length > 0) {
+      landedRef.current = true;
+      return;
+    }
+    landedRef.current = true;
+    void callRpc<{ messages?: Mail[] }>(cfg, "miniapp.mail.list_recent", { query: "in:inbox", limit: 1 })
+      .then((payload) => {
+        if (!mountedRef.current) return;
+        const newest = payload?.messages?.[0];
+        const ms = newest?.date ? new Date(newest.date).getTime() : NaN;
+        if (!Number.isFinite(ms)) return;
+        const day = startOfDay(ms);
+        if (day !== today) setDayMs(day);
+      })
+      .catch(() => {}); // best-effort — staying on today is the safe fallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, dayMs, fetchedMails, query.isLoading, query.isError]);
 
   const markMailRead = useCallback(
     (id: string | number) => {
