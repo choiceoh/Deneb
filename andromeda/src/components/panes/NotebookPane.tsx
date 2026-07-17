@@ -317,24 +317,17 @@ export function NotebookPane() {
         ))}
 
       {creating && (
-        <CreateNotebookModal
-          onClose={() => setCreating(false)}
-          onCreate={(name, desc) => void createNotebook(name, desc)}
-        />
+        <CreateNotebookModal onClose={() => setCreating(false)} onCreate={(name, desc) => createNotebook(name, desc)} />
       )}
       {addingSource && active && (
-        <AddSourceModal
-          notebook={active.name}
-          onClose={() => setAddingSource(false)}
-          onAdd={(src) => void addSource(src)}
-        />
+        <AddSourceModal notebook={active.name} onClose={() => setAddingSource(false)} onAdd={(src) => addSource(src)} />
       )}
       {deleting && (
         <DeleteModal
           title="노트북 삭제"
           path={deleting.name}
           onClose={() => setDeleting(null)}
-          onDelete={() => void deleteNotebook()}
+          onDelete={() => deleteNotebook()}
         />
       )}
       {deletingSource && (
@@ -476,17 +469,27 @@ function CreateNotebookModal({
   onCreate,
 }: {
   onClose: () => void;
-  onCreate: (name: string, desc: string) => void;
+  onCreate: (name: string, desc: string) => void | Promise<unknown>;
 }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
-  const submit = () => name.trim() && onCreate(name, desc);
+  const [busy, setBusy] = useState(false);
+  const submit = () => {
+    if (busy || !name.trim()) return;
+    const r = onCreate(name, desc);
+    if (r && typeof r.then === "function") {
+      setBusy(true);
+      void r.finally(() => setBusy(false));
+    }
+  };
   return (
     <Modal
       title="새 노트북"
       onClose={onClose}
       width={460}
-      footer={<ModalFooter action="생성" canSubmit={Boolean(name.trim())} onClose={onClose} onSubmit={submit} />}
+      footer={
+        <ModalFooter action="생성" canSubmit={Boolean(name.trim())} busy={busy} onClose={onClose} onSubmit={submit} />
+      }
     >
       <Field label="이름">
         <input
@@ -516,7 +519,7 @@ function AddSourceModal({
 }: {
   notebook: string;
   onClose: () => void;
-  onAdd: (src: NewSource) => void;
+  onAdd: (src: NewSource) => void | Promise<unknown>;
 }) {
   const [kind, setKind] = useState<SourceKind>("note");
   const [title, setTitle] = useState("");
@@ -524,20 +527,25 @@ function AddSourceModal({
   const [ref, setRef] = useState("");
   const kindOption = SOURCE_KIND_OPTIONS.find((option) => option.kind === kind) ?? SOURCE_KIND_OPTIONS[0];
   const canAdd = kind === "note" ? text.trim().length > 0 : ref.trim().length > 0;
+  const [busy, setBusy] = useState(false);
   const add = () => {
-    if (!canAdd) return;
-    onAdd(
+    if (!canAdd || busy) return;
+    const r = onAdd(
       kind === "note"
         ? { kind, title: title.trim(), text: text.trim() }
         : { kind, title: title.trim(), ref: ref.trim() },
     );
+    if (r && typeof r.then === "function") {
+      setBusy(true);
+      void r.finally(() => setBusy(false));
+    }
   };
   return (
     <Modal
       title={`인용자료 추가 — ${notebook}`}
       onClose={onClose}
       width={560}
-      footer={<ModalFooter action="추가" canSubmit={canAdd} onClose={onClose} onSubmit={add} />}
+      footer={<ModalFooter action="추가" canSubmit={canAdd} busy={busy} onClose={onClose} onSubmit={add} />}
     >
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>종류</div>

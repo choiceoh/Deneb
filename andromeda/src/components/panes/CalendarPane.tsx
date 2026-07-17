@@ -486,6 +486,7 @@ function EventForm({
   const [location, setLocation] = useState(event?.location ?? "");
   const [description, setDescription] = useState(event?.description ?? "");
   const [status, setStatus] = useState("");
+  const [saving, setSaving] = useState(false);
   const { mutate: createEvent } = useCreate();
   const { mutate: updateEvent } = useUpdate();
 
@@ -504,6 +505,7 @@ function EventForm({
   }
 
   function save() {
+    if (saving) return;
     const sum = summary.trim();
     if (!sum) return setStatus("제목을 입력하세요");
     if (!start) return setStatus("시작 시각을 입력하세요");
@@ -516,13 +518,18 @@ function EventForm({
     if (location.trim()) payload.location = location.trim();
     if (description.trim()) payload.description = description.trim();
     setStatus("저장 중…");
+    setSaving(true);
     const opts = {
       onSuccess: () => {
+        setSaving(false);
         onSaved();
         setStatus("저장됨");
         if (!stayOpenOnSave) onClose();
       },
-      onError: (err: unknown) => setStatus(`오류: ${errText(err)}`),
+      onError: (err: unknown) => {
+        setSaving(false);
+        setStatus(`오류: ${errText(err)}`);
+      },
     };
     if (isNew) createEvent({ resource: "calendar", values: payload }, opts);
     else updateEvent({ resource: "calendar", id: event.id, values: payload }, opts);
@@ -664,7 +671,13 @@ function EventForm({
         <button className="btn" onClick={onClose}>
           {isNew ? "취소" : "닫기"}
         </button>
-        <button className="btn btn-accent" onClick={save}>
+        <button
+          className="btn btn-accent"
+          onClick={save}
+          disabled={saving}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          {saving && <span className="tool-spin" style={{ width: 12, height: 12, flexShrink: 0 }} />}
           저장
         </button>
       </div>

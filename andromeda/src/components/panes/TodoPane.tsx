@@ -116,19 +116,25 @@ function TodoModal({ todo, onClose, onSaved }: { todo: Todo | null; onClose: () 
   const [due, setDue] = useState(todo?.due ? todo.due.slice(0, 10) : "");
   const [note, setNote] = useState(todo?.note ?? "");
   const [status, setStatus] = useState("");
+  const [saving, setSaving] = useState(false);
   const { mutate: createTodo } = useCreate();
   const { mutate: updateTodo } = useUpdate();
 
   function save() {
+    if (saving) return;
     const t = title.trim();
     if (!t) return setStatus("제목을 입력하세요");
     setStatus("저장 중…");
+    setSaving(true);
     const handlers = {
       onSuccess: () => {
         onSaved();
         onClose();
       },
-      onError: (e: unknown) => setStatus(`오류: ${errText(e)}`),
+      onError: (e: unknown) => {
+        setSaving(false);
+        setStatus(`오류: ${errText(e)}`);
+      },
     };
     if (todo) {
       const dueValue = due ? dateOnlyToRpcDue(due) : "";
@@ -156,7 +162,7 @@ function TodoModal({ todo, onClose, onSaved }: { todo: Todo | null; onClose: () 
     <Modal
       title={todo ? "할일 수정" : "할일 추가"}
       onClose={onClose}
-      footer={<ModalFooter action="저장" status={status} onClose={onClose} onSubmit={save} />}
+      footer={<ModalFooter action="저장" busy={saving} status={status} onClose={onClose} onSubmit={save} />}
     >
       <Field label="제목">
         <input className="field" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />

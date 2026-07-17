@@ -3,12 +3,13 @@ import { DataProviderScope } from "@/crud";
 import { type GatewayConfig, loadConfig, saveConfig } from "./gateway";
 import { denebDataProvider } from "./dataProvider";
 import { readDesktopToken } from "./tauri";
-import { checkForUpdates } from "./updater";
+import { type AvailableUpdate, checkForUpdate } from "./updater";
 import { errText } from "./format";
 import { log } from "./log";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Workstation } from "./components/Workstation";
+import { UpdateNudge } from "./components/UpdateNudge";
 
 // App owns the gateway config and the DIY data provider derived from it.
 // The workstation UI lives under <DataProviderScope> + <WorkspaceProvider>.
@@ -18,10 +19,14 @@ export function App() {
   const connected = Boolean(cfg.url && cfg.token);
 
   // Desktop auto-update: check GitHub Releases for a newer signed build on launch.
-  // No-op on the web build. The interactive settings UI surfaces failures to the
-  // user; here we just log them so a transient update hiccup never blocks startup.
+  // Check ONLY — installing waits for consent via the UpdateNudge pill (no silent
+  // bandwidth/disk spend). No-op on the web build; failures just log so a
+  // transient update hiccup never blocks startup.
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
   useEffect(() => {
-    checkForUpdates().catch((e) => log.child("updater").warn("startup update check failed", errText(e)));
+    checkForUpdate()
+      .then((u) => setUpdate(u))
+      .catch((e) => log.child("updater").warn("startup update check failed", errText(e)));
   }, []);
 
   // Desktop auto-connect: if we have no token yet, pull it from the OS keychain /
@@ -48,6 +53,7 @@ export function App() {
       <DataProviderScope dataProvider={dataProvider}>
         <WorkspaceProvider connected={connected} cfg={cfg} setCfg={setCfg}>
           <Workstation cfg={cfg} />
+          {update && <UpdateNudge update={update} onDismiss={() => setUpdate(null)} />}
         </WorkspaceProvider>
       </DataProviderScope>
     </ErrorBoundary>

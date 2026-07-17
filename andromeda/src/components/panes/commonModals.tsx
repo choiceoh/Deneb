@@ -22,9 +22,21 @@ export function OneFieldModal({
   action: string;
   width?: number;
   onClose: () => void;
-  onSubmit: (value: string) => void;
+  // May return a promise — the footer stays disabled until it settles, so a
+  // double-click can't fire the mutation twice (the modal often outlives the
+  // first click when the parent keeps it open on failure).
+  onSubmit: (value: string) => void | Promise<unknown>;
 }) {
   const [value, setValue] = useState(initialValue);
+  const [busy, setBusy] = useState(false);
+  function submit() {
+    if (busy) return;
+    const r = onSubmit(value);
+    if (r && typeof r.then === "function") {
+      setBusy(true);
+      void r.finally(() => setBusy(false));
+    }
+  }
   return (
     <Modal
       title={title}
@@ -34,8 +46,9 @@ export function OneFieldModal({
         <ModalFooter
           action={action}
           canSubmit={Boolean(value.trim())}
+          busy={busy}
           onClose={onClose}
-          onSubmit={() => onSubmit(value)}
+          onSubmit={submit}
         />
       }
     >
@@ -57,14 +70,23 @@ export function DeleteModal({
   title: string;
   path: string;
   onClose: () => void;
-  onDelete: () => void;
+  onDelete: () => void | Promise<unknown>;
 }) {
+  const [busy, setBusy] = useState(false);
+  function submit() {
+    if (busy) return;
+    const r = onDelete();
+    if (r && typeof r.then === "function") {
+      setBusy(true);
+      void r.finally(() => setBusy(false));
+    }
+  }
   return (
     <Modal
       title={title}
       onClose={onClose}
       width={420}
-      footer={<ModalFooter action="삭제" onClose={onClose} onSubmit={onDelete} />}
+      footer={<ModalFooter action="삭제" busy={busy} onClose={onClose} onSubmit={submit} />}
     >
       <p style={{ ...muted, margin: 0 }}>{path}</p>
     </Modal>

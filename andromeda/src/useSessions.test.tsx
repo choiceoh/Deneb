@@ -21,7 +21,7 @@ function chatDouble() {
 
 beforeEach(() => {
   recent.mockResolvedValue([]);
-  transcript.mockResolvedValue([]);
+  transcript.mockResolvedValue({ messages: [], total: 0 });
   remove.mockResolvedValue(true);
 });
 
@@ -44,11 +44,14 @@ describe("useSessions", () => {
   });
 
   it("when maps a selected transcript into stable chat turns", async () => {
-    transcript.mockResolvedValue([
-      { id: "u1", role: "user", content: "질문" },
-      { role: "assistant", content: "답변" },
-      { id: "sys", role: "system", content: "상태" },
-    ]);
+    transcript.mockResolvedValue({
+      messages: [
+        { id: "u1", role: "user", content: "질문" },
+        { role: "assistant", content: "답변" },
+        { id: "sys", role: "system", content: "상태" },
+      ],
+      total: 3,
+    });
     const chat = chatDouble();
     const { result } = renderHook(() => useSessions(cfg, true, false, chat));
 

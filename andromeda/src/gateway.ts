@@ -244,11 +244,16 @@ export const recentSessions = (cfg: GatewayConfig, limit = 20) =>
     (r) => r.sessions ?? [],
   );
 
+// The gateway caps limit at 200 server-side; total lets the drawer show a
+// "이전 대화 더 불러오기" affordance instead of silently truncating history.
 export const sessionTranscript = (cfg: GatewayConfig, sessionKey: string, limit = 60) =>
   callRpc<{ sessionKey: string; messages: TranscriptMsg[]; total: number }>(cfg, "miniapp.sessions.transcript", {
     sessionKey,
     limit,
-  }).then((r) => r.messages ?? []);
+  }).then((r) => ({ messages: r.messages ?? [], total: r.total ?? r.messages?.length ?? 0 }));
+
+// Server-side clamp of miniapp.sessions.transcript (sessions.go maxTranscriptLimit).
+export const TRANSCRIPT_MAX = 200;
 
 // Drop a dismissed conversation (the × in the session drawer). The gateway also
 // deletes its transcript so the row can't resurrect on the next restart.

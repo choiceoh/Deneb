@@ -955,6 +955,28 @@ textarea {
 .ai-send-stop:hover:not(:disabled) {
   background: var(--due);
 }
+/* Update nudge — bottom-right floating pill; above panes, below modals. */
+.update-nudge {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+/* "이전 대화 더 불러오기" pill — centered, quiet, above the oldest loaded turn. */
+.history-more {
+  align-self: center;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
 .ai-transcript {
   flex: 1;
   min-height: 0;

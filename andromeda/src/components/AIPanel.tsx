@@ -68,8 +68,18 @@ export function AIPanel({
   // 첨부 배치 진행 state — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션 전환/삭제/
   // 새 대화를 막는다 (useSessions 인자로 들어가야 해서 파이프라인 훅 밖에 산다).
   const [attaching, setAttaching] = useState(false);
-  const { sessions, sessionKey, sessionsOpen, sessionErr, toggleSessions, selectSession, removeSession, newChat } =
-    useSessions(cfg, connected, busy || attaching, { clear, setTurns });
+  const {
+    sessions,
+    sessionKey,
+    sessionsOpen,
+    sessionErr,
+    hiddenHistory,
+    toggleSessions,
+    selectSession,
+    removeSession,
+    newChat,
+    loadOlderTurns,
+  } = useSessions(cfg, connected, busy || attaching, { clear, setTurns });
   // Follow the newest message while it streams, unless the user scrolled up to read.
   const { ref: transcriptRef, onScroll, pin, atBottom, scrollToBottom } = useStickyScroll([turns, thinking]);
 
@@ -221,39 +231,46 @@ export function AIPanel({
             <div className="ai-empty">게이트웨이 연결 대기 중</div>
           )
         ) : (
-          turns.map((turn) => (
-            <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
-              <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
-              {turn.role === "user" ? (
-                <div className="ai-turn-body">{turn.text}</div>
-              ) : (
-                <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
-              )}
-              <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate}>
-                {/* Save this answer into the open notebook as a cited note — shown only
+          <>
+            {hiddenHistory && (
+              <button className="btn history-more" onClick={() => void loadOlderTurns()}>
+                이전 대화 {hiddenHistory.count}개 더 불러오기
+              </button>
+            )}
+            {turns.map((turn) => (
+              <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
+                <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
+                {turn.role === "user" ? (
+                  <div className="ai-turn-body">{turn.text}</div>
+                ) : (
+                  <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
+                )}
+                <AssistantTurnActions turn={turn} lastId={lastId} busy={busy} onRegenerate={regenerate}>
+                  {/* Save this answer into the open notebook as a cited note — shown only
                     while a notebook pane has registered a sink (the notebook's output
                     loop: material made with the AI stays with the deal). 저장됨 only
                     after the sink confirms; a failed pin stays clickable for retry. */}
-                {noteSink && turn.status === "done" && turn.text.trim() && (
-                  <button
-                    className="row-btn ai-save-note no-print"
-                    disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
-                    onClick={() => void saveNote(turn.id, turn.text)}
-                    title="이 답변을 노트북에 인용자료(노트)로 저장"
-                  >
-                    <Icon name="plus" size={12} />{" "}
-                    {noteSaves.get(turn.id) === "saved"
-                      ? "노트로 저장됨"
-                      : noteSaves.get(turn.id) === "saving"
-                        ? "저장 중…"
-                        : noteSaves.get(turn.id) === "error"
-                          ? "저장 실패 — 다시 시도"
-                          : "노트에 저장"}
-                  </button>
-                )}
-              </AssistantTurnActions>
-            </div>
-          ))
+                  {noteSink && turn.status === "done" && turn.text.trim() && (
+                    <button
+                      className="row-btn ai-save-note no-print"
+                      disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
+                      onClick={() => void saveNote(turn.id, turn.text)}
+                      title="이 답변을 노트북에 인용자료(노트)로 저장"
+                    >
+                      <Icon name="plus" size={12} />{" "}
+                      {noteSaves.get(turn.id) === "saved"
+                        ? "노트로 저장됨"
+                        : noteSaves.get(turn.id) === "saving"
+                          ? "저장 중…"
+                          : noteSaves.get(turn.id) === "error"
+                            ? "저장 실패 — 다시 시도"
+                            : "노트에 저장"}
+                    </button>
+                  )}
+                </AssistantTurnActions>
+              </div>
+            ))}
+          </>
         )}
         {/* Once content has started streaming, a mid-turn thinking burst (between
             tools) shows here; before the first token it rides in the sparkle above. */}
