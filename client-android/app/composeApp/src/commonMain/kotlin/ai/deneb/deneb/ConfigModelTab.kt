@@ -348,10 +348,13 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (model.unhealthy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                             )
+                            // Full model path (provider/model): supporting detail, so a
+                            // step smaller and lighter than the display name above it
+                            // (operator polish request, 2026-07-17).
                             Text(
                                 model.id + ModelHealth.parse(model.health).suffix,
-                                style = DenebType.rowSubtitle,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = DenebType.meta,
+                                color = denebHint(),
                             )
                             // Rolling 24h usage from the gateway's run log — always
                             // visible when the model actually ran, so subscription
