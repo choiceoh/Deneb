@@ -227,7 +227,19 @@ export function AIPanel({
         onScroll={onScroll}
       >
         {turns.length === 0 ? (
-          connected ? null : (
+          connected ? (
+            // Designed empty: the side panel reads the focused pane's projection,
+            // so pitch that instead of a blank column. Chips send immediately —
+            // mouse-first affordance (the user doesn't use shortcuts).
+            <div className="ai-empty-suggest">
+              <p>지금 보고 있는 화면을 함께 봅니다</p>
+              {["이 화면 요약해줘", "여기서 눈에 띄는 점은?", "오늘 뭐부터 하면 좋을까?"].map((s) => (
+                <button key={s} className="btn suggest-chip" onClick={() => submit(s)} disabled={busy}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : (
             <div className="ai-empty">게이트웨이 연결 대기 중</div>
           )
         ) : (

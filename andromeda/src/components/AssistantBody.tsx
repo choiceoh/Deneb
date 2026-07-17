@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import type { AttachmentPart, ChatTurn } from "@/hooks";
 import { printClosest } from "@/print";
@@ -111,12 +111,27 @@ export function AssistantTurnActions({
   onRegenerate: () => void;
   children?: ReactNode;
 }) {
+  const [copied, setCopied] = useState(false);
   if (turn.role !== "assistant") return null;
+  async function copyAnswer() {
+    try {
+      await navigator.clipboard.writeText(turn.text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — no-op */
+    }
+  }
   return (
     <>
       {turn.id === lastId && turn.parts && turn.canRegenerate !== false && !busy && turn.status !== "streaming" && (
         <button className="row-btn ai-regen no-print" onClick={onRegenerate} title="다시 생성">
           <Icon name="refresh" size={12} /> 다시 생성
+        </button>
+      )}
+      {turn.status !== "streaming" && turn.text.trim().length > 0 && (
+        <button className="row-btn ai-copy no-print" onClick={() => void copyAnswer()} title="답변 전체를 복사">
+          <Icon name={copied ? "check" : "copy"} size={12} /> {copied ? "복사됨" : "복사"}
         </button>
       )}
       {turn.status !== "streaming" && (turn.text.trim().length > 0 || (turn.parts?.length ?? 0) > 0) && (
