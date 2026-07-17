@@ -2701,4 +2701,3 @@ val Icons.Filled.WorkspacePremium: ImageVector by lazy {
         }
     }
 }
-

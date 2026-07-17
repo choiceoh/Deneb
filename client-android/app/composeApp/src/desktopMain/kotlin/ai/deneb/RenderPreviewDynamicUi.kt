@@ -18,6 +18,13 @@ import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiNode
 import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.LocalDenebUiMotion
+import ai.deneb.ui.icons.outlined.AutoAwesome
+import ai.deneb.ui.icons.outlined.Dns
+import ai.deneb.ui.icons.outlined.Extension
+import ai.deneb.ui.icons.outlined.Memory
+import ai.deneb.ui.icons.outlined.Palette
+import ai.deneb.ui.icons.outlined.Schedule
+import ai.deneb.ui.icons.outlined.Visibility
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -32,13 +39,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import ai.deneb.ui.icons.outlined.AutoAwesome
-import ai.deneb.ui.icons.outlined.Dns
-import ai.deneb.ui.icons.outlined.Extension
-import ai.deneb.ui.icons.outlined.Memory
-import ai.deneb.ui.icons.outlined.Palette
-import ai.deneb.ui.icons.outlined.Schedule
-import ai.deneb.ui.icons.outlined.Visibility
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme

@@ -8,6 +8,7 @@ import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.denebSharedBounds
+import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import ai.deneb.ui.icons.outlined.AutoAwesome
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text

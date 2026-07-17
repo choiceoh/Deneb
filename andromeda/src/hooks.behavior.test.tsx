@@ -27,7 +27,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-
 type DragLike = {
   dataTransfer?: {
     types: string[];

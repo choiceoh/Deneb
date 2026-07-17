@@ -12,6 +12,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.gradientBrush
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.outlined.KeyboardVoice
 import ai.deneb.ui.outlineTextFieldColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,7 +32,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material.icons.Icons
-import ai.deneb.ui.icons.outlined.KeyboardVoice
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SuggestionChip

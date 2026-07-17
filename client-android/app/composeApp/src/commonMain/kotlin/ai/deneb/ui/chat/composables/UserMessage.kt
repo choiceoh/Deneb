@@ -5,6 +5,8 @@ import ai.deneb.shareTextToApps
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.filled.ContentCopy
+import ai.deneb.ui.icons.filled.SelectAll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,9 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import ai.deneb.ui.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
-import ai.deneb.ui.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon

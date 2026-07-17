@@ -1858,4 +1858,3 @@ val Icons.Outlined.Translate: ImageVector by lazy {
         }
     }
 }
-

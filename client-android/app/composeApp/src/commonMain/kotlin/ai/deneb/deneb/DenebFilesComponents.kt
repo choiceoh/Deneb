@@ -7,6 +7,12 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
+import ai.deneb.ui.icons.automirrored.outlined.DriveFileMove
+import ai.deneb.ui.icons.automirrored.outlined.InsertDriveFile
+import ai.deneb.ui.icons.outlined.DriveFileRenameOutline
+import ai.deneb.ui.icons.outlined.Folder
+import ai.deneb.ui.icons.outlined.Link
+import ai.deneb.ui.icons.outlined.Visibility
 import ai.deneb.ui.markdown.MarkdownContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,13 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import ai.deneb.ui.icons.automirrored.outlined.DriveFileMove
-import ai.deneb.ui.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Delete
-import ai.deneb.ui.icons.outlined.DriveFileRenameOutline
-import ai.deneb.ui.icons.outlined.Folder
-import ai.deneb.ui.icons.outlined.Link
-import ai.deneb.ui.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider

@@ -7,6 +7,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useSyncExternalStore,
@@ -15,7 +16,6 @@ import {
 
 export type BaseKey = string | number;
 /** Unconstrained row type — domain interfaces (Todo, digests, …) often omit `id`. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type BaseRecord = any;
 
 export interface DataProvider {
@@ -131,16 +131,9 @@ interface DataCtx {
 
 const DataContext = createContext<DataCtx | null>(null);
 
-export function DataProviderScope({
-  dataProvider,
-  children,
-}: {
-  dataProvider: DataProvider;
-  children: ReactNode;
-}) {
-  // Fresh cache per mount so tests don't leak query state across renders.
-  const cache = useMemo(() => new QueryCache(), [dataProvider]);
-  const value = useMemo(() => ({ provider: dataProvider, cache }), [dataProvider, cache]);
+export function DataProviderScope({ dataProvider, children }: { dataProvider: DataProvider; children: ReactNode }) {
+  // Fresh cache whenever the provider identity changes (cfg swap / test inject).
+  const value = useMemo(() => ({ provider: dataProvider, cache: new QueryCache() }), [dataProvider]);
   return createElement(DataContext.Provider, { value }, children);
 }
 
@@ -171,7 +164,9 @@ function useQueryObserver(
 ): QueryObserver {
   const { cache } = useDataCtx();
   const fetchRef = useRef(fetch);
-  fetchRef.current = fetch;
+  useEffect(() => {
+    fetchRef.current = fetch;
+  }, [fetch]);
 
   const version = useSyncExternalStore(
     (onStoreChange) => cache.subscribe(key, resource, onStoreChange),
@@ -242,15 +237,16 @@ export function useList<T extends BaseRecord = BaseRecord>(opts: {
   const initial = opts.queryOptions?.initialData;
   const initialAt = opts.queryOptions?.initialDataUpdatedAt;
 
-  // Seed synchronously before observers fetch so the first paint can show cache.
-  if (initial && cache.get(key)?.data == null) {
+  // Seed before paint so cached lists appear on the first frame (tests + cold open).
+  useLayoutEffect(() => {
+    if (!initial || cache.get(key)?.data != null) return;
     cache.set(key, {
       status: "success",
       data: initial,
       dataUpdatedAt: initialAt ?? Date.now(),
       epoch: 0,
     });
-  }
+  }, [cache, initial, initialAt, key]);
 
   const query = useQueryObserver(
     key,
@@ -274,7 +270,7 @@ export function useList<T extends BaseRecord = BaseRecord>(opts: {
   );
 
   const entry = cache.get(key);
-  const result = (entry?.data as ListResult<T> | undefined) ?? { data: [] as T[], total: 0 };
+  const result = (entry?.data as ListResult<T> | undefined) ?? initial ?? { data: [] as T[], total: 0 };
   return { query, result };
 }
 
@@ -295,17 +291,18 @@ export function useOne<T extends BaseRecord = BaseRecord>(opts: {
   const key = opts.id !== undefined ? cache.oneKey(opts.resource, opts.id) : `one:${opts.resource}:_`;
   const initial = opts.queryOptions?.initialData;
   const initialAt = opts.queryOptions?.initialDataUpdatedAt;
+  const id = opts.id;
 
-  if (opts.id !== undefined && initial && cache.get(key)?.data == null) {
+  useLayoutEffect(() => {
+    if (id === undefined || !initial || cache.get(key)?.data != null) return;
     cache.set(key, {
       status: "success",
       data: initial.data,
       dataUpdatedAt: initialAt ?? Date.now(),
       epoch: 0,
     });
-  }
+  }, [cache, id, initial, initialAt, key]);
 
-  const id = opts.id;
   const query = useQueryObserver(
     key,
     opts.resource,
@@ -329,7 +326,7 @@ export function useOne<T extends BaseRecord = BaseRecord>(opts: {
   );
 
   const entry = cache.get(key);
-  return { query, result: (entry?.data as T | undefined) ?? undefined };
+  return { query, result: (entry?.data as T | undefined) ?? initial?.data };
 }
 
 type MutateHandlers = { onSuccess?: () => void; onError?: (e: unknown) => void };

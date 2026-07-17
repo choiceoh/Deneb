@@ -53,8 +53,11 @@ val Icons.AutoMirrored.Outlined.Chat: ImageVector by lazy {
 }
 
 val Icons.AutoMirrored.Outlined.DriveFileMove: ImageVector by lazy {
-    materialIcon(name = "AutoMirrored.Outlined.DriveFileMove", autoMirror =
-                true) {
+    materialIcon(
+        name = "AutoMirrored.Outlined.DriveFileMove",
+        autoMirror =
+        true,
+    ) {
         materialPath {
             moveTo(20.0f, 6.0f)
             horizontalLineToRelative(-8.0f)
@@ -93,8 +96,11 @@ val Icons.AutoMirrored.Outlined.DriveFileMove: ImageVector by lazy {
 }
 
 val Icons.AutoMirrored.Outlined.InsertDriveFile: ImageVector by lazy {
-    materialIcon(name = "AutoMirrored.Outlined.InsertDriveFile", autoMirror =
-                true) {
+    materialIcon(
+        name = "AutoMirrored.Outlined.InsertDriveFile",
+        autoMirror =
+        true,
+    ) {
         materialPath {
             moveTo(14.0f, 2.0f)
             horizontalLineTo(6.0f)
@@ -150,4 +156,3 @@ val Icons.AutoMirrored.Outlined.OpenInNew: ImageVector by lazy {
         }
     }
 }
-

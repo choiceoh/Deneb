@@ -58,4 +58,3 @@ describe("useAction", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
-

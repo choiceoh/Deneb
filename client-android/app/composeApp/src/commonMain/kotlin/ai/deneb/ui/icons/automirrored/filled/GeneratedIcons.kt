@@ -228,4 +228,3 @@ val Icons.AutoMirrored.Filled.Undo: ImageVector by lazy {
         }
     }
 }
-

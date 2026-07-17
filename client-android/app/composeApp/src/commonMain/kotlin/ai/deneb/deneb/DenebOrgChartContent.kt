@@ -11,6 +11,7 @@ import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.outlined.Article
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +33,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Add
-import ai.deneb.ui.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MailOutline

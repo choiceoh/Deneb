@@ -31,12 +31,12 @@ import androidx.compose.ui.unit.dp
 import ai.deneb.ui.icons.automirrored.filled.Chat as ChatFilled
 import ai.deneb.ui.icons.automirrored.outlined.Chat as ChatOutlined
 import ai.deneb.ui.icons.filled.CalendarMonth as CalendarMonthFilled
-import androidx.compose.material.icons.filled.Email as EmailFilled
 import ai.deneb.ui.icons.filled.MoreHoriz as MoreFilled
-import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
 import ai.deneb.ui.icons.outlined.CalendarMonth as CalendarMonthOutlined
-import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import ai.deneb.ui.icons.outlined.MoreHoriz as MoreOutlined
+import androidx.compose.material.icons.filled.Email as EmailFilled
+import androidx.compose.material.icons.filled.Notifications as NotificationsFilled
+import androidx.compose.material.icons.outlined.Email as EmailOutlined
 import androidx.compose.material.icons.outlined.Notifications as NotificationsOutlined
 
 /**

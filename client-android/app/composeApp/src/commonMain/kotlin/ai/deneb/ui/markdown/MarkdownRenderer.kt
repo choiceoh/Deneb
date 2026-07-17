@@ -11,6 +11,11 @@ import ai.deneb.ui.dynamicui.DenebUiRenderer
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.hasInteractiveNode
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.filled.CheckBox
+import ai.deneb.ui.icons.filled.ChevronRight
+import ai.deneb.ui.icons.filled.ExpandMore
+import ai.deneb.ui.icons.outlined.BrokenImage
+import ai.deneb.ui.icons.outlined.CheckBoxOutlineBlank
 import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,11 +39,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import ai.deneb.ui.icons.filled.CheckBox
-import ai.deneb.ui.icons.filled.ChevronRight
-import ai.deneb.ui.icons.filled.ExpandMore
-import ai.deneb.ui.icons.outlined.BrokenImage
-import ai.deneb.ui.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
