@@ -6,4 +6,13 @@
         <item name="android:enforceNavigationBarContrast">false</item>
         <item name="android:enforceStatusBarContrast">false</item>
     </style>
+    <!-- Launch theme: SplashScreen API — background matches the app's LIGHT
+         Compose background (Theme.kt LightColorScheme.background = pure white)
+         so splash → app has no color step; values-night overrides it to the
+         dark windowBackground. Icon exit animation lives in MainActivity. -->
+    <style name="AppTheme.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FFFFFFFF</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+    </style>
 </resources>

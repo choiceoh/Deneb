@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.speech.RecognizerIntent
+import android.view.animation.DecelerateInterpolator
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
@@ -63,6 +65,20 @@ class MainActivity : ComponentActivity() {
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // SplashScreen API + custom exit: the launcher icon fades/scales out into
+        // the content instead of the default hard cut — "opened", not "switched
+        // on". Duration/curve mirror the compose motion doctrine's snappy tier
+        // (this is a View-layer animator, so the spec is inlined with intent).
+        installSplashScreen().setOnExitAnimationListener { splash ->
+            splash.iconView.animate()
+                .alpha(0f)
+                .scaleX(1.12f)
+                .scaleY(1.12f)
+                .setDuration(220L)
+                .setInterpolator(DecelerateInterpolator())
+                .withEndAction { splash.remove() }
+                .start()
+        }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         FileKit.init(this)
