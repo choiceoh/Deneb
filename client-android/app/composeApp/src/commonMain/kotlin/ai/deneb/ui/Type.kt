@@ -2,6 +2,7 @@ package ai.deneb.ui
 
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
@@ -28,20 +29,27 @@ import org.jetbrains.compose.resources.Font
 // reads generic next to the branded Pretendard body). OFL license:
 // client-android/app/THIRD_PARTY_LICENSES/JetBrainsMono-OFL.txt
 @Composable
-fun JetBrainsMonoFamily(): FontFamily = FontFamily(
-    Font(Res.font.jetbrains_mono_regular, FontWeight.Normal),
-    Font(Res.font.jetbrains_mono_bold, FontWeight.Bold),
-)
+fun JetBrainsMonoFamily(): FontFamily {
+    // Memoize the family: callers use it as a remember key (inline-text caches),
+    // so a fresh FontFamily per recomposition would defeat those caches. Key on
+    // the Font instances — compose-resources swaps them in once loading finishes.
+    val regular = Font(Res.font.jetbrains_mono_regular, FontWeight.Normal)
+    val bold = Font(Res.font.jetbrains_mono_bold, FontWeight.Bold)
+    return remember(regular, bold) { FontFamily(regular, bold) }
+}
 
 @Composable
-fun PretendardFontFamily(): FontFamily = FontFamily(
-    Font(Res.font.pretendard_extralight, FontWeight.ExtraLight),
-    Font(Res.font.pretendard_light, FontWeight.Light),
-    Font(Res.font.pretendard_regular, FontWeight.Normal),
-    Font(Res.font.pretendard_medium, FontWeight.Medium),
-    Font(Res.font.pretendard_semibold, FontWeight.SemiBold),
-    Font(Res.font.pretendard_bold, FontWeight.Bold),
-)
+fun PretendardFontFamily(): FontFamily {
+    val extraLight = Font(Res.font.pretendard_extralight, FontWeight.ExtraLight)
+    val light = Font(Res.font.pretendard_light, FontWeight.Light)
+    val regular = Font(Res.font.pretendard_regular, FontWeight.Normal)
+    val medium = Font(Res.font.pretendard_medium, FontWeight.Medium)
+    val semiBold = Font(Res.font.pretendard_semibold, FontWeight.SemiBold)
+    val bold = Font(Res.font.pretendard_bold, FontWeight.Bold)
+    return remember(extraLight, light, regular, medium, semiBold, bold) {
+        FontFamily(extraLight, light, regular, medium, semiBold, bold)
+    }
+}
 
 /**
  * Material 3 type scale re-pointed at Pretendard, with the Mini App's tight
