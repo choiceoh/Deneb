@@ -5,7 +5,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 
 # Sidecar Models (GPU 부가 모델 운영 현황)
 
-> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU 플릿에서 상주 서빙되는 전용 모델들**을 호출한다. 호스트 배치(2026-07-17 갱신): **srv4** = 게이트웨이·wormhole·diffusiongemma 엔진(:8100)·메일서버, **srv1**(구 gx10) = GPU 보조 — qwen3.6(:8000)·PaddleOCR-VL(:18011)·VibeVoice-ASR(:18013)·hy-mt2(:8102)·lfm2.5(:8101)·sparkfleet(:18900), **srv2**(구 spark4tb) = dsv4 엔진(:8000). wormhole 의 `qwen3.6-35b-a3b` 엔트리는 srv1 tailnet(`http://100.105.145.6:8000/v1`) + `fleet: true`(SparkFleet 등록 시 노드 이동 자동 추적). 게이트웨이는 크로스호스트 사이드카를 env 오버라이드(`DENEB_OCR_VL_URL`/`DENEB_ASR_URL` = srv1 tailnet)로 소비한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 플릿 안에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
+> Deneb 는 메인 챗 LLM 외에도 **로컬 GPU 플릿에서 상주 서빙되는 전용 모델들**을 호출한다. 호스트 배치(2026-07-17 갱신): **srv4** = 게이트웨이·wormhole·diffusiongemma 엔진(:8100)·메일서버, **srv1** = GPU 보조 — qwen3.6(:8000)·PaddleOCR-VL(:18011)·VibeVoice-ASR(:18013)·hy-mt2(:8102)·lfm2.5(:8101)·sparkfleet(:18900), **srv2** = dsv4 엔진(:8000). wormhole 의 `qwen3.6-35b-a3b` 엔트리는 srv1 tailnet(`http://100.105.145.6:8000/v1`) + `fleet: true`(SparkFleet 등록 시 노드 이동 자동 추적). 게이트웨이는 크로스호스트 사이드카를 env 오버라이드(`DENEB_OCR_VL_URL`/`DENEB_ASR_URL` = srv1 tailnet)로 소비한다. 대부분 vLLM 의 OpenAI 호환 `/v1` 엔드포인트지만, 일부(VibeVoice-ASR)는 전용 서비스로 상주한다. 외부 API 호출을 피하고 플릿 안에서 자급한다는 프로젝트 원칙(로컬 추론 우선)을 따른다. 이 파일은 "어떤 모델이, 어디서, 어떻게" 돌아가는지의 단일 진실원이다.
 
 ## 현황 표
 

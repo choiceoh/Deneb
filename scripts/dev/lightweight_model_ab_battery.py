@@ -43,7 +43,7 @@ COMPACTION_CASES = [
         ],
         # Facts that belong to the OTHER case — appearing here means the model
         # contaminated the summary with unrelated context (hallucination probe).
-        "foreign": [["18789"], ["spark4tb"], ["ssh 타임아웃", "ssh타임아웃"], ["7월 15일"]],
+        "foreign": [["18789"], ["srv2"], ["ssh 타임아웃", "ssh타임아웃"], ["7월 15일"]],
     },
     {
         "name": "compaction-ops",
@@ -51,7 +51,7 @@ COMPACTION_CASES = [
             "사용자: 서버 점검 결과 정리해줘.\n"
             "비서: 게이트웨이는 포트 18789에서 정상이고, 평균 응답은 1.8초입니다. 최근 일주일 오류율은 0.2%로 "
             "평시 범위이고, 피크는 아침 브리핑 생성 시간대에 몰립니다. "
-            "디스크는 spark4tb 노드가 82% 찼고 30일 보존 정책 기준으로 다음 달 초 정리가 필요합니다. "
+            "디스크는 srv2 노드가 82% 찼고 30일 보존 정책 기준으로 다음 달 초 정리가 필요합니다. "
             "오래된 전사 파일이 용량의 절반 이상이라 정리 효과는 클 것으로 봅니다. "
             "백업은 매일 자정에 돌았고 실패는 6월 28일 한 번, 원인은 ssh 타임아웃이었습니다. "
             "그날 새벽 네트워크 순단이 있었고 같은 시간대에 모니터링 핑도 두 번 유실됐습니다.\n"

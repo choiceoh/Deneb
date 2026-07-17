@@ -161,7 +161,7 @@ class FleetWireCompatibilityBoundaryTest {
     @Test
     fun nestedCompleteNodeRoundTripsWithoutFieldLoss() {
         val node = FleetNode(
-            name = "gx10",
+            name = "srv1",
             role = "head",
             reachable = true,
             metrics = FleetNodeMetrics(
@@ -440,9 +440,9 @@ class FleetWireCompatibilityBoundaryTest {
 
     @Test
     fun lenientJsonAcceptsUnquotedObjectKeys() {
-        val node = fleetJson.decodeFromString<FleetNode>("{name:gx10, role:head, reachable:true}")
+        val node = fleetJson.decodeFromString<FleetNode>("{name:srv1, role:head, reachable:true}")
 
-        assertEquals("gx10", node.name)
+        assertEquals("srv1", node.name)
         assertEquals("head", node.role)
         assertTrue(node.reachable)
     }

@@ -82,9 +82,9 @@ func recallGainCorpus() ([]gainFact, []gainQuery) {
 			wikiPage: page("dgx", "DGX Spark 게이트웨이", "프로젝트", "포트 18789, 메인 step3p7", "게이트웨이 포트 18789, 추론은 로컬.", "dgx", "게이트웨이", "포트"),
 		},
 		{
-			diary:    []string{"매일 자정 무렵 spark4tb로 백업. 30일 보관."},
+			diary:    []string{"매일 자정 무렵 srv2로 백업. 30일 보관."},
 			wikiPath: "시스템/backup.md",
-			wikiPage: page("backup", "기억 백업 체계", "시스템", "spark4tb 일일 백업, 보존 30일", "매일 자정 spark4tb, 보존 30일.", "백업", "spark4tb"),
+			wikiPage: page("backup", "기억 백업 체계", "시스템", "srv2 일일 백업, 보존 30일", "매일 자정 srv2, 보존 30일.", "백업", "srv2"),
 		},
 		{
 			diary:    []string{"에코프로 케이블 1,950m 견적 회신함."},

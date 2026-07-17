@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   parity:
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 10
     steps:
       - name: Checkout

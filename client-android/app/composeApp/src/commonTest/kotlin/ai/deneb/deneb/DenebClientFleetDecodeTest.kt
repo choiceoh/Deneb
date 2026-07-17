@@ -18,14 +18,14 @@ class DenebClientFleetDecodeTest {
         val raw = """
         {
           "nodes": [
-            {"name":"gx10","role":"head","address":"100.105.145.6","reachable":true,
+            {"name":"srv1","role":"head","address":"100.105.145.6","reachable":true,
              "metrics":{"gpus":[{"index":0,"utilPct":37,"tempC":62,"powerW":41.2}],
                         "memory":{"totalKB":127541248,"availableKB":13917184},
                         "disks":[{"path":"/","totalKB":914415616,"usedKB":501841920,"availKB":366039040,"usePct":58}],
                         "services":[{"name":"vllm-nex","url":"http://127.0.0.1:8002/v1/models","ok":false,"httpStatus":0}],
-                        "nfs":[{"path":"/mnt/spark4tb","status":"mounted"}]},
+                        "nfs":[{"path":"/mnt/srv2","status":"mounted"}]},
              "models":[{"name":"Qwen3.6-35B-A3B-FP8","sizeBytes":37493015668}]},
-            {"name":"spark4tb","role":"storage","address":"100.125.220.117","reachable":true,
+            {"name":"srv2","role":"storage","address":"100.125.220.117","reachable":true,
              "metrics":{"gpus":[{"index":0,"utilPct":null,"tempC":null,"powerW":null}],
                         "memory":{"totalKB":127541248,"availableKB":80000000},
                         "disks":[],"services":[],"nfs":null}},
@@ -39,7 +39,7 @@ class DenebClientFleetDecodeTest {
 
         val st = fleetJson.decodeFromString<FleetState>(raw)
         assertEquals(3, st.nodes.size)
-        assertEquals("gx10", st.nodes[0].name)
+        assertEquals("srv1", st.nodes[0].name)
         assertEquals(37, st.nodes[0].metrics.gpus.first().utilPct)
         // null arrays / objects coerce to defaults instead of failing the decode
         val srv3 = st.nodes[2]
@@ -55,13 +55,13 @@ class DenebClientFleetDecodeTest {
     @Test
     fun decodesRecipesAndJobs() {
         val recipes = fleetJson.decodeFromString<List<FleetRecipe>>(
-            """[{"name":"qwen36-fast","description":"","node":"gx10","port":8000,
-                 "tags":["vllm"],"status":{"running":true,"weightsPresent":true,"node":"gx10","headroomGB":13.2}}]""",
+            """[{"name":"qwen36-fast","description":"","node":"srv1","port":8000,
+                 "tags":["vllm"],"status":{"running":true,"weightsPresent":true,"node":"srv1","headroomGB":13.2}}]""",
         )
         assertTrue(recipes.single().status.running)
 
         val jobs = fleetJson.decodeFromString<List<FleetJob>>(
-            """[{"id":"job-3","title":"hf download a/b → gx10","state":"running",
+            """[{"id":"job-3","title":"hf download a/b → srv1","state":"running",
                  "log":"progress: 12G downloaded","startedAt":"2026-06-12T10:00:00+09:00","cmd":"…"}]""",
         )
         assertEquals("job-3", jobs.single().id)

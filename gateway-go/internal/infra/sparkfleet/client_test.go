@@ -25,9 +25,9 @@ func TestCheck_ParsesAndClassifiesBackendHealth(t *testing.T) {
 			return
 		}
 		_, _ = w.Write([]byte(`{"services":[
-			{"node":"gx10","name":"paddleocr","ok":true,"httpStatus":200},
-			{"node":"gx10","name":"embeddings","ok":false,"httpStatus":0},
-			{"node":"spark4tb","name":"vllm-tp2","ok":true,"httpStatus":200,"model":"step3p7"}
+			{"node":"srv1","name":"paddleocr","ok":true,"httpStatus":200},
+			{"node":"srv1","name":"embeddings","ok":false,"httpStatus":0},
+			{"node":"srv2","name":"vllm-tp2","ok":true,"httpStatus":200,"model":"step3p7"}
 		]}`))
 	}))
 	defer srv.Close()

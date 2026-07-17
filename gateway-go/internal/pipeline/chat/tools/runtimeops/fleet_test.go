@@ -16,10 +16,10 @@ func stubFleet(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"nodes":[{"name":"gx10","role":"head","reachable":true,"metrics":{"gpus":[{"utilPct":42,"tempC":55}],"memory":{"totalKB":131072000,"availableKB":65536000},"services":[{"name":"vllm","ok":false}]}}]}`))
+		_, _ = w.Write([]byte(`{"nodes":[{"name":"srv1","role":"head","reachable":true,"metrics":{"gpus":[{"utilPct":42,"tempC":55}],"memory":{"totalKB":131072000,"availableKB":65536000},"services":[{"name":"vllm","ok":false}]}}]}`))
 	})
 	mux.HandleFunc("/api/recipes", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[{"name":"qwen36","node":"gx10","container":"vllm_qwen36","port":8000,"status":{"running":true,"weightsPresent":true,"node":"gx10"}}]`))
+		_, _ = w.Write([]byte(`[{"name":"qwen36","node":"srv1","container":"vllm_qwen36","port":8000,"status":{"running":true,"weightsPresent":true,"node":"srv1"}}]`))
 	})
 	mux.HandleFunc("/api/jobs", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`[{"id":"job-1","title":"launch qwen36","state":"failed"}]`))
@@ -62,7 +62,7 @@ func TestFleetTool_ReturnsOffMessageWhenUnconfigured(t *testing.T) {
 
 func TestFleetTool_StatusReturnsNodeAndGPUInfo(t *testing.T) {
 	out := runFleet(t, fleetDepsFor(stubFleet(t).URL), map[string]any{"action": "status"})
-	for _, want := range []string{"gx10", "qwen36", "GPU 42%", "다운: vllm", "실패 작업"} {
+	for _, want := range []string{"srv1", "qwen36", "GPU 42%", "다운: vllm", "실패 작업"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("status missing %q in:\n%s", want, out)
 		}

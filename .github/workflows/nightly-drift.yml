@@ -69,9 +69,9 @@ jobs:
   kotlin:
     # Same gate as kotlin-lint.yml, which triggers on pull_request only —
     # direct pushes to main skip it entirely. Nightly closes that hole.
-    # Self-hosted gx10 keeps ~/.gradle + ~/android-sdk warm (matches PR lane).
+    # Self-hosted srv4 keeps ~/.gradle + ~/android-sdk warm (matches PR lane).
     name: kotlin (spotless + detekt + desktopTest + android compile)
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 25
     env:
       ANDROID_HOME: /home/choiceoh/android-sdk

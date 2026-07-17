@@ -44,7 +44,7 @@ class ScoringContractTest(unittest.TestCase):
     def test_when_cross_case_contamination_is_penalized(self) -> None:
         case = battery.COMPACTION_CASES[0]
         clean = runner.MOCK_GOOD["compaction-deal"]
-        contaminated = clean + "\n서버 포트 18789와 spark4tb도 확인"
+        contaminated = clean + "\n서버 포트 18789와 srv2도 확인"
         self.assertLess(
             battery.score_compaction(case, contaminated),
             battery.score_compaction(case, clean),
