@@ -13,10 +13,12 @@ class PendingQueueTest {
 
     private class Fixture(maxSize: Int = 100, initial: String = "") {
         var raw = initial
+        var beforeWrite: (() -> Unit)? = null
         val writes = mutableListOf<String>()
         val queue = PendingQueue(
             readJson = { raw },
             writeJson = {
+                beforeWrite?.invoke()
                 raw = it
                 writes += it
             },
@@ -27,11 +29,25 @@ class PendingQueueTest {
     }
 
     @Test
-    fun emptyAndMalformedStorageReadAsEmpty() {
-        assertEquals(emptyList(), Fixture().queue.get())
-        assertEquals(emptyList(), Fixture(initial = "not-json").queue.get())
-        assertEquals(emptyList(), Fixture(initial = "{}").queue.get())
-        assertEquals(emptyList(), Fixture(initial = "[1, 2]").queue.get())
+    fun emptyStorageReadsWithoutWriting() {
+        val f = Fixture()
+
+        assertEquals(emptyList(), f.queue.get())
+        assertEquals(emptyList(), f.writes)
+    }
+
+    @Test
+    fun malformedStorageIsClearedAfterFirstRead() {
+        for (raw in listOf("not-json", "{}", "[1, 2]")) {
+            val f = Fixture(initial = raw)
+
+            assertEquals(emptyList(), f.queue.get(), raw)
+            assertEquals("", f.raw, raw)
+            assertEquals(listOf(""), f.writes, raw)
+
+            assertEquals(emptyList(), f.queue.get(), raw)
+            assertEquals(1, f.writes.size, raw)
+        }
     }
 
     @Test
@@ -115,6 +131,19 @@ class PendingQueueTest {
 
         assertEquals(listOf("fresh:1"), f.queue.get())
         assertTrue(f.raw.startsWith("["))
+    }
+
+    @Test
+    fun readerDuringMutationCannotClearIncomingWrite() = runTest {
+        val f = Fixture(initial = "broken")
+        var readDuringWrite: List<String>? = null
+        f.beforeWrite = { readDuringWrite = f.queue.get() }
+
+        f.queue.add(listOf("fresh:1"))
+
+        assertEquals(emptyList(), readDuringWrite)
+        assertEquals(listOf("fresh:1"), f.queue.get())
+        assertEquals(1, f.writes.size)
     }
 
     @Test
