@@ -2701,3 +2701,17 @@ val Icons.Filled.WorkspacePremium: ImageVector by lazy {
         }
     }
 }
+
+val Icons.Filled.ChevronLeft: ImageVector by lazy {
+    materialIcon(name = "Filled.ChevronLeft") {
+        materialPath {
+            moveTo(15.41f, 7.41f)
+            lineTo(14.0f, 6.0f)
+            lineToRelative(-6.0f, 6.0f)
+            lineToRelative(6.0f, 6.0f)
+            lineToRelative(1.41f, -1.41f)
+            lineTo(10.83f, 12.0f)
+            close()
+        }
+    }
+}

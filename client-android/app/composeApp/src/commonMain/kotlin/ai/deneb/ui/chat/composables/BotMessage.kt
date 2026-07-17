@@ -13,6 +13,8 @@ import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.dynamicui.FrozenSubmission
 import ai.deneb.ui.dynamicui.toSpeakableText
 import ai.deneb.ui.handCursor
+import ai.deneb.ui.icons.filled.ChevronLeft
+import ai.deneb.ui.icons.filled.ChevronRight
 import ai.deneb.ui.icons.filled.ContentCopy
 import ai.deneb.ui.icons.filled.MoreHoriz
 import ai.deneb.ui.markdown.LocalDenebUiStreaming
@@ -41,8 +43,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
