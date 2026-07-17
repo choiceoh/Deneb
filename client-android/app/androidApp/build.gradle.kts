@@ -176,6 +176,10 @@ dependencies {
     implementation(project(":composeApp"))
     implementation(libs.firebase.messaging)
     implementation(libs.androidx.activity.compose)
+    // Cold-start polish: SplashScreen API (custom exit into content) + Play
+    // cloud-profile collection (no local baseline generation on this ARM host).
+    implementation(libs.androidx.splashscreen)
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.car.app)
