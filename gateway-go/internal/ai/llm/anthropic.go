@@ -245,10 +245,52 @@ func sanitizeAnthropicContent(raw FlexibleJSON) (json.RawMessage, error) {
 	for i := range blocks {
 		fillRequiredBlockFields(&blocks[i])
 	}
+	blocks = dropInertEmptyBlocks(blocks)
 	if len(blocks) == 0 {
 		blocks = []ContentBlock{{Type: "text", Text: ""}}
 	}
 	return marshalAnthropicBlocks(blocks)
+}
+
+// dropInertEmptyBlocks removes blocks that reach the wire with an empty
+// payload and carry no information: text blocks with blank text, and
+// thinking blocks whose wire field (`thinking`, not `text`) is blank.
+// Whole-empty MESSAGES are dropped upstream by DropEmptyMessages; this
+// closes the remaining gap — a blank block riding a message that also has
+// real blocks (e.g. [text(""), tool_use]). marshalAnthropicBlocks force-emits
+// the required string fields as "", and strict backends reject that (live
+// 2026-07-17: kimi 400 "Invalid request: text content is empty" on a
+// first-boot task turn; real Anthropic rejects blank text blocks too).
+// Returns the input slice unchanged when nothing needs dropping.
+func dropInertEmptyBlocks(blocks []ContentBlock) []ContentBlock {
+	inert := func(b ContentBlock) bool {
+		switch b.Type {
+		case "text":
+			return strings.TrimSpace(b.Text) == ""
+		case "thinking":
+			// Keep signature-bearing blocks even if the text is blank —
+			// providers validate round-tripped signatures.
+			return strings.TrimSpace(b.Thinking) == "" && b.Signature == ""
+		}
+		return false
+	}
+	drop := false
+	for _, b := range blocks {
+		if inert(b) {
+			drop = true
+			break
+		}
+	}
+	if !drop {
+		return blocks
+	}
+	kept := make([]ContentBlock, 0, len(blocks))
+	for _, b := range blocks {
+		if !inert(b) {
+			kept = append(kept, b)
+		}
+	}
+	return kept
 }
 
 // fillRequiredBlockFields populates fields that Anthropic-compat servers
