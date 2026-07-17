@@ -64,6 +64,8 @@ internal suspend fun DenebGatewayClient.refreshWikiMirrorFull(): Boolean {
     val all = mutableListOf<WikiPage>()
     var cursor = ""
     var pulls = 0
+    var total = 0
+    var syncComplete = false
     while (pulls < WIKI_MIRROR_MAX_PULL_PAGES) {
         val payload = callRpc<WikiMirrorPayload>(
             "miniapp.memory.mirror",
@@ -73,13 +75,22 @@ internal suspend fun DenebGatewayClient.refreshWikiMirrorFull(): Boolean {
             },
         ) ?: return false
         if (epoch != credEpoch) return false
+        total = payload.total
         all += payload.pages
             .filter { it.path.isNotBlank() }
             .map { it.toWikiPage() }
-        if (!payload.hasMore || payload.nextCursor.isEmpty() || payload.nextCursor == cursor) break
+        if (!payload.hasMore) {
+            syncComplete = true
+            break
+        }
+        if (payload.nextCursor.isEmpty() || payload.nextCursor == cursor) return false
         cursor = payload.nextCursor
         pulls++
     }
+    if (!syncComplete) return false
+    // A scan that lists pages but emits none (transient wiki store read failure)
+    // must not wipe a previously good mirror — offline browse would lose the corpus.
+    if (all.isEmpty() && total > 0) return false
     wikiMirror.replaceAll(all, Clock.System.now().toEpochMilliseconds())
     return true
 }
