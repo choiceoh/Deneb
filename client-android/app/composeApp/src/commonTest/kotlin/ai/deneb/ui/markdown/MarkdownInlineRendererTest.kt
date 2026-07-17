@@ -24,14 +24,14 @@ class MarkdownInlineRendererTest {
             Image("https://example.test/image.png", "diagram"),
             LineBreak,
             InlineMath("x^2 + y^2"),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("before diagram\nx^2 + y^2", rendered.text)
     }
 
     @Test
     fun emptyInlineListProducesEmptyUnstyledString() {
-        val rendered = emptyList<InlineNode>().toAnnotatedString(colors)
+        val rendered = emptyList<InlineNode>().toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("", rendered.text)
         assertTrue(rendered.spanStyles.isEmpty())
@@ -42,7 +42,7 @@ class MarkdownInlineRendererTest {
         val rendered = listOf(
             Strong(persistentListOf(Text("bold "), Emphasis(persistentListOf(Text("both"))))),
             Text(" plain"),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("bold both plain", rendered.text)
         val bold = rendered.spanStyles.single { it.item.fontWeight == FontWeight.Bold }
@@ -59,7 +59,7 @@ class MarkdownInlineRendererTest {
             Strike(persistentListOf(Text("removed"))),
             Text(" "),
             Underline(persistentListOf(Text("kept"))),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         val strike = rendered.spanStyles.single { it.item.textDecoration == TextDecoration.LineThrough }
         val underline = rendered.spanStyles.single { it.item.textDecoration == TextDecoration.Underline }
@@ -72,7 +72,7 @@ class MarkdownInlineRendererTest {
 
     @Test
     fun highlightUsesThirtyPercentPrimaryBackground() {
-        val rendered = listOf(Highlight(persistentListOf(Text("marked")))).toAnnotatedString(colors)
+        val rendered = listOf(Highlight(persistentListOf(Text("marked")))).toAnnotatedString(colors, FontFamily.Monospace)
 
         val style = rendered.spanStyles.single().item
         assertEquals(colors.primary.copy(alpha = 0.30f), style.background)
@@ -86,7 +86,7 @@ class MarkdownInlineRendererTest {
             Text(" H"),
             Subscript(persistentListOf(Text("2"))),
             Text("O"),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("x2 H2O", rendered.text)
         val superStyle = rendered.spanStyles.single { it.item.baselineShift == BaselineShift.Superscript }
@@ -101,7 +101,7 @@ class MarkdownInlineRendererTest {
 
     @Test
     fun inlineCodeAddsHairSpaceAndMonospaceBackgroundSpan() {
-        val rendered = listOf(Text("run "), InlineCode("git status"), Text(" now")).toAnnotatedString(colors)
+        val rendered = listOf(Text("run "), InlineCode("git status"), Text(" now")).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("run  git status  now", rendered.text)
         val code = rendered.spanStyles.single { it.item.fontFamily == FontFamily.Monospace }
@@ -114,7 +114,7 @@ class MarkdownInlineRendererTest {
         val rendered = listOf(
             Text("see "),
             Link("https://example.test/path", persistentListOf(Text("example"))),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("see example", rendered.text)
         val annotation = rendered.getLinkAnnotations(0, rendered.length).single()
@@ -133,7 +133,7 @@ class MarkdownInlineRendererTest {
             Link("https://one.test", persistentListOf(Text("one"))),
             Text(" and "),
             Link("mailto:two@example.test", persistentListOf(Text("two"))),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         val links = rendered.getLinkAnnotations(0, rendered.length)
 
@@ -154,7 +154,7 @@ class MarkdownInlineRendererTest {
             Strong(persistentListOf()),
             Emphasis(persistentListOf()),
             Text("visible"),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("visible", rendered.text)
         assertTrue(rendered.spanStyles.all { it.start == it.end })
@@ -170,7 +170,7 @@ class MarkdownInlineRendererTest {
                     InlineCode("code"),
                 ),
             ),
-        ).toAnnotatedString(colors)
+        ).toAnnotatedString(colors, FontFamily.Monospace)
 
         assertEquals("bold under code ", rendered.text)
         assertTrue(rendered.spanStyles.any { it.item.fontWeight == FontWeight.Bold && it.start == 0 && it.end == rendered.length })

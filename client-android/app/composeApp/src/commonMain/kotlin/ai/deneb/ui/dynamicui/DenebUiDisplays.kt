@@ -3,6 +3,7 @@
 package ai.deneb.ui.dynamicui
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.denebOnSuccessContainer
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.denebSuccessContainer
@@ -144,8 +145,9 @@ internal fun denebUiInlineText(value: String): AnnotatedString {
     if (value.none { it == '*' || it == '`' || it == '~' || it == '_' || it == '[' || it == '<' }) {
         return AnnotatedString(value)
     }
-    return remember(value, colors) {
-        InlineTokenizer.tokenize(value).toAnnotatedString(colors)
+    val monoFamily = JetBrainsMonoFamily()
+    return remember(value, colors, monoFamily) {
+        InlineTokenizer.tokenize(value).toAnnotatedString(colors, monoFamily)
     }
 }
 

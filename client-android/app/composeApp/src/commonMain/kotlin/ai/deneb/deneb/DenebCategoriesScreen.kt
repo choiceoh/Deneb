@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.List
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -102,7 +104,7 @@ fun DenebCategoriesScreen(
 
                 d == null -> DenebLoading()
 
-                d.categories.isEmpty() -> DenebEmpty("위키 페이지가 없습니다.")
+                d.categories.isEmpty() -> DenebEmpty("위키 페이지가 없습니다.", icon = Icons.Outlined.List, hint = "데네브가 배운 지식이 카테고리로 쌓입니다")
 
                 else -> {
                     Text(

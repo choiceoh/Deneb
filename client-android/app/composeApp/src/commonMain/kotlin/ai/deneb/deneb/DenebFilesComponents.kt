@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.PlatformBackHandler
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
@@ -50,7 +51,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -396,7 +396,7 @@ internal fun FilesTextViewerContent(
                 } else {
                     Text(
                         body,
-                        style = DenebType.body.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp),
+                        style = DenebType.body.copy(fontFamily = JetBrainsMonoFamily(), fontSize = 13.sp),
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                 }

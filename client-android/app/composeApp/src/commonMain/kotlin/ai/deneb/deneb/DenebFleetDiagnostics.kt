@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.denebHairline
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +34,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,7 +82,7 @@ internal fun FleetLogsDialog(client: DenebGatewayClient, rc: FleetRecipe, onDism
                         text.isBlank() -> "로그가 없습니다."
                         else -> text.takeLast(8000)
                     },
-                    style = DenebType.snippet.copy(fontFamily = FontFamily.Monospace),
+                    style = DenebType.snippet.copy(fontFamily = JetBrainsMonoFamily()),
                     modifier = Modifier.verticalScroll(scroll).padding(8.dp),
                 )
             }
