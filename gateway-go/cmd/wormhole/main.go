@@ -106,6 +106,12 @@ type modelEntry struct {
 	// the model; with neither a live backend nor a static url the entry is unroutable
 	// (clean 404 / auto-fallback) — never a stale pin to a dead node.
 	Fleet bool `json:"fleet,omitempty"`
+	// Profile names an upstream-specific request-shaping profile applied in
+	// shapeFor. Recognized: "kimi" — the Kimi coding endpoint's anthropic
+	// translator has proven quirks (see applyKimiQuirks) that 400 otherwise-legal
+	// requests; the profile normalizes each request before forwarding. Unknown
+	// values are inert (the dsv4 entries carry a documentation-only "dsv4").
+	Profile string `json:"profile,omitempty"`
 	// Headers are extra request headers sent to THIS entry's upstream on every
 	// call — the per-entry profile for picky endpoints. Motivating case: coding-
 	// subscription providers (Kimi Code, MiMo Token Plan) admit only recognized

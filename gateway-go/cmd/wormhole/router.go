@@ -247,6 +247,9 @@ func (rt *router) shapeFor(entry modelEntry, body []byte, proto string, r *http.
 			out = rewritten
 		}
 	}
+	if entry.Profile == profileKimi && proto == protocolAnthropic {
+		out = applyKimiQuirks(out)
+	}
 	out = rt.applyVisionGate(entry, out, proto)
 	if rt.cur().cfg.effortRoutingOn() {
 		out = rt.applyThinking(entry, out, noEffortRouting(r))
@@ -307,15 +310,9 @@ func (rt *router) serveAuto(client clientInfo, w http.ResponseWriter, r *http.Re
 	}
 	var lastErr error
 	for _, entry := range cands {
-		out := body
-		if rewritten, rerr := rewriteModel(body, entry.UpstreamModel); rerr == nil {
-			out = rewritten
-		}
-		out = rt.applyVisionGate(entry, out, proto) // per-candidate: capabilities differ
-		if rt.cur().cfg.effortRoutingOn() {
-			out = rt.applyThinking(entry, out, noEffortRouting(r))
-			out = rt.applyReasoning(entry, out)
-		}
+		// Same per-candidate shaping as the explicit route (capabilities and
+		// dialects differ per entry, so each candidate reshapes the RAW bytes).
+		out := rt.shapeFor(entry, body, proto, r)
 		resp, err := rt.doUpstream(r, entry, out, pathSuffix)
 		if err != nil {
 			rt.recordCircuitFailure(entry.Name, false, 0)
@@ -456,10 +453,33 @@ func (rt *router) forward(client clientInfo, w http.ResponseWriter, r *http.Requ
 			// reply is rescued, but the operator should see the substitution.
 			rt.log.Warn("failover routed", "from", primary.Name, "to", entry.Name)
 		}
+		rt.annotateProfileError(entry, resp)
 		rt.commit(client, w, entry, body, resp)
 		return
 	}
 	writeErr(w, http.StatusBadGateway, "upstream unreachable: "+primary.Name)
+}
+
+// annotateProfileError peeks a profile-entry error response to log a quirk
+// diagnostic before the bytes stream to the client. Kimi's 400 messages are
+// misleading on their own (internal "web:N" ordinals, blame far from the
+// defect) — the hint saves the next diagnosis. Error bodies are small JSON,
+// never SSE, so buffering a bounded prefix is safe; the body is reconstituted
+// in place, byte-identical for the client, with the original Closer retained.
+func (rt *router) annotateProfileError(entry modelEntry, resp *http.Response) {
+	if entry.Profile != profileKimi || resp.StatusCode != http.StatusBadRequest {
+		return
+	}
+	peek, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+	rest := resp.Body
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(peek), rest), rest}
+	if hint := kimiBadRequestHint(peek); hint != "" {
+		rt.log.Warn("kimi 400 with known quirk signature",
+			"model", entry.Name, "hint", hint, "error", string(peek))
+	}
 }
 
 func (rt *router) recordCircuitFailure(name string, immediate bool, retryHint time.Duration) {
