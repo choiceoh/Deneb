@@ -20,10 +20,14 @@ class MemoryStoreTest {
     }
 
     @Test
-    fun emptyAndMalformedStorageReadAsEmpty() {
+    fun emptyAndMalformedStorageReadAsEmptyAndMalformedStorageIsCleared() {
         assertEquals(emptyList(), fixture().second.getAllMemories())
-        assertEquals(emptyList(), fixture("broken").second.getAllMemories())
-        assertEquals(emptyList(), fixture("{}").second.getAllMemories())
+
+        for (raw in listOf("broken", "{}")) {
+            val (settings, store) = fixture(raw)
+            assertEquals(emptyList(), store.getAllMemories(), raw)
+            assertEquals("", settings.getMemoriesJson(), raw)
+        }
     }
 
     @Test
