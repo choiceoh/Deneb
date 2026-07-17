@@ -306,3 +306,49 @@ func TestWithAPIMode_NormalizesValues(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeAnthropicContentDropsInertEmptyBlocks(t *testing.T) {
+	// A blank text block riding a message that also has real blocks is
+	// dropped — strict backends reject text:"" on the wire (live 2026-07-17:
+	// kimi 400 "Invalid request: text content is empty").
+	got, err := sanitizeAnthropicContent(FlexibleFromRaw(json.RawMessage(
+		`[{"type":"text","text":""},{"type":"tool_use","id":"t1","name":"fs","input":{}}]`,
+	)))
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if strings.Contains(string(got), `"text":""`) {
+		t.Errorf("blank text block not dropped: %s", got)
+	}
+	if !strings.Contains(string(got), `"id":"t1"`) {
+		t.Errorf("real block lost: %s", got)
+	}
+
+	// Blank thinking without a signature is dropped; a signature-bearing one
+	// survives (providers validate round-tripped signatures).
+	got, err = sanitizeAnthropicContent(FlexibleFromRaw(json.RawMessage(
+		`[{"type":"thinking","thinking":""},{"type":"thinking","thinking":"","signature":"sig1"},{"type":"text","text":"hi"}]`,
+	)))
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if n := strings.Count(string(got), `"type":"thinking"`); n != 1 {
+		t.Errorf("want exactly the signed thinking block kept, got %d in %s", n, got)
+	}
+	if !strings.Contains(string(got), `"signature":"sig1"`) {
+		t.Errorf("signed thinking block lost: %s", got)
+	}
+
+	// All-blank content degrades to the canonical single empty text block —
+	// whole-empty messages are dropped upstream by DropEmptyMessages; this
+	// backstop only exists so sanitize never emits an empty array.
+	got, err = sanitizeAnthropicContent(FlexibleFromRaw(json.RawMessage(
+		`[{"type":"text","text":"  "}]`,
+	)))
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	if string(got) != `[{"type":"text","text":""}]` {
+		t.Errorf("all-blank backstop: got %s", got)
+	}
+}
