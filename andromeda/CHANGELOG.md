@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.93](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.92...andromeda-v0.0.93) (2026-07-17)
+
+
+### ✨ Features
+
+* **andromeda:** 오늘 콕핏 — KPI 스트립·일정 타임라인·마감 레이더·결재 섹션 ([#3863](https://github.com/choiceoh/Deneb/issues/3863)) ([527d5a5](https://github.com/choiceoh/Deneb/commit/527d5a5450584024453313185385c4bafbda10f4))
+* **andromeda:** 타일 분할 워크스페이스·커맨드 팔레트·데네브 화면 조종 버스 ([#3850](https://github.com/choiceoh/Deneb/issues/3850)) ([58c6d1b](https://github.com/choiceoh/Deneb/commit/58c6d1b6a243a1a31c524a01ea07a92d48289d73))
+* **gateway:** workstation 챗 도구 — 데네브가 안드로메다 화면을 직접 조종 ([#3861](https://github.com/choiceoh/Deneb/issues/3861)) ([fb2c5df](https://github.com/choiceoh/Deneb/commit/fb2c5dfc406c95148ced8f10dc735d4ff5fb7441))
+
+
+### 🔧 Internal
+
+* **deps:** Refine·extended-icons·play-review 제거 및 DIY 대체 ([#3879](https://github.com/choiceoh/Deneb/issues/3879)) ([b33e6c6](https://github.com/choiceoh/Deneb/commit/b33e6c66cd00f659c371567694f5333a19e716b7))
+
 ## [0.0.92](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.91...andromeda-v0.0.92) (2026-07-16)
 
 
