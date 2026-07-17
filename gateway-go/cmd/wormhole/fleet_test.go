@@ -155,7 +155,7 @@ func TestRouterLookup_FleetBackedEntryPreservesConfigAcrossMoves(t *testing.T) {
 	// Stage discovery for the served model id → URL resolves, toggleKwarg preserved.
 	local := true
 	fleet := map[string]modelEntry{
-		"qwen3.6-35b-a3b": {Name: "qwen3.6-35b-a3b", URL: "http://srv4:8000/v1", UpstreamModel: "qwen3.6-35b-a3b", Local: &local},
+		"qwen3.6-35b-a3b": {Name: "qwen3.6-35b-a3b", URL: "http://srv1:8000/v1", UpstreamModel: "qwen3.6-35b-a3b", Local: &local},
 	}
 	rt.fleet.Store(&fleet)
 
@@ -163,7 +163,7 @@ func TestRouterLookup_FleetBackedEntryPreservesConfigAcrossMoves(t *testing.T) {
 	if !ok {
 		t.Fatal("fleet-backed entry must resolve once its backend is discovered")
 	}
-	if e.URL != "http://srv4:8000/v1" {
+	if e.URL != "http://srv1:8000/v1" {
 		t.Errorf("URL must come from discovery, got %q", e.URL)
 	}
 	if e.ToggleKwarg != "enable_thinking" {

@@ -206,6 +206,9 @@ echo "== GPU 보조 사이드카 (sidecar-models.md 호스트 배치표) =="
 [ "$(http_code http://100.125.220.117:8000/health)" = "200" ] \
     && pass "dsv4 엔진 @srv2:8000" \
     || warn "dsv4 엔진 @srv2:8000 무응답 — 로컬 역할·폴백 체인 영향 (sidecar-models.md·model-roles.md)"
+[ "$(http_code http://100.105.145.6:8000/health)" = "200" ] \
+    && pass "qwen3.6 엔진 @srv1:8000" \
+    || warn "qwen3.6 엔진 @srv1:8000 무응답 — dsv4 폴백·로컬 역할 영향 (sidecar-models.md·model-roles.md)"
 
 echo "== 메일 엣지 (sidecar-models.md 호스트 배치표 — srv4 메일서버) =="
 
