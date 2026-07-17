@@ -382,6 +382,10 @@ export interface ModelOption {
   deletable?: boolean
   unhealthy?: boolean
   note?: string
+  runs24h?: number
+  inputTokens24h?: number
+  outputTokens24h?: number
+  cacheReadTokens24h?: number
 }
 
 export interface ModelSection {

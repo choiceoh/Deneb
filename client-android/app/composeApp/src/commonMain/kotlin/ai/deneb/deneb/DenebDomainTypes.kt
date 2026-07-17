@@ -27,6 +27,11 @@ data class ModelOption(
     val unhealthy: Boolean = false,
     /** Tuner stat line (runs, p95, cache, fallback/stall, probe, floor). */
     val note: String = "",
+    /** Rolling 24h usage from the gateway run log; all zero = never ran. */
+    val runs24h: Int = 0,
+    val inputTokens24h: Long = 0,
+    val outputTokens24h: Long = 0,
+    val cacheReadTokens24h: Long = 0,
 )
 
 /** Gateway/native API status returned by `miniapp.client.hello`. */

@@ -348,11 +348,24 @@ internal fun ModelTab(client: DenebGatewayClient) {
                                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                                 color = if (model.unhealthy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                             )
+                            // Full model path (provider/model): supporting detail, so a
+                            // step smaller and lighter than the display name above it
+                            // (operator polish request, 2026-07-17).
                             Text(
                                 model.id + ModelHealth.parse(model.health).suffix,
-                                style = DenebType.rowSubtitle,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = DenebType.meta,
+                                color = denebHint(),
                             )
+                            // Rolling 24h usage from the gateway's run log — always
+                            // visible when the model actually ran, so subscription
+                            // consumption (and cache savings) are one glance away.
+                            usage24hLine(model)?.let { line ->
+                                Text(
+                                    line,
+                                    style = DenebType.hint,
+                                    color = denebHint(),
+                                )
+                            }
                             // Tuner stat line (24h runs, p95, cache hit, fallback/stall,
                             // calibration probe, tuned output floor) — only when the row's
                             // ⓘ toggle is expanded, so the list stays clean by default.
@@ -563,6 +576,28 @@ private enum class ModelRole(val wire: String, val label: String, val desc: Stri
     TINY("tiny", "초경량", "세션 제목·메일 1차 추출 같은 사소한 분류·추출"),
     LIGHTWEIGHT("lightweight", "경량", "위키 병합·파일럿·스킬 리뷰 같은 범위가 정해진 요약"),
     FALLBACK("fallback", "폴백", "메인 모델이 실패했을 때 대신 쓰는 모델"),
+}
+
+/** "24h · 12회 · 입력 1.2M(캐시 0.9M) · 출력 45K" — the model row's rolling-24h
+ *  usage line from the gateway's run log, or null when the model didn't run
+ *  (so unused rows carry no extra chrome). Cache reads are shown separately:
+ *  a caching provider's savings should be visible at a glance. */
+internal fun usage24hLine(model: ModelOption): String? {
+    if (model.runs24h <= 0) return null
+    val cache = if (model.cacheReadTokens24h > 0) "(캐시 ${formatTokenCount(model.cacheReadTokens24h)})" else ""
+    return "24h · ${model.runs24h}회 · 입력 ${formatTokenCount(model.inputTokens24h)}$cache · 출력 ${formatTokenCount(model.outputTokens24h)}"
+}
+
+/** Compact token count: 1_234_567 → "1.2M", 45_300 → "45K", 872 → "872". */
+internal fun formatTokenCount(n: Long): String = when {
+    n >= 1_000_000 -> {
+        val tenths = n * 10 / 1_000_000
+        if (tenths % 10 == 0L) "${tenths / 10}M" else "${tenths / 10}.${tenths % 10}M"
+    }
+
+    n >= 1_000 -> "${n / 1_000}K"
+
+    else -> n.toString()
 }
 
 /**

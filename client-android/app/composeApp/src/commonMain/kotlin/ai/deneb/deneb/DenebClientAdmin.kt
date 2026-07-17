@@ -75,6 +75,10 @@ suspend fun DenebGatewayClient.refreshModels(): Boolean {
                 deletable = it.deletable,
                 unhealthy = it.unhealthy,
                 note = it.note,
+                runs24h = it.runs24h,
+                inputTokens24h = it.inputTokens24h,
+                outputTokens24h = it.outputTokens24h,
+                cacheReadTokens24h = it.cacheReadTokens24h,
             )
         }
     _denebRoleModels.value = payload.roles.associate { it.role to it.model }
