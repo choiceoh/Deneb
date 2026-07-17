@@ -137,3 +137,100 @@ func TestNormalizeMessages_ThreeConsecutive(t *testing.T) {
 		t.Fatalf("want 3 blocks, got %d", len(blocks))
 	}
 }
+
+func TestOrderToolResultsFirst_SteerMergeShape(t *testing.T) {
+	// The live-bisected kimi failure shape: a steering user text merged in
+	// front of the turn's tool_results ([text, result, result]). The results
+	// must move to the front, both relative orders preserved.
+	msgs := []Message{
+		{Role: "assistant", Content: marshalBlocks([]ContentBlock{
+			{Type: "tool_use", ID: "call_a", Name: "web"},
+			{Type: "tool_use", ID: "call_b", Name: "web"},
+		})},
+		{Role: "user", Content: marshalBlocks([]ContentBlock{
+			{Type: "text", Text: "steer: do it differently"},
+			{Type: "tool_result", ToolUseID: "call_a", Content: "result A"},
+			{Type: "tool_result", ToolUseID: "call_b", Content: "result B"},
+		})},
+	}
+	got := OrderToolResultsFirst(msgs)
+	if len(got) != 2 {
+		t.Fatalf("want 2 messages, got %d", len(got))
+	}
+	blocks := ContentToBlocks(got[1].Content)
+	if len(blocks) != 3 {
+		t.Fatalf("want 3 blocks, got %d", len(blocks))
+	}
+	if blocks[0].ToolUseID != "call_a" || blocks[1].ToolUseID != "call_b" {
+		t.Fatalf("tool_results not first / order lost: %+v", blocks)
+	}
+	if blocks[2].Type != "text" || blocks[2].Text != "steer: do it differently" {
+		t.Fatalf("text block lost: %+v", blocks[2])
+	}
+	// Input slice must be untouched.
+	orig := ContentToBlocks(msgs[1].Content)
+	if orig[0].Type != "text" {
+		t.Fatalf("input mutated: %+v", orig)
+	}
+}
+
+func TestOrderToolResultsFirst_OrderedInputUntouched(t *testing.T) {
+	// Already-ordered messages pass through byte-identical (cache stability):
+	// same slice back, no re-marshal.
+	msgs := []Message{
+		NewTextMessage("user", "hello"),
+		{Role: "assistant", Content: marshalBlocks([]ContentBlock{
+			{Type: "tool_use", ID: "call_a", Name: "web"},
+		})},
+		{Role: "user", Content: marshalBlocks([]ContentBlock{
+			{Type: "tool_result", ToolUseID: "call_a", Content: "result"},
+			{Type: "text", Text: "and a follow-up"},
+		})},
+	}
+	got := OrderToolResultsFirst(msgs)
+	if &got[0] != &msgs[0] {
+		t.Fatal("ordered input should return the same slice")
+	}
+	for i := range msgs {
+		if string(got[i].Content.Bytes()) != string(msgs[i].Content.Bytes()) {
+			t.Fatalf("message %d content changed", i)
+		}
+	}
+}
+
+func TestOrderToolResultsFirst_AssistantUntouched(t *testing.T) {
+	// Only user messages are rewritten — an assistant message with text before
+	// tool_use is the normal shape and must never be reordered.
+	msgs := []Message{
+		{Role: "assistant", Content: marshalBlocks([]ContentBlock{
+			{Type: "text", Text: "let me check"},
+			{Type: "tool_use", ID: "call_a", Name: "web"},
+			{Type: "tool_result", ToolUseID: "call_x", Content: "weird persisted block"},
+		})},
+	}
+	got := OrderToolResultsFirst(msgs)
+	if string(got[0].Content.Bytes()) != string(msgs[0].Content.Bytes()) {
+		t.Fatal("assistant message was rewritten")
+	}
+}
+
+func TestOrderToolResultsFirst_OnlyOffendingMessageRewritten(t *testing.T) {
+	// A mixed history: clean messages keep their exact bytes; only the
+	// offending message is re-marshaled.
+	clean := Message{Role: "user", Content: marshalBlocks([]ContentBlock{
+		{Type: "tool_result", ToolUseID: "call_0", Content: "ok"},
+	})}
+	dirty := Message{Role: "user", Content: marshalBlocks([]ContentBlock{
+		{Type: "text", Text: "steer"},
+		{Type: "tool_result", ToolUseID: "call_1", Content: "late"},
+	})}
+	msgs := []Message{clean, NewTextMessage("assistant", "mid"), dirty}
+	got := OrderToolResultsFirst(msgs)
+	if string(got[0].Content.Bytes()) != string(clean.Content.Bytes()) {
+		t.Fatal("clean message bytes changed")
+	}
+	blocks := ContentToBlocks(got[2].Content)
+	if blocks[0].Type != "tool_result" || blocks[1].Type != "text" {
+		t.Fatalf("dirty message not reordered: %+v", blocks)
+	}
+}

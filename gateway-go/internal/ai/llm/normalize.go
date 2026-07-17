@@ -138,6 +138,75 @@ func RepairToolPairing(messages []Message) []Message {
 	return out
 }
 
+// OrderToolResultsFirst rewrites any USER message whose tool_result blocks
+// appear after other block types so the results come first (their relative
+// order preserved, then everything else).
+//
+// Why: Anthropic requires tool_result blocks at the START of the user
+// message. The shape [text, tool_result, …] arises when the user steers
+// mid-tool-loop — the typed message persists between the assistant's
+// tool_use and its results, and NormalizeMessages then merges the two user
+// messages text-first. Real Anthropic rejects that outright; kimi's coding
+// endpoint is worse — its translator silently derails and 400s blaming
+// unrelated LATER calls ("tool_call_ids did not have response messages:
+// web:24, web:25" while messages 111/113 were perfectly paired; live-bisected
+// 2026-07-17, the poison was one [text, result, result] user message at 76,
+// and reordering exactly that message made the identical request return 200).
+//
+// Already-ordered messages pass through byte-identical (cache-stable); the
+// input slice is not modified. Run AFTER NormalizeMessages — the merge is
+// what creates the bad ordering.
+func OrderToolResultsFirst(messages []Message) []Message {
+	needs := false
+	for i := range messages {
+		if messages[i].Role == "user" && needsToolResultReorder(ContentToBlocks(messages[i].Content)) {
+			needs = true
+			break
+		}
+	}
+	if !needs {
+		return messages
+	}
+	out := make([]Message, len(messages))
+	copy(out, messages)
+	for i := range out {
+		if out[i].Role != "user" {
+			continue
+		}
+		blocks := ContentToBlocks(out[i].Content)
+		if !needsToolResultReorder(blocks) {
+			continue
+		}
+		results := make([]ContentBlock, 0, len(blocks))
+		rest := make([]ContentBlock, 0, len(blocks))
+		for _, b := range blocks {
+			if b.Type == "tool_result" {
+				results = append(results, b)
+			} else {
+				rest = append(rest, b)
+			}
+		}
+		out[i].Content = marshalBlocks(append(results, rest...))
+	}
+	return out
+}
+
+// needsToolResultReorder reports whether a tool_result block appears after any
+// non-tool_result block.
+func needsToolResultReorder(blocks []ContentBlock) bool {
+	seenOther := false
+	for _, b := range blocks {
+		if b.Type == "tool_result" {
+			if seenOther {
+				return true
+			}
+			continue
+		}
+		seenOther = true
+	}
+	return false
+}
+
 // DropEmptyMessages removes messages that carry no usable content — no
 // non-blank text and no structural block (tool_use, tool_result, image,
 // thinking). Anthropic rejects such messages ("... must not be empty"); they
