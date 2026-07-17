@@ -16,15 +16,12 @@ class EmailStore(private val appSettings: AppSettings) {
         keyOf = { it.accountId to it.uid },
     )
 
-    fun getAccounts(): List<EmailAccount> {
-        val raw = appSettings.getEmailAccountsJson()
-        if (raw.isEmpty()) return emptyList()
-        return try {
-            json.decodeFromString<List<EmailAccount>>(raw)
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    fun getAccounts(): List<EmailAccount> = mutex.loadStoredJsonOrDefault(
+        readJson = appSettings::getEmailAccountsJson,
+        clearMalformed = { appSettings.setEmailAccountsJson("") },
+        defaultValue = { emptyList() },
+        decode = json::decodeFromString,
+    )
 
     fun getAccount(id: String): EmailAccount? = getAccounts().find { it.id == id }
 
@@ -56,15 +53,12 @@ class EmailStore(private val appSettings: AppSettings) {
     }
 
     // Sync state
-    fun getSyncState(accountId: String): EmailSyncState {
-        val raw = appSettings.getEmailSyncStateJson(accountId)
-        if (raw.isEmpty()) return EmailSyncState(accountId = accountId)
-        return try {
-            json.decodeFromString<EmailSyncState>(raw)
-        } catch (_: Exception) {
-            EmailSyncState(accountId = accountId)
-        }
-    }
+    fun getSyncState(accountId: String): EmailSyncState = mutex.loadStoredJsonOrDefault(
+        readJson = { appSettings.getEmailSyncStateJson(accountId) },
+        clearMalformed = { appSettings.setEmailSyncStateJson(accountId, "") },
+        defaultValue = { EmailSyncState(accountId = accountId) },
+        decode = json::decodeFromString,
+    )
 
     suspend fun updateSyncState(state: EmailSyncState) = mutex.withLock {
         appSettings.setEmailSyncStateJson(state.accountId, json.encodeToString(state))

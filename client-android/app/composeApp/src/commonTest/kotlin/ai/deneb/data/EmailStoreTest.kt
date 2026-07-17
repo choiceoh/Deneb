@@ -40,13 +40,14 @@ class EmailStoreTest {
     )
 
     @Test
-    fun missingAndMalformedAccountsReadAsEmpty() {
+    fun missingAndMalformedAccountsReadAsEmptyAndMalformedStorageIsCleared() {
         val f = fixture()
         assertEquals(emptyList(), f.store.getAccounts())
 
         for (raw in listOf("broken", "{}", "[1,2]")) {
             f.settings.setEmailAccountsJson(raw)
             assertEquals(emptyList(), f.store.getAccounts(), raw)
+            assertEquals("", f.settings.getEmailAccountsJson(), raw)
         }
     }
 
@@ -117,6 +118,7 @@ class EmailStoreTest {
 
         f.settings.setEmailSyncStateJson("a", "broken")
         assertEquals(EmailSyncState(accountId = "a"), f.store.getSyncState("a"))
+        assertEquals("", f.settings.getEmailSyncStateJson("a"))
     }
 
     @Test

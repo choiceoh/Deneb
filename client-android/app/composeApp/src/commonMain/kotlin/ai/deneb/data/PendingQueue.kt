@@ -19,27 +19,18 @@ class PendingQueue<T, K>(
     private val mutex = Mutex()
     private val json = SharedJson
 
-    fun get(): List<T> {
-        // Only the lock owner may repair malformed storage. A concurrent reader
-        // still gets a safe snapshot but cannot clear a valid write racing in.
-        if (!mutex.tryLock()) return readStored()
-        return try {
-            readStored(clearMalformed = true)
-        } finally {
-            mutex.unlock()
-        }
-    }
+    fun get(): List<T> = mutex.loadStoredJsonOrDefault(
+        readJson = readJson,
+        clearMalformed = { writeJson("") },
+        defaultValue = { emptyList() },
+        decode = { json.decodeFromString(serializer, it) },
+    )
 
-    private fun readStored(clearMalformed: Boolean = false): List<T> {
-        val raw = readJson()
-        if (raw.isEmpty()) return emptyList()
-        return try {
-            json.decodeFromString(serializer, raw)
-        } catch (_: Exception) {
-            if (clearMalformed) runCatching { writeJson("") }
-            emptyList()
-        }
-    }
+    private fun readStored(): List<T> = decodeStoredJsonOrDefault(
+        raw = readJson(),
+        defaultValue = { emptyList() },
+        decode = { json.decodeFromString(serializer, it) },
+    )
 
     suspend fun add(items: List<T>) = mutex.withLock {
         if (items.isEmpty()) return@withLock
