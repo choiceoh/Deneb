@@ -181,6 +181,25 @@ export function CommandPalette() {
       );
     }
 
+    // 모닝 브리핑 투어 — 데네브가 화면을 몰며 브리핑 (마우스-퍼스트 진입점).
+    push(
+      {
+        key: "tour:briefing",
+        icon: "today",
+        label: "모닝 브리핑 투어",
+        hint: "데네브가 화면을 옮기며 브리핑",
+        run: () => {
+          if (
+            !askDeneb(
+              "오늘 모닝 브리핑 투어를 시작해줘. workstation 도구로 화면을 직접 옮기면서 단계마다 한두 문장으로 브리핑해: ① layout으로 today를 열고 오늘 핵심(미결·일정·마감) 요약 ② open mail(어제 날짜 date 지정)로 어제 메일 중 답장 필요한 것 짚기 ③ approvals를 열고 미결이 있으면 spotlight로 강조 ④ 마지막으로 오늘 가장 먼저 할 일 1가지 추천.",
+            )
+          )
+            palLog.warn("ask sink unavailable");
+        },
+      },
+      q === "" ? 650 : matchScore(q, "모닝 브리핑 투어"),
+    );
+
     // Handoffs for any non-empty query: 통합 검색, 데네브에게 묻기.
     if (q !== "") {
       push(

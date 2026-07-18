@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -59,7 +61,7 @@ func TestDependencyAccessorsNilGetterAndNilResult(t *testing.T) {
 func TestMethodsReturnExactFourNamedLocalAndMiniappEndpoints(t *testing.T) {
 	local := Methods(Deps{})
 	mini := MiniappMethods(Deps{})
-	if len(local) != 4 || len(mini) != 4 {
+	if len(local) != 5 || len(mini) != 5 {
 		t.Fatalf("method sizes local=%d mini=%d", len(local), len(mini))
 	}
 	localNames := make([]string, 0, len(local))
@@ -72,11 +74,45 @@ func TestMethodsReturnExactFourNamedLocalAndMiniappEndpoints(t *testing.T) {
 	}
 	sort.Strings(localNames)
 	sort.Strings(miniNames)
-	if want := []string{"observe.behavior", "observe.health", "observe.logs", "observe.turn"}; !reflect.DeepEqual(localNames, want) {
+	if want := []string{"observe.behavior", "observe.health", "observe.logs", "observe.turn", "observe.workstation_usage"}; !reflect.DeepEqual(localNames, want) {
 		t.Fatalf("local names = %#v", localNames)
 	}
-	if want := []string{"miniapp.observe.behavior", "miniapp.observe.health", "miniapp.observe.logs", "miniapp.observe.turn"}; !reflect.DeepEqual(miniNames, want) {
+	if want := []string{"miniapp.observe.behavior", "miniapp.observe.health", "miniapp.observe.logs", "miniapp.observe.turn", "miniapp.observe.workstation_usage"}; !reflect.DeepEqual(miniNames, want) {
 		t.Fatalf("mini names = %#v", miniNames)
+	}
+}
+
+func TestWorkstationUsageHandlerReadsLedgerAndDefaultsEmpty(t *testing.T) {
+	// Empty deps → zeroed ledger, never an error (관찰 카드는 미기록도 정상 상태).
+	empty := Methods(Deps{})["observe.workstation_usage"](context.Background(), &protocol.RequestFrame{ID: "u0"})
+	rpctest.MustOK(t, empty)
+	zero := rpctest.Result[struct {
+		Total    int            `json:"total"`
+		ByAction map[string]int `json:"byAction"`
+	}](t, empty)
+	if zero.Total != 0 || len(zero.ByAction) != 0 {
+		t.Fatalf("empty ledger = %+v", zero)
+	}
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ledger := `{"total":3,"byAction":{"spotlight":2,"open":1},"lastAt":"2026-07-18T01:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(dir, "cache", "workstation_usage.json"), []byte(ledger), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resp := Methods(Deps{StateDir: func() string { return dir }})["observe.workstation_usage"](
+		context.Background(), &protocol.RequestFrame{ID: "u1"},
+	)
+	rpctest.MustOK(t, resp)
+	got := rpctest.Result[struct {
+		Total    int            `json:"total"`
+		ByAction map[string]int `json:"byAction"`
+		LastAt   string         `json:"lastAt"`
+	}](t, resp)
+	if got.Total != 3 || got.ByAction["spotlight"] != 2 || got.LastAt == "" {
+		t.Fatalf("ledger read = %+v", got)
 	}
 }
 

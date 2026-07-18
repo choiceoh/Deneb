@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { callRpc } from "@/gateway";
 import { OBSERVE_RPC } from "@/resources";
-import { errText } from "@/format";
+import { errText, fmtDate } from "@/format";
 import { color, line, pane } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
 
@@ -34,6 +34,13 @@ interface ObserveLogLine {
 interface ObserveLogsPayload {
   lines?: ObserveLogLine[];
   count?: number;
+}
+
+// 워크스테이션 조종 도구의 사용 원장 — "화면 조종이 실제로 쓰이는가"의 접지 숫자.
+interface WorkstationUsage {
+  total?: number;
+  byAction?: Record<string, number>;
+  lastAt?: string;
 }
 
 const PERIODS: Array<{ label: string; days: number }> = [
@@ -92,6 +99,7 @@ export function ObservePane() {
   const [days, setDays] = useState(7);
   const [behavior, setBehavior] = useState<ObserveBehavior | null>(null);
   const [logs, setLogs] = useState<ObserveLogLine[]>([]);
+  const [wsUsage, setWsUsage] = useState<WorkstationUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -116,15 +124,17 @@ export function ObservePane() {
     if (!connected) return;
     let cancelled = false;
     void (async () => {
-      const [bSettled, lSettled] = await Promise.allSettled([
+      const [bSettled, lSettled, uSettled] = await Promise.allSettled([
         callRpc<ObserveBehavior>(cfg, OBSERVE_RPC.behavior, { days }),
         callRpc<ObserveLogsPayload>(cfg, OBSERVE_RPC.logs, { level: "warn", limit: 40, days }),
+        callRpc<WorkstationUsage>(cfg, OBSERVE_RPC.workstationUsage, {}),
       ]);
       if (cancelled) return;
       const bOk = bSettled.status === "fulfilled";
       const lOk = lSettled.status === "fulfilled";
       setBehavior(bOk ? bSettled.value : null);
       setLogs(lOk ? (lSettled.value.lines ?? []) : []);
+      setWsUsage(uSettled.status === "fulfilled" ? uSettled.value : null);
       if (!bOk && !lOk) {
         const reason = bSettled.status === "rejected" ? errText(bSettled.reason) : errText(lSettled.reason);
         setErr(reason);
@@ -206,6 +216,22 @@ export function ObservePane() {
                     실행 {runs}회 · 능동 {behavior.proactiveRuns ?? 0} · 압축 {behavior.compactedRuns ?? 0}
                   </div>
                 </div>
+              )}
+              {wsUsage && (wsUsage.total ?? 0) > 0 && (
+                <>
+                  <SectionHeader text="워크스테이션 조종 (효용 접지)" />
+                  <div style={{ padding: "10px 0", borderBottom: line }}>
+                    <div style={{ fontSize: 13.5, color: color.text }}>
+                      누적 {wsUsage.total}회{wsUsage.lastAt ? ` · 마지막 ${fmtDate(wsUsage.lastAt)}` : ""}
+                    </div>
+                    <div style={{ fontSize: 12, marginTop: 2, color: color.muted }}>
+                      {Object.entries(wsUsage.byAction ?? {})
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([k, v]) => `${k} ${v}`)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                </>
               )}
               {tools.length > 0 && (
                 <>
