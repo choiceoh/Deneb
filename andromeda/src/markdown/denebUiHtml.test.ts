@@ -233,4 +233,17 @@ describe("parseDenebUi (labeled HTML)", () => {
       expect(hasInteractiveNode(partial)).toBe(false);
     }
   });
+  it("promotes invented tags (title/label/spacer/kv) to typed aliases", () => {
+    // 2026-07-18 reject telemetry — gateway/Kotlin parity.
+    const root = parseDenebUi(
+      '<card><title>실사 보고</title><label>발신</label><kv label="발신">양도현</kv><spacer/><text>본문</text></card>',
+    );
+    expect(root).toMatchObject({ type: "card" });
+    const kids = root.children as Array<Record<string, unknown>>;
+    expect(kids).toHaveLength(5);
+    expect(kids[0]).toMatchObject({ type: "text", style: "title", value: "실사 보고" });
+    expect(kids[1]).toMatchObject({ type: "text", style: "caption", value: "발신" });
+    expect(kids[2]).toMatchObject({ type: "text", value: "발신 — 양도현" });
+    expect(kids[3]).toMatchObject({ type: "divider" });
+  });
 });

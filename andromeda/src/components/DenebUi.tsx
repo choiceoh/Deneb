@@ -1021,10 +1021,17 @@ export function AssistantText({
           );
         if (seg.kind === "html-pending")
           // Never render a half-streamed document — its scripts must not run
-          // until the fence closes.
+          // until the fence closes. A page takes tens of seconds to generate,
+          // so hold a page-shaped shimmer skeleton instead of a bare line.
           return (
             <div key={i} className="assistant-segment assistant-segment-pending">
-              <div className="dui-pending">웹 응답 생성 중…</div>
+              <div className="dui-skeleton" role="status" aria-label="웹 응답 생성 중">
+                <div className="dui-skeleton-bar" style={{ width: "45%", height: 18 }} />
+                <div className="dui-skeleton-bar" style={{ width: "92%" }} />
+                <div className="dui-skeleton-bar" style={{ width: "78%" }} />
+                <div className="dui-skeleton-bar" style={{ width: "60%", height: 34 }} />
+                <div className="dui-skeleton-label">웹 응답 생성 중…</div>
+              </div>
             </div>
           );
         if (seg.kind === "ui-pending") {

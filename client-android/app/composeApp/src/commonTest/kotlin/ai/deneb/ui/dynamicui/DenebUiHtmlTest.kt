@@ -343,4 +343,23 @@ class DenebUiHtmlTest {
         val nested = parseUi("""<tabs><tab label="a"><button event="e">전송</button></tab></tabs>""")
         assertEquals(true, nested.hasInteractiveNode())
     }
+
+    @Test
+    fun `invented tag aliases render as proper typography`() {
+        // title/label/spacer/kv — 2026-07-18 reject telemetry, promoted to
+        // real aliases (gateway/Andromeda parity).
+        val card = parseUi(
+            """<card><title>실사 보고</title><label>발신</label><kv label="발신">양도현</kv><spacer/><text>본문</text></card>""",
+        )
+        val kids = assertIs<CardNode>(card).children
+        assertEquals(5, kids.size)
+        val title = assertIs<TextNode>(kids[0])
+        assertEquals("실사 보고", title.value)
+        assertEquals(TextNodeStyle.TITLE, title.style)
+        val label = assertIs<TextNode>(kids[1])
+        assertEquals("발신", label.value)
+        assertEquals(TextNodeStyle.CAPTION, label.style)
+        assertEquals("발신 — 양도현", assertIs<TextNode>(kids[2]).value)
+        assertIs<DividerNode>(kids[3])
+    }
 }

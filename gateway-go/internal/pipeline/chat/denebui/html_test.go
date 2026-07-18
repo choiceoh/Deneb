@@ -361,3 +361,33 @@ func TestValidateReturnsIssueForInvalidEnumValue(t *testing.T) {
 		t.Errorf("issues = %v", issues)
 	}
 }
+
+func TestParseHTML_InventedTagAliases(t *testing.T) {
+	// title/label/spacer/kv — the invented tags production models actually
+	// emit (2026-07-18 reject telemetry), promoted to real aliases so they
+	// render with proper typography instead of unwrapping to bare text.
+	root := mustParseHTML(t,
+		`<card><title>실사 보고</title><label>발신</label><kv label="발신">양도현</kv><spacer/><text>본문</text></card>`)
+	kids := children(t, root)
+	if len(kids) != 5 {
+		t.Fatalf("want 5 children, got %d: %v", len(kids), kids)
+	}
+	titleNode := kids[0].(map[string]any)
+	if titleNode["type"] != "text" || titleNode["style"] != "title" || titleNode["value"] != "실사 보고" {
+		t.Errorf("title alias = %v", titleNode)
+	}
+	labelNode := kids[1].(map[string]any)
+	if labelNode["type"] != "text" || labelNode["style"] != "caption" || labelNode["value"] != "발신" {
+		t.Errorf("label alias = %v", labelNode)
+	}
+	kvNode := kids[2].(map[string]any)
+	if kvNode["type"] != "text" || kvNode["value"] != "발신 — 양도현" {
+		t.Errorf("kv alias = %v", kvNode)
+	}
+	if kids[3].(map[string]any)["type"] != "divider" {
+		t.Errorf("spacer alias = %v", kids[3])
+	}
+	if issues, err := Validate(`<card><title>제목</title><spacer/></card>`); err != nil || len(issues) > 0 {
+		t.Errorf("aliased card must validate clean: err=%v issues=%v", err, issues)
+	}
+}

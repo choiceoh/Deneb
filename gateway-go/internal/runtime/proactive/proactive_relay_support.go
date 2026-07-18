@@ -330,8 +330,9 @@ func appendWorkModelFooter(body, model string) string {
 func pushPreview(content string) string {
 	// A body that opens with a deneb-ui fence would preview as "```deneb-ui" —
 	// project cards to their prose first, so the notification carries the
-	// card's own headline instead of markup.
-	s := strings.TrimSpace(textprep.ReplaceFences(content, textprep.PlainText))
+	// card's own headline instead of markup. deneb-html documents strip to a
+	// short marker for the same reason (raw HTML must never reach a preview).
+	s := strings.TrimSpace(textprep.ReplaceFences(textprep.StripHTMLAnswers(content), textprep.PlainText))
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = strings.TrimSpace(s[:i])
 	}

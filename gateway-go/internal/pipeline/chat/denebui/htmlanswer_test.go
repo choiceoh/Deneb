@@ -75,9 +75,10 @@ func TestNormalizeFinalReplyHTMLAnswerIsIdempotent(t *testing.T) {
 func TestNormalizeFinalReplyRecoverableCardIssues(t *testing.T) {
 	t.Parallel()
 
-	// Invented-but-unwrapped tags (<title>, <label>, <spacer/>) are content-
-	// preserving: the card must deliver as a card, not degrade to plain text.
-	in := "```deneb-ui\n<column><card><title>대한전선 실사</title><label>발신</label><spacer/><text>본문</text></card></column>\n```"
+	// Unknown-but-unwrapped tags are content-preserving: the card must deliver
+	// as a card, not degrade to plain text. (title/label/spacer graduated to
+	// real aliases — use a genuinely unknown tag to keep exercising unwrap.)
+	in := "```deneb-ui\n<column><card><wrapper-x>대한전선 실사</wrapper-x><text>본문</text></card></column>\n```"
 	got := NormalizeFinalReply(in, "client:main", slog.New(slog.DiscardHandler))
 	if len(ExtractFences(got)) != 1 {
 		t.Fatalf("card with only unknown-tag issues must stay a card, got %q", got)
@@ -109,5 +110,22 @@ func TestIssueRecoverable(t *testing.T) {
 		if is.Recoverable() {
 			t.Fatalf("id-missing issue must NOT be recoverable: %v", is)
 		}
+	}
+}
+
+func TestStripHTMLAnswers(t *testing.T) {
+	t.Parallel()
+	in := "요약 문장.\n```deneb-html\n<!doctype html><div>본문</div>\n```\n마무리."
+	got := StripHTMLAnswers(in)
+	if got != "요약 문장.\n[웹 응답]\n마무리." {
+		t.Fatalf("StripHTMLAnswers() = %q", got)
+	}
+	// Unclosed fence (mid-stream / truncated) strips to EOF — no markup leaks.
+	if got := StripHTMLAnswers("머리\n```deneb-html\n<div>부분"); got != "머리\n[웹 응답]" {
+		t.Fatalf("unclosed strip = %q", got)
+	}
+	// No fence → untouched (no allocation-churn path).
+	if got := StripHTMLAnswers("그냥 프로즈"); got != "그냥 프로즈" {
+		t.Fatalf("plain text changed: %q", got)
 	}
 }

@@ -12,7 +12,7 @@ import type { Node } from "./denebUiParse";
 import { convert, newElem, type OpenElem, type Structural } from "./denebUiHtmlConvert";
 import { decodeEntities, indexOfCloseTag, isNameChar, isNameStart, isSpace, textBlockNode } from "./denebUiHtmlHelpers";
 
-const VOID_TAGS = new Set(["hr", "img", "input", "icon", "slider", "progress", "avatar", "point", "br"]);
+const VOID_TAGS = new Set(["hr", "img", "input", "icon", "slider", "progress", "avatar", "point", "br", "spacer"]);
 const RAW_TEXT_TAGS = new Set(["markdown", "code"]);
 const AUTO_CLOSE: Record<string, Set<string>> = {
   li: new Set(["li"]),
@@ -125,6 +125,10 @@ const KNOWN_TAGS = new Set([
   "h4",
   "h5",
   "h6",
+  "title",
+  "label",
+  "spacer",
+  "kv",
 ]);
 
 // Whether bare text inside a tag surfaces as implicit child nodes

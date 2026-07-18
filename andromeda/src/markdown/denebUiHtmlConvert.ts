@@ -61,8 +61,10 @@ export function convert(el: OpenElem): Node | Structural | null {
     case "box":
       set("contentAlignment", a.align);
       return { ...node, type: "box", children: el.children };
+    // spacer: invented-but-frequent alias — breathing room ≈ divider.
     case "hr":
     case "divider":
+    case "spacer":
       return { ...node, type: "divider" };
     case "text":
       // Whole markdown blocks stuffed into <text> upgrade to a markdown node
@@ -74,21 +76,30 @@ export function convert(el: OpenElem): Node | Structural | null {
       set("color", a.color);
       return { ...node, type: "text", value: inner };
     // HTML fluency aliases: paragraphs and headings map onto text nodes.
+    // title/label/kv are invented-but-frequent model habits promoted to
+    // proper typography (2026-07-18 reject telemetry; gateway parity).
     case "p":
     case "h1":
     case "h2":
     case "h3":
     case "h4":
     case "h5":
-    case "h6": {
-      if (!inner && el.children.length === 0) return null;
-      const textNode: Node = { ...node, type: "text", value: inner };
+    case "h6":
+    case "title":
+    case "label":
+    case "kv": {
+      let value = inner;
+      // <kv label="발신">양도현</kv> → "발신 — 양도현" (key/value convention).
+      if (el.tag === "kv" && a.label && value) value = `${a.label} — ${value}`;
+      if (!value && el.children.length === 0) return null;
+      const textNode: Node = { ...node, type: "text", value };
       if (el.tag === "h1") textNode.style = "headline";
-      else if (el.tag === "h2" || el.tag === "h3") textNode.style = "title";
-      else if (el.tag !== "p") textNode.bold = true;
+      else if (el.tag === "h2" || el.tag === "h3" || el.tag === "title") textNode.style = "title";
+      else if (el.tag === "label") textNode.style = "caption";
+      else if (el.tag !== "p" && el.tag !== "kv") textNode.bold = true;
       if (el.children.length === 0) return textNode;
       // Block children inside a paragraph: keep both, text first.
-      const kids = inner ? [textNode, ...el.children] : el.children;
+      const kids = value ? [textNode, ...el.children] : el.children;
       return { type: "column", children: kids };
     }
     case "markdown":
