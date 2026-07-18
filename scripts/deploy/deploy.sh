@@ -309,9 +309,26 @@ make gateway-prod
 # Amaranth reader (Playwright) — node_modules is gitignored; keep prod in sync
 # so miniapp.groupware.* / radar don't fail with ERR_MODULE_NOT_FOUND.
 if [[ -f scripts/dev/groupware-reader/package-lock.json ]]; then
-    echo "==> groupware-reader npm ci"
-    (cd scripts/dev/groupware-reader && npm ci --omit=dev) || \
-        echo "WARN: groupware-reader npm ci failed (전자결재 RPC may be broken)" >&2
+    # Node lives in user space (~/.local/bin symlinks into the ~/node-sdk
+    # tarball), which the systemd timer's fixed PATH lacks — same trap as the
+    # Go/cargo toolchains on this host. Prepend the bin dir instead of
+    # resolving an absolute npm: npm's own shebang (#!/usr/bin/env node)
+    # needs node on PATH too.
+    if ! command -v npm >/dev/null 2>&1; then
+        for node_bin in "$HOME/.local/bin" "$HOME"/node-sdk/node-*/bin; do
+            if [[ -x "$node_bin/npm" ]]; then
+                PATH="$node_bin:$PATH"
+                break
+            fi
+        done
+    fi
+    if command -v npm >/dev/null 2>&1; then
+        echo "==> groupware-reader npm ci"
+        (cd scripts/dev/groupware-reader && npm ci --omit=dev) || \
+            echo "WARN: groupware-reader npm ci failed (전자결재 RPC may be broken)" >&2
+    else
+        echo "WARN: npm not found on PATH, ~/.local/bin, or ~/node-sdk — skipping groupware-reader npm ci (전자결재 RPC may be broken)" >&2
+    fi
 fi
 
 if [[ "${1:-}" == "--build-only" ]]; then
