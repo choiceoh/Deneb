@@ -255,6 +255,11 @@ export const sessionTranscript = (cfg: GatewayConfig, sessionKey: string, limit 
 // Server-side clamp of miniapp.sessions.transcript (sessions.go maxTranscriptLimit).
 export const TRANSCRIPT_MAX = 200;
 
+// Rename a conversation from the drawer — persisted by the gateway's label
+// sidecar, so it survives restarts (and shows up on the native client too).
+export const renameSession = (cfg: GatewayConfig, sessionKey: string, label: string) =>
+  callRpc<{ renamed: boolean }>(cfg, "miniapp.sessions.rename", { sessionKey, label }).then((r) => Boolean(r.renamed));
+
 // Drop a dismissed conversation (the × in the session drawer). The gateway also
 // deletes its transcript so the row can't resurrect on the next restart.
 export const deleteSession = (cfg: GatewayConfig, sessionKey: string) =>

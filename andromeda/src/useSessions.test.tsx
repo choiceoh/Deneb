@@ -5,8 +5,10 @@ import { type GatewayConfig, deleteSession, recentSessions, sessionTranscript } 
 import { useSessions } from "./useSessions";
 
 vi.mock("@/gateway", () => ({
+  TRANSCRIPT_MAX: 200,
   deleteSession: vi.fn(),
   recentSessions: vi.fn(),
+  renameSession: vi.fn(),
   sessionTranscript: vi.fn(),
 }));
 

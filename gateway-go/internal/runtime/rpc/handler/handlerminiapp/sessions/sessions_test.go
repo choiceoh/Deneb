@@ -15,9 +15,25 @@ import (
 type fakeSessionsLister struct {
 	out     []*session.Session
 	deleted []string // keys passed to Delete, in order
+	patched map[string]session.PatchFields
 }
 
 func (f *fakeSessionsLister) List() []*session.Session { return f.out }
+
+func (f *fakeSessionsLister) Patch(key string, patch session.PatchFields) *session.Session {
+	s := f.Get(key)
+	if s == nil {
+		return nil
+	}
+	if f.patched == nil {
+		f.patched = map[string]session.PatchFields{}
+	}
+	f.patched[key] = patch
+	if patch.Label != nil {
+		s.Label = *patch.Label
+	}
+	return s
+}
 
 func (f *fakeSessionsLister) Get(key string) *session.Session {
 	for _, s := range f.out {

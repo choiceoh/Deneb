@@ -955,6 +955,22 @@ textarea {
 .ai-send-stop:hover:not(:disabled) {
   background: var(--due);
 }
+/* 세션 드로어 검색/이름변경 — 리스트 위 조용한 필터, 행 내 인라인 편집. */
+.session-filter {
+  margin: 6px 10px 2px;
+  width: calc(100% - 20px);
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.session-rename-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  padding: 4px 8px;
+  margin: 2px 0;
+}
+
 /* ‹n/N› 답변 변형 페이저 — 마지막 답변 액션 행에 붙는 조용한 카운터. */
 .variant-nav {
   display: inline-flex;

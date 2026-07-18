@@ -7,6 +7,7 @@ import {
   type TranscriptMsg,
   deleteSession,
   recentSessions,
+  renameSession as renameSessionRpc,
   sessionTranscript,
 } from "@/gateway";
 import { type ChatTurn } from "@/hooks";
@@ -48,12 +49,16 @@ export function useSessions(
     if (!connected) setSessions([]);
   }
 
+  // 20 rows covers a working day; 최근 대화 더 보기 raises to the server cap so
+  // older conversations stay reachable without an unbounded first fetch.
+  const [sessionsLimit, setSessionsLimit] = useState(20);
+
   // Load recent sessions once connected (best-effort — older gateway / offline test
   // just leaves the list empty).
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
-    void recentSessions(cfg, 20)
+    void recentSessions(cfg, sessionsLimit)
       .then((s) => !cancelled && setSessions(keep(s)))
       .catch(() => {});
     return () => {
@@ -62,9 +67,28 @@ export function useSessions(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
 
-  async function refreshSessions() {
+  async function refreshSessions(limit = sessionsLimit) {
     try {
-      setSessions(keep(await recentSessions(cfg, 20)));
+      setSessions(keep(await recentSessions(cfg, limit)));
+      setSessionErr("");
+    } catch (e) {
+      setSessionErr(errText(e));
+    }
+  }
+
+  // The drawer's "이전 대화 더 보기" — one step to the gateway's cap (100).
+  const canLoadMoreSessions = sessionsLimit < 100 && sessions.length >= sessionsLimit;
+  async function loadMoreSessions() {
+    setSessionsLimit(100);
+    await refreshSessions(100);
+  }
+
+  async function renameSession(key: string, label: string) {
+    const next = label.trim();
+    if (!next) return;
+    try {
+      await renameSessionRpc(cfg, key, next);
+      setSessions((prev) => prev.map((s) => (s.key === key ? { ...s, label: next } : s)));
       setSessionErr("");
     } catch (e) {
       setSessionErr(errText(e));
@@ -152,6 +176,9 @@ export function useSessions(
     refreshSessions,
     selectSession,
     removeSession,
+    renameSession,
+    canLoadMoreSessions,
+    loadMoreSessions,
     newChat,
     loadOlderTurns,
   };
