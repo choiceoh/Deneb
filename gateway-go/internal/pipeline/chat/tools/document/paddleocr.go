@@ -147,8 +147,14 @@ func paddleOCR(ctx context.Context, img []byte, task string) (string, error) {
 // server is unreachable or errors — connection refused fails instantly, so the
 // fallback is cheap when the server is simply not running.
 func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
+	// Repeat OCR of identical bytes (mail-poll analysis + chat open + re-asks)
+	// is common — serve it from the content-addressed cache for free.
+	if cached, ok := ocrCacheGet(img); ok {
+		return cached, nil
+	}
 	text, err := paddleOCR(ctx, img, "OCR:")
 	if err == nil {
+		final := ""
 		// Dense item tables can trap the full-page mode in a repetition loop
 		// (the same row emitted until max_tokens — reproduced 2026-07-18 on a
 		// real 발주서, CER 2.58). Sampling penalties don't fix it (they kill
@@ -160,14 +166,22 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 				"chars", len(text))
 			if t2, err2 := paddleOCR(ctx, img, "Table Recognition:"); err2 == nil {
 				if conv := paddleTableToText(t2); strings.TrimSpace(conv) != "" && !looksRepetitionLoop(conv) {
-					return conv, nil
+					final = conv
 				}
 			}
 		}
-		// PaddleOCR-VL's full-page mode recognizes tables and emits them as
-		// HTML; render those as markdown so the model reads columns as a grid
-		// instead of a flattened blob. No-op when the page has no table.
-		return htmlTablesToMarkdown(text), nil
+		if final == "" {
+			// PaddleOCR-VL's full-page mode recognizes tables and emits them
+			// as HTML; render those as markdown so the model reads columns as
+			// a grid instead of a flattened blob. No-op without a table.
+			final = htmlTablesToMarkdown(text)
+		}
+		// Cache healthy results only: a still-looped last resort must stay
+		// uncached so a later attempt gets to redo it.
+		if !looksRepetitionLoop(final) {
+			ocrCachePut(img, final)
+		}
+		return final, nil
 	}
 	slog.Default().Debug("paddleocr-vl unavailable, falling back to tesseract", "error", err)
 	return tesseract(ctx, img)

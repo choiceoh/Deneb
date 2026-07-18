@@ -85,6 +85,7 @@ func TestOCRImageBytesRetriesTableModeOnLoop(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
+	t.Setenv("DENEB_OCR_CACHE_DIR", t.TempDir())
 
 	got, err := ocrImageBytes(context.Background(), []byte("\x89PNG fake"))
 	if err != nil {
@@ -108,6 +109,8 @@ func TestOCRImageBytesKeepsOriginalWhenRetryAlsoLoops(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
+	cacheDir := t.TempDir()
+	t.Setenv("DENEB_OCR_CACHE_DIR", cacheDir)
 
 	got, err := ocrImageBytes(context.Background(), []byte("\x89PNG fake"))
 	if err != nil {
@@ -115,6 +118,56 @@ func TestOCRImageBytesKeepsOriginalWhenRetryAlsoLoops(t *testing.T) {
 	}
 	if strings.TrimSpace(got) != strings.TrimSpace(looped) {
 		t.Fatalf("looped original must survive as last resort, got %q", got[:40])
+	}
+	// A still-looped last resort must not be cached — a recovered server
+	// should get to redo it.
+	if entries, _ := os.ReadDir(cacheDir); len(entries) != 0 {
+		t.Fatalf("looped output must stay uncached, found %d entries", len(entries))
+	}
+}
+
+// A healthy result is cached by content hash: the second call for the same
+// bytes never reaches the server.
+func TestOCRImageBytesServesRepeatFromCache(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{"content": "합계 99,000원"}}},
+		})
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
+	t.Setenv("DENEB_OCR_CACHE_DIR", t.TempDir())
+
+	for i := 0; i < 2; i++ {
+		got, err := ocrImageBytes(context.Background(), []byte("\x89PNG cached"))
+		if err != nil || got != "합계 99,000원" {
+			t.Fatalf("call %d: got %q err %v", i, got, err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("server calls = %d, want 1 (second must hit the cache)", calls)
+	}
+	// Different bytes miss the cache.
+	if _, err := ocrImageBytes(context.Background(), []byte("\x89PNG other")); err != nil {
+		t.Fatalf("second image: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("server calls = %d, want 2 after a distinct image", calls)
+	}
+}
+
+// The tesseract fallback path must not poison the cache: with the server down
+// nothing is written, so a recovered server re-OCRs properly.
+func TestOCRImageBytesDoesNotCacheTesseractFallback(t *testing.T) {
+	cacheDir := t.TempDir()
+	t.Setenv("DENEB_OCR_VL_URL", "http://127.0.0.1:1") // refused instantly
+	t.Setenv("DENEB_OCR_CACHE_DIR", cacheDir)
+
+	_, _ = ocrImageBytes(context.Background(), []byte("\x89PNG down"))
+	if entries, _ := os.ReadDir(cacheDir); len(entries) != 0 {
+		t.Fatalf("fallback output must stay uncached, found %d entries", len(entries))
 	}
 }
 
@@ -130,6 +183,8 @@ func TestOCRImageBytesLoopFallback_Live(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read page: %v", err)
 	}
+	// Isolate from the real cache so reruns keep exercising the loop path.
+	t.Setenv("DENEB_OCR_CACHE_DIR", t.TempDir())
 	got, err := ocrImageBytes(context.Background(), img)
 	if err != nil {
 		t.Fatalf("ocrImageBytes: %v", err)

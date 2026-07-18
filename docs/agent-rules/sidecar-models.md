@@ -41,6 +41,14 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 - `gateway-go/internal/pipeline/chat/tools/document/paddleocr.go`:
   - `paddleOCR(ctx, img, task)` — `/v1/chat/completions` 에 `image_url`(base64 data URI) + 태스크 프롬프트 전송. 태스크: `"OCR:"` / `"Table Recognition:"` / `"Formula Recognition:"` / `"Chart Recognition:"`.
   - `ocrImageBytes(ctx, img)` — **단일 OCR 진입점**. PaddleOCR-VL 우선, 실패 시 tesseract 폴백.
+    ★**결과 캐시**(2026-07-18): 동일 바이트 재-OCR(메일폴 분석+챗 열람+재질문)은
+    콘텐츠 해시 디스크 캐시(`ocrcache.go`, 기본 `~/.deneb/cache/ocr`,
+    `DENEB_OCR_CACHE_DIR` override, 4096엔트리 프룬)에서 0ms 반환. 건강한
+    Paddle 결과만 캐시 — tesseract 폴백·루프 잔존 출력은 미캐시(복구 후 재시도
+    보장). 포맷 바뀌면 `ocrCacheVersion` 범프.
+    ★speculative 튜닝은 소진(2026-07-18 A/B 실측): ngram tokens 3→8 = +1.2%
+    (노이즈) → 3 유지. 웜 지연의 실변수는 **GB10 코테넌트 부하**(qwen36 등 동시
+    가동 시 동페이지 6.7s→20s 실측) — spec 노브 재시도 금지, 병목은 대역폭 공유.
     ★**반복 루프 폴백**(2026-07-18): 품목 표 밀집 페이지에서 `"OCR:"` 단발 호출이
     같은 행을 max_tokens 소진까지 반복하는 퇴화가 실측됨(발주서 CER 2.58, 재현).
     `looksRepetitionLoop`(실질 라인 ≥12회 반복)가 감지하면 `"Table Recognition:"`
