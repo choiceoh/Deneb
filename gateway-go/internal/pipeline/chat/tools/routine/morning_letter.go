@@ -32,65 +32,24 @@ type MorningLetterOpts struct {
 	GroupwareCCCollector func(context.Context) any // optional test/alternate 수신참조 collector
 }
 
-// ToolMorningLetter returns the morning_letter tool — collects 8 data sections
-// in parallel and returns structured JSON for the LLM to compose the final letter.
-//
-// The LLM receives raw data and is responsible for formatting, tone, and
-// contextual interpretation (e.g. "우산 챙기세요" for rain, email importance ranking).
+// ToolMorningLetter returns the morning_letter tool — collects 10 data sections
+// in parallel and returns both the structured facts and a deterministic,
+// delivery-ready deneb-ui card. The card is the authoritative projection; raw
+// sections remain available for inspection and backwards compatibility.
 //
 // Sections: weather (Gwangju), exchange rates, copper price, calendar, email,
-// deadlines (upcoming due dates scanned from wiki pages), open questions
-// (project 미해결 질문 that stayed open too long).
+// deadlines and recent project signals from wiki, long-open questions, pending
+// groupware approvals, and new groupware CC documents.
 func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
-	var diaryDir, wikiDir string
-	groupwareCollector := fetchGroupwarePending
-	groupwareCCCollector := fetchGroupwareCC
+	var cfg MorningLetterOpts
 	if len(opts) > 0 {
-		diaryDir = opts[0].DiaryDir
-		wikiDir = opts[0].WikiDir
-		if opts[0].GroupwareCollector != nil {
-			groupwareCollector = opts[0].GroupwareCollector
-		}
-		if opts[0].GroupwareCCCollector != nil {
-			groupwareCCCollector = opts[0].GroupwareCCCollector
-		}
+		cfg = opts[0]
 	}
 
 	return func(ctx context.Context, _ json.RawMessage) (string, error) {
 		now := time.Now().In(kstLocation)
-
-		collectors := []letterCollector{
-			{0, func(ctx context.Context) any { return fetchWeather(ctx) }},
-			{1, func(ctx context.Context) any { return fetchExchangeRates(ctx) }},
-			{2, func(ctx context.Context) any { return fetchCopper(ctx) }},
-			{3, func(ctx context.Context) any { return fetchCalendar(ctx) }},
-			{4, func(ctx context.Context) any { return fetchEmail(ctx) }},
-			{5, func(_ context.Context) any { return fetchDeadlines(wikiDir, now) }},
-			{6, func(_ context.Context) any { return fetchOpenQuestions(wikiDir, now) }},
-			{7, groupwareCollector},
-			{8, groupwareCCCollector},
-		}
-
-		results := collectLetterSections(ctx, 9, collectors)
-		dateStr := koreanDate(now)
-		envelope := map[string]any{
-			"date":      dateStr,
-			"timestamp": now.Format(time.RFC3339),
-			// Instruction rides with the data (the cron prompt is user config):
-			// the model places digit-free tokens; the relay injects real values.
-			"note": "시세(환율·구리) 숫자는 절대 직접 쓰지 말 것 — exchange의 usd_krw_token, copper의 token 플레이스홀더를 문장 안에 그대로 배치하면 발송 시 실제 숫자로 자동 치환된다. 토큰은 숫자만 치환되므로 단위(원, 달러, /t 등)는 문장에 직접 쓴다. 환율은 달러(USD/KRW)만 — 유로 등 다른 통화는 제공하지 않는다",
-			"sections": map[string]any{
-				"weather":           results[0],
-				"exchange":          results[1],
-				"copper":            results[2],
-				"calendar":          results[3],
-				"email":             results[4],
-				"deadlines":         results[5],
-				"open_questions":    results[6],
-				"groupware_pending": results[7],
-				"groupware_cc":      results[8],
-			},
-		}
+		envelope, results := collectMorningLetter(ctx, cfg, now)
+		envelope.Delivery = composeMorningLetterCard(envelope, now)
 
 		out, err := json.MarshalIndent(envelope, "", "  ")
 		if err != nil {
@@ -98,13 +57,42 @@ func ToolMorningLetter(opts ...MorningLetterOpts) toolport.ToolFunc {
 		}
 
 		// Log collected data to diary for wiki knowledge synthesis.
-		if diaryDir != "" {
-			summary := formatMorningDiarySummary(dateStr, results)
-			_ = wiki.AppendDiaryTo(diaryDir, summary) // best-effort: diary append is non-critical
+		if cfg.DiaryDir != "" {
+			summary := formatMorningDiarySummary(envelope.Date, results)
+			_ = wiki.AppendDiaryTo(cfg.DiaryDir, summary) // best-effort: diary append is non-critical
 		}
 
 		return string(out), nil
 	}
+}
+
+// CollectMorningLetterData collects the same facts as ToolMorningLetter without
+// the fallback delivery field. Cron passes this compact envelope through one
+// model projection turn, then RenderMorningLetterCard applies the semantic
+// slots to the fixed server-side card.
+func CollectMorningLetterData(ctx context.Context, opts MorningLetterOpts, now time.Time) (string, error) {
+	now = now.In(kstLocation)
+	envelope, results := collectMorningLetter(ctx, opts, now)
+	if opts.DiaryDir != "" {
+		_ = wiki.AppendDiaryTo(opts.DiaryDir, formatMorningDiarySummary(envelope.Date, results))
+	}
+	// The projection model needs facts, not the manual-tool contract, legacy
+	// substitution tokens, or backend diagnostics. Keep those out of its prompt.
+	envelope.Note = ""
+	envelope.Sections.Exchange.USDKRWToken = ""
+	envelope.Sections.Exchange.Error = ""
+	envelope.Sections.Copper.Token = ""
+	envelope.Sections.Copper.Error = ""
+	envelope.Sections.Weather.Error = ""
+	envelope.Sections.Calendar.Error = ""
+	envelope.Sections.Email.Error = ""
+	envelope.Sections.GroupwarePending.Error = ""
+	envelope.Sections.GroupwareCC.Error = ""
+	out, err := json.Marshal(envelope)
+	if err != nil {
+		return "", fmt.Errorf("marshal morning letter data: %w", err)
+	}
+	return string(out), nil
 }
 
 // formatMorningDiarySummary builds a concise diary entry from morning letter data.
@@ -130,6 +118,12 @@ func formatMorningDiarySummary(dateStr string, results []any) string {
 
 	if cal, ok := results[3].(calendarData); ok && cal.OK && len(cal.Events) > 0 {
 		fmt.Fprintf(&sb, "- 일정: %d건\n", len(cal.Events))
+	}
+
+	if len(results) > 9 {
+		if projects, ok := results[9].(morningProjectSignalsData); ok && projects.OK && len(projects.Items) > 0 {
+			fmt.Fprintf(&sb, "- 최근 프로젝트: %d건\n", len(projects.Items))
+		}
 	}
 
 	if em, ok := results[4].(emailData); ok && em.OK && len(em.Messages) > 0 {

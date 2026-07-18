@@ -34,8 +34,9 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 - 일반 응답 상세 저작 계약: `skills/productivity/deneb-ui-authoring/SKILL.md`
   (카드가 필요한 턴에만 읽고, static 블록에는 문법·예시를 중복하지 않는다).
 - 이브닝레터: `toolwire/chrono/register.go` evening_letter 도구 설명.
-- 모닝레터: `skills/productivity/morning-letter/SKILL.md` 스켈레톤 —
-  `letter_card_test.go` 상수와 **동기 유지**(테스트가 서버측 게이트).
+- 모닝레터: `tools/routine/morning_card.go`의 서버 조립이 정본이고
+  `morning_card_test.go`가 실제 validator로 게이트한다. 스킬은 완성된
+  `delivery`를 그대로 반환하는 짧은 호출 계약만 가진다.
 - 서버 조립: `denebui/collapsed.go` (`CollapsedReportFence`) — raw-text 본문의
   백틱은 반드시 `&#96;` 이스케이프(바깥 펜스 조기종료 차단). 단 **생산자가 이미
   카드로 저작한 본문(```deneb-ui로 시작)은 relay가 아코디언 래핑을 생략**하고

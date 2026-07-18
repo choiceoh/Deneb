@@ -11,8 +11,30 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 )
+
+type cronSyncStub struct {
+	result   *chatport.SyncResult
+	err      error
+	requests []chatport.SyncRequest
+}
+
+func (s *cronSyncStub) ChatReady() bool { return true }
+
+func (s *cronSyncStub) RunSync(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+	s.requests = append(s.requests, req)
+	return s.result, s.err
+}
+
+type cronNotReadyStub struct{}
+
+func (cronNotReadyStub) ChatReady() bool { return false }
+
+func (cronNotReadyStub) RunSync(context.Context, chatport.SyncRequest) (*chatport.SyncResult, error) {
+	panic("RunSync must not be called when chat is not ready")
+}
 
 func cronTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -517,6 +539,98 @@ func TestDeterministicWeeklyRunBoundary(t *testing.T) {
 	}
 }
 
+func TestMorningLetterUsesOneNoToolProjectionThenFixedRenderer(t *testing.T) {
+	tests := []cron.AgentTurnParams{
+		{SessionKey: "cron:morning-letter:1784338800000", Command: "custom operator prompt"},
+		{SessionKey: "cron:anything:1", AgentID: "morning-letter", Command: "custom operator prompt"},
+		{SessionKey: "cron:anything:2", Command: "/morning"},
+		{SessionKey: "cron:anything:3", Command: "/모닝레터"},
+	}
+	for _, params := range tests {
+		chat := &cronSyncStub{result: &chatport.SyncResult{
+			Text: `{"headline":"오늘 핵심"}`, DeliverableText: `{"headline":"오늘 핵심"}`,
+			Turns: 1, InputTokens: 1200, OutputTokens: 80,
+		}}
+		var dataCalls, renderCalls atomic.Int64
+		runner := New(Config{
+			Chat:   chat,
+			Logger: cronTestLogger(),
+			MorningLetterData: func(context.Context) (string, error) {
+				dataCalls.Add(1)
+				return `{"date":"2026-07-18","sections":{}}`, nil
+			},
+			MorningLetterRender: func(dataJSON, narrativeJSON string) (string, error) {
+				renderCalls.Add(1)
+				if !strings.Contains(dataJSON, "2026-07-18") || !strings.Contains(narrativeJSON, "오늘 핵심") {
+					t.Fatalf("renderer inputs=(%q, %q)", dataJSON, narrativeJSON)
+				}
+				return "fixed card", nil
+			},
+		})
+		got, err := runner.RunAgentTurn(context.Background(), params)
+		if err != nil {
+			t.Fatalf("RunAgentTurn(%+v): %v", params, err)
+		}
+		if got != "fixed card" || dataCalls.Load() != 1 || renderCalls.Load() != 1 || len(chat.requests) != 1 {
+			t.Errorf("RunAgentTurn(%+v)=(%q data=%d render=%d requests=%d)", params, got, dataCalls.Load(), renderCalls.Load(), len(chat.requests))
+		}
+		req := chat.requests[0]
+		if req.MaxTurns == nil || *req.MaxTurns != 1 || req.MaxTokens == nil || *req.MaxTokens != 1800 {
+			t.Errorf("projection budgets turns=%v tokens=%v", req.MaxTurns, req.MaxTokens)
+		}
+		if req.MaxToolCallAttempts == nil || *req.MaxToolCallAttempts != 0 {
+			t.Errorf("projection tool-call budget=%v, want 0", req.MaxToolCallAttempts)
+		}
+		if req.ToolPreset != morningLetterProjectionPreset || !req.SkipRecall || !req.EphemeralUser || !req.EphemeralAssistant || req.Thinking != "off" || req.SystemPrompt != morningLetterProjectionSystem {
+			t.Errorf("projection request policy=%+v", req)
+		}
+		if !strings.Contains(req.Message, "FACT ENVELOPE") || strings.Contains(req.Message, "custom operator prompt") {
+			t.Errorf("projection message=%q", req.Message)
+		}
+	}
+}
+
+func TestMorningLetterChatNotReadyFallsBackToFactsCard(t *testing.T) {
+	runner := New(Config{
+		Chat:   cronNotReadyStub{},
+		Logger: cronTestLogger(),
+		MorningLetterData: func(context.Context) (string, error) {
+			return `{"date":"2026-07-18"}`, nil
+		},
+		MorningLetterRender: func(_ string, narrativeJSON string) (string, error) {
+			if narrativeJSON != "" {
+				t.Fatalf("fallback narrative=%q, want empty", narrativeJSON)
+			}
+			return "facts-only card", nil
+		},
+	})
+	got, err := runner.RunAgentTurn(context.Background(), cron.AgentTurnParams{SessionKey: "cron:morning-letter:1"})
+	if err != nil || got != "facts-only card" {
+		t.Fatalf("fallback=(%q, %v)", got, err)
+	}
+}
+
+func TestMorningLetterProjectionFailureFallsBackToFactsCard(t *testing.T) {
+	chat := &cronSyncStub{err: errors.New("model unavailable")}
+	runner := New(Config{
+		Chat:   chat,
+		Logger: cronTestLogger(),
+		MorningLetterData: func(context.Context) (string, error) {
+			return `{"date":"2026-07-18"}`, nil
+		},
+		MorningLetterRender: func(_ string, narrativeJSON string) (string, error) {
+			if narrativeJSON != "" {
+				t.Fatalf("fallback narrative=%q, want empty", narrativeJSON)
+			}
+			return "facts-only card", nil
+		},
+	})
+	got, err := runner.RunAgentTurn(context.Background(), cron.AgentTurnParams{SessionKey: "cron:morning-letter:1"})
+	if err != nil || got != "facts-only card" {
+		t.Fatalf("fallback=(%q, %v)", got, err)
+	}
+}
+
 func TestDeterministicWeeklyRunFormFailureIsBestEffort(t *testing.T) {
 	want := "deterministic report"
 	runner := New(Config{
@@ -534,16 +648,21 @@ func TestDeterministicWeeklyRunFormFailureIsBestEffort(t *testing.T) {
 }
 
 func TestNewRunnerWiresCallbacksOnCreate(t *testing.T) {
+	morningDataFn := func(context.Context) (string, error) { return "morning", nil }
+	morningRenderFn := func(string, string) (string, error) { return "rendered", nil }
 	dataFn := func(context.Context) (string, error) { return "data", nil }
 	textFn := func(context.Context) (string, error) { return "text", nil }
 	formFn := func(context.Context) error { return nil }
 	logger := cronTestLogger()
-	runner := New(Config{Logger: logger, WeeklyReportData: dataFn, WeeklyReportText: textFn, WeeklyFormDeliver: formFn})
+	runner := New(Config{Logger: logger, MorningLetterData: morningDataFn, MorningLetterRender: morningRenderFn, WeeklyReportData: dataFn, WeeklyReportText: textFn, WeeklyFormDeliver: formFn})
 	if runner == nil {
 		t.Fatal("New returned nil")
 	}
 	if runner.logger != logger {
 		t.Error("logger was not retained")
+	}
+	if runner.morningLetterData == nil || runner.morningLetterRender == nil {
+		t.Error("morning projection boundaries missing")
 	}
 	if runner.weeklyReportData == nil {
 		t.Error("data boundary missing")
