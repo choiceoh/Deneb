@@ -25,7 +25,7 @@ import (
 
 const (
 	// browseSidecarDefaultURL is the sidecar's loopback API (same host as the
-	// gateway). Override with DENEB_BROWSER_URL for tests / remote layouts.
+	// gateway). Override with DENEB_BROWSE_URL for tests / remote layouts.
 	browseSidecarDefaultURL = "http://127.0.0.1:18930"
 	// browseTimeout bounds one page read: sidecar navigation (25s cap) +
 	// settle + extraction, with headroom for a queued request ahead.
@@ -33,10 +33,39 @@ const (
 )
 
 func browseSidecarURL() string {
-	if v := strings.TrimSpace(os.Getenv("DENEB_BROWSER_URL")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("DENEB_BROWSE_URL")); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return browseSidecarDefaultURL
+}
+
+func browseAllowedHosts() []string {
+	raw := strings.TrimSpace(os.Getenv("DENEB_BROWSE_ALLOWED_HOSTS"))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		host := strings.TrimSpace(part)
+		if host != "" {
+			out = append(out, host)
+		}
+	}
+	return out
+}
+
+func browseURLAllowed(rawURL string) bool {
+	allowed := browseAllowedHosts()
+	if len(allowed) == 0 {
+		return false
+	}
+	for _, host := range allowed {
+		if httputil.HostMatches(rawURL, host) {
+			return true
+		}
+	}
+	return false
 }
 
 type browseSidecarResponse struct {
@@ -61,6 +90,12 @@ func ToolBrowse() toolport.ToolFunc {
 		u := strings.TrimSpace(p.URL)
 		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
 			return "", fmt.Errorf("browse: url must be http(s), got %q", p.URL)
+		}
+		if !browseURLAllowed(u) {
+			return "", fmt.Errorf(
+				"browse: host %q is not trusted; configure DENEB_BROWSE_ALLOWED_HOSTS and use web for public pages",
+				httputil.Hostname(u),
+			)
 		}
 
 		body, err := json.Marshal(map[string]any{"url": u, "waitMs": p.WaitMs})
