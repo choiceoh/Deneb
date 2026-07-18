@@ -14,6 +14,7 @@ import { EditResendModal } from "./EditResendModal";
 import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
+import { ContextFollow } from "./ContextFollow";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
 import { UiSubmissionBubble } from "./UiSubmission";
@@ -47,7 +48,7 @@ export function AIPanel({
   // 셀이 정하므로 width/flex를 지정하지 않고, 넓어진 만큼 대화 폭을 가독성 있게 가운데 정렬한다.
   placement?: "side" | "bottom";
 }) {
-  const { connected, noteSink, setAskSink } = useWorkspace();
+  const { connected, noteSink, setAskSink, followMode } = useWorkspace();
   const { aiText, activeResource } = useAiFeed();
   const {
     thinking,
@@ -164,6 +165,10 @@ export function AIPanel({
   const { over: dropOver, dropProps } = useFileDrop(!busy && connected, (files) => void attachFiles(files));
 
   const last = turns.at(-1);
+
+  // 컨텍스트 팔로우 모드 ("말하면 화면이 따라온다") — 실행부는 토글이 켜졌을
+  // 때만 마운트되는 ContextFollow가 소유한다 (엔티티 fetch도 그때만).
+  const followTurn = last?.role === "assistant" && last.status === "done" ? last : null;
   const lastId = last?.id;
   // Only the newest answer's cards may talk back to the agent (native parity);
   // older cards stay explorable but their callbacks/inputs lock.
@@ -253,6 +258,7 @@ export function AIPanel({
       )}
 
       <ProactivePanel cfg={cfg} />
+      {followMode && connected && <ContextFollow turn={followTurn} />}
 
       <div
         className="ai-transcript"

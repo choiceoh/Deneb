@@ -89,7 +89,7 @@ func TestToolWorkstation_DispatchAndErrors(t *testing.T) {
 	tool := ToolWorkstation(func(_ context.Context, action string, args map[string]string) error {
 		gotAction, gotArgs = action, args
 		return nil
-	})
+	}, nil)
 
 	out, err := tool(context.Background(), json.RawMessage(`{"action":"split","view":"mail"}`))
 	if err != nil {
@@ -114,13 +114,13 @@ func TestToolWorkstation_DispatchAndErrors(t *testing.T) {
 	// Transport errors surface to the agent (e.g. no desktop connected).
 	toolDown := ToolWorkstation(func(context.Context, string, map[string]string) error {
 		return errors.New("연결된 데스크톱 워크스테이션(Andromeda)이 없습니다")
-	})
+	}, nil)
 	if _, err := toolDown(context.Background(), json.RawMessage(`{"action":"focus","view":"mail"}`)); err == nil {
 		t.Fatal("expected transport error to propagate")
 	}
 
 	// A nil sender reports the capability as unavailable.
-	toolNil := ToolWorkstation(nil)
+	toolNil := ToolWorkstation(nil, nil)
 	if _, err := toolNil(context.Background(), json.RawMessage(`{"action":"focus","view":"mail"}`)); err == nil {
 		t.Fatal("expected unavailable error with nil sender")
 	}

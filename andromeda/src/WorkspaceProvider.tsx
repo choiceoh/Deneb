@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { WorkspaceCommand } from "./commands";
 import type { GatewayConfig } from "./gateway";
 import { PANES, paneLabel } from "./components/panes";
-import { getJSON, setJSON } from "./storage";
+import { getJSON, getString, setJSON, setString } from "./storage";
 import { closeInTiles, focusedTile, isTileable, MAX_TILES, openInTiles, sanitizeTiles, splitInTiles } from "./tiling";
 import type { View } from "./types";
 import {
@@ -16,6 +16,7 @@ import {
 } from "./workspaceContext";
 
 const HIDDEN_VIEWS_KEY = "andromeda.hiddenPanes";
+const FOLLOW_MODE_KEY = "andromeda.followMode";
 const VIEW_KEYS: ReadonlySet<View> = new Set(PANES.map((p) => p.key));
 
 function readHiddenViews(): View[] {
@@ -178,7 +179,23 @@ export function WorkspaceProvider({
     },
     [setView],
   );
+  // Screen-follow: open the wiki page WITHOUT stealing the focused pane — wiki
+  // joins as a split tile (or refreshes its target if already tiled).
+  const splitWiki = useCallback(
+    (path: string) => {
+      setWikiTarget(path);
+      splitPane("wiki");
+    },
+    [splitPane],
+  );
   const consumeWikiTarget = useCallback(() => setWikiTarget(null), []);
+
+  // 컨텍스트 팔로우 모드 — 기본 OFF, 명시 토글만 (침습적 조종이라 opt-in).
+  const [followMode, setFollowModeState] = useState(() => getString(FOLLOW_MODE_KEY) === "1");
+  const setFollowMode = useCallback((on: boolean) => {
+    setFollowModeState(on);
+    setString(FOLLOW_MODE_KEY, on ? "1" : "0");
+  }, []);
   const openPane = useCallback(
     (nextView: View, target?: Omit<PaneTarget, "view">) => {
       setPaneTarget(target ? { view: nextView, ...target } : null);
@@ -316,7 +333,10 @@ export function WorkspaceProvider({
       consumePaneTarget,
       wikiTarget,
       openWiki,
+      splitWiki,
       consumeWikiTarget,
+      followMode,
+      setFollowMode,
       noteSink,
       setNoteSink,
       hiddenViews,
@@ -350,7 +370,10 @@ export function WorkspaceProvider({
       consumePaneTarget,
       wikiTarget,
       openWiki,
+      splitWiki,
       consumeWikiTarget,
+      followMode,
+      setFollowMode,
       noteSink,
       setNoteSink,
       hiddenViews,

@@ -61,7 +61,7 @@ func TestDependencyAccessorsNilGetterAndNilResult(t *testing.T) {
 func TestMethodsReturnExactFourNamedLocalAndMiniappEndpoints(t *testing.T) {
 	local := Methods(Deps{})
 	mini := MiniappMethods(Deps{})
-	if len(local) != 5 || len(mini) != 5 {
+	if len(local) != 6 || len(mini) != 6 {
 		t.Fatalf("method sizes local=%d mini=%d", len(local), len(mini))
 	}
 	localNames := make([]string, 0, len(local))
@@ -74,10 +74,10 @@ func TestMethodsReturnExactFourNamedLocalAndMiniappEndpoints(t *testing.T) {
 	}
 	sort.Strings(localNames)
 	sort.Strings(miniNames)
-	if want := []string{"observe.behavior", "observe.health", "observe.logs", "observe.turn", "observe.workstation_usage"}; !reflect.DeepEqual(localNames, want) {
+	if want := []string{"observe.behavior", "observe.health", "observe.logs", "observe.turn", "observe.workstation_feedback", "observe.workstation_usage"}; !reflect.DeepEqual(localNames, want) {
 		t.Fatalf("local names = %#v", localNames)
 	}
-	if want := []string{"miniapp.observe.behavior", "miniapp.observe.health", "miniapp.observe.logs", "miniapp.observe.turn", "miniapp.observe.workstation_usage"}; !reflect.DeepEqual(miniNames, want) {
+	if want := []string{"miniapp.observe.behavior", "miniapp.observe.health", "miniapp.observe.logs", "miniapp.observe.turn", "miniapp.observe.workstation_feedback", "miniapp.observe.workstation_usage"}; !reflect.DeepEqual(miniNames, want) {
 		t.Fatalf("mini names = %#v", miniNames)
 	}
 }

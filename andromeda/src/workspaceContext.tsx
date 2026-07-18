@@ -82,7 +82,14 @@ interface WorkspaceCtx {
   // 넘기면 위키 pane으로 전환하고 해당 페이지를 연다. WikiPane이 마운트되어 소비한다.
   wikiTarget: string | null;
   openWiki: (path: string) => void;
+  // Like openWiki but as a SPLIT tile — screen-follow features (결재 검토 모드,
+  // 컨텍스트 팔로우) must not steal the pane the user is reading.
+  splitWiki: (path: string) => void;
   consumeWikiTarget: () => void;
+  // 컨텍스트 팔로우 모드: 대화에서 언급된 프로젝트/인물 위키를 옆 타일로 따라
+  // 연다. 침습적이라 기본 OFF; 팔레트로 토글, localStorage 영속.
+  followMode: boolean;
+  setFollowMode: (on: boolean) => void;
   // Cross-pane "save this AI answer into the open notebook" channel: NotebookPane
   // registers a sink while a notebook is open (and clears it on unmount/close);
   // the AI panel shows a per-answer 노트에 저장 button only while a sink exists.

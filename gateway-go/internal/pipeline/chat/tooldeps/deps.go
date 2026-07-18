@@ -200,6 +200,9 @@ type CoreToolDeps struct {
 	// events push channel. nil = no desktop channel wired, so the workstation
 	// tool reports unavailable.
 	WorkstationCommandSender func(ctx context.Context, action string, args map[string]string) error
+	// WorkstationUsageHint surfaces the adoption-rate note appended to the
+	// workstation tool result (효용 원장 자기조정) — "" when nothing to say.
+	WorkstationUsageHint func(action string) string
 	// SkillsCatalogDirs are the skill catalog roots that live outside the
 	// workspace (managed ~/.deneb/skills, personal ~/.agents/skills). The
 	// read tool accepts them as extra allowed roots so the SKILL.md

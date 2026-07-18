@@ -22,12 +22,15 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
@@ -86,11 +89,81 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 
 func methodsWithPrefix(deps Deps, p string) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
-		p + "turn":              turnHandler(deps),
-		p + "logs":              logsHandler(deps),
-		p + "behavior":          behaviorHandler(deps),
-		p + "health":            healthHandler(deps),
-		p + "workstation_usage": workstationUsageHandler(deps),
+		p + "turn":                 turnHandler(deps),
+		p + "logs":                 logsHandler(deps),
+		p + "behavior":             behaviorHandler(deps),
+		p + "health":               healthHandler(deps),
+		p + "workstation_usage":    workstationUsageHandler(deps),
+		p + "workstation_feedback": workstationFeedbackHandler(deps),
+	}
+}
+
+// feedbackMu serializes read-modify-write of the feedback tally file (the
+// desktop reports verdicts fire-and-forget; two overlapping reports must not
+// lose a count).
+var feedbackMu sync.Mutex
+
+// workstationFeedbackKept mirrors the on-disk per-action tally.
+type workstationFeedbackKept struct {
+	Kept    int `json:"kept"`
+	Dropped int `json:"dropped"`
+}
+
+// workstationFeedbackHandler records the desktop's adoption verdict for a
+// dispatched workspace command: kept = the arranged pane survived the first
+// two minutes; dropped = the user closed/replaced it right away. This is the
+// utility-grounding signal the raw dispatch tally can't provide — the
+// workstation tool reads it back to tune how eagerly it drives the screen.
+func workstationFeedbackHandler(deps Deps) rpcutil.HandlerFunc {
+	type params struct {
+		Action string `json:"action"`
+		Kept   bool   `json:"kept"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		var p params
+		if len(req.Params) > 0 {
+			_ = json.Unmarshal(req.Params, &p)
+		}
+		action := strings.TrimSpace(p.Action)
+		if action == "" {
+			return rpcerr.Newf(protocol.ErrMissingParam, "workstation_feedback requires action").Response(req.ID)
+		}
+		if deps.StateDir == nil {
+			return rpcutil.RespondOK(req.ID, map[string]bool{"recorded": false})
+		}
+		dir := deps.StateDir()
+		if dir == "" {
+			return rpcutil.RespondOK(req.ID, map[string]bool{"recorded": false})
+		}
+		path := filepath.Join(dir, "cache", "workstation_feedback.json")
+		feedbackMu.Lock()
+		defer feedbackMu.Unlock()
+		tally := struct {
+			ByAction map[string]workstationFeedbackKept `json:"byAction"`
+			LastAt   string                             `json:"lastAt"`
+		}{ByAction: map[string]workstationFeedbackKept{}}
+		if data, err := os.ReadFile(path); err == nil {
+			_ = json.Unmarshal(data, &tally)
+			if tally.ByAction == nil {
+				tally.ByAction = map[string]workstationFeedbackKept{}
+			}
+		}
+		entry := tally.ByAction[action]
+		if p.Kept {
+			entry.Kept++
+		} else {
+			entry.Dropped++
+		}
+		tally.ByAction[action] = entry
+		tally.LastAt = time.Now().UTC().Format(time.RFC3339)
+		data, err := json.Marshal(tally)
+		if err != nil {
+			return rpcerr.WrapUnavailable("feedback encode failed", err).Response(req.ID)
+		}
+		if err := atomicfile.WriteFile(path, data, nil); err != nil {
+			return rpcerr.WrapUnavailable("feedback write failed", err).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, map[string]bool{"recorded": true})
 	}
 }
 

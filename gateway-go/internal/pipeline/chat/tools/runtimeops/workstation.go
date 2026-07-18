@@ -151,9 +151,15 @@ func buildWorkstationCommand(p workstationParams) (string, map[string]string, er
 	return action, args, nil
 }
 
+// WorkstationUsageHintFunc returns a short adoption-rate note for an action
+// ("" = nothing worth saying). Backed by the desktop's kept/dropped feedback
+// ledger — riding the TOOL RESULT keeps the (cache-invariant) system prompt
+// untouched while still closing the self-adjustment loop each use.
+type WorkstationUsageHintFunc func(action string) string
+
 // ToolWorkstation creates the workstation tool handler. A nil send reports the
-// capability as unavailable (no desktop push channel wired).
-func ToolWorkstation(send WorkstationCommandFunc) toolport.ToolFunc {
+// capability as unavailable (no desktop push channel wired). hint may be nil.
+func ToolWorkstation(send WorkstationCommandFunc, hint WorkstationUsageHintFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p workstationParams
 		if err := jsonutil.UnmarshalInto("workstation params", input, &p); err != nil {
@@ -169,6 +175,12 @@ func ToolWorkstation(send WorkstationCommandFunc) toolport.ToolFunc {
 		if err := send(ctx, action, args); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("데스크톱 워크스테이션에 화면 명령을 보냈습니다 (%s). 클라이언트가 즉시 반영하고 '화면 조정' 알림으로 표시합니다.", action), nil
+		out := fmt.Sprintf("데스크톱 워크스테이션에 화면 명령을 보냈습니다 (%s). 클라이언트가 즉시 반영하고 '화면 조정' 알림으로 표시합니다.", action)
+		if hint != nil {
+			if note := hint(action); note != "" {
+				out += "\n" + note
+			}
+		}
+		return out, nil
 	}
 }
