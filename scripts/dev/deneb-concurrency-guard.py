@@ -20,9 +20,13 @@ Three checks, per the original 2026-07-09 spec:
 
 Self-gate: only acts when the touched path / cwd / command is Deneb-related, so
 the global wiring is a no-op in unrelated projects. Fail-open by design: any
-internal error allows the tool. Known ceiling (unchanged from the original):
-check 1 sees tool file_path only — Bash `sed -i`/redirects into prod are not
-parsed (rare; CLAUDE.md already forbids them).
+internal error allows the tool.
+
+Check 1b closes the original's known ceiling: Bash commands whose WRITE TARGET
+is an absolute/~ path in the prod tree (cp/mv/rm dest, tee, sed -i, >/>>
+redirects) now ask — the exact hole the 2026-07-18 stale fix script walked
+through (`cp … ~/deneb/scripts/dev/`). Reading prod (cat/grep/ls, cp FROM prod)
+stays silent; relative-path writes with cwd inside prod are out of scope.
 """
 
 import json
@@ -80,6 +84,60 @@ def check_prod_edit(tool, tool_input, cwd):
         f"프로드 전용 트리({prod}) 직접 편집은 금지 — main만, auto-deploy가 관리 "
         "(더럽히면 배포 동결). 개발은 ~/deneb-dev 또는 워크트리에서 하세요."
     ))
+
+
+def prod_target(token):
+    """Realpath when an (expanded) absolute token lands in prod outside worktrees."""
+    path = os.path.expanduser(token)
+    if not os.path.isabs(path):
+        return None
+    real = os.path.realpath(path)
+    prod = prod_root()
+    if real != prod and not real.startswith(prod + os.sep):
+        return None
+    if real.startswith(os.path.join(prod, ".claude", "worktrees") + os.sep):
+        return None
+    return real
+
+
+# Commands where only the last path argument (the destination) mutates vs. ones
+# that mutate every path argument they are given.
+WRITE_DEST_LAST = {"cp", "install", "rsync"}
+WRITE_ANY_ARG = {"rm", "mv", "tee", "touch", "mkdir", "truncate", "ln", "chmod", "chown"}
+
+
+def check_prod_write_bash(command):
+    """Check 1b: ask on Bash writes into the prod tree (check 1 sees only tool
+    file_path). Targets: write-command args, sed -i files, >/>> redirects."""
+    for segment in command_segments(command):
+        if not segment:
+            continue
+        name = os.path.basename(segment[0])
+        args = [t for t in segment[1:] if not t.startswith("-")]
+        targets = []
+        if name in WRITE_DEST_LAST:
+            if args:
+                targets.append(args[-1])
+        elif name in WRITE_ANY_ARG:
+            targets.extend(args)
+        elif name == "sed" and any(t == "-i" or t.startswith("-i") for t in segment[1:]):
+            targets.extend(args)
+        for i, tok in enumerate(segment):
+            bare = tok.lstrip("0123456789&")  # 2>, &>, 2>>… down to the > core
+            if bare in (">", ">>"):
+                if i + 1 < len(segment):
+                    targets.append(segment[i + 1])
+            elif bare.startswith(">") and bare.lstrip(">"):
+                targets.append(bare.lstrip(">"))
+        for target in targets:
+            hit = prod_target(target)
+            if hit:
+                return decide("ask", (
+                    f"이 명령은 프로드 전용 트리에 씁니다: {hit} — main만, auto-deploy가 관리 "
+                    "(더럽히면 배포 동결·다음 pull 충돌). 개발은 ~/deneb-dev 또는 워크트리에서. "
+                    "정말 프로드에 써야 하는 부트스트랩이면 계속하세요."
+                ))
+    return None
 
 
 def command_segments(command):
@@ -183,6 +241,9 @@ def main():
         command = tool_input.get("command") or ""
         if not is_deneb_context(cwd, command):
             return 0
+        result = check_prod_write_bash(command)
+        if result is not None:
+            return result
         result = check_git_scoping(command)
         if result is not None:
             return result

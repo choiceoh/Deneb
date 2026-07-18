@@ -95,6 +95,49 @@ class GitScopingTests(GuardTestCase):
         self.assertEqual(self.decision(stdin), "allow")
 
 
+class ProdWriteBashTests(GuardTestCase):
+    def bash(self, command):
+        return payload("Bash", {"command": command}, str(self.home / "deneb-dev"))
+
+    def prod(self, rel):
+        return str(self.home / "deneb" / rel)
+
+    def test_writes_into_prod_ask(self) -> None:
+        commands = [
+            f"cp local.py {self.prod('scripts/dev/x.py')}",  # the 2026-07-18 incident shape
+            f"cp a.py b.py {self.prod('scripts/dev/')}",
+            f"rm {self.prod('scripts/dev/x.py')}",
+            f"mv {self.prod('scripts/dev/x.py')} /tmp/x.py",
+            f"echo hi > {self.prod('notes.txt')}",
+            f"echo hi >{self.prod('notes.txt')}",
+            f"echo hi 2> {self.prod('err.log')}",
+            f"cat local | tee {self.prod('notes.txt')}",
+            f"sed -i s/a/b/ {self.prod('scripts/dev/x.py')}",
+            f"touch {self.prod('marker')}",
+            f"make build && cp dist/out {self.prod('dist/out')}",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(self.decision(self.bash(command)), "ask")
+
+    def test_reads_and_safe_destinations_pass(self) -> None:
+        home = self.home
+        commands = [
+            f"cat {self.prod('scripts/dev/x.py')}",
+            f"grep -rn foo {self.prod('scripts')}",
+            f"cp {self.prod('scripts/dev/x.py')} /tmp/x.py",  # prod as SOURCE only
+            f"cp {self.prod('a')} {home / 'deneb-dev/a'}",
+            f"cp x {home / 'deneb/.claude/worktrees/wt1/x'}",  # worktree dest
+            f"cp x {home / 'deneb-dev/scripts/x'}",
+            f"git -C {home / 'deneb'} log --oneline",
+            f"sed s/a/b/ {self.prod('f')}",  # sed without -i reads only
+            f"ls > /tmp/deneb-listing.txt && cat {self.prod('f')}",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(self.decision(self.bash(command)), "allow")
+
+
 class LivetestLockTests(GuardTestCase):
     COMMAND = "scripts/dev/live-test.sh restart && scripts/dev/live-test.sh smoke"
 
