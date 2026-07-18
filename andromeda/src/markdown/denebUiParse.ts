@@ -177,6 +177,40 @@ export function collectInputs(root: Node): { initial: Record<string, unknown>; r
   return { initial, required };
 }
 
+// --- deneb-ui round-trip user messages -------------------------------------
+// A card submission comes back as a machine-shaped user message ("Pressed:
+// <event>" / "Responded with: k: v, …" — composed in DenebUi.dispatch and the
+// native ChatViewModel.submitUiCallback). Parse it back so the transcript can
+// present the answer as a human card-reply instead of the raw wire text; this
+// also covers transcript reloads, where only the raw text survives.
+export interface UiSubmission {
+  /** callback event name — "" when collected values were submitted */
+  event: string;
+  /** ordered k/v pairs from "Responded with:" — empty for a bare press */
+  values: [string, string][];
+}
+
+const PRESSED_RE = /^Pressed: (\S+)$/;
+const RESPONDED_PREFIX = "Responded with: ";
+// A pair starts at a space-free key followed by ": ". Segments that fail this
+// (a comma run inside a value) merge back into the previous value.
+const PAIR_START_RE = /^(\S+): ([\s\S]*)$/;
+
+export function parseUiSubmission(text: string): UiSubmission | null {
+  const t = text.trim();
+  const pressed = PRESSED_RE.exec(t);
+  if (pressed) return { event: pressed[1], values: [] };
+  if (!t.startsWith(RESPONDED_PREFIX)) return null;
+  const values: [string, string][] = [];
+  for (const seg of t.slice(RESPONDED_PREFIX.length).split(", ")) {
+    const m = PAIR_START_RE.exec(seg);
+    if (m) values.push([m[1], m[2]]);
+    else if (values.length > 0) values[values.length - 1][1] += ", " + seg;
+    else return null; // first segment isn't "k: v" — an ordinary message
+  }
+  return values.length > 0 ? { event: "", values } : null;
+}
+
 export const TEXT_STYLE: Record<string, React.CSSProperties> = {
   // Editorial hero voice (parity with the native 28sp Light headline,
   // scaled for desktop panel density).

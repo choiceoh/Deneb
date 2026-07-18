@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { type GatewayConfig } from "@/gateway";
 import { useChat } from "@/hooks";
+import { parseUiSubmission } from "@/markdown/denebUiParse";
 import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
@@ -15,6 +16,7 @@ import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
 import { ProactivePanel } from "./ProactivePanel";
 import { SessionDrawer } from "./SessionDrawer";
+import { UiSubmissionBubble } from "./UiSubmission";
 
 // Right floating panel: Deneb AI collaboration. Reads the active pane's pushed
 // text from the workspace context and streams a reply with Markdown + tool
@@ -163,6 +165,9 @@ export function AIPanel({
 
   const last = turns.at(-1);
   const lastId = last?.id;
+  // Only the newest answer's cards may talk back to the agent (native parity);
+  // older cards stay explorable but their callbacks/inputs lock.
+  const lastAssistantId = [...turns].reverse().find((t) => t.role === "assistant")?.id;
 
   const bottom = placement === "bottom";
   return (
@@ -280,58 +285,68 @@ export function AIPanel({
                 이전 대화 {hiddenHistory.count}개 더 불러오기
               </button>
             )}
-            {turns.map((turn) => (
-              <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
-                <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
-                {turn.role === "user" ? (
-                  <div className="ai-turn-body">
-                    {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}
-                    {turn.text}
-                  </div>
-                ) : (
-                  <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
-                )}
-                {turn.role === "user" && turn.id === lastUserId && !busy && (
-                  <button
-                    className="row-btn ai-edit no-print"
-                    onClick={() => setEditingMsg(turn.text)}
-                    title="이 메시지를 수정해 다시 보내기"
+            {turns.map((turn) => {
+              // A card answer round-trips as machine text — humanize it.
+              const sub = turn.role === "user" ? parseUiSubmission(turn.text) : null;
+              return (
+                <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
+                  <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
+                  {turn.role === "user" ? (
+                    <div className="ai-turn-body">
+                      {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}
+                      {sub ? <UiSubmissionBubble sub={sub} /> : turn.text}
+                    </div>
+                  ) : (
+                    <AssistantBody
+                      turn={turn}
+                      thinking={thinking}
+                      onUiSubmit={submit}
+                      busy={busy}
+                      interactive={turn.id === lastAssistantId}
+                    />
+                  )}
+                  {turn.role === "user" && turn.id === lastUserId && !busy && !sub && (
+                    <button
+                      className="row-btn ai-edit no-print"
+                      onClick={() => setEditingMsg(turn.text)}
+                      title="이 메시지를 수정해 다시 보내기"
+                    >
+                      <Icon name="pencil" size={12} /> 수정
+                    </button>
+                  )}
+                  <AssistantTurnActions
+                    turn={turn}
+                    lastId={lastId}
+                    busy={busy}
+                    onRegenerate={regenerate}
+                    variants={variants}
+                    onVariant={selectVariant}
                   >
-                    <Icon name="pencil" size={12} /> 수정
-                  </button>
-                )}
-                <AssistantTurnActions
-                  turn={turn}
-                  lastId={lastId}
-                  busy={busy}
-                  onRegenerate={regenerate}
-                  variants={variants}
-                  onVariant={selectVariant}
-                >
-                  {/* Save this answer into the open notebook as a cited note — shown only
+                    {/* Save this answer into the open notebook as a cited note — shown only
                     while a notebook pane has registered a sink (the notebook's output
                     loop: material made with the AI stays with the deal). 저장됨 only
                     after the sink confirms; a failed pin stays clickable for retry. */}
-                  {noteSink && turn.status === "done" && turn.text.trim() && (
-                    <button
-                      className="row-btn ai-save-note no-print"
-                      disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
-                      onClick={() => void saveNote(turn.id, turn.text)}
-                      title="이 답변을 노트북에 인용자료(노트)로 저장"
-                    >
-                      <Icon name="plus" size={12} />{" "}
-                      {noteSaves.get(turn.id) === "saved"
-                        ? "노트로 저장됨"
-                        : noteSaves.get(turn.id) === "saving"
-                          ? "저장 중…"
-                          : noteSaves.get(turn.id) === "error"
-                            ? "저장 실패 — 다시 시도"
-                            : "노트에 저장"}
-                    </button>
-                  )}
-                </AssistantTurnActions>
-              </div>
-            ))}
+                    {noteSink && turn.status === "done" && turn.text.trim() && (
+                      <button
+                        className="row-btn ai-save-note no-print"
+                        disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
+                        onClick={() => void saveNote(turn.id, turn.text)}
+                        title="이 답변을 노트북에 인용자료(노트)로 저장"
+                      >
+                        <Icon name="plus" size={12} />{" "}
+                        {noteSaves.get(turn.id) === "saved"
+                          ? "노트로 저장됨"
+                          : noteSaves.get(turn.id) === "saving"
+                            ? "저장 중…"
+                            : noteSaves.get(turn.id) === "error"
+                              ? "저장 실패 — 다시 시도"
+                              : "노트에 저장"}
+                      </button>
+                    )}
+                  </AssistantTurnActions>
+                </div>
+              );
+            })}
           </>
         )}
         {/* Once content has started streaming, a mid-turn thinking burst (between
