@@ -263,6 +263,11 @@ export function MailPane() {
           onRowClick={(m) => setSelectedId((current) => (String(current) === String(m.id) ? undefined : m.id))}
           isRowSelected={(m) => String(m.id) === String(selectedId)}
           rowTitle={(m) => `${m.subject ?? "(제목 없음)"} 읽기`}
+          rowMenu={(m) => [
+            { label: "읽음 처리", disabled: m.isUnread !== true, onSelect: () => markMailRead(m.id) },
+            { label: "보관", disabled: busy, onSelect: () => void run(MAIL_RPC.archive, { id: m.id }) },
+            { label: "휴지통", danger: true, disabled: busy, onSelect: () => void run(MAIL_RPC.trash, { id: m.id }) },
+          ]}
           renderExpandedRow={() => (
             <MailDetail
               mail={selectedMail}

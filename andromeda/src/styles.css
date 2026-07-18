@@ -1207,6 +1207,39 @@ input[type="checkbox"] {
   margin-top: 8px;
 }
 
+/* 우클릭 컨텍스트 메뉴 — 웹뷰 기본(영문) 메뉴 대신 앱 스타일 행 액션. */
+.ctx-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 140px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ctx-menu-item {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  color: var(--ink);
+}
+
+.ctx-menu-item:hover:not(:disabled) {
+  background: var(--panel-sunken);
+}
+
+.ctx-menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.ctx-menu-item.danger {
+  color: var(--due);
+}
+
 /* Update nudge — bottom-right floating pill; above panes, below modals. */
 .update-nudge {
   position: fixed;
