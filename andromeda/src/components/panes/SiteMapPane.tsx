@@ -362,15 +362,34 @@ export function SiteMapPane() {
     else if (status !== STATUS_UNDER_CONSTRUCTION) setShowUnclassified(true);
   };
 
-  const applySiteStatus = async (next: string) => {
+  // Pending "milestone date missing" question for a status change. App-styled
+  // modal instead of window.confirm (a silent no-op in the Tauri WebView): both
+  // old outcomes are explicit buttons; Esc/backdrop aborts the change entirely.
+  const [dateAsk, setDateAsk] = useState<{
+    next: string;
+    key: "contract_date" | "construction_start";
+    question: string;
+  } | null>(null);
+
+  const changeStatus = (next: string) => {
+    if (!selected || statusBusy || next === selected.status) return;
+    if (next === STATUS_CONTRACT && !selected.sched.contractDate.trim()) {
+      setDateAsk({ next, key: "contract_date", question: "계약일을 오늘로 넣을까요?" });
+      return;
+    }
+    if (next === STATUS_UNDER_CONSTRUCTION && !selected.sched.constructionStart.trim()) {
+      setDateAsk({ next, key: "construction_start", question: "공사개시일을 오늘로 넣을까요?" });
+      return;
+    }
+    void applySiteStatus(next, null);
+  };
+
+  const applySiteStatus = async (
+    next: string,
+    fillDate: { key: "contract_date" | "construction_start"; value: string } | null,
+  ) => {
     const path = selected?.path;
     if (!selected || !path || !isSitePagePath(path) || statusBusy || next === selected.status) return;
-    let fillDate: { key: "contract_date" | "construction_start"; value: string } | null = null;
-    if (next === STATUS_CONTRACT && !selected.sched.contractDate.trim()) {
-      if (window.confirm("계약일을 오늘로 넣을까요?")) fillDate = { key: "contract_date", value: todayYmd() };
-    } else if (next === STATUS_UNDER_CONSTRUCTION && !selected.sched.constructionStart.trim()) {
-      if (window.confirm("공사개시일을 오늘로 넣을까요?")) fillDate = { key: "construction_start", value: todayYmd() };
-    }
     setStatusBusy(true);
     setStatusError(null);
     try {
@@ -580,6 +599,39 @@ export function SiteMapPane() {
 
   return (
     <>
+      {dateAsk && (
+        <Modal
+          title="공정 일정 입력"
+          onClose={() => setDateAsk(null)}
+          width={400}
+          footer={
+            <>
+              <button
+                className="btn"
+                onClick={() => {
+                  const ask = dateAsk;
+                  setDateAsk(null);
+                  void applySiteStatus(ask.next, null);
+                }}
+              >
+                날짜 없이 변경
+              </button>
+              <button
+                className="btn btn-accent"
+                onClick={() => {
+                  const ask = dateAsk;
+                  setDateAsk(null);
+                  void applySiteStatus(ask.next, { key: ask.key, value: todayYmd() });
+                }}
+              >
+                오늘로 넣고 변경
+              </button>
+            </>
+          }
+        >
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>{dateAsk.question}</p>
+        </Modal>
+      )}
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginTop: 2 }}>
         <h2 style={{ margin: 0 }}>현장 지도</h2>
         <span style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -911,7 +963,7 @@ export function SiteMapPane() {
               <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>상태</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {STATUS_CHOICES.map((c) => (
-                  <Chip key={c.label} on={selected.status === c.value} onClick={() => void applySiteStatus(c.value)}>
+                  <Chip key={c.label} on={selected.status === c.value} onClick={() => changeStatus(c.value)}>
                     {c.label}
                   </Chip>
                 ))}

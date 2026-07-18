@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { checkForUpdates } from "@/updater";
+import { checkForUpdates, relaunchApp } from "@/updater";
 import { getLogLevel, setLogLevel } from "@/log";
 import { renderWithProviders } from "@/test/util";
 import { SettingsPane } from "./SettingsPane";
 
-vi.mock("@/updater", () => ({ checkForUpdates: vi.fn() }));
+vi.mock("@/updater", () => ({ checkForUpdates: vi.fn(), relaunchApp: vi.fn() }));
 
 type RpcCall = { method: string; params: Record<string, unknown> };
 
@@ -521,17 +521,35 @@ describe("SettingsPane boundary behavior", () => {
       [{ status: "up-to-date", currentVersion: "1.2.3" } as const, "최신 버전입니다 (v1.2.3)."],
       [
         { status: "installed", version: "2.0.0", currentVersion: "1.2.3" } as const,
-        "v2.0.0으로 업데이트되어 재시작 중입니다.",
-      ],
-      [
-        { status: "deferred", version: "2.1.0", currentVersion: "1.2.3" } as const,
-        "v2.1.0 설치 완료 — 다음 실행 시 적용됩니다.",
+        "v2.0.0 설치 완료 — 다음 실행 시 적용됩니다.",
       ],
     ])("renders updater result %#", async (result, message) => {
       vi.mocked(checkForUpdates).mockResolvedValue(result);
       renderWithProviders(<SettingsPane />, { connected: false });
       await openAboutAndCheck();
       expect(await screen.findByText(message)).toBeInTheDocument();
+    });
+
+    it("installed asks for relaunch via the app dialog and honors both answers", async () => {
+      vi.mocked(checkForUpdates).mockResolvedValue({
+        status: "installed",
+        version: "2.0.0",
+        currentVersion: "1.2.3",
+      });
+      renderWithProviders(<SettingsPane />, { connected: false });
+      await openAboutAndCheck();
+
+      // Decline: install stays deferred, nothing relaunches.
+      let dialog = await screen.findByRole("dialog", { name: "업데이트 설치 완료" });
+      await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(relaunchApp).not.toHaveBeenCalled();
+
+      // Accept on a fresh check: relaunch fires.
+      await userEvent.click(screen.getByRole("button", { name: "업데이트 확인" }));
+      dialog = await screen.findByRole("dialog", { name: "업데이트 설치 완료" });
+      await userEvent.click(within(dialog).getByRole("button", { name: "재시작" }));
+      expect(relaunchApp).toHaveBeenCalledTimes(1);
     });
 
     it("shows a stable error message when the updater throws", async () => {
