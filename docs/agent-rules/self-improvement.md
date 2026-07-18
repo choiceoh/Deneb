@@ -67,6 +67,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `tracker_self_correction_dispatch_selection.go` | Canonical O(n) L4 candidate selection across review, delivery, source, and surface policy |
 | `lifecycle/` | Stable L1-L4 display identity and authoritative L4 review/delivery state kernel |
 | `tracker_recurrence_promotion.go` | Recurrence/cluster → self-correction candidate promotion |
+| `failure_intervention_router.go` | Failure origin → cheapest intervention surface advisory routing (`shadow`; never changes dispatch or target policy) |
 | `meta_evolution.go` | L2 slow loop — weekly meta-artifact revision (evolve/judge prompts) with epoch benches, auto-adopt + rollback watch |
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
 | `rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
@@ -109,6 +110,12 @@ Deterministic promotion lives in `tracker_recurrence_promotion.go`:
   recurring failures (`FailureEvidenceClusters`, Support ≥ threshold) into
   candidates with no LLM in the loop — the reliable backstop when the LLM sweep
   ignores its nudge.
+- Every `FailureEvidenceCluster` receives a deterministic two-axis shadow route:
+  `failureOrigin` identifies where the contract first broke and
+  `interventionSurface` names the cheapest likely repair surface. The route is
+  visible in status, heartbeat sweep prompts, and promoted-candidate evidence,
+  but is advisory only: it cannot change `TargetFiles`, editable-surface tier,
+  review state, or dispatch eligibility.
 - `selfCorrectionReopenBlocked` allows an **applied** candidate to reopen only
   after a cooldown once the same signature recurs (fixed-but-still-failing);
   **rejected** never reopens (operator veto is respected). Per-tick promotion is

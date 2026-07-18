@@ -135,6 +135,16 @@ func TestPromoteFailureClusterCandidates(t *testing.T) {
 	if cands[0].Scope != "skill" {
 		t.Fatalf("scope = %q, want skill", cands[0].Scope)
 	}
+	for _, want := range []string{
+		"shadowRoute=origin:workflow",
+		"intervention:workflow",
+		"confidence:medium",
+		"reasons:execution_or_sequence_signal",
+	} {
+		if !strings.Contains(cands[0].Evidence, want) {
+			t.Fatalf("candidate evidence missing %q: %s", want, cands[0].Evidence)
+		}
+	}
 
 	// Idempotent: a live proposed twin blocks a second promotion in the same window.
 	promoted2, err := tr.PromoteFailureClusterCandidates()
