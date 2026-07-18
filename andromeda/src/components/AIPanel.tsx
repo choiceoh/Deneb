@@ -107,19 +107,26 @@ export function AIPanel({
   // 사이드 패널은 focusOnReveal 없음 — 드러날 때 작업 영역의 포커스를 뺏으면 안 된다.
   useComposerBehavior(composeRef, { input, busy, hidden });
 
-  const { attachNote, attachingRef, attachFiles, onPick } = useAttachPipeline({
+  const { attachNote, attachingRef, attachFiles, onPick, staged, removeStaged, sendStaged } = useAttachPipeline({
     connected,
     busy,
     input,
     setInput,
     setAttaching,
     pin,
-    capture: (file, caption) => capture(file, { sessionKey, caption }),
+    capture: (file, caption, previewUrl) => capture(file, { sessionKey, caption, previewUrl }),
   });
 
   function submit(message = input) {
     const msg = message.trim();
-    if (!msg || busy || attachingRef.current || !connected) return;
+    if (busy || attachingRef.current || !connected) return;
+    if (staged.length > 0) {
+      // 스테이징된 파일이 있으면 이 전송이 배치를 나른다 — 텍스트는 첫 파일 캡션
+      // (오디오만이면 텍스트는 남는다; 캡션 소비는 sendStaged가 소유).
+      void sendStaged(msg);
+      return;
+    }
+    if (!msg) return;
     setInput("");
     pin(); // a fresh send always rides down to the latest
     void send(msg, { workspaceContext: aiText, activeResource, model: model || undefined, sessionKey });
@@ -277,7 +284,10 @@ export function AIPanel({
               <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
                 <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
                 {turn.role === "user" ? (
-                  <div className="ai-turn-body">{turn.text}</div>
+                  <div className="ai-turn-body">
+                    {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}
+                    {turn.text}
+                  </div>
                 ) : (
                   <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
                 )}
@@ -345,7 +355,9 @@ export function AIPanel({
         onSubmit={submit}
         onStop={stop}
         onPick={onPick}
-        onAttachFiles={(files) => void attachFiles(files)}
+        onAttachFiles={attachFiles}
+        staged={staged}
+        onRemoveStaged={removeStaged}
       />
       {editingMsg !== null && (
         <EditResendModal initial={editingMsg} onClose={() => setEditingMsg(null)} onResend={editResend} />

@@ -1,10 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { describeCommand, isWorkspaceCommandKind, parseWorkspaceCommand } from "@/commands";
 import type { ProactiveEvent } from "@/events";
 import { fmtMailDate } from "@/format";
 import type { GatewayConfig } from "@/gateway";
 import { useEvents } from "@/hooks";
 import { log } from "@/log";
+import { notifyDesktop } from "@/notify";
+import { setBadgeCount } from "@/tauri";
 import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
 import { type ProactiveNav, proactiveNav } from "./proactiveNav";
@@ -42,6 +44,29 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
     [runCommand],
   );
   const { events, status, dismiss, clearAll } = useEvents(cfg, connected, intercept);
+
+  // OS 알림: 비포커스 창에도 능동 넛지가 닿도록 — 최신 이벤트가 "새로" 도착했을
+  // 때 1회 (마운트 시 이미 있던 목록은 복원분이라 침묵). notifyDesktop 자체가
+  // 포커스 중·웹 빌드에선 no-op.
+  const prevNewestRef = useRef<string | undefined>(undefined);
+  const notifyArmedRef = useRef(false);
+  useEffect(() => {
+    const newest = events[0];
+    if (!notifyArmedRef.current) {
+      notifyArmedRef.current = true;
+      prevNewestRef.current = newest?.id;
+      return;
+    }
+    if (newest && newest.id !== prevNewestRef.current) {
+      prevNewestRef.current = newest.id;
+      void notifyDesktop(newest.title ?? "데네브 알림", newest.body ?? "");
+    }
+  }, [events]);
+
+  // 독/태스크바 배지 = 대기 중 넛지 수 (0이면 지움).
+  useEffect(() => {
+    void setBadgeCount(events.length);
+  }, [events.length]);
 
   const onNavigate = (nav: ProactiveNav) => {
     if (nav.view === "wiki" && nav.ref) openWiki(nav.ref);

@@ -43,6 +43,7 @@ export interface ChatTurn {
   // user: the message as typed; assistant: the accumulated plain text (used for
   // copy, regenerate, and as the canonical body for transcript-loaded turns).
   text: string;
+  imageUrl?: string; // user turns only — staged-image thumbnail (session-local)
   parts?: AssistantPart[]; // assistant turns only; live-streamed segments
   status: "done" | "streaming" | "error" | "stopped";
   model?: string;
@@ -55,6 +56,9 @@ export interface SendOpts {
   model?: string;
   sessionKey?: string;
   caption?: string;
+  // Object URL of a staged image — rendered as the user-turn thumbnail so the
+  // conversation shows the image, not just its filename (session-local).
+  previewUrl?: string;
 }
 
 // ‹n/N› pager state for the newest answer's regenerate variants (live session
@@ -311,7 +315,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
     setThinking("");
     setTurns((prev) => [
       ...prev,
-      { id: chatTurnId(), role: "user", text: label, status: "done" },
+      { id: chatTurnId(), role: "user", text: label, imageUrl: opts.previewUrl, status: "done" },
       {
         id: assistantId,
         role: "assistant",

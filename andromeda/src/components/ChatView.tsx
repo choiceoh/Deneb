@@ -79,14 +79,14 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
 
   useComposerBehavior(composeRef, { input, busy, hidden, focusOnReveal: true });
 
-  const { attachNote, attachingRef, attachFiles, onPick } = useAttachPipeline({
+  const { attachNote, attachingRef, attachFiles, onPick, staged, removeStaged, sendStaged } = useAttachPipeline({
     connected,
     busy,
     input,
     setInput,
     setAttaching,
     pin,
-    capture: (file, caption) => capture(file, { sessionKey, caption }),
+    capture: (file, caption, previewUrl) => capture(file, { sessionKey, caption, previewUrl }),
     // 배치가 끝나면 세션 목록을 한 번 갱신 — 게이트웨이가 세션을 만들거나 라벨을 바꿨을 수 있다.
     onBatchDone: () => void refreshSessions(),
   });
@@ -95,7 +95,14 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   // the gateway applies the full 업무 profile (wiki/recall/persona) on its own.
   function submit(message = input) {
     const msg = message.trim();
-    if (!msg || busy || attachingRef.current || !connected) return;
+    if (busy || attachingRef.current || !connected) return;
+    if (staged.length > 0) {
+      // 스테이징된 파일이 있으면 이 전송이 배치를 나른다 — 텍스트는 첫 파일 캡션
+      // (오디오만이면 텍스트는 남는다; 캡션 소비는 sendStaged가 소유).
+      void sendStaged(msg);
+      return;
+    }
+    if (!msg) return;
     setInput("");
     pin();
     // refresh the history once the turn finishes — the gateway may have created or
@@ -152,7 +159,10 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
                 <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
                   <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
                   {turn.role === "user" ? (
-                    <div className="ai-turn-body">{turn.text}</div>
+                    <div className="ai-turn-body">
+                      {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}
+                      {turn.text}
+                    </div>
                   ) : (
                     <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
                   )}
@@ -193,7 +203,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           onSubmit={submit}
           onStop={stop}
           onPick={onPick}
-          onAttachFiles={(files) => void attachFiles(files)}
+          onAttachFiles={attachFiles}
+          staged={staged}
+          onRemoveStaged={removeStaged}
         />
         {editingMsg !== null && (
           <EditResendModal initial={editingMsg} onClose={() => setEditingMsg(null)} onResend={editResend} />

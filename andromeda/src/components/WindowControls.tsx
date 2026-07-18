@@ -44,7 +44,12 @@ export function WindowControls() {
       <button className="win-ctl" onClick={() => void runWindow("toggleMaximize")} title="최대화" aria-label="최대화">
         <Icon name="win-max" size={13} />
       </button>
-      <button className="win-ctl close" onClick={() => void runWindow("close")} title="닫기" aria-label="닫기">
+      <button
+        className="win-ctl close"
+        onClick={() => void runWindow("close")}
+        title="트레이로 닫기 (완전 종료는 트레이 메뉴)"
+        aria-label="닫기"
+      >
         <Icon name="close" size={14} />
       </button>
     </div>

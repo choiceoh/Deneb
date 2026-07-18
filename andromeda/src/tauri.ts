@@ -5,6 +5,18 @@
 const TOKEN_KEY = "andromeda.token";
 const DEFAULT_ACCOUNT = "client:main";
 
+// Dock/taskbar badge — pending proactive nudge count (0 clears). Best-effort:
+// platforms without badge support just ignore it.
+export async function setBadgeCount(count: number): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("set_badge", { count });
+  } catch {
+    /* unsupported platform — silent */
+  }
+}
+
 export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
