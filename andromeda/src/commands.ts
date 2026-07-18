@@ -9,12 +9,23 @@ import type { View } from "./types";
 import { isTileable, MAX_TILES } from "./tiling";
 
 export type WorkspaceCommand =
-  | { kind: "open"; view: View; ref?: string; query?: string }
+  | { kind: "open"; view: View; ref?: string; query?: string; date?: string }
   | { kind: "wiki"; path: string }
-  | { kind: "split"; view: View; ref?: string }
+  | { kind: "split"; view: View; ref?: string; date?: string }
   | { kind: "close"; view?: View }
   | { kind: "focus"; view: View }
-  | { kind: "layout"; views: View[] };
+  | { kind: "layout"; views: View[] }
+  // spotlight: open the view at ref AND flash the tile — "여기 보세요".
+  | { kind: "spotlight"; view: View; ref: string }
+  // prefill: open the 할일 form pre-filled; saving stays the human's click.
+  | { kind: "prefill"; view: "todo"; title: string; due?: string; note?: string };
+
+// Day-pager jump dates ride the wire as YYYY-MM-DD only.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function asDate(v: unknown): string | undefined {
+  return typeof v === "string" && DATE_RE.test(v.trim()) ? v.trim() : undefined;
+}
 
 const VIEW_KEYS: ReadonlySet<View> = new Set(PANES.map((p) => p.key));
 
@@ -48,14 +59,14 @@ export function parseWorkspaceCommand(raw: Record<string, unknown>): WorkspaceCo
       const path = asStr(raw.path) ?? (view === "wiki" ? asStr(raw.ref) : undefined);
       if (path && (view === "wiki" || !view)) return { kind: "wiki", path };
       if (!view) return null;
-      return { kind: "open", view, ref: asStr(raw.ref), query: asStr(raw.query) };
+      return { kind: "open", view, ref: asStr(raw.ref), query: asStr(raw.query), date: asDate(raw.date) };
     }
     case "wiki": {
       const path = asStr(raw.path) ?? asStr(raw.ref);
       return path ? { kind: "wiki", path } : null;
     }
     case "split":
-      return view && isTileable(view) ? { kind: "split", view, ref: asStr(raw.ref) } : null;
+      return view && isTileable(view) ? { kind: "split", view, ref: asStr(raw.ref), date: asDate(raw.date) } : null;
     case "close":
       // A close naming an UNKNOWN view is malformed — drop it rather than
       // falling through to "close the focused tile" (a drifted gateway command
@@ -65,6 +76,17 @@ export function parseWorkspaceCommand(raw: Record<string, unknown>): WorkspaceCo
       return { kind: "close", view: view ?? undefined };
     case "focus":
       return view ? { kind: "focus", view } : null;
+    case "spotlight": {
+      const ref = asStr(raw.ref);
+      return view && ref ? { kind: "spotlight", view, ref } : null;
+    }
+    case "prefill": {
+      // Narrow by design: only the 할일 form, only prose fields — a drifted
+      // gateway command must not be able to type anywhere else.
+      const title = asStr(raw.title);
+      if (view !== "todo" || !title) return null;
+      return { kind: "prefill", view: "todo", title, due: asDate(raw.due), note: asStr(raw.note) };
+    }
     case "layout": {
       const rawViews = Array.isArray(raw.views)
         ? raw.views
@@ -89,7 +111,7 @@ export function parseWorkspaceCommand(raw: Record<string, unknown>): WorkspaceCo
 export function describeCommand(cmd: WorkspaceCommand): string {
   switch (cmd.kind) {
     case "open":
-      return `${paneLabel(cmd.view)} 화면을 열었습니다${cmd.query ? ` · 검색: ${cmd.query}` : ""}`;
+      return `${paneLabel(cmd.view)} 화면을 열었습니다${cmd.query ? ` · 검색: ${cmd.query}` : ""}${cmd.date ? ` · ${cmd.date}` : ""}`;
     case "wiki":
       return `위키 문서를 열었습니다: ${cmd.path}`;
     case "split":
@@ -100,5 +122,9 @@ export function describeCommand(cmd: WorkspaceCommand): string {
       return `${paneLabel(cmd.view)} 화면에 포커스했습니다`;
     case "layout":
       return `화면 구성: ${cmd.views.map((v) => paneLabel(v)).join(" · ")}`;
+    case "spotlight":
+      return `${paneLabel(cmd.view)}에서 항목을 강조했습니다`;
+    case "prefill":
+      return `할일 초안을 채워 열었습니다: ${cmd.title}`;
   }
 }

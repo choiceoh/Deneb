@@ -1058,6 +1058,19 @@ input[type="checkbox"] {
   background: var(--panel);
 }
 
+/* 데네브 spotlight — "여기 보세요" 타일 펄스 (1.6s 후 클래스 해제). */
+.tile-spotlight {
+  animation: tileSpotlight 0.8s ease-in-out 2;
+}
+
+@keyframes tileSpotlight {
+  50% {
+    box-shadow:
+      0 0 0 3px var(--accent),
+      0 10px 32px rgb(193 122 91 / 30%);
+  }
+}
+
 /* 전역 오프라인 배너 — 상단 중앙, 재연결 중에만. */
 .offline-banner {
   position: fixed;

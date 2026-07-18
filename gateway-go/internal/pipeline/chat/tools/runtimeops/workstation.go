@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -32,18 +33,35 @@ type workstationParams struct {
 	Ref    string `json:"ref"`
 	Path   string `json:"path"`
 	Query  string `json:"query"`
+	// Date jumps a day-paged pane (mail/approvals) to a specific day (YYYY-MM-DD).
+	Date string `json:"date"`
+	// Prefill fields (action=prefill, view=todo): the modal opens pre-filled;
+	// saving stays a human click — the acceptance gate is untouched.
+	Title string `json:"title"`
+	Due   string `json:"due"`
+	Note  string `json:"note"`
 }
 
 // workstationActions is the screen-verb allowlist — arrangement only, nothing
 // that types into the chat or mutates data. Mirrors the desktop command bus
-// (andromeda/src/commands.ts).
+// (andromeda/src/commands.ts). spotlight opens+highlights (still read-only);
+// prefill opens a pre-filled 할일 form whose save button remains the human gate.
 var workstationActions = map[string]bool{
-	"open":   true,
-	"split":  true,
-	"close":  true,
-	"focus":  true,
-	"layout": true,
-	"wiki":   true,
+	"open":      true,
+	"split":     true,
+	"close":     true,
+	"focus":     true,
+	"layout":    true,
+	"wiki":      true,
+	"spotlight": true,
+	"prefill":   true,
+}
+
+// validWorkstationDate accepts only real calendar dates (2026-02-30 must fail —
+// the desktop's new Date() would silently normalize it into March).
+func validWorkstationDate(v string) bool {
+	_, err := time.Parse(time.DateOnly, v)
+	return err == nil
 }
 
 // buildWorkstationCommand validates params against the allowlist and returns
@@ -52,13 +70,29 @@ var workstationActions = map[string]bool{
 func buildWorkstationCommand(p workstationParams) (string, map[string]string, error) {
 	action := strings.ToLower(strings.TrimSpace(p.Action))
 	if !workstationActions[action] {
-		return "", nil, fmt.Errorf("workstation: unknown action=%q (open|split|close|focus|layout|wiki)", p.Action)
+		return "", nil, fmt.Errorf("workstation: unknown action=%q (open|split|close|focus|layout|wiki|spotlight|prefill)", p.Action)
 	}
 	view := strings.TrimSpace(p.View)
 	views := strings.TrimSpace(p.Views)
 	ref := strings.TrimSpace(p.Ref)
 	path := strings.TrimSpace(p.Path)
 	query := strings.TrimSpace(p.Query)
+	date := strings.TrimSpace(p.Date)
+	title := strings.TrimSpace(p.Title)
+	due := strings.TrimSpace(p.Due)
+	note := strings.TrimSpace(p.Note)
+
+	if date != "" && !validWorkstationDate(date) {
+		return "", nil, fmt.Errorf("workstation: date must be YYYY-MM-DD (got %q)", p.Date)
+	}
+	if due != "" && !validWorkstationDate(due) {
+		return "", nil, fmt.Errorf("workstation: due must be YYYY-MM-DD (got %q)", p.Due)
+	}
+	// date rides only where the desktop actually consumes it (open/split day
+	// pagers) — advertising it wider would report success while doing nothing.
+	if date != "" && action != "open" && action != "split" {
+		return "", nil, fmt.Errorf("workstation: date is only valid with open/split (got action=%s)", action)
+	}
 
 	switch action {
 	case "open", "split", "focus":
@@ -73,9 +107,20 @@ func buildWorkstationCommand(p workstationParams) (string, map[string]string, er
 		if path == "" && ref == "" {
 			return "", nil, fmt.Errorf("workstation: action=wiki needs path (위키 페이지 경로)")
 		}
+	case "spotlight":
+		if view == "" || ref == "" {
+			return "", nil, fmt.Errorf("workstation: action=spotlight needs view + ref (강조할 항목 id)")
+		}
+	case "prefill":
+		if view != "todo" {
+			return "", nil, fmt.Errorf("workstation: action=prefill supports view=todo only")
+		}
+		if title == "" {
+			return "", nil, fmt.Errorf("workstation: action=prefill needs title (할일 제목)")
+		}
 	}
 
-	args := make(map[string]string, 5)
+	args := make(map[string]string, 8)
 	if view != "" {
 		args["view"] = view
 	}
@@ -90,6 +135,18 @@ func buildWorkstationCommand(p workstationParams) (string, map[string]string, er
 	}
 	if query != "" {
 		args["query"] = query
+	}
+	if date != "" {
+		args["date"] = date
+	}
+	if title != "" {
+		args["title"] = title
+	}
+	if due != "" {
+		args["due"] = due
+	}
+	if note != "" {
+		args["note"] = note
 	}
 	return action, args, nil
 }

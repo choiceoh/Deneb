@@ -27,6 +27,7 @@ export function workspaceValue(overrides: Partial<WorkspaceValue> = {}): Workspa
     saveLayout: vi.fn(),
     deleteLayout: vi.fn(),
     runCommand: vi.fn(),
+    spotlight: null,
     paletteOpen: false,
     setPaletteOpen: vi.fn(),
     // 앱 기본값과 동일하게 접힘 — 열림을 검증하는 테스트가 명시적으로 푼다.

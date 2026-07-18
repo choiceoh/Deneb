@@ -13,9 +13,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // dispatchWorkstationCommand is wired into the workstation tool as its
@@ -38,6 +43,43 @@ func (s *Server) dispatchWorkstationCommand(_ context.Context, action string, ar
 		Body:  action,
 		Data:  data,
 	})
+	s.recordWorkstationUsage(action)
 	s.logger.Info("workstation command dispatched", "action", action, "desktops", s.pushHub.DesktopSubscriberCount())
 	return nil
+}
+
+// recordWorkstationUsage keeps a tiny on-disk tally per action — the utility
+// grounding for the workstation loop ("대대적 개선이 실제로 쓰이는가"를 2주 뒤
+// 숫자로 답하기 위한 원장). Best-effort; dispatch rate is human-scale.
+func (s *Server) recordWorkstationUsage(action string) {
+	if s.denebDir == "" {
+		return
+	}
+	s.workstationUsageMu.Lock()
+	defer s.workstationUsageMu.Unlock()
+	path := filepath.Join(s.denebDir, "cache", "workstation_usage.json")
+	usage := struct {
+		Total    int            `json:"total"`
+		ByAction map[string]int `json:"byAction"`
+		LastAt   string         `json:"lastAt"`
+	}{ByAction: map[string]int{}}
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &usage)
+		if usage.ByAction == nil {
+			usage.ByAction = map[string]int{}
+		}
+	}
+	usage.Total++
+	usage.ByAction[action]++
+	usage.LastAt = time.Now().UTC().Format(time.RFC3339)
+	data, err := json.MarshalIndent(usage, "", "  ")
+	if err != nil {
+		s.logger.Warn("workstation usage ledger marshal failed", "error", err)
+		return
+	}
+	// Atomic write: a mid-write crash must not truncate the two-week ledger
+	// (the next dispatch would silently reset the tally from zero).
+	if err := atomicfile.WriteFile(path, data, nil); err != nil {
+		s.logger.Warn("workstation usage ledger write failed", "path", path, "error", err)
+	}
 }

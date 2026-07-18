@@ -96,6 +96,8 @@ export function WorkspaceProvider({
   const [notebookTop, setNotebookTop] = useState<NotebookTop>(readNotebookTop);
   const [layouts, setLayouts] = useState<SavedLayout[]>(readLayouts);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // 데네브 spotlight 커맨드의 타일 플래시 신호 (seq로 같은 타일 반복 강조 구분).
+  const [spotlight, setSpotlight] = useState<{ view: View; seq: number } | null>(null);
   // 기본은 접힘 — 작업 영역을 넓게 두고, 필요할 때 우측 탭/커맨드로 데네브 패널을 연다.
   const [aiCollapsed, setAiCollapsed] = useState(true);
   // AIPanel의 submit을 참조로 보관 — state로 두면 패널 리렌더마다 컨텍스트가 출렁인다.
@@ -194,14 +196,21 @@ export function WorkspaceProvider({
         case "open":
           openPane(
             cmd.view,
-            cmd.ref ? { id: cmd.ref, query: cmd.query } : cmd.query ? { query: cmd.query } : undefined,
+            cmd.ref || cmd.query || cmd.date ? { id: cmd.ref, query: cmd.query, date: cmd.date } : undefined,
           );
+          break;
+        case "spotlight":
+          openPane(cmd.view, { id: cmd.ref, spotlight: true });
+          setSpotlight({ view: cmd.view, seq: Date.now() });
+          break;
+        case "prefill":
+          openPane(cmd.view, { prefill: { title: cmd.title, due: cmd.due, note: cmd.note } });
           break;
         case "wiki":
           openWiki(cmd.path);
           break;
         case "split":
-          splitPane(cmd.view, cmd.ref ? { id: cmd.ref } : undefined);
+          splitPane(cmd.view, cmd.ref || cmd.date ? { id: cmd.ref, date: cmd.date } : undefined);
           break;
         case "close":
           closePane(cmd.view);
@@ -295,6 +304,7 @@ export function WorkspaceProvider({
       saveLayout,
       deleteLayout,
       runCommand,
+      spotlight,
       paletteOpen,
       setPaletteOpen,
       aiCollapsed,
@@ -330,6 +340,7 @@ export function WorkspaceProvider({
       saveLayout,
       deleteLayout,
       runCommand,
+      spotlight,
       paletteOpen,
       aiCollapsed,
       askDeneb,

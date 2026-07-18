@@ -1771,7 +1771,19 @@ func WorkstationToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "open(화면 열기) | split(분할 추가) | close(분할 닫기) | focus(포커스 이동) | layout(분할 구성 일괄 지정) | wiki(위키 페이지 열기)",
+				"description": "open(화면 열기) | split(분할 추가) | close(분할 닫기) | focus(포커스 이동) | layout(분할 구성 일괄 지정) | wiki(위키 페이지 열기) | spotlight(항목 강조 — 열고 하이라이트) | prefill(할일 초안 채워 모달 오픈, 저장은 사용자)",
+			},
+			"date": map[string]any{
+				"type":        "string",
+				"description": "YYYY-MM-DD — 메일/결재처럼 날짜 페이저가 있는 pane을 그 날짜로 점프 (open/split 전용)",
+			},
+			"due": map[string]any{
+				"type":        "string",
+				"description": "prefill 전용 — 마감일 YYYY-MM-DD (선택)",
+			},
+			"note": map[string]any{
+				"type":        "string",
+				"description": "prefill 전용 — 메모 (선택)",
 			},
 			"path": map[string]any{
 				"type":        "string",
@@ -1783,7 +1795,11 @@ func WorkstationToolSchema() map[string]any {
 			},
 			"ref": map[string]any{
 				"type":        "string",
-				"description": "열 항목의 리소스 id (예: 메일 id) — 해당 pane이 그 항목을 바로 연다",
+				"description": "열 항목의 리소스 id (예: 메일 id) — 해당 pane이 그 항목을 바로 연다. spotlight에선 강조할 항목 id(필수)",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"description": "prefill 전용 — 할일 제목",
 			},
 			"view": map[string]any{
 				"type":        "string",
