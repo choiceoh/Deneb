@@ -44,6 +44,20 @@ type Embedder interface {
 // semanticMinChars guards against embedding near-empty pages.
 const semanticMinChars = 8
 
+// embedQueries embeds search QUERIES in the query role when the embedder is
+// role-aware (asymmetric models — Nemotron trains distinct "query:"/"passage:"
+// prefixes; the sidecar applies them from the role). Symmetric embedders (BGE)
+// and test fakes take the plain Embed path unchanged — the optional-interface
+// assertion keeps the small Embedder contract intact.
+func embedQueries(ctx context.Context, e Embedder, texts []string) ([][]float32, error) {
+	if ke, ok := e.(interface {
+		EmbedKind(ctx context.Context, kind string, texts []string) ([][]float32, error)
+	}); ok {
+		return ke.EmbedKind(ctx, "query", texts)
+	}
+	return e.Embed(ctx, texts)
+}
+
 // semanticEmbedBatch bounds how many pages we embed per request. Kept small
 // because the CPU embedding server drops (EOF) on large batches — empirically
 // 32 and 64 texts return fine (~1.4s / ~3.3s) but a full ~110-page batch is
@@ -650,7 +664,7 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 	// short text) still runs on the request ctx — fast and necessary.
 	s.sem.refreshAsync(s)
 
-	qvecs, err := s.sem.embedder.Embed(ctx, []string{query})
+	qvecs, err := embedQueries(ctx, s.sem.embedder, []string{query})
 	if err != nil || len(qvecs) == 0 {
 		return nil
 	}
@@ -751,7 +765,7 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 	if len(texts) == 0 {
 		return nil
 	}
-	vecs, err := s.sem.embedder.Embed(ctx, texts)
+	vecs, err := embedQueries(ctx, s.sem.embedder, texts)
 	if err != nil || len(vecs) != len(texts) {
 		return nil
 	}
