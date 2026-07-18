@@ -244,7 +244,7 @@ func probeYtDlp(ctx context.Context) (string, error) {
 }
 
 // AudioTranscriber, when set, transcribes a local audio file to text. It is the
-// injection point for the chat layer's ASR service (VibeVoice-ASR) so this
+// injection point for the chat layer's ASR service (MOSS-Transcribe-Diarize) so this
 // platform package stays free of any chat/tools dependency. Wired once at
 // startup; nil disables the audio-ASR fallback (captions-only behavior).
 var AudioTranscriber func(ctx context.Context, audioPath string) (string, error)
@@ -278,7 +278,7 @@ func asrAudioCapSec() int {
 
 // ASR cost model used to keep the audio→ASR fallback inside the caller's deadline.
 const (
-	asrRealtimeFactor = 0.7 // VibeVoice transcription time ≈ audioSeconds * this
+	asrRealtimeFactor = 0.5 // MOSS transcription time ≈ audioSeconds * this (실측 RTF 0.26-0.46 + 여유)
 	asrMinViableSec   = 20  // not worth transcribing a clip shorter than this
 )
 

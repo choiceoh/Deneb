@@ -497,7 +497,7 @@ func promotablePair(p CorrectionPair) bool {
 	return true
 }
 
-// LoadPlaudGlossaryHotwords extracts canonical terms for VibeVoice ASR bias.
+// LoadPlaudGlossaryHotwords extracts canonical terms for ASR hotword bias.
 func LoadPlaudGlossaryHotwords(topicsDir string, maxTerms int) string {
 	if maxTerms <= 0 {
 		maxTerms = 80

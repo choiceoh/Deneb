@@ -12,7 +12,7 @@ import (
 // init wires the YouTube audio→ASR fallback: media.ExtractYouTubeTranscript and
 // media.WatchVideo call media.AudioTranscriber when captions are unavailable
 // (no captions, or YouTube's 429/no-JS block), transcribing the downloaded audio
-// via the VibeVoice-ASR sidecar. Kept here rather than in the media package so
+// via the ASR sidecar. Kept here rather than in the media package so
 // that platform layer stays free of any chat/tools dependency — tools imports
 // media, not the reverse, so this one-way injection avoids an import cycle.
 func init() {
@@ -24,7 +24,7 @@ func init() {
 		return transcribeAudioText(ctx, data, audioMimeFromPath(audioPath), "")
 	}
 	// Readiness gate: media checks this before downloading audio, so when the
-	// VibeVoice-ASR sidecar is down the fallback skips up front instead of
+	// ASR sidecar is down the fallback skips up front instead of
 	// burning the fetch budget on a download that can't be transcribed.
 	media.AudioTranscriberReady = asrReady
 }

@@ -13,7 +13,7 @@ import (
 
 // TestYouTubeASR_Live exercises the full caption-less fallback chain on the host:
 // download a capped audio clip from a real YouTube URL, transcribe it via the
-// VibeVoice-ASR sidecar through the wired media.AudioTranscriber. Skipped in CI
+// ASR sidecar through the wired media.AudioTranscriber. Skipped in CI
 // (no GPU/network). Run on the DGX host:
 //
 //	DENEB_YT_ASR_LIVE=1 DENEB_YT_ASR_URL=https://youtu.be/<id> \

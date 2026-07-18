@@ -57,10 +57,11 @@ with `🎙️ 공유 녹음에서 받아쓴 내용 (화자분리·타임스탬�
 turn (summary, action items, capture to the wiki). The chat shows
 `🎙️ 녹음 공유됨 (전사 중…)` while it works. Gateway RPC: `miniapp.capture.audio`.
 
-- **Engine.** The resident **VibeVoice-ASR** model, default
-  `http://127.0.0.1:18013`. It handles up to an hour of audio across 50+
-  languages including Korean, decoding common containers (opus/`.oga`, m4a, mp3,
-  wav) internally.
+- **Engine.** The resident **MOSS-Transcribe-Diarize** sidecar (0.9B; the
+  2026-07-18 cutover from VibeVoice-ASR — same `/v1/transcribe` contract),
+  default `http://127.0.0.1:18014`, prod `DENEB_ASR_URL=http://100.105.145.6:18014`.
+  It handles up to 90 minutes of audio across 50+ languages including Korean,
+  decoding common containers (opus/`.oga`, m4a, mp3, wav) server-side.
 - **Output.** One line per segment, `[mm:ss 화자N] …` (and `[h:mm:ss …]` past an
   hour). If the model returns no segments it falls back to a flat transcript.
 - **Proper-noun bias.** Korean common speech transcribes cleanly, but proper
@@ -77,7 +78,7 @@ turn (summary, action items, capture to the wiki). The chat shows
   Voice capture and audio-share are different paths. **Voice** (below) is
   on-device speech recognition for short hands-free input. **Audio-share** is
   this path — long recordings that need diarization and proper-noun correction,
-  routed to VibeVoice-ASR.
+  routed to the ASR sidecar.
 </Tip>
 
 ## Text Share
@@ -103,7 +104,7 @@ Operator assets under the workspace `topics/` directory:
 | `plaud-do-not-correct.md` | Forbidden false corrections |
 | `plaud-promote-pending.json` | Sighting counters before auto-promote (≥2 recordings) |
 
-ASR hotwords for VibeVoice also merge glossary `From`/`To` terms (with wiki +
+ASR hotwords also merge glossary `From`/`To` terms (with wiki +
 contacts). Disable the worker with `DENEB_PLAUD_RECORDINGS_DISABLE=1`. Token
 expiry posts a throttled feed card; poison recordings (3 failed analyses) are
 quarantined the same way.
@@ -129,7 +130,7 @@ differ on whether a fallback exists.
 | Sidecar | Used by | Default endpoint | Override | Fallback |
 |---|---|---|---|---|
 | PaddleOCR-VL | Image OCR (and Gmail attachments) | `http://127.0.0.1:18011` | `DENEB_OCR_VL_URL` | tesseract (`kor+eng`) |
-| VibeVoice-ASR | Audio transcription | `http://127.0.0.1:18013` | `DENEB_ASR_URL` | none (clear error) |
+| MOSS-Transcribe-Diarize | Audio transcription | `http://127.0.0.1:18014` | `DENEB_ASR_URL` | none (clear error) |
 
 Both capture RPCs are conditional on their sidecar being wired, run on the
 `client:main` session, and reach the gateway over the same authenticated native

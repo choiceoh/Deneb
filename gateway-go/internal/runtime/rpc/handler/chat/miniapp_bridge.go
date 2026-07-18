@@ -114,7 +114,7 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 		m["miniapp.capture.image"] = handleMiniappCaptureImage(deps)
 	}
 	// Audio capture (share a voice memo / meeting recording to Deneb) needs the
-	// VibeVoice-ASR sidecar wired; skip the method cleanly when it isn't.
+	// ASR sidecar wired; skip the method cleanly when it isn't.
 	if deps.Transcribe != nil {
 		m["miniapp.capture.audio"] = handleMiniappCaptureAudio(deps)
 	}
@@ -352,7 +352,7 @@ func handleMiniappWebTranslate(deps Deps) rpcutil.HandlerFunc {
 }
 
 // handleMiniappCaptureAudio transcribes a directly-shared audio recording (a
-// voice memo or meeting audio) via VibeVoice-ASR and runs one agent turn over
+// voice memo or meeting audio) via the ASR sidecar and runs one agent turn over
 // the diarized transcript — the native client's "share a recording to Deneb"
 // path. The transcript carries speaker labels and timestamps, so the agent can
 // summarize, pull action items, or capture it to the wiki.
