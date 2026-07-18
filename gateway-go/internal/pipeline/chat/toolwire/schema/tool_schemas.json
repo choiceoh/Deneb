@@ -345,6 +345,22 @@
     }
   },
   {
+    "name": "browse",
+    "properties": {
+      "url": {
+        "type": "string",
+        "description": "열어 읽을 페이지 URL (http/https)"
+      },
+      "wait_ms": {
+        "type": "integer",
+        "description": "렌더 정착 대기(ms, 기본 2000·최대 5000) — SPA/그룹웨어처럼 늦게 그려지는 페이지에서 올린다"
+      }
+    },
+    "required": [
+      "url"
+    ]
+  },
+  {
     "name": "cron",
     "description": "Manage scheduled tasks (cron jobs). Actions: add (create), list (all jobs), status (service health),\nget (job detail), update (modify), remove (delete), run (execute now), runs (execution history).\nSchedule formats: cron expression (0 9 * * * = daily 9am), interval (30m, 1h), one-shot (ISO timestamp).\nCommon patterns: 0 9 * * * (daily 9am), 0 */2 * * * (every 2h), 0 9 * * 1-5 (weekdays 9am), @daily, @hourly.\n",
     "properties": {

@@ -1,0 +1,12 @@
+{
+  "name": "deneb-browser-sidecar",
+  "private": true,
+  "type": "module",
+  "description": "Resident headful Chromium the Deneb agent browses through (Playwright persistent context + noVNC-shareable display).",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.58.0"
+  }
+}
