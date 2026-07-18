@@ -377,23 +377,22 @@ fun DenebBrowserChrome(
                         tint = if (state.translateEnabled) denebInsight() else denebHint(),
                     )
                 }
-                val bookmarkEnabled = canBookmark && onToggleBookmark != null
+                // Frequency-ordered (operator feedback): the persistent bar hosts the
+                // FREQUENT action — opening the bookmark list — while the rare
+                // add/remove toggle lives in the More menu. The filled/insight tint
+                // still signals "this page is bookmarked" at a glance.
                 IconButton(
                     onClick = {
                         haptics.tap()
-                        onToggleBookmark?.invoke()
+                        onShowBookmarks?.invoke()
                     },
-                    enabled = bookmarkEnabled,
+                    enabled = onShowBookmarks != null,
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
                         if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = if (isBookmarked) "북마크 삭제" else "북마크 추가",
-                        tint = when {
-                            isBookmarked -> denebInsight()
-                            bookmarkEnabled -> denebHint()
-                            else -> denebHint().copy(alpha = 0.3f)
-                        },
+                        contentDescription = "북마크 목록",
+                        tint = if (isBookmarked) denebInsight() else denebHint(),
                     )
                 }
                 Box {
@@ -447,23 +446,34 @@ fun DenebBrowserChrome(
                                 menuOpen = false
                             },
                         )
-                        if (onShowBookmarks != null) {
+                        if (onToggleBookmark != null) {
                             DropdownMenuItem(
+                                enabled = canBookmark,
                                 text = {
                                     Column {
-                                        Text("북마크")
+                                        Text(if (isBookmarked) "북마크 삭제" else "북마크 추가")
                                         Text(
-                                            if (bookmarksCount > 0) "${bookmarksCount}개 저장됨" else "저장된 북마크 없음",
+                                            when {
+                                                isBookmarked -> "현재 페이지 저장됨 · 전체 ${bookmarksCount}개"
+                                                bookmarksCount > 0 -> "전체 ${bookmarksCount}개 저장됨"
+                                                else -> "현재 페이지를 저장"
+                                            },
                                             style = DenebType.meta,
                                             color = denebHint(),
                                         )
                                     }
                                 },
-                                leadingIcon = { Icon(Icons.Filled.Bookmark, contentDescription = null, tint = denebHint()) },
+                                leadingIcon = {
+                                    Icon(
+                                        if (isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                        contentDescription = null,
+                                        tint = if (isBookmarked) denebInsight() else denebHint(),
+                                    )
+                                },
                                 onClick = {
                                     haptics.tap()
+                                    onToggleBookmark()
                                     menuOpen = false
-                                    onShowBookmarks()
                                 },
                             )
                         }
