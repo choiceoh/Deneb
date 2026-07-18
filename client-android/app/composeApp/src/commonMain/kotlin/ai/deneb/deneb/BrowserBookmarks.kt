@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.data.decodeStoredJsonOrDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
@@ -17,9 +18,11 @@ internal data class BrowserBookmark(
     val addedAtMs: Long = 0,
 )
 
-internal fun decodeBrowserBookmarks(raw: String): List<BrowserBookmark> = runCatching {
-    browserBookmarksJson.decodeFromString<List<BrowserBookmark>>(raw)
-}.getOrDefault(emptyList())
+internal fun decodeBrowserBookmarks(raw: String): List<BrowserBookmark> = decodeStoredJsonOrDefault(
+    raw = raw,
+    defaultValue = { emptyList() },
+    decode = { browserBookmarksJson.decodeFromString<List<BrowserBookmark>>(it) },
+)
     .asSequence()
     .mapNotNull { bookmark ->
         val url = canonicalBrowserBookmarkUrl(bookmark.url)

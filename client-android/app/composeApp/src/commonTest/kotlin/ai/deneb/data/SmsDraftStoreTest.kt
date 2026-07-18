@@ -38,10 +38,14 @@ class SmsDraftStoreTest {
     )
 
     @Test
-    fun missingAndMalformedPersistenceLoadAsEmpty() {
+    fun missingPersistenceLoadsAsEmptyAndMalformedPersistenceIsCleared() {
         assertEquals(emptyList(), fixture().store.drafts.value)
-        assertEquals(emptyList(), fixture("broken").store.drafts.value)
-        assertEquals(emptyList(), fixture("{}").store.drafts.value)
+
+        for (raw in listOf("broken", "{}")) {
+            val f = fixture(raw)
+            assertEquals(emptyList(), f.store.drafts.value, raw)
+            assertEquals("", f.settings.getSmsDraftsJson(), raw)
+        }
     }
 
     @Test

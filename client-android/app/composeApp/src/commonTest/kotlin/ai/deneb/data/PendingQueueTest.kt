@@ -7,6 +7,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class PendingQueueTest {
@@ -14,11 +15,17 @@ class PendingQueueTest {
     private class Fixture(maxSize: Int = 100, initial: String = "") {
         var raw = initial
         var beforeWrite: (() -> Unit)? = null
+        var failWrites = false
+        var reads = 0
         val writes = mutableListOf<String>()
         val queue = PendingQueue(
-            readJson = { raw },
+            readJson = {
+                reads++
+                raw
+            },
             writeJson = {
                 beforeWrite?.invoke()
+                if (failWrites) error("queue persistence unavailable")
                 raw = it
                 writes += it
             },
@@ -26,6 +33,23 @@ class PendingQueueTest {
             keyOf = { it.substringBefore(':') },
             maxSize = maxSize,
         )
+    }
+
+    @Test
+    fun negativeCapacityFailsFastAtConstruction() {
+        val failure = assertFailsWith<IllegalArgumentException> { Fixture(maxSize = -1) }
+
+        assertEquals("maxSize must not be negative", failure.message)
+    }
+
+    @Test
+    fun zeroCapacityDropsIncomingItemsWithoutWriting() = runTest {
+        val f = Fixture(maxSize = 0)
+
+        f.queue.add(listOf("a:1", "b:1"))
+
+        assertEquals(emptyList(), f.queue.get())
+        assertEquals(emptyList(), f.writes)
     }
 
     @Test
@@ -103,6 +127,27 @@ class PendingQueueTest {
     }
 
     @Test
+    fun removingOnlyMissingKeysDoesNotRewriteHealthyStorage() = runTest {
+        val f = Fixture(initial = "[\"a:1\",\"b:1\"]")
+
+        f.queue.remove(listOf("missing:any"))
+
+        assertEquals(listOf("a:1", "b:1"), f.queue.get())
+        assertEquals(emptyList(), f.writes)
+    }
+
+    @Test
+    fun removingFromMalformedStorageRepairsItEvenWhenNothingMatches() = runTest {
+        val f = Fixture(initial = "broken")
+
+        f.queue.remove(listOf("missing:any"))
+
+        assertEquals("", f.raw)
+        assertEquals(listOf(""), f.writes)
+        assertEquals(emptyList(), f.queue.get())
+    }
+
+    @Test
     fun emptyMutationsDoNotWrite() = runTest {
         val f = Fixture(initial = "[\"a:1\"]")
 
@@ -134,6 +179,58 @@ class PendingQueueTest {
     }
 
     @Test
+    fun eachMutationReadsPersistedStateOnlyOnce() = runTest {
+        val f = Fixture(initial = "[\"a:1\"]")
+
+        f.queue.add(listOf("b:1"))
+        assertEquals(1, f.reads)
+
+        f.queue.remove(listOf("a:any"))
+        assertEquals(2, f.reads)
+        assertEquals(listOf("b:1"), f.queue.get())
+        assertEquals(3, f.reads)
+    }
+
+    @Test
+    fun addWriteFailurePropagatesAndKeepsOriginalQueue() = runTest {
+        val f = Fixture(initial = "[\"stable:1\"]")
+        f.failWrites = true
+
+        assertFailsWith<IllegalStateException> {
+            f.queue.add(listOf("lost:1"))
+        }
+
+        assertEquals("[\"stable:1\"]", f.raw)
+        assertEquals(emptyList(), f.writes)
+        f.failWrites = false
+        assertEquals(listOf("stable:1"), f.queue.get())
+    }
+
+    @Test
+    fun removeWriteFailurePropagatesAndKeepsOriginalQueue() = runTest {
+        val f = Fixture(initial = "[\"stable:1\",\"remove:1\"]")
+        f.failWrites = true
+
+        assertFailsWith<IllegalStateException> {
+            f.queue.remove(listOf("remove:any"))
+        }
+
+        assertEquals("[\"stable:1\",\"remove:1\"]", f.raw)
+        assertEquals(emptyList(), f.writes)
+    }
+
+    @Test
+    fun clearWriteFailurePropagatesAndKeepsOriginalQueue() = runTest {
+        val f = Fixture(initial = "[\"stable:1\"]")
+        f.failWrites = true
+
+        assertFailsWith<IllegalStateException> { f.queue.clear() }
+
+        assertEquals("[\"stable:1\"]", f.raw)
+        assertEquals(emptyList(), f.writes)
+    }
+
+    @Test
     fun readerDuringMutationCannotClearIncomingWrite() = runTest {
         val f = Fixture(initial = "broken")
         var readDuringWrite: List<String>? = null
@@ -144,6 +241,20 @@ class PendingQueueTest {
         assertEquals(emptyList(), readDuringWrite)
         assertEquals(listOf("fresh:1"), f.queue.get())
         assertEquals(1, f.writes.size)
+    }
+
+    @Test
+    fun readerDuringClearSeesPreviousSnapshotWithoutRestoringIt() = runTest {
+        val f = Fixture(initial = "[\"old:1\"]")
+        var readDuringClear: List<String>? = null
+        f.beforeWrite = { readDuringClear = f.queue.get() }
+
+        f.queue.clear()
+
+        assertEquals(listOf("old:1"), readDuringClear)
+        assertEquals("", f.raw)
+        assertEquals(emptyList(), f.queue.get())
+        assertEquals(listOf(""), f.writes)
     }
 
     @Test

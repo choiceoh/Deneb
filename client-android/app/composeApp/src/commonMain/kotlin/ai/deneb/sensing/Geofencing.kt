@@ -1,5 +1,6 @@
 package ai.deneb.sensing
 
+import ai.deneb.data.decodeStoredJsonOrDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -11,7 +12,11 @@ import kotlinx.serialization.json.jsonPrimitive
 /** JSON codec for the geofence list (stored as a string in AppSettings). */
 fun encodeGeofences(list: List<DenebGeofence>): String = Json.encodeToString(list)
 
-fun decodeGeofences(json: String): List<DenebGeofence> = runCatching { Json.decodeFromString<List<DenebGeofence>>(json) }.getOrDefault(emptyList())
+fun decodeGeofences(json: String): List<DenebGeofence> = decodeStoredJsonOrDefault(
+    raw = json,
+    defaultValue = { emptyList() },
+    decode = { Json.decodeFromString<List<DenebGeofence>>(it) },
+)
 
 /**
  * A user-pinned place geofence (집/직장). The user sets these by standing at the place

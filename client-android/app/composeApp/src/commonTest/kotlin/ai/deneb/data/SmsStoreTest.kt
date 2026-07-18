@@ -1,12 +1,35 @@
 package ai.deneb.data
 
 import com.russhwolf.settings.MapSettings
+import com.russhwolf.settings.Settings
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class SmsStoreTest {
+
+    private class SmsSyncSettings(
+        private val delegate: Settings = MapSettings(),
+    ) : Settings by delegate {
+        var failSyncWrites = false
+        var syncReads = 0
+        var beforeSyncWrite: (() -> Unit)? = null
+
+        override fun getString(key: String, defaultValue: String): String {
+            if (key == AppSettings.KEY_SMS_SYNC_STATE) syncReads++
+            return delegate.getString(key, defaultValue)
+        }
+
+        override fun putString(key: String, value: String) {
+            if (key == AppSettings.KEY_SMS_SYNC_STATE) {
+                beforeSyncWrite?.invoke()
+                if (failSyncWrites) error("sms sync persistence unavailable")
+            }
+            delegate.putString(key, value)
+        }
+    }
 
     private data class Fixture(val settings: AppSettings, val store: SmsStore)
 
@@ -50,6 +73,54 @@ class SmsStoreTest {
 
         assertEquals(state, f.store.getSyncState())
         assertEquals(state, SmsStore(f.settings).getSyncState())
+    }
+
+    @Test
+    fun syncUpdateReplacesMalformedPayloadWithoutReadingIt() = runTest {
+        val raw = SmsSyncSettings()
+        val settings = AppSettings(raw)
+        settings.setSmsSyncStateJson("broken")
+        raw.syncReads = 0
+        val store = SmsStore(settings)
+        val state = SmsSyncState(lastSeenId = 9, unreadCount = 2)
+
+        store.updateSyncState(state)
+
+        assertEquals(0, raw.syncReads)
+        assertEquals(state, store.getSyncState())
+    }
+
+    @Test
+    fun failedSyncUpdateLeavesPreviouslyCommittedState() = runTest {
+        val raw = SmsSyncSettings()
+        val settings = AppSettings(raw)
+        val stable = SmsSyncState(lastSeenId = 3, unreadCount = 1)
+        settings.setSmsSyncStateJson(SharedJson.encodeToString(stable))
+        raw.failSyncWrites = true
+        val store = SmsStore(settings)
+
+        assertFailsWith<IllegalStateException> {
+            store.updateSyncState(SmsSyncState(lastSeenId = 99))
+        }
+
+        raw.failSyncWrites = false
+        assertEquals(stable, store.getSyncState())
+    }
+
+    @Test
+    fun readerDuringSyncUpdateCannotClearIncomingValue() = runTest {
+        val raw = SmsSyncSettings()
+        val settings = AppSettings(raw)
+        settings.setSmsSyncStateJson("broken")
+        val store = SmsStore(settings)
+        val committed = SmsSyncState(lastSeenId = 44)
+        var readDuringWrite: SmsSyncState? = null
+        raw.beforeSyncWrite = { readDuringWrite = store.getSyncState() }
+
+        store.updateSyncState(committed)
+
+        assertEquals(SmsSyncState(), readDuringWrite)
+        assertEquals(committed, store.getSyncState())
     }
 
     @Test

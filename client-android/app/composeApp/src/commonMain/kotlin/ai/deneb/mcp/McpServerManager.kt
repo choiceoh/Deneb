@@ -1,6 +1,7 @@
 package ai.deneb.mcp
 
 import ai.deneb.data.AppSettings
+import ai.deneb.data.decodeStoredJsonOrDefault
 import ai.deneb.network.tools.Tool
 import ai.deneb.network.tools.ToolInfo
 import kotlinx.coroutines.async
@@ -31,21 +32,24 @@ class McpServerManager(private val appSettings: AppSettings) {
         val jsonStr = appSettings.getMcpServersJson()
         if (jsonStr.isBlank()) return emptyList()
         if (jsonStr == cachedServersJson) return cachedServers
-        return try {
-            json.decodeFromString<List<McpServerConfig>>(jsonStr).also {
-                cachedServersJson = jsonStr
-                cachedServers = it
-            }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        return decodeStoredJsonOrDefault(
+            raw = jsonStr,
+            defaultValue = { emptyList() },
+            onMalformed = { cacheServers(jsonStr, emptyList()) },
+            decode = { cacheServers(jsonStr, json.decodeFromString<List<McpServerConfig>>(it)) },
+        )
     }
 
     private fun saveServers(servers: List<McpServerConfig>) {
         val jsonStr = json.encodeToString(kotlinx.serialization.builtins.ListSerializer(McpServerConfig.serializer()), servers)
         appSettings.setMcpServersJson(jsonStr)
+        cacheServers(jsonStr, servers)
+    }
+
+    private fun cacheServers(jsonStr: String, servers: List<McpServerConfig>): List<McpServerConfig> {
         cachedServersJson = jsonStr
         cachedServers = servers
+        return servers
     }
 
     fun addServer(name: String, url: String, headers: Map<String, String>): McpServerConfig {

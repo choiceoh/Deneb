@@ -35,15 +35,11 @@ class HeartbeatManager(
 
     private val json = SharedJson
 
-    fun getConfig(): HeartbeatConfig {
-        val raw = appSettings.getHeartbeatConfigJson()
-        if (raw.isEmpty()) return HeartbeatConfig()
-        return try {
-            json.decodeFromString<HeartbeatConfig>(raw)
-        } catch (_: Exception) {
-            HeartbeatConfig()
-        }
-    }
+    fun getConfig(): HeartbeatConfig = decodeStoredJsonOrDefault(
+        raw = appSettings.getHeartbeatConfigJson(),
+        defaultValue = { HeartbeatConfig() },
+        decode = { json.decodeFromString<HeartbeatConfig>(it) },
+    )
 
     fun saveConfig(config: HeartbeatConfig) {
         appSettings.setHeartbeatConfigJson(json.encodeToString(config))
@@ -143,15 +139,11 @@ class HeartbeatManager(
         appSettings.setHeartbeatLogJson(json.encodeToString(trimmed))
     }
 
-    fun getHeartbeatLog(): List<HeartbeatLogEntry> {
-        val raw = appSettings.getHeartbeatLogJson()
-        if (raw.isEmpty()) return emptyList()
-        return try {
-            json.decodeFromString<List<HeartbeatLogEntry>>(raw)
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    fun getHeartbeatLog(): List<HeartbeatLogEntry> = decodeStoredJsonOrDefault(
+        raw = appSettings.getHeartbeatLogJson(),
+        defaultValue = { emptyList() },
+        decode = { json.decodeFromString<List<HeartbeatLogEntry>>(it) },
+    )
 
     companion object {
         private const val MAX_LOG_ENTRIES = 5

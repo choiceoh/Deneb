@@ -109,11 +109,11 @@ class ConversationStorage(private val appSettings: AppSettings) {
         appSettings.setConversationsJson(data)
     }
 
-    private fun deserialize(data: String): List<Conversation> = try {
-        json.decodeFromString<ConversationsData>(data).conversations
-    } catch (_: Exception) {
-        emptyList()
-    }
+    private fun deserialize(data: String): List<Conversation> = decodeStoredJsonOrDefault(
+        raw = data,
+        defaultValue = { emptyList() },
+        decode = { json.decodeFromString<ConversationsData>(it).conversations },
+    )
 
     private fun migrateLegacy() {
         val legacyData = readLegacyConversationFile() ?: return
