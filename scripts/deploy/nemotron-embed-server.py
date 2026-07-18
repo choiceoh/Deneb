@@ -1,79 +1,118 @@
 #!/usr/bin/env python3
-"""Nemotron-3-Embed embedding sidecar (Deneb recall/compaction semantic index).
+"""Nemotron-3-Embed adapter — Deneb embedding contract over the vLLM container.
 
-Successor to bge-m3-server.py after the 2026-07-18 hard-goldset A/B (semantic
-p@1 BGE 70.4% vs Nemotron 88.9%). Same /health + /embed HTTP contract the
-gateway's embedding.Client speaks, with one addition: the request may carry
-`kind` ("query" | "passage" | ""), because Nemotron is an asymmetric model
-trained with distinct role prefixes. The gateway's search paths send
-kind=query; indexing/refresh sends the default, which maps to passage.
+Topology (2026-07-18 NVFP4 cutover):
 
-GPU (GB10) via sentence-transformers/torch. dim=2048 — the gateway's semantic
-caches key on the /health model:dimensions fingerprint, so pointing
-DENEB_EMBEDDING_URL here re-embeds the wiki/diary automatically, and pointing
-back to BGE restores the old cache untouched (rollback lever).
+    gateway (embedding.Client) ──/embed {texts,kind}──▶ THIS adapter :8002
+                                                           │ prefixes "query: "/"passage: "
+                                                           ▼
+    eugr spark-vllm container (NVFP4, prebuilt sm_121a) ── /v1/embeddings :8003
+
+Why an adapter at all: the gateway speaks the BGE-era /health + /embed contract
+(and its semantic caches key on /health model:dimensions), while the NVFP4
+checkpoint is vLLM-only and speaks OpenAI /v1/embeddings. The adapter is
+stdlib-only (no venv — pip vLLM JIT-compiles fp4 kernels on GB10 and trips
+earlyoom; the eugr image ships prebuilt wheels, so the model lives in the
+container and this file stays a dumb translator).
+
+kind: "query" → "query: " prefix (asymmetric retrieval role); anything else →
+"passage: " — bulk indexing is the default caller and must never get query
+framing.
 """
 
 import argparse
-import os
+import json
 import sys
+import threading
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import numpy as np
-import uvicorn
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
-
-DEFAULT_MODEL = "nvidia/Nemotron-3-Embed-1B-BF16"
+MODEL_ID = "nvidia/Nemotron-3-Embed-1B-NVFP4"
+MODEL_LABEL = "Nemotron-3-Embed-1B-NVFP4"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8002)
-    parser.add_argument("--model", default=os.environ.get("NEMOTRON_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--backend", default="http://127.0.0.1:8003", help="vLLM OpenAI server base URL")
+    parser.add_argument("--timeout", type=float, default=120.0)
     return parser.parse_args()
+
+
+class Adapter(BaseHTTPRequestHandler):
+    args: argparse.Namespace
+    dims_lock = threading.Lock()
+    dims = 0  # probed lazily from the first backend response
+
+    def log_message(self, fmt, *a):  # quiet: health polls every 30s
+        pass
+
+    def _json(self, code: int, payload: dict) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _backend_embed(self, texts: list[str]) -> list[list[float]]:
+        body = json.dumps({"model": MODEL_ID, "input": texts}).encode()
+        req = urllib.request.Request(
+            self.args.backend.rstrip("/") + "/v1/embeddings",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=self.args.timeout) as resp:
+            data = json.load(resp)
+        rows = sorted(data["data"], key=lambda e: e["index"])
+        return [row["embedding"] for row in rows]
+
+    def do_GET(self):
+        if self.path != "/health":
+            self._json(404, {"error": "not found"})
+            return
+        # The gateway fingerprint (model:dimensions) comes from here — only
+        # report ok once the backend actually answers, and learn dims from a
+        # one-token probe so the fingerprint is truthful, not hardcoded.
+        try:
+            with self.dims_lock:
+                if Adapter.dims <= 0:
+                    Adapter.dims = len(self._backend_embed(["passage: ping"])[0])
+            self._json(200, {"status": "ok", "model": MODEL_LABEL, "dimensions": Adapter.dims})
+        except Exception as exc:  # noqa: BLE001 — health must degrade, not crash
+            self._json(503, {"status": "backend unavailable", "error": str(exc)[:200]})
+
+    def do_POST(self):
+        if self.path != "/embed":
+            self._json(404, {"error": "not found"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            req = json.loads(self.rfile.read(length))
+            texts = req.get("texts") or []
+            kind = req.get("kind") or ""
+            prefix = "query: " if kind == "query" else "passage: "
+            vecs = self._backend_embed([prefix + t for t in texts])
+            if vecs:
+                with self.dims_lock:
+                    Adapter.dims = len(vecs[0])
+            self._json(200, {
+                "embeddings": vecs,
+                "model": MODEL_LABEL,
+                "count": len(vecs),
+                "dimensions": Adapter.dims,
+            })
+        except Exception as exc:  # noqa: BLE001 — surface as HTTP 502, keep serving
+            self._json(502, {"error": str(exc)[:300]})
 
 
 def main() -> None:
     args = parse_args()
-    print(f"loading {args.model} ...", file=sys.stderr, flush=True)
-    model = SentenceTransformer(args.model, trust_remote_code=True, device="cuda")
-    dim = model.get_sentence_embedding_dimension()
-    print(f"loaded: dim={dim}", file=sys.stderr, flush=True)
-
-    app = FastAPI()
-
-    class EmbedRequest(BaseModel):
-        texts: list[str]
-        # Retrieval role for the asymmetric prefixes. Unknown/empty → passage:
-        # bulk indexing is the default caller and must never get query framing.
-        kind: str = ""
-
-    @app.get("/health")
-    def health():  # matches the gateway probe contract (model + dimensions)
-        return {"status": "ok", "model": os.path.basename(args.model), "dimensions": dim}
-
-    @app.post("/embed")
-    def embed(req: EmbedRequest):
-        prefix = "query: " if req.kind == "query" else "passage: "
-        texts = [prefix + t for t in req.texts]
-        vecs = model.encode(
-            texts,
-            normalize_embeddings=True,
-            convert_to_numpy=True,
-            batch_size=args.batch_size,
-        )
-        arr = np.asarray(vecs, dtype=np.float32)
-        return {
-            "embeddings": arr.tolist(),
-            "model": os.path.basename(args.model),
-            "count": len(texts),
-            "dimensions": dim,
-        }
-
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    Adapter.args = args
+    server = ThreadingHTTPServer((args.host, args.port), Adapter)
+    print(f"nemotron adapter on {args.host}:{args.port} -> {args.backend}", file=sys.stderr, flush=True)
+    server.serve_forever()
 
 
 if __name__ == "__main__":

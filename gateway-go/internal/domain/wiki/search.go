@@ -1128,6 +1128,21 @@ func rrfKValue() float64 {
 	return rrfK
 }
 
+// rrfSemWeightValue scales the SEMANTIC ranking's RRF contribution relative to
+// BM25 (and graph, both fixed at 1.0). Default 1.0 = the historical equal
+// weighting. Introduced for the Nemotron cutover: the hard gold set showed
+// equal-weight fusion diluting a much stronger semantic ranker with a weak BM25
+// (33% p@1) — sweep via DENEB_WIKI_RRF_SEM_WEIGHT with cmd/recall-bench, same
+// runtime-override pattern as the floor/K knobs.
+func rrfSemWeightValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_RRF_SEM_WEIGHT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
+		}
+	}
+	return 1.0
+}
+
 // fuseSearchResults dispatches BM25×semantic fusion. Reciprocal Rank Fusion is
 // the default (DENEB_WIKI_FUSION=additive rolls back to the historical additive
 // max(bm25,cosine)+bonus/penalty blend). RRF measured +11.3pt P@1 / +4.5pt R@8 /
@@ -1182,6 +1197,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 			m.res.Content = r.Content
 		}
 	}
+	semWeight := rrfSemWeightValue()
 	for rank, r := range sem {
 		m := byPath[r.Path]
 		if m == nil {
@@ -1191,7 +1207,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		if r.Score > m.semCos {
 			m.semCos = r.Score
 		}
-		m.rrf += 1.0 / (k + float64(rank+1))
+		m.rrf += semWeight / (k + float64(rank+1))
 	}
 	// Graph proximity as a third RRF ranking: pages connected to the entity named
 	// in the query (seed first, then neighbors by graph score). A page already

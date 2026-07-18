@@ -1,0 +1,23 @@
+# Nemotron-3-Embed NVFP4 backend — eugr spark-vllm container (prebuilt sm_121a
+# wheels; pip vLLM JIT-compiles fp4 kernels on GB10 and trips earlyoom).
+# USER unit: install via scripts/systemd/setup-nemotron-embed.sh.
+[Unit]
+Description=Nemotron NVFP4 vLLM backend (eugr container, port 8003)
+After=network.target docker.service
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/docker rm -f nemotron-vllm
+ExecStart=/usr/bin/docker run --rm --name nemotron-vllm --runtime nvidia --gpus all \
+  --network host \
+  -v %h/.deneb/nemotron-hf-cache:/root/.cache/huggingface \
+  ghcr.io/spark-arena/dgx-vllm-eugr-nightly:latest \
+  vllm serve nvidia/Nemotron-3-Embed-1B-NVFP4 --host 127.0.0.1 --port 8003 \
+  --max-model-len 4096 --max-num-batched-tokens 4096 \
+  --gpu-memory-utilization 0.05 --enforce-eager
+ExecStop=/usr/bin/docker stop nemotron-vllm
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=default.target
