@@ -4587,6 +4587,40 @@ button.mail-attachment {
   gap: 10px;
   line-height: 1.56;
 }
+/* deneb-html streaming skeleton — a page-shaped shimmer while the document
+   generates (scripts must not run on a half-streamed body). */
+.dui-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+}
+.dui-skeleton-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--panel-sunken) 25%, var(--row-hover) 50%, var(--panel-sunken) 75%);
+  background-size: 200% 100%;
+  animation: dui-shimmer 1.4s ease-in-out infinite;
+}
+.dui-skeleton-label {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+@keyframes dui-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dui-skeleton-bar {
+    animation: none;
+  }
+}
 /* deneb-html — webpage-style HTML answer, sandboxed inline in the transcript.
    Light surface regardless of app theme: the page authors its own design. */
 .deneb-html-frame {

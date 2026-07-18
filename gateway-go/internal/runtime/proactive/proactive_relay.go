@@ -386,7 +386,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 	// that is mostly a deneb-ui fence is otherwise invisible to the
 	// fence-skipping scans — the title fell back to the generic "업무 리포트"
 	// and the titler echoed "```deneb-ui" as the summary (2026-07-12 live feed).
-	extractSrc := textprep.ReplaceFences(cardSrc, textprep.PlainText)
+	extractSrc := textprep.ReplaceFences(textprep.StripHTMLAnswers(cardSrc), textprep.PlainText)
 	title, titleLine := extractCardTitle(extractSrc)
 	source := strings.TrimSpace(opts.workFeedSource)
 	if source == "" {
@@ -490,7 +490,7 @@ func (d proactiveRelayDeps) publishDeliverable(content string) (bool, error) {
 	}
 	// Same prose projection as the relay card path — a doc analysis whose
 	// answer is a deneb-ui card must not title itself "```deneb-ui".
-	extractSrc := textprep.ReplaceFences(content, textprep.PlainText)
+	extractSrc := textprep.ReplaceFences(textprep.StripHTMLAnswers(content), textprep.PlainText)
 	title, titleLine := extractCardTitle(extractSrc)
 	summary := extractCardSummary(extractSrc, titleLine)
 	if d.cardTitler != nil && isWeakCardTitle(title, titleLine) {

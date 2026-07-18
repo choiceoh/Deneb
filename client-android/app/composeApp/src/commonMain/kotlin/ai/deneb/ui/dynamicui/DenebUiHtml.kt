@@ -21,7 +21,7 @@ import kotlinx.serialization.json.JsonPrimitive
 object DenebUiHtml {
 
     /** Void tags never take children; a stray close tag is tolerated. */
-    private val voidTags = setOf("hr", "img", "input", "icon", "slider", "progress", "avatar", "point", "br")
+    private val voidTags = setOf("hr", "img", "input", "icon", "slider", "progress", "avatar", "point", "br", "spacer")
 
     /** Raw-text tags capture verbatim content up to their literal close tag. */
     private val rawTextTags = setOf("markdown", "code")
@@ -76,6 +76,7 @@ object DenebUiHtml {
         "button", "input", "textarea", "checkbox", "switch", "select",
         "radio-group", "radiogroup", "option", "slider", "chips", "chip-group",
         "chip", "br", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+        "title", "label", "spacer", "kv",
     )
 
     /**
@@ -518,7 +519,8 @@ object DenebUiHtml {
 
             "box" -> BoxNode(id = id, children = kids(), contentAlignment = a["align"])
 
-            "hr", "divider" -> DividerNode(id = id)
+            // spacer: invented-but-frequent alias — breathing room ≈ divider.
+            "hr", "divider", "spacer" -> DividerNode(id = id)
 
             "text" -> if (looksLikeMarkdownBlock(inner)) {
                 // Whole markdown blocks stuffed into <text> upgrade to a
@@ -536,14 +538,22 @@ object DenebUiHtml {
             }
 
             // HTML fluency aliases: paragraphs and headings map onto text nodes.
-            "p", "h1", "h2", "h3", "h4", "h5", "h6" -> {
-                if (inner.isEmpty() && el.children.isEmpty()) return null
+            // title/label/kv are invented-but-frequent model habits promoted to
+            // proper typography (2026-07-18 reject telemetry; gateway parity).
+            "p", "h1", "h2", "h3", "h4", "h5", "h6", "title", "label", "kv" -> {
+                var value = inner
+                if (el.tag == "kv") {
+                    val k = a["label"].orEmpty()
+                    if (k.isNotEmpty() && value.isNotEmpty()) value = "$k — $value"
+                }
+                if (value.isEmpty() && el.children.isEmpty()) return null
                 val textNode = TextNode(
                     id = id,
-                    value = inner,
+                    value = value,
                     style = when (el.tag) {
                         "h1" -> TextNodeStyle.HEADLINE
-                        "h2", "h3" -> TextNodeStyle.TITLE
+                        "h2", "h3", "title" -> TextNodeStyle.TITLE
+                        "label" -> TextNodeStyle.CAPTION
                         else -> null
                     },
                     bold = if (el.tag in setOf("h4", "h5", "h6")) true else null,
@@ -553,7 +563,7 @@ object DenebUiHtml {
                 } else {
                     // Block children inside a paragraph: keep both, text first.
                     val kids = buildList {
-                        if (inner.isNotEmpty()) add(textNode)
+                        if (value.isNotEmpty()) add(textNode)
                         addAll(el.children)
                     }
                     ColumnNode(children = kids.toImmutableList())

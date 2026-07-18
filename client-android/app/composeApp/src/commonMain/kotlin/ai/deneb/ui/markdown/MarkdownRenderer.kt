@@ -5,6 +5,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.dynamicui.DenebHtmlAnswerBlock
 import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiParser
@@ -19,6 +20,7 @@ import ai.deneb.ui.icons.outlined.BrokenImage
 import ai.deneb.ui.icons.outlined.CheckBoxOutlineBlank
 import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -278,17 +280,41 @@ private fun DenebHtmlPendingBlock(
     onUiCallback: (String, Map<String, String>) -> Unit,
 ) {
     if (LocalDenebUiStreaming.current) {
-        // Never run scripts in a half-streamed document — hold a placeholder.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 8.dp),
+        // Never run scripts in a half-streamed document. A page takes tens of
+        // seconds to generate, so hold a page-shaped breathing skeleton
+        // instead of a bare spinner line.
+        Column(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                .padding(14.dp),
         ) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            val barColor = MaterialTheme.colorScheme.surfaceVariant
+
+            @Composable
+            fun bar(widthFraction: Float, height: Int) = Box(
+                Modifier
+                    .fillMaxWidth(widthFraction)
+                    .height(height.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(barColor)
+                    .denebBreathing(minScale = 1f, maxScale = 1f, minAlpha = 0.35f),
+            )
+            bar(0.45f, 18)
+            bar(0.92f, 12)
+            bar(0.78f, 12)
+            bar(0.6f, 34)
             Text(
-                "웹 응답 구성 중…",
+                "웹 응답 생성 중…",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 8.dp),
             )
         }
         return

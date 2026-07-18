@@ -22,7 +22,9 @@ func convertLayoutElem(el *openElem, node map[string]any) (any, bool) {
 		putNodeID(node, a)
 		node["children"] = el.children
 		putStr(node, "contentAlignment", a["align"])
-	case "hr", "divider":
+	case "hr", "divider", "spacer":
+		// spacer: an invented-but-frequent alias (2026-07-18 reject telemetry) —
+		// vertical breathing room reads closest to a divider.
 		node["type"] = "divider"
 		putNodeID(node, a)
 	default:

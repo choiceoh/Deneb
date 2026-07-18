@@ -27,7 +27,7 @@ import (
 // voidTags never take children; a matching close tag is tolerated and ignored.
 var voidTags = map[string]bool{
 	"hr": true, "img": true, "input": true, "icon": true, "slider": true,
-	"progress": true, "avatar": true, "point": true, "br": true,
+	"progress": true, "avatar": true, "point": true, "br": true, "spacer": true,
 }
 
 // rawTextTags capture verbatim content up to their literal close tag; only
@@ -89,7 +89,8 @@ var knownTags = map[string]bool{
 	"select": true, "radio-group": true, "radiogroup": true, "option": true,
 	"slider": true, "chips": true, "chip-group": true, "chip": true,
 	"br": true, "p": true, "h1": true, "h2": true, "h3": true, "h4": true,
-	"h5": true, "h6": true,
+	"h5": true, "h6": true, "title": true, "label": true, "spacer": true,
+	"kv": true,
 }
 
 // treatsTextAsChildren reports whether bare text inside a tag surfaces as

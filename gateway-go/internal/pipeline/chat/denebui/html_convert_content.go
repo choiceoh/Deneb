@@ -21,8 +21,17 @@ func convertContentElem(el *openElem, inner string, node map[string]any) (any, b
 		putBool(node, "bold", a, "bold")
 		putBool(node, "italic", a, "italic")
 		putStr(node, "color", a["color"])
-	case "p", "h1", "h2", "h3", "h4", "h5", "h6":
+	case "p", "h1", "h2", "h3", "h4", "h5", "h6", "title", "label", "kv":
 		// HTML fluency aliases: paragraphs and headings map onto text nodes.
+		// title/label/kv are invented-but-frequent model habits promoted from
+		// unknown-tag unwrap to proper typography (2026-07-18 reject telemetry).
+		if el.tag == "kv" {
+			// <kv label="발신">양도현</kv> → "발신 — 양도현" (the renderers'
+			// key/value convention).
+			if k := a["label"]; k != "" && inner != "" {
+				inner = k + " — " + inner
+			}
+		}
 		if inner == "" && len(el.children) == 0 {
 			return nil, true
 		}
@@ -32,10 +41,12 @@ func convertContentElem(el *openElem, inner string, node map[string]any) (any, b
 		switch el.tag {
 		case "h1":
 			node["style"] = "headline"
-		case "h2", "h3":
+		case "h2", "h3", "title":
 			node["style"] = "title"
 		case "h4", "h5", "h6":
 			node["bold"] = true
+		case "label":
+			node["style"] = "caption"
 		}
 		if len(el.children) > 0 {
 			// Block children inside a paragraph (models nest freely): keep

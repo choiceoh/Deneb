@@ -71,6 +71,32 @@ func normalizeHTMLAnswers(text, sessionKey string, logger *slog.Logger) string {
 	return strings.Join(out, "\n")
 }
 
+// StripHTMLAnswers removes ```deneb-html documents from text, leaving a short
+// "[웹 응답]" marker line, so prose-level preview/title extraction (work-feed
+// cards, push previews, card titlers) never reads raw markup. An unclosed
+// fence strips to EOF — mid-stream text must not leak partial markup either.
+func StripHTMLAnswers(text string) string {
+	if !hasHTMLAnswerFence(text) {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); i++ {
+		if !isHTMLAnswerOpen(lines[i]) {
+			out = append(out, lines[i])
+			continue
+		}
+		for i+1 < len(lines) {
+			i++
+			if isFenceClose(strings.TrimSpace(lines[i])) {
+				break
+			}
+		}
+		out = append(out, "[웹 응답]")
+	}
+	return strings.Join(out, "\n")
+}
+
 func hasHTMLAnswerFence(text string) bool {
 	for _, line := range strings.Split(text, "\n") {
 		if isHTMLAnswerOpen(line) {

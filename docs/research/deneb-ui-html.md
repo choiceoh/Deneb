@@ -19,7 +19,7 @@
 - 불리언 속성은 값 생략 가능 (`required` == `required="true"`).
 - 셀프클로징 `<tag/>` 허용. 주석 `<!-- … -->` 무시. `<!DOCTYPE …>` 무시.
 - 엔티티: `&lt; &gt; &amp; &quot; &#39; &nbsp;` + 수치(`&#NN;` `&#xHH;`).
-- **Void 태그** (닫는 태그 없음): `hr img input icon slider progress avatar point br`.
+- **Void 태그** (닫는 태그 없음): `hr img input icon slider progress avatar point br spacer`.
 - **형제 자동 닫힘**: `li→li`, `option→option`, `td/th→td/th`, `tr→tr(+열린 td/th)`,
   `tab→tab`, `chip→chip`, `point→point`. (모델이 HTML5 습관대로 안 닫는 것 수용)
 - **EOF 자동 닫힘**: 열린 태그 전부 — 스트리밍 절단 내성 (잘린 JSON과 달리 graceful).
@@ -64,8 +64,11 @@
   불릿/번호 리스트 ≥2 · ``` 펜스)면 `text` 대신 `markdown` 노드로 — "카드 안
   마크다운 표" 습관이 전체 마크다운 렌더러(표 포함)로 살아난다. `<text>` 요소
   자체도 값이 블록 구조면 markdown 노드로 승격.
-- **블록 별칭**: `p`→text(body) · `h1`→text(headline) · `h2 h3`→text(title) ·
-  `h4-h6`→text(bold). 블록 자식이 섞이면 column 래핑(텍스트 먼저).
+- **블록 별칭**: `p`→text(body) · `h1`→text(headline) · `h2 h3 title`→text(title) ·
+  `h4-h6`→text(bold) · `label`→text(caption) · `spacer`→divider ·
+  `kv label="키"`→text("키 — 값"). 블록 자식이 섞이면 column 래핑(텍스트 먼저).
+  (title/label/spacer/kv 는 2026-07-18 리젝트 텔레메트리에서 실측된 모델 습관을
+  정식 승격한 것.)
 - **수치 관용**: 정확 파스 실패 시 첫 숫자 런 추출 — 천단위 콤마 허용, 단위/기호
   무시 (`"1,200톤"`→1200, `"68%"`→68, `"16px"`→16).
 - **progress 백분율 정규화**: value>1 이면 /100 후 [0,1] 클램프 (`"68"`/`"68%"`→0.68).
@@ -145,4 +148,5 @@ badge `red`→error / alert `warn`→warning / chart `column`→bar /
 프로즈 꼬리에 붙은 펜스 오프너(+문장 중간 언급은 프로즈 유지) /
 인접 인라인 런 공백 보존(`**A** **B**`) / `<ul>` 비순서·`<ol>`/`ordered` 속성만 순서 /
 `<thead>/<tbody>` unwrap 시 행 보존 / 본문 꼬리에 붙은 클로저(HTML 한정, 뒤 프로즈 분리) /
-원라이너 펜스(````프로즈.```deneb-ui<text>…</text>``` 끝````) / legacy JSON은 단독 라인 클로저 유지.
+원라이너 펜스(````프로즈.```deneb-ui<text>…</text>``` 끝````) / legacy JSON은 단독 라인 클로저 유지 /
+발명 태그 별칭(title→title·label→caption·kv→"키 — 값"·spacer→divider).

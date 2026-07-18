@@ -9,4 +9,5 @@ var (
 	ReplaceFences        = denebui.ReplaceFences
 	PlainText            = denebui.PlainText
 	IsFenceOpenLine      = denebui.IsFenceOpenLine
+	StripHTMLAnswers     = denebui.StripHTMLAnswers
 )
