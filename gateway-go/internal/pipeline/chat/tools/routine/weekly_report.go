@@ -366,7 +366,7 @@ func weeklyTrimPNG(pngPath string) ([]byte, error) {
 
 // weeklyMinHeadroomMB is the commit headroom below which a Chromium render is
 // not even attempted (it would hang). Empirically render succeeds with multi-GB
-// headroom and hangs near ~1GB on the srv1 (formerly gx10) head node.
+// headroom and hangs near ~1GB on the srv1 head node.
 const weeklyMinHeadroomMB = 2048
 
 // weeklyMinDiskMB is the free space (on the output filesystem) below which a

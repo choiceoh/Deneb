@@ -78,12 +78,12 @@ func buildRecallBenchStore(t *testing.T) *wiki.Store {
 		{"운영시스템/backup.md", &wiki.Page{
 			Meta: wiki.Frontmatter{
 				ID: "memory-backup", Title: "기억 백업 체계", Category: "운영시스템",
-				Summary: "spark4tb로 일일 메모리 백업, 보존 30일", Tags: []string{"백업", "spark4tb"}, Importance: 0.7,
+				Summary: "srv2로 일일 메모리 백업, 보존 30일", Tags: []string{"백업", "srv2"}, Importance: 0.7,
 				// Cue anchors: paraphrase vocabulary absent from title/summary/body
 				// ("보존"이 아니라 "보관", offsite라는 관점) — cue-paraphrase-ops 케이스가 의존.
 				Cues: []string{"오프사이트", "기억 보관"},
 			},
-			Body: "매일 자정 무렵 spark4tb 스토리지 노드로 tar.gz 전송. 보존 기간은 30일.",
+			Body: "매일 자정 무렵 srv2 스토리지 노드로 tar.gz 전송. 보존 기간은 30일.",
 		}},
 		{"거래/sunshine-downpayment.md", &wiki.Page{
 			Meta: wiki.Frontmatter{
@@ -345,7 +345,7 @@ func recallHardCases() []recallBenchCase {
 		// Answer lives in the diary, bridged by 탑솔라/RE100 — not in any wiki title.
 		{name: "cross-source-converge", question: "탑솔라 RE100 실사 어디랑 하기로 했지?", wantAll: []string{"남도에코"}},
 		// Backup target lives in the body, not the title/topic word.
-		{name: "attr-not-in-title", question: "백업 데이터 어느 스토리지 노드로 보낸다고 했지?", wantAll: []string{"spark4tb"}},
+		{name: "attr-not-in-title", question: "백업 데이터 어느 스토리지 노드로 보낸다고 했지?", wantAll: []string{"srv2"}},
 	}
 }
 

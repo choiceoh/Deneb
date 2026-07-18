@@ -16,8 +16,7 @@ name: Publish APK (OTA)
 # flock), so merging a native PR is itself the release signal. Also runnable on demand
 # (workflow_dispatch) with custom release notes.
 #
-# Prerequisite: a self-hosted runner on srv4 labeled "gx10" (the label predates
-# two host renames and is pinned in actionlint.yaml), with the Android SDK,
+# Prerequisite: a self-hosted runner on srv4 labeled "srv4", with the Android SDK,
 # JDK 21, and the ARM64 aapt2 override in ~/.gradle/gradle.properties. One-time
 # setup is documented in docs/agent-rules/release-and-deploy.md.
 # Only push-to-main and manual dispatch trigger this -- never fork pull requests --
@@ -45,7 +44,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 30
     env:
       DENEB_INSTANCE: ci-publish-apk
@@ -87,8 +86,8 @@ jobs:
           set -euo pipefail
           scripts/dev/publish-apk.sh "$NOTES"
 
-      # The gateway runs on srv4 but the build runs here (the gx10/srv1 runner, which
-      # has the Android SDK). publish-apk.sh wrote the APK + version.json to THIS
+      # The gateway runs on srv4 and the build runs here (the srv4 self-hosted
+      # runner, which has the Android SDK). publish-apk.sh wrote the APK + version.json to THIS
       # runner's serve dir; copy the just-published build to srv4's serve dir so the
       # gateway's OTA manifest (highest-versionCode scan of ~/.cache/deneb-apk) sees it.
       # Only the newest APK matters (manifest takes the top code), so we ship that one

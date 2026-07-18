@@ -3,10 +3,9 @@
 
 self-hosted-runner:
   labels:
-    # srv1 (formerly gx10) DGX Spark host runner — builds + publishes the native
-    # APK OTA (publish-apk.yml). The label keeps the legacy "gx10" name; pinned
-    # so the job only lands on that host.
-    - gx10
+    # srv4 gateway host runner — builds + publishes the native APK OTA
+    # (publish-apk.yml, kotlin-lint.yml). Pinned so the job only lands on that host.
+    - srv4
 
 # Ignore patterns for known issues
 paths:

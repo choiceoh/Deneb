@@ -16,7 +16,7 @@
 #     code that resolves only on the Android target (#2698) and stale androidApp
 #     references (#2702) compiled clean here yet broke publish-apk.
 #
-# Runs on the srv4 self-hosted runner (gx10 label) so the host ~/.gradle and
+# Runs on the srv4 self-hosted runner (label: srv4) so the host ~/.gradle and
 # ~/android-sdk stay warm — cold ubuntu-latest was ~7m wall. Same trust model as
 # publish-apk.yml: same-repo agent/operator PRs only (never fork PRs on this host).
 # One gradle invocation keeps a single daemon; changelog-only diffs take the
@@ -40,7 +40,7 @@ permissions:
 jobs:
   lint:
     name: spotless + detekt + full desktopTest
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 20
     env:
       ANDROID_HOME: /home/choiceoh/android-sdk

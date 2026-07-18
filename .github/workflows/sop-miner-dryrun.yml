@@ -1,6 +1,6 @@
 name: SOP Miner Dry-Run (srv4)
 
-# 수동 전용: 게이트웨이 호스트(gx10 러너 = srv4)에서 sop-miner를 --dry-run으로
+# 수동 전용: 게이트웨이 호스트(srv4 self-hosted runner, label: srv4)에서 sop-miner를 --dry-run으로
 # 실행해 실측 트랜스크립트 채굴 결과를 확인한다. 읽기 전용 — 아무것도 파일링하지
 # 않고(--dry-run), 게이트웨이 RPC도 호출하지 않는다. 러너 유저의
 # ~/.deneb/transcripts 가 곧 프로덕션 트랜스크립트다 (publish-apk와 동일 전제:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   dry-run:
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
