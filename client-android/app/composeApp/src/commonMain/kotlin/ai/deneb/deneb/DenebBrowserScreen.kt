@@ -71,6 +71,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 
 /**
  * In-app browser for external links, with one-tap in-place DeepL translation to
@@ -110,6 +112,18 @@ fun DenebBrowserScreen(
         if (state.adBlockEnabled != appSettings.isBrowserAdBlockEnabled()) {
             appSettings.setBrowserAdBlockEnabled(state.adBlockEnabled)
         }
+    }
+    // Disk-back the translate cache (encrypted cached-section store) so recent
+    // pages' translations survive an app restart. Constant owner: translations
+    // of public web pages are browsing data, not account data — they stay valid
+    // across a credential switch.
+    remember {
+        val slot = SectionDiskSlot(
+            appSettings,
+            "browser-translate",
+            MapSerializer(String.serializer(), String.serializer()),
+        ) { "browser" }
+        browserTranslateCache.attachPersistence(load = { slot.load() }, save = { slot.save(it) })
     }
     var showBookmarks by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
