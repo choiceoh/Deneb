@@ -103,8 +103,7 @@ func TestWorkstationUsageHandlerReadsLedgerAndDefaultsEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp := Methods(Deps{StateDir: func() string { return dir }})["observe.workstation_usage"](
-		context.Background(), &protocol.RequestFrame{ID: "u1"},
-	)
+		context.Background(), &protocol.RequestFrame{ID: "u1"})
 	rpctest.MustOK(t, resp)
 	got := rpctest.Result[struct {
 		Total    int            `json:"total"`
