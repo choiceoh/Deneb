@@ -107,3 +107,31 @@ func TestStoreYouTubeTranscript_NilStore(t *testing.T) {
 		t.Fatalf("expected empty ID with nil store, got %q", id)
 	}
 }
+
+// Chunk splitting: single chunk under the cap, clean boundaries, and the
+// max-chunk cap reporting a dropped tail — the honesty contract for long videos.
+func TestSplitTranscriptChunksBoundsAndDroppedTail(t *testing.T) {
+	short := []rune(strings.Repeat("가", 100))
+	chunks, dropped := splitTranscriptChunks(short)
+	if len(chunks) != 1 || dropped != 0 {
+		t.Fatalf("short: got %d chunks dropped=%d, want 1/0", len(chunks), dropped)
+	}
+
+	twoExact := []rune(strings.Repeat("나", youtubeSummaryChunkChars*2))
+	chunks, dropped = splitTranscriptChunks(twoExact)
+	if len(chunks) != 2 || dropped != 0 {
+		t.Fatalf("two-exact: got %d chunks dropped=%d, want 2/0", len(chunks), dropped)
+	}
+	if got := len([]rune(chunks[0])); got != youtubeSummaryChunkChars {
+		t.Fatalf("chunk 0 size = %d, want %d", got, youtubeSummaryChunkChars)
+	}
+
+	over := []rune(strings.Repeat("다", youtubeSummaryChunkChars*youtubeSummaryMaxChunks+500))
+	chunks, dropped = splitTranscriptChunks(over)
+	if len(chunks) != youtubeSummaryMaxChunks {
+		t.Fatalf("over-cap: got %d chunks, want %d", len(chunks), youtubeSummaryMaxChunks)
+	}
+	if dropped != 500 {
+		t.Fatalf("over-cap: dropped = %d, want 500", dropped)
+	}
+}
