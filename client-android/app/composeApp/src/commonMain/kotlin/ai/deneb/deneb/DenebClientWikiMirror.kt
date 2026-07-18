@@ -124,11 +124,19 @@ internal suspend fun DenebGatewayClient.updateWikiMirrorPaths(paths: Collection<
             is RpcOutcome.Ok -> if (!wikiMirror.upsert(
                     outcome.payload.toWikiPage(fallbackPath = path),
                     expectedOwner = expectedOwner,
-                )) return
+                )
+            ) {
+                return
+            }
+
             is RpcOutcome.Rejected -> if (outcome.code == "NOT_FOUND" && !wikiMirror.remove(
                     path,
                     expectedOwner = expectedOwner,
-                )) return
+                )
+            ) {
+                return
+            }
+
             RpcOutcome.Unreachable -> return // offline: stop burning the batch
         }
     }
