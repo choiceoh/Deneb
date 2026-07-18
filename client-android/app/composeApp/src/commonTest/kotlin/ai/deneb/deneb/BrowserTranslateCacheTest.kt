@@ -98,4 +98,49 @@ class BrowserTranslateCacheTest {
         cache.translate(listOf("x".repeat(100)), "ko", upper())
         assertEquals(1, cache.size())
     }
+
+    @Test
+    fun persistenceSeedsEmptyCacheAndThrottlesSaves() = runTest {
+        // Threshold 20: the first stored batch (cost 13) does not save; the
+        // second (cumulative 26) does. Budget 30 keeps only the newest entries.
+        val cache = BrowserTranslateCache(maxChars = 200, persistThresholdChars = 20, persistBudgetChars = 30)
+        var saved: Map<String, String>? = null
+        cache.attachPersistence(load = { mapOf("ko seed" to "SEED") }, save = { saved = it })
+
+        // Seeded entry serves without an upstream call.
+        var upstream = false
+        assertEquals(
+            listOf("SEED"),
+            cache.translate(listOf("seed"), "ko") { s, _ ->
+                upstream = true
+                s
+            },
+        )
+        assertEquals(false, upstream)
+
+        cache.translate(listOf("aaaaa"), "ko", upper()) // unsaved 13 < 20 → no save
+        assertNull(saved)
+        cache.translate(listOf("bbbbb"), "ko", upper()) // unsaved 26 ≥ 20 → save
+        val snapshot = saved ?: error("expected a persisted snapshot")
+        // Budget 30 fits two 13-char entries; the seed (oldest) is dropped.
+        assertEquals(setOf("ko aaaaa", "ko bbbbb"), snapshot.keys)
+    }
+
+    @Test
+    fun persistenceLoadDoesNotOverrideLiveEntriesAndAttachIsIdempotent() = runTest {
+        val cache = BrowserTranslateCache()
+        cache.translate(listOf("live"), "ko", upper())
+        cache.attachPersistence(load = { mapOf("ko live" to "STALE-DISK") }, save = { })
+        var upstream = false
+        val out = cache.translate(listOf("live"), "ko") { s, _ ->
+            upstream = true
+            s
+        }
+        assertEquals(listOf("LIVE"), out)
+        assertEquals(false, upstream)
+
+        // Second attach is ignored (no re-seed, first save sink kept).
+        cache.attachPersistence(load = { mapOf("ko other" to "X") }, save = { })
+        assertEquals(1, cache.size())
+    }
 }
