@@ -351,6 +351,7 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 	// invisible in ~/.deneb/agent-logs and to the modeltuner's AggregateByModel.
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+		isAutomationRun(params),
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRun(runCtx, params, deps, nil, nil, h.logger, runLog)
 			if err != nil {
@@ -385,21 +386,21 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 // never observes a stale active run. Order mirrors run_start.go: Cleanup first
 // (HasActiveRun authoritative), then ReclaimOnIdle, then drain.
 func (h *Handler) withSyncRunLifecycle(
-	ctx context.Context, sessionKey, clientRunID string,
+	ctx context.Context, sessionKey, clientRunID string, automation bool,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
-	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, false, fn)
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, false, automation, fn)
 }
 
 func (h *Handler) withAdmittedSyncRunLifecycle(
-	ctx context.Context, sessionKey, clientRunID string,
+	ctx context.Context, sessionKey, clientRunID string, automation bool,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
-	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, true, fn)
+	return h.withSyncRunLifecycleAdmission(ctx, sessionKey, clientRunID, true, automation, fn)
 }
 
 func (h *Handler) withSyncRunLifecycleAdmission(
-	ctx context.Context, sessionKey, clientRunID string, admitted bool,
+	ctx context.Context, sessionKey, clientRunID string, admitted, automation bool,
 	fn func(context.Context) (*SyncResult, error),
 ) (*SyncResult, error) {
 	runCtx, cancel := context.WithCancelCause(ctx)
@@ -410,6 +411,7 @@ func (h *Handler) withSyncRunLifecycleAdmission(
 		ClientRun:  clientRunID,
 		CancelFn:   cancel,
 		ExpiresAt:  time.Now().Add(4 * time.Hour),
+		Automation: automation,
 	}
 	var registered bool
 	if admitted {
@@ -484,7 +486,11 @@ func (h *Handler) trySteerIntoActiveRun(sessionKey, message string, opts *SyncOp
 	if trimmed == "" || utf8.RuneCountInString(trimmed) > steerMaxRunes {
 		return nil, false
 	}
-	if !h.abort.HasActiveRun(sessionKey) {
+	// Interactive runs only: if the sole active run on this session is an
+	// autonomous relay (heartbeat/cron/mailpoll riding client:main), fold
+	// nothing — the user isn't watching that turn. Their message becomes a
+	// normal new turn instead.
+	if !h.abort.HasActiveInteractiveRun(sessionKey) {
 		return nil, false
 	}
 	if !h.steer.Enqueue(sessionKey, trimmed) {
@@ -604,6 +610,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		sinks.OnThinking = opts.OnThinking
 	}
 	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
+		isAutomationRun(params),
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRunWithDelta(runCtx, params, deps, sinks, h.logger)
 			if err != nil {

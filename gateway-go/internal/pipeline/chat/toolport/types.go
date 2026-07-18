@@ -104,6 +104,13 @@ type AbortEntry struct {
 	ClientRun  string
 	CancelFn   context.CancelCauseFunc
 	ExpiresAt  time.Time
+	// Automation marks an autonomous relay run (cron, heartbeat sweep,
+	// mailpoll, goal, event-ingest) that merely RIDES a session key the user
+	// also chats on. Auto-steer must never fold a user's message into such a
+	// run: the user isn't watching that turn, and their message would surface
+	// as a stray note inside an automation transcript (live 2026-07-18 —
+	// "채팅 안 하고 있는데 진행 중인 답변에 반영하겠다더라").
+	Automation bool
 }
 
 // MediaSendFunc delivers a file to the originating channel.

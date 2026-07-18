@@ -115,6 +115,7 @@ func (h *Handler) startAsyncRunWithAdmission(reqID string, params RunParams, isS
 		ClientRun:  params.ClientRunID,
 		CancelFn:   runCancel,
 		ExpiresAt:  time.Now().Add(4 * time.Hour),
+		Automation: isAutomationRun(params),
 	}
 	var registered bool
 	switch admission {

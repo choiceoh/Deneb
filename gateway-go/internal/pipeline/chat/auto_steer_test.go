@@ -99,3 +99,46 @@ func TestTrySteerRejectsGatedCases(t *testing.T) {
 		t.Errorf("gated cases leaked a steer note: %v", notes)
 	}
 }
+
+// markActiveAutomationRun registers an autonomous relay (heartbeat/cron)
+// on the session — the shape that must NOT absorb a user's message.
+func markActiveAutomationRun(h *Handler, sessionKey string) {
+	h.abort.Register("auto-"+sessionKey, &AbortEntry{
+		SessionKey: sessionKey,
+		ClientRun:  "auto-" + sessionKey,
+		CancelFn:   func(error) {},
+		ExpiresAt:  time.Now().Add(time.Hour),
+		Automation: true,
+	})
+}
+
+// The reported bug: a user types into a session that isn't in an interactive
+// turn, but a heartbeat/cron automation run happens to be active on the same
+// key (client:main). Auto-steer must decline so the message starts a normal
+// new turn instead of folding into the automation transcript.
+func TestTrySteerDeclinesWhenOnlyAutomationRunActive(t *testing.T) {
+	h := newSteerTestHandler()
+	markActiveAutomationRun(h, "client:main")
+
+	res, handled := h.trySteerIntoActiveRun("client:main", "지금 뭐 하고 있어?", &SyncOptions{
+		Delivery: &DeliveryContext{Channel: "client", To: "main"},
+	})
+	if handled || res != nil {
+		t.Fatalf("steered into an automation run: handled=%v res=%+v", handled, res)
+	}
+}
+
+// A concurrent interactive run alongside the automation run DOES steer — the
+// user is genuinely mid-turn.
+func TestTrySteerFoldsWhenInteractiveRunActiveDespiteAutomation(t *testing.T) {
+	h := newSteerTestHandler()
+	markActiveAutomationRun(h, "client:main")
+	markActiveRun(h, "client:main")
+
+	res, handled := h.trySteerIntoActiveRun("client:main", "아 그거 말고", &SyncOptions{
+		Delivery: &DeliveryContext{Channel: "client", To: "main"},
+	})
+	if !handled || res == nil {
+		t.Fatal("interactive run present: steer should fold")
+	}
+}
