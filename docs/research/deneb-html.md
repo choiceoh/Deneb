@@ -30,7 +30,7 @@
 
 | 클라 | 표면 | 샌드박스 | 브리지 |
 |---|---|---|---|
-| Andromeda | `components/DenebHtml.tsx` — iframe `sandbox="allow-scripts"` srcdoc | 주입 CSP `default-src 'none'; style/script 'unsafe-inline'; img data:` (네트워크 전면 차단) + 고유 오리진 | postMessage `{__deneb:"prompt"|"height"}` |
+| Andromeda | `components/DenebHtml.tsx` — iframe `sandbox="allow-scripts"` srcdoc | 주입 CSP `default-src 'none'; style/script 'unsafe-inline'; img data:` (네트워크 전면 차단) + 고유 오리진 | postMessage `{__deneb:"prompt"}` · `{__deneb:"height"}` |
 | 네이티브 Android | `ui/dynamicui/DenebHtmlView.android.kt` — WebView | `blockNetworkLoads`·file/content 접근 차단·내비게이션 전부 삼킴 | `DenebNative.send/height` JavascriptInterface |
 | 네이티브 기타 타깃 | 자리표시자 ("이 기기에서는 미리보기 미지원") | — | — |
 
