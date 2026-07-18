@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"strings"
 	"time"
@@ -296,46 +297,77 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			return rpcutil.RespondOK(req.ID, payload)
 		}
 
-		client, errResp := gmailClientOrErr(deps, req.ID)
-		if errResp != nil {
-			return errResp
-		}
-		searchLimit := limit
-		if workFilter != "" {
-			searchLimit = maxGmailLimit
-		}
-		results, nextPageToken, err := client.SearchPage(ctx, query, p.PageToken, searchLimit)
-		if err != nil {
-			// Route through mapGmailError so 403 (Gmail OAuth scope
-			// missing) and 404 stay distinguishable from transient
-			// outages — the client can surface different remediation
-			// hints. Matches get/mark_read/archive's behavior.
-			return MapGmailError(req.ID, "mail search failed", err)
-		}
-		// Absorb the "empty page + token" case server-side: Gmail can
-		// legitimately return 0 messages with a non-empty
-		// nextPageToken when server-side filtering eats a chunk, and
-		// the Mini App can't tell the difference between that and a
-		// truly empty inbox. Hop forward up to maxEmptyPageHops times
-		// until we get at least one message or run out of pages.
-		for hops := 0; hops < maxEmptyPageHops && len(results) == 0 && nextPageToken != ""; hops++ {
-			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, searchLimit)
-			if err != nil {
-				return MapGmailError(req.ID, "mail search failed", err)
+		fetchPage := func(fctx context.Context) (map[string]any, *protocol.ResponseFrame) {
+			client, errResp := gmailClientOrErr(deps, req.ID)
+			if errResp != nil {
+				return nil, errResp
 			}
+			searchLimit := limit
+			if workFilter != "" {
+				searchLimit = maxGmailLimit
+			}
+			results, nextPageToken, err := client.SearchPage(fctx, query, p.PageToken, searchLimit)
+			if err != nil {
+				// Route through mapGmailError so 403 (Gmail OAuth scope
+				// missing) and 404 stay distinguishable from transient
+				// outages — the client can surface different remediation
+				// hints. Matches get/mark_read/archive's behavior.
+				return nil, MapGmailError(req.ID, "mail search failed", err)
+			}
+			// Absorb the "empty page + token" case server-side: Gmail can
+			// legitimately return 0 messages with a non-empty
+			// nextPageToken when server-side filtering eats a chunk, and
+			// the Mini App can't tell the difference between that and a
+			// truly empty inbox. Hop forward up to maxEmptyPageHops times
+			// until we get at least one message or run out of pages.
+			for hops := 0; hops < maxEmptyPageHops && len(results) == 0 && nextPageToken != ""; hops++ {
+				results, nextPageToken, err = client.SearchPage(fctx, query, nextPageToken, searchLimit)
+				if err != nil {
+					return nil, MapGmailError(req.ID, "mail search failed", err)
+				}
+			}
+
+			out := appendMailRows(make([]mailRowOut, 0, len(results)), deps, results, workFilter, limit)
+			for hops := 0; workFilter != "" && len(out) < limit && nextPageToken != "" && hops < maxWorkFilterPageHops; hops++ {
+				results, nextPageToken, err = client.SearchPage(fctx, query, nextPageToken, searchLimit)
+				if err != nil {
+					return nil, MapGmailError(req.ID, "mail search failed", err)
+				}
+				out = appendMailRows(out, deps, results, workFilter, limit)
+			}
+			return map[string]any{
+				"messages":      out,
+				"nextPageToken": nextPageToken,
+			}, nil
 		}
 
-		out := appendMailRows(make([]mailRowOut, 0, len(results)), deps, results, workFilter, limit)
-		for hops := 0; workFilter != "" && len(out) < limit && nextPageToken != "" && hops < maxWorkFilterPageHops; hops++ {
-			results, nextPageToken, err = client.SearchPage(ctx, query, nextPageToken, searchLimit)
-			if err != nil {
-				return MapGmailError(req.ID, "mail search failed", err)
+		// Stale-while-revalidate: a page past TTL (≤5 min) is served
+		// instantly and refreshed in the background, so re-opening the mail
+		// tab never eats the ~2.5s cold fetch. Single-flight per key.
+		if stale, ok, refresh := cache.getStale(cacheKey, now); ok {
+			if refresh {
+				go func() {
+					defer cache.refreshDone(cacheKey)
+					defer func() {
+						if r := recover(); r != nil {
+							slog.Error("mail list background refresh panic", "panic", r)
+						}
+					}()
+					// Detached from the request ctx (it dies when this response
+					// is written) but bounded — a hung refresh must not leak.
+					rctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+					defer cancel()
+					if payload, errResp := fetchPage(rctx); errResp == nil {
+						cache.put(cacheKey, payload, time.Now())
+					}
+				}()
 			}
-			out = appendMailRows(out, deps, results, workFilter, limit)
+			return rpcutil.RespondOK(req.ID, stale)
 		}
-		payload := map[string]any{
-			"messages":      out,
-			"nextPageToken": nextPageToken,
+
+		payload, errResp := fetchPage(ctx)
+		if errResp != nil {
+			return errResp
 		}
 		cache.put(cacheKey, payload, now)
 		return rpcutil.RespondOK(req.ID, payload)

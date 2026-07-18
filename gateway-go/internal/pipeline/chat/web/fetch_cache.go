@@ -14,7 +14,12 @@ import (
 
 const (
 	fetchCacheDefaultMaxSize = 64
-	fetchCacheDefaultTTL     = 5 * time.Minute
+	// 30 min (operator directive 2026-07-18): the dominant repeat pattern is
+	// re-asking about a page later in the same working session, and most
+	// fetched pages (docs, articles, reference material) don't change on that
+	// horizon. Truly live pages can still be forced fresh by re-fetching after
+	// the TTL or via search.
+	fetchCacheDefaultTTL = 30 * time.Minute
 )
 
 type fetchCacheEntry struct {
