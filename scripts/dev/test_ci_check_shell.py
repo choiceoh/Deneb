@@ -109,19 +109,20 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(self.calls(), [])
 
     def test_when_audit_lane_runs_all_three_health_gates_and_cleans_logs(self) -> None:
+        # health-v2-check is deliberately absent: the pillar ratchet is out of
+        # local CI gates (operator decision 2026-07-18 — git-window false reds).
         proc = self.invoke("--audit")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("3 gates, selected lanes run in parallel", proc.stdout)
-        for gate in ("runtime-health-test", "health-v2-test", "health-v2-check"):
+        self.assertIn("2 gates, selected lanes run in parallel", proc.stdout)
+        for gate in ("runtime-health-test", "health-v2-test"):
             self.assertRegex(proc.stdout, rf"{gate}\s+PASS")
-        self.assertIn("3 passed, 0 failed", proc.stdout)
+        self.assertIn("2 passed, 0 failed", proc.stdout)
         self.assertIn("make ci PASSED", proc.stdout)
         self.assertEqual(
             self.calls(),
             [
                 "make runtime-health-test",
                 "make health-v2-test",
-                "make health-v2-check",
             ],
         )
         self.assertEqual(list(self.root.glob("deneb-ci-check.*")), [])
@@ -213,7 +214,6 @@ class CICheckShellTests(unittest.TestCase):
             [
                 "make runtime-health-test",
                 "make health-v2-test",
-                "make health-v2-check",
             ],
         )
 
@@ -222,7 +222,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)
         self.assertIn("Go:run  Kotlin:run  Audit:run", proc.stdout)
-        self.assertIn("12 passed, 0 failed", proc.stdout)
+        self.assertIn("11 passed, 0 failed", proc.stdout)
         make_calls = [call for call in self.calls() if call.startswith("make ")]
         self.assertIn("make go-test-cached", make_calls)
         self.assertIn("make kotlin-android-compile", make_calls)
