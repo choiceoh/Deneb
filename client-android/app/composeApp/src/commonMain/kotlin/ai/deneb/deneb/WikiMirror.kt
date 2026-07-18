@@ -124,14 +124,18 @@ internal class WikiMirrorStore(
         }
     }
 
-    /** Atomically replace the whole mirror after a successful bulk pull. */
-    suspend fun replaceAll(all: List<WikiPage>, nowMs: Long): Boolean = mutex.withLock {
+    /** Atomically replace the whole mirror after a successful bulk pull.
+     *  [expectedOwner] pins the account fingerprint captured when the pull
+     *  started so a credential switch after the RPC fence cannot stamp
+     *  account A's corpus with account B's owner. */
+    suspend fun replaceAll(all: List<WikiPage>, nowMs: Long, expectedOwner: String? = null): Boolean = mutex.withLock {
         withStateLock state@{
+            if (expectedOwner != null && owner() != expectedOwner) return@state false
             loadLocked()
             val nextPages = all.filter { it.path.isNotBlank() }.associateByTo(mutableMapOf()) { it.path }
             val nextMeta = commitLocked(
                 nextPages = nextPages,
-                nextOwner = owner(),
+                nextOwner = expectedOwner ?: owner(),
                 syncedAtMs = nowMs,
                 changedShards = ALL_SHARDS,
             ) ?: return@state false
@@ -141,14 +145,15 @@ internal class WikiMirrorStore(
         }
     }
 
-    suspend fun upsert(page: WikiPage): Boolean = mutex.withLock {
+    suspend fun upsert(page: WikiPage, expectedOwner: String? = null): Boolean = mutex.withLock {
         withStateLock state@{
+            if (expectedOwner != null && owner() != expectedOwner) return@state false
             loadLocked()
             if (page.path.isBlank()) return@state true
             val nextPages = pages.toMutableMap().apply { put(page.path, page) }
             val nextMeta = commitLocked(
                 nextPages = nextPages,
-                nextOwner = owner(),
+                nextOwner = expectedOwner ?: owner(),
                 syncedAtMs = meta.syncedAtMs,
                 changedShards = setOf(shardOf(page.path)),
             ) ?: return@state false
@@ -158,14 +163,15 @@ internal class WikiMirrorStore(
         }
     }
 
-    suspend fun remove(path: String): Boolean = mutex.withLock {
+    suspend fun remove(path: String, expectedOwner: String? = null): Boolean = mutex.withLock {
         withStateLock state@{
+            if (expectedOwner != null && owner() != expectedOwner) return@state false
             loadLocked()
             if (path !in pages) return@state true
             val nextPages = pages.toMutableMap().apply { remove(path) }
             val nextMeta = commitLocked(
                 nextPages = nextPages,
-                nextOwner = owner(),
+                nextOwner = expectedOwner ?: owner(),
                 syncedAtMs = meta.syncedAtMs,
                 changedShards = setOf(shardOf(path)),
             ) ?: return@state false

@@ -255,6 +255,38 @@ class WikiMirrorStoreTest {
     }
 
     @Test
+    fun replaceAllRejectsStaleOwnerPinAfterCredentialSwitch() = runTest {
+        val files = MemoryMirrorFiles()
+        var currentOwner = "gw#token-a"
+        val s = store(files) { currentOwner }
+        assertTrue(s.replaceAll(listOf(page("a/kept.md")), nowMs = 1))
+
+        currentOwner = "gw#token-b"
+        assertFalse(
+            s.replaceAll(
+                listOf(page("a/foreign.md", body = "from-A")),
+                nowMs = 2,
+                expectedOwner = "gw#token-a",
+            ),
+        )
+        assertNull(s.get("a/foreign.md"))
+        assertEquals(0, s.pageCount())
+    }
+
+    @Test
+    fun upsertRejectsStaleOwnerPinAfterCredentialSwitch() = runTest {
+        val files = MemoryMirrorFiles()
+        var currentOwner = "gw#token-a"
+        val s = store(files) { currentOwner }
+        assertTrue(s.replaceAll(listOf(page("a/kept.md")), nowMs = 1))
+
+        currentOwner = "gw#token-b"
+        assertFalse(s.upsert(page("a/foreign.md", body = "from-A"), expectedOwner = "gw#token-a"))
+        assertNull(s.get("a/foreign.md"))
+        assertEquals(0, s.pageCount())
+    }
+
+    @Test
     fun clearDropsMemoryAndDisk() = runTest {
         val files = MemoryMirrorFiles()
         val s = store(files)
