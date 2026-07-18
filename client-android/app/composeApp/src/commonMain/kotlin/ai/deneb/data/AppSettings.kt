@@ -5,6 +5,9 @@ import com.russhwolf.settings.ExperimentalSettingsApi
 import com.russhwolf.settings.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 
 enum class ThemeMode {
     System,
@@ -13,7 +16,27 @@ enum class ThemeMode {
     OledBlack,
 }
 
+@Serializable
+private data class TranscriptCacheEntry(
+    val sessionKey: String,
+    val payloadKey: String,
+)
+
+@Serializable
+private data class TranscriptCacheManifest(
+    val revision: Long = 0,
+    val entries: List<TranscriptCacheEntry> = emptyList(),
+)
+
+private data class TranscriptManifestState(
+    val present: Boolean,
+    val manifest: TranscriptCacheManifest,
+)
+
+private fun nextTranscriptRevision(current: Long): Long = if (current == Long.MAX_VALUE) 1 else current + 1
+
 class AppSettings(internal val settings: Settings) {
+    private val transcriptCacheLock = SynchronousLock()
 
     // App open tracking
     fun trackAppOpen(): Int {
@@ -379,31 +402,191 @@ class AppSettings(internal val settings: Settings) {
     // Bounded by a small LRU so it never grows without limit (transcripts are
     // private work content — kept encrypted, capped, and evicted, not archived).
 
-    fun getCachedTranscript(sessionKey: String): String? = settings.getStringOrNull(KEY_TX_CACHE_PREFIX + sessionKey)
+    fun getCachedTranscript(sessionKey: String): String? = transcriptCacheLock.withLock {
+        val state = readTranscriptManifestLocked()
+        if (!state.present) return@withLock getLegacyTranscriptLocked(sessionKey)
 
-    fun putCachedTranscript(sessionKey: String, json: String) {
-        settings.putString(KEY_TX_CACHE_PREFIX + sessionKey, json)
-        // Most-recent-first LRU; evict overflow keys' payloads so the store is bounded.
-        val current = txCacheLru()
-        val next = (listOf(sessionKey) + current.filterNot { it == sessionKey }).take(TX_CACHE_MAX_SESSIONS)
-        current.filterNot { it in next }.forEach { settings.remove(KEY_TX_CACHE_PREFIX + it) }
-        writeTxCacheLru(next)
+        val entry = state.manifest.entries.firstOrNull { it.sessionKey == sessionKey }
+            ?: return@withLock null
+        val payload = settings.getStringOrNull(entry.payloadKey)
+        if (payload == null) repairMissingTranscriptPayloadsLocked(state.manifest)
+        payload
     }
 
-    fun removeCachedTranscript(sessionKey: String) {
-        settings.remove(KEY_TX_CACHE_PREFIX + sessionKey)
-        writeTxCacheLru(txCacheLru().filterNot { it == sessionKey })
+    /**
+     * Copy-on-write transcript update. A fresh payload blob is fully prepared
+     * before the single manifest write publishes it; cleanup happens only after
+     * that commit, so a write failure leaves the prior generation readable.
+     */
+    fun putCachedTranscript(sessionKey: String, json: String) = transcriptCacheLock.withLock {
+        val state = readTranscriptManifestLocked()
+        if (state.present) {
+            putTransactionalTranscriptLocked(state.manifest, sessionKey, json)
+        } else {
+            migrateLegacyTranscriptsLocked(sessionKey to json)
+        }
     }
 
-    // sessionKeys never contain a newline, so "\n" is a safe list separator.
-    private fun txCacheLru(): List<String> = settings.getStringOrNull(KEY_TX_CACHE_LRU)
+    fun removeCachedTranscript(sessionKey: String) = transcriptCacheLock.withLock {
+        val state = readTranscriptManifestLocked()
+        if (state.present) {
+            val next = state.manifest.copy(
+                entries = state.manifest.entries.filterNot { it.sessionKey == sessionKey },
+            )
+            writeTranscriptManifestLocked(next)
+            cleanupTranscriptStorageLocked(next, removeLegacy = true)
+        } else {
+            migrateLegacyTranscriptsLocked(extra = null, removedSessionKey = sessionKey)
+        }
+    }
+
+    private fun readTranscriptManifestLocked(): TranscriptManifestState {
+        val raw = settings.getStringOrNull(KEY_TX_CACHE_MANIFEST)
+            ?: return TranscriptManifestState(false, TranscriptCacheManifest())
+        val decoded = runCatching { SharedJson.decodeFromString<TranscriptCacheManifest>(raw) }.getOrNull()
+        if (decoded != null && decoded.isValidTranscriptManifest()) {
+            return TranscriptManifestState(true, decoded)
+        }
+
+        // A malformed committed manifest must fail closed. Replacing it with an
+        // empty manifest before cleanup prevents stale legacy payloads from being
+        // resurrected if a previous post-commit cleanup was interrupted.
+        val empty = TranscriptCacheManifest()
+        if (runCatching { writeTranscriptManifestLocked(empty) }.isSuccess) {
+            cleanupTranscriptStorageLocked(empty, removeLegacy = true)
+        }
+        return TranscriptManifestState(true, empty)
+    }
+
+    private fun TranscriptCacheManifest.isValidTranscriptManifest(): Boolean = revision >= 0 &&
+        entries.size <= TX_CACHE_MAX_SESSIONS &&
+        entries.map { it.sessionKey }.distinct().size == entries.size &&
+        entries.map { it.payloadKey }.distinct().size == entries.size &&
+        entries.all { entry ->
+            val suffix = entry.payloadKey.removePrefix(KEY_TX_CACHE_BLOB_PREFIX)
+            entry.payloadKey.startsWith(KEY_TX_CACHE_BLOB_PREFIX) &&
+                suffix.toLongOrNull()?.let { it > 0 } == true
+        }
+
+    private fun getLegacyTranscriptLocked(sessionKey: String): String? {
+        val lru = legacyTranscriptKeysLocked()
+        if (sessionKey !in lru) {
+            runCatching { settings.remove(KEY_TX_CACHE_PREFIX + sessionKey) }
+            return null
+        }
+        val payload = settings.getStringOrNull(KEY_TX_CACHE_PREFIX + sessionKey)
+        if (payload == null) runCatching { writeLegacyTranscriptLruLocked(lru - sessionKey) }
+        return payload
+    }
+
+    private fun putTransactionalTranscriptLocked(
+        current: TranscriptCacheManifest,
+        sessionKey: String,
+        json: String,
+    ) {
+        val retained = current.entries
+            .filterNot { it.sessionKey == sessionKey }
+            .filter { settings.getStringOrNull(it.payloadKey) != null }
+            .take(TX_CACHE_MAX_SESSIONS - 1)
+        val (revision, payloadKey) = nextTranscriptPayloadKey(current.revision, retained)
+        settings.putString(payloadKey, json)
+        val next = TranscriptCacheManifest(
+            revision = revision,
+            entries = listOf(TranscriptCacheEntry(sessionKey, payloadKey)) + retained,
+        )
+        try {
+            writeTranscriptManifestLocked(next)
+        } catch (failure: Throwable) {
+            runCatching { settings.remove(payloadKey) }
+            throw failure
+        }
+        cleanupTranscriptStorageLocked(next, removeLegacy = true)
+    }
+
+    private fun migrateLegacyTranscriptsLocked(
+        extra: Pair<String, String>?,
+        removedSessionKey: String? = null,
+    ) {
+        val desired = buildList {
+            if (extra != null) add(extra)
+            legacyTranscriptKeysLocked()
+                .asSequence()
+                .filterNot { it == extra?.first || it == removedSessionKey }
+                .mapNotNull { key -> settings.getStringOrNull(KEY_TX_CACHE_PREFIX + key)?.let { key to it } }
+                .forEach(::add)
+        }.take(TX_CACHE_MAX_SESSIONS)
+
+        var revision = 0L
+        val preparedKeys = mutableListOf<String>()
+        val entries = mutableListOf<TranscriptCacheEntry>()
+        try {
+            desired.forEach { (sessionKey, json) ->
+                revision = nextTranscriptRevision(revision)
+                val payloadKey = KEY_TX_CACHE_BLOB_PREFIX + revision
+                settings.putString(payloadKey, json)
+                preparedKeys += payloadKey
+                entries += TranscriptCacheEntry(sessionKey, payloadKey)
+            }
+            val manifest = TranscriptCacheManifest(revision, entries)
+            writeTranscriptManifestLocked(manifest)
+            cleanupTranscriptStorageLocked(manifest, removeLegacy = true)
+        } catch (failure: Throwable) {
+            preparedKeys.forEach { runCatching { settings.remove(it) } }
+            throw failure
+        }
+    }
+
+    private fun nextTranscriptPayloadKey(
+        currentRevision: Long,
+        retained: List<TranscriptCacheEntry>,
+    ): Pair<Long, String> {
+        val retainedKeys = retained.mapTo(mutableSetOf()) { it.payloadKey }
+        var revision = currentRevision
+        repeat(TX_CACHE_MAX_SESSIONS + 1) {
+            revision = nextTranscriptRevision(revision)
+            val key = KEY_TX_CACHE_BLOB_PREFIX + revision
+            if (key !in retainedKeys) return revision to key
+        }
+        error("Unable to allocate transcript cache generation")
+    }
+
+    private fun repairMissingTranscriptPayloadsLocked(manifest: TranscriptCacheManifest) {
+        val repaired = manifest.copy(
+            entries = manifest.entries.filter { settings.getStringOrNull(it.payloadKey) != null },
+        )
+        if (repaired.entries == manifest.entries) return
+        if (runCatching { writeTranscriptManifestLocked(repaired) }.isSuccess) {
+            cleanupTranscriptStorageLocked(repaired, removeLegacy = true)
+        }
+    }
+
+    private fun legacyTranscriptKeysLocked(): List<String> = settings.getStringOrNull(KEY_TX_CACHE_LRU)
         ?.split("\n")
         ?.filter { it.isNotBlank() }
         ?.distinct()
+        ?.take(TX_CACHE_MAX_SESSIONS)
         ?: emptyList()
 
-    private fun writeTxCacheLru(keys: List<String>) {
+    private fun writeLegacyTranscriptLruLocked(keys: List<String>) {
         if (keys.isEmpty()) settings.remove(KEY_TX_CACHE_LRU) else settings.putString(KEY_TX_CACHE_LRU, keys.joinToString("\n"))
+    }
+
+    private fun writeTranscriptManifestLocked(manifest: TranscriptCacheManifest) {
+        settings.putString(KEY_TX_CACHE_MANIFEST, SharedJson.encodeToString(manifest))
+    }
+
+    @OptIn(ExperimentalSettingsApi::class)
+    private fun cleanupTranscriptStorageLocked(
+        manifest: TranscriptCacheManifest,
+        removeLegacy: Boolean,
+    ) {
+        val retained = manifest.entries.mapTo(mutableSetOf()) { it.payloadKey }
+        settings.keys
+            .filter { key ->
+                (key.startsWith(KEY_TX_CACHE_BLOB_PREFIX) && key !in retained) ||
+                    (removeLegacy && (key.startsWith(KEY_TX_CACHE_PREFIX) || key == KEY_TX_CACHE_LRU))
+            }
+            .forEach { runCatching { settings.remove(it) } }
     }
 
     // Default inbox mail-list cache (single key — only the no-query inbox view is
@@ -477,19 +660,19 @@ class AppSettings(internal val settings: Settings) {
      * without this the prior gateway/account's chat and mail would render under the
      * new credentials on the next cold start (before any authenticated RPC).
      *
-     * Deletes by key PREFIX rather than walking the LRU index, because the payload
-     * and the LRU list are separate settings entries: a crash between
-     * putCachedTranscript and its LRU update can orphan a `tx_cache:<session>` key
-     * that the LRU never lists, and a stable session key (client:main) could then
-     * still load it after a credential switch. Prefix deletion catches those orphans.
+     * Deletes by key PREFIX rather than walking the manifest, because an interrupted
+     * pre-commit write can leave an unpublished payload blob behind. Prefix deletion
+     * catches both those blobs and legacy `tx_cache:<session>` entries.
      */
     @OptIn(ExperimentalSettingsApi::class)
-    fun clearCachedContent() {
+    fun clearCachedContent() = transcriptCacheLock.withLock {
         settings.keys
             .filter {
                 it.startsWith(KEY_TX_CACHE_PREFIX) ||
+                    it.startsWith(KEY_TX_CACHE_BLOB_PREFIX) ||
                     it.startsWith(KEY_SECTION_CACHE_PREFIX) ||
                     it == KEY_TX_CACHE_LRU ||
+                    it == KEY_TX_CACHE_MANIFEST ||
                     it == KEY_MAIL_CACHE ||
                     it == KEY_WORK_FEED_CACHE ||
                     it == KEY_CALENDAR_CACHE ||
@@ -559,6 +742,8 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_SECTION_CACHE_PREFIX = "section_cache:"
         const val KEY_TX_CACHE_PREFIX = "tx_cache:"
         const val KEY_TX_CACHE_LRU = "tx_cache_lru"
+        const val KEY_TX_CACHE_BLOB_PREFIX = "tx_cache_blob:"
+        const val KEY_TX_CACHE_MANIFEST = "tx_cache_manifest_v2"
         const val TX_CACHE_MAX_SESSIONS = 12
 
         // Basic memory guidance shared by every chat variant. The advanced `## Structured

@@ -1,18 +1,35 @@
 package ai.deneb.data
 
 import app.cash.turbine.test
+import com.russhwolf.settings.ExperimentalSettingsApi
 import com.russhwolf.settings.MapSettings
+import com.russhwolf.settings.Settings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AppSettingsStateAndCacheTest {
+
+    private class FaultSettings(
+        private val delegate: Settings = MapSettings(),
+    ) : Settings by delegate {
+        var failPutKey: String? = null
+
+        override fun putString(key: String, value: String) {
+            if (key == failPutKey) error("put failed: $key")
+            delegate.putString(key, value)
+        }
+    }
 
     private data class Fixture(val raw: MapSettings, val settings: AppSettings)
 
@@ -194,7 +211,8 @@ class AppSettingsStateAndCacheTest {
         repeat(5) { settings.putCachedTranscript("same", "value-$it") }
 
         assertEquals("value-4", settings.getCachedTranscript("same"))
-        assertEquals("same", raw.getString(AppSettings.KEY_TX_CACHE_LRU, ""))
+        assertTrue(raw.hasKey(AppSettings.KEY_TX_CACHE_MANIFEST))
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_LRU))
     }
 
     @Test
@@ -206,11 +224,12 @@ class AppSettingsStateAndCacheTest {
         settings.removeCachedTranscript("a")
 
         assertNull(settings.getCachedTranscript("a"))
-        assertEquals("b", raw.getString(AppSettings.KEY_TX_CACHE_LRU, ""))
+        assertEquals("B", settings.getCachedTranscript("b"))
 
         settings.removeCachedTranscript("b")
 
         assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_LRU))
+        assertTrue(raw.hasKey(AppSettings.KEY_TX_CACHE_MANIFEST))
     }
 
     @Test
@@ -222,8 +241,105 @@ class AppSettingsStateAndCacheTest {
 
         settings.putCachedTranscript("new", "new-body")
 
-        assertEquals("new\nold", raw.getString(AppSettings.KEY_TX_CACHE_LRU, ""))
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_LRU))
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_PREFIX + "old"))
         assertEquals("old-body", settings.getCachedTranscript("old"))
+        assertEquals("new-body", settings.getCachedTranscript("new"))
+    }
+
+    @Test
+    fun failedManifestCommitKeepsPriorTranscriptGenerationReadable() {
+        val raw = FaultSettings()
+        val settings = AppSettings(raw)
+        settings.putCachedTranscript("same", "before")
+        raw.failPutKey = AppSettings.KEY_TX_CACHE_MANIFEST
+
+        assertFailsWith<IllegalStateException> {
+            settings.putCachedTranscript("same", "after")
+        }
+
+        raw.failPutKey = null
+        assertEquals("before", settings.getCachedTranscript("same"))
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_BLOB_PREFIX + "2"))
+    }
+
+    @Test
+    fun failedLegacyMigrationLeavesTheLegacyGenerationReadable() {
+        val raw = FaultSettings().apply {
+            putString(AppSettings.KEY_TX_CACHE_LRU, "old")
+            putString(AppSettings.KEY_TX_CACHE_PREFIX + "old", "legacy")
+        }
+        val settings = AppSettings(raw)
+        raw.failPutKey = AppSettings.KEY_TX_CACHE_MANIFEST
+
+        assertFailsWith<IllegalStateException> {
+            settings.putCachedTranscript("new", "fresh")
+        }
+
+        raw.failPutKey = null
+        assertEquals("legacy", settings.getCachedTranscript("old"))
+        assertNull(settings.getCachedTranscript("new"))
+    }
+
+    @Test
+    fun malformedManifestFailsClosedAndRemovesStaleLegacyData() {
+        val (raw, settings) = fixture {
+            putString(AppSettings.KEY_TX_CACHE_MANIFEST, "not-json")
+            putString(AppSettings.KEY_TX_CACHE_LRU, "same")
+            putString(AppSettings.KEY_TX_CACHE_PREFIX + "same", "stale")
+        }
+
+        assertNull(settings.getCachedTranscript("same"))
+
+        assertTrue(raw.hasKey(AppSettings.KEY_TX_CACHE_MANIFEST))
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_LRU))
+        assertFalse(raw.hasKey(AppSettings.KEY_TX_CACHE_PREFIX + "same"))
+    }
+
+    @OptIn(ExperimentalSettingsApi::class)
+    @Test
+    fun successfulMutationCleansUnpublishedTranscriptBlobs() {
+        val (raw, settings) = fixture()
+        settings.putCachedTranscript("a", "A")
+        val orphan = AppSettings.KEY_TX_CACHE_BLOB_PREFIX + "999"
+        raw.putString(orphan, "orphan")
+
+        settings.putCachedTranscript("b", "B")
+
+        assertFalse(raw.hasKey(orphan))
+        assertEquals(2, raw.keys.count { it.startsWith(AppSettings.KEY_TX_CACHE_BLOB_PREFIX) })
+    }
+
+    @OptIn(ExperimentalSettingsApi::class)
+    @Test
+    fun missingCommittedPayloadIsRemovedFromManifestOnRead() {
+        val (raw, settings) = fixture()
+        settings.putCachedTranscript("missing", "body")
+        val payloadKey = raw.keys.single { it.startsWith(AppSettings.KEY_TX_CACHE_BLOB_PREFIX) }
+        raw.remove(payloadKey)
+
+        assertNull(settings.getCachedTranscript("missing"))
+        settings.putCachedTranscript("healthy", "value")
+
+        assertNull(settings.getCachedTranscript("missing"))
+        assertEquals("value", settings.getCachedTranscript("healthy"))
+    }
+
+    @Test
+    fun concurrentTranscriptWritesShareOneCommittedManifest() = runTest {
+        val settings = AppSettings(MapSettings())
+
+        (0 until AppSettings.TX_CACHE_MAX_SESSIONS)
+            .map { index ->
+                async(Dispatchers.Default) {
+                    settings.putCachedTranscript("s$index", "body$index")
+                }
+            }
+            .awaitAll()
+
+        for (index in 0 until AppSettings.TX_CACHE_MAX_SESSIONS) {
+            assertEquals("body$index", settings.getCachedTranscript("s$index"))
+        }
     }
 
     @Test
