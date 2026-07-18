@@ -61,6 +61,7 @@ internal suspend fun DenebGatewayClient.ensureWikiMirrorFresh() {
 @OptIn(ExperimentalTime::class)
 internal suspend fun DenebGatewayClient.refreshWikiMirrorFull(): Boolean {
     val epoch = credEpoch
+    val expectedOwner = mailCacheOwner(gatewayUrl, clientToken)
     val all = mutableListOf<WikiPage>()
     var cursor = ""
     var pulls = 0
@@ -94,7 +95,11 @@ internal suspend fun DenebGatewayClient.refreshWikiMirrorFull(): Boolean {
     // Credentials can switch after the last RPC but before the write — never stamp
     // account A's corpus with account B's owner fingerprint.
     if (epoch != credEpoch) return false
-    return wikiMirror.replaceAll(all, Clock.System.now().toEpochMilliseconds())
+    return wikiMirror.replaceAll(
+        all,
+        Clock.System.now().toEpochMilliseconds(),
+        expectedOwner = expectedOwner,
+    )
 }
 
 /**
@@ -107,15 +112,31 @@ internal suspend fun DenebGatewayClient.refreshWikiMirrorFull(): Boolean {
 internal suspend fun DenebGatewayClient.updateWikiMirrorPaths(paths: Collection<String>) {
     if (wikiMirror.syncedAtMs() == 0L) return
     val epoch = credEpoch
+    val expectedOwner = mailCacheOwner(gatewayUrl, clientToken)
     for (path in paths.filter { it.isNotBlank() }.distinct()) {
         if (epoch != credEpoch) return
         val outcome = callRpcOutcome<WikiPagePayload>(
             "miniapp.memory.get_page",
             buildJsonObject { put("path", path) },
         )
+        if (epoch != credEpoch) return
         when (outcome) {
-            is RpcOutcome.Ok -> if (!wikiMirror.upsert(outcome.payload.toWikiPage(fallbackPath = path))) return
-            is RpcOutcome.Rejected -> if (outcome.code == "NOT_FOUND" && !wikiMirror.remove(path)) return
+            is RpcOutcome.Ok -> if (!wikiMirror.upsert(
+                    outcome.payload.toWikiPage(fallbackPath = path),
+                    expectedOwner = expectedOwner,
+                )
+            ) {
+                return
+            }
+
+            is RpcOutcome.Rejected -> if (outcome.code == "NOT_FOUND" && !wikiMirror.remove(
+                    path,
+                    expectedOwner = expectedOwner,
+                )
+            ) {
+                return
+            }
+
             RpcOutcome.Unreachable -> return // offline: stop burning the batch
         }
     }
