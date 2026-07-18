@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.0.94](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.93...andromeda-v0.0.94) (2026-07-18)
+
+
+### ✨ Features
+
+* **andromeda:** undo 토스트·앱 컨펌 통일 + 폴리시 묶음 + 코드 신택스 하이라이트 ([#3913](https://github.com/choiceoh/Deneb/issues/3913)) ([1a9294f](https://github.com/choiceoh/Deneb/commit/1a9294fac2a45ec00ca755218941eb90ed71cfed))
+* **andromeda:** 줌(Ctrl+휠 영속) + 전역 오프라인 배너 ([#3910](https://github.com/choiceoh/Deneb/issues/3910)) ([5609e03](https://github.com/choiceoh/Deneb/commit/5609e03ead4572bb343088d0b70f5852309bd34e))
+* **andromeda:** 챗 파리티 — 응답 복사·빈 상태 + 편집-재전송·응답 변형 ‹n/N› ([#3906](https://github.com/choiceoh/Deneb/issues/3906)) ([368e607](https://github.com/choiceoh/Deneb/commit/368e60779a7861bdc5173409d4bd0ca841b92adc))
+* **andromeda:** 첨부 스테이징·썸네일 + 데스크톱 상주성 (트레이·OS알림·배지·창영속·단일인스턴스) ([#3908](https://github.com/choiceoh/Deneb/issues/3908)) ([b4decee](https://github.com/choiceoh/Deneb/commit/b4decee39f919f829bd78a46af164407cec99f4e))
+* **modelpicker:** per-model rolling 24h usage in the picker (runs, tokens, cache reads) ([#3894](https://github.com/choiceoh/Deneb/issues/3894)) ([fc8c9ad](https://github.com/choiceoh/Deneb/commit/fc8c9adf7a0ca7ad9a8b27bf6c5b718cedf8fa17))
+* **sessions:** 대화 이름변경 RPC + 드로어 검색·더 보기 (miniapp.sessions.rename) ([#3907](https://github.com/choiceoh/Deneb/issues/3907)) ([38762f9](https://github.com/choiceoh/Deneb/commit/38762f9dd66edad643cc06170d33a18a24b5f9de))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** Cargo.lock에 W6 플러그인 크레이트 반영 (rust --locked 레인 복구) ([#3912](https://github.com/choiceoh/Deneb/issues/3912)) ([ecb7899](https://github.com/choiceoh/Deneb/commit/ecb7899f1d955f257692795b9af51aa19139e4b3))
+* **andromeda:** 감사 결함 5종 — 죽은 토큰·이중 제출·빈 오늘 랜딩·대화 60개 잘림·업데이터 동의 UX ([#3904](https://github.com/choiceoh/Deneb/issues/3904)) ([f9a8f65](https://github.com/choiceoh/Deneb/commit/f9a8f652592d7e548fbeadf0d0a512f0e55878e7))
+
 ## [0.0.93](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.92...andromeda-v0.0.93) (2026-07-17)
 
 
