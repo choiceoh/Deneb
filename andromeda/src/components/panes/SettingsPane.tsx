@@ -4,7 +4,7 @@ import { setString } from "@/storage";
 import { moveItem } from "@/listReorder";
 import { useGatewayStatus } from "@/hooks";
 import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
-import { checkForUpdates } from "@/updater";
+import { checkForUpdates, relaunchApp } from "@/updater";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { errText, fmtDate } from "@/format";
 import { muted } from "@/theme";
@@ -46,6 +46,10 @@ export function SettingsPane() {
   const { status, check } = useGatewayStatus(cfg);
   const [level, setLevel] = useState<LogLevel>(getLogLevel());
   const [updateMsg, setUpdateMsg] = useState("");
+  // Version just installed and awaiting the relaunch decision — drives the
+  // app-styled ConfirmModal (the old window.confirm in updater.ts never showed
+  // in the Tauri WebView, so installs always silently deferred).
+  const [relaunchAsk, setRelaunchAsk] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("connection");
 
   useRegisterPane(
@@ -71,10 +75,8 @@ export function SettingsPane() {
           setUpdateMsg(`최신 버전입니다 (v${result.currentVersion}).`);
           break;
         case "installed":
-          setUpdateMsg(`v${result.version}으로 업데이트되어 재시작 중입니다.`);
-          break;
-        case "deferred":
           setUpdateMsg(`v${result.version} 설치 완료 — 다음 실행 시 적용됩니다.`);
+          setRelaunchAsk(result.version);
           break;
       }
     } catch (e) {
@@ -108,6 +110,15 @@ export function SettingsPane() {
 
   return (
     <div>
+      {relaunchAsk && (
+        <ConfirmModal
+          title="업데이트 설치 완료"
+          message={`새 버전 ${relaunchAsk} 설치 완료. 지금 재시작할까요?`}
+          action="재시작"
+          onConfirm={() => void relaunchApp()}
+          onClose={() => setRelaunchAsk(null)}
+        />
+      )}
       <h2 style={{ marginTop: 2 }}>설정</h2>
 
       <div className="settings-tabs" role="tablist" aria-label="설정 섹션">

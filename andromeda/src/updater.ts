@@ -17,14 +17,14 @@ const u = log.child("updater");
 // What checkForUpdates() did. The settings UI maps each case to a message.
 //   - "unavailable"   : off-desktop (web build) — auto-update isn't supported.
 //   - "up-to-date"    : ran the check, no newer signed build was published.
-//   - "installed"     : downloaded + installed a newer build (version set).
-//   - "deferred"      : a newer build was installed but the user declined the
-//                       relaunch prompt, so it'll apply on the next manual start.
+//   - "installed"     : downloaded + installed a newer build (version set);
+//                       relaunching into it is the caller's decision — the old
+//                       window.confirm here was a silent no-op in the Tauri
+//                       WebView, so the prompt never actually appeared.
 export type UpdateResult =
   | { status: "unavailable" }
   | { status: "up-to-date"; currentVersion: string }
-  | { status: "installed"; version: string; currentVersion: string }
-  | { status: "deferred"; version: string; currentVersion: string };
+  | { status: "installed"; version: string; currentVersion: string };
 
 // A newer signed build the user hasn't consented to yet. `install` downloads +
 // installs on demand — the startup path surfaces this as a nudge instead of
@@ -74,9 +74,10 @@ export async function relaunchApp(): Promise<void> {
   await relaunch();
 }
 
-// Check for a newer release and, if the user agrees, install + relaunch into it.
-// User-initiated path (settings 업데이트 확인 button) — clicking IS the consent,
-// so download+install proceeds directly. Startup uses checkForUpdate + the nudge.
+// Check for a newer release and install it. User-initiated path (settings
+// 업데이트 확인 button) — clicking IS the consent, so download+install proceeds
+// directly. Relaunching is the caller's UI decision (SettingsPane's app-styled
+// ConfirmModal → relaunchApp). Startup uses checkForUpdate + the nudge.
 export async function checkForUpdates(): Promise<UpdateResult> {
   if (!isTauri()) return { status: "unavailable" };
   const update = await checkForUpdate();
@@ -86,13 +87,5 @@ export async function checkForUpdates(): Promise<UpdateResult> {
     return { status: "up-to-date", currentVersion: __APP_VERSION__ };
   }
   await update.install();
-
-  // Don't yank the app out from under the user mid-task — ask first.
-  const relaunchNow =
-    typeof window === "undefined" || window.confirm(`새 버전 ${update.version} 설치 완료. 지금 재시작할까요?`);
-  if (relaunchNow) {
-    await relaunchApp();
-    return { status: "installed", version: update.version, currentVersion: update.currentVersion };
-  }
-  return { status: "deferred", version: update.version, currentVersion: update.currentVersion };
+  return { status: "installed", version: update.version, currentVersion: update.currentVersion };
 }
