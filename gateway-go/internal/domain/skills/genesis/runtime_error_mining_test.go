@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 )
@@ -50,11 +52,24 @@ func newMiningTask(t *testing.T, lines []observe.LogLine) (*RuntimeErrorMiningTa
 		ErrorLines: func(int) []observe.LogLine { return lines },
 		Tracker:    tracker,
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		// Isolated rolling state — the default resolves to the REAL
+		// ~/.deneb/data, which tests must never touch (and whose watermark
+		// would leak between tests).
+		StatePath: filepath.Join(t.TempDir(), "runtime_error_signature_state.json"),
 	}, tracker
 }
 
+// testLineBase anchors synthetic line timestamps near NOW: the rolling
+// window prunes by a 7d TTL against the wall clock, so raw epoch-1970
+// offsets would age out instantly.
+var testLineBase = time.Now().Add(-time.Hour).UnixMilli()
+
 func errLine(msg string, ts int64) observe.LogLine {
-	return observe.LogLine{Ts: ts, Level: "error", Msg: msg}
+	return observe.LogLine{Ts: testLineBase + ts, Level: "error", Msg: msg}
+}
+
+func warnLine(msg string, ts int64) observe.LogLine {
+	return observe.LogLine{Ts: testLineBase + ts, Level: "warn", Msg: msg}
 }
 
 func TestRuntimeErrorMining_RecurringCodeErrorBecomesCandidate(t *testing.T) {
@@ -114,5 +129,93 @@ func TestRuntimeErrorMining_PerRunCap(t *testing.T) {
 	got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50)
 	if len(got) != runtimeErrorMaxCandidatesPerRun {
 		t.Fatalf("per-run cap not honored: got %d, want %d", len(got), runtimeErrorMaxCandidatesPerRun)
+	}
+}
+
+// The window survives restarts: two runs each seeing only PART of the
+// recurrence (a hot-swap wiped the ring in between) still accumulate to the
+// floor. This is the exact failure mode that starved the lane all week —
+// snapshot mining over an in-memory ring on an active-deploy day.
+func TestRuntimeErrorMining_WindowSurvivesRestart(t *testing.T) {
+	var first []observe.LogLine
+	for i := 0; i < 3; i++ {
+		first = append(first, errLine("panic in feedRenderer col=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, first)
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50); len(got) != 0 {
+		t.Fatalf("3 < floor 5: no candidate expected yet, got %d", len(got))
+	}
+
+	// "Restart": fresh ring with only 2 more occurrences (new timestamps).
+	var second []observe.LogLine
+	for i := 0; i < 2; i++ {
+		second = append(second, errLine("panic in feedRenderer col=", int64(2000+i)))
+	}
+	task.ErrorLines = func(int) []observe.LogLine { return second }
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50)
+	if len(got) != 1 {
+		t.Fatalf("3+2 across restarts must reach floor 5, got %d candidates", len(got))
+	}
+}
+
+// The watermark deduplicates: re-feeding the same ring lines (same
+// timestamps) must not double-count.
+func TestRuntimeErrorMining_WatermarkDeduplicatesAcrossRuns(t *testing.T) {
+	var lines []observe.LogLine
+	for i := 0; i < 3; i++ {
+		lines = append(lines, errLine("index oob in sorter idx=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, lines)
+	for run := 0; run < 3; run++ { // same lines three times = still count 3
+		if err := task.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50); len(got) != 0 {
+		t.Fatalf("re-fed lines double-counted into a candidate: %d", len(got))
+	}
+}
+
+// Warn-only signatures use the stricter floor; crossing it promotes.
+func TestRuntimeErrorMining_WarnFloorStricterThanError(t *testing.T) {
+	var lines []observe.LogLine
+	// 11 warns: below the warn floor (12), above the error floor (5).
+	for i := 0; i < 11; i++ {
+		lines = append(lines, warnLine("model failed, trying fallback chain step=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, lines)
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50); len(got) != 0 {
+		t.Fatalf("11 warns < warn floor 12: no candidate expected, got %d", len(got))
+	}
+	// One more warn crosses the warn floor.
+	task.ErrorLines = func(int) []observe.LogLine {
+		return []observe.LogLine{warnLine("model failed, trying fallback chain step=", 5000)}
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50)
+	if len(got) != 1 {
+		t.Fatalf("12 warns must promote, got %d", len(got))
+	}
+}
+
+// Aged-out signatures fall off the rolling window.
+func TestRuntimeErrorMiningStatePrunesAgedSignatures(t *testing.T) {
+	st := &runtimeErrorState{Sigs: map[string]*runtimeErrorSigEntry{}}
+	old := time.Now().Add(-8 * 24 * time.Hour).UnixMilli()
+	st.Sigs["stale sig"] = &runtimeErrorSigEntry{Count: 20, LastAt: old}
+	st.fold(nil, time.Now())
+	if _, ok := st.Sigs["stale sig"]; ok {
+		t.Fatal("signature older than the 7d TTL not pruned")
 	}
 }
