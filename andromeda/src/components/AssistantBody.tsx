@@ -20,10 +20,12 @@ function AttachmentResult({
   part,
   onUiSubmit,
   busy,
+  interactive = true,
 }: {
   part: AttachmentPart;
   onUiSubmit: (msg: string) => void;
   busy: boolean;
+  interactive?: boolean;
 }) {
   const stateText = part.isError ? "실패" : "완료";
   return (
@@ -49,7 +51,7 @@ function AttachmentResult({
         ) : null}
       </div>
       <div className="attachment-result-content">
-        <AssistantText text={part.text} onUiSubmit={onUiSubmit} busy={busy} />
+        <AssistantText text={part.text} onUiSubmit={onUiSubmit} busy={busy} interactive={interactive} />
       </div>
     </section>
   );
@@ -63,11 +65,15 @@ export function AssistantBody({
   thinking,
   onUiSubmit,
   busy,
+  // false on non-last assistant turns: the cards stay explorable but their
+  // agent round-trip (callbacks/inputs) locks — native BotMessage parity.
+  interactive = true,
 }: {
   turn: ChatTurn;
   thinking?: string;
   onUiSubmit: (msg: string) => void;
   busy: boolean;
+  interactive?: boolean;
 }) {
   const parts = turn.parts;
   if (!parts || parts.length === 0) {
@@ -76,7 +82,7 @@ export function AssistantBody({
     if (turn.status === "streaming") return <DenebStatus summary={thinking?.trim() ? thinking : undefined} />;
     return (
       <div className="ai-turn-body">
-        <AssistantText text={turn.text || ""} onUiSubmit={onUiSubmit} busy={busy} />
+        <AssistantText text={turn.text || ""} onUiSubmit={onUiSubmit} busy={busy} interactive={interactive} />
       </div>
     );
   }
@@ -84,9 +90,9 @@ export function AssistantBody({
     <div className="ai-turn-body">
       {parts.map((p, i) =>
         p.kind === "text" ? (
-          <AssistantText key={i} text={p.text} onUiSubmit={onUiSubmit} busy={busy} />
+          <AssistantText key={i} text={p.text} onUiSubmit={onUiSubmit} busy={busy} interactive={interactive} />
         ) : p.kind === "attachment" ? (
-          <AttachmentResult key={p.id || i} part={p} onUiSubmit={onUiSubmit} busy={busy} />
+          <AttachmentResult key={p.id || i} part={p} onUiSubmit={onUiSubmit} busy={busy} interactive={interactive} />
         ) : (
           <ToolChip key={p.id || i} part={p} />
         ),

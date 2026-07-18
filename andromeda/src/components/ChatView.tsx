@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 
 import { type GatewayConfig } from "@/gateway";
 import { useChat } from "@/hooks";
+import { parseUiSubmission } from "@/markdown/denebUiParse";
 import { useAttachPipeline, useComposerBehavior, useModels } from "@/useChatSurface";
 import { useFileDrop } from "@/useFileDrop";
 import { useSessions } from "@/useSessions";
@@ -15,6 +16,7 @@ import { Icon } from "./Icon";
 import { LiveDot } from "./LiveDot";
 import { ModelPicker } from "./ModelPicker";
 import { SessionDrawer } from "./SessionDrawer";
+import { UiSubmissionBubble } from "./UiSubmission";
 
 // 채팅 탭 — 풀사이즈 업무 대화 surface. 측면 데네브 패널(활성 pane 컨텍스트를
 // 밀어넣음)과 달리 자체 useChat + client:main:* 세션을 가지며, pane 컨텍스트는 보내지
@@ -114,6 +116,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
   const { over: dropOver, dropProps } = useFileDrop(!busy && connected, (files) => void attachFiles(files));
 
   const lastId = turns.at(-1)?.id;
+  // Only the newest answer's cards may talk back to the agent (native parity);
+  // older cards stay explorable but their callbacks/inputs lock.
+  const lastAssistantId = [...turns].reverse().find((t) => t.role === "assistant")?.id;
 
   return (
     <section className="chat-view" style={{ display: hidden ? "none" : "flex" }}>
@@ -155,36 +160,46 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
                   이전 대화 {hiddenHistory.count}개 더 불러오기
                 </button>
               )}
-              {turns.map((turn) => (
-                <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
-                  <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
-                  {turn.role === "user" ? (
-                    <div className="ai-turn-body">
-                      {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}
-                      {turn.text}
-                    </div>
-                  ) : (
-                    <AssistantBody turn={turn} thinking={thinking} onUiSubmit={submit} busy={busy} />
-                  )}
-                  {turn.role === "user" && turn.id === lastUserId && !busy && (
-                    <button
-                      className="row-btn ai-edit no-print"
-                      onClick={() => setEditingMsg(turn.text)}
-                      title="이 메시지를 수정해 다시 보내기"
-                    >
-                      <Icon name="pencil" size={12} /> 수정
-                    </button>
-                  )}
-                  <AssistantTurnActions
-                    turn={turn}
-                    lastId={lastId}
-                    busy={busy}
-                    onRegenerate={regenerate}
-                    variants={variants}
-                    onVariant={selectVariant}
-                  />
-                </div>
-              ))}
+              {turns.map((turn) => {
+                // A card answer round-trips as machine text — humanize it.
+                const sub = turn.role === "user" ? parseUiSubmission(turn.text) : null;
+                return (
+                  <div key={turn.id} className={`ai-turn ${turn.role} ${turn.status}`}>
+                    <div className="ai-turn-label">{turn.role === "user" ? "나" : "Deneb"}</div>
+                    {turn.role === "user" ? (
+                      <div className="ai-turn-body">
+                        {turn.imageUrl && <img className="ai-turn-image" src={turn.imageUrl} alt="첨부 이미지" />}
+                        {sub ? <UiSubmissionBubble sub={sub} /> : turn.text}
+                      </div>
+                    ) : (
+                      <AssistantBody
+                        turn={turn}
+                        thinking={thinking}
+                        onUiSubmit={submit}
+                        busy={busy}
+                        interactive={turn.id === lastAssistantId}
+                      />
+                    )}
+                    {turn.role === "user" && turn.id === lastUserId && !busy && !sub && (
+                      <button
+                        className="row-btn ai-edit no-print"
+                        onClick={() => setEditingMsg(turn.text)}
+                        title="이 메시지를 수정해 다시 보내기"
+                      >
+                        <Icon name="pencil" size={12} /> 수정
+                      </button>
+                    )}
+                    <AssistantTurnActions
+                      turn={turn}
+                      lastId={lastId}
+                      busy={busy}
+                      onRegenerate={regenerate}
+                      variants={variants}
+                      onVariant={selectVariant}
+                    />
+                  </div>
+                );
+              })}
             </>
           )}
         </div>

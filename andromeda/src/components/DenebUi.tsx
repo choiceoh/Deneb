@@ -218,7 +218,22 @@ function Countdown({ seconds, label }: { seconds: number; label: string }) {
 
 // Render one agent-drawn UI block. Owns form + accordion-toggle state so a
 // callback's collectFrom can gather live input values.
-export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: string) => void; busy?: boolean }) {
+//
+// `interactive=false` (an older assistant turn — native BotMessage parity)
+// keeps the card explorable (accordion/tabs/copy/link/toggle stay live) but
+// locks the agent round-trip: form controls disable and callbacks won't fire,
+// so a stale card can't submit an out-of-context answer.
+export function DenebUi({
+  spec,
+  onSubmit,
+  busy,
+  interactive = true,
+}: {
+  spec: Node;
+  onSubmit: (msg: string) => void;
+  busy?: boolean;
+  interactive?: boolean;
+}) {
   const { initial, required } = useMemo(() => collectInputs(spec), [spec]);
   const [form, setForm] = useState<Record<string, unknown>>(initial);
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
@@ -253,6 +268,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
         return;
       }
       case "callback": {
+        if (!interactive) return; // stale card — the round-trip is locked
         const from: string[] = Array.isArray(action.collectFrom) ? action.collectFrom : [];
         const missing = from.filter((id) => required.has(id) && coerce(form[id]) === "");
         if (missing.length > 0) {
@@ -808,7 +824,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           <button
             key={key}
             className={"btn" + (accent ? " btn-accent" : "")}
-            disabled={busy || n.enabled === false}
+            disabled={busy || n.enabled === false || (!interactive && n.action?.type === "callback")}
             onClick={() => dispatch(n.action)}
           >
             {String(n.label || "")}
@@ -820,7 +836,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
           className: "field",
           placeholder: String(n.placeholder || ""),
           value: String(form[id] ?? ""),
-          disabled: busy,
+          disabled: busy || !interactive,
           onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setField(id, e.target.value),
         };
         return (
@@ -844,7 +860,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               className="field"
               type={n.type === "date_input" ? "date" : "time"}
               value={String(form[id] ?? "")}
-              disabled={busy}
+              disabled={busy || !interactive}
               onChange={(e) => setField(id, e.target.value)}
             />
             {reqHint(id)}
@@ -857,7 +873,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
             <input
               type="checkbox"
               checked={form[id] === true}
-              disabled={busy}
+              disabled={busy || !interactive}
               onChange={(e) => setField(id, e.target.checked)}
             />
             <span>{String(n.label || "")}</span>
@@ -870,7 +886,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
             <select
               className="field"
               value={String(form[id] ?? "")}
-              disabled={busy}
+              disabled={busy || !interactive}
               onChange={(e) => setField(id, e.target.value)}
             >
               <option value="">{String(n.placeholder || "선택…")}</option>
@@ -893,7 +909,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                   type="radio"
                   name={id || key}
                   checked={String(form[id] ?? "") === String(o)}
-                  disabled={busy}
+                  disabled={busy || !interactive}
                   onChange={() => setField(id, String(o))}
                 />
                 <span>{String(o)}</span>
@@ -922,7 +938,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
               max={max}
               step={Number(n.step ?? 1)}
               value={Number(form[id] ?? min)}
-              disabled={busy}
+              disabled={busy || !interactive}
               onChange={(e) => setField(id, Number(e.target.value))}
             />
           </label>
@@ -953,7 +969,7 @@ export function DenebUi({ spec, onSubmit, busy }: { spec: Node; onSubmit: (msg: 
                 <button
                   key={i}
                   className={"chip" + (isOn(val) ? " on" : "")}
-                  disabled={busy || n.selection === "none"}
+                  disabled={busy || !interactive || n.selection === "none"}
                   onClick={() => toggle(val)}
                 >
                   {String(c?.label ?? val)}
@@ -978,10 +994,12 @@ export function AssistantText({
   text,
   onUiSubmit,
   busy,
+  interactive = true,
 }: {
   text: string;
   onUiSubmit: (msg: string) => void;
   busy?: boolean;
+  interactive?: boolean;
 }) {
   const segments = splitDenebUi(text);
   const cls = "assistant-text" + (segments.length > 1 ? " mixed" : "");
@@ -991,7 +1009,7 @@ export function AssistantText({
         if (seg.kind === "md")
           return (
             <div key={i} className="assistant-segment assistant-segment-md">
-              <Markdown text={seg.text} onChoice={busy ? undefined : onUiSubmit} />
+              <Markdown text={seg.text} onChoice={busy || !interactive ? undefined : onUiSubmit} />
             </div>
           );
         if (seg.kind === "ui-pending") {
@@ -1014,7 +1032,7 @@ export function AssistantText({
         const spec = parseDenebUi(seg.body);
         return spec ? (
           <div key={i} className="assistant-segment assistant-segment-ui">
-            <DenebUi spec={spec} onSubmit={onUiSubmit} busy={busy} />
+            <DenebUi spec={spec} onSubmit={onUiSubmit} busy={busy} interactive={interactive} />
           </div>
         ) : (
           <div key={i} className="assistant-segment assistant-segment-code">

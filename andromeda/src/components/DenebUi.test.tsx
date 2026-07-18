@@ -463,3 +463,55 @@ describe("DenebUi node rendering polish", () => {
     expect(container.querySelector(".dui-bar-rect")?.getAttribute("fill")).toBe(`url(#${grad!.id})`);
   });
 });
+
+describe("stale-card gating (interactive=false)", () => {
+  const formSpec = {
+    type: "column",
+    children: [
+      { type: "chip_group", id: "slot", chips: [{ value: "10:00", label: "오전" }] },
+      { type: "text_input", id: "name", label: "이름" },
+      { type: "button", label: "잡기", action: { type: "callback", event: "confirm", collectFrom: ["slot"] } },
+      { type: "button", label: "복사", action: { type: "copy_to_clipboard", text: "npm run dev" } },
+    ],
+  };
+
+  it("locks callbacks and form controls on a stale card, but keeps local actions live", async () => {
+    const onSubmit = vi.fn();
+    render(<DenebUi spec={formSpec} onSubmit={onSubmit} interactive={false} />);
+
+    // callback button + form controls are disabled…
+    expect(screen.getByRole("button", { name: "잡기" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "오전" })).toBeDisabled();
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    // …but a local action (copy) stays usable.
+    expect(screen.getByRole("button", { name: "복사" })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "잡기" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps a stale accordion explorable", async () => {
+    render(
+      <DenebUi
+        spec={{ type: "accordion", title: "상세", children: [{ type: "text", value: "본문" }] }}
+        onSubmit={() => {}}
+        interactive={false}
+      />,
+    );
+    expect(screen.queryByText("본문")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /상세/ }));
+    expect(screen.getByText("본문")).toBeInTheDocument();
+  });
+
+  it("stays fully interactive by default", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <DenebUi
+        spec={{ type: "button", label: "확인", action: { type: "callback", event: "ok" } }}
+        onSubmit={onSubmit}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "확인" }));
+    expect(onSubmit).toHaveBeenCalledWith("Pressed: ok");
+  });
+});
