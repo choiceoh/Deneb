@@ -20,7 +20,7 @@ Health Bench 3.0 점수와 비교하거나 산술 변환하지 않는다.
 - `--check`는 confidence < `MIN_CHECK_CONFIDENCE`(60)이면 실패 (증거 얇은 상태의 Utility 래칫 신뢰 금지).
 - Health Fitness의 finding-land / feed-card는 RSI Utility를 **thin re-export**.
 - `swap-consistency` / `ability-transfer`는 전용 코퍼스 전까지 **proxy ceiling** (각각 ≤58, 포화 시 swap ≤52).
-- L4 `dispatch-land`는 마커 **`outcome`**(landed/…)을 착지로 센다 — review `status`는 accepted로 남을 수 있음.
+- L4 `dispatch-land`는 마커 **`outcome`**(landed/…)을 착지로 센다 — review `status`는 accepted로 남을 수 있음. 착지는 **RHAE식 효율 가중**(`ledgers.land_efficiency`): 1차 시도 착지=1.0, 재시도는 `(1/attempts)²`로 감쇠, 상한 `LAND_EFFICIENCY_CAP`(1.15). attempts는 attemptId 말미 서수, 파싱 불가=1(무벌점).
 - Snapshot 케이던스: `make bench-refresh` / `scripts/systemd/setup-bench-refresh.sh` (일 04:30).
 
 ## Rubric 1.2.0

@@ -46,7 +46,7 @@ this bench.
 | operator-verdict | 20 | ANCHOR | feed-card / meta adopt |
 | codebase-delta | 20 | P5-5 | health-v3 live−baseline |
 | retention-proxy | 15 | CPE | confirm / soft watch keep |
-| dispatch-land | 20 | SkillSmith L4 | coding_dispatch **outcome** land fidelity |
+| dispatch-land | 20 | SkillSmith L4 | coding_dispatch **outcome** land fidelity, RHAE-weighted (`min(1.15, (1/attempts)²)` per land; attemptId ordinal) |
 
 **Expect-band: 25–50.** Soft watch requires `soft_confirmed ≥ 3`
 (open watches ∪ evolved-in-28d skills with ≥3 real post-evolve uses).
