@@ -37,6 +37,23 @@ describe("deneb-html sandbox document", () => {
     expect(doc.indexOf("Noto Sans KR")).toBeLessThan(doc.indexOf("body{margin:0}"));
   });
 
+  it("ships the theme variants and design-system utilities the contract teaches", () => {
+    const doc = buildSrcdoc("<div/>");
+    for (const marker of [
+      "body.theme-dark",
+      "body.theme-warm",
+      "body.theme-mono",
+      ".card{",
+      ".grid{",
+      ".stat-value{",
+      ".badge.warn{",
+      ".bar>i{",
+      "button.primary{",
+    ]) {
+      expect(doc).toContain(marker);
+    }
+  });
+
   it("classifies bridge messages and rejects foreign data", () => {
     expect(parseDenebHtmlMessage({ __deneb: "prompt", text: " 확인 " })).toEqual({ type: "prompt", text: "확인" });
     expect(parseDenebHtmlMessage({ __deneb: "height", h: 320 })).toEqual({ type: "height", h: 320 });

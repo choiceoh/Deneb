@@ -36,12 +36,15 @@
 
 공통 규칙:
 
-- **베이스 스타일시트**: 두 클라 모두 문서 앞에 동일한 최소 베이스 CSS를 주입한다
-  (한국어 시스템 폰트 스택·14px/1.6 리듬·경계선 표·`body` 여백·라이트 표면·
-  `color-scheme: light`). 페이지 자체 스타일이 뒤에 와서 자연히 이긴다. 정의는
-  `DenebHtml.tsx` `BASE_CSS` ↔ `DenebHtmlView.android.kt` `BASE_CSS` — **둘을
-  항상 동일하게 유지**. 프롬프트 계약은 "베이스가 있으니 재지정하지 말 것"을
-  고지해 문서를 짧게(=생성을 빠르게) 유도한다.
+- **베이스 스타일시트 + 마이크로 디자인 시스템**: 두 클라 모두 문서 앞에 동일한
+  CSS를 주입한다 — 변수 기반 베이스(한국어 시스템 폰트·14px/1.6 리듬·경계선 표·
+  여백) + **테마 3종**(`<body class="theme-dark|theme-warm|theme-mono">`, 생략 =
+  클린 라이트 — 응답마다 무드 다양화) + **유틸리티 클래스**(`card`·`grid`·
+  `stat-value/stat-label`·`badge(+ok|warn|bad)`·`bar>i`(게이지, width:%)·`muted`·
+  `accent`·`button.primary`). 페이지 자체 스타일이 뒤에 와서 자연히 이긴다.
+  정의는 `DenebHtml.tsx` `BASE_CSS` ↔ `DenebHtmlView.android.kt` `BASE_CSS` —
+  **둘을 항상 동일하게 유지**. 프롬프트 계약은 "베이스가 있으니 재지정하지 말
+  것"을 고지해 문서를 짧게(=생성을 빠르게) 유도한다.
 
 - **스트리밍 중(펜스 미닫힘)엔 절대 부분 렌더하지 않는다** — 반쯤 로드된 문서의
   스크립트가 실행되면 안 된다. placeholder("웹 응답 생성/구성 중…") 유지.
