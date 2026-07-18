@@ -169,7 +169,13 @@ fun DenebBrowserScreen(
     ) {
         DenebWebView(
             state = state,
-            translate = { segments, lang -> client.translateSegments(segments, lang) },
+            // Recently seen segments (back-nav, reload, shared site chrome) apply
+            // instantly from the LRU cache; only misses round-trip to DeepL.
+            translate = { segments, lang ->
+                browserTranslateCache.translate(segments, lang) { miss, missLang ->
+                    client.translateSegments(miss, missLang)
+                }
+            },
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
