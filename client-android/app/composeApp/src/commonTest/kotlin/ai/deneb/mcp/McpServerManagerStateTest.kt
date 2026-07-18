@@ -85,7 +85,7 @@ class McpServerManagerStateTest {
     @Test
     fun generatedBaseIdIsCappedAtThirtyCharacters() {
         val f = fixture()
-        val name = "abcdefghijklmnopqrstuvwxyz0123456789-extra"
+        val name = "abcdefghij".repeat(4) + "-extra"
 
         val added = f.manager.addServer(name, "url", emptyMap())
 
@@ -193,6 +193,18 @@ class McpServerManagerStateTest {
         f.settings.setMcpServersJson("broken")
 
         assertEquals(emptyList(), f.manager.getServers())
+    }
+
+    @Test
+    fun cachedMalformedReadDoesNotHideLaterExternalRecovery() {
+        val f = fixture()
+        f.settings.setMcpServersJson("broken")
+        assertEquals(emptyList(), f.manager.getServers())
+        val recovered = McpServerConfig("recovered", "Recovered", "url")
+
+        f.settings.setMcpServersJson(Json.encodeToString(listOf(recovered)))
+
+        assertEquals(listOf(recovered), f.manager.getServers())
     }
 
     @Test

@@ -1,8 +1,6 @@
 package ai.deneb.data
 
 import ai.deneb.DenebLog
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.uuid.ExperimentalUuidApi
@@ -18,14 +16,25 @@ data class PendingTaskPartition(
 class TaskStore(private val appSettings: AppSettings) {
 
     private val json = SharedJson
-    private val mutex = Mutex()
+    private val tasks = StoredJsonDocument(
+        readJson = appSettings::getScheduledTasksJson,
+        writeJson = appSettings::setScheduledTasksJson,
+        defaultValue = { emptyList() },
+        decode = { json.decodeFromString<List<ScheduledTask>>(it) },
+        encode = { json.encodeToString(it) },
+        malformedPolicy = MalformedStoredJsonPolicy.PRESERVE,
+        migrate = ::migrateLegacyCronTasks,
+        onMalformed = { DenebLog.error("TaskStore", "failed to load tasks: ${it.message}") },
+        onRepairFailure = { DenebLog.error("TaskStore", "failed to persist task migration: ${it.message}") },
+    )
 
-    private fun loadTasks(): MutableList<ScheduledTask> = try {
-        val decoded = json.decodeFromString<List<ScheduledTask>>(appSettings.getScheduledTasksJson())
-        // Migration: tasks persisted before the `trigger` field existed decode with
-        // the default (TIME). Upgrade rows that carry a cron expression to CRON so the
-        // scheduler can distinguish time/cron from heartbeat additions. Persist the
-        // upgrade the first time we see it so every subsequent load is a no-op map.
+    /**
+     * Tasks persisted before `trigger` existed decode as TIME. A row carrying a
+     * cron expression is actually CRON and is normalized on the first uncontended
+     * read. [StoredJsonDocument] owns that rewrite, so it cannot overwrite a
+     * concurrent mutation from this store instance.
+     */
+    private fun migrateLegacyCronTasks(decoded: List<ScheduledTask>): StoredJsonMigration<List<ScheduledTask>> {
         var migrated = false
         val upgraded = decoded.map { task ->
             if (task.trigger == TaskTrigger.TIME && task.cron != null) {
@@ -34,19 +43,8 @@ class TaskStore(private val appSettings: AppSettings) {
             } else {
                 task
             }
-        }.toMutableList()
-        if (migrated) {
-            runCatching { saveTasks(upgraded) }
-                .onFailure { DenebLog.error("TaskStore", "failed to persist task migration: ${it.message}") }
         }
-        upgraded
-    } catch (e: Exception) {
-        DenebLog.error("TaskStore", "failed to load tasks: ${e.message}")
-        mutableListOf()
-    }
-
-    private fun saveTasks(tasks: List<ScheduledTask>) {
-        appSettings.setScheduledTasksJson(json.encodeToString(tasks))
+        return if (migrated) rewrittenStoredJson(upgraded) else unchangedStoredJson(decoded)
     }
 
     suspend fun addTask(
@@ -55,8 +53,7 @@ class TaskStore(private val appSettings: AppSettings) {
         scheduledAtEpochMs: Long,
         cron: String? = null,
         trigger: TaskTrigger = if (cron != null) TaskTrigger.CRON else TaskTrigger.TIME,
-    ): ScheduledTask = mutex.withLock {
-        val tasks = loadTasks()
+    ): ScheduledTask = tasks.mutate { current ->
         val now = Clock.System.now()
         val effectiveScheduledAt = when (trigger) {
             TaskTrigger.HEARTBEAT -> 0L
@@ -83,21 +80,19 @@ class TaskStore(private val appSettings: AppSettings) {
             cron = cron,
             trigger = trigger,
         )
-        tasks.add(task)
-        saveTasks(tasks)
-        task
+        persistStoredJson(current + task, task)
     }
 
-    fun getAllTasks(): List<ScheduledTask> = loadTasks()
+    fun getAllTasks(): List<ScheduledTask> = tasks.read()
 
     /**
      * All PENDING non-heartbeat tasks — what the user thinks of as "scheduled". Heartbeat-
      * triggered tasks are surfaced separately via [getPendingHeartbeatAdditions].
      */
-    fun getPendingTasks(): List<ScheduledTask> = loadTasks().filter { it.status == TaskStatus.PENDING && it.trigger != TaskTrigger.HEARTBEAT }
+    fun getPendingTasks(): List<ScheduledTask> = tasks.read().filter { it.status == TaskStatus.PENDING && it.trigger != TaskTrigger.HEARTBEAT }
 
     /** Standing additions to every heartbeat self-check. */
-    fun getPendingHeartbeatAdditions(): List<ScheduledTask> = loadTasks().filter { it.status == TaskStatus.PENDING && it.trigger == TaskTrigger.HEARTBEAT }
+    fun getPendingHeartbeatAdditions(): List<ScheduledTask> = tasks.read().filter { it.status == TaskStatus.PENDING && it.trigger == TaskTrigger.HEARTBEAT }
 
     /**
      * Both pending scheduled tasks and heartbeat additions from a single load. Hot-path
@@ -105,32 +100,28 @@ class TaskStore(private val appSettings: AppSettings) {
      * combining avoids re-parsing the tasks JSON twice.
      */
     fun getPendingTasksPartitioned(): PendingTaskPartition {
-        val (additions, scheduled) = loadTasks()
+        val (additions, scheduled) = tasks.read()
             .filter { it.status == TaskStatus.PENDING }
             .partition { it.trigger == TaskTrigger.HEARTBEAT }
         return PendingTaskPartition(scheduled = scheduled, heartbeatAdditions = additions)
     }
 
-    suspend fun updateTask(task: ScheduledTask): ScheduledTask = mutex.withLock {
-        val tasks = loadTasks()
-        val index = tasks.indexOfFirst { it.id == task.id }
-        if (index >= 0) {
-            tasks[index] = task
-            saveTasks(tasks)
-        }
-        task
+    suspend fun updateTask(task: ScheduledTask): ScheduledTask = tasks.mutate { current ->
+        val index = current.indexOfFirst { it.id == task.id }
+        if (index < 0) return@mutate keepStoredJson(task)
+        val updated = current.toMutableList()
+        updated[index] = task
+        persistStoredJson(updated, task)
     }
 
-    suspend fun removeTask(id: String): Boolean = mutex.withLock {
-        val tasks = loadTasks()
-        val removed = tasks.removeAll { it.id == id }
-        if (removed) saveTasks(tasks)
-        removed
+    suspend fun removeTask(id: String): Boolean = tasks.mutate { current ->
+        val updated = current.filterNot { it.id == id }
+        if (updated.size == current.size) keepStoredJson(false) else persistStoredJson(updated, true)
     }
 
     fun getDueTasks(): List<ScheduledTask> {
         val now = Clock.System.now().toEpochMilliseconds()
-        return loadTasks().filter {
+        return tasks.read().filter {
             it.trigger != TaskTrigger.HEARTBEAT &&
                 it.scheduledAtEpochMs <= now &&
                 it.status == TaskStatus.PENDING

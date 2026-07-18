@@ -2,8 +2,6 @@ package ai.deneb.data
 
 import ai.deneb.DenebLog
 import androidx.compose.runtime.Immutable
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -32,72 +30,68 @@ data class MemoryEntry(
 class MemoryStore(private val appSettings: AppSettings) {
 
     private val json = SharedJson
-    private val mutex = Mutex()
-
-    private fun loadMemories(): MutableList<MemoryEntry> = mutex.loadStoredJsonOrDefault(
+    private val memories = StoredJsonDocument<List<MemoryEntry>>(
         readJson = appSettings::getMemoriesJson,
-        clearMalformed = { appSettings.setMemoriesJson("") },
-        defaultValue = { mutableListOf() },
+        writeJson = appSettings::setMemoriesJson,
+        defaultValue = { emptyList() },
         onMalformed = { DenebLog.error("MemoryStore", "failed to load memories: ${it.message}") },
-        decode = { json.decodeFromString<List<MemoryEntry>>(it).toMutableList() },
+        decode = { json.decodeFromString<List<MemoryEntry>>(it) },
+        encode = json::encodeToString,
     )
-
-    private fun saveMemories(memories: List<MemoryEntry>) {
-        appSettings.setMemoriesJson(json.encodeToString(memories))
-    }
 
     suspend fun store(
         key: String,
         content: String,
         category: MemoryCategory = MemoryCategory.GENERAL,
         source: String? = null,
-    ): MemoryEntry = mutex.withLock {
-        val memories = loadMemories()
+    ): MemoryEntry = memories.mutate { current ->
+        val updatedMemories = current.toMutableList()
         val now = Clock.System.now().toEpochMilliseconds()
-        val existing = memories.indexOfFirst { it.key == key }
+        val existing = updatedMemories.indexOfFirst { it.key == key }
         val entry = if (existing >= 0) {
-            val updated = memories[existing].copy(content = content, updatedAt = now, category = category, source = source ?: memories[existing].source)
-            memories[existing] = updated
+            val updated = updatedMemories[existing].copy(
+                content = content,
+                updatedAt = now,
+                category = category,
+                source = source ?: updatedMemories[existing].source,
+            )
+            updatedMemories[existing] = updated
             updated
         } else {
             val newEntry = MemoryEntry(key = key, content = content, createdAt = now, updatedAt = now, category = category, source = source)
-            memories.add(newEntry)
+            updatedMemories.add(newEntry)
             newEntry
         }
-        saveMemories(memories)
-        entry
+        persistStoredJson(updatedMemories, entry)
     }
 
-    suspend fun updateContent(key: String, content: String): MemoryEntry? = mutex.withLock {
-        val memories = loadMemories()
-        val index = memories.indexOfFirst { it.key == key }
-        if (index < 0) return@withLock null
+    suspend fun updateContent(key: String, content: String): MemoryEntry? = memories.mutate { current ->
+        val index = current.indexOfFirst { it.key == key }
+        if (index < 0) return@mutate keepStoredJson(null)
+        val updatedMemories = current.toMutableList()
         val now = Clock.System.now().toEpochMilliseconds()
-        val updated = memories[index].copy(content = content, updatedAt = now)
-        memories[index] = updated
-        saveMemories(memories)
-        updated
+        val updated = updatedMemories[index].copy(content = content, updatedAt = now)
+        updatedMemories[index] = updated
+        persistStoredJson(updatedMemories, updated)
     }
 
-    suspend fun reinforceMemory(key: String): MemoryEntry? = mutex.withLock {
-        val memories = loadMemories()
-        val index = memories.indexOfFirst { it.key == key }
-        if (index < 0) return@withLock null
+    suspend fun reinforceMemory(key: String): MemoryEntry? = memories.mutate { current ->
+        val index = current.indexOfFirst { it.key == key }
+        if (index < 0) return@mutate keepStoredJson(null)
+        val updatedMemories = current.toMutableList()
         val now = Clock.System.now().toEpochMilliseconds()
-        val updated = memories[index].copy(hitCount = memories[index].hitCount + 1, updatedAt = now)
-        memories[index] = updated
-        saveMemories(memories)
-        updated
+        val nextHitCount = if (updatedMemories[index].hitCount == Int.MAX_VALUE) Int.MAX_VALUE else updatedMemories[index].hitCount + 1
+        val updated = updatedMemories[index].copy(hitCount = nextHitCount, updatedAt = now)
+        updatedMemories[index] = updated
+        persistStoredJson(updatedMemories, updated)
     }
 
-    fun getPromotionCandidates(minHits: Int = 5): List<MemoryEntry> = loadMemories().filter { it.hitCount >= minHits }
+    fun getPromotionCandidates(minHits: Int = 5): List<MemoryEntry> = memories.read().filter { it.hitCount >= minHits }
 
-    suspend fun forget(key: String): Boolean = mutex.withLock {
-        val memories = loadMemories()
-        val removed = memories.removeAll { it.key == key }
-        if (removed) saveMemories(memories)
-        removed
+    suspend fun forget(key: String): Boolean = memories.mutate { current ->
+        val updated = current.filterNot { it.key == key }
+        if (updated.size == current.size) keepStoredJson(false) else persistStoredJson(updated, true)
     }
 
-    fun getAllMemories(): List<MemoryEntry> = loadMemories()
+    fun getAllMemories(): List<MemoryEntry> = memories.read()
 }

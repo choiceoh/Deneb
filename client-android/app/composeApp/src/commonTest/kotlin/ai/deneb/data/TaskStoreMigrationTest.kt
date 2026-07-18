@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Locks in the legacy → `TaskTrigger` migration path in [TaskStore.loadTasks]. Users on
+ * Locks in the legacy → `TaskTrigger` migration path in [TaskStore]. Users on
  * older versions of the app have `ScheduledTask` JSON in settings without a `trigger`
  * field; decoding lands them on the default (`TIME`). Rows that carry a `cron` need to
  * be upgraded to `CRON` on first load so the scheduler routes them correctly.

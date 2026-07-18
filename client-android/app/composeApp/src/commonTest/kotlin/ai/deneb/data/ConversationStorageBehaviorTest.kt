@@ -59,6 +59,7 @@ class ConversationStorageBehaviorTest {
         storage.loadConversations()
 
         assertEquals(emptyList(), storage.conversations.value)
+        assertEquals("not-json", settings.getConversationsJson())
     }
 
     @Test

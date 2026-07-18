@@ -1,14 +1,18 @@
 package ai.deneb.data
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.serializer
 
 class SmsStore(private val appSettings: AppSettings) {
 
     private val json = SharedJson
-    private val mutex = Mutex()
+    private val syncState = StoredJsonDocument(
+        readJson = appSettings::getSmsSyncStateJson,
+        writeJson = appSettings::setSmsSyncStateJson,
+        defaultValue = ::SmsSyncState,
+        decode = { json.decodeFromString<SmsSyncState>(it) },
+        encode = { json.encodeToString(it) },
+    )
     private val pendingQueue = PendingQueue<SmsMessage, Long>(
         readJson = appSettings::getSmsPendingJson,
         writeJson = appSettings::setSmsPendingJson,
@@ -16,16 +20,9 @@ class SmsStore(private val appSettings: AppSettings) {
         keyOf = { it.id },
     )
 
-    fun getSyncState(): SmsSyncState = mutex.loadStoredJsonOrDefault(
-        readJson = appSettings::getSmsSyncStateJson,
-        clearMalformed = { appSettings.setSmsSyncStateJson("") },
-        defaultValue = ::SmsSyncState,
-        decode = json::decodeFromString,
-    )
+    fun getSyncState(): SmsSyncState = syncState.read()
 
-    suspend fun updateSyncState(state: SmsSyncState) = mutex.withLock {
-        appSettings.setSmsSyncStateJson(json.encodeToString(state))
-    }
+    suspend fun updateSyncState(state: SmsSyncState) = syncState.write(state)
 
     fun getPending(): List<SmsMessage> = pendingQueue.get()
 

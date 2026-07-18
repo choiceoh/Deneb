@@ -13,15 +13,12 @@ class SmsDraftStore(private val appSettings: AppSettings) {
     private val _drafts = MutableStateFlow(loadPersisted())
     val drafts: StateFlow<List<SmsDraft>> = _drafts.asStateFlow()
 
-    private fun loadPersisted(): List<SmsDraft> {
-        val raw = appSettings.getSmsDraftsJson()
-        if (raw.isEmpty()) return emptyList()
-        return try {
-            json.decodeFromString<List<SmsDraft>>(raw)
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
+    private fun loadPersisted(): List<SmsDraft> = decodeStoredJsonOrDefault(
+        raw = appSettings.getSmsDraftsJson(),
+        defaultValue = { emptyList() },
+        onMalformed = { appSettings.setSmsDraftsJson("") },
+        decode = { json.decodeFromString<List<SmsDraft>>(it) },
+    )
 
     private fun persist(list: List<SmsDraft>) {
         _drafts.value = list

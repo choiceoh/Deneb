@@ -1,7 +1,5 @@
 package ai.deneb.data
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 
 /**
@@ -16,34 +14,37 @@ class PendingQueue<T, K>(
     private val keyOf: (T) -> K,
     private val maxSize: Int = 100,
 ) {
-    private val mutex = Mutex()
     private val json = SharedJson
-
-    fun get(): List<T> = mutex.loadStoredJsonOrDefault(
+    private val document = StoredJsonDocument(
         readJson = readJson,
-        clearMalformed = { writeJson("") },
+        writeJson = writeJson,
         defaultValue = { emptyList() },
         decode = { json.decodeFromString(serializer, it) },
+        encode = { json.encodeToString(serializer, it) },
     )
 
-    private fun readStored(): List<T> = decodeStoredJsonOrDefault(
-        raw = readJson(),
-        defaultValue = { emptyList() },
-        decode = { json.decodeFromString(serializer, it) },
-    )
-
-    suspend fun add(items: List<T>) = mutex.withLock {
-        if (items.isEmpty()) return@withLock
-        writeJson(json.encodeToString(serializer, (readStored() + items).takeLast(maxSize)))
+    init {
+        require(maxSize >= 0) { "maxSize must not be negative" }
     }
 
-    suspend fun remove(items: List<T>) = mutex.withLock {
-        if (items.isEmpty()) return@withLock
+    fun get(): List<T> = document.read()
+
+    suspend fun add(items: List<T>) {
+        if (items.isEmpty()) return
+        document.mutate { current ->
+            val updated = (current + items).takeLast(maxSize)
+            if (updated == current) keepStoredJson(Unit) else persistStoredJson(updated, Unit)
+        }
+    }
+
+    suspend fun remove(items: List<T>) {
+        if (items.isEmpty()) return
         val keys = items.map(keyOf).toSet()
-        writeJson(json.encodeToString(serializer, readStored().filterNot { keyOf(it) in keys }))
+        document.mutate { current ->
+            val updated = current.filterNot { keyOf(it) in keys }
+            if (updated == current) keepStoredJson(Unit) else persistStoredJson(updated, Unit)
+        }
     }
 
-    suspend fun clear() = mutex.withLock {
-        writeJson("")
-    }
+    suspend fun clear() = document.clear()
 }

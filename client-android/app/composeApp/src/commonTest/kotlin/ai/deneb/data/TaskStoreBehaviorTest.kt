@@ -21,6 +21,8 @@ class TaskStoreBehaviorTest {
     ) : Settings by delegate {
         var failWrites = false
         var scheduledReads = 0
+        var scheduledWrites = 0
+        var beforeScheduledWrite: (() -> Unit)? = null
 
         override fun getString(key: String, defaultValue: String): String {
             if (key == AppSettings.KEY_SCHEDULED_TASKS) scheduledReads++
@@ -28,8 +30,10 @@ class TaskStoreBehaviorTest {
         }
 
         override fun putString(key: String, value: String) {
-            if (failWrites && key == AppSettings.KEY_SCHEDULED_TASKS) {
-                error("scheduled task persistence unavailable")
+            if (key == AppSettings.KEY_SCHEDULED_TASKS) {
+                beforeScheduledWrite?.invoke()
+                if (failWrites) error("scheduled task persistence unavailable")
+                scheduledWrites++
             }
             delegate.putString(key, value)
         }
@@ -327,6 +331,37 @@ class TaskStoreBehaviorTest {
     }
 
     @Test
+    fun noOpMutationPreservesMalformedTaskPayload() = runTest {
+        val raw = ScheduledWriteFailingSettings()
+        val settings = AppSettings(raw)
+        settings.setScheduledTasksJson("not-json")
+        raw.scheduledWrites = 0
+        val store = TaskStore(settings)
+
+        assertFalse(store.removeTask("missing"))
+
+        assertEquals("not-json", settings.getScheduledTasksJson())
+        assertEquals(0, raw.scheduledWrites)
+    }
+
+    @Test
+    fun readerDuringMalformedRecoveryWriteCannotClearIncomingTask() = runTest {
+        val raw = ScheduledWriteFailingSettings()
+        val settings = AppSettings(raw)
+        settings.setScheduledTasksJson("not-json")
+        raw.scheduledWrites = 0
+        val store = TaskStore(settings)
+        var readDuringWrite: List<ScheduledTask>? = null
+        raw.beforeScheduledWrite = { readDuringWrite = store.getAllTasks() }
+
+        val added = store.addTask("recovered", "prompt", 1L)
+
+        assertEquals(emptyList(), readDuringWrite)
+        assertEquals(listOf(added), store.getAllTasks())
+        assertEquals(1, raw.scheduledWrites)
+    }
+
+    @Test
     fun concurrentAddsAreSerializedWithoutLostUpdates() = runTest {
         val (_, store) = fixture()
 
@@ -383,5 +418,81 @@ class TaskStoreBehaviorTest {
         assertEquals(1, loaded.size)
         assertEquals(TaskTrigger.CRON, loaded.single().trigger)
         assertEquals("legacy", loaded.single().id)
+    }
+
+    @Test
+    fun failedMigrationRewriteRetriesOnTheNextUncontendedRead() {
+        val raw = ScheduledWriteFailingSettings()
+        val settings = AppSettings(raw)
+        settings.setScheduledTasksJson(
+            """[{"id":"legacy","description":"d","prompt":"p","scheduledAtEpochMs":0,"createdAtEpochMs":0,"cron":"0 9 * * *"}]""",
+        )
+        raw.scheduledWrites = 0
+        raw.failWrites = true
+        val store = TaskStore(settings)
+
+        assertEquals(TaskTrigger.CRON, store.getAllTasks().single().trigger)
+        assertFalse(settings.getScheduledTasksJson().contains("\"trigger\":\"CRON\""))
+
+        raw.failWrites = false
+        assertEquals(TaskTrigger.CRON, store.getAllTasks().single().trigger)
+        assertTrue(settings.getScheduledTasksJson().contains("\"trigger\":\"CRON\""))
+        assertEquals(1, raw.scheduledWrites)
+    }
+
+    @Test
+    fun noOpUpdatePersistsPendingMigrationExactlyOnce() = runTest {
+        val raw = ScheduledWriteFailingSettings()
+        val settings = AppSettings(raw)
+        settings.setScheduledTasksJson(
+            """[{"id":"legacy","description":"d","prompt":"p","scheduledAtEpochMs":0,"createdAtEpochMs":0,"cron":"0 9 * * *"}]""",
+        )
+        raw.scheduledWrites = 0
+        val store = TaskStore(settings)
+
+        val missing = task("missing")
+        assertEquals(missing, store.updateTask(missing))
+
+        assertTrue(settings.getScheduledTasksJson().contains("\"trigger\":\"CRON\""))
+        assertEquals(1, raw.scheduledWrites)
+        assertEquals(TaskTrigger.CRON, store.getAllTasks().single().trigger)
+        assertEquals(1, raw.scheduledWrites)
+    }
+
+    @Test
+    fun addSupersedesPendingMigrationWithOneCombinedWrite() = runTest {
+        val raw = ScheduledWriteFailingSettings()
+        val settings = AppSettings(raw)
+        settings.setScheduledTasksJson(
+            """[{"id":"legacy","description":"d","prompt":"p","scheduledAtEpochMs":0,"createdAtEpochMs":0,"cron":"0 9 * * *"}]""",
+        )
+        raw.scheduledWrites = 0
+        val store = TaskStore(settings)
+
+        val added = store.addTask("new", "prompt", 1L)
+
+        val persisted = store.getAllTasks()
+        assertEquals(listOf("legacy", added.id), persisted.map { it.id })
+        assertEquals(TaskTrigger.CRON, persisted.first().trigger)
+        assertEquals(1, raw.scheduledWrites)
+    }
+
+    @Test
+    fun nestedReadDuringMigrationRewriteCannotCauseADuplicateWrite() {
+        val raw = ScheduledWriteFailingSettings()
+        val settings = AppSettings(raw)
+        settings.setScheduledTasksJson(
+            """[{"id":"legacy","description":"d","prompt":"p","scheduledAtEpochMs":0,"createdAtEpochMs":0,"cron":"0 9 * * *"}]""",
+        )
+        raw.scheduledWrites = 0
+        val store = TaskStore(settings)
+        var nestedRead: List<ScheduledTask>? = null
+        raw.beforeScheduledWrite = { nestedRead = store.getAllTasks() }
+
+        val loaded = store.getAllTasks()
+
+        assertEquals(TaskTrigger.CRON, loaded.single().trigger)
+        assertEquals(TaskTrigger.CRON, nestedRead?.single()?.trigger)
+        assertEquals(1, raw.scheduledWrites)
     }
 }

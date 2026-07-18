@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.data.decodeStoredJsonOrDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
@@ -17,9 +18,11 @@ internal data class BrowserVisit(
     val visitedAtMs: Long = 0,
 )
 
-internal fun decodeBrowserHistory(raw: String): List<BrowserVisit> = runCatching {
-    browserHistoryJson.decodeFromString<List<BrowserVisit>>(raw)
-}.getOrDefault(emptyList()).sanitizedBrowserHistory()
+internal fun decodeBrowserHistory(raw: String): List<BrowserVisit> = decodeStoredJsonOrDefault(
+    raw = raw,
+    defaultValue = { emptyList() },
+    decode = { browserHistoryJson.decodeFromString<List<BrowserVisit>>(it) },
+).sanitizedBrowserHistory()
 
 internal fun encodeBrowserHistory(visits: List<BrowserVisit>): String = browserHistoryJson.encodeToString(visits.sanitizedBrowserHistory())
 

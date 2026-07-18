@@ -1,17 +1,35 @@
 package ai.deneb.data
 
 import com.russhwolf.settings.MapSettings
+import com.russhwolf.settings.Settings
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.encodeToString
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MemoryStoreTest {
+
+    private class MemoryWriteFailingSettings(
+        private val delegate: Settings = MapSettings(),
+    ) : Settings by delegate {
+        var failWrites = false
+        var memoryWrites = 0
+
+        override fun putString(key: String, value: String) {
+            if (key == AppSettings.KEY_AGENT_MEMORIES) {
+                if (failWrites) error("memory persistence unavailable")
+                memoryWrites++
+            }
+            delegate.putString(key, value)
+        }
+    }
 
     private fun fixture(initialJson: String = "[]"): Pair<AppSettings, MemoryStore> {
         val settings = AppSettings(MapSettings())
@@ -105,6 +123,16 @@ class MemoryStoreTest {
     }
 
     @Test
+    fun missingUpdateRepairsMalformedStorageWithoutInventingAnEntry() = runTest {
+        val (settings, store) = fixture("broken")
+
+        assertNull(store.updateContent("missing", "value"))
+
+        assertEquals("", settings.getMemoriesJson())
+        assertEquals(emptyList(), store.getAllMemories())
+    }
+
+    @Test
     fun reinforceIncrementsHitsAndKeepsOtherFields() = runTest {
         val (_, store) = fixture()
         val original = store.store("k", "value", MemoryCategory.PREFERENCE, "user")
@@ -118,6 +146,37 @@ class MemoryStoreTest {
         assertEquals(original.category, second.category)
         assertEquals(original.source, second.source)
         assertNull(store.reinforceMemory("missing"))
+    }
+
+    @Test
+    fun reinforceSaturatesAtMaximumHitCount() = runTest {
+        val saturated = MemoryEntry(
+            key = "popular",
+            content = "value",
+            createdAt = 1,
+            updatedAt = 1,
+            hitCount = Int.MAX_VALUE,
+        )
+        val (settings, store) = fixture(SharedJson.encodeToString(listOf(saturated)))
+
+        val reinforced = assertNotNull(store.reinforceMemory("popular"))
+
+        assertEquals(Int.MAX_VALUE, reinforced.hitCount)
+        assertEquals(Int.MAX_VALUE, MemoryStore(settings).getAllMemories().single().hitCount)
+    }
+
+    @Test
+    fun concurrentReinforcementDoesNotLoseHits() = runTest {
+        val (_, store) = fixture()
+        store.store("popular", "value")
+
+        coroutineScope {
+            repeat(50) {
+                launch { store.reinforceMemory("popular") }
+            }
+        }
+
+        assertEquals(51, store.getAllMemories().single().hitCount)
     }
 
     @Test
@@ -148,6 +207,18 @@ class MemoryStoreTest {
     }
 
     @Test
+    fun forgetRemovesEveryPersistedDuplicateOfAKey() = runTest {
+        val first = MemoryEntry("dup", "first", 1, 1)
+        val keep = MemoryEntry("keep", "value", 2, 2)
+        val second = MemoryEntry("dup", "second", 3, 3)
+        val (_, store) = fixture(SharedJson.encodeToString(listOf(first, keep, second)))
+
+        assertTrue(store.forget("dup"))
+
+        assertEquals(listOf(keep), store.getAllMemories())
+    }
+
+    @Test
     fun storeHealsMalformedPersistence() = runTest {
         val (settings, store) = fixture("not-json")
 
@@ -155,6 +226,41 @@ class MemoryStoreTest {
 
         assertEquals(listOf(entry), store.getAllMemories())
         assertTrue(settings.getMemoriesJson().startsWith("["))
+    }
+
+    @Test
+    fun failedStoreDoesNotExposeAnUncommittedMemory() = runTest {
+        val raw = MemoryWriteFailingSettings()
+        val settings = AppSettings(raw)
+        val existing = MemoryEntry("stable", "value", 1, 1)
+        settings.setMemoriesJson(SharedJson.encodeToString(listOf(existing)))
+        raw.memoryWrites = 0
+        raw.failWrites = true
+        val store = MemoryStore(settings)
+
+        assertFailsWith<IllegalStateException> {
+            store.store("lost", "value")
+        }
+
+        raw.failWrites = false
+        assertEquals(listOf(existing), store.getAllMemories())
+        assertEquals(0, raw.memoryWrites)
+    }
+
+    @Test
+    fun failedUpdateAndForgetKeepTheCommittedSnapshot() = runTest {
+        val raw = MemoryWriteFailingSettings()
+        val settings = AppSettings(raw)
+        val existing = MemoryEntry("stable", "value", 1, 1)
+        settings.setMemoriesJson(SharedJson.encodeToString(listOf(existing)))
+        raw.failWrites = true
+        val store = MemoryStore(settings)
+
+        assertFailsWith<IllegalStateException> { store.updateContent("stable", "lost") }
+        assertFailsWith<IllegalStateException> { store.forget("stable") }
+
+        raw.failWrites = false
+        assertEquals(listOf(existing), store.getAllMemories())
     }
 
     @Test
