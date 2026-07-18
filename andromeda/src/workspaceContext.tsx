@@ -22,6 +22,11 @@ export interface PaneTarget {
   dayKey?: string;
   path?: string;
   query?: string; // query-driven panes (search): run this query on open
+  // 데네브 조종 확장: date = day-pager 점프(YYYY-MM-DD, mail/approvals),
+  // prefill = 할일 폼 초안(저장은 사용자), spotlight = 타일 플래시 동반.
+  date?: string;
+  prefill?: { title: string; due?: string; note?: string };
+  spotlight?: boolean;
 }
 
 // 노트북 상단(자료) 영역의 3단계 높이 — 접힘(바)·기본(30%)·확대(70%). 바 버튼이
@@ -57,6 +62,8 @@ interface WorkspaceCtx {
   // The command bus: palette / shortcuts / gateway pushes all execute through
   // this single entry point.
   runCommand: (cmd: WorkspaceCommand) => void;
+  // 데네브의 "여기 보세요" — 마지막 spotlight 커맨드 (Workstation이 타일 플래시로 소비).
+  spotlight: { view: View; seq: number } | null;
   // ⌘K command palette visibility (rendered by Workstation).
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;

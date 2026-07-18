@@ -57,6 +57,8 @@ export function ApprovalsPane() {
   const rows = (result?.data ?? []).map((a) => ({ ...a, id: a.docId ?? a.id }));
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const { run, error, busy } = useAction(() => void query.refetch());
+  // 자동 랜딩 원샷 플래그 — 아래 렌더 조정 블록과 date 점프 타깃이 공유한다.
+  const [landed, setLanded] = useState(false);
 
   // Deep link (오늘 KPI/섹션 · workspace 커맨드): query="pending" opens the 미결
   // inbox; an id selects that document (waits for rows to load — return false
@@ -66,6 +68,13 @@ export function ApprovalsPane() {
     useCallback(
       (target) => {
         if (target.query === "pending") setPendingOnly(true);
+        if (target.date) {
+          const ms = new Date(`${target.date}T00:00:00`).getTime();
+          if (Number.isFinite(ms)) {
+            setLanded(true); // 날짜 점프는 자동 랜딩보다 우선
+            setDayMs(startOfDay(ms));
+          }
+        }
         if (target.id != null) {
           if (!rows.some((a) => String(a.id) === String(target.id))) return rows.length === 0 ? false : undefined;
           setSelectedId(String(target.id));
@@ -86,7 +95,6 @@ export function ApprovalsPane() {
   // "오늘 0건" while the cockpit shows a full approval list reads broken. One
   // shot on first data, render-phase adjustment (same pattern as useSessions
   // prevConnected); only while still parked on today — manual paging wins.
-  const [landed, setLanded] = useState(false);
   if (!landed && rows.length > 0) {
     setLanded(true);
     if (dayMs === todayMs) {

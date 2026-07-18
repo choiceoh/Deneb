@@ -93,7 +93,21 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
     setPaletteOpen,
     aiCollapsed,
     setAiCollapsed,
+    spotlight,
   } = useWorkspace();
+
+  // 데네브 spotlight — 대상 타일을 1.6초 플래시. 점화는 렌더 조정(adjust-state)으로,
+  // 이펙트는 타이머 해제만 소유한다 (setState-in-effect 캐스케이드 회피).
+  const [flashSeq, setFlashSeq] = useState<number | null>(null);
+  if (spotlight && flashSeq !== spotlight.seq && flashSeq !== -spotlight.seq) {
+    setFlashSeq(spotlight.seq);
+  }
+  useEffect(() => {
+    if (flashSeq === null || flashSeq < 0) return;
+    // 만료 표식은 -seq — 같은 seq로 렌더 조정이 재점화하지 않게 한다.
+    const timer = window.setTimeout(() => setFlashSeq((s) => (s === null ? null : -s)), 1600);
+    return () => window.clearTimeout(timer);
+  }, [flashSeq]);
 
   // 우측 데네브 패널을 중앙 작업 영역까지 넓히는 토글(maximize). 활성화되면 작업 pane을
   // 숨기고 AIPanel이 사이드바를 제외한 전 폭을 차지한다. 채팅 탭에선 ChatView가
@@ -194,10 +208,11 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
             const P = PANES.find((p) => p.key === t)?.Component;
             if (!P) return null;
             const focused = t === view;
+            const spot = flashSeq !== null && flashSeq > 0 && spotlight?.view === t;
             return (
               <main
                 key={t}
-                className={"panel tile" + (focused ? " tile-focused" : "")}
+                className={"panel tile" + (focused ? " tile-focused" : "") + (spot ? " tile-spotlight" : "")}
                 style={{ ...paneStyle, position: "relative" }}
                 onMouseDownCapture={focused ? undefined : () => setView(t)}
                 aria-label={paneLabel(t)}

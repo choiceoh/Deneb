@@ -20,6 +20,11 @@ func TestBuildWorkstationCommand_Validation(t *testing.T) {
 		{"focus without view", workstationParams{Action: "focus"}, "needs view"},
 		{"layout without views", workstationParams{Action: "layout"}, "needs views"},
 		{"wiki without path", workstationParams{Action: "wiki"}, "needs path"},
+		{"spotlight without ref", workstationParams{Action: "spotlight", View: "mail"}, "needs view + ref"},
+		{"prefill on non-todo", workstationParams{Action: "prefill", View: "mail", Title: "x"}, "view=todo only"},
+		{"prefill without title", workstationParams{Action: "prefill", View: "todo"}, "needs title"},
+		{"bad date shape", workstationParams{Action: "open", View: "mail", Date: "7월 15일"}, "date must be YYYY-MM-DD"},
+		{"bad due shape", workstationParams{Action: "prefill", View: "todo", Title: "x", Due: "내일"}, "due must be YYYY-MM-DD"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,6 +61,23 @@ func TestBuildWorkstationCommand_Frames(t *testing.T) {
 	action, args, err = buildWorkstationCommand(workstationParams{Action: "open", View: "search", Query: "면허 대여"})
 	if err != nil || args["query"] != "면허 대여" || args["view"] != "search" {
 		t.Fatalf("search frame = %q %v (%v)", action, args, err)
+	}
+
+	action, args, err = buildWorkstationCommand(workstationParams{Action: "spotlight", View: "approvals", Ref: "99391"})
+	if err != nil || action != "spotlight" || args["view"] != "approvals" || args["ref"] != "99391" {
+		t.Fatalf("spotlight frame = %q %v (%v)", action, args, err)
+	}
+
+	action, args, err = buildWorkstationCommand(workstationParams{Action: "open", View: "mail", Date: "2026-07-15"})
+	if err != nil || args["date"] != "2026-07-15" {
+		t.Fatalf("date frame = %q %v (%v)", action, args, err)
+	}
+
+	action, args, err = buildWorkstationCommand(workstationParams{
+		Action: "prefill", View: "todo", Title: "견적 회신", Due: "2026-07-21", Note: "부산항터미널",
+	})
+	if err != nil || action != "prefill" || args["title"] != "견적 회신" || args["due"] != "2026-07-21" || args["note"] != "부산항터미널" {
+		t.Fatalf("prefill frame = %q %v (%v)", action, args, err)
 	}
 }
 

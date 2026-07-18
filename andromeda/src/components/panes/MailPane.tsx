@@ -152,7 +152,15 @@ export function MailPane() {
   // An id-less mail target is meaningless — keep it pending instead of clearing the
   // current selection. (The detail fetches by id, so no need to wait for the list.)
   const openTargetedMail = useCallback((t: PaneTarget) => {
-    if (t.id === undefined) return false;
+    // 날짜 점프(데네브 "지난 화요일 메일 보여줘") — 자동 랜딩보다 우선.
+    if (t.date) {
+      const ms = new Date(`${t.date}T00:00:00`).getTime();
+      if (Number.isFinite(ms)) {
+        landedRef.current = true;
+        setDayMs(startOfDay(ms));
+      }
+    }
+    if (t.id === undefined) return t.date ? undefined : false;
     setSelectedId(t.id);
   }, []);
   usePaneTarget("mail", openTargetedMail);

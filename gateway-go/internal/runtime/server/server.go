@@ -250,6 +250,10 @@ type Server struct {
 	// re-resolving — single source of truth.
 	denebDir string
 
+	// workstationUsageMu guards the workstation-usage tally file (utility
+	// grounding counter — server_workstation.go).
+	workstationUsageMu sync.Mutex
+
 	// groupwareRadar is set when registerGroupwareRadarTask successfully
 	// registers the Amaranth poll task. Phone electronic-approval notifications
 	// then trigger an on-demand radar scan (analyze→wiki→feed with 승인/반려

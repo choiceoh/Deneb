@@ -81,6 +81,45 @@ describe("parseWorkspaceCommand", () => {
     expect(parseWorkspaceCommand({ action: "open", view: "nonsense" })).toBeNull();
     expect(parseWorkspaceCommand({})).toBeNull();
   });
+
+  it("parses spotlight only with view + ref", () => {
+    expect(parseWorkspaceCommand({ action: "spotlight", view: "approvals", ref: "99391" })).toEqual({
+      kind: "spotlight",
+      view: "approvals",
+      ref: "99391",
+    });
+    expect(parseWorkspaceCommand({ action: "spotlight", view: "approvals" })).toBeNull();
+    expect(parseWorkspaceCommand({ action: "spotlight", ref: "1" })).toBeNull();
+  });
+
+  it("parses prefill narrowly (todo + title only)", () => {
+    expect(
+      parseWorkspaceCommand({ action: "prefill", view: "todo", title: "견적 회신", due: "2026-07-21", note: "메모" }),
+    ).toEqual({ kind: "prefill", view: "todo", title: "견적 회신", due: "2026-07-21", note: "메모" });
+    // due가 형식 밖이면 조용히 떨어뜨리되 커맨드는 산다.
+    expect(parseWorkspaceCommand({ action: "prefill", view: "todo", title: "x", due: "내일" })).toEqual({
+      kind: "prefill",
+      view: "todo",
+      title: "x",
+      due: undefined,
+      note: undefined,
+    });
+    expect(parseWorkspaceCommand({ action: "prefill", view: "mail", title: "x" })).toBeNull();
+    expect(parseWorkspaceCommand({ action: "prefill", view: "todo" })).toBeNull();
+  });
+
+  it("parses the date jump on open and drops malformed dates", () => {
+    expect(parseWorkspaceCommand({ action: "open", view: "mail", date: "2026-07-15" })).toMatchObject({
+      kind: "open",
+      view: "mail",
+      date: "2026-07-15",
+    });
+    expect(parseWorkspaceCommand({ action: "open", view: "mail", date: "7월 15일" })).toMatchObject({
+      kind: "open",
+      view: "mail",
+      date: undefined,
+    });
+  });
 });
 
 describe("describeCommand", () => {
@@ -89,5 +128,8 @@ describe("describeCommand", () => {
     expect(describeCommand({ kind: "split", view: "calendar" })).toContain("일정");
     expect(describeCommand({ kind: "layout", views: ["mail", "wiki"] })).toContain("메일 · 위키");
     expect(describeCommand({ kind: "wiki", path: "a/b.md" })).toContain("a/b.md");
+    expect(describeCommand({ kind: "spotlight", view: "approvals", ref: "1" })).toContain("강조");
+    expect(describeCommand({ kind: "prefill", view: "todo", title: "견적 회신" })).toContain("견적 회신");
+    expect(describeCommand({ kind: "open", view: "mail", date: "2026-07-15" })).toContain("2026-07-15");
   });
 });
