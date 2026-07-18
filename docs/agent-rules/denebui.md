@@ -30,9 +30,16 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 
 ## 저작 계약 위치 (바꾸면 함께 갱신)
 
-- 일반 응답 라우터: `prompt/system_prompt.go` 소통 섹션의 짧은 JIT 지시.
-- 일반 응답 상세 저작 계약: `skills/productivity/deneb-ui-authoring/SKILL.md`
-  (카드가 필요한 턴에만 읽고, static 블록에는 문법·예시를 중복하지 않는다).
+- 일반 응답 라우터: `prompt/system_prompt.go` 소통 섹션의 **인라인 컴팩트 계약**
+  (태그 인벤토리+결정 예시+deneb-html 계약, 2026-07-18). 구 "스킬을 먼저 읽어라"
+  라우팅은 실측(7일 저널: 스킬 read 0회·미스 3:1·발명 태그 리젝트)으로 은퇴 —
+  static 블록이 최소 인벤토리를 직접 들고, 스킬은 복잡 조합용 상세 계약으로 잔존.
+- 일반 응답 상세 저작 계약: `skills/productivity/deneb-ui-authoring/SKILL.md`.
+- **웹페이지형 HTML 응답**(```deneb-html — 자유 HTML 문서, 샌드박스 인라인 렌더)은
+  별도 wire: 정본 [docs/research/deneb-html.md](../research/deneb-html.md),
+  서버 정규화 `denebui/htmlanswer.go`, 렌더러는 `DenebHtml.tsx`(iframe) /
+  `DenebHtmlView.android.kt`(WebView). deneb-ui 3구현 토크나이저 동기 대상 아님
+  (파서가 아니라 샌드박스 컨테이너).
 - 이브닝레터: `toolwire/chrono/register.go` evening_letter 도구 설명.
 - 모닝레터: `tools/routine/morning_card.go`의 서버 조립이 정본이고
   `morning_card_test.go`가 실제 validator로 게이트한다. 스킬은 완성된
@@ -52,8 +59,10 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
 ## 관찰/검증 사슬
 
 - 런타임: 최종 전달 전 `denebui.NormalizeFinalReply`가 모든 펜스를 `Validate`
-  하고, invalid/추가 펜스를 평문으로 내린다. 그 뒤 카드 health 로그가 채택률과
-  남은 드리프트를 관찰한다.
+  하고, invalid/추가 펜스를 평문으로 내린다. 단 **내용 보존형 이슈(unknown tag
+  unwrap — `Issue.Recoverable`)만 있는 카드는 카드로 배달**된다(2026-07-18) —
+  3구현 파서가 동일하게 unwrap 하므로 안전하며, Issue 는 드리프트 텔레메트리로
+  계속 로그된다. 그 뒤 카드 health 로그가 채택률과 남은 드리프트를 관찰한다.
 - 품질 스위트: `checks.py check_deneb_ui_valid`(denebui-check 위임) +
   `quality-tests.yaml` `fmt-deneb-ui-card` 행동 게이트.
 - 시각: `RenderPreview.kt`의 레터 프리뷰가 **정본 HTML 스켈레톤을 실제 파서로**

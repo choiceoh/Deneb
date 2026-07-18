@@ -1,0 +1,113 @@
+package denebui
+
+import (
+	"log/slog"
+	"strings"
+	"testing"
+)
+
+func TestNormalizeFinalReplyHTMLAnswers(t *testing.T) {
+	t.Parallel()
+
+	doc := "<!doctype html>\n<html><body><h1>보고</h1><button onclick=\"deneb.send('확인')\">확인</button></body></html>"
+	valid := "요약입니다.\n```deneb-html\n" + doc + "\n```\n끝."
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "one valid html answer is kept verbatim",
+			in:   valid,
+			want: valid,
+		},
+		{
+			name: "unclosed fence at EOF is closed",
+			in:   "```deneb-html\n<div>진행 요약</div>",
+			want: "```deneb-html\n<div>진행 요약</div>\n```",
+		},
+		{
+			name: "second html fence degrades to a code block",
+			in:   "```deneb-html\n<div>하나</div>\n```\n```deneb-html\n<div>둘</div>\n```",
+			want: "```deneb-html\n<div>하나</div>\n```\n```html\n<div>둘</div>\n```",
+		},
+		{
+			name: "non-markup body degrades to a code block",
+			in:   "```deneb-html\n그냥 텍스트\n```",
+			want: "```html\n그냥 텍스트\n```",
+		},
+		{
+			name: "prose mention of the fence stays prose",
+			in:   "```deneb-html 펜스는 이렇게 씁니다 — 라고 설명만 하는 문장.",
+			want: "```deneb-html 펜스는 이렇게 씁니다 — 라고 설명만 하는 문장.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeFinalReply(tt.in, "client:main", slog.New(slog.DiscardHandler))
+			if got != tt.want {
+				t.Fatalf("NormalizeFinalReply() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeFinalReplyHTMLAnswerOversize(t *testing.T) {
+	t.Parallel()
+	doc := "<div>" + strings.Repeat("가", MaxHTMLAnswerBytes) + "</div>"
+	got := NormalizeFinalReply("```deneb-html\n"+doc+"\n```", "client:main", slog.New(slog.DiscardHandler))
+	if !strings.HasPrefix(got, "```html\n") {
+		t.Fatalf("oversized document must degrade to a ```html code block, got prefix %q", got[:20])
+	}
+}
+
+func TestNormalizeFinalReplyHTMLAnswerIsIdempotent(t *testing.T) {
+	t.Parallel()
+	in := "설명\n```deneb-html\n<div id=\"x\"><script>var a='1';deneb.send(a);</script></div>\n```"
+	once := NormalizeFinalReply(in, "client:main", slog.New(slog.DiscardHandler))
+	twice := NormalizeFinalReply(once, "client:main", slog.New(slog.DiscardHandler))
+	if twice != once {
+		t.Fatalf("second normalization changed output:\nonce: %q\ntwice: %q", once, twice)
+	}
+}
+
+func TestNormalizeFinalReplyRecoverableCardIssues(t *testing.T) {
+	t.Parallel()
+
+	// Invented-but-unwrapped tags (<title>, <label>, <spacer/>) are content-
+	// preserving: the card must deliver as a card, not degrade to plain text.
+	in := "```deneb-ui\n<column><card><title>대한전선 실사</title><label>발신</label><spacer/><text>본문</text></card></column>\n```"
+	got := NormalizeFinalReply(in, "client:main", slog.New(slog.DiscardHandler))
+	if len(ExtractFences(got)) != 1 {
+		t.Fatalf("card with only unknown-tag issues must stay a card, got %q", got)
+	}
+
+	// A structural violation (interactive input without id) must still degrade.
+	bad := "```deneb-ui\n<column><input/></column>\n```"
+	if got := NormalizeFinalReply(bad, "client:main", slog.New(slog.DiscardHandler)); len(ExtractFences(got)) != 0 {
+		t.Fatalf("id-missing interactive card must degrade, got %q", got)
+	}
+}
+
+func TestIssueRecoverable(t *testing.T) {
+	t.Parallel()
+	issues, err := Validate("<column><whatever>내용</whatever></column>")
+	if err != nil || len(issues) == 0 {
+		t.Fatalf("expected unknown-tag issues, got issues=%v err=%v", issues, err)
+	}
+	for _, is := range issues {
+		if !is.Recoverable() {
+			t.Fatalf("unknown-tag issue must be recoverable: %v", is)
+		}
+	}
+	issues, err = Validate("<column><input/></column>")
+	if err != nil || len(issues) == 0 {
+		t.Fatalf("expected id-missing issue, got issues=%v err=%v", issues, err)
+	}
+	for _, is := range issues {
+		if is.Recoverable() {
+			t.Fatalf("id-missing issue must NOT be recoverable: %v", is)
+		}
+	}
+}

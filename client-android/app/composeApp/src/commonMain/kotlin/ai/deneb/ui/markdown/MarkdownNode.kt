@@ -83,6 +83,20 @@ data class DenebUiError(val rawJson: String) : BlockNode
 @Immutable
 data class DenebUiPending(val rawBody: String) : BlockNode
 
+// A webpage-style HTML answer (```deneb-html): a complete self-contained
+// document rendered sandboxed INLINE in the transcript (Android WebView with
+// network blocked; other targets show a quiet placeholder). Page → chat
+// replies ride window.deneb.send(text), bridged to the "choice" callback.
+@Immutable
+data class DenebHtmlBlock(val html: String) : BlockNode
+
+// A deneb-html fence still streaming (no closing ``` yet). Scripts must never
+// run in a half-built document, so the renderer holds a placeholder until the
+// fence closes; a final-but-unclosed body (truncated reply) renders if it is
+// markup, else degrades to a code fence.
+@Immutable
+data class DenebHtmlPending(val rawBody: String) : BlockNode
+
 @Immutable
 sealed interface InlineNode
 

@@ -10,6 +10,10 @@ import subprocess
 from pathlib import Path
 
 _DENEB_UI_FENCE = re.compile(r"```\s*deneb-ui\s*\n.*?(?:\n```|\Z)", re.DOTALL | re.IGNORECASE)
+# deneb-html documents are size-governed server-side (96KB cap in
+# denebui/htmlanswer.go) and rendered sandboxed, so prose-level length/tag
+# checks must not see their bodies.
+_DENEB_HTML_FENCE = re.compile(r"```\s*deneb-html\s*\n.*?(?:\n```|\Z)", re.DOTALL | re.IGNORECASE)
 
 
 def strip_deneb_ui_fences(text: str) -> str:
@@ -58,12 +62,16 @@ def check_no_leaked_markup(text: str) -> tuple[bool, str]:
 def check_telegram_safe(text: str) -> tuple[bool, str]:
     """Check response is safe for output delivery (legacy check name)."""
     issues = []
-    if len(text) > 4096:
-        issues.append(f"exceeds 4096 char limit ({len(text)} chars)")
+    # Length is a prose limit: a deneb-html document legitimately runs long
+    # (server caps it at 96KB separately), so measure without its body.
+    measured = _DENEB_HTML_FENCE.sub("", text)
+    if len(measured) > 4096:
+        issues.append(f"exceeds 4096 char limit ({len(measured)} chars)")
     # Tag balance applies to prose only: deneb-ui cards are labeled HTML with
     # deliberately lenient closing rules (<code> nodes, sibling auto-close),
-    # validated separately by check_deneb_ui_valid.
-    prose = strip_deneb_ui_fences(text)
+    # validated separately by check_deneb_ui_valid; deneb-html is a full
+    # sandboxed document and equally exempt.
+    prose = _DENEB_HTML_FENCE.sub("", strip_deneb_ui_fences(text))
     open_tags = re.findall(r"<(b|i|code|pre|s|u|a|blockquote|tg-spoiler)[\s>]", prose)
     close_tags = re.findall(r"</(b|i|code|pre|s|u|a|blockquote|tg-spoiler)>", prose)
     if len(open_tags) != len(close_tags):

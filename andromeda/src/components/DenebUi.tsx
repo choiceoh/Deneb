@@ -17,6 +17,7 @@ import {
   splitDenebUi,
   TEXT_STYLE,
 } from "@/markdown/denebUiParse";
+import { DenebHtmlAnswer } from "./DenebHtml";
 import { Icon, type IconName } from "./Icon";
 import { CodeBlock, Markdown } from "./Markdown";
 import { renderInline } from "./renderInline";
@@ -1010,6 +1011,20 @@ export function AssistantText({
           return (
             <div key={i} className="assistant-segment assistant-segment-md">
               <Markdown text={seg.text} onChoice={busy || !interactive ? undefined : onUiSubmit} />
+            </div>
+          );
+        if (seg.kind === "html")
+          return (
+            <div key={i} className="assistant-segment assistant-segment-html">
+              <DenebHtmlAnswer body={seg.body} onSubmit={onUiSubmit} busy={busy} interactive={interactive} />
+            </div>
+          );
+        if (seg.kind === "html-pending")
+          // Never render a half-streamed document — its scripts must not run
+          // until the fence closes.
+          return (
+            <div key={i} className="assistant-segment assistant-segment-pending">
+              <div className="dui-pending">웹 응답 생성 중…</div>
             </div>
           );
         if (seg.kind === "ui-pending") {

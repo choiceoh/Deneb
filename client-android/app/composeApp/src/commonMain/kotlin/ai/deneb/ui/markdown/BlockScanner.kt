@@ -388,6 +388,13 @@ internal object BlockScanner {
             return decodeDenebUi(body) to next
         }
 
+        if (info.equals("deneb-html", ignoreCase = true)) {
+            // Webpage-style HTML answer. Unclosed = still streaming (or truncated);
+            // the renderer decides — scripts must not run in a half-built document.
+            if (!closed) return DenebHtmlPending(body) to next
+            return DenebHtmlBlock(body.trim()) to next
+        }
+
         if (info.equals("latex", ignoreCase = true) ||
             info.equals("tex", ignoreCase = true) ||
             info.equals("math", ignoreCase = true)
