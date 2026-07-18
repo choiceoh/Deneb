@@ -19,7 +19,19 @@ class CacheError(RuntimeError):
 
 
 def default_cache_path(root: Path) -> Path:
-    return root / "scripts" / "audit" / "rsi-bench-cache.json"
+    """Runtime cache lives in the state dir, NOT the repo tree.
+
+    It used to sit at scripts/audit/rsi-bench-cache.json — a tracked file the
+    bench rewrote in place, which kept the production checkout permanently
+    dirty and forced the auto-deploy timer through a git stash/pop on every
+    tick (2,671 of 2,683 auto-stashes over three days were this one file).
+    Runtime state must never dirty the deployable tree. The `root` parameter
+    is kept for signature stability (and future per-tree isolation if a dev
+    instance ever needs it).
+    """
+    del root
+    state = Path(os.environ.get("DENEB_STATE_DIR", "") or (Path.home() / ".deneb"))
+    return state / "data" / "rsi-bench-cache.json"
 
 
 def _parse_generated_at(raw: object) -> datetime | None:

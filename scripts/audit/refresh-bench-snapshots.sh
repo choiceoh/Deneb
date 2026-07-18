@@ -27,7 +27,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git checkout -- scripts/audit/health-v3-runtime-cache.json 2>/dev/null || true
 fi
 
-# 2) RSI deep refresh embeds the fresh health snapshot into rsi-bench-cache.json
+# 2) RSI deep refresh embeds the fresh health snapshot into the state-dir cache (~/.deneb/data/rsi-bench-cache.json)
 #    and writes rsi-bench-snapshot.json for meta RSI evidence.
 python3 scripts/audit/rsi-bench.py --deep --refresh-cache \
   --write-snapshot --append-history
