@@ -58,6 +58,8 @@ export function CommandPalette() {
     askDeneb,
     hiddenViews,
     viewOrder,
+    followMode,
+    setFollowMode,
   } = useWorkspace();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -181,6 +183,15 @@ export function CommandPalette() {
       );
     }
 
+    // 컨텍스트 팔로우 모드 토글 — 답변이 언급한 프로젝트/인물 위키를 옆 타일로.
+    out.push({
+      key: "follow-mode",
+      icon: "wiki",
+      label: followMode ? "컨텍스트 팔로우 모드 끄기" : "컨텍스트 팔로우 모드 켜기",
+      run: () => setFollowMode(!followMode),
+      score: q === "" ? 640 : matchScore(q, "컨텍스트 팔로우 모드"),
+    });
+
     // 모닝 브리핑 투어 — 데네브가 화면을 몰며 브리핑 (마우스-퍼스트 진입점).
     push(
       {
@@ -248,6 +259,8 @@ export function CommandPalette() {
     openWiki,
     setAiCollapsed,
     askDeneb,
+    followMode,
+    setFollowMode,
   ]);
 
   // Clamp the highlighted row while the list reshapes under the query.

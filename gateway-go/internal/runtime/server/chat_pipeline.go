@@ -253,6 +253,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		// Desktop workstation control (the workstation tool): screen commands ride
 		// the same events push channel, gated on a connected desktop subscriber.
 		WorkstationCommandSender: s.dispatchWorkstationCommand,
+		WorkstationUsageHint:     s.workstationUsageHint,
 		// Fleet management: the agent's twin of the /api/v1/fleet passthrough —
 		// reaches the same SparkFleet control plane via s.fleet's accessors, so
 		// "is the fleet ok / restart qwen36" works from chat. "" base = off.

@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useRef } from "react";
-import { describeCommand, isWorkspaceCommandKind, parseWorkspaceCommand } from "@/commands";
+import { type WorkspaceCommand, describeCommand, isWorkspaceCommandKind, parseWorkspaceCommand } from "@/commands";
 import type { ProactiveEvent } from "@/events";
 import { fmtMailDate } from "@/format";
-import type { GatewayConfig } from "@/gateway";
+import { type GatewayConfig, callRpc } from "@/gateway";
 import { useEvents } from "@/hooks";
 import { log } from "@/log";
 import { notifyDesktop } from "@/notify";
+import { OBSERVE_RPC } from "@/resources";
 import { setBadgeCount } from "@/tauri";
+import type { View } from "@/types";
 import { useWorkspace } from "@/workspaceContext";
 import { Icon } from "./Icon";
 import { type ProactiveNav, proactiveNav } from "./proactiveNav";
 
 const nudgeLog = log.child("proactive");
+// 조종 채택 판정 유예 — 이 시간 안에 화면이 닫히면 dropped 로 본다.
+const ADOPTION_VERDICT_MS = 120_000;
 
 // Proactive nudges pushed by Deneb (events SSE). Sits atop the AI panel; renders
 // nothing until something arrives, so it stays out of the way when quiet. A pile
@@ -24,7 +28,33 @@ const nudgeLog = log.child("proactive");
 // through the command bus, and is replaced by a visible "화면 조정" nudge so a
 // machine-driven rearrangement is never silent.
 export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
-  const { connected, openPane, openWiki, runCommand } = useWorkspace();
+  const { connected, openPane, openWiki, runCommand, tiles } = useWorkspace();
+  // 효용 원장 채택 판정: 게이트웨이 조종이 실행되고 2분 뒤, 그 화면(타일)이
+  // 아직 살아 있으면 kept, 이미 닫혔거나 교체됐으면 dropped 로 보고한다 —
+  // 발송 tally만으로는 알 수 없는 "무시됐는가" 신호. fire-and-forget.
+  const tilesRef = useRef(tiles);
+  useEffect(() => {
+    tilesRef.current = tiles;
+  }, [tiles]);
+  const scheduleAdoptionVerdict = useCallback(
+    (cmd: WorkspaceCommand) => {
+      const target =
+        cmd.kind === "wiki"
+          ? "wiki"
+          : cmd.kind === "open" || cmd.kind === "split" || cmd.kind === "focus" || cmd.kind === "spotlight"
+            ? cmd.view
+            : cmd.kind === "layout"
+              ? cmd.views[0]
+              : null; // close/prefill: 판정 대상 아님
+      if (!target) return;
+      window.setTimeout(() => {
+        const kept = tilesRef.current.includes(target as View);
+        void callRpc(cfg, OBSERVE_RPC.workstationFeedback, { action: cmd.kind, kept }).catch(() => {});
+      }, ADOPTION_VERDICT_MS);
+    },
+    [cfg],
+  );
+
   const intercept = useCallback(
     (ev: ProactiveEvent): ProactiveEvent | null => {
       if (!isWorkspaceCommandKind(ev.kind)) return ev;
@@ -39,8 +69,10 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
         return null;
       }
       runCommand(cmd);
+      scheduleAdoptionVerdict(cmd);
       return { ...ev, kind: "workspace", title: ev.title ?? "화면 조정", body: describeCommand(cmd) };
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [runCommand],
   );
   const { events, status, dismiss, clearAll } = useEvents(cfg, connected, intercept);

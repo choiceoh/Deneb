@@ -83,3 +83,39 @@ func (s *Server) recordWorkstationUsage(action string) {
 		s.logger.Warn("workstation usage ledger write failed", "path", path, "error", err)
 	}
 }
+
+// workstationUsageHint turns the desktop's kept/dropped feedback tally into a
+// short self-adjustment note for the workstation tool result. Only speaks when
+// there is enough signal AND the keep-rate is poor — silence is the default so
+// well-adopted actions stay noise-free. Reading the tiny tally per tool call
+// beats caching: the file changes out-of-band (desktop reports) and a screen
+// command is a low-frequency, high-latency operation anyway.
+func (s *Server) workstationUsageHint(action string) string {
+	const minSamples, poorKeepRate = 5, 0.5
+	data, err := os.ReadFile(filepath.Join(s.denebDir, "cache", "workstation_feedback.json"))
+	if err != nil {
+		return ""
+	}
+	var tally struct {
+		ByAction map[string]struct {
+			Kept    int `json:"kept"`
+			Dropped int `json:"dropped"`
+		} `json:"byAction"`
+	}
+	if json.Unmarshal(data, &tally) != nil {
+		return ""
+	}
+	entry := tally.ByAction[action]
+	total := entry.Kept + entry.Dropped
+	if total < minSamples {
+		return ""
+	}
+	rate := float64(entry.Kept) / float64(total)
+	if rate >= poorKeepRate {
+		return ""
+	}
+	return fmt.Sprintf(
+		"참고(효용 원장): 최근 '%s' 조종 %d회 중 %d회는 사용자가 2분 내에 화면을 닫았습니다(유지율 %.0f%%) — 이 액션은 더 아껴 쓰거나, 띄우기 전에 정말 필요한지 판단하세요.",
+		action, total, entry.Dropped, rate*100,
+	)
+}

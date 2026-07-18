@@ -174,6 +174,7 @@ export const OBSERVE_RPC = {
   behavior: "miniapp.observe.behavior",
   logs: "miniapp.observe.logs",
   workstationUsage: "miniapp.observe.workstation_usage",
+  workstationFeedback: "miniapp.observe.workstation_feedback",
 } as const;
 
 export const WORKFEED_RPC = {
