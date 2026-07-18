@@ -9,7 +9,7 @@
 #
 # Gates (each is the make target of the same name):
 #   Go      generate-check  go-fmt  go-vet  go-lint  go-test
-#   Audit   runtime-health-test  health-v2-test  health-v2-check
+#   Audit   runtime-health-test  health-v2-test
 #   Kotlin  kotlin-spotless  kotlin-detekt  kotlin-desktop-smoke-test
 #           kotlin-android-compile
 #
@@ -55,7 +55,12 @@ BASE_REF="${CI_CHECK_BASE:-origin/main}"
 # --- Gate definitions (gate name == make target) -----------------------------
 GO_GATES=(generate-check go-fmt go-vet go-lint go-test)
 KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-android-compile)
-AUDIT_GATES=(runtime-health-test health-v2-test health-v2-check)
+# health-v2-check is OUT of the gate (operator decision 2026-07-18): the
+# git-window pillar ratchet false-reds unrelated PRs (five-pillar drops on a
+# one-file systemd diff, while CI stayed green) and a gate that cries wolf
+# trains everyone to ignore red. Scorer unit tests (health-v2-test) remain.
+# Run the ratchet manually via `make health-v2-check` or the nightly sweep.
+AUDIT_GATES=(runtime-health-test health-v2-test)
 
 # --- Args --------------------------------------------------------------------
 RUN_GO=true
@@ -245,8 +250,6 @@ offenders() {
         | grep -v 'host platform is not supported by Kotlin/Native' ;;
     generate-check)
       grep -E '^==> |^diff --git|^\+\+\+ |^--- |^@@ |generated file changed|out of date|not up to date' "$log" ;;
-    health-v2-check)
-      grep -E '^(REGRESSION:|health-v2:|DENEB_HEALTH_V2)' "$log" ;;
   esac
 }
 
