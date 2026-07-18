@@ -28,6 +28,23 @@ export default tseslint.config(
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      // Script dialogs are silent no-ops in the Tauri WebView (wry implements
+      // none): window.confirm returns falsy without showing anything, so a
+      // confirm() gate cancels itself in the desktop app while passing in
+      // browser dev and jsdom tests (#3913/#3924 swept the codebase clean).
+      // Use ConfirmModal / Modal instead.
+      "no-restricted-globals": [
+        "error",
+        { name: "confirm", message: "Tauri WebView no-op — use ConfirmModal (@/components/ConfirmModal)." },
+        { name: "alert", message: "Tauri WebView no-op — surface via pane error/status UI." },
+        { name: "prompt", message: "Tauri WebView no-op — use a Modal with a Field input." },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "window", property: "confirm", message: "Tauri WebView no-op — use ConfirmModal." },
+        { object: "window", property: "alert", message: "Tauri WebView no-op — surface via pane error/status UI." },
+        { object: "window", property: "prompt", message: "Tauri WebView no-op — use a Modal with a Field input." },
+      ],
     },
   },
   {
