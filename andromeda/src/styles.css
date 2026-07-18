@@ -5671,6 +5671,11 @@ button.mail-attachment {
   display: flex;
   align-items: center;
 }
+/* ai-reopen 엣지 탭(26px)과 같은 세로 중앙에 서므로, 탭이 보일 땐 옆으로 비킨다. */
+.split-add.with-edge-tab {
+  margin-right: 32px;
+}
+
 .split-add-btn {
   display: inline-flex;
   align-items: center;
