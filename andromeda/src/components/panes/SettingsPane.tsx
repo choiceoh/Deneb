@@ -5,6 +5,7 @@ import { moveItem } from "@/listReorder";
 import { useGatewayStatus } from "@/hooks";
 import { type LogLevel, getLogLevel, setLogLevel } from "@/log";
 import { checkForUpdates } from "@/updater";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { errText, fmtDate } from "@/format";
 import { muted } from "@/theme";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
@@ -319,8 +320,14 @@ function PromptSettings() {
     void refreshPromptsInner(openFirst);
   }
 
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+
   async function openPrompt(id: string, force = false) {
-    if (!force && dirty && !window.confirm("저장하지 않은 변경을 버리고 다른 프롬프트를 열까요?")) return;
+    // App-styled discard confirm (window.confirm 대체) — 편집 유실 방지 게이트.
+    if (!force && dirty) {
+      setPendingOpenId(id);
+      return;
+    }
     setSelectedId(id);
     setLoadingDetail(true);
     setStatus("");
@@ -476,6 +483,15 @@ function PromptSettings() {
           )}
         </div>
       </div>
+      {pendingOpenId && (
+        <ConfirmModal
+          title="편집 취소"
+          message="저장하지 않은 변경을 버리고 다른 프롬프트를 열까요?"
+          action="버리고 열기"
+          onConfirm={() => void openPrompt(pendingOpenId, true)}
+          onClose={() => setPendingOpenId(null)}
+        />
+      )}
     </Section>
   );
 }

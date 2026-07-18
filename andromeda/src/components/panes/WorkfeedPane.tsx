@@ -6,6 +6,7 @@ import { WORKFEED_RPC } from "@/resources";
 import { dayLabel, fmtDate, fmtTime, startOfDay } from "@/format";
 import { usePaneTarget } from "@/usePaneTarget";
 import { useAction } from "@/useAction";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice } from "@/components/Grid";
 import { AssistantText } from "@/components/DenebUi";
@@ -275,6 +276,8 @@ function WorkItemDetail({
   // onResult streams to the asking session — the same handler the free-text field uses.
   // Approval chips confirm first — Amaranth mutate is irreversible from the feed.
   // Rejection uses an in-app dialog so an optional reason can travel with the action.
+  const [confirmAction, setConfirmAction] = useState<WorkAction | null>(null);
+
   const runAction = (a: WorkAction) => {
     if (a.id === "approval:reject") {
       setRejectComment("");
@@ -282,9 +285,9 @@ function WorkItemDetail({
       return;
     }
     if (a.id === "approval:approve") {
-      const title = w.title || "이 결재 문서";
-      const ref = w.refId ? ` (doc ${w.refId})` : "";
-      if (!window.confirm(`${a.label}할까요?\n\n${title}${ref}\n그룹웨어에 즉시 반영됩니다.`)) return;
+      // App-styled confirm (window.confirm 대체) — Amaranth 반영은 불가역.
+      setConfirmAction(a);
+      return;
     }
     void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: a.id });
   };
@@ -398,6 +401,15 @@ function WorkItemDetail({
           </section>
         </div>
       </div>
+      {confirmAction && (
+        <ConfirmModal
+          title="결재 승인"
+          message={`${w.title || "이 결재 문서"}${w.refId ? ` (doc ${w.refId})` : ""}\n그룹웨어에 즉시 반영됩니다.`}
+          action={confirmAction.label || "승인"}
+          onConfirm={() => void run(WORKFEED_RPC.actionRun, { itemId: w.id, actionId: confirmAction.id })}
+          onClose={() => setConfirmAction(null)}
+        />
+      )}
       {rejectAction && (
         <Modal
           title="결재 반려"
