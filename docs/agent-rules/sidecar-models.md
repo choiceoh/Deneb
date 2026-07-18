@@ -19,7 +19,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 | 모델 | 역할 | 기본 엔드포인트 | 코드 진입점 | 비고 |
 |---|---|---|---|---|
 | **PaddleOCR-VL-1.6** (0.9B) | 문서 OCR (스캔 PDF·이미지 첨부) | `http://127.0.0.1:18011/v1` | `chat/tools/document/paddleocr.go` | 상주 서빙. tesseract 폴백 있음. ↓ 상세 |
-| **VibeVoice-ASR** (9B) | 음성 전사 + 화자분리 + 타임스탬프 (최대 60분·50+개 언어·한국어) | `http://127.0.0.1:18013` (`POST /v1/transcribe`, OpenAI 비호환) | `chat/tools/artifact/asr.go` | transformers+FastAPI 상주. 핫워드로 고유명사 교정. `miniapp.capture.audio` 캡처 배선(#1847). ↓ 상세 |
+| **MOSS-Transcribe-Diarize** (0.9B) | 음성 전사 + 화자분리 + 타임스탬프 (단일 패스 90분·50+개 언어·한국어) | `http://100.105.145.6:18014` (`POST /v1/transcribe`, VibeVoice 서버와 동일 계약) | `chat/tools/artifact/asr.go` | 2026-07-18 VibeVoice(9B) 컷오버. 정답자막 CER 8.5% vs 9.6%·RTF 0.26 vs 0.52·16GB→2GB(earlyoom 킬 리스크 소멸). 핫워드 프롬프트 주입. 롤백 = sidecar-remote.conf 18013 복원(vibevoice-asr 컨테이너 유지). ↓ 상세 |
 | 메인 챗 LLM | 대화/분석/도구호출 | provider config (Anthropic/OpenRouter/vLLM 등) | `pipeline/chat/run_provider.go` | modelrole `main`. 로컬일 때 기본 `http://127.0.0.1:8000/v1` |
 | lightweight 서브 LLM | mailanalysis(메일폴)/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
@@ -89,7 +89,21 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 
 ---
 
-## VibeVoice-ASR (음성 전사 엔진)
+## MOSS-Transcribe-Diarize (음성 전사 엔진, 현행)
+
+### 무엇 / 왜
+
+- 0.9B end-to-end 오디오 모델 (Whisper-Medium 인코더 + Qwen3-0.6B 디코더, Apache-2.0). **전사+화자분리([S01]…)+타임스탬프 단일 패스**, 90분, 핫워드 프롬프트.
+- 2026-07-18 VibeVoice-ASR(9B) 컷오버. 판정 근거(실측): 세바시 정답자막 CER **8.5% vs 9.6%**, RTF **0.26 vs 0.52**, 실회의 25분에서 VibeVoice는 기본 예산 잘림/32k 예산 미완주(RTF>1.8)·반복 환각, MOSS는 안정 완주. 상주 16GB→2GB로 srv1 earlyoom(`--prefer python3`) 킬 리스크 소멸. 상대 확인 사례: Plaud가 "회사"로 뭉갠 거래처명을 "핵사(Hexa)"로 정확히 들음.
+
+### 서버 (상주)
+
+- 런처: **`~/start-moss-asr.sh`** (★srv1, 레포 밖). 컨테이너 `moss-asr`, port **18014**, `--restart unless-stopped`. 이미지 `vibevoice-asr:latest` 재사용(torch/transformers 5.9/fastapi/ffmpeg).
+- 코드: `~/moss-asr/moss_server.py` + `~/moss-asr/repo`(OpenMOSS github clone — inference 헬퍼). 가중치 `~/models/MOSS-Transcribe-Diarize`(1.8G).
+- API·게이트웨이 배선은 VibeVoice 서버와 **동일 계약**(`POST /v1/transcribe` multipart file/hotwords → segments/transcription/rtf) — `asr.go` 무변경, `DENEB_ASR_URL`만 스왑(`~/.config/systemd/user/deneb-gateway.service.d/sidecar-remote.conf`).
+- 함정: 단일 화자 오디오는 `[S01]` 태그 없이 `[t]텍스트[t]`로 나옴 → moss_server가 타임스탬프 페어 폴백 파서로 세그먼트화. 업스트림 헬퍼는 np 배열 truthiness·librosa 부재 이슈가 있어 서버가 soundfile/ffmpeg로 직접 디코드+`process_audio_info` 몽키패치.
+
+## VibeVoice-ASR (구 전사 엔진 — 롤백 대기)
 
 ### 무엇 / 왜
 
