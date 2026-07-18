@@ -237,8 +237,11 @@ def _score_dispatch(dispatch: DispatchWindow) -> tuple[float, Evidence, list[Fin
             Evidence("utility-dispatch-land", "bootstrap", "no coding_dispatch files", required=False),
             [],
         )
-    # accepted without land is weak utility; land/watch_passed is strong.
-    progress = dispatch.landed + 0.35 * dispatch.accepted
+    # accepted without land is weak utility; land/watch_passed is strong. Lands
+    # are RHAE-weighted (ledgers.land_efficiency): a first-attempt land counts
+    # 1.0, retries decay quadratically — landing is only full utility when the
+    # loop lands efficiently.
+    progress = dispatch.land_eff + 0.35 * dispatch.accepted
     raw = 100.0 * progress / max(dispatch.files, 1)
     if dispatch.rolled_back:
         raw *= max(0.0, 1.0 - dispatch.rolled_back / max(dispatch.files, 1))
@@ -265,7 +268,7 @@ def _score_dispatch(dispatch: DispatchWindow) -> tuple[float, Evidence, list[Fin
             "utility-dispatch-land",
             "measured",
             f"files={dispatch.files} accepted={dispatch.accepted} landed={dispatch.landed} "
-            f"failed={dispatch.failed}",
+            f"landEff={dispatch.land_eff:.2f} failed={dispatch.failed}",
         ),
         findings,
     )

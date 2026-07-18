@@ -93,6 +93,33 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(win.accepted, 3)
             self.assertEqual(win.landed, 1)
             self.assertEqual(win.failed, 1)
+            # No attemptId → attempts=1 → efficiency 1.0 (flat-count parity).
+            self.assertAlmostEqual(win.land_eff, 1.0)
+
+    def test_dispatch_land_efficiency_decays_with_retries(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "coding_dispatch"
+            folder.mkdir()
+            markers = [
+                ("first", "sc-1-100-200-1"),  # 1st attempt → 1.0
+                ("retry", "sc-2-100-200-2"),  # 2nd attempt → 0.25
+                ("third", "sc-3-100-200-3"),  # 3rd attempt → ~0.111
+                ("weird", "not-an-ordinal"),  # unparseable → 1.0 (no penalty)
+            ]
+            for name, attempt_id in markers:
+                (folder / f"{name}.json").write_text(
+                    json.dumps({"status": "accepted", "outcome": "landed", "attemptId": attempt_id}),
+                    encoding="utf-8",
+                )
+            from rsi_bench.ledgers import land_efficiency, load_dispatch_window
+
+            win = load_dispatch_window(root)
+            self.assertEqual(win.landed, 4)
+            self.assertAlmostEqual(win.land_eff, 1.0 + 0.25 + 1.0 / 9.0 + 1.0, places=6)
+            # RHAE cap guards a future sub-1 baseline; at baseline 1 it is inert.
+            self.assertAlmostEqual(land_efficiency(1), 1.0)
+            self.assertLessEqual(land_efficiency(0), 1.15)
 
     def test_soft_confirm_from_usage_after_evolve(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

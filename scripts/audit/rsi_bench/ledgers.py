@@ -139,6 +139,31 @@ class WatchWindow:
     watches: int = 0
 
 
+# RHAE-style land efficiency (adopted from the ARC-AGI-3 harness scoring form
+# min(115, 100*(h/a)^2)): each landed dispatch is weighted by squared attempt
+# efficiency against the 1-attempt baseline, capped so a future sub-baseline
+# cannot run away. A first-attempt land scores 1.0 (identical to the old flat
+# count); a 2nd-attempt land 0.25, a 3rd 0.11 — retry-heavy landing stops
+# reading as full utility. Attempts come from the marker attemptId's trailing
+# ordinal (`<cid>-<ts>-<pid>-<n>`, coding-dispatch.sh); unparseable → 1 (no
+# penalty on unknown).
+LAND_EFFICIENCY_CAP = 1.15
+
+
+def _attempt_ordinal(attempt_id: Any) -> int:
+    raw = str(attempt_id or "")
+    _, _, tail = raw.rpartition("-")
+    try:
+        ordinal = int(tail)
+    except ValueError:
+        return 1
+    return ordinal if ordinal >= 1 else 1
+
+
+def land_efficiency(attempts: int) -> float:
+    return min(LAND_EFFICIENCY_CAP, (1.0 / max(attempts, 1)) ** 2)
+
+
 @dataclass
 class DispatchWindow:
     files: int = 0
@@ -146,6 +171,9 @@ class DispatchWindow:
     landed: int = 0
     failed: int = 0
     rolled_back: int = 0
+    # Σ land_efficiency over landed markers (== landed when every land was
+    # first-attempt). Utility's dispatch-land scores this instead of the count.
+    land_eff: float = 0.0
 
 
 @dataclass
@@ -399,6 +427,7 @@ def load_dispatch_window(data: Path | None = None) -> DispatchWindow:
             out.accepted += 1
         if terminal in _LAND_OUTCOMES:
             out.landed += 1
+            out.land_eff += land_efficiency(_attempt_ordinal(row.get("attemptId")))
         if terminal in _FAIL_OUTCOMES:
             out.failed += 1
         if terminal in _ROLLBACK_OUTCOMES:
