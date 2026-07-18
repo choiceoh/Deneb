@@ -11,10 +11,30 @@ import { useEffect, useMemo, useRef, useState } from "react";
 // as a user message; the page also reports its scrollHeight so the frame
 // grows to fit instead of double-scrolling.
 
-/** CSP + deneb bridge, prepended to the document. The CSP meta blocks network
- * subresources; the bridge exposes deneb.send and streams content height. */
+/** Base stylesheet every page gets for free: Korean-friendly system fonts,
+ * readable rhythm, bordered tables, sane margins on a light surface. Injected
+ * FIRST so the page's own styles override it naturally. Keep in sync with the
+ * native PRELUDE (DenebHtmlView.android.kt) and docs/research/deneb-html.md. */
+const BASE_CSS =
+  ":root{color-scheme:light}" +
+  "body{margin:14px;font-family:'Pretendard','Noto Sans KR',system-ui,-apple-system,sans-serif;" +
+  "font-size:14px;line-height:1.6;color:#1f2128;background:#fff}" +
+  "h1,h2,h3,h4{line-height:1.3;margin:0.7em 0 0.35em}" +
+  "h1{font-size:22px}h2{font-size:18px}h3{font-size:15px}" +
+  "p{margin:0.4em 0}" +
+  "table{border-collapse:collapse;width:100%}" +
+  "th,td{padding:6px 10px;border:1px solid #e5e6ea;text-align:left}" +
+  "th{background:#f7f7f9}" +
+  "button{font:inherit;cursor:pointer}";
+
+/** CSP + base style + deneb bridge, prepended to the document. The CSP meta
+ * blocks network subresources; the bridge exposes deneb.send and streams
+ * content height. */
 const PRELUDE =
   "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;\">" +
+  "<style>" +
+  BASE_CSS +
+  "</style>" +
   "<script>(function(){" +
   'window.deneb={send:function(t){parent.postMessage({__deneb:"prompt",text:String(t)},"*")}};' +
   'var r=function(){parent.postMessage({__deneb:"height",h:document.documentElement.scrollHeight},"*")};' +
