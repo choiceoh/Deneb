@@ -48,8 +48,13 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
   // OS 알림: 비포커스 창에도 능동 넛지가 닿도록 — 최신 이벤트가 "새로" 도착했을
   // 때 1회 (마운트 시 이미 있던 목록은 복원분이라 침묵). notifyDesktop 자체가
   // 포커스 중·웹 빌드에선 no-op.
+  //
+  // 알림→행동 왕복: Tauri 데스크톱 백엔드는 알림 클릭 콜백을 노출하지 않으므로
+  // (notify-rust fire-and-forget), 가장 가까운 확실 경로로 — 알림 후 60초 안에
+  // 창이 포커스를 되찾으면 그 넛지의 화면으로 자동 내비 (알림 보고 돌아온 것).
   const prevNewestRef = useRef<string | undefined>(undefined);
   const notifyArmedRef = useRef(false);
+  const pendingNavRef = useRef<{ nav: ProactiveNav; at: number } | null>(null);
   useEffect(() => {
     const newest = events[0];
     if (!notifyArmedRef.current) {
@@ -59,6 +64,10 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
     }
     if (newest && newest.id !== prevNewestRef.current) {
       prevNewestRef.current = newest.id;
+      if (typeof document === "undefined" || !document.hasFocus()) {
+        const nav = proactiveNav(newest);
+        if (nav) pendingNavRef.current = { nav, at: Date.now() };
+      }
       void notifyDesktop(newest.title ?? "데네브 알림", newest.body ?? "");
     }
   }, [events]);
@@ -67,6 +76,19 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
   useEffect(() => {
     void setBadgeCount(events.length);
   }, [events.length]);
+
+  // 알림 후 복귀 내비 — 위 pendingNavRef 소비.
+  useEffect(() => {
+    function onFocus() {
+      const pending = pendingNavRef.current;
+      pendingNavRef.current = null;
+      if (!pending || Date.now() - pending.at > 60_000) return;
+      if (pending.nav.view === "wiki" && pending.nav.ref) openWiki(pending.nav.ref);
+      else openPane(pending.nav.view, pending.nav.ref ? { id: pending.nav.ref } : undefined);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [openPane, openWiki]);
 
   const onNavigate = (nav: ProactiveNav) => {
     if (nav.view === "wiki" && nav.ref) openWiki(nav.ref);

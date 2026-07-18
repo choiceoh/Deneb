@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
@@ -46,6 +48,10 @@ type Deps struct {
 	// /metrics for the engine-level prefix-cache hit rate; nil or an empty
 	// list simply omits the field.
 	VllmBases func() []string
+
+	// StateDir resolves the deneb state dir — observe.workstation_usage reads
+	// the workstation-tool tally (utility-grounding ledger) from its cache.
+	StateDir func() string
 }
 
 func (d Deps) ring() *observe.Ring {
@@ -80,10 +86,36 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 
 func methodsWithPrefix(deps Deps, p string) map[string]rpcutil.HandlerFunc {
 	return map[string]rpcutil.HandlerFunc{
-		p + "turn":     turnHandler(deps),
-		p + "logs":     logsHandler(deps),
-		p + "behavior": behaviorHandler(deps),
-		p + "health":   healthHandler(deps),
+		p + "turn":              turnHandler(deps),
+		p + "logs":              logsHandler(deps),
+		p + "behavior":          behaviorHandler(deps),
+		p + "health":            healthHandler(deps),
+		p + "workstation_usage": workstationUsageHandler(deps),
+	}
+}
+
+// workstationUsageHandler surfaces the workstation-tool usage ledger (written
+// by server_workstation.go on every dispatch) so the 관찰 pane can answer
+// "화면 조종이 실제로 쓰이는가" without shelling into the state dir.
+func workstationUsageHandler(deps Deps) rpcutil.HandlerFunc {
+	type out struct {
+		Total    int            `json:"total"`
+		ByAction map[string]int `json:"byAction"`
+		LastAt   string         `json:"lastAt"`
+	}
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		usage := out{ByAction: map[string]int{}}
+		if deps.StateDir != nil {
+			if dir := deps.StateDir(); dir != "" {
+				if data, err := os.ReadFile(filepath.Join(dir, "cache", "workstation_usage.json")); err == nil {
+					_ = json.Unmarshal(data, &usage)
+					if usage.ByAction == nil {
+						usage.ByAction = map[string]int{}
+					}
+				}
+			}
+		}
+		return rpcutil.RespondOK(req.ID, usage)
 	}
 }
 

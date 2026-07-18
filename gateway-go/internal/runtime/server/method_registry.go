@@ -257,6 +257,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 	observeDeps := handlerobserve.Deps{
 		Capture:  s.logCapture,
 		AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
+		StateDir: func() string { return denebDir },
 		VllmBases: func() []string {
 			if s.modelRegistry == nil {
 				return nil
