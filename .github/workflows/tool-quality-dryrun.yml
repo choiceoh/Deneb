@@ -1,10 +1,10 @@
 name: Tool Quality Miner Dry-Run (srv4)
 
-# 수동 전용: 게이트웨이 호스트(gx10 러너 = srv4)에서 tool-quality-miner를
+# 수동 전용: 게이트웨이 호스트(srv4 self-hosted runner, label: srv4)에서 tool-quality-miner를
 # --dry-run으로 실행해, 실측 agentlog 도구 통계(observe.behavior RPC)에서 어떤
 # 도구-설명/스키마 개선 propose-only 후보가 채굴되는지 확인한다. 읽기 전용 —
 # 아무것도 파일링하지 않는다(--dry-run). 라이브 게이트웨이 RPC를 조회하므로
-# gx10 러너(게이트웨이와 같은 호스트·유저)에서만 의미가 있다.
+# srv4 러너(게이트웨이와 같은 호스트·유저)에서만 의미가 있다.
 # fork PR에서는 절대 돌지 않는다 (workflow_dispatch 전용 + self-hosted).
 
 on:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   dry-run:
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7

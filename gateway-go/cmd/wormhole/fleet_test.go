@@ -13,9 +13,9 @@ import (
 // vLLM (advertises a model), one down vLLM, and one non-chat sidecar (paddleocr,
 // no model, /health probe URL). Only the first should become a routable model.
 const servicesPayload = `{"services":[
-	{"node":"gx10","name":"vllm-tp2","url":"http://127.0.0.1:8000/v1/models","ok":true,"httpStatus":200,"model":"qwen3.6-35b-a3b","nodeReachable":true},
-	{"node":"gx10","name":"vllm-nex","url":"http://127.0.0.1:8002/v1/models","ok":false,"httpStatus":0,"nodeReachable":true},
-	{"node":"gx10","name":"paddleocr","url":"http://127.0.0.1:18011/health","ok":true,"httpStatus":200,"nodeReachable":true}
+	{"node":"srv1","name":"vllm-tp2","url":"http://127.0.0.1:8000/v1/models","ok":true,"httpStatus":200,"model":"qwen3.6-35b-a3b","nodeReachable":true},
+	{"node":"srv1","name":"vllm-nex","url":"http://127.0.0.1:8002/v1/models","ok":false,"httpStatus":0,"nodeReachable":true},
+	{"node":"srv1","name":"paddleocr","url":"http://127.0.0.1:18011/health","ok":true,"httpStatus":200,"nodeReachable":true}
 ]}`
 
 func fleetServer(t *testing.T, wantToken string, body string) *httptest.Server {

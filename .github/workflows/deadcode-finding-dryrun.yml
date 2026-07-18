@@ -1,6 +1,6 @@
 name: Deadcode Finding Miner Dry-Run (srv4)
 
-# 수동 전용: 게이트웨이 호스트(gx10 러너 = srv4)에서 deadcode-finding-miner를
+# 수동 전용: 게이트웨이 호스트(srv4 self-hosted runner, label: srv4)에서 deadcode-finding-miner를
 # --dry-run으로 실행해, deadcode-audit 델타가 어떤 propose-only 코드 후보로
 # 채굴되는지 실측한다. 읽기 전용 — 아무것도 파일링하지 않고(--dry-run), 게이트웨이
 # RPC로 기록하지도 않는다(dry-run은 dedup 없이 계획만 출력). deadcode-audit은
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   dry-run:
-    runs-on: [self-hosted, gx10]
+    runs-on: [self-hosted, srv4]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

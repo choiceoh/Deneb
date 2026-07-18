@@ -3,7 +3,7 @@
 # against reality, so out-of-band host changes can't silently rot the docs.
 #
 # WHY: the 2026-07-06 srv4 unification left three silent divergences behind
-# (split gx10 runners, missing APK signing material → debug-signed OTA builds,
+# (split srv4 runners, missing APK signing material → debug-signed OTA builds,
 # a zombie wormhole on srv1). Each took hours of ssh archaeology to DISCOVER
 # and minutes to fix. This sweep makes the discovery free: every claim cites
 # the doc that makes it, so a FAIL pinpoints both the drifted host state and
@@ -179,8 +179,8 @@ fi
 
 check_srv1 '[ -d ~/actions-runner-deneb ] && echo FOUND || echo NONE' FOUND \
     "srv1 구 러너 잔재 없음" \
-    "srv1 에 구 Deneb 러너 디렉토리 부활 — gx10 라벨 이중화(잡 분열) 위험" \
-    "release-and-deploy.md (구 gx10-apk 는 해제·삭제됨)"
+    "srv1 에 구 Deneb 러너 디렉토리 부활 — srv4 라벨 이중화(잡 분열) 위험" \
+    "release-and-deploy.md (구 gx10-apk 는 해제·삭제됨 — legacy gx10-apk)"
 
 echo "== wormhole (docs/agent-rules/sidecar-models.md) =="
 

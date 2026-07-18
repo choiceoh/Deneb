@@ -21,9 +21,8 @@ import (
 
 // defaultBackupSSHHost is this deployment's storage node — the Tailscale machine
 // name "srv2" (MagicDNS-resolvable). Override with DENEB_BACKUP_SSH_HOST; set
-// DENEB_BACKUP_DISABLE=1 to turn backups off. (Previously "spark4tb", which is
-// not a resolvable Tailscale name, so every backup logged "could not resolve
-// hostname spark4tb".)
+// DENEB_BACKUP_DISABLE=1 to turn backups off. (Previously "spark4tb", an
+// obsolete Tailscale name that failed DNS resolution before the srv2 rename.)
 const defaultBackupSSHHost = "srv2"
 
 // productionStateDir reports the resolved state dir and whether this process
