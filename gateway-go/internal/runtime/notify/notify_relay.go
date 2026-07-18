@@ -95,6 +95,14 @@ type Service struct {
 
 	debounceMu sync.Mutex
 	lastSent   map[string]time.Time
+
+	// Dependency (sidecar) probes woven into each heartbeat — see
+	// notify_deps.go. depMu guards both fields; late-bound via
+	// SetDependencyChecks because dependency handles are built after the
+	// notify service (Session phase vs Early phase).
+	depMu     sync.Mutex
+	depChecks []DepCheck
+	depDown   map[string]bool
 }
 
 // notifyEvent is the worker's inbound message envelope.
@@ -214,6 +222,26 @@ func (n *Service) deliver(_ context.Context, ev notifyEvent) {
 		body, _ := ev.payload.(string)
 		if body != "" {
 			n.logger.Error("notify slog forwarded", "body", body)
+		}
+		return
+	}
+
+	// Dependency transition alerts ("_dep_<name>", see notify_deps.go): a
+	// sidecar going down is operator-actionable NOW, so unlike the quiet
+	// heartbeat these push to the native client. Recovery logs at Info and
+	// pushes too — it closes the loop the down-alert opened.
+	if strings.HasPrefix(ev.name, "_dep_") {
+		body, _ := ev.payload.(string)
+		if body == "" {
+			return
+		}
+		if strings.HasPrefix(body, "🔌") {
+			n.logger.Error("sidecar health alert", "body", body)
+		} else {
+			n.logger.Info("sidecar health recovered", "body", body)
+		}
+		if n.push != nil {
+			n.push("🔌 사이드카 상태", truncate(body, 120))
 		}
 		return
 	}
