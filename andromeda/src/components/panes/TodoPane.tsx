@@ -127,7 +127,17 @@ export function TodoPane() {
         </button>
       </div>
       <GridNotice query={query} count={todos.length} empty="할일이 없습니다.">
-        <Grid columns={columns} rows={todos} getKey={(t) => String(t.id)} onRowClick={(t) => setModal(t)} />
+        <Grid
+          columns={columns}
+          rows={todos}
+          getKey={(t) => String(t.id)}
+          onRowClick={(t) => setModal(t)}
+          rowMenu={(t) => [
+            { label: t.done ? "미완료로" : "완료로", onSelect: () => toggleTodo(t) },
+            { label: "수정", onSelect: () => setModal(t) },
+            { label: "삭제", danger: true, onSelect: () => removeTodo(t) },
+          ]}
+        />
       </GridNotice>
       {modal && (
         <TodoModal

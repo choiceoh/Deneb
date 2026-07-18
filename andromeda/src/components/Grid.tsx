@@ -5,6 +5,7 @@ import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { color, muted } from "@/theme";
 import { errText } from "@/format";
 import { useWorkspace } from "@/workspaceContext";
+import { useContextMenu, type MenuItem } from "./ContextMenu";
 
 export interface Column<T> {
   header: ReactNode;
@@ -22,6 +23,7 @@ export function Grid<T>({
   onRowClick,
   isRowSelected,
   rowTitle,
+  rowMenu,
   renderExpandedRow,
   hideHeader,
 }: {
@@ -33,72 +35,80 @@ export function Grid<T>({
   onRowClick?: (row: T) => void;
   isRowSelected?: (row: T) => boolean;
   rowTitle?: (row: T) => string;
+  // Right-click actions for a row — rendered as the app-styled ContextMenu
+  // instead of the webview's default (English browser) menu. Mouse-first idiom.
+  rowMenu?: (row: T) => MenuItem[];
   renderExpandedRow?: (row: T) => ReactNode;
   // Omit the column header row — used when several grids stack under shared section
   // headings (e.g. the 작업피드 date groups) and one header per group would be noise.
   // A zero-width <colgroup> still pins the fixed column widths so stacked grids align.
   hideHeader?: boolean;
 }) {
+  const { openMenu, menuElement } = useContextMenu();
   return (
-    <table className="dgrid" style={{ maxWidth }}>
-      {hideHeader ? (
-        <colgroup>
-          {columns.map((c, i) => (
-            <col key={i} style={c.width ? { width: c.width } : undefined} />
-          ))}
-        </colgroup>
-      ) : (
-        <thead>
-          <tr>
+    <>
+      <table className="dgrid" style={{ maxWidth }}>
+        {hideHeader ? (
+          <colgroup>
             {columns.map((c, i) => (
-              <th key={i} style={c.width ? { width: c.width } : undefined}>
-                {c.header}
-              </th>
+              <col key={i} style={c.width ? { width: c.width } : undefined} />
             ))}
-          </tr>
-        </thead>
-      )}
-      <tbody>
-        {rows.map((row) => {
-          const interactive = Boolean(onRowClick);
-          const selected = Boolean(isRowSelected?.(row));
-          const className = [interactive ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
-          const expanded = selected ? renderExpandedRow?.(row) : null;
-          return (
-            <Fragment key={getKey(row)}>
-              <tr
-                className={className || undefined}
-                style={rowStyle?.(row)}
-                tabIndex={interactive ? 0 : undefined}
-                aria-selected={interactive ? selected : undefined}
-                title={rowTitle?.(row)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                onKeyDown={
-                  onRowClick
-                    ? (e) => {
-                        if (e.key !== "Enter" && e.key !== " ") return;
-                        e.preventDefault();
-                        onRowClick(row);
-                      }
-                    : undefined
-                }
-              >
-                {columns.map((c, i) => (
-                  <td key={i} style={c.tdStyle}>
-                    {c.cell(row)}
-                  </td>
-                ))}
-              </tr>
-              {expanded && (
-                <tr className="dgrid-expanded-row">
-                  <td colSpan={columns.length}>{expanded}</td>
+          </colgroup>
+        ) : (
+          <thead>
+            <tr>
+              {columns.map((c, i) => (
+                <th key={i} style={c.width ? { width: c.width } : undefined}>
+                  {c.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.map((row) => {
+            const interactive = Boolean(onRowClick);
+            const selected = Boolean(isRowSelected?.(row));
+            const className = [interactive ? "clickable" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
+            const expanded = selected ? renderExpandedRow?.(row) : null;
+            return (
+              <Fragment key={getKey(row)}>
+                <tr
+                  className={className || undefined}
+                  style={rowStyle?.(row)}
+                  tabIndex={interactive ? 0 : undefined}
+                  aria-selected={interactive ? selected : undefined}
+                  title={rowTitle?.(row)}
+                  onContextMenu={rowMenu ? (e) => openMenu(e, rowMenu(row)) : undefined}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (e) => {
+                          if (e.key !== "Enter" && e.key !== " ") return;
+                          e.preventDefault();
+                          onRowClick(row);
+                        }
+                      : undefined
+                  }
+                >
+                  {columns.map((c, i) => (
+                    <td key={i} style={c.tdStyle}>
+                      {c.cell(row)}
+                    </td>
+                  ))}
                 </tr>
-              )}
-            </Fragment>
-          );
-        })}
-      </tbody>
-    </table>
+                {expanded && (
+                  <tr className="dgrid-expanded-row">
+                    <td colSpan={columns.length}>{expanded}</td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+      {menuElement}
+    </>
   );
 }
 
