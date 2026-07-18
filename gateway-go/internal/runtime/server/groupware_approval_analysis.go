@@ -64,6 +64,15 @@ func (s *Server) completeApprovalAnalysis(ctx context.Context, docID, title, dat
 			user += "\n\n## 프로젝트 후보\n「" + ref.Name + "」에 매칭됨. 이 프로젝트 로그/현재 상태에 남길지 PROJECT_FILE로 답할 것."
 		}
 	}
+	// Precedent recall: past analyses of similar documents (title-token overlap,
+	// same drafter appearing in the body) so the model judges against 전례 —
+	// repeat cadence, amount drift, consistency with earlier recommendations.
+	if s.denebDir != "" {
+		store := groupware.NewApprovalAnalysisStore(filepath.Join(s.denebDir, "cache", "approval_analysis"))
+		if prec := groupware.SelectApprovalPrecedents(store.Recent(300), docID, title, enriched, 5); len(prec) > 0 {
+			user += "\n\n## 과거 유사 결재 (전례)\n" + groupware.FormatApprovalPrecedents(prec)
+		}
+	}
 	out, err := client.Complete(ctx, llm.ChatRequest{
 		Model:     model,
 		System:    llm.SystemString(handlerminiapp.ApprovalAnalyzeSystemPrompt()),

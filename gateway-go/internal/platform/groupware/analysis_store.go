@@ -18,7 +18,8 @@ import (
 // v2: price-memory loop — 과거 단가·경비 이력 주입 + 단가 비교 섹션.
 // v3: selected attachments (계약/견적/…) downloaded+OCR'd into the analysis prompt.
 // v4: PROJECT_FILE trailer — agent judges whether to file to project wiki.
-const ApprovalAnalysisPromptVersion = "v4"
+// v5: precedent recall — 과거 유사 결재 주입 + 전례 대조 섹션.
+const ApprovalAnalysisPromptVersion = "v5"
 
 // ApprovalAnalysisRecord is the on-disk shape of one cached 전자결재 analysis.
 type ApprovalAnalysisRecord struct {
