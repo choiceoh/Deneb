@@ -35,8 +35,10 @@ mkdir -p "$USER_SYSTEMD_DIR" "$HOME/.deneb/nemotron-hf-cache"
 install -m 0644 "$SCRIPT_DIR/nemotron-vllm.service" "$USER_SYSTEMD_DIR/nemotron-vllm.service"
 install -m 0644 "$SCRIPT_DIR/nemotron-embed.service" "$USER_SYSTEMD_DIR/nemotron-embed.service"
 systemctl --user daemon-reload
-systemctl --user enable --now nemotron-vllm.service
-systemctl --user enable --now nemotron-embed.service
+systemctl --user enable nemotron-vllm.service
+systemctl --user restart nemotron-vllm.service
+systemctl --user enable nemotron-embed.service
+systemctl --user restart nemotron-embed.service
 
 echo "Nemotron NVFP4 embed stack installed (backend :8003, adapter :8002)."
 echo "Cutover : deneb-gateway drop-in with DENEB_EMBEDDING_URL=http://127.0.0.1:8002"
