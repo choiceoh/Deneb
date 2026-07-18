@@ -41,6 +41,13 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 - `gateway-go/internal/pipeline/chat/tools/document/paddleocr.go`:
   - `paddleOCR(ctx, img, task)` — `/v1/chat/completions` 에 `image_url`(base64 data URI) + 태스크 프롬프트 전송. 태스크: `"OCR:"` / `"Table Recognition:"` / `"Formula Recognition:"` / `"Chart Recognition:"`.
   - `ocrImageBytes(ctx, img)` — **단일 OCR 진입점**. PaddleOCR-VL 우선, 실패 시 tesseract 폴백.
+    ★**반복 루프 폴백**(2026-07-18): 품목 표 밀집 페이지에서 `"OCR:"` 단발 호출이
+    같은 행을 max_tokens 소진까지 반복하는 퇴화가 실측됨(발주서 CER 2.58, 재현).
+    `looksRepetitionLoop`(실질 라인 ≥12회 반복)가 감지하면 `"Table Recognition:"`
+    으로 1회 재시도 후 셀 마크업(`<fcel>`/`<nl>`)을 파이프 행으로 변환해 반환
+    (`paddleTableToText`; 같은 페이지 CER 0.153). 샘플링 페널티는 해법 아님
+    (repetition_penalty=악화·frequency_penalty=표 내용 소실 실측). 재시도도
+    루프면 원문 유지. 라이브 재현: `DENEB_OCR_LIVE_PAGE=<루프 PNG> go test -run Live ./internal/pipeline/chat/tools/document`.
 - `tools/document/docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR`(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사). **`pdfOCR` 페이지 루프는 병렬**(`ocrPageConcurrency`=6, 세마포어+WaitGroup, distinct-slot 쓰기로 순서 보존) — 서버 배칭(`--max-num-seqs 8`)을 활용해 N페이지 스캔을 ~1 배칭 디코드로 접음. 동시성 상한은 서버 seq 한도 밑으로 둬 라이브 챗/메일분석과 GPU 사이드카를 공유해도 몰리지 않게.
 - **폴백 설계**: 서버가 꺼져 있으면 connection refused 로 즉시 실패 → tesseract(kor+eng) 로 graceful degradation. 즉 OCR 은 서버 없어도 깨지지 않고 품질만 낮아진다.
 - **엔드포인트 override**: 환경변수 `DENEB_OCR_VL_URL` (기본 `http://127.0.0.1:18011`). 테스트/비표준 배포용.

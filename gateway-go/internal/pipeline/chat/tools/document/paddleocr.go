@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
@@ -147,6 +149,21 @@ func paddleOCR(ctx context.Context, img []byte, task string) (string, error) {
 func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 	text, err := paddleOCR(ctx, img, "OCR:")
 	if err == nil {
+		// Dense item tables can trap the full-page mode in a repetition loop
+		// (the same row emitted until max_tokens — reproduced 2026-07-18 on a
+		// real 발주서, CER 2.58). Sampling penalties don't fix it (they kill
+		// legitimate repeated cells too); the model's own table mode does
+		// (same page: CER 0.153, zero loops). Detect the loop and retry once
+		// in table mode, keeping the looped text only as a last resort.
+		if looksRepetitionLoop(text) {
+			slog.Default().Warn("paddleocr-vl full-page output degenerated into a repetition loop; retrying in table mode",
+				"chars", len(text))
+			if t2, err2 := paddleOCR(ctx, img, "Table Recognition:"); err2 == nil {
+				if conv := paddleTableToText(t2); strings.TrimSpace(conv) != "" && !looksRepetitionLoop(conv) {
+					return conv, nil
+				}
+			}
+		}
 		// PaddleOCR-VL's full-page mode recognizes tables and emits them as
 		// HTML; render those as markdown so the model reads columns as a grid
 		// instead of a flattened blob. No-op when the page has no table.
@@ -154,6 +171,72 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 	}
 	slog.Default().Debug("paddleocr-vl unavailable, falling back to tesseract", "error", err)
 	return tesseract(ctx, img)
+}
+
+// looksRepetitionLoop reports whether OCR output degenerated into a repeated
+// block. Signature: one substantive line (≥8 runes carrying ≥4 letters —
+// Hangul/Latin/etc.) occurring ≥12 times. Honest tables repeat short unit and
+// quantity cells ("EA", "20") far more often than that, but their item lines
+// differ row to row; only a degenerated output repeats a wordy line this much.
+func looksRepetitionLoop(text string) bool {
+	const (
+		minRunes   = 8
+		minLetters = 4
+		minRepeats = 12
+	)
+	counts := make(map[string]int)
+	for _, line := range strings.Split(text, "\n") {
+		t := strings.TrimSpace(line)
+		if utf8.RuneCountInString(t) < minRunes {
+			continue
+		}
+		letters := 0
+		for _, r := range t {
+			if unicode.IsLetter(r) {
+				letters++
+			}
+		}
+		if letters < minLetters {
+			continue
+		}
+		counts[t]++
+		if counts[t] >= minRepeats {
+			return true
+		}
+	}
+	return false
+}
+
+// paddleTableToText renders a Table Recognition response as readable rows.
+// That mode answers in PaddleOCR cell markup — <fcel>/<ecel> open cells,
+// <lcel>/<ucel>/<xcel> continue merged cells, <nl> breaks rows — or plain
+// HTML tables depending on content; both normalize to pipe-joined lines.
+func paddleTableToText(s string) string {
+	if strings.Contains(strings.ToLower(s), "<table") {
+		return htmlTablesToMarkdown(s)
+	}
+	if !strings.Contains(s, "<fcel>") && !strings.Contains(s, "<nl>") {
+		return s
+	}
+	var rows []string
+	for _, row := range strings.Split(s, "<nl>") {
+		// Merged-cell continuations carry no text of their own — drop the
+		// markers, then split cells on the openers.
+		for _, cont := range []string{"<lcel>", "<ucel>", "<xcel>"} {
+			row = strings.ReplaceAll(row, cont, "")
+		}
+		row = strings.ReplaceAll(row, "<ecel>", "<fcel>")
+		cells := []string{}
+		for _, c := range strings.Split(row, "<fcel>") {
+			if t := strings.TrimSpace(c); t != "" {
+				cells = append(cells, t)
+			}
+		}
+		if len(cells) > 0 {
+			rows = append(rows, strings.Join(cells, " | "))
+		}
+	}
+	return strings.Join(rows, "\n")
 }
 
 // htmlTablesToMarkdown converts any <table>…</table> blocks embedded in s to
