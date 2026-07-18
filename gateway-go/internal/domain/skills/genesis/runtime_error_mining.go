@@ -31,8 +31,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -48,6 +50,18 @@ const (
 	// runtimeErrorMinRecurrence: a signature below this is a one-off, not a
 	// grounded, code-actionable defect.
 	runtimeErrorMinRecurrence = 5
+	// runtimeErrorWarnMinRecurrence is the stricter bar for WARN-level
+	// signatures. Warns are admitted at all because graceful degradation
+	// DOWNGRADES real defects: a fallback-rescued model failure logs Warn
+	// ("model failed, trying fallback"), so the better the fallbacks, the less
+	// an Error-only miner sees (live 2026-07-18: a week of recurring kimi 400s
+	// produced zero candidates while an operator fixed them by hand). Warns
+	// are also noisier, hence the higher floor.
+	runtimeErrorWarnMinRecurrence = 12
+	// runtimeErrorStateTTL bounds the rolling signature window. Old
+	// occurrences age out so a long-fixed defect cannot keep a signature
+	// above threshold forever.
+	runtimeErrorStateTTL = 7 * 24 * time.Hour
 	// runtimeErrorMaxCandidatesPerRun bounds queue growth per run.
 	runtimeErrorMaxCandidatesPerRun = 2
 	// runtimeErrorRingScan is how many recent error lines to pull from the ring.
@@ -96,10 +110,144 @@ func runtimeErrorSignatureHash(sig string) string {
 
 // RuntimeErrorMiningTask is the standing lane. ErrorLines is injected (a thin
 // closure over the observe ring) so scoring is testable without a live ring.
+//
+// The lane aggregates into a PERSISTED rolling window (StatePath), not a
+// single ring snapshot: the observe ring is in-memory and every hot-swap
+// wipes it, so on active development days — exactly when defects are most
+// plentiful — a snapshot miner scans a near-empty ring every run and nothing
+// ever reaches the recurrence floor (live 2026-07-18: 7+ restarts in a
+// morning, zero candidates all week). Each run folds only lines newer than
+// the stored watermark, so a line is counted once across restarts.
 type RuntimeErrorMiningTask struct {
 	ErrorLines func(limit int) []observe.LogLine
 	Tracker    *Tracker
 	Logger     *slog.Logger
+	// StatePath overrides the rolling-state location (tests). Empty resolves
+	// to ~/.deneb/data/runtime_error_signature_state.json — the same
+	// homeDir-anchored convention as the Tracker ledgers.
+	StatePath string
+}
+
+// runtimeErrorSigEntry is one signature's rolling aggregate.
+type runtimeErrorSigEntry struct {
+	Count      int    `json:"count"`
+	FirstAt    int64  `json:"firstAtMs"`
+	LastAt     int64  `json:"lastAtMs"`
+	ExampleMsg string `json:"exampleMsg"`
+	ExampleErr string `json:"exampleErr,omitempty"`
+	// SeenError records whether the signature ever fired at ERROR level —
+	// error signatures use the lower recurrence floor, warn-only ones the
+	// stricter floor.
+	SeenError bool `json:"seenError,omitempty"`
+}
+
+// runtimeErrorState is the persisted rolling aggregation.
+type runtimeErrorState struct {
+	// WatermarkMs is the newest line timestamp already folded — the
+	// cross-restart dedup cursor.
+	WatermarkMs int64                            `json:"watermarkMs"`
+	Sigs        map[string]*runtimeErrorSigEntry `json:"sigs"`
+}
+
+func (t *RuntimeErrorMiningTask) statePath() string {
+	if strings.TrimSpace(t.StatePath) != "" {
+		return t.StatePath
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".deneb", "data", "runtime_error_signature_state.json")
+}
+
+// loadRuntimeErrorState is fail-open: a missing or corrupt file starts fresh —
+// losing the window costs one accumulation cycle, never the lane.
+func loadRuntimeErrorState(path string) *runtimeErrorState {
+	st := &runtimeErrorState{Sigs: map[string]*runtimeErrorSigEntry{}}
+	if path == "" {
+		return st
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return st
+	}
+	var loaded runtimeErrorState
+	if json.Unmarshal(raw, &loaded) != nil || loaded.Sigs == nil {
+		return st
+	}
+	return &loaded
+}
+
+func saveRuntimeErrorState(path string, st *runtimeErrorState) error {
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// fold merges ring lines newer than the watermark into the rolling state and
+// prunes aged-out signatures. Returns the number of lines folded.
+func (st *runtimeErrorState) fold(lines []observe.LogLine, now time.Time) int {
+	folded := 0
+	maxTs := st.WatermarkMs
+	for _, ln := range lines {
+		if ln.Ts <= st.WatermarkMs {
+			continue
+		}
+		if ln.Ts > maxTs {
+			maxTs = ln.Ts
+		}
+		if isExternalFault(ln) {
+			continue
+		}
+		sig := normalizeErrorSignature(ln.Msg)
+		if sig == "" {
+			continue
+		}
+		e := st.Sigs[sig]
+		if e == nil {
+			e = &runtimeErrorSigEntry{FirstAt: ln.Ts}
+			st.Sigs[sig] = e
+		}
+		e.Count++
+		folded++
+		if ln.Ts >= e.LastAt {
+			e.LastAt = ln.Ts
+			e.ExampleMsg = ln.Msg
+			e.ExampleErr = ln.Attrs["error"]
+		}
+		if strings.EqualFold(ln.Level, "ERROR") {
+			e.SeenError = true
+		}
+	}
+	st.WatermarkMs = maxTs
+	cutoff := now.Add(-runtimeErrorStateTTL).UnixMilli()
+	for sig, e := range st.Sigs {
+		if e.LastAt < cutoff {
+			delete(st.Sigs, sig)
+		}
+	}
+	return folded
+}
+
+// recurrenceFloor is per-signature: ERROR-touched signatures promote at the
+// base floor; warn-only ones need the stricter floor.
+func (e *runtimeErrorSigEntry) recurrenceFloor() int {
+	if e.SeenError {
+		return runtimeErrorMinRecurrence
+	}
+	return runtimeErrorWarnMinRecurrence
 }
 
 // Name identifies the task in the autonomous scheduler.
@@ -116,14 +264,15 @@ func (t *RuntimeErrorMiningTask) Interval() time.Duration {
 }
 
 type runtimeErrorAgg struct {
-	sig     string
-	count   int
-	lastAt  int64
-	example observe.LogLine
+	sig        string
+	count      int
+	lastAt     int64
+	exampleMsg string
+	exampleErr string
 }
 
-// Run mines one snapshot of the error ring for recurring, code-actionable
-// signatures and records the missing propose-only candidates.
+// Run folds the current ring into the persisted rolling window and records
+// propose-only candidates for signatures over their recurrence floor.
 func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 	if t.ErrorLines == nil || t.Tracker == nil {
 		return nil
@@ -133,33 +282,26 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 		logger = slog.Default()
 	}
 
-	lines := t.ErrorLines(runtimeErrorRingScan)
-	aggs := map[string]*runtimeErrorAgg{}
-	for _, ln := range lines {
-		if isExternalFault(ln) {
-			continue
-		}
-		sig := normalizeErrorSignature(ln.Msg)
-		if sig == "" {
-			continue
-		}
-		a := aggs[sig]
-		if a == nil {
-			a = &runtimeErrorAgg{sig: sig, example: ln}
-			aggs[sig] = a
-		}
-		a.count++
-		if ln.Ts > a.lastAt {
-			a.lastAt = ln.Ts
-			a.example = ln
-		}
+	now := time.Now()
+	path := t.statePath()
+	state := loadRuntimeErrorState(path)
+	folded := state.fold(t.ErrorLines(runtimeErrorRingScan), now)
+	if err := saveRuntimeErrorState(path, state); err != nil {
+		logger.Warn("runtime-error-mining: state save failed (window will re-accumulate)", "error", err)
+	}
+	if folded > 0 {
+		logger.Debug("runtime-error-mining: folded ring lines into rolling window",
+			"folded", folded, "signatures", len(state.Sigs))
 	}
 
 	// Deterministic order: most-recurring first, signature as tie-break.
-	ranked := make([]*runtimeErrorAgg, 0, len(aggs))
-	for _, a := range aggs {
-		if a.count >= runtimeErrorMinRecurrence {
-			ranked = append(ranked, a)
+	ranked := make([]*runtimeErrorAgg, 0, len(state.Sigs))
+	for sig, e := range state.Sigs {
+		if e.Count >= e.recurrenceFloor() {
+			ranked = append(ranked, &runtimeErrorAgg{
+				sig: sig, count: e.Count, lastAt: e.LastAt,
+				exampleMsg: e.ExampleMsg, exampleErr: e.ExampleErr,
+			})
 		}
 	}
 	sort.Slice(ranked, func(i, j int) bool {
@@ -176,7 +318,6 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 	}
 
 	authored := 0
-	now := time.Now()
 	for _, a := range ranked {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -223,15 +364,11 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 func buildRuntimeErrorEvidence(a *runtimeErrorAgg) string {
 	var b strings.Builder
 	b.WriteString(strconv.Itoa(a.count))
-	b.WriteString("× in the recent error ring. example: ")
-	b.WriteString(common.TruncateRunes(a.example.Msg, 300))
-	if e := strings.TrimSpace(a.example.Attrs["error"]); e != "" {
+	b.WriteString("× in the rolling 7d window (restart-surviving). example: ")
+	b.WriteString(common.TruncateRunes(a.exampleMsg, 300))
+	if e := strings.TrimSpace(a.exampleErr); e != "" {
 		b.WriteString("\nerror=")
 		b.WriteString(common.TruncateRunes(e, 300))
-	}
-	if rid := strings.TrimSpace(a.example.RunID); rid != "" {
-		b.WriteString("\nrunId=")
-		b.WriteString(rid)
 	}
 	return b.String()
 }

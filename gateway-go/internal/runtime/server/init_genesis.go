@@ -504,12 +504,17 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 			// autonomous source edit is dispatched.
 			if s.logCapture != nil {
 				s.autonomousSvc.RegisterTask(&genesis.RuntimeErrorMiningTask{
+					// Warn+, not Error-only: graceful degradation downgrades
+					// real defects (a fallback-rescued model failure logs
+					// Warn), so an Error-only feed goes blind exactly where
+					// the system self-heals. The task applies a stricter
+					// recurrence floor to warn-only signatures.
 					ErrorLines: func(limit int) []observe.LogLine {
 						r := s.logCapture.Ring()
 						if r == nil {
 							return nil
 						}
-						return r.Query(observe.QueryOpts{MinLevel: slog.LevelError, Limit: limit})
+						return r.Query(observe.QueryOpts{MinLevel: slog.LevelWarn, Limit: limit})
 					},
 					Tracker: s.genesisTracker,
 					Logger:  s.logger,
