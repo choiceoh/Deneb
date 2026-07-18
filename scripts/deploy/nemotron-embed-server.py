@@ -58,13 +58,15 @@ class Adapter(BaseHTTPRequestHandler):
 
     def _backend_embed(self, texts: list[str]) -> list[list[float]]:
         # truncate_prompt_tokens: vLLM 400s on inputs beyond --max-model-len
-        # (4096) instead of truncating like the BGE server did — diary warm
-        # batches carry entries that long (observed 2026-07-18). Server-side
-        # truncation restores the old lossy-but-never-failing contract.
+        # instead of truncating like the BGE server did — diary warm batches
+        # carry entries that long (observed 2026-07-18). Server-side truncation
+        # restores the old lossy-but-never-failing contract. MUST match the
+        # backend unit's --max-model-len (8192; a pooling model needs the whole
+        # sequence in one batch, so --max-num-batched-tokens matches too).
         body = json.dumps({
             "model": MODEL_ID,
             "input": texts,
-            "truncate_prompt_tokens": 4096,
+            "truncate_prompt_tokens": 8192,
         }).encode()
         req = urllib.request.Request(
             self.args.backend.rstrip("/") + "/v1/embeddings",
