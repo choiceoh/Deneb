@@ -30,6 +30,13 @@ describe("deneb-html sandbox document", () => {
     expect(doc.endsWith("<div>본문</div>")).toBe(true);
   });
 
+  it("injects the base stylesheet before the page body so page styles win", () => {
+    const doc = buildSrcdoc("<style>body{margin:0}</style><div>본문</div>");
+    expect(doc).toContain("color-scheme:light");
+    expect(doc).toContain("Noto Sans KR");
+    expect(doc.indexOf("Noto Sans KR")).toBeLessThan(doc.indexOf("body{margin:0}"));
+  });
+
   it("classifies bridge messages and rejects foreign data", () => {
     expect(parseDenebHtmlMessage({ __deneb: "prompt", text: " 확인 " })).toEqual({ type: "prompt", text: "확인" });
     expect(parseDenebHtmlMessage({ __deneb: "height", h: 320 })).toEqual({ type: "height", h: 320 });

@@ -17,11 +17,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
-// Injected ahead of the document: mobile viewport + the deneb bridge.
-// window.deneb.send(text) → the native "choice" callback (a user chat message);
-// the height reporter grows the frame to fit so the page never double-scrolls.
+// Base stylesheet every page gets for free: Korean-friendly system fonts,
+// readable rhythm, bordered tables, sane margins on a light surface. Injected
+// FIRST so the page's own styles override it naturally. Keep in sync with the
+// desktop PRELUDE (DenebHtml.tsx) and docs/research/deneb-html.md.
+private const val BASE_CSS =
+    ":root{color-scheme:light}" +
+        "body{margin:14px;font-family:'Pretendard','Noto Sans KR',system-ui,-apple-system,sans-serif;" +
+        "font-size:14px;line-height:1.6;color:#1f2128;background:#fff}" +
+        "h1,h2,h3,h4{line-height:1.3;margin:0.7em 0 0.35em}" +
+        "h1{font-size:22px}h2{font-size:18px}h3{font-size:15px}" +
+        "p{margin:0.4em 0}" +
+        "table{border-collapse:collapse;width:100%}" +
+        "th,td{padding:6px 10px;border:1px solid #e5e6ea;text-align:left}" +
+        "th{background:#f7f7f9}" +
+        "button{font:inherit;cursor:pointer}"
+
+// Injected ahead of the document: mobile viewport + base style + the deneb
+// bridge. window.deneb.send(text) → the native "choice" callback (a user chat
+// message); the height reporter grows the frame to fit so the page never
+// double-scrolls.
 private const val PRELUDE =
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+        "<style>$BASE_CSS</style>" +
         "<script>(function(){" +
         "window.deneb={send:function(t){DenebNative.send(String(t))}};" +
         "var r=function(){DenebNative.height(document.documentElement.scrollHeight)};" +
