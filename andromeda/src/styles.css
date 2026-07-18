@@ -955,6 +955,21 @@ textarea {
 .ai-send-stop:hover:not(:disabled) {
   background: var(--due);
 }
+/* 전역 오프라인 배너 — 상단 중앙, 재연결 중에만. */
+.offline-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--panel);
+  font-size: 12px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+}
+
 /* 컴포저 첨부 스테이징 칩 — 전송 전 파일이 여기 대기한다 (썸네일+이름+제거). */
 .attach-chips {
   display: flex;
