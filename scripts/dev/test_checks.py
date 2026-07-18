@@ -83,6 +83,18 @@ class MarkupAndDeliveryTests(unittest.TestCase):
         card = "```deneb-ui\n<card><code>lenient card html</card>\n```"
         self.assertTrue(checks.check_telegram_safe(card)[0])
 
+    def test_deneb_html_document_is_exempt_from_length_and_tag_balance(self) -> None:
+        # A webpage-style answer legitimately exceeds the prose limit (the
+        # gateway caps it separately at 96KB) and is a full HTML document.
+        page = "요약\n```deneb-html\n<!doctype html><b>" + "가" * 5000 + "\n```"
+        self.assertTrue(checks.check_telegram_safe(page)[0])
+
+        # Prose around the document still counts against the limit.
+        long_prose = "x" * 4097 + "\n```deneb-html\n<div>페이지</div>\n```"
+        passed, detail = checks.check_telegram_safe(long_prose)
+        self.assertFalse(passed)
+        self.assertIn("exceeds 4096", detail)
+
 
 class DenebUIValidatorTests(unittest.TestCase):
     def test_reply_without_card_does_not_spawn_validator(self) -> None:

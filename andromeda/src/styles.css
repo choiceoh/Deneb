@@ -4587,6 +4587,15 @@ button.mail-attachment {
   gap: 10px;
   line-height: 1.56;
 }
+/* deneb-html — webpage-style HTML answer, sandboxed inline in the transcript.
+   Light surface regardless of app theme: the page authors its own design. */
+.deneb-html-frame {
+  width: 100%;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-ctl);
+  background: #fff;
+  display: block;
+}
 /* deneb-ui card answer — the round-trip user message ("Responded with: …" /
    "Pressed: …") presented as a compact card-reply instead of raw wire text */
 .ui-submission {

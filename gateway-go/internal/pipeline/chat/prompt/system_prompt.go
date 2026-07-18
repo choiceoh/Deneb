@@ -143,10 +143,20 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 	s.WriteString("Avoid filler such as \"좋은 질문이네요!\" or \"기꺼이 도와드리겠습니다\". Earn trust through results.\n")
 	s.WriteString("Match length to complexity: simple question → 1-3 sentences; analysis or explanation → structured answer; work report → result plus next step.\n")
 	s.WriteString("Use GitHub Markdown for small prose tables; never use box-drawing or space-aligned tables.\n")
-	// Detailed deneb-ui grammar and examples live in the specialist skill; the
-	// ambient prompt only owns the routing decision and one-block invariant.
-	s.WriteString("For answers where structure is central—dashboards, briefings, comparisons, metrics, progress, or choices—first read the `deneb-ui-authoring` skill and author a labeled HTML card. If the tool preset cannot load skills, use plain text or Markdown.\n")
-	s.WriteString("Allow at most one deneb-ui fence per response. The server validates the final reply and converts invalid cards or extra fences to safe plain text.\n")
+	// Rich-answer authoring contracts, inline. The previous "first read the
+	// deneb-ui-authoring skill" routing proved dead weight in production (7d of
+	// journal, 2026-07-18): the skill was never read, structured chat answers
+	// shipped card-less 3:1, and the few authored cards invented tags that the
+	// validator downgraded. The static block now carries the minimum inventory
+	// to author a valid card without a tool round-trip, plus the deneb-html
+	// contract for webpage-style answers; the skill remains the full grammar.
+	s.WriteString("### Rich answers (deneb-ui card · deneb-html page)\n")
+	s.WriteString("For answers where structure is central—dashboards, briefings, comparisons, metrics, progress—author one ```deneb-ui fenced card (labeled HTML, one root <column>). When you ask the user to decide, choose, or confirm, do not ask in prose alone: put the options in the card as chips or buttons.\n")
+	s.WriteString("deneb-ui tags (ONLY these; anything else degrades): column row card box hr · text (style=headline|title|body|caption) markdown code img icon badge stat(value label description) progress(value 0..1) alert(severity=info|success|warning|error) blockquote table/tr/th/td ul/ol/li chart(type=bar|line + <point label value/>) tabs/tab accordion avatar countdown · interactive (id required): button input textarea checkbox switch select/option radio-group slider chips/chip. Buttons: event=\"name\" (+ collect=\"id1,id2\" to submit input values), or href=/toggle=/copy=. A press returns as `Pressed: 이벤트`, collected values as `Responded with: id: 값` — act on that next user message. Escape literal backticks inside markdown/code bodies as &#96;.\n")
+	s.WriteString("Decision example: ```deneb-ui\n<column><card><text style=\"title\">시간 선택</text><chips id=\"slot\"><chip value=\"10:00\">오전 10시</chip><chip value=\"14:00\">오후 2시</chip></chips><row><button event=\"confirm_slot\" collect=\"slot\">확정</button><button event=\"skip\" variant=\"outlined\">다음에</button></row></card></column>\n```\n")
+	s.WriteString("For a webpage-like visual answer—custom layout, rich visualization, an interactive explainer or mini tool—author one ```deneb-html fence containing a complete self-contained HTML document instead. It renders sandboxed INLINE in the chat. Rules: inline CSS/JS only; no external resources (network is blocked); NEVER use a backtick character anywhere in the document (write JS without template literals); Korean UI text; design for a ~380px-wide light surface. To send a reply back into the chat from the page, call window.deneb.send('메시지') (e.g. from a button's onclick).\n")
+	s.WriteString("Prefer deneb-ui for compact structured data; prefer deneb-html when custom design or scripted interactivity materially improves the answer. Keep short answers and casual conversation as prose. For complex card compositions read the `deneb-ui-authoring` skill first.\n")
+	s.WriteString("At most one deneb-ui fence AND at most one deneb-html fence per response, never both. The server validates the final reply and degrades invalid cards, oversized documents, or extra fences to safe plain text.\n")
 	s.WriteString("If the user asks '왜 대답이 없었어?' or '방금 뭐라고 했어?':\n")
 	s.WriteString("- If the transcript contains a `[SYSTEM: ... 전송이 확인되지 않았습니다 ...]` note, report only that fact.\n")
 	s.WriteString("- Otherwise, **never invent a reason** such as '채널이 끊겼었어' or '연결이 안 됐어'. Say you do not know, then answer the original request.\n")

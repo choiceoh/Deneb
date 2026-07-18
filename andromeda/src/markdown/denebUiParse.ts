@@ -18,6 +18,10 @@ export type Node = any;
 // body start — accepted only when it begins with "<", so mid-sentence
 // mentions of the fence stay prose.
 const FENCE_OPEN = /^(.*?)`{3,}\s*deneb-ui\s*(<.*)?$/i;
+// deneb-html (webpage-style HTML answer) opener is deliberately strict — own
+// line, no glued-prose leniency: an HTML document starts on its own line, and
+// its body must never contain backticks per the authoring contract.
+const HTML_FENCE_OPEN = /^`{3,}\s*deneb-html\s*$/i;
 const FENCE_CLOSE = /^`{3,}\s*$/;
 // A ``` run glued into an HTML body line closes the fence: HTML bodies escape
 // backticks as &#96; per the authoring contract, so a raw run can only be the
@@ -30,7 +34,12 @@ export type UiSegment =
   | { kind: "ui"; body: string }
   // Unclosed trailing fence mid-stream; body is the partial content so HTML
   // blocks can render progressively (EOF auto-close makes partials parseable).
-  | { kind: "ui-pending"; body: string };
+  | { kind: "ui-pending"; body: string }
+  // Webpage-style HTML answer (```deneb-html): rendered sandboxed inline in
+  // the transcript. A pending one never renders partially — scripts must not
+  // run in a half-built document.
+  | { kind: "html"; body: string }
+  | { kind: "html-pending"; body: string };
 
 // Split a (possibly mid-stream) assistant text part into Markdown spans and
 // deneb-ui blocks. An unclosed trailing fence → a pending placeholder.
@@ -45,6 +54,25 @@ export function splitDenebUi(text: string): UiSegment[] {
     md = [];
   };
   for (let i = 0; i < lines.length; i++) {
+    if (HTML_FENCE_OPEN.test(lines[i].trim())) {
+      flush();
+      const body: string[] = [];
+      let closed = false;
+      while (i + 1 < lines.length) {
+        i++;
+        if (FENCE_CLOSE.test(lines[i].trim())) {
+          closed = true;
+          break;
+        }
+        body.push(lines[i]);
+      }
+      if (!closed) {
+        segs.push({ kind: "html-pending", body: body.join("\n") });
+        return segs; // streaming: nothing useful after an open block yet
+      }
+      segs.push({ kind: "html", body: body.join("\n") });
+      continue;
+    }
     const open = FENCE_OPEN.exec(lines[i]);
     if (open) {
       if (open[1].trim()) md.push(open[1]);

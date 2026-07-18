@@ -22,18 +22,35 @@ fun MarkdownDocument.toPlainText(): String {
 
 private fun blockToSpeakable(block: BlockNode): String = when (block) {
     is Heading -> inlinesToText(block.inlines)
+
     is Paragraph -> inlinesToText(block.inlines)
+
     is CodeFence -> ""
+
     is Blockquote -> block.children.joinToString(". ") { blockToSpeakable(it) }.trim()
+
     is Collapsible -> (inlinesToText(block.summary) + ". " + block.children.joinToString(". ") { blockToSpeakable(it) }).trim()
+
     is BulletList -> block.items.joinToString("\n") { itemToSpeakable(it) }
+
     is OrderedList -> block.items.joinToString("\n") { itemToSpeakable(it) }
+
     is Table -> tableToSpeakable(block)
+
     HorizontalRule -> ""
+
     is DisplayMath -> block.latex
+
     is DenebUiBlock -> block.node.collectSpeakableText()
+
     is DenebUiError -> ""
+
     is DenebUiPending -> ""
+
+    // A webpage answer has no faithful speakable projection — skip it.
+    is DenebHtmlBlock -> ""
+
+    is DenebHtmlPending -> ""
 }
 
 private fun itemToSpeakable(item: ListItem): String {
@@ -118,6 +135,11 @@ private fun blockToPlain(block: BlockNode): String = when (block) {
     is DenebUiError -> ""
 
     is DenebUiPending -> ""
+
+    // Copy the page's source — the only faithful plain projection of a document.
+    is DenebHtmlBlock -> block.html
+
+    is DenebHtmlPending -> block.rawBody
 }
 
 private fun itemToPlain(item: ListItem): String = item.children.joinToString("\n") { blockToPlain(it) }.trim()

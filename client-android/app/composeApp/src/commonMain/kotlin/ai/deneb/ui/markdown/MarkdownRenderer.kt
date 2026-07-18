@@ -5,6 +5,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.DenebChip
 import ai.deneb.ui.components.LocalShowFullScreenImageModel
 import ai.deneb.ui.components.rememberHaptics
+import ai.deneb.ui.dynamicui.DenebHtmlAnswerBlock
 import ai.deneb.ui.dynamicui.DenebUiHtml
 import ai.deneb.ui.dynamicui.DenebUiParser
 import ai.deneb.ui.dynamicui.DenebUiRenderer
@@ -254,6 +255,51 @@ private fun BlockRenderer(
         )
 
         is DenebUiPending -> DenebUiPendingBlock(block, isInteractive, onUiCallback, frozen)
+
+        is DenebHtmlBlock -> DenebHtmlAnswerBlock(
+            html = block.html,
+            // Page → chat rides the existing "choice" callback (a user message);
+            // stale/read-only rows pass null so page sends are ignored.
+            onSendPrompt = if (isInteractive) {
+                { text -> onUiCallback("choice", mapOf("text" to text)) }
+            } else {
+                null
+            },
+        )
+
+        is DenebHtmlPending -> DenebHtmlPendingBlock(block, isInteractive, onUiCallback)
+    }
+}
+
+@Composable
+private fun DenebHtmlPendingBlock(
+    block: DenebHtmlPending,
+    isInteractive: Boolean,
+    onUiCallback: (String, Map<String, String>) -> Unit,
+) {
+    if (LocalDenebUiStreaming.current) {
+        // Never run scripts in a half-streamed document — hold a placeholder.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(vertical = 8.dp),
+        ) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Text(
+                "웹 응답 구성 중…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        return
+    }
+    // Final but unclosed (truncated reply): render if it is markup, else keep
+    // the source readable as a code fence.
+    val trimmed = block.rawBody.trim()
+    if (trimmed.startsWith("<")) {
+        BlockRenderer(DenebHtmlBlock(trimmed), isInteractive, onUiCallback, frozen = null)
+    } else {
+        CodeFenceBlock(language = "html", code = block.rawBody, modifier = Modifier.padding(vertical = 4.dp))
     }
 }
 

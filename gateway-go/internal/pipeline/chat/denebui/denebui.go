@@ -33,6 +33,15 @@ type Issue struct {
 // String returns the human-readable representation.
 func (is Issue) String() string { return is.Path + ": " + is.Msg }
 
+// Recoverable reports whether the issue is content-preserving: the HTML parser
+// already unwrapped the offending unknown tag (children hoisted, or a void tag
+// with no content), so the parsed tree still renders faithfully on all three
+// clients — their parsers unwrap unknown tags the same way. NormalizeFinalReply
+// delivers a card whose issues are ALL recoverable instead of downgrading it to
+// plain text; the issue stays logged as drift telemetry. Structural violations
+// (missing interactive id, invalid action, unparseable body) are not recoverable.
+func (is Issue) Recoverable() bool { return strings.HasPrefix(is.Msg, "unknown tag <") }
+
 // nodeSpec captures the structural rules for one node type.
 type nodeSpec struct {
 	requireID    bool                // true if "id" must be a non-empty string
