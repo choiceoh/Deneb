@@ -24,6 +24,7 @@ func (s *Server) resolveFeedWorkModel() string {
 func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 	s.registerProcessApprovalSideEffect(hub)
 	s.configureAutonomousWorkflow(hub)
+	s.registerSidecarHealthWatch()
 
 	if s.chatHandler != nil {
 		homeDir := workflowHomeDir()

@@ -95,12 +95,33 @@ func (n *Service) runHeartbeat(ctx context.Context) {
 func (n *Service) enqueueHeartbeat(startTime time.Time) {
 	now := time.Now()
 	pollOK, pollLatency, pollErr := n.selfPoll(context.Background())
+	depDown, depTransitions := n.probeDependencies()
 
 	body := n.buildHeartbeatLine(startTime, now)
 	if !pollOK {
 		body = n.composeHangAlert(pollErr) + "\n" + body
 	} else if pollLatency > 0 {
 		body += fmt.Sprintf(" — /health %s", humanLatency(pollLatency))
+	}
+	if line := composeDepLine(depDown); line != "" {
+		body += "\n" + line
+	}
+
+	// Dependency state TRANSITIONS alert immediately and separately from the
+	// quiet heartbeat: a sidecar going down (or recovering) is exactly the
+	// event an operator must not have to fish out of the monitoring stream.
+	// Each dependency gets its own debounce key so one flapping sidecar
+	// cannot silence another's alert.
+	for _, t := range depTransitions {
+		key := "_dep_" + t.name
+		if !n.checkDebounce(key) {
+			continue
+		}
+		select {
+		case n.queue <- notifyEvent{name: key, payload: composeDepAlert(t)}:
+			n.markSent(key)
+		default:
+		}
 	}
 
 	if !n.checkDebounce("_heartbeat") {
