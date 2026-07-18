@@ -102,6 +102,34 @@ _RISK_NOTE = (
     "land nothing and record why."
 )
 
+# The responsibility/fan-out family scores a large public surface and/or a
+# multi-hundred-commit git-history window. No single bounded coding session can
+# make such a finding DISAPPEAR (the history component only heals as the
+# window slides; the surface takes multiple steps), so the default
+# "confirm this finding disappears" verify contract made every dispatched
+# agent decline — live 2026-07-14/15, all 4 declined dispatches were exactly
+# these kinds, burning 2–18 min of coding-lane quota each with zero landings.
+# They get an honest bounded-step contract instead, and NO finding-present
+# impact contract (a landed bounded step would otherwise be mislabeled
+# "no effect" when the finding, correctly, is still present).
+INCREMENTAL_KINDS = frozenset({
+    "responsibility-cochange",
+    "volatile-contract-responsibility",
+    "diffuse-change-responsibility",
+    "fanout-hotspot",
+})
+
+INCREMENTAL_VERIFY = (
+    "Contract: this finding scores a large surface and/or a git-history window "
+    "and CANNOT disappear in one session — do not aim for that. Land ONE bounded "
+    "structural step instead: move the top 1-2 consumers behind a narrow port, "
+    "or shrink the exported surface for one capability. If no such step is "
+    "cleanly separable, land nothing and record why. Done = the bounded step "
+    "compiles, passes the lane gates, and plausibly reduces the finding's "
+    "structural driver (exports / fan-in / fan-out); the score itself moves "
+    "over multiple steps and window slides."
+)
+
 
 class GatewayError(RuntimeError):
     """The gateway RPC failed — the miner must fail loud, not file silently."""
@@ -175,11 +203,25 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         fid = str(f["id"])
         kind = fid.split(":", 1)[0]
+        if kind == "structure" and ":" in fid.split(":", 1)[1]:
+            # v3 domain-prefixed ids ("structure:<rule>:<hash>") — the rule is
+            # the second segment.
+            kind = fid.split(":", 2)[1]
         proposed = str(f.get("remediation") or "").strip()
         verify = str(f.get("verify") or "").strip()
-        if verify:
+        incremental = kind in INCREMENTAL_KINDS
+        if incremental:
+            # These findings score a large surface and/or a multi-hundred-commit
+            # history window; NO single bounded session can make the finding
+            # disappear, and a "confirm it disappears" contract makes the
+            # dispatched agent correctly decline every time (live 2026-07-14/15:
+            # all 4 declined dispatches were exactly this family — 2 to 18
+            # minutes of coding-lane quota each, zero landings). Replace the
+            # verify ask with an honest bounded step.
+            proposed = f"{proposed} {INCREMENTAL_VERIFY}".strip()
+        elif verify:
             proposed = f"{proposed} Verify: {verify}".strip()
-        out.append({
+        candidate = {
             "scope": "code",
             "skillName": "codebase-health",
             "title": f"structural finding: {kind} @ {f['path']}",
@@ -196,14 +238,20 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
             "proposedChange": proposed,
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{fid}",
-            "impactContract": {
+        }
+        if not incremental:
+            # finding-present → 0 is only an honest impact contract for
+            # findings a single fix can extinguish; a bounded step on the
+            # incremental family leaves the finding correctly present and
+            # would be mislabeled "no effect".
+            candidate["impactContract"] = {
                 "metric": f"health.finding_present:{fid}",
                 "direction": "decrease",
                 "baseline": 1,
                 "target": 0,
                 "minSamples": 1,
-            },
-        })
+            }
+        out.append(candidate)
     return out
 
 
