@@ -13,11 +13,14 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  # Health Bench 2.0 is intentionally independent of the Go job: documentation,
-  # test, client, and CI-only changes can all affect maintainability evidence.
-  # Full history is required for change-locality and co-change measurements.
+  # Health Bench 2.0 scorer unit tests only. The pillar RATCHET is out of PR
+  # CI entirely (operator decision 2026-07-18): its git-window scoring
+  # false-reds unrelated PRs (five-pillar drops on a one-file systemd diff),
+  # and even the advisory step's step-summary noise trained reviewers to skim
+  # past it. The fail-closed ratchet sweep lives on Nightly Drift Watch; run
+  # it locally via `make health-v2-check`.
   code-health:
-    name: Code health 2.0 (fast)
+    name: Health Bench scorer tests
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     steps:
@@ -29,28 +32,6 @@ jobs:
 
       - name: Test Health Bench 2.0
         run: make health-v2-test
-
-      # Ratchet is advisory on PRs: git-window churn tips "high" findings and
-      # false-reds unrelated PRs. Scorer unit tests above stay required; the
-      # full ratchet runs on Nightly Drift Watch.
-      - name: Check Health Bench 2.0 ratchet (advisory)
-        continue-on-error: true
-        run: |
-          python3 scripts/audit/codebase-health-v2.py \
-            --check \
-            --format markdown \
-            --json-out health-v2-report.json \
-            >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice::Health Bench 2.0 ratchet is advisory in PR CI; see nightly-drift for the fail-closed sweep."
-
-      - name: Upload Health Bench 2.0 report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: health-v2-report
-          path: health-v2-report.json
-          if-no-files-found: warn
-          retention-days: 14
 
   python:
     name: Python support tooling
