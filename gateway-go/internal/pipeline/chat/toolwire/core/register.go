@@ -272,7 +272,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		})
 	}
 
-	// Audio transcription: resident VibeVoice-ASR sidecar over a file on disk.
+	// Audio transcription: resident MOSS-Transcribe-Diarize ASR sidecar over a file on disk.
 	// Deferred — capture RPCs cover app-shared audio; this is for files the
 	// agent encounters itself (downloads, exec artifacts, file store).
 	registry.RegisterTool(toolport.ToolDef{

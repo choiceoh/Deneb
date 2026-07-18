@@ -29,7 +29,7 @@ const (
 )
 
 // ToolTranscribe returns the transcribe tool: audio file → diarized Korean
-// transcript ("[mm:ss 화자N] …") via the resident VibeVoice-ASR sidecar.
+// transcript ("[mm:ss 화자N] …") via the resident ASR sidecar (MOSS-Transcribe-Diarize).
 // hotwords supplies the wiki+contacts proper-noun bias the capture path
 // already uses (people/companies/deals); nil just skips the bias — the
 // operator's DENEB_ASR_HOTWORDS env is still merged downstream.

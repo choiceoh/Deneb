@@ -102,8 +102,8 @@ func New(cfg Config) *Handler {
 
 // maxMiniappRPCBodyBytes caps the POST /api/v1/miniapp/rpc body. This endpoint
 // carries the whole miniapp.* surface, including capture RPCs whose params hold
-// a base64-encoded image or audio recording (VibeVoice-ASR accepts up to a
-// 60-minute clip), so the cap is generous — its job is to stop an unbounded
+// a base64-encoded image or audio recording (the ASR sidecar accepts up to a
+// 90-minute clip), so the cap is generous — its job is to stop an unbounded
 // io.ReadAll from OOMing the host (GPU memory == system RAM on the DGX), not to
 // tightly bound captures. The text-only chat stream uses the smaller
 // maxMiniappChatStreamBodyBytes.

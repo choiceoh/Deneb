@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// TestTranscribeAudioLiveReturnsTranscript exercises the VibeVoice-ASR client end-to-end against
+// TestTranscribeAudioLiveReturnsTranscript exercises the ASR-sidecar client end-to-end against
 // a real running server (multipart upload, JSON parse, diarized formatting).
 // Skipped in CI (no GPU); run on the host:
 //
@@ -15,7 +15,7 @@ import (
 //	  go test -run TestTranscribeAudioLiveReturnsTranscript ./internal/pipeline/chat/tools/
 func TestTranscribeAudioLiveReturnsTranscript(t *testing.T) {
 	if os.Getenv("DENEB_ASR_LIVE") != "1" {
-		t.Skip("set DENEB_ASR_LIVE=1 to run against a live VibeVoice-ASR server")
+		t.Skip("set DENEB_ASR_LIVE=1 to run against a live ASR sidecar (MOSS)")
 	}
 	path := os.Getenv("DENEB_ASR_AUDIO")
 	if path == "" {

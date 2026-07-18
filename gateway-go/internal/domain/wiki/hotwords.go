@@ -7,7 +7,7 @@ import (
 )
 
 // HotwordHints builds a comma-separated proper-noun bias list for speech
-// recognition (VibeVoice-ASR's `hotwords`) from the wiki index: each page's
+// recognition (the ASR sidecar's `hotwords`) from the wiki index: each page's
 // title plus its tags — the company names, people, places, and domain terms the
 // user actually works with, which are exactly what bare ASR mis-hears
 // (탑솔라→팝솔라, 에코프로, 석문호, 케이원일렉트릭, …). Named entities

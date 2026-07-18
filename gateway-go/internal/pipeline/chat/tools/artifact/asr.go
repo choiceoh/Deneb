@@ -18,18 +18,20 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
-// VibeVoice-ASR is Deneb's speech-to-text sidecar: microsoft/VibeVoice-ASR-HF
-// (transformers, served on the local GPU by start-vibevoice-asr.sh, port 18013).
-// One model does transcription + speaker diarization + timestamps, and accepts
-// `hotwords` (Deneb contacts / deals / company names) that reliably fix the
-// Korean proper nouns bare ASR mis-hears (탑솔라, 데네브). It decodes any
-// container (.oga/opus, m4a, mp3, wav) to 24 kHz mono internally.
+// MOSS-Transcribe-Diarize is Deneb's speech-to-text sidecar (0.9B, served on
+// srv1 by ~/start-moss-asr.sh, port 18014 — the 2026-07-18 cutover from
+// VibeVoice-ASR 9B; same /v1/transcribe contract, so only DENEB_ASR_URL moved).
+// One model does transcription + speaker diarization + timestamps in a single
+// pass (up to 90 min), and accepts `hotwords` (Deneb contacts / deals / company
+// names) that fix the Korean proper nouns bare ASR mis-hears (탑솔라, 핵사).
+// The server decodes any container (.oga/opus, m4a, mp3, wav) internally.
 // Unlike the OCR path there is no local fallback — when the server is down,
 // transcription returns a clear error and the caller degrades by surfacing it.
 
 const (
-	// asrDefaultURL is the local VibeVoice-ASR FastAPI base.
-	asrDefaultURL = "http://127.0.0.1:18013"
+	// asrDefaultURL is the ASR sidecar FastAPI base (prod overrides with
+	// DENEB_ASR_URL=http://100.105.145.6:18014 via the gateway unit drop-in).
+	asrDefaultURL = "http://127.0.0.1:18014"
 	// asrTimeout bounds a single transcription, which runs in the capture.audio
 	// RPC *before* the meeting-minutes turn (with the request ctx, not the
 	// 5-minute turn deadline — that bounds the turn afterward). The model is
@@ -49,7 +51,7 @@ func asrBaseURL() string {
 	return asrDefaultURL
 }
 
-// asrReady reports whether the VibeVoice-ASR sidecar is reachable (GET /health,
+// asrReady reports whether the ASR sidecar is reachable (GET /health,
 // 200). It gates the YouTube audio→ASR fallback BEFORE any audio is downloaded,
 // so a deployment with the sidecar down doesn't waste the fetch budget on a
 // doomed transcription. A connection-refused probe returns fast, so this is cheap
@@ -117,7 +119,7 @@ func (f *flexStr) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// asrResponse mirrors vibevoice_server.py's /v1/transcribe JSON.
+// asrResponse mirrors the ASR sidecar (moss_server.py) /v1/transcribe JSON.
 type asrResponse struct {
 	Segments      []asrSegment `json:"segments"`
 	Transcription string       `json:"transcription"`
@@ -128,13 +130,13 @@ type asrResponse struct {
 	Hotwords      string       `json:"hotwords"`
 }
 
-// transcribeAudio posts raw audio bytes to VibeVoice-ASR and returns the parsed
+// transcribeAudio posts raw audio bytes to the ASR sidecar and returns the parsed
 // structured response (segments + flat transcription). filename is cosmetic —
 // the server sniffs the codec from the bytes — but a plausible extension keeps
 // the multipart part tidy.
 func transcribeAudio(ctx context.Context, audio []byte, filename, hotwords string) (*asrResponse, error) {
 	if len(audio) == 0 {
-		return nil, fmt.Errorf("vibevoice-asr: empty audio")
+		return nil, fmt.Errorf("asr: empty audio")
 	}
 	if strings.TrimSpace(filename) == "" {
 		filename = "audio"
@@ -170,18 +172,18 @@ func transcribeAudio(ctx context.Context, audio []byte, filename, hotwords strin
 
 	resp, err := httputil.NewClient(asrTimeout).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("vibevoice-asr 연결 실패: %w", err)
+		return nil, fmt.Errorf("asr 사이드카 연결 실패: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2*1024))
-		return nil, fmt.Errorf("vibevoice-asr HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		return nil, fmt.Errorf("asr 사이드카 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 
 	var out asrResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, fmt.Errorf("vibevoice-asr 응답 파싱 실패: %w", err)
+		return nil, fmt.Errorf("asr 응답 파싱 실패: %w", err)
 	}
 	return &out, nil
 }
@@ -240,7 +242,7 @@ func mmss(sec float64) string {
 }
 
 // transcribeAudioText is the single transcription entry point: it calls
-// VibeVoice-ASR and returns a ready-to-read diarized transcript. mimeType is a
+// the ASR sidecar and returns a ready-to-read diarized transcript. mimeType is a
 // hint used only to pick the multipart filename extension. There is no local
 // fallback — an unreachable server surfaces as an error the caller reports.
 func transcribeAudioText(ctx context.Context, audio []byte, mimeType, extraHotwords string) (string, error) {

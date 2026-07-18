@@ -203,7 +203,7 @@ Hermes/Juiz: Tailscale IP의 사설 `…/v1/chat/completions` + request_id / pen
 | Chat sync / tools / wiki / mail / calendar | 비서 본체 | 짧은 질의·Glance 데이터 소스 |
 | Wormhole `POST /v1/chat/completions` | **LLM 라우터/프록시** | Agent ingress로 오해하면 안 됨 |
 | Agent-facing OpenAI chat completions | **없음** (조사 시점) | Custom AI → **브리지 필수** |
-| VibeVoice ASR sidecar | 회의/보이스 메모 | 플러그인 PCM 경로 후보 |
+| ASR 사이드카(MOSS-Transcribe-Diarize) | 회의/보이스 메모 | 플러그인 PCM 경로 후보 |
 | 인앱 DeepL 번역 브라우저 | 화면/문서 | G2 Translate와 역할 분리 |
 | FCM / SSE 푸시 | 선제 알림 | 알림 미러 0차 연동 |
 | Android Auto / assist surfaces | 존재 | G2와 겹치지 않는 별 레인 |

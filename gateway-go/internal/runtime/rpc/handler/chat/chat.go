@@ -38,7 +38,7 @@ type Deps struct {
 	// Optional; nil disables miniapp.capture.image.
 	OcrImage func(ctx context.Context, img []byte) (string, error)
 	// Transcribe transcribes a directly-shared audio recording (native-client
-	// voice/meeting capture) via the VibeVoice-ASR sidecar. hotwords is an
+	// voice/meeting capture) via the ASR sidecar (MOSS-Transcribe-Diarize). hotwords is an
 	// optional proper-noun bias list. Optional; nil disables miniapp.capture.audio.
 	Transcribe func(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error)
 	// ExtractDocument extracts readable text from a directly-shared document's raw
