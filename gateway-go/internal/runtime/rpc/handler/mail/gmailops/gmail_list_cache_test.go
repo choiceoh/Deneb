@@ -185,3 +185,40 @@ func TestGmailListRecent_MarkReadKeepsCache(t *testing.T) {
 		t.Errorf("list fetched %d times, want 1 (mark_read must NOT invalidate)", calls)
 	}
 }
+
+func TestListCache_StaleServeAndSingleFlightRefresh(t *testing.T) {
+	c := newListCache(30 * time.Second)
+	now := time.Now()
+	c.put("k", map[string]any{"v": 1}, now)
+
+	// Fresh window: not stale (the fresh get path owns it).
+	if _, ok, _ := c.getStale("k", now.Add(10*time.Second)); ok {
+		t.Fatal("fresh entry must not be served via the stale path")
+	}
+
+	// Past TTL, within ceiling: served, and the first caller wins the refresh.
+	at := now.Add(2 * time.Minute)
+	payload, ok, refresh := c.getStale("k", at)
+	if !ok || payload["v"] != 1 || !refresh {
+		t.Fatalf("want stale hit + refresh claim, got ok=%v refresh=%v", ok, refresh)
+	}
+	if _, ok, refresh := c.getStale("k", at); !ok || refresh {
+		t.Fatalf("second caller must be served without a duplicate refresh claim (ok=%v refresh=%v)", ok, refresh)
+	}
+	c.refreshDone("k")
+	if _, ok, refresh := c.getStale("k", at); !ok || !refresh {
+		t.Fatalf("after refreshDone the claim must be available again (ok=%v refresh=%v)", ok, refresh)
+	}
+
+	// Past the ceiling: dead.
+	if _, ok, _ := c.getStale("k", now.Add(listCacheStaleServeCeiling+time.Second)); ok {
+		t.Fatal("entry past the stale ceiling must not be served")
+	}
+
+	// Nil safety mirrors the other methods.
+	var nilCache *listCache
+	if _, ok, _ := nilCache.getStale("k", at); ok {
+		t.Fatal("nil cache must miss")
+	}
+	nilCache.refreshDone("k")
+}
