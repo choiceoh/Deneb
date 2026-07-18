@@ -48,6 +48,9 @@ type FailureClusterSummary struct {
 	Support        int    `json:"support"`
 	LastAt         int64  `json:"lastAt,omitempty"` // unix millis of the newest member
 	Example        string `json:"example,omitempty"`
+	// Route is an advisory shadow classification. It is intentionally excluded
+	// from grouping/ranking and cannot change dispatch or editable-surface policy.
+	Route FailureInterventionRoute `json:"route"`
 }
 
 // FailureEvidenceClusters mines the last health window's failures across the
@@ -184,6 +187,9 @@ func (groups failureClusterGroups) ranked(limit int) []FailureClusterSummary {
 	limit = normalizedFailureClusterLimit(limit)
 	if len(clusters) > limit {
 		clusters = clusters[:limit]
+	}
+	for i := range clusters {
+		clusters[i].Route = routeFailureCluster(clusters[i])
 	}
 	return clusters
 }

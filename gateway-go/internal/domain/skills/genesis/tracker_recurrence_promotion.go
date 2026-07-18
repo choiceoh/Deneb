@@ -274,6 +274,7 @@ func (t *Tracker) PromoteFailureClusterCandidates() (int, error) {
 		}
 		evidence := fmt.Sprintf("kind=%s; support=%d; lastAt=%s",
 			c.Kind, c.Support, time.UnixMilli(c.LastAt).Format(time.RFC3339))
+		evidence += "\n" + formatFailureRouteEvidence(c.Route)
 		if ex := strings.TrimSpace(c.Example); ex != "" {
 			evidence += "\nexample: " + ex
 		}
@@ -289,7 +290,7 @@ func (t *Tracker) PromoteFailureClusterCandidates() (int, error) {
 			Evidence:       evidence,
 			TargetFiles:    targets,
 			ProposedChange: "Review the clustered failures, fix the root cause (skill body or handling), and add a held-out validation case reproducing the signature.",
-			Risk:           "Deterministic promotion from clustered failure traces; signature matching is fuzzy substring — confirm the members share a root cause before acting.",
+			Risk:           "Deterministic promotion from clustered failure traces; signature matching is fuzzy substring and the shadow route is advisory — confirm the members share a root cause and the intervention surface before acting.",
 			Source:         source,
 		}); err != nil {
 			// A forbidden-surface target or weak-record rejection kills THIS
