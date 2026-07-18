@@ -535,6 +535,17 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 				// (feed items) and wiki environment (counterparty domains).
 				EnvDigest: s.curriculumEnvDigest,
 			})
+
+			// Genesis backlog drain: route=genesis opportunities used to pile
+			// up with no consumer (creation relied on a nudged session
+			// executing inline — 1/10 follow-through observed 2026-07-18);
+			// this deterministically pushes the most-recurring demand through
+			// the existing generation gates, one attempt per run.
+			s.autonomousSvc.RegisterTask(&genesis.GenesisBacklogDrainTask{
+				Tracker: s.genesisTracker,
+				Genesis: s.genesisSvc,
+				Logger:  s.logger,
+			})
 		}
 		if replayExecutorEnabled() && isProdState {
 			workoutEngine := genesis.NewSkillValidationEngine(s.genesisTracker, s.logger)

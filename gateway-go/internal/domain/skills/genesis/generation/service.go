@@ -415,6 +415,44 @@ func (s *Service) GenerateFromDream(ctx context.Context, summaryContent string) 
 	return s.gateGenerated(ctx, gen, perr)
 }
 
+// GenerateFromBacklog creates a skill from a recurring demand brief mined out
+// of the Propus opportunity backlog (route=genesis signals that no session
+// followed through on). Same contract as GenerateFromDream: the LLM only
+// drafts; gateGenerated + Persist keep the deterministic accept/dedup gates.
+func (s *Service) GenerateFromBacklog(ctx context.Context, brief string) (*GeneratedSkill, error) {
+	existingSkills := s.listExistingSkillNames()
+
+	userPrompt := fmt.Sprintf(`## 반복 수요 브리프 (스킬 기회 백로그 — 여러 세션에서 같은 필요가 관측됨)
+%s
+
+## 기존 스킬 목록 (중복 방지)
+%s
+
+위 브리프는 실제 사용 세션들이 스킬 신설 가치가 있다고 판단해 남긴 반복 신호입니다.
+브리프가 요구하는 재사용 가능한 절차를 스킬로 작성하세요. 이미 기존 스킬이 커버하거나
+내장 도구 한 번 호출로 끝나는 내용이면 skip을 반환하세요.`,
+		genesiscommon.TruncateRunes(brief, 8000),
+		strings.Join(existingSkills, ", "))
+
+	events, err := s.llmClient.StreamChat(ctx, llm.ChatRequest{
+		Model:          s.cfg.Model,
+		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:         llm.SystemString(s.metaLoad(MetaGenesisSystemPrompt, genesisSystemPrompt)),
+		MaxTokens:      generationMaxTokens,
+		Stream:         true,
+		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("genesis-backlog LLM call: %w", err)
+	}
+	if events == nil {
+		return nil, fmt.Errorf("genesis-backlog LLM: nil event channel")
+	}
+
+	gen, perr := parseGenesisResponse(llm.DrainStreamText(events))
+	return s.gateGenerated(ctx, gen, perr)
+}
+
 // gateGenerated applies a specificity gate to a freshly generated skill before
 // it reaches Persist. Self-generated skills are, on average, net-harmful unless
 // curated (SkillsBench: human-curated +16.2pp vs self-generated -1.3pp; SoK
