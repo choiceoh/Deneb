@@ -77,6 +77,8 @@ describe("ChatView (업무 채팅 탭)", () => {
     renderWithProviders(<ChatView cfg={{ url: "http://test", token: "tok" }} />, { connected: true });
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await userEvent.upload(input, new File(["fake pdf"], "contract.pdf", { type: "" }));
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
     const capture = rpcCalls.find((c) => c.method === "miniapp.capture.document");
@@ -124,6 +126,9 @@ describe("ChatView (업무 채팅 탭)", () => {
     fireEvent.drop(zone, { dataTransfer: dt });
     expect(zone).not.toHaveClass("drop-over");
 
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
+
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.capture.document")?.params).toMatchObject({
       filename: "contract.pdf",
@@ -165,6 +170,9 @@ describe("ChatView (업무 채팅 탭)", () => {
       clipboardData: { files: [new File(["x"], "shot.png", { type: "image/png" })] },
     });
 
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
+
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
       mimeType: "image/png",
@@ -205,6 +213,8 @@ describe("ChatView (업무 채팅 탭)", () => {
     await user.type(composer, "이 녹음 요약해줘");
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, new File(["fake audio"], "meeting.mp3", { type: "" }));
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    await user.click(screen.getByRole("button", { name: "전송" }));
 
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.audio")).toBe(true));
     const capture = rpcCalls.find((c) => c.method === "miniapp.capture.audio");
@@ -249,6 +259,8 @@ describe("ChatView (업무 채팅 탭)", () => {
     await user.type(composer, "이 이미지에서 금액만 찾아줘");
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, new File(["fake image"], "quote.png", { type: "image/png" }));
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    await user.click(screen.getByRole("button", { name: "전송" }));
 
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
     const capture = rpcCalls.find((c) => c.method === "miniapp.capture.image");

@@ -1,5 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
 
+import type { StagedAttachment } from "@/useChatSurface";
 import { Icon } from "./Icon";
 
 // The shared composer of the two chat surfaces (chat tab · AI side panel):
@@ -20,6 +21,8 @@ export function ChatComposer({
   onStop,
   onPick,
   onAttachFiles,
+  staged,
+  onRemoveStaged,
 }: {
   composeRef: RefObject<HTMLTextAreaElement | null>;
   fileRef: RefObject<HTMLInputElement | null>;
@@ -34,12 +37,34 @@ export function ChatComposer({
   onStop: () => void;
   onPick: (e: ChangeEvent<HTMLInputElement>) => void;
   onAttachFiles: (files: File[]) => void;
+  staged?: StagedAttachment[];
+  onRemoveStaged?: (id: string) => void;
 }) {
+  const hasStaged = (staged?.length ?? 0) > 0;
   return (
     <>
       {note && (
         <div className="attach-notice" role="status">
           {note}
+        </div>
+      )}
+      {hasStaged && (
+        <div className="attach-chips" role="group" aria-label="첨부 대기 파일">
+          {staged!.map((s) => (
+            <span key={s.id} className="attach-chip" title={s.name}>
+              {s.previewUrl ? <img src={s.previewUrl} alt="" /> : <Icon name="attach" size={13} />}
+              <span className="attach-chip-name">{s.name}</span>
+              <button
+                type="button"
+                className="row-btn"
+                onClick={() => onRemoveStaged?.(s.id)}
+                aria-label={`첨부 제거: ${s.name}`}
+                title="첨부 제거"
+              >
+                <Icon name="close" size={11} />
+              </button>
+            </span>
+          ))}
         </div>
       )}
       <form
@@ -111,7 +136,7 @@ export function ChatComposer({
           <button
             type="submit"
             className="ai-send"
-            disabled={!connected || input.trim().length === 0}
+            disabled={!connected || (input.trim().length === 0 && !hasStaged)}
             aria-label="전송"
           >
             <Icon name="send" size={16} />

@@ -955,6 +955,49 @@ textarea {
 .ai-send-stop:hover:not(:disabled) {
   background: var(--due);
 }
+/* 컴포저 첨부 스테이징 칩 — 전송 전 파일이 여기 대기한다 (썸네일+이름+제거). */
+.attach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px 0;
+}
+
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-sunken);
+  font-size: 12px;
+}
+
+.attach-chip img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 5px;
+}
+
+.attach-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 사용자 턴 이미지 썸네일 — 파일명 라벨 위에 실제 이미지가 보인다. */
+.ai-turn-image {
+  display: block;
+  max-width: 240px;
+  max-height: 200px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  object-fit: cover;
+}
+
 /* 세션 드로어 검색/이름변경 — 리스트 위 조용한 필터, 행 내 인라인 편집. */
 .session-filter {
   margin: 6px 10px 2px;

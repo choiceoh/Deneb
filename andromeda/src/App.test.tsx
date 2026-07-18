@@ -259,6 +259,11 @@ describe("Workstation (connected, fixtures)", () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, new File(["fake image"], "quote.png", { type: "image/png" }));
 
+    // 스테이징 칩으로 대기 → 전송 버튼이 배치를 나른다 (즉시 업로드 아님).
+    expect(await screen.findByRole("group", { name: "첨부 대기 파일" })).toBeInTheDocument();
+    expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
     const captureCall = rpcCalls.find((c) => c.method === "miniapp.capture.image");
     // Lands in the panel's own client:main session (not the chat tab's chat:*).
@@ -317,6 +322,10 @@ describe("Workstation (connected, fixtures)", () => {
     fireEvent.drop(panel, { dataTransfer: dt });
     expect(panel).not.toHaveClass("drop-over");
 
+    // 드롭은 스테이징까지 — 전송 버튼이 capture를 발사한다.
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
+
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
       mimeType: "image/png",
@@ -357,6 +366,10 @@ describe("Workstation (connected, fixtures)", () => {
     fireEvent.paste(composer, {
       clipboardData: { files: [new File(["img"], "screenshot.png", { type: "image/png" })] },
     });
+
+    // 붙여넣기도 스테이징까지 — 전송이 capture를 발사한다.
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
     await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
     expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
@@ -406,8 +419,14 @@ describe("Workstation (connected, fixtures)", () => {
     ];
     fireEvent.drop(panel, { dataTransfer: { files, types: ["Files"] } });
 
-    // the unsupported file is skipped with a transient notice, not a silent drop
+    // the unsupported file is skipped with a transient notice at staging time
     expect(await screen.findByRole("status")).toHaveTextContent("clip.mp4");
+
+    // 지원 파일 2개는 칩으로 대기 — 전송 버튼이 배치를 나른다.
+    const chips = await screen.findByRole("group", { name: "첨부 대기 파일" });
+    expect(within(chips).getByText("quote.png")).toBeInTheDocument();
+    expect(within(chips).getByText("contract.pdf")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "전송" }));
 
     await waitFor(() => expect(rpcCalls.filter((c) => c.method.startsWith("miniapp.capture.")).length).toBe(2));
     const captures = rpcCalls.filter((c) => c.method.startsWith("miniapp.capture."));
@@ -477,6 +496,8 @@ describe("Workstation (connected, fixtures)", () => {
     fireEvent.drop(panel, {
       dataTransfer: { files: [new File(["i"], "a.png", { type: "image/png" })], types: ["Files"] },
     });
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
     // busy: the non-stop attach state replaces the send button
     await screen.findByRole("button", { name: "첨부 분석 중" });
 
@@ -570,6 +591,8 @@ describe("Workstation (connected, fixtures)", () => {
     fireEvent.drop(panel, {
       dataTransfer: { files: [new File(["i"], "a.png", { type: "image/png" })], types: ["Files"] },
     });
+    await screen.findByRole("group", { name: "첨부 대기 파일" });
+    fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
     const pending = await screen.findByRole("button", { name: "첨부 분석 중" });
     expect(pending).toBeDisabled();

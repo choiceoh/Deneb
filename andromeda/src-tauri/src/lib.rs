@@ -36,25 +36,104 @@ fn token_get(account: String) -> Result<Option<String>, String> {
     }
 }
 
+// Dock/taskbar badge for pending proactive nudges (0 clears it). Frontend drives
+// the count from the ProactivePanel list.
+#[tauri::command]
+fn set_badge(window: tauri::WebviewWindow, count: u32) -> Result<(), String> {
+    let n = if count == 0 { None } else { Some(count as i64) };
+    window.set_badge_count(n).map_err(|e| e.to_string())
+}
+
+// Tray + focus helper: the resident-assistant pattern — closing the window hides
+// it (SSE + notifications stay alive); the tray reopens or truly quits.
+#[cfg(desktop)]
+fn show_main_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // Second launch focuses the existing window instead of racing a duplicate
+    // SSE subscription + sync cursor. Must register before other plugins.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        show_main_window(app);
+    }));
+
+    // Restore last window size/position/monitor on launch.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+
+    builder
         .plugin(tauri_plugin_process::init())
         // Native HTTP (reqwest) so gateway requests bypass the webview's CORS and
         // macOS WKWebView ATS (which blocks plain-HTTP gateways). See src/gateway.ts.
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Updater is desktop-only; the frontend drives the check (see src/updater.ts).
             #[cfg(desktop)]
             {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
+
+                // System tray: left click reopens, menu offers 열기/종료. 종료 is
+                // the only true exit — window close just hides (see below).
+                use tauri::menu::{Menu, MenuItem};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+                let show = MenuItem::with_id(app, "show", "열기", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show, &quit])?;
+                let mut tray = TrayIconBuilder::with_id("andromeda-tray")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .tooltip("Andromeda")
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => show_main_window(app),
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            show_main_window(tray.app_handle());
+                        }
+                    });
+                if let Some(icon) = app.default_window_icon() {
+                    tray = tray.icon(icon.clone());
+                }
+                tray.build(app)?;
             }
             #[cfg(not(desktop))]
             let _ = app;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![token_set, token_get, token_from_file])
+        .on_window_event(|_window, _event| {
+            // Close-to-tray: keep the events SSE + catch-up sync alive so the
+            // proactive channel doesn't die with the window. 종료 lives in the tray.
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                let _ = _window.hide();
+                api.prevent_close();
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            token_set,
+            token_get,
+            token_from_file,
+            set_badge
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Andromeda");
 }

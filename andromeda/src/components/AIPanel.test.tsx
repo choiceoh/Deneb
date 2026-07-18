@@ -116,8 +116,11 @@ beforeEach(() => {
   mocks.useAttachPipeline.mockReturnValue({
     attachNote: "",
     attachingRef: { current: false },
-    attachFiles: vi.fn(async () => {}),
+    attachFiles: vi.fn(),
     onPick: vi.fn(),
+    staged: [],
+    removeStaged: vi.fn(),
+    sendStaged: vi.fn(async () => {}),
   });
   mocks.useSessions.mockReturnValue({ ...sessionActions });
   mocks.useStickyScroll.mockReturnValue({

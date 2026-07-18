@@ -270,7 +270,11 @@ interface AttachHarnessProps {
   setInput?: (value: string) => void;
   setAttaching?: (value: boolean) => void;
   pin?: () => void;
-  capture?: (file: { name: string; mimeType: string; base64: string }, caption: string) => Promise<void>;
+  capture?: (
+    file: { name: string; mimeType: string; base64: string },
+    caption: string,
+    previewUrl?: string,
+  ) => Promise<void>;
   onBatchDone?: () => void;
 }
 
@@ -328,6 +332,28 @@ describe("useAttachPipeline", () => {
     expect(result.current.attachNote).toBe("");
   });
 
+  it("stages supported files as chips without sending", async () => {
+    const { result, props } = attachHarness();
+    const image = new File(["pixels"], "photo.png", { type: "image/png" });
+
+    await act(async () => result.current.attachFiles([image]));
+
+    expect(result.current.staged).toHaveLength(1);
+    expect(result.current.staged[0]).toMatchObject({ name: "photo.png", mimeType: "image/png" });
+    expect(props.capture).not.toHaveBeenCalled();
+    expect(props.setAttaching).not.toHaveBeenCalled();
+  });
+
+  it("removes a staged chip", async () => {
+    const { result } = attachHarness();
+    await act(async () => result.current.attachFiles([new File(["a"], "a.png", { type: "image/png" })]));
+    const id = result.current.staged[0]!.id;
+
+    act(() => result.current.removeStaged(id));
+
+    expect(result.current.staged).toHaveLength(0);
+  });
+
   it("when uses the first non-audio file as the batch caption target", async () => {
     const { result, props } = attachHarness();
     const audio = new File(["voice"], "voice.mp3", { type: "audio/mpeg" });
@@ -335,6 +361,7 @@ describe("useAttachPipeline", () => {
     const document = new File(["document"], "brief.txt", { type: "text/plain" });
 
     await act(async () => result.current.attachFiles([audio, image, document]));
+    await act(async () => result.current.sendStaged());
 
     expect(props.setInput).toHaveBeenCalledWith("");
     expect(props.setAttaching).toHaveBeenNthCalledWith(1, true);
@@ -344,19 +371,23 @@ describe("useAttachPipeline", () => {
       1,
       expect.objectContaining({ name: "voice.mp3", mimeType: "audio/mpeg" }),
       "",
+      undefined,
     );
     expect(props.capture).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ name: "photo.png", mimeType: "image/png" }),
       "파일 설명",
+      expect.any(String), // 이미지의 object-URL 썸네일이 함께 흐른다
     );
     expect(props.capture).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({ name: "brief.txt", mimeType: "text/plain" }),
       "",
+      undefined,
     );
     expect(props.pin).toHaveBeenCalledTimes(3);
     expect(props.onBatchDone).toHaveBeenCalledTimes(1);
+    expect(result.current.staged).toHaveLength(0);
   });
 
   it("without consume composer text for an audio-only batch", async () => {
@@ -364,9 +395,10 @@ describe("useAttachPipeline", () => {
     const audio = new File(["voice"], "voice.wav", { type: "audio/wav" });
 
     await act(async () => result.current.attachFiles([audio]));
+    await act(async () => result.current.sendStaged());
 
     expect(props.setInput).not.toHaveBeenCalled();
-    expect(props.capture).toHaveBeenCalledWith(expect.objectContaining({ name: "voice.wav" }), "");
+    expect(props.capture).toHaveBeenCalledWith(expect.objectContaining({ name: "voice.wav" }), "", undefined);
   });
 
   it("sends a bare base64 payload with inferred MIME", async () => {
@@ -374,34 +406,37 @@ describe("useAttachPipeline", () => {
     const image = new File(["hello"], "PHOTO.PNG", { type: "application/octet-stream" });
 
     await act(async () => result.current.attachFiles([image]));
+    await act(async () => result.current.sendStaged());
 
-    expect(props.capture).toHaveBeenCalledWith({ name: "PHOTO.PNG", mimeType: "image/png", base64: "aGVsbG8=" }, "");
+    expect(props.capture).toHaveBeenCalledWith(
+      { name: "PHOTO.PNG", mimeType: "image/png", base64: "aGVsbG8=" },
+      "",
+      expect.any(String),
+    );
   });
 
   it("when blocks synchronous re-entry while a batch is active", async () => {
     let release!: () => void;
     const capture = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
-    const { result, props } = attachHarness({ capture });
+    const { result } = attachHarness({ capture });
     const image = new File(["image"], "image.png", { type: "image/png" });
 
+    await act(async () => result.current.attachFiles([image]));
     let first!: Promise<void>;
     act(() => {
-      first = result.current.attachFiles([image]);
+      first = result.current.sendStaged();
     });
     await waitFor(() => expect(result.current.attachingRef.current).toBe(true));
-    await act(async () => result.current.attachFiles([image]));
-    // The first batch reads the file before invoking capture — wait for that
-    // call to land (it also assigns release) instead of asserting mid-flight.
+    // Re-entry while the batch is in flight is a no-op (staged is already
+    // drained; a second call must not double-run the loop).
+    await act(async () => result.current.sendStaged());
     await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       release();
       await first;
     });
-    // Everything settled: if re-entry weren't blocked, a second capture would
-    // have landed by now.
     expect(capture).toHaveBeenCalledTimes(1);
-    expect(props.setAttaching).toHaveBeenLastCalledWith(false);
   });
 
   it("continues after one capture rejects and reports the skipped file", async () => {
@@ -411,6 +446,7 @@ describe("useAttachPipeline", () => {
     const second = new File(["two"], "two.png", { type: "image/png" });
 
     await act(async () => result.current.attachFiles([first, second]));
+    await act(async () => result.current.sendStaged());
 
     expect(capture).toHaveBeenCalledTimes(2);
     expect(result.current.attachNote).toBe("one.png — 읽기 실패라 건너뜀");
@@ -425,6 +461,7 @@ describe("useAttachPipeline", () => {
     const image = new File(["image"], "image.png", { type: "image/png" });
 
     await act(async () => result.current.attachFiles([image]));
+    await act(async () => result.current.sendStaged());
 
     expect(result.current.attachingRef.current).toBe(false);
     expect(props.setAttaching).toHaveBeenNthCalledWith(1, true);

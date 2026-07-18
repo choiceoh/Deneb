@@ -86,6 +86,20 @@ export function useComposerBehavior(
 // - attachingRef — 동기 재진입 차단. busyRef 미러는 useLayoutEffect(커밋 시 동기 반영)라
 //   다음 매크로태스크(FileReader 콜백)가 낡은 값을 읽을 수 없다. 파일 읽기 틈에 배치 밖의
 //   턴(다시 생성 등)이 시작됐다면 남은 파일은 건너뛴다 — 턴 인터리브 방지.
+// A file waiting in the composer (frontier staging UX: pick/drop/paste collects
+// chips; nothing uploads until 전송). previewUrl is an object URL for images —
+// intentionally NOT revoked on send, because the transcript keeps rendering it
+// as the user-turn thumbnail for the rest of the session (bounded, local).
+export interface StagedAttachment {
+  id: string;
+  file: File;
+  name: string;
+  mimeType: string;
+  previewUrl?: string;
+}
+
+let stagedSeq = 0;
+
 export function useAttachPipeline({
   connected,
   busy,
@@ -102,8 +116,13 @@ export function useAttachPipeline({
   setInput: (v: string) => void;
   setAttaching: (v: boolean) => void;
   pin: () => void;
-  // The surface binds its own sessionKey: (file, caption) => capture(file, {sessionKey, caption}).
-  capture: (file: { name: string; mimeType: string; base64: string }, caption: string) => Promise<void>;
+  // The surface binds its own sessionKey: (file, caption, previewUrl) =>
+  // capture(file, {sessionKey, caption, previewUrl}).
+  capture: (
+    file: { name: string; mimeType: string; base64: string },
+    caption: string,
+    previewUrl?: string,
+  ) => Promise<void>;
   onBatchDone?: () => void; // e.g. refresh the session list once the batch lands
 }) {
   const attachingRef = useRef(false);
@@ -128,30 +147,70 @@ export function useAttachPipeline({
     noteTimer.current = window.setTimeout(() => setAttachNote(""), 6000);
   }
 
-  async function attachFiles(files: File[]) {
-    if (busy || attachingRef.current || !connected || files.length === 0) return;
+  // Composer staging: picked/dropped/pasted files wait here as chips. Nothing
+  // uploads until 전송 (sendStaged) — frontier-style consent + one message can
+  // carry text and files together.
+  const [staged, setStaged] = useState<StagedAttachment[]>([]);
+
+  function attachFiles(files: File[]) {
+    if (busy || !connected || files.length === 0) return;
     const { ok, skipped } = splitAttachable(files);
     showAttachNote(skipped);
     if (ok.length === 0) return;
-    const captionTarget = ok.find((f) => !inferAttachmentMimeType(f.name, f.type).startsWith("audio/"));
-    const caption = captionTarget ? input.trim() : "";
+    setStaged((prev) => [
+      ...prev,
+      ...ok.map((file) => {
+        const mimeType = inferAttachmentMimeType(file.name, file.type);
+        // createObjectURL is missing in jsdom — thumbnails just degrade there.
+        const canPreview = mimeType.startsWith("image/") && typeof URL.createObjectURL === "function";
+        return {
+          id: `staged-${++stagedSeq}`,
+          file,
+          name: file.name,
+          mimeType,
+          previewUrl: canPreview ? URL.createObjectURL(file) : undefined,
+        };
+      }),
+    ]);
+  }
+
+  function removeStaged(id: string) {
+    setStaged((prev) => {
+      const hit = prev.find((s) => s.id === id);
+      if (hit?.previewUrl) URL.revokeObjectURL(hit.previewUrl);
+      return prev.filter((s) => s.id !== id);
+    });
+  }
+
+  // Send the staged batch, one capture per file; the composer text rides as the
+  // first non-audio file's caption (existing gateway contract).
+  async function sendStaged(captionOverride?: string) {
+    if (busy || attachingRef.current || !connected || staged.length === 0) return;
+    const batch = staged;
+    setStaged([]);
+    const captionTarget = batch.find((s) => !s.mimeType.startsWith("audio/"));
+    // Audio-only batches never consume the composer text (existing contract).
+    const caption = captionTarget ? (captionOverride ?? input).trim() : "";
     if (caption) setInput("");
     attachingRef.current = true;
     setAttaching(true);
     try {
-      for (const file of ok) {
-        const mimeType = inferAttachmentMimeType(file.name, file.type);
+      for (const item of batch) {
         try {
-          const base64 = await readFileBase64(file);
+          const base64 = await readFileBase64(item.file);
           // 읽기(≥1 태스크 경계) 후 확인이라 직전 capture의 busy 해제는 ref에 반영돼 있다.
           if (busyRef.current) {
-            showAttachNote([`${file.name} — 다른 응답이 진행 중이라 건너뜀`]);
+            showAttachNote([`${item.name} — 다른 응답이 진행 중이라 건너뜀`]);
             continue;
           }
           pin();
-          await capture({ name: file.name, mimeType, base64 }, file === captionTarget ? caption : "");
+          await capture(
+            { name: item.name, mimeType: item.mimeType, base64 },
+            item === captionTarget ? caption : "",
+            item.previewUrl,
+          );
         } catch {
-          showAttachNote([`${file.name} — 읽기 실패라 건너뜀`]);
+          showAttachNote([`${item.name} — 읽기 실패라 건너뜀`]);
         }
       }
     } finally {
@@ -164,8 +223,8 @@ export function useAttachPipeline({
   function onPick(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ""; // let the same selection be picked again later
-    void attachFiles(files);
+    attachFiles(files);
   }
 
-  return { attachNote, attachingRef, attachFiles, onPick };
+  return { attachNote, attachingRef, attachFiles, onPick, staged, removeStaged, sendStaged };
 }
