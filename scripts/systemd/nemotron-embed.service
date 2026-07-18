@@ -1,0 +1,19 @@
+# Nemotron-3-Embed embedding server — Deneb recall/compaction semantic index.
+# USER unit: install via scripts/systemd/setup-nemotron-embed.sh.
+# Runs beside bge-m3.service (8001) on port 8002; the gateway selects the
+# active sidecar via DENEB_EMBEDDING_URL (drop-in), which is also the rollback.
+[Unit]
+Description=Nemotron-3-Embed Embedding Server (Deneb semantic index, GPU GB10)
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=HF_HOME=%h/.deneb/nemotron-hf-cache
+ExecStart=%h/.deneb/nemotron-venv/bin/python3 %h/deneb/scripts/deploy/nemotron-embed-server.py --port 8002 --host 127.0.0.1
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

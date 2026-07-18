@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,13 @@ type Client struct {
 
 // New creates a Client and starts background health checking.
 func New(baseURL string, logger *slog.Logger) *Client {
+	if baseURL == "" {
+		// Cutover/rollback lever (Nemotron 2026-07-18): point the gateway at an
+		// alternate embedding sidecar without a code change. The semantic caches
+		// key on EmbeddingFingerprint (model:dims), so flipping this re-embeds
+		// automatically and flipping back restores the old cache.
+		baseURL = strings.TrimSpace(os.Getenv("DENEB_EMBEDDING_URL"))
+	}
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
@@ -108,6 +116,10 @@ func (c *Client) recordIdentity(model string, dimensions int) {
 
 type embedRequest struct {
 	Texts []string `json:"texts"`
+	// Kind marks the retrieval role for asymmetric models ("query" | "passage");
+	// empty means passage/default. The BGE sidecar ignores the field (pydantic
+	// drops unknown keys), so the same client speaks to both server generations.
+	Kind string `json:"kind,omitempty"`
 }
 
 type embedResponse struct {
@@ -116,11 +128,19 @@ type embedResponse struct {
 	Count      int         `json:"count"`
 }
 
-// Embed returns dense embeddings for the given texts.
+// Embed returns dense embeddings for the given texts (passage/default role).
 // Returns one embedding vector per input text.
 // Returns an error immediately if the server is known to be unhealthy,
 // avoiding a wasted 30s timeout on every compaction attempt.
 func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	return c.EmbedKind(ctx, "", texts)
+}
+
+// EmbedKind embeds texts in an explicit retrieval role. Asymmetric models
+// (Nemotron) are trained with distinct query/passage prefixes — the sidecar
+// applies them from this field; symmetric sidecars (BGE) ignore it. Search
+// paths pass "query"; indexing/refresh paths use Embed (passage/default).
+func (c *Client) EmbedKind(ctx context.Context, kind string, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}
@@ -131,7 +151,7 @@ func (c *Client) Embed(ctx context.Context, texts []string) ([][]float32, error)
 		return nil, fmt.Errorf("embedding: batch size %d exceeds max %d", len(texts), maxTextsPerBatch)
 	}
 
-	body, err := json.Marshal(embedRequest{Texts: texts})
+	body, err := json.Marshal(embedRequest{Texts: texts, Kind: kind})
 	if err != nil {
 		return nil, fmt.Errorf("embedding: marshal: %w", err)
 	}
