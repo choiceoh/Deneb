@@ -1,0 +1,11 @@
+[Unit]
+Description=Deneb RSI L4 coding dispatch (self-correction queue -> Codex headless)
+
+[Service]
+Type=oneshot
+Environment=DENEB_DISPATCH_CODEX_BIN=%h/.local/bin/codex
+Environment=DENEB_DISPATCH_GH_BIN=%h/.local/bin/gh
+# npm-installed codex is a node-shebang JS entrypoint; the systemd user manager's
+# minimal PATH lacks ~/.local/bin, which surfaced as L4 environment_failed runs.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/deneb/scripts/dev/coding-dispatch.sh
