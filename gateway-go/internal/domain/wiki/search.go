@@ -1143,6 +1143,35 @@ func rrfSemWeightValue() float64 {
 	return 1.0
 }
 
+// rrfBM25WeightValue scales the BM25 ranking's rank votes. Unlike the other
+// knobs 0 IS allowed: at 0, BM25-found pages keep their ADMISSION role (they
+// bypass the semantic floor and backfill recall) but cast no ranking votes —
+// "BM25 as fallback/filler only" (operator direction 2026-07-18).
+func rrfBM25WeightValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_RRF_BM25_WEIGHT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return f
+		}
+	}
+	return 1.0
+}
+
+// rrfGraphWeightValue scales the GRAPH-proximity ranking's RRF contribution.
+// The three signals form a ratio space bm25:semantic:graph — tune the knobs
+// together, not the semantic one alone (operator methodology note, 2026-07-18).
+// Admission rules (graph seed injection, floors) are unaffected; the knobs only
+// scale rank votes.
+func rrfGraphWeightValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_RRF_GRAPH_WEIGHT"); v != "" {
+		// 0 allowed (mirrors the BM25 knob): the graph keeps its seed-admission
+		// role but casts no rank votes.
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return f
+		}
+	}
+	return 1.0
+}
+
 // fuseSearchResults dispatches BM25×semantic fusion. Reciprocal Rank Fusion is
 // the default (DENEB_WIKI_FUSION=additive rolls back to the historical additive
 // max(bm25,cosine)+bonus/penalty blend). RRF measured +11.3pt P@1 / +4.5pt R@8 /
@@ -1185,6 +1214,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		rrf    float64
 	}
 	byPath := make(map[string]*merged, len(bm25)+len(sem))
+	bm25Weight := rrfBM25WeightValue()
 	for rank, r := range bm25 {
 		m := byPath[r.Path]
 		if m == nil {
@@ -1192,7 +1222,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 			byPath[r.Path] = m
 		}
 		m.inBM25 = true
-		m.rrf += 1.0 / (k + float64(rank+1))
+		m.rrf += bm25Weight / (k + float64(rank+1))
 		if m.res.Content == "" && r.Content != "" {
 			m.res.Content = r.Content
 		}
@@ -1215,6 +1245,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 	// is admitted only if it is the SEED (the named entity's own page, rank 0) —
 	// a high-confidence "the user asked about this exact thing" signal — so
 	// arbitrary neighbors never inject themselves off a graph edge alone.
+	graphWeight := rrfGraphWeightValue()
 	for rank, p := range graphPaths {
 		m := byPath[p]
 		if m == nil {
@@ -1224,7 +1255,7 @@ func mergeSearchResultsRRF(bm25, sem []SearchResult, graphPaths []string, limit 
 		if rank == 0 {
 			m.graph0 = true
 		}
-		m.rrf += 1.0 / (k + float64(rank+1))
+		m.rrf += graphWeight / (k + float64(rank+1))
 	}
 
 	floor := semanticOnlyFloorValue()

@@ -57,7 +57,15 @@ class Adapter(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _backend_embed(self, texts: list[str]) -> list[list[float]]:
-        body = json.dumps({"model": MODEL_ID, "input": texts}).encode()
+        # truncate_prompt_tokens: vLLM 400s on inputs beyond --max-model-len
+        # (4096) instead of truncating like the BGE server did — diary warm
+        # batches carry entries that long (observed 2026-07-18). Server-side
+        # truncation restores the old lossy-but-never-failing contract.
+        body = json.dumps({
+            "model": MODEL_ID,
+            "input": texts,
+            "truncate_prompt_tokens": 4096,
+        }).encode()
         req = urllib.request.Request(
             self.args.backend.rstrip("/") + "/v1/embeddings",
             data=body,
