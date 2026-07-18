@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.123.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.122.0...deneb-v4.123.0) (2026-07-18)
+
+
+### ✨ Features
+
+* add failure intervention shadow router ([#3921](https://github.com/choiceoh/Deneb/issues/3921)) ([68eef0a](https://github.com/choiceoh/Deneb/commit/68eef0a4066cb4f27e0c06ed1415425f69898c42))
+* **andromeda:** 인터랙티브 카드 응답 표시·회신 개선 — 카드 응답 말풍선 + 최신 답변만 콜백 허용 ([#3933](https://github.com/choiceoh/Deneb/issues/3933)) ([56b42be](https://github.com/choiceoh/Deneb/commit/56b42be58b8684eb7a8f11727304d18e065becd6))
+* **chat:** deneb-html 스타일 다양화 — 테마 3종 + 유틸리티 마이크로 디자인 시스템 ([#3939](https://github.com/choiceoh/Deneb/issues/3939)) ([b88fc17](https://github.com/choiceoh/Deneb/commit/b88fc17f73f00c17bfdd4e3ff9063ec371c12e56))
+* **chat:** deneb-html 클라이언트 베이스 스타일시트 — 일관 타이포 + 생성 3배 단축 ([#3938](https://github.com/choiceoh/Deneb/issues/3938)) ([bca0693](https://github.com/choiceoh/Deneb/commit/bca0693fb6830b503668c1a1681721ed96ce9d18))
+* **chat:** 웹페이지형 인터랙티브 응답(deneb-html) + 카드 저작 인라인 계약·열화 구제 ([#3936](https://github.com/choiceoh/Deneb/issues/3936)) ([7f6b5b6](https://github.com/choiceoh/Deneb/commit/7f6b5b63054e65ad35a646030d2589b3c5a854c2))
+* **chat:** 카드 발명태그 별칭화(3구현)·deneb-html 프리뷰 누출 방지·생성중 스켈레톤 ([#3937](https://github.com/choiceoh/Deneb/issues/3937)) ([8c0f5f4](https://github.com/choiceoh/Deneb/commit/8c0f5f479143243621cb12d44d2dd33163fb180c))
+* **dev:** rebuild concurrency guard with repo-canonical source + user-hook shim ([#3918](https://github.com/choiceoh/Deneb/issues/3918)) ([96f4862](https://github.com/choiceoh/Deneb/commit/96f4862ac92683d4144d4b0b08bbfeb632dfc14e))
+* **dev:** 동시작업 가드 프로드 Bash 쓰기 탐지 + ci-check 셸 테스트 [#3917](https://github.com/choiceoh/Deneb/issues/3917) 정합 ([#3930](https://github.com/choiceoh/Deneb/issues/3930)) ([4cb3274](https://github.com/choiceoh/Deneb/commit/4cb327439521cb9c61f124b9d5a6d3f08efbf3ee))
+* **gateway:** 결재 분석 전례 대조 — 과거 유사 결재 회상 주입 (프롬프트 v5) ([#3922](https://github.com/choiceoh/Deneb/issues/3922)) ([18a4215](https://github.com/choiceoh/Deneb/commit/18a4215eb7c794b364ec4ff1b4106752169f93c4))
+* **genesis:** deterministic backlog drain — route=genesis opportunities become skills ([#3932](https://github.com/choiceoh/Deneb/issues/3932)) ([c0659c2](https://github.com/choiceoh/Deneb/commit/c0659c20f120e602966a0baf784592e41c984e98))
+* **genesis:** runtime-error miner — restart-surviving rolling window + warn-level rescue signatures ([#3926](https://github.com/choiceoh/Deneb/issues/3926)) ([6efab0c](https://github.com/choiceoh/Deneb/commit/6efab0caeafd217c8cd25c53d516570eb0af54e4))
+* **morning:** fix layout and let main fill semantic slots ([#3925](https://github.com/choiceoh/Deneb/issues/3925)) ([f78ce27](https://github.com/choiceoh/Deneb/commit/f78ce2775352d9c80fba698880b8711bb4c9771b))
+* **rsi-bench:** RHAE-style attempt-efficiency weighting on dispatch-land ([#3940](https://github.com/choiceoh/Deneb/issues/3940)) ([4ee53d8](https://github.com/choiceoh/Deneb/commit/4ee53d8ed1b95ec37922b491798ab5f19c6dcc95))
+* **workstation:** 도구 활용 확장 — 능동 지침·spotlight·date 점프·todo prefill·계측 ([#3927](https://github.com/choiceoh/Deneb/issues/3927)) ([bee77c5](https://github.com/choiceoh/Deneb/commit/bee77c564001d082cace6ca0ef7ccc7a55f889fd))
+* **workstation:** 활용 2탄 — 알림 복귀 내비·모닝 브리핑 투어·효용 원장 관찰 카드 ([#3931](https://github.com/choiceoh/Deneb/issues/3931)) ([fa69236](https://github.com/choiceoh/Deneb/commit/fa69236699b6998b10caa6f9d6175408a8e2d67e))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** finish window.confirm sweep — 현장지도 날짜질문·업데이터 재시작을 앱 다이얼로그로 ([#3924](https://github.com/choiceoh/Deneb/issues/3924)) ([d7cea05](https://github.com/choiceoh/Deneb/commit/d7cea058ba2dcee5fff5101049b5a55ea5e19f42))
+* **andromeda:** 분할 스트립·데네브 패널 리오픈 탭 겹침 해소 ([#3923](https://github.com/choiceoh/Deneb/issues/3923)) ([0ec0d5a](https://github.com/choiceoh/Deneb/commit/0ec0d5a05ca8b91cde61863d54eef00da1eccf4e))
+* **audit:** honest bounded-step dispatch contract for incremental structural findings ([#3934](https://github.com/choiceoh/Deneb/issues/3934)) ([150a1de](https://github.com/choiceoh/Deneb/commit/150a1dec894e52d7acc25b6ec2aeba8e9685129d))
+* **native:** make local caches transactional ([#3928](https://github.com/choiceoh/Deneb/issues/3928)) ([72bcd55](https://github.com/choiceoh/Deneb/commit/72bcd55b8bc8e3c9756c145c1855f3540229d187))
+
+
+### 🔧 Internal
+
+* **android:** centralize persisted JSON recovery ([#3920](https://github.com/choiceoh/Deneb/issues/3920)) ([b19b4ee](https://github.com/choiceoh/Deneb/commit/b19b4ee2c0fe71b5e6f9937ab7ddc5787e105ffd))
+
 ## [4.122.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.121.0...deneb-v4.122.0) (2026-07-18)
 
 

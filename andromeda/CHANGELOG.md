@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.0.95](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.94...andromeda-v0.0.95) (2026-07-18)
+
+
+### ✨ Features
+
+* **andromeda:** 인터랙티브 카드 응답 표시·회신 개선 — 카드 응답 말풍선 + 최신 답변만 콜백 허용 ([#3933](https://github.com/choiceoh/Deneb/issues/3933)) ([56b42be](https://github.com/choiceoh/Deneb/commit/56b42be58b8684eb7a8f11727304d18e065becd6))
+* **chat:** deneb-html 스타일 다양화 — 테마 3종 + 유틸리티 마이크로 디자인 시스템 ([#3939](https://github.com/choiceoh/Deneb/issues/3939)) ([b88fc17](https://github.com/choiceoh/Deneb/commit/b88fc17f73f00c17bfdd4e3ff9063ec371c12e56))
+* **chat:** deneb-html 클라이언트 베이스 스타일시트 — 일관 타이포 + 생성 3배 단축 ([#3938](https://github.com/choiceoh/Deneb/issues/3938)) ([bca0693](https://github.com/choiceoh/Deneb/commit/bca0693fb6830b503668c1a1681721ed96ce9d18))
+* **chat:** 웹페이지형 인터랙티브 응답(deneb-html) + 카드 저작 인라인 계약·열화 구제 ([#3936](https://github.com/choiceoh/Deneb/issues/3936)) ([7f6b5b6](https://github.com/choiceoh/Deneb/commit/7f6b5b63054e65ad35a646030d2589b3c5a854c2))
+* **chat:** 카드 발명태그 별칭화(3구현)·deneb-html 프리뷰 누출 방지·생성중 스켈레톤 ([#3937](https://github.com/choiceoh/Deneb/issues/3937)) ([8c0f5f4](https://github.com/choiceoh/Deneb/commit/8c0f5f479143243621cb12d44d2dd33163fb180c))
+* **workstation:** 도구 활용 확장 — 능동 지침·spotlight·date 점프·todo prefill·계측 ([#3927](https://github.com/choiceoh/Deneb/issues/3927)) ([bee77c5](https://github.com/choiceoh/Deneb/commit/bee77c564001d082cace6ca0ef7ccc7a55f889fd))
+* **workstation:** 활용 2탄 — 알림 복귀 내비·모닝 브리핑 투어·효용 원장 관찰 카드 ([#3931](https://github.com/choiceoh/Deneb/issues/3931)) ([fa69236](https://github.com/choiceoh/Deneb/commit/fa69236699b6998b10caa6f9d6175408a8e2d67e))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** finish window.confirm sweep — 현장지도 날짜질문·업데이터 재시작을 앱 다이얼로그로 ([#3924](https://github.com/choiceoh/Deneb/issues/3924)) ([d7cea05](https://github.com/choiceoh/Deneb/commit/d7cea058ba2dcee5fff5101049b5a55ea5e19f42))
+* **andromeda:** 분할 스트립·데네브 패널 리오픈 탭 겹침 해소 ([#3923](https://github.com/choiceoh/Deneb/issues/3923)) ([0ec0d5a](https://github.com/choiceoh/Deneb/commit/0ec0d5a05ca8b91cde61863d54eef00da1eccf4e))
+
 ## [0.0.94](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.93...andromeda-v0.0.94) (2026-07-18)
 
 
