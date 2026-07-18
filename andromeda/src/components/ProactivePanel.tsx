@@ -74,7 +74,22 @@ export function ProactivePanel({ cfg }: { cfg: GatewayConfig }) {
   };
 
   return (
-    <ProactiveList events={events} status={status} onDismiss={dismiss} onClearAll={clearAll} onNavigate={onNavigate} />
+    <>
+      {/* 전역 오프라인 배너: 게이트웨이 핫스왑/다운 동안 페인별 산발 에러 대신
+          한 줄의 정직한 상태. events SSE의 지수 백오프가 재연결을 소유한다. */}
+      {status === "재연결 중…" && (
+        <div className="offline-banner" role="status">
+          게이트웨이 재연결 중… 자동으로 복구됩니다
+        </div>
+      )}
+      <ProactiveList
+        events={events}
+        status={status}
+        onDismiss={dismiss}
+        onClearAll={clearAll}
+        onNavigate={onNavigate}
+      />
+    </>
   );
 }
 
