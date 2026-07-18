@@ -340,6 +340,23 @@ func WebToolSchema() map[string]any {
 	}
 }
 
+func BrowseToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"url": map[string]any{
+				"type":        "string",
+				"description": "열어 읽을 페이지 URL (http/https)",
+			},
+			"wait_ms": map[string]any{
+				"type":        "integer",
+				"description": "렌더 정착 대기(ms, 기본 2000·최대 5000) — SPA/그룹웨어처럼 늦게 그려지는 페이지에서 올린다",
+			},
+		},
+		"required": []string{"url"},
+	}
+}
+
 func CronToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

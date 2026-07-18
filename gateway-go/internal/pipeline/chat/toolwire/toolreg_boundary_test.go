@@ -500,7 +500,7 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		{name: "graph", run: func(r *mockRegistrar) { core.RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
 		{name: "phone", run: func(r *mockRegistrar) { core.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
-		{name: "web", run: func(r *mockRegistrar) { core.RegisterWebTools(r, nil) }, want: []string{"web"}},
+		{name: "web", run: func(r *mockRegistrar) { core.RegisterWebTools(r, nil) }, want: []string{"web", "browse"}},
 		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
 		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
 		{name: "todo", run: func(r *mockRegistrar) { chrono.RegisterTodoTool(r) }, want: []string{"todo"}},
