@@ -431,3 +431,64 @@ class CliDryRunTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IncrementalContractTests(unittest.TestCase):
+    """The responsibility/fan-out family gets a bounded-step contract."""
+
+    def test_incremental_kind_gets_bounded_step_verify_and_no_impact_contract(self):
+        report = structural_report()
+        report["findings"].append({
+            "id": "fanout-hotspot:deadbeef0001",
+            "pillar": "boundary-integrity",
+            "severity": "high",
+            "path": "gateway-go/internal/pipeline/chat",
+            "evidence": "Direct internal fan-out is 90; bars are 20/50.",
+            "why": "A broad dependency surface.",
+            "remediation": "Depend on narrow capability ports.",
+            "verify": "Re-run the bench and confirm this finding disappears.",
+            "priority": 96.0,
+            "related_paths": [],
+        })
+        cands = structural_candidates(report)
+        fan = [c for c in cands if c["source"].endswith("deadbeef0001")]
+        self.assertEqual(len(fan), 1)
+        c = fan[0]
+        # The disappearance ask is replaced by the bounded-step contract.
+        self.assertNotIn("confirm this finding disappears", c["proposedChange"])
+        self.assertIn("CANNOT disappear in one session", c["proposedChange"])
+        self.assertIn("ONE bounded structural step", c["proposedChange"])
+        # No finding-present impact contract for the incremental family.
+        self.assertNotIn("impactContract", c)
+
+    def test_non_incremental_kind_keeps_disappearance_contract(self):
+        cands = structural_candidates(structural_report())
+        hub = [c for c in cands if c["source"].startswith("health-finding:volatile-hub:")]
+        self.assertEqual(len(hub), 1)
+        self.assertIn("Verify:", hub[0]["proposedChange"])
+        self.assertIn("impactContract", hub[0])
+        self.assertEqual(hub[0]["impactContract"]["target"], 0)
+
+    def test_v3_domain_prefixed_incremental_id_is_recognized(self):
+        report = structural_report()
+        report["schema_version"] = 3
+        for f in report["findings"]:
+            f["domain"] = "structure"
+        report["findings"].append({
+            "id": "structure:diffuse-change-responsibility:cafe00112233",
+            "domain": "structure",
+            "pillar": "responsibility-cohesion",
+            "severity": "high",
+            "path": "gateway-go/internal/platform/mailarchive",
+            "evidence": "Partner entropy=0.81 across 5 components.",
+            "why": "No focused component boundary.",
+            "remediation": "Choose one owning capability.",
+            "verify": "Re-run the bench and confirm this finding disappears.",
+            "priority": 91.0,
+            "related_paths": [],
+        })
+        cands = structural_candidates(report)
+        diff = [c for c in cands if "cafe00112233" in c["source"]]
+        self.assertEqual(len(diff), 1)
+        self.assertIn("CANNOT disappear in one session", diff[0]["proposedChange"])
+        self.assertNotIn("impactContract", diff[0])
