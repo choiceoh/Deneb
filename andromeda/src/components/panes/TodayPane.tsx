@@ -13,7 +13,7 @@ import type {
   WorkItem,
 } from "@/types";
 import { useCachedList } from "@/cachedList";
-import { calSpan, eventDayKeys, fmtDate, senderName } from "@/format";
+import { calSpan, eventDayKeys, fmtDate, fmtNum, senderName } from "@/format";
 import { moveItem, orderedItems } from "@/listReorder";
 import { getJSON, setJSON } from "@/storage";
 import { Icon, type IconName } from "@/components/Icon";
@@ -126,7 +126,7 @@ interface BriefLine {
 
 // 시장 카드 한 줄: 가격 + 전일대비 등락(▲/▼ %). The AI reads the same text via lineText.
 function marketLine(q: MarketQuote): BriefLine {
-  const price = (q.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const price = fmtNum(q.price ?? 0, 2);
   const pct = q.changePct ?? 0;
   const arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "·";
   return {
@@ -647,9 +647,7 @@ function MarketCard({
             return (
               <div key={q.symbol || q.label} className={"market-tile " + tone}>
                 <div className="market-tile-label">{q.label}</div>
-                <div className="market-tile-price">
-                  {(q.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </div>
+                <div className="market-tile-price">{fmtNum(q.price ?? 0, 2)}</div>
                 <div className="market-tile-change">
                   {arrow} {Math.abs(pct).toFixed(2)}%
                 </div>

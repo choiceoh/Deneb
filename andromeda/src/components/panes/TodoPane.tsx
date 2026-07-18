@@ -8,6 +8,7 @@ import { usePaneTarget } from "@/usePaneTarget";
 import { useRegisterPane, useWorkspace, type PaneTarget } from "@/workspaceContext";
 import { Column, Grid, GridNotice, RowBtn } from "@/components/Grid";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
+import { showToast } from "@/toast";
 
 export function TodoPane() {
   const { connected } = useWorkspace();
@@ -17,6 +18,7 @@ export function TodoPane() {
   const todos = useMemo(() => result?.data ?? [], [result?.data]);
   const { mutate: updateTodo } = useUpdate();
   const { mutate: deleteTodo } = useDelete();
+  const { mutate: createTodo } = useCreate(); // 삭제 실행취소(재생성) 경로
 
   // Deep-link: open the matching todo's edit modal when another pane targets it.
   // While the list is still loading, keep the target pending (return false) so it
@@ -44,7 +46,25 @@ export function TodoPane() {
     updateTodo({ resource: "todo", id: t.id, values: { done: !t.done } }, { onSuccess: () => void query.refetch() });
   }
   function removeTodo(t: Todo) {
-    deleteTodo({ resource: "todo", id: t.id }, { onSuccess: () => void query.refetch() });
+    deleteTodo(
+      { resource: "todo", id: t.id },
+      {
+        onSuccess: () => {
+          void query.refetch();
+          // 확인 다이얼로그 대신 실행취소 — 삭제는 즉시, 복구는 원클릭 (재생성이라
+          // id는 바뀌지만 제목/마감/메모는 그대로 돌아온다).
+          const values: Record<string, string | boolean> = { title: t.title };
+          if (t.due) {
+            values.due = t.due;
+            if (t.dueAllDay != null) values.dueAllDay = t.dueAllDay;
+          }
+          if (t.note) values.note = t.note;
+          showToast(`"${t.title}" 삭제됨`, {
+            undo: () => createTodo({ resource: "todo", values }, { onSuccess: () => void query.refetch() }),
+          });
+        },
+      },
+    );
   }
 
   const columns: Column<Todo>[] = [

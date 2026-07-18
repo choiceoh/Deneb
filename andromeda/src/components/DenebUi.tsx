@@ -158,7 +158,7 @@ export function statCountUpFrame(value: string, progress: number): string {
   const eased = 1 - Math.pow(1 - Math.max(0, progress), 3); // fast-out-slow-in
   const v = target * eased;
   const s = m[0].includes(",")
-    ? v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    ? v.toLocaleString("ko-KR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
     : v.toFixed(decimals);
   return value.slice(0, m.index) + s + value.slice(m.index + m[0].length);
 }

@@ -72,6 +72,12 @@ export function fmtTime(v?: string | number): string {
 // Mail timestamps within the last 6 hours read relatively ("3시간 전" / "45분 전" /
 // "방금"); older or future ones fall back to the absolute fmtDate. `now` is injectable
 // for deterministic tests.
+// Korean-first number formatting — one locale everywhere instead of per-call
+// toLocaleString(undefined) drifting with the OS locale.
+export function fmtNum(v: number, maxFraction = 0): string {
+  return v.toLocaleString("ko-KR", { maximumFractionDigits: maxFraction });
+}
+
 export function fmtMailDate(v?: string | number, now = Date.now()): string {
   if (v == null || v === "") return "";
   const d = new Date(v);

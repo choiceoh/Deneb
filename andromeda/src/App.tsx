@@ -10,6 +10,7 @@ import { log } from "./log";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Workstation } from "./components/Workstation";
+import { Toasts } from "./components/Toasts";
 import { UpdateNudge } from "./components/UpdateNudge";
 
 // App owns the gateway config and the DIY data provider derived from it.
@@ -73,6 +74,7 @@ export function App() {
         <WorkspaceProvider connected={connected} cfg={cfg} setCfg={setCfg}>
           <Workstation cfg={cfg} />
           {update && <UpdateNudge update={update} onDismiss={() => setUpdate(null)} />}
+          <Toasts />
         </WorkspaceProvider>
       </DataProviderScope>
     </ErrorBoundary>

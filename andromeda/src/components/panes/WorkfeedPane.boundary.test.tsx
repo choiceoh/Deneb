@@ -437,7 +437,6 @@ describe("WorkfeedPane boundary behavior", () => {
     });
 
     it("submits a nonblank reject comment and omits comments from approve", async () => {
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       renderFeed([approvalItem]);
       await userEvent.click(await screen.findByText("모듈 구매 품의"));
 
@@ -455,6 +454,9 @@ describe("WorkfeedPane boundary behavior", () => {
       await waitFor(() => expect(screen.queryByRole("dialog", { name: "결재 반려" })).not.toBeInTheDocument());
 
       await userEvent.click(screen.getByRole("button", { name: "승인" }));
+      // App-styled confirm modal (window.confirm 대체) 경유.
+      const approveDialog = await screen.findByRole("dialog", { name: "결재 승인" });
+      await userEvent.click(within(approveDialog).getByRole("button", { name: "승인" }));
       await waitFor(() =>
         expect(lastRpc(rpc, "miniapp.workfeed.action.run")?.params).toEqual({
           itemId: "approval-7",

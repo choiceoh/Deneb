@@ -380,7 +380,6 @@ describe("SettingsPane boundary behavior", () => {
     });
 
     it("asks before discarding a dirty draft and honors cancellation", async () => {
-      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
       renderWithProviders(<SettingsPane />, {
         connected: true,
         cfg: { url: "http://test", token: "tok" },
@@ -391,13 +390,15 @@ describe("SettingsPane boundary behavior", () => {
       });
       await userEvent.click(within(list).getByRole("button", { name: /시스템 안전 지침/ }));
 
-      expect(confirm).toHaveBeenCalledWith("저장하지 않은 변경을 버리고 다른 프롬프트를 열까요?");
+      // App-styled confirm modal (window.confirm 대체) — 취소하면 초안 유지.
+      const dialog = await screen.findByRole("dialog", { name: "편집 취소" });
+      await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+
       expect(screen.getByDisplayValue("저장하지 않은 편집")).toBeInTheDocument();
       expect(calls.filter((call) => call.method === "miniapp.prompts.get")).toHaveLength(1);
     });
 
     it("when opens the next prompt after discard confirmation", async () => {
-      vi.spyOn(window, "confirm").mockReturnValue(true);
       renderWithProviders(<SettingsPane />, {
         connected: true,
         cfg: { url: "http://test", token: "tok" },
@@ -407,6 +408,8 @@ describe("SettingsPane boundary behavior", () => {
         target: { value: "버릴 편집" },
       });
       await userEvent.click(within(list).getByRole("button", { name: /시스템 안전 지침/ }));
+      const dialog = await screen.findByRole("dialog", { name: "편집 취소" });
+      await userEvent.click(within(dialog).getByRole("button", { name: "버리고 열기" }));
       expect(await screen.findByDisplayValue("외부 변경은 확인 후 실행한다.")).toBeInTheDocument();
     });
 

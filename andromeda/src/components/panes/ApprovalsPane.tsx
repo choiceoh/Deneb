@@ -21,6 +21,7 @@ import { Column, Grid, GridNotice } from "@/components/Grid";
 import { FileViewer } from "@/components/FileViewer";
 import { viewKindFor } from "@/components/fileView";
 import { Markdown } from "@/components/Markdown";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { Field, Modal } from "@/components/Modal";
 
 // Recent 전체 결재 snapshot; day-pager filters client-side (Amaranth list has no
@@ -138,11 +139,13 @@ export function ApprovalsPane() {
   const [rejectDoc, setRejectDoc] = useState<GroupwareApprovalRow | null>(null);
   const [rejectComment, setRejectComment] = useState("");
 
+  // App-styled confirm (window.confirm의 OS 다이얼로그 대체) — 승인은 그룹웨어에
+  // 즉시 반영되는 불가역 액션이라 확인은 유지한다.
+  const [approving, setApproving] = useState<GroupwareApprovalRow | null>(null);
+
   async function actApprove(doc: GroupwareApprovalRow) {
     const id = String(doc.docId ?? "").trim();
     if (!id) return;
-    const title = doc.title || "이 결재 문서";
-    if (!window.confirm(`승인할까요?\n\n${title} (doc ${id})\n그룹웨어에 즉시 반영됩니다.`)) return;
     const result = await run(APPROVALS_RPC.act, { docId: id, decision: "approve" });
     if (result !== undefined) setSelectedId(undefined);
   }
@@ -251,7 +254,7 @@ export function ApprovalsPane() {
               <ApprovalDetail
                 doc={selected}
                 busy={busy}
-                onApprove={() => void actApprove(selected)}
+                onApprove={() => setApproving(selected)}
                 onReject={() => openReject(selected)}
                 onClose={() => setSelectedId(undefined)}
               />
@@ -259,6 +262,15 @@ export function ApprovalsPane() {
           }
         />
       </GridNotice>
+      {approving && (
+        <ConfirmModal
+          title="결재 승인"
+          message={`${approving.title || "이 결재 문서"} (doc ${String(approving.docId ?? "")})\n그룹웨어에 즉시 반영됩니다.`}
+          action="승인"
+          onConfirm={() => void actApprove(approving)}
+          onClose={() => setApproving(null)}
+        />
+      )}
       {rejectDoc && (
         <Modal
           title="결재 반려"

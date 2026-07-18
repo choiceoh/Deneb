@@ -15,7 +15,7 @@
 // KaTeX's own span/MathML markup is produced. We render our own GFM rather than
 // pulling react-markdown + remark (and its build-script supply-chain gate); KaTeX
 // is the single math dependency.
-import { type CSSProperties, type ReactNode, useMemo, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 import katex from "katex";
 import { normalizeMarkdown } from "@/markdown/normalize";
 import { type Block, type ListItem, parseBlocks } from "@/markdown/parse";
@@ -141,6 +141,28 @@ function renderInline(text: string, key: string): ReactNode[] {
 // as the identical fence in prose.
 export function CodeBlock({ lang, text }: { lang: string; text: string }) {
   const [copied, setCopied] = useState(false);
+  // Syntax colors: lazy-load highlight.js (common languages) so the base
+  // bundle stays lean; only fenced blocks with a KNOWN language get colored —
+  // auto-detection on plain text mis-paints too often. hljs escapes its output,
+  // so the innerHTML sink is safe.
+  // Keyed result instead of a reset-in-effect: stale colors for a previous
+  // lang/text pair are simply ignored at render time (no cascading setState).
+  const [hl, setHl] = useState<{ key: string; value: string } | null>(null);
+  const hlKey = lang + "\u0000" + text;
+  useEffect(() => {
+    if (!lang) return;
+    let cancelled = false;
+    void import("highlight.js/lib/common")
+      .then(({ default: hljs }) => {
+        if (cancelled || !hljs.getLanguage(lang)) return;
+        setHl({ key: hlKey, value: hljs.highlight(text, { language: lang, ignoreIllegals: true }).value });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [hlKey, lang, text]);
+  const html = hl && hl.key === hlKey ? hl.value : null;
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
@@ -160,7 +182,11 @@ export function CodeBlock({ lang, text }: { lang: string; text: string }) {
         </button>
       </div>
       <pre>
-        <code data-lang={lang || undefined}>{text}</code>
+        {html !== null ? (
+          <code data-lang={lang || undefined} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
+          <code data-lang={lang || undefined}>{text}</code>
+        )}
       </pre>
     </div>
   );
