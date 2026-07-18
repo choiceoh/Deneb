@@ -251,6 +251,21 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 	// delivered to the native client via the main-session handoff wired in
 	// registerSessionRPCMethods (proactive relay), not Telegram.
 	if s.cronService != nil {
+		var morningDataFn func(ctx context.Context) (string, error)
+		var morningRenderFn func(dataJSON, narrativeJSON string) (string, error)
+		var morningOpts toolbind.MorningLetterOpts
+		if s.wikiStore != nil {
+			morningOpts = toolbind.MorningLetterOpts{
+				DiaryDir: s.wikiStore.DiaryDir(),
+				WikiDir:  s.wikiStore.Dir(),
+			}
+		}
+		morningDataFn = func(ctx context.Context) (string, error) {
+			return toolbind.CollectMorningLetterData(ctx, morningOpts, time.Now())
+		}
+		morningRenderFn = func(dataJSON, narrativeJSON string) (string, error) {
+			return toolbind.RenderMorningLetterCard(dataJSON, narrativeJSON, time.Now())
+		}
 		// Pre-collect wiki weekly-report data for "/weekly" cron payloads so the
 		// LLM writes inside a fixed 양식 (cronChatAdapter.resolveCronCommand), and
 		// render the formal form image to post to the 업무 chat alongside the text.
@@ -280,11 +295,13 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			}
 		}
 		s.cronService.SetAgentRunner(cronrunner.New(cronrunner.Config{
-			Chat:              s.chatHandler,
-			Logger:            s.logger,
-			WeeklyReportData:  weeklyDataFn,
-			WeeklyReportText:  weeklyTextFn,
-			WeeklyFormDeliver: weeklyFormFn,
+			Chat:                s.chatHandler,
+			Logger:              s.logger,
+			MorningLetterData:   morningDataFn,
+			MorningLetterRender: morningRenderFn,
+			WeeklyReportData:    weeklyDataFn,
+			WeeklyReportText:    weeklyTextFn,
+			WeeklyFormDeliver:   weeklyFormFn,
 		}))
 		// Interactive /weekly (/주간보고) reuses the same deterministic generators
 		// so a manually typed command matches the Saturday cron output (this path

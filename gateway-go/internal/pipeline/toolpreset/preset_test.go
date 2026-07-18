@@ -274,7 +274,7 @@ func TestIsValidAcceptsKnownPresetsRejectsUnknown(t *testing.T) {
 	for _, p := range []Preset{
 		PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetCoding, PresetBriefcase,
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase, PresetProjection,
 	} {
 		if !IsValid(p) {
 			t.Errorf("IsValid(%q) should be true", p)
@@ -287,8 +287,8 @@ func TestIsValidAcceptsKnownPresetsRejectsUnknown(t *testing.T) {
 
 func TestKnownPresetsReturnsValidPresetsWithAllowLists(t *testing.T) {
 	presets := KnownPresets()
-	if len(presets) != 11 {
-		t.Errorf("got %d, want 11 known presets", len(presets))
+	if len(presets) != 12 {
+		t.Errorf("got %d, want 12 known presets", len(presets))
 	}
 	for _, p := range presets {
 		if AllowedTools(p) == nil {
@@ -296,6 +296,18 @@ func TestKnownPresetsReturnsValidPresetsWithAllowLists(t *testing.T) {
 		}
 		if !IsValid(p) {
 			t.Errorf("known preset %q should be valid", p)
+		}
+	}
+}
+
+func TestProjectionPresetIsRecognizedAndDeniesEveryTool(t *testing.T) {
+	allowed := AllowedTools(PresetProjection)
+	if allowed == nil {
+		t.Fatal("projection preset must be a recognized non-nil allow-list")
+	}
+	for _, name := range []string{"read", "web", "wiki", "fetch_tools", "message", "exec"} {
+		if _, ok := allowed[name]; ok {
+			t.Errorf("projection preset must deny %q", name)
 		}
 	}
 }

@@ -48,8 +48,19 @@ var (
 // Phone ops leaf binding (hosted under lifecycle to keep this package ≤ soft fanout).
 var ErrPhoneActionUnconfirmed = lifecycle.ErrPhoneActionUnconfirmed
 
-// Weekly report leaf bindings.
-type WeeklyReportOpts = weekly.WeeklyReportOpts
+// Recurring briefing leaf bindings.
+type (
+	MorningLetterOpts = weekly.MorningLetterOpts
+	WeeklyReportOpts  = weekly.WeeklyReportOpts
+)
+
+func CollectMorningLetterData(ctx context.Context, opts MorningLetterOpts, now time.Time) (string, error) {
+	return weekly.CollectMorningLetterData(ctx, opts, now)
+}
+
+func RenderMorningLetterCard(dataJSON, narrativeJSON string, now time.Time) (string, error) {
+	return weekly.RenderMorningLetterCard(dataJSON, narrativeJSON, now)
+}
 
 func CollectWeeklyReportData(ctx context.Context, opts WeeklyReportOpts, now time.Time) (string, error) {
 	return weekly.CollectWeeklyReportData(ctx, opts, now)

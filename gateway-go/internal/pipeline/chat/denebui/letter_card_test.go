@@ -2,12 +2,11 @@ package denebui
 
 import "testing"
 
-// Canonical morning/evening letter cards in the labeled-HTML wire format,
-// mirroring the deneb-ui skeleton in skills/productivity/morning-letter/SKILL.md
-// and the evening_letter tool's output contract (toolreg/core.go). These tests
-// are a server-side gate: the letter skeletons the agent copies+fills must stay
-// schema-valid against the deneb-ui node spec, so a malformed template can't
-// silently ship a broken card. Keep the HTML here in sync with those sources.
+// Canonical legacy-authored morning and current evening letter examples in the
+// labeled-HTML wire format. The production morning card is now assembled and
+// validator-gated in tools/routine/morning_card.go; this fixture remains a wire
+// compatibility check for existing transcripts. The evening example mirrors
+// the evening_letter tool's model-authored output contract.
 //
 // The market stat values carry the AUTHORING form — digit-free letter tokens
 // ("{{market:usd_krw}}") the proactive relay substitutes with fetched numbers

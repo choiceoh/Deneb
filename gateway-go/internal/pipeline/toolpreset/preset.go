@@ -18,7 +18,12 @@ const (
 	PresetNotiDigest   Preset = "noti-digest"   // autonomous notification digest: wiki only (no external, no personal stores)
 	PresetCoding       Preset = "coding"        // 코드모드 (code: sessions): worktree coding, no 업무 memory/personal-data tools
 	PresetBriefcase    Preset = "briefcase"     // isolated Deneb-Briefcase evaluation world
+	PresetProjection   Preset = "projection"    // internal one-shot structured projection, no tools
 )
+
+// The impossible sentinel keeps the allow-list non-empty for the existing
+// filter contract while exposing no registered tool to the model.
+var projectionTools = toSet("__projection_no_tools__")
 
 // conversationTools are minimal tools for conversation mode (대화모드).
 // Web access, wiki, plus read-only file inspection.
@@ -214,6 +219,8 @@ func AllowedTools(preset Preset) map[string]struct{} {
 		return codingTools
 	case PresetBriefcase:
 		return briefcaseTools
+	case PresetProjection:
+		return projectionTools
 	default:
 		return nil
 	}
@@ -224,7 +231,7 @@ func IsValid(preset Preset) bool {
 	switch preset {
 	case PresetNone, PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase:
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase, PresetProjection:
 		return true
 	default:
 		return false
@@ -236,7 +243,7 @@ func KnownPresets() []Preset {
 	return []Preset{
 		PresetConversation, PresetBoot, PresetSelfReview,
 		PresetResearcher, PresetImplementer, PresetVerifier, PresetWikiResearch,
-		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase,
+		PresetWikiScout, PresetNotiDigest, PresetCoding, PresetBriefcase, PresetProjection,
 	}
 }
 

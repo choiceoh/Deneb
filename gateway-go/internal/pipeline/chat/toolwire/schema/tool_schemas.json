@@ -443,7 +443,7 @@
   },
   {
     "name": "morning_letter",
-    "description": "Collect the morning-letter data sections in parallel — weather (Gwangju), exchange rates, copper price, today's calendar, unread email, upcoming wiki deadlines, open questions, pending groupware approvals — and return raw JSON. The agent composes the letter (tone, interpretation, priorities). No parameters.",
+    "description": "Collect the morning-letter sections in parallel and return a complete, validated deneb-ui message in delivery plus inspection-only raw sections. Return delivery verbatim; do not re-fetch or reformat the sections. No parameters.",
     "properties": {},
     "required": []
   },

@@ -68,12 +68,12 @@ func RegisterRoutineTools(registry toolport.ToolRegistrar, chrono *tooldeps.Chro
 		Fn:          artifact.ToolFiles(filesSemanticSearch),
 		Deferred:    true,
 	})
-	// Morning-letter data collection: six sections in parallel, raw JSON out;
-	// the agent composes the letter. Deferred like the other routine tools —
-	// the daily cron run loads it via fetch_tools, every other turn stays slim.
+	// Morning-letter collection + deterministic card assembly. The raw sections
+	// remain in the result for inspection, but delivery is complete and should be
+	// returned verbatim. Deferred like the other routine tools.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "morning_letter",
-		Description: "모닝레터 데이터 수집: 날씨·환율·구리시세·오늘 일정·미읽음 메일·위키 마감(due) 6개 섹션을 병렬 수집해 raw JSON 반환. 편지 작성(어조·해석·우선순위)은 에이전트 몫. No parameters",
+		Description: "모닝레터 완성: 날씨·달러환율·구리·일정·메일·위키 마감/미해결질문·전자결재를 병렬 수집하고 delivery에 검증 가능한 deneb-ui 카드를 완성해 반환한다. delivery를 그대로 최종 응답으로 사용하고 sections는 다시 조회·재구성하지 않는다. No parameters",
 		InputSchema: schema.MorningLetterToolSchema(),
 		Fn:          routine.ToolMorningLetter(routine.MorningLetterOpts{DiaryDir: diaryDir, WikiDir: wikiDir}),
 		Deferred:    true,

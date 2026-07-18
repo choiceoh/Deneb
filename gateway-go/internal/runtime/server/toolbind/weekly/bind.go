@@ -7,7 +7,18 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/routine"
 )
 
-type WeeklyReportOpts = routine.WeeklyReportOpts
+type (
+	WeeklyReportOpts  = routine.WeeklyReportOpts
+	MorningLetterOpts = routine.MorningLetterOpts
+)
+
+func CollectMorningLetterData(ctx context.Context, opts MorningLetterOpts, now time.Time) (string, error) {
+	return routine.CollectMorningLetterData(ctx, opts, now)
+}
+
+func RenderMorningLetterCard(dataJSON, narrativeJSON string, now time.Time) (string, error) {
+	return routine.RenderMorningLetterCard(dataJSON, narrativeJSON, now)
+}
 
 func CollectWeeklyReportData(ctx context.Context, opts WeeklyReportOpts, now time.Time) (string, error) {
 	return routine.CollectWeeklyReportData(ctx, opts, now)
