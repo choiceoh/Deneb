@@ -1,33 +1,27 @@
+# BGE-M3 embedding server — Deneb recall/compaction semantic index.
+# USER unit: install to ~/.config/systemd/user/ and manage with `systemctl --user`.
+# GPU inference (--gpu-layers 99) from the CUDA venv since the 2026-07-07 GPU
+# cutover (recall 3-query 201ms→27ms); the venv carries the GB10 sm_121
+# llama-cpp build (see bge-m3-build-cuda.sh).
 [Unit]
-Description=BGE-M3 Embedding Server (Deneb compaction fallback)
+Description=BGE-M3 Embedding Server (Deneb recall/compaction, GPU GB10 sm_121)
 After=network.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
 Type=simple
-User=choiceoh
-# CPU inference (--gpu-layers 0): keeps the GPU's unified memory for the main
-# LLM and PaddleOCR-VL, which otherwise CUDA-OOM the BGE-M3 GPU buffers on this
-# box. /usr/bin/python3 carries the llama-cpp-python + fastapi/uvicorn deps.
-ExecStart=/usr/bin/python3 /home/choiceoh/deneb/scripts/deploy/bge-m3-server.py --port 8001 --host 127.0.0.1 --gpu-layers 0
+ExecStart=/home/choiceoh/.deneb/bge-gpu-venv/bin/python3 /home/choiceoh/deneb/scripts/deploy/bge-m3-server.py --port 8001 --host 127.0.0.1 --gpu-layers 99
 WorkingDirectory=/home/choiceoh/deneb
-Restart=on-failure
+# Always revive. Restart=on-failure left a clean external SIGTERM (exit 0)
+# permanently down for 33h on 2026-07-17 while the gateway logged failed embed
+# batches every cycle — only an explicit `systemctl --user stop` should stick.
+# The StartLimit guard above still halts a rapid crash loop.
+Restart=always
 RestartSec=5
-
-# OOM protection. CPU inference needs the model (~446MB) plus the n_ctx=8192
-# compute + logits buffers, which exceed 2GB; 4GB gives safe headroom.
-MemoryMax=4G
-MemoryHigh=3G
-
-# Graceful shutdown.
 TimeoutStopSec=10
 KillSignal=SIGTERM
-
-# Logging.
-StandardOutput=journal
-StandardError=journal
 SyslogIdentifier=bge-m3
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
