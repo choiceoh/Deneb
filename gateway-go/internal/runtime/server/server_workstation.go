@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // dispatchWorkstationCommand is wired into the workstation tool as its
@@ -71,8 +72,14 @@ func (s *Server) recordWorkstationUsage(action string) {
 	usage.Total++
 	usage.ByAction[action]++
 	usage.LastAt = time.Now().UTC().Format(time.RFC3339)
-	if data, err := json.MarshalIndent(usage, "", "  "); err == nil {
-		_ = os.MkdirAll(filepath.Dir(path), 0o755)
-		_ = os.WriteFile(path, data, 0o644)
+	data, err := json.MarshalIndent(usage, "", "  ")
+	if err != nil {
+		s.logger.Warn("workstation usage ledger marshal failed", "error", err)
+		return
+	}
+	// Atomic write: a mid-write crash must not truncate the two-week ledger
+	// (the next dispatch would silently reset the tally from zero).
+	if err := atomicfile.WriteFile(path, data, nil); err != nil {
+		s.logger.Warn("workstation usage ledger write failed", "path", path, "error", err)
 	}
 }

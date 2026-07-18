@@ -108,6 +108,14 @@ describe("parseWorkspaceCommand", () => {
     expect(parseWorkspaceCommand({ action: "prefill", view: "todo" })).toBeNull();
   });
 
+  it("parses the date jump on split too", () => {
+    expect(parseWorkspaceCommand({ action: "split", view: "mail", date: "2026-07-15" })).toMatchObject({
+      kind: "split",
+      view: "mail",
+      date: "2026-07-15",
+    });
+  });
+
   it("parses the date jump on open and drops malformed dates", () => {
     expect(parseWorkspaceCommand({ action: "open", view: "mail", date: "2026-07-15" })).toMatchObject({
       kind: "open",

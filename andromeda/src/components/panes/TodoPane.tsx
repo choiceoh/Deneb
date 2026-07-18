@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useCreate, useDelete, useUpdate } from "@/crud";
 import type { Todo } from "@/types";
 import { serializeList } from "@/aiText";
@@ -24,11 +24,14 @@ export function TodoPane() {
   // While the list is still loading, keep the target pending (return false) so it
   // retries once the rows arrive instead of being dropped.
   // 데네브 prefill 커맨드용 초안 — 새 할일 모달이 채워진 채 열린다 (저장은 사용자).
-  const [draft, setDraft] = useState<{ title: string; due?: string; note?: string } | null>(null);
+  // seq는 모달 remount 키: 이미 열려 있는 모달 위로 새 초안이 오면 useState
+  // 초기값이 다시 뛰도록 인스턴스를 갈아끼운다.
+  const [draft, setDraft] = useState<{ seq: number; title: string; due?: string; note?: string } | null>(null);
+  const draftSeqRef = useRef(0);
   const openTargetedTodo = useCallback(
     (t: PaneTarget) => {
       if (t.prefill) {
-        setDraft(t.prefill);
+        setDraft({ seq: ++draftSeqRef.current, ...t.prefill });
         setModal("new");
         return;
       }
@@ -128,6 +131,7 @@ export function TodoPane() {
       </GridNotice>
       {modal && (
         <TodoModal
+          key={modal === "new" ? `new-${draft?.seq ?? 0}` : String(modal.id)}
           todo={modal === "new" ? null : modal}
           draft={modal === "new" ? draft : null}
           onClose={() => {

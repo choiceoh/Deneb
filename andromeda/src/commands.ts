@@ -11,7 +11,7 @@ import { isTileable, MAX_TILES } from "./tiling";
 export type WorkspaceCommand =
   | { kind: "open"; view: View; ref?: string; query?: string; date?: string }
   | { kind: "wiki"; path: string }
-  | { kind: "split"; view: View; ref?: string }
+  | { kind: "split"; view: View; ref?: string; date?: string }
   | { kind: "close"; view?: View }
   | { kind: "focus"; view: View }
   | { kind: "layout"; views: View[] }
@@ -66,7 +66,7 @@ export function parseWorkspaceCommand(raw: Record<string, unknown>): WorkspaceCo
       return path ? { kind: "wiki", path } : null;
     }
     case "split":
-      return view && isTileable(view) ? { kind: "split", view, ref: asStr(raw.ref) } : null;
+      return view && isTileable(view) ? { kind: "split", view, ref: asStr(raw.ref), date: asDate(raw.date) } : null;
     case "close":
       // A close naming an UNKNOWN view is malformed — drop it rather than
       // falling through to "close the focused tile" (a drifted gateway command

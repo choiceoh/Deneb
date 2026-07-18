@@ -13,8 +13,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -57,7 +57,12 @@ var workstationActions = map[string]bool{
 	"prefill":   true,
 }
 
-var workstationDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+// validWorkstationDate accepts only real calendar dates (2026-02-30 must fail —
+// the desktop's new Date() would silently normalize it into March).
+func validWorkstationDate(v string) bool {
+	_, err := time.Parse(time.DateOnly, v)
+	return err == nil
+}
 
 // buildWorkstationCommand validates params against the allowlist and returns
 // the (action, args) frame for the desktop. Pure — unit-testable without the
@@ -77,11 +82,16 @@ func buildWorkstationCommand(p workstationParams) (string, map[string]string, er
 	due := strings.TrimSpace(p.Due)
 	note := strings.TrimSpace(p.Note)
 
-	if date != "" && !workstationDateRe.MatchString(date) {
+	if date != "" && !validWorkstationDate(date) {
 		return "", nil, fmt.Errorf("workstation: date must be YYYY-MM-DD (got %q)", p.Date)
 	}
-	if due != "" && !workstationDateRe.MatchString(due) {
+	if due != "" && !validWorkstationDate(due) {
 		return "", nil, fmt.Errorf("workstation: due must be YYYY-MM-DD (got %q)", p.Due)
+	}
+	// date rides only where the desktop actually consumes it (open/split day
+	// pagers) — advertising it wider would report success while doing nothing.
+	if date != "" && action != "open" && action != "split" {
+		return "", nil, fmt.Errorf("workstation: date is only valid with open/split (got action=%s)", action)
 	}
 
 	switch action {

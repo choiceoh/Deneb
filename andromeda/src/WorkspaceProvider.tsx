@@ -210,7 +210,7 @@ export function WorkspaceProvider({
           openWiki(cmd.path);
           break;
         case "split":
-          splitPane(cmd.view, cmd.ref ? { id: cmd.ref } : undefined);
+          splitPane(cmd.view, cmd.ref || cmd.date ? { id: cmd.ref, date: cmd.date } : undefined);
           break;
         case "close":
           closePane(cmd.view);

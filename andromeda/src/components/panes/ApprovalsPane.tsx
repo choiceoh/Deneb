@@ -73,6 +73,9 @@ export function ApprovalsPane() {
           if (Number.isFinite(ms)) {
             setLanded(true); // 날짜 점프는 자동 랜딩보다 우선
             setDayMs(startOfDay(ms));
+            // 미결만 모드는 day-pager를 숨긴다 — 명시적 pending 요청이 아니면
+            // 날짜 점프가 보이도록 해제.
+            if (target.query !== "pending") setPendingOnly(false);
           }
         }
         if (target.id != null) {

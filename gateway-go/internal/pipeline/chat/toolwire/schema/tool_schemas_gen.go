@@ -1775,7 +1775,7 @@ func WorkstationToolSchema() map[string]any {
 			},
 			"date": map[string]any{
 				"type":        "string",
-				"description": "YYYY-MM-DD — 메일/결재처럼 날짜 페이저가 있는 pane을 그 날짜로 점프 (open/split/focus와 함께)",
+				"description": "YYYY-MM-DD — 메일/결재처럼 날짜 페이저가 있는 pane을 그 날짜로 점프 (open/split 전용)",
 			},
 			"due": map[string]any{
 				"type":        "string",

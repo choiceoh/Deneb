@@ -234,7 +234,14 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
             );
           })
         ) : (
-          <main className={"panel" + (bottomChat ? " ws-main" : "")} style={paneStyle}>
+          <main
+            className={
+              "panel" +
+              (bottomChat ? " ws-main" : "") +
+              (flashSeq !== null && flashSeq > 0 && spotlight?.view === view ? " tile-spotlight" : "")
+            }
+            style={paneStyle}
+          >
             <TileCtx.Provider value={view}>
               <div key={view} className="pane-enter">
                 {(() => {

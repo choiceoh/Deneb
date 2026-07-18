@@ -24,6 +24,8 @@ func TestBuildWorkstationCommand_Validation(t *testing.T) {
 		{"prefill on non-todo", workstationParams{Action: "prefill", View: "mail", Title: "x"}, "view=todo only"},
 		{"prefill without title", workstationParams{Action: "prefill", View: "todo"}, "needs title"},
 		{"bad date shape", workstationParams{Action: "open", View: "mail", Date: "7월 15일"}, "date must be YYYY-MM-DD"},
+		{"impossible calendar date", workstationParams{Action: "open", View: "mail", Date: "2026-02-30"}, "date must be YYYY-MM-DD"},
+		{"date outside open/split", workstationParams{Action: "focus", View: "mail", Date: "2026-07-15"}, "only valid with open/split"},
 		{"bad due shape", workstationParams{Action: "prefill", View: "todo", Title: "x", Due: "내일"}, "due must be YYYY-MM-DD"},
 	}
 	for _, tc := range cases {

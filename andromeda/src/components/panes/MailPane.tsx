@@ -158,6 +158,9 @@ export function MailPane() {
       if (Number.isFinite(ms)) {
         landedRef.current = true;
         setDayMs(startOfDay(ms));
+        // id 없는 날짜 점프는 기존 선택을 비운다 — 선택 메일의 날짜-보정 렌더
+        // 로직이 페이저를 곧바로 되돌리는 것을 막는다.
+        if (t.id === undefined) setSelectedId(undefined);
       }
     }
     if (t.id === undefined) return t.date ? undefined : false;
