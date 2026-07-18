@@ -176,6 +176,21 @@ func (at *AbortTracker) HasActiveRun(sessionKey string) bool {
 	return false
 }
 
+// HasActiveInteractiveRun reports whether a NON-automation run is active for
+// the session. Auto-steer uses it instead of HasActiveRun so a user's message
+// never folds into an autonomous relay (heartbeat/cron/mailpoll) that merely
+// rides the same session key — see AbortEntry.Automation.
+func (at *AbortTracker) HasActiveInteractiveRun(sessionKey string) bool {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	for _, entry := range at.entries {
+		if entry.SessionKey == sessionKey && !entry.Automation {
+			return true
+		}
+	}
+	return false
+}
+
 // HasOtherActiveRun reports whether a registered run other than clientRunID
 // is active for the session. Completion handoff uses this while holding the
 // session decision lock: if a successor already registered, that successor

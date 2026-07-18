@@ -258,7 +258,7 @@ func TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter(t *testing.T) {
 
 	var activeDuringRun bool
 	var gotCtx context.Context
-	_, err := h.withSyncRunLifecycle(context.Background(), sessionKey, "run-1",
+	_, err := h.withSyncRunLifecycle(context.Background(), sessionKey, "run-1", false,
 		func(ctx context.Context) (*SyncResult, error) {
 			activeDuringRun = h.abort.HasActiveRun(sessionKey)
 			gotCtx = ctx

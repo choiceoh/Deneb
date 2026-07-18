@@ -108,7 +108,7 @@ func TestBeginDrainWaitsForAdmittedSyncRunToActuallyReturn(t *testing.T) {
 	runDone := make(chan error, 1)
 	go func() {
 		defer h.abort.ReleaseAdmission()
-		_, err := h.withAdmittedSyncRunLifecycle(context.Background(), "client:main", "run-sync",
+		_, err := h.withAdmittedSyncRunLifecycle(context.Background(), "client:main", "run-sync", false,
 			func(context.Context) (*SyncResult, error) {
 				close(started)
 				<-release

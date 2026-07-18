@@ -276,3 +276,37 @@ func TestActiveRunCountTracksAdmissionsAndRuns(t *testing.T) {
 		t.Fatalf("ActiveRunCount after cleanup = %d, want 0", got)
 	}
 }
+
+// HasActiveInteractiveRun ignores automation entries: an autonomous relay
+// (heartbeat/cron) riding a session key the user chats on must not make the
+// session look busy to auto-steer. Regression for the 2026-07-18 report where
+// a user's message folded into a heartbeat run on client:main.
+func TestHasActiveInteractiveRunIgnoresAutomation(t *testing.T) {
+	tracker := NewAbortTracker()
+	t.Cleanup(tracker.Close)
+
+	auto, _ := abortEntry("client:main", "hb-1")
+	auto.Automation = true
+	tracker.Register(auto.ClientRun, auto)
+
+	// Only an automation run is active → NOT interactive-active.
+	if !tracker.HasActiveRun("client:main") {
+		t.Fatal("HasActiveRun should still see the automation run")
+	}
+	if tracker.HasActiveInteractiveRun("client:main") {
+		t.Fatal("automation-only session must not count as interactive-active")
+	}
+
+	// A concurrent interactive run flips it.
+	inter, _ := abortEntry("client:main", "chat-1")
+	tracker.Register(inter.ClientRun, inter)
+	if !tracker.HasActiveInteractiveRun("client:main") {
+		t.Fatal("interactive run must make the session interactive-active")
+	}
+
+	// Removing the interactive run drops it back to automation-only.
+	tracker.Cleanup("chat-1")
+	if tracker.HasActiveInteractiveRun("client:main") {
+		t.Fatal("after the interactive run ends, automation alone is not interactive")
+	}
+}
