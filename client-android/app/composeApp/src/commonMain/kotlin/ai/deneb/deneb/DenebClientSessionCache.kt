@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.data.AppSettings
+import ai.deneb.data.SynchronousLock
 import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.deneb.generated.DashboardOut
 import ai.deneb.deneb.generated.NotebookSummaryOut
@@ -32,12 +33,14 @@ internal class SessionCache<T : Any>(
     private var at: TimeSource.Monotonic.ValueTimeMark? = null
     private var value: T? = null
     private var diskChecked = false
-    private var invalidationVersion = 0L
+    private var nextLoadToken = 0L
+    private var activeLoadToken: Long? = null
+    private val stateLock = SynchronousLock()
     private val loadMutex = Mutex()
 
     /** The cached value while it is younger than the TTL, else null. A disk-seeded
      *  value is never fresh — it paints, but the fetch still goes out. */
-    private fun fresh(): T? = value?.takeIf { at?.let { mark -> mark.elapsedNow() < ttl } == true }
+    private fun freshLocked(): T? = value?.takeIf { at?.let { mark -> mark.elapsedNow() < ttl } == true }
 
     /**
      * Reuse the fresh value or run one loader at a time. The second cache check
@@ -46,36 +49,48 @@ internal class SessionCache<T : Any>(
      * invalidation during loading prevents that now-stale result from being cached.
      */
     suspend fun getOrLoad(force: Boolean = false, load: suspend () -> T?): T? {
-        if (!force) fresh()?.let { return it }
+        if (!force) stateLock.withLock(::freshLocked)?.let { return it }
         return loadMutex.withLock {
-            if (!force) fresh()?.let { return@withLock it }
-            val version = invalidationVersion
-            val loaded = load() ?: return@withLock null
-            if (version == invalidationVersion) store(loaded)
-            loaded
+            if (!force) stateLock.withLock(::freshLocked)?.let { return@withLock it }
+            val token = stateLock.withLock {
+                nextLoadToken = nextCacheToken(nextLoadToken)
+                nextLoadToken.also { activeLoadToken = it }
+            }
+            try {
+                val loaded = load() ?: return@withLock null
+                stateLock.withLock {
+                    if (activeLoadToken == token) storeLocked(loaded)
+                }
+                loaded
+            } finally {
+                stateLock.withLock {
+                    if (activeLoadToken == token) activeLoadToken = null
+                }
+            }
         }
     }
 
     /** Last-known value regardless of age — memory first, then one lazy disk read.
      *  For the screens' instant stale paint on cold start. */
-    fun peek(): T? {
-        value?.let { return it }
-        if (!diskChecked) {
-            diskChecked = true
-            value = disk?.load()
+    fun peek(): T? = stateLock.withLock {
+        value ?: run {
+            if (!diskChecked) {
+                diskChecked = true
+                value = disk?.load()
+            }
+            value
         }
-        return value
     }
 
-    private fun store(v: T) {
+    private fun storeLocked(v: T) {
         value = v
         at = TimeSource.Monotonic.markNow()
         diskChecked = true
         disk?.save(v)
     }
 
-    fun invalidate() {
-        invalidationVersion++
+    fun invalidate() = stateLock.withLock {
+        activeLoadToken = null
         value = null
         at = null
         diskChecked = true
@@ -130,17 +145,19 @@ internal class SessionCacheMap<K : Any, V : Any>(
     // null mark = disk-seeded (stale by definition).
     private val entries = LinkedHashMap<K, Pair<TimeSource.Monotonic.ValueTimeMark?, V>>()
     private var diskChecked = false
-    private var invalidationVersion = 0L
+    private var nextLoadToken = 0L
+    private val activeLoads = mutableMapOf<K, Long>()
+    private val stateLock = SynchronousLock()
     private val loadMutex = KeyedMutex<K>()
 
-    private fun seedFromDisk() {
+    private fun seedFromDiskLocked() {
         if (diskChecked) return
         diskChecked = true
         disk?.load()?.forEach { (k, v) -> if (k !in entries) entries[k] = null to v }
     }
 
-    private fun fresh(key: K): V? {
-        seedFromDisk()
+    private fun freshLocked(key: K): V? {
+        seedFromDiskLocked()
         val (mark, v) = entries[key] ?: return null
         return v.takeIf { mark != null && mark.elapsedNow() < ttl }
     }
@@ -148,45 +165,56 @@ internal class SessionCacheMap<K : Any, V : Any>(
     /** Reuse a fresh value or run one loader for [key]. Other keys remain
      *  independent, and invalidation while loading prevents stale recaching. */
     suspend fun getOrLoad(key: K, force: Boolean = false, load: suspend () -> V?): V? {
-        if (!force) fresh(key)?.let { return it }
+        if (!force) stateLock.withLock { freshLocked(key) }?.let { return it }
         return loadMutex.withLock(key) locked@{
-            if (!force) fresh(key)?.let { return@locked it }
-            val version = invalidationVersion
-            val loaded = load() ?: return@locked null
-            if (version == invalidationVersion) store(key, loaded)
-            loaded
+            if (!force) stateLock.withLock { freshLocked(key) }?.let { return@locked it }
+            val token = stateLock.withLock {
+                nextLoadToken = nextCacheToken(nextLoadToken)
+                nextLoadToken.also { activeLoads[key] = it }
+            }
+            try {
+                val loaded = load() ?: return@locked null
+                stateLock.withLock {
+                    if (activeLoads[key] == token) storeLocked(key, loaded)
+                }
+                loaded
+            } finally {
+                stateLock.withLock {
+                    if (activeLoads[key] == token) activeLoads.remove(key)
+                }
+            }
         }
     }
 
     /** Last-known value for [key] regardless of age — the cold-start stale paint. */
-    fun peek(key: K): V? {
-        seedFromDisk()
-        return entries[key]?.second
+    fun peek(key: K): V? = stateLock.withLock {
+        seedFromDiskLocked()
+        entries[key]?.second
     }
 
-    private fun store(key: K, value: V) {
-        seedFromDisk()
+    private fun storeLocked(key: K, value: V) {
+        seedFromDiskLocked()
         entries.remove(key)
         entries[key] = TimeSource.Monotonic.markNow() to value
         while (entries.size > maxEntries) entries.remove(entries.keys.first())
-        persist()
+        persistLocked()
     }
 
-    fun invalidate(key: K) {
-        invalidationVersion++
-        seedFromDisk()
-        if (entries.remove(key) != null) persist()
+    fun invalidate(key: K) = stateLock.withLock {
+        activeLoads.remove(key)
+        seedFromDiskLocked()
+        if (entries.remove(key) != null) persistLocked()
     }
 
     /** Full reset (credential switch): drop memory and the disk snapshot. */
-    fun clear() {
-        invalidationVersion++
+    fun clear() = stateLock.withLock {
+        activeLoads.clear()
         entries.clear()
         diskChecked = true
         disk?.clear()
     }
 
-    private fun persist() {
+    private fun persistLocked() {
         val slot = disk ?: return
         // LinkedHashMap iteration is insertion order and store() reinserts, so the
         // tail is the most recently written — keep those.
@@ -194,6 +222,8 @@ internal class SessionCacheMap<K : Any, V : Any>(
         slot.save(recent)
     }
 }
+
+private fun nextCacheToken(current: Long): Long = if (current == Long.MAX_VALUE) 1 else current + 1
 
 /**
  * One owner-fingerprinted JSON envelope in settings (encrypted at rest), the

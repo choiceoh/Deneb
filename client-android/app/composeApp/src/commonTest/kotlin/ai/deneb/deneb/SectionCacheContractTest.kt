@@ -3,9 +3,11 @@ package ai.deneb.deneb
 import ai.deneb.data.AppSettings
 import com.russhwolf.settings.MapSettings
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -157,6 +159,81 @@ class SectionCacheContractTest {
         releaseProject.complete(Unit)
         assertEquals("프로젝트/a", project.await())
         assertEquals("업무/b", work.await())
+    }
+
+    @Test
+    fun invalidatingOneKeyDoesNotFenceAnotherInFlightLoad() = runTest {
+        val cache = SessionCacheMap<String, String>(SectionCacheTtl)
+        val projectStarted = CompletableDeferred<Unit>()
+        val workStarted = CompletableDeferred<Unit>()
+        val releaseProject = CompletableDeferred<Unit>()
+        val releaseWork = CompletableDeferred<Unit>()
+
+        val project = async {
+            cache.getOrLoad("프로젝트") {
+                projectStarted.complete(Unit)
+                releaseProject.await()
+                "프로젝트/stale"
+            }
+        }
+        val work = async {
+            cache.getOrLoad("업무") {
+                workStarted.complete(Unit)
+                releaseWork.await()
+                "업무/fresh"
+            }
+        }
+        projectStarted.await()
+        workStarted.await()
+
+        cache.invalidate("프로젝트")
+        releaseProject.complete(Unit)
+        releaseWork.complete(Unit)
+
+        assertEquals("프로젝트/stale", project.await())
+        assertEquals("업무/fresh", work.await())
+        assertNull(cache.peek("프로젝트"))
+        assertEquals("업무/fresh", cache.peek("업무"))
+    }
+
+    @Test
+    fun differentKeyCompletionsPersistOneCombinedSnapshot() = runTest {
+        val settings = AppSettings(MapSettings())
+        val serializer = MapSerializer(String.serializer(), String.serializer())
+        val cache = SessionCacheMap(
+            ttl = SectionCacheTtl,
+            disk = SectionDiskSlot(settings, "parallel-map", serializer) { "owner" },
+        )
+        val firstStarted = CompletableDeferred<Unit>()
+        val secondStarted = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+
+        val first = async(Dispatchers.Default) {
+            cache.getOrLoad("first") {
+                firstStarted.complete(Unit)
+                release.await()
+                "A"
+            }
+        }
+        val second = async(Dispatchers.Default) {
+            cache.getOrLoad("second") {
+                secondStarted.complete(Unit)
+                release.await()
+                "B"
+            }
+        }
+        firstStarted.await()
+        secondStarted.await()
+        release.complete(Unit)
+        assertEquals("A", first.await())
+        assertEquals("B", second.await())
+
+        val reopened = SessionCacheMap(
+            ttl = SectionCacheTtl,
+            disk = SectionDiskSlot(settings, "parallel-map", serializer) { "owner" },
+        )
+        assertEquals("A", reopened.peek("first"))
+        assertEquals("B", reopened.peek("second"))
     }
 
     @Test

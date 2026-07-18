@@ -18,7 +18,9 @@ internal class IosWikiMirrorFiles(private val dir: String) : WikiMirrorFiles {
     override fun write(name: String, content: String) {
         NSFileManager.defaultManager.createDirectoryAtPath(dir, true, null, null)
         @Suppress("CAST_NEVER_SUCCEEDS")
-        (content as NSString).writeToFile("$dir/$name", true, NSUTF8StringEncoding, null)
+        check((content as NSString).writeToFile("$dir/$name", true, NSUTF8StringEncoding, null)) {
+            "Unable to atomically replace wiki mirror file $name"
+        }
     }
 
     override fun delete(name: String) {
