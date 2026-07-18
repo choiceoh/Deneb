@@ -57,6 +57,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     hiddenHistory,
     selectSession,
     removeSession,
+    renameSession,
+    canLoadMoreSessions,
+    loadMoreSessions,
     newChat,
     refreshSessions,
     loadOlderTurns,
@@ -206,6 +209,9 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
           onSelect={selectSession}
           onDelete={removeSession}
           onNew={newChat}
+          onRename={(key, label) => void renameSession(key, label)}
+          canLoadMore={canLoadMoreSessions}
+          onLoadMore={() => void loadMoreSessions()}
         />
       </aside>
     </section>

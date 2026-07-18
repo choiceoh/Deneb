@@ -40,6 +40,10 @@ type SessionsLister interface {
 	List() []*session.Session
 	Get(key string) *session.Session
 	Delete(key string) bool
+	// Patch backs miniapp.sessions.rename (Label field). The label persistence
+	// sweep (server/session_labels.go) snapshots manager labels, so a rename
+	// here survives restarts with no extra plumbing.
+	Patch(key string, patch session.PatchFields) *session.Session
 }
 
 // TranscriptLoader is the subset of chat.TranscriptStore the session
@@ -76,6 +80,7 @@ func SessionsMethods(deps SessionsDeps) map[string]rpcutil.HandlerFunc {
 	out := map[string]rpcutil.HandlerFunc{
 		"miniapp.sessions.recent": sessionsRecent(deps),
 		"miniapp.sessions.delete": sessionsDelete(deps),
+		"miniapp.sessions.rename": sessionsRename(deps),
 	}
 	// Transcript registration is conditional — without a transcript
 	// loader factory the gateway boots fine, the method just isn't
@@ -281,6 +286,34 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 // A running session is left intact unless force=true: yanking it out from under
 // an in-flight turn would let that run re-Set the session on completion, so the
 // row would just come back — a subtler resurrection than the one we're fixing.
+// sessionsRename sets a conversation's display label from the drawer's rename
+// affordance. Truncated to the same budget as auto-titles so the drawer row
+// never overflows; persistence rides the existing label sweep.
+func sessionsRename(deps SessionsDeps) rpcutil.HandlerFunc {
+	type params struct {
+		SessionKey string `json:"sessionKey"`
+		Label      string `json:"label"`
+	}
+	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		key := strings.TrimSpace(p.SessionKey)
+		if key == "" {
+			return rpcerr.MissingParam("sessionKey").Response(req.ID)
+		}
+		label := strings.TrimSpace(p.Label)
+		if label == "" {
+			return rpcerr.MissingParam("label").Response(req.ID)
+		}
+		if r := []rune(label); len(r) > 60 {
+			label = string(r[:60])
+		}
+		if deps.Manager.Get(key) == nil {
+			return rpcutil.RespondOK(req.ID, map[string]any{"renamed": false})
+		}
+		s := deps.Manager.Patch(key, session.PatchFields{Label: &label})
+		return rpcutil.RespondOK(req.ID, map[string]any{"renamed": s != nil, "label": label})
+	})
+}
+
 func sessionsDelete(deps SessionsDeps) rpcutil.HandlerFunc {
 	type params struct {
 		SessionKey string `json:"sessionKey"`

@@ -152,6 +152,7 @@ var requiredMethods = []string{
 	// required list because tests run without providers.
 	"miniapp.sessions.recent",
 	"miniapp.sessions.delete",
+	"miniapp.sessions.rename",
 	"miniapp.sessions.transcript",
 	// FCM device-token registration — the token store always resolves (temp
 	// state dir in tests), so these register unconditionally even though the

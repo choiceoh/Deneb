@@ -95,6 +95,9 @@ export function AIPanel({
     toggleSessions,
     selectSession,
     removeSession,
+    renameSession,
+    canLoadMoreSessions,
+    loadMoreSessions,
     newChat,
     loadOlderTurns,
   } = useSessions(cfg, connected, busy || attaching, { clear, setTurns });
@@ -231,6 +234,9 @@ export function AIPanel({
           onSelect={selectSession}
           onDelete={removeSession}
           onNew={newChat}
+          onRename={(key, label) => void renameSession(key, label)}
+          canLoadMore={canLoadMoreSessions}
+          onLoadMore={() => void loadMoreSessions()}
         />
       )}
 
