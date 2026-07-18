@@ -35,7 +35,7 @@ function codeForShortcut(k: string): string {
 // 마우스용 분할 추가 스트립 — 작업 영역 오른쪽의 슬림한 + 버튼. 클릭하면 아직 타일에
 // 없는 pane 목록 팝오버가 뜨고, 고르면 현재 화면 옆에 분할로 열린다. (단축키·Alt+클릭을
 // 안 쓰는 사용 방식의 1차 분할 진입점.)
-function SplitAddStrip() {
+function SplitAddStrip({ edgeTabVisible = false }: { edgeTabVisible?: boolean }) {
   const { tiles, splitPane, hiddenViews, viewOrder } = useWorkspace();
   const [open, setOpen] = useState(false);
   if (tiles.length >= MAX_TILES) return null;
@@ -44,7 +44,9 @@ function SplitAddStrip() {
   );
   if (candidates.length === 0) return null;
   return (
-    <div className="split-add">
+    // 패널이 접혀 ai-reopen 엣지 탭이 떠 있으면 그 폭만큼 비켜선다 — 두 컨트롤이
+    // 같은 우측 세로 중앙에 겹치던 결함.
+    <div className={"split-add" + (edgeTabVisible ? " with-edge-tab" : "")}>
       <button
         className="split-add-btn"
         onClick={() => setOpen((v) => !v)}
@@ -251,7 +253,7 @@ export function Workstation({ cfg }: { cfg: GatewayConfig }) {
         </main>
       )}
       {/* 분할 추가 스트립 — 타일 여유가 있고 작업 영역이 보일 때만. */}
-      {showMain && isTileable(view) && !bottomChat && <SplitAddStrip />}
+      {showMain && isTileable(view) && !bottomChat && <SplitAddStrip edgeTabVisible={aiSideCollapsed} />}
       {/* 채팅 탭(비업무)·측면 데네브 패널 모두 항상 마운트(각자 대화 유지) — 비활성 탭에선 숨긴다. */}
       <ChatView cfg={cfg} hidden={view !== "chat"} />
       <AIPanel
