@@ -18,12 +18,14 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/core/corecache"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -58,7 +60,20 @@ const (
 	// ~28-42 tok/s; a short deadline would truncate into the fallback-excerpt
 	// path and silently discard the detail.
 	youtubeSummaryTimeout = 180 * time.Second
+	// youtubeSummaryCache bounds: ~32 detailed summaries ≈ well under 1MB.
+	youtubeSummaryCacheEntries = 32
+	youtubeSummaryCacheTTL     = 12 * time.Hour
 )
+
+// youtubeSummaryCache reuses a completed detailed summary when the same
+// transcript reappears — the link re-shared, asked again in another session, or
+// retried after a client-side timeout. The multi-chunk pipeline costs minutes
+// of local decode, and the YouTube path bypasses FetchCache entirely, so
+// without this every repeat paid the full price. Keyed by transcript hash
+// (caption updates invalidate naturally); the spillover copy is re-stored per
+// request because spill IDs are session-scoped (SpilloverStore.Load takes
+// sessionKey), so a cached spill note could dangle across sessions.
+var youtubeSummaryCache = corecache.NewLRU[[32]byte, string](youtubeSummaryCacheEntries, youtubeSummaryCacheTTL)
 
 // youtubeSummaryDetailCore is the shared detail contract for both the
 // single-call and per-chunk prompts: exhaustive, section-structured, fact-preserving.
@@ -97,10 +112,18 @@ func summarizeYouTubeResult(ctx context.Context, spill tooldeps.SpilloverStore, 
 	// retrievable regardless of the summarization outcome.
 	spillID := storeYouTubeTranscript(ctx, spill, r)
 
+	// Cache check runs before the local-AI availability gate: serving a cached
+	// summary needs no model at all.
+	key := sha256.Sum256([]byte(r.Transcript))
+	if cached, ok := youtubeSummaryCache.Get(key); ok {
+		return formatYouTubeSummary(r, cached, spillID)
+	}
+
 	summary, err := summarizeTranscript(ctx, r)
 	if err != nil || strings.TrimSpace(summary) == "" {
 		return formatYouTubeFallback(r, spillID)
 	}
+	youtubeSummaryCache.Put(key, summary)
 	return formatYouTubeSummary(r, summary, spillID)
 }
 

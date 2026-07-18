@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"strings"
 	"testing"
 
@@ -133,5 +134,22 @@ func TestSplitTranscriptChunksBoundsAndDroppedTail(t *testing.T) {
 	}
 	if dropped != 500 {
 		t.Fatalf("over-cap: dropped = %d, want 500", dropped)
+	}
+}
+
+// A cached summary is served without any summarizer call (deterministic even
+// when the local model is unavailable) and gets a fresh session-scoped spill note.
+func TestSummarizeYouTubeResultServesCachedSummaryWithoutModel(t *testing.T) {
+	transcript := strings.Repeat("이것은 캐시 테스트용 자막입니다. ", 200) // > youtubeSummarizeMinChars
+	r := sampleResult(transcript)
+	key := sha256.Sum256([]byte(transcript))
+	youtubeSummaryCache.Put(key, "## 섹션\n\n캐시된 상세 요약 본문")
+
+	out := summarizeYouTubeResult(context.Background(), nil, r)
+	if !strings.Contains(out, "캐시된 상세 요약 본문") {
+		t.Fatalf("expected cached summary, got:\n%s", out)
+	}
+	if strings.Contains(out, "로컬 요약 모델 사용 불가") {
+		t.Fatalf("cache hit must not fall back to the excerpt path:\n%s", out)
 	}
 }
