@@ -13,7 +13,7 @@ ExecStart=/usr/bin/docker run --rm --name nemotron-vllm --runtime nvidia --gpus 
   -v %h/.deneb/nemotron-hf-cache:/root/.cache/huggingface \
   ghcr.io/spark-arena/dgx-vllm-eugr-nightly:latest \
   vllm serve nvidia/Nemotron-3-Embed-1B-NVFP4 --host 127.0.0.1 --port 8003 \
-  --max-model-len 4096 --max-num-batched-tokens 4096 \
+  --max-model-len 8192 --max-num-batched-tokens 8192 \
   --gpu-memory-utilization 0.05 --enforce-eager
 ExecStop=/usr/bin/docker stop nemotron-vllm
 Restart=on-failure
