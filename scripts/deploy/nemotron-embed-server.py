@@ -61,11 +61,17 @@ class Adapter(BaseHTTPRequestHandler):
 
     def _json(self, code: int, payload: dict) -> None:
         body = json.dumps(payload).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # The client (gateway embedindex) gave up mid-request — commonly on
+            # the 502 error path when the embed already failed. There is no one
+            # left to send to, so swallow it rather than dumping a traceback.
+            pass
 
     def _truncate_tokens(self) -> int:
         # Probe the backend's live max_model_len and clamp; cache the answer.
