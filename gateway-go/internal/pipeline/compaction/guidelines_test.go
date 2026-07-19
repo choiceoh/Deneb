@@ -18,10 +18,10 @@ func TestGuidelineStore_SaveLoadCapDedup(t *testing.T) {
 		"", // dropped
 		"담당자 변경 이력을 보존하라",
 		long, // truncated
-		"세 번째 규칙",
-		"네 번째 규칙",
-		"다섯 번째 규칙",
-		"여섯 번째 규칙 — 캡 초과로 잘림",
+		"거래처명은 정식 상호로 보존하라",
+		"발주 수량은 단위와 함께 보존하라",
+		"계약 조건은 문구 그대로 보존하라",
+		"여섯 번째 규칙 — 캡 초과로 잘림", // distinct concept, dropped by the cap
 	}
 	if err := store.Save(in); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -102,5 +102,57 @@ func TestCompactionPrompt_RendersAnchorsAndGuidelines(t *testing.T) {
 	}
 	if !strings.Contains(got, "학습된 보존 지침") || !strings.Contains(got, "결제 기한 보존") {
 		t.Fatalf("learned guidelines not applied: %q", got)
+	}
+}
+
+// The 2026-07-19 near-dup fix: reworded siblings of one rule must not each hold
+// a slot, but genuinely distinct rules must survive.
+func TestSanitizeGuidelines_MergesNearDuplicateConcepts(t *testing.T) {
+	// The actual churned prod set (5 slots holding ~2 concepts).
+	in := []string{
+		"금액은 정확한 숫자와 통화로 보존하라",
+		"단가, 예산 등 금액은 정확한 숫자와 단위를 보존하라", // ~dup of금액 → dropped
+		"인물, 기업, 프로젝트명은 직책이나 호칭만 남기지 말고 보존하라",
+		"인원은 정확한 직위와 성함으로 보존하라", // shares nothing with인물 rule → distinct
+		"날짜는 구체적인 일자로 보존하라",
+	}
+	got := sanitizeGuidelines(in)
+	if len(got) != 4 {
+		t.Fatalf("want 4 distinct concepts after merge, got %d: %v", len(got), got)
+	}
+	// Newest-first: the first금액 phrasing wins, its sibling is gone.
+	if got[0] != "금액은 정확한 숫자와 통화로 보존하라" {
+		t.Fatalf("freshest phrasing must win: %v", got)
+	}
+	for _, g := range got {
+		if strings.Contains(g, "단가") {
+			t.Fatalf("near-dup sibling should have been dropped: %v", got)
+		}
+	}
+	// The distinct rules all survive.
+	for _, want := range []string{"인물", "인원", "날짜"} {
+		found := false
+		for _, g := range got {
+			if strings.Contains(g, want) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("distinct rule %q dropped: %v", want, got)
+		}
+	}
+}
+
+func TestGuidelineOverlap_PrefixMatchAbsorbsParticles(t *testing.T) {
+	// "금액" and "금액은" (particle) must count as the same token.
+	a := guidelineContentTokens("금액은 숫자와 통화로 보존하라")
+	b := guidelineContentTokens("금액 숫자 단위 보존하라")
+	if ov := guidelineOverlap(a, b); ov < 0.5 {
+		t.Fatalf("particle-variant tokens should overlap ≥0.5, got %.2f (a=%v b=%v)", ov, a, b)
+	}
+	// Unrelated rules overlap ~0.
+	c := guidelineContentTokens("날짜는 구체적인 일자로 보존하라")
+	if ov := guidelineOverlap(a, c); ov > 0 {
+		t.Fatalf("unrelated rules must not overlap, got %.2f", ov)
 	}
 }
