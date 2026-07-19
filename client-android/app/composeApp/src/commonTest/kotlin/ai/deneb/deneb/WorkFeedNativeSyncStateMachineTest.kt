@@ -97,6 +97,7 @@ class WorkFeedNativeSyncStateMachineTest {
         client.lastUsageForward = TimeSource.Monotonic.markNow()
         client.lastLocationForward = TimeSource.Monotonic.markNow()
         client.lastWikiMirrorRefresh = TimeSource.Monotonic.markNow()
+        client.lastDiaryMirrorRefresh = TimeSource.Monotonic.markNow()
     }
 
     @Test
@@ -541,6 +542,7 @@ class WorkFeedNativeSyncStateMachineTest {
         restarted.lastUsageForward = TimeSource.Monotonic.markNow()
         restarted.lastLocationForward = TimeSource.Monotonic.markNow()
         restarted.lastWikiMirrorRefresh = TimeSource.Monotonic.markNow()
+        restarted.lastDiaryMirrorRefresh = TimeSource.Monotonic.markNow()
         transport.enqueueRpc(syncPayload(cursor = 42))
 
         restarted.syncNativeState()

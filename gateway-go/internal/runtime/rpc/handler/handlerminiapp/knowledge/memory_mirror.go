@@ -108,3 +108,84 @@ func memoryMirror(deps MemoryDeps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, res)
 	})
 }
+
+const (
+	defaultDiaryMirrorLimit = 300
+	maxDiaryMirrorLimit     = 500
+	// diaryMirrorCursorSep joins (file, header) into one opaque cursor token.
+	// NUL never occurs in either part (filenames are diary-YYYY-MM-DD.md,
+	// headers are HH:MM section titles).
+	diaryMirrorCursorSep = "\x00"
+)
+
+// memoryDiaryMirror is the diary counterpart of memoryMirror: full entries
+// (not the 200-rune diary_recent snippets) in stable (file, header) order with
+// a resumable cursor, powering the native client's offline diary search
+// (~2,350 entries / ~1.9MB today). Entries are already redacted at the write
+// boundary (wiki.AppendDiaryTo), so mirroring them to the device adds no new
+// exposure beyond the wiki mirror.
+func memoryDiaryMirror(deps MemoryDeps) rpcutil.HandlerFunc {
+	type params struct {
+		// Cursor is the "file\x00header" of the last entry considered ("" =
+		// start). An entry appended behind the cursor mid-scan is picked up
+		// by the next full refresh — the scan itself never restarts.
+		Cursor string `json:"cursor,omitempty"`
+		Limit  int    `json:"limit,omitempty"`
+	}
+	type entryOut struct {
+		File    string `json:"file"`
+		Header  string `json:"header"`
+		Content string `json:"content"`
+		At      int64  `json:"at,omitempty"`
+	}
+	type out struct {
+		Entries    []entryOut `json:"entries"`
+		NextCursor string     `json:"nextCursor,omitempty"`
+		HasMore    bool       `json:"hasMore"`
+		Total      int        `json:"total"`
+	}
+	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		limit := p.Limit
+		if limit <= 0 {
+			limit = defaultDiaryMirrorLimit
+		}
+		if limit > maxDiaryMirrorLimit {
+			limit = maxDiaryMirrorLimit
+		}
+
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
+		}
+		all := store.RecentDiaryEntries(int(^uint(0) >> 1))
+		sort.Slice(all, func(i, j int) bool {
+			if all[i].File != all[j].File {
+				return all[i].File < all[j].File
+			}
+			return all[i].Header < all[j].Header
+		})
+		total := len(all)
+
+		start := 0
+		if c := strings.TrimSpace(p.Cursor); c != "" {
+			start = sort.Search(len(all), func(i int) bool {
+				return all[i].File+diaryMirrorCursorSep+all[i].Header > c
+			})
+		}
+
+		end := start + limit
+		if end > total {
+			end = total
+		}
+		entries := make([]entryOut, 0, end-start)
+		for _, h := range all[start:end] {
+			entries = append(entries, entryOut{File: h.File, Header: h.Header, Content: h.Content, At: h.At})
+		}
+		res := out{Entries: entries, Total: total, HasMore: end < total}
+		if res.HasMore && end > start {
+			last := all[end-1]
+			res.NextCursor = last.File + diaryMirrorCursorSep + last.Header
+		}
+		return rpcutil.RespondOK(req.ID, res)
+	})
+}

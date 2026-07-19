@@ -113,6 +113,7 @@ func MemoryMethods(deps MemoryDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.memory.list_in_category": memoryListInCategory(deps),
 		"miniapp.memory.mirror":           memoryMirror(deps),
 		"miniapp.memory.diary_recent":     memoryDiaryRecent(deps),
+		"miniapp.memory.diary_mirror":     memoryDiaryMirror(deps),
 	}
 }
 

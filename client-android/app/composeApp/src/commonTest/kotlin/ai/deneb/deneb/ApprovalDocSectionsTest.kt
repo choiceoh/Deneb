@@ -47,4 +47,55 @@ class ApprovalDocSectionsTest {
         assertEquals("", s.line)
         assertEquals("", s.attachments)
     }
+
+    @Test
+    fun prefersTrailingReaderAttachBlockOverBodyAttachList() {
+        // Real-world shape (docId 99391): the drafter writes a bare "첨부" list
+        // inside the body; the reader appends the structured "첨부 (N건 …)"
+        // block at the end. The reader block must win.
+        val sample = """
+            제목: 공고료 지급 품의
+
+            본문
+            공고료를 지급하고자 합니다.
+
+            첨부
+            1. 신문공고증빙
+            2. 거래명세서 끝.
+
+            첨부 (2건 · 내용 미열람)
+            필요한 파일만 …
+            1. 공고증빙.pdf · 1.9MB
+            2. 거래명세서.pdf · 55KB
+        """.trimIndent()
+
+        val s = parseApprovalDocBody(sample)
+        assertTrue(s.body.contains("신문공고증빙"), "drafter's own list stays in the body")
+        assertTrue(s.attachmentHeader.startsWith("첨부 (2건"))
+        assertEquals(2, s.attachmentCount)
+        val rows = parseAttachmentRows(s.attachments)
+        assertEquals(listOf("공고증빙.pdf", "거래명세서.pdf"), rows.map { it.name })
+    }
+
+    @Test
+    fun parsesAttachmentRowsWithAndWithoutMeta() {
+        val rows = parseAttachmentRows(
+            """
+                필요한 파일만 …
+                1. 영수증.pdf · 12KB
+                2. 견적.xlsx
+                3. 사진 자료.png · 1.2MB · 스캔
+            """.trimIndent(),
+        )
+        assertEquals(3, rows.size)
+        assertEquals(ApprovalAttachmentRow(1, "영수증.pdf", "12KB"), rows[0])
+        assertEquals(ApprovalAttachmentRow(2, "견적.xlsx", ""), rows[1])
+        assertEquals(ApprovalAttachmentRow(3, "사진 자료.png", "1.2MB · 스캔"), rows[2])
+    }
+
+    @Test
+    fun attachmentRowsIgnoreNonNumberedLines() {
+        assertEquals(emptyList<ApprovalAttachmentRow>(), parseAttachmentRows("내용 미열람 안내문"))
+        assertEquals(emptyList<ApprovalAttachmentRow>(), parseAttachmentRows(""))
+    }
 }

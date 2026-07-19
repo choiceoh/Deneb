@@ -212,6 +212,23 @@ internal data class WikiMirrorPageRow(
     val body: String = "",
 )
 
+// Bulk entry export for the offline diary mirror (miniapp.memory.diary_mirror).
+@Serializable
+internal data class DiaryMirrorPayload(
+    val entries: List<DiaryMirrorEntryRow> = emptyList(),
+    val nextCursor: String = "",
+    val hasMore: Boolean = false,
+    val total: Int = 0,
+)
+
+@Serializable
+internal data class DiaryMirrorEntryRow(
+    val file: String = "",
+    val header: String = "",
+    val content: String = "",
+    val at: Long = 0,
+)
+
 // Capture results: the gateway runs OCR / ASR / contacts-extract and the agent
 // turn, returning the surfaced text.
 @Serializable
