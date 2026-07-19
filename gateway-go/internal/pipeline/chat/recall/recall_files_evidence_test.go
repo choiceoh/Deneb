@@ -104,7 +104,7 @@ func TestRecallFilesEvidenceIgnoresBlankPath(t *testing.T) {
 // files source wired (no wiki/diary/polaris), proving the task's two scenarios:
 // a topical question surfaces the matching file as recall evidence in the tail
 // block, and an off-topic question ("오늘 날씨") injects nothing. The fake search
-// stands in for the BGE-M3 hybrid index (which needs the live embedding server).
+// stands in for the filestore hybrid index (which needs the live embedding server).
 func TestBuildRecallPreflightSurfacesFileWhenTopical(t *testing.T) {
 	// The fake returns the file only for queries containing a real signal term of
 	// the topical message; the weather message tokenizes to no matching query.
@@ -146,9 +146,9 @@ func TestRecallFileConfidenceReturnsHighOrMediumBand(t *testing.T) {
 	if high != "high" {
 		t.Errorf("strong file hit confidence = %q, want high", high)
 	}
-	// A file right at the floor (cosine 0.73 + prior 0.78 = 1.51) is below the 1.55
+	// A file right at the floor (cosine 0.33 + prior 0.78 = 1.11) is below the 1.18
 	// high bar → medium.
-	med := recallConfidence(recallEvidence{Kind: "file", Score: recallFilesSourcePrior + 0.73})
+	med := recallConfidence(recallEvidence{Kind: "file", Score: recallFilesSourcePrior + 0.33})
 	if med != "medium" {
 		t.Errorf("floor-level file hit confidence = %q, want medium", med)
 	}

@@ -17,8 +17,9 @@ func pathSet(hits []ScoredEntry) map[string]bool {
 
 // TestHybridSearch_ReturnsExactNameBelowFloor is the core hybrid gain: a file
 // whose NAME literally contains the query but whose chunk cosine lands in the
-// BGE-M3 Korean noise band (~0.6, below the 0.73 floor) is DROPPED by the
-// cosine-only Search, but HybridSearch keeps it on the exact-name signal.
+// loose-association band (~0.2 on the Nemotron scale, below the 0.33 floor;
+// the analogous band was ~0.6 on BGE-M3) is DROPPED by the cosine-only
+// Search, but HybridSearch keeps it on the exact-name signal.
 func TestHybridSearch_ReturnsExactNameBelowFloor(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
@@ -30,12 +31,12 @@ func TestHybridSearch_ReturnsExactNameBelowFloor(t *testing.T) {
 	mustPut(t, store, "/회의/점심 메뉴.txt", "점심 메뉴 커피 음료 목록입니다")
 
 	const query = "탑솔라 계약 관련 문서" // >= minChunkRunes
-	// Hand-place the body's chunk at cosine ~0.6 to the query (noise band), and the
+	// Hand-place the body's chunk at cosine ~0.2 to the query (noise band), and the
 	// other file far away. fixedEmbedder maps each exact text to a vector.
 	embed := &fixedEmbedder{vecs: map[string][]float32{
 		body: {1, 0, 0},
 		"점심 메뉴 커피 음료 목록입니다": {0, 1, 0},
-		query: {0.6, 0, 0.8}, // cos to body = 0.6 < floor 0.73
+		query: {0.2, 0, 0.98}, // cos to body = 0.2 < floor 0.33
 	}}
 
 	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
@@ -43,7 +44,7 @@ func TestHybridSearch_ReturnsExactNameBelowFloor(t *testing.T) {
 		t.Fatalf("Reindex: %v", err)
 	}
 
-	// Cosine-only Search drops the file (body cosine 0.6 < 0.73 floor).
+	// Cosine-only Search drops the file (body cosine 0.2 < 0.33 floor).
 	semOnly, err := idx.Search(ctx, query, 5, embed)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -63,7 +64,7 @@ func TestHybridSearch_ReturnsExactNameBelowFloor(t *testing.T) {
 }
 
 // TestHybridSearch_RejectsSemanticNoise pins the floor's noise rejection: a file
-// with a 0.6-band cosine AND no lexical overlap with the query is still cut, so
+// with a noise-band cosine AND no lexical overlap with the query is still cut, so
 // hybrid doesn't reopen the Korean-noise hole the floor closed.
 func TestHybridSearch_RejectsSemanticNoise(t *testing.T) {
 	ctx := context.Background()
@@ -74,12 +75,12 @@ func TestHybridSearch_RejectsSemanticNoise(t *testing.T) {
 	mustPut(t, store, "/회의/메뉴.txt", fileB)
 
 	// A query that shares NO tokens with either file's name or body, placed at the
-	// ~0.6 noise band to fileA. No lexical overlap + sub-floor cosine ⇒ must be cut.
+	// ~0.2 noise band to fileA. No lexical overlap + sub-floor cosine ⇒ must be cut.
 	const noiseQuery = "전혀 무관한 별개 주제 질문" // disjoint vocabulary
 	embed := &fixedEmbedder{vecs: map[string][]float32{
 		fileA:      {1, 0, 0},
 		fileB:      {0, 1, 0},
-		noiseQuery: {0.6, 0, 0.8}, // 0.6 to fileA, in the noise band
+		noiseQuery: {0.2, 0, 0.98}, // 0.2 to fileA, in the noise band
 	}}
 
 	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))

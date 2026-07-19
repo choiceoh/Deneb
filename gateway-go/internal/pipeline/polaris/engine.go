@@ -30,7 +30,7 @@ type Engine struct {
 	logger            *slog.Logger
 	cfg               Config
 	circuit           *CircuitBreaker
-	embedder          compact.Embedder // optional; BGE-M3 for MMR compaction fallback
+	embedder          compact.Embedder // optional; embedding sidecar for MMR compaction fallback
 	anchorMu          sync.RWMutex
 	anchorKeywords    []string // wiki Tier1 page titles to preserve through summarization
 	learnedGuidelines []string // ACON-style preservation rules distilled from past compaction misses

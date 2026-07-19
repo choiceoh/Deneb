@@ -6,7 +6,7 @@
 //   - the chat files tool (CoreToolDeps.FilesSemanticSearch),
 //   - the miniapp.files.search RPC (FilesBrowseDeps.SemanticSearch).
 //
-// The index embeds each file's extracted text once (BGE-M3) and ranks files by
+// The index embeds each file's extracted text once (embedding sidecar) and ranks files by
 // the best chunk cosine similarity to the query — finding files by meaning, not
 // just literal substring. Everything degrades silently when the embedding server
 // (:8001) is down: reindex is a no-op and search returns empty, so the callers

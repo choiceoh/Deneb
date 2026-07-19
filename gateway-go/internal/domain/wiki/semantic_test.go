@@ -127,7 +127,7 @@ func TestMergeSearchResults_DemotesUnconfirmedBM25BoostsConfirmedRejectsSemantic
 		{Path: "weak.md", Score: 0.30},     // below semSupportThreshold (but inBM25, so kept)
 		{Path: "strong.md", Score: 0.60},   // above semSupportThreshold
 		{Path: "semonly.md", Score: 0.75},  // semantic-only, ABOVE the floor → admitted
-		{Path: "semfloor.md", Score: 0.50}, // semantic-only, BELOW the floor → excluded
+		{Path: "semfloor.md", Score: 0.30}, // semantic-only, BELOW the 0.44 floor → excluded
 	}
 	out := mergeSearchResults(bm25, sem, 10, false)
 	score := func(p string) float64 {
@@ -170,14 +170,16 @@ func TestMergeSearchResults_DemotesUnconfirmedBM25BoostsConfirmedRejectsSemantic
 
 // TestMergeSearchResults_SemanticOnlyFloorOverrideGatesLeakCosineFallsBackOnMalformed
 // confirms the DENEB_WIKI_SEM_FLOOR env override moves the admission gate, that
-// a malformed override falls back to the default, and — using the exact
-// MEASURED leak cosine (0.6302) — proves the leak→no-leak transition: the
-// off-topic semantic-only hit is injected when the floor is below it (old
-// floorless behavior) and excluded at the shipped 0.70 default.
+// a malformed override falls back to the default, and — using a
+// representative off-topic leak cosine — proves the leak→no-leak transition:
+// the semantic-only hit is injected when the floor is below it (old floorless
+// behavior) and excluded at the shipped 0.44 default. (The originally measured
+// BGE-era leak was 0.6302; on the Nemotron scale, off-topic pages score ~0.30.)
 func TestMergeSearchResults_SemanticOnlyFloorOverrideGatesLeakCosineFallsBackOnMalformed(t *testing.T) {
-	// The measured leak: an off-topic wiki page injected at score 0.6302 == its
-	// raw cosine, with no admission gate on the semantic-only branch.
-	const measuredLeakCos = 0.6302
+	// The leak shape: an off-topic wiki page injected at score == its raw
+	// cosine, with no admission gate on the semantic-only branch. 0.30 is the
+	// Nemotron-scale off-topic band (the BGE-era measurement was 0.6302).
+	const measuredLeakCos = 0.30
 	sem := []SearchResult{{Path: "거래/hyundai.md", Score: measuredLeakCos}}
 	has := func(out []SearchResult, p string) bool {
 		for _, r := range out {
@@ -188,11 +190,11 @@ func TestMergeSearchResults_SemanticOnlyFloorOverrideGatesLeakCosineFallsBackOnM
 		return false
 	}
 	// Floor BELOW the cosine (reproduces the old floorless behavior) → injected.
-	t.Setenv("DENEB_WIKI_SEM_FLOOR", "0.40")
+	t.Setenv("DENEB_WIKI_SEM_FLOOR", "0.20")
 	if !has(mergeSearchResults(nil, sem, 10, false), "거래/hyundai.md") {
-		t.Errorf("floor=0.40 (below the %.4f leak cosine) must admit the off-topic hit — old floorless behavior", measuredLeakCos)
+		t.Errorf("floor=0.20 (below the %.4f leak cosine) must admit the off-topic hit — old floorless behavior", measuredLeakCos)
 	}
-	// Shipped default floor (0.70, above the cosine) → excluded (no leak).
+	// Shipped default floor (0.44, above the cosine) → excluded (no leak).
 	t.Setenv("DENEB_WIKI_SEM_FLOOR", "")
 	if has(mergeSearchResults(nil, sem, 10, false), "거래/hyundai.md") {
 		t.Errorf("default floor must exclude the %.4f off-topic leak cosine", measuredLeakCos)

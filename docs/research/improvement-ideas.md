@@ -118,7 +118,7 @@
 
 ### 2.3 Polaris semantic-anchor 압축 (Tier 3a 개선) — **P3 / M**
 
-**현황.** `compaction/embedding.go` 는 BGE-M3 + MMR 로 dedup. 다만 **앵커** (사용자가 명시한 핵심 사실: "내 이름은 X", "프로젝트 Y 마감 6/15") 가 일반 메시지와 똑같이 MMR 점수 경쟁.
+**현황.** `compaction/embedding.go` 는 임베딩 사이드카(현행 Nemotron, 구 BGE-M3) + MMR 로 dedup. 다만 **앵커** (사용자가 명시한 핵심 사실: "내 이름은 X", "프로젝트 Y 마감 6/15") 가 일반 메시지와 똑같이 MMR 점수 경쟁.
 
 **제안.** Anchor extraction 패스 1회 추가:
 

@@ -1,6 +1,9 @@
-// Package embedding provides a client for the BGE-M3 embedding server.
-// Used by Polaris compaction for MMR-based extractive fallback when LLM
-// summarization is unavailable.
+// Package embedding provides a client for the local embedding sidecar —
+// since the 2026-07-18 cutover the Nemotron NVFP4 adapter on :8002
+// (scripts/deploy/nemotron-embed-server.py; DENEB_EMBEDDING_URL selects the
+// endpoint, and the BGE-M3 server on :8001 remains the rollback target).
+// Used by wiki/diary/file semantic search and by Polaris compaction for
+// MMR-based extractive fallback when LLM summarization is unavailable.
 package embedding
 
 import (
@@ -22,13 +25,15 @@ import (
 )
 
 const (
+	// defaultBaseURL is the legacy BGE-M3 port; production points at the
+	// Nemotron adapter via DENEB_EMBEDDING_URL (gateway drop-in).
 	defaultBaseURL    = "http://127.0.0.1:8001"
 	defaultTimeout    = 30 * time.Second
 	healthCheckPeriod = 30 * time.Second
 	maxTextsPerBatch  = 256
 )
 
-// Client communicates with the BGE-M3 embedding server.
+// Client communicates with the embedding sidecar (/health + /embed contract).
 type Client struct {
 	baseURL string
 	http    *http.Client

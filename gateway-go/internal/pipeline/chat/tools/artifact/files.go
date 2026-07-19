@@ -30,7 +30,7 @@ type filesParams struct {
 	Max       FlexInt `json:"max"`        // max results (list/search); accepts "10" or 10
 }
 
-// FilesSemanticSearchFunc ranks store files by meaning (BGE-M3 vectors) for the
+// FilesSemanticSearchFunc ranks store files by meaning (embedding vectors) for the
 // search action's semantic=true mode. It is injected from the server (which owns
 // the embedding client + index), so the tool stays decoupled from that wiring.
 // A nil func — or an unavailable embedding server returning an empty slice —
@@ -44,7 +44,7 @@ type FilesSemanticSearchFunc func(ctx context.Context, query string, max int) ([
 // over (the tool calls no LLM); share links are minted via internal/infra/fileshare.
 //
 // semanticSearch (optional) powers the search action's semantic=true mode by
-// ranking files by meaning (BGE-M3 vectors). Nil disables semantic search
+// ranking files by meaning (embedding vectors). Nil disables semantic search
 // gracefully — a semantic query then falls back to name/content matching.
 func ToolFiles(semanticSearch FilesSemanticSearchFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
