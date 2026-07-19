@@ -30,7 +30,7 @@ const DefaultPrompt = `카카오메일 알림으로 도착한 새 메일을 업�
 - 첨부파일 내용이 주어졌으면 본문보다 첨부 원문 수치를 우선해 반영한다. 견적서·계약서·세금계산서 같은 첨부가 있는데 내용이 비어 있거나 "일부만 반영"으로 표시됐으면, mail_archive(action="attachment", message_id 또는 query로 이 메일 지정, attachment로 파일 선택)로 직접 열어 수치·조건을 확인한다.
 - 마지막은 추측이 아닌 구체적인 다음 행동으로 끝낸다.
 
-보고 도입부는 deneb-ui 카드 한 블록으로 시작한다 — 여는 펜스는 ` + "```deneb-ui" + ` 한 줄 그대로 쓰고 그 줄 뒤에 다른 글자를 붙이지 않는다. 다음 줄부터 카드 본문이다 — 루트 <column> 안 <card>, 첫 행은 <row><icon name="mail" size="16"/><text style="caption">메일 분석</text></row>, 중요도는 <text color="error|warning|success">로, 금액·기한 같은 핵심 수치는 <stat>으로, 다음 행동은 <ul>로. 카드 안에 백틱·코드펜스 금지. 카드 뒤에 필요한 상세만 짧은 산문으로 잇는다. 메일 전체 본문을 그대로 전달하지 않는다. 결정이 필요하면(회신 여부·승인 등) 카드 뒤에 ` + "```choices" + ` 펜스로 선택지를 한 줄에 하나씩 제시한다(예: 회신 초안 작성 / 나중에 알림 / 무시) — 탭한 선택이 프롬프트로 돌아오면 실행한다. 결정 지점이 아니면 넣지 않는다.
+보고 도입부는 deneb-ui 카드 한 블록으로 시작한다 — 여는 펜스는 ` + "```deneb-ui" + ` 한 줄 그대로 쓰고 그 줄 뒤에 다른 글자를 붙이지 않는다. 다음 줄부터 카드 본문이다 — 루트 <column> 안 <card>, 첫 행은 <row><icon name="mail" size="16"/><text style="caption">메일 분석</text></row>, 중요도는 <text color="error|warning|success">로, 금액·기한 같은 핵심 수치는 <stat>으로, 다음 행동은 <ul>로. 카드 안에 백틱·코드펜스 금지. 도입 카드는 압축이 생명이다: 중요도 한 줄 + <stat> 최대 2개 + 한 문장 요지만 담고, 발신·수신·CC·분류·현장 같은 메타를 라벨-값 줄로 나열하지 마라 — 화면에 이미 보이는 메일 제목 재기술도 금지. 그런 맥락은 카드 뒤 산문에 자연스럽게 녹인다. 카드 뒤에 필요한 상세만 짧은 산문으로 잇는다. 메일 전체 본문을 그대로 전달하지 않는다. 결정이 필요하면(회신 여부·승인 등) 카드 뒤에 ` + "```choices" + ` 펜스로 선택지를 한 줄에 하나씩 제시한다(예: 회신 초안 작성 / 나중에 알림 / 무시) — 탭한 선택이 프롬프트로 돌아오면 실행한다. 결정 지점이 아니면 넣지 않는다.
 중요도는 "긴급", "확인 필요", "참고" 중 하나가 드러나게 쓰되, 장식용 이모지는 쓰지 않는다.
 기한·금액처럼 놓치면 손해가 큰 경고에만 ⚠️를 드물게 쓸 수 있다.
 한국어로 간결하게 쓰고, 근거가 필요한 판단에는 메일 문구나 이전 맥락을 짧게 붙여 사실과 추측을 구분한다.`
@@ -47,6 +47,7 @@ const analysisSystemPrompt = "당신은 업무 메일 분석 어시스턴트입�
 	// prompt so an operator-customized analysis prompt file still reports as a
 	// card.
 	"보고가 구조적(중요도·수치·기한·다음 행동)이면 도입부를 deneb-ui 카드 한 블록으로 시작하세요 — 여는 펜스는 ```deneb-ui 한 줄 그대로(그 줄 뒤에 다른 글자 금지), 다음 줄부터 루트 <column> 하나. 카드 안에는 백틱을 쓰지 마세요. " +
+	"도입 카드는 중요도 한 줄 + 핵심 수치 <stat> 최대 2개 + 한 문장 요지로 압축하세요 — 발신·수신·CC·분류 같은 메타의 라벨-값 나열과 메일 제목 재기술은 금지(그 맥락은 카드 뒤 산문에). " +
 	// Interactive decision (feed): a mail report lands in the 업무 feed, where the
 	// reliable one-tap affordance is a ```choices fence — the relay turns it into
 	// answer chips (question card) that route the tapped option back as a prompt.
