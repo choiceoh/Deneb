@@ -57,7 +57,7 @@ func loadCachedSkillsPrompt(workspaceDir string, availableToolNames []string) st
 			SkillConfigs:   make(map[string]skills.SkillConfig),
 			AvailableTools: availableTools,
 		},
-		ExcludedSkills: loadArchivedCuratorSkillNames(),
+		ExcludedSkills: excludedSkillNames(),
 	}
 	// Discover entries first so we can cache them for slash command routing.
 	allEntries := skills.DiscoverWorkspaceSkills(cfg.DiscoverConfig)
@@ -109,7 +109,7 @@ func EligibleWorkspaceSkills(workspaceDir string, availableToolNames []string) [
 		WorkspaceDir:     workspaceDir,
 		BundledSkillsDir: BundledSkillsDir(),
 	})
-	entries = skills.FilterExcludedSkills(entries, loadArchivedCuratorSkillNames())
+	entries = skills.FilterExcludedSkills(entries, excludedSkillNames())
 	entries = skills.FilterEligibleSkills(entries, skills.EligibilityContext{
 		EnvVars:        skills.EnvSnapshotFromOS(),
 		SkillConfigs:   make(map[string]skills.SkillConfig),
@@ -186,6 +186,21 @@ func skillCuratorStateVersion() int64 {
 		return 0
 	}
 	return info.ModTime().UnixNano()
+}
+
+// excludedSkillNames is the union of curator-archived skills and
+// operator-deleted skills (skills.LoadDeletedSkillNames — the bundled-skill
+// tombstone file), applied identically to the prompt, the skills tab, and
+// slash routing so a deleted skill disappears from every surface at once.
+func excludedSkillNames() map[string]struct{} {
+	excluded := loadArchivedCuratorSkillNames()
+	for name := range skills.LoadDeletedSkillNames() {
+		if excluded == nil {
+			excluded = make(map[string]struct{})
+		}
+		excluded[name] = struct{}{}
+	}
+	return excluded
 }
 
 func loadArchivedCuratorSkillNames() map[string]struct{} {

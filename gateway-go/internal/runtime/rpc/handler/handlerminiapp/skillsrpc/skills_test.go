@@ -300,6 +300,46 @@ func TestSkillsDelete_RemovesSkillDirectoryAndInvalidates(t *testing.T) {
 	}
 }
 
+func TestSkillsDelete_BundledSkillTombstonesInsteadOfRemoving(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	root := t.TempDir()
+	skillDir := filepath.Join(root, "email-analysis")
+	path := filepath.Join(skillDir, "SKILL.md")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("---\nname: email-analysis\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	invalidated := 0
+	deps := testSkillsDeps()
+	base := deps.List
+	deps.List = func() []skills.SkillEntry {
+		entries := base()
+		entries[0].Skill.FilePath = path
+		entries[0].Skill.Source = skills.SourceBundled
+		return entries[:1]
+	}
+	deps.InvalidateSkills = func() { invalidated++ }
+
+	params, _ := json.Marshal(map[string]any{"name": "email-analysis"})
+	resp := skillsDelete(deps)(authedSkillsCtx(), &protocol.RequestFrame{ID: "1", Method: "miniapp.skills.delete", Params: params})
+	if resp == nil || !resp.OK {
+		t.Fatalf("expected OK delete response, got %+v", resp)
+	}
+	// The checked-in files must survive; the deletion is a tombstone.
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("bundled SKILL.md must not be removed: %v", err)
+	}
+	if _, ok := skills.LoadDeletedSkillNames()["email-analysis"]; !ok {
+		t.Error("tombstone missing for deleted bundled skill")
+	}
+	if invalidated != 1 {
+		t.Errorf("InvalidateSkills calls = %d, want 1", invalidated)
+	}
+}
+
 // A missing SKILL.md is non-fatal: the row meta still renders.
 func TestSkillsDetail_MissingBodyDegrades(t *testing.T) {
 	h := skillsDetail(testSkillsDeps())

@@ -154,7 +154,9 @@ func buildSkillRow(
 		row.InstallSummary = skillInstallSummary(e.Metadata.Install)
 	}
 	row.Editable = skillEntryMutable(e)
-	row.Deletable = row.Editable
+	// Bundled skills are not editable (their SKILL.md is checked into the
+	// repo) but ARE deletable — deletion tombstones them out of the catalog.
+	row.Deletable = row.Editable || e.Skill.Source == skills.SourceBundled
 	rec, isManaged := curator[e.Skill.Name]
 	agentCreated := isManaged && rec.CreatedBy == genesis.SkillCuratorCreatedByAgent
 	// Two origin signals, belt and suspenders: the curator marker is
@@ -323,11 +325,21 @@ func skillsDelete(deps SkillsDeps) rpcutil.HandlerFunc {
 		if !ok {
 			return rpcerr.NotFound("skill").Response(req.ID)
 		}
-		if !skillEntryMutable(entry) {
+		switch {
+		case skillEntryMutable(entry):
+			if err := os.RemoveAll(filepath.Dir(entry.Skill.FilePath)); err != nil {
+				return rpcerr.WrapUnavailable("failed to delete skill directory", err).Response(req.ID)
+			}
+		case entry.Skill.Source == skills.SourceBundled:
+			// Bundled skills live in the repo's checked-in skills/ tree —
+			// removing files there would dirty the production checkout, so
+			// deletion is a persistent tombstone the catalog filters instead
+			// (skills.LoadDeletedSkillNames via chat.excludedSkillNames).
+			if err := skills.MarkSkillDeleted(entry.Skill.Name); err != nil {
+				return rpcerr.WrapUnavailable("failed to record skill deletion", err).Response(req.ID)
+			}
+		default:
 			return rpcerr.InvalidRequest("skill is not deletable from the native app").Response(req.ID)
-		}
-		if err := os.RemoveAll(filepath.Dir(entry.Skill.FilePath)); err != nil {
-			return rpcerr.WrapUnavailable("failed to delete skill directory", err).Response(req.ID)
 		}
 		invalidateSkills(deps)
 
