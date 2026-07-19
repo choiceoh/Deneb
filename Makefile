@@ -260,6 +260,14 @@ state-register:
 	  -out ../docs/research/state-register-workfeed.md
 	@echo "regenerated docs/research/state-register-{session,workfeed}.md"
 
+# TS twin of state-register: the TypeScript checker over the workstation's
+# shared context value (WorkspaceCtx). Uses the andromeda `typescript` devdep,
+# no new deps. Advisory (not a CI gate) — rerun after touching the context type.
+state-register-ts:
+	@cd andromeda && node --experimental-strip-types scripts/state-register.ts \
+	  --out ../docs/research/state-register-workstation.md
+	@echo "regenerated docs/research/state-register-workstation.md"
+
 # Semantic (concept) code search: Nemotron embeddings over CodeGraph nodes,
 # RRF-fused with the FTS lexical arm. Index lives in .codegraph/ (gitignored),
 # incremental by node updated_at. Query: make codesearch Q="재시도 백오프".
