@@ -1,0 +1,13 @@
+[Unit]
+Description=Close the RSI P5-2 calibration window on 2026-08-23 (harvest + revert)
+
+[Timer]
+# Dated one-shot: fires once on the window-close date; Persistent catches a
+# host that was down at the time. The service is idempotent (re-running after
+# the revert just re-emits the report), so a stray second fire is harmless.
+OnCalendar=2026-08-23 09:00:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Deneb RSI P5-2 calibration-window harvest + revert (one-shot, 2026-08-23)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/deneb
+ExecStart=/usr/bin/python3 %h/deneb/scripts/audit/calibration_harvest.py --revert
+Nice=10
+TimeoutStartSec=10min
