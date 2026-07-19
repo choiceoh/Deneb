@@ -37,6 +37,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 			Cues     []string `json:"cues"`
 			Client   string   `json:"client"`
 			Sites    []string `json:"sites"`
+			Stage    string   `json:"stage"`
 			// 현장(site) authoring fields — used by action="write-site".
 			Address              string   `json:"address"`
 			Status               string   `json:"status"`
@@ -80,7 +81,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		case "index":
 			return wikiIndex(d.Store, p.Category)
 		case "write":
-			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Client, p.Sites, p.Kinds, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
+			return wikiWrite(ctx, d.Store, d.Contacts, p.Query, p.Title, p.ID, p.Summary, p.Category, p.Content, p.Tags, p.Related, p.Cues, p.Client, p.Sites, p.Stage, p.Kinds, p.Supersedes, p.Importance, p.Type, p.Confidence, p.Due, p.Force)
 		case "write-site":
 			return wikiWriteSite(d.Store, p.Project, p.Title, wiki.SiteFields{
 				Client: p.Client, Address: p.Address, Status: p.Status, Capacity: p.Capacity,
@@ -395,6 +396,7 @@ type wikiWriteRequest struct {
 	cues       []string
 	client     string
 	sites      []string
+	stage      string
 	kinds      []string
 	supersedes []string
 	importance float64
@@ -404,11 +406,11 @@ type wikiWriteRequest struct {
 	force      bool
 }
 
-func wikiWrite(ctx context.Context, store *wiki.Store, contactsBook tooldeps.ContactsBook, path, title, id, summary, category, content string, tags, related, cues []string, client string, sites, kinds, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
+func wikiWrite(ctx context.Context, store *wiki.Store, contactsBook tooldeps.ContactsBook, path, title, id, summary, category, content string, tags, related, cues []string, client string, sites []string, stage string, kinds, supersedes []string, importance float64, pageType, confidence, due string, force bool) (string, error) {
 	req := wikiWriteRequest{
 		title: title, id: id, summary: summary, category: category, content: content,
 		tags: tags, related: related, cues: cues, client: client, sites: sites,
-		kinds: kinds, supersedes: supersedes, importance: importance,
+		stage: stage, kinds: kinds, supersedes: supersedes, importance: importance,
 		pageType: pageType, confidence: confidence, due: due, force: force,
 	}
 	if guidance := validateWikiWrite(req); guidance != "" {
@@ -549,6 +551,9 @@ func updateWikiWritePage(page *wiki.Page, req wikiWriteRequest, logAppend bool) 
 	if len(req.sites) > 0 {
 		page.Meta.Sites = req.sites
 	}
+	if req.stage != "" {
+		page.Meta.Stage = req.stage
+	}
 	if len(req.kinds) > 0 {
 		page.Meta.Kinds = req.kinds
 	}
@@ -578,6 +583,7 @@ func newWikiWritePage(req wikiWriteRequest, logAppend bool) *wiki.Page {
 	page.Meta.Cues = req.cues
 	page.Meta.Client = req.client
 	page.Meta.Sites = req.sites
+	page.Meta.Stage = req.stage
 	page.Meta.Kinds = req.kinds
 	if req.importance > 0 {
 		page.Meta.Importance = req.importance

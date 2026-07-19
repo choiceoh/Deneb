@@ -130,6 +130,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	page.Meta.Resource = "gmail:thread/abc123"
 	page.Meta.PID = "p-pl2-001"
 	page.Meta.Capacity = 12.5
+	page.Meta.Stage = "계약협의"
 	page.Body = "# 테스트\n\n## 요약\n테스트 내용."
 
 	rendered := page.Render()
@@ -137,6 +138,9 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	parsed := testutil.Must(parsePage(rendered))
 	if parsed.Meta.Capacity != 12.5 {
 		t.Errorf("capacity roundtrip: got %v, want 12.5", parsed.Meta.Capacity)
+	}
+	if parsed.Meta.Stage != "계약협의" {
+		t.Errorf("stage roundtrip: got %q, want 계약협의", parsed.Meta.Stage)
 	}
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)
@@ -314,6 +318,17 @@ func TestWritePageFile_RedactsSummary(t *testing.T) {
 	data := testutil.Must(os.ReadFile(path))
 	if strings.Contains(string(data), token) {
 		t.Fatalf("summary still contains raw token: %q", string(data))
+	}
+}
+
+func TestNormalizeStage_DropsOutOfVocabulary(t *testing.T) {
+	for in, want := range map[string]string{
+		"계약협의": "계약협의", " 시공 ": "시공", "유실": "유실",
+		"협상중": "", "done": "", "": "",
+	} {
+		if got := normalizeStage(in); got != want {
+			t.Errorf("normalizeStage(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

@@ -1177,6 +1177,11 @@ func WikiToolSchema() map[string]any {
 					"type": "string",
 				},
 			},
+			"stage": map[string]any{
+				"type":        "string",
+				"description": "write 전용(프로젝트 대표페이지): 프로젝트 사업 단계. 제안→견적→입찰→계약협의→시공→운영 진행, 종결/유실은 말단. 현장 상세 문서는 계약협의부터 — 그 전 단계는 sites 메타데이터까지만. 어휘 밖 값은 버려진다",
+				"enum":        []string{"제안", "견적", "입찰", "계약협의", "시공", "운영", "종결", "유실"},
+			},
 			"status": map[string]any{
 				"type":        "string",
 				"description": "write-site 전용: 현장 생애주기 단계 (후보→계약→개설→준공). 지도는 기본적으로 계약·개설·준공만 표시하고 후보는 숨긴다",
