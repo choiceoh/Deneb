@@ -95,7 +95,7 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 ## 함정
 
 - **배선은 `method_registry.go`에서만.** 다른 파일에서 Deps 구조체 조립 금지(예외: `server_rpc.go`의 `registerBuiltinMethods` 서버상태 클로저). 어댑터 파일(`hub_adapters.go` 류) 만들지 마라 — `docs/agent-rules/hub-wiring.md` 5규칙 + 스냅샷 테스트가 강제. <!-- docref:ignore -->
-- **핸들러는 `rpcutil.GatewayHub`를 import하지 않는다.** `Deps` 구조체만 받는다. Hub는 순수 서비스 컨테이너 — 읽기 접근자·late-bind setter(`SetChat` 등)·phase 헬퍼 외의 행위 메서드는 `Broadcast`/`Validate`뿐이며, 비즈니스 로직 추가 금지.
+- **핸들러는 `rpcutil.GatewayHub`를 import하지 않는다.** `Deps` 구조체만 받는다. Hub는 순수 서비스 컨테이너 — 읽기 접근자·late-bind setter(`SetWikiStore` 등)·phase 헬퍼 외의 행위 메서드는 `Broadcast`/`Validate`뿐이며, 비즈니스 로직 추가 금지.
 - **등록 5단계 순서 의존**: Builtin(허브 전) → Early(Chat 없음) → Session(Chat 생성) → Late(Chat 의존) → SideEffects. Chat-의존 메서드를 Early에 두면 nil. 새 단계는 정말 필요할 때만.
 - **graceful shutdown drain hang 이력**(배포 후 미니앱 404): HTTP 리스너 닫혔는데 프로세스 생존 → watchdog+bound drain으로 방어([project_gateway_shutdown_wedge]). 종료 격리 kill은 `fuser`(`pkill -f`는 셸 자살).
 - **배경 goroutine**은 `docs/agent-rules/concurrency.md`: `Server.ShutdownCtx()` 파생 + recover + 종료경로. 사용자 무응답 실패는 `Error`+broadcast(`docs/agent-rules/logging.md`).
