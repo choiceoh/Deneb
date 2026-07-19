@@ -362,6 +362,20 @@ if command -v codegraph >/dev/null 2>&1; then
     fi
 fi
 
+# Refresh the semantic code index (the runtime `code_search` tool) right after
+# the CodeGraph sync above, so concept search reflects the code we're about to
+# serve. Incremental: only nodes whose CodeGraph updated_at changed re-embed, so
+# a typical deploy re-embeds a handful (seconds); the first-ever run embeds the
+# full node set (~90s) and creates .codegraph/semantic-code.*. Fully soft: gated
+# on the embedder sidecar being up, never fails the deploy. Built here via the
+# same toolchain that just ran `make gateway-prod` — no separate binary needed.
+if [[ -d .codegraph && -f .codegraph/codegraph.db ]] \
+    && curl -sf -m 2 "${DENEB_EMBEDDING_URL:-http://127.0.0.1:8002}/health" >/dev/null 2>&1; then
+    echo "==> code_search semantic index refresh"
+    ( cd gateway-go && go run ./cmd/codesearch index ) >/dev/null 2>&1 \
+        || echo "    codesearch index failed (non-fatal); code_search serves prior index or guidance"
+fi
+
 case "$RESTART_MODE" in
     systemd)
         restart_with_systemd
