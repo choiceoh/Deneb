@@ -11,12 +11,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
+	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/codesearch"
 )
 
@@ -58,7 +60,7 @@ func main() {
 				k = n
 			}
 		}
-		hits, err := codesearch.Search(ctx, dir, emb, os.Args[2], k)
+		hits, err := codesearch.SearchRanked(ctx, repo, dir, emb, reranker(), os.Args[2], k)
 		if err != nil {
 			fatal(err)
 		}
@@ -70,6 +72,27 @@ func main() {
 	default:
 		fatal(fmt.Errorf("unknown subcommand %q", os.Args[1]))
 	}
+}
+
+// reranker wires the production XProvence sidecar: DENEB_RERANK_URL wins,
+// otherwise probe the well-known local port so the dev CLI picks it up
+// automatically. nil (with a note) when neither answers — Search still works.
+func reranker() codesearch.Reranker {
+	if c := airerank.NewFromEnv(); c != nil {
+		return c
+	}
+	probe, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(probe, http.MethodGet, "http://127.0.0.1:8004/health", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	resp.Body.Close()
+	if c := airerank.New("http://127.0.0.1:8004", "xprovence-bgem3-v2"); c != nil {
+		return c
+	}
+	return nil
 }
 
 func repoRoot() string {

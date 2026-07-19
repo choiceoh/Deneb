@@ -1,6 +1,7 @@
 package codesearch
 
 import (
+	"context"
 	"math"
 	"strings"
 	"testing"
@@ -53,5 +54,29 @@ func TestKindHint(t *testing.T) {
 		if got := kindHint(q); got != want {
 			t.Fatalf("kindHint(%q) = %q, want %q", q, got, want)
 		}
+	}
+}
+
+type fakeReranker struct{ scores []float64 }
+
+func (f fakeReranker) Rerank(_ context.Context, _ string, docs []string) ([]float64, error) {
+	return f.scores[:len(docs)], nil
+}
+func (f fakeReranker) Identity() string { return "fake" }
+
+func TestRerankHitsReorndersHead(t *testing.T) {
+	hits := []Hit{
+		{Entry: Entry{ID: "a", Qualified: "A"}},
+		{Entry: Entry{ID: "b", Qualified: "B"}},
+		{Entry: Entry{ID: "c", Qualified: "C"}},
+	}
+	out := rerankHits(context.Background(), t.TempDir(), fakeReranker{scores: []float64{0.1, 0.9, 0.5}}, "q", hits)
+	if out[0].ID != "b" || out[1].ID != "c" || out[2].ID != "a" {
+		t.Fatalf("rerank order = %s,%s,%s want b,c,a", out[0].ID, out[1].ID, out[2].ID)
+	}
+	// nil reranker → unchanged
+	same := rerankHits(context.Background(), t.TempDir(), nil, "q", hits)
+	if same[0].ID != "a" {
+		t.Fatalf("nil reranker mutated order")
 	}
 }

@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Embedder matches internal/ai/embedding.Client (and filestore's contract).
@@ -315,6 +316,67 @@ func cosine(a, b []float32) float64 {
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
 
+// Reranker mirrors wiki.Reranker: an optional cross-encoder sidecar
+// (XProvence :8004 in production). Search stays fully functional without it
+// and falls back unchanged on any error.
+type Reranker interface {
+	Rerank(ctx context.Context, query string, documents []string) ([]float64, error)
+	Identity() string
+}
+
+const (
+	rerankCandidates   = 10
+	rerankDocChars     = 600
+	rerankTimeoutShort = 800 * time.Millisecond
+)
+
+// rerankHits re-orders the head of the fused list by cross-encoder relevance.
+// Documents carry the symbol header plus a source-head excerpt — same shape
+// the wiki reranker validated offline (600 chars, top-10, one fast batch).
+func rerankHits(ctx context.Context, repo string, rr Reranker, query string, hits []Hit) []Hit {
+	n := min(rerankCandidates, len(hits))
+	if rr == nil || n < 2 {
+		return hits
+	}
+	docs := make([]string, n)
+	for i, h := range hits[:n] {
+		docs[i] = h.Qualified + "\n" + h.File + "\n" + sourceHead(repo, h.Entry)
+		if len(docs[i]) > rerankDocChars {
+			docs[i] = docs[i][:rerankDocChars]
+		}
+	}
+	rctx, cancel := context.WithTimeout(ctx, rerankTimeoutShort)
+	defer cancel()
+	scores, err := rr.Rerank(rctx, query, docs)
+	if err != nil || len(scores) != n {
+		return hits
+	}
+	idx := make([]int, n)
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return scores[idx[a]] > scores[idx[b]] })
+	out := make([]Hit, 0, len(hits))
+	for _, i := range idx {
+		out = append(out, hits[i])
+	}
+	return append(out, hits[n:]...)
+}
+
+// sourceHead returns the first lines of the symbol's source, cheap file read.
+func sourceHead(repo string, e Entry) string {
+	data, err := os.ReadFile(filepath.Join(repo, e.File))
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(data), "\n")
+	if e.StartLine-1 < 0 || e.StartLine-1 >= len(lines) {
+		return ""
+	}
+	end := min(e.StartLine-1+12, len(lines))
+	return strings.Join(lines[e.StartLine-1:end], "\n")
+}
+
 // Search fuses dense top-K with CodeGraph FTS top-K by reciprocal rank (k=60),
 // mirroring the wiki-recall fusion that measurably beat either alone.
 func Search(ctx context.Context, dir string, emb Embedder, query string, topK int) ([]Hit, error) {
@@ -505,6 +567,21 @@ func expandQuery(q string) string {
 	}
 	sort.Strings(extra)
 	return q + " " + strings.Join(extra, " ")
+}
+
+// SearchRanked is Search plus an optional cross-encoder pass over the fused
+// head. repo is the checkout root (source excerpts feed the rerank docs).
+func SearchRanked(ctx context.Context, repo, dir string, emb Embedder, rr Reranker, query string, topK int) ([]Hit, error) {
+	// Over-fetch so the reranker sees the full candidate head even for small topK.
+	hits, err := Search(ctx, dir, emb, query, max(topK, rerankCandidates))
+	if err != nil {
+		return nil, err
+	}
+	hits = rerankHits(ctx, repo, rr, query, hits)
+	if len(hits) > topK {
+		hits = hits[:topK]
+	}
+	return hits, nil
 }
 
 // ftsQuery quotes each term so FTS5 treats natural language safely.
