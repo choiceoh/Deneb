@@ -25,7 +25,7 @@ import (
 
 const (
 	// browseSidecarDefaultURL is the sidecar's loopback API (same host as the
-	// gateway). Override with DENEB_BROWSER_URL for tests / remote layouts.
+	// gateway). Override with DENEB_BROWSE_URL for tests / remote layouts.
 	browseSidecarDefaultURL = "http://127.0.0.1:18930"
 	// browseTimeout bounds one page read: sidecar navigation (25s cap) +
 	// settle + extraction, with headroom for a queued request ahead.
@@ -33,7 +33,7 @@ const (
 )
 
 func browseSidecarURL() string {
-	if v := strings.TrimSpace(os.Getenv("DENEB_BROWSER_URL")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("DENEB_BROWSE_URL")); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	return browseSidecarDefaultURL
