@@ -4,7 +4,7 @@
 // overlap; it misses a file that is *about* the query but phrases it differently
 // (a query "납기 지연 위험" vs a contract whose text says "delivery delay
 // penalty"). This index extracts each file's text once, chunks it, embeds the
-// chunks (BGE-M3), and ranks files by the best cosine similarity of any chunk to
+// chunks (embedding sidecar), and ranks files by the best cosine similarity of any chunk to
 // the query — so search can find files by meaning, not just by matching strings.
 //
 // Everything here degrades silently: no embedder, an unhealthy embedding server,
@@ -73,34 +73,26 @@ const minChunkRunes = 8
 const contentHashPrefixBytes = 64 << 10 // 64 KiB
 
 // minSemanticScore is the cosine floor a file's best chunk must clear to count
-// as a semantic hit. BGE-M3 packs *Korean* text into a high, narrow band: even
-// a totally unrelated query scores ~0.58–0.69 against a Korean office document,
-// and a genuinely relevant query scores ~0.77–0.86. A low floor therefore lets
-// every Korean query "match" every file — measured on the live srv4 BGE-M3
-// (:8001), the old 0.4 floor kept 15/15 irrelevant queries (e.g. "오늘 날씨
-// 어때" returned the 개발행위허가 PDF). The floor must sit *inside* the
-// Korean separation band, not at the generic-cosine band the wiki uses.
+// as a semantic hit. Calibrated for the Nemotron embedder (2026-07-19), whose
+// cosine scale runs far LOWER than the BGE-M3 sidecar this floor was first
+// tuned on: BGE packed Korean text into a high 0.58–0.86 band (hence the old
+// 0.73 floor), while Nemotron spreads the same pairs across ~0.0–0.6 — after
+// the cutover the 0.73 floor silently rejected every semantic file hit.
 //
-// Measured cosine distribution (srv4 BGE-M3, 20 relevant + 23 irrelevant
-// Korean (query, file) pairs across two office-doc corpora):
+// Measured on the LIVE production index (129 files, stored Nemotron chunk
+// vectors) against realistic Korean file-search queries with known targets:
 //
-//	relevant   : min 0.7722, mean 0.8137, max 0.8619
-//	irrelevant : min 0.5847, mean 0.6307, max 0.6890   (best chunk over all files)
-//	"오늘 날씨 어때" vs 개발행위허가 PDF: 0.5626
+//	target files      : 0.40–0.59 best-chunk cosine
+//	non-target top    : ~0.20–0.33 (related sibling docs reach ~0.42)
+//	non-target p90    : ≤0.27
+//	off-topic noise   : <0.10
 //
-// Floor sweep (relevant kept / irrelevant kept):
-//
-//	0.40 → 20/20, 23/23   (the old floor — useless for Korean)
-//	0.70 → 20/20,  0/23   (clean)
-//	0.76 → 20/20,  0/23   (clean)
-//	0.78 → drops real hits (토지 형질변경 0.772, 인사 발령 명단 0.772)
-//
-// The clean window is [0.689 irrelevant-max, 0.772 relevant-min]; 0.73 is its
-// midpoint, keeping every relevant pair and rejecting every irrelevant one with
-// ~0.04 margin on each side. An absolute floor separates cleanly, so no
-// per-query normalization or BM25 hybrid is needed. Below it the match is noise
-// and the query falls through to name/content search as intended.
-const minSemanticScore = 0.73
+// The clean window is roughly [0.27 non-target p90, 0.40 target-min]; 0.33 is
+// its midpoint — same placement philosophy as the original BGE 0.73 (midpoint
+// of [0.689, 0.772]). Below the floor the match is noise and the query falls
+// through to name/content search; HybridSearch's lexical OR-gate still rescues
+// exact name/content matches that dip under it.
+const minSemanticScore = 0.33
 
 // embedBatchSize bounds how many chunks are embedded per request. Kept small
 // because the CPU BGE-M3 server drops (EOF) on large batches — the wiki index

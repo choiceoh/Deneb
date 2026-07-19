@@ -264,7 +264,8 @@ const (
 	// calendar scan; running a result list sequentially made mail_archive
 	// latency track the recall latency × N (observed 5–40s on busy turns when
 	// recall spiked). A small pool overlaps them without flooding the shared
-	// embedder (BGE pool is 4).
+	// embedding sidecar (BGE served 4 parallel contexts; the Nemotron vLLM
+	// backend batches internally).
 	maxEnrichConcurrency = 6
 	// maxEnrichedMessages caps the related-wiki/events decoration to the head of
 	// the result list. Beyond it the message is returned plain: the decoration is

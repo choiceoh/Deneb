@@ -6,10 +6,10 @@
 //   - the chat files tool (CoreToolDeps.FilesSemanticSearch),
 //   - the miniapp.files.search RPC (FilesBrowseDeps.SemanticSearch).
 //
-// The index embeds each file's extracted text once (BGE-M3) and ranks files by
+// The index embeds each file's extracted text once (embedding sidecar) and ranks files by
 // the best chunk cosine similarity to the query — finding files by meaning, not
-// just literal substring. Everything degrades silently when the embedding server
-// (:8001) is down: reindex is a no-op and search returns empty, so the callers
+// just literal substring. Everything degrades silently when the embedding
+// sidecar is down: reindex is a no-op and search returns empty, so the callers
 // fall back to name/content search.
 package filesemindex
 
@@ -34,8 +34,9 @@ const (
 	// index is warm; 15 min keeps newly added files findable without churn. The
 	// autonomous service also runs the first cycle ~initialGrace after boot.
 	semindexInterval = 15 * time.Minute
-	// semindexRunTimeout bounds one reindex pass. Generous because the CPU BGE-M3
-	// server is slow under host load and this runs off the request path.
+	// semindexRunTimeout bounds one reindex pass. Generous headroom kept from
+	// the CPU BGE-M3 era (the GPU Nemotron backend is much faster); this runs
+	// off the request path, so the slack costs nothing.
 	semindexRunTimeout = 10 * time.Minute
 	// semindexQueryTimeout bounds a single search (one query embed + cosine scan),
 	// keeping the RPC/tool call responsive even if the embedding server is slow.

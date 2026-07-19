@@ -1,10 +1,11 @@
 // semhybrid.go — hybrid (lexical BM25 + dense-vector) file search.
 //
 // Search (semindex.go) ranks files purely by chunk cosine and cuts everything
-// below an absolute Korean-calibrated floor (minSemanticScore=0.73). That floor
-// rejects the BGE-M3 "Korean noise band" cleanly, but pays for it two ways:
+// below an absolute Korean-calibrated floor (minSemanticScore, embedder-
+// calibrated — see semindex.go). That floor rejects the noise band cleanly,
+// but pays for it two ways:
 //
-//   - an exact match phrased oddly can dip just under 0.73 and vanish, and
+//   - an exact match phrased oddly can dip just under the floor and vanish, and
 //   - a file whose NAME or text literally contains the query gets no credit for
 //     that lexical hit — meaning is the only signal.
 //
@@ -17,7 +18,7 @@
 //     evidence above a corpus-relative bar).
 //
 // The OR-gate is the whole point: it preserves the floor's clean rejection of
-// purely-semantic noise (a 0.6-band cosine with no lexical overlap is still cut)
+// purely-semantic noise (a below-floor cosine with no lexical overlap is still cut)
 // while letting exact name/content matches survive below the floor. Like Search,
 // it degrades to an empty result on any embedding failure so callers fall back
 // to name/content search.
@@ -31,9 +32,10 @@ import (
 
 // Why RRF over a normalized weighted sum.
 //
-// The two signals live on incompatible scales. BGE-M3 Korean cosine is packed
-// into a high, narrow band (~0.58–0.86 across relevant AND irrelevant pairs),
-// while BM25 is an unbounded sum of IDF·TF terms whose magnitude swings with
+// The two signals live on incompatible scales. Embedding cosine occupies a
+// model-specific band (BGE-M3 packed Korean into ~0.58–0.86; Nemotron spreads
+// it across ~0.0–0.6), while BM25 is an unbounded sum of IDF·TF terms whose
+// magnitude swings with
 // query length and corpus IDF. A weighted sum α·cos + (1-α)·norm(bm25) forces a
 // choice of normalizer (min-max? sigmoid? per-query?) and an α, both of which
 // need re-tuning whenever the corpus or query mix shifts — exactly the brittle

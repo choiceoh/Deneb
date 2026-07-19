@@ -110,12 +110,13 @@ func (f *fixedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, e
 // yield an EMPTY result (not a max-capped list of noise), so the caller's
 // name/content fallback kicks in.
 //
-// The floor (0.73) is tuned to BGE-M3's *Korean* cosine distribution, measured
-// live on srv4: unrelated Korean queries score ~0.58–0.69 against Korean office
-// docs, relevant ones ~0.77–0.86. So the dangerous case isn't an exactly-0.30
-// cosine (any floor catches that) — it's the ~0.6 "Korean noise band" the old
-// 0.4 floor let straight through (e.g. "오늘 날씨" returning a 개발행위허가 PDF).
-// This test pins both a 0.6-band noise hit (must be dropped) and a 0.8 relevant
+// The floor (0.33) is tuned to the Nemotron cosine distribution, measured on
+// the live production index: unrelated Korean queries score ≲0.27 against
+// office docs, relevant ones 0.40+ (the analogous BGE-M3 bands were 0.58–0.69
+// vs 0.77–0.86). So the dangerous case isn't an exactly-0 cosine (any floor
+// catches that) — it's the ~0.2 loose-association band a floorless index lets
+// straight through (e.g. "오늘 날씨" returning a 개발행위허가 PDF).
+// This test pins both a 0.2-band noise hit (must be dropped) and a 0.8 relevant
 // hit (must survive), so a regression that lowers the floor back into the noise
 // band fails here.
 func TestSemanticIndex_ScoreFloorRejectsNoiseQueries(t *testing.T) {
@@ -130,7 +131,7 @@ func TestSemanticIndex_ScoreFloorRejectsNoiseQueries(t *testing.T) {
 	// fileA/fileB sit on orthogonal unit axes. Each query vector is hand-placed
 	// at a known cosine to fileA ({1,0,0}):
 	//   noiseQuery  → ~0.302 (well below any floor)
-	//   bandQuery   → ~0.6   (in the Korean noise band: old 0.4 kept it, 0.73 drops it)
+	//   bandQuery   → ~0.2   (in the loose-association band: a floorless index keeps it, 0.33 drops it)
 	//   matchQuery  → 1.0    (a real, relevant hit)
 	const noiseQuery = "전혀 무관한 다른 질문입니다" // >= 8 runes (Search rejects shorter)
 	const bandQuery = "애매하게 걸치는 한국어 질문입니다"
@@ -138,9 +139,9 @@ func TestSemanticIndex_ScoreFloorRejectsNoiseQueries(t *testing.T) {
 	embed := &fixedEmbedder{vecs: map[string][]float32{
 		fileA:      {1, 0, 0},
 		fileB:      {0, 1, 0},
-		noiseQuery: {1, 1, 3},     // ~0.302 to each file
-		bandQuery:  {0.6, 0, 0.8}, // cos to fileA = 0.6 → Korean-noise band
-		matchQuery: {1, 0, 0},     // identical to fileA's chunk → cosine 1.0
+		noiseQuery: {1, 1, 3},      // ~0.302 to each file
+		bandQuery:  {0.2, 0, 0.98}, // cos to fileA = 0.2 → loose-association band
+		matchQuery: {1, 0, 0},      // identical to fileA's chunk → cosine 1.0
 	}}
 
 	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
@@ -148,7 +149,7 @@ func TestSemanticIndex_ScoreFloorRejectsNoiseQueries(t *testing.T) {
 		t.Fatalf("Reindex: %v", err)
 	}
 
-	// Both the exact-noise and the 0.6-band query must return nothing.
+	// Both the exact-noise and the 0.2-band query must return nothing.
 	for _, q := range []string{noiseQuery, bandQuery} {
 		hits, err := idx.Search(ctx, q, 5, embed)
 		if err != nil {

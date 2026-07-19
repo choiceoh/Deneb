@@ -120,7 +120,7 @@ type MemoryDeps struct {
 	// source (org members/divisions named in a turn → their 부서 + 인물 page).
 	// Injected by the server as org.Load; nil disables the org recall source.
 	Org chatrecall.OrgLoader
-	// Embedding is the embedding client (BGE-M3) for the MMR compaction
+	// Embedding is the embedding sidecar client for the MMR compaction
 	// fallback tier.
 	Embedding compact.Embedder
 }

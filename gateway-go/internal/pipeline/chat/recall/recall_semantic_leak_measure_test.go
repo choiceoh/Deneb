@@ -4,7 +4,7 @@
 // The recall_bench_test.go corpus runs WITHOUT an embedder (CI has no GPU /
 // BGE-M3), so it never exercises store.Search's semantic blend — a documented
 // blind spot that let the floorless semantic-only branch ship untested. These
-// tests attach a deterministic, BGE-M3-band-calibrated mock embedder so the
+// tests attach a deterministic, Nemotron-band-calibrated mock embedder so the
 // semantic-only path actually runs, then drive the REAL recall pipeline
 // (searchQueries → store.Search → Build → formatRecall*)
 // and assert that a weakly-similar off-topic wiki page is NOT injected into
@@ -19,7 +19,7 @@
 // Why a mock and not real BGE-M3: this host has no reachable embedding server
 // (:8001 not exposed on the tailnet — only the gateway :18789 is), so
 // real-cosine measurement is impossible in CI. The mock reproduces the measured
-// Korean cosine separation (irrelevant ~0.58-0.69, relevant ~0.77-0.86, per
+// Korean cosine separation (Nemotron scale: irrelevant ≲0.30, relevant 0.44+, per
 // filestore/semindex.go:80-82). It is COLLISION-FREE: each text is exactly
 // floor·e0 + topic·e_t, so a cross-topic pair sits at a fixed sub-floor cosine
 // with no hash noise (an earlier idiosyncratic-hash variant could collide two
@@ -39,7 +39,7 @@ import (
 )
 
 // bandEmbedder is a deterministic, collision-free embedder whose cosine
-// geometry reproduces the BGE-M3 Korean separation bands: a same-topic
+// geometry reproduces the embedder's Korean separation bands: a same-topic
 // (query,doc) pair sits in the relevant band, a cross-topic pair at a fixed
 // "irrelevant" cosine that is ABOVE 0 (so searchSemantic's >0 gate keeps it)
 // but BELOW the wiki semantic-only floor (so mergeSearchResults must exclude
@@ -53,7 +53,7 @@ import (
 // idiosyncratic-hash axis to accidentally inflate a cross-topic pair.
 type bandEmbedder struct {
 	healthy  bool
-	crossCos float64 // the exact cross-topic cosine produced; default 0.63 (irrelevant band)
+	crossCos float64 // the exact cross-topic cosine produced; default 0.25 (irrelevant band)
 }
 
 func (b bandEmbedder) IsHealthy() bool { return b.healthy }
@@ -92,7 +92,7 @@ func (b bandEmbedder) crossCosOrDefault() float64 {
 	if b.crossCos > 0 {
 		return b.crossCos
 	}
-	return 0.63 // middle of the measured Korean irrelevant band (0.58-0.69)
+	return 0.25 // middle of the measured Nemotron irrelevant band (~0.15-0.30)
 }
 
 // Embed returns floorW·e0 + topicW·e_topic, L2-normalized (see type doc).
@@ -130,7 +130,7 @@ func cosF32(a, b []float32) float64 {
 
 // TestRecallSemanticLeakBandCalibrationReturnsSeparatedCosines proves the mock reproduces the measured
 // Korean cosine bands (relevant strictly above irrelevant, irrelevant in the
-// 0.58-0.69 band), so the leak gate that follows rests on realistic geometry.
+// Nemotron ~0.15-0.30 band), so the leak gate that follows rests on realistic geometry.
 func TestRecallSemanticLeakBandCalibrationReturnsSeparatedCosines(t *testing.T) {
 	emb := bandEmbedder{healthy: true}
 	ctx := context.Background()
@@ -172,8 +172,8 @@ func TestRecallSemanticLeakBandCalibrationReturnsSeparatedCosines(t *testing.T) 
 		t.Errorf("mock bands do not separate: relevant min %.3f <= irrelevant max %.3f", rMin, iMax)
 	}
 	// Irrelevant pairs must land in the measured Korean band; relevant clearly above.
-	if !(iMax < 0.70 && iMin > 0.45) {
-		t.Errorf("irrelevant band [%.3f,%.3f] outside the BGE-M3 envelope (~0.58-0.69)", iMin, iMax)
+	if !(iMax < 0.44 && iMin > 0.10) {
+		t.Errorf("irrelevant band [%.3f,%.3f] outside the Nemotron envelope (~0.15-0.30)", iMin, iMax)
 	}
 	if rMax < 0.99 {
 		t.Errorf("same-topic pairs should approach cosine 1.0, got max %.3f", rMax)
@@ -321,7 +321,7 @@ func TestRecallSemanticLeakPreservesOnTopicMatch(t *testing.T) {
 	}
 
 	// Solar-deal query: on-topic to 거래/hyundai.md (cosine 1.0), off-topic to the
-	// rest (cross-topic cosine ~0.63, below the floor).
+	// rest (cross-topic cosine ~0.25, below the floor).
 	const query = "태양광 모듈 납품 결제기한 거래 건"
 	merged, err := store.Search(context.Background(), query, 5)
 	if err != nil {

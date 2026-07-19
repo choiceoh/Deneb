@@ -23,7 +23,8 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 | 메인 챗 LLM | 대화/분석/도구호출 | provider config (Anthropic/OpenRouter/vLLM 등) | `pipeline/chat/run_provider.go` | modelrole `main`. 로컬일 때 기본 `http://127.0.0.1:8000/v1` |
 | lightweight 서브 LLM | mailanalysis(메일폴)/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
-| granite-embedding-311m / nomic-embed-text-v2-moe / BGE-M3 | 임베딩 (압축/검색) | config-driven | compaction 임베딩 폴백 경로 | `~/models/` 보관 |
+| **Nemotron-3-Embed-1B-NVFP4** | 임베딩 (위키/다이어리/파일 시맨틱 검색·compaction MMR) | `http://127.0.0.1:8002` (어댑터 `scripts/deploy/nemotron-embed-server.py` → eugr vLLM 컨테이너 :8003) | `ai/embedding/client.go` (게이트웨이 drop-in `DENEB_EMBEDDING_URL`) | 2026-07-18 BGE-M3 컷오버 (2048d, query:/passage: 비대칭). 코사인 스케일이 BGE보다 훨씬 낮음 — **시맨틱 플로어는 전부 Nemotron 재캘리브레이션 값** (wiki 0.44·diary 0.20·summary 0.25·files 0.33, 2026-07-19). 설치 `scripts/systemd/setup-nemotron-embed.sh`. 롤백 = drop-in 제거(BGE :8001 유닛 잔존, 캐시 지문 분리) |
+| granite-embedding-311m / nomic-embed-text-v2-moe / BGE-M3 | 임베딩 (레거시/롤백) | BGE `:8001` | compaction 임베딩 폴백 경로 | `~/models/` 보관 |
 
 > **modelrole 기본값**: `gateway-go/internal/ai/modelrole/registry.go` — `DefaultVllmBaseURL = "http://127.0.0.1:8000/v1"`, `DefaultVllmModel = "gemma4"`. 역할(main/lightweight/fallback)별 실제 모델은 `~/.deneb/deneb.json` 의 provider/modelRole 설정이 결정한다. 코드는 이름을 하드코딩하지 않는다.
 

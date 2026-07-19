@@ -896,7 +896,10 @@ const (
 	bm25OnlyPenalty = 0.7
 	// semSupportThreshold is the cosine above which a page counts as genuinely
 	// related, so a BM25 hit is confirmed rather than a lexical accident.
-	// On-topic pages measure ~0.6-0.76; off-topic lexical matches ~0.2-0.3.
+	// Tuned on BGE-M3 (on-topic ~0.6-0.76, off-topic ~0.2-0.3); under Nemotron
+	// (2026-07-18 cutover) the on-topic band starts near ~0.44, so 0.4 still
+	// separates — kept as-is, validated end-to-end by the 07-19 gold-set bench
+	// (analysis-xl r@8 93.8%) rather than re-derived from pair measurements.
 	semSupportThreshold = 0.4
 	// semanticBlendK widens the semantic neighbor set used for the blend beyond
 	// the result limit, so a BM25 hit's cosine is known even when the page is not
@@ -916,20 +919,18 @@ const (
 	// purely the missing gate on the floorless branch, so lexically-relevant
 	// pages (including the bm25OnlyPenalty-demoted ones) are unaffected.
 	//
-	// Value 0.70 (override via DENEB_WIKI_SEM_FLOOR). Rationale: BGE-M3 packs
-	// Korean text into a high, narrow cosine band — even a totally unrelated
-	// Korean (query,doc) pair scores ~0.58–0.69 and a genuinely relevant one
-	// ~0.77–0.86 (filestore/semindex.go:80-82, measured on the live srv4 :8001).
-	// The floor must sit INSIDE that separation band, not at the generic-cosine
-	// level. filestore's office-doc corpus has a clean window [0.689, 0.772]
-	// (midpoint 0.73), but wiki pages are SHORT curated summaries (title +
-	// summary + body), so a genuinely relevant page's cosine can land a notch
-	// lower than a full document's — 0.70 is the conservative choice: still above
-	// the ~0.69 irrelevant-band ceiling (rejecting the off-topic leak) while
-	// leaving more headroom under the relevant band so a terse on-topic summary
-	// is not dropped. An srv4 sweep over the real wiki corpus is the final
-	// confirmation of the exact value; 0.70 is the measurement-grounded default.
-	semanticOnlyFloor = 0.70
+	// Value 0.44 (override via DENEB_WIKI_SEM_FLOOR). Calibrated for the
+	// Nemotron embedder (2026-07-18 cutover): its cosine scale runs far lower
+	// than the BGE-M3 band this floor was first tuned on (0.70 — BGE packed
+	// Korean pairs into 0.58–0.86, so 0.70 sat inside that separation band).
+	// Under Nemotron, wrong-sibling wiki negatives (hard negatives from the
+	// same domain) top out just under ~0.44 while genuinely relevant pages
+	// clear it — measured on the real srv4 wiki corpus with cosine
+	// distributions of random negatives vs wrong-sibling negatives, then
+	// confirmed end-to-end on the recall gold sets (legacy r@8 98%, hard 92.6%,
+	// analysis-xl 93.8% at this floor). The production drop-in sets the same
+	// value explicitly, so default and override agree.
+	semanticOnlyFloor = 0.44
 
 	// bm25RarityFloor is the SYMMETRIC counterpart to semanticOnlyFloor, for the
 	// lexical (BM25) path. It is the minimum corpus-rarity (textsearch

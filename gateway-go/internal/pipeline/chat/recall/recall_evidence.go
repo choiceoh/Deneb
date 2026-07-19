@@ -24,8 +24,9 @@ type (
 )
 
 // recallFileSource gates how many file hits a single turn's recall may carry.
-// Files are a high-precision but easily-overweighted source: the index's 0.73
-// cosine floor already rejects off-topic queries, but a broad on-topic query
+// Files are a high-precision but easily-overweighted source: the index's
+// cosine floor (filestore.minSemanticScore) already rejects off-topic
+// queries, but a broad on-topic query
 // can still return many files. This per-layer quota (the hindsight lesson: a
 // source whose score band differs must not monopolize the merged window) keeps
 // files from crowding out wiki/diary/session evidence in the tail injection.
@@ -300,10 +301,14 @@ func recallWikiStalenessMarker(meta wiki.Frontmatter) string {
 // returns the two most recent diary entries — the right behavior for
 // vague cues like "그거 뭐였지?" where the user expects *some* context.
 // diaryRecallSemanticFloor is the cosine a semantic-only diary hit must clear.
-// BGE-M3's Korean band puts relevant entries at ~0.77–0.86 and off-topic at
-// ~0.58–0.69 (same measurement behind wiki's semanticOnlyFloor), so 0.70 admits
-// paraphrase matches while rejecting loosely-associated noise.
-const diaryRecallSemanticFloor = 0.70
+// Calibrated for the Nemotron embedder (2026-07-19, measured on 60 real diary
+// sections × 8 realistic recall queries via the :8002 adapter): genuinely
+// relevant sections score ~0.28–0.35, loosely-associated ones top out around
+// p90 0.15, and off-topic noise sits below 0.10 — Nemotron's cosine scale runs
+// far lower than BGE-M3's old 0.58–0.86 Korean band, which is why the previous
+// 0.70 floor silently rejected every hit after the cutover. 0.20 admits the
+// relevant band with margin while staying above the loose-association bulk.
+const diaryRecallSemanticFloor = 0.20
 
 // diaryRecallSemanticQuota caps how many semantic-only diary rows a turn adds on
 // top of the BM25 hits, so a broad query's dense neighbors don't crowd wiki/
@@ -626,10 +631,11 @@ func appendPolarisSummaryHits(ctx context.Context, store *polaris.Store, session
 }
 
 // recallSummarySemanticFloor is the cosine a cross-session summary match must
-// clear. Set just above the cross-session message prior band: a summary is a
-// coarser signal (a whole conversation's gist), so it should surface only on a
-// clear topical match, not a loose association.
-const recallSummarySemanticFloor = 0.60
+// clear. A summary is a coarser signal (a whole conversation's gist), so it
+// should surface only on a clear topical match, not a loose association —
+// hence a notch above diaryRecallSemanticFloor on the same Nemotron cosine
+// scale (relevant ~0.28+, loose ≲0.15; see that constant for the measurement).
+const recallSummarySemanticFloor = 0.25
 
 // recallSummarySemanticQuota caps semantic summary rows per turn so past-session
 // gists (0.55+cosine) don't crowd out the sharper current-session message hits
@@ -696,10 +702,11 @@ func recallConfidence(ev recallEvidence) string {
 		}
 		return "medium"
 	case "file":
-		// Score = recallFilesSourcePrior(0.78) + cosine. A file admitted past the
-		// 0.73 index floor sits at ≥1.51; the genuinely-relevant band starts near
-		// the floor's clean cut, so treat a clearly-above-floor cosine as high.
-		if ev.Score >= 1.55 {
+		// Score = recallFilesSourcePrior(0.78) + cosine. A file admitted past
+		// filestore's 0.33 index floor sits at ≥1.11; on the Nemotron scale the
+		// genuinely-relevant band starts near 0.40 (real-index measurement, see
+		// filestore.minSemanticScore), so 0.78+0.40 marks a confident match.
+		if ev.Score >= 1.18 {
 			return "high"
 		}
 		return "medium"

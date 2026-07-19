@@ -917,7 +917,7 @@ func FilesToolSchema() map[string]any {
 			},
 			"semantic": map[string]any{
 				"type":        "boolean",
-				"description": "On search, rank files by meaning (BGE-M3 vector similarity) instead of literal substring match — finds files about the query even when they phrase it differently. Equivalent to the semantic_search action. Falls back to name/content search when the embedding server is unavailable. Default false.",
+				"description": "On search, rank files by meaning (embedding vector similarity) instead of literal substring match — finds files about the query even when they phrase it differently. Equivalent to the semantic_search action. Falls back to name/content search when the embedding server is unavailable. Default false.",
 				"default":     false,
 			},
 		},

@@ -28,7 +28,7 @@ const (
 	mmrMaxEmbedBatch = 128
 )
 
-// EmbeddingCompact uses BGE-M3 embeddings + MMR (Maximal Marginal Relevance)
+// EmbeddingCompact uses sidecar embeddings + MMR (Maximal Marginal Relevance)
 // to select the most relevant and diverse subset of old messages.
 //
 // Strategy:

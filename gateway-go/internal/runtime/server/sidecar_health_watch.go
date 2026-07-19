@@ -1,7 +1,7 @@
 // sidecar_health_watch.go — wires sidecar dependency probes into the notify
 // heartbeat (see runtime/notify/notify_deps.go for the alerting semantics).
 //
-// Motivation (2026-07-17/18): the BGE-M3 embedding sidecar died cleanly and
+// Motivation (2026-07-17/18): the embedding sidecar (then BGE-M3) died cleanly and
 // stayed down for 33 hours; the embedding client logged "server unhealthy"
 // every batch but nothing reached the operator. This wiring closes that class:
 // the heartbeat now watches every local dependency the gateway relies on.
@@ -24,8 +24,9 @@ const sidecarProbeTimeout = 3 * time.Second
 
 // registerSidecarHealthWatch installs dependency checks on the notify service:
 //
-//   - bge-m3: the embedding client's existing background health prober
-//     (30s cadence) — no extra traffic, just surfaced.
+//   - embedding: the embedding client's existing background health prober
+//     (30s cadence) — no extra traffic, just surfaced. Watches whatever
+//     DENEB_EMBEDDING_URL points at (Nemotron adapter since 2026-07-18).
 //   - every DISTINCT loopback model-provider endpoint (in practice the
 //     wormhole router on 127.0.0.1:18800): a liveness GET where ANY HTTP
 //     response — auth errors included — means the process is alive, and only
@@ -41,7 +42,7 @@ func (s *Server) registerSidecarHealthWatch() {
 	if s.embeddingClient != nil {
 		embed := s.embeddingClient
 		checks = append(checks, runtimenotify.DepCheck{
-			Name: "bge-m3",
+			Name: "embedding",
 			Check: func() error {
 				if embed.IsHealthy() {
 					return nil

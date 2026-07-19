@@ -86,7 +86,7 @@ type FilesUploadOut struct {
 // (a layer inversion). A nil ExtractText silently degrades content search to a
 // name-only search, so the feature is optional, not load-bearing.
 //
-// SemanticSearch ranks files by meaning (BGE-M3 vectors) for the search RPC's
+// SemanticSearch ranks files by meaning (embedding vectors) for the search RPC's
 // semantic=true mode. The server owns the embedding client + index and injects
 // this closure; a nil func — or an empty result when the embedding server is
 // down — falls back to name/content search, so semantic search is optional.
