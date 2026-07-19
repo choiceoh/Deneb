@@ -28,7 +28,7 @@
 ## What shipped
 
 | PR | What | Result |
-|----|------|--------|
+| ---- | ------ | -------- |
 | #3982 | recall-bench `--by-category` + `--holdout` | diagnosis tooling |
 | #3987 | recall-bench `--dump-signals` (per-mode rankings for offline re-fusion) | tooling |
 | #3992 | **cross-encoder rerank wired live** — xProvence sidecar (:8004), page-head docs, `DENEB_RERANK_FORCE` | single-fact P@1 83.7→87.1 |
@@ -39,6 +39,7 @@
 ## Rejected with data
 
 ### Per-query-type fusion routing — REJECTED (held-out regression)
+
 Per-category diagnostics showed value/identity lookups (거래/인물/집계/관계)
 score far higher under BM25 than the sem-dominant global weight (거래 P@1 74 vs
 48). But **every router built to exploit it regressed held-out**: a keyword
@@ -49,6 +50,7 @@ the available cheap signal. **The binding constraint is validation data, not the
 mechanism.**
 
 ### Reranker model swap — NO WINNER on our data
+
 Six rerankers compared on identical candidates (xProvence / bge-reranker-v2-m3 /
 jina-reranker-v3 / Qwen3-Reranker-0.6B / gte-multilingual / nemotron-rerank-1b):
 
@@ -63,12 +65,14 @@ jina-reranker-v3 / Qwen3-Reranker-0.6B / gte-multilingual / nemotron-rerank-1b):
   matters, **bge** (Apache, fastest) is the pragmatic Apache pick — not nemotron.
 
 ### xProvence context pruning — REJECTED
+
 Using xProvence's sentence pruning to shrink recall-note tokens: measured worse
 answer-token retention than the current query-match snippet (81.5% vs 78.7%) and
 the token saving is negligible (recall block already capped). Pruning picks
 topically-relevant sentences but drops the numeric/answer sentence.
 
 ### Reranking does not help recall (live-confirmed)
+
 Live `memory.search` rerank ON vs OFF on the meeting gold: **identical** recall@8
 (all 58.3%, multigold 48.1%). Reranking reorders the top-10; it never adds a
 page fusion missed. This is why the #4004 reranker fan-out to mail/workfeed/
@@ -76,6 +80,7 @@ codesearch/fetch surfaces (other agents) is unlikely to move recall there either
 — and those surfaces were wired without a quality bench (only wiring tests).
 
 ### Naive multi-query — REJECTED (hurts, offline + live)
+
 Fragmenting a query into signal terms and unioning (both an offline best-rank
 merge and the production `SearchPlan` clause fusion, tested **live**) is worse at
 **every** K — recall@8 multigold 48→39, recall@40 68.6→42.3. Splitting
@@ -83,6 +88,7 @@ merge and the production `SearchPlan` clause fusion, tested **live**) is worse a
 sub-query below the coherent whole. Coverage does **not** improve; it degrades.
 
 ### Rerank candidate-window expansion (10→30) — marginal, noisy
+
 The recall curve shows ~8pp of gold at fusion rank 9–20, so widening the
 reranked window should help. Measured gain is small and non-monotonic (+2–4pp
 recall@8 with a dip at 20) because the imperfect reranker also *demotes* correct
@@ -101,7 +107,7 @@ flood top-K.
 Measured live on the 26 multigold meeting cases (recall@8):
 
 | | multigold | all(42) |
-|---|---|---|
+| --- | --- | --- |
 | original query only | 48.1% | 58.3% |
 | + expansion (RRF), first run | **58.3%** | 60.3% |
 | + expansion (RRF), tuning re-run | 51.3% | 60.3% |
@@ -109,6 +115,7 @@ Measured live on the 26 multigold meeting cases (recall@8):
 | + expansion **+ HyDE** | 50.0% | — |
 
 Honest caveats:
+
 - **High variance.** The same technique scored 58.3% then 51.3% across runs —
   LLM nondeterminism + a 26-case set. The robust estimate is **+3–5pp**; the
   first-run +10pp was partly prompt/seed luck.
