@@ -55,10 +55,19 @@ func sessionExercisesSkill(logger *slog.Logger, client *llm.Client, model, skill
 		skillName, strings.Join(toolActivityNames(sctx.ToolActivities), ", "), transcript)
 
 	raw, err := client.Complete(ctx, llm.ChatRequest{
-		Model:          model,
-		Messages:       []llm.Message{llm.NewTextMessage("user", user)},
-		System:         llm.SystemString(system),
-		MaxTokens:      512,
+		Model:    model,
+		Messages: []llm.Message{llm.NewTextMessage("user", user)},
+		System:   llm.SystemString(system),
+		// The verdict is a one-line JSON, but Thinking=disabled is ADVISORY:
+		// some lightweight-role models (glm/deepseek family) ignore it and
+		// reason anyway, and a small MaxTokens then gets fully consumed by
+		// reasoning → empty content (finish_reason=length) → fail-open, which
+		// admits off-topic sessions into the held-out corpus (the exact
+		// contamination this classifier exists to prevent). Budget for a
+		// reasoning model's forced thinking (~600 tok observed) plus the tiny
+		// output so the verdict actually lands. Models that honor disabled
+		// still return in a few tokens — the ceiling only affects the tail.
+		MaxTokens:      2048,
 		Thinking:       &llm.ThinkingConfig{Type: "disabled"},
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
