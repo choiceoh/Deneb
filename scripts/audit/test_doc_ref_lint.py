@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
 class FixAnchorsTest(unittest.TestCase):
     def test_fix_prefers_symbol_hint_then_drops_line(self):
-        from doc_ref_lint import Report, fix_broken_lines, lint
+        from doc_ref_lint import fix_broken_lines, lint
 
         repo = make_repo(
             {
