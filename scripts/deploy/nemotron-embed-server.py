@@ -24,11 +24,20 @@ import argparse
 import json
 import sys
 import threading
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODEL_ID = "nvidia/Nemotron-3-Embed-1B-NVFP4"
 MODEL_LABEL = "Nemotron-3-Embed-1B-NVFP4"
+
+# Upper bound for server-side truncation; the effective value is clamped to the
+# backend's live --max-model-len (probed via /v1/models), because vLLM 400s the
+# whole batch when truncate_prompt_tokens exceeds it. Trusting unit files to be
+# restarted in lockstep is what broke overnight 2026-07-18→19: the adapter
+# shipped 8192 while the old backend (smaller limit) kept running, and every
+# 5-minute warm loop failed until the backend restart.
+TRUNCATE_CAP = 8192
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,6 +53,8 @@ class Adapter(BaseHTTPRequestHandler):
     args: argparse.Namespace
     dims_lock = threading.Lock()
     dims = 0  # probed lazily from the first backend response
+    trunc_lock = threading.Lock()
+    trunc_tokens = 0  # probed lazily from the backend's max_model_len
 
     def log_message(self, fmt, *a):  # quiet: health polls every 30s
         pass
@@ -56,27 +67,57 @@ class Adapter(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _truncate_tokens(self) -> int:
+        # Probe the backend's live max_model_len and clamp; cache the answer.
+        # A probe failure falls back to the cap without caching, so a backend
+        # that is briefly down doesn't pin a guess.
+        with self.trunc_lock:
+            if Adapter.trunc_tokens > 0:
+                return Adapter.trunc_tokens
+        try:
+            req = urllib.request.Request(self.args.backend.rstrip("/") + "/v1/models")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.load(resp)
+            limits = [int(m["max_model_len"]) for m in data.get("data") or [] if m.get("max_model_len")]
+            value = min([TRUNCATE_CAP] + limits)
+        except Exception:  # noqa: BLE001 — degrade to the cap, stay serving
+            return TRUNCATE_CAP
+        with self.trunc_lock:
+            Adapter.trunc_tokens = value
+        return value
+
     def _backend_embed(self, texts: list[str]) -> list[list[float]]:
         # truncate_prompt_tokens: vLLM 400s on inputs beyond --max-model-len
         # instead of truncating like the BGE server did — diary warm batches
         # carry entries that long (observed 2026-07-18). Server-side truncation
-        # restores the old lossy-but-never-failing contract. MUST match the
-        # backend unit's --max-model-len (8192; a pooling model needs the whole
-        # sequence in one batch, so --max-num-batched-tokens matches too).
-        body = json.dumps({
-            "model": MODEL_ID,
-            "input": texts,
-            "truncate_prompt_tokens": 8192,
-        }).encode()
-        req = urllib.request.Request(
-            self.args.backend.rstrip("/") + "/v1/embeddings",
-            data=body,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=self.args.timeout) as resp:
-            data = json.load(resp)
-        rows = sorted(data["data"], key=lambda e: e["index"])
-        return [row["embedding"] for row in rows]
+        # restores the old lossy-but-never-failing contract. The value is
+        # clamped to the backend's live limit (see _truncate_tokens); on a
+        # limit-mismatch 400 (backend restarted with a smaller --max-model-len
+        # under us) the cached limit is dropped and the batch retried once.
+        for attempt in (0, 1):
+            body = json.dumps({
+                "model": MODEL_ID,
+                "input": texts,
+                "truncate_prompt_tokens": self._truncate_tokens(),
+            }).encode()
+            req = urllib.request.Request(
+                self.args.backend.rstrip("/") + "/v1/embeddings",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.args.timeout) as resp:
+                    data = json.load(resp)
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode(errors="replace")[:500]
+                if attempt == 0 and exc.code == 400 and "truncate_prompt_tokens" in detail:
+                    with self.trunc_lock:
+                        Adapter.trunc_tokens = 0
+                    continue
+                raise RuntimeError(f"backend {exc.code}: {detail}") from exc
+            rows = sorted(data["data"], key=lambda e: e["index"])
+            return [row["embedding"] for row in rows]
+        raise RuntimeError("unreachable")  # loop always returns or raises
 
     def do_GET(self):
         if self.path != "/health":

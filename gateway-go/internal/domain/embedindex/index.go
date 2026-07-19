@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -445,6 +446,12 @@ func (ix *Index) saveCache() {
 		return
 	}
 	tmp := ix.cachePath + ".tmp"
+	// A fresh state dir may not have the corpus subdir yet (e.g. memory/diary
+	// before the first entry) — the cache must not fail on that.
+	if err := os.MkdirAll(filepath.Dir(tmp), 0o755); err != nil {
+		slog.Warn("embedindex: cache dir create failed", "index", ix.name, "path", ix.cachePath, "error", err)
+		return
+	}
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		slog.Warn("embedindex: cache write failed", "index", ix.name, "path", ix.cachePath, "error", err)
 		return
