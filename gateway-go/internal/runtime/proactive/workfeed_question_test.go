@@ -44,3 +44,26 @@ func TestSplitChoicesFenceCreatesAnswerActionsFromMailCard(t *testing.T) {
 		}
 	}
 }
+
+func TestDeadlineMarkActionsFromBody(t *testing.T) {
+	body := `<column><card>` +
+		`<row longpress="deadline_done" data-path="프로젝트/대한전선"><text>대한전선 마감</text></row>` +
+		`<row><text>일반 줄</text></row>` +
+		`<row data-path="프로젝트/곡성금호" longpress="deadline_done"><text>곡성금호</text></row>` +
+		`<row longpress="deadline_done" data-path="프로젝트/대한전선"><text>중복</text></row>` +
+		`</card></column>`
+	got := deadlineMarkActions(body)
+	if len(got) != 2 {
+		t.Fatalf("want 2 distinct deadline actions, got %d: %v", len(got), got)
+	}
+	if got[0].ID != "deadline_done:프로젝트/대한전선" || got[0].Kind != workfeed.ActionMark || got[0].Label != "완료" {
+		t.Errorf("action[0] = %+v", got[0])
+	}
+	if got[1].ID != "deadline_done:프로젝트/곡성금호" {
+		t.Errorf("action[1] = %+v (attr order should not matter)", got[1])
+	}
+	// A body with no markers yields nothing.
+	if a := deadlineMarkActions("<card><text>x</text></card>"); a != nil {
+		t.Errorf("no-marker body must yield nil, got %v", a)
+	}
+}

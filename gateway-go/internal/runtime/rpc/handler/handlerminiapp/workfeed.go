@@ -41,6 +41,10 @@ type WorkFeedDeps struct {
 	// OnLadder, if set, applies a graduation-ladder card's veto (재잠금) after
 	// the action settles. Same best-effort contract as OnAnswer.
 	OnLadder func(item workfeed.Item, actionID string)
+	// OnDeadlineDone, if set, stamps a wiki page's due_done when the operator
+	// long-presses a morning-card deadline row (actionID "deadline_done:<path>").
+	// Non-settling (ActionMark): the card stays for its other deadlines.
+	OnDeadlineDone func(item workfeed.Item, actionID string)
 }
 
 const (
@@ -236,6 +240,9 @@ func workFeedActionRun(deps WorkFeedDeps) rpcutil.HandlerFunc {
 			result.Item.Source == "genesis-ladder" &&
 			strings.HasPrefix(actionID, "ladder:") {
 			deps.OnLadder(result.Item, actionID)
+		}
+		if deps.OnDeadlineDone != nil && strings.HasPrefix(actionID, "deadline_done:") {
+			deps.OnDeadlineDone(result.Item, actionID)
 		}
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"ok":             true,

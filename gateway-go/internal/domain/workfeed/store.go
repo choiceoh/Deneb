@@ -49,6 +49,11 @@ const (
 	// including legacy items and captures whose stored action list predates it —
 	// without a feed-wide migration. The native client renders it as 휴지통.
 	ActionTrash = "trash"
+	// ActionMark runs an action's side effect WITHOUT settling the card, so a
+	// card offering several marks (a morning letter's per-deadline "완료" long-
+	// press) lets the operator handle each without the whole card vanishing.
+	// The tapped action is stamped done; the card stays for the rest.
+	ActionMark = "mark"
 
 	// Priority levels — higher surfaces first in the feed. Inferred from the
 	// item's urgency markers/keywords when the caller doesn't set one, so the
@@ -739,6 +744,19 @@ func (s *Store) RunActionWithEffect(itemID, actionID string, effect ActionEffect
 		result.Prompt = actionPrompt(action, "")
 		result.Message = "answered"
 		result.RemoveFromFeed = true
+	case ActionMark:
+		// Non-settling: mark just this action done and keep the card so its
+		// sibling marks stay actionable. The durable "done" is the effect's
+		// side channel (e.g. wiki due_done); the card refreshes on next cycle.
+		for i := range items {
+			if items[i].ID == itemID {
+				markActionDone(&items[i], action.ID)
+				items[i].UpdatedAtMs = now
+			}
+		}
+		result.Item = items[first]
+		result.Message = "marked"
+		result.RemoveFromFeed = false
 	default:
 		return ActionResult{}, ErrActionNotFound
 	}

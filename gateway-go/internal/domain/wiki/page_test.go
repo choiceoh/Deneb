@@ -316,3 +316,18 @@ func TestWritePageFile_RedactsSummary(t *testing.T) {
 		t.Fatalf("summary still contains raw token: %q", string(data))
 	}
 }
+
+func TestPageDueDoneRoundTrip(t *testing.T) {
+	p := &Page{Meta: Frontmatter{Title: "대한전선", Due: "2026-07-20", DueDone: "2026-07-20"}, Body: "본문"}
+	rendered := string(p.Render())
+	if !strings.Contains(rendered, "due_done: 2026-07-20") {
+		t.Fatalf("due_done not rendered:\n%s", rendered)
+	}
+	parsed, err := parsePage([]byte(rendered))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if parsed.Meta.DueDone != "2026-07-20" || parsed.Meta.Due != "2026-07-20" {
+		t.Fatalf("round-trip lost fields: due=%q due_done=%q", parsed.Meta.Due, parsed.Meta.DueDone)
+	}
+}
