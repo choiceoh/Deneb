@@ -49,6 +49,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 )
 
@@ -160,7 +161,17 @@ type runDependencies struct {
 func defaultRunDependencies() runDependencies {
 	return runDependencies{
 		openStore: func(wikiDir, diaryDir string) (benchmarkStore, error) {
-			return wiki.NewStore(wikiDir, diaryDir)
+			store, err := wiki.NewStore(wikiDir, diaryDir)
+			if err != nil {
+				return nil, err
+			}
+			// Mirror production wiring (initSessionAI): a reranker exists only
+			// when DENEB_RERANK_URL is set, so the bench scores the exact
+			// retrieval stack the gateway would run under the same env.
+			if reranker := rerank.NewFromEnv(); reranker != nil {
+				store.SetReranker(reranker)
+			}
+			return store, nil
 		},
 		newEmbedder: func(logger *slog.Logger) wiki.Embedder {
 			return embedding.New("", logger)
@@ -761,6 +772,7 @@ func dumpSignals(ctx context.Context, store benchmarkOptionStore, cases []goldCa
 		// sweeps and per-query adaptive weighting alike — without another Go run.
 		writeRankedPaths(stdout, "BM25", c.ID, bmRep.Results)
 		writeRankedPaths(stdout, "SEM", c.ID, semRep.Results)
+		writeRankedPaths(stdout, "FULL", c.ID, fullRep.Results)
 	}
 }
 

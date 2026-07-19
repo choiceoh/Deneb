@@ -2,6 +2,7 @@ package wiki
 
 import (
 	"context"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -10,7 +11,23 @@ import (
 const (
 	rerankCandidateLimit = 10
 	rerankTimeout        = 800 * time.Millisecond
+	// rerankDocBodyChars bounds the page-body head included in each rerank
+	// document. 600 chars is what the offline validation scored (2026-07-19,
+	// merged wiki-qa gold 177 cases: P@1 83.6→87.0 with xprovence): enough for
+	// the lead facts a cross-encoder needs, small enough that 10 docs stay one
+	// fast batch.
+	rerankDocBodyChars = 600
 )
+
+// rerankForced reports whether DENEB_RERANK_FORCE=on. The default ambiguity
+// trigger (shouldModelRerank) fired on only 6% of the gold queries — RRF's
+// top1-top2 gap is usually wide even when the top-1 is wrong — capturing +1.1pp
+// of the +3.4pp a rerank-always policy measured. The env knob lets production
+// opt into rerank-always without a rebuild; keep default off so a configured
+// reranker alone does not change latency behavior until explicitly asked.
+func rerankForced() bool {
+	return os.Getenv("DENEB_RERANK_FORCE") == "on"
+}
 
 // Reranker is an optional dedicated cross-encoder/ranking service. Search is
 // fully functional without it and falls back unchanged on every error.
@@ -39,10 +56,28 @@ func shouldModelRerank(results []SearchResult, force bool) bool {
 	if len(results) < 2 {
 		return false
 	}
-	if force {
+	if force || rerankForced() {
 		return true
 	}
 	return results[0].Score-results[1].Score < intentAmbiguousGap || results[0].Score < intentWeakTopScore
+}
+
+// rerankDocument builds the text the cross-encoder scores for one hit: page
+// path + title + summary + body head, falling back to the retrieval snippet
+// when the page cannot be read (diary hits, deleted files). The page head beats
+// the BM25/semantic snippet because the snippet is biased toward the retrieval
+// query's own terms — exactly the signal the reranker is supposed to second-
+// guess — while title/summary/lead state what the page IS about.
+func (s *Store) rerankDocument(result SearchResult) string {
+	if page, err := s.ReadPage(result.Path); err == nil && page != nil {
+		body := strings.Join(strings.Fields(page.Body), " ")
+		if runes := []rune(body); len(runes) > rerankDocBodyChars {
+			body = string(runes[:rerankDocBodyChars])
+		}
+		parts := []string{result.Path, page.Meta.Title, page.Meta.Summary, body}
+		return strings.TrimSpace(strings.Join(parts, "\n"))
+	}
+	return strings.TrimSpace(strings.Join(append(append([]string(nil), result.Context...), result.Content), "\n"))
 }
 
 func (s *Store) applyModelRerank(ctx context.Context, query string, results []SearchResult, force bool) (map[string]float64, map[string]float64, RerankDiagnostics) {
@@ -65,7 +100,7 @@ func (s *Store) applyModelRerank(ctx context.Context, query string, results []Se
 	count := min(len(results), rerankCandidateLimit)
 	documents := make([]string, count)
 	for i := range documents {
-		documents[i] = strings.TrimSpace(strings.Join(append(append([]string(nil), results[i].Context...), results[i].Content), "\n"))
+		documents[i] = s.rerankDocument(results[i])
 	}
 	diagnostics.Attempted = true
 	diagnostics.Candidates = count
