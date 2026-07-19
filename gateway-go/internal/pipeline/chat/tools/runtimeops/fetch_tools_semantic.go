@@ -12,16 +12,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
-// Calibrated on Nemotron-3-Embed-1B Korean intent/tool-description pairs.
-// 0.30 recovers short concept matches while the RRF/top-five cap bounds noise.
-const fetchToolSemanticOnlyFloor = 0.30
-
 type fetchToolSemanticSearch struct {
 	embedder embedindex.Embedder
 
 	mu     sync.Mutex
 	digest string
 	vecs   map[string][]float32
+}
+
+func (s *fetchToolSemanticSearch) admissionFloor() float64 {
+	if s == nil {
+		return embedindex.CalibrationFor(nil, embedindex.SemanticSurfaceFetchTools).Floor
+	}
+	return embedindex.CalibrationFor(s.embedder, embedindex.SemanticSurfaceFetchTools).Floor
 }
 
 type semanticToolHit struct {
@@ -120,6 +123,11 @@ func fuseFetchToolRanks(lexical []string, semantic []semanticToolHit) []string {
 }
 
 func fuseFetchToolRanksLimit(lexical []string, semantic []semanticToolHit, limit int) []string {
+	floor := embedindex.CalibrationFor(nil, embedindex.SemanticSurfaceFetchTools).Floor
+	return fuseFetchToolRanksLimitCalibrated(lexical, semantic, limit, floor)
+}
+
+func fuseFetchToolRanksLimitCalibrated(lexical []string, semantic []semanticToolHit, limit int, semanticFloor float64) []string {
 	const k = 60.0
 	type fused struct {
 		name         string
@@ -136,7 +144,7 @@ func fuseFetchToolRanksLimit(lexical []string, semantic []semanticToolHit, limit
 	for rank, hit := range semantic {
 		entry := byName[hit.name]
 		if entry == nil {
-			if hit.score < fetchToolSemanticOnlyFloor {
+			if hit.score < semanticFloor {
 				continue
 			}
 			entry = &fused{name: hit.name}

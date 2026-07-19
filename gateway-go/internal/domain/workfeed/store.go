@@ -162,8 +162,9 @@ func NewStore(path string) *Store {
 }
 
 // SetEmbedder enables non-destructive semantic grouping for newly appended
-// cards. Existing cards are embedded lazily on the next append and cached next
-// to the feed file. A nil/unhealthy embedder preserves the exact old behavior.
+// cards. Existing cards are warmed at server startup (and reconciled again on
+// append) and cached next to the feed file. A nil/unhealthy embedder preserves
+// the exact old behavior.
 func (s *Store) SetEmbedder(embedder embedindex.Embedder, opts ...embedindex.Option) {
 	if s == nil {
 		return
@@ -266,7 +267,8 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 	semantic := s.semantic
 	if semantic == nil || !semantic.Enabled() {
 		items = append(items, item)
-		items = pruneRetention(items)
+		items = reconcileSemanticGroups(pruneRetention(items))
+		item = workFeedItemSnapshot(items, item)
 		if err := jsonlstore.Snapshot(s.path, items); err != nil {
 			s.mu.Unlock()
 			return Item{}, false, err
@@ -298,13 +300,23 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 	}
 	item = applySemanticGroup(items, item, relatedIDs)
 	items = append(items, item)
-	items = pruneRetention(items)
+	items = reconcileSemanticGroups(pruneRetention(items))
+	item = workFeedItemSnapshot(items, item)
 	if err := jsonlstore.Snapshot(s.path, items); err != nil {
 		s.mu.Unlock()
 		return Item{}, false, err
 	}
 	s.mu.Unlock()
 	return item, true, nil
+}
+
+func workFeedItemSnapshot(items []Item, fallback Item) Item {
+	for i := range items {
+		if items[i].ID == fallback.ID {
+			return items[i]
+		}
+	}
+	return fallback
 }
 
 func isGroupwareRefSource(source string) bool {
@@ -472,6 +484,7 @@ func (s *Store) ListFiltered(opts ListOptions) ([]Item, int, error) {
 	for i := range items {
 		items[i] = normalizeExisting(items[i])
 	}
+	items = reconcileSemanticGroups(items)
 	// A snoozed item whose window has elapsed sorts by its wake time, so it
 	// re-surfaces near the top (fresh) instead of buried at its original slot.
 	effectiveTime := func(it Item) int64 {
@@ -729,6 +742,12 @@ func (s *Store) mutateItem(id string, update func(*Item, int64) bool) (Item, err
 		return Item{}, ErrNotFound
 	}
 	if changed {
+		items = reconcileSemanticGroups(items)
+		for i := range items {
+			if items[i].ID == id {
+				out = items[i]
+			}
+		}
 		if err := jsonlstore.Snapshot(s.path, items); err != nil {
 			return Item{}, err
 		}
@@ -789,6 +808,7 @@ func (s *Store) RunActionWithEffect(itemID, actionID string, effect ActionEffect
 				kept = append(kept, it)
 			}
 		}
+		kept = reconcileSemanticGroups(kept)
 		if err := jsonlstore.Snapshot(s.path, kept); err != nil {
 			return ActionResult{}, err
 		}
@@ -866,6 +886,13 @@ func (s *Store) RunActionWithEffect(itemID, actionID string, effect ActionEffect
 		result.RemoveFromFeed = false
 	default:
 		return ActionResult{}, ErrActionNotFound
+	}
+	items = reconcileSemanticGroups(items)
+	for i := range items {
+		if items[i].ID == itemID {
+			result.Item = items[i]
+			break
+		}
 	}
 	if err := jsonlstore.Snapshot(s.path, items); err != nil {
 		return ActionResult{}, err

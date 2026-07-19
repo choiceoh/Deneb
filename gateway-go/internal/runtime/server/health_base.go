@@ -62,6 +62,29 @@ func (s *Server) collectBaseHealth() map[string]any {
 		"local_ai":  localAIStatus,
 		"embedding": embeddingStatus,
 	}
+	if s.rerankerClient != nil {
+		subsystems["reranker"] = map[string]any{
+			"status":   "configured",
+			"identity": s.rerankerClient.Identity(),
+			"stats":    s.rerankerClient.Stats(),
+		}
+	}
+	retrieval := map[string]any{}
+	if s.mailStore != nil {
+		retrieval["mail"] = map[string]any{
+			"index":       s.mailStore.SemanticStatus(),
+			"calibration": s.mailStore.SemanticCalibration(),
+		}
+	}
+	if s.workFeedStore != nil {
+		retrieval["workfeed"] = map[string]any{
+			"index":       s.workFeedStore.SemanticStatus(),
+			"calibration": s.workFeedStore.SemanticCalibration(),
+		}
+	}
+	if len(retrieval) > 0 {
+		subsystems["retrieval"] = retrieval
+	}
 	if value := s.mailIngestHealth.Load(); value != nil {
 		if ingestHealth, ok := value.(mailIngestHealth); ok {
 			if s.mailIngestQueueStats != nil {

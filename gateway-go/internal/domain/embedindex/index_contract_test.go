@@ -393,6 +393,79 @@ func TestRefreshAsyncSingleFlightAndCloseCancellation(t *testing.T) {
 	ix.Close() // idempotent
 }
 
+func TestRefreshAsyncReplaysLatestSupplierQueuedDuringFlight(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 2)
+	embedder := &recordingEmbedder{healthy: true, block: release, started: started}
+	ix := New("pending", embedder, "")
+	defer ix.Close()
+
+	ix.RefreshAsync(func() []Item {
+		return []Item{{ID: "a", Hash: "a1", Text: "alpha first version"}}
+	})
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first refresh did not start")
+	}
+	ix.RefreshAsync(func() []Item {
+		return []Item{
+			{ID: "a", Hash: "a2", Text: "alpha second version"},
+			{ID: "b", Hash: "b1", Text: "bravo newly arrived"},
+		}
+	})
+	close(release)
+
+	deadline := time.Now().Add(2 * time.Second)
+	var a cachedVec
+	var aOK, bOK bool
+	for time.Now().Before(deadline) {
+		ix.mu.Lock()
+		a, aOK = ix.vecs["a"]
+		_, bOK = ix.vecs["b"]
+		ix.mu.Unlock()
+		if aOK && a.hash == "a2" && bOK && !ix.refreshing.Load() {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !aOK || a.hash != "a2" || !bOK {
+		t.Fatalf("queued corpus not applied: a=%+v aOK=%v bOK=%v", a, aOK, bOK)
+	}
+	if ix.refreshing.Load() {
+		t.Fatal("queued refresh did not finish")
+	}
+	if calls := embedder.snapshotCalls(); len(calls) != 2 {
+		t.Fatalf("embed calls = %#v, want first plus one coalesced follow-up", calls)
+	}
+}
+
+func TestRefreshIfStaleBoundsReadPathScansAndReportsFreshness(t *testing.T) {
+	embedder := &recordingEmbedder{healthy: true, fingerprint: "model-a:3", dimensions: 3}
+	ix := New("stale", embedder, "", WithSyncRefresh())
+	defer ix.Close()
+	supplierCalls := 0
+	supplier := func() []Item {
+		supplierCalls++
+		return []Item{{ID: "a", Hash: "a1", Text: "alpha stable corpus"}}
+	}
+
+	ix.RefreshIfStale(supplier, time.Hour)
+	ix.RefreshIfStale(supplier, time.Hour)
+	if supplierCalls != 1 {
+		t.Fatalf("fresh index supplier calls = %d, want 1", supplierCalls)
+	}
+	status := ix.Status()
+	if !status.Enabled || status.Entries != 1 || status.RefreshCount != 1 || status.LastRefreshAtMs == 0 || status.Fingerprint != "model-a:3" {
+		t.Fatalf("status = %+v", status)
+	}
+
+	ix.RefreshIfStale(supplier, 0)
+	if supplierCalls != 2 {
+		t.Fatalf("forced refresh supplier calls = %d, want 2", supplierCalls)
+	}
+}
+
 func TestContentHashPreservesDeterminismAndSeparatesInputs(t *testing.T) {
 	a := ContentHash("same text")
 	b := ContentHash("same text")

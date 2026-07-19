@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/toolmeta"
 )
@@ -22,8 +23,9 @@ type fakeFetchRegistry struct {
 }
 
 type fetchSemanticEmbedder struct {
-	mu    sync.Mutex
-	kinds []string
+	mu          sync.Mutex
+	kinds       []string
+	fingerprint string
 }
 
 type fetchTestReranker struct {
@@ -48,6 +50,10 @@ func (r *fetchTestReranker) Rerank(_ context.Context, _ string, documents []stri
 }
 
 func (e *fetchSemanticEmbedder) IsHealthy() bool { return true }
+
+func (e *fetchSemanticEmbedder) EmbeddingFingerprint() string { return e.fingerprint }
+
+func (e *fetchSemanticEmbedder) EmbeddingDimensions() int { return 2 }
 
 func (e *fetchSemanticEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	e.mu.Lock()
@@ -234,12 +240,28 @@ func TestFetchTools_RerankerFailsOpenAndExplicitNamesBypassIt(t *testing.T) {
 }
 
 func TestFuseFetchToolRanksRejectsLowSemanticOnlyTail(t *testing.T) {
+	floor := embedindex.CalibrationFor(nil, embedindex.SemanticSurfaceFetchTools).Floor
 	got := fuseFetchToolRanks(
 		[]string{"lexical"},
-		[]semanticToolHit{{name: "lexical", score: 0.2}, {name: "noise", score: fetchToolSemanticOnlyFloor - 0.01}},
+		[]semanticToolHit{{name: "lexical", score: 0.2}, {name: "noise", score: floor - 0.01}},
 	)
 	if !slices.Equal(got, []string{"lexical"}) {
 		t.Fatalf("fused names = %v", got)
+	}
+}
+
+func TestFetchToolsUnknownEmbedderDoesNotAdmitSemanticOnlyTool(t *testing.T) {
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{
+		"mail_archive": {Name: "mail_archive", Description: "Read email from the local archive", Deferred: true},
+		"storage":      {Name: "storage", Description: "Manage object buckets", Deferred: true},
+	}}
+	embedder := &fetchSemanticEmbedder{fingerprint: "future-embedder:2"}
+	out, err := ToolFetchTools(reg, embedder)(context.Background(), mustJSON(t, map[string]any{"query": "받은 편지함에서 대화 찾기"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "## mail_archive") {
+		t.Fatalf("uncalibrated model admitted semantic-only tool: %s", out)
 	}
 }
 

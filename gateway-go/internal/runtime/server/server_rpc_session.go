@@ -225,8 +225,11 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 	s.embeddingClient = embedding.New("", s.logger)
 	s.rerankerClient = airerank.NewFromEnv()
 	chatCfg.Memory.Embedding = s.embeddingClient
+	var warmers []semanticWarmTarget
 	if s.mailStore != nil {
 		s.mailStore.SetEmbedder(s.embeddingClient)
+		store := s.mailStore
+		warmers = append(warmers, semanticWarmTarget{name: "mail", warm: store.WarmSemanticIndex})
 		if s.rerankerClient != nil {
 			s.mailStore.SetReranker(s.rerankerClient)
 		} else {
@@ -235,6 +238,8 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 	}
 	if s.workFeedStore != nil {
 		s.workFeedStore.SetEmbedder(s.embeddingClient)
+		store := s.workFeedStore
+		warmers = append(warmers, semanticWarmTarget{name: "workfeed", warm: store.WarmSemanticIndex})
 	}
 	if s.polarisStore != nil {
 		s.polarisStore.SetSummaryEmbedder(s.embeddingClient)
@@ -245,28 +250,61 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 			s.wikiStore.SetReranker(s.rerankerClient)
 		}
 		store := s.wikiStore
-		s.safeGo("wiki-semantic-warm", func() {
-			s.warmSessionSemanticIndexes(store)
+		warmers = append(
+			warmers,
+			semanticWarmTarget{name: "wiki", warm: store.WarmSemanticIndex},
+			semanticWarmTarget{name: "diary", warm: store.WarmDiarySemantic},
+		)
+	}
+	if len(warmers) > 0 {
+		s.safeGo("retrieval-semantic-warm", func() {
+			s.warmSessionSemanticIndexes(warmers)
 		})
 	}
 }
 
-func (s *Server) warmSessionSemanticIndexes(store interface {
-	WarmSemanticIndex(context.Context) error
-	WarmDiarySemantic(context.Context) error
-},
-) {
+type semanticWarmTarget struct {
+	name string
+	warm func(context.Context) error
+}
+
+func (s *Server) warmSessionSemanticIndexes(warmers []semanticWarmTarget) {
 	ctx, cancel := context.WithTimeout(s.ShutdownCtx(), 10*time.Minute)
 	defer cancel()
-	if err := store.WarmSemanticIndex(ctx); err != nil {
-		s.logger.Warn("wiki semantic warm incomplete", "error", err)
-	} else {
-		s.logger.Info("wiki semantic index warmed")
+	if err := s.waitForEmbeddingReady(ctx); err != nil {
+		s.logger.Warn("semantic warm skipped; embedding unavailable", "error", err)
+		return
 	}
-	if err := store.WarmDiarySemantic(ctx); err != nil {
-		s.logger.Warn("diary semantic warm incomplete", "error", err)
-	} else {
-		s.logger.Info("diary semantic index warmed")
+	for _, target := range warmers {
+		if target.warm == nil {
+			continue
+		}
+		if err := target.warm(ctx); err != nil {
+			s.logger.Warn("semantic warm incomplete", "index", target.name, "error", err)
+		} else {
+			s.logger.Info("semantic index warmed", "index", target.name)
+		}
+		if ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+func (s *Server) waitForEmbeddingReady(ctx context.Context) error {
+	if s.embeddingClient == nil || s.embeddingClient.IsHealthy() {
+		return nil
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if s.embeddingClient.IsHealthy() {
+				return nil
+			}
+		}
 	}
 }
 

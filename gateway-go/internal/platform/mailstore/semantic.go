@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
@@ -13,8 +14,8 @@ import (
 const (
 	mailSemanticCacheFile            = "semantic-index.json"
 	mailSemanticPreprocessingVersion = "mailstore-context-fields-v1"
-	mailSemanticOnlyFloor            = 0.33
 	mailRRFK                         = 60.0
+	mailSemanticRefreshInterval      = 5 * time.Minute
 )
 
 // SetEmbedder enables semantic mail retrieval. Corpus vectors are refreshed
@@ -83,6 +84,26 @@ func (s *Store) semanticSnapshot() *embedindex.Index {
 	return s.semantic
 }
 
+// WarmSemanticIndex synchronously reconciles the persisted mail corpus. The
+// server runs it after the embedding probe becomes healthy so a restart never
+// leaves the first user query racing a multi-thousand-message cold build.
+func (s *Store) WarmSemanticIndex(ctx context.Context) error {
+	semantic := s.semanticSnapshot()
+	if semantic == nil {
+		return nil
+	}
+	return semantic.Warm(ctx, s.semanticItems)
+}
+
+// SemanticStatus exposes cache freshness without running an embedding probe.
+func (s *Store) SemanticStatus() embedindex.Status {
+	return s.semanticSnapshot().Status()
+}
+
+func (s *Store) SemanticCalibration() embedindex.Calibration {
+	return s.semanticSnapshot().Calibration(embedindex.SemanticSurfaceMail)
+}
+
 type mailSearchRank struct {
 	id            string
 	lexicalScore  float64
@@ -103,17 +124,18 @@ func (s *Store) rankedSearch(ctx context.Context, query string, candidate int) [
 
 	var dense []embedindex.Hit
 	if semantic != nil && semantic.Enabled() {
-		semantic.RefreshAsync(s.semanticItems)
+		semantic.RefreshIfStale(s.semanticItems, mailSemanticRefreshInterval)
 		dense = semantic.Search(ctx, query, candidate)
 	}
 	if len(dense) == 0 {
 		out := make([]mailSearchRank, 0, len(lexical))
 		for rank, hit := range lexical {
-			out = append(out, mailSearchRank{id: hit.ID, lexicalScore: hit.Score, lexicalRank: rank + 1, fusedScore: hit.Score})
+			out = append(out, mailSearchRank{id: hit.ID, lexicalScore: hit.Score, lexicalRank: rank + 1, fusedScore: mailRRFScore(rank + 1)})
 		}
 		return out
 	}
 
+	semanticFloor := semantic.Calibration(embedindex.SemanticSurfaceMail).Floor
 	byID := make(map[string]*mailSearchRank, len(lexical)+len(dense))
 	for rank, hit := range lexical {
 		entry := &mailSearchRank{id: hit.ID, lexicalScore: hit.Score, lexicalRank: rank + 1}
@@ -123,7 +145,7 @@ func (s *Store) rankedSearch(ctx context.Context, query string, candidate int) [
 	for rank, hit := range dense {
 		entry := byID[hit.ID]
 		if entry == nil {
-			if hit.Score < mailSemanticOnlyFloor {
+			if hit.Score < semanticFloor {
 				continue
 			}
 			entry = &mailSearchRank{id: hit.ID}
@@ -160,6 +182,10 @@ func (s *Store) rankedSearch(ctx context.Context, query string, candidate int) [
 		return out[i].id < out[j].id
 	})
 	return out
+}
+
+func mailRRFScore(rank int) float64 {
+	return (1 / (mailRRFK + float64(rank))) * (0.4 * (mailRRFK + 1))
 }
 
 func nonzeroRank(rank int) int {

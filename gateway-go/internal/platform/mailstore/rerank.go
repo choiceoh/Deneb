@@ -2,11 +2,10 @@ package mailstore
 
 import (
 	"context"
-	"math"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/rankblend"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 )
 
@@ -61,21 +60,16 @@ func (s *Store) rerankMessages(ctx context.Context, query string, messages []mai
 	if err != nil || len(scores) != len(documents) {
 		return messages
 	}
-	for _, score := range scores {
-		if math.IsNaN(score) || math.IsInf(score, 0) {
-			return messages
-		}
+	retrievalScores := make([]float64, count)
+	for i := range retrievalScores {
+		retrievalScores[i] = messages[i].Score
 	}
-
-	order := make([]int, count)
-	for i := range order {
-		order[i] = i
+	blended, ok := rankblend.Blend(retrievalScores, scores, rankblend.DefaultConfig)
+	if !ok {
+		return messages
 	}
-	sort.SliceStable(order, func(i, j int) bool {
-		return scores[order[i]] > scores[order[j]]
-	})
 	out := append([]mailarchive.ContextMessage(nil), messages...)
-	for rank, index := range order {
+	for rank, index := range blended.Order {
 		msg := messages[index]
 		msg.RankReasons = append([]string(nil), msg.RankReasons...)
 		msg.RankReasons = appendMailRankReason(msg.RankReasons, "rerank")
