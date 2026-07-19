@@ -46,6 +46,17 @@ import (
 )
 
 const (
+	// runtimeErrorFoldDefaultInterval is the task cadence: how often the
+	// in-memory observe ring is folded into the persisted rolling window.
+	// This must be much shorter than the mining cadence because the ring is
+	// wiped by every hot-swap: with 12h folds, a night-long error burst
+	// followed by a morning deploy evaporated entirely (live 2026-07-19: a
+	// ~120-line embed-failure burst — 10× the warn floor — left zero trace
+	// in the rolling state). Hourly folds bound the loss to ≤1h per swap.
+	runtimeErrorFoldDefaultInterval = 1 * time.Hour
+	// runtimeErrorMiningDefaultInterval throttles candidate AUTHORING — the
+	// expensive/queue-visible half stays at the original cadence while folds
+	// run hourly underneath.
 	runtimeErrorMiningDefaultInterval = 12 * time.Hour
 	// runtimeErrorMinRecurrence: a signature below this is a one-off, not a
 	// grounded, code-actionable defect.
@@ -126,6 +137,9 @@ type RuntimeErrorMiningTask struct {
 	// to ~/.deneb/data/runtime_error_signature_state.json — the same
 	// homeDir-anchored convention as the Tracker ledgers.
 	StatePath string
+	// MiningInterval overrides the candidate-authoring throttle (tests).
+	// Zero resolves via env/default.
+	MiningInterval time.Duration
 }
 
 // runtimeErrorSigEntry is one signature's rolling aggregate.
@@ -147,6 +161,9 @@ type runtimeErrorState struct {
 	// cross-restart dedup cursor.
 	WatermarkMs int64                            `json:"watermarkMs"`
 	Sigs        map[string]*runtimeErrorSigEntry `json:"sigs"`
+	// LastMinedAtMs throttles candidate authoring to the mining cadence
+	// while the task itself runs at the (much faster) fold cadence.
+	LastMinedAtMs int64 `json:"lastMinedAtMs,omitempty"`
 }
 
 func (t *RuntimeErrorMiningTask) statePath() string {
@@ -253,8 +270,24 @@ func (e *runtimeErrorSigEntry) recurrenceFloor() int {
 // Name identifies the task in the autonomous scheduler.
 func (t *RuntimeErrorMiningTask) Name() string { return "runtime-error-mining" }
 
-// Interval honors DENEB_RUNTIME_ERROR_MINING_INTERVAL_HOURS.
+// Interval is the FOLD cadence (ring → persisted window); candidate authoring
+// is throttled separately by miningInterval. Honors
+// DENEB_RUNTIME_ERROR_FOLD_INTERVAL_HOURS.
 func (t *RuntimeErrorMiningTask) Interval() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("DENEB_RUNTIME_ERROR_FOLD_INTERVAL_HOURS")); v != "" {
+		if hours, err := strconv.Atoi(v); err == nil && hours > 0 {
+			return time.Duration(hours) * time.Hour
+		}
+	}
+	return runtimeErrorFoldDefaultInterval
+}
+
+// miningInterval throttles candidate authoring. Honors
+// DENEB_RUNTIME_ERROR_MINING_INTERVAL_HOURS (its pre-split meaning).
+func (t *RuntimeErrorMiningTask) miningInterval() time.Duration {
+	if t.MiningInterval > 0 {
+		return t.MiningInterval
+	}
 	if v := strings.TrimSpace(os.Getenv("DENEB_RUNTIME_ERROR_MINING_INTERVAL_HOURS")); v != "" {
 		if hours, err := strconv.Atoi(v); err == nil && hours > 0 {
 			return time.Duration(hours) * time.Hour
@@ -286,12 +319,22 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 	path := t.statePath()
 	state := loadRuntimeErrorState(path)
 	folded := state.fold(t.ErrorLines(runtimeErrorRingScan), now)
-	if err := saveRuntimeErrorState(path, state); err != nil {
-		logger.Warn("runtime-error-mining: state save failed (window will re-accumulate)", "error", err)
-	}
 	if folded > 0 {
 		logger.Debug("runtime-error-mining: folded ring lines into rolling window",
 			"folded", folded, "signatures", len(state.Sigs))
+	}
+
+	// Authoring runs at the slower mining cadence; every other run is a pure
+	// fold that just keeps the rolling window fed between hot-swaps.
+	mine := now.UnixMilli()-state.LastMinedAtMs >= t.miningInterval().Milliseconds()
+	if mine {
+		state.LastMinedAtMs = now.UnixMilli()
+	}
+	if err := saveRuntimeErrorState(path, state); err != nil {
+		logger.Warn("runtime-error-mining: state save failed (window will re-accumulate)", "error", err)
+	}
+	if !mine {
+		return nil
 	}
 
 	// Deterministic order: most-recurring first, signature as tie-break.
