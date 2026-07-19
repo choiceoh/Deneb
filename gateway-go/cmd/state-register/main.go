@@ -349,7 +349,7 @@ func (a *analyzer) render() string {
 				}
 				return sites[i].line < sites[j].line
 			})
-			fmt.Fprintf(&b, "%s:\n", label)
+			fmt.Fprintf(&b, "%s:\n\n", label)
 			for _, s := range sites {
 				fmt.Fprintf(&b, "- `%s:%d` %s\n", s.file, s.line, s.fn)
 			}
@@ -359,7 +359,7 @@ func (a *analyzer) render() string {
 		emit("reads", r)
 	}
 	fmt.Fprintf(&b,
-		"---\n필드명은 일치하나 타입을 증명하지 못해 제외한 접근: %d건 — 다른 타입의\n"+
+		"---\n\n필드명은 일치하나 타입을 증명하지 못해 제외한 접근: %d건 — 다른 타입의\n"+
 			"동명 필드(진짜 무관)와 타입 추론 로컬(놓친 접근)이 섞인 상한이다.\n",
 		a.unresolved)
 	return b.String()

@@ -10,22 +10,26 @@
 ## AbortedLastRun — write 1 · read 0
 
 **writes**:
+
 - `internal/domain/session/patch.go:134` ResetSession
 
 ## Channel — write 0 · read 2
 
 reads:
+
 - `internal/pipeline/chat/slash_dispatch.go:232` buildSessionStatus
 - `internal/pipeline/chat/slash_dispatch.go:233` buildSessionStatus
 
 ## CompactionFired — write 0 · read 1
 
 reads:
+
 - `internal/pipeline/chat/run_exec.go:595` recordRunCompletion
 
 ## EndedAt — write 4 · read 0 · **크로스-패키지 2개**
 
 **writes**:
+
 - `internal/domain/session/manager.go:336` evictStale
 - `internal/domain/session/manager.go:347` evictStale
 - `internal/domain/session/patch.go:132` ResetSession
@@ -34,9 +38,11 @@ reads:
 ## FailureReason — write 1 · read 6 · **크로스-패키지 4개**
 
 **writes**:
+
 - `internal/domain/session/manager.go:349` evictStale
 
 reads:
+
 - `internal/pipeline/chat/slash_dispatch.go:329` appendServerStatus
 - `internal/pipeline/chat/slash_dispatch.go:330` appendServerStatus
 - `internal/pipeline/chat/subagent/notifier.go:165` NewSubagentNotifier
@@ -47,22 +53,26 @@ reads:
 ## IdleTimeoutMs — write 0 · read 2
 
 reads:
+
 - `internal/domain/session/manager.go:339` evictStale
 - `internal/domain/session/manager.go:344` evictStale
 
 ## InputTokens — write 2 · read 2 · **크로스-패키지 2개**
 
 **writes**:
+
 - `internal/domain/session/patch.go:135` ResetSession
 - `internal/domain/session/patch.go:188` ClearTokens
 
 reads:
+
 - `internal/pipeline/chat/slash_dispatch.go:307` sessionTokenLine
 - `internal/pipeline/chat/slash_dispatch.go:308` sessionTokenLine
 
 ## Key — write 0 · read 20 · **크로스-패키지 3개**
 
 reads:
+
 - `internal/domain/session/manager.go:416` Set
 - `internal/domain/session/manager.go:423` Set
 - `internal/domain/session/manager.go:436` Set
@@ -87,12 +97,14 @@ reads:
 ## Kind — write 0 · read 2 · **크로스-패키지 2개**
 
 reads:
+
 - `internal/domain/session/manager.go:328` evictStale
 - `internal/pipeline/chat/run_agent_config.go:331` resolveAgentRunLimits
 
 ## Label — write 0 · read 7 · **크로스-패키지 3개**
 
 reads:
+
 - `internal/domain/session/patch.go:67` ApplyPatch
 - `internal/domain/session/patch.go:173` FindByLabel
 - `internal/pipeline/chat/subagent/notifier.go:369` buildNotifyItem
@@ -104,15 +116,18 @@ reads:
 ## LastActivityAt — write 1 · read 2
 
 **writes**:
+
 - `internal/domain/session/manager.go:482` TouchActivity
 
 reads:
+
 - `internal/domain/session/manager.go:341` evictStale
 - `internal/domain/session/manager.go:342` evictStale
 
 ## LastOutput — write 0 · read 3 · **크로스-패키지 2개**
 
 reads:
+
 - `internal/pipeline/chat/subagent/notifier.go:372` buildNotifyItem
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:228` subagentsResult
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
@@ -120,6 +135,7 @@ reads:
 ## Model — write 0 · read 5 · **크로스-패키지 3개**
 
 reads:
+
 - `internal/domain/session/patch.go:68` ApplyPatch
 - `internal/pipeline/chat/run_model.go:52` resolveModel
 - `internal/pipeline/chat/run_model.go:53` resolveModel
@@ -129,20 +145,24 @@ reads:
 ## OutputTokens — write 2 · read 2 · **크로스-패키지 2개**
 
 **writes**:
+
 - `internal/domain/session/patch.go:136` ResetSession
 - `internal/domain/session/patch.go:189` ClearTokens
 
 reads:
+
 - `internal/pipeline/chat/slash_dispatch.go:310` sessionTokenLine
 - `internal/pipeline/chat/slash_dispatch.go:311` sessionTokenLine
 
 ## RuntimeMs — write 2 · read 5 · **크로스-패키지 3개**
 
 **writes**:
+
 - `internal/domain/session/patch.go:133` ResetSession
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:259` killSession
 
 reads:
+
 - `internal/domain/session/lifecycle.go:130` DeriveLifecycleSnapshot
 - `internal/pipeline/chat/subagent/notifier.go:377` buildNotifyItem
 - `internal/pipeline/chat/subagent/notifier.go:378` buildNotifyItem
@@ -152,14 +172,17 @@ reads:
 ## SessionID — write 0 · read 1
 
 reads:
+
 - `internal/domain/session/patch.go:158` FindBySessionID
 
 ## StartedAt — write 1 · read 7 · **크로스-패키지 2개**
 
 **writes**:
+
 - `internal/domain/session/patch.go:131` ResetSession
 
 reads:
+
 - `internal/domain/session/lifecycle.go:129` DeriveLifecycleSnapshot
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:96` subagentsList
@@ -171,12 +194,14 @@ reads:
 ## Status — write 4 · read 25 · **크로스-패키지 4개**
 
 **writes**:
+
 - `internal/domain/session/manager.go:334` evictStale
 - `internal/domain/session/manager.go:345` evictStale
 - `internal/domain/session/patch.go:130` ResetSession
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:255` killSession
 
 reads:
+
 - `internal/domain/session/manager.go:327` evictStale
 - `internal/domain/session/manager.go:333` evictStale
 - `internal/domain/session/manager.go:339` evictStale
@@ -206,16 +231,19 @@ reads:
 ## TimeoutAt — write 0 · read 2
 
 reads:
+
 - `internal/domain/session/manager.go:333` evictStale
 - `internal/domain/session/manager.go:333` evictStale
 
 ## TotalTokens — write 2 · read 7 · **크로스-패키지 3개**
 
 **writes**:
+
 - `internal/domain/session/patch.go:137` ResetSession
 - `internal/domain/session/patch.go:190` ClearTokens
 
 reads:
+
 - `internal/pipeline/chat/slash_dispatch.go:303` sessionTokenLine
 - `internal/pipeline/chat/slash_dispatch.go:303` sessionTokenLine
 - `internal/pipeline/chat/slash_dispatch.go:313` sessionTokenLine
@@ -227,6 +255,7 @@ reads:
 ## UpdatedAt — write 7 · read 7 · **크로스-패키지 2개**
 
 **writes**:
+
 - `internal/domain/session/manager.go:337` evictStale
 - `internal/domain/session/manager.go:348` evictStale
 - `internal/domain/session/manager.go:516` EnsureVisible
@@ -236,6 +265,7 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:261` killSession
 
 reads:
+
 - `internal/domain/session/lifecycle.go:131` DeriveLifecycleSnapshot
 - `internal/domain/session/lifecycle.go:132` DeriveLifecycleSnapshot
 - `internal/domain/session/manager.go:329` evictStale
@@ -245,5 +275,6 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
 
 ---
+
 필드명은 일치하나 타입을 증명하지 못해 제외한 접근: 1219건 — 다른 타입의
 동명 필드(진짜 무관)와 타입 추론 로컬(놓친 접근)이 섞인 상한이다.
