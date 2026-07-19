@@ -61,3 +61,8 @@ doc-ref-lint`(CI 게이트, validate-or-freeze — arXiv:2607.13285에서 채택
 `<!-- docref:off -->`/`<!-- docref:on -->`으로 감싼다. 런타임 데이터 파일
 (`deneb.json` 류 bare 파일명)과 개념/외부 참조는 자동으로 warn 이하로
 분류되므로 마킹이 필요 없다.
+
+부가 명령: `--fix`(broken 라인 앵커를 심볼 힌트→심볼 시작 라인, 힌트 없으면
+라인 드롭으로 결정적 수리), `--unmentioned <디렉토리> <문서>`(모듈 문서가
+큐레이션하지 않은 소스 나열 — advisory), `make memory-ref-audit`(레포 밖
+메모리 파일의 코드 참조 감사 — 회상 메모리의 file:line 검증 규칙 일괄 실행).

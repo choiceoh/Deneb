@@ -124,3 +124,25 @@ class TieringTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FixAnchorsTest(unittest.TestCase):
+    def test_fix_prefers_symbol_hint_then_drops_line(self):
+        from doc_ref_lint import Report, fix_broken_lines, lint
+
+        repo = make_repo(
+            {
+                "CLAUDE.md": "see `DoThing` at `pkg/a.go:99` and bare `pkg/b.go:99`",
+                "pkg/a.go": "package a\nfunc DoThing() {}\n",
+                "pkg/b.go": "package b\n",
+            }
+        )
+        docs = collect_docs(repo, ["CLAUDE.md"])
+        report = lint(repo, docs, symbols=None)
+        self.assertEqual(len(report.broken()), 2)
+        fixed = fix_broken_lines(repo, report, {"pkg/a.go": {"DoThing": 2}})
+        self.assertEqual(fixed, 2)
+        text = (repo / "CLAUDE.md").read_text()
+        self.assertIn("`pkg/a.go:2`", text)   # 심볼 힌트 → 심볼 시작 라인으로 재작성
+        self.assertIn("`pkg/b.go`", text)      # 힌트 없음 → 라인 드롭 (거짓 앵커 제거)
+        self.assertEqual(lint(repo, docs, symbols=None).broken(), [])

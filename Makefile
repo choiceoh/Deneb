@@ -256,7 +256,15 @@ doc-ref-lint:
 # (not a CI gate) — rerun after touching session fields or their consumers.
 state-register:
 	@cd gateway-go && go run ./cmd/state-register -out ../docs/research/state-register-session.md
-	@echo "regenerated docs/research/state-register-session.md"
+	@cd gateway-go && go run ./cmd/state-register -type internal/domain/workfeed.Item \
+	  -out ../docs/research/state-register-workfeed.md
+	@echo "regenerated docs/research/state-register-{session,workfeed}.md"
+
+# 메모리 파일(레포 밖)의 코드 참조 감사 — advisory, CI 밖. 메모리 규칙의
+# "회상된 file:line은 검증하라"를 일괄 실행하는 수동/주기용 진입점.
+memory-ref-audit:
+	@python3 scripts/audit/doc_ref_lint.py --glob '__none__' \
+	  --extra-docs "$(HOME)/.claude/projects/-home-choiceoh-deneb/memory"
 
 # All checked-in Python behavior tests. Keep the two roots isolated so their
 # fixture/support modules resolve exactly as they do when invoked directly.
