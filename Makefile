@@ -268,6 +268,15 @@ state-register-ts:
 	  --out ../docs/research/state-register-workstation.md
 	@echo "regenerated docs/research/state-register-workstation.md"
 
+# Kotlin twin of state-register: the Kotlin K1 compiler frontend (BindingContext)
+# over the chat client's shared UI state (ChatUiState). Uses kotlin-compiler-
+# embeddable jars ALREADY in the gradle cache — nothing added to the KMP build
+# graph. Advisory. data class는 불변이라 write=.copy(field=…). Requires a prior
+# client-android build to populate the cache.
+state-register-kt:
+	@client-android/tools/state-register/run.sh
+	@echo "regenerated docs/research/state-register-chat-ui.md"
+
 # Semantic (concept) code search: Nemotron embeddings over CodeGraph nodes,
 # RRF-fused with the FTS lexical arm. Index lives in .codegraph/ (gitignored),
 # incremental by node updated_at. Query: make codesearch Q="재시도 백오프".
