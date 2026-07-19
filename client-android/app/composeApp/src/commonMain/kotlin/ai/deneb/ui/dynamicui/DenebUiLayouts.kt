@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,6 +90,18 @@ internal fun RenderRow(
     depth: Int,
 ) {
     val allStats = node.children.isNotEmpty() && node.children.all { it is StatNode }
+    // longpress="event": press-hold the row to fire the callback (e.g. a
+    // morning-card deadline row → mark done). Interactive rows only; the
+    // combinedClickable long-press haptic fires automatically (foundation 1.9+).
+    val longPress = node.longPressAction as? CallbackAction
+    var rowModifier: Modifier = Modifier.fillMaxWidth().wrapContentHeight()
+    if (isInteractive && longPress != null) {
+        @OptIn(ExperimentalFoundationApi::class)
+        rowModifier = rowModifier.combinedClickable(
+            onClick = {},
+            onLongClick = { onCallback(longPress.event, longPress.dataAsStrings.orEmpty()) },
+        )
+    }
     @OptIn(ExperimentalLayoutApi::class)
     FlowRow(
         // Weighted stat cells own the distribution — SpaceEvenly on top
@@ -95,9 +109,7 @@ internal fun RenderRow(
         // catch on #3231).
         horizontalArrangement = if (allStats) Arrangement.Start else Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight(),
+        modifier = rowModifier,
     ) {
         for (child in node.children) {
             if (allStats) {

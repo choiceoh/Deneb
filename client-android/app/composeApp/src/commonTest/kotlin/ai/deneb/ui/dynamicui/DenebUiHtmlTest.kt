@@ -362,4 +362,16 @@ class DenebUiHtmlTest {
         assertEquals("발신 — 양도현", assertIs<TextNode>(kids[2]).value)
         assertIs<DividerNode>(kids[3])
     }
+    @Test
+    fun `longpress attaches a press-hold callback to a row`() {
+        val row = assertIs<RowNode>(
+            parseUi("""<row longpress="deadline_done" data-path="프로젝트/대한전선"><text>대한전선 마감</text></row>"""),
+        )
+        val action = assertIs<CallbackAction>(row.longPressAction)
+        assertEquals("deadline_done", action.event)
+        assertEquals("프로젝트/대한전선", action.dataAsStrings?.get("path"))
+        // A plain row carries none.
+        val plain = assertIs<RowNode>(parseUi("<row><text>일반</text></row>"))
+        assertEquals(null, plain.longPressAction)
+    }
 }

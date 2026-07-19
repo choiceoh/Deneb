@@ -29,6 +29,10 @@ data class ColumnNode(
 data class RowNode(
     override val id: String? = null,
     @Contextual val children: ImmutableList<DenebUiNode> = persistentListOf(),
+    // Optional press-hold callback (longpress="event" in the wire). The
+    // renderer binds it via combinedClickable onLongClick when interactive —
+    // e.g. long-press a morning-card deadline row to mark it done.
+    val longPressAction: UiAction? = null,
 ) : DenebUiNode
 
 @Immutable
@@ -58,6 +62,8 @@ data class TextNode(
     val bold: Boolean? = null,
     val italic: Boolean? = null,
     val color: String? = null,
+    // Optional press-hold callback (longpress="event" in the wire).
+    val longPressAction: UiAction? = null,
 ) : DenebUiNode
 
 /**

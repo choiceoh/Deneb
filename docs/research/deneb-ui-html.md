@@ -118,6 +118,13 @@
 
 ## 액션 속성 (button · countdown)
 
+**롱프레스 액션 (모든 노드)**: `longpress="이벤트명"`(+ `data-*="…"`)는 노드에
+press-hold 콜백을 단다 — 탭 `event=`와 별개(한 노드가 둘 다 가질 수 있음).
+렌더러는 `row`/`text`에 바인딩(네이티브 combinedClickable onLongClick·데스크톱
+~500ms 프레스홀드). 인터랙티브 카드에서만 발사. 예: 모닝 카드 마감 `<row>`를
+길게 눌러 완료 처리(`longpress="deadline_done" data-path="위키경로"`).
+
+
 | 속성 | UiAction | 비고 |
 |---|---|---|
 | `event="이벤트명"` | callback | `data-*="…"` → data 맵, `collect="id1,id2"` → collectFrom |
