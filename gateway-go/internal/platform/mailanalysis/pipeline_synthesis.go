@@ -465,6 +465,7 @@ func projectSelectionSuffix(candidates []ProjectCandidate) string {
 	sb.WriteString("아래는 위키에 등록된 프로젝트다. 이 이메일과 직접 관련된 프로젝트가 있으면, ")
 	sb.WriteString("응답의 가장 마지막 줄에 정확히 다음 형식으로 경로만 나열하라:\n")
 	sb.WriteString("RELATED_PROJECTS: <경로1>, <경로2>\n")
+	sb.WriteString("한 메일이 여러 프로젝트에 걸치면(복수 현장 견적·통합 발주·공유 자재 등) 해당 프로젝트를 모두 나열하라(최대 3, 관련 강한 순). ")
 	sb.WriteString("관련 프로젝트가 없으면 그 줄을 아예 생략하라. 목록에 없는 경로는 절대 만들지 마라.\n\n")
 	for _, c := range candidates {
 		sb.WriteString("- ")
