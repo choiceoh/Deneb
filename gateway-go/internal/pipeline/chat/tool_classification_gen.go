@@ -11,6 +11,7 @@ package chat
 // mutating/read-only split lives in an argument (wiki, calendar, todo, ...)
 // stay suppressed entirely.
 var dryRunSafeTools = map[string]struct{}{
+	"code_search":    {},
 	"fetch_tools":    {},
 	"grep":           {},
 	"read":           {},
@@ -29,6 +30,7 @@ var dryRunSafeTools = map[string]struct{}{
 // serial waits — web+web research turns alone ran 50s+ that parallel
 // execution halves.
 var parallelSafeTools = map[string]struct{}{
+	"code_search":    {},
 	"contacts":       {},
 	"grep":           {},
 	"knowledge":      {},
