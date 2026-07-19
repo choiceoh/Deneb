@@ -129,6 +129,14 @@ type Frontmatter struct {
 	// values auto-upgrade (모듈→기자재/모듈, 시공·개발→태양광), and a bare
 	// parent folds away when its child is present. 대표페이지 전용.
 	Kinds []string
+	// Program groups sibling deal folders that are workstreams of ONE larger
+	// venture (예: 비금 130.9MW = 케이블 조달 + 커넥터 + EPC가 별개 폴더) —
+	// a cross-cutting axis like Client, one level below it: Client groups by
+	// counterparty, Program by venture. Free-form short Korean slug (예:
+	// "비금-130mw"); identical values ARE the grouping key, so reuse the
+	// existing spelling when joining an existing program (검색으로 확인).
+	// Project 대표페이지 전용; empty = standalone deal (대부분의 프로젝트).
+	Program string
 	// Stage is the project's business lifecycle stage on the 대표페이지 —
 	// fixed vocabulary 제안 → 견적 → 입찰 → 개발 → 계약협의 → 시공/납품 → 운영,
 	// with 종결/유실 as terminal states (operator-confirmed 2026-07-19/20).
@@ -257,6 +265,9 @@ func (p *Page) Render() []byte {
 	}
 	if stage := normalizeStage(p.Meta.Stage); stage != "" {
 		buf.WriteString("stage: " + stage + "\n")
+	}
+	if program := strings.TrimSpace(p.Meta.Program); program != "" {
+		buf.WriteString("program: " + sanitizeScalar(program) + "\n")
 	}
 	if p.Meta.Capacity > 0 {
 		buf.WriteString("capacity: " + strconv.FormatFloat(p.Meta.Capacity, 'g', -1, 64) + "\n")
@@ -688,6 +699,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Kinds = normalizeKinds(parseFlowArray(val))
 		case "stage":
 			fm.Stage = normalizeStage(val)
+		case "program":
+			fm.Program = strings.TrimSpace(val)
 		case "capacity":
 			fm.Capacity, _ = strconv.ParseFloat(strings.TrimSpace(val), 64) // best-effort: defaults to zero
 		case "address":

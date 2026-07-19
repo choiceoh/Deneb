@@ -112,6 +112,11 @@ type Store struct {
 	// unchanged — a write/delete during a slow build must not reinstall a
 	// pre-mutation snapshot (e.g. a wiki_forget followed by recall).
 	graphGen uint64
+
+	// aliasCache memoizes project folder → rep-title display aliases for the
+	// code-keyed folder pivot (display_alias.go). Invalidated by generation
+	// comparison against graphGen — no extra bookkeeping on the write path.
+	aliasCache projectAliasCache
 }
 
 // SearchOptions fixes search-time inputs that production normally obtains
