@@ -29,7 +29,7 @@ Four agents share the codegraph and hook infrastructure:
 | **ZCode** | `.zcode/config.json` | `~/.zcode/worktrees/Deneb/` | `zcode/` |
 | **Cursor** | `.cursor/hooks.json` + `.cursor/mcp.json` | `~/.cursor/worktrees/Deneb/` | `cursor/` |
 | **Claude Code** | `.claude/settings.json` | native `EnterWorktree` | `claude/` |
-| **Codex** | `~/.codex/hooks.json` + `config.toml` | `~/.codex/worktrees/` | `codex/` | <!-- docref:ignore -->
+| **Codex** | `~/.codex/hooks.json` + `config.toml` | `~/.codex/worktrees/` | `codex/` <!-- docref:ignore --> |
 
 All four auto-connect the `codegraph` MCP server and share the same sync / rules-gate / nudge / remind scripts — ensuring consistent code intelligence across agents without duplication.
 

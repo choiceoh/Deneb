@@ -119,7 +119,7 @@ scripts/dev/native-app.sh shot home    # 홈 데이터가 차 있으면 인증 �
 | **타이핑이 안 들어감**(필드 포커스는 됨) | WM 없으면 X포커스↔Compose필드포커스 어긋남 | matchbox WM 필수(스크립트가 기동). `ensure_focus`가 이미 포커스면 windowfocus 생략 |
 | 기동 실패 `errno=12 ENOMEM` | strict overcommit(`vm.overcommit_memory=2`), 앱 기본힙 32GB | `-Xmx1024m` 캡(적용됨). 데몬 죽이지 말 것(`/proc/meminfo` 헤드룸 확인) |
 | 창이 1280×800에 멈춤 | Compose가 첫 컴포지션에 WindowState 재적용 | `force_geometry` 재확인 루프(적용됨). `start` 재실행으로 self-heal |
-| 스크립트가 조용히 죽음 | `set -e`+`pipefail`에서 `xdotool/pgrep` no-match exit1이 `x="$(…)"` 할당을 즉사 | 헬퍼에 `\|\| true` 필수(`app_wid`/`xvfb_pid`/`wm_pid` 적용됨) | <!-- docref:ignore -->
+| 스크립트가 조용히 죽음 | `set -e`+`pipefail`에서 `xdotool/pgrep` no-match exit1이 `x="$(…)"` 할당을 즉사 | 헬퍼에 `\|\| true` 필수(`app_wid`/`xvfb_pid`/`wm_pid` 적용됨) <!-- docref:ignore --> |
 | 첫 화면이 검은 띠/토글 누락 | shot이 정착 직전 transient | 잠깐 뒤 다시 `shot`, 또는 `start` 재실행(geometry 재적용) |
 | 검정 화면만 | GL 없는 Xvfb에 하드웨어 렌더 시도 | `-Dskiko.renderApi=SOFTWARE`(적용됨) |
 

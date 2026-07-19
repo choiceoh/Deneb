@@ -218,7 +218,7 @@ Assets: `/modules/personal/asset-manifest.json`, `/modules/human/asset-manifest.
 
 | Gap | Notes |
 |-----|-------|
-| **조직도 / 부서 트리 API** | No dedicated dept/org-tree POST found. `ApAperUserCode` helpTy aliases ≠ dept list. Affiliation = person detail `divNm`/`deptNm` + Deneb `org.json`. | <!-- docref:ignore -->
+| **조직도 / 부서 트리 API** | No dedicated dept/org-tree POST found. `ApAperUserCode` helpTy aliases ≠ dept list. Affiliation = person detail `divNm`/`deptNm` + Deneb `org.json`. <!-- docref:ignore --> |
 | 주소록 `HPM0310` list body | Menu present; `/personal/hpm0310/0hp00001` 404 — real op names still in lazy chunks / need Playwright capture |
 | `hpd0220` / `hrd0250` full filter body | Date keys alone insufficient |
 | Wire leave/attendance into chat | Not yet — candidates: personal leave `hpd0550`, company leave `hrd0570` (permission-sensitive) |
@@ -244,7 +244,7 @@ Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/mo
 
 | Gap | Notes |
 |-----|-------|
-| `aca2010/getList` request body | Screen loads helpers only; 조회 click did not emit list POST with dates | <!-- docref:ignore -->
+| `aca2010/getList` request body | Screen loads helpers only; 조회 click did not emit list POST with dates <!-- docref:ignore --> |
 | `ACA3010` 경비전표 | Direct hash bounced to `#/` |
 | `ACN4000` 프로젝트 list API | Need leaf navigation + network capture |
 | `BSB0020` 거래처단가 | Hash opened; no business POST captured |
