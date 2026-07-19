@@ -94,7 +94,7 @@ func TestApplyUpdates_Guards(t *testing.T) {
 	}
 	wd := NewWikiDreamer(store, nil, "", Config{Enabled: true}, slog.Default())
 
-	created, updated, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{
+	created, updated, _, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{
 		{
 			Action: "create", Path: "프로젝트/당진-솔라빌리지/대표.md", Title: "당진 솔라빌리지",
 			Category: "프로젝트", Type: "entity", Confidence: "high",
@@ -139,7 +139,7 @@ func TestApplyUpdates_CountsUserModelPages(t *testing.T) {
 	}
 	wd := NewWikiDreamer(store, nil, "", Config{Enabled: true}, slog.Default())
 
-	created, updated, userPages, _ := wd.applyUpdates(context.Background(), []wikiUpdate{
+	created, updated, userPages, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{
 		{
 			Action: "create", Path: "사용자/보고-형식-선호.md", Title: "보고 형식 선호",
 			Category: "사용자", Type: "concept", Confidence: "high",
@@ -157,7 +157,7 @@ func TestApplyUpdates_CountsUserModelPages(t *testing.T) {
 		t.Fatalf("userPages=%d, want 1 (사용자 write only)", userPages)
 	}
 
-	created, updated, userPages, _ = wd.applyUpdates(context.Background(), []wikiUpdate{{
+	created, updated, userPages, _, _ = wd.applyUpdates(context.Background(), []wikiUpdate{{
 		Action: "update", Path: "선호/보고-형식-선호.md", Title: "보고 형식 선호",
 		Category: "선호", Content: "상세 보고 선호로 전환 — 2026-07-09 갱신 근거 줄입니다.",
 	}})
@@ -239,7 +239,7 @@ func TestApplyUpdates_UpdateFallbackDedup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, updated, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
+	created, updated, _, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
 		Action: "update", Path: "프로젝트/해밀고흥-솔라팜모듈/대표.md", ID: "haemil-solar",
 		Title: "해밀고흥솔라팜 모듈", Category: "프로젝트", Content: "새 진행 사실이 추가되는 줄입니다.",
 	}})
@@ -272,7 +272,7 @@ func TestApplyUpdates_LogReroutesAfterDedup(t *testing.T) {
 	// A slug-variant create carrying a 진행 로그 section: the dedup retarget
 	// must run FIRST so the rerouted log lands under the real project folder,
 	// not a duplicate one named after the proposed path.
-	created, updated, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
+	created, updated, _, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
 		Action: "create", Path: "프로젝트/해밀고흥-솔라팜모듈/대표.md", ID: "haemil-solar",
 		Title: "해밀고흥솔라팜 모듈", Category: "프로젝트",
 		Content: "요약 갱신 내용입니다.\n\n## 진행 로그\n- 2026-07-03: 모듈 납기 확정",
@@ -315,7 +315,7 @@ func TestApplyUpdates_PreservesBatchPartialSuccessOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, updated, userPages, oversized := wd.applyUpdates(context.Background(), []wikiUpdate{
+	created, updated, userPages, oversized, _ := wd.applyUpdates(context.Background(), []wikiUpdate{
 		{
 			Action: "create", Path: failedRep, Title: "실패프로젝트",
 			Category: "프로젝트", Supersedes: flexStringList{"업무/기존.md"},

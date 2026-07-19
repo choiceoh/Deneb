@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -282,6 +283,7 @@ type wikiResearchCandidate struct {
 	lastRun    int64 // unix millis this task last refreshed it; 0 = never
 	skeleton   bool  // layout-migration mint (wiki.RepSkeletonMarker) awaiting backfill
 	noStatus   bool  // 현재 상태 section empty — the 2026-07 audit's top gap (57%)
+	activity   int   // raw-data pages (메일분석/자료/회의록) newer than the rep's updated: date
 }
 
 // selectTarget picks the project page most overdue for a refresh: never-refreshed
@@ -321,6 +323,7 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			lastRun:    state.Researched[p],
 			skeleton:   strings.Contains(page.Body, wiki.RepSkeletonMarker),
 			noStatus:   strings.TrimSpace(page.Section("현재 상태")) == "",
+			activity:   t.rawDataActivity(p, page.Meta.Updated),
 		})
 	}
 	if len(cands) == 0 {
@@ -337,6 +340,15 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			// nothing — filling these first is the fastest quality win
 			// (2026-07-05 audit: 57% of live projects had none).
 			return cands[i].noStatus
+		}
+		// Freshness SLO (2026-07-19): a rep page whose folder keeps receiving
+		// raw data (new 메일분석/자료/회의록 since its updated: date) is rotting
+		// in public — its summary is what every recall anchor injects. High
+		// activity jumps the round-robin; the bucket comparison (3+) keeps a
+		// noisy folder from monopolizing every cycle.
+		ai, aj := cands[i].activity, cands[j].activity
+		if (ai >= 3) != (aj >= 3) {
+			return ai >= 3
 		}
 		if cands[i].lastRun != cands[j].lastRun {
 			return cands[i].lastRun < cands[j].lastRun // never/least-recently refreshed first
@@ -385,6 +397,9 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
    - client(거래처): 내부 소스에서 발주처/계약 상대가 확인되는데 client가 비어 있으면 계열사 단위 정식명 1개로 기입하세요 (예: "기아", "현대차", "LG전자", "금호타이어" — 그룹명·㈜ 등 법인 접미어 금지). 이미 있으면 유지, 자체 개발 등 거래처 없는 사업이거나 불확실하면 비워둠(추측 금지)
    - sites(현장): 내부 소스에서 현장 위치가 확인되는데 sites가 비어 있으면 고정 규칙 "광역약칭 시/군 읍/면/동 [리]"(예: "전북 군산시 옥구읍 수산리")로 기입하세요. 이미 있으면 유지, 불확실하면 비워둠(추측 금지)
    - kinds(특성): 비어 있으면 2단 체계 "1차/2차"로 기입하세요 — 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차: 토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(모듈/인버터/케이블/기타), 풍력(육상/해상), 기타(용역/협력). 2차가 불명확하면 1차만, 1차만 있는 기존 값에 2차가 확인되면 세분화(예: 태양광 → 태양광/루프탑). 명백한 것만(추측 금지)
+   - stage(단계): 내부 소스에서 사업 단계가 확인되면 고정 어휘 하나로 기입/갱신하세요 — 제안 → 견적 → 입찰 → 계약협의 → 시공 → 운영 (진행 순), 종결/유실 (말단). 진행 신호 예: 견적서 송부=견적, 입찰/적격심사=입찰, 계약서 검토·날인·PF=계약협의, 착공·자재 반입=시공, 준공·O&M=운영, 중단 결정·불참 종결=유실/종결. 기존 값보다 후행 단계 증거가 나오면 갱신, 불확실하면 두세요(추측 금지)
+   - 현장문서 게이트: stage가 제안·견적·입찰이면 대표페이지에 현장 상세 섹션(주소 목록·현장 스펙 문단)을 만들지 마세요 — sites 메타데이터 한 줄까지만. 계약협의 이상 또는 기존 O&M 자산부터 상세 문서가 값어치를 합니다
+   - 증거 함정(sites/client 판정 시): ①메일 서명 블록의 주소는 발신자 회사 소재지이지 현장이 아닙니다 ②견적서의 공급자란 주소는 탑솔라 본사(전남 나주시)입니다 ③"~공장 가배치" 메일의 현장은 그 공장이지 우리측 조직이 아닙니다 — 본문에서 현장으로 명시된 주소만 채택하세요
 4. 대상 페이지의 "## 미해결 질문" 섹션을 관리합니다:
    - 내부 소스를 다 뒤져도 답을 못 찾은, 이 프로젝트 진행에 실제로 중요한 질문이 있으면 "- YYYY-MM-DD 질문" 형식 불릿으로 추가 (섹션 전체 최대 5개, 이미 있는 질문과 중복 금지, 사소한 질문은 넣지 않음)
    - 이번 리서치에서 답이 확인된 기존 질문은 섹션에서 제거하고 답을 본문에 반영하되, 로그.md에 '## [YYYY-MM-DD] 질문해결 | <질문 요지>' 섹션으로 답과 근거([[페이지]] 링크)를 함께 남기세요 — 질문이 흔적 없이 증발하면 안 됩니다
@@ -394,6 +409,39 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
 
 이것은 사용자에게 보내는 응답이 아니라 백그라운드 메모리 유지보수 작업입니다. 사용자에게 알리지 마세요.`)
 	return b.String()
+}
+
+// rawDataActivity counts raw-data pages (메일분석/자료/회의록) in the rep page's
+// project folder whose file mtime is newer than the rep's updated: date — the
+// freshness-SLO signal: how much evidence has piled up since the summary was
+// last rewritten. Best-effort: unparseable dates or a flat legacy path count
+// as zero (never blocks selection).
+func (t *wikiResearchTask) rawDataActivity(repPath, updated string) int {
+	folder, ok := wiki.ProjectFolderOf(repPath)
+	if !ok {
+		return 0
+	}
+	cutoff, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(updated), time.Local)
+	if err != nil {
+		return 0
+	}
+	cutoff = cutoff.AddDate(0, 0, 1) // pages written the same day are not "since"
+	count := 0
+	for _, sub := range []string{"메일분석", "자료", "회의록"} {
+		entries, err := os.ReadDir(filepath.Join(t.wikiStore.Dir(), folder, sub))
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			if info, err := e.Info(); err == nil && info.ModTime().After(cutoff) {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func (t *wikiResearchTask) loadState() *wikiResearchState {
