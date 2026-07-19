@@ -29,7 +29,11 @@ import (
 
 // Embedder matches internal/ai/embedding.Client (and filestore's contract).
 type Embedder interface {
+	// Embed uses the passage/default role — indexing path.
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	// EmbedKind carries the retrieval role; Search passes "query" so
+	// asymmetric models (Nemotron) apply their query prefix.
+	EmbedKind(ctx context.Context, kind string, texts []string) ([][]float32, error)
 }
 
 // Entry is one embedded code unit (vector lives in the .vec file at the same
@@ -310,7 +314,7 @@ func Search(ctx context.Context, dir string, emb Embedder, query string, topK in
 		return nil, err
 	}
 	query = expandQuery(query)
-	qv, err := emb.Embed(ctx, []string{query})
+	qv, err := emb.EmbedKind(ctx, "query", []string{query})
 	if err != nil || len(qv) != 1 {
 		return nil, fmt.Errorf("query embed failed: %w", err)
 	}
@@ -417,6 +421,29 @@ var koEnSynonyms = map[string][]string{
 	"스트리밍": {"stream", "sse"},
 	"업로드":  {"upload"},
 	"다운로드": {"download", "fetch"},
+	"텔레그램": {"telegram"},
+	"슬랙":   {"slack"},
+	"브라우저": {"browser"},
+	"본문":   {"content", "article", "readability", "body"},
+	"유튜브":  {"youtube"},
+	"자막":   {"transcript", "caption", "subtitle"},
+	"파싱":   {"parse", "parser"},
+	"렌더링":  {"render"},
+	"스크린샷": {"screenshot", "capture"},
+	"북마크":  {"bookmark"},
+	"스크롤":  {"scroll"},
+	"로그인":  {"login"},
+	"백업":   {"backup"},
+	"필터":   {"filter"},
+	"라우팅":  {"route", "routing"},
+	"프록시":  {"proxy"},
+	"녹음":   {"recording", "audio"},
+	"회의록":  {"meeting", "plaud"},
+	"요약":   {"summary", "summarize"},
+	"번역":   {"translate"},
+	"날씨":   {"weather"},
+	"주가":   {"stock", "market"},
+	"환율":   {"exchange", "currency", "fx"},
 }
 
 // expandQuery appends English domain anchors for any Korean term present.

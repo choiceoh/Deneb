@@ -24,6 +24,10 @@ var goldset = []struct {
 	{"프롬프트 캐시 컴팩션", []string{"compact", "prompt_cache"}},
 	{"작업 피드 카드 생성", []string{"workfeed"}},
 	{"스킬 자동 진화 심사", []string{"genesis/evolver", "skills/genesis"}},
+	// held-out 유래(순환 튜닝 감시용): 최초 튜닝에 쓰지 않은 질의를 회귀로 고정.
+	{"유튜브 자막 추출", []string{"youtube"}},
+	{"크론 잡 실행 스케줄", []string{"cron"}},
+	{"환율 시세 조회", []string{"morning", "market", "money"}},
 }
 
 func runBench(ctx context.Context, dir string, emb codesearch.Embedder) {
