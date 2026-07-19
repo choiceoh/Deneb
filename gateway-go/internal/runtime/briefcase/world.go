@@ -552,7 +552,7 @@ func fileEqualsBytesContext(ctx context.Context, path string, expected []byte) (
 
 // StateJSON is a stable minimal state projection suitable for deterministic
 // state checks. Source contents are deliberately excluded.
-func (w *World) StateJSON() rawJSON {
+func (w *World) StateJSON() json.RawMessage {
 	state := struct {
 		Now              time.Time `json:"now"`
 		VisibleSourceIDs []string  `json:"visibleSourceIds"`

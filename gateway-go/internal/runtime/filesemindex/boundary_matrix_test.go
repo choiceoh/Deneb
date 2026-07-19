@@ -395,7 +395,6 @@ func TestFileSemindexConcurrentDegradedBoundaries(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for worker := 0; worker < workers; worker++ {
-		worker := worker
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -403,7 +402,7 @@ func TestFileSemindexConcurrentDegradedBoundaries(t *testing.T) {
 				query := fmt.Sprintf("q-%d-%d", worker, i)
 				hits, err := svc.Search(context.Background(), query, i)
 				if err != nil || len(hits) != 0 {
-					errs <- fmt.Errorf("search worker=%d i=%d hits=%v err=%v", worker, i, hits, err)
+					errs <- fmt.Errorf("search worker=%d i=%d hits=%v err=%w", worker, i, hits, err)
 					return
 				}
 				if got := fileServerModifiedMillis("2026-07-11T08:15:30Z"); got == 0 {

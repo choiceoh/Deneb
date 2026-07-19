@@ -97,11 +97,9 @@ func parseAnchorParties(header string) []anchorParty {
 			// party line, the exact inversion this anchor exists to prevent.
 			continue
 		}
-		name := frag
+		name := ""
 		if i := strings.IndexByte(frag, '<'); i >= 0 {
 			name = strings.TrimSpace(frag[:i])
-		} else {
-			name = ""
 		}
 		out = append(out, anchorParty{name: strings.Trim(name, `"`), addr: addr})
 	}

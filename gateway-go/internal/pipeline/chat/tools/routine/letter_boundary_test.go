@@ -3,6 +3,7 @@ package routine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,7 +33,6 @@ func TestCollectLetterSectionsRunsConcurrentlyAndPreservesSlots(t *testing.T) {
 	release := make(chan struct{})
 	collectors := make([]letterCollector, 0, 3)
 	for index := 0; index < 3; index++ {
-		index := index
 		collectors = append(collectors, letterCollector{
 			index: index,
 			load: func(context.Context) any {
@@ -92,7 +92,8 @@ func TestCollectLetterSectionsPropagatesParentCancellation(t *testing.T) {
 
 	select {
 	case got := <-done:
-		if len(got) != 1 || got[0] != context.Canceled {
+		err, ok := got[0].(error)
+		if len(got) != 1 || !ok || !errors.Is(err, context.Canceled) {
 			t.Fatalf("canceled result = %#v", got)
 		}
 	case <-time.After(2 * time.Second):
@@ -128,7 +129,6 @@ func TestCollectLetterSectionsConcurrentCallsStayIsolated(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, calls)
 	for call := 0; call < calls; call++ {
-		call := call
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

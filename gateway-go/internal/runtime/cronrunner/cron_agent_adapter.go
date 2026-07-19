@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/acp"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"

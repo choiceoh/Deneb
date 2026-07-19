@@ -3,6 +3,7 @@ package artifact
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,7 +32,7 @@ func captureASRRequest(r *http.Request) (capturedASRRequest, error) {
 	}
 	for {
 		part, err := reader.NextPart()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -340,7 +341,6 @@ func TestTranscribeAudioConcurrentMultipartIsolation(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, calls)
 	for i := 0; i < calls; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

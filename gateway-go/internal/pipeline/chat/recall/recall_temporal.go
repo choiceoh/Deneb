@@ -4,8 +4,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
 // recallTemporalBoost multiplies the score of an evidence row whose timestamp
@@ -34,12 +32,6 @@ type recallTemporalRange struct {
 	From int64 // unix milli, inclusive
 	To   int64 // unix milli, inclusive
 	ok   bool
-}
-
-// parseRecallTemporalRange detects an explicit, unambiguous Korean temporal cue
-// in the message and resolves it to a date window on the user's configured zone.
-func parseRecallTemporalRange(message string) recallTemporalRange {
-	return parseRecallTemporalRangeAt(message, dentime.Now())
 }
 
 // parseRecallTemporalRangeAt is parseRecallTemporalRange with an injected clock,

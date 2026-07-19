@@ -3,6 +3,7 @@ package pilot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -280,7 +281,7 @@ func TestCollectStreamNilClosedUnknownAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	blocking := make(chan llm.StreamEvent)
-	if got, err := CollectStream(ctx, blocking); !errorsIs(err, context.Canceled) || got != "" {
+	if got, err := CollectStream(ctx, blocking); !errors.Is(err, context.Canceled) || got != "" {
 		t.Fatalf("cancelled stream = %q/%v", got, err)
 	}
 }
@@ -292,21 +293,6 @@ func mustJSON(t *testing.T, v any) json.RawMessage {
 		t.Fatal(err)
 	}
 	return b
-}
-
-func errorsIs(err, target error) bool {
-	for err != nil {
-		if err == target {
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		u, ok := err.(unwrapper)
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
 }
 
 func TestCollectStreamDeltaAndErrorShapeMatrix(t *testing.T) {

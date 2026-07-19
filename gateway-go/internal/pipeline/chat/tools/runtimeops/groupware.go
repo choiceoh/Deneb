@@ -113,6 +113,7 @@ func ToolGroupware(store *wiki.Store) toolport.ToolFunc {
 
 		folder, ferr := normalizeFolder(p.Folder, action, area)
 		if ferr != nil {
+			//nolint:nilerr // tool contract: user-facing guidance rides the result text, not the error
 			return ferr.Error(), nil
 		}
 

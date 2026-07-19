@@ -17,7 +17,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
-	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
 func quietRPCLogger() *slog.Logger {
@@ -214,11 +213,4 @@ func TestGatewayHubBroadcastDeliversOrReturnsErrorWhenUnavailable(t *testing.T) 
 	if len(sub.received) != 1 || !strings.Contains(string(sub.received[0]), `"event":"hub.event"`) {
 		t.Fatalf("received = %q", sub.received)
 	}
-}
-
-func responseErrorCode(resp *protocol.ResponseFrame) string {
-	if resp == nil || resp.Error == nil {
-		return ""
-	}
-	return resp.Error.Code
 }

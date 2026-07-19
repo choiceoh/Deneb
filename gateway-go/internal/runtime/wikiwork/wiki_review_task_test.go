@@ -99,10 +99,10 @@ func TestWikiReviewRunMergesDuplicateAndIgnoresInventedPath(t *testing.T) {
 		if !strings.Contains(user, "업무/탑솔라-공급-계약.md") {
 			t.Errorf("verdict prompt missing suspect page:\n%s", user)
 		}
-		return fmt.Sprintf(`[
+		return `[
 			{"page":"업무/탑솔라-공급-계약.md","duplicate_of":"업무/탑솔라-공급계약.md","confidence":"high"},
 			{"page":"업무/탑솔라-공급-계약.md","duplicate_of":"업무/없는-문서.md","confidence":"high"}
-		]`), nil
+		]`, nil
 	}
 
 	if err := task.Run(context.Background()); err != nil {

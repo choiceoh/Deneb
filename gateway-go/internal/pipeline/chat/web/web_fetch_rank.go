@@ -300,10 +300,7 @@ func isDeniedYouTubeURL(u *url.URL) bool {
 	default:
 		return false
 	}
-	if media.IsYouTubeURL(u.String()) {
-		return false
-	}
-	return true
+	return !media.IsYouTubeURL(u.String())
 }
 
 var lowQualityFetchPathExact = map[string]struct{}{

@@ -307,10 +307,6 @@ func wikiFieldBoostValue() float64 {
 	return wikiFieldBoost
 }
 
-func searchablePageFields(page *Page) []textsearch.Field {
-	return searchablePageFieldsWithBoost(page, wikiFieldBoostValue())
-}
-
 func searchablePageFieldsWithBoost(page *Page, boost float64) []textsearch.Field {
 	if page == nil {
 		return nil
@@ -1181,13 +1177,6 @@ func rrfGraphWeightValue() float64 {
 // normalization the additive priors accrue as sources grow. The env read is the
 // same runtime-override pattern as the floor knobs, so a bench scores both from
 // one binary and an operator can roll back without a rebuild.
-func fuseSearchResults(bm25, sem []SearchResult, graphPaths []string, limit int, commonOnlyQuery bool) []SearchResult {
-	if os.Getenv("DENEB_WIKI_FUSION") == "additive" {
-		return mergeSearchResults(bm25, sem, limit, commonOnlyQuery)
-	}
-	return mergeSearchResultsRRF(bm25, sem, graphPaths, limit, commonOnlyQuery)
-}
-
 // mergeSearchResultsRRF fuses the lexical and semantic rankings by Reciprocal
 // Rank Fusion: a page's score is Σ 1/(rrfK + rank) over the rankings it appears
 // in (rank is 1-based position in each already-sorted candidate list). Unlike

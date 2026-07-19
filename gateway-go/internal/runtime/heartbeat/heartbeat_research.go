@@ -113,6 +113,7 @@ func scanWikiNewData(wikiDir string, since time.Time) wikiNewDataDigest {
 	dig := wikiNewDataDigest{analysesByProject: map[string]int{}}
 	_ = filepath.WalkDir(wikiDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			//nolint:nilerr // best-effort scan: returning the error would abort the whole walk
 			return nil
 		}
 		if d.IsDir() {
@@ -126,10 +127,12 @@ func scanWikiNewData(wikiDir string, since time.Time) wikiNewDataDigest {
 		}
 		info, ierr := d.Info()
 		if ierr != nil || !info.ModTime().After(since) {
+			//nolint:nilerr // best-effort scan: skip unreadable entries, keep walking
 			return nil
 		}
 		rel, rerr := filepath.Rel(wikiDir, path)
 		if rerr != nil {
+			//nolint:nilerr // best-effort scan: skip unresolvable paths, keep walking
 			return nil
 		}
 		parts := strings.Split(filepath.ToSlash(rel), "/")

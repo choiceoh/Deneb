@@ -99,7 +99,8 @@ func TestProcessReturnsStatusForEachOutcome(t *testing.T) {
 
 func TestProcessPreservesRawBytesAndContext(t *testing.T) {
 	raw := rawContractMail("raw", "line one\r\nline two")
-	ctxKey := struct{}{}
+	type ctxKeyType struct{}
+	ctxKey := ctxKeyType{}
 	ctx := context.WithValue(context.Background(), ctxKey, "value")
 	var got *Message
 	s := New("unused", func(handlerCtx context.Context, msg *Message) error {

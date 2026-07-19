@@ -217,6 +217,7 @@ func fetchXTweet(ctx context.Context, rawURL, id string, maxChars int) (string, 
 
 	var tw xTweet
 	if json.Unmarshal(body, &tw) != nil {
+		//nolint:nilerr // tool contract: fetch failures render as result text for the model
 		return xUnavailable(rawURL, "could not parse syndication response"), nil
 	}
 	if tw.Typename == "TweetTombstone" || strings.TrimSpace(tw.Text) == "" {

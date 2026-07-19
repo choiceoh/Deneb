@@ -117,10 +117,6 @@ func (c *Client) validToken(ctx context.Context) (string, error) {
 	return c.tokens.ValidToken(ctx, tokenURL)
 }
 
-func (c *Client) persistToken() {
-	c.tokens.Persist()
-}
-
 func (c *Client) doAPI(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
 	return googleoauth.DoBearer(ctx, c.httpClient, c.validToken, apiBase, method, path, body)
 }

@@ -242,7 +242,6 @@ func TestConcurrentStoresSamePathDoNotLoseUpdates(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, count)
 	for i := 0; i < count; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

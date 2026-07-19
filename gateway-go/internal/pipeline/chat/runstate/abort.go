@@ -249,7 +249,7 @@ func (at *AbortTracker) CancelByRunID(runID string) (sessionKey, abortedRunID st
 		delete(at.entries, runID)
 		at.signalDrainedLocked()
 	}
-	return
+	return sessionKey, abortedRunID
 }
 
 // CancelBySessionKey cancels the first matching run for a session.
@@ -274,7 +274,7 @@ func (at *AbortTracker) CancelBySessionKeyWithCause(sessionKey string, cause err
 		}
 	}
 	at.signalDrainedLocked()
-	return
+	return abortedRunID
 }
 
 // Close stops the GC loop and cancels all active entries.

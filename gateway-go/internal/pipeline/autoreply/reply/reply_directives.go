@@ -3,7 +3,7 @@ package reply
 
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/mediatokens"
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 

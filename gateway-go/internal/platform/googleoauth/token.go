@@ -6,6 +6,7 @@ package googleoauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -312,8 +313,8 @@ func Persist(service, tokenPath string, token Token) error {
 		return nil
 	}
 
-	persistErr, ok := err.(*PersistError)
-	if !ok {
+	var persistErr *PersistError
+	if !errors.As(err, &persistErr) {
 		slog.Error(service+" token persist failed — refresh token may be stale on restart",
 			"tokenPath", tokenPath, "error", err)
 		return err

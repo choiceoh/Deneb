@@ -160,18 +160,6 @@ func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent
 // parser whose buffer fills after the protocol translator has observed a
 // terminal event can remain blocked forever even after the response body is
 // closed: closing a reader only interrupts reads, not a channel send.
-func sendSSE(ctx context.Context, ch chan<- StreamEvent, event StreamEvent) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	select {
-	case ch <- event:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
-
 // startSSEPipeline owns the common streaming lifecycle shared by OpenAI and
 // Anthropic modes: response-body cancellation, raw SSE parsing, translation,
 // and deterministic cleanup. A pipeline-local parser context is canceled when

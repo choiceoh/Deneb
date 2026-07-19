@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,10 +12,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
-
-func quietRPCLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
 
 func responseErrorCode(resp *protocol.ResponseFrame) string {
 	if resp == nil || resp.Error == nil {

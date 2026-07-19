@@ -742,7 +742,7 @@ func formatCodeActionResult(stdout, stderr string, runErr, ctxErr error) string 
 
 // CodeActionSchema is the input schema (defined in Go, like fetch_tools, since
 // code_action is registered in toolreg_core.go and not via tool_schemas.json).
-func CodeActionSchema() jsonObject {
+func CodeActionSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{

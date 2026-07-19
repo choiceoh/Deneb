@@ -88,7 +88,7 @@ func TestNewContractAdditional(t *testing.T) {
 	if _, err := New(context.Background(), []string{}, nil); err == nil {
 		t.Fatal("empty slice accepted")
 	}
-	c, err := New(nil, []string{"server", "--flag"}, nil)
+	c, err := New(nil, []string{"server", "--flag"}, nil) //nolint:staticcheck // contract under test: New must default a nil context
 	if err != nil {
 		t.Fatal(err)
 	}

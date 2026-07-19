@@ -216,7 +216,7 @@ func (c *imapConn) uidSearchSentAware(criteria string) ([]string, error) {
 	}
 	uids, err2 := c.uidSearch(stripped)
 	if err2 != nil {
-		return nil, fmt.Errorf("%w (sent-date fallback also failed: %v)", err, err2)
+		return nil, fmt.Errorf("%w (sent-date fallback also failed: %w)", err, err2)
 	}
 	return uids, nil
 }

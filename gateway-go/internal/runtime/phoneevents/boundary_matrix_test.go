@@ -687,7 +687,6 @@ func TestPhoneEventPureBoundariesConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for worker := 0; worker < workers; worker++ {
-		worker := worker
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

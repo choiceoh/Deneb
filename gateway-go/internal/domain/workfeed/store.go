@@ -27,7 +27,7 @@ const (
 	// glyph (native sourcePainter else-branch — no icon map change needed).
 	SourceDocAnalysis = "doc_analysis"
 	// SourceGroupwareApproval is an Amaranth e-approval card with 승인/반려 chips.
-	SourceGroupwareApproval = "groupware-approval"
+	SourceGroupwareApproval = "groupware-approval" //nolint:gosec // feed-source kind label, not a credential
 	// SourceGroupwareBoard is an important Amaranth notice surfaced read-only.
 	SourceGroupwareBoard = "groupware-board"
 

@@ -267,7 +267,6 @@ func TestVerdictsConcurrentCopies(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for i := 0; i < workers; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -62,7 +62,7 @@ func TestAbortTrackerCancelByRunIDAndCleanup(t *testing.T) {
 	if session != "client:main" || run != "run-1" {
 		t.Fatalf("CancelByRunID = (%q, %q)", session, run)
 	}
-	if context.Cause(ctx) != context.Canceled {
+	if !errors.Is(context.Cause(ctx), context.Canceled) {
 		t.Fatalf("cancellation cause = %v, want context.Canceled", context.Cause(ctx))
 	}
 	if session, run = tracker.CancelByRunID("run-1"); session != "" || run != "" {
@@ -106,7 +106,7 @@ func TestAbortTrackerConcurrentRegisterAndInterrupt(t *testing.T) {
 		t.Fatal("InterruptSession left active runs")
 	}
 	for i, ctx := range contexts {
-		if context.Cause(ctx) != context.Canceled {
+		if !errors.Is(context.Cause(ctx), context.Canceled) {
 			t.Errorf("run %d cause = %v, want context.Canceled", i, context.Cause(ctx))
 		}
 	}
@@ -119,7 +119,7 @@ func TestAbortTrackerCloseIsIdempotent(t *testing.T) {
 
 	tracker.Close()
 	tracker.Close()
-	if context.Cause(ctx) != context.Canceled {
+	if !errors.Is(context.Cause(ctx), context.Canceled) {
 		t.Fatalf("Close cancellation cause = %v", context.Cause(ctx))
 	}
 	if tracker.CountForSession("client:main") != 0 {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -100,7 +101,7 @@ func (s *Server) logApprovalAnalysisToWiki(rec *groupware.ApprovalAnalysisRecord
 		cur.Meta.Updated = today
 		return cur, nil
 	})
-	if err != nil && err != errApprovalLogDuplicate && s.logger != nil {
+	if err != nil && !errors.Is(err, errApprovalLogDuplicate) && s.logger != nil {
 		s.logger.Warn("approval analysis wiki log failed", "docId", docID, "project", project, "error", err)
 	}
 	if err == nil && s.logger != nil {
@@ -125,11 +126,11 @@ func (s *Server) appendApprovalStatusToProject(repPath, title, ref string) {
 
 // errApprovalLogDuplicate aborts UpdatePage without a warning — the section is
 // already there (analysis rerun / force refresh).
-var errApprovalLogDuplicate = errSentinel("approval log already recorded")
+var errApprovalLogDuplicate = sentinelError("approval log already recorded")
 
-type errSentinel string
+type sentinelError string
 
-func (e errSentinel) Error() string { return string(e) }
+func (e sentinelError) Error() string { return string(e) }
 
 // approvalAnalysisExcerpt keeps the gist: machine trailers (IMPORTANCE /
 // PROJECT_FILE) drop, and the remainder is rune-bounded.

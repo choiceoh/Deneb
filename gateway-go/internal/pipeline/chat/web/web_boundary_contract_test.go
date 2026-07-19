@@ -419,7 +419,9 @@ func TestLocalAIExtractorLoadsEnvAndCachesAvailability(t *testing.T) {
 	}))
 	defer server.Close()
 	extractor := &LocalAIExtractor{client: server.Client(), baseURL: server.URL, apiKey: "test-key", model: "test"}
-	if !extractor.available() || !extractor.available() {
+	// Two calls on purpose: the second must be served from the cached probe.
+	first, second := extractor.available(), extractor.available()
+	if !first || !second {
 		t.Fatal("healthy local AI reported unavailable")
 	}
 	if requests.Load() != 1 {

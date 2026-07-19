@@ -381,7 +381,7 @@ func TestConcurrentRecordCallsExactTotals(t *testing.T) {
 		for iteration := 0; iteration < iterations; iteration++ {
 			want[(worker+iteration)%providers]++
 		}
-		worker := worker
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -449,7 +449,6 @@ func TestConcurrentMixedRecordAndSnapshotOperations(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for writer := 0; writer < writers; writer++ {
-		writer := writer
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -510,7 +509,6 @@ func TestProviderKeysRemainDistinctUnderConcurrency(t *testing.T) {
 	const iterations = 1000
 	var wg sync.WaitGroup
 	for _, key := range keys {
-		key := key
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
