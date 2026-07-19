@@ -79,6 +79,81 @@ func TestMetaEvolution_ProducerDropsWithoutShadowGenerator(t *testing.T) {
 // The deterministic contract gate is what stands between an LLM proposal and
 // the .proposed file — it must reject schema-breaking, oversized, and no-op
 // revisions regardless of how plausible the prose reads.
+// A skip cycle carries no bench by default; with DENEB_META_BENCH_ON_SKIP=1
+// (set by the P5-2 calibration drop-in) it benches the INCUMBENT alone so the
+// calibration ladder keeps accumulating per-epoch samples even when the
+// producer has nothing to propose. The cycle must stay a skip either way —
+// the incumbent-only run is measurement, never a gate input.
+func TestMetaEvolution_SkipCycleBenchesIncumbentOnlyWhenCalibrationKnobSet(t *testing.T) {
+	run := func(t *testing.T, knob bool) MetaRevisionRecord {
+		t.Helper()
+		t.Setenv("HOME", t.TempDir())
+		if knob {
+			t.Setenv("DENEB_META_BENCH_ON_SKIP", "1")
+		} else {
+			t.Setenv("DENEB_META_BENCH_ON_SKIP", "") // t.Setenv outlives the helper
+		}
+		tr, err := NewTracker(slog.Default())
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Teacher declines to propose → the cycle is a skip.
+		payload, _ := json.Marshal(map[string]any{"skip": true, "reason": "개정할 근거 없음"})
+		teacher := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			writeTestSSEJSON(t, w, string(payload))
+		}))
+		defer teacher.Close()
+
+		quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+		e := NewEvolver(nil, skills.NewCatalog(nil), tr, "", quiet)
+		e.SetTeacher(llm.NewClient(teacher.URL, "test-key"), "teacher")
+
+		meta := generation.NewMetaArtifacts(filepath.Join(t.TempDir(), "meta"), quiet)
+		meta.MaterializeDefaults(nil)
+
+		// Rotate to the GENESIS epoch: its shadow-scenario corpus is
+		// compiled-in, so the incumbent-only bench has scenarios without any
+		// catalog fixture.
+		if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: "a", FromVersion: "aaa"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: "b", FromVersion: "bbb"}); err != nil {
+			t.Fatal(err)
+		}
+		task := &MetaEvolutionTask{
+			Tracker: tr, Meta: meta, Evolver: e, Logger: quiet,
+			GenesisGen: func(context.Context, string, string) (string, error) {
+				return `{"skip": false, "skill": {"name": "bench-stub", "description": "벤치 스텁", "category": "work", "body": "# stub\n절차."}}`, nil
+			},
+		}
+		if epoch, _ := task.nextEpoch(); epoch != metaEpochGenesis {
+			t.Fatalf("precondition: epoch = %q, want genesis", epoch)
+		}
+		if err := task.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		ledger, err := tr.RecentMetaRevisions(1)
+		if err != nil || len(ledger) == 0 {
+			t.Fatalf("no cycle record (err=%v)", err)
+		}
+		head := ledger[0]
+		if head.Proposed || !strings.HasPrefix(head.Reason, "skip:") {
+			t.Fatalf("cycle must stay a skip: %+v", head)
+		}
+		return head
+	}
+
+	withKnob := run(t, true)
+	if withKnob.BenchGenesis == nil || withKnob.BenchGenesis.Scenarios == 0 {
+		t.Fatalf("knob on: skip cycle must carry an incumbent-only genesis bench, got %+v", withKnob.BenchGenesis)
+	}
+	withoutKnob := run(t, false)
+	if withoutKnob.BenchGenesis != nil {
+		t.Fatalf("knob off: skip cycle must stay benchless, got %+v", withoutKnob.BenchGenesis)
+	}
+}
+
 func TestMetaProposalGateRejectsIdenticalOversizedAndSchemaBreakingProposals(t *testing.T) {
 	incumbent := strings.Repeat("현재 프롬프트 내용. ", 30)
 	valid := incumbent + `
