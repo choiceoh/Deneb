@@ -210,8 +210,10 @@ suspend fun DenebGatewayClient.createWikiPage(title: String, category: String, b
 }
 
 /** Unified search across wiki, diary and people (`miniapp.search.all`).
- *  Offline, wiki hits come from the on-device mirror (diary/people need the
- *  gateway); null only when there's no mirror either, so the screen retries. */
+ *  Offline, wiki and diary hits come from the on-device mirrors, and people
+ *  hits are the 인물 wiki pages already inside the wiki mirror (the Gmail
+ *  half of the people directory is inherently online-only); null only when
+ *  there's no mirror content at all, so the screen retries. */
 suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
     val p = callRpc<SearchAllResult>(
         "miniapp.search.all",
@@ -219,9 +221,7 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
             put("query", query)
             put("limit", 20)
         },
-    ) ?: return wikiMirror.search(query)
-        .ifEmpty { null }
-        ?.let { SearchResults(wiki = it, diary = emptyList(), people = emptyList()) }
+    ) ?: return offlineSearchAll(query)
     return SearchResults(
         wiki = p.wiki.filter { it.path.isNotBlank() }
             .map { SearchHit(it.path, it.title.ifBlank { it.path }, it.snippet.ifBlank { it.summary }, it.category) },
@@ -229,6 +229,19 @@ suspend fun DenebGatewayClient.searchAll(query: String): SearchResults? {
         people = p.people.filter { it.email.isNotBlank() || it.name.isNotBlank() }
             .map { PersonHit(it.name.ifBlank { it.email }, it.email, it.messageCount, it.lastSubject) },
     )
+}
+
+/** Offline 검색: wiki + diary from the on-device mirrors; people are the 인물
+ *  mirror pages surfaced as wiki-only rows (blank email, zero mail count —
+ *  the shape PersonHit documents for wiki-only people). */
+internal suspend fun DenebGatewayClient.offlineSearchAll(query: String): SearchResults? {
+    val wiki = wikiMirror.search(query)
+    val diary = diaryMirror.search(query)
+    if (wiki.isEmpty() && diary.isEmpty()) return null
+    val people = wiki
+        .filter { it.category == "인물" }
+        .map { PersonHit(name = it.title, email = "", messageCount = 0, lastSubject = it.snippet, wikiPath = it.path) }
+    return SearchResults(wiki = wiki, diary = diary, people = people)
 }
 
 /** Merged people directory (`miniapp.people.list`): recent Gmail counterparties

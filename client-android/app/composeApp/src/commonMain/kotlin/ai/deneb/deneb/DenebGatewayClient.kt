@@ -244,13 +244,21 @@ class DenebGatewayClient private constructor(
     // Offline wiki mirror (WikiMirror.kt): the whole corpus on disk, bulk-seeded
     // from miniapp.memory.mirror and kept current by wiki.changed sync events.
     // The 위키 read paths fall back here when the network fetch fails.
-    internal val wikiMirror = WikiMirrorStore(wikiMirrorFiles ?: platformWikiMirrorFiles()) { mailCacheOwner(gatewayUrl, clientToken) }
+    private val mirrorFiles = wikiMirrorFiles ?: platformWikiMirrorFiles()
+    internal val wikiMirror = WikiMirrorStore(mirrorFiles) { mailCacheOwner(gatewayUrl, clientToken) }
     internal var wikiMirrorRefreshInFlight = false
+
+    // Offline diary mirror (DiaryMirror.kt): shares the wiki mirror's storage
+    // directory (distinct file), so test injection isolates both at once.
+    // Offline 검색 falls back here for the 일기 section.
+    internal val diaryMirror = DiaryMirrorStore(mirrorFiles) { mailCacheOwner(gatewayUrl, clientToken) }
+    internal var diaryMirrorRefreshInFlight = false
 
     // Attempt throttle for the mirror's full refresh (same shape as
     // lastHomeWarm): bounds retry pressure when the pull keeps failing, and
     // lets sync contract tests pre-arm it to keep request sequences exact.
     internal var lastWikiMirrorRefresh: TimeSource.Monotonic.ValueTimeMark? = null
+    internal var lastDiaryMirrorRefresh: TimeSource.Monotonic.ValueTimeMark? = null
 
     // Calendar month cache (range-key → when-fetched + events). The calendar
     // screen's own cache is composition-scoped, so every tab switch back to the
@@ -409,10 +417,13 @@ class DenebGatewayClient private constructor(
         _denebCalendar.value = emptyList()
         _denebCalProposals.value = emptyList()
         sectionCaches.clearAll()
-        // The mirror holds account A's whole wiki on disk; wipe memory synchronously
-        // (offline fallbacks consult the hot map) then delete shards on a worker.
+        // The mirrors hold account A's whole wiki/diary on disk; wipe memory
+        // synchronously (offline fallbacks consult the hot maps) then delete
+        // the files on a worker.
         wikiMirror.evictMemoryForCredentialSwitch()
+        diaryMirror.evictMemoryForCredentialSwitch()
         scope.launch { wikiMirror.clear() }
+        scope.launch { diaryMirror.clear() }
         _denebModels.value = emptyList()
         _denebRoleModels.value = emptyMap()
         _denebModelAdvisories.value = emptyList()

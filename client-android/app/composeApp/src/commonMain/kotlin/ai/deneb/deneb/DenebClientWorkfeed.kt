@@ -200,6 +200,7 @@ suspend fun DenebGatewayClient.syncNativeState(): Boolean {
     // full refresh (seeds a fresh install, repairs anything the events missed).
     if (wikiChangedPaths.isNotEmpty()) updateWikiMirrorPaths(wikiChangedPaths)
     ensureWikiMirrorFresh()
+    ensureDiaryMirrorFresh()
     maybeForwardUsageDigest()
     maybeForwardLocation()
     return true
