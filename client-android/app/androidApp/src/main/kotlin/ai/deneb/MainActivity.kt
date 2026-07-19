@@ -70,7 +70,17 @@ class MainActivity : ComponentActivity() {
         // on". Duration/curve mirror the compose motion doctrine's snappy tier
         // (this is a View-layer animator, so the spec is inlined with intent).
         installSplashScreen().setOnExitAnimationListener { splash ->
-            splash.iconView.animate()
+            // splash.iconView is a null-assertion seam: on Android 12+ the
+            // platform SplashScreenView can carry no icon view (warm start /
+            // iconless exit) and the compat getter throws NPE — 12 startup
+            // crashes on builds 744-759 (Android 36). No icon → nothing to
+            // animate; remove the splash immediately instead of crashing.
+            val icon = runCatching { splash.iconView }.getOrNull()
+            if (icon == null) {
+                splash.remove()
+                return@setOnExitAnimationListener
+            }
+            icon.animate()
                 .alpha(0f)
                 .scaleX(1.12f)
                 .scaleY(1.12f)
