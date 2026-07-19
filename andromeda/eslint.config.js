@@ -52,5 +52,11 @@ export default tseslint.config(
     files: ["scripts/**/*.{js,mjs}"],
     languageOptions: { globals: { ...globals.node } },
   },
+  {
+    // Test fixtures never hot-reload — mixing helper exports with wrapper
+    // components is the point of a fixture module.
+    files: ["src/test/**/*.{ts,tsx}", "**/*.test.{ts,tsx}"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
   prettier,
 );

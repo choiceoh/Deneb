@@ -140,3 +140,11 @@ export function parseApprovalDocBody(raw: string): ApprovalDocSections {
     attachmentCount: countAttachRows(attachments),
   };
 }
+
+/** Parse Amaranth date stamps (2026-07-16 / 2026.07.16 / 20260716) → local midnight ms. */
+export function approvalDayMs(date?: string): number | null {
+  const s = (date ?? "").trim();
+  const m = /^(\d{4})[-./]?(\d{2})[-./]?(\d{2})/.exec(s);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+}

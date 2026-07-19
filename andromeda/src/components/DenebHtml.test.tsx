@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { splitDenebUi } from "@/markdown/denebUiParse";
-import { buildSrcdoc, DenebHtmlAnswer, parseDenebHtmlMessage } from "./DenebHtml";
+import { DenebHtmlAnswer } from "./DenebHtml";
+import { buildSrcdoc, parseDenebHtmlMessage } from "./denebHtmlSandbox";
 
 describe("deneb-html splitting", () => {
   it("splits a closed deneb-html fence into an html segment between prose", () => {

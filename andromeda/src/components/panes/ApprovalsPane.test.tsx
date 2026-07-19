@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { ApprovalsPane, approvalDayMs } from "./ApprovalsPane";
+import { ApprovalsPane } from "./ApprovalsPane";
+import { approvalDayMs } from "../../approvalBody";
 import { fakeProvider, renderWithProviders } from "@/test/util";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 
