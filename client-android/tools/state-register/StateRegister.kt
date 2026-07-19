@@ -183,7 +183,8 @@ fun render(fqn: String, simple: String, sites: Map<String, List<Site>>, unresolv
             if (arr.isEmpty()) return
             b.append("$label:\n\n")
             arr.sortedWith(compareBy({ it.file }, { it.line })).forEach {
-                b.append("- `${it.file}:${it.line}` ${it.fn}\n")
+                val loc = "- `${it.file}:${it.line}`"
+                b.append(if (it.fn.isEmpty()) "$loc\n" else "$loc ${it.fn}\n")
             }
             b.append("\n")
         }

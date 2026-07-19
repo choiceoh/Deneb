@@ -88,7 +88,7 @@ reads:
 
 **writes**:
 
-- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:152` 
+- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:152`
 
 reads:
 
@@ -221,7 +221,7 @@ reads:
 
 **writes**:
 
-- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:147` 
+- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:147`
 
 reads:
 
@@ -361,7 +361,7 @@ reads:
 
 **writes**:
 
-- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:159` 
+- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:159`
 
 reads:
 
@@ -414,7 +414,7 @@ reads:
 
 **writes**:
 
-- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:132` 
+- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:132`
 
 reads:
 
@@ -424,7 +424,7 @@ reads:
 
 **writes**:
 
-- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:137` 
+- `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/ui/chat/ChatViewModel.kt:137`
 
 ---
 
