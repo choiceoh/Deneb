@@ -44,6 +44,10 @@ data class WorkFeedItem(
     val summary: String = "",
     val body: String = "",
     val sessionKey: String = "",
+    // Advisory semantic grouping from the gateway. Related cards remain
+    // independent feed entries; these fields only explain their relationship.
+    val clusterId: String = "",
+    val relatedIds: List<String> = emptyList(),
     val status: String = "",
     val priority: Int = 0,
     val actions: List<WorkFeedAction> = emptyList(),

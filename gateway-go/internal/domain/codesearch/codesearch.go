@@ -26,15 +26,14 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 )
 
-// Embedder matches internal/ai/embedding.Client (and filestore's contract).
+// Embedder matches internal/ai/embedding.Client. Role-aware implementations use
+// the query role through embedindex; symmetric embedders retain plain Embed.
 type Embedder interface {
-	// Embed uses the passage/default role — indexing path.
-	Embed(ctx context.Context, texts []string) ([][]float32, error)
-	// EmbedKind carries the retrieval role; Search passes "query" so
-	// asymmetric models (Nemotron) apply their query prefix.
-	EmbedKind(ctx context.Context, kind string, texts []string) ([][]float32, error)
+	embedindex.TextEmbedder
 }
 
 // Entry is one embedded code unit (vector lives in the .vec file at the same
@@ -389,7 +388,7 @@ func Search(ctx context.Context, dir string, emb Embedder, query string, topK in
 		return nil, err
 	}
 	query = expandQuery(query)
-	qv, err := emb.EmbedKind(ctx, "query", []string{query})
+	qv, err := embedindex.EmbedQueries(ctx, emb, []string{query})
 	if err != nil || len(qv) != 1 {
 		return nil, fmt.Errorf("query embed failed: %w", err)
 	}

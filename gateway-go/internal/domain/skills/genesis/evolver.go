@@ -365,7 +365,7 @@ func (e *Evolver) evolveSkill(ctx context.Context, skillName, reviewFinding stri
 		}, nil
 	}
 
-	userPrompt := e.buildEvolveUserPrompt(skillName, string(currentContent), stats, reviewFinding)
+	userPrompt := e.buildEvolveUserPrompt(ctx, skillName, string(currentContent), stats, reviewFinding)
 
 	if primaryClient, _ := e.primaryModel(); primaryClient == nil {
 		return nil, fmt.Errorf("evolver: primary client not configured")
@@ -426,7 +426,7 @@ func (e *Evolver) evolutionStats(skillName string) *UsageStats {
 // stats, and the tracker-derived evidence sections. A review-provided finding
 // (when present) is the primary basis for improvement and lets the evolver
 // proceed without usage data.
-func (e *Evolver) buildEvolveUserPrompt(skillName, currentContent string, stats *UsageStats, reviewFinding string) string {
+func (e *Evolver) buildEvolveUserPrompt(ctx context.Context, skillName, currentContent string, stats *UsageStats, reviewFinding string) string {
 	var rejected []RejectedSkillEditRecord
 	var optimizerMemory SkillOptimizerMemoryEntry
 	var validationCases []SkillValidationCaseRecord
@@ -453,7 +453,7 @@ func (e *Evolver) buildEvolveUserPrompt(skillName, currentContent string, stats 
 	rejectedSection := formatRejectedSkillEdits(rejected)
 	memorySection := formatOptimizerMemory(optimizerMemory)
 	leverSection := e.formatLowYieldLevers()
-	exemplarSection := e.formatEvolveExemplarSection(skillName, stats)
+	exemplarSection := e.formatEvolveExemplarSection(ctx, skillName, stats)
 	validationSection := formatValidationCasesForPrompt(validationCases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	return fmt.Sprintf(`## 현재 SKILL.md
@@ -480,7 +480,7 @@ func (e *Evolver) buildEvolveUserPrompt(skillName, currentContent string, stats 
 // formatEvolveExemplarSection renders confirmed evolve exemplars matched to the
 // skill's recent failure signatures (up to 3), or "" when the tracker is
 // unwired or lookup fails.
-func (e *Evolver) formatEvolveExemplarSection(skillName string, stats *UsageStats) string {
+func (e *Evolver) formatEvolveExemplarSection(ctx context.Context, skillName string, stats *UsageStats) string {
 	if e.tracker == nil || stats == nil {
 		return ""
 	}
@@ -493,7 +493,7 @@ func (e *Evolver) formatEvolveExemplarSection(skillName string, stats *UsageStat
 			break
 		}
 	}
-	exemplars, exErr := e.tracker.confirmedEvolveExemplars(sigs, skillName, 3)
+	exemplars, exErr := e.tracker.confirmedEvolveExemplarsContext(ctx, sigs, skillName, 3)
 	if exErr != nil {
 		return ""
 	}

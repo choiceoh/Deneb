@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -25,14 +26,33 @@ type FetchToolsRegistry interface {
 	DeferredSummaries() []toolport.DeferredToolSummary
 }
 
-// ToolFetchTools returns a tool that activates deferred tools and returns their schemas.
-func ToolFetchTools(registry FetchToolsRegistry) toolport.ToolFunc {
+// FetchToolReranker is an optional cross-encoder used only after lexical/dense
+// retrieval has admitted a bounded candidate set. Every failure is fail-open.
+type FetchToolReranker interface {
+	Rerank(ctx context.Context, query string, documents []string) ([]float64, error)
+}
+
+// ToolFetchTools returns a tool that activates deferred tools and returns their
+// schemas. An optional embedder adds semantic ranking inside this explicit
+// meta-tool; it never changes the base tool array or prompt-cache boundary.
+func ToolFetchTools(registry FetchToolsRegistry, embedders ...embedindex.Embedder) toolport.ToolFunc {
+	var embedder embedindex.Embedder
+	if len(embedders) > 0 {
+		embedder = embedders[0]
+	}
+	return ToolFetchToolsWithReranker(registry, embedder, nil)
+}
+
+// ToolFetchToolsWithReranker adds a bounded cross-encoder pass to query-based
+// discovery. Explicit tool names bypass both semantic search and reranking.
+func ToolFetchToolsWithReranker(registry FetchToolsRegistry, embedder embedindex.Embedder, reranker FetchToolReranker) toolport.ToolFunc {
+	semantic := newFetchToolSemanticSearch(embedder)
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		return runFetchTools(ctx, input, registry)
+		return runFetchTools(ctx, input, registry, semantic, reranker)
 	}
 }
 
-func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToolsRegistry) (string, error) {
+func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToolsRegistry, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) (string, error) {
 	if err := validateFetchToolsContext(ctx); err != nil {
 		return "", err
 	}
@@ -42,7 +62,7 @@ func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToo
 	}
 
 	access := fetchToolAccessFromContext(ctx)
-	names := selectFetchToolNames(request, registry, access)
+	names := selectFetchToolNames(ctx, request, registry, access, semantic, reranker)
 	if request.selectsByQuery() && len(names) == 0 {
 		return fmt.Sprintf("No deferred tools match query %q.", request.Query), nil
 	}
@@ -104,13 +124,34 @@ func (a fetchToolAccess) allows(name string) bool {
 
 // selectFetchToolNames gives explicit names precedence. Query selection ranks
 // whole-token matches, then appends substring-only matches as a recall floor.
-func selectFetchToolNames(request fetchToolsRequest, registry FetchToolsRegistry, access fetchToolAccess) []string {
+func selectFetchToolNames(ctx context.Context, request fetchToolsRequest, registry FetchToolsRegistry, access fetchToolAccess, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) []string {
 	if !request.selectsByQuery() {
 		return request.Names
 	}
 	docs := deferredToolSearchDocs(registry, access)
-	ranked := bm25Rank(request.Query, docs)
-	return appendSubstringMatches(ranked, request.Query, docs)
+	poolLimit := searchResultLimit
+	if reranker != nil {
+		poolLimit = fetchToolRerankCandidateLimit
+	}
+	lexical := appendSubstringMatches(bm25RankLimit(request.Query, docs, poolLimit), request.Query, docs)
+	lexical = clipFetchToolNames(lexical, poolLimit)
+	candidates := lexical
+	if semantic != nil {
+		if dense, ok := semantic.rank(ctx, request.Query, docs); ok {
+			candidates = fuseFetchToolRanksLimit(lexical, dense, poolLimit)
+		}
+	}
+	if reranked, ok := rerankFetchToolNames(ctx, request.Query, candidates, docs, reranker); ok {
+		candidates = reranked
+	}
+	return clipFetchToolNames(candidates, searchResultLimit)
+}
+
+func clipFetchToolNames(names []string, limit int) []string {
+	if limit > 0 && len(names) > limit {
+		return names[:limit]
+	}
+	return names
 }
 
 func deferredToolSearchDocs(registry FetchToolsRegistry, access fetchToolAccess) []searchDoc {
@@ -126,15 +167,22 @@ func deferredToolSearchDocs(registry FetchToolsRegistry, access fetchToolAccess)
 
 func deferredToolSearchDoc(registry FetchToolsRegistry, summary toolport.DeferredToolSummary) searchDoc {
 	tokens := append(tokenize(summary.Name), tokenize(summary.Description)...)
+	parameterNames := []string(nil)
 	if def, ok := registry.DeferredToolDef(summary.Name); ok {
-		for _, parameterName := range extractParamNames(def.InputSchema) {
+		parameterNames = extractParamNames(def.InputSchema)
+		for _, parameterName := range parameterNames {
 			tokens = append(tokens, tokenize(parameterName)...)
 		}
+	}
+	semanticText := summary.Name + "\n" + summary.Description
+	if len(parameterNames) > 0 {
+		semanticText += "\nParameters: " + strings.Join(parameterNames, ", ")
 	}
 	return searchDoc{
 		name:     summary.Name,
 		tokens:   tokens,
 		fallback: strings.ToLower(summary.Name + " " + summary.Description),
+		semantic: semanticText,
 	}
 }
 

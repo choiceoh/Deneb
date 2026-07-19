@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 )
 
 // Embedder produces dense vector embeddings for text.
@@ -66,7 +67,10 @@ func EmbeddingCompact(
 
 	// Truncate old messages first if total exceeds batch limit.
 	// Recent texts are always preserved (they form the query centroid).
-	if len(oldTexts)+len(recentTexts) > mmrMaxEmbedBatch {
+	if len(recentTexts) > mmrMaxEmbedBatch {
+		return messages, false
+	}
+	if len(oldTexts) > mmrMaxEmbedBatch-len(recentTexts) {
 		maxOld := mmrMaxEmbedBatch - len(recentTexts)
 		if maxOld < mmrMinOldMessages {
 			return messages, false
@@ -75,20 +79,13 @@ func EmbeddingCompact(
 		oldTexts = oldTexts[:maxOld]
 	}
 
-	allTexts := make([]string, 0, len(oldTexts)+len(recentTexts))
-	allTexts = append(allTexts, oldTexts...)
-	allTexts = append(allTexts, recentTexts...)
-
-	embeddings, err := embedder.Embed(ctx, allTexts)
+	oldEmbeddings, recentEmbeddings, err := embedCompactionTexts(ctx, embedder, oldTexts, recentTexts)
 	if err != nil {
 		if logger != nil {
 			logger.Warn("polaris: embedding compaction failed", "error", err)
 		}
 		return messages, false
 	}
-
-	oldEmbeddings := embeddings[:len(oldTexts)]
-	recentEmbeddings := embeddings[len(oldTexts):]
 
 	queryCentroid := centroid(recentEmbeddings)
 	if queryCentroid == nil {
@@ -131,6 +128,51 @@ func EmbeddingCompact(
 			"tokensAfter", EstimateMessagesTokens(compacted))
 	}
 	return compacted, true
+}
+
+// embedCompactionTexts keeps the single-request behavior for symmetric
+// embedders. Asymmetric embedders receive old candidates as passages and the
+// recent-context centroid inputs as queries, matching the retrieval roles used
+// by the sidecar without changing the compacting or acceptance logic.
+func embedCompactionTexts(
+	ctx context.Context,
+	embedder Embedder,
+	oldTexts []string,
+	recentTexts []string,
+) ([][]float32, [][]float32, error) {
+	if len(oldTexts) > mmrMaxEmbedBatch || len(recentTexts) > mmrMaxEmbedBatch-len(oldTexts) {
+		return nil, nil, fmt.Errorf(
+			"embedding batch too large: old=%d recent=%d limit=%d",
+			len(oldTexts), len(recentTexts), mmrMaxEmbedBatch,
+		)
+	}
+
+	if _, ok := embedder.(embedindex.RoleAwareEmbedder); ok {
+		oldEmbeddings, err := embedder.Embed(ctx, oldTexts)
+		if err != nil {
+			return nil, nil, err
+		}
+		recentEmbeddings, err := embedindex.EmbedQueries(ctx, embedder, recentTexts)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(oldEmbeddings) != len(oldTexts) || len(recentEmbeddings) != len(recentTexts) {
+			return nil, nil, fmt.Errorf("unexpected embedding count: old=%d/%d recent=%d/%d", len(oldEmbeddings), len(oldTexts), len(recentEmbeddings), len(recentTexts))
+		}
+		return oldEmbeddings, recentEmbeddings, nil
+	}
+
+	allTexts := make([]string, 0, mmrMaxEmbedBatch)
+	allTexts = append(allTexts, oldTexts...)
+	allTexts = append(allTexts, recentTexts...)
+	embeddings, err := embedder.Embed(ctx, allTexts)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(embeddings) != len(allTexts) {
+		return nil, nil, fmt.Errorf("unexpected embedding count: got=%d want=%d", len(embeddings), len(allTexts))
+	}
+	return embeddings[:len(oldTexts)], embeddings[len(oldTexts):], nil
 }
 
 // mmrSelect greedily selects messages using Maximal Marginal Relevance.

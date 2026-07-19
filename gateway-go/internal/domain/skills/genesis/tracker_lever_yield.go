@@ -1,8 +1,13 @@
 package genesis
 
 import (
+	"context"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
+	"github.com/choiceoh/deneb/gateway-go/pkg/vectorutil"
 )
 
 // leverYield is the effectiveness of one evolution "lever" — a (target failure
@@ -168,6 +173,14 @@ type confirmedEvolveExemplar struct {
 // GRAO experience-retrieval mechanism: a memoryless improvement loop repeats
 // dead ends AND forgets what worked (TPGO ablation 30.0→14.5%).
 func (t *Tracker) confirmedEvolveExemplars(signatures []string, excludeSkill string, limit int) ([]confirmedEvolveExemplar, error) {
+	// Compatibility path for callers without a request context. The only such
+	// callers are tests/diagnostics; keep any optional semantic request bounded.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return t.confirmedEvolveExemplarsContext(ctx, signatures, excludeSkill, limit)
+}
+
+func (t *Tracker) confirmedEvolveExemplarsContext(ctx context.Context, signatures []string, excludeSkill string, limit int) ([]confirmedEvolveExemplar, error) {
 	if limit <= 0 || len(signatures) == 0 {
 		return nil, nil
 	}
@@ -196,7 +209,128 @@ func (t *Tracker) confirmedEvolveExemplars(signatures []string, excludeSkill str
 			out = confirmedExemplarsMatching(entries, mech, excludeSkill, limit)
 		}
 	}
+	if len(out) < limit {
+		out = t.fillConfirmedExemplarsSemantic(ctx, entries, wanted, excludeSkill, limit, out)
+	}
 	return out, nil
+}
+
+const (
+	// Semantic exemplars are advisory prompt evidence after exact/mechanism
+	// retrieval, not acceptance gates. Nemotron Korean hard-negative sweeps put
+	// the useful precision/recall boundary at 0.32.
+	confirmedExemplarSemanticFloor = 0.32
+	// Keep well below the sidecar's 256-text request cap. The lifecycle scan can
+	// contain up to 300 confirmed entries, so a single request is not safe.
+	confirmedExemplarEmbedBatch = 128
+)
+
+type scoredConfirmedExemplar struct {
+	exemplar confirmedEvolveExemplar
+	score    float64
+}
+
+// fillConfirmedExemplarsSemantic adds analogous confirmed successes only after
+// deterministic exact/mechanism retrieval. This is prompt evidence, never a
+// gate signal; every degradation path returns the deterministic base unchanged.
+func (t *Tracker) fillConfirmedExemplarsSemantic(
+	ctx context.Context,
+	entries []LifecycleLogEntry,
+	wanted []string,
+	excludeSkill string,
+	limit int,
+	base []confirmedEvolveExemplar,
+) []confirmedEvolveExemplar {
+	embedder := t.exemplarEmbedderSnapshot()
+	if embedder == nil || !embedder.IsHealthy() || ctx == nil || ctx.Err() != nil {
+		return base
+	}
+	seen := make(map[string]struct{}, len(base))
+	for _, exemplar := range base {
+		seen[confirmedExemplarKey(exemplar)] = struct{}{}
+	}
+	candidates := make([]confirmedEvolveExemplar, 0, len(entries))
+	texts := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type != "evolve_confirmed" || entry.SkillName == excludeSkill || entry.SelfHarnessAudit == nil {
+			continue
+		}
+		exemplar := confirmedEvolveExemplar{SkillName: entry.SkillName, Audit: *entry.SelfHarnessAudit, CreatedAt: entry.CreatedAt}
+		if strings.TrimSpace(exemplar.Audit.TargetSignature) == "" {
+			continue
+		}
+		if _, exists := seen[confirmedExemplarKey(exemplar)]; exists {
+			continue
+		}
+		candidates = append(candidates, exemplar)
+		texts = append(texts, confirmedExemplarPassage(exemplar))
+	}
+	if len(candidates) == 0 {
+		return base
+	}
+	passages, ok := embedConfirmedExemplarPassages(ctx, embedder, texts)
+	if !ok {
+		return base
+	}
+	queries, err := embedindex.EmbedQueries(ctx, embedder, []string{"Current failure signatures:\n" + strings.Join(wanted, "\n")})
+	if err != nil || len(queries) != 1 {
+		return base
+	}
+	scored := make([]scoredConfirmedExemplar, 0, len(candidates))
+	for i, candidate := range candidates {
+		score := vectorutil.Cosine(queries[0], passages[i])
+		if score >= confirmedExemplarSemanticFloor {
+			scored = append(scored, scoredConfirmedExemplar{exemplar: candidate, score: score})
+		}
+	}
+	sort.Slice(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		if scored[i].exemplar.CreatedAt != scored[j].exemplar.CreatedAt {
+			return scored[i].exemplar.CreatedAt > scored[j].exemplar.CreatedAt
+		}
+		if scored[i].exemplar.SkillName != scored[j].exemplar.SkillName {
+			return scored[i].exemplar.SkillName < scored[j].exemplar.SkillName
+		}
+		return scored[i].exemplar.Audit.TargetSignature < scored[j].exemplar.Audit.TargetSignature
+	})
+	out := append([]confirmedEvolveExemplar(nil), base...)
+	for _, candidate := range scored {
+		out = append(out, candidate.exemplar)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func embedConfirmedExemplarPassages(ctx context.Context, embedder embedindex.Embedder, texts []string) ([][]float32, bool) {
+	passages := make([][]float32, 0, len(texts))
+	for start := 0; start < len(texts); start += confirmedExemplarEmbedBatch {
+		if ctx.Err() != nil {
+			return nil, false
+		}
+		end := min(start+confirmedExemplarEmbedBatch, len(texts))
+		batch, err := embedder.Embed(ctx, texts[start:end])
+		if err != nil || len(batch) != end-start {
+			return nil, false
+		}
+		passages = append(passages, batch...)
+	}
+	return passages, true
+}
+
+func confirmedExemplarPassage(exemplar confirmedEvolveExemplar) string {
+	return "Confirmed improvement\n" +
+		"Failure: " + exemplar.Audit.TargetSignature + "\n" +
+		"Edited surface: " + exemplar.Audit.EditedSurface + "\n" +
+		"Behavior change: " + exemplar.Audit.ExpectedBehaviorChange + "\n" +
+		"Regression risk: " + exemplar.Audit.RegressionRisk
+}
+
+func confirmedExemplarKey(exemplar confirmedEvolveExemplar) string {
+	return exemplar.SkillName + "\x00" + exemplar.Audit.TargetSignature + "\x00" + time.UnixMilli(exemplar.CreatedAt).UTC().Format(time.RFC3339Nano)
 }
 
 // confirmedExemplarsMatching scans newest-first confirmed evolves whose target

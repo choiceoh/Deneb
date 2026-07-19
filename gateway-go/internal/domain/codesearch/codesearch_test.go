@@ -3,9 +3,41 @@ package codesearch
 import (
 	"context"
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+type symmetricCodeSearchEmbedder struct {
+	calls []string
+}
+
+func (e *symmetricCodeSearchEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	e.calls = append(e.calls, "plain")
+	return codeSearchTestVectors(texts), nil
+}
+
+type roleAwareCodeSearchEmbedder struct {
+	calls []string
+}
+
+func (e *roleAwareCodeSearchEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	e.calls = append(e.calls, "passage")
+	return codeSearchTestVectors(texts), nil
+}
+
+func (e *roleAwareCodeSearchEmbedder) EmbedKind(_ context.Context, kind string, texts []string) ([][]float32, error) {
+	e.calls = append(e.calls, kind)
+	return codeSearchTestVectors(texts), nil
+}
+
+func codeSearchTestVectors(texts []string) [][]float32 {
+	out := make([][]float32, len(texts))
+	for i := range texts {
+		out[i] = []float32{1, 0}
+	}
+	return out
+}
 
 func TestFTSQueryQuotesTerms(t *testing.T) {
 	got := ftsQuery(`retry "backoff" 로직`)
@@ -79,4 +111,37 @@ func TestRerankHitsReorndersHead(t *testing.T) {
 	if same[0].ID != "a" {
 		t.Fatalf("nil reranker mutated order")
 	}
+}
+
+func TestSearchUsesQueryRoleWithSymmetricFallback(t *testing.T) {
+	dir := t.TempDir()
+	meta := Meta{
+		Model: "test", Dim: 2,
+		Entries: []Entry{{ID: "one", Kind: "function", Qualified: "mail.Search", File: "mail.go", StartLine: 1, EndLine: 2}},
+	}
+	if err := saveIndex(dir, meta, [][]float32{{1, 0}}); err != nil {
+		t.Fatalf("save index: %v", err)
+	}
+
+	t.Run("role aware", func(t *testing.T) {
+		embedder := &roleAwareCodeSearchEmbedder{}
+		hits, err := Search(context.Background(), dir, embedder, "mail lookup", 1)
+		if err != nil || len(hits) != 1 || hits[0].ID != "one" {
+			t.Fatalf("Search hits = %+v, err %v", hits, err)
+		}
+		if want := []string{"query"}; !reflect.DeepEqual(embedder.calls, want) {
+			t.Fatalf("embedding roles = %v, want %v", embedder.calls, want)
+		}
+	})
+
+	t.Run("symmetric", func(t *testing.T) {
+		embedder := &symmetricCodeSearchEmbedder{}
+		hits, err := Search(context.Background(), dir, embedder, "mail lookup", 1)
+		if err != nil || len(hits) != 1 || hits[0].ID != "one" {
+			t.Fatalf("Search hits = %+v, err %v", hits, err)
+		}
+		if want := []string{"plain"}; !reflect.DeepEqual(embedder.calls, want) {
+			t.Fatalf("embedding fallback = %v, want %v", embedder.calls, want)
+		}
+	})
 }

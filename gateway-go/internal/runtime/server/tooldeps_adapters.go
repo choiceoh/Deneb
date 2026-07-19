@@ -59,6 +59,7 @@ func mapWorkFeedItem(in workfeed.Item) tooldeps.WorkFeedItem {
 	return tooldeps.WorkFeedItem{
 		ID: in.ID, Source: in.Source, Title: in.Title, Summary: in.Summary, Body: in.Body,
 		SessionKey: in.SessionKey, RefType: in.RefType, RefID: in.RefID, Metadata: in.Metadata,
+		ClusterID: in.ClusterID, RelatedIDs: append([]string(nil), in.RelatedIDs...),
 		Status: in.Status, Priority: in.Priority, Question: in.Question, Actions: actions,
 		CreatedAtMs: in.CreatedAtMs, UpdatedAtMs: in.UpdatedAtMs,
 		SnoozedUntilMs: in.SnoozedUntilMs, ReadAtMs: in.ReadAtMs,
@@ -75,6 +76,7 @@ func unmapWorkFeedItem(in tooldeps.WorkFeedItem) workfeed.Item {
 	return workfeed.Item{
 		ID: in.ID, Source: in.Source, Title: in.Title, Summary: in.Summary, Body: in.Body,
 		SessionKey: in.SessionKey, RefType: in.RefType, RefID: in.RefID, Metadata: in.Metadata,
+		ClusterID: in.ClusterID, RelatedIDs: append([]string(nil), in.RelatedIDs...),
 		Status: in.Status, Priority: in.Priority, Question: in.Question, Actions: actions,
 		CreatedAtMs: in.CreatedAtMs, UpdatedAtMs: in.UpdatedAtMs,
 		SnoozedUntilMs: in.SnoozedUntilMs, ReadAtMs: in.ReadAtMs,

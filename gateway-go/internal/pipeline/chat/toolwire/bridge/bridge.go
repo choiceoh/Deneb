@@ -30,7 +30,7 @@ func RegisterRegistryBridgeTools(registry RegistryBridge, deps *tooldeps.CoreToo
 		Name:        "fetch_tools",
 		Description: "Load full schemas for deferred tools so you can call them. Use names (exact) or query (keyword search). The activated tools become available on the next turn",
 		InputSchema: schema.FetchToolsToolSchema(),
-		Fn:          runtimeops.ToolFetchTools(registry),
+		Fn:          runtimeops.ToolFetchToolsWithReranker(registry, deps.FetchToolsEmbedder, deps.FetchToolsReranker),
 	})
 
 	// code_action (CodeAct): the model writes Python to orchestrate several

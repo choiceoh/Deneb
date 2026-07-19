@@ -1,10 +1,56 @@
 package genesis
 
 import (
+	"context"
 	"log/slog"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
+
+type exemplarSemanticEmbedder struct {
+	mu    sync.Mutex
+	kinds []string
+}
+
+func (e *exemplarSemanticEmbedder) IsHealthy() bool { return true }
+
+func (e *exemplarSemanticEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	e.mu.Lock()
+	e.kinds = append(e.kinds, "passage")
+	e.mu.Unlock()
+	out := make([][]float32, len(texts))
+	for i, text := range texts {
+		if strings.Contains(text, "remote service stopped answering") {
+			out[i] = []float32{1, 0}
+		} else {
+			out[i] = []float32{0, 1}
+		}
+	}
+	return out, nil
+}
+
+func (e *exemplarSemanticEmbedder) EmbedKind(_ context.Context, kind string, texts []string) ([][]float32, error) {
+	e.mu.Lock()
+	e.kinds = append(e.kinds, kind)
+	e.mu.Unlock()
+	out := make([][]float32, len(texts))
+	for i, text := range texts {
+		if strings.Contains(text, "외부 연동 응답이 늦어") {
+			out[i] = []float32{1, 0}
+		} else {
+			out[i] = []float32{0, 1}
+		}
+	}
+	return out, nil
+}
+
+func (e *exemplarSemanticEmbedder) snapshotKinds() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.kinds...)
+}
 
 func TestConfirmedEvolveExemplars_RetrievalContract(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
@@ -112,5 +158,82 @@ func TestConfirmedEvolveExemplars_MechanismFallback(t *testing.T) {
 	// No shared mechanism → nothing.
 	if got, _ := tr.confirmedEvolveExemplars([]string{"terminal=crash|mechanism=other"}, "sk-target", 3); len(got) != 0 {
 		t.Fatalf("unrelated mechanism must not match: %+v", got)
+	}
+}
+
+func TestConfirmedEvolveExemplars_SemanticFallbackFindsAnalogousSuccess(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.logEvolveConfirmed("remote-recovery", HarnessEditAudit{
+		TargetSignature:        "remote service stopped answering during a tool call",
+		EditedSurface:          "Procedure",
+		ExpectedBehaviorChange: "retry with a bounded fallback",
+	}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.logEvolveConfirmed("formatting", HarnessEditAudit{
+		TargetSignature:        "markdown table alignment mismatch",
+		EditedSurface:          "Output",
+		ExpectedBehaviorChange: "normalize cell widths",
+	}, true); err != nil {
+		t.Fatal(err)
+	}
+	embedder := &exemplarSemanticEmbedder{}
+	tr.SetExemplarEmbedder(embedder)
+
+	got, err := tr.confirmedEvolveExemplarsContext(
+		context.Background(),
+		[]string{"외부 연동 응답이 늦어 도구 실행이 멈춤"},
+		"target-skill",
+		3,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].SkillName != "remote-recovery" {
+		t.Fatalf("semantic exemplars = %+v", got)
+	}
+	if want := []string{"passage", "query"}; !reflect.DeepEqual(embedder.snapshotKinds(), want) {
+		t.Fatalf("embedding roles = %v, want %v", embedder.snapshotKinds(), want)
+	}
+}
+
+func TestConfirmedEvolveExemplars_ExactMatchPrecedesSemanticLookup(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.logEvolveConfirmed("exact", HarnessEditAudit{TargetSignature: "same failure"}, true); err != nil {
+		t.Fatal(err)
+	}
+	embedder := &exemplarSemanticEmbedder{}
+	tr.SetExemplarEmbedder(embedder)
+
+	got, err := tr.confirmedEvolveExemplarsContext(context.Background(), []string{"same failure"}, "target", 1)
+	if err != nil || len(got) != 1 || got[0].SkillName != "exact" {
+		t.Fatalf("exact exemplars = %+v err=%v", got, err)
+	}
+	if calls := embedder.snapshotKinds(); len(calls) != 0 {
+		t.Fatalf("exact match unnecessarily embedded: %v", calls)
+	}
+}
+
+func TestEmbedConfirmedExemplarPassagesBatchesBeyondSidecarLimit(t *testing.T) {
+	embedder := &exemplarSemanticEmbedder{}
+	texts := make([]string, confirmedExemplarEmbedBatch*2+1)
+	for i := range texts {
+		texts[i] = "remote service stopped answering"
+	}
+
+	passages, ok := embedConfirmedExemplarPassages(context.Background(), embedder, texts)
+	if !ok || len(passages) != len(texts) {
+		t.Fatalf("batched passages = %d ok=%v, want %d", len(passages), ok, len(texts))
+	}
+	if want := []string{"passage", "passage", "passage"}; !reflect.DeepEqual(embedder.snapshotKinds(), want) {
+		t.Fatalf("embedding batches = %v, want %v", embedder.snapshotKinds(), want)
 	}
 }

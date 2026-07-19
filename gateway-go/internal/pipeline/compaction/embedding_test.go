@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,6 +13,28 @@ import (
 // mockEmbedder returns sequential unit vectors for deterministic testing.
 type mockEmbedder struct {
 	dim int
+}
+
+type roleAwareMockEmbedder struct {
+	calls []string
+}
+
+func (m *roleAwareMockEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	m.calls = append(m.calls, "passage")
+	return roleAwareMockVectors(texts), nil
+}
+
+func (m *roleAwareMockEmbedder) EmbedKind(_ context.Context, kind string, texts []string) ([][]float32, error) {
+	m.calls = append(m.calls, kind)
+	return roleAwareMockVectors(texts), nil
+}
+
+func roleAwareMockVectors(texts []string) [][]float32 {
+	result := make([][]float32, len(texts))
+	for i := range texts {
+		result[i] = []float32{1, float32(i + 1)}
+	}
+	return result
 }
 
 func (m *mockEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
@@ -66,6 +89,41 @@ func TestEmbeddingCompact_SkipsWhenTooFewMessages(t *testing.T) {
 	_, ok := EmbeddingCompact(context.Background(), cfg, messages, embedder, nil)
 	if ok {
 		t.Error("expected no compaction for too few messages")
+	}
+}
+
+func TestEmbedCompactionTextsUsesPassageAndQueryRoles(t *testing.T) {
+	embedder := &roleAwareMockEmbedder{}
+	old, recent, err := embedCompactionTexts(
+		context.Background(),
+		embedder,
+		[]string{"old one", "old two"},
+		[]string{"recent one"},
+	)
+	if err != nil {
+		t.Fatalf("embedCompactionTexts: %v", err)
+	}
+	if len(old) != 2 || len(recent) != 1 {
+		t.Fatalf("embedding shape old=%d recent=%d", len(old), len(recent))
+	}
+	if want := []string{"passage", "query"}; !reflect.DeepEqual(embedder.calls, want) {
+		t.Fatalf("embedding roles = %v, want %v", embedder.calls, want)
+	}
+}
+
+func TestEmbedCompactionTextsRejectsOversizedBatch(t *testing.T) {
+	embedder := &roleAwareMockEmbedder{}
+	_, _, err := embedCompactionTexts(
+		context.Background(),
+		embedder,
+		make([]string, mmrMaxEmbedBatch),
+		[]string{"one too many"},
+	)
+	if err == nil {
+		t.Fatal("embedCompactionTexts accepted an oversized batch")
+	}
+	if len(embedder.calls) != 0 {
+		t.Fatalf("embedder called for oversized batch: %v", embedder.calls)
 	}
 }
 

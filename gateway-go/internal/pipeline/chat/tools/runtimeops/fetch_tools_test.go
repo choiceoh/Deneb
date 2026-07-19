@@ -3,9 +3,11 @@ package runtimeops
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -17,6 +19,70 @@ import (
 // are Deferred and not Hidden, so tests exercise a realistic catalog.
 type fakeFetchRegistry struct {
 	defs map[string]toolport.ToolDef
+}
+
+type fetchSemanticEmbedder struct {
+	mu    sync.Mutex
+	kinds []string
+}
+
+type fetchTestReranker struct {
+	calls int
+	err   error
+}
+
+func (r *fetchTestReranker) Rerank(_ context.Context, _ string, documents []string) ([]float64, error) {
+	r.calls++
+	if r.err != nil {
+		return nil, r.err
+	}
+	scores := make([]float64, len(documents))
+	for i, document := range documents {
+		if strings.Contains(document, "preferred candidate") {
+			scores[i] = 10
+		} else {
+			scores[i] = -float64(i)
+		}
+	}
+	return scores, nil
+}
+
+func (e *fetchSemanticEmbedder) IsHealthy() bool { return true }
+
+func (e *fetchSemanticEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+	e.mu.Lock()
+	e.kinds = append(e.kinds, "passage")
+	e.mu.Unlock()
+	out := make([][]float32, len(texts))
+	for i, text := range texts {
+		if strings.Contains(text, "email") {
+			out[i] = []float32{1, 0}
+		} else {
+			out[i] = []float32{0, 1}
+		}
+	}
+	return out, nil
+}
+
+func (e *fetchSemanticEmbedder) EmbedKind(_ context.Context, kind string, texts []string) ([][]float32, error) {
+	e.mu.Lock()
+	e.kinds = append(e.kinds, kind)
+	e.mu.Unlock()
+	out := make([][]float32, len(texts))
+	for i, text := range texts {
+		if strings.Contains(text, "받은 편지함") {
+			out[i] = []float32{1, 0}
+		} else {
+			out[i] = []float32{0, 1}
+		}
+	}
+	return out, nil
+}
+
+func (e *fetchSemanticEmbedder) snapshotKinds() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.kinds...)
 }
 
 func (f *fakeFetchRegistry) DeferredToolDef(name string) (toolport.ToolDef, bool) {
@@ -90,6 +156,90 @@ func TestFetchTools_ByQueryReturnsMatchingTool(t *testing.T) {
 	assertActivated(t, out, "mail_archive")
 	if strings.Contains(out, "## storage") {
 		t.Fatalf("did not expect storage for email query, got: %s", out)
+	}
+}
+
+func TestFetchTools_ByQueryFindsSemanticOnlyToolAndCachesCatalog(t *testing.T) {
+	reg := &fakeFetchRegistry{
+		defs: map[string]toolport.ToolDef{
+			"mail_archive": {Name: "mail_archive", Description: "Read email from the local archive", Deferred: true},
+			"storage":      {Name: "storage", Description: "Manage object buckets", Deferred: true},
+		},
+	}
+	embedder := &fetchSemanticEmbedder{}
+	fn := ToolFetchTools(reg, embedder)
+	input := mustJSON(t, map[string]any{"query": "받은 편지함에서 대화 찾기"})
+
+	for range 2 {
+		out, err := fn(context.Background(), input)
+		if err != nil {
+			t.Fatalf("semantic fetch: %v", err)
+		}
+		assertActivated(t, out, "mail_archive")
+		if strings.Contains(out, "## storage") {
+			t.Fatalf("unexpected semantic tool: %s", out)
+		}
+	}
+	if want := []string{"passage", "query", "query"}; !slices.Equal(embedder.snapshotKinds(), want) {
+		t.Fatalf("embedding roles/cache = %v, want %v", embedder.snapshotKinds(), want)
+	}
+}
+
+func TestFetchTools_QueryRerankerPromotesCandidateFromWiderPool(t *testing.T) {
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{}}
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		reg.defs[name] = toolport.ToolDef{Name: name, Description: "email helper", Deferred: true}
+	}
+	reg.defs["z"] = toolport.ToolDef{Name: "z", Description: "email preferred candidate", Deferred: true}
+	reranker := &fetchTestReranker{}
+
+	out, err := ToolFetchToolsWithReranker(reg, nil, reranker)(context.Background(), mustJSON(t, map[string]any{"query": "email"}))
+	if err != nil {
+		t.Fatalf("reranked fetch: %v", err)
+	}
+	if reranker.calls != 1 {
+		t.Fatalf("reranker calls = %d, want 1", reranker.calls)
+	}
+	assertActivated(t, out, "z")
+	if got := strings.Count(out, "## "); got != searchResultLimit {
+		t.Fatalf("activated schemas = %d, want %d: %s", got, searchResultLimit, out)
+	}
+}
+
+func TestFetchTools_RerankerFailsOpenAndExplicitNamesBypassIt(t *testing.T) {
+	reg := &fakeFetchRegistry{defs: map[string]toolport.ToolDef{
+		"mail_archive": {Name: "mail_archive", Description: "email archive", Deferred: true},
+		"storage":      {Name: "storage", Description: "email object storage", Deferred: true},
+	}}
+	input := mustJSON(t, map[string]any{"query": "email"})
+	baseline, err := ToolFetchTools(reg)(context.Background(), input)
+	if err != nil {
+		t.Fatalf("baseline fetch: %v", err)
+	}
+	reranker := &fetchTestReranker{err: errors.New("sidecar unavailable")}
+	out, err := ToolFetchToolsWithReranker(reg, nil, reranker)(context.Background(), input)
+	if err != nil {
+		t.Fatalf("fail-open fetch: %v", err)
+	}
+	if out != baseline {
+		t.Fatalf("reranker failure changed output:\n--- got ---\n%s\n--- want ---\n%s", out, baseline)
+	}
+
+	if _, err := ToolFetchToolsWithReranker(reg, nil, reranker)(context.Background(), mustJSON(t, map[string]any{"names": []string{"mail_archive"}})); err != nil {
+		t.Fatalf("explicit fetch: %v", err)
+	}
+	if reranker.calls != 1 {
+		t.Fatalf("explicit names called reranker: calls=%d", reranker.calls)
+	}
+}
+
+func TestFuseFetchToolRanksRejectsLowSemanticOnlyTail(t *testing.T) {
+	got := fuseFetchToolRanks(
+		[]string{"lexical"},
+		[]semanticToolHit{{name: "lexical", score: 0.2}, {name: "noise", score: fetchToolSemanticOnlyFloor - 0.01}},
+	)
+	if !slices.Equal(got, []string{"lexical"}) {
+		t.Fatalf("fused names = %v", got)
 	}
 }
 

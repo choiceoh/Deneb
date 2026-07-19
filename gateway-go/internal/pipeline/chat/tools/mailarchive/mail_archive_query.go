@@ -67,9 +67,9 @@ func (q mailArchiveQuery) search(ctx context.Context) (string, error) {
 		// slower (~11s scanning the large Gmail mailbox), and CJK-blind — pure
 		// latency, zero recall. widenStoreSearch already relaxes a bounded miss to
 		// all-time within the mirror, which is the real recall lever.
-		msgs = q.deps.Store.Search(q.mailboxes, q.args.Query, opts.Since, opts.Limit)
+		msgs = q.deps.Store.SearchContext(ctx, q.mailboxes, q.args.Query, opts.Since, opts.Limit)
 		*q.storeHits = len(msgs)
-		msgs, widened = q.widenStoreSearch(msgs, opts)
+		msgs, widened = q.widenStoreSearch(ctx, msgs, opts)
 	} else if q.imapReady {
 		// No local mirror (legacy IMAP-only mode): IMAP is the primary source here,
 		// not a fallback.
@@ -83,13 +83,13 @@ func (q mailArchiveQuery) search(ctx context.Context) (string, error) {
 	return q.formatSearch(ctx, msgs, widened)
 }
 
-func (q mailArchiveQuery) widenStoreSearch(msgs []mailarchive.ContextMessage, opts mailarchive.ContextOptions) ([]mailarchive.ContextMessage, bool) {
+func (q mailArchiveQuery) widenStoreSearch(ctx context.Context, msgs []mailarchive.ContextMessage, opts mailarchive.ContextOptions) ([]mailarchive.ContextMessage, bool) {
 	// A bounded store miss is widened before paying for an IMAP request with the
 	// same narrow window. This keeps historical-topic searches on the fast path.
 	if len(msgs) != 0 || opts.Since.IsZero() {
 		return msgs, false
 	}
-	wider := q.deps.Store.Search(q.mailboxes, q.args.Query, time.Time{}, opts.Limit)
+	wider := q.deps.Store.SearchContext(ctx, q.mailboxes, q.args.Query, time.Time{}, opts.Limit)
 	if len(wider) == 0 {
 		return msgs, false
 	}
@@ -202,7 +202,7 @@ func (q mailArchiveQuery) projectHistory(ctx context.Context) (string, error) {
 	if q.storeReady {
 		// Mirror-authoritative, same as search: a store miss is not re-run over the
 		// smaller/slower/CJK-blind IMAP archive.
-		history, _ = q.deps.Store.ProjectHistory(q.args.Query, opts.Since, opts.Limit, opts.IndexLimit)
+		history, _ = q.deps.Store.ProjectHistoryContext(ctx, q.args.Query, opts.Since, opts.Limit, opts.IndexLimit)
 	} else if q.imapReady {
 		// Legacy IMAP-only mode (no mirror): IMAP is the primary source.
 		*q.usedIMAP = true

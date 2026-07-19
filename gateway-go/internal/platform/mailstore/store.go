@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailarchive"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
@@ -27,12 +28,14 @@ import (
 type Store struct {
 	dir string
 
-	mu      sync.RWMutex
-	idx     *textsearch.Index                     // full-text over subject/body/participants/…
-	byKey   map[string]mailarchive.ContextMessage // dedupeKey → message (source of truth)
-	byLoc   map[string]string                     // Locator → dedupeKey (read by locator)
-	byMsgID map[string]string                     // normalized Message-ID → dedupeKey (thread/read)
-	byID    map[string]string                     // ContextMessage.ID → dedupeKey (read by bare id)
+	mu       sync.RWMutex
+	idx      *textsearch.Index                     // full-text over subject/body/participants/…
+	byKey    map[string]mailarchive.ContextMessage // dedupeKey → message (source of truth)
+	byLoc    map[string]string                     // Locator → dedupeKey (read by locator)
+	byMsgID  map[string]string                     // normalized Message-ID → dedupeKey (thread/read)
+	byID     map[string]string                     // ContextMessage.ID → dedupeKey (read by bare id)
+	semantic *embedindex.Index                     // optional dense index; never called while mu is held
+	reranker MailReranker                          // optional cross-encoder; never called while mu is held
 }
 
 // New opens (or creates) the store at dir and loads every JSONL shard into the
@@ -71,8 +74,14 @@ func New(dir string) (*Store, error) {
 	return s, nil
 }
 
-// Close is a no-op — every mutation is flushed to its shard at Put time.
-func (s *Store) Close() error { return nil }
+// Close stops an optional semantic refresh. Message mutations themselves are
+// already flushed to their shard at Put time.
+func (s *Store) Close() error {
+	if semantic := s.semanticSnapshot(); semantic != nil {
+		semantic.Close()
+	}
+	return nil
+}
 
 // Len reports how many distinct messages are indexed (0 = not yet backfilled,
 // so the tool should IMAP-fallback rather than trust an empty answer).
@@ -93,18 +102,24 @@ func (s *Store) Put(msg mailarchive.ContextMessage) (created bool, err error) {
 		return false, fmt.Errorf("mailstore: message has no dedupe key")
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if existing, ok := s.byKey[key]; ok {
 		// Allow a one-way upgrade when a prior metadata-only review stub left an
 		// empty body. Full→full and full→empty remain idempotent no-ops.
 		if strings.TrimSpace(existing.Body) != "" || strings.TrimSpace(msg.Body) == "" {
+			s.mu.Unlock()
 			return false, nil
 		}
 	}
 	if aerr := jsonlstore.Append(s.shardPath(msg), msg); aerr != nil {
+		s.mu.Unlock()
 		return false, fmt.Errorf("mailstore: append: %w", aerr)
 	}
 	s.putInMemoryLocked(msg)
+	semantic := s.semantic
+	s.mu.Unlock()
+	if semantic != nil && semantic.Enabled() {
+		semantic.RefreshAsync(s.semanticItems)
+	}
 	return true, nil
 }
 

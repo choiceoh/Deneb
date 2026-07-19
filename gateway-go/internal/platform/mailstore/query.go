@@ -6,6 +6,7 @@ package mailstore
 // method compose another without re-entering the RWMutex.
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -32,9 +33,47 @@ func (s *Store) List(mailboxes []string, since time.Time, limit int) []mailarchi
 
 // Search returns full-text hits, mailbox/since-filtered, best-match first.
 func (s *Store) Search(mailboxes []string, query string, since time.Time, limit int) []mailarchive.ContextMessage {
+	// Legacy callers do not carry a request context. Keep their semantic work
+	// bounded; runtime tool paths call SearchContext with the turn context.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return s.SearchContext(ctx, mailboxes, query, since, limit)
+}
+
+// SearchContext returns BM25+dense RRF hits, mailbox/since-filtered.
+func (s *Store) SearchContext(ctx context.Context, mailboxes []string, query string, since time.Time, limit int) []mailarchive.ContextMessage {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil
+	}
+	candidate := limit * 4
+	if candidate < 40 {
+		candidate = 40
+	}
+	ranked := s.rankedSearch(ctx, query, candidate)
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.searchLocked(mailboxes, query, since, limit)
+	out := make([]mailarchive.ContextMessage, 0, len(ranked))
+	for _, hit := range ranked {
+		msg, ok := s.byKey[hit.id]
+		if !ok || !matchMailbox(msg, mailboxes) {
+			continue
+		}
+		if !since.IsZero() && !mailarchive.SentOnOrAfter(msg.Date, since) {
+			continue
+		}
+		msg.Score += hit.fusedScore
+		msg.RankReasons = append([]string(nil), msg.RankReasons...)
+		if hit.lexicalRank > 0 {
+			msg.RankReasons = appendMailRankReason(msg.RankReasons, "local_fts")
+		}
+		if hit.semanticRank > 0 {
+			msg.RankReasons = appendMailRankReason(msg.RankReasons, "semantic")
+		}
+		out = append(out, msg)
+	}
+	s.mu.RUnlock()
+	out = s.rerankMessages(ctx, query, out)
+	return clip(out, limit)
 }
 
 func (s *Store) searchLocked(mailboxes []string, query string, since time.Time, limit int) []mailarchive.ContextMessage {
@@ -178,9 +217,21 @@ func (s *Store) Thread(messageID, query string, mailboxes []string, limit int) (
 // ProjectHistory ranks project/company/person hits into a timeline + thread
 // clusters. ok=false when the index is empty or nothing matched (IMAP fallback).
 func (s *Store) ProjectHistory(query string, since time.Time, limit, indexLimit int) (mailarchive.ProjectHistory, bool) {
+	// See Search: preserve the context-free API for backfill/tests while keeping
+	// the detached semantic request bounded.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return s.ProjectHistoryContext(ctx, query, since, limit, indexLimit)
+}
+
+// ProjectHistoryContext builds project history from the same hybrid candidate
+// ranking as SearchContext, then applies the existing deterministic business
+// signal ranker and thread clustering.
+func (s *Store) ProjectHistoryContext(ctx context.Context, query string, since time.Time, limit, indexLimit int) (mailarchive.ProjectHistory, bool) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.idx.Len() == 0 {
+	empty := s.idx.Len() == 0
+	s.mu.RUnlock()
+	if empty {
 		return mailarchive.ProjectHistory{}, false // not backfilled yet
 	}
 	if limit <= 0 {
@@ -192,23 +243,33 @@ func (s *Store) ProjectHistory(query string, since time.Time, limit, indexLimit 
 			candidate = 200
 		}
 	}
-	hits := s.idx.Search(query, candidate)
-	msgs := make([]mailarchive.ContextMessage, 0, len(hits))
-	for _, h := range hits {
-		msg, ok := s.byKey[h.ID]
+	rankedHits := s.rankedSearch(ctx, query, candidate)
+	s.mu.RLock()
+	msgs := make([]mailarchive.ContextMessage, 0, len(rankedHits))
+	for _, hit := range rankedHits {
+		msg, ok := s.byKey[hit.id]
 		if !ok {
 			continue
 		}
 		if !since.IsZero() && !mailarchive.SentOnOrAfter(msg.Date, since) {
 			continue
 		}
-		msg.Score += h.Score
+		msg.Score += hit.fusedScore
+		msg.RankReasons = append([]string(nil), msg.RankReasons...)
+		if hit.lexicalRank > 0 {
+			msg.RankReasons = appendMailRankReason(msg.RankReasons, "local_fts")
+		}
+		if hit.semanticRank > 0 {
+			msg.RankReasons = appendMailRankReason(msg.RankReasons, "semantic")
+		}
 		msgs = append(msgs, msg)
 	}
+	s.mu.RUnlock()
 	if len(msgs) == 0 {
 		return mailarchive.ProjectHistory{}, false
 	}
 	ranked := mailarchive.RankProjectMessages(query, msgs)
+	ranked = s.rerankMessages(ctx, query, ranked)
 	if len(ranked) > limit {
 		ranked = ranked[:limit]
 	}

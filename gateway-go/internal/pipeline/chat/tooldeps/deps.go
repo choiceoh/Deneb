@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
@@ -62,6 +63,8 @@ type WorkFeedItem struct {
 	RefType        string
 	RefID          string
 	Metadata       map[string]string
+	ClusterID      string
+	RelatedIDs     []string
 	Status         string
 	Priority       int
 	Question       bool
@@ -86,6 +89,13 @@ const WorkFeedSourceDocAnalysis = "doc_analysis"
 
 // ObserveToolFunc is the observe tool executor injected by the composition root.
 type ObserveToolFunc func(ctx context.Context, input json.RawMessage) (string, error)
+
+// TextReranker is the narrow cross-encoder contract needed by tool discovery.
+// Implementations are optional; callers must preserve their retrieval order on
+// every error so the reranker never becomes load-bearing.
+type TextReranker interface {
+	Rerank(ctx context.Context, query string, documents []string) ([]float64, error)
+}
 
 // SpilloverStore spills large tool results to disk and loads them back by ID.
 // Satisfied by *agent.SpilloverStore — no adapter needed at wire sites.
@@ -214,13 +224,19 @@ type CoreToolDeps struct {
 	// modify or delete checked-in skill files — it must create a workspace
 	// override instead. Empty disables the guard.
 	BundledSkillsDir string
-	Process          ProcessDeps
-	Sessions         SessionDeps
-	Chrono           ChronoDeps
-	Wiki             WikiDeps
-	Notebook         NotebookDeps
-	Contacts         ContactsDeps
-	Calendar         CalendarDeps
+	// FetchToolsEmbedder adds semantic ranking only inside the explicit
+	// fetch_tools meta-tool. It does not alter the base tool array.
+	FetchToolsEmbedder embedindex.Embedder
+	// FetchToolsReranker reorders only the bounded candidates already admitted
+	// by lexical/dense retrieval. nil or an error leaves that order unchanged.
+	FetchToolsReranker TextReranker
+	Process            ProcessDeps
+	Sessions           SessionDeps
+	Chrono             ChronoDeps
+	Wiki               WikiDeps
+	Notebook           NotebookDeps
+	Contacts           ContactsDeps
+	Calendar           CalendarDeps
 	// MailStore is the local mail archive mirror backing the mail_archive tool's
 	// storage-first read path (no per-call IMAP round-trip). nil = IMAP only.
 	MailStore *mailstore.Store

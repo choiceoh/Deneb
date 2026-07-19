@@ -71,6 +71,9 @@ func (s *Server) initGenesisServices() {
 	s.genesisSvc = bundle.Service
 	s.genesisTracker = bundle.Tracker
 	s.genesisEvolver = bundle.Evolver
+	if s.genesisTracker != nil {
+		s.genesisTracker.SetExemplarEmbedder(s.embeddingClient)
+	}
 	s.genesisMeta = bundle.Meta
 	cfg := bundle.Config
 

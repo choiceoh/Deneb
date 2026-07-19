@@ -301,6 +301,12 @@ func (s *Server) doShutdown() error {
 	if s.localAIHub != nil {
 		stopWithTimeout(10*time.Second, "localAIHub.Shutdown", s.logger, s.localAIHub.Shutdown)
 	}
+	if s.mailStore != nil {
+		stopWithTimeout(5*time.Second, "mailStore.Close", s.logger, func() { _ = s.mailStore.Close() })
+	}
+	if s.workFeedStore != nil {
+		stopWithTimeout(5*time.Second, "workFeedStore.Close", s.logger, func() { _ = s.workFeedStore.Close() })
+	}
 	if s.embeddingClient != nil {
 		stopWithTimeout(10*time.Second, "embeddingClient.Shutdown", s.logger, s.embeddingClient.Shutdown)
 	}

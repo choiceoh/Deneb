@@ -79,6 +79,9 @@ func workFeedList(store tooldeps.WorkFeedRW, limit int, includeAcked bool) (stri
 		if it.ReadAtMs == 0 {
 			b.WriteString(" · 미열람")
 		}
+		if len(it.RelatedIDs) > 0 {
+			fmt.Fprintf(&b, " · 관련 %d건", len(it.RelatedIDs))
+		}
 		fmt.Fprintf(&b, " · %s\n", workFeedAge(it.CreatedAtMs))
 	}
 	b.WriteString("\n카드 본문은 workfeed(action=read, id=...), 처리 완료 표시는 action=ack.")
@@ -100,6 +103,9 @@ func workFeedRead(store tooldeps.WorkFeedRW, id string) (string, error) {
 	fmt.Fprintf(&b, "생성: %s", time.UnixMilli(item.CreatedAtMs).Format("2006-01-02 15:04"))
 	if item.RefType != "" {
 		fmt.Fprintf(&b, " · ref: %s/%s", item.RefType, item.RefID)
+	}
+	if len(item.RelatedIDs) > 0 {
+		fmt.Fprintf(&b, " · 관련 카드: %s", strings.Join(item.RelatedIDs, ", "))
 	}
 	b.WriteString("\n\n")
 	body := strings.TrimSpace(item.Body)
