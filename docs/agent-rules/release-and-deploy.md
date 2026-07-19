@@ -88,6 +88,11 @@ cat > ~/.config/systemd/user/deneb-coding-dispatch.timer <<'UNIT'
 Description=Run Deneb coding dispatch every 2 hours
 [Timer]
 OnBootSec=10min
+# OnActiveSec re-arms the schedule when the timer unit itself is restarted
+# (daemon-reload + restart with the service inactive and boot long past leaves
+# OnUnitActiveSec with nothing to anchor to — observed 2026-07-18: the lane
+# silently stopped with "Trigger: n/a" until manually restarted).
+OnActiveSec=10min
 OnUnitActiveSec=2h
 Persistent=true
 [Install]
