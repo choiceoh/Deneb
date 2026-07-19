@@ -110,19 +110,21 @@ class CICheckShellTests(unittest.TestCase):
 
     def test_when_audit_lane_runs_both_health_gates_and_cleans_logs(self) -> None:
         # health-v2-check (the ratchet) left the CI gates in #3917 — Nightly and
-        # manual runs only. The audit lane is the two scorer test suites.
+        # manual runs only. The audit lane is the scorer test suites plus the
+        # doc-reference validate-or-freeze gate (doc-ref-lint).
         proc = self.invoke("--audit")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("2 gates, selected lanes run in parallel", proc.stdout)
-        for gate in ("runtime-health-test", "health-v2-test"):
+        self.assertIn("3 gates, selected lanes run in parallel", proc.stdout)
+        for gate in ("runtime-health-test", "health-v2-test", "doc-ref-lint"):
             self.assertRegex(proc.stdout, rf"{gate}\s+PASS")
-        self.assertIn("2 passed, 0 failed", proc.stdout)
+        self.assertIn("3 passed, 0 failed", proc.stdout)
         self.assertIn("make ci PASSED", proc.stdout)
         self.assertEqual(
             self.calls(),
             [
                 "make runtime-health-test",
                 "make health-v2-test",
+                "make doc-ref-lint",
             ],
         )
         self.assertEqual(list(self.root.glob("deneb-ci-check.*")), [])
@@ -214,6 +216,7 @@ class CICheckShellTests(unittest.TestCase):
             [
                 "make runtime-health-test",
                 "make health-v2-test",
+                "make doc-ref-lint",
             ],
         )
 
@@ -222,7 +225,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)
         self.assertIn("Go:run  Kotlin:run  Audit:run", proc.stdout)
-        self.assertIn("11 passed, 0 failed", proc.stdout)
+        self.assertIn("12 passed, 0 failed", proc.stdout)
         make_calls = [call for call in self.calls() if call.startswith("make ")]
         self.assertIn("make go-test-cached", make_calls)
         self.assertIn("make kotlin-android-compile", make_calls)

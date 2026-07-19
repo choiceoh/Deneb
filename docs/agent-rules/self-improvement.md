@@ -28,7 +28,7 @@ things it shouldn't.
 
 1. **Session completes** → `LogGenesis` records the activity and marks the skill agent-created (`tracker.go` → `curator.go:markSkillAgentCreatedLocked`).
 2. **Threshold check** → `maybeFireEvolveLocked` fires the evolve trigger at 3 new skills, respecting a min-gap.
-3. **Skill generation** → the model generates `SKILL.md`; `Persist` writes to the managed dir. `ErrSkillDeduped` (`genesis.go:41`) is an intentional skip, not a failure.
+3. **Skill generation** → the model generates `SKILL.md`; `Persist` writes to the managed dir. `ErrSkillDeduped` (`generation/service.go:54`) is an intentional skip, not a failure.
 4. **Catalog registration** → discovered by precedence `bundled < managed` (see `skills/CLAUDE.md`).
 5. **Evolution** → `Evolver.EvolveSkill` / `EvolveUnderperformers` rewrites; a candidate is judged by an independent judge model (`SetJudge`).
 6. **Validation gates** → `evolver_skill_validation.go`: the self-harness audit must name a target failure signature, and `validateSelfHarnessEditedSurface` verifies the claimed `edited_surface` matches the section actually changed.
@@ -55,12 +55,12 @@ attempt; it does not mean the change shipped. Delivery advances through
 |---|---|
 | `evolver.go` | `Evolver` — rewrite orchestrator (~844 LOC) |
 | `tracker.go` | `Tracker` — activity log, lifecycle, event triggers, usage-source gate |
-| `genesis.go` | `Service`, `Config`, generation/persist orchestration |
+| `generation/service.go` | `Service`, `Config`, generation/persist orchestration |
 | `curator.go` | Staleness classification + archive; `markSkillAgentCreatedLocked` |
 | `nudger.go` | Mid-session background nudging (shares Service cooldown / `MaxSkillsPerDay`) |
 | `evolver_adopt.go` | Copy-on-evolve **adoption** of bundled skills (`SetAdoptionDirs`) |
 | `evolver_skill_validation.go` | Deterministic admissibility gates — **pure**, no `Evolver` state |
-| `editable_surfaces.go` | `EditableSurface`, `ClassifySurface`, `DeclaredEditableSurfaces` whitelist |
+| `surfaces/surfaces.go` | `EditableSurface`, `ClassifySurface`, `DeclaredEditableSurfaces` whitelist |
 | `workout.go` | Synthetic exercise lane — evidence only, never real usage |
 | `curriculum.go` | Demand-generation lane (RSI P5-1) — coverage-gap mining; files route=genesis opportunities with validation cases authored first (source=`curriculum`, propose-only) |
 | `tracker_self_correction.go` | Self-correction candidate record/query + forbidden-surface gate |
@@ -72,7 +72,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
 | `rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
 
-## Surface Tiers (`editable_surfaces.go`)
+## Surface Tiers (`surfaces/surfaces.go`)
 
 | Tier | Meaning |
 |---|---|
