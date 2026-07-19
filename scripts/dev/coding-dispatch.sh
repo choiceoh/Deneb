@@ -54,6 +54,11 @@ CAPEOF
     )
 fi
 SESSION_TIMEOUT="${DENEB_DISPATCH_TIMEOUT_SEC:-7200}"
+# Terminal dispatch markers accrete forever (one per candidate ever dispatched);
+# the daily cap only counts today's window and the gateway ledger is the
+# authoritative state, so old markers are pure disk residue. Prune terminal
+# markers older than this many days. 0 disables.
+MARKER_RETENTION_DAYS="${DENEB_DISPATCH_MARKER_RETENTION_DAYS:-30}"
 # Consecutive instant-failure cap per candidate. Below this, an instant failure
 # (<60s, rc!=0, no PR) is treated as a transient environment problem and the
 # marker is released for a free retry (no daily-cap slot burned). At/above it,
@@ -307,6 +312,51 @@ reconcile_dispatches() {
     done
 }
 
+# prune_stale_markers removes terminal dispatch markers older than the
+# retention window. Safe because: (a) the daily cap only sums today's window,
+# (b) the gateway ledger — not the marker — is the authoritative candidate
+# state, and (c) a real in-flight dispatch is bounded to SESSION_TIMEOUT, so
+# nothing legitimately open is this old. Never touches phase="started" markers
+# (reclaim owns those on a much shorter timescale).
+prune_stale_markers() {
+    [[ "$MARKER_RETENTION_DAYS" -gt 0 ]] || return 0
+    local pruned
+    pruned=$(python3 - "$DISPATCH_DIR" "$MARKER_RETENTION_DAYS" <<'PY' 2>>"$LOG_FILE" || true
+import json, os, sys, time
+dispatch_dir, days = sys.argv[1], int(sys.argv[2])
+cutoff = time.time() - days * 86400
+pruned = 0
+try:
+    names = os.listdir(dispatch_dir)
+except OSError:
+    print(0); raise SystemExit
+for name in names:
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(dispatch_dir, name)
+    try:
+        if os.path.getmtime(path) >= cutoff:
+            continue
+        with open(path, encoding="utf-8", errors="replace") as f:
+            rec = json.load(f)
+        if isinstance(rec, dict) and rec.get("_dispatchPhase") == "started":
+            continue  # in-flight — reclaim owns it
+        os.unlink(path)
+        # A sibling .instantfail retry marker, if any, goes with it.
+        sib = path[:-5] + ".instantfail"
+        if os.path.exists(sib):
+            os.unlink(sib)
+        pruned += 1
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        continue
+print(pruned)
+PY
+)
+    if [[ "${pruned:-0}" -gt 0 ]]; then
+        log "pruned $pruned terminal dispatch marker(s) older than ${MARKER_RETENTION_DAYS}d"
+    fi
+}
+
 reclaim_abandoned_dispatches() {
     [[ -f "$DISPATCH_RPC" && -f "$DISPATCH_RECLAIM" ]] || return 0
     local ledger_file reclaim_file
@@ -390,6 +440,7 @@ main() {
     local script_dir="$SCRIPT_DIR"
     reconcile_dispatches
     reclaim_abandoned_dispatches
+    prune_stale_markers
 
     # Upgrade non-terminal outcomes first. Newest-first within 14d (mtime), then
     # truncate — sorting AFTER age filter so five stale markers cannot starve
