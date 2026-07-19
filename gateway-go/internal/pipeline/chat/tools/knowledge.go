@@ -25,8 +25,10 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 			Op string `json:"op"`
 
 			// recall
-			Query string `json:"query"`
-			Limit int    `json:"limit"`
+			Query   string   `json:"query"`
+			Limit   int      `json:"limit"`
+			Sources []string `json:"sources"`
+			Scopes  []string `json:"scopes"`
 
 			// read
 			Ref string `json:"ref"`
@@ -51,7 +53,15 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 
 		switch p.Op {
 		case "recall":
-			return knowledgeRecall(ctx, router, p.Query, p.Limit)
+			layers := make([]knowledge.Layer, 0, len(p.Sources))
+			for _, source := range p.Sources {
+				layer, ok := knowledge.ParseLayerName(source)
+				if !ok {
+					return "", fmt.Errorf("unknown knowledge source %q (expected wiki|files)", source)
+				}
+				layers = append(layers, layer)
+			}
+			return knowledgeRecall(ctx, router, p.Query, p.Limit, knowledge.RecallOptions{Layers: layers, Scopes: p.Scopes})
 		case "read":
 			return knowledgeRead(ctx, router, p.Ref)
 		case "record":
@@ -72,7 +82,7 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 	}
 }
 
-func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string, limit int) (string, error) {
+func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string, limit int, options knowledge.RecallOptions) (string, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return "", fmt.Errorf("query is required for knowledge(op=\"recall\")")
@@ -82,18 +92,24 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 	}
 
 	started := time.Now()
-	hits, notes := router.RecallWithMeta(ctx, query, limit)
+	packet := router.RecallPacket(ctx, query, limit, options)
+	hits, notes := packet.Results, packet.Notes
+	planSources := make([]string, 0, len(packet.Plan.Sources))
+	for _, source := range packet.Plan.Sources {
+		planSources = append(planSources, source.Source.Name)
+	}
 	slog.Info(
 		"knowledge tool recall",
 		"query_len", len(query),
 		"limit", limit,
 		"hit_count", len(hits),
-		"layers", router.Layers(),
+		"layers", planSources,
+		"scopes", packet.Plan.Scopes,
 		"notes", len(notes),
 		"total_ms", time.Since(started).Milliseconds(),
 	)
 	if len(hits) == 0 {
-		msg := fmt.Sprintf("검색 결과 없음: %q (layers=%v)", query, router.Layers())
+		msg := fmt.Sprintf("검색 결과 없음: %q (sources=%v)", query, planSources)
 		if len(notes) > 0 {
 			msg += "\n참고: " + strings.Join(notes, "; ")
 		}
@@ -101,7 +117,7 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 	}
 
 	var sb strings.Builder
-	sb.WriteString(toolport.RecallHeader(query, len(hits), fmt.Sprintf("layers=%v", router.Layers())))
+	sb.WriteString(toolport.RecallHeader(query, len(hits), fmt.Sprintf("sources=%v", planSources)))
 	for _, n := range notes {
 		sb.WriteString("참고: ")
 		sb.WriteString(n)
@@ -109,10 +125,10 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 	}
 	for i, h := range hits {
 		metaParts := make([]string, 0, 2)
-		if startLine := strings.TrimSpace(h.Meta["startLine"]); startLine != "" {
-			lineRef := "L" + startLine
-			if endLine := strings.TrimSpace(h.Meta["endLine"]); endLine != "" && endLine != startLine {
-				lineRef += "-L" + endLine
+		if startLine := h.Provenance.Locator.StartLine; startLine > 0 {
+			lineRef := fmt.Sprintf("L%d", startLine)
+			if endLine := h.Provenance.Locator.EndLine; endLine > startLine {
+				lineRef += fmt.Sprintf("-L%d", endLine)
 			}
 			metaParts = append(metaParts, lineRef)
 		}
@@ -120,9 +136,28 @@ func knowledgeRecall(ctx context.Context, router *knowledge.Router, query string
 			metaParts = append(metaParts, time.UnixMilli(h.Time).Format("2006-01-02"))
 		}
 		sb.WriteString(toolport.RecallRow(i+1, h.Ref.String(), strings.Join(metaParts, " · "), h.Snippet))
+		if contextText := strings.TrimSpace(h.Context); contextText != "" {
+			lineRef := ""
+			if start := h.Provenance.Locator.ContextStartLine; start > 0 {
+				lineRef = fmt.Sprintf(" L%d", start)
+				if end := h.Provenance.Locator.ContextEndLine; end > start {
+					lineRef += fmt.Sprintf("-L%d", end)
+				}
+			}
+			fmt.Fprintf(&sb, "   ↳ 인접 문맥%s: %s\n\n", lineRef, truncateKnowledgeContext(contextText, 800))
+		}
 	}
 	sb.WriteString("자세한 내용은 `knowledge(op=\"read\", ref=\"...\")` 로 ref 지정.")
 	return sb.String(), nil
+}
+
+func truncateKnowledgeContext(text string, maxRunes int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 func knowledgeRead(ctx context.Context, router *knowledge.Router, refStr string) (string, error) {

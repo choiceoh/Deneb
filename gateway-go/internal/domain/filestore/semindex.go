@@ -36,12 +36,12 @@ import (
 
 // semindexVersion is bumped when the on-disk shape or chunking changes, so a
 // stale cache from an older layout is dropped and rebuilt rather than misread.
-const semindexVersion = 3
+const semindexVersion = 4
 
 // filestorePreprocessingVersion covers extraction-to-chunk semantics. Bump it
 // whenever chunk boundaries or normalization change without changing the
 // embedding model itself.
-const filestorePreprocessingVersion = "filestore-structure-chunk-v2"
+const filestorePreprocessingVersion = "filestore-code-hierarchy-chunk-v3"
 
 // chunkRunes is the target size of one text chunk (~512 tokens for mixed
 // Korean/English). Rune-based so a chunk boundary never splits a CJK character.
@@ -116,9 +116,11 @@ type ExtractFunc func(ctx context.Context, data []byte, name string) string
 type chunk struct {
 	Snippet   string    `json:"snippet"`
 	Vector    []float32 `json:"vector"`
+	Hash      string    `json:"hash"`
 	StartLine int       `json:"startLine,omitempty"`
 	EndLine   int       `json:"endLine,omitempty"`
 	Kind      string    `json:"kind,omitempty"`
+	Heading   string    `json:"heading,omitempty"`
 }
 
 // fileEntry is the index record for one file: its identity (path), the
@@ -171,14 +173,18 @@ type ScoredEntry struct {
 	Snippet   string
 	StartLine int
 	EndLine   int
+	Kind      string
+	Heading   string
 }
 
 // ReindexStats summarizes one Reindex pass for logging.
 type ReindexStats struct {
-	Scanned  int // files enumerated in the store
-	Embedded int // files (re)embedded this pass (new or changed)
-	Removed  int // index entries dropped because the file is gone
-	Skipped  int // files skipped (too large, unreadable, or no extractable text)
+	Scanned        int // files enumerated in the store
+	Embedded       int // files refreshed this pass (new or changed)
+	ChunksEmbedded int // new/changed structural chunks sent to the embedder
+	ChunksReused   int // unchanged structural chunks whose vectors were retained
+	Removed        int // index entries dropped because the file is gone
+	Skipped        int // files skipped (too large, unreadable, or no extractable text)
 }
 
 // NewSemanticIndex creates an index persisted at path (pass "" to disable
@@ -294,8 +300,9 @@ func (si *SemanticIndex) Rename(oldPath, newPath string) {
 	fe, ok := si.files[oldPath]
 	if ok {
 		delete(si.files, oldPath)
-		fe.Path = newPath
-		si.files[newPath] = fe
+		renamed := cloneFileEntry(fe)
+		renamed.Path = newPath
+		si.files[newPath] = renamed
 	}
 	si.mu.Unlock()
 	if ok {
@@ -405,9 +412,14 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 	var toEmbed []Entry
 	var verify []Entry // (mtime,size) matched — confirm with a content-prefix hash
 	prevContent := make(map[string]string)
+	previous := make(map[string]*fileEntry)
 	for p, e := range live {
 		mtime, size := freshKey(e)
-		if cur, ok := si.files[p]; ok && cur.MTime == mtime && cur.Size == size {
+		cur, exists := si.files[p]
+		if exists {
+			previous[p] = cloneFileEntry(cur)
+		}
+		if exists && cur.MTime == mtime && cur.Size == size {
 			// Looks unchanged by the cheap key. If we have a stored content hash,
 			// re-verify it (catches a same-second, same-size overwrite). An entry
 			// from before content hashing has Content=="" — treat it as current to
@@ -455,7 +467,7 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 			_ = si.persistIfMutated(mutated)
 			return stats, cerr
 		}
-		entry, ok := si.embedFile(ctx, store, extractFn, embed, e)
+		entry, chunksEmbedded, chunksReused, ok := si.embedFile(ctx, store, extractFn, embed, e, previous[e.PathDisplay])
 		if !ok {
 			stats.Skipped++
 			continue
@@ -465,12 +477,23 @@ func (si *SemanticIndex) Reindex(ctx context.Context, store Store, extractFn Ext
 		si.mu.Unlock()
 		mutated = true
 		stats.Embedded++
+		stats.ChunksEmbedded += chunksEmbedded
+		stats.ChunksReused += chunksReused
 	}
 
 	if err := si.persistIfMutated(mutated); err != nil {
 		return stats, err
 	}
 	return stats, nil
+}
+
+func cloneFileEntry(entry *fileEntry) *fileEntry {
+	if entry == nil {
+		return nil
+	}
+	clone := *entry
+	clone.Chunks = append([]chunk(nil), entry.Chunks...)
+	return &clone
 }
 
 // adoptEmbeddingIdentity invalidates vectors produced by another embedding
@@ -510,13 +533,20 @@ func (si *SemanticIndex) persistIfMutated(mutated bool) error {
 // success; (nil, false) when the file is skipped (oversized, unreadable, no
 // text, or an embed failure). An embed failure for one file does not abort the
 // whole reindex — the file is simply left out and retried next pass.
-func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn ExtractFunc, embed Embedder, e Entry) (*fileEntry, bool) {
+func (si *SemanticIndex) embedFile(
+	ctx context.Context,
+	store Store,
+	extractFn ExtractFunc,
+	embed Embedder,
+	e Entry,
+	previous *fileEntry,
+) (*fileEntry, int, int, bool) {
 	if e.Size > maxIndexFileBytes {
-		return nil, false
+		return nil, 0, 0, false
 	}
 	data, _, err := store.Get(ctx, e.PathDisplay)
 	if err != nil {
-		return nil, false // vanished/unreadable mid-walk
+		return nil, 0, 0, false // vanished/unreadable mid-walk
 	}
 	content := contentHashOfBytes(data, e.Size)
 	text := extractFn(ctx, data, e.Name)
@@ -525,30 +555,66 @@ func (si *SemanticIndex) embedFile(ctx context.Context, store Store, extractFn E
 		// No extractable text: record a fresh, empty entry so we don't re-extract
 		// this unchanged file every pass (the mtime/size/content key marks it current).
 		mtime, size := freshKey(e)
-		return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content}, true
+		return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content}, 0, 0, true
 	}
 
-	out := make([]chunk, 0, len(chunks))
-	for start := 0; start < len(chunks); start += embedBatchSize {
-		end := start + embedBatchSize
-		if end > len(chunks) {
-			end = len(chunks)
+	previousByHash := make(map[string][]float32)
+	if previous != nil {
+		for _, piece := range previous.Chunks {
+			if piece.Hash != "" && len(piece.Vector) > 0 {
+				previousByHash[piece.Hash] = piece.Vector
+			}
 		}
+	}
+	out := make([]chunk, len(chunks))
+	pending := make([]int, 0, len(chunks))
+	reused := 0
+	for i, piece := range chunks {
+		input := chunkEmbeddingText(piece)
+		hash := embedindex.ContentHash(input)
+		out[i] = chunk{
+			Snippet: piece.Text, Hash: hash, StartLine: piece.StartLine, EndLine: piece.EndLine,
+			Kind: piece.Kind, Heading: piece.Heading,
+		}
+		if vector := previousByHash[hash]; len(vector) > 0 {
+			out[i].Vector = vector
+			reused++
+			continue
+		}
+		pending = append(pending, i)
+	}
+	for start := 0; start < len(pending); start += embedBatchSize {
+		end := min(start+embedBatchSize, len(pending))
 		texts := make([]string, end-start)
 		for i := start; i < end; i++ {
-			texts[i-start] = chunks[i].Text
+			texts[i-start] = chunkEmbeddingText(chunks[pending[i]])
 		}
-		vecs, eerr := embed.Embed(ctx, texts)
-		if eerr != nil || len(vecs) != end-start {
-			return nil, false // skip this file; retried next pass
+		vecs, embedErr := embed.Embed(ctx, texts)
+		if embedErr != nil || len(vecs) != end-start {
+			return nil, 0, 0, false // skip this file; retried next pass
 		}
-		for i, v := range vecs {
-			piece := chunks[start+i]
-			out = append(out, chunk{Snippet: piece.Text, Vector: v, StartLine: piece.StartLine, EndLine: piece.EndLine, Kind: piece.Kind})
+		for i, vector := range vecs {
+			out[pending[start+i]].Vector = vector
 		}
 	}
 	mtime, size := freshKey(e)
-	return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content, Chunks: out}, true
+	return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content, Chunks: out}, len(pending), reused, true
+}
+
+func chunkEmbeddingText(chunk textchunk.Chunk) string {
+	if chunk.Heading == "" || !isCodeChunkKind(chunk.Kind) {
+		return chunk.Text
+	}
+	return strings.TrimSpace("kind: " + chunk.Kind + "\nsymbol: " + chunk.Heading + "\n" + chunk.Text)
+}
+
+func isCodeChunkKind(kind string) bool {
+	for _, prefix := range []string{"go-", "kotlin-", "python-", "javascript-", "java-", "rust-"} {
+		if strings.HasPrefix(kind, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // Search embeds the query and returns up to max files ranked by the best cosine
@@ -570,12 +636,15 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 		snippet string
 		start   int
 		end     int
+		kind    string
+		heading string
 	}
 	hits := make([]scored, 0, len(entries))
 	for _, fe := range entries {
 		best := -1.0
 		bestSnip := ""
 		bestStart, bestEnd := 0, 0
+		bestKind, bestHeading := "", ""
 		for i := range fe.Chunks {
 			s := cosine(qv, fe.Chunks[i].Vector)
 			if s > best {
@@ -583,13 +652,18 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 				bestSnip = fe.Chunks[i].Snippet
 				bestStart = fe.Chunks[i].StartLine
 				bestEnd = fe.Chunks[i].EndLine
+				bestKind = fe.Chunks[i].Kind
+				bestHeading = fe.Chunks[i].Heading
 			}
 		}
 		if best < minSemanticScore {
 			continue // below the cosine floor (empty entry, or only noise-level
 			// similarity) ⇒ not a semantic hit; the caller's lexical fallback handles it
 		}
-		hits = append(hits, scored{path: fe.Path, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip, start: bestStart, end: bestEnd})
+		hits = append(hits, scored{
+			path: fe.Path, size: fe.Size, mtime: fe.MTime, score: best, snippet: bestSnip,
+			start: bestStart, end: bestEnd, kind: bestKind, heading: bestHeading,
+		})
 	}
 
 	sort.Slice(hits, func(a, b int) bool {
@@ -618,6 +692,8 @@ func (si *SemanticIndex) Search(ctx context.Context, query string, max int, embe
 			Snippet:   h.snippet,
 			StartLine: h.start,
 			EndLine:   h.end,
+			Kind:      h.kind,
+			Heading:   h.heading,
 		})
 	}
 	return out, nil

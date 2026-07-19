@@ -39,8 +39,8 @@ func RegisterKnowledgeTool(registry toolport.ToolRegistrar, router *knowledge.Ro
 	}
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "knowledge",
-		Description: "지식·기억 도구. 위키 지식베이스를 의미+키워드로 검색·조회·기록. " +
-			"op=recall(질의→의미 기반 검색, ref와 함께 머지) → " +
+		Description: "지식·기억 도구. 소스 카탈로그를 계획해 위키·파일을 의미+키워드로 검색·조회하고 위키를 기록. " +
+			"op=recall(질의→소스 병렬 검색, sources/scopes로 명시 제한 가능, ref와 근거 문맥 머지) → " +
 			"op=read(ref로 단건 fetch — `w:인물/박부장` 같이 prefix로 layer 자동 라우팅) → " +
 			"op=record(wiki에 큐레이션 페이지 작성·갱신). " +
 			"polaris(현재 세션 회상)·graphify(개념 그래프)는 별개 도구로 분리됨 — paradigm이 다름.",

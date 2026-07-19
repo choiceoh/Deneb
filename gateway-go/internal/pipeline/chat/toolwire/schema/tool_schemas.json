@@ -1677,6 +1677,24 @@
         "minimum": 1,
         "maximum": 50
       },
+      "sources": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "wiki",
+            "files"
+          ]
+        },
+        "description": "검색할 소스 제한 (op=recall, 생략 시 planner가 사용 가능한 소스를 모두 병렬 검색)"
+      },
+      "scopes": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "경로/프로젝트 범위 (op=recall) — 예: `프로젝트/탑솔라`, `files:/계약`"
+      },
       "ref": {
         "type": "string",
         "description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`"

@@ -1,4 +1,5 @@
-// semantic.go — dense-vector recall over RESIDENT sessions' summary nodes.
+// semantic.go — dense-vector recall over RESIDENT sessions' structured
+// conversation artifacts and admitted high-signal bursts.
 //
 // The keyword search (SearchMessages / SearchResidentSessions) finds past
 // messages by literal overlap; it misses a session that is *about* the query but
@@ -7,10 +8,11 @@
 // "지난번에 곡성 대금 어떻게 했더라" surfaces the session whose summary says
 // "금호 곡성 기성 청구 처리" even with no shared word.
 //
-// Why summaries, not raw messages: a per-message vector index grows unbounded
-// (tens of thousands of messages → 100MB+ of vectors). Summary nodes are few per
-// session and already the distilled content, so the index stays small AND the
-// recall is denoised. It is bounded to sessions resident in memory this uptime —
+// Why artifacts/bursts, not every raw message: a per-message vector index grows
+// unbounded and embeds low-signal chatter. Raw messages stay losslessly FTS
+// searchable; one normalized artifact per summary range plus a small, gated set
+// of consecutive high-signal bursts supplies semantic recall. It is bounded to
+// sessions resident in memory this uptime —
 // the same scope as SearchResidentSessions — so it does no disk I/O and re-embeds
 // only what is loaded. The on-disk cache is intentionally disabled (cachePath
 // ""): nothing is resident at boot, so a persisted cache would just be dropped on
@@ -20,16 +22,19 @@ package polaris
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 )
 
 // SummaryHit is a semantic match against one session summary node.
 type SummaryHit struct {
-	SessionKey string
-	Content    string
-	CreatedAt  int64
-	Score      float64 // cosine (0–1)
+	SessionKey     string
+	Content        string
+	CreatedAt      int64
+	Score          float64 // cosine (0–1)
+	Representation string  // artifact | burst | summary-fallback
+	Artifact       *ConversationArtifact
 }
 
 // SetSummaryEmbedder wires (or clears, on nil embedder) the summary semantic
@@ -42,7 +47,7 @@ func (s *Store) SetSummaryEmbedder(e embedindex.Embedder) {
 	if e == nil {
 		return
 	}
-	s.summarySem = embedindex.New("session", e, "" /* no on-disk cache */, embedindex.WithPreprocessingFingerprint("session-summary-v1"))
+	s.summarySem = embedindex.New("session", e, "" /* no on-disk cache */, embedindex.WithPreprocessingFingerprint("session-artifact-burst-v2"))
 }
 
 // closeSummarySem stops the summary semantic index (folded into Store.Close).
@@ -62,10 +67,50 @@ func (s *Store) warmSummarySem(ctx context.Context) error {
 	return s.summarySem.Warm(ctx, s.summaryItems)
 }
 
-// summaryItemID keys a summary node's vector by session + node id (NUL separator,
-// which cannot appear in a session key).
-func summaryItemID(sessionKey string, nodeID int64) string {
-	return sessionKey + "\x00" + strconv.FormatInt(nodeID, 10)
+// semanticItemID keys one artifact/burst vector by session + summary node +
+// representation (NUL cannot appear in a session key).
+func semanticItemID(sessionKey string, nodeID int64, representation string, index int) string {
+	return sessionKey + "\x00" + strconv.FormatInt(nodeID, 10) + "\x00" + representation + "\x00" + strconv.Itoa(index)
+}
+
+type semanticRepresentation struct {
+	id             string
+	text           string
+	content        string
+	representation string
+	artifact       *ConversationArtifact
+}
+
+func nodeSemanticRepresentations(sessionKey string, node SummaryNode) []semanticRepresentation {
+	artifact := node.Artifact
+	if artifact == nil {
+		text := strings.TrimSpace(node.Content)
+		if text == "" {
+			return nil
+		}
+		return []semanticRepresentation{{
+			id: semanticItemID(sessionKey, node.ID, "summary", 0), text: text, content: text,
+			representation: "summary-fallback",
+		}}
+	}
+	var out []semanticRepresentation
+	if text := artifact.embeddingText(); text != "" {
+		out = append(out, semanticRepresentation{
+			id: semanticItemID(sessionKey, node.ID, "artifact", 0), text: text, content: text,
+			representation: "artifact", artifact: artifact,
+		})
+	}
+	for i, burst := range artifact.Bursts {
+		text := artifact.burstEmbeddingText(burst)
+		if text == "" {
+			continue
+		}
+		out = append(out, semanticRepresentation{
+			id: semanticItemID(sessionKey, node.ID, "burst", i), text: text, content: text,
+			representation: "burst", artifact: artifact,
+		})
+	}
+	return out
 }
 
 // summaryItems enumerates the summary nodes of every resident session for
@@ -76,14 +121,11 @@ func (s *Store) summaryItems() []embedindex.Item {
 	var items []embedindex.Item
 	for key, sd := range s.sessions {
 		for _, n := range sd.summaries {
-			if n.Content == "" {
-				continue
+			for _, representation := range nodeSemanticRepresentations(key, n) {
+				items = append(items, embedindex.Item{
+					ID: representation.id, Hash: embedindex.ContentHash(representation.text), Text: representation.text,
+				})
 			}
-			items = append(items, embedindex.Item{
-				ID:   summaryItemID(key, n.ID),
-				Hash: embedindex.ContentHash(n.Content),
-				Text: n.Content,
-			})
 		}
 	}
 	return items
@@ -114,10 +156,11 @@ func (s *Store) SearchSummariesSemantic(ctx context.Context, excludeKey string, 
 			continue
 		}
 		for _, n := range sd.summaries {
-			lookup[summaryItemID(key, n.ID)] = SummaryHit{
-				SessionKey: key,
-				Content:    n.Content,
-				CreatedAt:  n.CreatedAt,
+			for _, representation := range nodeSemanticRepresentations(key, n) {
+				lookup[representation.id] = SummaryHit{
+					SessionKey: key, Content: representation.content, CreatedAt: n.CreatedAt,
+					Representation: representation.representation, Artifact: representation.artifact,
+				}
 			}
 		}
 	}

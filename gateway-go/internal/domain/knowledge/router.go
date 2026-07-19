@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -78,29 +79,68 @@ func (r *Router) Recall(ctx context.Context, query string, limit int) []Result {
 // RecallWithMeta is Recall plus human-readable degrade notes (e.g. files-layer
 // timeout). Notes are empty when every layer completed normally.
 func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([]Result, []string) {
+	packet := r.RecallPacket(ctx, query, limit, RecallOptions{})
+	return packet.Results, packet.Notes
+}
+
+// RecallPacket plans, fans out, normalizes, and fuses one retrieval request.
+// Existing Recall/RecallWithMeta callers retain their behavior through the
+// wrappers above; new consumers get the typed plan and evidence provenance.
+func (r *Router) RecallPacket(ctx context.Context, query string, limit int, options RecallOptions) EvidencePacket {
 	if limit <= 0 {
 		limit = 10
+	}
+	started := time.Now()
+	retrievedAt := started.UnixMilli()
+	plan := r.PlanRecall(query, limit, options)
+	packet := EvidencePacket{Query: strings.TrimSpace(query), Plan: plan, RetrievedAt: retrievedAt}
+	if len(plan.Sources) == 0 {
+		packet.Notes = []string{"선택 조건에 맞는 지식 소스가 없음"}
+		return packet
+	}
+	adapterByLayer := make(map[Layer]Adapter, len(r.adapters))
+	for _, adapter := range r.adapters {
+		adapterByLayer[adapter.Layer()] = adapter
 	}
 	var (
 		wg      sync.WaitGroup
 		mu      sync.Mutex
-		byHits  = make(map[Layer][]Result, len(r.adapters))
-		layerMs = make(map[Layer]int64, len(r.adapters))
+		byHits  = make(map[Layer][]Result, len(plan.Sources))
+		layerMs = make(map[Layer]int64, len(plan.Sources))
 		notes   []string
 	)
-	started := time.Now()
-	for _, a := range r.adapters {
+	for _, source := range plan.Sources {
+		a := adapterByLayer[source.Source.Layer]
+		if a == nil {
+			continue
+		}
 		wg.Add(1)
-		go func(a Adapter) {
+		go func(a Adapter, source PlannedSource) {
 			defer wg.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					mu.Lock()
+					notes = append(notes, fmt.Sprintf("%s 소스 오류로 제외됨", source.Source.Name))
+					mu.Unlock()
+					slog.Warn("knowledge recall source panicked", "source", source.Source.Name, "panic", recovered)
+				}
+			}()
 			layerStart := time.Now()
-			hits, err := a.Recall(ctx, query, limit)
+			hits, err := a.Recall(ctx, query, source.FetchLimit)
 			elapsed := time.Since(layerStart).Milliseconds()
 			mu.Lock()
 			defer mu.Unlock()
 			layerMs[a.Layer()] = elapsed
 			if err == nil {
-				byHits[a.Layer()] = append(byHits[a.Layer()], hits...)
+				for _, hit := range hits {
+					if !inRecallScopes(hit.Ref, plan.Scopes) {
+						continue
+					}
+					byHits[a.Layer()] = append(byHits[a.Layer()], normalizeEvidence(hit, source.Source, retrievedAt))
+				}
+				if _, ok := byHits[a.Layer()]; !ok {
+					byHits[a.Layer()] = nil
+				}
 				return
 			}
 			if errors.Is(err, ErrFilesRecallTimeout) {
@@ -109,7 +149,7 @@ func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([
 			}
 			// Other adapter errors: swallow (same as before) so one flaky
 			// backend cannot fail the whole recall.
-		}(a)
+		}(a, source)
 	}
 	wg.Wait()
 
@@ -125,9 +165,15 @@ func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([
 		rank int // 1-based within its layer after quota trim
 	}
 	var ranked []rankedHit
+	contributingLayers := 0
+	for _, hits := range byHits {
+		if len(hits) > 0 {
+			contributingLayers++
+		}
+	}
 	for _, hits := range byHits {
 		sort.SliceStable(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
-		if len(byHits) > 1 && len(hits) > quota {
+		if contributingLayers > 1 && len(hits) > quota {
 			hits = hits[:quota]
 		}
 		for i, h := range hits {
@@ -143,13 +189,23 @@ func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([
 		rrf := 1.0 / (mergeRRFK + float64(ranked[i].rank))
 		ranked[i].res.Score = rrf * scale
 	}
+	priorityByLayer := make(map[Layer]int, len(plan.Sources))
+	for _, source := range plan.Sources {
+		priorityByLayer[source.Source.Layer] = source.Priority
+	}
 	sort.SliceStable(ranked, func(i, j int) bool {
 		if ranked[i].res.Score != ranked[j].res.Score {
 			return ranked[i].res.Score > ranked[j].res.Score
 		}
-		// Same rank across layers: prefer curated wiki over files, then
-		// stable ref order — never fall back to raw backend scores.
+		// Same rank across layers: use the auditable planner priority (for
+		// example files on a code/path query), then the curated-wiki default and
+		// stable ref order. Never fall back to incomparable raw backend scores.
 		if ranked[i].res.Ref.Layer != ranked[j].res.Ref.Layer {
+			leftPriority := priorityByLayer[ranked[i].res.Ref.Layer]
+			rightPriority := priorityByLayer[ranked[j].res.Ref.Layer]
+			if leftPriority != rightPriority {
+				return leftPriority > rightPriority
+			}
 			if ranked[i].res.Ref.Layer == LayerWiki {
 				return true
 			}
@@ -170,7 +226,7 @@ func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([
 
 	filesDegraded := ""
 	for _, n := range notes {
-		if n != "" {
+		if strings.Contains(n, "files 레이어 타임아웃") {
 			filesDegraded = "timeout"
 			break
 		}
@@ -180,13 +236,24 @@ func (r *Router) RecallWithMeta(ctx context.Context, query string, limit int) ([
 		"query_len", len(query),
 		"limit", limit,
 		"hit_count", len(all),
-		"layers", r.Layers(),
+		"layers", plannedLayers(plan),
+		"scopes", plan.Scopes,
 		"wiki_ms", layerMs[LayerWiki],
 		"files_ms", layerMs[LayerFiles],
 		"files_degraded", filesDegraded,
 		"total_ms", time.Since(started).Milliseconds(),
 	)
-	return all, notes
+	packet.Results = all
+	packet.Notes = notes
+	return packet
+}
+
+func plannedLayers(plan RecallPlan) []Layer {
+	layers := make([]Layer, 0, len(plan.Sources))
+	for _, source := range plan.Sources {
+		layers = append(layers, source.Source.Layer)
+	}
+	return layers
 }
 
 // Read dispatches to the adapter that owns the ref's layer.

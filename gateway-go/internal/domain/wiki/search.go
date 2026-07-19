@@ -13,18 +13,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/pkg/textchunk"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
 )
 
 // SearchResult is a single search hit.
 type SearchResult struct {
-	Path    string             `json:"path"`              // relative path within wiki dir
-	Line    int                `json:"line,omitempty"`    // absolute 1-based start line
-	EndLine int                `json:"endLine,omitempty"` // absolute 1-based inclusive end line
-	Content string             `json:"content"`           // matching snippet
-	Context []string           `json:"context,omitempty"` // hierarchical path/business context
-	Score   float64            `json:"score"`             // relevance score (0-1)
-	Explain *SearchExplanation `json:"explain,omitempty"` // populated only for explicit diagnostic queries
+	Path            string             `json:"path"`                      // relative path within wiki dir
+	Line            int                `json:"line,omitempty"`            // absolute 1-based start line of Content
+	EndLine         int                `json:"endLine,omitempty"`         // absolute 1-based inclusive end line of Content
+	Content         string             `json:"content"`                   // matching snippet
+	ExpandedContent string             `json:"expandedContent,omitempty"` // bounded adjacent sections, attached only after final ranking
+	ExpandedLine    int                `json:"expandedLine,omitempty"`    // absolute 1-based start line of ExpandedContent
+	ExpandedEndLine int                `json:"expandedEndLine,omitempty"` // absolute 1-based inclusive end line of ExpandedContent
+	UpdatedAt       int64              `json:"updatedAt,omitempty"`       // page metadata timestamp, unix milli when parseable
+	Context         []string           `json:"context,omitempty"`         // hierarchical path/business context
+	Score           float64            `json:"score"`                     // relevance score (0-1)
+	Explain         *SearchExplanation `json:"explain,omitempty"`         // populated only for explicit diagnostic queries
 }
 
 // SearchMode selects one retrieval stage for evaluation. The zero/auto mode is
@@ -87,6 +92,7 @@ type SearchDiagnostics struct {
 	IntentApplied     bool                    `json:"intentApplied"`
 	CandidateCount    int                     `json:"candidateCount"`
 	ReturnedCount     int                     `json:"returnedCount"`
+	ContextExpanded   int                     `json:"contextExpanded,omitempty"`
 	Scopes            []string                `json:"scopes,omitempty"`
 	Clauses           []QueryClauseDiagnostic `json:"clauses,omitempty"`
 	Rerank            RerankDiagnostics       `json:"rerank"`
@@ -634,6 +640,7 @@ func (s *Store) composeSearchReport(
 	results = truncateResults(results, limit)
 	if !options.skipMetadata {
 		s.attachResultMetadata(query, results)
+		diagnostics.ContextExpanded = s.attachLateContext(results)
 	}
 	if admitted > len(results) {
 		diagnostics.Dropped = appendDrop(diagnostics.Dropped, "result_limit", admitted-len(results))
@@ -646,6 +653,121 @@ func (s *Store) composeSearchReport(
 	return SearchReport{Results: results, Diagnostics: diagnostics}
 }
 
+const (
+	// Late context expansion runs only on the final winners. Retrieval and the
+	// cross-encoder therefore score compact chunks; nearby sections are restored
+	// afterwards so synthesis sees enough surrounding meaning without paying the
+	// embedding/rerank cost for that extra text on every candidate.
+	lateContextWinnerLimit = 3
+	lateContextTargetRunes = 500
+	lateContextMaxRunes    = 1600
+	lateContextNeighbors   = 1
+	lateContextMaxChunks   = 128
+)
+
+// attachLateContext restores the section immediately before and after each of
+// the top final hits. It deliberately runs after truncate/rerank and keeps the
+// original Content + line range intact as the precise matching evidence.
+func (s *Store) attachLateContext(results []SearchResult) int {
+	expanded := 0
+	for i := 0; i < min(len(results), lateContextWinnerLimit); i++ {
+		result := &results[i]
+		page, err := s.ReadPage(result.Path)
+		if err != nil || page == nil || strings.TrimSpace(page.Body) == "" {
+			continue
+		}
+		chunks := textchunk.Split(result.Path, page.Body, textchunk.Options{
+			TargetRunes: lateContextTargetRunes,
+			MaxChunks:   lateContextMaxChunks,
+		})
+		if len(chunks) < 2 {
+			continue
+		}
+		bodyStart := pageBodyStartLine(page)
+		matchLine := result.Line - bodyStart + 1
+		chunkIndex := matchingContextChunk(chunks, matchLine, result.Content)
+		if chunkIndex < 0 {
+			continue
+		}
+		start := max(0, chunkIndex-lateContextNeighbors)
+		end := min(len(chunks), chunkIndex+lateContextNeighbors+1)
+		text, firstLine, lastLine := boundedContextChunks(chunks[start:end], chunkIndex-start, lateContextMaxRunes)
+		if text == "" || strings.TrimSpace(text) == strings.TrimSpace(result.Content) {
+			continue
+		}
+		result.ExpandedContent = text
+		result.ExpandedLine = bodyStart + firstLine - 1
+		result.ExpandedEndLine = bodyStart + lastLine - 1
+		expanded++
+	}
+	return expanded
+}
+
+func matchingContextChunk(chunks []textchunk.Chunk, line int, snippet string) int {
+	needle := strings.TrimSpace(snippet)
+	if runes := []rune(needle); len(runes) > 80 {
+		needle = string(runes[:80])
+	}
+	fallback := -1
+	for i, chunk := range chunks {
+		if line < chunk.StartLine || line > chunk.EndLine {
+			continue
+		}
+		if fallback < 0 {
+			fallback = i
+		}
+		if needle != "" && strings.Contains(chunk.Text, needle) {
+			return i
+		}
+	}
+	return fallback
+}
+
+// boundedContextChunks keeps the matching chunk and adds its already-bounded
+// neighbors when they fit. The returned lines always describe the emitted
+// chronological window, even when one neighbor is omitted for budget.
+func boundedContextChunks(chunks []textchunk.Chunk, matchIndex, maxRunes int) (string, int, int) {
+	if len(chunks) == 0 || matchIndex < 0 || matchIndex >= len(chunks) || maxRunes <= 0 {
+		return "", 0, 0
+	}
+	selected := map[int]bool{matchIndex: true}
+	used := len([]rune(strings.TrimSpace(chunks[matchIndex].Text)))
+	for distance := 1; distance <= lateContextNeighbors; distance++ {
+		for _, index := range []int{matchIndex - distance, matchIndex + distance} {
+			if index < 0 || index >= len(chunks) {
+				continue
+			}
+			cost := len([]rune(strings.TrimSpace(chunks[index].Text)))
+			if used+cost+2 > maxRunes {
+				continue
+			}
+			selected[index] = true
+			used += cost + 2
+		}
+	}
+	parts := make([]string, 0, len(selected))
+	firstLine, lastLine := 0, 0
+	for i, chunk := range chunks {
+		if !selected[i] {
+			continue
+		}
+		text := strings.TrimSpace(chunk.Text)
+		if text == "" {
+			continue
+		}
+		if firstLine == 0 {
+			firstLine = chunk.StartLine
+		}
+		lastLine = chunk.EndLine
+		parts = append(parts, text)
+	}
+	text := strings.Join(parts, "\n\n")
+	if runes := []rune(text); len(runes) > maxRunes {
+		text = strings.TrimSpace(string(runes[:maxRunes]))
+	}
+	return text, firstLine, lastLine
+}
+
 func (s *Store) attachResultMetadata(query string, results []SearchResult) {
 	for i := range results {
 		page, err := s.ReadPage(results[i].Path)
@@ -653,6 +775,9 @@ func (s *Store) attachResultMetadata(query string, results []SearchResult) {
 			continue
 		}
 		results[i].Context = hierarchicalPageContext(results[i].Path, page)
+		if updated, err := time.Parse("2006-01-02", strings.TrimSpace(page.Meta.Updated)); err == nil {
+			results[i].UpdatedAt = updated.UnixMilli()
+		}
 		if results[i].Line > 0 && results[i].Content != "" {
 			if results[i].EndLine < results[i].Line {
 				results[i].EndLine = results[i].Line

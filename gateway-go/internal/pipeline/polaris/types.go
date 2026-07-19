@@ -54,13 +54,35 @@ func DefaultConfig() Config {
 type SummaryNode struct {
 	ID         int64 // auto-increment primary key
 	SessionKey string
-	Level      int    // 1 = leaf, 2+ = condensed
-	Content    string // summary text (Korean)
-	TokenEst   int    // estimated token count
-	CreatedAt  int64  // unix milliseconds
-	MsgStart   int    // first source message index (inclusive)
-	MsgEnd     int    // last source message index (inclusive)
-	ParentID   *int64 // condensed node that absorbed this node (nil = uncondensed)
+	Level      int                   // 1 = leaf, 2+ = condensed
+	Content    string                // summary text (Korean)
+	TokenEst   int                   // estimated token count
+	CreatedAt  int64                 // unix milliseconds
+	MsgStart   int                   // first source message index (inclusive)
+	MsgEnd     int                   // last source message index (inclusive)
+	ParentID   *int64                // condensed node that absorbed this node (nil = uncondensed)
+	Artifact   *ConversationArtifact // normalized retrieval projection derived from the covered raw messages + summary
+}
+
+// ConversationArtifact is the semantic retrieval projection of one summary
+// range. Raw messages remain the lossless FTS representation; this normalized
+// record carries the question, resolution, systems/code references, and only
+// the high-signal consecutive-message bursts worth embedding separately.
+type ConversationArtifact struct {
+	Question   string
+	Summary    string
+	Resolution string
+	Systems    []string
+	CodeRefs   []string
+	Bursts     []ConversationBurst
+}
+
+type ConversationBurst struct {
+	Role     string
+	MsgStart int
+	MsgEnd   int
+	Text     string
+	Signal   int
 }
 
 // CreatedTime returns CreatedAt as time.Time.

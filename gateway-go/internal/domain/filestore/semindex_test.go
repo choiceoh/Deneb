@@ -216,6 +216,73 @@ func TestSemanticIndex_IncrementalReindexUpdatesChangedFiles(t *testing.T) {
 	}
 }
 
+func TestSemanticIndex_CodeRefreshReusesUnchangedStructuralChunks(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	const before = `package sample
+
+func Stable() string {
+	return "stable anchor"
+}
+
+func Changed() string {
+	return "before token"
+}
+`
+	const after = `package sample
+
+func Stable() string {
+	return "stable anchor"
+}
+
+func Changed() string {
+	return "after token"
+}
+`
+	mustPut(t, store, "/src/sample.go", before)
+	embed := newFakeEmbedder("stable", "anchor", "before", "after", "changed")
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+	first, err := idx.Reindex(ctx, store, plainText, embed)
+	if err != nil {
+		t.Fatalf("Reindex 1: %v", err)
+	}
+	if first.ChunksEmbedded < 3 || first.ChunksReused != 0 {
+		t.Fatalf("first stats = %+v, want overview + declarations embedded", first)
+	}
+
+	mustPut(t, store, "/src/sample.go", after)
+	beforeTexts := embed.texts
+	second, err := idx.Reindex(ctx, store, plainText, embed)
+	if err != nil {
+		t.Fatalf("Reindex 2: %v", err)
+	}
+	if second.Embedded != 1 || second.ChunksReused < 1 || second.ChunksEmbedded != 2 {
+		t.Fatalf("second stats = %+v, want stable function reused and overview+changed function embedded", second)
+	}
+	if embedded := embed.texts - beforeTexts; embedded != second.ChunksEmbedded {
+		t.Fatalf("embedder received %d texts, stats report %d", embedded, second.ChunksEmbedded)
+	}
+
+	idx.mu.Lock()
+	entry := cloneFileEntry(idx.files["/src/sample.go"])
+	idx.mu.Unlock()
+	if entry == nil {
+		t.Fatal("code file missing from index")
+	}
+	var stable, changed bool
+	for _, chunk := range entry.Chunks {
+		switch chunk.Heading {
+		case "Stable":
+			stable = chunk.Kind == "go-function" && chunk.Hash != ""
+		case "Changed":
+			changed = chunk.Kind == "go-function" && strings.Contains(chunk.Snippet, "after token")
+		}
+	}
+	if !stable || !changed {
+		t.Fatalf("hierarchical chunks = %+v", entry.Chunks)
+	}
+}
+
 // A file overwritten with DIFFERENT content but the SAME byte size and SAME
 // mtime (second granularity) must still re-embed. The (mtime,size) key alone
 // can't see this — the content-prefix hash is what catches it.

@@ -4,11 +4,25 @@ import "context"
 
 // Result is a single hit returned by Recall.
 type Result struct {
-	Ref     Ref
-	Snippet string
-	Score   float64
-	Meta    map[string]string // backend-specific result metadata (for example, absolute line ranges)
-	Time    int64             // unix milli, 0 when the backend does not surface a timestamp
+	Ref        Ref
+	Snippet    string
+	Context    string // bounded late-expanded context; Snippet remains the precise match
+	Score      float64
+	Provenance Provenance
+	Meta       map[string]string // legacy/backend-specific fields not yet promoted into Provenance
+	Time       int64             // unix milli, 0 when the backend does not surface a timestamp
+}
+
+// EvidencePacket is the typed boundary between source planning/retrieval and
+// agent-facing synthesis. It keeps the plan, degradation notes, provenance,
+// freshness, exact match, and late-expanded context together instead of
+// flattening those distinctions into one display string.
+type EvidencePacket struct {
+	Query       string
+	Plan        RecallPlan
+	Results     []Result
+	Notes       []string
+	RetrievedAt int64 // unix milli
 }
 
 // Document is the full content of one knowledge entry fetched by Read.

@@ -125,6 +125,8 @@ func (si *SemanticIndex) HybridSearch(ctx context.Context, query string, max int
 			Snippet:   h.snippet,
 			StartLine: h.start,
 			EndLine:   h.end,
+			Kind:      h.kind,
+			Heading:   h.heading,
 		})
 	}
 	return results, nil
@@ -140,6 +142,8 @@ type hybridSemHit struct {
 	snippet string
 	start   int
 	end     int
+	kind    string
+	heading string
 }
 
 // hybridFusedHit is an admitted file carrying its RRF fusion score (the
@@ -153,6 +157,8 @@ type hybridFusedHit struct {
 	cos     float64
 	start   int
 	end     int
+	kind    string
+	heading string
 }
 
 // hybridSemanticHits computes each file's best chunk cosine (and its snippet),
@@ -164,6 +170,7 @@ func hybridSemanticHits(qv []float32, entries []*fileEntry) []hybridSemHit {
 		best := -1.0
 		bestSnip := ""
 		bestStart, bestEnd := 0, 0
+		bestKind, bestHeading := "", ""
 		for i := range fe.Chunks {
 			s := cosine(qv, fe.Chunks[i].Vector)
 			if s > best {
@@ -171,12 +178,17 @@ func hybridSemanticHits(qv []float32, entries []*fileEntry) []hybridSemHit {
 				bestSnip = fe.Chunks[i].Snippet
 				bestStart = fe.Chunks[i].StartLine
 				bestEnd = fe.Chunks[i].EndLine
+				bestKind = fe.Chunks[i].Kind
+				bestHeading = fe.Chunks[i].Heading
 			}
 		}
 		if best < 0 {
 			best = 0 // a file with no chunks (text-less) has no semantic signal
 		}
-		sem = append(sem, hybridSemHit{path: fe.Path, size: fe.Size, mtime: fe.MTime, cos: best, snippet: bestSnip, start: bestStart, end: bestEnd})
+		sem = append(sem, hybridSemHit{
+			path: fe.Path, size: fe.Size, mtime: fe.MTime, cos: best, snippet: bestSnip,
+			start: bestStart, end: bestEnd, kind: bestKind, heading: bestHeading,
+		})
 	}
 	sort.Slice(sem, func(a, b int) bool {
 		if sem[a].cos != sem[b].cos {
@@ -271,6 +283,7 @@ func fuseHybridHits(sem []hybridSemHit, lex map[string]lexResult, semRank, lexRa
 		out = append(out, hybridFusedHit{
 			path: h.path, size: h.size, mtime: h.mtime,
 			snippet: h.snippet, score: score, cos: h.cos, start: h.start, end: h.end,
+			kind: h.kind, heading: h.heading,
 		})
 	}
 

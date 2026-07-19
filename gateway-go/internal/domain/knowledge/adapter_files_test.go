@@ -179,3 +179,18 @@ func TestNewFilesAdapter_NilWhenDegraded(t *testing.T) {
 		t.Error("nil embedder should yield nil adapter")
 	}
 }
+
+func TestFilesAdapterDescriptorHasValidIncrementalSyncContract(t *testing.T) {
+	adapter, _, _ := newFilesAdapterFixture(t)
+	described, ok := adapter.(SourceDescriber)
+	if !ok {
+		t.Fatal("files adapter does not describe its connector contract")
+	}
+	descriptor := described.Descriptor()
+	if err := descriptor.Sync.Validate(); err != nil {
+		t.Fatalf("files sync contract: %v", err)
+	}
+	if !hasCapabilities(descriptor.Capabilities, []Capability{CapabilityCode, CapabilitySemantic}) {
+		t.Fatalf("files capabilities = %v", descriptor.Capabilities)
+	}
+}
