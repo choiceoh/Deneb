@@ -414,6 +414,10 @@ private fun FeedRowWithBody(
     onLongAction: (WorkFeedItem) -> Unit,
 ) {
     val usesInlineApprovalActions = remember(item) { item.hasInlineApprovalActions() }
+    // Morning-letter deadline rows carry a longpress="deadline_done" callback:
+    // long-press a deadline line in the feed card to mark it handled (writes
+    // due_done to the wiki so it stops nagging). Detected from the body marker.
+    val usesDeadlineLongPress = remember(item) { item.body.contains("deadline_done") }
     var pendingApproval by remember(item.id) { mutableStateOf<WorkFeedAction?>(null) }
     pendingApproval?.let { action ->
         WorkFeedApprovalDialog(
@@ -433,11 +437,18 @@ private fun FeedRowWithBody(
         SelectionContainer {
             MarkdownContent(
                 content = item.body,
-                isInteractive = usesInlineApprovalActions,
-                onUiCallback = approvalCallback@{ event, _ ->
-                    val actionId = approvalActionIdForUiEvent(event) ?: return@approvalCallback
+                isInteractive = usesInlineApprovalActions || usesDeadlineLongPress,
+                onUiCallback = cb@{ event, data ->
+                    // Deadline row long-press → run the matching card action
+                    // (deadline_done:<wiki-path>); the gateway stamps due_done.
+                    if (event == "deadline_done") {
+                        val path = data["path"].orEmpty()
+                        if (path.isNotEmpty()) onRunAction(item.id, "deadline_done:$path")
+                        return@cb
+                    }
+                    val actionId = approvalActionIdForUiEvent(event) ?: return@cb
                     pendingApproval = item.actions.firstOrNull { action -> action.id == actionId }
-                        ?: return@approvalCallback
+                        ?: return@cb
                 },
                 modifier = Modifier
                     .fillMaxWidth()
