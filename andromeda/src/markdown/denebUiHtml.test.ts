@@ -247,3 +247,22 @@ describe("parseDenebUi (labeled HTML)", () => {
     expect(kids[3]).toMatchObject({ type: "divider" });
   });
 });
+
+describe("longpress action (gateway/native parity)", () => {
+  it("attaches a press-hold callback to a row from longpress= + data-*", () => {
+    const root = parseDenebUi(
+      '<row longpress="deadline_done" data-path="프로젝트/대한전선"><text>대한전선 마감</text></row>',
+    );
+    expect(root).toMatchObject({ type: "row" });
+    expect(root.longPressAction).toMatchObject({
+      type: "callback",
+      event: "deadline_done",
+      data: { path: "프로젝트/대한전선" },
+    });
+  });
+
+  it("leaves a plain row without a longPressAction", () => {
+    const root = parseDenebUi("<row><text>일반</text></row>");
+    expect(root.longPressAction).toBeUndefined();
+  });
+});

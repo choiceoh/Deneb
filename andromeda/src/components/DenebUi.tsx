@@ -7,7 +7,7 @@
 //
 // The pure parser + tree helpers live in markdown/denebUiParse.ts; this file
 // holds the React rendering (DenebUi component + AssistantText stream wrapper).
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Node,
   coerce,
@@ -164,6 +164,42 @@ export function statCountUpFrame(value: string, progress: number): string {
   return value.slice(0, m.index) + s + value.slice(m.index + m[0].length);
 }
 
+// Press-and-hold a row ~500ms to fire its longpress callback — the desktop
+// analog of the native combinedClickable long-press. Pointer events cover
+// mouse and touch; leaving/lifting before the threshold cancels.
+function LongPressRow({ onLongPress, children }: { onLongPress: () => void; children: ReactNode }) {
+  const timer = useRef<number | null>(null);
+  // Immediate local feedback: strike through + dim once fired, matching the
+  // native renderer. Durable state (wiki due_done) refreshes on the next cycle.
+  const [marked, setMarked] = useState(false);
+  const clear = () => {
+    if (timer.current != null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+  const start = () => {
+    clear();
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setMarked(true);
+      onLongPress();
+    }, 500);
+  };
+  useEffect(() => clear, []);
+  return (
+    <div
+      className={"dui-row dui-row-longpress" + (marked ? " marked" : "")}
+      onPointerDown={start}
+      onPointerUp={clear}
+      onPointerLeave={clear}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {children}
+    </div>
+  );
+}
+
 // Count-up entrance for stat values (native parity): the numeric run rolls
 // 0→target once (~600ms, rAF); tabular-nums in CSS keeps digits from
 // jittering. Static wherever motion is reduced or matchMedia is absent
@@ -311,12 +347,23 @@ export function DenebUi({
             {kids(n, key)}
           </div>
         );
-      case "row":
+      case "row": {
+        // longpress="event": press-and-hold ~500ms fires the callback (desktop
+        // analog of the native long-press) — e.g. a morning-card deadline row.
+        const lp = n.longPressAction as Node | undefined;
+        if (!lp || lp.type !== "callback" || !interactive) {
+          return (
+            <div key={key} className="dui-row">
+              {kids(n, key)}
+            </div>
+          );
+        }
         return (
-          <div key={key} className="dui-row">
+          <LongPressRow key={key} onLongPress={() => dispatch(lp)}>
             {kids(n, key)}
-          </div>
+          </LongPressRow>
         );
+      }
       case "card": {
         // Letter/briefing convention: an icon + caption first row is the
         // card's section label — give it the tracked label voice instead of

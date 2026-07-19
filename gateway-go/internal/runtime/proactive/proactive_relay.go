@@ -417,7 +417,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 		SessionKey: target,
 		RefID:      strings.TrimSpace(opts.refID),
 		Question:   opts.forceQuestion || len(choices) > 0 || endsWithQuestionMark(extractSrc),
-		Actions:    coalesceActions(opts.actions, choiceAnswerActions(choices)),
+		Actions:    append(coalesceActions(opts.actions, choiceAnswerActions(choices)), deadlineMarkActions(cardBody)...),
 	})
 	if err != nil {
 		if d.logger != nil {

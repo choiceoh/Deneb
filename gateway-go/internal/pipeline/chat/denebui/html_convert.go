@@ -24,20 +24,49 @@ func convertElem(el *openElem, p *htmlParser) any {
 	// Each family receives the same fresh node. Non-matching families leave it
 	// untouched; matching families have no effects outside the returned value.
 	node := map[string]any{}
-	if value, ok := convertLayoutElem(el, node); ok {
-		return value
+	var value any
+	var ok bool
+	if value, ok = convertLayoutElem(el, node); !ok {
+		if value, ok = convertContentElem(el, inner, node); !ok {
+			if value, ok = convertStructuredElem(el, inner, node); !ok {
+				if value, ok = convertFormElem(el, inner, node); !ok {
+					p.issues = append(p.issues, Issue{"$", "unknown tag <" + el.tag + ">"})
+					return nil
+				}
+			}
+		}
 	}
-	if value, ok := convertContentElem(el, inner, node); ok {
-		return value
+	// longpress="event" (+ data-*) attaches a long-press action to ANY node —
+	// the renderers bind it as a press-hold callback. Universal here so a
+	// deadline <row> (server-assembled morning card) carries it without each
+	// family converter knowing about it. Tap actions stay via actionFromAttrs.
+	if m, ok := value.(map[string]any); ok {
+		if lp := longPressActionFromAttrs(el.attrs); lp != nil {
+			m["longPressAction"] = lp
+		}
 	}
-	if value, ok := convertStructuredElem(el, inner, node); ok {
-		return value
+	return value
+}
+
+// longPressActionFromAttrs builds a callback UiAction from a longpress="event"
+// attribute (+ data-* payload). Distinct from actionFromAttrs's event= (tap):
+// a node may carry a tap action, a long-press action, or both.
+func longPressActionFromAttrs(a map[string]string) map[string]any {
+	ev := strings.TrimSpace(a["longpress"])
+	if ev == "" {
+		return nil
 	}
-	if value, ok := convertFormElem(el, inner, node); ok {
-		return value
+	act := map[string]any{"type": "callback", "event": ev}
+	data := map[string]any{}
+	for k, v := range a {
+		if strings.HasPrefix(k, "data-") && len(k) > 5 {
+			data[k[5:]] = v
+		}
 	}
-	p.issues = append(p.issues, Issue{"$", "unknown tag <" + el.tag + ">"})
-	return nil
+	if len(data) > 0 {
+		act["data"] = data
+	}
+	return act
 }
 
 func putNodeID(node map[string]any, attrs map[string]string) {

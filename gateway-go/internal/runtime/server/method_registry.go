@@ -426,6 +426,7 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 			Store:          capabilities.nativeWorkFeed,
 			OnAnswer:       s.recordDealQuestionAnswer,
 			OnMetaProposal: s.handleMetaProposalAction,
+			OnDeadlineDone: s.markDeadlineDone,
 		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.

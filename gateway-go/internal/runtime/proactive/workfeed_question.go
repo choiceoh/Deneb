@@ -6,6 +6,7 @@
 package proactive
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -84,4 +85,40 @@ func coalesceActions(explicit, fromChoices []workfeed.Action) []workfeed.Action 
 func endsWithQuestionMark(s string) bool {
 	s = strings.TrimRight(strings.TrimSpace(s), "\"'」』）)]*_")
 	return strings.HasSuffix(s, "?") || strings.HasSuffix(s, "？")
+}
+
+// deadlineOpenTagRe matches an opening tag that carries a deadline long-press
+// (longpress="deadline_done") so the relay can register a matching work-feed
+// action per row — the durable action list the RunAction path needs, derived
+// from the card body exactly as choiceAnswerActions derives from ```choices.
+var (
+	deadlineOpenTagRe  = regexp.MustCompile(`<[^>]*\blongpress="deadline_done"[^>]*>`)
+	deadlineDataPathRe = regexp.MustCompile(`\bdata-path="([^"]+)"`)
+)
+
+// deadlineMarkActions scans a card body for deadline long-press rows and mints
+// one non-settling ActionMark per distinct wiki path (id "deadline_done:<path>").
+func deadlineMarkActions(body string) []workfeed.Action {
+	var actions []workfeed.Action
+	seen := map[string]struct{}{}
+	for _, tag := range deadlineOpenTagRe.FindAllString(body, -1) {
+		m := deadlineDataPathRe.FindStringSubmatch(tag)
+		if m == nil {
+			continue
+		}
+		path := strings.TrimSpace(m[1])
+		if path == "" {
+			continue
+		}
+		if _, dup := seen[path]; dup {
+			continue
+		}
+		seen[path] = struct{}{}
+		actions = append(actions, workfeed.Action{
+			ID:    "deadline_done:" + path,
+			Kind:  workfeed.ActionMark,
+			Label: "완료",
+		})
+	}
+	return actions
 }

@@ -146,18 +146,23 @@ type Frontmatter struct {
 	// Status: 계약→ContractDate, 개설→ConstructionStart·ModuleDelivery, 준공→
 	// PreUseInspection·CompletionInspection. YYYY-MM-DD, except ModuleDelivery which
 	// may be a range ("2026-08-01~2026-08-15"). 현장 페이지 전용; empty until reached.
-	ContractDate         string  // 계약일
-	ConstructionStart    string  // 공사개시일
-	ModuleDelivery       string  // 모듈입고(기간 가능)
-	PreUseInspection     string  // 사용전검사일
-	CompletionInspection string  // 준공검사일
-	Created              string  // YYYY-MM-DD
-	Updated              string  // YYYY-MM-DD
-	Due                  string  // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
-	Importance           float64 // 0.0-1.0
-	Archived             bool
-	Type                 string // concept, entity, source, comparison, log
-	Confidence           string // high, medium, low
+	ContractDate         string // 계약일
+	ConstructionStart    string // 공사개시일
+	ModuleDelivery       string // 모듈입고(기간 가능)
+	PreUseInspection     string // 사용전검사일
+	CompletionInspection string // 준공검사일
+	Created              string // YYYY-MM-DD
+	Updated              string // YYYY-MM-DD
+	Due                  string // YYYY-MM-DD — upcoming deadline (payment due, delivery, milestone); empty if none
+	// DueDone stamps the Due value the operator marked handled (long-press on a
+	// morning-card deadline row). The deadline scan skips the page while
+	// DueDone == Due, so a handled deadline stops nagging; a NEW Due (later
+	// milestone) no longer matches and resurfaces. Empty = never marked done.
+	DueDone    string  // YYYY-MM-DD
+	Importance float64 // 0.0-1.0
+	Archived   bool
+	Type       string // concept, entity, source, comparison, log
+	Confidence string // high, medium, low
 	// SupersededBy points at the page that replaced this one's facts. Set by
 	// the dreamer when new information contradicts/replaces an old page;
 	// search demotes superseded pages so stale facts stop surfacing as
@@ -264,6 +269,9 @@ func (p *Page) Render() []byte {
 	}
 	if p.Meta.Due != "" {
 		buf.WriteString("due: " + sanitizeScalar(p.Meta.Due) + "\n")
+	}
+	if p.Meta.DueDone != "" {
+		buf.WriteString("due_done: " + sanitizeScalar(p.Meta.DueDone) + "\n")
 	}
 	if p.Meta.Importance > 0 {
 		fmt.Fprintf(&buf, "importance: %.2f\n", p.Meta.Importance)
@@ -683,6 +691,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Updated = val
 		case "due":
 			fm.Due = val
+		case "due_done":
+			fm.DueDone = val
 		case "importance":
 			fm.Importance, _ = strconv.ParseFloat(val, 64) // best-effort: defaults to zero
 		case "archived":

@@ -55,6 +55,7 @@ export function convert(el: OpenElem): Node | Structural | null {
     case "col":
       return { ...node, type: "column", children: el.children };
     case "row":
+      set("longPressAction", longPressFromAttrs(a));
       return { ...node, type: "row", children: el.children };
     case "card":
       return { ...node, type: "card", children: el.children };
@@ -74,6 +75,7 @@ export function convert(el: OpenElem): Node | Structural | null {
       set("bold", bool("bold"));
       set("italic", bool("italic"));
       set("color", a.color);
+      set("longPressAction", longPressFromAttrs(a));
       return { ...node, type: "text", value: inner };
     // HTML fluency aliases: paragraphs and headings map onto text nodes.
     // title/label/kv are invented-but-frequent model habits promoted to
@@ -323,4 +325,18 @@ function actionFromAttrs(a: Record<string, string>): Node | undefined {
   if (a.toggle) return { type: "toggle", targetId: a.toggle };
   if (a.copy) return { type: "copy_to_clipboard", text: a.copy };
   return undefined;
+}
+
+// longpress="event" (+ data-*) → a press-hold callback, distinct from event=
+// (tap). Attached to any node by the convert wrapper; the renderer binds it.
+function longPressFromAttrs(a: Record<string, string>): Node | undefined {
+  const ev = (a.longpress ?? "").trim();
+  if (!ev) return undefined;
+  const action: Node = { type: "callback", event: ev };
+  const data: Record<string, string> = {};
+  for (const [k, v] of Object.entries(a)) {
+    if (k.startsWith("data-") && k.length > 5) data[k.slice(5)] = v;
+  }
+  if (Object.keys(data).length > 0) action.data = data;
+  return action;
 }

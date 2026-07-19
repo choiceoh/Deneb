@@ -513,7 +513,7 @@ object DenebUiHtml {
         return when (el.tag) {
             "column", "col" -> ColumnNode(id = id, children = kids())
 
-            "row" -> RowNode(id = id, children = kids())
+            "row" -> RowNode(id = id, children = kids(), longPressAction = longPressFromAttrs(a))
 
             "card" -> CardNode(id = id, children = kids())
 
@@ -534,6 +534,7 @@ object DenebUiHtml {
                     bold = attrBool(a, "bold"),
                     italic = attrBool(a, "italic"),
                     color = a["color"],
+                    longPressAction = longPressFromAttrs(a),
                 )
             }
 
@@ -824,6 +825,16 @@ object DenebUiHtml {
         a["toggle"]?.takeIf { it.isNotEmpty() }?.let { return ToggleAction(targetId = it) }
         a["copy"]?.takeIf { it.isNotEmpty() }?.let { return CopyToClipboardAction(text = it) }
         return null
+    }
+
+    /** longpress="event" (+ data-*) → a press-hold callback, distinct from the
+     *  tap action's event=. Gateway parity (html_convert.longPressActionFromAttrs). */
+    private fun longPressFromAttrs(a: Map<String, String>): UiAction? {
+        val event = a["longpress"]?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val data = a.entries
+            .filter { it.key.startsWith("data-") && it.key.length > 5 }
+            .associate { it.key.removePrefix("data-") to JsonPrimitive(it.value) }
+        return CallbackAction(event = event, data = data.takeIf { it.isNotEmpty() })
     }
 
     // =====================================================================

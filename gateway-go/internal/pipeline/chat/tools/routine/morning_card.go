@@ -345,8 +345,16 @@ func writeMorningDeadlines(b *strings.Builder, deadlines deadlineData) {
 			break
 		}
 		label, color, marker := deadlinePresentation(item.DaysLeft)
-		fmt.Fprintf(b, "    <row><text style=\"body\">%s %s</text><badge%s>%s</badge></row>\n",
-			marker, morningRaw(item.Title), color, morningRaw(label))
+		// longpress="deadline_done" (+ data-path): long-press the row in the feed
+		// card to mark this deadline handled — the relay derives a matching
+		// work-feed action and the gateway stamps the wiki page's due_done.
+		// data-path carries the wiki rel path; empty path stays non-actionable.
+		lp := ""
+		if p := strings.TrimSpace(item.Path); p != "" {
+			lp = fmt.Sprintf(" longpress=\"deadline_done\" data-path=\"%s\"", morningAttr(p))
+		}
+		fmt.Fprintf(b, "    <row%s><text style=\"body\">%s %s</text><badge%s>%s</badge></row>\n",
+			lp, marker, morningRaw(item.Title), color, morningRaw(label))
 	}
 	b.WriteString("  </card>\n")
 }

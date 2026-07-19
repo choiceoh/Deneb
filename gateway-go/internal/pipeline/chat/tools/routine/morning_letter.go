@@ -647,6 +647,12 @@ func fetchDeadlines(wikiDir string, now time.Time) any {
 		if page.Meta.Due == "" || page.Meta.Archived || page.Meta.Importance < deadlineMinImportance {
 			return nil
 		}
+		// Skip a deadline the operator already marked handled (due_done stamped
+		// the same Due via a morning-card long-press). A later Due won't match,
+		// so a genuinely new deadline resurfaces.
+		if page.Meta.DueDone != "" && page.Meta.DueDone == page.Meta.Due {
+			return nil //nolint:nilerr // handled deadline — intentionally skipped
+		}
 		due, parseErr := time.ParseInLocation("2006-01-02", page.Meta.Due, now.Location())
 		if parseErr != nil {
 			return nil //nolint:nilerr // malformed due date — skip

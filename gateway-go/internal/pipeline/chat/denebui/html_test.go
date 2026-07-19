@@ -391,3 +391,32 @@ func TestParseHTML_InventedTagAliases(t *testing.T) {
 		t.Errorf("aliased card must validate clean: err=%v issues=%v", err, issues)
 	}
 }
+
+func TestParseHTML_LongPressAction(t *testing.T) {
+	// longpress="event" + data-* attaches a press-hold callback to ANY node
+	// (morning card marks a deadline done by long-pressing its row).
+	root := mustParseHTML(t,
+		`<row longpress="deadline_done" data-path="프로젝트/대한전선"><text>대한전선 마감</text></row>`)
+	if root["type"] != "row" {
+		t.Fatalf("root type = %v", root["type"])
+	}
+	lp, ok := root["longPressAction"].(map[string]any)
+	if !ok {
+		t.Fatalf("longPressAction missing: %v", root)
+	}
+	if lp["type"] != "callback" || lp["event"] != "deadline_done" {
+		t.Errorf("longPressAction = %v", lp)
+	}
+	data, _ := lp["data"].(map[string]any)
+	if data["path"] != "프로젝트/대한전선" {
+		t.Errorf("data.path = %v", data["path"])
+	}
+	// A node without longpress carries no action, and a card still validates clean.
+	plain := mustParseHTML(t, `<row><text>일반 줄</text></row>`)
+	if _, has := plain["longPressAction"]; has {
+		t.Errorf("plain row must not carry longPressAction")
+	}
+	if issues, err := Validate(`<card><row longpress="x" data-path="p"><text>t</text></row></card>`); err != nil || len(issues) > 0 {
+		t.Errorf("longpress card must validate clean: err=%v issues=%v", err, issues)
+	}
+}
