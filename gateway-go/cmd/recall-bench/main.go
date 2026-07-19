@@ -124,12 +124,13 @@ type benchmarkConfig struct {
 	// composite recall-health score) after the pure P@K result. emitGold prints
 	// deterministic gold candidates for uncovered projects. Both read-only over
 	// the wiki COPY; default off so `recall-bench` alone stays a pure P@K tool.
-	health     bool
-	emitGold   bool
-	matrix     bool
-	byCategory bool
-	holdoutPct int
-	split      string
+	health      bool
+	emitGold    bool
+	matrix      bool
+	byCategory  bool
+	dumpSignals bool
+	holdoutPct  int
+	split       string
 }
 
 type parseOutcome struct {
@@ -205,6 +206,7 @@ func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benc
 	fs.BoolVar(&cfg.emitGold, "emit-gold", false, "print deterministic gold candidates for uncovered projects (implies -health)")
 	fs.BoolVar(&cfg.matrix, "matrix", false, "compare bm25, semantic, hybrid, and full retrieval with p50/p95 latency")
 	fs.BoolVar(&cfg.byCategory, "by-category", false, "per-category P@1 across bm25/semantic/hybrid/full modes — diagnoses where global fusion weights lose to a single mode (headroom for per-query-type weighting)")
+	fs.BoolVar(&cfg.dumpSignals, "dump-signals", false, "per-case signal dump (category, top semantic cosine, gold rank under bm25 vs semantic) — grounds confidence-weighted fusion in real numbers")
 	fs.IntVar(&cfg.holdoutPct, "holdout-pct", 0, "hold out this %% of cases (stable hash of case ID) as a test split; 0 = use all")
 	fs.StringVar(&cfg.split, "split", "all", "which split to score when --holdout-pct>0: all|train|test")
 	if err := fs.Parse(args); err != nil {
@@ -282,6 +284,14 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			return fmt.Errorf("store does not expose stage-specific search required by --by-category")
 		}
 		reportByCategory(ctx, optionStore, cases, cfg.k, stdout)
+		return nil
+	}
+	if cfg.dumpSignals {
+		optionStore, ok := store.(benchmarkOptionStore)
+		if !ok {
+			return fmt.Errorf("store does not expose stage-specific search required by --dump-signals")
+		}
+		dumpSignals(ctx, optionStore, cases, cfg.k, stdout)
 		return nil
 	}
 	if cfg.matrix {
@@ -707,6 +717,62 @@ func reportByCategory(
 	fmt.Fprintf(stdout, "RECALL_BENCH_BYCAT headroom_categories=%d/%d weighted_p@1_headroom=%.2fpp total=%d\n",
 		headroomCats, len(order), overall, totalScored)
 	fmt.Fprintln(stdout, "  (weighted_p@1_headroom = max attainable P@1 gain if each category were routed to its best single mode — an upper bound; real per-type weighting captures a fraction)")
+}
+
+// dumpSignals prints, per case, the raw retrieval signals a confidence-weighted
+// fusion would key on: the top semantic cosine (semantic self-confidence) and
+// where the gold page lands under BM25-only vs semantic-only. Machine-readable
+// (SIGNAL prefix) so the numbers can be aggregated by category — the empirical
+// basis for scaling each signal's fusion weight by its own confidence instead of
+// a fixed global weight.
+func dumpSignals(ctx context.Context, store benchmarkOptionStore, cases []goldCase, k int, stdout io.Writer) {
+	fmt.Fprintln(stdout, "SIGNAL_HEADER category topSemCos goldSemRank goldSemCos goldBm25Rank goldFullRank id")
+	goldRankAndScore := func(results []wiki.SearchResult, gold []string) (int, float64) {
+		for i, r := range results {
+			for _, g := range gold {
+				if pathHit(g, r.Path) {
+					return i, r.Score
+				}
+			}
+		}
+		return -1, 0
+	}
+	for _, c := range cases {
+		if len(c.GoldPaths) == 0 {
+			continue
+		}
+		semRep, err1 := store.SearchWithOptions(ctx, c.Question, max(k, 10), wiki.QueryOptions{Mode: wiki.SearchModeSemantic})
+		bmRep, err2 := store.SearchWithOptions(ctx, c.Question, max(k, 10), wiki.QueryOptions{Mode: wiki.SearchModeBM25})
+		fullRep, err3 := store.SearchWithOptions(ctx, c.Question, max(k, 10), wiki.QueryOptions{Mode: wiki.SearchModeFull})
+		if err1 != nil || err2 != nil || err3 != nil {
+			continue
+		}
+		topSemCos := 0.0
+		if len(semRep.Results) > 0 {
+			topSemCos = semRep.Results[0].Score
+		}
+		goldSemRank, goldSemCos := goldRankAndScore(semRep.Results, c.GoldPaths)
+		goldBm25Rank, _ := goldRankAndScore(bmRep.Results, c.GoldPaths)
+		goldFullRank, _ := goldRankAndScore(fullRep.Results, c.GoldPaths)
+		fmt.Fprintf(stdout, "SIGNAL %s %.4f %d %.4f %d %d %s\n",
+			c.Category, topSemCos, goldSemRank, goldSemCos, goldBm25Rank, goldFullRank, c.ID)
+		// Raw per-mode rankings (path TAB score). Weight-independent, so one dump
+		// lets an offline harness re-fuse them under ANY weight scheme — global
+		// sweeps and per-query adaptive weighting alike — without another Go run.
+		writeRankedPaths(stdout, "BM25", c.ID, bmRep.Results)
+		writeRankedPaths(stdout, "SEM", c.ID, semRep.Results)
+	}
+}
+
+func writeRankedPaths(out io.Writer, mode, id string, results []wiki.SearchResult) {
+	fmt.Fprintf(out, "PATHS %s %s", mode, id)
+	for i, r := range results {
+		if i >= 10 {
+			break
+		}
+		fmt.Fprintf(out, "\t%s\x1f%.4f", r.Path, r.Score)
+	}
+	fmt.Fprintln(out)
 }
 
 func writeQualityMetrics(out io.Writer, prefix string, k int, result benchmarkResult) {
