@@ -307,6 +307,12 @@ jobs:
       - name: Test runtime-health audit
         run: make runtime-health-test
 
+      # Doc-reference validate-or-freeze (arXiv:2607.13285): agent docs must not
+      # point at moved/deleted source. Mirrors the local `make ci` audit lane —
+      # without this step the gate is local-only and red-merge paths bypass it.
+      - name: Doc reference lint
+        run: make doc-ref-lint
+
       - name: Race test (concurrency core)
         working-directory: gateway-go
         run: >-

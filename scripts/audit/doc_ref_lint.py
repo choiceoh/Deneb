@@ -231,9 +231,24 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
                             resolved = cand
                             break
                 if resolved is None and path_part in by_suffix:
-                    resolved = by_suffix[path_part][0]
-                if resolved is None and "/" not in path_part and path_part in by_basename:
-                    resolved = by_basename[path_part][0]  # bare filename, exists somewhere
+                    candidates = by_suffix[path_part]
+                elif resolved is None and "/" not in path_part and path_part in by_basename:
+                    candidates = by_basename[path_part]
+                else:
+                    candidates = []
+                if resolved is None and candidates:
+                    resolved = candidates[0]
+                    if len(candidates) > 1:
+                        # Rescued only by an AMBIGUOUS short name — this ref is
+                        # effectively unverifiable (any same-named file keeps it
+                        # green forever). Surface it instead of silently passing.
+                        report.findings.append(
+                            Finding(
+                                rel_doc, line_no, ref, "warn-ambiguous",
+                                f"동명 파일 {len(candidates)}개 — 경로를 더 구체화해야 검증됨",
+                            )
+                        )
+                        resolved = ("*ambiguous*", candidates)
 
             if resolved is None:
                 # Tiering by what a miss most likely MEANS:
@@ -262,12 +277,20 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
                     Finding(rel_doc, line_no, ref, "warn-symbol", "CodeGraph에 없는 심볼 앵커")
                 )
             if anchor is not None:
-                total = file_line_count(repo, resolved)
-                if anchor > total:
+                # Ambiguous rescue: accept the anchor if ANY candidate is long
+                # enough (under-alarming beats mis-attributing a wrong file).
+                if isinstance(resolved, tuple):
+                    lengths = [file_line_count(repo, c) for c in resolved[1]]
+                    ok = any(anchor <= n for n in lengths)
+                    longest = max(lengths, default=0)
+                else:
+                    longest = file_line_count(repo, resolved)
+                    ok = anchor <= longest
+                if not ok:
                     report.findings.append(
                         Finding(
                             rel_doc, line_no, ref, "broken-line",
-                            f"라인 앵커 {anchor} > 파일 길이 {total}",
+                            f"라인 앵커 {anchor} > 파일 길이 {longest}",
                         )
                     )
     return report

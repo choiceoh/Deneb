@@ -7,18 +7,20 @@
 바꾸면 어디가 영향받나"의 블래스트 반경. 선언-타입 전파 기반의 정직한
 과소근사: 타입 추론 로컬 등 증명 못 한 접근은 세지 않고 아래에 개수만 보고한다.
 
-## AbortedLastRun — write 1 · read 0
+## AbortedLastRun — write 2 · read 0
 
 **writes**:
 
+- `internal/domain/session/manager.go:612` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:134` ResetSession
 
-## Channel — write 0 · read 2
+## Channel — write 0 · read 3 · **크로스-패키지 2개**
 
 reads:
 
 - `internal/pipeline/chat/slash_dispatch.go:232` buildSessionStatus
 - `internal/pipeline/chat/slash_dispatch.go:233` buildSessionStatus
+- `internal/runtime/insights/engine.go:305` computeTopSessions
 
 ## CompactionFired — write 0 · read 1
 
@@ -26,20 +28,24 @@ reads:
 
 - `internal/pipeline/chat/run_exec.go:595` recordRunCompletion
 
-## EndedAt — write 4 · read 0 · **크로스-패키지 2개**
+## EndedAt — write 6 · read 0 · **크로스-패키지 2개**
 
 **writes**:
 
 - `internal/domain/session/manager.go:336` evictStale
 - `internal/domain/session/manager.go:347` evictStale
+- `internal/domain/session/manager.go:622` ApplyLifecycleEvent
+- `internal/domain/session/manager.go:629` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:132` ResetSession
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:256` killSession
 
-## FailureReason — write 1 · read 6 · **크로스-패키지 4개**
+## FailureReason — write 3 · read 6 · **크로스-패키지 4개**
 
 **writes**:
 
 - `internal/domain/session/manager.go:349` evictStale
+- `internal/domain/session/manager.go:624` ApplyLifecycleEvent
+- `internal/domain/session/manager.go:632` ApplyLifecycleEvent
 
 reads:
 
@@ -57,7 +63,7 @@ reads:
 - `internal/domain/session/manager.go:339` evictStale
 - `internal/domain/session/manager.go:344` evictStale
 
-## InputTokens — write 2 · read 2 · **크로스-패키지 2개**
+## InputTokens — write 2 · read 10 · **크로스-패키지 3개**
 
 **writes**:
 
@@ -68,8 +74,16 @@ reads:
 
 - `internal/pipeline/chat/slash_dispatch.go:307` sessionTokenLine
 - `internal/pipeline/chat/slash_dispatch.go:308` sessionTokenLine
+- `internal/runtime/insights/engine.go:233` computeOverview
+- `internal/runtime/insights/engine.go:234` computeOverview
+- `internal/runtime/insights/engine.go:266` computeModelStats
+- `internal/runtime/insights/engine.go:267` computeModelStats
+- `internal/runtime/insights/engine.go:275` computeModelStats
+- `internal/runtime/insights/engine.go:310` computeTopSessions
+- `internal/runtime/insights/engine.go:311` computeTopSessions
+- `internal/runtime/insights/engine.go:338` computeTopSessions
 
-## Key — write 0 · read 20 · **크로스-패키지 3개**
+## Key — write 0 · read 23 · **크로스-패키지 5개**
 
 reads:
 
@@ -93,15 +107,20 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:234` subagentsResult
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:292` resolveChildTarget
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:325` resolveChildTarget
+- `internal/runtime/insights/engine.go:304` computeTopSessions
+- `internal/runtime/server/session_labels.go:93` snapshotSessionLabels
+- `internal/runtime/server/session_labels.go:96` snapshotSessionLabels
 
-## Kind — write 0 · read 2 · **크로스-패키지 2개**
+## Kind — write 0 · read 4 · **크로스-패키지 3개**
 
 reads:
 
 - `internal/domain/session/manager.go:328` evictStale
 - `internal/pipeline/chat/run_agent_config.go:331` resolveAgentRunLimits
+- `internal/runtime/insights/engine.go:207` filterSessions
+- `internal/runtime/insights/engine.go:308` computeTopSessions
 
-## Label — write 0 · read 7 · **크로스-패키지 3개**
+## Label — write 0 · read 9 · **크로스-패키지 4개**
 
 reads:
 
@@ -112,6 +131,8 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:191` childLabel
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:192` childLabel
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:302` resolveChildTarget
+- `internal/runtime/server/session_labels.go:90` snapshotSessionLabels
+- `internal/runtime/server/session_labels.go:96` snapshotSessionLabels
 
 ## LastActivityAt — write 1 · read 2
 
@@ -132,7 +153,7 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:228` subagentsResult
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
 
-## Model — write 0 · read 5 · **크로스-패키지 3개**
+## Model — write 0 · read 7 · **크로스-패키지 4개**
 
 reads:
 
@@ -141,8 +162,10 @@ reads:
 - `internal/pipeline/chat/run_model.go:53` resolveModel
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:104` subagentsList
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:105` subagentsList
+- `internal/runtime/insights/engine.go:256` computeModelStats
+- `internal/runtime/insights/engine.go:306` computeTopSessions
 
-## OutputTokens — write 2 · read 2 · **크로스-패키지 2개**
+## OutputTokens — write 2 · read 10 · **크로스-패키지 3개**
 
 **writes**:
 
@@ -153,11 +176,21 @@ reads:
 
 - `internal/pipeline/chat/slash_dispatch.go:310` sessionTokenLine
 - `internal/pipeline/chat/slash_dispatch.go:311` sessionTokenLine
+- `internal/runtime/insights/engine.go:236` computeOverview
+- `internal/runtime/insights/engine.go:237` computeOverview
+- `internal/runtime/insights/engine.go:269` computeModelStats
+- `internal/runtime/insights/engine.go:270` computeModelStats
+- `internal/runtime/insights/engine.go:275` computeModelStats
+- `internal/runtime/insights/engine.go:313` computeTopSessions
+- `internal/runtime/insights/engine.go:314` computeTopSessions
+- `internal/runtime/insights/engine.go:338` computeTopSessions
 
-## RuntimeMs — write 2 · read 5 · **크로스-패키지 3개**
+## RuntimeMs — write 4 · read 7 · **크로스-패키지 4개**
 
 **writes**:
 
+- `internal/domain/session/manager.go:623` ApplyLifecycleEvent
+- `internal/domain/session/manager.go:630` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:133` ResetSession
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:259` killSession
 
@@ -168,6 +201,8 @@ reads:
 - `internal/pipeline/chat/subagent/notifier.go:378` buildNotifyItem
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:93` subagentsList
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:94` subagentsList
+- `internal/runtime/insights/engine.go:321` computeTopSessions
+- `internal/runtime/insights/engine.go:322` computeTopSessions
 
 ## SessionID — write 0 · read 1
 
@@ -175,10 +210,12 @@ reads:
 
 - `internal/domain/session/patch.go:158` FindBySessionID
 
-## StartedAt — write 1 · read 7 · **크로스-패키지 2개**
+## StartedAt — write 3 · read 10 · **크로스-패키지 3개**
 
 **writes**:
 
+- `internal/domain/session/manager.go:621` ApplyLifecycleEvent
+- `internal/domain/session/manager.go:627` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:131` ResetSession
 
 reads:
@@ -190,13 +227,17 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:222` subagentsResult
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:257` killSession
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:258` killSession
+- `internal/runtime/insights/engine.go:212` filterSessions
+- `internal/runtime/insights/engine.go:212` filterSessions
+- `internal/runtime/insights/engine.go:213` filterSessions
 
-## Status — write 4 · read 25 · **크로스-패키지 4개**
+## Status — write 5 · read 29 · **크로스-패키지 5개**
 
 **writes**:
 
 - `internal/domain/session/manager.go:334` evictStale
 - `internal/domain/session/manager.go:345` evictStale
+- `internal/domain/session/manager.go:611` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:130` ResetSession
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:255` killSession
 
@@ -205,9 +246,12 @@ reads:
 - `internal/domain/session/manager.go:327` evictStale
 - `internal/domain/session/manager.go:333` evictStale
 - `internal/domain/session/manager.go:339` evictStale
+- `internal/domain/session/manager.go:426` Set
 - `internal/domain/session/manager.go:428` Set
 - `internal/domain/session/manager.go:460` Delete
 - `internal/domain/session/manager.go:481` TouchActivity
+- `internal/domain/session/manager.go:602` ApplyLifecycleEvent
+- `internal/domain/session/manager.go:638` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:129` ResetSession
 - `internal/pipeline/chat/slash_dispatch.go:216` buildSessionStatus
 - `internal/pipeline/chat/slash_dispatch.go:216` buildSessionStatus
@@ -227,6 +271,7 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:240` subagentsResult
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:249` subagentsResult
+- `internal/runtime/insights/engine.go:307` computeTopSessions
 
 ## TimeoutAt — write 0 · read 2
 
@@ -235,7 +280,7 @@ reads:
 - `internal/domain/session/manager.go:333` evictStale
 - `internal/domain/session/manager.go:333` evictStale
 
-## TotalTokens — write 2 · read 7 · **크로스-패키지 3개**
+## TotalTokens — write 2 · read 14 · **크로스-패키지 4개**
 
 **writes**:
 
@@ -251,14 +296,23 @@ reads:
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:101` subagentsList
+- `internal/runtime/insights/engine.go:239` computeOverview
+- `internal/runtime/insights/engine.go:240` computeOverview
+- `internal/runtime/insights/engine.go:272` computeModelStats
+- `internal/runtime/insights/engine.go:273` computeModelStats
+- `internal/runtime/insights/engine.go:316` computeTopSessions
+- `internal/runtime/insights/engine.go:317` computeTopSessions
+- `internal/runtime/insights/engine.go:338` computeTopSessions
 
-## UpdatedAt — write 7 · read 7 · **크로스-패키지 2개**
+## UpdatedAt — write 9 · read 8 · **크로스-패키지 3개**
 
 **writes**:
 
 - `internal/domain/session/manager.go:337` evictStale
 - `internal/domain/session/manager.go:348` evictStale
 - `internal/domain/session/manager.go:516` EnsureVisible
+- `internal/domain/session/manager.go:615` ApplyLifecycleEvent
+- `internal/domain/session/manager.go:617` ApplyLifecycleEvent
 - `internal/domain/session/patch.go:87` ApplyPatch
 - `internal/domain/session/patch.go:138` ResetSession
 - `internal/domain/session/patch.go:191` ClearTokens
@@ -273,8 +327,9 @@ reads:
 - `internal/domain/session/manager.go:515` EnsureVisible
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
 - `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
+- `internal/runtime/insights/engine.go:211` filterSessions
 
 ---
 
-필드명은 일치하나 타입을 증명하지 못해 제외한 접근: 1219건 — 다른 타입의
+필드명은 일치하나 타입을 증명하지 못해 제외한 접근: 1164건 — 다른 타입의
 동명 필드(진짜 무관)와 타입 추론 로컬(놓친 접근)이 섞인 상한이다.

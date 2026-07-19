@@ -82,6 +82,21 @@ class TieringTest(unittest.TestCase):
         )
         self.assertEqual(report.broken(), [])
 
+    def test_ambiguous_basename_surfaces_and_line_checks_all_candidates(self):
+        report = self.run_lint(
+            {
+                "CLAUDE.md": "see `x.go` and `x.go:2` and dead `x.go:99`",
+                "a/x.go": "l1\n",
+                "b/x.go": "l1\nl2\nl3\n",
+            }
+        )
+        # Every ambiguous rescue is surfaced — it's unverifiable, not verified.
+        amb = [f for f in report.warns() if f.tier == "warn-ambiguous"]
+        self.assertEqual(len(amb), 3)
+        # Line anchors accept ANY candidate (b/x.go has 3 lines) but still
+        # break when no candidate is long enough.
+        self.assertEqual([f.ref for f in report.broken()], ["x.go:99"])
+
     def test_symbol_validation_uses_index(self):
         repo = make_repo({"CLAUDE.md": "call `pkg.KnownFunc` then `pkg.GhostFunc`"})
         report = lint(repo, collect_docs(repo, ["CLAUDE.md"]), symbols={"KnownFunc"})
