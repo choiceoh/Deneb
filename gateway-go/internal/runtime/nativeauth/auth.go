@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // Authenticate verifies the native client token carried in the request header.
@@ -43,6 +44,6 @@ func writeJSON(w http.ResponseWriter, status int, value any, logger *slog.Logger
 	w.Header().Set("Server", "deneb-gateway")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil && logger != nil {
-		logger.Error("native auth: json encode error", "error", err)
+		httputil.LogEncodeError(logger, "native auth: json encode error", err)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // AlertGate is the narrow cooldown contract required by the Fleet webhook.
@@ -95,7 +97,7 @@ func (h *AlertHook) writeJSON(w http.ResponseWriter, status int, value any) {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		h.loggerOrDefault().Error("fleet alert: json encode error", "error", err)
+		httputil.LogEncodeError(h.loggerOrDefault(), "fleet alert: json encode error", err)
 	}
 }
 
