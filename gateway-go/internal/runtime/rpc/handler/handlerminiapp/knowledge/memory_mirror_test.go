@@ -142,3 +142,61 @@ func TestMemoryMirror_ListFailure(t *testing.T) {
 		t.Errorf("code = %s, want UNAVAILABLE", resp.Error.Code)
 	}
 }
+
+type diaryMirrorOut struct {
+	Entries []struct {
+		File    string `json:"file"`
+		Header  string `json:"header"`
+		Content string `json:"content"`
+		At      int64  `json:"at"`
+	} `json:"entries"`
+	NextCursor string `json:"nextCursor"`
+	HasMore    bool   `json:"hasMore"`
+	Total      int    `json:"total"`
+}
+
+func TestMemoryDiaryMirror_PaginatesInFileHeaderOrderWithCursorResume(t *testing.T) {
+	// Deliberately recency-ordered (as RecentDiaryEntries returns) — the
+	// handler must impose (file, header) order for a stable cursor.
+	store := &fakeMemoryStore{diaryRecentFn: func(int) []wiki.DiaryHit {
+		return []wiki.DiaryHit{
+			{File: "diary-2026-07-19.md", Header: "09:00", Content: "c3", At: 3},
+			{File: "diary-2026-07-18.md", Header: "17:30", Content: "c2", At: 2},
+			{File: "diary-2026-07-18.md", Header: "08:15", Content: "c1", At: 1},
+		}
+	}}
+	h := memoryDiaryMirror(memoryDepsFor(store))
+
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.diary_mirror", map[string]any{"limit": 2}))
+	var first diaryMirrorOut
+	decode(t, resp, &first)
+	if len(first.Entries) != 2 || first.Entries[0].Content != "c1" || first.Entries[1].Content != "c2" {
+		t.Fatalf("first entries = %+v", first.Entries)
+	}
+	if !first.HasMore || first.Total != 3 || first.NextCursor == "" {
+		t.Fatalf("first meta = %+v", first)
+	}
+
+	resp = h(authedCtx(), reqWith(t, "miniapp.memory.diary_mirror", map[string]any{
+		"cursor": first.NextCursor,
+		"limit":  2,
+	}))
+	var second diaryMirrorOut
+	decode(t, resp, &second)
+	if len(second.Entries) != 1 || second.Entries[0].Content != "c3" || second.Entries[0].At != 3 {
+		t.Fatalf("second entries = %+v", second.Entries)
+	}
+	if second.HasMore || second.NextCursor != "" {
+		t.Errorf("second meta = %+v", second)
+	}
+}
+
+func TestMemoryDiaryMirror_EmptyDiary(t *testing.T) {
+	h := memoryDiaryMirror(memoryDepsFor(&fakeMemoryStore{}))
+	resp := h(authedCtx(), reqWith(t, "miniapp.memory.diary_mirror", map[string]any{}))
+	var out diaryMirrorOut
+	decode(t, resp, &out)
+	if len(out.Entries) != 0 || out.HasMore || out.Total != 0 {
+		t.Fatalf("out = %+v", out)
+	}
+}
