@@ -1,0 +1,14 @@
+# Virtual X display for the Deneb browser sidecar's headful Chromium.
+# Separate unit so the sidecar (deneb-browser.service) can depend on a live
+# display and a human can attach x11vnc/noVNC to the same :98.
+[Unit]
+Description=Deneb Browser Xvfb display (:98)
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/Xvfb :98 -screen 0 1280x900x24
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

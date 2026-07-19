@@ -26,7 +26,7 @@ func TestToolBrowseFormatsSidecarPage(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	t.Setenv("DENEB_BROWSER_URL", srv.URL)
+	t.Setenv("DENEB_BROWSE_URL", srv.URL)
 
 	out, err := ToolBrowse()(context.Background(), []byte(`{"url":"https://gw.example/approvals"}`))
 	if err != nil {
@@ -38,7 +38,7 @@ func TestToolBrowseFormatsSidecarPage(t *testing.T) {
 }
 
 func TestToolBrowseSidecarDownDegradesToGuidance(t *testing.T) {
-	t.Setenv("DENEB_BROWSER_URL", "http://127.0.0.1:1") // refused instantly
+	t.Setenv("DENEB_BROWSE_URL", "http://127.0.0.1:1") // refused instantly
 	out, err := ToolBrowse()(context.Background(), []byte(`{"url":"https://example.com"}`))
 	if err != nil {
 		t.Fatalf("sidecar-down must degrade to guidance, got error %v", err)
@@ -58,7 +58,7 @@ func TestToolBrowseRejectsNonHTTPAndSurfacesSidecarError(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "url must be http(s)"})
 	}))
 	defer srv.Close()
-	t.Setenv("DENEB_BROWSER_URL", srv.URL)
+	t.Setenv("DENEB_BROWSE_URL", srv.URL)
 	if _, err := ToolBrowse()(context.Background(), []byte(`{"url":"https://example.com"}`)); err == nil ||
 		!strings.Contains(err.Error(), "url must be http(s)") {
 		t.Fatalf("sidecar error must surface, got %v", err)

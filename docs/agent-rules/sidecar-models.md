@@ -13,7 +13,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 > (Playwright 상주 headful Chromium, 프로필 `~/.deneb/browser-profile`, API
 > 127.0.0.1:18930). 운영자가 `start-browser-sidecar.sh view`(noVNC)로 로그인해
 > 두면 에이전트가 그 세션으로 로그인 벽 페이지를 읽는다(읽기 전용 v1).
-> 기동 `start-browser-sidecar.sh start` · 게이트웨이 override `DENEB_BROWSER_URL` ·
+> 기동 `start-browser-sidecar.sh start` · 게이트웨이 override `DENEB_BROWSE_URL`(Page Agent의 DENEB_BROWSER_URL과 별개) ·
 > 라이브 검증 `DENEB_BROWSE_LIVE=1 go test -run TestToolBrowse_Live ./internal/pipeline/chat/tools`.
 
 | 모델 | 역할 | 기본 엔드포인트 | 코드 진입점 | 비고 |

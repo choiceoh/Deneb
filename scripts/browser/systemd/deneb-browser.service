@@ -1,0 +1,23 @@
+# Deneb browser sidecar — resident headful Chromium (Playwright persistent
+# profile) the agent reads login-walled pages through. API on 127.0.0.1:18930.
+# Human login/takeover over noVNC: scripts/browser/start-browser-sidecar.sh view
+[Unit]
+Description=Deneb Browser Sidecar (Playwright headful Chromium, port 18930)
+After=deneb-browser-xvfb.service
+Requires=deneb-browser-xvfb.service
+
+[Service]
+Type=simple
+Environment=DISPLAY=:98
+Environment=DENEB_BROWSER_PORT=18930
+# Absolute node path — ~/.local/bin/node is a symlink shadow and systemd has a
+# minimal PATH (see memory: ~/.local/bin trap).
+ExecStart=/home/choiceoh/node-sdk/node-v24.18.0-linux-arm64/bin/node %h/deneb/scripts/browser/server.mjs
+Restart=on-failure
+RestartSec=5
+# The router LLM path must die before this under memory pressure (2026-07-18
+# OOM cascade); a browser tab is more expendable than embeddings/wormhole.
+OOMScoreAdjust=300
+
+[Install]
+WantedBy=default.target
