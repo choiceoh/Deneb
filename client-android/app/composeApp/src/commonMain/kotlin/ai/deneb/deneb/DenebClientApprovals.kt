@@ -5,6 +5,7 @@ import ai.deneb.deneb.generated.GroupwareApprovalAnalysisOut
 import ai.deneb.deneb.generated.GroupwareApprovalGetResponse
 import ai.deneb.deneb.generated.GroupwareApprovalRow
 import ai.deneb.deneb.generated.GroupwareApprovalsListResponse
+import io.ktor.http.encodeURLParameter
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -243,6 +244,21 @@ suspend fun DenebGatewayClient.fetchApprovalBody(
         approvalBodyCache.remove(approvalBodyCache.keys.first())
     }
     return fetched
+}
+
+/**
+ * Browser-openable 결재 첨부 download URL (mail [attachmentUrl] parity). The
+ * download endpoint can't read the X-Deneb-Client-Token header from a link
+ * open, so the token rides in the query string (single-user local setup).
+ * [selector] is the 1-based row index (or filename) parsed from the 첨부 block;
+ * [filename] keeps the extension so Android picks the right viewer app.
+ */
+fun DenebGatewayClient.approvalAttachmentUrl(docId: String, selector: String, filename: String = ""): String {
+    fun e(s: String) = s.encodeURLParameter()
+    return "$gatewayUrl/api/v1/miniapp/groupware/approval/attachment" +
+        "?docId=${e(docId)}&attachment=${e(selector)}" +
+        (if (filename.isBlank()) "" else "&filename=${e(filename)}") +
+        "&clientToken=${e(clientToken)}"
 }
 
 /** Instant cached analysis (no LLM) if one was already produced. */

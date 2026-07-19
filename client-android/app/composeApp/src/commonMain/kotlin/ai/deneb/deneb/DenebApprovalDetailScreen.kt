@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.network.httpTeardownTolerantHandler
+import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
@@ -17,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -255,12 +258,41 @@ fun DenebApprovalDetailScreen(
                             attachOpen = !attachOpen
                         },
                     ) {
-                        SelectionContainer {
-                            Text(
-                                sections.attachments,
-                                style = DenebType.body,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
+                        val attachmentRows = remember(sections.attachments) {
+                            parseAttachmentRows(sections.attachments)
+                        }
+                        if (attachmentRows.isEmpty()) {
+                            SelectionContainer {
+                                Text(
+                                    sections.attachments,
+                                    style = DenebType.body,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        } else {
+                            // Tap opens/downloads the real file via the binary
+                            // download route — mail attachment chip parity.
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                attachmentRows.forEach { row ->
+                                    AssistChip(
+                                        onClick = {
+                                            haptics.tap()
+                                            openUrl(
+                                                client.approvalAttachmentUrl(
+                                                    docId = docId,
+                                                    selector = row.index.toString(),
+                                                    filename = row.name,
+                                                ),
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                if (row.meta.isBlank()) row.name else "${row.name}  ${row.meta}",
+                                            )
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
