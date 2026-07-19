@@ -179,7 +179,10 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
 
     report = Report()
     for doc in docs:
-        rel_doc = str(doc.relative_to(repo))
+        try:
+            rel_doc = str(doc.relative_to(repo))
+        except ValueError:
+            rel_doc = str(doc)  # --extra-docs: 레포 밖 문서는 절대경로로 표기
         try:
             text = doc.read_text(encoding="utf-8")
         except OSError:
@@ -229,8 +232,8 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
                         cand = None
                     if cand and (cand in tracked_set or cand in tracked_dirs):
                         resolved = cand
-                    if base == repo:
-                        break
+                    if base == repo or base == base.parent:
+                        break  # repo 루트 또는 파일시스템 루트(레포 밖 문서) 도달
                     base = base.parent
                 if resolved is None:
                     # Well-known module roots: docs shorthand like `pkg/safego`
@@ -327,18 +330,98 @@ def collect_docs(repo: Path, globs: list[str]) -> list[Path]:
     return sorted(seen)
 
 
+def fix_broken_lines(repo: Path, report: Report, symbols_by_file: dict[str, dict[str, int]]) -> int:
+    """--fix: repair broken line anchors deterministically.
+
+    Rule 1 — a backtick symbol on the same doc line that CodeGraph locates in
+    the anchored file: rewrite `f.go:N` → `f.go:<symbol start line>`.
+    Rule 2 — otherwise drop the stale line (`f.go:N` → `f.go`): losing a number
+    beats shipping a lie. Anything else is left for a human."""
+    fixed = 0
+    for f in report.broken():
+        if f.tier != "broken-line":
+            continue
+        doc = repo / f.doc
+        lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
+        line = lines[f.line_no - 1]
+        path_part = f.ref.rsplit(":", 1)[0]
+        target = None
+        file_syms = {}
+        for cand, syms in symbols_by_file.items():
+            if cand.endswith(path_part) or path_part.endswith(cand):
+                file_syms = syms
+                break
+        for tok in BACKTICK_RE.findall(line):
+            tok = tok.strip().rstrip("()")
+            name = tok.split(".")[-1]
+            if name in file_syms:
+                target = f"{path_part}:{file_syms[name]}"
+                break
+        replacement = target or path_part
+        lines[f.line_no - 1] = line.replace(f.ref, replacement, 1)
+        doc.write_text("".join(lines), encoding="utf-8")
+        fixed += 1
+    return fixed
+
+
+def load_symbols_by_file(repo: Path) -> dict[str, dict[str, int]]:
+    db = repo / ".codegraph" / "codegraph.db"
+    if not db.exists():
+        return {}
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        out: dict[str, dict[str, int]] = {}
+        for name, fp, start in con.execute(
+            "SELECT name, file_path, start_line FROM nodes"
+            " WHERE kind IN ('function','method','struct','class','type','constant','variable')"
+        ):
+            out.setdefault(fp, {}).setdefault(name, start)
+        con.close()
+        return out
+    except sqlite3.Error:
+        return {}
+
+
+def unmentioned(repo: Path, src_dir: str, doc_rel: str) -> list[str]:
+    """Curation aid: source files under src_dir the doc never mentions.
+    Advisory by design — module docs curate, they don't inventory."""
+    doc_text = (repo / doc_rel).read_text(encoding="utf-8", errors="ignore")
+    out = []
+    for p in sorted((repo / src_dir).glob("*.go")):
+        if p.name.endswith("_test.go"):
+            continue
+        if p.name not in doc_text:
+            out.append(p.name)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", default=".", type=Path)
     ap.add_argument("--glob", action="append", help="override default doc globs")
+    ap.add_argument("--extra-docs", action="append", type=Path,
+                    help="레포 밖 문서 디렉토리(메모리 등) — refs는 레포 기준 검증")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true", help="broken 참조가 있으면 exit 1")
+    ap.add_argument("--fix", action="store_true", help="broken 라인 앵커를 결정적 규칙으로 수리")
+    ap.add_argument("--unmentioned", nargs=2, metavar=("SRC_DIR", "DOC"),
+                    help="큐레이션 감사: SRC_DIR의 소스 중 DOC에 미언급 파일 나열")
     args = ap.parse_args(argv)
 
     repo = args.repo.resolve()
+    if args.unmentioned:
+        for name in unmentioned(repo, *args.unmentioned):
+            print(name)
+        return 0
     docs = collect_docs(repo, args.glob or DEFAULT_GLOBS)
+    for extra in args.extra_docs or []:
+        docs += sorted(p for p in extra.resolve().glob("*.md") if p.is_file())
     symbols = load_symbol_index(repo)
     report = lint(repo, docs, symbols)
+    if args.fix and report.broken():
+        n = fix_broken_lines(repo, report, load_symbols_by_file(repo))
+        print(f"--fix: {n}건 수리 — 재검증 필요")
+        report = lint(repo, docs, symbols)
 
     if args.json:
         print(json.dumps(
