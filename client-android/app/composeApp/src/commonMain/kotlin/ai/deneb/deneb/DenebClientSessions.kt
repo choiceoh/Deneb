@@ -4,6 +4,7 @@ import ai.deneb.data.Attachment
 import ai.deneb.data.Conversation
 import ai.deneb.deneb.generated.SessionRowOut
 import ai.deneb.ui.chat.History
+import ai.deneb.ui.chat.stableTranscriptId
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.withLock
@@ -279,7 +280,13 @@ internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): Lis
         if (m.content.isBlank() && attachments.isEmpty()) {
             null
         } else {
-            History(role = role, content = m.content, attachments = attachments, timestampMs = m.timestampMs)
+            History(
+                id = stableTranscriptId(role, m.content, m.timestampMs),
+                role = role,
+                content = m.content,
+                attachments = attachments,
+                timestampMs = m.timestampMs,
+            )
         }
     }
 }
