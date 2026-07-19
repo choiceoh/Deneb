@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.ui.chat.History
+import ai.deneb.ui.chat.stableTranscriptId
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 
@@ -33,8 +34,10 @@ internal fun decodeCachedTranscript(json: String, expectedOwner: String): List<H
     val msgs = decodeOwnedCache(json, expectedOwner, TX_CACHE_PAYLOAD_KEY, txCacheSerializer) ?: return null
     if (msgs.isEmpty()) return null
     return msgs.map {
+        val role = if (it.role == "user") History.Role.USER else History.Role.ASSISTANT
         History(
-            role = if (it.role == "user") History.Role.USER else History.Role.ASSISTANT,
+            id = stableTranscriptId(role, it.content, it.ts),
+            role = role,
             content = it.content,
             timestampMs = it.ts,
         )

@@ -177,6 +177,19 @@ data class History(
     }
 }
 
+/**
+ * Stable identity for a transcript-sourced message. Both the local cache decode
+ * and the network fetch rebuild [History] from role + content + timestamp, so a
+ * default random UUID would give the SAME message a NEW id on every reload — and
+ * the message list keys the LazyColumn on `id` with `animateItem`, so a re-key
+ * makes the old and new rows animate as separate items and briefly OVERLAP
+ * (the "같은 채팅이 두 번 렌더링돼 겹침" bug). Deriving the id from the persisted
+ * fields keeps it identical across cache/network/change-feed reloads, so the row
+ * is reused instead of re-inserted. Live optimistic rows keep their random UUID
+ * (they carry no stable timestamp yet) and settle to this id on the next reload.
+ */
+fun stableTranscriptId(role: History.Role, content: String, timestampMs: Long): String = "tx:${role.name}:$timestampMs:${content.hashCode()}"
+
 /** Latest assistant message that should render in the UI (non-empty content, not a thinking-only entry). */
 fun List<History>.lastRenderedAssistant(): History? = lastOrNull { it.role == History.Role.ASSISTANT && it.content.isNotEmpty() && !it.isThinking }
 
