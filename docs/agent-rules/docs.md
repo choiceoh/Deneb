@@ -47,3 +47,17 @@ globs: ["docs/**"]
 | Command | Description |
 |---|---|
 | `npx mintlify dev` (from `docs/`) | Run Mintlify local preview |
+
+## 문서 참조 정합 (doc-ref-lint)
+
+에이전트 문서(CLAUDE.md·docs/agent-rules 등)에 박힌 코드 참조는 `make
+doc-ref-lint`(CI 게이트, validate-or-freeze — arXiv:2607.13285에서 채택)가
+현재 레포와 대조한다. 소스 파일 경로가 사라졌거나 `file.go:라인` 앵커가 파일
+길이를 넘으면 BROKEN으로 게이트가 레드다 — 코드를 옮겼으면 문서도 같이 고쳐라.
+`file.go:심볼` 앵커와 심볼 참조는 CodeGraph 인덱스로 검증되는 advisory warn.
+
+의도적으로 존재하지 않는 참조(가상 예시 파일, "만들지 마라" 반례, 레포 밖
+호스트 파일)는 해당 줄 끝에 `<!-- docref:ignore -->`, 블록 단위는
+`<!-- docref:off -->`/`<!-- docref:on -->`으로 감싼다. 런타임 데이터 파일
+(`deneb.json` 류 bare 파일명)과 개념/외부 참조는 자동으로 warn 이하로
+분류되므로 마킹이 필요 없다.

@@ -2,7 +2,7 @@
 
 이 패키지는 session tool-preset 상수와 헬퍼만 보관하는 얇은 leaf다.
 **도구 등록 배선은 `toolwire/`로 이동했다.** 과거 이 패키지가 담당하던
-등록 허브 역할(`core.go`, `file_tools.go`, `runtime_ops.go`,
+등록 허브 역할(`core.go`, `file_tools.go`, `runtime_ops.go`, <!-- docref:ignore -->
 `tool_schemas.json`, `tool_schemas_gen.go`)은 모두 `toolwire/` 아래에 있다:
 
 - `toolwire/core/register.go` — 책임별 `Register*Tools` (File/RuntimeOps/Graph/

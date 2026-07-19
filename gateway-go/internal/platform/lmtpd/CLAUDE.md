@@ -31,5 +31,5 @@
 `cd gateway-go && go test ./internal/platform/lmtpd`
 
 큐 상태기계 변경은 `queue_test.go`(enqueue/claim/complete)로, 소켓 경로는
-`systemd_socket_test.go`로 고정한다. 라이브 검증 시 dev 인스턴스의 LMTP
+`server_test.go`(SplitListenAddr 계열)와 `systemd_socket.go`의 계약으로 고정한다. 라이브 검증 시 dev 인스턴스의 LMTP
 비활성(포트 소유권)을 먼저 확인한다.

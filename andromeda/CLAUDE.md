@@ -92,7 +92,7 @@ The registry makes this declarative. To add e.g. a `notes` grid:
    { name: "notes", label: "노트", list: "miniapp.notes.list", create: "miniapp.notes.create" }
    ```
 2. **`types.ts`** — add `Note` row interface and add `"notes"` to the `View` union.
-3. **`components/panes/NotePane.tsx`** — copy `PeoplePane.tsx` (the simplest read
+3. **`components/panes/NotePane.tsx`** — copy `PeoplePane.tsx` (the simplest read <!-- docref:ignore -->
    grid): `useList<Note>({ resource: "notes", queryOptions: { enabled: connected } })`,
    build `aiText` with `serializeList("노트", notes, (n) => …)`, call
    `useRegisterPane("notes", aiText)`, render `<GridNotice><Grid…/></GridNotice>`.

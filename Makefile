@@ -15,7 +15,7 @@
        health-v3 health-v3-check health-v3-deep health-v3-test health-v3-baseline \
        rsi-bench rsi-bench-check rsi-bench-deep rsi-bench-test rsi-bench-baseline \
        bench-check bench-refresh \
-       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test \
+       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test doc-ref-lint \
        preview native-smoke \
        info
 
@@ -243,6 +243,13 @@ health-v2-deep:
 # Stdlib-only scorer regression and anti-gaming fixtures.
 health-v2-test:
 	@python3 -m unittest discover -s scripts/audit -p 'test_codebase_health_v2*.py' -v
+
+# validate-or-freeze for doc-embedded code references (Harness Handbook,
+# arXiv:2607.13285): agent docs must not silently point at moved/deleted code.
+# Strict on BROKEN (missing source paths / dead line anchors); symbol drift
+# stays advisory inside the report. Sub-second.
+doc-ref-lint:
+	@python3 scripts/audit/doc_ref_lint.py --strict
 
 # All checked-in Python behavior tests. Keep the two roots isolated so their
 # fixture/support modules resolve exactly as they do when invoked directly.

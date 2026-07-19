@@ -42,7 +42,7 @@ They must NOT import `rpcutil.GatewayHub` or the `server` package.
 
 ### Rule 5: No adapter files
 
-Do not create `hub_adapters.go` or similar adapter layers.
+Do not create `hub_adapters.go` or similar adapter layers. <!-- docref:ignore -->
 Inline Deps literals in `method_registry*.go` are the only wiring point.
 
 ## Registration Phases

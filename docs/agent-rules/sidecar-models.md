@@ -63,7 +63,7 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
     (`paddleTableToText`; 같은 페이지 CER 0.153). 샘플링 페널티는 해법 아님
     (repetition_penalty=악화·frequency_penalty=표 내용 소실 실측). 재시도도
     루프면 원문 유지. 라이브 재현: `DENEB_OCR_LIVE_PAGE=<루프 PNG> go test -run Live ./internal/pipeline/chat/tools/document`.
-- `tools/document/docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR`(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사). **`pdfOCR` 페이지 루프는 병렬**(`ocrPageConcurrency`=6, 세마포어+WaitGroup, distinct-slot 쓰기로 순서 보존) — 서버 배칭(`--max-num-seqs 8`)을 활용해 N페이지 스캔을 ~1 배칭 디코드로 접음. 동시성 상한은 서버 seq 한도 밑으로 둬 라이브 챗/메일분석과 GPU 사이드카를 공유해도 몰리지 않게.
+- `tools/document/docparse.go` 의 `imageOCR`(이미지 첨부)와 `pdfOCR`(스캔 PDF)가 `ocrImageBytes` 경유 (구 `gmail_attachment.go` 에서 이사). **`pdfOCR` 페이지 루프는 병렬**(`ocrPageConcurrency`=6, 세마포어+WaitGroup, distinct-slot 쓰기로 순서 보존) — 서버 배칭(`--max-num-seqs 8`)을 활용해 N페이지 스캔을 ~1 배칭 디코드로 접음. 동시성 상한은 서버 seq 한도 밑으로 둬 라이브 챗/메일분석과 GPU 사이드카를 공유해도 몰리지 않게. <!-- docref:ignore -->
 - **폴백 설계**: 서버가 꺼져 있으면 connection refused 로 즉시 실패 → tesseract(kor+eng) 로 graceful degradation. 즉 OCR 은 서버 없어도 깨지지 않고 품질만 낮아진다.
 - **엔드포인트 override**: 환경변수 `DENEB_OCR_VL_URL` (기본 `http://127.0.0.1:18011`). 테스트/비표준 배포용.
 
@@ -114,7 +114,7 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 
 - 런처: **`~/start-vibevoice-asr.sh`** (★**srv1** 호스트, **레포 밖** — 게이트웨이(srv4)는 `DENEB_ASR_URL=http://100.105.145.6:18013` 로 크로스호스트 소비). 컨테이너 `vibevoice-asr`, port **18013**, `--restart unless-stopped`.
 - 서빙: PaddleOCR 와 달리 **vLLM serve 아님.** MS 의 vLLM 플러그인은 vLLM v0.14.1 타깃인데 로컬 `vllm-node` 는 0.21.1 → transformers eager + 얇은 FastAPI 래퍼로 상주 (단일 사용자엔 충분).
-- 이미지: `vibevoice-asr:latest` = `FROM vllm-node:latest` + accelerate/soundfile/soxr/ffmpeg/fastapi. 빌드 컨텍스트 `~/vibevoice-asr/` (Dockerfile + `vibevoice_server.py`).
+- 이미지: `vibevoice-asr:latest` = `FROM vllm-node:latest` + accelerate/soundfile/soxr/ffmpeg/fastapi. 빌드 컨텍스트 `~/vibevoice-asr/` (Dockerfile + `vibevoice_server.py`). <!-- docref:ignore -->
 - 가중치: `~/models/VibeVoice-ASR-HF` (16GB BF16, hf download — 이 호스트에선 `HF_HUB_DISABLE_XET=1` 필요). 로드 ~80s(부팅 1회).
 - **커밋 헤드룸**: strict overcommit(`vm.overcommit_memory=2`) 호스트라 16GB 상주를 위해 `vm.overcommit_ratio` 50→80 영구 상향(`/etc/sysctl.d/99-deneb-vibevoice.conf`). OOM 가드(min_free_kbytes/watermark)는 미변경.
 
