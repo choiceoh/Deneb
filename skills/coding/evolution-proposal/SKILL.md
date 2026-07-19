@@ -10,7 +10,7 @@ metadata:
         "emoji": "🧭",
         "tags": ["self-evolution", "genesis", "proposal", "procedural-memory", "routing", "SkillOpt", "Self-Harness", "held-out-replay", "self-correction-queue"],
         "triggers": ["자가개선", "자기진화", "스킬화", "스킬 생성", "스킬 개선", "스킬 진화", "evolution proposal"],
-        "related_skills": ["skill-factory", "skill-creator", "skill-evolution"],
+        "related_skills": ["skill-factory"],
         "requires_tools": ["skill_lifecycle", "skills"],
       },
   }
@@ -54,7 +54,7 @@ Choose exactly one route:
 | No-op | The workflow is one-off or already covered | Say no skill change is needed |
 | Genesis | A complete recent session has a reusable pattern | Call `skill_lifecycle` action `genesis` |
 | Create | RPC is unavailable, but the pattern is clear now | Use `skill-factory`, then `skills` action `create` |
-| Evolve | An existing skill almost covers the workflow | Call `skill_lifecycle` action `evolve` or use `skill-evolution` for a manual patch |
+| Evolve | An existing skill almost covers the workflow | Call `skill_lifecycle` action `evolve` |
 
 Prefer `Genesis` through `skill_lifecycle` when available; it preserves the
 engine's cooldowns, duplicate checks, daily cap, generated-skill metadata, and
@@ -209,7 +209,7 @@ Typical manual held-out replay case:
 ## Pitfalls
 
 - Do not create a skill just because a task was long. The workflow must be reusable.
-- Do not duplicate `skill-factory`, `skill-creator`, or `skill-evolution`; route to them.
+- Do not duplicate `skill-factory`; route to it.
 - Do not store secrets, private contact data, or single-session context in a skill.
 - Do not name new skills after PR numbers, exact errors, codenames, or one session's artifact; make the name class-level.
 - Do not mutate a skill and invalidate prompt cache mid-session unless immediate use is necessary; prefer deferred application.

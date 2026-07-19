@@ -30,8 +30,8 @@ description: One-line description of what skills belong in this category.
 
 | Category | Description | Skills |
 |---|---|---|
-| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, github, self-evolve, skill-creator, skill-evolution, skill-factory |
-| `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, deneb-ui-authoring, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, session-logs, weekly-report |
+| `coding` | Software development, code generation, version control, CI/CD | evolution-proposal, skill-factory |
+| `productivity` | Daily workflows, documents, summarization, personal automation | contract-review, decision-premortem, deep-research, deneb-ui-authoring, email-analysis, fact-check, meeting-minutes, morning-letter, proactive-gate, retrieval-plan, weekly-report |
 | `devops` | System monitoring, terminal management, infrastructure | (none — 2026-07 사용량 감사로 은퇴; 필요 시 git 히스토리에서 복원) |
 | `security` | Security, secrets management, and credential handling | (none) |
 | `integration` | External service connectivity, API bridges | (none) |
@@ -229,8 +229,8 @@ Experience → Proposal → Genesis/Create → Use → Evolution → Improved Sk
 |---|---|---|
 | **Proposal** | `evolution-proposal` + `skill_lifecycle` | Decide, record, and execute genesis/evolution/no-op routes |
 | **Creation** | `skill-factory` | Extract reusable patterns from complex workflows |
-| **Authoring** | `skill-creator` | Create/edit/audit SKILL.md files |
-| **Evolution** | `skill-evolution` | Optimize skills via the iterative-optimization loop (`docs/agent-rules/optimization.md`) |
+| **Authoring** | `skill-factory` | Extract/author SKILL.md files (docs/tools/creating-skills.md) |
+| **Evolution** | `skill_lifecycle` tool | Route evolution through the genesis loop (propose-only) |
 
 ### Autonomous Skill Creation
 
@@ -238,7 +238,7 @@ After completing complex multi-step tasks (5+ tool calls), the agent should cons
 > "이 작업은 스킬로 만들 가치가 있는가?"
 
 If the pattern is reusable, start with `evolution-proposal`, then route to
-`skill_lifecycle`, `skill-factory`, or `skill-evolution` as appropriate.
+`skill_lifecycle` or `skill-factory` as appropriate.
 
 Deneb follows the Hermes mainline route order:
 
