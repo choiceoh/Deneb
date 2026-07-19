@@ -57,6 +57,13 @@ SYMBOL_RE = re.compile(r"^(?:[a-z][\w]*\.[A-Z]\w+|[A-Z]\w+\.[a-z]\w+|\w{3,}\(\))
 
 SKIP_PREFIXES = ("http://", "https://", "~", "/", "$", "<", "100.", "127.", "0.")
 
+# Symbol heads that live outside this repo (Go stdlib, Compose/Material, ktor…):
+# CodeGraph rightly doesn't index them, so "unknown symbol" would be noise.
+EXTERNAL_SYMBOL_HEADS = frozenset(
+    "slog fmt http context json os time sync errors strings sql sqlite3 "
+    "MaterialTheme Icons Modifier Text LazyColumn Compose ktor tauri React".split()
+)
+
 
 @dataclass
 class Finding:
@@ -134,6 +141,8 @@ def extract_refs(text: str) -> list[tuple[int, str, str]]:
             continue
         if not active or "docref:ignore" in line:
             continue
+        # Strikethrough marks retired symbols/paths on purpose — not claims.
+        line = re.sub(r"~~[^~]*~~", "", line)
         tokens = BACKTICK_RE.findall(line) + MDLINK_RE.findall(line)
         for tok in tokens:
             tok = tok.strip()
@@ -182,6 +191,10 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
             if kind == "symbol":
                 name = ref.rstrip("()").split(".")[-1]
                 head = ref.split(".")[0].rstrip("()")
+                # stdlib / framework symbols are legitimately absent from the
+                # repo's CodeGraph — verifying them is pure noise.
+                if head in EXTERNAL_SYMBOL_HEADS:
+                    continue
                 if symbols is not None and name not in symbols and head not in symbols:
                     report.findings.append(
                         Finding(rel_doc, line_no, ref, "warn-symbol", "CodeGraph에 없는 심볼")
@@ -273,9 +286,18 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
                 )
                 continue
             if sym_anchor is not None and symbols is not None and sym_anchor not in symbols:
-                report.findings.append(
-                    Finding(rel_doc, line_no, ref, "warn-symbol", "CodeGraph에 없는 심볼 앵커")
-                )
+                # CodeGraph doesn't index every language (shell functions, SQL…).
+                # The anchor names a SPECIFIC file, so fall back to checking the
+                # file's own text before warning.
+                target = resolved[1][0] if isinstance(resolved, tuple) else resolved
+                try:
+                    body = (repo / target).read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    body = ""
+                if sym_anchor not in body:
+                    report.findings.append(
+                        Finding(rel_doc, line_no, ref, "warn-symbol", "파일·CodeGraph 모두에 없는 심볼 앵커")
+                    )
             if anchor is not None:
                 # Ambiguous rescue: accept the anchor if ANY candidate is long
                 # enough (under-alarming beats mis-attributing a wrong file).

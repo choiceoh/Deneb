@@ -26,7 +26,7 @@ Post-construction mutation is limited to late-bound optional services
 (`SetWikiStore`, `SetLocalAIHub`, `SetEmbeddingClient`, `SetContactsStore`,
 `SetInsights`). The chat handler lives on `Server` (`s.chatHandler`) and is
 passed into handler `Deps` from `registerLateMethods` — there is no
-`hub.SetChat`.
+`hub.SetChat`. <!-- docref:ignore -->
 
 ### Rule 3: Handlers never import Hub
 
@@ -57,6 +57,6 @@ Inline Deps literals in `method_registry*.go` are the only wiring point.
 
 ## Snapshot Test
 
-`method_registry_test.go:TestMethodRegistry_RequiredMethodsRegistered` verifies
+`method_registry_test.go:TestMethodRegistryReturnsNoMissingRequiredMethods` verifies
 all required RPC methods are registered. When adding/removing methods, update
 the `requiredMethods` list.
