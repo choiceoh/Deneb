@@ -81,7 +81,7 @@ scripts/dev/native-app.sh stop
 | `NATIVE_APP_XMX` | `1024m` | 앱 JVM 힙 캡 |
 
 - **프로덕션 연결**(실데이터). 메일/일정/세션이 진짜로 보이고, **채팅을 보내면 실제 에이전트 턴이 돈다** — 입력 메커니즘만 볼 땐 Enter/전송 누르지 말 것.
-- ★**phone 프로파일 = 실제 모바일 UI**(2026-06-14 추가): 예전엔 항상 `Platform.Desktop`(phone 은 창 크기만)이라 폰 전용 분기를 못 봤는데, 이제 phone 프로파일이 `-Ddeneb.platform=phone` 으로 `currentPlatform=Mobile.Android` 를 강제하고 창을 프로파일 크기로 연다(`-Ddeneb.window.{width,height}` — Compose 가 1280 기본을 재적용해 좁은 레이아웃을 잘라먹던 클립 제거). 그래서 **하단 탭바·모달 드로어 등 폰 전용 분기를 헤드리스로 검증**할 수 있다. desktop 프로파일은 `currentPlatform=Platform.Desktop` 을 세팅하지만, 데스크탑 제품 UI 가 제거돼(모바일 전용, Andromeda 가 데스크탑 소유) **이제 모바일 UI 를 넓은 1280 창에 렌더**한다 — 즉 phone 프로파일이 실제 검증용이고 desktop 은 잔존 빌드 타깃이다. 구현: `Platform.jvm.kt` 가 `deneb.platform` 시스템 프로퍼티를, `main.kt` 가 `deneb.window.*` 를 인식(프로덕션 런치는 미설정). **단 실제 Android 인셋·소프트 키보드·엣지 제스처는 여전히 실기기 필요** — 이건 레이아웃·네비게이션 검증이지 OS 런타임 동작 검증이 아니다.
+- ★**phone 프로파일 = 실제 모바일 UI**(2026-06-14 추가): 예전엔 항상 `Platform.Desktop`(phone 은 창 크기만)이라 폰 전용 분기를 못 봤는데, 이제 phone 프로파일이 `-Ddeneb.platform=phone` 으로 `currentPlatform=Mobile.Android` 를 강제하고 창을 프로파일 크기로 연다(`-Ddeneb.window.{width,height}` — Compose 가 1280 기본을 재적용해 좁은 레이아웃을 잘라먹던 클립 제거). 그래서 **하단 탭바·모달 드로어 등 폰 전용 분기를 헤드리스로 검증**할 수 있다. desktop 프로파일은 `currentPlatform=Platform.Desktop` 을 세팅하지만, 데스크탑 제품 UI 가 제거돼(모바일 전용, Andromeda 가 데스크탑 소유) **이제 모바일 UI 를 넓은 1280 창에 렌더**한다 — 즉 phone 프로파일이 실제 검증용이고 desktop 은 잔존 빌드 타깃이다. 구현: `Platform.jvm.kt` 가 `deneb.platform` 시스템 프로퍼티를, `desktopMain/kotlin/ai/deneb/main.kt` 가 `deneb.window.*` 를 인식(프로덕션 런치는 미설정). **단 실제 Android 인셋·소프트 키보드·엣지 제스처는 여전히 실기기 필요** — 이건 레이아웃·네비게이션 검증이지 OS 런타임 동작 검증이 아니다.
 
 ## dev 게이트웨이 연결 (수정 빌드를 prod 배포 없이 검증)
 
@@ -119,7 +119,7 @@ scripts/dev/native-app.sh shot home    # 홈 데이터가 차 있으면 인증 �
 | **타이핑이 안 들어감**(필드 포커스는 됨) | WM 없으면 X포커스↔Compose필드포커스 어긋남 | matchbox WM 필수(스크립트가 기동). `ensure_focus`가 이미 포커스면 windowfocus 생략 |
 | 기동 실패 `errno=12 ENOMEM` | strict overcommit(`vm.overcommit_memory=2`), 앱 기본힙 32GB | `-Xmx1024m` 캡(적용됨). 데몬 죽이지 말 것(`/proc/meminfo` 헤드룸 확인) |
 | 창이 1280×800에 멈춤 | Compose가 첫 컴포지션에 WindowState 재적용 | `force_geometry` 재확인 루프(적용됨). `start` 재실행으로 self-heal |
-| 스크립트가 조용히 죽음 | `set -e`+`pipefail`에서 `xdotool/pgrep` no-match exit1이 `x="$(…)"` 할당을 즉사 | 헬퍼에 `\|\| true` 필수(`app_wid`/`xvfb_pid`/`wm_pid` 적용됨) |
+| 스크립트가 조용히 죽음 | `set -e`+`pipefail`에서 `xdotool/pgrep` no-match exit1이 `x="$(…)"` 할당을 즉사 | 헬퍼에 `\|\| true` 필수(`app_wid`/`xvfb_pid`/`wm_pid` 적용됨) <!-- docref:ignore --> |
 | 첫 화면이 검은 띠/토글 누락 | shot이 정착 직전 transient | 잠깐 뒤 다시 `shot`, 또는 `start` 재실행(geometry 재적용) |
 | 검정 화면만 | GL 없는 Xvfb에 하드웨어 렌더 시도 | `-Dskiko.renderApi=SOFTWARE`(적용됨) |
 

@@ -9,7 +9,7 @@ composition root의 서비스 컨테이너를 소유한다. 도메인 handler는
 - `helpers.go`의 `DecodeParams`, `RespondOK`, `Bind`, `BindCtx`,
   `BindHandler`, `BindHandlerCtx`가 JSON 경계에서 구체적인 요청·응답 타입을
   보존하고 `protocol.ResponseFrame`으로 변환한다.
-- `gateway_hub.go`의 `HubConfig`, `GatewayHub`, `NewGatewayHub`가 공유
+- `hub/gateway_hub.go`의 `HubConfig`, `GatewayHub`, `NewGatewayHub`가 공유
   런타임 서비스를 한 번 조립한다. `GatewayHub.Validate`,
   `GatewayHub.AdvancePhase`, `GatewayHub.Broadcast`만 컨테이너 수준 동작이다.
 - `HandlerFunc`와 `BroadcastFunc`는 handler 패키지들이 공유하는 정본

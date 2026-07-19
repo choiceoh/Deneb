@@ -81,7 +81,7 @@ revision의 format, vet, lint, test, race 실행 결과다. Fast 프로필에서
 **Ratchet은 CI 밖이다 (운영자 결정 2026-07-18).** git-window 기반 pillar 점수는
 무관한 PR을 허위 레드로 물들인다(systemd 유닛 1파일 diff에 5-pillar 동시 하락
 관측) — 우는 게이트는 진짜 레드를 무시하게 학습시킨다. PR CI와 로컬
-`make ci`/`ci/fast`에서 `health-v2-check`를 제거했고, scorer 단위 테스트
+`make ci`/`ci/fast`에서 `health-v2-check`를 제거했고, scorer 단위 테스트 <!-- docref:ignore -->
 (`health-v2-test`)만 게이트에 남는다. Fail-closed 래칫 스윕은 Nightly Drift
 Watch 소관이며, 수동 실행은 `make health-v2-check`.
 

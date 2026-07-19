@@ -1,6 +1,6 @@
 # Gateway Config 변경 지도
 
-이 패키지는 `deneb.json`의 typed view, 검증·기본값, startup bootstrap과
+이 패키지는 `deneb.json`의 typed view, 검증·기본값, startup bootstrap과 <!-- docref:ignore -->
 최종 gateway runtime 설정을 소유한다. runtime/server는 완성된 설정을
 소비하며 파일 형식이나 보안 제약을 다시 해석하지 않는다.
 

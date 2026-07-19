@@ -149,7 +149,7 @@ globs:
 
 ## 운영자 위키 브리프 (워크스페이스 WIKI.md)
 
-- **워크스페이스 `WIKI.md`** (USER.md·MEMORY.md 옆) = 운영자가 직접 편집하는 위키 유지보수 조향 파일
+- **워크스페이스 `WIKI.md`** (USER.md·MEMORY.md 옆) = 운영자가 직접 편집하는 위키 유지보수 조향 파일 <!-- docref:ignore -->
   (OpenWiki의 wiki-brief 패턴 도입, 2026-07). 드리머 합성 프롬프트와 위키 리서치 프롬프트가
   **매 사이클 재읽기**로 주입한다 (`wiki/brief.go`: `LoadWikiBrief`+`WikiBriefSection` — 렌더러 단일).
 - 용도: "무엇에 집중/무시할지"의 조향만. **레이아웃 불변식(카테고리·슬롯·추측 금지)은 브리프가
@@ -173,7 +173,7 @@ globs:
   질문 **불릿 제거만**. 대표페이지 본문(현재 상태 등) 통합은 내부 wiki-research 몫 — 스카우트가
   본문을 만지면 안 된다. wiki-research가 웹을 뺀 이유(큐레이션 오염)는 이 분리로 해소된다.
 - 게이트: 프로덕션 상태 디렉토리 전용, `DENEB_WIKI_SCOUT_DISABLE=1`로 비활성, 사용자 활동 중 스킵.
-  상태는 `wiki-scout-state.json`(질문별 마지막 시도 시각, 60일 프룬). 위키 날짜 비교·표기는
+  상태는 `wiki-scout-state.json`(질문별 마지막 시도 시각, 60일 프룬). 위키 날짜 비교·표기는 <!-- docref:ignore -->
   `dentime.Now()`(KST 정본 시계) — 서버 로컬 시계 금지.
 - **공유 유지보수 락**(`scout.MaintenanceLock()` → `research.SetMaintenanceLock`): scout와 research가
   같은 `*sync.Mutex`를 TryLock으로 잡아 **scout-vs-scout + scout-vs-research** 쓰기 경합을 막는다
@@ -210,7 +210,7 @@ globs:
   불필요(PDF 텍스트 레이어를 뽑기만). 만타에 텍스트만 올라오면 `.txt`도 처리.
 - **Drive 클라이언트** (`platform/googledrive/client.go`): 읽기 전용, `~/.deneb/credentials/drive_*.json`
   (gmail 패턴 미러). **Drive 스코프 크리덴셜은 운영자 1회 설정** — 게이트웨이는 토큰을 새로 발급하지
-  않고 refresh만 하므로, Drive-scoped 동의로 받은 `drive_client.json`+`drive_token.json`을 놓아야 함.
+  않고 refresh만 하므로, Drive-scoped 동의로 받은 `drive_client.json`+`drive_token.json`을 놓아야 함. <!-- docref:ignore -->
 - **supernote-digest 태스크** (`runtime/wikiwork/supernote_digest_task.go`, 6h): 설정 폴더의 신규
   파일(modifiedTime 커서 + 처리 ID 셋으로 dedup, 사이클당 최대 5건)을 다운로드→`document.ExtractText`로
   텍스트화→**내부 리서치 프리셋**(`PresetWikiResearch` — 웹 없음, 메모리 스토어 허용)의 턴 1회로 위키에
@@ -221,7 +221,7 @@ globs:
   확정 사실로 쓰지 않음. 커서는 성공 시에만 전진(읽을 수 없는 배치는 재다운로드 방지 위해 커서만 전진).
 - 게이트: 프로덕션 전용, `DENEB_SUPERNOTE_DISABLE=1`로 비활성, `DENEB_SUPERNOTE_DRIVE_FOLDER_ID` 미설정
   또는 Drive 크리덴셜 부재면 **1회 로그 후 휴면**(안전 no-op), 사용자 활동 중 스킵. 상태는
-  `supernote-digest-state.json`.
+  `supernote-digest-state.json`. <!-- docref:ignore -->
 
 ## 위치 → 현장 방문 기록 (프라이버시 경계 강함)
 

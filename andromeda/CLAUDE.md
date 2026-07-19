@@ -9,7 +9,7 @@ maps the architecture, the conventions, and the two recipes you'll use most
 **Andromeda** — a personal AI work-command **workstation**, the desktop cockpit
 for the Deneb gateway (a single-agent personal assistant). Three columns: nav +
 work area (grids/editors) + Deneb AI collaboration. Data and AI come from the
-Deneb gateway over `miniapp.*` RPC, `chat/stream` (SSE), and `events` (SSE).
+Deneb gateway over `miniapp.*` RPC, `chat/stream` (SSE), and `events` (SSE). <!-- docref:ignore -->
 
 Stack: **Tauri 2** (Rust desktop shell) + **React 19** + **DIY CRUD** (headless
 admin framework) + **Vite**. Design rationale (why/what): [`docs/DESIGN.md`](docs/DESIGN.md).
@@ -116,7 +116,7 @@ grid rows open one:
    pane state (`null` = closed). Use `<RowBtn>` for in-row action buttons — it
    calls `stopPropagation` internally so clicks don't also open the modal.
 2. Render `{sel && <DetailModal …/>}` as a sibling. Build the modal from
-   `components/Modal` primitives: `<Modal title footer>`, `<Field label>` for edit
+   `components/Modal.tsx` primitives: `<Modal title footer>`, `<Field label>` for edit
    inputs, `<Detail label value>` for read-only rows.
 3. **Edit/create** → drive writes through `useCreate`/`useUpdate` (crud.ts) so the
    resource's existing RPC wiring applies; close on `onSuccess`. See `CalendarPane`
@@ -189,7 +189,7 @@ Releases are automated from Conventional Commits — no manual version bumping.
   `.release-please-config.json` + `.release-please-manifest.json`. **Merging
   that PR** is what cuts a release: it tags `andromeda-vX.Y.Z`, creates the
   GitHub Release, then the workflow's `andromeda-build` job builds & signs the
-  Win/macOS bundles + `latest.json` and uploads them (auto-updater endpoint).
+  Win/macOS bundles + `latest.json` and uploads them (auto-updater endpoint). <!-- docref:ignore -->
 - Version lives in three files kept in lockstep by release-please
   (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`). Don't
   hand-edit versions. `pnpm bump <v>` remains only as a manual fallback.

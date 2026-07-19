@@ -88,9 +88,7 @@ class Report:
 
 
 def git_files(repo: Path) -> list[str]:
-    out = subprocess.run(
-        ["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True
-    )
+    out = subprocess.run(["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True)
     return out.stdout.splitlines()
 
 
@@ -108,6 +106,13 @@ def load_symbol_index(repo: Path) -> set[str] | None:
         return None
 
 
+MIME_RE = re.compile(r"^(text|application|image|audio|video|multipart)/[\w.+-]+$")
+
+# Skill-plugin layout convention names: every skill directory carries one, so a
+# doc mention deliberately refers to the CLASS of files, not a specific one.
+GENERIC_CONVENTION_NAMES = {"SKILL.md", "DESCRIPTION.md", "evals/trigger_cases.json"}
+
+
 def looks_like_path(token: str) -> bool:
     if token.startswith(SKIP_PREFIXES) or " " in token:
         return False
@@ -115,14 +120,22 @@ def looks_like_path(token: str) -> bool:
         return False  # globs / placeholders / `a/.../b` deliberate abbreviations
     if token.startswith("@"):  # npm scope (`@scope/pkg`) — external by definition
         return False
+    if any(ord(ch) > 127 for ch in token):
+        # Non-ASCII (한글 위키 페이지명, `file.go:라인` placeholders) — the repo
+        # tracks zero non-ASCII filenames, so these are never repo paths.
+        return False
+    if token in CODE_EXTS:
+        return False  # a bare extension mention (`.md`), not a file
+    if token.startswith("origin/"):
+        return False  # git ref, not a path
+    if MIME_RE.match(token):
+        return False  # `text/plain` — a MIME type, not a path
     base = token.split(":", 1)[0]
     if "/" in base:
         segs = base.split("/")
         # `chat.send/history/abort` — a dotted RPC/method enumeration, not a path
         # (paths never dot their leading directory segments).
-        if any("." in s for s in segs[:-1]) and not any(
-            s.endswith(tuple(CODE_EXTS)) for s in segs
-        ):
+        if any("." in s for s in segs[:-1]) and not any(s.endswith(tuple(CODE_EXTS)) for s in segs):
             return False
         return bool(re.match(r"^[\w.@-]+(/[\w.@-]+)+$", base))
     return any(base.endswith(ext) for ext in CODE_EXTS) and base.count(".") >= 1
@@ -181,6 +194,13 @@ def lint(
         segs = p.split("/")
         for i in range(len(segs) - 1):
             by_suffix.setdefault("/".join(segs[i + 1 :]), []).append(p)
+    # Directory suffixes get the same treatment as file suffixes: module docs
+    # write `genesis/lifecycle` meaning .../domain/skills/genesis/lifecycle.
+    by_dir_suffix: dict[str, list[str]] = {}
+    for d in tracked_dirs:
+        segs = d.split("/")
+        for i in range(len(segs)):
+            by_dir_suffix.setdefault("/".join(segs[i:]), []).append(d)
 
     report = Report()
     for doc in docs:
@@ -244,8 +264,12 @@ def lint(
                     # Well-known module roots: docs shorthand like `pkg/safego`
                     # or `internal/runtime/server` omits the module prefix.
                     for root in (
-                        "gateway-go", "gateway-go/internal", "gateway-go/pkg",
-                        "andromeda", "andromeda/src", "client-android/app",
+                        "gateway-go",
+                        "gateway-go/internal",
+                        "gateway-go/pkg",
+                        "andromeda",
+                        "andromeda/src",
+                        "client-android/app",
                     ):
                         cand = f"{root}/{path_part}"
                         if cand in tracked_set or cand in tracked_dirs:
@@ -253,19 +277,29 @@ def lint(
                             break
                 if resolved is None and path_part in by_suffix:
                     candidates = by_suffix[path_part]
+                elif resolved is None and path_part.rstrip("/") in by_dir_suffix:
+                    candidates = sorted(set(by_dir_suffix[path_part.rstrip("/")]))
                 elif resolved is None and "/" not in path_part and path_part in by_basename:
                     candidates = by_basename[path_part]
                 else:
                     candidates = []
                 if resolved is None and candidates:
                     resolved = candidates[0]
-                    if len(candidates) > 1:
+                    if len(candidates) > 1 and path_part in GENERIC_CONVENTION_NAMES:
+                        # `SKILL.md` in prose means "any skill's SKILL.md" —
+                        # the ambiguity IS the meaning for these plugin-layout
+                        # convention names; warning on each mention is noise.
+                        resolved = candidates[0]
+                    elif len(candidates) > 1:
                         # Rescued only by an AMBIGUOUS short name — this ref is
                         # effectively unverifiable (any same-named file keeps it
                         # green forever). Surface it instead of silently passing.
                         report.findings.append(
                             Finding(
-                                rel_doc, line_no, ref, "warn-ambiguous",
+                                rel_doc,
+                                line_no,
+                                ref,
+                                "warn-ambiguous",
                                 f"동명 파일 {len(candidates)}개 — 경로를 더 구체화해야 검증됨",
                             )
                         )
@@ -279,7 +313,18 @@ def lint(
                 #    runtime files under ~/.deneb or wiki examples → warn.
                 #  - extension-less multi-segment: concepts, API routes,
                 #    external repos → warn.
-                SOURCE_EXTS = (".go", ".kt", ".kts", ".ts", ".tsx", ".py", ".sh", ".rs", ".mjs", ".css")
+                SOURCE_EXTS = (
+                    ".go",
+                    ".kt",
+                    ".kts",
+                    ".ts",
+                    ".tsx",
+                    ".py",
+                    ".sh",
+                    ".rs",
+                    ".mjs",
+                    ".css",
+                )
                 has_src_ext = any(path_part.endswith(ext) for ext in SOURCE_EXTS)
                 bare = "/" not in path_part
                 has_ext = any(path_part.endswith(ext) for ext in CODE_EXTS)
@@ -289,9 +334,7 @@ def lint(
                     tier = "warn-path"
                 else:
                     tier = "broken-path"
-                report.findings.append(
-                    Finding(rel_doc, line_no, ref, tier, "레포에 없는 경로")
-                )
+                report.findings.append(Finding(rel_doc, line_no, ref, tier, "레포에 없는 경로"))
                 continue
             if sym_anchor is not None and symbols is not None and sym_anchor not in symbols:
                 # CodeGraph doesn't index every language (shell functions, SQL…).
@@ -304,7 +347,13 @@ def lint(
                     body = ""
                 if sym_anchor not in body:
                     report.findings.append(
-                        Finding(rel_doc, line_no, ref, "warn-symbol", "파일·CodeGraph 모두에 없는 심볼 앵커")
+                        Finding(
+                            rel_doc,
+                            line_no,
+                            ref,
+                            "warn-symbol",
+                            "파일·CodeGraph 모두에 없는 심볼 앵커",
+                        )
                     )
             if anchor is not None:
                 # Ambiguous rescue: accept the anchor if ANY candidate is long
@@ -319,7 +368,10 @@ def lint(
                 if not ok:
                     report.findings.append(
                         Finding(
-                            rel_doc, line_no, ref, "broken-line",
+                            rel_doc,
+                            line_no,
+                            ref,
+                            "broken-line",
                             f"라인 앵커 {anchor} > 파일 길이 {longest}",
                         )
                     )
@@ -331,7 +383,9 @@ def lint(
                     # (advisory: prose may legitimately anchor elsewhere) and
                     # let --fix snap it to the symbol's start line.
                     file_syms = sym_locs.get(resolved, {})
-                    doc_line = text.splitlines()[line_no - 1] if line_no <= len(text.splitlines()) else ""
+                    doc_line = (
+                        text.splitlines()[line_no - 1] if line_no <= len(text.splitlines()) else ""
+                    )
                     hinted = []
                     for tok in BACKTICK_RE.findall(doc_line):
                         tok = tok.strip().rstrip("()")
@@ -347,7 +401,10 @@ def lint(
                         names = ", ".join(f"`{n}`({s}–{e})" for n, (s, e) in hinted[:3])
                         report.findings.append(
                             Finding(
-                                rel_doc, line_no, ref, "warn-drift",
+                                rel_doc,
+                                line_no,
+                                ref,
+                                "warn-drift",
                                 f"앵커 {anchor}이 같은 줄 심볼 {names} 범위 밖 — --fix로 수리 가능",
                             )
                         )
@@ -431,13 +488,21 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", default=".", type=Path)
     ap.add_argument("--glob", action="append", help="override default doc globs")
-    ap.add_argument("--extra-docs", action="append", type=Path,
-                    help="레포 밖 문서 디렉토리(메모리 등) — refs는 레포 기준 검증")
+    ap.add_argument(
+        "--extra-docs",
+        action="append",
+        type=Path,
+        help="레포 밖 문서 디렉토리(메모리 등) — refs는 레포 기준 검증",
+    )
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true", help="broken 참조가 있으면 exit 1")
     ap.add_argument("--fix", action="store_true", help="broken 라인 앵커를 결정적 규칙으로 수리")
-    ap.add_argument("--unmentioned", nargs=2, metavar=("SRC_DIR", "DOC"),
-                    help="큐레이션 감사: SRC_DIR의 소스 중 DOC에 미언급 파일 나열")
+    ap.add_argument(
+        "--unmentioned",
+        nargs=2,
+        metavar=("SRC_DIR", "DOC"),
+        help="큐레이션 감사: SRC_DIR의 소스 중 DOC에 미언급 파일 나열",
+    )
     args = ap.parse_args(argv)
 
     repo = args.repo.resolve()
@@ -458,15 +523,18 @@ def main(argv: list[str] | None = None) -> int:
         report = lint(repo, docs, symbols, sym_locs)
 
     if args.json:
-        print(json.dumps(
-            {
-                "checkedDocs": report.checked_docs,
-                "checkedRefs": report.checked_refs,
-                "broken": [vars(f) for f in report.broken()],
-                "warnings": [vars(f) for f in report.warns()],
-            },
-            ensure_ascii=False, indent=2,
-        ))
+        print(
+            json.dumps(
+                {
+                    "checkedDocs": report.checked_docs,
+                    "checkedRefs": report.checked_refs,
+                    "broken": [vars(f) for f in report.broken()],
+                    "warnings": [vars(f) for f in report.warns()],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
         for f in report.broken():
             print(f"BROKEN {f.doc}:{f.line_no}  `{f.ref}`  — {f.detail}")

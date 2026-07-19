@@ -159,7 +159,7 @@ DENEB_ASR_LIVE=1 DENEB_ASR_AUDIO=/path/to.wav DENEB_ASR_URL=http://127.0.0.1:180
 
 ## Hindsight (장기 기억 서비스) — 은퇴 (2026-06-15)
 
-Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15 게이트웨이 회상에서 은퇴**했다. puppet 회상 측정 결과 순기여 ~0 — 합성 점수(0.60–0.92)가 wiki/diary 의 BM25 밴드(wiki ≥1.6, diary 3–9)보다 낮아 wiki·diary 가 히트하면 항상 랭킹 탈락했고, surface 될 때도 wiki 페이지 요약과 같은 사실을 중복 주입했다. recall 소스·retain recorder·`domain/hindsight` 클라이언트·knowledge hindsight 어댑터·`DENEB_HINDSIGHT_*` env·시스템 프롬프트 서비스 블록 모두 제거. 장기기억은 이제 **wiki(큐레이션·시맨틱)+diary(원문)+polaris(세션)** 가 담당한다.
+Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15 게이트웨이 회상에서 은퇴**했다. puppet 회상 측정 결과 순기여 ~0 — 합성 점수(0.60–0.92)가 wiki/diary 의 BM25 밴드(wiki ≥1.6, diary 3–9)보다 낮아 wiki·diary 가 히트하면 항상 랭킹 탈락했고, surface 될 때도 wiki 페이지 요약과 같은 사실을 중복 주입했다. recall 소스·retain recorder·`domain/hindsight` 클라이언트·knowledge hindsight 어댑터·`DENEB_HINDSIGHT_*` env·시스템 프롬프트 서비스 블록 모두 제거. 장기기억은 이제 **wiki(큐레이션·시맨틱)+diary(원문)+polaris(세션)** 가 담당한다. <!-- docref:ignore -->
 
 - **호스트 정리(운영자 작업)**: `cd ~/hindsight && docker compose down` 으로 컨테이너(8888/pgvector) 내림. systemd 의 `DENEB_HINDSIGHT_URL` Environment 도 제거(있어도 코드가 더는 안 읽음). 데이터는 `~/hindsight/hindsight-backup-20260610.sql.gz` 백업에 보존 — 되살리려면 백업 복원 + 코드 revert.
 - **작업 기억은 wiki/diary/polaris로 흡수**: Hindsight 이름의 서비스·스킬·프롬프트 섹션은 더 이상 쓰지 않는다. 작업 연속성은 wiki/diary/polaris/graphify가 담당하고, 모순·대체 관계는 wiki의 `supersedes`/`superseded_by` 흐름으로 남긴다.
@@ -208,7 +208,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 ### 서버 (상주)
 
 - ★**상주 호스트 = srv4** (게이트웨이와 동일 호스트, 2026-07-06 통일 — 게이트웨이는 `127.0.0.1:18800` 로컬 소비). srv1 의 구 인스턴스는 트래픽 0 확인 후 disable 됨(유닛·config 보존).
-- 빌드: **`make wormhole`** → `dist/wormhole`. 서비스: **`scripts/deploy/wormhole.service`**(systemd, `Restart=on-failure`, `MemoryMax=512M`, journal) 또는 수동 **`scripts/deploy/start-wormhole.sh {start|stop|restart|status}`**.
+- 빌드: **`make wormhole`** → `dist/wormhole`. 서비스: **`scripts/deploy/wormhole.service`**(systemd, `Restart=on-failure`, `MemoryMax=512M`, journal) 또는 수동 **`scripts/deploy/start-wormhole.sh {start|stop|restart|status}`**. <!-- docref:ignore -->
 - 설정: **`~/.wormhole/config.json`**(레포 밖, 시크릿 포함). 템플릿 = `gateway-go/cmd/wormhole/config.example.json`. `token` + 각 model `key` 는 `${ENV}` 확장. 포트 기본 `:18800`. 비루프백 listen에서 token이 비면 부팅과 핫리로드 모두 거부한다(누락된 env 토큰도 fail-closed); 무인증 개발 모드는 명시적 loopback listen에서만 허용한다.
 - Deneb-백엔드용 config 골격(메인 dsv4 = no-toggleKwarg 패스스루):
 
@@ -255,7 +255,7 @@ Hindsight(Hermes 계열 FastAPI+pgvector 장기기억 서비스)는 **2026-06-15
 >
 > 단일 관문이라 wormhole 이 "이 달 각 모델이 태운 토큰/요청"의 자연스러운 단일 진실원이다 (ClawRouter 패턴 차용). 이전엔 agent-logs 채굴로만 보이던 glm 소비(~3.2M tok/일)를 GET 한 번으로 답한다.
 
-- **동작**: 업스트림 응답의 **바운드 테일 사본**(64KB)에서 usage 프레임(openai `prompt/completion_tokens`·anthropic `input/output_tokens` 양 방언, 마지막 프레임 승)을 베스트에포트 파싱. 월 윈도우(`YYYY-MM`)로 `~/.wormhole/usage.json` 에 영속(atomic replace, 30s 디바운스) — 재시작해도 월 누계 유지.
+- **동작**: 업스트림 응답의 **바운드 테일 사본**(64KB)에서 usage 프레임(openai `prompt/completion_tokens`·anthropic `input/output_tokens` 양 방언, 마지막 프레임 승)을 베스트에포트 파싱. 월 윈도우(`YYYY-MM`)로 `~/.wormhole/usage.json` 에 영속(atomic replace, 30s 디바운스) — 재시작해도 월 누계 유지. <!-- docref:ignore -->
 - **★ APC/바이트 불변**: 계량은 요청을 절대 안 건드리고(`stream_options.include_usage` 주입 금지 — usage 프레임 없는 스트림은 토큰 0으로 계량, 요청 수는 집계) 응답 스트림도 read-through 사본이라 클라이언트 바이트 무변형.
 - **비용/예산(선택)**: 엔트리 `"pricing":{"inputPerMTokUsd":…,"outputPerMTokUsd":…}` 선언 시 추정 비용 계산, 톱레벨 `"monthlyBudgetUsd"` 선언 시 budget/usedPercent 표기. 어디까지나 표시용 — 예산 초과로 요청을 막지 않는다.
 
