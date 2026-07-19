@@ -186,11 +186,17 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	// session. NewHandler (server_rpc_session.go) is built after this from the
 	// same chatCfg, so setting it here is captured.
 	chatCfg.Memory.Notebook = notebookStore
+	var fetchToolsReranker tooldeps.TextReranker
+	if s.rerankerClient != nil {
+		fetchToolsReranker = s.rerankerClient
+	}
 
 	s.toolDeps = &chat.CoreToolDeps{
-		WorkspaceDir:      workspaceDir,
-		SkillsCatalogDirs: skillCatalogDirs,
-		BundledSkillsDir:  bundledSkillsDir,
+		WorkspaceDir:       workspaceDir,
+		SkillsCatalogDirs:  skillCatalogDirs,
+		BundledSkillsDir:   bundledSkillsDir,
+		FetchToolsEmbedder: s.embeddingClient,
+		FetchToolsReranker: fetchToolsReranker,
 		Process: chat.ProcessDeps{
 			Mgr:          s.processes,
 			WorkspaceDir: workspaceDir,

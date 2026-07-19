@@ -33,6 +33,7 @@ type searchDoc struct {
 	name     string   // tool name (returned to caller)
 	tokens   []string // tokenized name + description + parameter names
 	fallback string   // lowercased "name description" for substring fallback
+	semantic string   // natural-language passage used by optional dense search
 }
 
 // tokenize lowercases and splits a string on any non-alphanumeric rune.
@@ -67,6 +68,10 @@ func extractParamNames(schema map[string]any) []string {
 // nil when no query token matches any doc, signaling the caller to apply a
 // substring fallback.
 func bm25Rank(query string, docs []searchDoc) []string {
+	return bm25RankLimit(query, docs, searchResultLimit)
+}
+
+func bm25RankLimit(query string, docs []searchDoc, limit int) []string {
 	qTokens := tokenize(query)
 	if len(qTokens) == 0 || len(docs) == 0 {
 		return nil
@@ -136,7 +141,7 @@ func bm25Rank(query string, docs []searchDoc) []string {
 			break // sorted descending — everything after is also below floor
 		}
 		out = append(out, r.name)
-		if len(out) >= searchResultLimit {
+		if limit > 0 && len(out) >= limit {
 			break
 		}
 	}

@@ -1,13 +1,16 @@
 package workfeed
 
 import (
+	"context"
 	"errors"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -99,8 +102,13 @@ type Item struct {
 	// Metadata carries source-specific machine-readable action context. It
 	// keeps stable identifiers and measurements out of localized display prose.
 	Metadata map[string]string `json:"metadata,omitempty"`
-	Status   string            `json:"status"`
-	Priority int               `json:"priority,omitempty"`
+	// ClusterID and RelatedIDs are advisory semantic grouping metadata. Every
+	// card remains independently persisted/actionable; grouping never dedupes,
+	// acknowledges, or hides an item.
+	ClusterID  string   `json:"clusterId,omitempty"`
+	RelatedIDs []string `json:"relatedIds,omitempty"`
+	Status     string   `json:"status"`
+	Priority   int      `json:"priority,omitempty"`
 	// Question marks a card the agent is asking the user to answer (a deal-team
 	// question, or a proactive turn that posed a question / offered ```choices).
 	// The native renders such a card with inline answer chips (from Actions) plus a
@@ -134,14 +142,72 @@ type ActionResult struct {
 type ActionEffect func(item Item, action Action) error
 
 // Store persists work-feed items and action outcomes.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	appendMu -> mu
+//
+// The semantic index has its own independent lock. No Store lock is held while
+// embedding or while closing the index.
 type Store struct {
-	path string
-	mu   sync.Mutex
+	path     string
+	appendMu sync.Mutex
+	mu       sync.Mutex
+	semantic *embedindex.Index
 }
 
 // NewStore opens a work-feed store backed by path.
 func NewStore(path string) *Store {
 	return &Store{path: path}
+}
+
+// SetEmbedder enables non-destructive semantic grouping for newly appended
+// cards. Existing cards are embedded lazily on the next append and cached next
+// to the feed file. A nil/unhealthy embedder preserves the exact old behavior.
+func (s *Store) SetEmbedder(embedder embedindex.Embedder, opts ...embedindex.Option) {
+	if s == nil {
+		return
+	}
+	s.appendMu.Lock()
+	defer s.appendMu.Unlock()
+	var next *embedindex.Index
+	if embedder != nil {
+		opts = append(opts, embedindex.WithPreprocessingFingerprint(workFeedSemanticPreprocessingVersion))
+		next = embedindex.New("workfeed", embedder, workFeedSemanticCachePath(s.path), opts...)
+	}
+	s.mu.Lock()
+	previous := s.semantic
+	s.semantic = next
+	s.mu.Unlock()
+	if previous != nil {
+		previous.Close()
+	}
+}
+
+// Close stops an optional semantic refresh. Feed mutations are synchronously
+// persisted and need no additional flush.
+func (s *Store) Close() error {
+	if s == nil {
+		return nil
+	}
+	s.appendMu.Lock()
+	defer s.appendMu.Unlock()
+	s.mu.Lock()
+	semantic := s.semantic
+	s.semantic = nil
+	s.mu.Unlock()
+	if semantic != nil {
+		semantic.Close()
+	}
+	return nil
+}
+
+func workFeedSemanticCachePath(feedPath string) string {
+	if strings.TrimSpace(feedPath) == "" {
+		return ""
+	}
+	ext := filepath.Ext(feedPath)
+	return strings.TrimSuffix(feedPath, ext) + ".semantic.json"
 }
 
 // Append adds item to the feed and returns the stored item. Thin wrapper over
@@ -158,10 +224,11 @@ func (s *Store) Append(item Item) (Item, error) {
 // created=false; callers (native sync) then skip the "created" event. Otherwise
 // it returns the stored item with created=true.
 func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.appendMu.Lock()
+	defer s.appendMu.Unlock()
 
 	item = normalizeNew(item)
+	s.mu.Lock()
 	// Load + rewrite so retention can bound the file. The feed is appended to
 	// infrequently (once per proactive report / capture), so the O(n) rewrite is
 	// cheap and keeps the file — and every List — from growing without bound as
@@ -171,8 +238,10 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 	items, err := jsonlstore.Load[Item](s.path)
 	if err != nil {
 		if aerr := jsonlstore.Append(s.path, item); aerr != nil {
+			s.mu.Unlock()
 			return Item{}, false, aerr
 		}
+		s.mu.Unlock()
 		return item, true, nil
 	}
 	// Groupware cards are idempotent by durable Amaranth reference across their
@@ -182,21 +251,59 @@ func (s *Store) AppendIfNew(item Item) (Item, bool, error) {
 	hasGroupwareRef := isGroupwareRefSource(item.Source) && item.RefID != ""
 	if hasGroupwareRef {
 		if existing, ok := findActiveBySourceRef(items, item.Source, item.RefID); ok {
+			s.mu.Unlock()
 			return existing, false, nil
 		}
 	}
 	if !hasGroupwareRef {
 		for i := len(items) - 1; i >= 0 && i >= len(items)-30; i-- {
 			if isDuplicateCard(items[i], item) || isMeetingNearDuplicate(items[i], item) {
+				s.mu.Unlock()
 				return items[i], false, nil
 			}
 		}
 	}
+	semantic := s.semantic
+	if semantic == nil || !semantic.Enabled() {
+		items = append(items, item)
+		items = pruneRetention(items)
+		if err := jsonlstore.Snapshot(s.path, items); err != nil {
+			s.mu.Unlock()
+			return Item{}, false, err
+		}
+		s.mu.Unlock()
+		return item, true, nil
+	}
+	semanticSnapshot := append([]Item(nil), items...)
+	s.mu.Unlock()
+
+	// Append has no caller context, so bound this advisory request explicitly.
+	// A timeout only omits grouping; the card is still persisted below.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	relatedIDs := workFeedSemanticMatches(ctx, semantic, item, semanticSnapshot)
+	cancel()
+
+	// Actions/read state may have changed while embedding. Reload under mu so
+	// the final snapshot preserves those mutations; appendMu prevents another
+	// append from introducing a new duplicate in this window.
+	s.mu.Lock()
+	items, err = jsonlstore.Load[Item](s.path)
+	if err != nil {
+		if aerr := jsonlstore.Append(s.path, item); aerr != nil {
+			s.mu.Unlock()
+			return Item{}, false, aerr
+		}
+		s.mu.Unlock()
+		return item, true, nil
+	}
+	item = applySemanticGroup(items, item, relatedIDs)
 	items = append(items, item)
 	items = pruneRetention(items)
 	if err := jsonlstore.Snapshot(s.path, items); err != nil {
+		s.mu.Unlock()
 		return Item{}, false, err
 	}
+	s.mu.Unlock()
 	return item, true, nil
 }
 

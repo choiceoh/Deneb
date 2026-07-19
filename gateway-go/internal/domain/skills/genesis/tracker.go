@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
@@ -112,6 +113,9 @@ const (
 )
 
 // Tracker records and queries skill usage for evolution decisions.
+//
+// Locking: mu and exemplarEmbedderMu are independent and are never acquired
+// together. In particular, embedding network calls run after both are released.
 type Tracker struct {
 	logger              *slog.Logger
 	mu                  sync.Mutex
@@ -162,6 +166,32 @@ type Tracker struct {
 	// don't rescan the growing lifecycle log every call. Guarded by mu.
 	evoHealth   EvolutionHealthSummary
 	evoHealthAt time.Time
+
+	// exemplarEmbedder is an advisory retrieval dependency only. It may select
+	// confirmed exhibits for a prompt but is never consulted by acceptance,
+	// validation, adoption, or rollback gates.
+	exemplarEmbedderMu sync.RWMutex
+	exemplarEmbedder   embedindex.Embedder
+}
+
+// SetExemplarEmbedder enables semantic lookup of confirmed cross-skill
+// exemplars. It is safe to call during initialization or a runtime rewire.
+func (t *Tracker) SetExemplarEmbedder(embedder embedindex.Embedder) {
+	if t == nil {
+		return
+	}
+	t.exemplarEmbedderMu.Lock()
+	t.exemplarEmbedder = embedder
+	t.exemplarEmbedderMu.Unlock()
+}
+
+func (t *Tracker) exemplarEmbedderSnapshot() embedindex.Embedder {
+	if t == nil {
+		return nil
+	}
+	t.exemplarEmbedderMu.RLock()
+	defer t.exemplarEmbedderMu.RUnlock()
+	return t.exemplarEmbedder
 }
 
 // evolveWatch tracks consecutive failures of a skill since its last evolve.

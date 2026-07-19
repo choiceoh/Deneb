@@ -140,6 +140,8 @@ internal val sampleFeed = persistentListOf(
         source = "proactive",
         title = "📧 JOCA Cable 최신 메일 분석 보고",
         summary = "발신 fred@jocacable.com — 2800km solar cable 대량 발주 가격 제안, 발주 수량·시점 회신 요청.",
+        clusterId = "wfc-cable-order",
+        relatedIds = listOf("wf2"),
         status = "unread",
         actions = listOf(
             WorkFeedAction("open", "open", "열기"),

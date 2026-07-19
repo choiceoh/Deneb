@@ -223,14 +223,26 @@ func (s *Server) initSessionAI(chatCfg *chat.HandlerConfig, registry *modelrole.
 	s.localAIHub = localai.New(localai.Config{}, registry, s.logger)
 
 	s.embeddingClient = embedding.New("", s.logger)
+	s.rerankerClient = airerank.NewFromEnv()
 	chatCfg.Memory.Embedding = s.embeddingClient
+	if s.mailStore != nil {
+		s.mailStore.SetEmbedder(s.embeddingClient)
+		if s.rerankerClient != nil {
+			s.mailStore.SetReranker(s.rerankerClient)
+		} else {
+			s.mailStore.SetReranker(nil)
+		}
+	}
+	if s.workFeedStore != nil {
+		s.workFeedStore.SetEmbedder(s.embeddingClient)
+	}
 	if s.polarisStore != nil {
 		s.polarisStore.SetSummaryEmbedder(s.embeddingClient)
 	}
 	if s.wikiStore != nil {
 		s.wikiStore.SetEmbedder(s.embeddingClient)
-		if reranker := airerank.NewFromEnv(); reranker != nil {
-			s.wikiStore.SetReranker(reranker)
+		if s.rerankerClient != nil {
+			s.wikiStore.SetReranker(s.rerankerClient)
 		}
 		store := s.wikiStore
 		s.safeGo("wiki-semantic-warm", func() {

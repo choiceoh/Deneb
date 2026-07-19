@@ -653,7 +653,7 @@ func (si *SemanticIndex) prepareSemanticQuery(
 	if max <= 0 {
 		max = 20
 	}
-	vectors, err := embed.Embed(ctx, []string{query})
+	vectors, err := embedindex.EmbedQueries(ctx, embed, []string{query})
 	if err != nil || len(vectors) == 0 {
 		return "", nil, nil, max, false
 	}

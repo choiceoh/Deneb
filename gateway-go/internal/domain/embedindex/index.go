@@ -37,7 +37,7 @@ import (
 // *embedding.Client and the wiki/filestore embedders satisfy it structurally;
 // kept as an interface so this package imports no ai layer and tests can fake it.
 type Embedder interface {
-	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	TextEmbedder
 	IsHealthy() bool
 }
 
@@ -295,7 +295,7 @@ func (ix *Index) Search(ctx context.Context, query string, limit int) []Hit {
 	if !ix.Enabled() || len(strings.TrimSpace(query)) < minEmbedChars {
 		return nil
 	}
-	qvecs, err := ix.embedder.Embed(ctx, []string{query})
+	qvecs, err := EmbedQueries(ctx, ix.embedder, []string{query})
 	if err != nil || len(qvecs) == 0 {
 		return nil
 	}
@@ -320,7 +320,7 @@ func (ix *Index) SearchBatch(ctx context.Context, queries []string, limit int) [
 	if len(texts) == 0 {
 		return nil
 	}
-	vecs, err := ix.embedder.Embed(ctx, texts)
+	vecs, err := EmbedQueries(ctx, ix.embedder, texts)
 	if err != nil || len(vecs) != len(texts) {
 		return nil
 	}

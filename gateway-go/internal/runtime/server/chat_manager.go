@@ -4,6 +4,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mcpclient"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/filesemindex"
@@ -18,6 +19,7 @@ type ChatManager struct {
 	modelRegistry   *modelrole.Registry
 	localAIHub      *localai.Hub
 	embeddingClient *embedding.Client
+	rerankerClient  *airerank.Client
 
 	// fileSemindex owns the shared on-box store and semantic sidecar.
 	fileSemindex *filesemindex.Service

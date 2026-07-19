@@ -84,9 +84,10 @@ func (s *memWorkFeed) Append(item tooldeps.WorkFeedItem) (tooldeps.WorkFeedItem,
 func TestToolWorkFeed_ListReadAck(t *testing.T) {
 	store := newTestWorkFeed(t)
 	item, err := store.Append(tooldeps.WorkFeedItem{
-		Source: "mail_report",
-		Title:  "납품 일정 질문",
-		Body:   "탑솔라 케이블 납기가 다음 주로 당겨졌습니다.\n확인이 필요합니다.",
+		Source:     "mail_report",
+		Title:      "납품 일정 질문",
+		Body:       "탑솔라 케이블 납기가 다음 주로 당겨졌습니다.\n확인이 필요합니다.",
+		RelatedIDs: []string{"wf-related-a", "wf-related-b"},
 	})
 	if err != nil {
 		t.Fatalf("seed: %v", err)
@@ -104,6 +105,9 @@ func TestToolWorkFeed_ListReadAck(t *testing.T) {
 	if !strings.Contains(out, "미열람") {
 		t.Errorf("unread card must be flagged: %q", out)
 	}
+	if !strings.Contains(out, "관련 2건") {
+		t.Errorf("related card count missing: %q", out)
+	}
 
 	out, err = tool(ctx, json.RawMessage(`{"action":"read","id":"`+item.ID+`"}`))
 	if err != nil {
@@ -111,6 +115,9 @@ func TestToolWorkFeed_ListReadAck(t *testing.T) {
 	}
 	if !strings.Contains(out, "탑솔라 케이블") {
 		t.Errorf("read missing body: %q", out)
+	}
+	if !strings.Contains(out, "관련 카드: wf-related-a, wf-related-b") {
+		t.Errorf("read missing related IDs: %q", out)
 	}
 	out, _ = tool(ctx, json.RawMessage(`{"action":"list"}`))
 	if strings.Contains(out, "미열람") {
