@@ -3,9 +3,10 @@ package wiki
 import (
 	"context"
 	"os"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/rankblend"
 )
 
 const (
@@ -118,56 +119,24 @@ func (s *Store) applyModelRerank(ctx context.Context, query string, results []Se
 		diagnostics.Reason = "empty_response"
 		return scores, weights, diagnostics
 	}
-	order := make([]int, len(ranked))
-	for i, score := range ranked {
-		order[i] = i
-		scores[results[i].Path] = score
+	retrievalScores := make([]float64, len(ranked))
+	for i := range ranked {
+		retrievalScores[i] = results[i].Score
 	}
-	sort.SliceStable(order, func(i, j int) bool {
-		if ranked[order[i]] != ranked[order[j]] {
-			return ranked[order[i]] > ranked[order[j]]
-		}
-		return results[order[i]].Path < results[order[j]].Path
-	})
-	ranks := make(map[int]int, len(order))
-	for rank, index := range order {
-		ranks[index] = rank
+	blended, ok := rankblend.Blend(retrievalScores, ranked, rankblend.DefaultConfig)
+	if !ok {
+		diagnostics.Reason = "invalid_scores"
+		return scores, weights, diagnostics
 	}
-	maxRetrieval := results[0].Score
-	if maxRetrieval <= 0 {
-		maxRetrieval = 1
+	original := append([]SearchResult(nil), results[:count]...)
+	for i := range original {
+		scores[original[i].Path] = ranked[i]
+		original[i].Score = blended.Scores[i]
+		weights[original[i].Path] = blended.Weights[i]
 	}
-	for i := 0; i < count; i++ {
-		rank, ok := ranks[i]
-		if !ok {
-			continue
-		}
-		retrievalWeight := 0.4
-		switch {
-		case i < 3:
-			retrievalWeight = 0.75
-		case i < 10:
-			retrievalWeight = 0.60
-		}
-		// Blend by reranker rank rather than raw score. Some servers return
-		// already-sigmoided/compressed values; applying another score transform
-		// destroys separation, while ordinal rank is calibration-independent.
-		rerankRankScore := 1.0
-		if len(order) > 1 {
-			rerankRankScore = 1 - float64(rank)/float64(len(order)-1)
-		}
-		results[i].Score = retrievalWeight*(results[i].Score/maxRetrieval) + (1-retrievalWeight)*rerankRankScore
-		weights[results[i].Path] = retrievalWeight
+	for rank, index := range blended.Order {
+		results[rank] = original[index]
 	}
-	// Only reorder the candidate window sent to the reranker. Keeping the tail
-	// behind that window prevents an untouched retrieval score from interleaving
-	// with blended scores that live on a different scale.
-	sort.SliceStable(results[:count], func(i, j int) bool {
-		if results[i].Score != results[j].Score {
-			return results[i].Score > results[j].Score
-		}
-		return results[i].Path < results[j].Path
-	})
 	diagnostics.Applied = true
 	diagnostics.Reason = "ambiguous_candidates"
 	return scores, weights, diagnostics

@@ -7,20 +7,46 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 const requestTimeout = 2 * time.Second
 
+// ErrBusy means another optional rerank is already using the shared sidecar.
+// Callers are expected to fail open to retrieval order rather than queue behind
+// a GPU request and consume the rest of their turn deadline.
+var ErrBusy = errors.New("rerank: busy")
+
 type Client struct {
 	baseURL string
 	model   string
 	http    *http.Client
+	gate    chan struct{}
+
+	requests      atomic.Uint64
+	successes     atomic.Uint64
+	failures      atomic.Uint64
+	busy          atomic.Uint64
+	lastLatencyMS atomic.Int64
+	maxLatencyMS  atomic.Int64
+}
+
+// Stats is the bounded operational snapshot exposed through gateway health.
+type Stats struct {
+	Requests      uint64 `json:"requests"`
+	Successes     uint64 `json:"successes"`
+	Failures      uint64 `json:"failures"`
+	Busy          uint64 `json:"busy"`
+	InFlight      int    `json:"inFlight"`
+	LastLatencyMS int64  `json:"lastLatencyMs"`
+	MaxLatencyMS  int64  `json:"maxLatencyMs"`
 }
 
 // NewFromEnv enables reranking only when DENEB_RERANK_URL is explicitly set.
@@ -34,7 +60,12 @@ func New(baseURL, model string) *Client {
 	if baseURL == "" {
 		return nil
 	}
-	return &Client{baseURL: baseURL, model: strings.TrimSpace(model), http: &http.Client{Timeout: requestTimeout}}
+	return &Client{
+		baseURL: baseURL,
+		model:   strings.TrimSpace(model),
+		http:    &http.Client{Timeout: requestTimeout},
+		gate:    make(chan struct{}, 1),
+	}
 }
 
 func (c *Client) Identity() string {
@@ -45,6 +76,21 @@ func (c *Client) Identity() string {
 		return c.model
 	}
 	return "configured-reranker"
+}
+
+func (c *Client) Stats() Stats {
+	if c == nil {
+		return Stats{}
+	}
+	return Stats{
+		Requests:      c.requests.Load(),
+		Successes:     c.successes.Load(),
+		Failures:      c.failures.Load(),
+		Busy:          c.busy.Load(),
+		InFlight:      len(c.gate),
+		LastLatencyMS: c.lastLatencyMS.Load(),
+		MaxLatencyMS:  c.maxLatencyMS.Load(),
+	}
 }
 
 type rerankRequest struct {
@@ -67,13 +113,33 @@ type rerankResponse struct {
 }
 
 // Rerank returns one score per input document in the original order.
-func (c *Client) Rerank(ctx context.Context, query string, documents []string) ([]float64, error) {
+func (c *Client) Rerank(ctx context.Context, query string, documents []string) (scores []float64, err error) {
 	if c == nil || c.baseURL == "" {
 		return nil, fmt.Errorf("rerank: client disabled")
 	}
 	if len(documents) == 0 {
 		return nil, nil
 	}
+	c.requests.Add(1)
+	select {
+	case c.gate <- struct{}{}:
+		defer func() { <-c.gate }()
+	default:
+		c.busy.Add(1)
+		return nil, ErrBusy
+	}
+	started := time.Now()
+	defer func() {
+		latency := time.Since(started).Milliseconds()
+		c.lastLatencyMS.Store(latency)
+		for previous := c.maxLatencyMS.Load(); latency > previous && !c.maxLatencyMS.CompareAndSwap(previous, latency); previous = c.maxLatencyMS.Load() {
+		}
+		if err != nil {
+			c.failures.Add(1)
+		} else {
+			c.successes.Add(1)
+		}
+	}()
 	body, err := json.Marshal(rerankRequest{Model: c.model, Query: query, Documents: documents, TopN: len(documents)})
 	if err != nil {
 		return nil, fmt.Errorf("rerank: marshal: %w", err)
@@ -113,7 +179,7 @@ func (c *Client) Rerank(ctx context.Context, query string, documents []string) (
 	if len(items) != len(documents) {
 		return nil, fmt.Errorf("rerank: expected %d scores, got %d", len(documents), max(len(decoded.Scores), len(items)))
 	}
-	scores := make([]float64, len(documents))
+	scores = make([]float64, len(documents))
 	seen := make([]bool, len(documents))
 	for _, item := range items {
 		if item.Index < 0 || item.Index >= len(documents) || seen[item.Index] {

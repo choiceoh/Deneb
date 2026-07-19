@@ -2,10 +2,10 @@ package runtimeops
 
 import (
 	"context"
-	"math"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/rankblend"
 )
 
 const (
@@ -40,21 +40,12 @@ func rerankFetchToolNames(ctx context.Context, query string, names []string, doc
 	if err != nil || len(scores) != len(documents) {
 		return names, false
 	}
-	for _, score := range scores {
-		if math.IsNaN(score) || math.IsInf(score, 0) {
-			return names, false
-		}
+	blended, ok := rankblend.Blend(rankblend.OrdinalScores(count), scores, rankblend.OrderOnlyConfig)
+	if !ok {
+		return names, false
 	}
-
-	order := make([]int, count)
-	for i := range order {
-		order[i] = i
-	}
-	sort.SliceStable(order, func(i, j int) bool {
-		return scores[order[i]] > scores[order[j]]
-	})
 	out := append([]string(nil), names...)
-	for rank, index := range order {
+	for rank, index := range blended.Order {
 		out[rank] = names[index]
 	}
 	return out, true

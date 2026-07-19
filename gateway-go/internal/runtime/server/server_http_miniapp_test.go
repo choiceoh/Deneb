@@ -22,6 +22,11 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := s.Close(context.Background()); err != nil {
+			t.Errorf("server.Close: %v", err)
+		}
+	})
 	return s
 }
 

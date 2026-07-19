@@ -216,10 +216,6 @@ func (t *Tracker) confirmedEvolveExemplarsContext(ctx context.Context, signature
 }
 
 const (
-	// Semantic exemplars are advisory prompt evidence after exact/mechanism
-	// retrieval, not acceptance gates. Nemotron Korean hard-negative sweeps put
-	// the useful precision/recall boundary at 0.32.
-	confirmedExemplarSemanticFloor = 0.32
 	// Keep well below the sidecar's 256-text request cap. The lifecycle scan can
 	// contain up to 300 confirmed entries, so a single request is not safe.
 	confirmedExemplarEmbedBatch = 128
@@ -276,10 +272,11 @@ func (t *Tracker) fillConfirmedExemplarsSemantic(
 	if err != nil || len(queries) != 1 {
 		return base
 	}
+	semanticFloor := embedindex.CalibrationFor(embedder, embedindex.SemanticSurfaceRSIExemplar).Floor
 	scored := make([]scoredConfirmedExemplar, 0, len(candidates))
 	for i, candidate := range candidates {
 		score := vectorutil.Cosine(queries[0], passages[i])
-		if score >= confirmedExemplarSemanticFloor {
+		if score >= semanticFloor {
 			scored = append(scored, scoredConfirmedExemplar{exemplar: candidate, score: score})
 		}
 	}

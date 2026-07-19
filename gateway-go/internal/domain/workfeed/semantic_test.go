@@ -15,12 +15,17 @@ import (
 )
 
 type semanticWorkFeedEmbedder struct {
-	mu       sync.Mutex
-	kinds    []string
-	failPass bool
+	mu          sync.Mutex
+	kinds       []string
+	failPass    bool
+	fingerprint string
 }
 
 func (e *semanticWorkFeedEmbedder) IsHealthy() bool { return true }
+
+func (e *semanticWorkFeedEmbedder) EmbeddingFingerprint() string { return e.fingerprint }
+
+func (e *semanticWorkFeedEmbedder) EmbeddingDimensions() int { return 3 }
 
 func (e *semanticWorkFeedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	e.mu.Lock()
@@ -146,6 +151,30 @@ func TestAppendIfNewSemanticGroupingRejectsWeakOrUnrelatedHits(t *testing.T) {
 	}
 }
 
+func TestAppendIfNewSemanticGroupingRejectsUncalibratedModel(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	defer store.Close()
+	store.SetEmbedder(&semanticWorkFeedEmbedder{fingerprint: "future-embedder:3"}, embedindex.WithSyncRefresh())
+	now := time.Now().UnixMilli()
+	for _, item := range []Item{
+		{ID: "risk-mail", Source: SourceMailReport, Title: "공급망 경보", Body: "계약상 납기 지연 가능성이 커졌습니다.", CreatedAtMs: now - 1_000},
+		{ID: "risk-board", Source: SourceGroupwareBoard, Title: "배송 계획 재검토", Body: "배송 일정 위험 때문에 고객 공지를 준비해야 합니다.", CreatedAtMs: now},
+	} {
+		if _, created, err := store.AppendIfNew(item); err != nil || !created {
+			t.Fatalf("append %s = created %v err %v", item.ID, created, err)
+		}
+	}
+	items, _, err := store.List(10, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.ClusterID != "" || len(item.RelatedIDs) != 0 {
+			t.Fatalf("uncalibrated grouping = %+v", item)
+		}
+	}
+}
+
 func TestAppendIfNewExactDuplicateBypassesSemanticGrouping(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
 	defer store.Close()
@@ -195,7 +224,7 @@ func TestAppendIfNewPersistsCardWhenSemanticGroupingFails(t *testing.T) {
 	}
 }
 
-func TestApplySemanticGroupMergesTouchedClusters(t *testing.T) {
+func TestApplySemanticGroupDoesNotMergeTouchedClusters(t *testing.T) {
 	items := []Item{
 		{ID: "a", ClusterID: "cluster-a", RelatedIDs: []string{"b"}},
 		{ID: "b", ClusterID: "cluster-a", RelatedIDs: []string{"a"}},
@@ -203,14 +232,51 @@ func TestApplySemanticGroupMergesTouchedClusters(t *testing.T) {
 	}
 	item := applySemanticGroup(items, Item{ID: "d"}, []string{"b", "c"})
 	if item.ClusterID != "cluster-a" {
-		t.Fatalf("canonical cluster = %q, want cluster-a", item.ClusterID)
+		t.Fatalf("selected cluster = %q, want cluster-a", item.ClusterID)
 	}
-	for _, existing := range items {
-		if existing.ClusterID != "cluster-a" {
-			t.Fatalf("item %s cluster = %q, want cluster-a", existing.ID, existing.ClusterID)
+	if items[0].ClusterID != "cluster-a" || items[1].ClusterID != "cluster-a" || items[2].ClusterID != "cluster-c" {
+		t.Fatalf("clusters were transitively merged: %+v", items)
+	}
+	if !reflect.DeepEqual(item.RelatedIDs, []string{"a", "b"}) {
+		t.Fatalf("new related IDs = %v", item.RelatedIDs)
+	}
+}
+
+func TestApplySemanticGroupCapsClusterGrowth(t *testing.T) {
+	items := make([]Item, workFeedSemanticMaxCluster)
+	for i := range items {
+		items[i] = Item{ID: string(rune('a' + i)), ClusterID: "full-cluster"}
+	}
+	item := applySemanticGroup(items, Item{ID: "new"}, []string{items[0].ID})
+	if item.ClusterID != "" || len(item.RelatedIDs) != 0 {
+		t.Fatalf("full cluster accepted another member: %+v", item)
+	}
+}
+
+func TestAckReconcilesSemanticGroupMembership(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "workfeed.jsonl"))
+	defer store.Close()
+	store.SetEmbedder(&semanticWorkFeedEmbedder{}, embedindex.WithSyncRefresh())
+	now := time.Now().UnixMilli()
+	for _, item := range []Item{
+		{ID: "risk-mail", Source: SourceMailReport, Title: "공급망 경보", Body: "계약상 납기 지연 가능성이 커졌습니다.", CreatedAtMs: now - 1_000},
+		{ID: "risk-board", Source: SourceGroupwareBoard, Title: "배송 계획 재검토", Body: "배송 일정 위험 때문에 고객 공지를 준비해야 합니다.", CreatedAtMs: now},
+	} {
+		if _, created, err := store.AppendIfNew(item); err != nil || !created {
+			t.Fatalf("append %s = created %v err %v", item.ID, created, err)
 		}
-		if len(existing.RelatedIDs) != 3 {
-			t.Fatalf("item %s related = %v, want 3 members", existing.ID, existing.RelatedIDs)
+	}
+	acked, err := store.Ack("risk-mail")
+	if err != nil || acked.ClusterID != "" || len(acked.RelatedIDs) != 0 {
+		t.Fatalf("acked item kept cluster: %+v err=%v", acked, err)
+	}
+	items, _, err := store.List(10, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.ClusterID != "" || len(item.RelatedIDs) != 0 {
+			t.Fatalf("orphaned related metadata after ack: %+v", item)
 		}
 	}
 }

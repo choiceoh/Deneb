@@ -138,7 +138,7 @@ func selectFetchToolNames(ctx context.Context, request fetchToolsRequest, regist
 	candidates := lexical
 	if semantic != nil {
 		if dense, ok := semantic.rank(ctx, request.Query, docs); ok {
-			candidates = fuseFetchToolRanksLimit(lexical, dense, poolLimit)
+			candidates = fuseFetchToolRanksLimitCalibrated(lexical, dense, poolLimit, semantic.admissionFloor())
 		}
 	}
 	if reranked, ok := rerankFetchToolNames(ctx, request.Query, candidates, docs, reranker); ok {

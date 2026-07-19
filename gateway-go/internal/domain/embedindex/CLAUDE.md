@@ -7,9 +7,11 @@ queries so callers can blend semantic hits with lexical (BM25) indexes.
 ## Entry points
 
 - `index.go` — `New`, `Index`, `Embedder`, `Item`, `Supplier`, `Hit`
-- `Index.RefreshAsync`, `Index.Warm`, `Index.Search`, `Index.SearchBatch`,
-  `Index.SearchVec`, `Index.Enabled`, `Index.Close`
+- `Index.RefreshAsync`, `Index.RefreshIfStale`, `Index.Warm`, `Index.Search`,
+  `Index.SearchBatch`, `Index.SearchVec`, `Index.Status`, `Index.Close`
 - `identity.go` — `Identity`, `IdentityOf` (embedder identity for cache keys)
+- `calibration.go` — model-specific semantic admission profiles and explicit
+  operator overrides for each retrieval surface
 
 ## Dependency direction and invariants
 
@@ -19,8 +21,13 @@ queries so callers can blend semantic hits with lexical (BM25) indexes.
 - **Invariant**: no embedder / unhealthy server / embed error → zero hits
   (silent degrade so lexical fallback works). Refresh is lazy and off the
   query deadline; only items whose content hash changed are re-embedded.
+- Concurrent refresh requests coalesce into one worker plus one latest-state
+  follow-up scan. Never hold the index mutex while calling an embedder or
+  calculating the full cosine scan.
 - On-disk cache is keyed by embedder identity + item hashes — never serve
   vectors from a mismatched embedder identity.
+- A real unknown embedder fingerprint must not admit semantic-only results
+  until calibrated; dense rank may still reinforce an existing lexical hit.
 
 ## Focused verification
 

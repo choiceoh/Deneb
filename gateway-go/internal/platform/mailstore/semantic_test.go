@@ -13,11 +13,16 @@ import (
 )
 
 type semanticMailEmbedder struct {
-	mu    sync.Mutex
-	kinds []string
+	mu          sync.Mutex
+	kinds       []string
+	fingerprint string
 }
 
 func (e *semanticMailEmbedder) IsHealthy() bool { return true }
+
+func (e *semanticMailEmbedder) EmbeddingFingerprint() string { return e.fingerprint }
+
+func (e *semanticMailEmbedder) EmbeddingDimensions() int { return 2 }
 
 func (e *semanticMailEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	e.mu.Lock()
@@ -98,6 +103,43 @@ func TestSearchContextRejectsSemanticOnlyHitBelowFloor(t *testing.T) {
 
 	if hits := s.SearchContext(context.Background(), nil, "배송 일정 위험", time.Time{}, 10); len(hits) != 0 {
 		t.Fatalf("below-floor semantic hits = %v", messageIDs(hits))
+	}
+}
+
+func TestSearchContextRejectsSemanticOnlyHitForUncalibratedModel(t *testing.T) {
+	s := newContractStore(t)
+	defer s.Close()
+	putContractMessages(t, s, contractMessage("risk", "INBOX", "공급망 경보", "계약상 납기 지연 가능성이 커졌습니다", "2026-07-01"))
+	s.SetEmbedder(&semanticMailEmbedder{fingerprint: "future-embedder:2"}, embedindex.WithSyncRefresh())
+
+	if hits := s.SearchContext(context.Background(), nil, "배송 일정 위험", time.Time{}, 10); len(hits) != 0 {
+		t.Fatalf("uncalibrated semantic-only hits = %v", messageIDs(hits))
+	}
+}
+
+func TestRankedSearchLexicalFallbackUsesStableRRFScale(t *testing.T) {
+	s := newContractStore(t)
+	defer s.Close()
+	putContractMessages(t, s, contractMessage("lexical", "INBOX", "배송 일정 위험", "일반 공지", "2026-07-01"))
+
+	hits := s.rankedSearch(context.Background(), "배송 일정 위험", 10)
+	if len(hits) != 1 || math.Abs(hits[0].fusedScore-mailRRFScore(1)) > 1e-12 {
+		t.Fatalf("lexical fallback = %+v, want rank-derived score %.4f", hits, mailRRFScore(1))
+	}
+}
+
+func TestWarmSemanticIndexBuildsQueryableCacheBeforeFirstSearch(t *testing.T) {
+	s := newContractStore(t)
+	defer s.Close()
+	putContractMessages(t, s, contractMessage("risk", "INBOX", "공급망 경보", "계약상 납기 지연 가능성이 커졌습니다", "2026-07-01"))
+	s.SetEmbedder(&semanticMailEmbedder{})
+
+	if err := s.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	status := s.SemanticStatus()
+	if status.Entries != 1 || status.RefreshCount != 1 || status.LastRefreshAtMs == 0 {
+		t.Fatalf("semantic status after warm = %+v", status)
 	}
 }
 

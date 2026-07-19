@@ -72,15 +72,26 @@ const minEmbedChars = 8
 
 // Index is an in-memory, lazily-maintained vector index over one corpus.
 type Index struct {
-	name        string // log/label prefix, e.g. "diary" or "session"
-	embedder    Embedder
-	cachePath   string // "" → persistence disabled (tests)
-	batch       int    // items embedded per request
-	refreshTO   time.Duration
-	mu          sync.Mutex
-	vecs        map[string]cachedVec // id -> embedding
-	refreshing  atomic.Bool          // single-flight guard for RefreshAsync
-	syncRefresh bool                 // tests: run RefreshAsync inline
+	name      string // log/label prefix, e.g. "diary" or "session"
+	embedder  Embedder
+	cachePath string // "" → persistence disabled (tests)
+	batch     int    // items embedded per request
+	refreshTO time.Duration
+	// Lock hierarchy (acquire in this order; never reverse):
+	//
+	//	refreshMu -> mu
+	//
+	// refreshMu serializes synchronous warm and the background refresh worker;
+	// mu protects vectors, lifecycle state, and the coalesced supplier slot.
+	refreshMu       sync.Mutex
+	mu              sync.Mutex
+	vecs            map[string]cachedVec // id -> embedding
+	pendingSupplier Supplier             // latest refresh request while one is running
+	refreshing      atomic.Bool          // single-flight guard for RefreshAsync
+	syncRefresh     bool                 // tests: run RefreshAsync inline
+	lastRefreshAt   atomic.Int64
+	refreshCount    atomic.Uint64
+	refreshErrors   atomic.Uint64
 
 	cacheFingerprint   string
 	cacheDimensions    int
@@ -153,6 +164,62 @@ func (ix *Index) Enabled() bool {
 	return ix != nil && ix.embedder != nil && ix.embedder.IsHealthy()
 }
 
+// Len returns the number of currently usable corpus vectors.
+func (ix *Index) Len() int {
+	if ix == nil {
+		return 0
+	}
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	return len(ix.vecs)
+}
+
+// Calibration returns the model-aware semantic-only admission profile for one
+// consuming surface.
+func (ix *Index) Calibration(surface SemanticSurface) Calibration {
+	if ix == nil {
+		return CalibrationFor(nil, surface)
+	}
+	return CalibrationFor(ix.embedder, surface)
+}
+
+// Status is a cheap in-process diagnostic snapshot for health surfaces.
+type Status struct {
+	Enabled         bool   `json:"enabled"`
+	Entries         int    `json:"entries"`
+	Refreshing      bool   `json:"refreshing"`
+	RefreshPending  bool   `json:"refreshPending"`
+	LastRefreshAtMs int64  `json:"lastRefreshAtMs,omitempty"`
+	RefreshCount    uint64 `json:"refreshCount"`
+	RefreshErrors   uint64 `json:"refreshErrors"`
+	Fingerprint     string `json:"fingerprint,omitempty"`
+	Dimensions      int    `json:"dimensions,omitempty"`
+	Preprocessing   string `json:"preprocessing,omitempty"`
+}
+
+func (ix *Index) Status() Status {
+	if ix == nil {
+		return Status{}
+	}
+	identity := IdentityOf(ix.embedder)
+	enabled := ix.Enabled()
+	ix.mu.Lock()
+	status := Status{
+		Enabled:         enabled,
+		Entries:         len(ix.vecs),
+		Refreshing:      ix.refreshing.Load(),
+		RefreshPending:  ix.pendingSupplier != nil,
+		LastRefreshAtMs: ix.lastRefreshAt.Load(),
+		RefreshCount:    ix.refreshCount.Load(),
+		RefreshErrors:   ix.refreshErrors.Load(),
+		Fingerprint:     identity.Fingerprint,
+		Dimensions:      identity.Dimensions,
+		Preprocessing:   ix.preprocessing,
+	}
+	ix.mu.Unlock()
+	return status
+}
+
 // Close cancels any in-flight refresh and waits for it, so no cache write happens
 // after this returns. Idempotent.
 func (ix *Index) Close() {
@@ -174,13 +241,22 @@ func (ix *Index) RefreshAsync(supplier Supplier) {
 		return
 	}
 	if ix.syncRefresh {
-		ctx, cancel := context.WithTimeout(context.Background(), ix.refreshTO)
+		ctx, cancel := context.WithTimeout(ix.baseCtx, ix.refreshTO)
 		defer cancel()
-		_ = ix.refresh(ctx, supplier)
+		_ = ix.Warm(ctx, supplier)
 		return
 	}
+	ix.mu.Lock()
+	if ix.closed {
+		ix.mu.Unlock()
+		return
+	}
+	// One latest supplier slot is enough: corpus suppliers enumerate current
+	// state, so ten mutations during one embed batch need one follow-up scan.
+	ix.pendingSupplier = supplier
+	ix.mu.Unlock()
 	if !ix.refreshing.CompareAndSwap(false, true) {
-		return // a refresh is already in flight
+		return // the running worker will consume pendingSupplier
 	}
 	ix.mu.Lock()
 	if ix.closed {
@@ -192,11 +268,77 @@ func (ix *Index) RefreshAsync(supplier Supplier) {
 	ix.mu.Unlock()
 	safego.GoWithSlog(slog.Default(), "embedindex-refresh-"+ix.name, func() {
 		defer ix.wg.Done()
-		defer ix.refreshing.Store(false)
-		ctx, cancel := context.WithTimeout(ix.baseCtx, ix.refreshTO)
-		defer cancel()
-		_ = ix.refresh(ctx, supplier)
+		ix.runRefreshLoop()
 	})
+}
+
+// RefreshIfStale bounds supplier scans on read-heavy paths while still
+// reconciling an index that was restored from an old cache. Mutations should
+// continue to call RefreshAsync directly.
+func (ix *Index) RefreshIfStale(supplier Supplier, maxAge time.Duration) {
+	if ix == nil || supplier == nil {
+		return
+	}
+	last := ix.lastRefreshAt.Load()
+	if last > 0 && maxAge > 0 && time.Since(time.UnixMilli(last)) < maxAge {
+		return
+	}
+	ix.RefreshAsync(supplier)
+}
+
+func (ix *Index) runRefreshLoop() {
+	defer ix.refreshing.Store(false)
+	ix.refreshMu.Lock()
+	defer ix.refreshMu.Unlock()
+	mutated := false
+	defer func() {
+		if mutated {
+			ix.saveCache()
+		}
+	}()
+
+	for {
+		supplier := ix.takePendingSupplier()
+		if supplier == nil {
+			// Publish idle before rechecking the slot. A request that races this
+			// edge either starts a new worker or is observed here and consumed by
+			// this worker; it can no longer disappear behind single-flight.
+			ix.refreshing.Store(false)
+			ix.mu.Lock()
+			pending := !ix.closed && ix.pendingSupplier != nil
+			ix.mu.Unlock()
+			if pending && ix.refreshing.CompareAndSwap(false, true) {
+				continue
+			}
+			return
+		}
+		ctx, cancel := context.WithTimeout(ix.baseCtx, ix.refreshTO)
+		changed, err := ix.refresh(ctx, supplier)
+		cancel()
+		mutated = mutated || changed
+		ix.recordRefresh(err)
+	}
+}
+
+func (ix *Index) takePendingSupplier() Supplier {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	if ix.closed {
+		ix.pendingSupplier = nil
+		return nil
+	}
+	supplier := ix.pendingSupplier
+	ix.pendingSupplier = nil
+	return supplier
+}
+
+func (ix *Index) recordRefresh(err error) {
+	ix.refreshCount.Add(1)
+	if err != nil {
+		ix.refreshErrors.Add(1)
+		return
+	}
+	ix.lastRefreshAt.Store(time.Now().UnixMilli())
 }
 
 // Warm synchronously (re)embeds the corpus — for an eager startup warm so the
@@ -206,21 +348,32 @@ func (ix *Index) Warm(ctx context.Context, supplier Supplier) error {
 	if ix == nil || ix.embedder == nil || supplier == nil {
 		return nil
 	}
-	return ix.refresh(ctx, supplier)
+	ix.mu.Lock()
+	if ix.closed {
+		ix.mu.Unlock()
+		return nil
+	}
+	ix.wg.Add(1)
+	ix.mu.Unlock()
+	defer ix.wg.Done()
+
+	ix.refreshMu.Lock()
+	defer ix.refreshMu.Unlock()
+	mutated, err := ix.refresh(ctx, supplier)
+	if mutated {
+		ix.saveCache()
+	}
+	ix.recordRefresh(err)
+	return err
 }
 
-// refresh embeds items whose content hash changed and drops vanished ones. Holds
-// the mutex only around map mutations, not the network call. Any mutation is
-// mirrored to the on-disk cache so the work survives the next restart.
-func (ix *Index) refresh(ctx context.Context, supplier Supplier) error {
+// refresh embeds items whose content hash changed and drops vanished ones. It
+// holds the mutex only around map mutations, not the network call. The owning
+// warm/worker operation persists accumulated mutations before it returns.
+func (ix *Index) refresh(ctx context.Context, supplier Supplier) (bool, error) {
 	items := supplier()
 
 	mutated := false
-	defer func() {
-		if mutated {
-			ix.saveCache()
-		}
-	}()
 
 	want := make(map[string]string, len(items))
 	var toEmbedID []string
@@ -266,17 +419,17 @@ func (ix *Index) refresh(ctx context.Context, supplier Supplier) error {
 
 	for start := 0; start < len(toEmbedID); start += ix.batch {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return mutated, ctx.Err()
 		}
 		end := min(start+ix.batch, len(toEmbedID))
 		vecs, err := ix.embedder.Embed(ctx, toEmbedText[start:end])
 		if err != nil {
 			slog.Warn("embedindex: embed batch failed; keeping prior vectors",
 				"index", ix.name, "batchStart", start, "batchSize", end-start, "error", err)
-			return err
+			return mutated, err
 		}
 		if len(vecs) != end-start {
-			return fmt.Errorf("embedindex: %s embed batch returned %d vectors for %d texts", ix.name, len(vecs), end-start)
+			return mutated, fmt.Errorf("embedindex: %s embed batch returned %d vectors for %d texts", ix.name, len(vecs), end-start)
 		}
 		ix.mu.Lock()
 		for i, id := range toEmbedID[start:end] {
@@ -285,7 +438,7 @@ func (ix *Index) refresh(ctx context.Context, supplier Supplier) error {
 		ix.mu.Unlock()
 		mutated = true
 	}
-	return nil
+	return mutated, nil
 }
 
 // Search embeds the query and returns the top-limit items by cosine similarity.
@@ -347,11 +500,21 @@ func (ix *Index) SearchVec(qv []float32, limit int) []Hit {
 		ix.mu.Unlock()
 		return nil
 	}
-	hits := make([]Hit, 0, len(ix.vecs))
+	type vectorSnapshot struct {
+		id  string
+		vec []float32
+	}
+	vectors := make([]vectorSnapshot, 0, len(ix.vecs))
 	for id, cv := range ix.vecs {
-		hits = append(hits, Hit{ID: id, Score: cosine(qv, cv.vec)})
+		// Vectors are immutable after insertion; retaining the slice reference is
+		// safe and keeps the O(entries*dimensions) cosine scan off the index lock.
+		vectors = append(vectors, vectorSnapshot{id: id, vec: cv.vec})
 	}
 	ix.mu.Unlock()
+	hits := make([]Hit, 0, len(vectors))
+	for _, vector := range vectors {
+		hits = append(hits, Hit{ID: vector.id, Score: cosine(qv, vector.vec)})
+	}
 
 	sort.Slice(hits, func(a, b int) bool {
 		if hits[a].Score == hits[b].Score {
