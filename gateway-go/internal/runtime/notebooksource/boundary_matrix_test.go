@@ -246,14 +246,13 @@ func TestReadDiaryConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for worker := 0; worker < workers; worker++ {
-		worker := worker
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				got, err := notebookReadDiary(store, "entry")
 				if err != nil || got != "stable body" {
-					errs <- fmt.Errorf("worker=%d i=%d got=%q err=%v", worker, i, got, err)
+					errs <- fmt.Errorf("worker=%d i=%d got=%q err=%w", worker, i, got, err)
 					return
 				}
 			}

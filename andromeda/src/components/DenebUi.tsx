@@ -21,6 +21,7 @@ import { DenebHtmlAnswer } from "./DenebHtml";
 import { Icon, type IconName } from "./Icon";
 import { CodeBlock, Markdown } from "./Markdown";
 import { renderInline } from "./renderInline";
+import { statCountUpFrame } from "./statCountUp";
 
 // --- deneb-ui text conventions (parity with the native renderer) ---
 
@@ -141,28 +142,6 @@ const ICON_GLYPHS: Record<string, IconName> = {
 const TIMELINE_RE = /^\d{1,2}:\d{2}\s*—\s*.+$/;
 /** Short "키 — 내용" lead (time, sender) rendered as a bold scan point. */
 const KEY_DASH_RE = /^(.{1,14}?) — ([\s\S]*)$/;
-
-/** First numeric run (commas/decimal allowed) inside a stat value. */
-const STAT_NUM_RE = /\d[\d,]*(?:\.\d+)?/;
-
-/** One frame of the stat count-up: the numeric run scaled by an eased
- * [progress], prefix/suffix intact, decimal width and comma grouping matching
- * the target. progress ≥ 1 returns the ORIGINAL string so exact metrics
- * ("12.45%", 2-decimal FX) keep their full precision (native-parity rule). */
-export function statCountUpFrame(value: string, progress: number): string {
-  if (progress >= 1) return value;
-  const m = STAT_NUM_RE.exec(value);
-  if (!m) return value;
-  const target = Number(m[0].replace(/,/g, ""));
-  if (!Number.isFinite(target)) return value;
-  const decimals = m[0].includes(".") ? m[0].length - m[0].indexOf(".") - 1 : 0;
-  const eased = 1 - Math.pow(1 - Math.max(0, progress), 3); // fast-out-slow-in
-  const v = target * eased;
-  const s = m[0].includes(",")
-    ? v.toLocaleString("ko-KR", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
-    : v.toFixed(decimals);
-  return value.slice(0, m.index) + s + value.slice(m.index + m[0].length);
-}
 
 // Press-and-hold a row ~500ms to fire its longpress callback — the desktop
 // analog of the native combinedClickable long-press. Pointer events cover

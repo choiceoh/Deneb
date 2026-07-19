@@ -518,7 +518,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	case RoleMain, RoleTiny, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
-	case RoleCoding, RoleMain2:
+	case RoleCoding, RoleMain2, RoleVision:
 		// Opt-in roles resolve only when configured; otherwise the literal
 		// string falls through as a raw model name.
 		role = Role(modelOrRole)

@@ -25,20 +25,13 @@ import { viewKindFor } from "@/components/fileView";
 import { Markdown } from "@/components/Markdown";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Field, Modal } from "@/components/Modal";
+import { approvalDayMs } from "../../approvalBody";
 
 // Recent 전체 결재 snapshot; day-pager filters client-side (Amaranth list has no
 // date-range API). Mirrors mail/feed lookback so empty days never trap the pager.
 const APPROVALS_LIMIT = 100;
 const APPROVALS_LOOKBACK_DAYS = 31;
 const HOT_IMPORTANCE = /urgent|high|중요|긴급|priority/i;
-
-/** Parse Amaranth date stamps (2026-07-16 / 2026.07.16 / 20260716) → local midnight ms. */
-export function approvalDayMs(date?: string): number | null {
-  const s = (date ?? "").trim();
-  const m = /^(\d{4})[-./]?(\d{2})[-./]?(\d{2})/.exec(s);
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
-}
 
 function rowLine(a: GroupwareApprovalRow): string {
   const bits = [a.title ?? "(제목 없음)", a.drafter ? `기안 ${a.drafter}` : "", a.status ?? "", a.docNo ?? ""].filter(

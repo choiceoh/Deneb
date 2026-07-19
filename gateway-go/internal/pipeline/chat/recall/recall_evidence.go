@@ -723,10 +723,6 @@ func recallConfidence(ev recallEvidence) string {
 	}
 }
 
-func formatRecallAge(at int64) string {
-	return formatRecallAgeAt(at, time.Now())
-}
-
 func formatRecallAgeAt(at int64, now time.Time) string {
 	if at <= 0 {
 		return "unknown"

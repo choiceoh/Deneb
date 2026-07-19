@@ -342,7 +342,7 @@ func TestProviderModelProbeEncodesToEmptyJSON(t *testing.T) {
 		listed:    true,
 		models:    []string{"a"},
 	}
-	data, err := json.Marshal(probe)
+	data, err := json.Marshal(probe) //nolint:staticcheck // contract under test: probe must serialize to {} (nothing leaks)
 	if err != nil {
 		t.Fatal(err)
 	}

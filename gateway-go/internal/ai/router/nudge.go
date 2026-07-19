@@ -116,7 +116,7 @@ func EffortNudge(current int, sig EffortSignal) (int, bool) {
 		return current, false
 	}
 
-	next := current
+	var next int
 	switch {
 	case sig.RoutedRuns >= EffortNudgeMinRouted && sig.EscalationRate > EffortNudgeHighEscalation:
 		// Too aggressive: tighten the gate so fewer turns route off.

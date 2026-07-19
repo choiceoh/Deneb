@@ -57,7 +57,7 @@ func (m *ChatMessage) HasContent() bool {
 }
 
 // MarshalJSONString returns s as a JSON-encoded string.
-func MarshalJSONString(s string) rawJSON {
+func MarshalJSONString(s string) json.RawMessage {
 	data, _ := json.Marshal(s)
 	return data
 }

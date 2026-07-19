@@ -8,6 +8,7 @@ package toolport
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -90,7 +91,7 @@ func NewTextChatMessage(role, text string, ts int64) ChatMessage {
 }
 
 // MarshalJSONString preserves the legacy toolport helper surface.
-func MarshalJSONString(s string) rawJSON {
+func MarshalJSONString(s string) json.RawMessage {
 	return rawJSON(chatport.MarshalJSONString(s))
 }
 

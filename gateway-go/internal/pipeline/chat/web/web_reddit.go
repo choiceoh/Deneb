@@ -124,6 +124,7 @@ type redditComment struct {
 func fetchReddit(ctx context.Context, rawURL string, maxChars int) (string, error) {
 	apiURL, err := redditJSONURL(rawURL)
 	if err != nil {
+		//nolint:nilerr // tool contract: fetch failures render as result text for the model
 		return formatFetchError(webFetchErr{
 			Code: "reddit_bad_url", Message: err.Error(), URL: rawURL, Retryable: false,
 		}), nil

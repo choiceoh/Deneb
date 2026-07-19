@@ -218,14 +218,10 @@ type batchEdit struct {
 	ReplaceAll bool   `json:"replace_all"`
 }
 
-// applyBatchEdits applies the edits sequentially in memory (each edit sees the
-// previous edits' result), then writes once. Any failure aborts BEFORE the
-// write — the file is never left half-edited — and names the failing index so
-// the model can fix just that entry.
-func applyBatchEdits(path, displayPath, content string, edits []batchEdit) (string, error) {
-	return applyBatchEditsContext(context.Background(), path, displayPath, content, edits)
-}
-
+// applyBatchEditsContext applies the edits sequentially in memory (each edit
+// sees the previous edits' result), then writes once. Any failure aborts
+// BEFORE the write — the file is never left half-edited — and names the
+// failing index so the model can fix just that entry.
 func applyBatchEditsContext(ctx context.Context, path, displayPath, content string, edits []batchEdit) (string, error) {
 	cur := content
 	total := 0
@@ -258,11 +254,6 @@ func applyBatchEditsContext(ctx context.Context, path, displayPath, content stri
 	return fmt.Sprintf("Edited %s (%d edits, %d replacements)", displayPath, len(edits), total), nil
 }
 
-// editWithRegex performs regex-based search and replace.
-func editWithRegex(path, displayPath, content, pattern, replacement string, replaceAll bool) (string, error) {
-	return editWithRegexContext(context.Background(), path, displayPath, content, pattern, replacement, replaceAll)
-}
-
 func editWithRegexContext(ctx context.Context, path, displayPath, content, pattern, replacement string, replaceAll bool) (string, error) {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
@@ -290,11 +281,6 @@ func editWithRegexContext(ctx context.Context, path, displayPath, content, patte
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return fmt.Sprintf("Edited %s (regex, %d matches)", displayPath, len(matches)), nil
-}
-
-// editAtLine performs replacement only on a specific line.
-func editAtLine(path, displayPath, content, oldStr, newStr string, lineNum int) (string, error) {
-	return editAtLineContext(context.Background(), path, displayPath, content, oldStr, newStr, lineNum)
 }
 
 func editAtLineContext(ctx context.Context, path, displayPath, content, oldStr, newStr string, lineNum int) (string, error) {
@@ -389,10 +375,6 @@ func editByAnchorContext(ctx context.Context, path, displayPath, content, anchor
 // string literals), a whitespace-only old_string never matches, and
 // new_string is re-indented by the first-line indent delta so the block lands
 // at the file's actual depth, preserving relative indentation.
-func editWhitespaceTolerant(path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
-	return editWhitespaceTolerantContext(context.Background(), path, displayPath, content, oldStr, newStr)
-}
-
 func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, content, oldStr, newStr string) (result string, handled bool, err error) {
 	if strings.Contains(content, "\r") {
 		// CR/CRLF file: the tolerant splice joins with bare \n, so the

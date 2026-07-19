@@ -2,6 +2,7 @@ package acp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -611,7 +612,7 @@ func TestTranscriptAppendFuncPropagatesErrors(t *testing.T) {
 		}
 		return want
 	})
-	if got := f.AppendSystemNote("client:main", "note"); got != want {
+	if got := f.AppendSystemNote("client:main", "note"); !errors.Is(got, want) {
 		t.Fatalf("AppendSystemNote error = %v, want identity %v", got, want)
 	}
 }

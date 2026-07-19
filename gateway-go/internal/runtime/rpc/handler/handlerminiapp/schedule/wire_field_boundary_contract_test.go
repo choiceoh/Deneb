@@ -96,6 +96,9 @@ func setWireBoundaryValue(value reflect.Value, seed, depth int) {
 		for i := 0; i < value.NumField(); i++ {
 			setWireBoundaryValue(value.Field(i), seed+i+1, depth+1)
 		}
+	default:
+		// Wire structs never carry chan/func/complex/unsafe fields; leaving the
+		// zero value is correct if one ever appears.
 	}
 }
 

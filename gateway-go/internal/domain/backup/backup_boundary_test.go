@@ -362,7 +362,7 @@ func TestWriteArchivePreservesFileContentMetadataAndHierarchy(t *testing.T) {
 		if !entry.header.ModTime.Equal(file.modTime) {
 			t.Errorf("%s ModTime = %v, want %v", file.rel, entry.header.ModTime, file.modTime)
 		}
-		if entry.header.Typeflag != tar.TypeReg && entry.header.Typeflag != tar.TypeRegA {
+		if entry.header.Typeflag != tar.TypeReg {
 			t.Errorf("%s type = %d, want regular", file.rel, entry.header.Typeflag)
 		}
 	}

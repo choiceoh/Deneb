@@ -747,7 +747,7 @@ func TestBoundarySteerRestoreCopiesSliceHeaderAndBackingData(t *testing.T) {
 	notes := []string{"one", "two"}
 	queue.Restore("client:main", notes)
 	notes[0] = "caller-mutated"
-	notes = append(notes, "caller-appended")
+	notes = append(notes, "caller-appended") //nolint:ineffassign,staticcheck // mutation probe: proves Restore copied, not aliased
 	got := queue.Drain("client:main")
 	if !reflect.DeepEqual(got, []string{"one", "two"}) {
 		t.Fatalf("Restore retained caller alias: %#v", got)

@@ -759,10 +759,9 @@ func TestLoadFromFileMissingParentAndDanglingSymlinkUseDefaults(t *testing.T) {
 	if got.KeywordToLane["루프탑"] != LaneTeam2 {
 		t.Fatalf("missing parent defaults = %#v", got)
 	}
-	if err := os.Symlink(filepath.Join(t.TempDir(), "absent.json"), filepath.Join(filepath.Dir(missing), "link.json")); err == nil {
-		// The parent is missing, so this branch is intentionally unreachable;
-		// create a valid parent below for the actual dangling-link boundary.
-	}
+	// The parent is missing, so the symlink result is irrelevant here; the
+	// actual dangling-link boundary uses the valid parent created below.
+	_ = os.Symlink(filepath.Join(t.TempDir(), "absent.json"), filepath.Join(filepath.Dir(missing), "link.json"))
 	parent := t.TempDir()
 	link := filepath.Join(parent, "rules-link.json")
 	if err := os.Symlink(filepath.Join(parent, "does-not-exist.json"), link); err != nil {
@@ -881,7 +880,7 @@ func TestConcurrentClassificationIsRaceFreeAndStable(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
-		worker := worker
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

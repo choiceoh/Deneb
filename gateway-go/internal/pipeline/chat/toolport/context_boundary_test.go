@@ -133,7 +133,8 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 }
 
 func TestContextHelpersIgnoreNilOptionalDependencies(t *testing.T) {
-	base := context.WithValue(context.Background(), struct{}{}, "sentinel")
+	type sentinelKey struct{}
+	base := context.WithValue(context.Background(), sentinelKey{}, "sentinel")
 	if got := WithCheckpointer(base, nil); got != base {
 		t.Fatal("WithCheckpointer(nil) allocated a replacement context")
 	}

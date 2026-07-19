@@ -117,7 +117,7 @@ func TestCreateRequestCopiesMutableInputAndOutput(t *testing.T) {
 
 	// Mutate every caller-owned container after insertion.
 	argv[0] = "rm"
-	argv = append(argv, "extra")
+	argv = append(argv, "extra") //nolint:ineffassign,staticcheck // mutation probe: proves the store copied, not aliased
 	env["KEY"] = "changed"
 	env["NEW"] = "value"
 	turn.Channel = "changed"
@@ -273,7 +273,6 @@ func TestConcurrentGeneratedIDsAndReads(t *testing.T) {
 	ids := make(chan string, writers*perWriter)
 	var wg sync.WaitGroup
 	for writer := 0; writer < writers; writer++ {
-		writer := writer
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -375,7 +374,7 @@ func TestConcurrentResolveHasExactlyOneWinner(t *testing.T) {
 	var already atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < contenders; i++ {
-		i := i
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -616,7 +615,6 @@ func TestGlobalSnapshotConcurrentReadersAndWriters(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for writer := 0; writer < writers; writer++ {
-		writer := writer
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -676,7 +674,6 @@ func TestConcurrentLifecycleOperationsRemainConsistent(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for i, id := range ids {
-		i, id := i, id
 		wg.Add(3)
 		go func() {
 			defer wg.Done()

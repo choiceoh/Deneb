@@ -127,7 +127,8 @@ func TestLockSkillSerializesSameSkillConcurrentlyAndSeparatesDifferentSkills(t *
 	if e.lockSkillMutex("a") == e.lockSkillMutex("b") {
 		t.Fatal("distinct skills must not share a lock")
 	}
-	if e.lockSkillMutex("a") != e.lockSkillMutex("a") {
+	first := e.lockSkillMutex("a")
+	if first != e.lockSkillMutex("a") {
 		t.Fatal("same skill must reuse its lock")
 	}
 }

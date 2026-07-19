@@ -65,7 +65,7 @@ func (s *Server) approvalBrowserEnrich(ctx context.Context, source, text string)
 	token := strings.TrimSpace(os.Getenv("DENEB_BROWSER_TOKEN"))
 	groupwareURL := strings.TrimSpace(os.Getenv("DENEB_GROUPWARE_URL"))
 	if groupwareURL == "" {
-		groupwareURL = "https://tsgw.topsolar.kr"
+		groupwareURL = "https://tsgw.topsolar.kr" //nolint:gosec // default groupware base URL, not a credential
 	}
 	return runtimeops.ApprovalBrowserEnrich(ctx, base, token, groupwareURL, source, text)
 }

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 )
 
-func EncodeEvent[T any](v T) (rawJSON, error) {
+func EncodeEvent[T any](v T) (json.RawMessage, error) {
 	return json.Marshal(v)
 }
 

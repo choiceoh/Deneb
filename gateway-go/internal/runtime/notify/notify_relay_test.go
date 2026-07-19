@@ -111,21 +111,6 @@ func TestNotifyServiceDebounceUnaffectedWithoutMarkSent(t *testing.T) {
 	}
 }
 
-func keyN(i int) string { return "s" + itoa(i) }
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b [20]byte
-	pos := len(b)
-	for i > 0 {
-		pos--
-		b[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	return string(b[pos:])
-}
-
 // formatHeartbeatLine returns a non-empty Korean line with all key stats.
 func TestNotifyServiceHeartbeatLineFormatsKeyStats(t *testing.T) {
 	mgr := session.NewManager()

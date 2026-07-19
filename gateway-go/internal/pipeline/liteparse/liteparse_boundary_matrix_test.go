@@ -648,7 +648,6 @@ func TestBoundaryParseConcurrentDocumentsStayIsolated(t *testing.T) {
 	}
 	results := make(chan result, workers)
 	for i := 0; i < workers; i++ {
-		i := i
 		go func() {
 			<-start
 			want := fmt.Sprintf("document-%03d-%s", i, strings.Repeat("x", i%11))

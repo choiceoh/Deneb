@@ -3,7 +3,7 @@ package typing
 import (
 	"sync/atomic"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
+	tokens "github.com/choiceoh/deneb/gateway-go/internal/core/replytokens"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/autoreply/types"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )

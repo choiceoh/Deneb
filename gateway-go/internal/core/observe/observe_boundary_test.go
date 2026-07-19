@@ -59,7 +59,6 @@ func TestRingWrapBoundaryForManyCapacities(t *testing.T) {
 	t.Parallel()
 
 	for capacity := 1; capacity <= 32; capacity++ {
-		capacity := capacity
 		t.Run(fmt.Sprintf("capacity-%02d", capacity), func(t *testing.T) {
 			t.Parallel()
 			ring := NewRing(capacity)
@@ -491,7 +490,6 @@ func TestConcurrentRingAppendQueryAndSnapshotMutation(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for writer := 0; writer < writers; writer++ {
-		writer := writer
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -509,7 +507,6 @@ func TestConcurrentRingAppendQueryAndSnapshotMutation(t *testing.T) {
 		}()
 	}
 	for reader := 0; reader < readers; reader++ {
-		reader := reader
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -759,7 +756,7 @@ func TestConcurrentCaptureHandlersShareRingSafely(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
-		worker := worker
+
 		handler := root.WithAttrs([]slog.Attr{
 			slog.String("runId", fmt.Sprintf("run-%d", worker)),
 			slog.String("session", fmt.Sprintf("session-%d", worker%3)),

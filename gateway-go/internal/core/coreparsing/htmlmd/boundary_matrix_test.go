@@ -604,7 +604,6 @@ func TestConvertConcurrentDeterminism(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
-		worker := worker
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -24,7 +24,6 @@ export function Toasts() {
       off();
       for (const id of map.values()) window.clearTimeout(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function dismiss(id: number) {

@@ -45,6 +45,7 @@ func (s *Store) RotateProjectLog(project string) (int, error) {
 	logPath := LogPagePath(project)
 	logPage, err := s.ReadPage(logPath)
 	if err != nil || logPage == nil {
+		//nolint:nilerr // best-effort rotation: an unreadable log is treated as absent
 		return 0, nil // no log yet — nothing to rotate
 	}
 	_, sections := logPage.SplitByH2()

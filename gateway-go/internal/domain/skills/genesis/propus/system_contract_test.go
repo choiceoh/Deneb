@@ -152,7 +152,6 @@ func TestPropusMaxStateReturnsHigherPriorityStateForEveryPair(t *testing.T) {
 	states := []string{"steady", "has_backlog", "needs_validation", "needs_evolution", "needs_review", "needs_attention"}
 	for _, current := range states {
 		for _, candidate := range states {
-			current, candidate := current, candidate
 			t.Run(current+"__"+candidate, func(t *testing.T) {
 				t.Parallel()
 				want := current

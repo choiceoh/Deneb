@@ -31,10 +31,6 @@ const (
 	// (accelerator, 2026-07-09) consumes coverage as fast as it appears —
 	// still deterministic and idempotent, so the extra cycles cost file IO.
 	validationBackfillInterval = 6 * time.Hour
-	// validationBackfillWindow mirrors the evolution health window: only skills
-	// actually used recently earn bench coverage (dormant skills would only add
-	// replay cost without protecting live behavior).
-	validationBackfillWindow = 7 * 24 * time.Hour
 	// validationBackfillSessionsPerSkill caps transcript replays per skill per
 	// cycle; dedup makes later cycles pick up newer sessions.
 	validationBackfillSessionsPerSkill = 3
@@ -78,6 +74,8 @@ type validationBackfillTask struct {
 
 // NewValidationBackfillTask constructs the deterministic validation-corpus
 // growth task.
+//
+//nolint:revive // constructor intentionally returns the concrete task; callers hand it straight to RegisterTask
 func NewValidationBackfillTask(backend *Backend, logger *slog.Logger) *validationBackfillTask {
 	return &validationBackfillTask{backend: backend, logger: logger}
 }
