@@ -90,12 +90,20 @@ func junkGuideline(g string) bool {
 }
 
 // sanitizeGuidelines trims, drops empties and placeholder junk, truncates
-// over-long entries, dedups (case-insensitive), and caps to
+// over-long entries, dedups (exact AND near-duplicate), and caps to
 // MaxLearnedGuidelines keeping the first. Runs on Load AND Save, so junk
 // already persisted is filtered out the next time anything reads the store.
+//
+// Near-dup dedup (2026-07-19): exact-string dedup let reworded siblings of the
+// same rule ("금액은 …통화로 보존" vs "단가·예산 등 금액은 …단위를 보존") each
+// take a slot, so the 5-slot cap churned between phrasings of 2 concepts
+// instead of holding 5 distinct ones. Now a candidate is dropped when its
+// content words overlap an already-kept guideline past a threshold — the
+// tuner orders newest-first and we keep the first, so the freshest phrasing
+// of a concept wins and the freed slots go to genuinely new categories.
 func sanitizeGuidelines(in []string) []string {
-	seen := make(map[string]struct{}, len(in))
 	out := make([]string, 0, len(in))
+	keptTokens := make([][]string, 0, len(in))
 	for _, g := range in {
 		g = strings.TrimSpace(g)
 		if g == "" || junkGuideline(g) {
@@ -104,15 +112,98 @@ func sanitizeGuidelines(in []string) []string {
 		if r := []rune(g); len(r) > maxGuidelineRunes {
 			g = strings.TrimSpace(string(r[:maxGuidelineRunes]))
 		}
-		key := strings.ToLower(g)
-		if _, dup := seen[key]; dup {
+		toks := guidelineContentTokens(g)
+		dup := false
+		for _, kt := range keptTokens {
+			if guidelineOverlap(toks, kt) >= guidelineDupThreshold {
+				dup = true
+				break
+			}
+		}
+		if dup {
 			continue
 		}
-		seen[key] = struct{}{}
 		out = append(out, g)
+		keptTokens = append(keptTokens, toks)
 		if len(out) >= MaxLearnedGuidelines {
 			break
 		}
 	}
 	return out
+}
+
+// guidelineDupThreshold is the content-word overlap coefficient above which two
+// guidelines are treated as the same rule. 0.5 merges "금액…통화" with
+// "단가·예산…금액…단위" (share 금액·숫자) while keeping "금액 보존" and
+// "날짜 보존" (share nothing) distinct.
+const guidelineDupThreshold = 0.5
+
+// guidelineStopwords are the boilerplate that appears across nearly every
+// "~를 정확히 보존하라" guideline; counting them would make unrelated rules look
+// similar, so they are dropped before overlap is measured.
+var guidelineStopwords = map[string]struct{}{
+	"정확한": {}, "정확히": {}, "구체적인": {}, "구체적으로": {}, "보존하라": {}, "보존": {},
+	"하라": {}, "남기지": {}, "말고": {}, "등": {}, "만": {}, "직책이나": {}, "호칭만": {},
+	"값을": {}, "값": {}, "그대로": {},
+}
+
+// guidelineContentTokens splits a guideline into meaningful content words:
+// lowercased, punctuation-stripped, boilerplate removed, >=2 runes. Korean
+// particles are handled by the prefix match in guidelineOverlap, not here.
+func guidelineContentTokens(g string) []string {
+	fields := strings.FieldsFunc(strings.ToLower(g), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
+	toks := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if len([]rune(f)) < 2 {
+			continue
+		}
+		if _, stop := guidelineStopwords[f]; stop {
+			continue
+		}
+		toks = append(toks, f)
+	}
+	return toks
+}
+
+// guidelineOverlap is the overlap coefficient |a∩b| / min(|a|,|b|). Two tokens
+// match when one is a prefix of the other (>=2 runes) — this absorbs Korean
+// particles ("금액" <-> "금액은") without a morphological dictionary. Empty on
+// either side yields 0 (a value-free guideline never suppresses a real one).
+func guidelineOverlap(a, b []string) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	matches := 0
+	for _, ta := range a {
+		for _, tb := range b {
+			if tokenAkin(ta, tb) {
+				matches++
+				break
+			}
+		}
+	}
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+	return float64(matches) / float64(minLen)
+}
+
+// tokenAkin reports whether two content tokens denote the same word up to a
+// Korean particle: equal, or one a prefix of the other with the shorter >=2 runes.
+func tokenAkin(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, rb := []rune(a), []rune(b)
+	short, long := ra, rb
+	if len(rb) < len(ra) {
+		short, long = rb, ra
+	}
+	if len(short) < 2 {
+		return false
+	}
+	return strings.HasPrefix(string(long), string(short))
 }
