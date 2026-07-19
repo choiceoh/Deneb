@@ -329,3 +329,58 @@ func unopenedRunDependencies() runDependencies {
 		},
 	}
 }
+
+func TestContentMatcherHitsOnAnswerTokensAndAlternatives(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "프로젝트/pl2-tha-epc-001"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	page := filepath.Join(dir, "프로젝트/pl2-tha-epc-001/대표.md")
+	if err := os.WriteFile(page, []byte("title: 대한전선 당진\nPM 용역 발주서 금액 1.13억 회신."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newContentMatcher(dir)
+
+	// all tokens present (path has no .md suffix — matcher appends it)
+	if !m("프로젝트/pl2-tha-epc-001/대표", []string{"1.13억", "발주서"}) {
+		t.Fatal("expected content hit when every token present")
+	}
+	// alternative satisfied ("없는값|1.13억")
+	if !m("프로젝트/pl2-tha-epc-001/대표", []string{"없는값|1.13억"}) {
+		t.Fatal("expected hit when one alternative matches")
+	}
+	// a missing token fails the whole match
+	if m("프로젝트/pl2-tha-epc-001/대표", []string{"1.13억", "존재하지않는토큰"}) {
+		t.Fatal("expected miss when a required token is absent")
+	}
+	// empty must_contain never matches; missing page never matches
+	if m("프로젝트/pl2-tha-epc-001/대표", nil) {
+		t.Fatal("empty must_contain must not match")
+	}
+	if m("프로젝트/없는페이지", []string{"x"}) {
+		t.Fatal("missing page must not match")
+	}
+}
+
+func TestCaseHitFallsBackToContentWhenPathStale(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "프로젝트/nde-joc-cbl-001"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "프로젝트/nde-joc-cbl-001/대표.md"), []byte("JOCA 케이블 8,887 발주"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// gold points at the OLD (renamed-away) path; search returns the new code folder.
+	c := goldCase{GoldPaths: []string{"프로젝트/거래/joca"}, MustContain: []string{"8,887"}}
+	res := wiki.SearchResult{Path: "프로젝트/nde-joc-cbl-001/대표.md"}
+
+	if caseHit(res, c, nil) {
+		t.Fatal("path-only must NOT hit a stale-path case")
+	}
+	if !caseHit(res, c, newContentMatcher(dir)) {
+		t.Fatal("content matcher must rescue a stale-path case whose page holds the answer")
+	}
+	if findGoldRank([]wiki.SearchResult{res}, c, 8, newContentMatcher(dir)) != 0 {
+		t.Fatal("findGoldRank must rank the content-hit page at 0")
+	}
+}

@@ -45,7 +45,9 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
@@ -54,10 +56,11 @@ import (
 )
 
 type goldCase struct {
-	ID        string   `json:"id"`
-	Category  string   `json:"category"`
-	Question  string   `json:"question"`
-	GoldPaths []string `json:"gold_paths"`
+	ID          string   `json:"id"`
+	Category    string   `json:"category"`
+	Question    string   `json:"question"`
+	GoldPaths   []string `json:"gold_paths"`
+	MustContain []string `json:"must_contain"`
 }
 
 // pathHit mirrors wiki-qa-bench.py path_hit: gold matches p only from a
@@ -130,6 +133,7 @@ type benchmarkConfig struct {
 	matrix      bool
 	byCategory  bool
 	dumpSignals bool
+	content     bool
 	holdoutPct  int
 	split       string
 }
@@ -218,6 +222,7 @@ func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benc
 	fs.BoolVar(&cfg.matrix, "matrix", false, "compare bm25, semantic, hybrid, and full retrieval with p50/p95 latency")
 	fs.BoolVar(&cfg.byCategory, "by-category", false, "per-category P@1 across bm25/semantic/hybrid/full modes — diagnoses where global fusion weights lose to a single mode (headroom for per-query-type weighting)")
 	fs.BoolVar(&cfg.dumpSignals, "dump-signals", false, "per-case signal dump (category, top semantic cosine, gold rank under bm25 vs semantic) — grounds confidence-weighted fusion in real numbers")
+	fs.BoolVar(&cfg.content, "content", false, "content-aware hit: a result also counts when its page body holds every must_contain answer token (| = alternatives), not only when its path matches gold_paths — robust to wiki folder renames that stale path-based gold")
 	fs.IntVar(&cfg.holdoutPct, "holdout-pct", 0, "hold out this %% of cases (stable hash of case ID) as a test split; 0 = use all")
 	fs.StringVar(&cfg.split, "split", "all", "which split to score when --holdout-pct>0: all|train|test")
 	if err := fs.Parse(args); err != nil {
@@ -288,13 +293,19 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
 
+	var content contentMatcher
+	if cfg.content {
+		content = newContentMatcher(cfg.wikiDir)
+		fmt.Fprintln(stdout, "== content-aware scoring: a hit also counts when the page body holds every must_contain token")
+	}
+
 	var result benchmarkResult
 	if cfg.byCategory {
 		optionStore, ok := store.(benchmarkOptionStore)
 		if !ok {
 			return fmt.Errorf("store does not expose stage-specific search required by --by-category")
 		}
-		reportByCategory(ctx, optionStore, cases, cfg.k, stdout)
+		reportByCategory(ctx, optionStore, cases, cfg.k, stdout, content)
 		return nil
 	}
 	if cfg.dumpSignals {
@@ -315,7 +326,7 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			modeResult := evaluateCasesWithSearch(ctx, cases, cfg.k, cfg.verbose, stdout, func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
 				report, searchErr := optionStore.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{Mode: mode})
 				return report.Results, searchErr
-			})
+			}, content)
 			if err := modeResult.validate(); err != nil {
 				return fmt.Errorf("mode %s: %w", mode, err)
 			}
@@ -325,7 +336,7 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			}
 		}
 	} else {
-		result = evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout)
+		result = evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout, content)
 		if err := result.validate(); err != nil {
 			return err
 		}
@@ -441,8 +452,9 @@ func evaluateCases(
 	k int,
 	verbose bool,
 	stdout io.Writer,
+	content contentMatcher,
 ) benchmarkResult {
-	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, store.Search)
+	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, store.Search, content)
 }
 
 func evaluateCasesWithSearch(
@@ -452,6 +464,7 @@ func evaluateCasesWithSearch(
 	verbose bool,
 	stdout io.Writer,
 	search func(context.Context, string, int) ([]wiki.SearchResult, error),
+	content contentMatcher,
 ) benchmarkResult {
 	var result benchmarkResult
 	for _, c := range cases {
@@ -466,8 +479,8 @@ func evaluateCasesWithSearch(
 			continue
 		}
 		result.latencies = append(result.latencies, elapsed)
-		rank := findGoldRank(matches, c.GoldPaths, k)
-		result.record(rank, rankingQuality(matches, c.GoldPaths, k))
+		rank := findGoldRank(matches, c, k, content)
+		result.record(rank, rankingQuality(matches, c, k, content))
 		if verbose {
 			writeCaseResult(stdout, c, matches, rank)
 		}
@@ -491,15 +504,73 @@ func (r benchmarkResult) latencyPercentile(percentile float64) time.Duration {
 	return values[index]
 }
 
-func findGoldRank(results []wiki.SearchResult, goldPaths []string, k int) int {
+// contentMatcher reports whether a result page satisfies a case's answer tokens.
+// nil disables content-aware scoring (path-only). Built over the wiki dir so it
+// reads the exact tree the bench searched.
+type contentMatcher func(path string, mustContain []string) bool
+
+// newContentMatcher reads page bodies from wikiDir and reports a hit when every
+// must_contain token appears (a "a|b" token is satisfied by ANY alternative).
+// Empty must_contain never matches (falls back to path-only). A page cache keeps
+// repeated reads across the top-K window cheap.
+func newContentMatcher(wikiDir string) contentMatcher {
+	cache := make(map[string]string)
+	read := func(rel string) string {
+		if b, ok := cache[rel]; ok {
+			return b
+		}
+		name := rel
+		if !strings.HasSuffix(name, ".md") {
+			name += ".md"
+		}
+		data, err := os.ReadFile(filepath.Join(wikiDir, name))
+		body := ""
+		if err == nil {
+			body = string(data)
+		}
+		cache[rel] = body
+		return body
+	}
+	return func(path string, mustContain []string) bool {
+		if len(mustContain) == 0 {
+			return false
+		}
+		body := read(path)
+		if body == "" {
+			return false
+		}
+		for _, tok := range mustContain {
+			ok := false
+			for _, alt := range strings.Split(tok, "|") {
+				if alt != "" && strings.Contains(body, alt) {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func caseHit(result wiki.SearchResult, c goldCase, content contentMatcher) bool {
+	for _, gold := range c.GoldPaths {
+		if pathHit(gold, result.Path) {
+			return true
+		}
+	}
+	return content != nil && content(result.Path, c.MustContain)
+}
+
+func findGoldRank(results []wiki.SearchResult, c goldCase, k int, content contentMatcher) int {
 	for i, result := range results {
 		if i >= k {
 			break
 		}
-		for _, gold := range goldPaths {
-			if pathHit(gold, result.Path) {
-				return i
-			}
+		if caseHit(result, c, content) {
+			return i
 		}
 	}
 	return -1
@@ -514,12 +585,14 @@ type qualityMetrics struct {
 	f1K        float64
 }
 
-func rankingQuality(results []wiki.SearchResult, goldPaths []string, k int) qualityMetrics {
+func rankingQuality(results []wiki.SearchResult, c goldCase, k int, content contentMatcher) qualityMetrics {
+	goldPaths := c.GoldPaths
 	recallAt := func(limit int) float64 {
 		if len(goldPaths) == 0 {
 			return 0
 		}
 		matched := make([]bool, len(goldPaths))
+		contentSeen := false
 		for i, result := range results {
 			if i >= limit {
 				break
@@ -529,12 +602,20 @@ func rankingQuality(results []wiki.SearchResult, goldPaths []string, k int) qual
 					matched[goldIndex] = true
 				}
 			}
+			if content != nil && content(result.Path, c.MustContain) {
+				contentSeen = true
+			}
 		}
 		count := 0
 		for _, ok := range matched {
 			if ok {
 				count++
 			}
+		}
+		// Content-aware: an answer-bearing page satisfies at least one gold slot
+		// even when its (post-rename) path matches no gold_paths entry.
+		if contentSeen && count == 0 {
+			count = 1
 		}
 		return float64(count) / float64(len(goldPaths))
 	}
@@ -543,11 +624,8 @@ func rankingQuality(results []wiki.SearchResult, goldPaths []string, k int) qual
 		if i >= k {
 			break
 		}
-		for _, gold := range goldPaths {
-			if pathHit(gold, result.Path) {
-				relevant++
-				break
-			}
+		if caseHit(result, c, content) {
+			relevant++
 		}
 	}
 	precision := 0.0
@@ -653,6 +731,7 @@ func reportByCategory(
 	cases []goldCase,
 	k int,
 	stdout io.Writer,
+	content contentMatcher,
 ) {
 	modes := []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull}
 	searchFor := func(mode wiki.SearchMode) func(context.Context, string, int) ([]wiki.SearchResult, error) {
@@ -690,7 +769,7 @@ func reportByCategory(
 		p1 := make(map[wiki.SearchMode]float64, len(modes))
 		var scored int
 		for _, mode := range modes {
-			res := evaluateCasesWithSearch(ctx, grp, k, false, io.Discard, searchFor(mode))
+			res := evaluateCasesWithSearch(ctx, grp, k, false, io.Discard, searchFor(mode), content)
 			scored = res.scored
 			if res.scored > 0 {
 				p1[mode] = 100 * float64(res.hit1) / float64(res.scored)
