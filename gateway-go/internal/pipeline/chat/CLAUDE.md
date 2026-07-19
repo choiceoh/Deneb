@@ -15,7 +15,7 @@
 | `web/` | `web` 도구 백엔드: fetch/HTML 전처리/youtube/검색 escalate/stealth, singleflight+캐시 | — |
 | `linkenrichment/` | 입력 사용자 메시지 링크의 URL 추출, bounded 병렬 fetch, HTML/YouTube 변환, panic 격리와 start/join/cancel 수명주기 | chat root 타입을 import하지 않고 좁은 `Config`/`Sanitizer` 계약만 소비 |
 | `streaming/` | `Broadcaster` — 턴 이벤트 SSE 방출 | — |
-| `knowledge/` | `knowledge` 도구 → `domain/knowledge.Router` 얇은 어댑터 | — |
+| `knowledge/` | `knowledge` 도구 → `domain/knowledge`'s `Router` 얇은 어댑터 | — |
 | `denebui/` | deneb-ui 블록 검증·저작. wire 포맷 = **라벨 HTML v2**(`html.go`, 그래머: `docs/research/deneb-ui-html.md`; legacy JSON은 구 트랜스크립트 표시용 strict 경로). 서버 조립 collapsed 카드(메일 등) + 시스템 프롬프트 소통 섹션이 일반 응답 카드 사용을 허용([project_kaiui_server_assembly]) | — |
 | `toolpreset/` (형제: `pipeline/toolpreset/`) | 서브에이전트 도구 프리셋(implementer 등) | — |
 

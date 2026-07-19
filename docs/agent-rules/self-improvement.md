@@ -18,15 +18,15 @@ things it shouldn't.
 
 | Entry | Caller | When |
 |---|---|---|
-| `LogGenesis` (`tracker.go`) | session pipeline | After a skill-worthy session — records `SkillActivityGenesis`, calls `markSkillAgentCreatedLocked` (`curator.go`) |
-| `maybeFireEvolveLocked` (`tracker.go`) | via `LogGenesis` | Event-driven: every `DefaultEvolveEventThreshold` (3) new skills, min-gap respected |
+| `LogGenesis` (`genesis/tracker.go`) | session pipeline | After a skill-worthy session — records `SkillActivityGenesis`, calls `markSkillAgentCreatedLocked` (`curator.go`) |
+| `maybeFireEvolveLocked` (`genesis/tracker.go`) | via `LogGenesis` | Event-driven: every `DefaultEvolveEventThreshold` (3) new skills, min-gap respected |
 | `EvolveUnderperformers` (`evolver.go`) | `autonomous.PeriodicTask` | Background cycle over underperforming skills |
 | `EvolveSkill` (`evolver.go`) | skill-review fork / explicit | One skill, optionally with a `reviewFinding` directive |
 | `Nudger` (`nudger.go`) | session runtime, mid-session | Every `DefaultNudgeInterval` (3) tool calls; strictly background |
 
 ## End-to-End Flow
 
-1. **Session completes** → `LogGenesis` records the activity and marks the skill agent-created (`tracker.go` → `curator.go:markSkillAgentCreatedLocked`).
+1. **Session completes** → `LogGenesis` records the activity and marks the skill agent-created (`genesis/tracker.go` → `curator.go:markSkillAgentCreatedLocked`).
 2. **Threshold check** → `maybeFireEvolveLocked` fires the evolve trigger at 3 new skills, respecting a min-gap.
 3. **Skill generation** → the model generates `SKILL.md`; `Persist` writes to the managed dir. `ErrSkillDeduped` (`generation/service.go:54`) is an intentional skip, not a failure.
 4. **Catalog registration** → discovered by precedence `bundled < managed` (see `skills/CLAUDE.md`).
@@ -54,7 +54,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | File | Role |
 |---|---|
 | `evolver.go` | `Evolver` — rewrite orchestrator (~844 LOC) |
-| `tracker.go` | `Tracker` — activity log, lifecycle, event triggers, usage-source gate |
+| `genesis/tracker.go` | `Tracker` — activity log, lifecycle, event triggers, usage-source gate |
 | `generation/service.go` | `Service`, `Config`, generation/persist orchestration |
 | `curator.go` | Staleness classification + archive; `markSkillAgentCreatedLocked` |
 | `nudger.go` | Mid-session background nudging (shares Service cooldown / `MaxSkillsPerDay`) |
@@ -70,7 +70,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `failure_intervention_router.go` | Failure origin → cheapest intervention surface advisory routing (`shadow`; never changes dispatch or target policy) |
 | `meta_evolution.go` | L2 slow loop — weekly meta-artifact revision (evolve/judge prompts) with epoch benches, auto-adopt + rollback watch |
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
-| `rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
+| `genesis/rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
 
 ## Surface Tiers (`surfaces/surfaces.go`)
 
@@ -84,11 +84,11 @@ attempt; it does not mean the change shipped. Delivery advances through
 entries lead so they cannot be shadowed. `classifyProposalSurfaces` applies this
 gate when a candidate is recorded — source code is never a self-edit target.
 
-## Usage Sources — the success-rate gate (`tracker.go`)
+## Usage Sources — the success-rate gate (`genesis/tracker.go`)
 
 Only `real` usage feeds the evolver's success-rate gate. Conflating the review
 fork's self-activity with real-world outcome drove the email-analysis evolve
-thrash (`tracker.go:58`, PR #2328 — 6 evolves in ~2 days on one skill, undetected).
+thrash (`genesis/tracker.go:58`, PR #2328 — 6 evolves in ~2 days on one skill, undetected).
 
 | Source | Feeds evolver gate? |
 |---|---|

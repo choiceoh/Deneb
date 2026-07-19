@@ -172,7 +172,7 @@ Children: `POST /gw/gw999A03` `{ "upperMenuNo": "406000000" }` (and recurse).
 | 내 인사 상세 | `POST /personal/hpm0110/selectEmpDetail` | needs fuller body | SERVER ERROR (−1) |
 | 표시 필드 | `POST /personal/hpm0110/getVisibleList` | `{}` | confirmed (HTTP 200 array) |
 
-Chat wiring: `groupware` `area=people` → reader `listPeople` (+ `DENEB_PEOPLE_JSON` → wiki enrich + `org.Load` name match). **Amaranth has no separate org-chart POST found**; org affiliation for agents is still Deneb `org.json` + person `deptNm`/`divNm`.
+Chat wiring: `groupware` `area=people` → reader `listPeople` (+ `DENEB_PEOPLE_JSON` → wiki enrich + `org.Load` name match). **Amaranth has no separate org-chart POST found**; org affiliation for agents is still Deneb `org.json` + person `deptNm`/`divNm`. <!-- docref:ignore -->
 
 ### Confirmed leave / attendance (read)
 
@@ -218,7 +218,7 @@ Assets: `/modules/personal/asset-manifest.json`, `/modules/human/asset-manifest.
 
 | Gap | Notes |
 |-----|-------|
-| **조직도 / 부서 트리 API** | No dedicated dept/org-tree POST found. `ApAperUserCode` helpTy aliases ≠ dept list. Affiliation = person detail `divNm`/`deptNm` + Deneb `org.json`. |
+| **조직도 / 부서 트리 API** | No dedicated dept/org-tree POST found. `ApAperUserCode` helpTy aliases ≠ dept list. Affiliation = person detail `divNm`/`deptNm` + Deneb `org.json`. | <!-- docref:ignore -->
 | 주소록 `HPM0310` list body | Menu present; `/personal/hpm0310/0hp00001` 404 — real op names still in lazy chunks / need Playwright capture |
 | `hpd0220` / `hrd0250` full filter body | Date keys alone insufficient |
 | Wire leave/attendance into chat | Not yet — candidates: personal leave `hpd0550`, company leave `hrd0570` (permission-sensitive) |
@@ -238,13 +238,13 @@ Often loaded beside ERP grids:
 | `POST /logis/logisCommon/getCompanyInfo` | Company profile |
 | `POST /logis/logisCommon/selectGisu` | 기수 |
 
-Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/modules/purchase`, `/modules/system`, `/modules/bp`, `/modules/personal`, `/modules/human` (+ each `asset-manifest.json`).
+Micro frontend assets (debug only): `/modules/financial`, `/modules/logis`, `/modules/purchase`, `/modules/system`, `/modules/bp`, `/modules/personal`, `/modules/human` (+ each `asset-manifest.json`). <!-- docref:ignore -->
 
 ## Still open (pass 3+)
 
 | Gap | Notes |
 |-----|-------|
-| `aca2010/getList` request body | Screen loads helpers only; 조회 click did not emit list POST with dates |
+| `aca2010/getList` request body | Screen loads helpers only; 조회 click did not emit list POST with dates | <!-- docref:ignore -->
 | `ACA3010` 경비전표 | Direct hash bounced to `#/` |
 | `ACN4000` 프로젝트 list API | Need leaf navigation + network capture |
 | `BSB0020` 거래처단가 | Hash opened; no business POST captured |
@@ -272,7 +272,7 @@ Playwright: login → open `#/BL/BLG0070/BLG0070` (etc.) → capture POST bodies
 ## Field-level facts confirmed live (2026-07-16)
 
 Verified against full-history reads (2020→) while porting this contract into
-`choiceoh/solarflow` (`rpa/amaranth-reader`). These are payload facts, not
+`choiceoh/solarflow` (`rpa/amaranth-reader`). These are payload facts, not <!-- docref:ignore -->
 guesses — reuse instead of re-probing:
 
 | Screen | Confirmed facts |

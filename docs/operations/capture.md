@@ -102,7 +102,7 @@ Operator assets under the workspace `topics/` directory:
 | `plaud-glossary.md` | Canonical terms + 원문→교정 pairs (sliced per meeting) |
 | `plaud-correction.md` | ASR correction instructions |
 | `plaud-do-not-correct.md` | Forbidden false corrections |
-| `plaud-promote-pending.json` | Sighting counters before auto-promote (≥2 recordings) |
+| `plaud-promote-pending.json` | Sighting counters before auto-promote (≥2 recordings) | <!-- docref:ignore -->
 
 ASR hotwords also merge glossary `From`/`To` terms (with wiki +
 contacts). Disable the worker with `DENEB_PLAUD_RECORDINGS_DISABLE=1`. Token

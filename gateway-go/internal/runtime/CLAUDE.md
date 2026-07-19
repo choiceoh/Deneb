@@ -7,9 +7,9 @@
 | 경로 | 역할 |
 |---|---|
 | `server/` | HTTP+SSE 서버, RPC 등록 배선, 배경 서브시스템·태스크 (~90 소스 + ~65 테스트 파일, ↓ 파일 클러스터) |
-| `rpc/` | 레지스트리 기반 RPC 디스패처. `dispatch.go`/`methods.go`/`register.go`/`workerpool.go` |
+| `rpc/` | 레지스트리 기반 RPC 디스패처. `dispatch.go`/`methods.go`/`rpc/register.go`/`workerpool.go` |
 | `rpc/handler/<domain>/` | 도메인별 핸들러(agent·chat·session·skill·wiki·process·observe·insights·handlerminiapp·handlerevents·provider·system·gateway·checkpoint). `Deps` 구조체 + `Methods(deps)`만 노출 |
-| `rpc/rpcutil/` | `hub/gateway_hub.go`(서비스 컨테이너 — 읽기 접근자·late-bind setter·phase 헬퍼 외 행위는 `Broadcast`/`Validate`뿐; `hub_alias.go`가 rpcutil 레벨 재익스포트), `helpers.go` |
+| `rpc/rpcutil/` | `hub/gateway_hub.go`(서비스 컨테이너 — 읽기 접근자·late-bind setter·phase 헬퍼 외 행위는 `Broadcast`/`Validate`뿐; `hub_alias.go`가 rpcutil 레벨 재익스포트), `rpcutil/helpers.go` |
 | `../../core/rpcerr/`·`rpc/rpctest/` | 에러 타입 / 테스트 헬퍼 |
 | `../domain/session/` | 세션 도메인 상태기계(`IDLE→RUNNING→DONE/FAILED/KILLED/TIMEOUT`), 전이 검증, 이벤트 pub/sub 버스. runtime보다 아래 계층이라 pipeline/platform도 역의존 없이 사용 |
 | `bootstrap/` | 기동 시퀀스 조립 |
@@ -20,7 +20,7 @@
 
 ### server/ 파일 클러스터 (이름 규칙으로 읽기)
 
-- **`server*.go`** — 서버 코어: `server.go`(타입), `server_http*.go`(라우팅·miniapp·cron·files·fleet·update·gzip·event_ingest), `server_lifecycle.go`, `server_rpc*.go`(RPC 등록), `server_options.go`, `server_chat_config.go`.
+- **`server*.go`** — 서버 코어: `server/server.go`(타입), `server_http*.go`(라우팅·miniapp·cron·files·fleet·update·gzip·event_ingest), `server_lifecycle.go`, `server_rpc*.go`(RPC 등록), `server_options.go`, `server_chat_config.go`.
 - **`*_subsystem.go`** — 배경 서브시스템: `autonomous`·`genesis`·`infra`·`memory`·`workflow`. 각자 PeriodicTask/배경 루프를 소유.
 - **`*_task.go`** — 배경 태스크: `boot_task`·`heartbeat_task`·`goal_task`.
 - **`method_registry.go`** — ★Deps 배선 단일 지점(인라인 리터럴). 어댑터 레이어 없음.

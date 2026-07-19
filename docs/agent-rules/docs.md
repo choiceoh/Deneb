@@ -39,7 +39,7 @@ globs: ["docs/**"]
   - Icons use the Lucide library (e.g. `icon="rocket"`, `icon="settings"`, `icon="message-square"`).
 - Images: use root-relative paths (`/assets/...`). For light/dark mode, use paired `<img>` tags with `class="dark:hidden"` and `class="hidden dark:block"`.
 - Tables: standard Markdown tables for feature matrices, mode mappings, option lists.
-- File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`).
+- File conventions: all doc files are `.md` (Mintlify processes MDX syntax transparently). File naming: lowercase, hyphenated (`getting-started.md`, `voice-wake.md`). <!-- docref:ignore -->
 - Local preview: run `npx mintlify dev` from `docs/` (the repo has no pnpm docs scripts).
 
 ## Documentation Commands

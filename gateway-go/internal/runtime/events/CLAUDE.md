@@ -2,7 +2,7 @@
 
 Owns SSE/event fan-out for the gateway: `Broadcaster` delivery, typed
 `Publisher` helpers, and gateway subscription routing. Payloads at the
-package boundary are `RawJSON` (alias of `json.RawMessage`).
+package boundary are `EventPayload` (opaque JSON bytes).
 
 ## Entry points
 
@@ -11,13 +11,13 @@ package boundary are `RawJSON` (alias of `json.RawMessage`).
 - `publisher.go` — `NewPublisher`, `Publisher` session/agent helpers
 - `gateway_subscriptions.go` — `NewGatewayEventSubscriptions`,
   `AgentEvent`, `TranscriptUpdate`
-- `raw_json.go` — `RawJSON`, `IsNullJSON`
+- `event_payload.go` — `EventPayload`, `PayloadFromRaw`, `PayloadOf`
 
 ## Dependency direction and invariants
 
 - **Dependency direction / port boundary**: events is a leaf transport
   package — it must not import chat, wiki, or handler packages. Callers
-  marshal typed payloads to `RawJSON` before `Broadcast`.
+  marshal typed payloads to `EventPayload` (`PayloadOf`) before `Broadcast`.
 - **Invariant**: subscriber filters must never panic a broadcast loop;
   taps observe after encode and must tolerate bad payloads; session
   message delivery only reaches connIDs explicitly subscribed to that

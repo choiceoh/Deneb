@@ -34,7 +34,7 @@ thread/sender 문맥을, native mail UI에는 Gmail-like repository 계약을
   이 패키지에 넣어 transport와 분석 계층을 결합하지 않는다.
 - thread ancestor가 sender history보다 우선하며 fetch 수와 References 탐색
   상한을 보존한다. 한 message의 실패가 무제한 scan으로 번지면 안 된다.
-- imported mail의 날짜 범위는 Date header 기준 `SENTSINCE/SENTBEFORE`다.
+- imported mail의 날짜 범위는 Date header 기준 `SENTSINCE/SENTBEFORE`다. <!-- docref:ignore -->
   INTERNALDATE로 되돌리면 bulk import가 일자별 조회에서 사라진다.
   `SENTSINCE`가 서버에서 NO로 거부되면(`uidSearchSentAware`) ALL/나머지
   criteria로 재검색하고 Date header 반개구간(`[SentSince, SentBefore)`)으로

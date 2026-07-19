@@ -14,10 +14,10 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
 > **2026-07-06 srv4 통일**: 게이트웨이 호스트(srv4)가 직접 pull→빌드→핫스왑한다.
 > 옛 srv1 원격 빌드·배송 오케스트레이터는 은퇴했다 (srv1 유닛은 `.bak` 보존).
 
-- 머지 → srv4 의 systemd **user** 타이머 `deneb-auto-deploy.timer`(1분 간격,
+- 머지 → srv4 의 systemd **user** 타이머 `scripts/systemd/deneb-auto-deploy.timer`(1분 간격,
   quiet 300초 — 연속 머지는 정착 후 1회 배포)가 `scripts/deploy/auto-deploy.sh`
   를 실행: origin/main 새 head 감지 시 `make gateway-prod` 빌드 후
-  `deneb-gateway.service` 를 SIGUSR1 **핫스왑**. 로그: srv4 `/tmp/deneb-auto-deploy.log`.
+  `deneb-gateway.service` 를 SIGUSR1 **핫스왑**. 로그: srv4 `/tmp/deneb-auto-deploy.log`. <!-- docref:ignore -->
 - **턴-인지 idle 게이트**: 스왑 직전 `scripts/deploy/wait-idle.sh`가 `/health`의
   `activity.active_turns`가 0이 될 때까지 대기(기본 420초 — 5분 턴 데드라인 초과,
   `DENEB_DEPLOY_IDLE_WAIT_SEC`, 0=비활성; 타임아웃 시 그대로 진행 — 배포를 영구
@@ -46,7 +46,7 @@ globs: ["scripts/deploy*", "scripts/dev/publish-apk.sh", "client-android/app/and
   `~/.deneb/auto-deploy.unverified-head`에 남고 다음 no-op tick이 재시도한다.
   워치는 기본 600초 동안
   30초 간격으로 `/health`와 게이트웨이 저널 ERROR 수를 감시하고, health 연속 2회
-  실패 또는 ERROR 예산(기본 30) 초과 시 **직전 바이너리(`dist/deneb-gateway.bak-prev`)
+  실패 또는 ERROR 예산(기본 30) 초과 시 **직전 바이너리(`dist/deneb-gateway.bak-prev`) <!-- docref:ignore -->
   복원 + MainPID `kill -TERM`**(systemd `Restart=always`가 복원 바이너리를 재기동)으로
   자동 롤백한다 (git 무접촉; 유닛이 `RefuseManualStop=yes`라 `systemctl restart`는
   거부됨 — 2026-07-12 실측; 다운그레이드 가드는 SIGUSR1 경로에만 있어 hard restart가
@@ -103,7 +103,7 @@ systemctl --user daemon-reload && systemctl --user enable --now deneb-coding-dis
 
 ## 수동 배포 (폴백)
 
-- `make gateway-prod` — 프로덕션 바이너리 (`dist/deneb-gateway`).
+- `make gateway-prod` — 프로덕션 바이너리 (`dist/deneb-gateway`). <!-- docref:ignore -->
 - 재시작: `scripts/deploy/deploy.sh` (systemd 감지 시 SIGUSR1 핫스왑) 또는
   `systemctl --user restart deneb-gateway`.
 - 검증: `curl -s localhost:18789/health`, `journalctl --user -u deneb-gateway -n 120`.
@@ -112,9 +112,9 @@ systemctl --user daemon-reload && systemctl --user enable --now deneb-coding-dis
 
 > 여러 에이전트 worktree가 공유 serve dir(`~/.cache/deneb-apk`, http.server `:19010`)에 동시 배포한다. 충돌을 막는 장치가 코드에 있으니 **반드시 단일 스크립트로만 배포**한다.
 
-- **APK 배포는 `scripts/dev/publish-apk.sh` 경유만.** 직접 `assembleFossDebug` + `cp` + 수동 `version.json` 작성 금지 — 동시 빌드가 같은 파일명을 서로 덮어쓴다 (실제로 두 세션의 155 빌드가 충돌한 이력).
+- **APK 배포는 `scripts/dev/publish-apk.sh` 경유만.** 직접 `assembleFossDebug` + `cp` + 수동 `version.json` 작성 금지 — 동시 빌드가 같은 파일명을 서로 덮어쓴다 (실제로 두 세션의 155 빌드가 충돌한 이력). <!-- docref:ignore -->
 - APK 파일명 = **versionCode + 커밋 해시** (`deneb-<code>-<sha>-<variant>.apk`, `androidApp/build.gradle.kts`). semantic versionName(2.9.x)은 제거됨 — 빌드는 code 로만 식별. 다른 커밋 빌드는 안 덮어쓰고 전부 보존된다.
-- 스크립트가 빌드 + serve dir 복사 + `version.json`(실제 산출물의 code/url/notes) 생성을 한 번에 한다.
+- 스크립트가 빌드 + serve dir 복사 + `version.json`(실제 산출물의 code/url/notes) 생성을 한 번에 한다. <!-- docref:ignore -->
 - **fossRelease 는 R8 매핑도 함께 게시** — `deneb-<code>-<sha>-fossRelease.mapping.prt` (AGP 9.2 파티션 포맷 `.prt`). 크래시 스택 리트레이스: `java -cp $ANDROID_HOME/build-tools/<최신>/lib/d8.jar com.android.tools.r8.retrace.Retrace --partition-map <mapping.prt> <stack>` — cmdline-tools 의 구 retrace(8.2.33)는 `.prt` 를 파싱하지 못한다. 매핑 부재 시 경고만 하고 게시는 계속된다. (근거: 2026-07-12 크래시 트리아지 — 빌드 609/611/614 는 매핑이 어디에도 없어 커밋별 `git archive` + `minifyFossReleaseWithR8` 재빌드로 재생성해야 했다.)
 - **빌드 전 스모크 게이트(자동)**: 빌드에 들어가기 전에 `native-app-smoke.sh`(라이브 화면 워크)를 돌려 런타임 렌더 크래시(#1959류)를 막는다. 크래시/wrong-screen 감지 시 publish 중단, 하네스 기동 불가 시 warn+continue, `DENEB_SKIP_SMOKE=1` 로 우회. 상세: `docs/agent-rules/native-live-app.md`.
 - env: `DENEB_APK_DIR`(기본 `~/.cache/deneb-apk`), `DENEB_APK_BASE_URL`(기본 localhost — 배포 머신에서 tailnet URL로 export), `DENEB_APK_VARIANT`(기본 **fossRelease** — R8 프로덕션 빌드 `packageFossReleaseUniversalApk`; debug 변형은 opt-in), `ANDROID_HOME`, `DENEB_SKIP_SMOKE`(스모크 게이트 우회), `DENEB_APK_SIGNING_ENV`(release 서명 env 파일, 기본 `~/.deneb/apk-signing.env` — ↓ "APK release 서명").

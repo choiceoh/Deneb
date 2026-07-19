@@ -1,7 +1,7 @@
 # MCP stdio client
 
 Owns the minimal Model Context Protocol client over stdio JSON-RPC: spawn a
-configured server command, handshake once, then `tools/list` / `tools/call` /
+configured server command, handshake once, then `tools/list` / `tools/call` / <!-- docref:ignore -->
 `ping`. Resources, prompts, and sampling are intentionally out of scope.
 
 ## Entry points

@@ -85,7 +85,7 @@ review와 delivery를 분리하고, `watch_passed` 이후에만 `applied`를 파
 - 영속 파일은 `~/.deneb/data/` 아래 append-only JSONL이다. 주요 원장은
   `skill_usage.jsonl`, `skill_genesis_log.jsonl`, `skill_validation_cases.jsonl`,
   `skill_rejected_edits.jsonl`, `meta_evolution_log.jsonl`,
-  `judge_accuracy_log.jsonl`이며 자기 브레이크 마커는 `auto_adopt_freeze.json`이다.
+  `judge_accuracy_log.jsonl`이며 자기 브레이크 마커는 `auto_adopt_freeze.json`이다. <!-- docref:ignore -->
 
 ## 함정
 

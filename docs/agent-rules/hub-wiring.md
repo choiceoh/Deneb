@@ -20,7 +20,7 @@ Exception: `registerBuiltinMethods()` in `server_rpc.go` (server-state closures)
 
 ### Rule 2: Hub is built only in `buildHub()`
 
-`server/gateway_hub.go:buildHub()` is the sole constructor (a thin wrapper over
+`server/gateway_hub.go`'s `buildHub()` is the sole constructor (a thin wrapper over
 `rpcutil.NewGatewayHub`). Hub fields are private with read-only accessors.
 Post-construction mutation is limited to late-bound optional services
 (`SetWikiStore`, `SetLocalAIHub`, `SetEmbeddingClient`, `SetContactsStore`,
