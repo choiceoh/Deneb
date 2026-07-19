@@ -57,7 +57,11 @@ done
 # ── Background sync (detached, fire-and-forget) ───────────────────────────
 # Login shell so the profile PATH (node + codegraph) is restored.  Detached
 # so the session continues immediately — the index updates a moment later.
-( cd "$ROOT" && bash -lc "$CG sync" >/dev/null 2>&1 ) &
+# After the sync, re-inject rpcmap's string-keyed dispatch edges (synthetic
+# rows survive incremental syncs, but a rebuild drops them; re-running is
+# idempotent and <1s, so just always chase the sync with it).
+( cd "$ROOT" && bash -lc "$CG sync" >/dev/null 2>&1; \
+  python3 "$ROOT/scripts/dev/rpcmap_codegraph_sync.py" >/dev/null 2>&1 ) &
 disown 2>/dev/null || true
 
 exit 0
