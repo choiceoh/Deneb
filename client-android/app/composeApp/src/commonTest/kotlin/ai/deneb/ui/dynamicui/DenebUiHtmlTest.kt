@@ -362,6 +362,7 @@ class DenebUiHtmlTest {
         assertEquals("발신 — 양도현", assertIs<TextNode>(kids[2]).value)
         assertIs<DividerNode>(kids[3])
     }
+
     @Test
     fun `longpress attaches a press-hold callback to a row`() {
         val row = assertIs<RowNode>(

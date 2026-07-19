@@ -9,8 +9,10 @@ import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.Map
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,8 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -94,13 +97,31 @@ internal fun RenderRow(
     // morning-card deadline row → mark done). Interactive rows only; the
     // combinedClickable long-press haptic fires automatically (foundation 1.9+).
     val longPress = node.longPressAction as? CallbackAction
+    // Immediate local feedback: once long-pressed, strike through + dim the row
+    // so "완료" reads instantly, even though the durable state (wiki due_done)
+    // and the card body only refresh on the next cycle. Keyed on the action so
+    // it persists across recompositions of the same card.
+    var marked by remember(longPress) { mutableStateOf(false) }
+    val strikeColor = MaterialTheme.colorScheme.onSurface
     var rowModifier: Modifier = Modifier.fillMaxWidth().wrapContentHeight()
     if (isInteractive && longPress != null) {
         @OptIn(ExperimentalFoundationApi::class)
         rowModifier = rowModifier.combinedClickable(
             onClick = {},
-            onLongClick = { onCallback(longPress.event, longPress.dataAsStrings.orEmpty()) },
+            onLongClick = {
+                marked = true
+                onCallback(longPress.event, longPress.dataAsStrings.orEmpty())
+            },
         )
+    }
+    if (marked) {
+        rowModifier = rowModifier
+            .alpha(0.5f)
+            .drawWithContent {
+                drawContent()
+                val y = size.height / 2f
+                drawLine(strikeColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 2f)
+            }
     }
     @OptIn(ExperimentalLayoutApi::class)
     FlowRow(

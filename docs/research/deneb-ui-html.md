@@ -124,7 +124,6 @@ press-hold 콜백을 단다 — 탭 `event=`와 별개(한 노드가 둘 다 가
 ~500ms 프레스홀드). 인터랙티브 카드에서만 발사. 예: 모닝 카드 마감 `<row>`를
 길게 눌러 완료 처리(`longpress="deadline_done" data-path="위키경로"`).
 
-
 | 속성 | UiAction | 비고 |
 |---|---|---|
 | `event="이벤트명"` | callback | `data-*="…"` → data 맵, `collect="id1,id2"` → collectFrom |

@@ -169,6 +169,9 @@ export function statCountUpFrame(value: string, progress: number): string {
 // mouse and touch; leaving/lifting before the threshold cancels.
 function LongPressRow({ onLongPress, children }: { onLongPress: () => void; children: ReactNode }) {
   const timer = useRef<number | null>(null);
+  // Immediate local feedback: strike through + dim once fired, matching the
+  // native renderer. Durable state (wiki due_done) refreshes on the next cycle.
+  const [marked, setMarked] = useState(false);
   const clear = () => {
     if (timer.current != null) {
       window.clearTimeout(timer.current);
@@ -179,13 +182,14 @@ function LongPressRow({ onLongPress, children }: { onLongPress: () => void; chil
     clear();
     timer.current = window.setTimeout(() => {
       timer.current = null;
+      setMarked(true);
       onLongPress();
     }, 500);
   };
   useEffect(() => clear, []);
   return (
     <div
-      className="dui-row dui-row-longpress"
+      className={"dui-row dui-row-longpress" + (marked ? " marked" : "")}
       onPointerDown={start}
       onPointerUp={clear}
       onPointerLeave={clear}
