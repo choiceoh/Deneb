@@ -332,6 +332,13 @@ type dreamCycle struct {
 	created     int
 	updated     int
 	userPages   int
+	// appliedPaths are the pages this cycle actually wrote (created or
+	// updated). The processed-capsule history records THESE, not the proposed
+	// paths — a dropped proposal never existed on disk, and recording it would
+	// poison the quality score's utility denominator with phantom pages that
+	// can never be recalled (measured 2026-07-19: AR-glasses proposals dropped
+	// by guards still dragged utility to 0).
+	appliedPaths []string
 }
 
 func newDreamCycle() *dreamCycle {
@@ -504,9 +511,10 @@ func (wd *WikiDreamer) finishFailedDreamSynthesis(cycle *dreamCycle) {
 }
 
 func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle) {
-	created, updated, userPages, oversized := wd.applyUpdates(ctx, cycle.updates)
+	created, updated, userPages, oversized, appliedPaths := wd.applyUpdates(ctx, cycle.updates)
 	cycle.created = created
 	cycle.updated = updated
+	cycle.appliedPaths = appliedPaths
 	cycle.userPages = userPages
 	cycle.report.WikiPagesCreated = created
 	cycle.report.WikiPagesUpdated = updated
@@ -705,7 +713,7 @@ func (wd *WikiDreamer) persistDreamProgress(cycle *dreamCycle, heldOffsets bool)
 		Proposed:  len(cycle.updates),
 		Created:   cycle.created,
 		Updated:   cycle.updated,
-		Paths:     updatePaths(cycle.updates),
+		Paths:     cycle.appliedPaths,
 	})
 	if err := wd.saveDiaryProcessState(cycle.scan.State); err != nil {
 		cycle.addPhaseError("diary-state-save: %v", err)

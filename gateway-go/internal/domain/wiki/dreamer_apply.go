@@ -271,6 +271,7 @@ func buildWikiSynthesisPromptWithRules(rules, indexContent, processedHistory, po
 const defaultWikiSynthesisRules = `## 규칙
 - 일시적인 내용(인사, 잡담)은 무시
 - 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
+- 수요 우선순위: 챗 회상 수요의 대부분은 프로젝트 페이지다(회상-히트 원장 실측 ~86%). 일지에 프로젝트 관련 사실과 일반 지식이 섞여 있으면 프로젝트 반영을 우선하고, 기타(세상 지식·시사·잡학) 페이지는 지속 참조 가치가 분명할 때만 만들어라 — 일회성 브라우징 주제는 자료/일지로 충분하다
 - 기존 페이지가 있으면 action:"update", 없으면 action:"create"
 - 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
 - 지식은 저장만 하지 말고 연결·정리하라. 다음 세션이 다시 추론하지 않도록 상호링크·모순 표시·정리 위치를 함께 결정한다
@@ -443,7 +444,7 @@ func newPageFromUpdate(u wikiUpdate, code string) *Page {
 // applyUpdates creates or updates wiki pages based on LLM instructions.
 // Returns (created, updated) counts, the 사용자-category subset of those writes
 // (userPages — the user model), and paths of oversized pages.
-func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated, userPages int, oversized []string) {
+func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated, userPages int, oversized []string, appliedPaths []string) {
 	maxBytes := wd.config.MaxPageBytes
 	// Snapshot existing codes once so filings inherit their project's frozen code
 	// (and new-project mints stay collision-free across this batch).
@@ -468,6 +469,9 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		}
 		created += outcome.created
 		updated += outcome.updated
+		if outcome.wrote {
+			appliedPaths = append(appliedPaths, u.Path)
+		}
 
 		// 사용자-category writes are the user model — counted separately so the
 		// dream report/notification surfaces how the model of the user itself
@@ -484,7 +488,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		}
 	}
 
-	return created, updated, userPages, oversized
+	return created, updated, userPages, oversized, appliedPaths
 }
 
 // prepareDreamUpdate performs deterministic path/content normalization and the
@@ -608,6 +612,10 @@ func (wd *WikiDreamer) persistDreamUpdate(u wikiUpdate, code string) dreamWriteO
 		}
 		return dreamWriteOutcome{updated: 1, wrote: true}
 	default:
+		// An action outside create/update is an LLM contract violation — dropped,
+		// but never silently: an unlogged drop cost a day of precision=0
+		// misdiagnosis (2026-07-19).
+		wd.logger.Warn("wiki-dream: unknown update action dropped", "action", u.Action, "path", u.Path)
 		return dreamWriteOutcome{}
 	}
 }
