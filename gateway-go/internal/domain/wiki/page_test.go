@@ -131,6 +131,7 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	page.Meta.PID = "p-pl2-001"
 	page.Meta.Capacity = 12.5
 	page.Meta.Stage = "계약협의"
+	page.Meta.Program = "비금-130mw"
 	page.Body = "# 테스트\n\n## 요약\n테스트 내용."
 
 	rendered := page.Render()
@@ -141,6 +142,9 @@ func TestPage_RenderRoundtrip(t *testing.T) {
 	}
 	if parsed.Meta.Stage != "계약협의" {
 		t.Errorf("stage roundtrip: got %q, want 계약협의", parsed.Meta.Stage)
+	}
+	if parsed.Meta.Program != "비금-130mw" {
+		t.Errorf("program roundtrip: got %q, want 비금-130mw", parsed.Meta.Program)
 	}
 	if parsed.Meta.ID != "test-page" {
 		t.Errorf("id roundtrip: got %q", parsed.Meta.ID)

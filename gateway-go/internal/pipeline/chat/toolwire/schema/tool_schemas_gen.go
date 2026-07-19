@@ -1139,6 +1139,10 @@ func WikiToolSchema() map[string]any {
 				"type":        "string",
 				"description": "write-site 전용 공정 일정: 사용전검사일 YYYY-MM-DD",
 			},
+			"program": map[string]any{
+				"type":        "string",
+				"description": "write 전용(프로젝트 대표페이지): 사업군(프로그램) — 한 벤처의 워크스트림인 형제 프로젝트들을 묶는 축 (예: '비금-130mw' — 케이블·커넥터·EPC 폴더가 공유). client(거래처) 아래의 중간 우산. 짧은 한글 슬러그, 기존 프로그램에 합류할 땐 기존 표기를 그대로 재사용(검색으로 확인). 단독 딜은 생략",
+			},
 			"project": map[string]any{
 				"type":        "string",
 				"description": "ingest 전용: 자료를 연결할 프로젝트 이름. 대표페이지가 존재해야 하며(오타 유령 폴더 방지 — 없으면 전역 프로젝트/자료/ 버킷에 저장), 연결 시 페이지가 프로젝트/<이름>/자료/에 놓이고 로그.md에 ingest 섹션이 append된다.",
