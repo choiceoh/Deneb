@@ -64,7 +64,9 @@ fun parseApprovalDocBody(raw: String): ApprovalDocSections {
         val t = lines[i].trimEnd()
         when {
             lineStart < 0 && t == "결재선" -> lineStart = i
+
             bodyStart < 0 && t == "본문" -> bodyStart = i
+
             approvalAttachHeader.matches(t) ->
                 if (t.contains('(')) {
                     attachStart = i
