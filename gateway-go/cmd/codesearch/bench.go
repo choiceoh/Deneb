@@ -31,19 +31,32 @@ var goldset = []struct {
 }
 
 func runBench(ctx context.Context, dir string, emb codesearch.Embedder) {
-	hitAt5 := 0
+	repo := repoRoot()
+	rr := reranker()
+	rrName := "none"
+	if rr != nil {
+		rrName = rr.Identity()
+	}
+	hitAt5, p1Base, p1RR := 0, 0, 0
 	for _, g := range goldset {
 		hits, err := codesearch.Search(ctx, dir, emb, g.query, 5)
 		if err != nil {
 			fatal(err)
 		}
+		ranked, err := codesearch.SearchRanked(ctx, repo, dir, emb, rr, g.query, 5)
+		if err != nil {
+			fatal(err)
+		}
+		if len(hits) > 0 && isGold(hits[0], g.want) {
+			p1Base++
+		}
+		if len(ranked) > 0 && isGold(ranked[0], g.want) {
+			p1RR++
+		}
 		ok := false
 		for _, h := range hits {
-			for _, w := range g.want {
-				if strings.Contains(strings.ToLower(h.File), strings.ToLower(w)) ||
-					strings.Contains(strings.ToLower(h.Qualified), strings.ToLower(w)) {
-					ok = true
-				}
+			if isGold(h, g.want) {
+				ok = true
 			}
 		}
 		mark := "MISS"
@@ -58,4 +71,15 @@ func runBench(ctx context.Context, dir string, emb codesearch.Embedder) {
 		fmt.Printf("%s  %-24s top1=%s\n", mark, g.query, top)
 	}
 	fmt.Printf("\nP@5(any-gold): %d/%d\n", hitAt5, len(goldset))
+	fmt.Printf("P@1 base=%d/%d  reranked(%s)=%d/%d\n", p1Base, len(goldset), rrName, p1RR, len(goldset))
+}
+
+func isGold(h codesearch.Hit, want []string) bool {
+	for _, w := range want {
+		if strings.Contains(strings.ToLower(h.File), strings.ToLower(w)) ||
+			strings.Contains(strings.ToLower(h.Qualified), strings.ToLower(w)) {
+			return true
+		}
+	}
+	return false
 }
