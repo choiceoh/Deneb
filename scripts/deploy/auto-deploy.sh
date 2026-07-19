@@ -54,7 +54,14 @@ RETRY_SEC="${DENEB_AUTO_DEPLOY_RETRY_SEC:-600}"
 # commit younger than this). A landing PR stack then produces ONE deploy
 # after it settles instead of one restart per merge. 0 disables the guard.
 QUIET_SEC="${DENEB_AUTO_DEPLOY_QUIET_SEC:-300}"
-WATCH_START_SEC="${DENEB_DEPLOY_WATCH_START_SEC:-15}"
+# How long to wait for the launched watcher to write its ready file. This MUST
+# cover deploy-watch's handoff budget: a new watcher blocks on the flock until
+# the PRIOR deploy's watcher yields (deploy-watch HANDOFF_SEC = POLL_SEC*2+15 =
+# 75s by default), then marks ready. With the old 15s value every back-to-back
+# landing (a PR stack) logged a false "unverified" ERROR that self-healed ~60s
+# later on the next tick — noise that also dinged the runtime-health error-rate.
+# 90s = the 75s handoff window + margin; the genuine-failure fallback stays.
+WATCH_START_SEC="${DENEB_DEPLOY_WATCH_START_SEC:-90}"
 
 log() {
     printf '%s  %s\n' "$(date -Iseconds)" "$*" >> "$LOG_FILE"
