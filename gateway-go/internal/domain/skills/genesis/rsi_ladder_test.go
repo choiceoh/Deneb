@@ -147,14 +147,49 @@ func TestLadderCalibrationRowReadyOnlyWhenAllEpochsReachBenchTarget(t *testing.T
 			}
 		}
 	}
-	seed(metaEpochProducer, ladderCalibrationBenchTarget)
-	seed(metaEpochEvaluator, ladderCalibrationBenchTarget)
+	seed(metaEpochProducer, ladderCalibrationBenchTargetFor(metaEpochProducer))
+	seed(metaEpochEvaluator, ladderCalibrationBenchTargetFor(metaEpochEvaluator))
 	if row := tr.ladderCalibrationRow(); row.State != ladderStateGrowing {
 		t.Fatalf("two of three epochs at target must stay accumulating: %+v", row)
 	}
-	seed(metaEpochGenesis, ladderCalibrationBenchTarget)
+	seed(metaEpochGenesis, ladderCalibrationBenchTargetFor(metaEpochGenesis))
 	if row := tr.ladderCalibrationRow(); row.State != ladderStateReady {
 		t.Fatalf("all epochs at target must read READY: %+v", row)
+	}
+}
+
+// Producer's per-epoch bench target is lower (5) than evaluator/genesis (10):
+// the producer shadow bench samples only when the model returns a scorable
+// body, so matching the target to its achievable rate lets the window close on
+// real (if thin) noise samples instead of stalling forever.
+func TestLadderCalibrationProducerTargetIsLowerThanDefault(t *testing.T) {
+	if got := ladderCalibrationBenchTargetFor(metaEpochProducer); got != ladderCalibrationBenchTargetProducer {
+		t.Errorf("producer target = %d, want %d", got, ladderCalibrationBenchTargetProducer)
+	}
+	for _, epoch := range []string{metaEpochEvaluator, metaEpochGenesis} {
+		if got := ladderCalibrationBenchTargetFor(epoch); got != ladderCalibrationBenchTargetDefault {
+			t.Errorf("%s target = %d, want default %d", epoch, got, ladderCalibrationBenchTargetDefault)
+		}
+	}
+	if ladderCalibrationBenchTargetProducer >= ladderCalibrationBenchTargetDefault {
+		t.Fatal("producer target must be strictly below the default")
+	}
+
+	// Producer met (5) but evaluator/genesis below their 10 must stay
+	// accumulating — the lower producer bar does not leak to other epochs.
+	tr := newTestTracker(t)
+	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
+		for i := 0; i < ladderCalibrationBenchTargetProducer; i++ {
+			if err := tr.LogMetaRevision(MetaRevisionRecord{
+				Epoch: epoch, Artifact: "a.md", Proposed: true,
+				BenchShadow: &producerBenchOutcome{Skills: 1},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if row := tr.ladderCalibrationRow(); row.State != ladderStateGrowing {
+		t.Fatalf("producer met (5) but evaluator/genesis below 10 must stay accumulating: %+v", row)
 	}
 }
 
@@ -164,7 +199,7 @@ func TestLadderCalibrationRowReadyOnlyWhenAllEpochsReachBenchTarget(t *testing.T
 func TestLadderCalibrationCountsAutoAdoptedCycles(t *testing.T) {
 	tr := newTestTracker(t)
 	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
-		for i := 0; i < ladderCalibrationBenchTarget; i++ {
+		for i := 0; i < ladderCalibrationBenchTargetFor(epoch); i++ {
 			if err := tr.LogMetaRevision(MetaRevisionRecord{
 				Epoch: epoch, Artifact: "a.md", Action: "auto_adopted",
 				BenchShadow: &producerBenchOutcome{Skills: 1},

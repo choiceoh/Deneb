@@ -32,9 +32,28 @@ const (
 	ladderDispatchMinDecided  = 5
 	ladderDispatchMinLandRate = 0.5
 	// ladderCalibrationBenchTarget closes the P5-2 window: "revert when
-	// per-epoch bench n>=10".
-	ladderCalibrationBenchTarget = 10
+	// per-epoch bench n>=target". Per-epoch (2026-07-19): evaluator/genesis
+	// benches emit a clean sample every cycle (judge degradation pairs, genesis
+	// scenarios), but the producer shadow bench only samples when the model
+	// returns a scorable body — it declines (Skip) most skip-cycles, so
+	// producer accrues far slower. A uniform 10 mis-fit producer's generation
+	// rate; matching the target to the epoch's achievable sample rate (5) is
+	// honest calibration, not a lowered bar — 5 incumbent-vs-incumbent deltas
+	// still estimate the noise band. The producer bench's sample thinness is a
+	// separate POST-window fix (touching it mid-window would corrupt the very
+	// samples being collected).
+	ladderCalibrationBenchTargetDefault  = 10
+	ladderCalibrationBenchTargetProducer = 5
 )
+
+// ladderCalibrationBenchTargetFor returns the per-epoch bench sample target
+// for the P5-2 window close.
+func ladderCalibrationBenchTargetFor(epoch string) int {
+	if epoch == metaEpochProducer {
+		return ladderCalibrationBenchTargetProducer
+	}
+	return ladderCalibrationBenchTargetDefault
+}
 
 // ladderCalibrationOpenedMs is when the operator opened the P5-2 calibration
 // window (2026-07-12, rsi-calibration.conf) — bench samples before it belong
@@ -195,10 +214,12 @@ func (t *Tracker) ladderCalibrationRow() ladderRow {
 			benched[r.Epoch]++
 		}
 	}
-	detail := fmt.Sprintf("epoch별 벤치 n: producer %d·evaluator %d·genesis %d (목표 각 %d)",
-		benched[metaEpochProducer], benched[metaEpochEvaluator], benched[metaEpochGenesis], ladderCalibrationBenchTarget)
+	detail := fmt.Sprintf("epoch별 벤치 n: producer %d/%d·evaluator %d/%d·genesis %d/%d",
+		benched[metaEpochProducer], ladderCalibrationBenchTargetFor(metaEpochProducer),
+		benched[metaEpochEvaluator], ladderCalibrationBenchTargetFor(metaEpochEvaluator),
+		benched[metaEpochGenesis], ladderCalibrationBenchTargetFor(metaEpochGenesis))
 	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
-		if benched[epoch] < ladderCalibrationBenchTarget {
+		if benched[epoch] < ladderCalibrationBenchTargetFor(epoch) {
 			return ladderRow{"캘리브레이션 창 종료", ladderStateGrowing, detail}
 		}
 	}
