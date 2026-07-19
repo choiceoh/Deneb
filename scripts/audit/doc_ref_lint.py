@@ -161,7 +161,12 @@ def file_line_count(repo: Path, rel: str) -> int:
         return 0
 
 
-def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
+def lint(
+    repo: Path,
+    docs: list[Path],
+    symbols: set[str] | None,
+    sym_locs: dict[str, dict[str, tuple[int, int]]] | None = None,
+) -> Report:
     tracked = git_files(repo)
     tracked_set = set(tracked)
     tracked_dirs: set[str] = set()
@@ -318,6 +323,34 @@ def lint(repo: Path, docs: list[Path], symbols: set[str] | None) -> Report:
                             f"라인 앵커 {anchor} > 파일 길이 {longest}",
                         )
                     )
+                elif sym_locs is not None and not isinstance(resolved, tuple):
+                    # Drift check: an in-bounds anchor can still point at the
+                    # wrong place after code moves. When the same doc line names
+                    # a symbol CodeGraph locates in the anchored file, the
+                    # anchor must land inside that symbol's span — else warn
+                    # (advisory: prose may legitimately anchor elsewhere) and
+                    # let --fix snap it to the symbol's start line.
+                    file_syms = sym_locs.get(resolved, {})
+                    doc_line = text.splitlines()[line_no - 1] if line_no <= len(text.splitlines()) else ""
+                    hinted = []
+                    for tok in BACKTICK_RE.findall(doc_line):
+                        tok = tok.strip().rstrip("()")
+                        if tok == ref:
+                            continue
+                        name = tok.split(".")[-1]
+                        if name in file_syms:
+                            hinted.append((name, file_syms[name]))
+                    # ANY hinted symbol whose span contains the anchor vouches
+                    # for it (a doc line often names several symbols; matching
+                    # only the first would false-alarm on the rest).
+                    if hinted and not any(s <= anchor <= e for _, (s, e) in hinted):
+                        names = ", ".join(f"`{n}`({s}–{e})" for n, (s, e) in hinted[:3])
+                        report.findings.append(
+                            Finding(
+                                rel_doc, line_no, ref, "warn-drift",
+                                f"앵커 {anchor}이 같은 줄 심볼 {names} 범위 밖 — --fix로 수리 가능",
+                            )
+                        )
     return report
 
 
@@ -338,9 +371,8 @@ def fix_broken_lines(repo: Path, report: Report, symbols_by_file: dict[str, dict
     Rule 2 — otherwise drop the stale line (`f.go:N` → `f.go`): losing a number
     beats shipping a lie. Anything else is left for a human."""
     fixed = 0
-    for f in report.broken():
-        if f.tier != "broken-line":
-            continue
+    targets = [f for f in report.findings if f.tier in ("broken-line", "warn-drift")]
+    for f in targets:
         doc = repo / f.doc
         lines = doc.read_text(encoding="utf-8").splitlines(keepends=True)
         line = lines[f.line_no - 1]
@@ -355,7 +387,7 @@ def fix_broken_lines(repo: Path, report: Report, symbols_by_file: dict[str, dict
             tok = tok.strip().rstrip("()")
             name = tok.split(".")[-1]
             if name in file_syms:
-                target = f"{path_part}:{file_syms[name]}"
+                target = f"{path_part}:{file_syms[name][0]}"
                 break
         replacement = target or path_part
         lines[f.line_no - 1] = line.replace(f.ref, replacement, 1)
@@ -370,12 +402,12 @@ def load_symbols_by_file(repo: Path) -> dict[str, dict[str, int]]:
         return {}
     try:
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        out: dict[str, dict[str, int]] = {}
-        for name, fp, start in con.execute(
-            "SELECT name, file_path, start_line FROM nodes"
+        out: dict[str, dict[str, tuple[int, int]]] = {}
+        for name, fp, start, end in con.execute(
+            "SELECT name, file_path, start_line, end_line FROM nodes"
             " WHERE kind IN ('function','method','struct','class','type','constant','variable')"
         ):
-            out.setdefault(fp, {}).setdefault(name, start)
+            out.setdefault(fp, {}).setdefault(name, (start, end))
         con.close()
         return out
     except sqlite3.Error:
@@ -417,11 +449,13 @@ def main(argv: list[str] | None = None) -> int:
     for extra in args.extra_docs or []:
         docs += sorted(p for p in extra.resolve().glob("*.md") if p.is_file())
     symbols = load_symbol_index(repo)
-    report = lint(repo, docs, symbols)
-    if args.fix and report.broken():
-        n = fix_broken_lines(repo, report, load_symbols_by_file(repo))
+    sym_locs = load_symbols_by_file(repo)
+    report = lint(repo, docs, symbols, sym_locs)
+    fixables = report.broken() + [f for f in report.findings if f.tier == "warn-drift"]
+    if args.fix and fixables:
+        n = fix_broken_lines(repo, report, sym_locs)
         print(f"--fix: {n}건 수리 — 재검증 필요")
-        report = lint(repo, docs, symbols)
+        report = lint(repo, docs, symbols, sym_locs)
 
     if args.json:
         print(json.dumps(
