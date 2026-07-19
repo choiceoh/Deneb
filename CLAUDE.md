@@ -82,6 +82,7 @@ codegraph explore  "영역..."  # 지형 one-shot (다중 토큰; --max-files �
 - **새 워크트리는 SessionStart 훅(`codegraph-autoindex.py`)이 자동 준비** — 형제 워크트리 인덱스를 복사+`sync`(<1s)하거나 없으면 풀 init, 백그라운드라 세션 지연 0. 즉 워크트리마다 손수 `codegraph init` 할 필요 없다. ZCode 워크트리도 `zcode-worktree-init.sh`가 메인 체크아웃의 인덱스를 복사+`sync`로 동일하게 준비.
 - 설치/재빌드: `npm i -g @colbymchenry/codegraph@1.4.1` → `codegraph init` (정밀도·explore NL 수정 포함). 재인덱싱은 `codegraph index`, MCP 재배선은 `codegraph install`. GPU·컴파일 불필요(aarch64 네이티브). 상세는 메모리 [[codegraph-adoption]] 참조.
 - 문자열-키 간접참조(RPC 메서드명·툴명·이벤트명 → 핸들러/이벤트 타입)는 CodeGraph가 못 잇는 엣지(static-analysis frontier). **`scripts/dev/rpcmap.py`가 결정적으로 채운다**: `rpcmap <메서드명|툴명|이벤트명>` → 핸들러+파일:라인+`codegraph node` 힌트 (예: `rpcmap miniapp.people.list`→`peopleList (people.go:91)`, `rpcmap wiki`→`ToolWiki`, `rpcmap chat.delivery_failed`→`ChatDeliveryFailedEvent`). 역방향 `rpcmap --handler <이름>`, 전체는 `rpcmap --list`. 핸들러를 얻으면 `codegraph node <핸들러>`로 소스+호출자/피호출자. (점 있는 메서드명을 grep하면 훅이 rpcmap으로 유도한다.)
+- **개념(시맨틱) 검색**: 심볼 이름을 모르는 "무엇을 하는 코드가 어딨나" 질의는 `make codesearch Q="재시도 백오프"` — Nemotron 임베딩(로컬 :8002) dense 검색과 CodeGraph FTS를 RRF 융합, 한국어 질의는 도메인 동의어 확장으로 영문 코드에 닿는다. 인덱스는 `make codesearch-index`(CodeGraph 노드 기반 증분, `.codegraph/semantic-code.*`), 품질 회귀는 `make codesearch-bench`(골드셋 P@5).
 - 주의: CodeGraph는 **소스 코드 전용**. 위키/업무 지식 그래프는 별개 도구(`graphify` 챗 툴 → `~/.deneb/wiki-graph`)이며 이걸로 대체 불가.
 
 ## 룰 인덱스 — 필요할 때 Read (조건부 로딩)
