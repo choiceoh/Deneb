@@ -15,7 +15,7 @@
        health-v3 health-v3-check health-v3-deep health-v3-test health-v3-baseline \
        rsi-bench rsi-bench-check rsi-bench-deep rsi-bench-test rsi-bench-baseline \
        bench-check bench-refresh \
-       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test doc-ref-lint \
+       runtime-health runtime-health-test python-test python-lint shell-lint shell-behavior-test doc-ref-lint state-register \
        preview native-smoke \
        info
 
@@ -250,6 +250,13 @@ health-v2-test:
 # stays advisory inside the report. Sub-second.
 doc-ref-lint:
 	@python3 scripts/audit/doc_ref_lint.py --strict
+
+# Cross-stage shared-state read/write map (Harness Handbook state-register
+# view). Regenerates the committed session-state blast-radius doc; advisory
+# (not a CI gate) — rerun after touching session fields or their consumers.
+state-register:
+	@cd gateway-go && go run ./cmd/state-register -out ../docs/research/state-register-session.md
+	@echo "regenerated docs/research/state-register-session.md"
 
 # All checked-in Python behavior tests. Keep the two roots isolated so their
 # fixture/support modules resolve exactly as they do when invoked directly.

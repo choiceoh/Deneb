@@ -46,3 +46,11 @@ runtime/server는 이 계약을 소비하며 session 상태 규칙을 복제하�
 marker crash-safety를 검증한다. 결정적 패키지 검증 명령은:
 
 `cd gateway-go && go test -count=1 ./internal/domain/session`
+
+## State register (필드 블래스트 반경)
+
+`Session` 필드를 추가/변경하기 전에 `make state-register`로 재생성되는
+[docs/research/state-register-session.md](../../../../docs/research/state-register-session.md)를
+보라 — 필드별 write/read 지점을 패키지 경계 너머까지 펼친 맵이다 (콜그래프가
+못 잡는 상태 결합·크로스-패키지 리더 포함). 필드나 그 소비처를 바꿨으면 같은
+커밋에서 재생성한다.
