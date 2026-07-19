@@ -200,17 +200,35 @@ devlib_start_gateway() {
   # restarts and prefer devlib_seed_client_token's production-token mirror.
   devlib_ensure_client_token "$state_dir"
 
+  # Production-parity retrieval env (mirrors the deneb-gateway systemd drop-in,
+  # scripts/systemd/setup-nemotron-embed.sh): without these the dev gateway
+  # falls back to the legacy BGE port (:8001, stopped since the 2026-07-18
+  # Nemotron cutover) and logs "embedding: server unhealthy" on every semantic
+  # warm. ${VAR:-} keeps explicit caller overrides working for A/B sweeps.
+  local embed_url="${DENEB_EMBEDDING_URL:-http://127.0.0.1:8002}"
+  local sem_floor="${DENEB_WIKI_SEM_FLOOR:-0.44}"
+  local sem_weight="${DENEB_WIKI_RRF_SEM_WEIGHT:-10}"
+  local graph_weight="${DENEB_WIKI_RRF_GRAPH_WEIGHT:-3}"
+
   if [[ "$use_nohup" == "nohup" ]]; then
     DENEB_CONFIG_PATH="$config" \
     DENEB_STATE_DIR="$state_dir" \
     DENEB_WIKI_DIR="$state_dir/wiki" \
     DENEB_WIKI_DIARY_DIR="$state_dir/memory/diary" \
+    DENEB_EMBEDDING_URL="$embed_url" \
+    DENEB_WIKI_SEM_FLOOR="$sem_floor" \
+    DENEB_WIKI_RRF_SEM_WEIGHT="$sem_weight" \
+    DENEB_WIKI_RRF_GRAPH_WEIGHT="$graph_weight" \
     nohup "$binary" --bind loopback --port "$port" > "$log" 2>&1 &
   else
     DENEB_CONFIG_PATH="$config" \
     DENEB_STATE_DIR="$state_dir" \
     DENEB_WIKI_DIR="$state_dir/wiki" \
     DENEB_WIKI_DIARY_DIR="$state_dir/memory/diary" \
+    DENEB_EMBEDDING_URL="$embed_url" \
+    DENEB_WIKI_SEM_FLOOR="$sem_floor" \
+    DENEB_WIKI_RRF_SEM_WEIGHT="$sem_weight" \
+    DENEB_WIKI_RRF_GRAPH_WEIGHT="$graph_weight" \
     "$binary" --bind loopback --port "$port" > "$log" 2>&1 &
   fi
   DEVLIB_PID=$!
