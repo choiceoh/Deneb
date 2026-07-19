@@ -36,6 +36,18 @@ class ExtractionTest(unittest.TestCase):
         self.assertFalse(looks_like_path("@tauri-apps/plugin-http"))
         self.assertFalse(looks_like_path("chat.send/history/abort"))
         self.assertFalse(looks_like_path("client-android/.../Wire.kt"))
+        # non-paths: Korean tokens (wiki pages / placeholders — the repo tracks
+        # zero non-ASCII filenames), bare extensions, git refs, MIME types
+        self.assertFalse(looks_like_path("로그.md"))
+        self.assertFalse(looks_like_path("file.go:라인"))
+        self.assertFalse(looks_like_path("1차/2차"))
+        self.assertFalse(looks_like_path(".md"))
+        self.assertFalse(looks_like_path("origin/main"))
+        self.assertFalse(looks_like_path("text/plain"))
+        self.assertFalse(looks_like_path("application/pdf"))
+        # dotfiles that DO live in the repo must still count
+        self.assertTrue(looks_like_path(".golangci.yml"))
+        self.assertTrue(looks_like_path("scripts/audit/doc_ref_lint.py"))
 
     def test_escapes_fence_lines_out(self):
         text = (
@@ -143,8 +155,8 @@ class FixAnchorsTest(unittest.TestCase):
         fixed = fix_broken_lines(repo, report, {"pkg/a.go": {"DoThing": (2, 2)}})
         self.assertEqual(fixed, 2)
         text = (repo / "CLAUDE.md").read_text()
-        self.assertIn("`pkg/a.go:2`", text)   # 심볼 힌트 → 심볼 시작 라인으로 재작성
-        self.assertIn("`pkg/b.go`", text)      # 힌트 없음 → 라인 드롭 (거짓 앵커 제거)
+        self.assertIn("`pkg/a.go:2`", text)  # 심볼 힌트 → 심볼 시작 라인으로 재작성
+        self.assertIn("`pkg/b.go`", text)  # 힌트 없음 → 라인 드롭 (거짓 앵커 제거)
         self.assertEqual(lint(repo, docs, symbols=None).broken(), [])
 
 
@@ -181,5 +193,10 @@ class DriftTest(unittest.TestCase):
         fixed = fix_broken_lines(repo, report, {"pkg/a.go": {"DoThing": (2, 5)}})
         self.assertEqual(fixed, 1)
         self.assertIn("`pkg/a.go:2`", (repo / "CLAUDE.md").read_text())
-        again = lint(repo, collect_docs(repo, ["CLAUDE.md"]), symbols=None, sym_locs={"pkg/a.go": {"DoThing": (2, 5)}})
+        again = lint(
+            repo,
+            collect_docs(repo, ["CLAUDE.md"]),
+            symbols=None,
+            sym_locs={"pkg/a.go": {"DoThing": (2, 5)}},
+        )
         self.assertEqual([f for f in again.findings if f.tier == "warn-drift"], [])
