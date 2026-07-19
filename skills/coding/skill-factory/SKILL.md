@@ -9,7 +9,7 @@ metadata:
       {
         "emoji": "🏭",
         "tags": ["automation", "extraction", "pattern", "procedural-memory"],
-        "related_skills": ["evolution-proposal", "skill-creator", "skill-evolution"],
+        "related_skills": ["evolution-proposal"],
       },
   }
 ---
@@ -23,7 +23,7 @@ Inspired by hermes-agent's procedural memory: the agent creates skills from expe
 **Trigger autonomously** after completing a complex workflow (5+ tool calls, multi-step reasoning):
 
 1. You just solved a non-trivial problem with a reusable pattern
-2. You notice you've done a similar workflow before (check session-logs)
+2. You notice you've done a similar workflow before (check the sessions tool)
 3. The user explicitly asks to capture a workflow as a skill
 
 **Do NOT create a skill when:**

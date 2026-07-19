@@ -57,7 +57,7 @@ func ToolSessions(d *tooldeps.SessionDeps) toolport.ToolFunc {
 // --- sessions stats sub-action ---
 
 // toolSessionsStats rolls up run/token/tool totals from the agent log — the
-// Go replacement for the session-logs skill's brittle jq recipes over raw
+// Go replacement for the retired session-logs skill's brittle jq recipes over raw
 // JSONL. Window totals via Aggregate, per-session table via
 // AggregateBySession. Tokens only: agentlog persists no dollar cost, so none
 // is invented here (per-tool histograms live in observe action=behavior).
