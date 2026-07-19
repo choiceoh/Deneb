@@ -56,7 +56,51 @@ func newMiningTask(t *testing.T, lines []observe.LogLine) (*RuntimeErrorMiningTa
 		// ~/.deneb/data, which tests must never touch (and whose watermark
 		// would leak between tests).
 		StatePath: filepath.Join(t.TempDir(), "runtime_error_signature_state.json"),
+		// These tests exercise fold+mine together; the fold/mine cadence
+		// split has its own test.
+		MiningInterval: time.Nanosecond,
 	}, tracker
+}
+
+// Folds run at the task cadence but authoring is throttled to the mining
+// cadence: a run inside the throttle window still folds new lines into the
+// rolling window (so hot-swap ring wipes lose at most one fold interval),
+// without authoring candidates.
+func TestRuntimeErrorMining_FoldsWithoutAuthoringInsideMiningThrottle(t *testing.T) {
+	var first []observe.LogLine
+	for i := 0; i < 2; i++ {
+		first = append(first, errLine("slice oob in composer idx=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, first)
+	task.MiningInterval = 12 * time.Hour
+	if err := task.Run(context.Background()); err != nil { // run 1: mines (nothing over floor yet)
+		t.Fatal(err)
+	}
+
+	var second []observe.LogLine
+	for i := 0; i < 4; i++ { // 2+4 = 6 ≥ floor 5
+		second = append(second, errLine("slice oob in composer idx=", int64(2000+i)))
+	}
+	task.ErrorLines = func(int) []observe.LogLine { return second }
+	if err := task.Run(context.Background()); err != nil { // run 2: inside throttle → fold only
+		t.Fatal(err)
+	}
+	if got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50); len(got) != 0 {
+		t.Fatalf("throttled run must not author, got %d candidates", len(got))
+	}
+	st := loadRuntimeErrorState(task.StatePath)
+	if e := st.Sigs[normalizeErrorSignature("slice oob in composer idx=")]; e == nil || e.Count != 6 {
+		t.Fatalf("throttled run must still fold: %+v", st.Sigs)
+	}
+
+	task.MiningInterval = time.Nanosecond // throttle elapsed
+	task.ErrorLines = func(int) []observe.LogLine { return nil }
+	if err := task.Run(context.Background()); err != nil { // run 3: mines the folded window
+		t.Fatal(err)
+	}
+	if got, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50); len(got) != 1 {
+		t.Fatalf("post-throttle run must author from the folded window, got %d", len(got))
+	}
 }
 
 // testLineBase anchors synthetic line timestamps near NOW: the rolling
