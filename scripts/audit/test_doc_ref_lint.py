@@ -102,6 +102,25 @@ class TieringTest(unittest.TestCase):
         report = lint(repo, collect_docs(repo, ["CLAUDE.md"]), symbols={"KnownFunc"})
         self.assertEqual([f.ref for f in report.warns()], ["pkg.GhostFunc"])
 
+    def test_symbol_anchor_falls_back_to_file_text(self):
+        # Shell functions aren't in CodeGraph — the file's own text vouches.
+        report = self.run_lint_with_symbols(
+            {
+                "CLAUDE.md": "see `lib.sh:my_shell_fn` and `lib.sh:gone_fn`",
+                "lib.sh": "my_shell_fn() { :; }\n",
+            },
+            symbols=set(),
+        )
+        self.assertEqual([f.ref for f in report.warns()], ["lib.sh:gone_fn"])
+
+    def test_strikethrough_marks_retired_refs(self):
+        report = self.run_lint({"CLAUDE.md": "~~`retired.go`~~ but `alive.go`", "alive.go": "x\n"})
+        self.assertEqual(report.broken(), [])
+
+    def run_lint_with_symbols(self, files, symbols):
+        repo = make_repo(files)
+        return lint(repo, collect_docs(repo, ["CLAUDE.md"]), symbols=symbols)
+
 
 if __name__ == "__main__":
     unittest.main()
