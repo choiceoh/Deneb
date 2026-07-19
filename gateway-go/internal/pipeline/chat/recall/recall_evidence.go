@@ -275,6 +275,9 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 	if strings.TrimSpace(result.Content) != "" {
 		parts = append(parts, "match: "+strings.TrimSpace(result.Content))
 	}
+	if strings.TrimSpace(result.ExpandedContent) != "" {
+		parts = append(parts, "adjacent context: "+truncateRecallText(result.ExpandedContent, 240))
+	}
 	if len(parts) == 0 {
 		return result.Path
 	}

@@ -133,6 +133,11 @@ func (s *Store) ensureSession(sessionKey string) *sessionData {
 	if err == nil {
 		var nodes []SummaryNode
 		if json.Unmarshal(data, &nodes) == nil {
+			for i := range nodes {
+				if nodes[i].Artifact == nil {
+					nodes[i].Artifact = deriveConversationArtifact(nodes[i], sd.messages)
+				}
+			}
 			sd.summaries = nodes
 			for _, n := range nodes {
 				if n.ID >= sd.nextSumID {
@@ -309,6 +314,9 @@ func (s *Store) InsertSummary(node SummaryNode) (int64, error) {
 	defer s.mu.Unlock()
 
 	sd := s.ensureSession(node.SessionKey)
+	if node.Artifact == nil {
+		node.Artifact = deriveConversationArtifact(node, sd.messages)
+	}
 	node.ID = sd.nextSumID
 	sd.nextSumID++
 	sd.summaries = append(sd.summaries, node)

@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
@@ -37,6 +38,36 @@ func TestWikiAdapterRecordUpdatesSupersededPageMeta(t *testing.T) {
 	got := testutil.Must(store.ReadPage("프로젝트/old-fact.md"))
 	if got.Meta.SupersededBy != "프로젝트/new-fact.md" {
 		t.Fatalf("SupersededBy = %q, want 프로젝트/new-fact.md", got.Meta.SupersededBy)
+	}
+}
+
+func TestWikiAdapterRecallCarriesLateContextAndTypedLocation(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	t.Cleanup(func() { _ = store.Close() })
+	page := wiki.NewPage("배포 결정", "시스템", nil)
+	page.Meta.Updated = "2026-07-20"
+	page.Body = "## 배경\n이전 방식\n\n## 결정\nORBIT-WIKI 적용\n\n## 검증\n스모크 통과\n"
+	if err := store.WritePage("시스템/deploy.md", page); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, err := NewWikiAdapter(store).Recall(context.Background(), "ORBIT-WIKI", 1)
+	if err != nil || len(hits) != 1 {
+		t.Fatalf("Recall = %+v, %v", hits, err)
+	}
+	hit := hits[0]
+	if !strings.Contains(hit.Context, "## 배경") || !strings.Contains(hit.Context, "## 검증") {
+		t.Fatalf("late context = %q", hit.Context)
+	}
+	if hit.Provenance.Locator.StartLine <= 0 || hit.Provenance.Locator.ContextStartLine <= 0 {
+		t.Fatalf("locator = %+v", hit.Provenance.Locator)
+	}
+	if hit.Time == 0 {
+		t.Fatal("updated timestamp was not promoted into typed evidence")
+	}
+	if err := NewWikiAdapter(store).(SourceDescriber).Descriptor().Sync.Validate(); err != nil {
+		t.Fatalf("wiki sync contract: %v", err)
 	}
 }
 

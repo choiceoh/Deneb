@@ -67,6 +67,23 @@ func NewFilesAdapter(deps FilesAdapterDeps) Adapter {
 // Layer identifies the knowledge layer served by the adapter.
 func (a *filesAdapter) Layer() Layer { return LayerFiles }
 
+func (a *filesAdapter) Descriptor() SourceDescriptor {
+	return SourceDescriptor{
+		Layer:       LayerFiles,
+		Name:        "files",
+		Description: "uploaded and synchronized files with hybrid lexical/vector retrieval",
+		Capabilities: []Capability{
+			CapabilityLexical, CapabilitySemantic, CapabilityStructured, CapabilityCode,
+		},
+		Cost: 2,
+		Sync: SyncContract{
+			StableID: "virtual file path", Cursor: "mtime plus size plus content hash",
+			ChangeDetection: "mtime plus size plus SHA-256 prefix", DeletionDetection: "snapshot diff plus mutation hook",
+			FreshnessTargetMillis: millis(15 * time.Minute), AuthorizationBoundary: "virtual file-store root",
+		},
+	}
+}
+
 // filesRecallTimeout bounds one files-layer HybridSearch (query embed + scan),
 // matching filesemindex.semindexQueryTimeout so a slow embed cannot stall the
 // agent knowledge recall behind the embedding client's 30s HTTP timeout.
@@ -104,6 +121,16 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 			meta["startLine"] = fmt.Sprintf("%d", h.StartLine)
 			meta["endLine"] = fmt.Sprintf("%d", h.EndLine)
 		}
+		if h.Kind != "" {
+			meta["chunkKind"] = h.Kind
+		}
+		if h.Heading != "" {
+			meta["symbol"] = h.Heading
+		}
+		hierarchy := pathHierarchy(h.Entry.PathDisplay)
+		if h.Heading != "" {
+			hierarchy = append(hierarchy, "symbol: "+h.Heading)
+		}
 		out = append(out, Result{
 			Ref:     Ref{Layer: LayerFiles, ID: h.Entry.PathDisplay},
 			Snippet: strings.TrimSpace(h.Snippet),
@@ -112,8 +139,12 @@ func (a *filesAdapter) Recall(ctx context.Context, query string, limit int) ([]R
 			// across layers by this score; see chat recall preflight for the
 			// per-layer quota that keeps files from crowding out wiki/diary.
 			Score: h.Score,
-			Meta:  meta,
-			Time:  fileMTimeMillis(h.Entry.ServerModified),
+			Provenance: Provenance{
+				Locator:   Locator{StartLine: h.StartLine, EndLine: h.EndLine},
+				Hierarchy: hierarchy,
+			},
+			Meta: meta,
+			Time: fileMTimeMillis(h.Entry.ServerModified),
 		})
 	}
 	return out, nil

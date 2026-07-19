@@ -37,6 +37,12 @@ type mockWriter struct {
 	wErr     error
 }
 
+type panicAdapter struct{ mockAdapter }
+
+func (p *panicAdapter) Recall(context.Context, string, int) ([]Result, error) {
+	panic("broken connector")
+}
+
 func (m *mockWriter) Record(_ context.Context, opts RecordOptions) (Ref, error) {
 	m.recorded = opts
 	return m.out, m.wErr
@@ -145,6 +151,22 @@ func TestRouter_Recall_RRFPrefersWikiRankOverFilesCosine(t *testing.T) {
 	}
 }
 
+func TestRouter_Recall_FileIntentUsesPlannerPriorityForCrossLayerTie(t *testing.T) {
+	wikiA := &mockAdapter{layer: LayerWiki, results: []Result{
+		{Ref: Ref{Layer: LayerWiki, ID: "설계/router"}, Score: 0.9},
+	}}
+	files := &mockAdapter{layer: LayerFiles, results: []Result{
+		{Ref: Ref{Layer: LayerFiles, ID: "/src/router.go"}, Score: 0.8},
+	}}
+	packet := New(wikiA, files).RecallPacket(context.Background(), "router.go 함수 구현", 5, RecallOptions{})
+	if len(packet.Results) != 2 || packet.Results[0].Ref.Layer != LayerFiles {
+		t.Fatalf("file-intent results = %+v, want files rank-1 tie first", packet.Results)
+	}
+	if len(packet.Plan.Sources) != 2 || packet.Plan.Sources[0].Source.Layer != LayerFiles {
+		t.Fatalf("file-intent plan = %+v", packet.Plan.Sources)
+	}
+}
+
 func TestRouter_RecallWithMeta_FilesTimeoutNote(t *testing.T) {
 	wikiA := &mockAdapter{layer: LayerWiki, results: []Result{
 		{Ref: Ref{Layer: LayerWiki, ID: "p"}, Score: 0.7},
@@ -214,6 +236,20 @@ func TestRouter_Recall_SingleLayerReturnsAllHits(t *testing.T) {
 	}
 }
 
+func TestRouter_Recall_EmptySelectedLayerDoesNotThrottleOnlyContributor(t *testing.T) {
+	wikiA := &mockAdapter{layer: LayerWiki}
+	for i := 0; i < 5; i++ {
+		wikiA.results = append(wikiA.results, Result{
+			Ref: Ref{Layer: LayerWiki, ID: "p" + string(rune('A'+i))}, Score: 0.9 - float64(i)*0.1,
+		})
+	}
+	files := &mockAdapter{layer: LayerFiles}
+	got := New(wikiA, files).Recall(context.Background(), "q", 5)
+	if len(got) != 5 {
+		t.Fatalf("empty sibling layer throttled the only contributor: got %d, want 5", len(got))
+	}
+}
+
 func TestRouter_Recall_OneFails(t *testing.T) {
 	good := &mockAdapter{
 		layer: LayerWiki,
@@ -229,6 +265,18 @@ func TestRouter_Recall_OneFails(t *testing.T) {
 	got := r.Recall(context.Background(), "x", 5)
 	if len(got) != 1 {
 		t.Errorf("got %d hits, want 1 (bad adapter swallowed)", len(got))
+	}
+}
+
+func TestRouter_Recall_SourcePanicDegradesWithoutCrashingFanout(t *testing.T) {
+	good := &mockAdapter{layer: LayerWiki, results: []Result{{Ref: Ref{Layer: LayerWiki, ID: "p"}, Score: 0.5}}}
+	broken := &panicAdapter{mockAdapter{layer: LayerFiles}}
+	packet := New(good, broken).RecallPacket(context.Background(), "x", 5, RecallOptions{})
+	if len(packet.Results) != 1 || packet.Results[0].Ref.Layer != LayerWiki {
+		t.Fatalf("results = %+v, want surviving wiki hit", packet.Results)
+	}
+	if len(packet.Notes) != 1 || !strings.Contains(packet.Notes[0], "제외") {
+		t.Fatalf("notes = %v, want source degrade note", packet.Notes)
 	}
 }
 

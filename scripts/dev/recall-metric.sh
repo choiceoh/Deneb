@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../gateway-go"
 
-out=$(go test ./internal/pipeline/chat/ -run TestRecallQuality -count=1 -v 2>&1) && rc=0 || rc=$?
+out=$(go test ./internal/pipeline/chat/recall -run TestRecallQuality -count=1 -v 2>&1) && rc=0 || rc=$?
 line=$(grep -o 'RECALL_METRIC hits=[0-9]* total=[0-9]* pct=[0-9]*' <<<"$out" | tail -1 || true)
 if [[ $rc -ne 0 ]]; then
     echo "metric_value=0"

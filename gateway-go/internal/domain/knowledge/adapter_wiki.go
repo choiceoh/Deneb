@@ -26,6 +26,24 @@ func NewWikiAdapter(store *wiki.Store) Adapter {
 // Layer identifies the knowledge layer served by the adapter.
 func (a *wikiAdapter) Layer() Layer { return LayerWiki }
 
+func (a *wikiAdapter) Descriptor() SourceDescriptor {
+	return SourceDescriptor{
+		Layer:       LayerWiki,
+		Name:        "wiki",
+		Description: "curated wiki pages with lexical, semantic, graph, and rerank retrieval",
+		Capabilities: []Capability{
+			CapabilityLexical, CapabilitySemantic, CapabilityStructured,
+			CapabilityGraph, CapabilityRerank, CapabilityLateContext,
+		},
+		Cost: 2,
+		Sync: SyncContract{
+			StableID: "workspace-relative page path", Cursor: "write-through index generation",
+			ChangeDetection: "page content hash", DeletionDetection: "store delete plus audit tombstone",
+			FreshnessTargetMillis: millis(180 * 24 * time.Hour), AuthorizationBoundary: "workspace wiki root",
+		},
+	}
+}
+
 // Recall searches the adapter for knowledge relevant to the query.
 // Uses the full wiki pipeline (BM25/semantic/graph RRF + validity + gated
 // model rerank). applyModelRerank only runs when top scores are ambiguous
@@ -46,8 +64,17 @@ func (a *wikiAdapter) Recall(ctx context.Context, query string, limit int) ([]Re
 		out = append(out, Result{
 			Ref:     Ref{Layer: LayerWiki, ID: h.Path},
 			Snippet: h.Content,
+			Context: h.ExpandedContent,
 			Score:   h.Score,
-			Meta:    meta,
+			Provenance: Provenance{
+				Locator: Locator{
+					StartLine: h.Line, EndLine: h.EndLine,
+					ContextStartLine: h.ExpandedLine, ContextEndLine: h.ExpandedEndLine,
+				},
+				Hierarchy: append([]string(nil), h.Context...),
+			},
+			Meta: meta,
+			Time: h.UpdatedAt,
 		})
 	}
 	return out, nil

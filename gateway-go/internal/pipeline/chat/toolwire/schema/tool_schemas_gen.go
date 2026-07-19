@@ -1468,6 +1468,21 @@ func KnowledgeToolSchema() map[string]any {
 					"type": "string",
 				},
 			},
+			"scopes": map[string]any{
+				"type":        "array",
+				"description": "경로/프로젝트 범위 (op=recall) — 예: `프로젝트/탑솔라`, `files:/계약`",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"sources": map[string]any{
+				"type":        "array",
+				"description": "검색할 소스 제한 (op=recall, 생략 시 planner가 사용 가능한 소스를 모두 병렬 검색)",
+				"items": map[string]any{
+					"type": "string",
+					"enum": []string{"wiki", "files"},
+				},
+			},
 			"summary": map[string]any{
 				"type":        "string",
 				"description": "인덱스용 한 줄 요약 (op=record, ~80자)",

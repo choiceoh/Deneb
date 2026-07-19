@@ -223,6 +223,7 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	diagnostics.Rerank = rerankDiagnostics
 	results = truncateResults(results, limit)
 	s.attachResultMetadata(plan.Clauses[0].Query, results)
+	diagnostics.ContextExpanded = s.attachLateContext(results)
 	diagnostics.ReturnedCount = len(results)
 	if plan.Explain {
 		s.attachPlanExplanations(results, rankings, plan.Clauses, intentResults, baseScores, bonuses, applied)
