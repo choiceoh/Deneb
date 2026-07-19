@@ -66,3 +66,9 @@ doc-ref-lint`(CI 게이트, validate-or-freeze — arXiv:2607.13285에서 채택
 라인 드롭으로 결정적 수리), `--unmentioned <디렉토리> <문서>`(모듈 문서가
 큐레이션하지 않은 소스 나열 — advisory), `make memory-ref-audit`(레포 밖
 메모리 파일의 코드 참조 감사 — 회상 메모리의 file:line 검증 규칙 일괄 실행).
+
+드리프트 검출: `file.go:N` 앵커는 같은 줄 백틱 심볼의 CodeGraph 범위와
+대조된다(하나라도 품으면 무고, 전부 밖이면 warn-drift → `--fix`가 심볼
+시작 줄로 스냅). 주간 자가감사 크론 `weekly-ref-audit`(토 06:30)이
+doc-ref-lint·memory-ref-audit를 돌려 메모리 rot은 자가 수리하고 레포 문서
+rot은 작업 피드 제안 카드로 올린다.

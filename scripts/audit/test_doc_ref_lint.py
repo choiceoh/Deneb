@@ -140,9 +140,46 @@ class FixAnchorsTest(unittest.TestCase):
         docs = collect_docs(repo, ["CLAUDE.md"])
         report = lint(repo, docs, symbols=None)
         self.assertEqual(len(report.broken()), 2)
-        fixed = fix_broken_lines(repo, report, {"pkg/a.go": {"DoThing": 2}})
+        fixed = fix_broken_lines(repo, report, {"pkg/a.go": {"DoThing": (2, 2)}})
         self.assertEqual(fixed, 2)
         text = (repo / "CLAUDE.md").read_text()
         self.assertIn("`pkg/a.go:2`", text)   # 심볼 힌트 → 심볼 시작 라인으로 재작성
         self.assertIn("`pkg/b.go`", text)      # 힌트 없음 → 라인 드롭 (거짓 앵커 제거)
         self.assertEqual(lint(repo, docs, symbols=None).broken(), [])
+
+
+class DriftTest(unittest.TestCase):
+    def _lint(self, files, sym_locs):
+        from doc_ref_lint import lint
+
+        repo = make_repo(files)
+        return repo, lint(repo, collect_docs(repo, ["CLAUDE.md"]), symbols=None, sym_locs=sym_locs)
+
+    def test_in_bounds_anchor_can_still_drift_outside_hinted_symbol(self):
+        repo, report = self._lint(
+            {"CLAUDE.md": "`DoThing` lives at `pkg/a.go:9`", "pkg/a.go": "\n" * 20},
+            {"pkg/a.go": {"DoThing": (2, 5)}},
+        )
+        drifts = [f for f in report.findings if f.tier == "warn-drift"]
+        self.assertEqual([f.ref for f in drifts], ["pkg/a.go:9"])
+
+    def test_any_hinted_symbol_vouches(self):
+        # 줄에 심볼이 여럿이면 하나라도 범위에 맞으면 무고 (Persist/ErrSkillDeduped 실사례).
+        _, report = self._lint(
+            {"CLAUDE.md": "`Alpha` and `Beta` at `pkg/a.go:9`", "pkg/a.go": "\n" * 20},
+            {"pkg/a.go": {"Alpha": (2, 5), "Beta": (8, 12)}},
+        )
+        self.assertEqual([f for f in report.findings if f.tier == "warn-drift"], [])
+
+    def test_fix_snaps_drifted_anchor_to_symbol_start(self):
+        from doc_ref_lint import fix_broken_lines, lint
+
+        repo, report = self._lint(
+            {"CLAUDE.md": "`DoThing` lives at `pkg/a.go:9`", "pkg/a.go": "\n" * 20},
+            {"pkg/a.go": {"DoThing": (2, 5)}},
+        )
+        fixed = fix_broken_lines(repo, report, {"pkg/a.go": {"DoThing": (2, 5)}})
+        self.assertEqual(fixed, 1)
+        self.assertIn("`pkg/a.go:2`", (repo / "CLAUDE.md").read_text())
+        again = lint(repo, collect_docs(repo, ["CLAUDE.md"]), symbols=None, sym_locs={"pkg/a.go": {"DoThing": (2, 5)}})
+        self.assertEqual([f for f in again.findings if f.tier == "warn-drift"], [])
