@@ -4,332 +4,438 @@
 
 이 표는 공유 상태 한 타입의 필드별 write/read 지점을 패키지 경계 너머까지 펼친다
 (Harness Handbook의 state-register 뷰 채택). 콜그래프가 못 보여주는 "이 상태를
-바꾸면 어디가 영향받나"의 블래스트 반경. 선언-타입 전파 기반의 정직한
-과소근사: 타입 추론 로컬 등 증명 못 한 접근은 세지 않고 아래에 개수만 보고한다.
+바꾸면 어디가 영향받나"의 블래스트 반경. go/types 타입체크 기반 — 리턴 타입
+호출·클로저·추론 로컬을 지나는 접근까지 컴파일러가 해석하는 그대로 계수한다.
 
-## AbortedLastRun — write 2 · read 0
-
-**writes**:
-
-- `internal/domain/session/manager.go:612` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:134` ResetSession
-
-## Channel — write 0 · read 3 · **크로스-패키지 2개**
-
-reads:
-
-- `internal/pipeline/chat/slash_dispatch.go:232` buildSessionStatus
-- `internal/pipeline/chat/slash_dispatch.go:233` buildSessionStatus
-- `internal/runtime/insights/engine.go:305` computeTopSessions
-
-## CompactionFired — write 0 · read 1
-
-reads:
-
-- `internal/pipeline/chat/run_exec.go:595` recordRunCompletion
-
-## EndedAt — write 6 · read 0 · **크로스-패키지 2개**
+## AbortedLastRun — write 2 · read 1 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/session/manager.go:336` evictStale
-- `internal/domain/session/manager.go:347` evictStale
-- `internal/domain/session/manager.go:622` ApplyLifecycleEvent
-- `internal/domain/session/manager.go:629` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:132` ResetSession
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:256` killSession
+- `gateway-go/internal/domain/session/manager.go:612` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:134` ResetSession
 
-## FailureReason — write 3 · read 6 · **크로스-패키지 4개**
+reads:
+
+- `gateway-go/internal/runtime/server/server.go:310` SessionSnapshot
+
+## Channel — write 0 · read 7 · **크로스-패키지 4개**
+
+reads:
+
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:232` buildSessionStatus
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:233` buildSessionStatus
+- `gateway-go/internal/runtime/insights/engine.go:305` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:237` sessionsRecent
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:260` sessionsRecent
+- `gateway-go/internal/runtime/server/auto_resume.go:123` initRunMarkerLifecycle
+- `gateway-go/internal/runtime/server/server.go:302` SessionSnapshot
+
+## CompactionFired — write 1 · read 3
 
 **writes**:
 
-- `internal/domain/session/manager.go:349` evictStale
-- `internal/domain/session/manager.go:624` ApplyLifecycleEvent
-- `internal/domain/session/manager.go:632` ApplyLifecycleEvent
+- `gateway-go/internal/pipeline/chat/compaction_marker.go:37` markCompactionFired
 
 reads:
 
-- `internal/pipeline/chat/slash_dispatch.go:329` appendServerStatus
-- `internal/pipeline/chat/slash_dispatch.go:330` appendServerStatus
-- `internal/pipeline/chat/subagent/notifier.go:165` NewSubagentNotifier
-- `internal/pipeline/chat/subagent/notifier.go:371` buildNotifyItem
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:246` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
+- `gateway-go/internal/pipeline/chat/compaction_marker.go:34` markCompactionFired
+- `gateway-go/internal/pipeline/chat/run_exec.go:595` recordRunCompletion
+- `gateway-go/internal/pipeline/chat/run_prepare.go:288` buildTurnSystemPrompt
 
-## IdleTimeoutMs — write 0 · read 2
-
-reads:
-
-- `internal/domain/session/manager.go:339` evictStale
-- `internal/domain/session/manager.go:344` evictStale
-
-## InputTokens — write 2 · read 10 · **크로스-패키지 3개**
+## EndedAt — write 7 · read 3 · **크로스-패키지 5개**
 
 **writes**:
 
-- `internal/domain/session/patch.go:135` ResetSession
-- `internal/domain/session/patch.go:188` ClearTokens
+- `gateway-go/internal/domain/session/manager.go:336` evictStale
+- `gateway-go/internal/domain/session/manager.go:347` evictStale
+- `gateway-go/internal/domain/session/manager.go:622` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/manager.go:629` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:132` ResetSession
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:72` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:256` killSession
 
 reads:
 
-- `internal/pipeline/chat/slash_dispatch.go:307` sessionTokenLine
-- `internal/pipeline/chat/slash_dispatch.go:308` sessionTokenLine
-- `internal/runtime/insights/engine.go:233` computeOverview
-- `internal/runtime/insights/engine.go:234` computeOverview
-- `internal/runtime/insights/engine.go:266` computeModelStats
-- `internal/runtime/insights/engine.go:267` computeModelStats
-- `internal/runtime/insights/engine.go:275` computeModelStats
-- `internal/runtime/insights/engine.go:310` computeTopSessions
-- `internal/runtime/insights/engine.go:311` computeTopSessions
-- `internal/runtime/insights/engine.go:338` computeTopSessions
+- `gateway-go/internal/pipeline/autoreply/acp/acp.go:81` enrichFromSession
+- `gateway-go/internal/pipeline/autoreply/acp/acp.go:82` enrichFromSession
+- `gateway-go/internal/runtime/server/server.go:307` SessionSnapshot
 
-## Key — write 0 · read 23 · **크로스-패키지 5개**
-
-reads:
-
-- `internal/domain/session/manager.go:416` Set
-- `internal/domain/session/manager.go:423` Set
-- `internal/domain/session/manager.go:436` Set
-- `internal/domain/session/manager.go:440` Set
-- `internal/domain/session/manager.go:443` Set
-- `internal/pipeline/chat/subagent/notifier.go:368` buildNotifyItem
-- `internal/pipeline/chat/subagent/notifier.go:375` buildNotifyItem
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:84` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:142` subagentsKill
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:145` subagentsKill
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:169` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:180` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:183` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:184` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:186` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:194` childLabel
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:208` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:234` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:292` resolveChildTarget
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:325` resolveChildTarget
-- `internal/runtime/insights/engine.go:304` computeTopSessions
-- `internal/runtime/server/session_labels.go:93` snapshotSessionLabels
-- `internal/runtime/server/session_labels.go:96` snapshotSessionLabels
-
-## Kind — write 0 · read 4 · **크로스-패키지 3개**
-
-reads:
-
-- `internal/domain/session/manager.go:328` evictStale
-- `internal/pipeline/chat/run_agent_config.go:331` resolveAgentRunLimits
-- `internal/runtime/insights/engine.go:207` filterSessions
-- `internal/runtime/insights/engine.go:308` computeTopSessions
-
-## Label — write 0 · read 9 · **크로스-패키지 4개**
-
-reads:
-
-- `internal/domain/session/patch.go:67` ApplyPatch
-- `internal/domain/session/patch.go:173` FindByLabel
-- `internal/pipeline/chat/subagent/notifier.go:369` buildNotifyItem
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:82` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:191` childLabel
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:192` childLabel
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:302` resolveChildTarget
-- `internal/runtime/server/session_labels.go:90` snapshotSessionLabels
-- `internal/runtime/server/session_labels.go:96` snapshotSessionLabels
-
-## LastActivityAt — write 1 · read 2
+## FailureReason — write 4 · read 8 · **크로스-패키지 5개**
 
 **writes**:
 
-- `internal/domain/session/manager.go:482` TouchActivity
+- `gateway-go/internal/domain/session/manager.go:349` evictStale
+- `gateway-go/internal/domain/session/manager.go:624` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/manager.go:632` ApplyLifecycleEvent
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:71` killOrphanedChildren
 
 reads:
 
-- `internal/domain/session/manager.go:341` evictStale
-- `internal/domain/session/manager.go:342` evictStale
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:329` appendServerStatus
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:330` appendServerStatus
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:165` NewSubagentNotifier
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:371` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:246` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
+- `gateway-go/internal/runtime/server/server_rpc_session.go:310` configureSessionChatHandler
+- `gateway-go/internal/runtime/server/server_rpc_session.go:311` configureSessionChatHandler
 
-## LastOutput — write 0 · read 3 · **크로스-패키지 2개**
-
-reads:
-
-- `internal/pipeline/chat/subagent/notifier.go:372` buildNotifyItem
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:228` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
-
-## Model — write 0 · read 7 · **크로스-패키지 4개**
-
-reads:
-
-- `internal/domain/session/patch.go:68` ApplyPatch
-- `internal/pipeline/chat/run_model.go:52` resolveModel
-- `internal/pipeline/chat/run_model.go:53` resolveModel
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:104` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:105` subagentsList
-- `internal/runtime/insights/engine.go:256` computeModelStats
-- `internal/runtime/insights/engine.go:306` computeTopSessions
-
-## OutputTokens — write 2 · read 10 · **크로스-패키지 3개**
+## IdleTimeoutMs — write 1 · read 2 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/session/patch.go:136` ResetSession
-- `internal/domain/session/patch.go:189` ClearTokens
+- `gateway-go/internal/pipeline/autoreply/acp/subagent_deps.go:115` SpawnSubagent
 
 reads:
 
-- `internal/pipeline/chat/slash_dispatch.go:310` sessionTokenLine
-- `internal/pipeline/chat/slash_dispatch.go:311` sessionTokenLine
-- `internal/runtime/insights/engine.go:236` computeOverview
-- `internal/runtime/insights/engine.go:237` computeOverview
-- `internal/runtime/insights/engine.go:269` computeModelStats
-- `internal/runtime/insights/engine.go:270` computeModelStats
-- `internal/runtime/insights/engine.go:275` computeModelStats
-- `internal/runtime/insights/engine.go:313` computeTopSessions
-- `internal/runtime/insights/engine.go:314` computeTopSessions
-- `internal/runtime/insights/engine.go:338` computeTopSessions
+- `gateway-go/internal/domain/session/manager.go:339` evictStale
+- `gateway-go/internal/domain/session/manager.go:344` evictStale
 
-## RuntimeMs — write 4 · read 7 · **크로스-패키지 4개**
+## InputTokens — write 2 · read 9 · **크로스-패키지 3개**
 
 **writes**:
 
-- `internal/domain/session/manager.go:623` ApplyLifecycleEvent
-- `internal/domain/session/manager.go:630` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:133` ResetSession
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:259` killSession
+- `gateway-go/internal/domain/session/patch.go:135` ResetSession
+- `gateway-go/internal/domain/session/patch.go:188` ClearTokens
 
 reads:
 
-- `internal/domain/session/lifecycle.go:130` DeriveLifecycleSnapshot
-- `internal/pipeline/chat/subagent/notifier.go:377` buildNotifyItem
-- `internal/pipeline/chat/subagent/notifier.go:378` buildNotifyItem
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:93` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:94` subagentsList
-- `internal/runtime/insights/engine.go:321` computeTopSessions
-- `internal/runtime/insights/engine.go:322` computeTopSessions
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:307` sessionTokenLine
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:308` sessionTokenLine
+- `gateway-go/internal/runtime/insights/engine.go:233` computeOverview
+- `gateway-go/internal/runtime/insights/engine.go:234` computeOverview
+- `gateway-go/internal/runtime/insights/engine.go:266` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:267` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:275` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:310` computeTopSessions
+- `gateway-go/internal/runtime/insights/engine.go:311` computeTopSessions
 
-## SessionID — write 0 · read 1
+## Key — write 0 · read 29 · **크로스-패키지 7개**
 
 reads:
 
-- `internal/domain/session/patch.go:158` FindBySessionID
+- `gateway-go/internal/domain/session/manager.go:416` Set
+- `gateway-go/internal/domain/session/manager.go:423` Set
+- `gateway-go/internal/domain/session/manager.go:436` Set
+- `gateway-go/internal/domain/session/manager.go:440` Set
+- `gateway-go/internal/domain/session/manager.go:443` Set
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:368` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:375` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:83` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:86` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:159` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:84` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:142` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:145` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:169` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:180` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:183` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:184` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:186` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:194` childLabel
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:208` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:234` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:292` resolveChildTarget
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:325` resolveChildTarget
+- `gateway-go/internal/runtime/insights/engine.go:304` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:257` sessionsRecent
+- `gateway-go/internal/runtime/server/server.go:299` SessionSnapshot
+- `gateway-go/internal/runtime/server/session_labels.go:93` snapshotSessionLabels
+- `gateway-go/internal/runtime/server/session_labels.go:96` snapshotSessionLabels
 
-## StartedAt — write 3 · read 10 · **크로스-패키지 3개**
+## Kind — write 0 · read 9 · **크로스-패키지 6개**
+
+reads:
+
+- `gateway-go/internal/domain/session/manager.go:328` evictStale
+- `gateway-go/internal/pipeline/chat/run_agent_config.go:331` resolveAgentRunLimits
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:152` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/runtime/insights/engine.go:207` filterSessions
+- `gateway-go/internal/runtime/insights/engine.go:308` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:258` sessionsRecent
+- `gateway-go/internal/runtime/server/auto_resume.go:115` initRunMarkerLifecycle
+- `gateway-go/internal/runtime/server/server.go:301` SessionSnapshot
+
+## Label — write 1 · read 14 · **크로스-패키지 6개**
 
 **writes**:
 
-- `internal/domain/session/manager.go:621` ApplyLifecycleEvent
-- `internal/domain/session/manager.go:627` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:131` ResetSession
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:584` ToolSessionsSpawn
 
 reads:
 
-- `internal/domain/session/lifecycle.go:129` DeriveLifecycleSnapshot
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:96` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:221` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:222` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:257` killSession
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:258` killSession
-- `internal/runtime/insights/engine.go:212` filterSessions
-- `internal/runtime/insights/engine.go:212` filterSessions
-- `internal/runtime/insights/engine.go:213` filterSessions
+- `gateway-go/internal/domain/session/patch.go:67` ApplyPatch
+- `gateway-go/internal/domain/session/patch.go:173` FindByLabel
+- `gateway-go/internal/pipeline/chat/session_autotitle.go:78` autoTitleSessionAsync
+- `gateway-go/internal/pipeline/chat/session_autotitle.go:97` autoTitleSessionAsync
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:369` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:82` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:191` childLabel
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:192` childLabel
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:302` resolveChildTarget
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:262` sessionsRecent
+- `gateway-go/internal/runtime/server/server.go:303` SessionSnapshot
+- `gateway-go/internal/runtime/server/session_labels.go:90` snapshotSessionLabels
+- `gateway-go/internal/runtime/server/session_labels.go:96` snapshotSessionLabels
+- `gateway-go/internal/runtime/server/session_labels.go:177` backfillSessionTitles
 
-## Status — write 5 · read 29 · **크로스-패키지 5개**
+## LastActivityAt — write 2 · read 2 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/session/manager.go:334` evictStale
-- `internal/domain/session/manager.go:345` evictStale
-- `internal/domain/session/manager.go:611` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:130` ResetSession
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:255` killSession
+- `gateway-go/internal/domain/session/manager.go:482` TouchActivity
+- `gateway-go/internal/pipeline/autoreply/acp/subagent_deps.go:117` SpawnSubagent
 
 reads:
 
-- `internal/domain/session/manager.go:327` evictStale
-- `internal/domain/session/manager.go:333` evictStale
-- `internal/domain/session/manager.go:339` evictStale
-- `internal/domain/session/manager.go:426` Set
-- `internal/domain/session/manager.go:428` Set
-- `internal/domain/session/manager.go:460` Delete
-- `internal/domain/session/manager.go:481` TouchActivity
-- `internal/domain/session/manager.go:602` ApplyLifecycleEvent
-- `internal/domain/session/manager.go:638` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:129` ResetSession
-- `internal/pipeline/chat/slash_dispatch.go:216` buildSessionStatus
-- `internal/pipeline/chat/slash_dispatch.go:216` buildSessionStatus
-- `internal/pipeline/chat/subagent/notifier.go:370` buildNotifyItem
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:51` ToolSubagents
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:52` ToolSubagents
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:86` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:126` subagentsKill
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:141` subagentsKill
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:142` subagentsKill
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:161` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:179` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:180` subagentsSteer
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:219` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:240` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:249` subagentsResult
-- `internal/runtime/insights/engine.go:307` computeTopSessions
+- `gateway-go/internal/domain/session/manager.go:341` evictStale
+- `gateway-go/internal/domain/session/manager.go:342` evictStale
 
-## TimeoutAt — write 0 · read 2
-
-reads:
-
-- `internal/domain/session/manager.go:333` evictStale
-- `internal/domain/session/manager.go:333` evictStale
-
-## TotalTokens — write 2 · read 14 · **크로스-패키지 4개**
+## LastOutput — write 1 · read 7 · **크로스-패키지 5개**
 
 **writes**:
 
-- `internal/domain/session/patch.go:137` ResetSession
-- `internal/domain/session/patch.go:190` ClearTokens
+- `gateway-go/internal/pipeline/chat/run_lifecycle.go:63` handleRunSuccess
 
 reads:
 
-- `internal/pipeline/chat/slash_dispatch.go:303` sessionTokenLine
-- `internal/pipeline/chat/slash_dispatch.go:303` sessionTokenLine
-- `internal/pipeline/chat/slash_dispatch.go:313` sessionTokenLine
-- `internal/pipeline/chat/slash_dispatch.go:318` sessionTokenLine
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:101` subagentsList
-- `internal/runtime/insights/engine.go:239` computeOverview
-- `internal/runtime/insights/engine.go:240` computeOverview
-- `internal/runtime/insights/engine.go:272` computeModelStats
-- `internal/runtime/insights/engine.go:273` computeModelStats
-- `internal/runtime/insights/engine.go:316` computeTopSessions
-- `internal/runtime/insights/engine.go:317` computeTopSessions
-- `internal/runtime/insights/engine.go:338` computeTopSessions
+- `gateway-go/internal/pipeline/autoreply/acp/context_injection.go:65` StartSubagentResultInjection
+- `gateway-go/internal/pipeline/autoreply/acp/context_injection.go:70` StartSubagentResultInjection
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:372` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:228` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
+- `gateway-go/internal/runtime/cronrunner/cron_agent_adapter.go:466` CollectDescendantOutputs
+- `gateway-go/internal/runtime/cronrunner/cron_agent_adapter.go:473` CollectDescendantOutputs
 
-## UpdatedAt — write 9 · read 8 · **크로스-패키지 3개**
+## Model — write 3 · read 15 · **크로스-패키지 6개**
 
 **writes**:
 
-- `internal/domain/session/manager.go:337` evictStale
-- `internal/domain/session/manager.go:348` evictStale
-- `internal/domain/session/manager.go:516` EnsureVisible
-- `internal/domain/session/manager.go:615` ApplyLifecycleEvent
-- `internal/domain/session/manager.go:617` ApplyLifecycleEvent
-- `internal/domain/session/patch.go:87` ApplyPatch
-- `internal/domain/session/patch.go:138` ResetSession
-- `internal/domain/session/patch.go:191` ClearTokens
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:261` killSession
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:572` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:578` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:580` ToolSessionsSpawn
 
 reads:
 
-- `internal/domain/session/lifecycle.go:131` DeriveLifecycleSnapshot
-- `internal/domain/session/lifecycle.go:132` DeriveLifecycleSnapshot
-- `internal/domain/session/manager.go:329` evictStale
-- `internal/domain/session/manager.go:340` evictStale
-- `internal/domain/session/manager.go:515` EnsureVisible
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
-- `internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
-- `internal/runtime/insights/engine.go:211` filterSessions
+- `gateway-go/internal/domain/session/patch.go:68` ApplyPatch
+- `gateway-go/internal/pipeline/chat/rpc.go:329` HandleBtw
+- `gateway-go/internal/pipeline/chat/run_model.go:52` resolveModel
+- `gateway-go/internal/pipeline/chat/run_model.go:53` resolveModel
+- `gateway-go/internal/pipeline/chat/run_start.go:88` startAsyncRunWithAdmission
+- `gateway-go/internal/pipeline/chat/run_start.go:89` startAsyncRunWithAdmission
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:604` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:605` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:104` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:105` subagentsList
+- `gateway-go/internal/runtime/insights/engine.go:256` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:306` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:261` sessionsRecent
+- `gateway-go/internal/runtime/server/server.go:305` SessionSnapshot
+
+## OutputTokens — write 2 · read 9 · **크로스-패키지 3개**
+
+**writes**:
+
+- `gateway-go/internal/domain/session/patch.go:136` ResetSession
+- `gateway-go/internal/domain/session/patch.go:189` ClearTokens
+
+reads:
+
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:310` sessionTokenLine
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:311` sessionTokenLine
+- `gateway-go/internal/runtime/insights/engine.go:236` computeOverview
+- `gateway-go/internal/runtime/insights/engine.go:237` computeOverview
+- `gateway-go/internal/runtime/insights/engine.go:269` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:270` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:275` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:313` computeTopSessions
+- `gateway-go/internal/runtime/insights/engine.go:314` computeTopSessions
+
+## PreviousCompactionSummary — write 1 · read 1
+
+**writes**:
+
+- `gateway-go/internal/pipeline/chat/run_prepare_compact.go:405` compactWithoutPolarisBridge
+
+reads:
+
+- `gateway-go/internal/pipeline/chat/run_prepare_compact.go:401` compactWithoutPolarisBridge
+
+## RuntimeMs — write 5 · read 9 · **크로스-패키지 7개**
+
+**writes**:
+
+- `gateway-go/internal/domain/session/manager.go:623` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/manager.go:630` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:133` ResetSession
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:75` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:259` killSession
+
+reads:
+
+- `gateway-go/internal/domain/session/lifecycle.go:130` DeriveLifecycleSnapshot
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:377` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:378` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:93` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:94` subagentsList
+- `gateway-go/internal/runtime/insights/engine.go:321` computeTopSessions
+- `gateway-go/internal/runtime/insights/engine.go:322` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:265` sessionsRecent
+- `gateway-go/internal/runtime/server/server.go:308` SessionSnapshot
+
+## SessionID — write 0 · read 2 · **크로스-패키지 2개**
+
+reads:
+
+- `gateway-go/internal/domain/session/patch.go:158` FindBySessionID
+- `gateway-go/internal/runtime/server/server.go:300` SessionSnapshot
+
+## StartedAt — write 3 · read 14 · **크로스-패키지 6개**
+
+**writes**:
+
+- `gateway-go/internal/domain/session/manager.go:621` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/manager.go:627` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:131` ResetSession
+
+reads:
+
+- `gateway-go/internal/domain/session/lifecycle.go:129` DeriveLifecycleSnapshot
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:73` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:74` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:96` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:221` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:222` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:257` killSession
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:258` killSession
+- `gateway-go/internal/runtime/insights/engine.go:212` filterSessions
+- `gateway-go/internal/runtime/insights/engine.go:212` filterSessions
+- `gateway-go/internal/runtime/insights/engine.go:213` filterSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:264` sessionsRecent
+- `gateway-go/internal/runtime/server/server.go:306` SessionSnapshot
+
+## Status — write 6 · read 39 · **크로스-패키지 10개**
+
+**writes**:
+
+- `gateway-go/internal/domain/session/manager.go:334` evictStale
+- `gateway-go/internal/domain/session/manager.go:345` evictStale
+- `gateway-go/internal/domain/session/manager.go:611` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:130` ResetSession
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:70` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:255` killSession
+
+reads:
+
+- `gateway-go/internal/domain/session/manager.go:327` evictStale
+- `gateway-go/internal/domain/session/manager.go:333` evictStale
+- `gateway-go/internal/domain/session/manager.go:339` evictStale
+- `gateway-go/internal/domain/session/manager.go:426` Set
+- `gateway-go/internal/domain/session/manager.go:428` Set
+- `gateway-go/internal/domain/session/manager.go:460` Delete
+- `gateway-go/internal/domain/session/manager.go:481` TouchActivity
+- `gateway-go/internal/domain/session/manager.go:602` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/manager.go:638` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:129` ResetSession
+- `gateway-go/internal/pipeline/autoreply/acp/acp.go:78` enrichFromSession
+- `gateway-go/internal/pipeline/autoreply/acp/acp.go:107` RegisterIfUnderLimit
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:216` buildSessionStatus
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:216` buildSessionStatus
+- `gateway-go/internal/pipeline/chat/subagent/notifier.go:370` buildNotifyItem
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:66` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:559` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:51` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:52` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:86` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:126` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:141` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:142` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:161` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:179` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:180` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:219` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:240` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:249` subagentsResult
+- `gateway-go/internal/runtime/insights/engine.go:307` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/agent/agent.go:170` agentStatus
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:259` sessionsRecent
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:328` sessionsDelete
+- `gateway-go/internal/runtime/rpc/handler/session/session_crud.go:67` sessionsDelete
+- `gateway-go/internal/runtime/server/server.go:304` SessionSnapshot
+
+## TimeoutAt — write 1 · read 2 · **크로스-패키지 2개**
+
+**writes**:
+
+- `gateway-go/internal/pipeline/autoreply/acp/subagent_deps.go:114` SpawnSubagent
+
+reads:
+
+- `gateway-go/internal/domain/session/manager.go:333` evictStale
+- `gateway-go/internal/domain/session/manager.go:333` evictStale
+
+## TotalTokens — write 2 · read 15 · **크로스-패키지 6개**
+
+**writes**:
+
+- `gateway-go/internal/domain/session/patch.go:137` ResetSession
+- `gateway-go/internal/domain/session/patch.go:190` ClearTokens
+
+reads:
+
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:303` sessionTokenLine
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:303` sessionTokenLine
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:313` sessionTokenLine
+- `gateway-go/internal/pipeline/chat/slash_dispatch.go:318` sessionTokenLine
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:101` subagentsList
+- `gateway-go/internal/runtime/insights/engine.go:239` computeOverview
+- `gateway-go/internal/runtime/insights/engine.go:240` computeOverview
+- `gateway-go/internal/runtime/insights/engine.go:272` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:273` computeModelStats
+- `gateway-go/internal/runtime/insights/engine.go:316` computeTopSessions
+- `gateway-go/internal/runtime/insights/engine.go:317` computeTopSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:266` sessionsRecent
+- `gateway-go/internal/runtime/server/server.go:309` SessionSnapshot
+
+## UpdatedAt — write 10 · read 11 · **크로스-패키지 5개**
+
+**writes**:
+
+- `gateway-go/internal/domain/session/manager.go:337` evictStale
+- `gateway-go/internal/domain/session/manager.go:348` evictStale
+- `gateway-go/internal/domain/session/manager.go:516` EnsureVisible
+- `gateway-go/internal/domain/session/manager.go:615` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/manager.go:617` ApplyLifecycleEvent
+- `gateway-go/internal/domain/session/patch.go:87` ApplyPatch
+- `gateway-go/internal/domain/session/patch.go:138` ResetSession
+- `gateway-go/internal/domain/session/patch.go:191` ClearTokens
+- `gateway-go/internal/pipeline/chat/subagent_cleanup.go:77` killOrphanedChildren
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:261` killSession
+
+reads:
+
+- `gateway-go/internal/domain/session/lifecycle.go:131` DeriveLifecycleSnapshot
+- `gateway-go/internal/domain/session/lifecycle.go:132` DeriveLifecycleSnapshot
+- `gateway-go/internal/domain/session/manager.go:329` evictStale
+- `gateway-go/internal/domain/session/manager.go:340` evictStale
+- `gateway-go/internal/domain/session/manager.go:515` EnsureVisible
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
+- `gateway-go/internal/runtime/insights/engine.go:211` filterSessions
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:248` sessionsRecent
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:248` sessionsRecent
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:263` sessionsRecent
 
 ---
 
-필드명은 일치하나 타입을 증명하지 못해 제외한 접근: 1164건 — 다른 타입의
-동명 필드(진짜 무관)와 타입 추론 로컬(놓친 접근)이 섞인 상한이다.
+타입체커가 해석하지 못한 필드명 일치 접근: 0건 (체크 에러가 있는 패키지에서만 발생).

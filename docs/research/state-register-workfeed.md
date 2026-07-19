@@ -4,379 +4,372 @@
 
 이 표는 공유 상태 한 타입의 필드별 write/read 지점을 패키지 경계 너머까지 펼친다
 (Harness Handbook의 state-register 뷰 채택). 콜그래프가 못 보여주는 "이 상태를
-바꾸면 어디가 영향받나"의 블래스트 반경. 선언-타입 전파 기반의 정직한
-과소근사: 타입 추론 로컬 등 증명 못 한 접근은 세지 않고 아래에 개수만 보고한다.
+바꾸면 어디가 영향받나"의 블래스트 반경. go/types 타입체크 기반 — 리턴 타입
+호출·클로저·추론 로컬을 지나는 접근까지 컴파일러가 해석하는 그대로 계수한다.
 
-## Actions — write 3 · read 10 · **크로스-패키지 2개**
-
-**writes**:
-
-- `internal/domain/workfeed/item_helpers.go:125` normalizeItem
-- `internal/runtime/server/workfeed_meta_proposal.go:158` postMetaProposalCard
-- `internal/runtime/server/workfeed_meta_proposal.go:173` postMetaProposalCard
-
-reads:
-
-- `internal/domain/workfeed/item_helpers.go:149` normalizeActions
-- `internal/domain/workfeed/item_helpers.go:215` findAction
-- `internal/domain/workfeed/item_helpers.go:224` markActionDone
-- `internal/domain/workfeed/item_helpers.go:225` markActionDone
-- `internal/domain/workfeed/item_helpers.go:225` markActionDone
-- `internal/domain/workfeed/item_helpers.go:226` markActionDone
-- `internal/runtime/server/tooldeps_adapters.go:53` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:54` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:69` unmapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:70` unmapWorkFeedItem
-
-## Body — write 7 · read 14 · **크로스-패키지 4개**
+## Actions — write 3 · read 8 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:108` normalizeItem
-- `internal/domain/workfeed/store.go:506` Correct
-- `internal/domain/workfeed/store.go:555` EscalateApproval
-- `internal/domain/workfeed/store.go:557` EscalateApproval
-- `internal/domain/workfeed/store.go:582` Rewrite
-- `internal/runtime/server/workfeed_meta_proposal.go:149` postMetaProposalCard
-- `internal/runtime/server/workfeed_meta_proposal.go:163` postMetaProposalCard
+- `gateway-go/internal/domain/workfeed/item_helpers.go:125` normalizeItem
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:158` postMetaProposalCard
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:173` postMetaProposalCard
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:30` inferPriority
-- `internal/domain/workfeed/item_helpers.go:108` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:120` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:292` contextBody
-- `internal/domain/workfeed/store.go:211` isDuplicateCard
-- `internal/domain/workfeed/store.go:215` isDuplicateCard
-- `internal/domain/workfeed/store.go:270` meetingCardFingerprint
-- `internal/domain/workfeed/store.go:506` Correct
-- `internal/domain/workfeed/store.go:554` EscalateApproval
-- `internal/domain/workfeed/store.go:555` EscalateApproval
-- `internal/runtime/rpc/handler/chat/miniapp_workfeed.go:216` writeOriginalWorkFeedCard
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:76` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:149` normalizeActions
+- `gateway-go/internal/domain/workfeed/item_helpers.go:215` findAction
+- `gateway-go/internal/domain/workfeed/item_helpers.go:224` markActionDone
+- `gateway-go/internal/domain/workfeed/item_helpers.go:225` markActionDone
+- `gateway-go/internal/domain/workfeed/item_helpers.go:225` markActionDone
+- `gateway-go/internal/domain/workfeed/item_helpers.go:226` markActionDone
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:53` mapWorkFeedItem
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:54` mapWorkFeedItem
 
-## CreatedAtMs — write 1 · read 12 · **크로스-패키지 4개**
+## Body — write 7 · read 13 · **크로스-패키지 4개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:89` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:108` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:511` Correct
+- `gateway-go/internal/domain/workfeed/store.go:560` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:562` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:587` Rewrite
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:149` postMetaProposalCard
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:163` postMetaProposalCard
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:77` retentionRecency
-- `internal/domain/workfeed/item_helpers.go:88` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:99` normalizeExisting
-- `internal/domain/workfeed/store.go:369` ListFiltered
-- `internal/domain/workfeed/store.go:396` ListFiltered
-- `internal/domain/workfeed/store.go:399` ListFiltered
-- `internal/domain/workfeed/store.go:456` Engagement
-- `internal/runtime/rpc/handler/chat/miniapp_bridge.go:62` buildTodayFeedDigest
-- `internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:241` projectWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:63` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:79` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:30` inferPriority
+- `gateway-go/internal/domain/workfeed/item_helpers.go:108` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:120` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:292` contextBody
+- `gateway-go/internal/domain/workfeed/store.go:216` isDuplicateCard
+- `gateway-go/internal/domain/workfeed/store.go:220` isDuplicateCard
+- `gateway-go/internal/domain/workfeed/store.go:275` meetingCardFingerprint
+- `gateway-go/internal/domain/workfeed/store.go:511` Correct
+- `gateway-go/internal/domain/workfeed/store.go:559` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:560` EscalateApproval
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:216` writeOriginalWorkFeedCard
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
 
-## ID — write 3 · read 20 · **크로스-패키지 4개**
+## CreatedAtMs — write 1 · read 11 · **크로스-패키지 4개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:82` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:84` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:105` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:89` normalizeNew
 
 reads:
 
-- `internal/domain/nativesync/events.go:105` WorkFeedActionRun
-- `internal/domain/nativesync/events.go:107` WorkFeedActionRun
-- `internal/domain/nativesync/events.go:122` workFeedItem
-- `internal/domain/nativesync/events.go:124` workFeedItem
-- `internal/domain/workfeed/item_helpers.go:82` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:83` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:105` normalizeItem
-- `internal/domain/workfeed/store.go:378` ListFiltered
-- `internal/domain/workfeed/store.go:378` ListFiltered
-- `internal/domain/workfeed/store.go:610` mutateItem
-- `internal/domain/workfeed/store.go:662` RunActionWithEffect
-- `internal/domain/workfeed/store.go:676` RunActionWithEffect
-- `internal/domain/workfeed/store.go:717` RunActionWithEffect
-- `internal/domain/workfeed/store.go:753` settleAction
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:240` projectWorkFeedItem
-- `internal/runtime/server/native_sync_workfeed.go:80` AckBySourceRef
-- `internal/runtime/server/native_sync_workfeed.go:103` EscalateApprovalBySourceRef
-- `internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:76` unmapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:287` mapCalendarEvent
+- `gateway-go/internal/domain/workfeed/item_helpers.go:77` retentionRecency
+- `gateway-go/internal/domain/workfeed/item_helpers.go:88` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:99` normalizeExisting
+- `gateway-go/internal/domain/workfeed/store.go:374` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:401` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:404` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:461` Engagement
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:62` buildTodayFeedDigest
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:241` projectWorkFeedItem
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:63` mapWorkFeedItem
 
-## Metadata — write 1 · read 14 · **크로스-패키지 2개**
+## ID — write 3 · read 24 · **크로스-패키지 6개**
 
 **writes**:
 
-- `internal/domain/workfeed/store.go:535` EscalateApproval
+- `gateway-go/internal/domain/workfeed/item_helpers.go:82` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:84` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:105` normalizeItem
 
 reads:
 
-- `internal/domain/workfeed/store.go:534` EscalateApproval
-- `internal/domain/workfeed/store.go:537` EscalateApproval
-- `internal/domain/workfeed/store.go:541` EscalateApproval
-- `internal/domain/workfeed/store.go:544` EscalateApproval
-- `internal/domain/workfeed/store.go:546` EscalateApproval
-- `internal/domain/workfeed/store.go:547` EscalateApproval
-- `internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:77` unmapWorkFeedItem
-- `internal/runtime/server/workfeed_groupware_approval.go:73` runGroupwareApprovalAction
-- `internal/runtime/server/workfeed_meta_proposal.go:80` handleEvolveVerdictAction
-- `internal/runtime/server/workfeed_meta_proposal.go:81` handleEvolveVerdictAction
-- `internal/runtime/server/workfeed_meta_proposal.go:82` handleEvolveVerdictAction
-- `internal/runtime/server/workfeed_meta_proposal.go:83` handleEvolveVerdictAction
-- `internal/runtime/server/workfeed_meta_proposal.go:114` handleEvolveVerdictAction
+- `gateway-go/internal/domain/nativesync/events.go:105` WorkFeedActionRun
+- `gateway-go/internal/domain/nativesync/events.go:107` WorkFeedActionRun
+- `gateway-go/internal/domain/nativesync/events.go:122` workFeedItem
+- `gateway-go/internal/domain/nativesync/events.go:124` workFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:82` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:83` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:105` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:383` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:383` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:615` mutateItem
+- `gateway-go/internal/domain/workfeed/store.go:667` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:681` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:722` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:752` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:771` settleAction
+- `gateway-go/internal/runtime/proactive/proactive_relay.go:429` appendProactiveWorkFeed
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:202` findWorkFeedItem
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:240` projectWorkFeedItem
+- `gateway-go/internal/runtime/server/groupware_radar.go:281` publishApprovalAnalysisFeed
+- `gateway-go/internal/runtime/server/groupware_radar.go:370` notifyGroupwareRadarListFailed
+- `gateway-go/internal/runtime/server/method_registry.go:758` earlyProjectMethods
+- `gateway-go/internal/runtime/server/native_sync_workfeed.go:80` AckBySourceRef
+- `gateway-go/internal/runtime/server/native_sync_workfeed.go:103` EscalateApprovalBySourceRef
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
 
-## Priority — write 4 · read 7 · **크로스-패키지 2개**
+## Metadata — write 1 · read 13 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:123` normalizeItem
-- `internal/domain/workfeed/store.go:559` EscalateApproval
-- `internal/domain/workfeed/store.go:561` EscalateApproval
-- `internal/domain/workfeed/store.go:583` Rewrite
+- `gateway-go/internal/domain/workfeed/store.go:540` EscalateApproval
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:122` normalizeItem
-- `internal/domain/workfeed/store.go:373` ListFiltered
-- `internal/domain/workfeed/store.go:373` ListFiltered
-- `internal/domain/workfeed/store.go:374` ListFiltered
-- `internal/domain/workfeed/store.go:374` ListFiltered
-- `internal/runtime/server/tooldeps_adapters.go:62` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:78` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/store.go:539` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:542` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:546` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:549` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:551` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:552` EscalateApproval
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
+- `gateway-go/internal/runtime/server/workfeed_groupware_approval.go:73` runGroupwareApprovalAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:80` handleEvolveVerdictAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:81` handleEvolveVerdictAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:82` handleEvolveVerdictAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:83` handleEvolveVerdictAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:114` handleEvolveVerdictAction
 
-## Question — write 1 · read 2
+## Priority — write 4 · read 6 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/runtime/server/workfeed_meta_proposal.go:172` postMetaProposalCard
+- `gateway-go/internal/domain/workfeed/item_helpers.go:123` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:564` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:566` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:588` Rewrite
 
 reads:
 
-- `internal/runtime/server/tooldeps_adapters.go:62` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:78` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:122` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:378` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:378` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:379` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:379` ListFiltered
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:62` mapWorkFeedItem
 
-## ReadAtMs — write 1 · read 3 · **크로스-패키지 2개**
+## Question — write 1 · read 1
 
 **writes**:
 
-- `internal/domain/workfeed/store.go:491` MarkRead
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:172` postMetaProposalCard
 
 reads:
 
-- `internal/domain/workfeed/store.go:488` MarkRead
-- `internal/runtime/server/tooldeps_adapters.go:64` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:80` unmapWorkFeedItem
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:62` mapWorkFeedItem
+
+## ReadAtMs — write 1 · read 2 · **크로스-패키지 2개**
+
+**writes**:
+
+- `gateway-go/internal/domain/workfeed/store.go:496` MarkRead
+
+reads:
+
+- `gateway-go/internal/domain/workfeed/store.go:493` MarkRead
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:64` mapWorkFeedItem
 
 ## RefID — write 1 · read 11 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:111` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:111` normalizeItem
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:111` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:257` openPrompt
-- `internal/domain/workfeed/store.go:177` AppendIfNew
-- `internal/domain/workfeed/store.go:179` AppendIfNew
-- `internal/domain/workfeed/store.go:247` findActiveBySourceRef
-- `internal/runtime/server/deal_question.go:100` recordDealQuestionAnswer
-- `internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:77` unmapWorkFeedItem
-- `internal/runtime/server/workfeed_groupware_approval.go:71` runGroupwareApprovalAction
-- `internal/runtime/server/workfeed_meta_proposal.go:85` handleEvolveVerdictAction
-- `internal/runtime/server/workfeed_meta_proposal.go:246` handleMetaProposalAction
+- `gateway-go/internal/domain/workfeed/item_helpers.go:111` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:257` openPrompt
+- `gateway-go/internal/domain/workfeed/store.go:182` AppendIfNew
+- `gateway-go/internal/domain/workfeed/store.go:184` AppendIfNew
+- `gateway-go/internal/domain/workfeed/store.go:252` findActiveBySourceRef
+- `gateway-go/internal/runtime/server/deal_question.go:100` recordDealQuestionAnswer
+- `gateway-go/internal/runtime/server/method_registry.go:758` earlyProjectMethods
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
+- `gateway-go/internal/runtime/server/workfeed_groupware_approval.go:71` runGroupwareApprovalAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:85` handleEvolveVerdictAction
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:246` handleMetaProposalAction
 
-## RefType — write 1 · read 4 · **크로스-패키지 2개**
+## RefType — write 1 · read 3 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:110` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:110` normalizeItem
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:110` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:254` openPrompt
-- `internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:77` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:110` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:254` openPrompt
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
 
-## SessionKey — write 1 · read 9 · **크로스-패키지 4개**
+## SessionKey — write 1 · read 9 · **크로스-패키지 5개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:109` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:109` normalizeItem
 
 reads:
 
-- `internal/domain/nativesync/events.go:123` workFeedItem
-- `internal/domain/workfeed/item_helpers.go:109` normalizeItem
-- `internal/domain/workfeed/store.go:686` RunActionWithEffect
-- `internal/domain/workfeed/store.go:698` RunActionWithEffect
-- `internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
-- `internal/runtime/rpc/handler/chat/miniapp_workfeed.go:64` handleMiniappWorkfeedFeedback
-- `internal/runtime/rpc/handler/chat/miniapp_workfeed.go:145` handleMiniappWorkfeedRewrite
-- `internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:77` unmapWorkFeedItem
+- `gateway-go/internal/domain/nativesync/events.go:123` workFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:109` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:691` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:703` RunActionWithEffect
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:64` handleMiniappWorkfeedFeedback
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:145` handleMiniappWorkfeedRewrite
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:123` workFeedAnswer
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
 
-## SnoozedUntilMs — write 1 · read 6 · **크로스-패키지 2개**
+## SnoozedUntilMs — write 1 · read 5 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/store.go:722` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:727` RunActionWithEffect
 
 reads:
 
-- `internal/domain/workfeed/store.go:366` ListFiltered
-- `internal/domain/workfeed/store.go:366` ListFiltered
-- `internal/domain/workfeed/store.go:367` ListFiltered
-- `internal/domain/workfeed/store.go:390` ListFiltered
-- `internal/runtime/server/tooldeps_adapters.go:64` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:80` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/store.go:371` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:371` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:372` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:395` ListFiltered
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:64` mapWorkFeedItem
 
-## Source — write 1 · read 26 · **크로스-패키지 3개**
+## Source — write 1 · read 27 · **크로스-패키지 4개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:106` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:106` normalizeItem
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:106` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:117` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:168` normalizeActions
-- `internal/domain/workfeed/item_helpers.go:181` defaultActions
-- `internal/domain/workfeed/item_helpers.go:182` defaultActions
-- `internal/domain/workfeed/item_helpers.go:183` defaultActions
-- `internal/domain/workfeed/item_helpers.go:184` defaultActions
-- `internal/domain/workfeed/item_helpers.go:249` openPrompt
-- `internal/domain/workfeed/item_helpers.go:277` followUpPrompt
-- `internal/domain/workfeed/store.go:177` AppendIfNew
-- `internal/domain/workfeed/store.go:179` AppendIfNew
-- `internal/domain/workfeed/store.go:208` isDuplicateCard
-- `internal/domain/workfeed/store.go:208` isDuplicateCard
-- `internal/domain/workfeed/store.go:247` findActiveBySourceRef
-- `internal/domain/workfeed/store.go:257` isMeetingNearDuplicate
-- `internal/domain/workfeed/store.go:257` isMeetingNearDuplicate
-- `internal/domain/workfeed/store.go:458` Engagement
-- `internal/domain/workfeed/store.go:531` EscalateApproval
-- `internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
-- `internal/runtime/server/native_sync_workfeed.go:150` RunAction
-- `internal/runtime/server/native_sync_workfeed.go:154` RunAction
-- `internal/runtime/server/native_sync_workfeed.go:158` RunAction
-- `internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:76` unmapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:290` mapCalendarEvent
-- `internal/runtime/server/tooldeps_adapters.go:315` unmapCreateInput
+- `gateway-go/internal/domain/workfeed/item_helpers.go:106` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:117` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:168` normalizeActions
+- `gateway-go/internal/domain/workfeed/item_helpers.go:181` defaultActions
+- `gateway-go/internal/domain/workfeed/item_helpers.go:182` defaultActions
+- `gateway-go/internal/domain/workfeed/item_helpers.go:183` defaultActions
+- `gateway-go/internal/domain/workfeed/item_helpers.go:184` defaultActions
+- `gateway-go/internal/domain/workfeed/item_helpers.go:249` openPrompt
+- `gateway-go/internal/domain/workfeed/item_helpers.go:277` followUpPrompt
+- `gateway-go/internal/domain/workfeed/store.go:182` AppendIfNew
+- `gateway-go/internal/domain/workfeed/store.go:184` AppendIfNew
+- `gateway-go/internal/domain/workfeed/store.go:213` isDuplicateCard
+- `gateway-go/internal/domain/workfeed/store.go:213` isDuplicateCard
+- `gateway-go/internal/domain/workfeed/store.go:252` findActiveBySourceRef
+- `gateway-go/internal/domain/workfeed/store.go:262` isMeetingNearDuplicate
+- `gateway-go/internal/domain/workfeed/store.go:262` isMeetingNearDuplicate
+- `gateway-go/internal/domain/workfeed/store.go:463` Engagement
+- `gateway-go/internal/domain/workfeed/store.go:536` EscalateApproval
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:225` workFeedActionRun
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:230` workFeedActionRun
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:235` workFeedActionRun
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:240` workFeedActionRun
+- `gateway-go/internal/runtime/server/native_sync_workfeed.go:150` RunAction
+- `gateway-go/internal/runtime/server/native_sync_workfeed.go:154` RunAction
+- `gateway-go/internal/runtime/server/native_sync_workfeed.go:158` RunAction
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
 
-## Status — write 6 · read 13 · **크로스-패키지 2개**
+## Status — write 6 · read 11 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:112` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:114` normalizeItem
-- `internal/domain/workfeed/store.go:393` ListFiltered
-- `internal/domain/workfeed/store.go:474` Ack
-- `internal/domain/workfeed/store.go:720` RunActionWithEffect
-- `internal/domain/workfeed/store.go:756` settleAction
+- `gateway-go/internal/domain/workfeed/item_helpers.go:112` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:114` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:398` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:479` Ack
+- `gateway-go/internal/domain/workfeed/store.go:725` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:774` settleAction
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:66` pruneRetention
-- `internal/domain/workfeed/item_helpers.go:66` pruneRetention
-- `internal/domain/workfeed/item_helpers.go:112` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:113` normalizeItem
-- `internal/domain/workfeed/store.go:247` findActiveBySourceRef
-- `internal/domain/workfeed/store.go:366` ListFiltered
-- `internal/domain/workfeed/store.go:386` ListFiltered
-- `internal/domain/workfeed/store.go:389` ListFiltered
-- `internal/domain/workfeed/store.go:452` Engagement
-- `internal/domain/workfeed/store.go:531` EscalateApproval
-- `internal/runtime/server/tooldeps_adapters.go:62` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:78` unmapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:288` mapCalendarEvent
+- `gateway-go/internal/domain/workfeed/item_helpers.go:66` pruneRetention
+- `gateway-go/internal/domain/workfeed/item_helpers.go:66` pruneRetention
+- `gateway-go/internal/domain/workfeed/item_helpers.go:112` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:113` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:252` findActiveBySourceRef
+- `gateway-go/internal/domain/workfeed/store.go:371` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:391` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:394` ListFiltered
+- `gateway-go/internal/domain/workfeed/store.go:457` Engagement
+- `gateway-go/internal/domain/workfeed/store.go:536` EscalateApproval
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:62` mapWorkFeedItem
 
-## Summary — write 5 · read 16 · **크로스-패키지 4개**
+## Summary — write 5 · read 15 · **크로스-패키지 4개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:86` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:96` normalizeExisting
-- `internal/domain/workfeed/item_helpers.go:120` normalizeItem
-- `internal/domain/workfeed/store.go:550` EscalateApproval
-- `internal/domain/workfeed/store.go:552` EscalateApproval
+- `gateway-go/internal/domain/workfeed/item_helpers.go:86` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:96` normalizeExisting
+- `gateway-go/internal/domain/workfeed/item_helpers.go:120` normalizeItem
+- `gateway-go/internal/domain/workfeed/store.go:555` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:557` EscalateApproval
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:30` inferPriority
-- `internal/domain/workfeed/item_helpers.go:86` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:96` normalizeExisting
-- `internal/domain/workfeed/item_helpers.go:119` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:263` openPrompt
-- `internal/domain/workfeed/item_helpers.go:294` contextBody
-- `internal/domain/workfeed/store.go:272` meetingCardFingerprint
-- `internal/domain/workfeed/store.go:543` EscalateApproval
-- `internal/runtime/rpc/handler/chat/miniapp_bridge.go:66` buildTodayFeedDigest
-- `internal/runtime/rpc/handler/chat/miniapp_workfeed.go:219` writeOriginalWorkFeedCard
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:384` workFeedSubtitle
-- `internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:76` unmapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:287` mapCalendarEvent
-- `internal/runtime/server/tooldeps_adapters.go:313` unmapCreateInput
+- `gateway-go/internal/domain/workfeed/item_helpers.go:30` inferPriority
+- `gateway-go/internal/domain/workfeed/item_helpers.go:86` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:96` normalizeExisting
+- `gateway-go/internal/domain/workfeed/item_helpers.go:119` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:263` openPrompt
+- `gateway-go/internal/domain/workfeed/item_helpers.go:294` contextBody
+- `gateway-go/internal/domain/workfeed/store.go:277` meetingCardFingerprint
+- `gateway-go/internal/domain/workfeed/store.go:548` EscalateApproval
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:66` buildTodayFeedDigest
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:219` writeOriginalWorkFeedCard
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:384` workFeedSubtitle
+- `gateway-go/internal/runtime/server/groupware_radar.go:273` publishApprovalAnalysisFeed
+- `gateway-go/internal/runtime/server/groupware_radar.go:362` notifyGroupwareRadarListFailed
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
 
-## Title — write 4 · read 12 · **크로스-패키지 4개**
+## Title — write 4 · read 14 · **크로스-패키지 5개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:107` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:117` normalizeItem
-- `internal/runtime/server/workfeed_meta_proposal.go:148` postMetaProposalCard
-- `internal/runtime/server/workfeed_meta_proposal.go:162` postMetaProposalCard
+- `gateway-go/internal/domain/workfeed/item_helpers.go:107` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:117` normalizeItem
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:148` postMetaProposalCard
+- `gateway-go/internal/runtime/server/workfeed_meta_proposal.go:162` postMetaProposalCard
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:30` inferPriority
-- `internal/domain/workfeed/item_helpers.go:107` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:116` normalizeItem
-- `internal/domain/workfeed/item_helpers.go:244` openPrompt
-- `internal/domain/workfeed/store.go:272` meetingCardFingerprint
-- `internal/domain/workfeed/store.go:295` meetingCardFingerprint
-- `internal/runtime/rpc/handler/chat/miniapp_bridge.go:65` buildTodayFeedDigest
-- `internal/runtime/rpc/handler/chat/miniapp_workfeed.go:211` writeOriginalWorkFeedCard
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
-- `internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:236` projectWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:76` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:30` inferPriority
+- `gateway-go/internal/domain/workfeed/item_helpers.go:107` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:116` normalizeItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:244` openPrompt
+- `gateway-go/internal/domain/workfeed/store.go:277` meetingCardFingerprint
+- `gateway-go/internal/domain/workfeed/store.go:300` meetingCardFingerprint
+- `gateway-go/internal/runtime/curriculumenv/digest.go:152` writeFeedSection
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:65` buildTodayFeedDigest
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:211` writeOriginalWorkFeedCard
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
+- `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:236` projectWorkFeedItem
+- `gateway-go/internal/runtime/server/groupware_radar.go:275` publishApprovalAnalysisFeed
+- `gateway-go/internal/runtime/server/groupware_radar.go:364` notifyGroupwareRadarListFailed
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
 
-## UpdatedAtMs — write 8 · read 5 · **크로스-패키지 2개**
+## UpdatedAtMs — write 9 · read 4 · **크로스-패키지 2개**
 
 **writes**:
 
-- `internal/domain/workfeed/item_helpers.go:91` normalizeNew
-- `internal/domain/workfeed/item_helpers.go:99` normalizeExisting
-- `internal/domain/workfeed/store.go:475` Ack
-- `internal/domain/workfeed/store.go:508` Correct
-- `internal/domain/workfeed/store.go:563` EscalateApproval
-- `internal/domain/workfeed/store.go:584` Rewrite
-- `internal/domain/workfeed/store.go:721` RunActionWithEffect
-- `internal/domain/workfeed/store.go:757` settleAction
+- `gateway-go/internal/domain/workfeed/item_helpers.go:91` normalizeNew
+- `gateway-go/internal/domain/workfeed/item_helpers.go:99` normalizeExisting
+- `gateway-go/internal/domain/workfeed/store.go:480` Ack
+- `gateway-go/internal/domain/workfeed/store.go:513` Correct
+- `gateway-go/internal/domain/workfeed/store.go:568` EscalateApproval
+- `gateway-go/internal/domain/workfeed/store.go:589` Rewrite
+- `gateway-go/internal/domain/workfeed/store.go:726` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:754` RunActionWithEffect
+- `gateway-go/internal/domain/workfeed/store.go:775` settleAction
 
 reads:
 
-- `internal/domain/workfeed/item_helpers.go:74` retentionRecency
-- `internal/domain/workfeed/item_helpers.go:75` retentionRecency
-- `internal/domain/workfeed/item_helpers.go:98` normalizeExisting
-- `internal/runtime/server/tooldeps_adapters.go:63` mapWorkFeedItem
-- `internal/runtime/server/tooldeps_adapters.go:79` unmapWorkFeedItem
+- `gateway-go/internal/domain/workfeed/item_helpers.go:74` retentionRecency
+- `gateway-go/internal/domain/workfeed/item_helpers.go:75` retentionRecency
+- `gateway-go/internal/domain/workfeed/item_helpers.go:98` normalizeExisting
+- `gateway-go/internal/runtime/server/tooldeps_adapters.go:63` mapWorkFeedItem
 
 ---
 
-필드명은 일치하나 타입을 증명하지 못해 제외한 접근: 3019건 — 다른 타입의
-동명 필드(진짜 무관)와 타입 추론 로컬(놓친 접근)이 섞인 상한이다.
+타입체커가 해석하지 못한 필드명 일치 접근: 0건 (체크 에러가 있는 패키지에서만 발생).
