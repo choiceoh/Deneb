@@ -130,8 +130,12 @@ type Frontmatter struct {
 	// parent folds away when its child is present. 대표페이지 전용.
 	Kinds []string
 	// Stage is the project's business lifecycle stage on the 대표페이지 —
-	// fixed vocabulary 제안 → 견적 → 입찰 → 계약협의 → 시공 → 운영, with 종결/유실
-	// as terminal states (operator-confirmed 2026-07-19). Distinct from the
+	// fixed vocabulary 제안 → 견적 → 입찰 → 개발 → 계약협의 → 시공/납품 → 운영,
+	// with 종결/유실 as terminal states (operator-confirmed 2026-07-19/20).
+	// 개발 covers own-development permitting (자체개발 인허가·부지); 시공 and
+	// 납품 are parallel execution tracks — 시공 for site projects, 납품 for
+	// 기자재 (procurement) deals whose "execution" is delivery, not
+	// construction (operator: "기자재 전용을 나눠"). Distinct from the
 	// 현장 page's Status (후보/계약/개설/준공, per-site map lifecycle): Stage is
 	// the DEAL's stage, one per project. Gates how much documentation a
 	// project earns — site-detail sections start at 계약협의 (the site-docs
@@ -824,7 +828,7 @@ var kindStageWords = map[string]bool{
 // kindStageWords).
 // projectStages is the fixed stage: vocabulary in pipeline order. Kept as a
 // list (not just a set) so consumers can compare progression.
-var projectStages = []string{"제안", "견적", "입찰", "계약협의", "시공", "운영", "종결", "유실"}
+var projectStages = []string{"제안", "견적", "입찰", "개발", "계약협의", "시공", "납품", "운영", "종결", "유실"}
 
 // normalizeStage canonicalizes a stage: value — trims, and drops anything
 // outside the fixed vocabulary (same discipline as normalizeKinds: bad values
