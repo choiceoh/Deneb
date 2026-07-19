@@ -255,6 +255,36 @@ func (a *analyzer) scanFile(path string, af *ast.File) {
 		return false
 	}
 
+	// Short-var / range propagation: `s := m.sessions[key]` and
+	// `for _, s := range m.sessions` are the session core's dominant access
+	// pattern (patch.go, manager.go) — without this the map misses the domain
+	// package almost entirely. File-level fixpoint (2 passes covers chains
+	// like `a := m.sessions[k]; b := a`); name collisions across functions are
+	// theoretical here and still require a field-name match to miscount.
+	for range 2 {
+		ast.Inspect(af, func(n ast.Node) bool {
+			switch st := n.(type) {
+			case *ast.AssignStmt:
+				if st.Tok == token.DEFINE && len(st.Lhs) == len(st.Rhs) {
+					for i, lhs := range st.Lhs {
+						id, ok := lhs.(*ast.Ident)
+						if !ok || id.Name == "_" {
+							continue
+						}
+						if baseIsTarget(st.Rhs[i]) {
+							typed[id.Name] = true
+						}
+					}
+				}
+			case *ast.RangeStmt:
+				if v, ok := st.Value.(*ast.Ident); ok && v.Name != "_" && baseIsTarget(st.X) {
+					typed[v.Name] = true
+				}
+			}
+			return true
+		})
+	}
+
 	writes := map[*ast.SelectorExpr]bool{}
 	ast.Inspect(af, func(n ast.Node) bool {
 		switch st := n.(type) {
