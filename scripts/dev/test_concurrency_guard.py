@@ -179,5 +179,25 @@ class FailOpenTests(unittest.TestCase):
         self.assertEqual(done.stdout.strip(), "")
 
 
+class DecisionMessageTests(GuardTestCase):
+    """The 2026-07-19 clarity fix: a guard block must be distinguishable from a
+    user cancel, in both the JSON reason and stderr."""
+
+    def test_deny_reason_marks_it_as_guard_not_user_cancel(self) -> None:
+        prod_file = str(self.home / "deneb/gateway-go/main.go")
+        stdin = payload("Edit", {"file_path": prod_file}, str(self.home))
+        out = self.run_guard(stdin)
+        self.assertEqual(out["permissionDecision"], "deny")
+        self.assertIn("사용자 취소 아님", out["permissionDecisionReason"])
+        self.assertIn("차단", out["permissionDecisionReason"])
+
+    def test_reason_is_mirrored_to_stderr(self) -> None:
+        prod_file = str(self.home / "deneb/gateway-go/main.go")
+        stdin = payload("Edit", {"file_path": prod_file}, str(self.home))
+        _, _, err = invoke_main(guard, stdin=stdin, env=self.env)
+        self.assertIn("deneb-concurrency-guard", err)
+        self.assertIn("사용자 취소 아님", err)
+
+
 if __name__ == "__main__":
     unittest.main()

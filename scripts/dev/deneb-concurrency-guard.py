@@ -48,14 +48,31 @@ def livetest_lock_path():
 
 
 def decide(decision, reason):
-    """Emit a PreToolUse permission decision (deny/ask) and allow-exit."""
+    """Emit a PreToolUse permission decision (deny/ask) and allow-exit.
+
+    The reason is prefixed so it is never mistaken for a user cancel: the
+    harness renders a hook deny with a generic "user declined" wrapper, which
+    (2026-07-19) made a correct guard block look like the operator pressed no.
+    The marker travels inside permissionDecisionReason AND is mirrored to
+    stderr, so whichever stream the harness surfaces, the model sees that a
+    guard — not the user — stopped the call, and why.
+    """
+    marker = (
+        "⚠️ Deneb 동시작업 가드가 차단했습니다 (사용자 취소 아님) — "
+        if decision == "deny"
+        else "❓ Deneb 동시작업 가드가 확인을 요청합니다 (사용자 취소 아님) — "
+    )
+    full = marker + reason
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": decision,
-            "permissionDecisionReason": reason,
+            "permissionDecisionReason": full,
         }
     }, ensure_ascii=False))
+    # Mirror to stderr — surfaced to the model even when the JSON drives the
+    # decision, matching how the rules-gate's message reliably shows up.
+    print(f"[deneb-concurrency-guard] {full}", file=sys.stderr)
     return 0
 
 
