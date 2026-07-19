@@ -111,6 +111,22 @@ func TestEmbedCompactionTextsUsesPassageAndQueryRoles(t *testing.T) {
 	}
 }
 
+func TestEmbedCompactionTextsRejectsOversizedBatch(t *testing.T) {
+	embedder := &roleAwareMockEmbedder{}
+	_, _, err := embedCompactionTexts(
+		context.Background(),
+		embedder,
+		make([]string, mmrMaxEmbedBatch),
+		[]string{"one too many"},
+	)
+	if err == nil {
+		t.Fatal("embedCompactionTexts accepted an oversized batch")
+	}
+	if len(embedder.calls) != 0 {
+		t.Fatalf("embedder called for oversized batch: %v", embedder.calls)
+	}
+}
+
 func TestCosineSim_ReturnsHighForIdenticalLowForOrthogonal(t *testing.T) {
 	a := []float32{1, 0, 0}
 	b := []float32{1, 0, 0}
