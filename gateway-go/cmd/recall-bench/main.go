@@ -22,6 +22,14 @@
 // projects. Both are default-off so the bare invocation stays a pure P@K tool.
 // The `make recall-health` target wires the wiki copy + --health end to end;
 // see health.go.
+//
+// Gold sets live outside the repo in ~/.deneb/ (real data): wiki-qa-gold.jsonl
+// (hand-written chat-style questions, the default) plus themed sets like
+// wiki-qa-gold-hard/-multiturn/-analysis-xl.jsonl. The analysis-xl set — real
+// mail/approval subjects labeled with their wiki project, probing the dominant
+// mail/approval-analysis recall path at scale — is regenerated with
+// scripts/audit/mine_analysis_gold.py (spot-check labels before trusting; see
+// its docstring for the precision guards).
 package main
 
 import (

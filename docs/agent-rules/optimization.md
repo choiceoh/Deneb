@@ -16,6 +16,7 @@ description: "상수/파라미터 반복 최적화 전략 — 라이브 테스�
 | `scripts/dev/quality-metric.sh [MSG]` | 네이티브 클라 채팅 품질 점수 0-100 (15~60초) |
 | `scripts/dev/recall-metric.sh` | 회상 품질 점수 0-100 (합성 코퍼스 hit rate, ~1초, LLM 불필요) |
 | `python3 scripts/dev/mail-bench.py trap --model <현역모델>` | 메일 분석 고정 벤치 — 함정 6통×지표 18 자동 채점 (wormhole 필요, ~3분) |
+| `scripts/audit/mine_analysis_gold.py --wiki <위키사본>` | **분석 경로 골드셋 채굴** — 실제 메일/결재 제목을 위키 프로젝트 폴더로 자동 라벨링해 `~/.deneb/wiki-qa-gold-analysis-xl.jsonl` 생성 (지배적 실사용 경로인 메일·결재 분석 회상을 대규모로 프로브). 앵커 토큰 코퍼스-빈도 검증으로 오라벨 억제하지만 **표본 검수 필수** — 형제 폴더 중의성(한 현장 여러 폴더)은 gold_paths 복수 정답으로 처리. 채점은 `cmd/recall-bench -gold`로 |
 | `scripts/dev/wiki-qa-bench.py` | 위키 QA 골드셋 채점 — recall 모드(검색 hit@K, LLM 0원·초 단위)·answer 모드(실턴 정답 포함률, 비용 주의). 골드셋은 레포 밖 호스트 `~/.deneb/wiki-qa-gold.jsonl`(실데이터 포함). 베이스라인 비교는 스크립트 기능이 아니라 수동 — 이전 출력을 `~/.deneb/wiki-qa-baseline-*.txt` 등으로 보관해 대조 |
 
 ### metric 프리셋 선택 가이드
@@ -28,7 +29,7 @@ description: "상수/파라미터 반복 최적화 전략 — 라이브 테스�
 | 특정 메시지 응답 | `custom "메시지"` | 해당 메시지 품질 직접 측정 |
 | 회상(recall) 경로 | `scripts/dev/recall-metric.sh` | 근거 적중률 직접 측정 (recall_bench_test.go 코퍼스) |
 | 메일 분석 경로 (stage2 프롬프트·analysis 모델·컨텍스트 주입) | `python3 scripts/dev/mail-bench.py trap --model <현역> [--model-b 후보]` (기본 예산=프로덕션 1536) | 심은 통찰 18지표 고정 시드 게이트 — 변경 전후 점수 비열화 확인 후 채택. 경계선 결과는 저장된 출력 원문 수작업 대조 필수(자동 채점이 표현 변주를 놓친 전례). 실메일 나란히 비교는 `shadow --uids …` (사람 판독) |
-| 위키·회상·검색·사실 레이어 개선 | `scripts/dev/wiki-qa-bench.py` (recall 전량 + answer 샘플) | 실 업무 질문 골드셋 전후 비교 — 위키 계층 개선은 이 점수 비열화 확인 후 채택 (2026-07-05 베이스라인: recall 84%) |
+| 위키·회상·검색·사실 레이어 개선 | `scripts/dev/wiki-qa-bench.py` (recall 전량 + answer 샘플) | 실 업무 질문 골드셋 전후 비교 — 위키 계층 개선은 이 점수 비열화 확인 후 채택 (베이스라인 2026-07-19, Nemotron·floor 0.44·RRF 1:10:3: legacy r@8 98%·hard r@8 92.6%·analysis-xl p@1 69.1%/r@8 93.8%) |
 
 ---
 
