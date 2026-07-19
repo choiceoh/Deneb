@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	runtimehealth "github.com/choiceoh/deneb/gateway-go/internal/runtime/health"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // handleHealth responds with gateway health status including subsystem state.
@@ -89,6 +90,6 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		s.logger.Error("json encode error", "error", err)
+		httputil.LogEncodeError(s.logger, "json encode error", err)
 	}
 }

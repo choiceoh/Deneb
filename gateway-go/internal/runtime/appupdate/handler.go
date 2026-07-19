@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 // Handler serves authenticated app update metadata and APK downloads.
@@ -256,7 +257,7 @@ func (s *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(value); err != nil && s.logger != nil {
-		s.logger.Error("app update: json encode error", "error", err)
+		httputil.LogEncodeError(s.logger, "app update: json encode error", err)
 	}
 }
 

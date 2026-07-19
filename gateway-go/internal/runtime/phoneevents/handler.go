@@ -39,6 +39,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -625,7 +626,7 @@ func (s *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(value); err != nil && s.logger != nil {
-		s.logger.Error("phone event: json encode error", "error", err)
+		httputil.LogEncodeError(s.logger, "phone event: json encode error", err)
 	}
 }
 

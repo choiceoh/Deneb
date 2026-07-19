@@ -210,6 +210,6 @@ func (s *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(value); err != nil && s.logger != nil {
-		s.logger.Error("fleet proxy: json encode error", "error", err)
+		httputil.LogEncodeError(s.logger, "fleet proxy: json encode error", err)
 	}
 }

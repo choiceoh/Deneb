@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
 func (s *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
@@ -13,7 +15,7 @@ func (s *Handler) writeJSON(w http.ResponseWriter, status int, value any) {
 		w.WriteHeader(status)
 	}
 	if err := json.NewEncoder(w).Encode(value); err != nil && s.logger != nil {
-		s.logger.Error("native api: json encode error", "error", err)
+		httputil.LogEncodeError(s.logger, "native api: json encode error", err)
 	}
 }
 
