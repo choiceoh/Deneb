@@ -139,7 +139,9 @@ type node struct {
 // loadNodes pulls embeddable units from the CodeGraph DB, excluding tests.
 // queryJSON shells out to the sqlite3 CLI (-json) so the gateway module
 // needs no cgo/sqlite dependency — the CodeGraph DB is a read-only sidecar.
-func queryJSON(ctx context.Context, dbPath, query string) ([]map[string]any, error) {
+// Rows decode straight into T so column/type mismatches fail loudly instead
+// of silently zeroing (no map[string]any laundering).
+func queryJSON[T any](ctx context.Context, dbPath, query string) ([]T, error) {
 	// #nosec G204 -- fixed binary; dbPath is the local .codegraph sidecar and
 	// query is composed from constant SQL with single quotes stripped from user terms.
 	out, err := exec.CommandContext(ctx, "sqlite3", "-json", "file:"+dbPath+"?mode=ro", query).Output()
@@ -149,15 +151,29 @@ func queryJSON(ctx context.Context, dbPath, query string) ([]map[string]any, err
 	if len(strings.TrimSpace(string(out))) == 0 {
 		return nil, nil
 	}
-	var rows []map[string]any
+	var rows []T
 	if err := json.Unmarshal(out, &rows); err != nil {
 		return nil, fmt.Errorf("sqlite3 json: %w", err)
 	}
 	return rows, nil
 }
 
+// nodeRow mirrors the loadNodes SELECT column aliases one-to-one.
+type nodeRow struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Language  string `json:"language"`
+	Qualified string `json:"q"`
+	File      string `json:"f"`
+	StartLine int    `json:"s"`
+	EndLine   int    `json:"e"`
+	Signature string `json:"sig"`
+	Docstring string `json:"doc"`
+	UpdatedAt int64  `json:"u"`
+}
+
 func loadNodes(ctx context.Context, dbPath string) ([]node, error) {
-	rows, err := queryJSON(ctx, dbPath,
+	rows, err := queryJSON[nodeRow](ctx, dbPath,
 		`SELECT id, kind, language, qualified_name AS q, file_path AS f, start_line AS s, end_line AS e,
 		        COALESCE(signature,'') AS sig, COALESCE(docstring,'') AS doc, COALESCE(updated_at,0) AS u
 		 FROM nodes
@@ -173,24 +189,21 @@ func loadNodes(ctx context.Context, dbPath string) ([]node, error) {
 	for _, r := range rows {
 		out = append(out, node{
 			Entry: Entry{
-				ID:        str(r["id"]),
-				Kind:      str(r["kind"]),
-				Language:  str(r["language"]),
-				Qualified: str(r["q"]),
-				File:      str(r["f"]),
-				StartLine: num(r["s"]),
-				EndLine:   num(r["e"]),
-				UpdatedAt: int64(num(r["u"])),
+				ID:        r.ID,
+				Kind:      r.Kind,
+				Language:  r.Language,
+				Qualified: r.Qualified,
+				File:      r.File,
+				StartLine: r.StartLine,
+				EndLine:   r.EndLine,
+				UpdatedAt: r.UpdatedAt,
 			},
-			Signature: str(r["sig"]),
-			Docstring: str(r["doc"]),
+			Signature: r.Signature,
+			Docstring: r.Docstring,
 		})
 	}
 	return out, nil
 }
-
-func str(v any) string { s, _ := v.(string); return s }
-func num(v any) int    { f, _ := v.(float64); return int(f) }
 
 // embedText renders one unit into the text the model sees.
 func embedText(repo string, n node) string {
@@ -337,10 +350,13 @@ func Search(ctx context.Context, dir string, emb Embedder, query string, topK in
 	// Lexical arm: CodeGraph FTS over the same node universe.
 	ftsRank := map[string]int{}
 	q := strings.ReplaceAll(ftsQuery(query), "'", "")
-	if rows, err := queryJSON(ctx, filepath.Join(dir, "codegraph.db"),
+	type idRow struct {
+		ID string `json:"id"`
+	}
+	if rows, err := queryJSON[idRow](ctx, filepath.Join(dir, "codegraph.db"),
 		"SELECT id FROM nodes_fts WHERE nodes_fts MATCH '"+q+"' ORDER BY rank LIMIT 20"); err == nil {
 		for r, row := range rows {
-			ftsRank[str(row["id"])] = r
+			ftsRank[row.ID] = r
 		}
 	}
 
@@ -365,8 +381,12 @@ func Search(ctx context.Context, dir string, emb Embedder, query string, topK in
 			byID[id] = &Hit{Entry: meta.Entries[i], Score: 1 / (rrfK + float64(r) + 1)}
 		}
 	}
+	hint := kindHint(query)
 	out := make([]Hit, 0, len(byID))
 	for _, h := range byID {
+		if hint != "" && h.Kind == hint {
+			h.Score *= 1.3
+		}
 		out = append(out, *h)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })
@@ -444,6 +464,26 @@ var koEnSynonyms = map[string][]string{
 	"날씨":   {"weather"},
 	"주가":   {"stock", "market"},
 	"환율":   {"exchange", "currency", "fx"},
+}
+
+// kindHint reads an explicit symbol-kind ask out of the query ("~ 구조체",
+// "handler method", …) so results of that kind outrank same-relevance noise.
+// Empty string = no hint.
+func kindHint(q string) string {
+	lower := strings.ToLower(q)
+	for kind, words := range map[string][]string{
+		"struct":   {"구조체", "struct"},
+		"class":    {"클래스", "class"},
+		"method":   {"메서드", "메소드", "method"},
+		"function": {"함수", "function", "func "},
+	} {
+		for _, w := range words {
+			if strings.Contains(lower, w) {
+				return kind
+			}
+		}
+	}
+	return ""
 }
 
 // expandQuery appends English domain anchors for any Korean term present.

@@ -40,3 +40,18 @@ func TestExpandQueryBridgesKorean(t *testing.T) {
 		t.Fatalf("english query mutated: %q", got)
 	}
 }
+
+func TestKindHint(t *testing.T) {
+	cases := map[string]string{
+		"세션 상태 구조체":         "struct",
+		"메일 파서 함수":          "function",
+		"ChatViewModel 메서드": "method",
+		"승인 반려 클래스":         "class",
+		"재시도 백오프":           "",
+	}
+	for q, want := range cases {
+		if got := kindHint(q); got != want {
+			t.Fatalf("kindHint(%q) = %q, want %q", q, got, want)
+		}
+	}
+}
