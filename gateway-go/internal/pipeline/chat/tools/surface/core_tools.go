@@ -8,6 +8,7 @@ import (
 // that package stays at/under the fanout soft bar without importing tools/.
 var (
 	ToolGraphify      = tools.ToolGraphify
+	ToolCodeSearch    = tools.ToolCodeSearch
 	ToolOffice        = tools.ToolOffice
 	ToolGoal          = tools.ToolGoal
 	ToolOrg           = tools.ToolOrg

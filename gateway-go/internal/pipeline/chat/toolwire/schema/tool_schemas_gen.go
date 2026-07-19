@@ -2073,6 +2073,23 @@ func OfficeToolSchema() map[string]any {
 	}
 }
 
+func CodeSearchToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"k": map[string]any{
+				"type":        "integer",
+				"description": "반환 개수 (기본 10)",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "자연어 개념 질의 (한국어 가능). 예: \"재시도 백오프\", \"음성 전사 화자분리\", \"결재 승인 반려\". 심볼 이름을 몰라도 무엇을 하는 코드인지로 검색.",
+			},
+		},
+		"required": []string{"query"},
+	}
+}
+
 // ToolMaxOutputs returns per-tool output character budgets from tool_schemas.json.
 // Tools not in this map use agent.DefaultMaxOutput.
 func ToolMaxOutputs() map[string]int {
