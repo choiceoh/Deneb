@@ -129,6 +129,16 @@ type Frontmatter struct {
 	// values auto-upgrade (모듈→기자재/모듈, 시공·개발→태양광), and a bare
 	// parent folds away when its child is present. 대표페이지 전용.
 	Kinds []string
+	// Stage is the project's business lifecycle stage on the 대표페이지 —
+	// fixed vocabulary 제안 → 견적 → 입찰 → 계약협의 → 시공 → 운영, with 종결/유실
+	// as terminal states (operator-confirmed 2026-07-19). Distinct from the
+	// 현장 page's Status (후보/계약/개설/준공, per-site map lifecycle): Stage is
+	// the DEAL's stage, one per project. Gates how much documentation a
+	// project earns — site-detail sections start at 계약협의 (the site-docs
+	// stage gate); before that only the sites: matching keys are kept.
+	// Values outside the vocabulary are dropped at parse/render
+	// (normalizeStage). Project 대표페이지 전용; empty = 미분류.
+	Stage string
 	// Capacity is the project's (or a 현장 page's) 용량 in MW (megawatts) — the
 	// deal's scale. The 현장 지도 sizes each pin by it. 0 = unrecorded (drawn at a
 	// base size). On a 대표페이지 it is the project total; on a 현장 page it is that
@@ -240,6 +250,9 @@ func (p *Page) Render() []byte {
 	}
 	if kinds := normalizeKinds(p.Meta.Kinds); len(kinds) > 0 {
 		buf.WriteString("kinds: [" + strings.Join(sanitizeFlowItems(kinds), ", ") + "]\n")
+	}
+	if stage := normalizeStage(p.Meta.Stage); stage != "" {
+		buf.WriteString("stage: " + stage + "\n")
 	}
 	if p.Meta.Capacity > 0 {
 		buf.WriteString("capacity: " + strconv.FormatFloat(p.Meta.Capacity, 'g', -1, 64) + "\n")
@@ -669,6 +682,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Sites = normalizeSites(parseFlowArray(val))
 		case "kinds":
 			fm.Kinds = normalizeKinds(parseFlowArray(val))
+		case "stage":
+			fm.Stage = normalizeStage(val)
 		case "capacity":
 			fm.Capacity, _ = strconv.ParseFloat(strings.TrimSpace(val), 64) // best-effort: defaults to zero
 		case "address":
@@ -807,6 +822,23 @@ var kindStageWords = map[string]bool{
 // — the child implies the parent, and prefix matching recovers parent-level
 // queries), and drops stage-word-sourced 태양광 next to explicit 풍력 (see
 // kindStageWords).
+// projectStages is the fixed stage: vocabulary in pipeline order. Kept as a
+// list (not just a set) so consumers can compare progression.
+var projectStages = []string{"제안", "견적", "입찰", "계약협의", "시공", "운영", "종결", "유실"}
+
+// normalizeStage canonicalizes a stage: value — trims, and drops anything
+// outside the fixed vocabulary (same discipline as normalizeKinds: bad values
+// disappear rather than accrete).
+func normalizeStage(stage string) string {
+	s := strings.TrimSpace(stage)
+	for _, v := range projectStages {
+		if s == v {
+			return v
+		}
+	}
+	return ""
+}
+
 func normalizeKinds(kinds []string) []string {
 	var canon []string
 	seen := map[string]bool{}
