@@ -407,6 +407,16 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	}
 	if proposal == "" {
 		logger.Info("meta-evolution: cycle skipped by producer", "artifact", artifact, "reason", reason)
+		// Calibration-window opt-in (DENEB_META_BENCH_ON_SKIP=1, set by the
+		// P5-2 drop-in): a skip cycle normally leaves no bench sample, which
+		// starves the calibration ladder's per-epoch n exactly as low-hanging
+		// revisions dry up. An incumbent-only bench run is the purest variance
+		// sample calibration wants (bench noise, zero artifact delta). NEVER a
+		// gate input — the cycle stays a skip regardless of the outcome.
+		if inc, shadow, gen := t.benchIncumbentOnSkip(ctx, epoch, incumbent); inc != nil || shadow != nil || gen != nil {
+			t.pendingBenchGenesis = gen
+			return t.recordWithBenches(record, inc, nil, shadow, false, "", "skip: "+reason)
+		}
 		return record(false, "", "skip: "+reason)
 	}
 	if rejectReason := metaProposalGate(artifact, incumbent, proposal); rejectReason != "" {
@@ -555,6 +565,53 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 		t.OnProposal(artifact, epoch, reason, path, false)
 	}
 	return t.recordWithBenches(record, benchIncumbent, benchProposal, benchShadow, true, toVersion, reason)
+}
+
+// benchIncumbentOnSkip runs the epoch's bench against the incumbent alone on a
+// skip cycle — opt-in via DENEB_META_BENCH_ON_SKIP=1 (the P5-2 calibration
+// drop-in sets it; the knob dies with the window when the harvest removes the
+// drop-in). Producer/genesis epochs bench incumbent-vs-incumbent, which
+// measures the bench's own noise floor. An empty corpus yields NO sample — a
+// zero-pair "bench" must not inflate the ladder's per-epoch n.
+func (t *MetaEvolutionTask) benchIncumbentOnSkip(ctx context.Context, epoch, incumbent string) (*judgeBenchOutcome, *producerBenchOutcome, *genesisBenchOutcome) {
+	if strings.TrimSpace(os.Getenv("DENEB_META_BENCH_ON_SKIP")) != "1" {
+		return nil, nil, nil
+	}
+	switch epoch {
+	case metaEpochEvaluator:
+		verdict := t.judgeBenchExecutor()
+		if verdict == nil {
+			return nil, nil, nil
+		}
+		pairs := buildJudgeDegradationPairs(t.Evolver.catalogEntries(), judgeBenchMaxPairs*metaBenchScale())
+		if len(pairs) == 0 {
+			return nil, nil, nil
+		}
+		out := runJudgeDegradationBench(ctx, incumbent, pairs, verdict)
+		return &out, nil, nil
+	case metaEpochProducer:
+		gen := t.producerShadowExecutor()
+		if gen == nil {
+			return nil, nil, nil
+		}
+		scenarios := buildProducerShadowScenarios(t.Evolver.catalogEntries(), t.Tracker, producerBenchMaxSkills*metaBenchScale())
+		if len(scenarios) == 0 {
+			return nil, nil, nil
+		}
+		out := runProducerShadowBench(ctx, incumbent, incumbent, scenarios, gen)
+		return nil, &out, nil
+	case metaEpochGenesis:
+		if t.GenesisGen == nil {
+			return nil, nil, nil
+		}
+		scenarios := genesisShadowScenarios()
+		if len(scenarios) == 0 {
+			return nil, nil, nil
+		}
+		out := runGenesisShadowBench(ctx, incumbent, incumbent, scenarios, t.GenesisGen)
+		return nil, nil, &out
+	}
+	return nil, nil, nil
 }
 
 // recordWithBenches stashes the bench outcomes for the closure-based ledger
