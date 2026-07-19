@@ -344,7 +344,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 		// Stale-while-revalidate: a page past TTL (≤5 min) is served
 		// instantly and refreshed in the background, so re-opening the mail
 		// tab never eats the ~2.5s cold fetch. Single-flight per key.
-		if stale, ok, refresh := cache.getStale(cacheKey, now); ok {
+		if stale, ok, refresh, refreshGen := cache.getStale(cacheKey, now); ok {
 			if refresh {
 				go func() {
 					defer cache.refreshDone(cacheKey)
@@ -358,7 +358,7 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 					rctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 					defer cancel()
 					if payload, errResp := fetchPage(rctx); errResp == nil {
-						cache.put(cacheKey, payload, time.Now())
+						cache.putIfGeneration(cacheKey, payload, time.Now(), refreshGen)
 					}
 				}()
 			}

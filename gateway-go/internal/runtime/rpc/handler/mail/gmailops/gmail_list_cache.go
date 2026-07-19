@@ -42,6 +42,9 @@ type listCache struct {
 	ttl        time.Duration
 	entries    map[string]cachedList
 	refreshing map[string]bool
+	// generation bumps on invalidate so in-flight stale refreshes cannot
+	// resurrect a pre-archive/trash snapshot after membership changed.
+	generation uint64
 }
 
 type cachedList struct {
@@ -72,26 +75,31 @@ func (c *listCache) get(key string, now time.Time) (map[string]any, bool) {
 // getStale returns a payload past TTL but within the stale-serve ceiling —
 // the stale-while-revalidate read. The bool reports whether the CALLER won
 // the right to refresh this key in the background (single-flight: only one
-// concurrent refresher per key; the winner must call refreshDone).
-func (c *listCache) getStale(key string, now time.Time) (map[string]any, bool, bool) {
+// concurrent refresher per key; the winner must call refreshDone). When the
+// caller wins, refreshGen is the cache generation captured at claim time —
+// background putIfGeneration must use it so a concurrent invalidate cannot
+// be overwritten by a fetch that started before archive/trash.
+func (c *listCache) getStale(key string, now time.Time) (map[string]any, bool, bool, uint64) {
 	if c == nil {
-		return nil, false, false
+		return nil, false, false, 0
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e, ok := c.entries[key]
 	if !ok {
-		return nil, false, false
+		return nil, false, false, 0
 	}
 	age := now.Sub(e.storedAt)
 	if age <= c.ttl || age > listCacheStaleServeCeiling {
-		return nil, false, false
+		return nil, false, false, 0
 	}
 	shouldRefresh := !c.refreshing[key]
+	var refreshGen uint64
 	if shouldRefresh {
 		c.refreshing[key] = true
+		refreshGen = c.generation
 	}
-	return e.payload, true, shouldRefresh
+	return e.payload, true, shouldRefresh, refreshGen
 }
 
 // refreshDone releases the single-flight refresh claim taken by getStale.
@@ -114,6 +122,20 @@ func (c *listCache) put(key string, payload map[string]any, now time.Time) {
 	c.entries[key] = cachedList{payload: payload, storedAt: now}
 }
 
+// putIfGeneration stores payload only when gen still matches the cache
+// generation (see invalidate). Used by stale background refreshes.
+func (c *listCache) putIfGeneration(key string, payload map[string]any, now time.Time, gen uint64) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if gen != c.generation {
+		return
+	}
+	c.entries[key] = cachedList{payload: payload, storedAt: now}
+}
+
 // invalidate drops every cached page so the next list reflects an
 // inbox-membership change (archive/trash) immediately.
 func (c *listCache) invalidate() {
@@ -122,5 +144,7 @@ func (c *listCache) invalidate() {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.generation++
 	clear(c.entries)
+	clear(c.refreshing)
 }
