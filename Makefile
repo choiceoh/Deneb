@@ -260,6 +260,18 @@ state-register:
 	  -out ../docs/research/state-register-workfeed.md
 	@echo "regenerated docs/research/state-register-{session,workfeed}.md"
 
+# Semantic (concept) code search: Nemotron embeddings over CodeGraph nodes,
+# RRF-fused with the FTS lexical arm. Index lives in .codegraph/ (gitignored),
+# incremental by node updated_at. Query: make codesearch Q="재시도 백오프".
+codesearch-index:
+	@cd gateway-go && go run ./cmd/codesearch index
+
+codesearch:
+	@cd gateway-go && go run ./cmd/codesearch query "$(Q)"
+
+codesearch-bench:
+	@cd gateway-go && go run ./cmd/codesearch bench
+
 # 메모리 파일(레포 밖)의 코드 참조 감사 — advisory, CI 밖. 메모리 규칙의
 # "회상된 file:line은 검증하라"를 일괄 실행하는 수동/주기용 진입점.
 memory-ref-audit:
