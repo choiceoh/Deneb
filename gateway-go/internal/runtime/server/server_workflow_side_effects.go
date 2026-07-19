@@ -62,6 +62,15 @@ func (s *Server) registerWorkflowSideEffects(hub *rpcutil.GatewayHub) {
 		// capped, git-snapshotted merges. Production state dir only.
 		s.registerWikiReviewTask(homeDir)
 
+		// kb-interview suggestion: daily, check a curated set of
+		// business-knowledge domains (market/competitor/customer/pricing —
+		// "listened knowledge" only in the operator's head) against wiki
+		// coverage and, when one is missing or stale, post ONE workfeed
+		// question card offering an interview. Tapping the chip sends a chat
+		// message that trips the kb-interview skill trigger. Per-domain 14d
+		// cooldown; production state dir only (RSI P5 demand generation).
+		s.registerKBInterviewSuggestTask(homeDir)
+
 		// Notification digest: every 12h, consume the phone-notification raw
 		// ledger (phoneevents/ledger.go — KakaoTalk/approval/SMS events the
 		// ephemeral judgment path would otherwise evaporate) into the wiki via
