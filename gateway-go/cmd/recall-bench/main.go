@@ -40,6 +40,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log/slog"
 	"math"
@@ -123,9 +124,12 @@ type benchmarkConfig struct {
 	// composite recall-health score) after the pure P@K result. emitGold prints
 	// deterministic gold candidates for uncovered projects. Both read-only over
 	// the wiki COPY; default off so `recall-bench` alone stays a pure P@K tool.
-	health   bool
-	emitGold bool
-	matrix   bool
+	health     bool
+	emitGold   bool
+	matrix     bool
+	byCategory bool
+	holdoutPct int
+	split      string
 }
 
 type parseOutcome struct {
@@ -200,6 +204,9 @@ func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benc
 	fs.BoolVar(&cfg.health, "health", false, "add ledger-utility + gold coverage + composite recall-health score")
 	fs.BoolVar(&cfg.emitGold, "emit-gold", false, "print deterministic gold candidates for uncovered projects (implies -health)")
 	fs.BoolVar(&cfg.matrix, "matrix", false, "compare bm25, semantic, hybrid, and full retrieval with p50/p95 latency")
+	fs.BoolVar(&cfg.byCategory, "by-category", false, "per-category P@1 across bm25/semantic/hybrid/full modes — diagnoses where global fusion weights lose to a single mode (headroom for per-query-type weighting)")
+	fs.IntVar(&cfg.holdoutPct, "holdout-pct", 0, "hold out this %% of cases (stable hash of case ID) as a test split; 0 = use all")
+	fs.StringVar(&cfg.split, "split", "all", "which split to score when --holdout-pct>0: all|train|test")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return cfg, parseOutcome{done: true}
@@ -213,7 +220,35 @@ func validateBenchmarkConfig(cfg benchmarkConfig) error {
 	if cfg.wikiDir == "" {
 		return fmt.Errorf("--wiki required")
 	}
+	if cfg.holdoutPct < 0 || cfg.holdoutPct > 100 {
+		return fmt.Errorf("--holdout-pct must be 0..100")
+	}
+	switch cfg.split {
+	case "all", "train", "test":
+	default:
+		return fmt.Errorf("--split must be all|train|test")
+	}
 	return nil
+}
+
+// filterSplit partitions cases deterministically by a stable hash of the case
+// ID: the test split is the cases whose bucket (hash%100) falls under
+// holdoutPct, train is the complement. Stable across runs and independent of
+// gold order, so baseline vs candidate score the SAME held-out cases.
+func filterSplit(cases []goldCase, holdoutPct int, split string) []goldCase {
+	if holdoutPct <= 0 || split == "all" || split == "" {
+		return cases
+	}
+	out := make([]goldCase, 0, len(cases))
+	for _, c := range cases {
+		h := fnv.New32a()
+		_, _ = h.Write([]byte(c.ID))
+		isTest := int(h.Sum32()%100) < holdoutPct
+		if (split == "test") == isTest {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Writer, deps runDependencies) error {
@@ -232,10 +267,23 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	if err != nil {
 		return err
 	}
+	if cfg.holdoutPct > 0 {
+		total := len(cases)
+		cases = filterSplit(cases, cfg.holdoutPct, cfg.split)
+		fmt.Fprintf(stdout, "== split=%s holdout_pct=%d  %d/%d cases (stable hash of case ID)\n", cfg.split, cfg.holdoutPct, len(cases), total)
+	}
 	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
 
 	var result benchmarkResult
+	if cfg.byCategory {
+		optionStore, ok := store.(benchmarkOptionStore)
+		if !ok {
+			return fmt.Errorf("store does not expose stage-specific search required by --by-category")
+		}
+		reportByCategory(ctx, optionStore, cases, cfg.k, stdout)
+		return nil
+	}
 	if cfg.matrix {
 		optionStore, ok := store.(benchmarkOptionStore)
 		if !ok {
@@ -568,6 +616,97 @@ func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, resu
 		mode, result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored),
 		float64(result.latencyPercentile(0.50))/float64(time.Millisecond), float64(result.latencyPercentile(0.95))/float64(time.Millisecond))
 	writeQualityMetrics(out, "RECALL_BENCH_MATRIX_QUALITY mode="+string(mode), k, result)
+}
+
+// reportByCategory answers the question that decides whether per-query-type
+// fusion weights are worth building: for each gold category, which single
+// retrieval mode gives the best P@1? When the full (globally-weighted) fusion
+// already wins every category, there is no headroom — the global weights are
+// already category-appropriate and per-type weighting is overfitting waiting to
+// happen. When a category scores strictly higher under bm25-only or
+// semantic-only than under full, that gap is the achievable headroom from
+// routing that category to different weights. Read-only over the wiki copy.
+func reportByCategory(
+	ctx context.Context,
+	store benchmarkOptionStore,
+	cases []goldCase,
+	k int,
+	stdout io.Writer,
+) {
+	modes := []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull}
+	searchFor := func(mode wiki.SearchMode) func(context.Context, string, int) ([]wiki.SearchResult, error) {
+		return func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
+			report, err := store.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{Mode: mode})
+			return report.Results, err
+		}
+	}
+
+	// Group cases by category, preserving first-seen order for stable output.
+	order := make([]string, 0)
+	groups := make(map[string][]goldCase)
+	for _, c := range cases {
+		if len(c.GoldPaths) == 0 {
+			continue
+		}
+		cat := c.Category
+		if cat == "" {
+			cat = "(none)"
+		}
+		if _, seen := groups[cat]; !seen {
+			order = append(order, cat)
+		}
+		groups[cat] = append(groups[cat], c)
+	}
+
+	fmt.Fprintf(stdout, "== recall-bench by-category  K=%d  modes=bm25,semantic,hybrid,full  (P@1 per mode; ★=best, Δ=best−full)\n", k)
+	fmt.Fprintf(stdout, "%-10s %3s  %6s %6s %6s %6s   %-8s %6s\n", "category", "n", "bm25", "sem", "hybrid", "full", "best", "Δ")
+
+	headroomCats := 0
+	weightedHeadroom := 0.0
+	totalScored := 0
+	for _, cat := range order {
+		grp := groups[cat]
+		p1 := make(map[wiki.SearchMode]float64, len(modes))
+		var scored int
+		for _, mode := range modes {
+			res := evaluateCasesWithSearch(ctx, grp, k, false, io.Discard, searchFor(mode))
+			scored = res.scored
+			if res.scored > 0 {
+				p1[mode] = 100 * float64(res.hit1) / float64(res.scored)
+			}
+		}
+		bestMode := wiki.SearchModeFull
+		bestP1 := p1[wiki.SearchModeFull]
+		for _, mode := range modes {
+			if p1[mode] > bestP1 {
+				bestP1 = p1[mode]
+				bestMode = mode
+			}
+		}
+		delta := bestP1 - p1[wiki.SearchModeFull]
+		mark := func(mode wiki.SearchMode) string {
+			s := fmt.Sprintf("%.0f", p1[mode])
+			if mode == bestMode && delta > 0 {
+				return s + "★"
+			}
+			return s
+		}
+		fmt.Fprintf(stdout, "%-10s %3d  %6s %6s %6s %6s   %-8s %5.0f\n",
+			cat, scored, mark(wiki.SearchModeBM25), mark(wiki.SearchModeSemantic),
+			mark(wiki.SearchModeHybrid), mark(wiki.SearchModeFull), bestMode, delta)
+		if delta > 0 {
+			headroomCats++
+			weightedHeadroom += delta * float64(scored)
+		}
+		totalScored += scored
+	}
+	overall := 0.0
+	if totalScored > 0 {
+		overall = weightedHeadroom / float64(totalScored)
+	}
+	fmt.Fprintf(stdout, "RECALL_BENCH_BYCAT headroom_categories=%d/%d weighted_p@1_headroom=%.2fpp total=%d\n",
+		headroomCats, len(order), overall, totalScored)
+	fmt.Fprintln(stdout, "  (weighted_p@1_headroom = max attainable P@1 gain if each category were routed to its best single mode — an upper bound; real per-type weighting captures a fraction)")
 }
 
 func writeQualityMetrics(out io.Writer, prefix string, k int, result benchmarkResult) {
