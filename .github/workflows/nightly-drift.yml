@@ -194,6 +194,30 @@ jobs:
             --json-out health-v2-report.json \
             >> "$GITHUB_STEP_SUMMARY"
 
+  recall-health:
+    # Advisory recall-quality sweep against the LIVE wiki + repair worklist
+    # (bench misses classified into thin-folder / sibling-overlap / vocab-gap).
+    # srv4 only: needs the Nemotron embedding sidecar (:8002) and the prod wiki.
+    # Deliberately NOT in the notify gate — trends are read from the step
+    # summary (the health-v2 precedent: recall ratchets stay out of paging).
+    name: recall-health (advisory)
+    runs-on: [self-hosted, srv4]
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: recall health + repair worklist
+        env:
+          DENEB_EMBEDDING_URL: http://127.0.0.1:8002
+          DENEB_WIKI_SEM_FLOOR: "0.44"
+          DENEB_WIKI_RRF_SEM_WEIGHT: "10"
+          DENEB_WIKI_RRF_GRAPH_WEIGHT: "3"
+          RECALL_WORKLIST: "1"
+        run: scripts/dev/recall-health.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
   docs:
     # markdownlint + spellcheck only — the link check hits external URLs and
     # would page on other people's outages, so it stays out of the nightly.
