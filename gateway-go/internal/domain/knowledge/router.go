@@ -51,9 +51,9 @@ func (r *Router) Layers() []Layer {
 // (its synthetic 0.60–0.92 band always lost to wiki/diary BM25, so it was
 // either invisible or, when it surfaced, duplicative). The bands here differ
 // too: the wiki adapter returns BM25-normalized 0–1 scores while the files
-// adapter returns BGE-M3 cosine packed into a high 0.73–0.86 band, so a naive
-// score-sort would let files crowd out genuinely-relevant wiki pages on a
-// mixed query. The quota guarantees each configured layer a share of the
+// adapter returns raw embedding cosine on the embedder's own band (BGE-M3
+// packed hits into 0.73–0.86; Nemotron admits from 0.33 up), so a naive
+// score-sort would mis-rank layers against each other on a mixed query. The quota guarantees each configured layer a share of the
 // window regardless of its raw score scale; within the window, score still
 // orders the rows. A single-layer router is unaffected (quota ≥ limit).
 const layerRecallQuota = 0.6

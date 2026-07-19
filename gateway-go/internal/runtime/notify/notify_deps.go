@@ -1,6 +1,6 @@
 // notify_deps.go — dependency (sidecar) health woven into the heartbeat.
 //
-// Motivation (live 2026-07-17/18): the BGE-M3 embedding sidecar died to a
+// Motivation (live 2026-07-17/18): the embedding sidecar (then BGE-M3) died to a
 // clean external SIGTERM and stayed down for 33 hours. The gateway KNEW —
 // its embedding client logged "server unhealthy" every batch — but nothing
 // surfaced it to the operator: the heartbeat only reported the gateway's own

@@ -74,7 +74,8 @@ const filesRecallTimeout = 8 * time.Second
 
 // Recall runs the index's hybrid (BM25 lexical + dense cosine) search and maps
 // each hit to a knowledge.Result. The hybrid search already applies the
-// Korean-calibrated cosine floor (0.73) as its admission gate, so an off-topic
+// embedder-calibrated cosine floor (filestore.minSemanticScore) as its
+// admission gate, so an off-topic
 // query returns zero hits here — over-recall protection lives in the index, not
 // in the caller. A down/unhealthy embedder yields an empty slice (never an
 // error), matching every other recall source's degradation.

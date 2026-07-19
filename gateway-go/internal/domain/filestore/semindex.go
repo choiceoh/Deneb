@@ -4,7 +4,7 @@
 // overlap; it misses a file that is *about* the query but phrases it differently
 // (a query "납기 지연 위험" vs a contract whose text says "delivery delay
 // penalty"). This index extracts each file's text once, chunks it, embeds the
-// chunks (BGE-M3), and ranks files by the best cosine similarity of any chunk to
+// chunks (embedding sidecar), and ranks files by the best cosine similarity of any chunk to
 // the query — so search can find files by meaning, not just by matching strings.
 //
 // Everything here degrades silently: no embedder, an unhealthy embedding server,
