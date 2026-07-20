@@ -147,6 +147,36 @@ func TestRSIStatus_L3OperatorLabelIsLiveWithoutSyntheticRun(t *testing.T) {
 	}
 }
 
+// Restart/warmup error storms must not inflate L3 "판정 놓침".
+func TestRSIStatus_L3IgnoresInfraErrorStormMisses(t *testing.T) {
+	tr := newTestTracker(t)
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
+		JudgeVersion: "v1", Pairs: 24, Correct: 0,
+		ByClass: map[string][2]int{"fake-tool": {0, 3}, "section-drop": {0, 3}},
+		Misses: []judgeMissExhibit{
+			{Skill: "sk", Degradation: "section-drop", Verdict: "error"},
+			{Skill: "sk", Degradation: "fake-tool", Verdict: "error"},
+			{Skill: "sk", Degradation: "truncation", Verdict: "error"},
+			{Skill: "sk", Degradation: "overfit", Verdict: "error"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
+		JudgeVersion: "v1", Pairs: 4, Correct: 4,
+		ByClass: map[string][2]int{"safety-drop": {2, 2}, "imperative-drop": {2, 2}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L3")
+	if rsiMetricValue(l.Metrics, "판정 놓침") != "0" {
+		t.Fatalf("L3 misses inflated by error storm: %+v", l)
+	}
+	if rsiMetricValue(l.Metrics, "실행(7일)") != "1" {
+		t.Fatalf("L3 runs should count only usable probe rows: %+v", l)
+	}
+}
+
 // L1 with only rejections (no committed evolve) is DATA-GATED, not IDLE and not
 // LIVE — the lane is active but nothing cleared the gate.
 func TestRSIStatus_L1DataGatedOnRejectionsOnly(t *testing.T) {

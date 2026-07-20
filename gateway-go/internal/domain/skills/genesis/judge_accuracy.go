@@ -40,6 +40,10 @@ const (
 	// judgeAccuracyMaxExhibits bounds the per-run miss exhibits kept in the
 	// ledger record.
 	judgeAccuracyMaxExhibits = 4
+	// judgeAccuracyAbortAfterErrors stops a cold-start/outage storm from
+	// burning the whole corpus: after this many consecutive verdict call
+	// failures the lane exits without ledgering infra noise as judge misses.
+	judgeAccuracyAbortAfterErrors = 3
 	// falseRejectMargin is how much better (validation percent) a rejected
 	// candidate must score than the current body before it is flagged.
 	falseRejectMargin = 10.0
@@ -117,11 +121,40 @@ func (t *Tracker) organicFalseAccepts(window time.Duration, limit int) []organic
 }
 
 // judgeMissExhibit is one wrong verdict on a planted defect — few-shot food
-// for P3 judge evolution.
+// for P3 judge evolution. Verdict "error" is legacy (pre-infra-filter ledger
+// rows); new runs only record passed_defect / score_inverted.
 type judgeMissExhibit struct {
 	Skill       string `json:"skill"`
 	Degradation string `json:"degradation"`
-	Verdict     string `json:"verdict"` // "passed_defect" | "score_inverted" | "error"
+	Verdict     string `json:"verdict"` // "passed_defect" | "score_inverted" | "error" (legacy)
+}
+
+// judgeAccuracyProbeUsable reports whether a ledger row is judge-quality
+// evidence. Restart/warmup storms ledgered Correct==0 with only Verdict=error
+// exhibits are infrastructure noise — they must not inflate L3 "판정 놓침",
+// re-lock the weaken tier, trip verifier_broken, or feed evaluator epochs.
+func judgeAccuracyProbeUsable(rec judgeAccuracyRecord) bool {
+	if rec.Pairs == 0 {
+		return len(rec.FalseRejects) > 0
+	}
+	if rec.Correct > 0 {
+		return true
+	}
+	if len(rec.Misses) == 0 {
+		return false
+	}
+	for _, m := range rec.Misses {
+		if m.Verdict != "error" {
+			return true
+		}
+	}
+	return false
+}
+
+// judgeMissCountsAsFuel reports whether an exhibit is real P3 label food
+// (judge too lenient), not an infra call failure.
+func judgeMissCountsAsFuel(m judgeMissExhibit) bool {
+	return m.Verdict == "passed_defect" || m.Verdict == "score_inverted"
 }
 
 // falseRejectExhibit is a buffered rejected candidate that outscores the
@@ -356,10 +389,25 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	if escalated {
 		pairs = append(pairs, buildWeakenJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
 	}
+	verdictErrors, consecutiveErrors := 0, 0
 	for _, pair := range pairs {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		v, err := verdict(ctx, judgePrompt, pair.Original, pair.Degraded)
+		if err != nil {
+			// Infra/parse call failures are not judge-quality labels — do not
+			// count them in Pairs/ByClass or exhibit them as P3 fuel.
+			verdictErrors++
+			consecutiveErrors++
+			if consecutiveErrors >= judgeAccuracyAbortAfterErrors {
+				logger.Warn("judge-accuracy: aborting after consecutive verdict errors",
+					"errors", verdictErrors, "scored", rec.Pairs, "error", err)
+				break
+			}
+			continue
+		}
+		consecutiveErrors = 0
 		rec.Pairs++
 		cls := rec.ByClass[pair.Degradation]
 		cls[1]++
@@ -369,10 +417,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		}
 		cat := rec.ByCategory[category]
 		cat[1]++
-		v, err := verdict(ctx, judgePrompt, pair.Original, pair.Degraded)
 		switch {
-		case err != nil:
-			rec.Misses = append(rec.Misses, judgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "error"})
 		case v.Pass:
 			rec.Misses = append(rec.Misses, judgeMissExhibit{Skill: pair.Skill, Degradation: pair.Degradation, Verdict: "passed_defect"})
 		case v.OriginalScore != nil && v.CandidateScore != nil && *v.CandidateScore > *v.OriginalScore:
@@ -392,7 +437,11 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	rec.FalseRejects = t.mineFalseRejects()
 
 	if rec.Pairs == 0 && len(rec.FalseRejects) == 0 {
-		return nil // nothing to ledger — corpus too thin this run
+		if verdictErrors > 0 {
+			logger.Warn("judge-accuracy: skipped ledger — verdict calls failed before any scored pair",
+				"errors", verdictErrors)
+		}
+		return nil // nothing to ledger — corpus too thin or infra-only outage
 	}
 	if err := t.Tracker.logJudgeAccuracy(rec); err != nil {
 		logger.Warn("judge-accuracy: ledger write failed", "error", err)
@@ -401,7 +450,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	logger.Info("judge-accuracy: lane run ledgered (P3 label food)",
 		"pairs", rec.Pairs, "correct", rec.Correct, "misses", len(rec.Misses),
 		"falseRejects", len(rec.FalseRejects), "judgeVersion", rec.JudgeVersion,
-		"weakenTier", escalated)
+		"weakenTier", escalated, "verdictErrors", verdictErrors)
 	return nil
 }
 
@@ -423,6 +472,9 @@ func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
 		}
 		if rec.Pairs == 0 && len(rec.ByClass) == 0 {
 			continue // operator-only label, not a probe-curriculum run
+		}
+		if !judgeAccuracyProbeUsable(rec) {
+			continue // infra outage rows must not re-lock the soften ladder
 		}
 		pairsSeen, missed := 0, 0
 		for _, cls := range subtleJudgeDegradations {
