@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -182,6 +183,11 @@ type WikiDreamer struct {
 	// source alongside raw diary entries. Wired by the chat pipeline; the wiki
 	// package does not import polaris directly.
 	polarisContextFn func() string
+
+	// rulesEvolve arms the RHI self-comparison + rules-revision lane
+	// (dreamer_selfcompare.go). Off by default; the server enables it only for
+	// the production state dir.
+	rulesEvolve bool
 
 	// workspaceDir is the agent workspace containing MEMORY.md. Empty disables
 	// memory curation (see memory_curation.go).
@@ -360,9 +366,13 @@ type dreamCycle struct {
 	updates     []wikiUpdate
 	partial     bool
 	proposal    dreamProposalReport
-	created     int
-	updated     int
-	userPages   int
+	// prevProposal is the last cycle's persisted report, loaded before this
+	// cycle's save overwrites it — the self-comparison anchor (rulesEvolve
+	// lane only; nil otherwise).
+	prevProposal *dreamProposalReport
+	created      int
+	updated      int
+	userPages    int
 	// appliedPaths are the pages this cycle actually wrote (created or
 	// updated). The processed-capsule history records THESE, not the proposed
 	// paths — a dropped proposal never existed on disk, and recording it would
@@ -403,6 +413,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	wd.applyDreamUpdates(ctx, cycle)
 	wd.captureDreamOpenLoops(ctx, cycle)
 	wd.captureDreamThemes(ctx, cycle)
+	wd.captureDreamSelfComparison(ctx, cycle)
 	wd.seedDreamPersonPages(ctx, cycle)
 	wd.applyDreamProjectDigests(ctx, cycle)
 	wd.applyDreamUserDirectives(cycle)
@@ -536,11 +547,31 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 	cycle.updates = updates
 	cycle.partial = partial
 	cycle.proposal = buildDreamProposalReport(cycle.scan, updates)
+	// Stash the PREVIOUS cycle's report before the save below overwrites it —
+	// the self-comparison pass judges this cycle against it (RHI trajectory-
+	// local anchor, dreamer_selfcompare.go).
+	if wd.rulesEvolve {
+		cycle.prevProposal = wd.loadPrevDreamProposal()
+	}
 	cycle.report.WikiProposalPath = wd.dreamProposalPath()
 	if err := wd.saveDreamProposalReport(cycle.proposal); err != nil {
 		cycle.addPhaseError("proposal-save: %v", err)
 	}
 	return true
+}
+
+// loadPrevDreamProposal reads the last cycle's persisted proposal report; nil
+// when absent or unreadable (first cycle, rotated state).
+func (wd *WikiDreamer) loadPrevDreamProposal() *dreamProposalReport {
+	data, err := os.ReadFile(wd.dreamProposalPath())
+	if err != nil {
+		return nil
+	}
+	var report dreamProposalReport
+	if json.Unmarshal(data, &report) != nil {
+		return nil
+	}
+	return &report
 }
 
 func (wd *WikiDreamer) finishFailedDreamSynthesis(cycle *dreamCycle) {

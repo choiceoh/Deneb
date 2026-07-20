@@ -126,6 +126,15 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				// Let dream cycles consume + curate the auto-recorded
 				// workspace MEMORY.md (distill to wiki, keep a bounded buffer).
 				s.wikiDreamer.SetWorkspaceDir(configresolve.WorkspaceDir())
+				// RHI self-comparison + synthesis-rules revision (arXiv
+				// 2607.15524): production only — the revised
+				// wiki-dream-rules.md lives in the shared workspace a
+				// dev/live-test gateway must not mutate. Fail-closed.
+				if home, err := os.UserHomeDir(); err == nil {
+					if _, ok := s.productionStateDir(home); ok && os.Getenv("DENEB_DREAM_RULES_EVOLVE") != "0" {
+						s.wikiDreamer.SetRulesEvolution(true)
+					}
+				}
 				// Open loops are no longer auto-recorded as to-dos (operator approval
 				// first) — no open-loop sink is wired (the dreamer skips it when nil).
 				// Per-project latest-progress digests are written directly into each
