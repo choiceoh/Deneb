@@ -637,9 +637,7 @@ describe("WorkfeedPane boundary behavior", () => {
     it("opens the 질문 대기 inbox from query=questions without clearing an id open", async () => {
       function TargetSetter() {
         const { openPane } = useWorkspace();
-        return (
-          <button onClick={() => openPane("workfeed", { query: "questions" })}>questions target</button>
-        );
+        return <button onClick={() => openPane("workfeed", { query: "questions" })}>questions target</button>;
       }
       renderWithProviders(
         <>

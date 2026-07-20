@@ -331,7 +331,14 @@ describe("WorkfeedPane", () => {
     const dataProvider = fakeProvider({
       workfeed: [
         { id: "q-today", source: "proactive", title: "오늘 선제 질문", question: true, createdAtMs: at(0, 10) },
-        { id: "q-acked", source: "deal_question", title: "이미 답한 질문", question: true, ackedAtMs: 1, createdAtMs: at(0, 9) },
+        {
+          id: "q-acked",
+          source: "deal_question",
+          title: "이미 답한 질문",
+          question: true,
+          ackedAtMs: 1,
+          createdAtMs: at(0, 9),
+        },
         { id: "plain", source: "alert", title: "일반 알림", createdAtMs: at(0, 8) },
         { id: "q-yesterday", source: "deal_question", title: "어제 미답 질문", question: true, createdAtMs: at(1, 14) },
       ],

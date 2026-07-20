@@ -148,13 +148,9 @@ export function WorkfeedPane() {
     });
 
   // 질문 대기: cross-day inbox of unsettled question cards.
-  const questionItems = items
-    .filter(isOpenQuestion)
-    .sort((a, b) => effectiveMs(b, nowMs) - effectiveMs(a, nowMs));
+  const questionItems = items.filter(isOpenQuestion).sort((a, b) => effectiveMs(b, nowMs) - effectiveMs(a, nowMs));
   const shownItems = questionsOnly ? questionItems : dayItems;
-  const openQuestionCount = questionsOnly
-    ? questionItems.length
-    : dayItems.filter(isOpenQuestion).length;
+  const openQuestionCount = questionsOnly ? questionItems.length : dayItems.filter(isOpenQuestion).length;
 
   const aiText = questionsOnly
     ? `[피드 · 질문 대기]\n` +
