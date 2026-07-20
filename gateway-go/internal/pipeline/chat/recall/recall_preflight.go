@@ -117,26 +117,35 @@ func recallContentKey(note string) string {
 	return b.String()
 }
 
-// recordRecallUtility tees the injected wiki-page paths into the store's
-// recall-utility ledger (효용 접지). Only Kind=="wiki" rows carry a real page
+// recordRecallUtility tees the injected wiki-page evidence into the store's
+// recall-utility ledger (효용 접지), carrying the retrieval context (query label,
+// injection rank, preflight score) so real-traffic (query → page) pairs can be
+// mined as gold-set candidates. Only Kind=="wiki" rows carry a real page
 // relPath as Source (org rows may hold "조직도: 이름"); other kinds are diary/
-// transcript/file, not dreamer-managed pages, so they are not scored. Best-effort:
+// transcript/file, not dreamer-managed pages, so they are not scored. Rank is
+// the row's 1-based position in the FULL ranked evidence list (all kinds) —
+// i.e. its position in the recall block the model actually saw. Best-effort:
 // a nil store or a write error is swallowed after a single Warn — losing this
 // derived telemetry is not user-observable and self-heals next turn.
 func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, logger *slog.Logger) {
 	if store == nil || len(evidence) == 0 {
 		return
 	}
-	paths := make([]string, 0, len(evidence))
-	for _, ev := range evidence {
+	hits := make([]wiki.RecallHitRecord, 0, len(evidence))
+	for i, ev := range evidence {
 		if ev.Kind == "wiki" && ev.Source != "" {
-			paths = append(paths, ev.Source)
+			hits = append(hits, wiki.RecallHitRecord{
+				Path:  ev.Source,
+				Query: ev.Query,
+				Rank:  i + 1,
+				Score: ev.Score,
+			})
 		}
 	}
-	if len(paths) == 0 {
+	if len(hits) == 0 {
 		return
 	}
-	if err := store.RecordRecallHits(paths); err != nil && logger != nil {
+	if err := store.RecordRecallHits(hits); err != nil && logger != nil {
 		logger.Warn("recall preflight: recall-hit ledger write failed", "error", err)
 	}
 }
