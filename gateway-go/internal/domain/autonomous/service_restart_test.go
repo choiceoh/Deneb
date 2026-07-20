@@ -1,6 +1,9 @@
 package autonomous
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -99,4 +102,68 @@ func TestStatePersistenceUnknownTaskIgnored(t *testing.T) {
 	if hasGone {
 		t.Error("unknown persisted task should not be added to taskStatus")
 	}
+}
+
+// A subset process (live-test registering fewer tasks) must MERGE its LastRunAt
+// values and leave unregistered keys on disk — full replace wiped prod-only
+// lanes (judge-accuracy) and forced cold-start re-fires after every deploy.
+func TestStatePersistenceMergePreservesUnregisteredKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "autonomous_state.json")
+	if err := os.WriteFile(path, []byte(`{"judge-accuracy":111,"heartbeat":222}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewService(nil)
+	s.SetStateDir(dir)
+	s.RegisterTask(&fakeTask{name: "heartbeat", interval: time.Hour})
+	s.mu.Lock()
+	s.taskStatus["heartbeat"].LastRunAt = 333
+	s.mu.Unlock()
+	s.saveState()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]int64
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["judge-accuracy"] != 111 {
+		t.Fatalf("prod-only key wiped: %+v", got)
+	}
+	if got["heartbeat"] != 333 {
+		t.Fatalf("registered key not updated: %+v", got)
+	}
+}
+
+// Stop cancels svcCtx; Start must allocate a fresh parent so config-reload
+// Stop→Start does not spawn children of a dead context.
+func TestStartRecreatesSvcCtxAfterStop(t *testing.T) {
+	s := NewService(nil)
+	s.RegisterTask(&fakeTask{name: "x", interval: time.Hour})
+	s.Start()
+	s.mu.Lock()
+	first := s.svcCtx
+	s.mu.Unlock()
+	if first == nil {
+		t.Fatal("svcCtx nil after Start")
+	}
+	s.Stop()
+	if err := first.Err(); err == nil {
+		t.Fatal("Stop did not cancel the first svcCtx")
+	}
+	s.Start()
+	s.mu.Lock()
+	second := s.svcCtx
+	s.mu.Unlock()
+	if second == nil || second.Err() != nil {
+		t.Fatalf("Start did not recreate a live svcCtx: %v", second)
+	}
+	if second == first {
+		t.Fatal("Start reused the cancelled svcCtx")
+	}
+	// Drain loops so the test process can exit cleanly.
+	s.Stop()
 }

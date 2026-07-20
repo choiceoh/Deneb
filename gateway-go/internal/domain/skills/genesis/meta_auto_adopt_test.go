@@ -144,6 +144,125 @@ func TestMaybeRevertAdoptionTriggersRollbackOnlyOnHardHealthRegression(t *testin
 	})
 }
 
+// A judge adoption justified by miss-rate prose must roll back when the
+// usable (non-storm) probe ledger is clean — storm-inflated "놓침" was the
+// only signal that got the patch adopted.
+func TestMaybeRevertStormPoisonedEvaluatorAdoption(t *testing.T) {
+	setup := func(t *testing.T) (*MetaEvolutionTask, *generation.MetaArtifacts, string) {
+		t.Helper()
+		t.Setenv("HOME", t.TempDir())
+		tr, err := NewTracker(slog.Default())
+		if err != nil {
+			t.Fatal(err)
+		}
+		metaDir := filepath.Join(t.TempDir(), "meta")
+		meta := generation.NewMetaArtifacts(metaDir, slog.Default())
+		artifact := generation.MetaSkillJudgeSystemPrompt
+		incumbent := strings.Repeat("judge incumbent v1. ", 20)
+		meta.MaterializeDefaults(map[string]string{artifact: incumbent})
+		if _, err := meta.WriteProposal(artifact, strings.Repeat("judge adopted v2. ", 20)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := meta.AdoptProposal(artifact); err != nil {
+			t.Fatal(err)
+		}
+		return &MetaEvolutionTask{Tracker: tr, Meta: meta, Logger: slog.Default()}, meta, metaDir
+	}
+	seedCleanPairs := func(t *testing.T, tr *Tracker, version string, pairs int) {
+		t.Helper()
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
+			JudgeVersion: version,
+			Pairs:        pairs,
+			Correct:      pairs,
+			ByClass:      map[string][2]int{"fake-tool": {pairs, pairs}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("miss-cited adoption reverts when usable ledger is clean", func(t *testing.T) {
+		task, meta, metaDir := setup(t)
+		artifact := generation.MetaSkillJudgeSystemPrompt
+		fallback := generation.DefaultMetaArtifacts()[artifact]
+		version := meta.Version(artifact, fallback)
+		if err := task.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Epoch: metaEpochEvaluator, Artifact: artifact, Proposed: true,
+			ToVersion: version, Reason: "imperative-weaken 놓침 7/7 — tighten judge",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := task.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Artifact: artifact, ToVersion: version, Action: "auto_adopted",
+			Reason: "operator adopted evaluator patch citing miss rates",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		seedCleanPairs(t, task.Tracker, version, stormPoisonedJudgeMinPairs)
+
+		var notified string
+		task.OnReverted = func(name, _ string) { notified = name }
+		task.maybeRevertStormPoisonedEvaluatorAdoption(slog.Default())
+
+		if got, _ := os.ReadFile(filepath.Join(metaDir, artifact)); !strings.Contains(string(got), "judge incumbent v1") {
+			t.Fatalf("live judge not restored: %q", got)
+		}
+		if notified != artifact {
+			t.Fatalf("OnReverted = %q", notified)
+		}
+		ledger, _ := task.Tracker.RecentMetaRevisions(5)
+		if len(ledger) == 0 || ledger[0].Action != "auto_reverted" {
+			t.Fatalf("ledger head = %+v", ledger)
+		}
+	})
+
+	t.Run("adoption without miss citation stays", func(t *testing.T) {
+		task, meta, metaDir := setup(t)
+		artifact := generation.MetaSkillJudgeSystemPrompt
+		fallback := generation.DefaultMetaArtifacts()[artifact]
+		version := meta.Version(artifact, fallback)
+		if err := task.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Artifact: artifact, ToVersion: version, Action: "auto_adopted",
+			Reason: "style polish only",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		seedCleanPairs(t, task.Tracker, version, stormPoisonedJudgeMinPairs)
+
+		task.OnReverted = func(name, _ string) { t.Fatalf("non-miss adoption reverted: %s", name) }
+		task.maybeRevertStormPoisonedEvaluatorAdoption(slog.Default())
+		if got, _ := os.ReadFile(filepath.Join(metaDir, artifact)); !strings.Contains(string(got), "judge adopted v2") {
+			t.Fatalf("adoption rolled back without miss citation: %q", got)
+		}
+	})
+
+	t.Run("unclean usable ledger keeps the patch", func(t *testing.T) {
+		task, meta, metaDir := setup(t)
+		artifact := generation.MetaSkillJudgeSystemPrompt
+		fallback := generation.DefaultMetaArtifacts()[artifact]
+		version := meta.Version(artifact, fallback)
+		if err := task.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Artifact: artifact, ToVersion: version, Action: "auto_adopted",
+			Reason: "판정 놓침 과다",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := task.Tracker.logJudgeAccuracy(judgeAccuracyRecord{
+			JudgeVersion: version, Pairs: stormPoisonedJudgeMinPairs,
+			Correct: stormPoisonedJudgeMinPairs - 2,
+			ByClass: map[string][2]int{"fake-tool": {stormPoisonedJudgeMinPairs - 2, stormPoisonedJudgeMinPairs}},
+			Misses:  []judgeMissExhibit{{Skill: "sk", Degradation: "fake-tool", Verdict: "passed_defect"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		task.OnReverted = func(name, _ string) { t.Fatalf("real-miss adoption reverted: %s", name) }
+		task.maybeRevertStormPoisonedEvaluatorAdoption(slog.Default())
+		if got, _ := os.ReadFile(filepath.Join(metaDir, artifact)); !strings.Contains(string(got), "judge adopted v2") {
+			t.Fatalf("real miss evidence should keep the patch: %q", got)
+		}
+	})
+}
+
 // The kill switch flips the success tail back to propose-only.
 func TestMetaAutoAdoptEnabledDefaultsOnAndStopsOnKillSwitch(t *testing.T) {
 	t.Setenv("DENEB_META_AUTO_ADOPT", "")

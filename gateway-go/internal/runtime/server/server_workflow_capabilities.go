@@ -75,10 +75,10 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 	// AuroraDream: memory consolidation service (dreaming-only, no goal cycles).
 	s.autonomousSvc = autonomous.NewService(s.logger)
 	s.autonomousSvc.SetBehaviorLog(s.agentLogWriter)
-	// Persist last-run times so deploy restarts do not reset daily/weekly tasks.
-	if home, err := os.UserHomeDir(); err == nil {
-		s.autonomousSvc.SetStateDir(filepath.Join(home, ".deneb"))
-	}
+	// Persist last-run times under THIS process's state dir (DENEB_STATE_DIR),
+	// never hard-coded ~/.deneb — a live-test instance must not rewrite the
+	// production autonomous_state.json (and wipe prod-only task keys).
+	s.autonomousSvc.SetStateDir(config.ResolveStateDir())
 
 	// Prompt snapshots must be configured before the service can begin a dream
 	// cycle, otherwise a restart loses byte-identical APC prompt reuse.
