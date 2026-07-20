@@ -593,9 +593,8 @@ func resolveBoardRefs(ctx context.Context, input json.RawMessage) (json.RawMessa
 		return input, fmt.Errorf("blackboard: $board reference used but blackboard is not available")
 	}
 	var root any
-	// Malformed tool JSON is left untouched; the tool's own parser fails next.
-	if json.Unmarshal(input, &root) != nil {
-		return input, nil
+	if err := json.Unmarshal(input, &root); err != nil {
+		return input, fmt.Errorf("blackboard: decode tool input: %w", err)
 	}
 	replaced, err := replaceBoardRefs(root, board)
 	if err != nil {
