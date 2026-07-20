@@ -261,6 +261,39 @@ func TestMaybeRevertStormPoisonedEvaluatorAdoption(t *testing.T) {
 			t.Fatalf("real miss evidence should keep the patch: %q", got)
 		}
 	})
+
+	t.Run("falseRejects and operator confirms do not block heal", func(t *testing.T) {
+		task, meta, metaDir := setup(t)
+		artifact := generation.MetaSkillJudgeSystemPrompt
+		fallback := generation.DefaultMetaArtifacts()[artifact]
+		version := meta.Version(artifact, fallback)
+		if err := task.Tracker.LogMetaRevision(MetaRevisionRecord{
+			Artifact: artifact, ToVersion: version, Action: "auto_adopted",
+			Reason: "판정 놓침 — storm-cited tighten",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := task.Tracker.logJudgeAccuracy(judgeAccuracyRecord{
+			JudgeVersion: version,
+			Pairs:        stormPoisonedJudgeMinPairs,
+			Correct:      stormPoisonedJudgeMinPairs,
+			ByClass:      map[string][2]int{"fake-tool": {stormPoisonedJudgeMinPairs, stormPoisonedJudgeMinPairs}},
+			FalseRejects: []falseRejectExhibit{{Skill: "sk", RejectReason: "strict"}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := task.Tracker.LogOperatorJudgeVerdict(OperatorJudgeVerdict{
+			DecisionID: "sk@1.0.1", Skill: "sk", Version: "1.0.1",
+			Verdict: OperatorJudgeVerdictConfirm, JudgeVersion: version,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		task.maybeRevertStormPoisonedEvaluatorAdoption(slog.Default())
+		if got, _ := os.ReadFile(filepath.Join(metaDir, artifact)); !strings.Contains(string(got), "judge incumbent v1") {
+			t.Fatalf("confirms/falseRejects must not block storm heal: %q", got)
+		}
+	})
 }
 
 // The kill switch flips the success tail back to propose-only.

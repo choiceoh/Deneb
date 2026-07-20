@@ -454,6 +454,11 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		"pairs", rec.Pairs, "correct", rec.Correct, "misses", len(rec.Misses),
 		"falseRejects", len(rec.FalseRejects), "judgeVersion", rec.JudgeVersion,
 		"weakenTier", escalated, "verdictErrors", verdictErrors)
+	// Heal storm-poisoned judge adoptions on the P3 cadence (hours), not the
+	// meta slow-loop (days) — once usable probes clear, undo miss-cited
+	// tighten patches without waiting for the next evaluator epoch.
+	(&MetaEvolutionTask{Meta: t.Meta, Tracker: t.Tracker, Logger: logger}).
+		maybeRevertStormPoisonedEvaluatorAdoption(logger)
 	return nil
 }
 

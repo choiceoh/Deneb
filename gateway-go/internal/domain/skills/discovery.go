@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
 // SkillsLimits controls safety caps during discovery.
@@ -86,16 +88,16 @@ type discoveredSkill struct {
 	Category string // parent category directory name (empty for flat layout)
 }
 
-// DefaultManagedSkillsDir returns the managed skills catalog root
-// (~/.deneb/skills), or "" when the home directory cannot be resolved.
+// DefaultManagedSkillsDir returns the managed skills catalog root under THIS
+// process's state dir ({DENEB_STATE_DIR}/skills, else ~/.deneb/skills).
 // Single source of truth for discovery and for the read tool's extra
 // allowed root (tooldeps.CoreToolDeps.SkillsCatalogDir).
 func DefaultManagedSkillsDir() string {
-	home, _ := os.UserHomeDir()
-	if home == "" {
+	stateDir := config.ResolveStateDir()
+	if stateDir == "" {
 		return ""
 	}
-	return filepath.Join(home, ".deneb", "skills")
+	return filepath.Join(stateDir, "skills")
 }
 
 // DefaultPersonalSkillsDir returns the personal skills root (~/.agents/skills),

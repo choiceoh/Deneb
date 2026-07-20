@@ -29,6 +29,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -77,8 +78,8 @@ type Config struct {
 // DefaultConfig returns production defaults. Pure: no env reads.
 func DefaultConfig() Config {
 	outputDir := ""
-	if home, err := os.UserHomeDir(); err == nil {
-		outputDir = filepath.Join(home, ".deneb", "skills", "genesis")
+	if stateDir := config.ResolveStateDir(); stateDir != "" {
+		outputDir = filepath.Join(stateDir, "skills", "genesis")
 	}
 	return Config{
 		MinToolCalls:     2,
