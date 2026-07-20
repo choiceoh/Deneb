@@ -75,10 +75,13 @@ func pdfToText(ctx context.Context, pdf []byte) (string, error) {
 		return "", err
 	}
 
-	text := strings.TrimSpace(out.String())
-	if text == "" {
+	text := out.String()
+	if strings.TrimSpace(text) == "" {
 		return "", fmt.Errorf("추출된 텍스트가 없습니다 (스캔본 PDF일 수 있음)")
 	}
+	// Returned untrimmed: form feeds are whitespace, so trimming here would
+	// swallow the separators of empty leading/trailing pages and shift every
+	// page index in pdfToTextStructured off by one.
 	return text, nil
 }
 

@@ -138,6 +138,23 @@ func TestPageHasTableReturnsTrueForAlignedColumns(t *testing.T) {
 	}
 }
 
+func TestSplitPDFPagesKeepsEmptyEdgePages(t *testing.T) {
+	// An image-only cover page yields no text, so raw pdftotext output starts
+	// with a bare form feed. The empty page must survive the split — trimming
+	// it would shift every page index off by one (the regression that made the
+	// visual upgrade OCR the wrong pages on a real 소개자료 PDF).
+	pages := splitPDFPages("\f2페이지 본문\f3페이지 본문\f")
+	if want := []string{"", "2페이지 본문", "3페이지 본문"}; !reflect.DeepEqual(pages, want) {
+		t.Errorf("leading empty page: splitPDFPages = %q, want %q", pages, want)
+	}
+	// A trailing image-only page (back cover) must survive too — only the
+	// final page terminator is stripped.
+	pages = splitPDFPages("1페이지 본문\f\f")
+	if want := []string{"1페이지 본문", ""}; !reflect.DeepEqual(pages, want) {
+		t.Errorf("trailing empty page: splitPDFPages = %q, want %q", pages, want)
+	}
+}
+
 func TestClassifyPagesSeparatesTableAndVisualPages(t *testing.T) {
 	prose := strings.Repeat("이 페이지는 표도 그림도 아닌 충분히 긴 일반 본문 문단입니다. ", 8)
 	table := "품목       수량      단가\n" +

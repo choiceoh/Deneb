@@ -203,9 +203,7 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 		return "", err
 	}
 
-	// pdftotext separates pages with form feeds and emits a trailing one; drop
-	// the empty tail so it can't register as a visual-page candidate.
-	pages := strings.Split(strings.TrimRight(raw, "\f"), "\f")
+	pages := splitPDFPages(raw)
 	tableIdx, visualIdx := classifyPages(pages)
 	if len(tableIdx) == 0 && len(visualIdx) == 0 {
 		return strings.TrimSpace(raw), nil // nothing to upgrade
@@ -243,6 +241,15 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 		}
 	}
 	return strings.TrimSpace(strings.Join(pages, "\n\n")), nil
+}
+
+// splitPDFPages splits raw pdftotext output into per-page text. pdftotext
+// terminates every page with a form feed, so exactly one trailing separator is
+// stripped — leading and interior empty pages must survive the split to keep
+// index i aligned with PDF page i+1 (an image-only cover page is precisely the
+// page the visual upgrade needs to find).
+func splitPDFPages(raw string) []string {
+	return strings.Split(strings.TrimSuffix(raw, "\f"), "\f")
 }
 
 // classifyPages returns the 0-based indices of pages worth re-reading from the
