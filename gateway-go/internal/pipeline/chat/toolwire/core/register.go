@@ -225,7 +225,13 @@ func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 // It delegates to domain-specific Register*Tools functions.
 func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
-	RegisterFileTools(registry, deps.WorkspaceDir, deps.SkillsCatalogDirs...)
+	// Extra read-only roots outside the workspace: skill catalogs plus the
+	// memory root (capture originals referenced by oversized-document digests).
+	extraReadRoots := deps.SkillsCatalogDirs
+	if deps.MemoryDir != "" {
+		extraReadRoots = append(append([]string(nil), extraReadRoots...), deps.MemoryDir)
+	}
+	RegisterFileTools(registry, deps.WorkspaceDir, extraReadRoots...)
 	observeFn := toolport.ToolFunc(deps.ObserveTool)
 	if observeFn == nil {
 		observeFn = toolport.ToolFunc(func(context.Context, json.RawMessage) (string, error) {

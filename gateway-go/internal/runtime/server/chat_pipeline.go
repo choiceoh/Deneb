@@ -192,8 +192,12 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	}
 
 	s.toolDeps = &chat.CoreToolDeps{
-		WorkspaceDir:       workspaceDir,
-		SkillsCatalogDirs:  skillCatalogDirs,
+		WorkspaceDir:      workspaceDir,
+		SkillsCatalogDirs: skillCatalogDirs,
+		// Memory root as an extra read root: capture originals (and archived
+		// oversized-document sources the digest map references by path) live
+		// under {state}/memory/captures — outside the workspace jail.
+		MemoryDir:          filepath.Join(config.ResolveStateDir(), "memory"),
 		BundledSkillsDir:   bundledSkillsDir,
 		FetchToolsEmbedder: s.embeddingClient,
 		FetchToolsReranker: fetchToolsReranker,

@@ -46,11 +46,14 @@ type Deps struct {
 	// fallback (the native-client document attach path). Optional; nil disables
 	// miniapp.capture.document.
 	ExtractDocument func(ctx context.Context, data []byte, filename, mimeType string) string
-	// DigestOversized condenses an oversized extracted document (chunk digests
-	// via the local lightweight model, or a visible head truncation) before it
-	// enters the agent turn. Runs AFTER raw capture persistence so the full
-	// original still lands in captures. Optional; nil injects text unbounded.
-	DigestOversized func(ctx context.Context, name, text string) string
+	// DigestOversized condenses an oversized extracted document (a line-mapped
+	// chunk-digest map via the local lightweight model, or a visible head
+	// truncation) before it enters the agent turn. Runs AFTER raw capture
+	// persistence so the full original still lands in captures; sourcePath/
+	// sourceBodyLine locate that archived file so the map's line numbers stay
+	// openable ("" / 0 when persistence failed). Optional; nil injects text
+	// unbounded.
+	DigestOversized func(ctx context.Context, name, text, sourcePath string, sourceBodyLine int) string
 	// Translate translates web-page text segments for the in-app browser's
 	// in-place translation (en/ru → ko). Returns a same-length, same-order
 	// slice. Optional; nil disables miniapp.web.translate.
@@ -59,10 +62,11 @@ type Deps struct {
 	// for audio-capture transcription. Optional; nil or "" means no bias.
 	Hotwords func() string
 	// SaveCapture durably stores raw captured content (full ASR transcript,
-	// OCR text) and returns the stored file's memory-relative path. The agent
-	// turn only summarizes; without this the original is unrecoverable once
-	// the chat transcript ages out. Optional; nil skips persistence.
-	SaveCapture func(kind, context, text string) (string, error)
+	// OCR text) and returns the stored file's memory-relative path, absolute
+	// path, and the 1-based line where the body starts inside the file. The
+	// agent turn only summarizes; without this the original is unrecoverable
+	// once the chat transcript ages out. Optional; nil skips persistence.
+	SaveCapture func(kind, context, text string) (rel, abs string, bodyStartLine int, err error)
 	// EnrichContacts merges a shared address book into EXISTING wiki 사람 pages —
 	// it creates no pages, only enriches people already in the wiki with their
 	// phone/email/org (native-client contacts sync). Optional; nil disables the

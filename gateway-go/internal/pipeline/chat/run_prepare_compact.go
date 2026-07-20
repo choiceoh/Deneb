@@ -51,8 +51,13 @@ func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, p
 	// base64 bytes with no explicit type) into text up front, so the block
 	// builders below render their content instead of silently dropping them.
 	// Local-AI digestion of oversized documents is gated off in briefcase mode,
-	// mirroring the compaction summarizer gate.
-	attachments := prepareDocumentAttachments(ctx, params.Attachments, !deps.briefcaseMode)
+	// mirroring the compaction summarizer gate; oversized originals are archived
+	// to the wiki capture store so the digest map's line references stay openable.
+	var save captureSaver
+	if ws := deps.memory.Wiki; ws != nil {
+		save = ws.SaveCaptureAt
+	}
+	attachments := prepareDocumentAttachments(ctx, params.Attachments, !deps.briefcaseMode, save)
 
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
 	// with full conversation history), use those instead of transcript context.

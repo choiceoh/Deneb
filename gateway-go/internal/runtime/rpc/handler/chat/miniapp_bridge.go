@@ -197,7 +197,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		sessionKey := DefaultSessionKey(p.SessionKey)
 		var savedPath string
 		if deps.SaveCapture != nil {
-			if rel, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
+			if rel, _, _, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
 				slog.Error("capture image: raw persistence failed", "error", serr)
 			} else {
 				savedPath = rel
@@ -278,18 +278,20 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		sessionKey := DefaultSessionKey(p.SessionKey)
 		// Persist the raw extracted text before the turn: the agent only
 		// summarizes, and the original must outlive the chat transcript.
-		var savedPath string
+		var savedPath, savedAbs string
+		var savedBodyLine int
 		if deps.SaveCapture != nil {
-			if rel, serr := deps.SaveCapture("document", p.Caption, text); serr != nil {
+			if rel, abs, bodyLine, serr := deps.SaveCapture("document", p.Caption, text); serr != nil {
 				slog.Error("capture document: raw persistence failed", "error", serr)
 			} else {
-				savedPath = rel
+				savedPath, savedAbs, savedBodyLine = rel, abs, bodyLine
 			}
 		}
 		// Oversized documents would flood the turn's context; digest AFTER the
-		// raw persistence above so the full original still outlives the digest.
+		// raw persistence above so the full original still outlives the digest —
+		// the digest map's line numbers point into that archived file.
 		if deps.DigestOversized != nil {
-			text = deps.DigestOversized(ctx, p.Filename, text)
+			text = deps.DigestOversized(ctx, p.Filename, text, savedAbs, savedBodyLine)
 		}
 		header := "📄 공유 문서에서 추출한 텍스트"
 		if name := strings.TrimSpace(p.Filename); name != "" {
@@ -407,7 +409,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		// summary, and the one number the summary dropped lives only here.
 		var savedPath string
 		if deps.SaveCapture != nil {
-			if rel, serr := deps.SaveCapture("audio", "", transcript); serr != nil {
+			if rel, _, _, serr := deps.SaveCapture("audio", "", transcript); serr != nil {
 				slog.Error("capture audio: raw persistence failed", "error", serr)
 			} else {
 				savedPath = rel

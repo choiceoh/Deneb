@@ -95,15 +95,21 @@ func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.Cont
 	return blocks
 }
 
+// captureSaver archives an oversized document's full extracted text (the
+// wiki capture store) and returns its coordinates for the digest map. nil =
+// archiving unavailable.
+type captureSaver func(kind, context, text string) (rel, abs string, bodyStartLine int, err error)
+
 // prepareDocumentAttachments converts raw document attachments (PDF, Office,
 // CSV) into "document_text" attachments carrying server-extracted text. The
 // native client sends these as base64 Data + a document MimeType with no
 // explicit Type, so without this step they match neither the image nor the
 // document_text branch in buildAttachmentBlocks and get silently dropped.
 // Images and already-extracted text pass through unchanged. Oversized
-// documents are digested by the local lightweight model when allowLocalAI is
-// set (run_attachments_digest.go); otherwise they are visibly head-truncated.
-func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachment, allowLocalAI bool) []ChatAttachment {
+// documents are archived to the capture store (save) and digested into a map
+// by the local lightweight model when allowLocalAI is set
+// (run_attachments_digest.go); otherwise they are visibly head-truncated.
+func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachment, allowLocalAI bool, save captureSaver) []ChatAttachment {
 	if len(attachments) == 0 {
 		return attachments
 	}
@@ -158,7 +164,18 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 				inlineCap = docInlineRuneFloor
 			}
 		}
-		text = digestOversizedDocument(extractCtx, label, text, inlineCap, summarize)
+		// Archive the full original of an oversized document before digesting:
+		// the digest map's line numbers point into the archived file, and the
+		// primary record must outlive the chat transcript.
+		var src digestSource
+		if save != nil && utf8.RuneCountInString(text) > inlineCap {
+			if _, abs, bodyLine, serr := save("document", label, text); serr != nil {
+				slog.Warn("oversized attachment: raw persistence failed", "attachment", label, "error", serr)
+			} else {
+				src = digestSource{path: abs, bodyLine: bodyLine}
+			}
+		}
+		text = digestOversizedDocument(extractCtx, label, text, inlineCap, summarize, src)
 		usedRunes += utf8.RuneCountInString(text)
 		// document_text branch renders Data as the text body.
 		out = append(out, ChatAttachment{Type: "document_text", Name: label, Data: text})
