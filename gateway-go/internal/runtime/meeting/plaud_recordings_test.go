@@ -262,6 +262,89 @@ func TestPlaudTickAnalyzesOnlyWhenNewRecordingAppears(t *testing.T) {
 	}
 }
 
+// The 2026-07-20 incident: Plaud listed freshly synced recordings whose cloud
+// transcripts were still minutes away; the empty transcript was mistaken for a
+// silent recording and permanently skipped. An empty transcript must be
+// retried, then analyzed as soon as the transcript materializes.
+func TestPlaudEmptyTranscriptRetriesUntilReady(t *testing.T) {
+	transcript := strings.Repeat("오형석: 계약 조건 협의를 진행했습니다. ", 20)
+	inner, _ := json.Marshal([]map[string]any{{"content": transcript}})
+	outer, _ := json.Marshal([]map[string]any{{"data_content": string(inner)}})
+
+	ready := false
+	exec := func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		switch name {
+		case plaudListTool:
+			return plaudListPayload, nil
+		case plaudTranscriptTool:
+			if ready {
+				return string(outer), nil
+			}
+			return "[]", nil // synced but not yet transcribed
+		}
+		t.Fatalf("unexpected tool %s", name)
+		return "", nil
+	}
+	s, sink := newTestPlaudService(t, exec)
+	s.tick(context.Background()) // baseline
+	s.mu.Lock()
+	delete(s.state.Seen, "174d2f812c09ff81f9f95df708da938a")
+	s.mu.Unlock()
+
+	s.tick(context.Background())
+	if s.seen("174d2f812c09ff81f9f95df708da938a") {
+		t.Fatal("not-ready transcript must not mark the recording seen")
+	}
+	if len(sink.delivers) != 0 || len(sink.pages) != 0 {
+		t.Fatalf("no analysis output expected yet: delivers=%d pages=%d", len(sink.delivers), len(sink.pages))
+	}
+
+	ready = true
+	s.tick(context.Background())
+	if !s.seen("174d2f812c09ff81f9f95df708da938a") {
+		t.Fatal("recording must be analyzed once the transcript is ready")
+	}
+	if len(sink.delivers) != 1 || len(sink.pages) != 1 {
+		t.Fatalf("want 1 feed card + 1 wiki page, got delivers=%d pages=%d", len(sink.delivers), len(sink.pages))
+	}
+}
+
+// A transcript that stays empty past the wait budget is a genuinely silent
+// recording: give up quietly — mark seen, no quarantine card.
+func TestPlaudEmptyTranscriptGivesUpQuietlyAfterBudget(t *testing.T) {
+	exec := func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		switch name {
+		case plaudListTool:
+			return plaudListPayload, nil
+		case plaudTranscriptTool:
+			return "[]", nil
+		}
+		t.Fatalf("unexpected tool %s", name)
+		return "", nil
+	}
+	s, sink := newTestPlaudService(t, exec)
+	s.tick(context.Background()) // baseline
+	s.mu.Lock()
+	delete(s.state.Seen, "174d2f812c09ff81f9f95df708da938a")
+	s.mu.Unlock()
+
+	for i := 0; i < plaudTranscriptWaitTicks; i++ {
+		s.tick(context.Background())
+	}
+	if !s.seen("174d2f812c09ff81f9f95df708da938a") {
+		t.Fatal("recording must be marked seen once the wait budget is spent")
+	}
+	if len(sink.delivers) != 0 {
+		t.Fatalf("silent recording must not post any card, got %v", sink.delivers)
+	}
+	s.mu.Lock()
+	leftover := len(s.state.Failures)
+	s.mu.Unlock()
+	if leftover != 0 {
+		t.Errorf("failure counter must be cleared after give-up, got %d entries", leftover)
+	}
+}
+
 func keysOfPlaudPages(m map[string]*wiki.Page) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
