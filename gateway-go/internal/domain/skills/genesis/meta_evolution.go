@@ -697,12 +697,16 @@ const stormPoisonedJudgeMinPairs = 12
 
 // maybeRevertStormPoisonedEvaluatorAdoption undoes a judge-prompt adoption
 // that was justified by infra-error-inflated P3 miss rates. When the
-// incumbent's usable probe ledger is clean (zero fuel misses over a minimum
-// pair budget) and the adoption/proposal reason cited miss rates, restore
-// the pre-adoption backup — the patch had no real judge-quality signal.
+// incumbent's usable probe ledger shows zero fuel misses over a minimum pair
+// budget (and no real false-accept labels) and the adoption/proposal reason
+// cited miss rates, restore the pre-adoption backup. Also invoked from the
+// judge-accuracy lane so heal does not wait on the slow meta cadence.
 func (t *MetaEvolutionTask) maybeRevertStormPoisonedEvaluatorAdoption(logger *slog.Logger) {
 	if t.Meta == nil || t.Tracker == nil {
 		return
+	}
+	if logger == nil {
+		logger = slog.Default()
 	}
 	artifact := generation.MetaSkillJudgeSystemPrompt
 	prior, err := t.Tracker.RecentMetaRevisions(30)
@@ -738,15 +742,9 @@ func (t *MetaEvolutionTask) maybeRevertStormPoisonedEvaluatorAdoption(logger *sl
 		return // live artifact no longer matches the adopted revision
 	}
 	ev := t.collectJudgeAccuracyEvidence(version)
-	if !ev.clean() {
-		return // real misses/false-rejects remain — keep the patch
-	}
-	pairs := 0
-	for _, ct := range ev.byClass {
-		pairs += ct[1]
-	}
-	if pairs < stormPoisonedJudgeMinPairs {
-		return // not enough usable probe mass to call the ledger "clean"
+	pairs, ok := ev.stormPoisonHealEligible(stormPoisonedJudgeMinPairs)
+	if !ok {
+		return // real fuel misses or false-accept labels remain — keep the patch
 	}
 	restored, rerr := t.Meta.RevertAdoption(artifact)
 	if rerr != nil {
@@ -983,6 +981,24 @@ func (ev judgeAccuracyEvidence) clean() bool {
 	}
 	return ev.falseRejects == 0 && len(ev.organic) == 0 &&
 		ev.operatorConfirms == 0 && ev.operatorRollbacks == 0
+}
+
+// stormPoisonHealEligible reports whether a miss-rate-justified judge
+// adoption should be undone. Unlike clean() (evaluator co-evolve fuel),
+// this ignores falseRejects and operatorConfirms — those are over-strict /
+// keep-soft signals, not reasons to retain a storm-poisoned tighten patch.
+// Organic rollbacks and operator rollback labels still block the heal.
+func (ev judgeAccuracyEvidence) stormPoisonHealEligible(minPairs int) (pairs int, ok bool) {
+	for _, ct := range ev.byClass {
+		if ct[0] > 0 {
+			return 0, false
+		}
+		pairs += ct[1]
+	}
+	if pairs < minPairs || len(ev.organic) > 0 || ev.operatorRollbacks > 0 {
+		return pairs, false
+	}
+	return pairs, true
 }
 
 // collectJudgeAccuracyEvidence gathers the incumbent judge's synthetic misses,

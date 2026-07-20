@@ -115,14 +115,14 @@ func (s *Server) initGenesisServices() {
 	// without importing the genesis package (dependency inversion).
 	//
 	// Production-state gated (same invariant as the idle-review lane and
-	// workout): the genesis tracker writes to homeDir/.deneb regardless of
-	// DENEB_STATE_DIR, so a dev/live-test instance's chat sessions would fire
-	// fenced reviews that write review liveness and proposals into the
-	// production Propus sidecar. Observed 2026-07-11: a dev-origin review
-	// completion reset production review_age and pushed the idle backstop's
-	// first fire out by its full 6h staleness window. An explicit
-	// DENEB_SKILL_NUDGE_INTERVAL overrides the gate so nudger behavior stays
-	// live-testable (e.g. puppet mode) when that is the point of the test.
+	// workout): even though the genesis tracker now roots under
+	// DENEB_STATE_DIR, a mis-set env still must not fire fenced reviews that
+	// write review liveness into the production Propus sidecar. Observed
+	// 2026-07-11: a dev-origin review completion reset production review_age
+	// and pushed the idle backstop's first fire out by its full 6h staleness
+	// window. An explicit DENEB_SKILL_NUDGE_INTERVAL overrides the gate so
+	// nudger behavior stays live-testable (e.g. puppet mode) when that is the
+	// point of the test.
 	nudgerHome, _ := os.UserHomeDir()
 	_, nudgerProdState := s.productionStateDir(nudgerHome)
 	if !nudgerProdState && os.Getenv("DENEB_SKILL_NUDGE_INTERVAL") == "" {
@@ -457,19 +457,15 @@ func (s *Server) registerGenesisAutonomousTasks(_ *rpcutil.GatewayHub) {
 		// replay flag with the behavioral gate; workout evidence is quarantined
 		// from real-usage stats by Source.
 		//
-		// Production-state-dir gated (unlike evolve/curator/backfill): the
-		// genesis tracker writes to homeDir/.deneb REGARDLESS of DENEB_STATE_DIR,
-		// so a dev/live-test instance shares production's skill_usage.jsonl. That
-		// is an accepted read-mostly risk for the deterministic core-loop tasks,
-		// but workout is the one lane that would make live model calls AND write
-		// SYNTHETIC failure rows into production from a dev process — so it stays
-		// off outside the production state dir (same invariant as memory-backup /
-		// wiki-research).
+		// Production-state-dir gated (unlike evolve/curator/backfill): tracker
+		// paths honor DENEB_STATE_DIR, but workout still makes live model calls
+		// and writes SYNTHETIC failure rows — keep it off outside the production
+		// state dir (same invariant as memory-backup / wiki-research).
 		workoutHome, _ := os.UserHomeDir()
 		_, isProdState := s.productionStateDir(workoutHome)
 		// P3 label food factory (judge-accuracy standing lane): planted-defect
 		// replay through the LIVE judge + deterministic false-reject mining.
-		// Same gate as workout — live model calls + shared genesis writes.
+		// Same gate as workout — live model calls against the production judge.
 		if isProdState {
 			s.autonomousSvc.RegisterTask(&genesis.JudgeAccuracyTask{
 				Evolver: s.genesisEvolver,

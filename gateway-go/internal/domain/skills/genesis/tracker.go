@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	genesiscommon "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -250,17 +251,15 @@ type usageAgg struct {
 	lastUsed int64
 }
 
-// NewTracker opens or creates the skill usage tracker.
+// NewTracker opens or creates the skill usage tracker under THIS process's
+// state dir ({DENEB_STATE_DIR}/data, else ~/.deneb/data). Live-test/dev
+// instances must not append to the production JSONL ledgers.
 func NewTracker(logger *slog.Logger) (*Tracker, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("genesis-tracker: home dir: %w", err)
-	}
-	dir := filepath.Join(home, ".deneb", "data")
+	dir := filepath.Join(config.ResolveStateDir(), "data")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("genesis-tracker: mkdir: %w", err)
 	}
