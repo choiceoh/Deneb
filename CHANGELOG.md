@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.125.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.124.0...deneb-v4.125.0) (2026-07-20)
+
+
+### ✨ Features
+
+* **retrieval:** build hybrid code context pipeline ([#4016](https://github.com/choiceoh/Deneb/issues/4016)) ([fb8b60b](https://github.com/choiceoh/Deneb/commit/fb8b60b434801149705ff61d3834f66461710f4e))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** route session-less workfeed action prompts into the AI panel ([#4019](https://github.com/choiceoh/Deneb/issues/4019)) ([f4bcc74](https://github.com/choiceoh/Deneb/commit/f4bcc746c3daa424ffc008f0a42f206fb11ee800))
+* **gateway:** block stale mail refresh from undoing archive/trash invalidation ([#4002](https://github.com/choiceoh/Deneb/issues/4002)) ([8135586](https://github.com/choiceoh/Deneb/commit/8135586a89c9485cf0a2563ac2ba74ef2f797691))
+* **meeting:** retry empty Plaud transcripts instead of skipping permanently ([#4017](https://github.com/choiceoh/Deneb/issues/4017)) ([08fcbeb](https://github.com/choiceoh/Deneb/commit/08fcbebb027e8e617b8cb670231c7bb4fd9d05a9))
+
 ## [4.124.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.123.0...deneb-v4.124.0) (2026-07-19)
 
 
