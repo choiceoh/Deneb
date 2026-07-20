@@ -43,10 +43,18 @@ GENERIC = {
     "임대사업", "루프탑", "루프탑태양광", "케이블", "커넥터", "협의", "협력", "조사", "통합",
     "작성", "공유", "배치", "가배치", "주차장", "옥외", "자가소비", "태양광발전설비",
     "육상풍력", "수배전반", "리파워링", "energy",
+    # Mail-action/domain-generic offenders measured 2026-07-21 (gold v4 miss
+    # audit): an event-ish 대표 title ("… 견적 재송부 (재검토)") or a permit
+    # subpage name turned these into anchors, mislabeling unrelated mails
+    # (세창스틸 13, 진도보배 6 clusters).
+    "재송부", "재검토", "발전사업", "발전사업허가", "접속", "공고문", "규격서",
 }
 
 
 def ok_token(t: str) -> bool:
+    # Korean suffix particles glued to a token ("재송부의", "요청건") would
+    # bypass the GENERIC list — normalize the tail before checking.
+    t = re.sub(r"(의|건)$", "", t) or t
     if t in GENERIC or len(t) < 2 or t.isdigit():
         return False
     if t in "탑솔라" or t in "topsolar":  # company-name substrings ("솔라"…)
@@ -77,9 +85,55 @@ def main() -> None:
     for p in (pathlib.Path(args.wiki) / "프로젝트").iterdir():
         if not p.is_dir():
             continue
-        toks = [t for t in re.split(r"[-_(),]", p.name.lower()) if ok_token(t)]
+        # Only real deal folders — the layout contract gives every project a
+        # 대표.md slot. Utility dirs (자료/, 거래/ counterparty pages, stray
+        # 메일분석/) have none and must not become gold targets (measured:
+        # "광주글로벌모터스 주차장" labeled to 프로젝트/자료).
+        if not (p / "대표.md").is_file():
+            continue
+        # Anchor tokens come from the 대표페이지 IDENTITY (title, client, site
+        # leaves) plus the folder name. Folder names alone stopped carrying
+        # vocabulary when the taxonomy moved to code folders (nde-ztt-cbl-001);
+        # worse, a stale folder-name token could anchor a whole technical class
+        # to one project ("154kv" mislabeled every other site's cable mail to
+        # the 비금 deal — the measured r@8 miss cluster of 2026-07-21). With
+        # identity anchors, a token claimed by two projects' identities loses
+        # anchor status via the single-owner guard and self-heals.
+        toks = set(t for t in re.split(r"[-_(),]", p.name.lower()) if ok_token(t))
+        rep = p / "대표.md"
+        if rep.is_file():
+            fm_text = rep.read_text(errors="ignore")
+            m = re.match(r"^---\n(.*?)\n---", fm_text, re.S)
+            if m:
+                fm = dict(
+                    km.groups()
+                    for line in m.group(1).splitlines()
+                    if (km := re.match(r"^([a-z_]+):\s*(.*)$", line))
+                )
+                idents = re.split(r"[\s\-_(),:·—\[\]\"']+", fm.get("title", "").lower())
+                client = fm.get("client", "").strip().strip("\"'").lower()
+                if client:
+                    idents.append(client)
+                sites = fm.get("sites", "").strip()
+                if sites.startswith("[") and sites.endswith("]"):
+                    for site in sites[1:-1].split(","):
+                        parts = site.strip().strip("\"'").lower().split()
+                        if parts:
+                            idents.append(parts[-1])
+                toks.update(t for t in idents if ok_token(t))
+        # Subpage file names carry the folder's site/deal vocabulary that a
+        # weak 대표.md title misses (남도에코-케이블/당진-석문호-케이블-발주.md
+        # is the only place 석문호 appears as identity) — and a technical spec
+        # shared with another folder's subpage (154kv) then has TWO owners and
+        # stops anchoring.
+        for sub in p.glob("*.md"):
+            if sub.name in ("대표.md", "로그.md"):
+                continue
+            toks.update(
+                t for t in re.split(r"[-_(),]", sub.stem.lower()) if ok_token(t)
+            )
         if toks:
-            projects[f"프로젝트/{p.name}"] = toks
+            projects[f"프로젝트/{p.name}"] = sorted(toks)
     tok_owners: dict[str, set[str]] = collections.defaultdict(set)
     for proj, toks in projects.items():
         for t in toks:

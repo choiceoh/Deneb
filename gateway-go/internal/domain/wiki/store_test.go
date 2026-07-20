@@ -268,6 +268,42 @@ func TestStore_BacklinkMaintenance_CreatesReverseBacklinkOnWrite(t *testing.T) {
 	}
 }
 
+// TestStore_BacklinkMaintenance_SkipsMachineIDSources pins the machine-id
+// guard: a 메일분석 message-id page linking its 대표 must NOT earn a reverse
+// entry on the 대표페이지 (measured 2026-07-20: such entries were 26% of all
+// related and inflated BM25 doc length on exactly the pages recall needs),
+// while the forward link on the machine page itself stays intact.
+func TestStore_BacklinkMaintenance_SkipsMachineIDSources(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))
+	defer store.Close()
+
+	rep := NewPage("당진 대표", "프로젝트", nil)
+	rep.Body = "# 대표"
+	if err := store.WritePage("프로젝트/dj/대표.md", rep); err != nil {
+		t.Fatalf("WritePage(대표): %v", err)
+	}
+
+	const machinePath = "프로젝트/dj/메일분석/0106019f4a7566ca-6c6fc28e-000000@amazonses.com.md"
+	mail := NewPage("메일 분석", "프로젝트", nil)
+	mail.Meta.Related = []string{"프로젝트/dj/대표.md"}
+	mail.Body = "# 메일"
+	if err := store.WritePage(machinePath, mail); err != nil {
+		t.Fatalf("WritePage(메일분석): %v", err)
+	}
+
+	got := testutil.Must(store.ReadPage("프로젝트/dj/대표.md"))
+	for _, r := range got.Meta.Related {
+		if r == machinePath {
+			t.Fatalf("대표.Related gained a machine-id backlink: %v", got.Meta.Related)
+		}
+	}
+	gotMail := testutil.Must(store.ReadPage(machinePath))
+	if len(gotMail.Meta.Related) == 0 || gotMail.Meta.Related[0] != "프로젝트/dj/대표.md" {
+		t.Fatalf("forward link on the machine page was lost: %v", gotMail.Meta.Related)
+	}
+}
+
 func TestStore_BacklinkCleanupOnDelete(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -485,6 +486,18 @@ func (s *Store) maintainBacklinks(relPath string, oldRelated, newRelated []strin
 	}
 }
 
+// machineIDLeafRE matches machine-generated page leaves: mail message-ids
+// (contain '@' or a 12+ hex run). Meeting-note slugs keep their Korean title
+// and are NOT matched — only pure machine identifiers are.
+var machineIDLeafRE = regexp.MustCompile(`(@|[0-9a-f]{12,})`)
+
+// machineIDLeaf reports whether a related/backlink path's file name is a pure
+// machine identifier (메일분석 message-id pages and the like).
+func machineIDLeaf(p string) bool {
+	leaf := strings.TrimSuffix(filepath.Base(p), ".md")
+	return machineIDLeafRE.MatchString(leaf)
+}
+
 // normalizeRelatedPaths maps Related entries through normalizePagePath so the
 // backlink diff compares file identities, not raw spellings. Non-path entries
 // (titles, project codes) normalize to a non-existent ".md" name and stay
@@ -501,6 +514,17 @@ func normalizeRelatedPaths(related []string) []string {
 }
 
 func (s *Store) addBacklink(targetPath, sourcePath string) {
+	// Machine-id sources (메일분석 message-id leaves, hash-suffixed captures)
+	// earn no backlink slot on their target: they are already discoverable via
+	// their own folder, carry zero query vocabulary, and measured 2026-07-20
+	// they were 26% of all related entries — the largest 대표페이지 held 263
+	// related tokens against 665 body tokens, a BM25 length-normalization
+	// penalty on exactly the pages recall needs most. Forward links (the
+	// machine page listing its 대표) are untouched; only the reverse edge is
+	// withheld.
+	if machineIDLeaf(sourcePath) {
+		return
+	}
 	page, err := s.ReadPage(targetPath)
 	if err != nil {
 		return // target doesn't exist — skip
