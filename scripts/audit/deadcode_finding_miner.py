@@ -57,6 +57,7 @@ from health_finding_miner import (
     record_candidate,
     select_candidates,
 )
+from tool_quality_miner import fetch_behavior
 
 SOURCE_PREFIX = "deadcode-finding"
 
@@ -101,7 +102,96 @@ def parse_new_findings(audit_output: str) -> list[tuple[str, str]]:
     return sorted(seen)
 
 
-def deadcode_candidates(findings: list[tuple[str, str]]) -> list[dict[str, Any]]:
+# --- runtime corroboration (Hud talk adoption, 2026-07-20) ---------------------
+#
+# Static reachability has a known phantom class (tool-version skew flagged live
+# code before — the reason the deep gate is advisory). Where a "dead" symbol is
+# actually a REGISTERED entry point (rpcmap --handler resolves it to an RPC
+# method or tool), the observe window gives runtime evidence: recorded tool
+# calls > 0 means the symbol ran — filing its deletion would be a phantom, so
+# it is dropped loudly. Zero observed calls corroborates the static verdict on
+# the candidate's evidence. Non-entry-point symbols (the common case) have no
+# runtime observability and are annotated as static-evidence-only.
+
+RUNTIME_WINDOW_DAYS = 30
+
+_ENTRY_LINE = re.compile(r"^\s*\[(?P<kind>rpc|tool|event)\]\s+(?P<name>\S+)\s*$")
+
+
+def symbol_probe_name(symbol: str) -> str:
+    """Bare identifier for rpcmap --handler: a deadcode symbol may carry a
+    receiver or package qualifier ('(*Tracker).Foo', 'pkg.Bar') — the registry
+    maps bare handler names."""
+    name = symbol.strip().split(" ")[-1]
+    if ")." in name:
+        name = name.rsplit(").", 1)[-1]
+    elif "." in name:
+        name = name.rsplit(".", 1)[-1]
+    return name.strip("()*")
+
+
+def parse_entry_points(rpcmap_output: str) -> list[tuple[str, str]]:
+    """(kind, name) pairs from rpcmap --handler output (empty = not an entry)."""
+    out: list[tuple[str, str]] = []
+    for line in rpcmap_output.splitlines():
+        m = _ENTRY_LINE.match(line)
+        if m:
+            out.append((m.group("kind"), m.group("name")))
+    return out
+
+
+def probe_entry_points(symbol: str, root: str) -> list[tuple[str, str]]:
+    """Shell rpcmap --handler for symbol; [] on ANY failure — corroboration is
+    best-effort evidence enrichment and must never block the miner."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, os.path.join(root, "scripts", "dev", "rpcmap.py"),
+             "--handler", symbol_probe_name(symbol)],
+            capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return parse_entry_points(proc.stdout)
+
+
+def corroborate(findings: list[tuple[str, str]],
+                entry_points_for,
+                tool_calls: dict[str, int]) -> tuple[list[tuple[str, str, str]],
+                                                     list[tuple[str, str, str]]]:
+    """Split findings into kept (with an evidence note) and phantoms (dropped).
+
+    A phantom is a statically-dead symbol whose registered tool recorded calls
+    in the observe window — runtime contradicts the static verdict, and filing
+    a deletion for live code is exactly the known phantom failure class.
+    """
+    kept: list[tuple[str, str, str]] = []
+    phantoms: list[tuple[str, str, str]] = []
+    for file, symbol in findings:
+        entries = entry_points_for(symbol)
+        if not entries:
+            kept.append((file, symbol,
+                         "runtime corroboration: n/a — not a registered RPC/tool entry "
+                         "point, static reachability is the only evidence"))
+            continue
+        live = [(k, n) for k, n in entries if k == "tool" and tool_calls.get(n, 0) > 0]
+        if live:
+            kind, name = live[0]
+            phantoms.append((file, symbol,
+                             f"registered {kind} '{name}' recorded {tool_calls.get(name, 0)} "
+                             f"calls in the {RUNTIME_WINDOW_DAYS}d observe window — statically "
+                             f"'dead' but invoked at runtime (phantom, not filed)"))
+            continue
+        names = ", ".join(f"{k}:{n}" for k, n in entries)
+        kept.append((file, symbol,
+                     f"runtime corroboration: registered entry point(s) [{names}] recorded 0 "
+                     f"observed calls in the {RUNTIME_WINDOW_DAYS}d window — static verdict "
+                     f"corroborated"))
+    return kept, phantoms
+
+
+def deadcode_candidates(findings: list[tuple[str, str]],
+                        notes: dict[tuple[str, str], str] | None = None) -> list[dict[str, Any]]:
     """Newly-dead symbols as propose-only scope=code candidates.
 
     Uncapped: the shared reopen/dedup filter runs before the per-run cap so
@@ -132,6 +222,7 @@ def deadcode_candidates(findings: list[tuple[str, str]]) -> list[dict[str, Any]]
             "evidence": (
                 f"{finding} — x/tools deadcode over ./cmd/... reports this symbol "
                 f"unreachable and it is absent from scripts/audit/deadcode-baseline.txt"
+                + (f"; {notes[(file, symbol)]}" if notes and (file, symbol) in notes else "")
             ),
             "reason": "deadcode-audit delta — proactive L4 supply (RSI P5 ws3)",
             "targetFiles": [target],
@@ -232,8 +323,29 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         print(f"gateway unreachable — DRY-RUN continues WITHOUT dedup: {exc}", file=err)
         existing = []
 
+    notes: dict[tuple[str, str], str] = {}
+    phantoms: list[tuple[str, str, str]] = []
+    if findings:
+        tool_calls: dict[str, int] = {}
+        try:
+            behavior = fetch_behavior(base_url, token, RUNTIME_WINDOW_DAYS)
+            for t in behavior.get("tools") or []:
+                name = str(t.get("name") or "").strip()
+                if name:
+                    tool_calls[name] = int(t.get("calls") or 0)
+        except GatewayError as exc:
+            # Best-effort: without observe data the phantom guard cannot fire,
+            # but rpcmap-based entry-point annotation still applies.
+            print(f"observe.behavior unavailable — runtime call counts skipped: {exc}", file=err)
+        kept, phantoms = corroborate(
+            findings, lambda sym: probe_entry_points(sym, root), tool_calls)
+        for file, symbol, reason in phantoms:
+            print(f"phantom dropped (not filed): {file} :: {symbol} — {reason}", file=err)
+        notes = {(f, sym): note for f, sym, note in kept}
+        findings = [(f, sym) for f, sym, _ in kept]
+
     to_file, skipped = select_candidates(
-        deadcode_candidates(findings), existing, now_ms, max(args.max, 0))
+        deadcode_candidates(findings, notes), existing, now_ms, max(args.max, 0))
 
     filed: list[dict[str, str]] = []
     errors: list[str] = []
@@ -256,6 +368,7 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
 
     summary = {
         "findings": len(findings),
+        "phantoms": len(phantoms),
         "planned": len(to_file),
         "filed": len(filed),
         "skipped": len(skipped),

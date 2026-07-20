@@ -533,6 +533,8 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 		"effortEscalated", effortRt != nil && effortRt.escalated,
 		"agentMs", agentMs,
 		"totalMs", totalMs,
+		"llmMs", agentResult.LLMMs,
+		"toolMs", agentResult.ToolMs,
 		"turns", agentResult.Turns,
 		"inputTokens", agentResult.Usage.InputTokens,
 		"outputTokens", agentResult.Usage.OutputTokens,
