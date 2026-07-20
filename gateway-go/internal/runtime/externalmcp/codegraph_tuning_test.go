@@ -109,6 +109,26 @@ func TestEnrichWithFolderDocsTruncatesLongMap(t *testing.T) {
 	}
 }
 
+func TestEnrichWithFolderDocsSelectsQuerySectionAndSafety(t *testing.T) {
+	root := "/repo"
+	doc := "# Runtime\n\n## Safety\nNever trust an escaped path.\n\n## Prompt cache\nInject recall at the user-message tail.\n\n## Release\nPublish an APK.\n"
+	files := map[string]string{filepath.Join(root, "gateway-go/CLAUDE.md"): doc}
+	got := enrichWithFolderDocsQuery(
+		"gateway-go/internal/pipeline/chat/run_tail_inject.go:1",
+		root,
+		"prompt cache recall injection",
+		fakeReadFileMap(files),
+	)
+	for _, want := range []string{"## Safety", "## Prompt cache", "user-message tail"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("query-aware doc context missing %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "Publish an APK") {
+		t.Fatalf("unrelated section leaked into context: %s", got)
+	}
+}
+
 func TestEnrichWithFolderDocsNoPathsUnchanged(t *testing.T) {
 	in := "prose with no file paths, just words"
 	got := enrichWithFolderDocs(in, "/repo", func(string) ([]byte, error) { return nil, os.ErrNotExist })

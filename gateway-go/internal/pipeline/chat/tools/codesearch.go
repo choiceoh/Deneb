@@ -15,11 +15,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// ToolCodeSearch wraps the semantic (concept) code search: Nemotron embeddings
-// over CodeGraph nodes, RRF-fused with the FTS lexical arm and reranked by the
-// XProvence sidecar. It is the sibling of codegraph_explore — CodeGraph answers
-// structure/relations from a known symbol, code_search answers "where is the
-// code that DOES X" when the symbol name is unknown.
+// ToolCodeSearch wraps semantic code search over symbols plus tracked repository
+// file chunks. Dense, CodeGraph FTS, and local BM25 candidates are RRF-fused and
+// reranked; the result is expanded into a bounded context pack containing actual
+// source, safe adjacent relations, and applicable repository docs.
 //
 // The embedder (:8002) and reranker (:8004) self-wire from env exactly as the
 // codesearch CLI does — no dep threading. The index lives in <repo>/.codegraph
@@ -41,6 +40,7 @@ func ToolCodeSearch(workspaceDir string) ToolFunc {
 		if k <= 0 {
 			k = 10
 		}
+		k = min(k, 20)
 
 		dir := resolveCodeIndexDir(workspaceDir)
 		if dir == "" {
@@ -61,10 +61,8 @@ func ToolCodeSearch(workspaceDir string) ToolFunc {
 			return fmt.Sprintf("\"%s\"에 대한 시맨틱 매치 없음. 키워드가 명확하면 grep, 구조/호출 관계면 codegraph_explore를 시도하세요.", p.Query), nil
 		}
 		var b strings.Builder
-		fmt.Fprintf(&b, "code_search \"%s\" — 상위 %d개 (dense+FTS 융합, 리랭크):\n\n", p.Query, len(hits))
-		for _, h := range hits {
-			fmt.Fprintf(&b, "- %s  `%s`\n  %s:%d\n", h.Kind, h.Qualified, h.File, h.StartLine)
-		}
+		fmt.Fprintf(&b, "code_search \"%s\" — 상위 %d개 (dense+BM25+FTS 융합, 리랭크)\n\n", p.Query, len(hits))
+		b.WriteString(codesearch.BuildContextPack(ctx, repo, dir, p.Query, hits))
 		return b.String(), nil
 	}
 }

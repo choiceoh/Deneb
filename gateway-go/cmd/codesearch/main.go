@@ -2,7 +2,7 @@
 //
 //	go run ./cmd/codesearch index [-full]     # build/refresh .codegraph/semantic-code.*
 //	go run ./cmd/codesearch query "질의" [-k N]
-//	go run ./cmd/codesearch bench             # goldset P@5: fused quality
+//	go run ./cmd/codesearch bench             # code-path Hit@K/MRR quality
 //
 // DENEB_EMBEDDING_URL selects the sidecar (default the gateway's :8002).
 package main
@@ -65,7 +65,8 @@ func main() {
 			fatal(err)
 		}
 		for _, h := range hits {
-			fmt.Printf("%.3f  %-8s %s\n       %s:%d\n", h.Cosine, h.Kind, h.Qualified, h.File, h.StartLine)
+			fmt.Printf("cos=%.3f fused=%.4f rr=%.3f signals=%d  %-10s %s\n       %s:%d\n",
+				h.Cosine, h.Score, h.RerankScore, h.Signals, h.Kind, h.Qualified, h.File, h.StartLine)
 		}
 	case "bench":
 		runBench(ctx, dir, emb)

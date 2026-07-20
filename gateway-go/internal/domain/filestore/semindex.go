@@ -41,7 +41,7 @@ const semindexVersion = 4
 // filestorePreprocessingVersion covers extraction-to-chunk semantics. Bump it
 // whenever chunk boundaries or normalization change without changing the
 // embedding model itself.
-const filestorePreprocessingVersion = "filestore-code-hierarchy-chunk-v3"
+const filestorePreprocessingVersion = "filestore-contextual-code-hierarchy-chunk-v4"
 
 // chunkRunes is the target size of one text chunk (~512 tokens for mixed
 // Korean/English). Rune-based so a chunk boundary never splits a CJK character.
@@ -287,11 +287,10 @@ func (si *SemanticIndex) Remove(path string) {
 }
 
 // Rename re-keys the index entry from oldPath to newPath after a move, so search
-// returns the new path immediately (the vectors are unchanged — only the file's
-// location moved). If newPath already has an entry it is overwritten (the moved
-// file's content wins). A no-op when oldPath isn't indexed or the paths are
-// equal. Persisted best-effort. The entry's Path field is updated so a later
-// save/search reports the new location.
+// returns the new path immediately. Chunks remain temporarily usable, but MTime
+// is cleared to force the next Reindex to refresh their contextual path prefix;
+// without that invalidation a renamed document would permanently carry the old
+// path in its embedding. If newPath already exists the moved file wins.
 func (si *SemanticIndex) Rename(oldPath, newPath string) {
 	if si == nil || oldPath == "" || newPath == "" || oldPath == newPath {
 		return
@@ -302,6 +301,7 @@ func (si *SemanticIndex) Rename(oldPath, newPath string) {
 		delete(si.files, oldPath)
 		renamed := cloneFileEntry(fe)
 		renamed.Path = newPath
+		renamed.MTime = "" // contextual path changed: force next Reindex
 		si.files[newPath] = renamed
 	}
 	si.mu.Unlock()
@@ -333,6 +333,36 @@ func structuredChunks(name, text string) []textchunk.Chunk {
 		}
 	}
 	return out
+}
+
+// contextualChunkText gives the embedding model the identity that extraction
+// strips away. A body-only chunk such as "timeout is 30 seconds" is ambiguous
+// across a large store; binding it to the virtual path, file name, structural
+// kind, heading, and source lines makes the vector self-identifying while the
+// user-visible snippet remains the original text.
+//
+// Keep this prefix deterministic and compact: it is part of the persisted
+// preprocessing contract (filestorePreprocessingVersion) and every extra token
+// is paid once per chunk at reindex time.
+func contextualChunkText(e Entry, piece textchunk.Chunk) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Document: %s\nPath: %s\n", e.Name, e.PathDisplay)
+	if piece.Heading != "" {
+		label := "Section"
+		if isCodeChunkKind(piece.Kind) {
+			label = "Symbol"
+		}
+		fmt.Fprintf(&b, "%s: %s\n", label, piece.Heading)
+	}
+	if piece.Kind != "" {
+		fmt.Fprintf(&b, "Structure: %s\n", piece.Kind)
+	}
+	if piece.StartLine > 0 {
+		fmt.Fprintf(&b, "Lines: %d-%d\n", piece.StartLine, max(piece.StartLine, piece.EndLine))
+	}
+	b.WriteString("\n")
+	b.WriteString(piece.Text)
+	return b.String()
 }
 
 // freshKey returns the (mtime,size) pair that is the cheap first half of the
@@ -567,11 +597,12 @@ func (si *SemanticIndex) embedFile(
 		}
 	}
 	out := make([]chunk, len(chunks))
+	inputs := make([]string, len(chunks))
 	pending := make([]int, 0, len(chunks))
 	reused := 0
 	for i, piece := range chunks {
-		input := chunkEmbeddingText(piece)
-		hash := embedindex.ContentHash(input)
+		inputs[i] = contextualChunkText(e, piece)
+		hash := embedindex.ContentHash(inputs[i])
 		out[i] = chunk{
 			Snippet: piece.Text, Hash: hash, StartLine: piece.StartLine, EndLine: piece.EndLine,
 			Kind: piece.Kind, Heading: piece.Heading,
@@ -587,7 +618,7 @@ func (si *SemanticIndex) embedFile(
 		end := min(start+embedBatchSize, len(pending))
 		texts := make([]string, end-start)
 		for i := start; i < end; i++ {
-			texts[i-start] = chunkEmbeddingText(chunks[pending[i]])
+			texts[i-start] = inputs[pending[i]]
 		}
 		vecs, embedErr := embed.Embed(ctx, texts)
 		if embedErr != nil || len(vecs) != end-start {
@@ -599,13 +630,6 @@ func (si *SemanticIndex) embedFile(
 	}
 	mtime, size := freshKey(e)
 	return &fileEntry{Path: e.PathDisplay, MTime: mtime, Size: size, Content: content, Chunks: out}, len(pending), reused, true
-}
-
-func chunkEmbeddingText(chunk textchunk.Chunk) string {
-	if chunk.Heading == "" || !isCodeChunkKind(chunk.Kind) {
-		return chunk.Text
-	}
-	return strings.TrimSpace("kind: " + chunk.Kind + "\nsymbol: " + chunk.Heading + "\n" + chunk.Text)
 }
 
 func isCodeChunkKind(kind string) bool {

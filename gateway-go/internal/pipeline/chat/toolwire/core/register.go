@@ -162,8 +162,8 @@ func RegisterGraphTool(registry toolport.ToolRegistrar, workspaceDir string) {
 }
 
 // RegisterCodeSearchTool registers the eager `code_search` tool — semantic
-// (concept) code search: Nemotron embeddings over CodeGraph nodes, RRF-fused
-// with FTS and reranked by XProvence. It is the sibling of codegraph_explore:
+// (concept) code search: Nemotron embeddings over symbols/repository chunks,
+// RRF-fused with BM25+FTS and reranked by XProvence. It is the sibling of codegraph_explore:
 // CodeGraph resolves structure/relations from a KNOWN symbol; code_search finds
 // "where is the code that does X" when the symbol name is unknown. Eager (small
 // schema, one required field) so it sits on the wire without a fetch round-trip,
@@ -172,9 +172,9 @@ func RegisterCodeSearchTool(registry toolport.ToolRegistrar, workspaceDir string
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "code_search",
 		Description: "시맨틱 코드 검색 — 심볼 이름을 몰라도 \"무엇을 하는 코드가 어디 있나\"를 개념/자연어로 찾는다 " +
-			"(Nemotron 임베딩 dense + CodeGraph FTS 융합 + 리랭크, 한국어 질의 지원). " +
-			"codegraph_explore와 짝: **알려진 심볼의 구조·관계·호출**은 codegraph_explore, **이름 모를 기능의 위치**는 code_search. " +
-			"결과의 file:line을 codegraph_node/explore에 넘겨 구조를 이어서 파고들라.",
+			"(Nemotron dense + BM25 + CodeGraph FTS 융합 + 리랭크, 한국어 질의 지원). " +
+			"파싱되지 않는 배포 스크립트·설정·Markdown도 검색하며, 상위 결과의 실제 소스·안전한 인접 관계·적용 CLAUDE/AGENTS/README 섹션을 한 번에 반환한다. " +
+			"더 깊은 전체 호출 그래프가 필요할 때만 codegraph_node/explore로 이어서 파고들라.",
 		InputSchema: schema.CodeSearchToolSchema(),
 		Fn:          surface.ToolCodeSearch(workspaceDir),
 	})
