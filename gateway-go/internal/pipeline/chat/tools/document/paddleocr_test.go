@@ -136,6 +136,42 @@ func TestPaddleOCR_FallbackOnError(t *testing.T) {
 	}
 }
 
+// TestChartOCRAcceptsTableRejectsProse verifies the chart-mode guardrail: cell
+// markup normalizes to rows and is cached under a chart-namespaced key, while
+// prose output (the mode pointed at a non-chart) is discarded as an error.
+func TestChartOCRAcceptsTableRejectsProse(t *testing.T) {
+	t.Setenv("DENEB_OCR_CACHE_DIR", t.TempDir())
+	response := `{"choices":[{"message":{"content":"<fcel>연도<fcel>발전량<nl><fcel>2023<fcel>495<nl>"}}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
+
+	img := []byte{0x89, 0x50, 0x4e, 0x47, 0x01}
+	got, err := chartOCR(context.Background(), img)
+	if err != nil {
+		t.Fatalf("chartOCR: %v", err)
+	}
+	for _, want := range []string{"연도 | 발전량", "2023 | 495"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+
+	// Cached: a second call must not depend on the (now prose-returning) server.
+	response = `{"choices":[{"message":{"content":"이것은 표가 아니라 줄글입니다"}}]}`
+	if again, err := chartOCR(context.Background(), img); err != nil || again != got {
+		t.Errorf("second call not served from cache: (%q, %v)", again, err)
+	}
+
+	// A different image gets the prose response — must be rejected, not cached.
+	if out, err := chartOCR(context.Background(), []byte{0x00, 0x01}); err == nil {
+		t.Errorf("prose chart output must be discarded, got %q", out)
+	}
+}
+
 // TestHTMLTablesToMarkdownPreservesSurroundingText verifies that HTML tables embedded in OCR output are
 // normalized to markdown while the surrounding text is preserved. No GPU needed.
 func TestHTMLTablesToMarkdownPreservesSurroundingText(t *testing.T) {

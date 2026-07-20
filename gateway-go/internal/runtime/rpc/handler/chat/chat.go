@@ -46,6 +46,11 @@ type Deps struct {
 	// fallback (the native-client document attach path). Optional; nil disables
 	// miniapp.capture.document.
 	ExtractDocument func(ctx context.Context, data []byte, filename, mimeType string) string
+	// DigestOversized condenses an oversized extracted document (chunk digests
+	// via the local lightweight model, or a visible head truncation) before it
+	// enters the agent turn. Runs AFTER raw capture persistence so the full
+	// original still lands in captures. Optional; nil injects text unbounded.
+	DigestOversized func(ctx context.Context, name, text string) string
 	// Translate translates web-page text segments for the in-app browser's
 	// in-place translation (en/ru → ko). Returns a same-length, same-order
 	// slice. Optional; nil disables miniapp.web.translate.

@@ -519,9 +519,12 @@ func imageOCR(ctx context.Context, img []byte) (string, error) {
 	return ocrImageBytes(ctx, img)
 }
 
-// ocrPageCap bounds how many pages of a PDF we rasterize — enough for typical
-// business documents without letting a huge PDF monopolize the GPU.
-const ocrPageCap = 10
+// ocrPageCap bounds how many pages of a PDF we rasterize+OCR — enough for
+// long scanned contracts and image-heavy decks without letting a huge PDF
+// monopolize the GPU. Raised from 10 once page OCR became batched
+// (ocrPageConcurrency): the vLLM sidecar amortizes concurrent pages, so 30
+// pages cost wall-clock comparable to what 10 sequential pages did.
+const ocrPageCap = 30
 
 // ocrPageConcurrency bounds how many pages OCR at once. PaddleOCR-VL's vLLM
 // server batches concurrent requests (served with --max-num-seqs 8), and since
@@ -592,11 +595,26 @@ func rasterizePDF(ctx context.Context, pdf []byte, maxPages int) ([][]byte, erro
 	return out, nil
 }
 
-// rasterizePDFPages renders only the given 0-based page indices to PNG
-// (200 DPI) via pdftoppm — one bounded invocation per page, so a candidate
-// deep in a long document (a chart on page 27) doesn't require rasterizing
-// everything before it. Returns a map keyed by the same indices; a missing
-// key means that page failed to render (out of range, corrupt).
+// contiguousRuns collapses sorted, deduplicated 0-based indices into
+// inclusive [first, last] runs so adjacent candidate pages share one
+// pdftoppm invocation.
+func contiguousRuns(sorted []int) [][2]int {
+	var runs [][2]int
+	for _, idx := range sorted {
+		if n := len(runs); n > 0 && runs[n-1][1] == idx-1 {
+			runs[n-1][1] = idx
+			continue
+		}
+		runs = append(runs, [2]int{idx, idx})
+	}
+	return runs
+}
+
+// rasterizePDFPages renders only the given sorted 0-based page indices to PNG
+// (200 DPI) via pdftoppm — bounded range invocations, so a candidate deep in a
+// long document (a chart on page 27) doesn't require rasterizing everything
+// before it. Returns a map keyed by the same indices; a missing key means
+// that page failed to render (out of range, corrupt).
 func rasterizePDFPages(ctx context.Context, pdf []byte, pageIdx []int) (map[int][]byte, error) {
 	if _, err := exec.LookPath("pdftoppm"); err != nil {
 		return nil, fmt.Errorf("pdftoppm 미설치 (poppler-utils)")
@@ -615,13 +633,16 @@ func rasterizePDFPages(ctx context.Context, pdf []byte, pageIdx []int) (map[int]
 	runCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
-	for _, idx := range pageIdx {
-		n := strconv.Itoa(idx + 1)
+	// Adjacent candidates (an image-heavy deck classifies whole stretches of
+	// pages) share one pdftoppm invocation via contiguous ranges instead of
+	// paying process startup per page.
+	for _, run := range contiguousRuns(pageIdx) {
+		f, l := strconv.Itoa(run[0]+1), strconv.Itoa(run[1]+1)
 		// Every argument is a literal (page numbers are ints), no shell, and the
 		// command runs inside the temp dir — same containment as rasterizePDF.
-		rast := exec.CommandContext(runCtx, "pdftoppm", "-png", "-r", "200", "-f", n, "-l", n, "in.pdf", "page") //nolint:gosec // G204 — literal args, no shell, temp dir
+		rast := exec.CommandContext(runCtx, "pdftoppm", "-png", "-r", "200", "-f", f, "-l", l, "in.pdf", "page") //nolint:gosec // G204 — literal args, no shell, temp dir
 		rast.Dir = dir
-		_ = rast.Run() // a page out of range just produces no file
+		_ = rast.Run() // a range out of bounds just produces no files
 	}
 
 	// pdftoppm may or may not zero-pad the page number depending on version —
