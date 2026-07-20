@@ -142,6 +142,17 @@ func fetchReddit(ctx context.Context, rawURL string, maxChars int) (string, erro
 		}), nil
 	}
 	if status != 200 {
+		// Reddit's public .json API now 403s/429s datacenter-egress IPs even for
+		// public content, while the JS-rendered HTML site still serves. Escalate
+		// the block/throttle case to the resident browser sidecar, which drives a
+		// real headful Chromium and retrieves the page the API refuses. Other
+		// statuses (404 deleted, 5xx down) a re-fetch cannot help, so only the
+		// 403/429 block path escalates.
+		if status == 403 || status == 429 {
+			if rendered, ok := fetchRedditViaBrowser(ctx, rawURL, maxChars); ok {
+				return rendered, nil
+			}
+		}
 		hint := hintForHTTPStatus(status)
 		if status == 403 || status == 429 {
 			hint = "Reddit throttled or blocked the read. Retry later; private/quarantined subs need login."
@@ -161,6 +172,28 @@ func fetchReddit(ctx context.Context, rawURL string, maxChars int) (string, erro
 		}), nil
 	}
 	return out, nil
+}
+
+// fetchRedditViaBrowser renders the original (HTML) Reddit URL through the
+// resident browser sidecar when the .json API blocks the read. It reuses
+// browserRenderFn — the same injectable renderer the general fetch escalation
+// uses — so the browser fingerprint and SSRF guard stay identical. Returns
+// (text, true) on a non-empty render; ("", false) on any failure (sidecar down,
+// empty render) so the caller falls back to the original block error.
+func fetchRedditViaBrowser(ctx context.Context, rawURL string, maxChars int) (string, bool) {
+	maxBytes := int64(maxChars) * 2
+	if maxBytes <= 0 || maxBytes > redditMaxBytes {
+		maxBytes = redditMaxBytes
+	}
+	result, err := browserRenderFn(ctx, rawURL, maxBytes)
+	if err != nil || result == nil {
+		return "", false
+	}
+	text := strings.TrimSpace(string(result.Data))
+	if text == "" {
+		return "", false
+	}
+	return text, true
 }
 
 // renderReddit dispatches on the JSON shape: a 2-element array is a comment
