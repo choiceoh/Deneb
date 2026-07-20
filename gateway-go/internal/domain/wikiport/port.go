@@ -61,6 +61,7 @@ type (
 	MergeResult             = wiki.MergeResult
 	SnapshotResult          = wiki.SnapshotResult
 	PersonSeed              = wiki.PersonSeed
+	RecallHitRecord         = wiki.RecallHitRecord
 )
 
 const (

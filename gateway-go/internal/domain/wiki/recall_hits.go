@@ -7,13 +7,18 @@
 // recall preflight records every wiki page it injected as evidence, and the
 // dream cycle reads the aggregated counts to (1) score its own output quality,
 // (2) flag never-recalled low-value pages for archival, and (3) bias synthesis
-// toward the anchors that actually get used. Best-effort by contract — a ledger
-// failure never blocks a chat turn or a dream cycle.
+// toward the anchors that actually get used. Since 2026-07 each line also
+// carries the retrieval context (query label, injection rank, preflight score)
+// so real-traffic (query → page) pairs can be mined as recall-bench gold-set
+// candidates and later graded for usefulness — injection alone is popularity,
+// not utility. Best-effort by contract — a ledger failure never blocks a chat
+// turn or a dream cycle.
 package wiki
 
 import (
 	"bufio"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,27 +40,50 @@ const (
 	unrecalledColdMinDays = 60 // a page older than this with zero retained hits is archive-cold
 )
 
-// recallHit is one "page P surfaced as recall evidence at time T" event.
+// recallHitQueryMaxRunes bounds the recorded query label so a pathological cue
+// cannot bloat the ledger; 200 runes keeps every typical Korean cue intact.
+const recallHitQueryMaxRunes = 200
+
+// recallHit is one "page P surfaced as recall evidence at time T" event, plus
+// the retrieval context known at injection time. Query/Rank/Score are omitempty
+// so pre-context lines and new lines coexist in one ledger; readers treat zero
+// values as "unknown" (legacy line).
 type recallHit struct {
-	Path string `json:"path"`
-	At   int64  `json:"at"` // unix milli
+	Path  string  `json:"path"`
+	At    int64   `json:"at"`              // unix milli
+	Query string  `json:"query,omitempty"` // recall cue label that surfaced the page
+	Rank  int     `json:"rank,omitempty"`  // 1-based position in the injected evidence block
+	Score float64 `json:"score,omitempty"` // preflight ranking score at injection
 }
 
-// RecordRecallHits appends one hit line per injected wiki page path. Called from
+// RecallHitRecord is one injected wiki page with the retrieval context the
+// recall preflight knew at injection time. Query is the cue label (the primary
+// search query, or an anchor sentinel like "project-anchor") — not necessarily
+// the exact clause that matched; it exists so real-traffic (query → page) pairs
+// can be mined as gold-set candidates and later graded for usefulness.
+type RecallHitRecord struct {
+	Path  string
+	Query string
+	Rank  int
+	Score float64
+}
+
+// RecordRecallHits appends one hit line per injected wiki page. Called from
 // the recall preflight after the final evidence set is ranked, so each recorded
 // path is a page the turn actually pulled into context. Empty and duplicate
-// paths within a single call are collapsed (one turn surfacing a page twice is
-// one utility event). Returns an error only for the caller to log — recall
-// utility telemetry is best-effort and must never fail a chat turn.
-func (s *Store) RecordRecallHits(paths []string) error {
-	if len(paths) == 0 {
+// paths within a single call are collapsed keeping the first (best-ranked)
+// record — one turn surfacing a page twice is one utility event. Returns an
+// error only for the caller to log — recall utility telemetry is best-effort
+// and must never fail a chat turn.
+func (s *Store) RecordRecallHits(hits []RecallHitRecord) error {
+	if len(hits) == 0 {
 		return nil
 	}
 	now := time.Now().UnixMilli()
-	seen := make(map[string]struct{}, len(paths))
+	seen := make(map[string]struct{}, len(hits))
 	var buf []byte
-	for _, p := range paths {
-		p = strings.TrimSpace(p)
+	for _, h := range hits {
+		p := strings.TrimSpace(h.Path)
 		if p == "" {
 			continue
 		}
@@ -63,7 +91,14 @@ func (s *Store) RecordRecallHits(paths []string) error {
 			continue
 		}
 		seen[p] = struct{}{}
-		line, err := json.Marshal(recallHit{Path: p, At: now})
+		line, err := json.Marshal(recallHit{
+			Path:  p,
+			At:    now,
+			Query: clipRunes(strings.TrimSpace(h.Query), recallHitQueryMaxRunes),
+			Rank:  h.Rank,
+			// Round so a derived telemetry line doesn't carry 17-digit float noise.
+			Score: math.Round(h.Score*1e4) / 1e4,
+		})
 		if err != nil {
 			continue
 		}
@@ -82,6 +117,18 @@ func (s *Store) RecordRecallHits(paths []string) error {
 	defer f.Close()
 	_, err = f.Write(buf)
 	return err
+}
+
+// clipRunes returns s truncated to at most n runes.
+func clipRunes(s string, n int) string {
+	if len(s) <= n { // bytes ≤ n implies runes ≤ n
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 // readRecallHitsLocked returns every retained hit line, oldest first. Caller
