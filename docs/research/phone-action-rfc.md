@@ -1,6 +1,6 @@
 # RFC: 폰 액션을 SSH/Termux → 인앱 Intent 실행으로
 
-> 상태: **implemented / superseded (2026-07-05)** · 원안 작성: 2026-06 · 구현: `gateway-go/internal/pipeline/chat/tools/phone.go` (`phone_read`/`phone_write`; Termux/SSH retired) · 관련: `client-android` (FcmService·Platform.android), SSE/FCM push
+> 상태: **implemented / superseded (2026-07-05)** · 원안 작성: 2026-06 · 구현: `gateway-go/internal/pipeline/chat/tools/phone.go` (`phone_read`/`phone_write`; Termux/SSH retired) · 관련: `client-android` (FcmService·Platform.android), SSE/FCM push · **P3 개정 (2026-07-20)**: 스크린샷→좌표탭 → 접근성 트리 노드 어드레싱
 
 ## 0. TL;DR
 
@@ -59,7 +59,16 @@ Deneb의 폰 **액션**을 깨진 **SSH/Termux 브리지**에서 **네이티브 
 
 **P2 — 읽기 (요청/응답).** battery·location·contacts·clipboard를 앱 Android API로 읽어 SSH 읽기 대체. 게이트웨이가 SSE로 요청 push → 앱이 읽어 `POST /api/v1/miniapp/rpc`로 회신(왕복). photo 회신도 여기. SSH 읽기 단계적 폐기.
 
-**P3 — Accessibility fallback (선택, 게이트).** Intent/API 없는 서드파티 앱을 정말 조작해야 할 때만 스크린샷→모델→탭. 비용·안전 게이트, 명시적 사용자 허용. **기본 제어 아님.**
+**P3 — Accessibility fallback (선택, 게이트).** Intent/API 없는 서드파티 앱을 정말 조작해야 할 때만. 비용·안전 게이트, 명시적 사용자 허용. **기본 제어 아님.**
+
+> **2026-07-20 개정**: 원안의 "스크린샷→멀티모달→좌표 탭"을 **접근성 트리 노드 어드레싱**으로 재설계. 픽셀 대신 시맨틱 트리를 쓰는 방식(Cua Driver의 데스크톱 접근성 레이어 활용, DroidRun 계열의 AndroidWorld 91.4%가 입증)이 토큰 비용·오탭 fragility 문제를 해소한다. 원안 방식은 §7 그대로 계속 배제.
+
+트리 기반 설계 요지:
+
+- **읽기 (트리 덤프)**: 앱에 `AccessibilityService` 추가 → 포그라운드 UI 계층(`AccessibilityNodeInfo`)을 구조화 트리(role·text·contentDescription·bounds·안정적 node ref)로 직렬화. 운반은 P2 왕복 채널 재사용(게이트웨이 SSE 요청 push → 앱이 `POST /api/v1/miniapp/rpc`로 회신). 스크린샷·멀티모달 호출 불필요 — 텍스트 트리만으로 대부분의 앱을 다룬다.
+- **액션 (노드 단위)**: 좌표 탭이 아니라 트리 ref 대상 `performAction`(`ACTION_CLICK`/`ACTION_SET_TEXT`/`ACTION_SCROLL_*`). `dispatchGesture` 좌표 제스처는 노드 액션을 안 받는 커스텀 뷰 한정 최후 폴백으로만.
+- **운반·게이트**: `phone_write` 액션셋 확장(예: `a11y_tree`·`a11y_action`) — 기존 allowlist + untrusted-tool 승인 게이트(`untrusted_tool_gate.go`) 아래로. DroidRun처럼 ADB/외부 포털이 필요 없다 — 게이트웨이→앱 인증 채널(SSE/FCM + client-token)이 이미 있으므로 자체 앱 안에서 완결.
+- **게이트 불변 조건**: ① 접근성 서비스 활성화 자체가 설정 앱에서의 수동 opt-in(전 화면 읽기+입력 주입 권한임을 고지), ② 액션 실행은 세션별 승인, ③ Intent/API 우선 원칙 유지 — 트리 경로는 Intent 부재 시에만. ④ 폰은 단일 포그라운드 화면이므로 실행 중 사용자 조작과 충돌함을 사용자에게 고지(데스크톱 Cua의 백그라운드 멀티커서 등가물이 Android엔 없다).
 
 ## 6. 보안
 
@@ -70,7 +79,7 @@ Deneb의 폰 **액션**을 깨진 **SSH/Termux 브리지**에서 **네이티브 
 
 ## 7. 안 가져올 것 (명시)
 
-- **연속 스크린샷 → 멀티모달 → 좌표 탭을 *기본* 제어로** — 매 액션 멀티모달 호출(토큰 폭식, 영상 본인도 "DeepSeek 권장" 비용), 좌표추정 오탭 fragile. **P3 fallback 한정.**
+- **연속 스크린샷 → 멀티모달 → 좌표 탭** — 매 액션 멀티모달 호출(토큰 폭식, 영상 본인도 "DeepSeek 권장" 비용), 좌표추정 오탭 fragile. 원안은 "P3 fallback 한정"으로 남겼으나 **2026-07-20 개정으로 P3 자체가 트리 기반이 되면서 전면 배제** — 좌표 제스처는 P3 안에서도 노드 액션 불가 커스텀 뷰 한정 최후 폴백뿐.
 - Telegram 제어 — Deneb는 telegram 채널 폐기(앱+PC만). 불필요.
 
 ## 8. 검증
