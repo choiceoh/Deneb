@@ -65,8 +65,11 @@ func (c *FileCache) MaxEntrySize() int64 {
 	return c.maxEntrySize
 }
 
-// Get returns the cached entry for path, or nil if not cached.
-// Moves the entry to the back of the LRU order on hit.
+// Get returns a snapshot copy of the cached entry for path, or nil if not
+// cached. Handing out the live pointer let unlocked readers race the in-place
+// mutations UpdateAfterWrite / RecordReadEvidence perform under the cache
+// lock (torn time.Time reads in FileChanged); the copy keeps concurrent tool
+// execution safe. Moves the entry to the back of the LRU order on hit.
 func (c *FileCache) Get(path string) *FileCacheEntry {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -78,7 +81,18 @@ func (c *FileCache) Get(path string) *FileCacheEntry {
 
 	// Move to back (most recently used).
 	c.moveToBack(path)
-	return entry
+	snapshot := *entry
+	return &snapshot
+}
+
+// TouchRead counts a cache-served read on the live entry (Get returns
+// snapshots, so callers can no longer increment the counter themselves).
+func (c *FileCache) TouchRead(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if entry, ok := c.entries[path]; ok {
+		entry.ReadCount++
+	}
 }
 
 // Set adds or replaces a cache entry. Evicts the oldest entry if at capacity.
@@ -154,8 +168,14 @@ func FormatCachedRead(displayPath string, entry *FileCacheEntry) string {
 // Returns nil when the file is fresh or was never cached (first write is always
 // allowed). Returns a descriptive error when the file is stale.
 func (c *FileCache) CheckStaleness(path string) error {
+	// Snapshot under the lock — the live entry may be mutated in place by
+	// UpdateAfterWrite / RecordReadEvidence on a concurrent tool call.
 	c.mu.RLock()
-	entry, ok := c.entries[path]
+	live, ok := c.entries[path]
+	var entry FileCacheEntry
+	if ok {
+		entry = *live
+	}
 	c.mu.RUnlock()
 	if !ok {
 		return nil // never read → no staleness to detect
@@ -206,7 +226,52 @@ func (c *FileCache) UpdateAfterWrite(path string) {
 		entry.MTime = info.ModTime()
 		entry.Size = info.Size()
 		entry.ContentHash = ContentHashOf(data)
+		// The cached rendered output predates this write — serving it on the
+		// next read would resurrect pre-edit content. Drop it; the entry stays
+		// as the staleness baseline for future edits.
+		entry.Content = ""
+		entry.SpillID = ""
 	}
+}
+
+// RecordReadEvidence records that the session has seen the file's current
+// bytes without caching a rendered output. It is the staleness baseline for
+// reads that skip the dedup cache (offset/limit, function, hashes, force,
+// oversize): those previously left no entry, so CheckStaleness had nothing to
+// compare and an edit after a partial read of a concurrently modified file
+// sailed through. A same-content entry keeps its cached rendered output;
+// changed content drops it (the render no longer matches the bytes).
+func (c *FileCache) RecordReadEvidence(path string, data []byte) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	hash := ContentHashOf(data)
+	now := time.Now()
+	c.mu.Lock()
+	if entry, ok := c.entries[path]; ok {
+		entry.MTime = info.ModTime()
+		entry.Size = info.Size()
+		entry.ReadAt = now
+		entry.ReadCount++
+		if entry.ContentHash != hash {
+			entry.ContentHash = hash
+			entry.Content = ""
+			entry.SpillID = ""
+		}
+		c.moveToBack(path)
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Unlock()
+	c.Set(path, &FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		ContentHash: hash,
+		ReadAt:      now,
+		ReadCount:   1,
+	})
 }
 
 // --- internal helpers ---

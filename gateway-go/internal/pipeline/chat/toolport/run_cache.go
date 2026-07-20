@@ -122,6 +122,14 @@ func scopeOverlaps(dir, scope string) bool {
 	if scope == "." || scope == "" {
 		return true // workspace-wide search — always affected
 	}
+	// Mixed spellings — one side absolute, the other workspace-relative —
+	// cannot be compared reliably: recorder (search tool input) and
+	// invalidator (mutation tool input) pass the model's raw paths and never
+	// normalize through a shared root. Fail toward invalidation so a stale
+	// search result is never served on a spelling technicality.
+	if filepath.IsAbs(dir) != filepath.IsAbs(scope) {
+		return true
+	}
 	if dir == scope {
 		return true
 	}

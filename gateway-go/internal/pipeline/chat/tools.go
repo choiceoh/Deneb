@@ -379,11 +379,12 @@ func invalidateCachesAfterTool(ctx context.Context, name string, input json.RawM
 				rc.Invalidate()
 			}
 		}
-		if fc := toolport.FileCacheFromContext(ctx); fc != nil {
-			if mutPath != "" {
-				fc.Invalidate(mutPath)
-			}
-		}
+		// FileCache needs no executor-level invalidation for write/edit: the
+		// tools refresh their own entry via UpdateAfterWrite (new hash, stale
+		// render dropped), which keeps the modified-since-read baseline alive.
+		// The old fc.Invalidate(mutPath) here was raw-spelling dependent —
+		// a relative file_path missed the absolute cache key (no-op) and an
+		// absolute one destroyed the fresh baseline the tool just recorded.
 		return
 	}
 	if rc == nil {
