@@ -36,6 +36,8 @@ TOP_N = 12
 # --- log signal patterns ----------------------------------------------------- #
 RUN_RE = re.compile(r"agent loop complete")
 AGENTMS_RE = re.compile(r"\bagentMs=(\d+)")
+LLMMS_RE = re.compile(r"\bllmMs=(\d+)")
+TOOLMS_RE = re.compile(r"\btoolMs=(\d+)")
 TURNS_RE = re.compile(r"\bturns=(\d+)")
 TOOLCALLS_RE = re.compile(r"\btotalToolCalls=(\d+)")
 TOOLERR_RE = re.compile(r"tool complete .*isError=true")
@@ -88,6 +90,9 @@ class Signals:
     runs: int = 0
     timeout_runs: int = 0
     agent_ms: list[int] = field(default_factory=list)
+    # Stage decomposition of slow runs (llmMs/toolMs ride the same run-complete
+    # record; older journals lack them, so coverage is tracked separately).
+    stage_samples: list[tuple[int, int, int]] = field(default_factory=list)
     turns: list[int] = field(default_factory=list)
     tool_calls: int = 0
     tool_call_reports: int = 0
@@ -118,6 +123,55 @@ def journal_data_lines(lines: Iterable[str]) -> list[str]:
     return data
 
 
+
+def latency_stage_detail(samples: list[tuple[int, int, int]]) -> list[str]:
+    """Human lines attributing where slow-run time goes (advisory — the latency
+    SCORE stays a pure agentMs p95 grade so baselines do not churn).
+
+    Stage fields (llmMs/toolMs) ride the run-complete record since 2026-07-20;
+    older journal windows simply have no samples and the breakdown is omitted.
+    The slow cohort is the top decile by agentMs so the attribution describes
+    the p95 problem, not the healthy median.
+    """
+    if not samples:
+        return ["stage breakdown: n/a (no llmMs/toolMs fields in window)"]
+    ranked = sorted(samples, key=lambda t: -t[0])
+    slow = ranked[: max(1, len(ranked) // 10)]
+    agent = sum(t[0] for t in slow)
+    llm = sum(t[1] for t in slow)
+    tool = sum(t[2] for t in slow)
+    other = max(0, agent - llm - tool)
+    if agent <= 0:
+        return ["stage breakdown: n/a (zero agentMs in slow cohort)"]
+    return [
+        "slow-cohort stage breakdown (top 10% by agentMs, "
+        f"{len(slow)}/{len(samples)} sampled runs): "
+        f"llm {100.0 * llm / agent:.0f}% · tools {100.0 * tool / agent:.0f}% · "
+        f"other {100.0 * other / agent:.0f}%"
+    ]
+
+
+def latency_stage_extra(samples: list[tuple[int, int, int]]) -> dict:
+    """Machine fields for the latency dimension extra dict (same cohort as
+    latency_stage_detail; empty when the window has no stage samples)."""
+    if not samples:
+        return {}
+    ranked = sorted(samples, key=lambda t: -t[0])
+    slow = ranked[: max(1, len(ranked) // 10)]
+    agent = sum(t[0] for t in slow)
+    if agent <= 0:
+        return {}
+    llm = sum(t[1] for t in slow)
+    tool = sum(t[2] for t in slow)
+    return {
+        "stage_samples": len(samples),
+        "slow_cohort": len(slow),
+        "slow_llm_share": round(llm / agent, 3),
+        "slow_tool_share": round(tool / agent, 3),
+        "slow_other_share": round(max(0.0, 1.0 - (llm + tool) / agent), 3),
+    }
+
+
 def parse(lines: Iterable[str]) -> Signals:
     s = Signals()
     for raw in lines:
@@ -126,7 +180,12 @@ def parse(lines: Iterable[str]) -> Signals:
             s.runs += 1
             match = AGENTMS_RE.search(line)
             if match:
-                s.agent_ms.append(int(match.group(1)))
+                agent_ms = int(match.group(1))
+                s.agent_ms.append(agent_ms)
+                llm = LLMMS_RE.search(line)
+                tool = TOOLMS_RE.search(line)
+                if llm and tool:
+                    s.stage_samples.append((agent_ms, int(llm.group(1)), int(tool.group(1))))
             match = TURNS_RE.search(line)
             if match:
                 s.turns.append(int(match.group(1)))
@@ -259,11 +318,13 @@ def compute(s: Signals) -> tuple[float, list[DimResult]]:
                 f"run agentMs p95 = {p95:.0f}s (p50 {percentile(s.agent_ms, 0.5) / 1000:.0f}s, "
                 f"max {percentile(s.agent_ms, 1.0) / 1000:.0f}s) over {len(s.agent_ms)}/{runs} runs "
                 f"({latency_coverage * 100:.1f}% coverage)"
-            ],
+            ]
+            + latency_stage_detail(s.stage_samples),
             {
                 "p95_s": round(p95, 1),
                 "sampled_runs": len(s.agent_ms),
                 "coverage": round(latency_coverage, 4),
+                **latency_stage_extra(s.stage_samples),
             },
         ),
     ]

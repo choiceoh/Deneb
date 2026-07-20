@@ -344,6 +344,17 @@ type AgentResult struct {
 	// that were triggered during this run. 0 when recovery is disabled.
 	MaxTokensRecoveries int
 
+	// LLMMs and ToolMs decompose the run's wall time into its two dominant
+	// stages: provider streaming (request start → stream fully consumed,
+	// including retries) and tool-turn execution (dispatch → results
+	// committed). The remainder against the caller's agentMs is loop overhead
+	// (prompt prep, journal, hooks). Stage attribution exists so latency
+	// postmortems can tell WHERE a slow run spent its time instead of guessing
+	// from the aggregate (prod-to-code: runtime signals at the granularity the
+	// coding lane reasons about).
+	LLMMs  int64
+	ToolMs int64
+
 	// FinalMessages is the message array at the end of the agent loop.
 	FinalMessages []llm.Message
 

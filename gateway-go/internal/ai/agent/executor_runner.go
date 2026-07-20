@@ -133,7 +133,9 @@ func (r *agentRunner) runTurn(turn int) (bool, error) {
 	if done || err != nil {
 		return done, err
 	}
+	llmStart := time.Now()
 	turnResult, done, err := r.streamTurn(prepared)
+	r.result.LLMMs += time.Since(llmStart).Milliseconds()
 	if done || err != nil {
 		return done, err
 	}
@@ -161,7 +163,10 @@ func (r *agentRunner) runTurn(turn int) (bool, error) {
 		r.finishTurn(turnState)
 		return true, nil
 	}
-	return r.executeAndCommitToolTurn(turnState), nil
+	toolStart := time.Now()
+	done = r.executeAndCommitToolTurn(turnState)
+	r.result.ToolMs += time.Since(toolStart).Milliseconds()
+	return done, nil
 }
 
 func (r *agentRunner) prepareTurn(turn int) (preparedAgentTurn, bool, error) {

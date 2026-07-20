@@ -203,3 +203,32 @@ class OutputContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StageBreakdownTest(unittest.TestCase):
+    """llmMs/toolMs stage decomposition on the latency dimension (2026-07-20)."""
+
+    def _line(self, agent, llm, tool):
+        return (f"2026-07-08T10:00:00+0900 host deneb-gateway[1]: agent loop complete "
+                f"agentMs={agent} llmMs={llm} toolMs={tool} turns=2 totalToolCalls=1 stopReason=done")
+
+    def test_slow_cohort_attribution(self):
+        # Nine fast runs + one slow run dominated by tool time: the top-10%
+        # cohort is exactly the slow run, so the breakdown must attribute it.
+        lines = [self._line(5000, 4000, 500) for _ in range(9)]
+        lines.append(self._line(120000, 20000, 90000))
+        s = health.parse(lines)
+        self.assertEqual(len(s.stage_samples), 10)
+        extra = health.latency_stage_extra(s.stage_samples)
+        self.assertEqual(extra["slow_cohort"], 1)
+        self.assertAlmostEqual(extra["slow_tool_share"], 0.75, places=2)
+        detail = health.latency_stage_detail(s.stage_samples)
+        self.assertIn("tools 75%", detail[0])
+
+    def test_legacy_lines_without_stage_fields_are_na(self):
+        lines = ["2026-07-08T10:00:00+0900 host deneb-gateway[1]: agent loop complete "
+                 "agentMs=60000 turns=2 totalToolCalls=1 stopReason=done"]
+        s = health.parse(lines)
+        self.assertEqual(s.stage_samples, [])
+        self.assertEqual(health.latency_stage_extra([]), {})
+        self.assertIn("n/a", health.latency_stage_detail([])[0])

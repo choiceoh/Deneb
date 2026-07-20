@@ -15,6 +15,8 @@ import os
 import tempfile
 import unittest
 
+import deadcode_finding_miner as miner
+
 from deadcode_finding_miner import (
     SOURCE_PREFIX,
     deadcode_candidates,
@@ -133,3 +135,45 @@ class CliDryRunTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RuntimeCorroborationTest(unittest.TestCase):
+    """Phantom guard + evidence annotation (Hud talk adoption, 2026-07-20)."""
+
+    def test_phantom_with_runtime_calls_is_dropped(self):
+        findings = [("internal/a.go", "ToolFoo"), ("internal/b.go", "helperBar")]
+        entries = {"ToolFoo": [("tool", "foo")], "helperBar": []}
+        kept, phantoms = miner.corroborate(
+            findings, lambda sym: entries.get(miner.symbol_probe_name(sym), []),
+            {"foo": 42})
+        self.assertEqual([(f, s) for f, s, _ in phantoms], [("internal/a.go", "ToolFoo")])
+        self.assertIn("42", phantoms[0][2])
+        self.assertEqual([(f, s) for f, s, _ in kept], [("internal/b.go", "helperBar")])
+        self.assertIn("n/a", kept[0][2])
+
+    def test_zero_call_entry_point_is_corroborated(self):
+        kept, phantoms = miner.corroborate(
+            [("internal/a.go", "ToolFoo")],
+            lambda sym: [("tool", "foo")], {"foo": 0})
+        self.assertEqual(phantoms, [])
+        self.assertIn("0 observed calls", kept[0][2])
+        self.assertIn("corroborated", kept[0][2])
+
+    def test_rpc_entry_points_annotate_without_phantom(self):
+        # observe.behavior has no RPC counts — an RPC-mapped symbol annotates
+        # but never trips the phantom guard on missing data.
+        kept, phantoms = miner.corroborate(
+            [("internal/a.go", "peopleList")],
+            lambda sym: [("rpc", "miniapp.people.list")], {})
+        self.assertEqual(phantoms, [])
+        self.assertIn("rpc:miniapp.people.list", kept[0][2])
+
+    def test_notes_ride_candidate_evidence(self):
+        notes = {("internal/b.go", "helperBar"): "runtime corroboration: n/a"}
+        cands = miner.deadcode_candidates([("internal/b.go", "helperBar")], notes)
+        self.assertIn("runtime corroboration: n/a", cands[0]["evidence"])
+
+    def test_parse_entry_points(self):
+        out = "  [rpc] miniapp.people.list\n        → peopleList (x.go:92)\n  [tool] wiki\n"
+        self.assertEqual(miner.parse_entry_points(out),
+                         [("rpc", "miniapp.people.list"), ("tool", "wiki")])
