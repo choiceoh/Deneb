@@ -131,9 +131,21 @@ func recallContentKey(note string) string {
 // paths so the caller can arm the end-of-turn citation pass. Best-effort: a
 // nil store or a write error is swallowed after a single Warn — losing this
 // derived telemetry is not user-observable and self-heals next turn.
-func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKey string, logger *slog.Logger) []string {
+func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKey string, cue bool, logger *slog.Logger) []string {
 	if store == nil || len(evidence) == 0 {
 		return nil
+	}
+	// Turn-level gate-shadow signals (arXiv 2607.14390's episodic confidence
+	// gate): the paper separates useful from harmful injections by the ranked
+	// block's top-1 score and top1−top2 gap. We record the signals on every
+	// inject line — production behavior is UNCHANGED — so the silence gate can
+	// be calibrated offline against this ledger's read/cite outcomes before
+	// any threshold ever fires (recall bottleneck doctrine: no ungrounded
+	// suppression).
+	top1 := evidence[0].Score
+	gap := 0.0
+	if len(evidence) > 1 {
+		gap = top1 - evidence[1].Score
 	}
 	events := make([]wiki.RecallEvent, 0, len(evidence))
 	paths := make([]string, 0, len(evidence))
@@ -146,6 +158,9 @@ func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKe
 				Rank:    i + 1,
 				Score:   ev.Score,
 				Session: sessionKey,
+				Top1:    top1,
+				Gap:     gap,
+				Cue:     cue,
 			})
 			paths = append(paths, ev.Source)
 		}
@@ -315,7 +330,7 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	// and arm the end-of-turn citation pass with the same paths (skipped in
 	// briefcase mode — casepack replays have no citation pass to consume them).
 	// Best-effort telemetry — a ledger write must never affect the turn.
-	injected := recordRecallUtility(deps.Wiki, evidence, params.SessionKey, logger)
+	injected := recordRecallUtility(deps.Wiki, evidence, params.SessionKey, cue, logger)
 	if !deps.Briefcase {
 		StoreInjectedPaths(params.SessionKey, injected)
 	}

@@ -29,7 +29,7 @@ func TestRecordRecallUtility_RecordsWikiRowsWithRetrievalContext(t *testing.T) {
 		{Kind: "wiki", Source: "", Query: "조직도"}, // org row without a page path
 		{Kind: "wiki", Source: "인물/김.md", Query: recallCounterpartyAnchorQuery, Score: 0.9},
 	}
-	paths := recordRecallUtility(store, evidence, "client:main", nil)
+	paths := recordRecallUtility(store, evidence, "client:main", true, nil)
 	if len(paths) != 2 || paths[0] != "프로젝트/탑솔라.md" || paths[1] != "인물/김.md" {
 		t.Errorf("returned paths = %v, want the two recorded wiki pages", paths)
 	}
@@ -48,6 +48,9 @@ func TestRecordRecallUtility_RecordsWikiRowsWithRetrievalContext(t *testing.T) {
 		Rank    int     `json:"rank"`
 		Score   float64 `json:"score"`
 		Session string  `json:"session"`
+		Top1    float64 `json:"top1"`
+		Gap     float64 `json:"gap"`
+		Cue     bool    `json:"cue"`
 	}
 	var lines []line
 	sc := bufio.NewScanner(f)
@@ -67,5 +70,14 @@ func TestRecordRecallUtility_RecordsWikiRowsWithRetrievalContext(t *testing.T) {
 	}
 	if l := lines[1]; l.Path != "인물/김.md" || l.Query != recallCounterpartyAnchorQuery || l.Rank != 4 {
 		t.Errorf("second line context wrong (rank must count non-wiki rows): %+v", l)
+	}
+	// Gate-shadow signals are TURN-level: every inject line of the turn carries
+	// the ranked block's top-1 score, the top1−runner-up gap, and the cue flag
+	// (arXiv 2607.14390 confidence-gate calibration, shadow phase — recorded,
+	// never enforced here).
+	for i, l := range lines {
+		if l.Top1 != 1.2 || l.Gap != 0.25 || !l.Cue {
+			t.Errorf("line %d gate-shadow signals wrong (top1=%v gap=%v cue=%v), want top1=1.2 gap=0.25 cue=true", i, l.Top1, l.Gap, l.Cue)
+		}
 	}
 }

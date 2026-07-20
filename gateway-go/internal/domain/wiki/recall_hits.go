@@ -71,6 +71,16 @@ type RecallEvent struct {
 	Rank    int     // inject: 1-based position in the injected evidence block
 	Score   float64 // inject: preflight ranking score at injection
 	Session string  // chat session key ("" when the surface has none)
+	// Gate-shadow signals (inject only; arXiv 2607.14390's episodic confidence
+	// gate, SHADOW phase): turn-level confidence of the WHOLE injected block —
+	// Top1 is the highest ranked score, Gap = Top1 − runner-up score (0 with a
+	// single row), Cue whether the user explicitly asked for recall. Recorded
+	// on every inject line of the turn so the silence gate can be calibrated
+	// offline against read/cite outcomes (scripts/audit/
+	// recall_gate_calibration.py) BEFORE any production gating exists.
+	Top1 float64
+	Gap  float64
+	Cue  bool
 }
 
 // recallHit is one persisted ledger line. Context fields are omitempty so
@@ -84,6 +94,9 @@ type recallHit struct {
 	Rank    int     `json:"rank,omitempty"`    // inject: 1-based position in the evidence block
 	Score   float64 `json:"score,omitempty"`   // inject: preflight ranking score
 	Session string  `json:"session,omitempty"` // chat session key
+	Top1    float64 `json:"top1,omitempty"`    // inject: turn's top-1 ranked score (gate shadow)
+	Gap     float64 `json:"gap,omitempty"`     // inject: top1 − runner-up score (gate shadow)
+	Cue     bool    `json:"cue,omitempty"`     // inject: explicit recall cue turn (gate shadow)
 }
 
 // RecordRecallEvents appends one ledger line per event. Inject events come
@@ -125,6 +138,9 @@ func (s *Store) RecordRecallEvents(events []RecallEvent) error {
 			// Round so a derived telemetry line doesn't carry 17-digit float noise.
 			Score:   math.Round(ev.Score*1e4) / 1e4,
 			Session: strings.TrimSpace(ev.Session),
+			Top1:    math.Round(ev.Top1*1e4) / 1e4,
+			Gap:     math.Round(ev.Gap*1e4) / 1e4,
+			Cue:     ev.Cue,
 		})
 		if err != nil {
 			continue
