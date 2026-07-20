@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ApprovalsPane } from "./ApprovalsPane";
 import { approvalDayMs } from "../../approvalBody";
 import { fakeProvider, renderWithProviders } from "@/test/util";
+import { WorkspaceStub, workspaceValue } from "@/test/workspace";
+import { DataProviderScope } from "@/crud";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 
 const today = new Date();
@@ -85,6 +87,51 @@ describe("ApprovalsPane", () => {
     await userEvent.click(await screen.findByText("오늘 구매 품의"));
     expect(screen.getByRole("button", { name: "승인" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "반려" })).toBeInTheDocument();
+  });
+
+  // 검토 모드는 문서 "제목"에서만 근거를 찾는다 — 기안자 이름으로 기안자의
+  // 인물 위키를 여는 것(결재 내용 대신 사람 정보로 읽힘)은 회귀.
+  it("review mode follows the title's project, never the drafter's person wiki", async () => {
+    const splitWiki = vi.fn();
+    const pending: GroupwareApprovalRow[] = [
+      {
+        docId: "11",
+        title: "일반 경비 지출 품의",
+        drafter: "홍길동",
+        date: ymd,
+        status: "미결",
+        folder: "pending",
+        canAct: true,
+      },
+      {
+        docId: "12",
+        title: "완도 관산포 기자재 발주 품의",
+        drafter: "홍길동",
+        date: ymd,
+        status: "미결",
+        folder: "pending",
+        canAct: true,
+      },
+    ];
+    render(
+      <DataProviderScope
+        dataProvider={fakeProvider({
+          approvals: pending,
+          progress: [{ project: "완도 관산포", path: "프로젝트/완도 관산포/대표.md" }],
+          people: [{ name: "홍길동", wikiPath: "인물/홍길동.md" }],
+        })}
+      >
+        <WorkspaceStub value={workspaceValue({ splitWiki })}>
+          <ApprovalsPane />
+        </WorkspaceStub>
+      </DataProviderScope>,
+    );
+    // 기안자(홍길동)만 걸리는 문서 — 아무 위키도 자동 배치되지 않는다.
+    await userEvent.click(await screen.findByText("일반 경비 지출 품의"));
+    // 제목이 프로젝트를 담은 문서 — 그 프로젝트 위키가 옆 타일로 열린다.
+    await userEvent.click(screen.getByText("완도 관산포 기자재 발주 품의"));
+    await waitFor(() => expect(splitWiki).toHaveBeenCalledWith("프로젝트/완도 관산포/대표.md"));
+    expect(splitWiki).toHaveBeenCalledTimes(1);
   });
 
   it("미결만 collects pending docs across days", async () => {
