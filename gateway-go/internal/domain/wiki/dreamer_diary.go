@@ -340,7 +340,7 @@ func buildDreamProposalReport(scan *diaryScanResult, updates []wikiUpdate) dream
 			Summary:     update.Summary,
 			Category:    update.Category,
 			Type:        update.Type,
-			Confidence:  update.Confidence,
+			Confidence:  string(update.Confidence),
 			Importance:  update.Importance,
 			Related:     dedupeStringList(update.Related, 12),
 			ContentHint: truncateDreamReportText(update.Content, 320),
