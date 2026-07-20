@@ -239,3 +239,48 @@ func TestJudgeAccuracyIntervalDefaultsAndAllowsEnvOverride(t *testing.T) {
 		t.Fatalf("override = %v", task.Interval())
 	}
 }
+
+// Infra verdict errors must not poison the accuracy ledger: after a short
+// consecutive-error abort the lane writes nothing (or only scored pairs).
+func TestJudgeAccuracyTaskRunSkipsLedgerOnConsecutiveVerdictErrors(t *testing.T) {
+	task, tr := accuracyFixture(t)
+	calls := 0
+	task.verdictFn = func(_ context.Context, _, _, _ string) (judgeVerdict, error) {
+		calls++
+		return judgeVerdict{}, fmt.Errorf("judge unavailable")
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls != judgeAccuracyAbortAfterErrors {
+		t.Fatalf("calls = %d, want abort after %d", calls, judgeAccuracyAbortAfterErrors)
+	}
+	recs, err := tr.recentJudgeAccuracy(5)
+	if err != nil || len(recs) != 0 {
+		t.Fatalf("infra-only storm must not ledger: %+v err=%v", recs, err)
+	}
+}
+
+func TestJudgeAccuracyProbeUsableRejectsErrorStormRows(t *testing.T) {
+	storm := judgeAccuracyRecord{
+		Pairs: 24, Correct: 0,
+		ByClass: map[string][2]int{"fake-tool": {0, 3}, "section-drop": {0, 3}},
+		Misses: []judgeMissExhibit{
+			{Skill: "sk", Degradation: "section-drop", Verdict: "error"},
+			{Skill: "sk", Degradation: "fake-tool", Verdict: "error"},
+		},
+	}
+	if judgeAccuracyProbeUsable(storm) {
+		t.Fatal("all-error storm row treated as usable probe evidence")
+	}
+	real := judgeAccuracyRecord{
+		Pairs: 4, Correct: 3,
+		Misses: []judgeMissExhibit{{Skill: "sk", Degradation: "fake-tool", Verdict: "passed_defect"}},
+	}
+	if !judgeAccuracyProbeUsable(real) {
+		t.Fatal("real miss row rejected")
+	}
+	if !judgeMissCountsAsFuel(real.Misses[0]) || judgeMissCountsAsFuel(storm.Misses[0]) {
+		t.Fatal("fuel filter wrong")
+	}
+}

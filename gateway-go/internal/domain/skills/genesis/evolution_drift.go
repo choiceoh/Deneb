@@ -152,16 +152,24 @@ func (t *Tracker) auditEvolutionDrift() driftVerdict {
 	// ladder exists to produce — an aggregate rate would misread a
 	// hard-probe-heavy run ("judge can't catch hard probes yet", normal) as
 	// verifier breakage and freeze a healthy lane.
-	if runs, err := t.recentJudgeAccuracy(1); err == nil && len(runs) == 1 {
-		if correct, total := driftMustCatchCounts(runs[0]); total > 0 {
-			rate := float64(correct) / float64(total)
-			if rate < driftJudgeAccuracyFloor {
-				v.Signals = append(v.Signals, driftSignal{
-					Kind:   "verifier_broken",
-					Detail: fmt.Sprintf("judge caught only %.0f%% of must-catch planted defects", rate*100),
-					Value:  rate,
-				})
+	// Prefer the newest usable probe run — an infra outage row (all verdict
+	// errors) must not freeze auto-adopt as verifier_broken.
+	if runs, err := t.recentJudgeAccuracy(8); err == nil {
+		for _, run := range runs {
+			if !judgeAccuracyProbeUsable(run) {
+				continue
 			}
+			if correct, total := driftMustCatchCounts(run); total > 0 {
+				rate := float64(correct) / float64(total)
+				if rate < driftJudgeAccuracyFloor {
+					v.Signals = append(v.Signals, driftSignal{
+						Kind:   "verifier_broken",
+						Detail: fmt.Sprintf("judge caught only %.0f%% of must-catch planted defects", rate*100),
+						Value:  rate,
+					})
+				}
+			}
+			break
 		}
 	}
 

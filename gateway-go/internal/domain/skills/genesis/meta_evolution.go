@@ -910,6 +910,9 @@ func (t *MetaEvolutionTask) collectJudgeAccuracyEvidence(version string) judgeAc
 			if rec.JudgeVersion != version {
 				continue // only the incumbent judge's own record is actionable
 			}
+			if !judgeAccuracyProbeUsable(rec) {
+				continue // infra outage rows are not evaluator-epoch fuel
+			}
 			accumulateMissCounts(ev.byClass, rec.ByClass)
 			accumulateMissCounts(ev.byCategory, rec.ByCategory)
 			ev.falseRejects += len(rec.FalseRejects)

@@ -267,8 +267,15 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		if r.CreatedAt < cutoff {
 			continue
 		}
+		if !judgeAccuracyProbeUsable(r) {
+			continue // restart/warmup error storms are not L3 fuel
+		}
 		runs++
-		misses += len(r.Misses)
+		for _, m := range r.Misses {
+			if judgeMissCountsAsFuel(m) {
+				misses++
+			}
+		}
 		falseRejects += len(r.FalseRejects)
 		for cls := range r.ByClass {
 			if rsiSubtleDegradationClasses[cls] {
