@@ -82,6 +82,7 @@ def main() -> None:
 
     home = pathlib.Path.home()
     projects: dict[str, list[str]] = {}
+    programs: dict[str, str] = {}
     for p in (pathlib.Path(args.wiki) / "프로젝트").iterdir():
         if not p.is_dir():
             continue
@@ -134,6 +135,10 @@ def main() -> None:
             )
         if toks:
             projects[f"프로젝트/{p.name}"] = sorted(toks)
+            prog = ""
+            if rep.is_file() and (pm := re.search(r"^program:\s*(\S+)", fm_text if rep.is_file() else "", re.M)):
+                prog = pm.group(1).strip().strip("\"'")
+            programs[f"프로젝트/{p.name}"] = prog
     tok_owners: dict[str, set[str]] = collections.defaultdict(set)
     for proj, toks in projects.items():
         for t in toks:
@@ -203,7 +208,16 @@ def main() -> None:
                 "id": f"an-{src}-{len(cases)}",
                 "category": f"analysis-{src}",
                 "question": title,
-                "gold_paths": [proj],
+                # Program-mates are listed together (miner doctrine: sibling
+                # ambiguity → list the family): workstreams of one venture
+                # (program: axis) are interchangeable recall targets for the
+                # venture's mail.
+                "gold_paths": [proj]
+                + sorted(
+                    q
+                    for q, pg in programs.items()
+                    if q != proj and pg and pg == programs.get(proj, "")
+                ),
                 "must_contain": [],
                 "must_not": [],
             }
