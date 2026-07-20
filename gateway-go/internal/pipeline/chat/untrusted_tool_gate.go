@@ -67,15 +67,28 @@ func (g *untrustedToolGate) seed(message, recall string) {
 	}
 }
 
-// observeToolResult taints the run when a tool result carries the untrusted
-// fence marker — i.e. promptguard fired on that output in the agent executor.
-// It only reads the result string (the already-fenced content), never mutates.
-func (g *untrustedToolGate) observeToolResult(_ /*name*/, _ /*toolUseID*/, result string, isErr bool) {
+// observeToolResult taints the run when a tool result either carries the
+// untrusted fence marker (promptguard fired on that output in the agent
+// executor) OR came from an external-origin tool at all. It only reads the
+// result string and the tool name, never mutates.
+func (g *untrustedToolGate) observeToolResult(name, _ /*toolUseID*/, result string, isErr bool) {
 	if isErr || g.tainted.Load() {
 		return
 	}
+	// Signature path: promptguard matched, so the executor wrapped this output
+	// in the untrusted fence.
 	if strings.Contains(result, agent.UntrustedToolOutputMarker) {
 		g.markTainted("tool-output")
+		return
+	}
+	// Origin path: the tool pulled content from outside the operator's trust
+	// boundary (a web page, an email body, an attacker-craftable image). A
+	// carefully worded injection can slip past promptguard's signature scan and
+	// leave no fence marker, so a clean read from an external-origin tool taints
+	// the turn on its own — the irreversible-tool gate then closes the sleeper-
+	// injection gap deterministically instead of relying on signature recall.
+	if readsExternalOrigin(name) {
+		g.markTainted("external-origin:" + name)
 	}
 }
 
@@ -125,6 +138,30 @@ func isIrreversibleTool(name string, _ []byte) bool {
 		return true
 	case "wiki_forget":
 		// wiki_forget hard-deletes a page — irreversible data loss.
+		return true
+	default:
+		return false
+	}
+}
+
+// readsExternalOrigin reports whether a tool returns content sourced from
+// outside the operator's trust boundary — a fetched web page, an email body, an
+// attacker-craftable image — i.e. text an attacker could have authored and
+// seeded with hidden instructions. A successful read from such a tool taints the
+// turn even when promptguard found no signature, so the irreversible-tool gate
+// still engages against injections that evade the scan (the cross-turn sleeper
+// class). This trades exec availability on research-then-act turns for a
+// deterministic guarantee that untrusted content can never reach an irreversible
+// tool in the same turn.
+//
+// Deliberately narrow: only tools whose PRIMARY job is fetching outside content.
+// Operator-owned reads (wiki, files, office docs, calendar, contacts, phone,
+// groupware) are excluded — they are lower-probability vectors and tainting them
+// would over-block common turns. Recalled memory is covered separately: the gate
+// already seeds taint from prep.RecallMemory.
+func readsExternalOrigin(name string) bool {
+	switch name {
+	case "web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr":
 		return true
 	default:
 		return false
