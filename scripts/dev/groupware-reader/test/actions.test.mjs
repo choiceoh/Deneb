@@ -8,6 +8,7 @@ import {
   htmlToText,
   listApproval,
   listApprovalEntries,
+  readApproval,
   listBoard,
   listBoardEntries,
   normalizeBoardPost,
@@ -129,6 +130,39 @@ test("listApprovalEntries normalizes without network and preserves human list ou
 
   const human = await listApproval("pending", 80, loaders);
   assert.equal(human, "전자결재 · 미결문서 (1건)\n\n1. 지출결의 · 기안 이대리 · id=12");
+});
+
+test("readApproval searches the full list window used by the radar", async () => {
+  const calls = [];
+  const docs = Array.from({ length: 50 }, (_, index) => ({
+    DOC_ID: String(100_000 - index),
+    DOC_TITLE_ORIGIN: `수신참조 ${index + 1}`,
+  }));
+  docs[49] = { DOC_ID: "93481", DOC_TITLE_ORIGIN: "가장 오래된 수신참조" };
+
+  const out = await readApproval("cc", "93481", "", {
+    async listBoxPortlet(folder, limit) {
+      calls.push([folder, limit]);
+      return docs;
+    },
+    async listTotal() {
+      throw new Error("unexpected total loader");
+    },
+    async fetchDocDetail(docId) {
+      assert.equal(String(docId), "93481");
+      return { doc_id: docId, doc_title: "가장 오래된 수신참조", doc_contents: "<p>본문</p>" };
+    },
+    async fetchDocLine() {
+      return [];
+    },
+    async formatAttachments() {
+      return "";
+    },
+  });
+
+  assert.deepEqual(calls, [["cc", 50]]);
+  assert.match(out, /가장 오래된 수신참조/);
+  assert.match(out, /본문/);
 });
 
 test("normalizeBoardPost handles board payload aliases", () => {

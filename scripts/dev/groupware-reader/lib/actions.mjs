@@ -22,6 +22,7 @@ export const FOLDER_TITLE = {
 const MAX_ATTACH_DOWNLOAD = 3;
 const MAX_ATTACH_BYTES = 8 * 1024 * 1024;
 const MAX_EXTRACT_CHARS = 4_000;
+const MAX_APPROVAL_LIST_ENTRIES = 50;
 
 export function normalizeFolder(raw) {
   const f = String(raw || "").trim().toLowerCase();
@@ -730,7 +731,7 @@ function formatDocRead(folderTitle, query, detail, lines, attachBlock) {
 }
 
 export async function listApprovalEntries(folder, limit, loaders = {}) {
-  const lim = Math.min(Math.max(limit || 20, 1), 50);
+  const lim = Math.min(Math.max(limit || 20, 1), MAX_APPROVAL_LIST_ENTRIES);
   const normalizedFolder = normalizeFolder(folder);
   const loadBox = loaders.listBoxPortlet || listBoxPortlet;
   const loadTotal = loaders.listTotal || listTotal;
@@ -749,7 +750,7 @@ export async function listApprovalEntries(folder, limit, loaders = {}) {
 }
 
 export async function listApproval(folder, limit, loaders = {}) {
-  const lim = Math.min(Math.max(limit || 20, 1), 50);
+  const lim = Math.min(Math.max(limit || 20, 1), MAX_APPROVAL_LIST_ENTRIES);
   if (folder === "all") {
     const parts = [];
     for (const key of ["pending", "done", "cc", "total"]) {
@@ -764,15 +765,20 @@ export async function listApproval(folder, limit, loaders = {}) {
   return `전자결재 · ${title} (${docs.length}건)\n\n${lines.join("\n")}`;
 }
 
-export async function readApproval(folder, query, matchText) {
+export async function readApproval(folder, query, matchText, loaders = {}) {
   const q = queryFrom(query, matchText);
   if (!q) throw new Error("read requires --query or notification body on stdin");
 
+  const loadBox = loaders.listBoxPortlet || listBoxPortlet;
+  const loadTotal = loaders.listTotal || listTotal;
+  const loadDetail = loaders.fetchDocDetail || fetchDocDetail;
+  const loadLine = loaders.fetchDocLine || fetchDocLine;
+  const loadAttachments = loaders.formatAttachments || formatAttachments;
   const folders = folder === "all" ? ["pending", "done", "cc", "total"] : [folder];
   for (const key of folders) {
     let docs;
-    if (key === "total") docs = await listTotal(40);
-    else docs = await listBoxPortlet(key, 40);
+    if (key === "total") docs = await loadTotal(MAX_APPROVAL_LIST_ENTRIES);
+    else docs = await loadBox(key, MAX_APPROVAL_LIST_ENTRIES);
     const hit = docs.find((d) => {
       const title = d.DOC_TITLE_ORIGIN || d.doc_title || "";
       const no = d.DOC_NO || d.doc_no || "";
@@ -787,9 +793,9 @@ export async function readApproval(folder, query, matchText) {
     if (!hit) continue;
     const docId = hit.DOC_ID || hit.doc_id;
     const [detail, lines, attachBlock] = await Promise.all([
-      fetchDocDetail(docId),
-      fetchDocLine(docId),
-      formatAttachments(docId).catch(() => ""),
+      loadDetail(docId),
+      loadLine(docId),
+      loadAttachments(docId).catch(() => ""),
     ]);
     if (!detail.doc_contents && !detail.doc_title) {
       return (
