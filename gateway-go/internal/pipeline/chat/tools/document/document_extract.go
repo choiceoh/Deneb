@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -224,17 +225,72 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 		for _, i := range tableIdx {
 			isTable[i] = true
 		}
+		// OCR candidates concurrently (bounded): the vLLM sidecar batches the
+		// requests, so N pages finish in roughly one batched decode instead of
+		// N sequential ones — same rationale as pdfOCR. Goroutines write their
+		// own map entries under mu; the merge below runs after the wait so page
+		// order stays deterministic. A chart-mode follow-up call happens inside
+		// the same goroutine (and sem slot), so total concurrent GPU requests
+		// stay bounded by ocrPageConcurrency.
+		var (
+			wg          sync.WaitGroup
+			mu          sync.Mutex
+			ocrByPage   = make(map[int]string, len(candidates))
+			chartByPage = make(map[int]string)
+			chartCalls  int
+		)
+		sem := make(chan struct{}, ocrPageConcurrency)
 		for _, i := range candidates {
 			img := imgs[i]
 			if img == nil {
 				continue // page failed to render — keep pdftotext
 			}
-			text, oerr := ocrImageBytes(ctx, img)
-			if oerr != nil {
+			acquired := false
+			select {
+			case sem <- struct{}{}:
+				acquired = true
+			case <-ctx.Done():
+			}
+			if !acquired {
+				break // turn budget spent — keep pdftotext for the rest
+			}
+			wg.Add(1)
+			go func(i int, img []byte) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				defer func() { _ = recover() }() // one page's panic must not crash the gateway
+				text, oerr := ocrImageBytes(ctx, img)
+				if oerr != nil {
+					return
+				}
+				mu.Lock()
+				ocrByPage[i] = text
+				runChart := !isTable[i] && chartCalls < chartPageCap && looksChartLike(text)
+				if runChart {
+					chartCalls++
+				}
+				mu.Unlock()
+				if !runChart {
+					return
+				}
+				if data, cerr := chartOCR(ctx, img); cerr == nil && data != "" {
+					mu.Lock()
+					chartByPage[i] = data
+					mu.Unlock()
+				}
+			}(i, img)
+		}
+		wg.Wait()
+		for _, i := range candidates {
+			text, ok := ocrByPage[i]
+			if !ok {
 				continue
 			}
-			if upgraded, ok := upgradePage(pages[i], text, isTable[i]); ok {
+			if upgraded, upOK := upgradePage(pages[i], text, isTable[i]); upOK {
 				pages[i] = upgraded
+			}
+			if data := chartByPage[i]; data != "" {
+				pages[i] += "\n\n[차트 데이터 추정 — 기계 판독, 수치는 원본 확인 필요]\n" + data
 			}
 		}
 	}
@@ -270,6 +326,36 @@ func classifyPages(pages []string) (tableIdx, visualIdx []int) {
 // nearly empty. Real prose pages carry thousands of runes; a figure-only page
 // carries a header, a caption, and a page number at most.
 const visualPageMaxRunes = 100
+
+const (
+	// chartMinDigitTokens gates chart-mode recognition: real charts carry axis
+	// values, years, and series numbers, so several digit-bearing tokens must
+	// already be visible in the full-page OCR text. Equipment photos and
+	// stamps rarely qualify, which keeps the fabrication-prone chart mode away
+	// from non-charts.
+	chartMinDigitTokens = 5
+	// chartPageCap bounds chart-mode calls per document.
+	chartPageCap = 6
+)
+
+// looksChartLike reports whether a visual page's OCR text suggests an actual
+// chart worth a chart-mode data read. Pages whose full-page OCR already
+// yielded a markdown table are covered and skip chart mode.
+func looksChartLike(ocrText string) bool {
+	if strings.Contains(ocrText, "| ---") {
+		return false
+	}
+	digitTokens := 0
+	for _, tok := range strings.Fields(ocrText) {
+		if strings.ContainsAny(tok, "0123456789") {
+			digitTokens++
+			if digitTokens >= chartMinDigitTokens {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // pageNearlyEmpty reports whether a pdftotext page carries almost no text.
 func pageNearlyEmpty(page string) bool {

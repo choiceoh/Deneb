@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
@@ -99,8 +100,10 @@ func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.Cont
 // native client sends these as base64 Data + a document MimeType with no
 // explicit Type, so without this step they match neither the image nor the
 // document_text branch in buildAttachmentBlocks and get silently dropped.
-// Images and already-extracted text pass through unchanged.
-func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachment) []ChatAttachment {
+// Images and already-extracted text pass through unchanged. Oversized
+// documents are digested by the local lightweight model when allowLocalAI is
+// set (run_attachments_digest.go); otherwise they are visibly head-truncated.
+func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachment, allowLocalAI bool) []ChatAttachment {
 	if len(attachments) == 0 {
 		return attachments
 	}
@@ -109,7 +112,12 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 	// through untouched like any other extraction failure.
 	extractCtx, cancel := context.WithTimeout(ctx, docExtractBudget)
 	defer cancel()
+	var summarize chunkSummarizer
+	if allowLocalAI {
+		summarize = defaultChunkSummarizer()
+	}
 	budgetSpent := false
+	usedRunes := 0
 	out := make([]ChatAttachment, 0, len(attachments))
 	for _, att := range attachments {
 		if att.Type == "image" || att.Type == "document_text" || att.Data == "" ||
@@ -140,6 +148,18 @@ func prepareDocumentAttachments(ctx context.Context, attachments []ChatAttachmen
 		if label == "" {
 			label = "document"
 		}
+		// Per-doc inline allowance shrinks as the turn budget is spent by
+		// earlier documents, floored so a later document never degrades to
+		// uselessness. Digest output itself is small, so the loop converges.
+		inlineCap := docInlineRuneCap
+		if remaining := turnInlineRuneCap - usedRunes; remaining < inlineCap {
+			inlineCap = remaining
+			if inlineCap < docInlineRuneFloor {
+				inlineCap = docInlineRuneFloor
+			}
+		}
+		text = digestOversizedDocument(extractCtx, label, text, inlineCap, summarize)
+		usedRunes += utf8.RuneCountInString(text)
 		// document_text branch renders Data as the text body.
 		out = append(out, ChatAttachment{Type: "document_text", Name: label, Data: text})
 	}

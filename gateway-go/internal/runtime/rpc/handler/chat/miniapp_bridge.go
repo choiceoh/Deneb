@@ -286,6 +286,11 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 				savedPath = rel
 			}
 		}
+		// Oversized documents would flood the turn's context; digest AFTER the
+		// raw persistence above so the full original still outlives the digest.
+		if deps.DigestOversized != nil {
+			text = deps.DigestOversized(ctx, p.Filename, text)
+		}
 		header := "📄 공유 문서에서 추출한 텍스트"
 		if name := strings.TrimSpace(p.Filename); name != "" {
 			header += " (" + name + ")"

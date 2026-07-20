@@ -17,7 +17,7 @@ func TestPrepareDocumentAttachmentsParsesCSVIntoMarkdownTable(t *testing.T) {
 		{Type: "image", MimeType: "image/png", Data: "abc"}, // must pass through untouched
 	}
 
-	out := prepareDocumentAttachments(context.Background(), in)
+	out := prepareDocumentAttachments(context.Background(), in, false)
 	if len(out) != 2 {
 		t.Fatalf("len = %d, want 2", len(out))
 	}
@@ -40,7 +40,7 @@ func TestPrepareDocumentAttachmentsPreservesNonDocumentAttachments(t *testing.T)
 		{MimeType: "application/zip", Name: "a.zip", Data: base64.StdEncoding.EncodeToString([]byte("PK..."))},
 		{MimeType: "text/csv", Name: "bad.csv", Data: "!!!not base64!!!"},
 	}
-	out := prepareDocumentAttachments(context.Background(), in)
+	out := prepareDocumentAttachments(context.Background(), in, false)
 	if len(out) != 3 {
 		t.Fatalf("len = %d, want 3", len(out))
 	}

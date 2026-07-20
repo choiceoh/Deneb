@@ -50,7 +50,9 @@ func assembleTurnMessages(ctx context.Context, params RunParams, deps runDeps, p
 	// Extract raw document attachments (PDF/Office/CSV the native client sends as
 	// base64 bytes with no explicit type) into text up front, so the block
 	// builders below render their content instead of silently dropping them.
-	attachments := prepareDocumentAttachments(ctx, params.Attachments)
+	// Local-AI digestion of oversized documents is gated off in briefcase mode,
+	// mirroring the compaction summarizer gate.
+	attachments := prepareDocumentAttachments(ctx, params.Attachments, !deps.briefcaseMode)
 
 	// If the caller provided pre-built messages (e.g., OpenAI-compatible HTTP API
 	// with full conversation history), use those instead of transcript context.

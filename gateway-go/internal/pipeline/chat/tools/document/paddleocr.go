@@ -187,6 +187,50 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 	return tesseract(ctx, img)
 }
 
+// chartCachePayload namespaces chart-mode results in the content-addressed OCR
+// cache: the cache key is a hash of the payload, and the same page image must
+// not collide between full-page OCR text and chart-mode data.
+func chartCachePayload(img []byte) []byte {
+	return append([]byte("chart-recognition:"), img...)
+}
+
+// chartOCR asks PaddleOCR-VL's chart-recognition mode for the underlying data
+// series of a chart image, normalized to readable rows. The output is a model
+// ESTIMATE (bar heights become numbers), so callers must label it as such.
+// Output that does not look like a data table is discarded — the mode can
+// fabricate structure when pointed at a non-chart. No tesseract fallback:
+// chart parsing needs the VL model.
+func chartOCR(ctx context.Context, img []byte) (string, error) {
+	if cached, ok := ocrCacheGet(chartCachePayload(img)); ok {
+		return cached, nil
+	}
+	raw, err := paddleOCR(ctx, img, "Chart Recognition:")
+	if err != nil {
+		return "", err
+	}
+	table := strings.TrimSpace(paddleTableToText(raw))
+	if !looksDataTable(table) {
+		return "", fmt.Errorf("차트 데이터 형태 아님")
+	}
+	ocrCachePut(chartCachePayload(img), table)
+	return table, nil
+}
+
+// looksDataTable reports whether s is a plausible multi-row data table —
+// at least two non-empty rows carrying a column separator.
+func looksDataTable(s string) bool {
+	rows := 0
+	for _, ln := range strings.Split(s, "\n") {
+		if strings.TrimSpace(ln) != "" && strings.Contains(ln, "|") {
+			rows++
+			if rows >= 2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // looksRepetitionLoop reports whether OCR output degenerated into a repeated
 // block. Signature: one substantive line (≥8 runes carrying ≥4 letters —
 // Hangul/Latin/etc.) occurring ≥12 times. Honest tables repeat short unit and

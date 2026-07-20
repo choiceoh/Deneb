@@ -210,6 +210,33 @@ func TestUpgradePageGuards(t *testing.T) {
 	}
 }
 
+func TestContiguousRunsMergesAdjacentPages(t *testing.T) {
+	got := contiguousRuns([]int{0, 1, 2, 7, 9, 10})
+	want := [][2]int{{0, 2}, {7, 7}, {9, 10}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("contiguousRuns = %v, want %v", got, want)
+	}
+	if runs := contiguousRuns(nil); runs != nil {
+		t.Errorf("empty input should yield nil, got %v", runs)
+	}
+}
+
+func TestLooksChartLikeRequiresDigitTokensAndNoTable(t *testing.T) {
+	chart := "연도별 발전량 (GWh)\n2021 340\n2022 410\n2023 495\n2024 560"
+	if !looksChartLike(chart) {
+		t.Error("axis-and-value text should qualify as chart-like")
+	}
+	photo := "설비 전경 사진: 태양광 모듈 어레이와 인버터실 외관"
+	if looksChartLike(photo) {
+		t.Error("photo caption without numbers must not qualify")
+	}
+	// A page whose full-page OCR already produced a markdown table is covered.
+	tabled := "2021 2022 2023 2024 2025\n| 항목 | 값 |\n| --- | --- |\n| 발전량 | 340 |"
+	if looksChartLike(tabled) {
+		t.Error("page with a recognized markdown table must skip chart mode")
+	}
+}
+
 // TestPDFStructuredExtractionLive runs the full structured-extraction chain
 // (pdftotext → classify → selective raster → PaddleOCR-VL) against a real PDF
 // and a live OCR server. Opt-in only:

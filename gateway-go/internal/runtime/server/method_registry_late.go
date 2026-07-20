@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
@@ -54,6 +55,9 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).
 			ExtractDocument: toolbind.ExtractAttachmentText,
+			// Oversized captures are digested by the local lightweight model
+			// (or visibly head-truncated) after raw persistence.
+			DigestOversized: chat.DigestOversizedDocumentText,
 			// In-app browser in-place translation (en/ru → ko) — DeepL-only.
 			Translate: toolbind.TranslateSegments,
 			// Raw capture persistence: full OCR text / diarized transcript →
