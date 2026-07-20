@@ -14,7 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
-func callToolCtx(t *testing.T, ctx context.Context, fn toolport.ToolFunc, params any) (string, error) {
+func callToolCtx(ctx context.Context, t *testing.T, fn toolport.ToolFunc, params any) (string, error) {
 	t.Helper()
 	raw := testutil.Must(json.Marshal(params))
 	return fn(ctx, json.RawMessage(raw))
@@ -42,7 +42,7 @@ func TestEditBlockedAfterPartialReadWhenFileChangedExternally(t *testing.T) {
 	}
 	ctx := toolport.WithFileCache(context.Background(), agent.NewFileCache(0))
 
-	if _, err := callToolCtx(t, ctx, ToolRead(tmp), map[string]any{
+	if _, err := callToolCtx(ctx, t, ToolRead(tmp), map[string]any{
 		"file_path": "notes.txt", "offset": 2, "limit": 2,
 	}); err != nil {
 		t.Fatalf("partial read: %v", err)
@@ -54,7 +54,7 @@ func TestEditBlockedAfterPartialReadWhenFileChangedExternally(t *testing.T) {
 	}
 	bumpMTime(t, path)
 
-	_, err := callToolCtx(t, ctx, ToolEdit(tmp), map[string]any{
+	_, err := callToolCtx(ctx, t, ToolEdit(tmp), map[string]any{
 		"file_path": "notes.txt", "old_string": "delta", "new_string": "DELTA",
 	})
 	if err == nil || !strings.Contains(err.Error(), "modified since last read") {
@@ -72,12 +72,12 @@ func TestEditAllowedAfterPartialReadWhenFileUnchanged(t *testing.T) {
 	}
 	ctx := toolport.WithFileCache(context.Background(), agent.NewFileCache(0))
 
-	if _, err := callToolCtx(t, ctx, ToolRead(tmp), map[string]any{
+	if _, err := callToolCtx(ctx, t, ToolRead(tmp), map[string]any{
 		"file_path": "notes.txt", "offset": 1, "limit": 2,
 	}); err != nil {
 		t.Fatalf("partial read: %v", err)
 	}
-	out, err := callToolCtx(t, ctx, ToolEdit(tmp), map[string]any{
+	out, err := callToolCtx(ctx, t, ToolEdit(tmp), map[string]any{
 		"file_path": "notes.txt", "old_string": "bravo", "new_string": "BRAVO",
 	})
 	if err != nil {
@@ -99,15 +99,15 @@ func TestReadAfterEditServesFreshContent(t *testing.T) {
 	}
 	ctx := toolport.WithFileCache(context.Background(), agent.NewFileCache(0))
 
-	if _, err := callToolCtx(t, ctx, ToolRead(tmp), map[string]any{"file_path": "notes.txt"}); err != nil {
+	if _, err := callToolCtx(ctx, t, ToolRead(tmp), map[string]any{"file_path": "notes.txt"}); err != nil {
 		t.Fatalf("initial read: %v", err)
 	}
-	if _, err := callToolCtx(t, ctx, ToolEdit(tmp), map[string]any{
+	if _, err := callToolCtx(ctx, t, ToolEdit(tmp), map[string]any{
 		"file_path": "notes.txt", "old_string": "bravo", "new_string": "EDITED-LINE",
 	}); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
-	out, err := callToolCtx(t, ctx, ToolRead(tmp), map[string]any{"file_path": "notes.txt"})
+	out, err := callToolCtx(ctx, t, ToolRead(tmp), map[string]any{"file_path": "notes.txt"})
 	if err != nil {
 		t.Fatalf("re-read: %v", err)
 	}
@@ -126,12 +126,12 @@ func TestPartialReadBaselineIsNotServedAsCachedRead(t *testing.T) {
 	}
 	ctx := toolport.WithFileCache(context.Background(), agent.NewFileCache(0))
 
-	if _, err := callToolCtx(t, ctx, ToolRead(tmp), map[string]any{
+	if _, err := callToolCtx(ctx, t, ToolRead(tmp), map[string]any{
 		"file_path": "notes.txt", "offset": 1, "limit": 1,
 	}); err != nil {
 		t.Fatalf("partial read: %v", err)
 	}
-	out, err := callToolCtx(t, ctx, ToolRead(tmp), map[string]any{"file_path": "notes.txt"})
+	out, err := callToolCtx(ctx, t, ToolRead(tmp), map[string]any{"file_path": "notes.txt"})
 	if err != nil {
 		t.Fatalf("full read: %v", err)
 	}
