@@ -410,17 +410,22 @@ reclaim_abandoned_dispatches() {
 
 PR_OUTCOME="none"
 record_pr_outcome() {
-    local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5" ahead="$6"
-    local pr_json state number url merge_sha
+    local cid="$1" attempt="$2" branch="$3" rc="$4" elapsed="$5" ahead="$6" decline_note="${7:-}"
+    local pr_json state number url merge_sha note
     local -a result_args
     pr_json=$(pr_json_for_branch "$branch" || printf '[]')
     state=$(jq -r '.[0].state // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
     number=$(jq -r '.[0].number // 0' <<<"${pr_json:-[]}" 2>/dev/null || printf '0')
     url=$(jq -r '.[0].url // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
     merge_sha=$(jq -r '.[0].mergeCommit.oid // empty' <<<"${pr_json:-[]}" 2>/dev/null || true)
+    note="dispatch session rc=$rc elapsed=${elapsed}s; prState=${state:-unknown}"
+    # The executor's structured decline reason (from .dispatch-decline.md)
+    # rides the ledger note so post-mortems read the ledger, not the 39K-line
+    # session transcript.
+    [[ -n "$decline_note" ]] && note="$note; decline: $decline_note"
     result_args=(--state-dir "$STATE_DIR" result --id "$cid" --attempt-id "$attempt" \
         --branch "$branch" --rc "$rc" --pr-number "$number" --pr-url "$url" \
-        --commit-sha "$merge_sha" --note "dispatch session rc=$rc elapsed=${elapsed}s; prState=${state:-unknown}")
+        --commit-sha "$merge_sha" --note "$note")
     [[ -n "$ahead" ]] && result_args+=(--ahead "$ahead")
     [[ -n "$state" ]] && result_args+=(--pr-state "$state")
     if ! PR_OUTCOME=$(python3 "$DISPATCH_RPC" "${result_args[@]}" 2>>"$LOG_FILE"); then
@@ -613,13 +618,22 @@ main() {
     set -e
     local elapsed=$(( $(date +%s) - started_at ))
     log "dispatch $cid finished (rc=$rc, ${elapsed}s)"
+    # Structured decline reason: the contract asks the executor to write
+    # .dispatch-decline.md when it lands nothing. Capture and remove it so a
+    # declined worktree still reads as clean for cleanup below.
+    local decline_note=""
+    if [[ -f "$wt/.dispatch-decline.md" ]]; then
+        decline_note=$(head -c 800 "$wt/.dispatch-decline.md" 2>/dev/null | tr '\n\t' '  ' | sed 's/  */ /g' || true)
+        rm -f "$wt/.dispatch-decline.md"
+        [[ -n "$decline_note" ]] && log "dispatch $cid decline reason: $decline_note"
+    fi
     # Decide normal clean no-op versus failure from the actual branch delta
     # before writing the authoritative terminal lifecycle event.
     local ahead=""
     git -C "$PROD_DIR" fetch origin main --quiet >>"$LOG_FILE" 2>&1 || true
     ahead=$(git -C "$wt" rev-list --count origin/main..HEAD 2>/dev/null || echo "")
     local terminal_recorded=1
-    if ! record_pr_outcome "$cid" "$attempt_id" "$branch" "$rc" "$elapsed" "$ahead"; then
+    if ! record_pr_outcome "$cid" "$attempt_id" "$branch" "$rc" "$elapsed" "$ahead" "$decline_note"; then
         terminal_recorded=0
         log "WARN: failed to record terminal PR outcome for $cid"
     fi
@@ -663,7 +677,7 @@ main() {
     local outcome
     outcome=$(python3 "$script_dir/dispatch_outcome.py" --marker "$DISPATCH_DIR/$cid.json" \
         --rc "$rc" --elapsed "$elapsed" --ahead "$ahead" --pr-state "$pr_state" \
-        --authoritative-phase "$PR_OUTCOME" 2>>"$LOG_FILE" || echo "unknown")
+        --authoritative-phase "$PR_OUTCOME" --decline-note "$decline_note" 2>>"$LOG_FILE" || echo "unknown")
     log "dispatch $cid outcome: $outcome (prState=${pr_state:-n/a}, ahead=${ahead:-n/a})"
 
     if [[ "$terminal_recorded" -eq 0 ]]; then
