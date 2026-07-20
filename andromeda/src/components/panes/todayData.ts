@@ -62,7 +62,8 @@ export function buildKpis(input: {
       label: "질문 대기",
       value: openQuestions,
       tone: openQuestions > 0 ? "warn" : undefined,
-      target: { view: "workfeed" },
+      // Deep-link into the feed's 질문 대기 inbox (WorkfeedPane query="questions").
+      target: { view: "workfeed", query: "questions" },
     },
     {
       key: "events",

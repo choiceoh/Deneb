@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { WorkAction, WorkItem } from "@/types";
 import { useCachedList } from "@/cachedList";
 import { callRpc, chatStream } from "@/gateway";
@@ -33,6 +33,9 @@ function addDays(dayMs: number, delta: number): number {
 // workfeed.answer/action.run, then returns a sessionKey+prompt to deliver — to the
 // asking session when there is one, else into the AI panel's current conversation.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
+// Open-question inbox: matches Today's "질문 대기" KPI (authoritative flag only —
+// settled cards keep question=true with ackedAtMs set).
+const isOpenQuestion = (w: WorkItem) => Boolean(w.question) && !w.ackedAtMs;
 const ignoreUiSubmit = () => {};
 
 // One line per item — shared by the AI text projection so the day's rows read the
@@ -58,16 +61,19 @@ export function WorkfeedPane() {
   const { connected, cfg, askDeneb, setAiCollapsed } = useWorkspace();
   // The day currently in view (local midnight). Lands on today; prev/next step it.
   const [dayMs, setDayMs] = useState<number>(() => startOfDay());
-  // Fetch ONLY the selected day's items, server-side ranged (sinceMs..beforeMs) at the
-  // gateway's max page, refetched whenever the day changes. The old flat default fetch
-  // (limit 20, server order — not newest-first) silently dropped a busy day's later
-  // cards past position 20: a 6-mail morning showed just 2 here while the phone (which
-  // already ranges by day) showed all of them. The per-day cacheKey snapshots each day
-  // separately; the resource stays "workfeed" so sync.ts / useEvents invalidation still
-  // refetches the visible day when new cards land.
+  // 질문 대기 inbox (오늘 KPI · filter toggle): cross-day unsettled questions.
+  const [questionsOnly, setQuestionsOnly] = useState(false);
+  // Day mode: fetch ONLY the selected day's items, server-side ranged
+  // (sinceMs..beforeMs) at the gateway's max page. 질문 대기 mode drops the day
+  // window so an open question from days ago is not hidden behind the pager —
+  // same contract as ApprovalsPane's 미결만.
   const { result, query } = useCachedList<WorkItem>("workfeed", connected, {
-    cacheKey: `workfeed.${dayMs}`,
-    meta: { rpcParams: { limit: WORKFEED_DAY_LIMIT, sinceMs: dayMs, beforeMs: addDays(dayMs, 1) } },
+    cacheKey: questionsOnly ? "workfeed.questions" : `workfeed.${dayMs}`,
+    meta: {
+      rpcParams: questionsOnly
+        ? { limit: WORKFEED_DAY_LIMIT }
+        : { limit: WORKFEED_DAY_LIMIT, sinceMs: dayMs, beforeMs: addDays(dayMs, 1) },
+    },
   });
   const items = result?.data ?? [];
   const [selectedId, setSelectedId] = useState<string | number | undefined>();
@@ -105,14 +111,17 @@ export function WorkfeedPane() {
     },
   });
 
-  // An id-less workfeed target is meaningless — keep it pending rather than
-  // clearing the current selection. Plain function (no manual memo — the
-  // compiler lint couldn't preserve it); usePaneTarget re-runs are idempotent.
-  const openTargetedItem = (t: PaneTarget) => {
-    if (t.id === undefined) return false;
-    setSelectedId(t.id);
-  };
-  usePaneTarget("workfeed", openTargetedItem);
+  // Deep link (오늘 KPI · workspace 커맨드): query="questions" opens the 질문 대기
+  // inbox; an id selects that card. Bare id-less targets stay pending so they don't
+  // clear the current selection.
+  usePaneTarget(
+    "workfeed",
+    useCallback((t: PaneTarget) => {
+      if (t.query === "questions") setQuestionsOnly(true);
+      if (t.id === undefined) return t.query === "questions" ? undefined : false;
+      setSelectedId(t.id);
+    }, []),
+  );
 
   // Render-time clock read — day bucketing/pager bounds must track wall-clock at
   // paint; a state snapshot would go stale across midnight.
@@ -129,11 +138,26 @@ export function WorkfeedPane() {
 
   const dayItems = items
     .filter((w) => startOfDay(effectiveMs(w, nowMs)) === dayMs)
-    .sort((a, b) => effectiveMs(b, nowMs) - effectiveMs(a, nowMs));
+    .sort((a, b) => {
+      // Open questions first so the day's list makes "질문 대기" scannable.
+      if (isOpenQuestion(a) !== isOpenQuestion(b)) return isOpenQuestion(a) ? -1 : 1;
+      return effectiveMs(b, nowMs) - effectiveMs(a, nowMs);
+    });
 
-  const aiText =
-    `[피드 · ${dayLabel(dayMs, nowMs)}]\n` +
-    (dayItems.length ? dayItems.map(itemLine).join("\n") : "(이 날짜에는 항목이 없습니다)");
+  // 질문 대기: cross-day inbox of unsettled question cards.
+  const questionItems = items
+    .filter(isOpenQuestion)
+    .sort((a, b) => effectiveMs(b, nowMs) - effectiveMs(a, nowMs));
+  const shownItems = questionsOnly ? questionItems : dayItems;
+  const openQuestionCount = questionsOnly
+    ? questionItems.length
+    : dayItems.filter(isOpenQuestion).length;
+
+  const aiText = questionsOnly
+    ? `[피드 · 질문 대기]\n` +
+      (questionItems.length ? questionItems.map(itemLine).join("\n") : "(대기 중인 질문이 없습니다)")
+    : `[피드 · ${dayLabel(dayMs, nowMs)}]\n` +
+      (dayItems.length ? dayItems.map(itemLine).join("\n") : "(이 날짜에는 항목이 없습니다)");
   useRegisterPane("workfeed", aiText);
 
   function goToDay(nextDayMs: number) {
@@ -170,7 +194,14 @@ export function WorkfeedPane() {
       header: "유형",
       width: 92,
       tdStyle: { verticalAlign: "top" },
-      cell: (w) => <span className="workfeed-kind">{workfeedSourceLabel(w.source)}</span>,
+      cell: (w) => {
+        const waiting = isOpenQuestion(w);
+        return (
+          <span className={"workfeed-kind" + (waiting ? " waiting" : "")}>
+            {waiting ? "질문 대기" : workfeedSourceLabel(w.source)}
+          </span>
+        );
+      },
     },
     {
       header: "항목",
@@ -179,6 +210,11 @@ export function WorkfeedPane() {
           <div className={isRead(w) ? "workfeed-row-title workfeed-row-read" : "workfeed-row-title"}>
             {w.title ?? "(항목)"}
           </div>
+          {questionsOnly && (
+            <div className="workfeed-row-preview">
+              {[workfeedSourceLabel(w.source), fmtDate(w.createdAtMs)].filter(Boolean).join(" · ")}
+            </div>
+          )}
         </div>
       ),
     },
@@ -186,7 +222,8 @@ export function WorkfeedPane() {
       header: "시각",
       width: 76,
       tdStyle: { verticalAlign: "top" },
-      // Day is shown by the navigator above, so the row keeps only the time.
+      // Day is shown by the navigator above (or the preview under the title in
+      // 질문 대기 mode), so the row keeps only the time.
       cell: (w) => <span className="workfeed-row-time">{fmtTime(w.createdAtMs)}</span>,
     },
   ];
@@ -195,10 +232,25 @@ export function WorkfeedPane() {
     <>
       <h2 style={{ marginTop: 2 }}>피드</h2>
       {error && <p className="pane-error">오류: {error}</p>}
+      <div className="workfeed-filter-row">
+        <button
+          type="button"
+          className={"row-btn" + (questionsOnly ? " active" : "")}
+          aria-pressed={questionsOnly}
+          onClick={() => {
+            setQuestionsOnly((v) => !v);
+            setSelectedId(undefined);
+          }}
+        >
+          {openQuestionCount > 0 ? `질문 대기 ${openQuestionCount}` : "질문 대기"}
+        </button>
+        {questionsOnly && <span className="groupware-status">답변이 필요한 카드</span>}
+      </div>
       {/* Day nav lives ABOVE the grid notice so it stays put while a day loads or comes
           back empty — GridNotice swaps its children for a loading/empty notice, and
-          burying the pager inside it would strand the user on an empty day with no arrows. */}
-      {connected && (
+          burying the pager inside it would strand the user on an empty day with no arrows.
+          Hidden in 질문 대기 mode (cross-day inbox). */}
+      {connected && !questionsOnly && (
         <div className="workfeed-daynav">
           <button className="row-btn" onClick={() => stepDay(-1)} disabled={dayMs <= minDayMs} aria-label="이전 날">
             ‹ 이전
@@ -218,10 +270,14 @@ export function WorkfeedPane() {
           )}
         </div>
       )}
-      <GridNotice query={query} count={dayItems.length} empty="이 날짜에는 항목이 없습니다.">
+      <GridNotice
+        query={query}
+        count={shownItems.length}
+        empty={questionsOnly ? "대기 중인 질문이 없습니다." : "이 날짜에는 항목이 없습니다."}
+      >
         <Grid
           columns={columns}
-          rows={dayItems}
+          rows={shownItems}
           getKey={(w) => String(w.id)}
           hideHeader
           onRowClick={toggleSelected}

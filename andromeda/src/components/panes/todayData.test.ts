@@ -52,6 +52,7 @@ describe("buildKpis", () => {
     expect(byKey.overdue.value).toBe(1);
     expect(byKey.unread.value).toBe(5);
     expect(byKey.approvals.target).toEqual({ view: "approvals", query: "pending" });
+    expect(byKey.questions.target).toEqual({ view: "workfeed", query: "questions" });
 
     expect(kpiText(kpis)).toContain("미결 결재 2");
   });

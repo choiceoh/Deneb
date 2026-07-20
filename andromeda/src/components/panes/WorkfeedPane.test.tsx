@@ -323,4 +323,68 @@ describe("WorkfeedPane", () => {
     // …and the row is now de-emphasized (read).
     await waitFor(() => expect(title.className).toContain("workfeed-row-read"));
   });
+
+  it("labels open question rows as 질문 대기 and filters them across days", async () => {
+    const t = new Date();
+    const at = (daysAgo: number, hour: number) =>
+      new Date(t.getFullYear(), t.getMonth(), t.getDate() - daysAgo, hour).getTime();
+    const dataProvider = fakeProvider({
+      workfeed: [
+        { id: "q-today", source: "proactive", title: "오늘 선제 질문", question: true, createdAtMs: at(0, 10) },
+        { id: "q-acked", source: "deal_question", title: "이미 답한 질문", question: true, ackedAtMs: 1, createdAtMs: at(0, 9) },
+        { id: "plain", source: "alert", title: "일반 알림", createdAtMs: at(0, 8) },
+        { id: "q-yesterday", source: "deal_question", title: "어제 미답 질문", question: true, createdAtMs: at(1, 14) },
+      ],
+    });
+    renderWithProviders(<WorkfeedPane />, { connected: true, dataProvider });
+
+    // List badge: only unsettled question cards — not source="deal_question" alone, not acked.
+    expect(await screen.findByText("오늘 선제 질문")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "질문 대기 1" })).toBeInTheDocument();
+    // Row kind badge (exact "질문 대기") vs filter toggle ("질문 대기 1").
+    expect(screen.getByText("질문 대기")).toBeInTheDocument();
+    expect(screen.getByText("알림")).toBeInTheDocument(); // plain row keeps source label
+    expect(screen.getByText("질문")).toBeInTheDocument(); // acked deal_question keeps source label
+    expect(screen.queryByText("어제 미답 질문")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "질문 대기 1" }));
+    expect(await screen.findByText("오늘 선제 질문")).toBeInTheDocument();
+    expect(screen.getByText("어제 미답 질문")).toBeInTheDocument();
+    expect(screen.queryByText("일반 알림")).not.toBeInTheDocument();
+    expect(screen.queryByText("이미 답한 질문")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "이전 날" })).not.toBeInTheDocument();
+    // Cross-day inbox: both open questions → count on the toggle updates to 2.
+    expect(screen.getByRole("button", { name: "질문 대기 2" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens 질문 대기 inbox from a pane target query", async () => {
+    function TargetSetter() {
+      const { openPane } = useWorkspace();
+      return <button onClick={() => openPane("workfeed", { query: "questions" })}>open questions</button>;
+    }
+    const t = new Date();
+    const at = (daysAgo: number, hour: number) =>
+      new Date(t.getFullYear(), t.getMonth(), t.getDate() - daysAgo, hour).getTime();
+    const dataProvider = fakeProvider({
+      workfeed: [
+        { id: "q1", source: "proactive", title: "대기 질문", question: true, createdAtMs: at(1, 11) },
+        { id: "a1", source: "alert", title: "오늘 알림", createdAtMs: at(0, 9) },
+      ],
+    });
+    renderWithProviders(
+      <>
+        <TargetSetter />
+        <WorkfeedPane />
+      </>,
+      { connected: true, dataProvider },
+    );
+
+    expect(await screen.findByText("오늘 알림")).toBeInTheDocument();
+    expect(screen.queryByText("대기 질문")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "open questions" }));
+    expect(await screen.findByText("대기 질문")).toBeInTheDocument();
+    expect(screen.queryByText("오늘 알림")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /질문 대기/ })).toHaveAttribute("aria-pressed", "true");
+  });
 });
