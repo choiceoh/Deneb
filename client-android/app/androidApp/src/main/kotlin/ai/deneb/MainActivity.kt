@@ -370,7 +370,11 @@ class MainActivity : ComponentActivity() {
             handleSharedAudio(intent)
             return
         }
-        if (isSharedDocumentMime(intent.type)) {
+        // Document route only when an actual stream rides along: apps share
+        // markdown/CSV as inline EXTRA_TEXT too (no EXTRA_STREAM), and those must
+        // fall through to the text capture below instead of dying silently in
+        // handleSharedDocument's missing-uri return.
+        if (isSharedDocumentMime(intent.type) && intent.hasExtra(Intent.EXTRA_STREAM)) {
             handleSharedDocument(intent)
             return
         }
@@ -383,9 +387,19 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_TEXT)
     }
 
-    // Document mimes the share filter accepts — mirrors the in-app picker's
-    // document route (PDF/CSV → gateway extraction via captureDocument).
-    private fun isSharedDocumentMime(mime: String?): Boolean = mime == "application/pdf" || mime == "text/csv" || mime == "text/comma-separated-values"
+    // Document mimes the share filter accepts — must stay in lockstep with the
+    // manifest SEND filter and the gateway extraction dispatcher
+    // (document_extract.go): PDF/CSV/OOXML(docx·xlsx·pptx)/Markdown. HWP is
+    // deliberately absent — the gateway has no extractor, so accepting it would
+    // only surface an extraction error.
+    private fun isSharedDocumentMime(mime: String?): Boolean = when {
+        mime == null -> false
+        mime == "application/pdf" -> true
+        mime == "text/csv" || mime == "text/comma-separated-values" -> true
+        mime == "text/markdown" -> true
+        mime.contains("wordprocessingml") || mime.contains("spreadsheetml") || mime.contains("presentationml") -> true
+        else -> false
+    }
 
     // Shared image -> gateway OCR -> chat. Reads the image bytes (a temporary read
     // grant rides with the share) and hands them to the gateway, which OCRs via the
@@ -442,10 +456,21 @@ class MainActivity : ComponentActivity() {
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
         val mime = intent.type ?: "application/pdf"
-        val name = sharedDisplayName(uri) ?: if (mime == "application/pdf") "shared.pdf" else "shared.csv"
+        val name = sharedDisplayName(uri) ?: ("shared" + sharedDocumentExt(mime))
         val client = get<DataRepository>() as? DenebGatewayClient ?: return
         lifecycleScope.launch { client.captureDocument(bytes, name, mime) }
         intent.removeExtra(Intent.EXTRA_STREAM)
+    }
+
+    // Fallback extension when the share carries no display name — the gateway
+    // dispatcher also matches on mime, so this only affects the shown filename.
+    private fun sharedDocumentExt(mime: String): String = when {
+        mime == "application/pdf" -> ".pdf"
+        mime == "text/markdown" -> ".md"
+        mime.contains("wordprocessingml") -> ".docx"
+        mime.contains("spreadsheetml") -> ".xlsx"
+        mime.contains("presentationml") -> ".pptx"
+        else -> ".csv"
     }
 
     // Multiple shared images (several receipt photos / scan pages): each rides the
