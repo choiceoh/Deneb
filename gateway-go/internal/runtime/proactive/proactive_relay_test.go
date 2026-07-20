@@ -614,6 +614,50 @@ func TestRelayCollapsed_CardBodyPreservedWithoutAccordionWrap(t *testing.T) {
 
 // The bypass mirrors the parser's fence tolerance: case-insensitive info
 // string and whitespace after the backticks must also bypass the accordion.
+// TestRelay_RepairsFenceGlitchInFeedCardBody verifies the relay repairs a
+// model fence-emission glitch (mid-card restart: "```" close + orphaned
+// "deneb-ui" line + rewritten card) before the body reaches the work feed —
+// the stored card must be a single valid fence, not truncated markup followed
+// by raw duplicate text.
+func TestRelay_RepairsFenceGlitchInFeedCardBody(t *testing.T) {
+	store := newRecordingTranscriptStore()
+	feed := &recordingWorkFeed{}
+	d := proactiveRelayDeps{transcriptStore: store, workFeed: feed}
+
+	glitched := strings.Join([]string{
+		"```deneb-ui",
+		"<column>",
+		`<text style="headline">발주 결재</text>`,
+		`<text style="`,
+		"```",
+		"deneb-ui",
+		"<column>",
+		`<text style="headline">발주 결재</text>`,
+		`<text style="body">재작성 본문 — 결재선과 입고기한 정리</text>`,
+		"</column>",
+		"```",
+	}, "\n")
+
+	delivered, err := d.relay(context.Background(), "ignored-session-key", glitched)
+	if err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if !delivered {
+		t.Fatal("relay should deliver a card body")
+	}
+	if len(feed.items) != 1 {
+		t.Fatalf("want 1 work-feed item, got %d", len(feed.items))
+	}
+	body := feed.items[0].Body
+	fences := denebui.ExtractFences(body)
+	if len(fences) != 1 {
+		t.Fatalf("feed body has %d card fences, want 1:\n%s", len(fences), body)
+	}
+	if !strings.Contains(fences[0], "재작성 본문") || strings.Contains(body, "\ndeneb-ui\n") {
+		t.Fatalf("glitch not repaired in feed body:\n%s", body)
+	}
+}
+
 func TestStartsWithDenebUIFence(t *testing.T) {
 	for _, ok := range []string{
 		"```deneb-ui\n<column/>\n```",

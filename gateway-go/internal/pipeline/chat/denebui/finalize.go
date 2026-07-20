@@ -22,6 +22,10 @@ func NormalizeFinalReply(text, sessionKey string, logger *slog.Logger) string {
 	// contract, so running the (lenient) deneb-ui scan afterwards cannot split
 	// a kept HTML document.
 	text = normalizeHTMLAnswers(text, sessionKey, logger)
+	if repairedText, glitched := RepairFenceGlitches(text); glitched {
+		logger.Warn("deneb-ui fence glitch repaired", "session", sessionKey)
+		text = repairedText
+	}
 	if !HasFence(text) {
 		return text
 	}
