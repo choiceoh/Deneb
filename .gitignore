@@ -56,6 +56,8 @@ docs/.generated/config-baseline.jsonl
 cache/
 .claude/worktrees/
 .zcode/worktrees/
+# Manual/worktrunk worktrees (wt switch --create; see docs/tools/worktrunk.md)
+.worktrees/
 # root CLI binary only — anchored so it does not also ignore the nested ai/deneb/ source package
 /deneb
 # SQLite project databases (IDE/tool artifacts)
