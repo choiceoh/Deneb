@@ -121,6 +121,25 @@ func TestSemanticTextFoldsFacetBehindKnob(t *testing.T) {
 	}
 }
 
+// TestRerankDocumentCarriesFacet pins the reranker's view of facet identity:
+// the document sent to the cross-encoder must carry the counterparty/site
+// vocabulary (else a lexical reranker demotes facet-recalled pages as noise),
+// and boost 0 must restore the pre-facet document.
+func TestRerankDocumentCarriesFacet(t *testing.T) {
+	const pagePath = "프로젝트/gunsan-rooftop-epc.md"
+	store := newFacetTestStore(t, true)
+	doc := store.rerankDocument(SearchResult{Path: pagePath})
+	if !strings.Contains(doc, "금호타이어") || !strings.Contains(doc, "수산리") {
+		t.Fatalf("rerank document missing facet vocabulary: %q", doc)
+	}
+
+	t.Setenv("DENEB_WIKI_FACET_BOOST", "0")
+	doc = store.rerankDocument(SearchResult{Path: pagePath})
+	if strings.Contains(doc, "금호타이어") {
+		t.Fatalf("rerank document carries facet at boost 0: %q", doc)
+	}
+}
+
 // TestFacetBoostZeroDisables pins the A/B lever: DENEB_WIKI_FACET_BOOST=0 must
 // omit the facet field entirely, restoring the pre-facet baseline index.
 func TestFacetBoostZeroDisables(t *testing.T) {

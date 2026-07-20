@@ -75,7 +75,18 @@ func (s *Store) rerankDocument(result SearchResult) string {
 		if runes := []rune(body); len(runes) > rerankDocBodyChars {
 			body = string(runes[:rerankDocBodyChars])
 		}
-		parts := []string{result.Path, page.Meta.Title, page.Meta.Summary, body}
+		parts := []string{result.Path, page.Meta.Title, page.Meta.Summary}
+		// Facet identity metadata (거래처/현장/코드) is hidden retrieval
+		// vocabulary the reranker otherwise never sees: a page recalled BY
+		// that vocabulary may carry none of it in title/summary/body, so a
+		// lexical cross-encoder scores the right page like noise (measured
+		// 2026-07-21: gold page −7.7 vs pure noise −10.3 for a 거래처 query;
+		// −3 hit@1 on the facet probe). Exposing it here lets the reranker
+		// judge what the page IS about. Same gate as the index-side facet.
+		if facet := facetText(page); facet != "" && wikiFacetBoostValue() > 0 {
+			parts = append(parts, facet)
+		}
+		parts = append(parts, body)
 		return strings.TrimSpace(strings.Join(parts, "\n"))
 	}
 	return strings.TrimSpace(strings.Join(append(append([]string(nil), result.Context...), result.Content), "\n"))
