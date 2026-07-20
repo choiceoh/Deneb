@@ -61,6 +61,18 @@ type goldCase struct {
 	Question    string   `json:"question"`
 	GoldPaths   []string `json:"gold_paths"`
 	MustContain []string `json:"must_contain"`
+	// MustNot lists answer tokens that must NOT surface. wiki-qa-bench.py --mode
+	// answer already scores them at the answer level; under --content they feed
+	// the retrieval-level leakage rate.
+	MustNot []string `json:"must_not"`
+	// OpType tags the memory-lifecycle operation the case probes: "" or
+	// "remember" (plain fact), "update" (fact was superseded), "forget" (fact
+	// was tombstone-deleted). Any other value counts as a malformed row.
+	OpType string `json:"op_type"`
+	// StaleValues holds old-value tokens from superseded/deleted pages; under
+	// --content the stale-value rate counts cases whose top-K result bodies
+	// still expose one.
+	StaleValues []string `json:"stale_values"`
 }
 
 // pathHit mirrors wiki-qa-bench.py path_hit: gold matches p only from a
@@ -294,8 +306,9 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
 
 	var content contentMatcher
+	var holds bodyHolder
 	if cfg.content {
-		content = newContentMatcher(cfg.wikiDir)
+		content, holds = newContentScorers(cfg.wikiDir)
 		fmt.Fprintln(stdout, "== content-aware scoring: a hit also counts when the page body holds every must_contain token")
 	}
 
@@ -326,7 +339,7 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			modeResult := evaluateCasesWithSearch(ctx, cases, cfg.k, cfg.verbose, stdout, func(ctx context.Context, query string, limit int) ([]wiki.SearchResult, error) {
 				report, searchErr := optionStore.SearchWithOptions(ctx, query, limit, wiki.QueryOptions{Mode: mode})
 				return report.Results, searchErr
-			}, content)
+			}, content, holds)
 			if err := modeResult.validate(); err != nil {
 				return fmt.Errorf("mode %s: %w", mode, err)
 			}
@@ -336,7 +349,7 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			}
 		}
 	} else {
-		result = evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout, content)
+		result = evaluateCases(ctx, store, cases, cfg.k, cfg.verbose, stdout, content, holds)
 		if err := result.validate(); err != nil {
 			return err
 		}
@@ -443,6 +456,16 @@ type benchmarkResult struct {
 	recall5Sum    float64
 	recallKSum    float64
 	f1KSum        float64
+	// Memory-lifecycle exposure (MemOps-style), scored only under --content:
+	// counted per case that carries the corresponding gold field, exposed when
+	// ANY of its tokens appears in a top-K result body. Additive — the P@K/MRR
+	// math above is untouched.
+	staleCases   int // cases with stale_values
+	staleExposed int // ...whose top-K bodies still expose a superseded/deleted value
+	leakCases    int // cases with must_not
+	leakExposed  int // ...whose top-K bodies expose a forbidden token
+	opUpdate     int // op_type=update cases seen
+	opForget     int // op_type=forget cases seen
 }
 
 func evaluateCases(
@@ -453,8 +476,9 @@ func evaluateCases(
 	verbose bool,
 	stdout io.Writer,
 	content contentMatcher,
+	holds bodyHolder,
 ) benchmarkResult {
-	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, store.Search, content)
+	return evaluateCasesWithSearch(ctx, cases, k, verbose, stdout, store.Search, content, holds)
 }
 
 func evaluateCasesWithSearch(
@@ -465,6 +489,7 @@ func evaluateCasesWithSearch(
 	stdout io.Writer,
 	search func(context.Context, string, int) ([]wiki.SearchResult, error),
 	content contentMatcher,
+	holds bodyHolder,
 ) benchmarkResult {
 	var result benchmarkResult
 	for _, c := range cases {
@@ -481,11 +506,50 @@ func evaluateCasesWithSearch(
 		result.latencies = append(result.latencies, elapsed)
 		rank := findGoldRank(matches, c, k, content)
 		result.record(rank, rankingQuality(matches, c, k, content))
+		if holds != nil {
+			result.recordLifecycle(c, matches, k, holds)
+		}
 		if verbose {
 			writeCaseResult(stdout, c, matches, rank)
 		}
 	}
 	return result
+}
+
+// recordLifecycle scores the memory-lifecycle exposure of one case: whether any
+// stale_values (superseded/deleted old values) or must_not (forbidden answers)
+// token still surfaces in a top-K result body. This is the retrieval-level twin
+// of wiki-qa-bench.py --mode answer's must_not scoring.
+func (r *benchmarkResult) recordLifecycle(c goldCase, results []wiki.SearchResult, k int, holds bodyHolder) {
+	switch c.OpType {
+	case "update":
+		r.opUpdate++
+	case "forget":
+		r.opForget++
+	}
+	if len(c.StaleValues) == 0 && len(c.MustNot) == 0 {
+		return
+	}
+	staleHit, leakHit := false, false
+	for i, result := range results {
+		if i >= k {
+			break
+		}
+		staleHit = staleHit || (len(c.StaleValues) > 0 && holds(result.Path, c.StaleValues))
+		leakHit = leakHit || (len(c.MustNot) > 0 && holds(result.Path, c.MustNot))
+	}
+	if len(c.StaleValues) > 0 {
+		r.staleCases++
+		if staleHit {
+			r.staleExposed++
+		}
+	}
+	if len(c.MustNot) > 0 {
+		r.leakCases++
+		if leakHit {
+			r.leakExposed++
+		}
+	}
 }
 
 func (r benchmarkResult) latencyPercentile(percentile float64) time.Duration {
@@ -509,11 +573,17 @@ func (r benchmarkResult) latencyPercentile(percentile float64) time.Duration {
 // reads the exact tree the bench searched.
 type contentMatcher func(path string, mustContain []string) bool
 
-// newContentMatcher reads page bodies from wikiDir and reports a hit when every
-// must_contain token appears (a "a|b" token is satisfied by ANY alternative).
-// Empty must_contain never matches (falls back to path-only). A page cache keeps
-// repeated reads across the top-K window cheap.
-func newContentMatcher(wikiDir string) contentMatcher {
+// bodyHolder reports whether a result page's body exposes ANY of the given
+// tokens (a "a|b" token matches on any alternative). nil disables the lifecycle
+// (stale-value/leakage) metrics — they only make sense with page bodies.
+type bodyHolder func(path string, tokens []string) bool
+
+// newContentScorers builds both content-aware scorers over ONE shared page
+// cache: the matcher reports a hit when EVERY must_contain token appears (empty
+// never matches — falls back to path-only), the holder reports exposure when
+// ANY token appears (empty never exposes). The cache keeps repeated reads
+// across the top-K window cheap.
+func newContentScorers(wikiDir string) (contentMatcher, bodyHolder) {
 	cache := make(map[string]string)
 	read := func(rel string) string {
 		if b, ok := cache[rel]; ok {
@@ -531,7 +601,15 @@ func newContentMatcher(wikiDir string) contentMatcher {
 		cache[rel] = body
 		return body
 	}
-	return func(path string, mustContain []string) bool {
+	tokenIn := func(body, tok string) bool {
+		for _, alt := range strings.Split(tok, "|") {
+			if alt != "" && strings.Contains(body, alt) {
+				return true
+			}
+		}
+		return false
+	}
+	matcher := func(path string, mustContain []string) bool {
 		if len(mustContain) == 0 {
 			return false
 		}
@@ -540,19 +618,32 @@ func newContentMatcher(wikiDir string) contentMatcher {
 			return false
 		}
 		for _, tok := range mustContain {
-			ok := false
-			for _, alt := range strings.Split(tok, "|") {
-				if alt != "" && strings.Contains(body, alt) {
-					ok = true
-					break
-				}
-			}
-			if !ok {
+			if !tokenIn(body, tok) {
 				return false
 			}
 		}
 		return true
 	}
+	holder := func(path string, tokens []string) bool {
+		body := read(path)
+		if body == "" {
+			return false
+		}
+		for _, tok := range tokens {
+			if tokenIn(body, tok) {
+				return true
+			}
+		}
+		return false
+	}
+	return matcher, holder
+}
+
+// newContentMatcher keeps the single-scorer constructor for callers (and tests)
+// that only need must_contain matching.
+func newContentMatcher(wikiDir string) contentMatcher {
+	matcher, _ := newContentScorers(wikiDir)
+	return matcher
 }
 
 func caseHit(result wiki.SearchResult, c goldCase, content contentMatcher) bool {
@@ -704,6 +795,7 @@ func writeBenchmarkResult(out io.Writer, k int, fusion string, result benchmarkR
 	fmt.Fprintf(out, "RECALL_BENCH hit@1=%d hit@%d=%d total=%d p@1=%.1f%% r@%d=%.1f%% mrr=%.3f fusion=%s\n",
 		result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored), fusion)
 	writeQualityMetrics(out, "RECALL_BENCH_QUALITY", k, result)
+	writeLifecycleMetrics(out, "RECALL_BENCH_LIFECYCLE", k, result)
 }
 
 func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, result benchmarkResult) {
@@ -715,6 +807,7 @@ func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, resu
 		mode, result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored),
 		float64(result.latencyPercentile(0.50))/float64(time.Millisecond), float64(result.latencyPercentile(0.95))/float64(time.Millisecond))
 	writeQualityMetrics(out, "RECALL_BENCH_MATRIX_QUALITY mode="+string(mode), k, result)
+	writeLifecycleMetrics(out, "RECALL_BENCH_MATRIX_LIFECYCLE mode="+string(mode), k, result)
 }
 
 // reportByCategory answers the question that decides whether per-query-type
@@ -769,7 +862,8 @@ func reportByCategory(
 		p1 := make(map[wiki.SearchMode]float64, len(modes))
 		var scored int
 		for _, mode := range modes {
-			res := evaluateCasesWithSearch(ctx, grp, k, false, io.Discard, searchFor(mode), content)
+			// Lifecycle metrics stay off (nil holder) — this report prints P@1 only.
+			res := evaluateCasesWithSearch(ctx, grp, k, false, io.Discard, searchFor(mode), content, nil)
 			scored = res.scored
 			if res.scored > 0 {
 				p1[mode] = 100 * float64(res.hit1) / float64(res.scored)
@@ -874,6 +968,27 @@ func writeQualityMetrics(out io.Writer, prefix string, k int, result benchmarkRe
 		k, result.recallKSum/denominator, k, result.f1KSum/denominator)
 }
 
+// writeLifecycleMetrics prints the stale-value and leakage rates (lower is
+// better: % of lifecycle-labeled cases whose top-K result bodies expose an old
+// or forbidden value). Printed only when the run scored at least one such case
+// under --content, so existing gold sets keep byte-identical output.
+func writeLifecycleMetrics(out io.Writer, prefix string, k int, result benchmarkResult) {
+	if result.staleCases == 0 && result.leakCases == 0 {
+		return
+	}
+	rate := func(exposed, cases int) float64 {
+		if cases == 0 {
+			return 0
+		}
+		return 100 * float64(exposed) / float64(cases)
+	}
+	fmt.Fprintf(out, "%s k=%d stale_rate=%.1f%% (%d/%d) leak_rate=%.1f%% (%d/%d) op_update=%d op_forget=%d\n",
+		prefix, k,
+		rate(result.staleExposed, result.staleCases), result.staleExposed, result.staleCases,
+		rate(result.leakExposed, result.leakCases), result.leakExposed, result.leakCases,
+		result.opUpdate, result.opForget)
+}
+
 // loadGold parses the gold JSONL, returning the cases and the count of malformed
 // (non-empty, unparseable) rows so the caller can refuse to score against
 // corrupt data. Blank lines are not malformed.
@@ -896,6 +1011,14 @@ func loadGold(path string) ([]goldCase, int, error) {
 		}
 		var c goldCase
 		if err := json.Unmarshal(line, &c); err != nil {
+			skipped++
+			continue
+		}
+		// A typo'd op_type would silently score as a plain remember case and
+		// misreport the lifecycle rates — treat it as malformed instead.
+		switch c.OpType {
+		case "", "remember", "update", "forget":
+		default:
 			skipped++
 			continue
 		}
