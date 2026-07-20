@@ -314,6 +314,19 @@ Five workstreams, in priority order:
    real-usage stats never conflate synthetic demand with operator demand
    (ground rule 3). Refs: DemoEvolve 2605.24539, SkillFlow 2604.17308,
    EvoAgentBench 2607.05202.
+   **SkillCorpus (2607.15557, reviewed 2026-07-20)** adds two external
+   anchors: (a) its 96K-skill study found composite LLM quality scores DO NOT
+   predict per-task success (all |r|<0.10) — corroborating the deterministic
+   replay-first acceptance principle; never rank or cull skills by judge
+   score alone. (b) Per-task gain tracks retrieval-match quality (r≈0.31–0.40;
+   +2.2pp lowest bin → +25.1pp highest) — a low best-match relevance score
+   over real sessions is therefore a coverage-gap DEMAND signal; candidate
+   future curriculum input once per-session match scores are ledgered
+   (deferred: needs session-side scoring + ledger plumbing). Rejected from
+   the same paper: corpus import (supply-chain surface + English-dominant),
+   semantic dedup tiers (scale mismatch at our catalog size), and regex
+   safety hard-gates (the paper itself measured >90% false positives,
+   audit-only).
 
    *Slice-2 LANDED (EnvDigest wiring).* The curriculum producer now sees the
    operator's active work (recent feed-item titles) and wiki environment
