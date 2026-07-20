@@ -16,12 +16,15 @@ import (
 )
 
 // RegisterFileTools registers the workspace file read/write/edit/grep surface.
-func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, skillsCatalogDirs ...string) {
+// extraReadRoots are curated read-only roots outside the workspace (skill
+// catalogs, the memory root) honored by read and grep; write/edit stay
+// workspace-jailed.
+func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, extraReadRoots ...string) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "read",
 		Description: "Read file contents with line numbers for code review (default: 2000 lines). Use offset/limit for large files; equivalent to a clean bat/cat -n view",
 		InputSchema: schema.ReadToolSchema(),
-		Fn:          filesystem.ToolRead(workspaceDir, skillsCatalogDirs...),
+		Fn:          filesystem.ToolRead(workspaceDir, extraReadRoots...),
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "write",
@@ -43,7 +46,7 @@ func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, ski
 		Name:        "grep",
 		Description: "Regex search across files (rg / ripgrep). Use include/fileType to narrow scope. Returns file:line:match format",
 		InputSchema: schema.GrepToolSchema(),
-		Fn:          filesystem.ToolGrep(workspaceDir),
+		Fn:          filesystem.ToolGrep(workspaceDir, extraReadRoots...),
 	})
 }
 
