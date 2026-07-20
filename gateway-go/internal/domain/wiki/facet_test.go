@@ -91,6 +91,36 @@ func TestSearchReturnsPageByFacetOnly(t *testing.T) {
 	}
 }
 
+// TestSemanticTextFoldsFacetBehindKnob pins the semantic half of the facet
+// gate: with the boost on, the embedded text and every chunk's identity prefix
+// carry facet vocabulary (visible snippets must not), and boost 0 removes it —
+// the contentHash cache key then re-embeds affected pages on the next warm.
+func TestSemanticTextFoldsFacetBehindKnob(t *testing.T) {
+	page := facetTestPage(true)
+
+	t.Setenv("DENEB_WIKI_FACET_BOOST", "2.5")
+	if got := semanticText(page); !strings.Contains(got, "금호타이어") {
+		t.Fatalf("semanticText missing facet vocabulary: %q", got)
+	}
+	chunks := semanticChunkInputs("프로젝트/gunsan-rooftop-epc.md", page)
+	if len(chunks) == 0 {
+		t.Fatal("semanticChunkInputs returned no chunks")
+	}
+	for _, c := range chunks {
+		if !strings.Contains(c.text, "금호타이어") {
+			t.Fatalf("chunk embed text missing facet identity: %q", c.text)
+		}
+		if strings.Contains(c.snippet, "금호타이어") {
+			t.Fatalf("facet vocabulary leaked into visible snippet: %q", c.snippet)
+		}
+	}
+
+	t.Setenv("DENEB_WIKI_FACET_BOOST", "0")
+	if got := semanticText(page); strings.Contains(got, "금호타이어") {
+		t.Fatalf("semanticText carries facet vocabulary at boost 0: %q", got)
+	}
+}
+
 // TestFacetBoostZeroDisables pins the A/B lever: DENEB_WIKI_FACET_BOOST=0 must
 // omit the facet field entirely, restoring the pre-facet baseline index.
 func TestFacetBoostZeroDisables(t *testing.T) {

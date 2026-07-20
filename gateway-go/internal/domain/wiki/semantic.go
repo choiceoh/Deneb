@@ -497,10 +497,16 @@ func (s *Store) SemanticStatus() SemanticIndexStatus {
 }
 
 // semanticText is the text embedded for a page: title + summary + cue anchors +
-// body, which is what a meaning-based query should match against. Cues are the
-// alternate phrasings a future query may use, so folding them into the embedding
-// pulls the page's vector toward the question vocabulary; a page whose cues
-// change re-embeds automatically via the contentHash cache key.
+// facet identity metadata + body, which is what a meaning-based query should
+// match against. Cues are the alternate phrasings a future query may use, so
+// folding them into the embedding pulls the page's vector toward the question
+// vocabulary; a page whose cues change re-embeds automatically via the
+// contentHash cache key. Facet metadata (facetText: 거래처/현장/코드) folds in
+// behind the same DENEB_WIKI_FACET_BOOST gate as the lexical facet field —
+// the RRF semantic arm carries 10x the BM25 weight, so counterparty/site
+// vocabulary reachable only lexically stayed half-covered (facet probe:
+// client-arm recovery 1/45 with the BM25 field alone). Toggling the knob
+// changes this text and therefore re-embeds facet pages on the next warm.
 func semanticText(page *Page) string {
 	if page == nil {
 		return ""
@@ -512,6 +518,9 @@ func semanticText(page *Page) string {
 	}
 	if len(page.Meta.Cues) > 0 {
 		sb.WriteString("\n" + strings.Join(page.Meta.Cues, " · "))
+	}
+	if facet := facetText(page); facet != "" && wikiFacetBoostValue() > 0 {
+		sb.WriteString("\n" + facet)
 	}
 	if page.Body != "" {
 		sb.WriteString("\n" + page.Body)
@@ -536,11 +545,18 @@ func semanticChunkInputs(relPath string, page *Page) []semanticChunkInput {
 	if page == nil {
 		return nil
 	}
-	identity := strings.TrimSpace(strings.Join([]string{
+	identityParts := []string{
 		page.Meta.Title,
 		page.Meta.Summary,
 		strings.Join(page.Meta.Cues, " · "),
-	}, "\n"))
+	}
+	// Same facet fold (and gate) as semanticText: every body chunk carries the
+	// page's counterparty/site/code identity so a facet-vocabulary query can
+	// reach any chunk, not just the identity chunk.
+	if facet := facetText(page); facet != "" && wikiFacetBoostValue() > 0 {
+		identityParts = append(identityParts, facet)
+	}
+	identity := strings.TrimSpace(strings.Join(identityParts, "\n"))
 	bodyStart := pageBodyStartLine(page)
 	chunks := textchunk.Split(relPath, page.Body, textchunk.Options{
 		TargetRunes: textchunk.DefaultTargetRunes,
