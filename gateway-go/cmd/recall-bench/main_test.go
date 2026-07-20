@@ -132,7 +132,7 @@ func TestRunCLIPreservesScoringAndSearchErrorPolicy(t *testing.T) {
 		"--wiki", "wiki-copy", "--diary", "diary-copy", "--gold", "gold.jsonl", "--k", "2", "-v",
 	}, &stdout, &stderr, deps)
 
-	if code != 0 || stderr.Len() != 0 {
+	if code != 0 || stderr.String() != bm25DegradedWarning {
 		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
 	}
 	for _, want := range []string{
@@ -163,7 +163,7 @@ func TestRunCLIMatrixComparesAllRetrievalStagesWithLatency(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	code := runCLI("recall-bench", []string{"--wiki", "wiki-copy", "--matrix"}, &stdout, &stderr, deps)
-	if code != 0 || stderr.Len() != 0 {
+	if code != 0 || stderr.String() != bm25DegradedWarning {
 		t.Fatalf("exit=%d stderr=%q", code, stderr.String())
 	}
 	for _, mode := range []wiki.SearchMode{wiki.SearchModeBM25, wiki.SearchModeSemantic, wiki.SearchModeHybrid, wiki.SearchModeFull} {
@@ -240,7 +240,7 @@ func TestRunCLIPreservesGoldAndZeroScoreErrors(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			code := runCLI("recall-bench", []string{"--wiki", "wiki-copy", "--gold", "gold.jsonl"}, &stdout, &stderr, deps)
-			if code != 1 || stderr.String() != tt.wantError {
+			if code != 1 || stderr.String() != bm25DegradedWarning+tt.wantError {
 				t.Fatalf("exit=%d stderr=%q", code, stderr.String())
 			}
 			if !store.closed {

@@ -150,6 +150,10 @@ type benchmarkConfig struct {
 	split       string
 }
 
+// bm25DegradedWarning flags a run whose semantic arm never came up. Kept as a
+// const so tests pin the exact message alongside their own stderr expectations.
+const bm25DegradedWarning = "recall-bench: WARNING — embedding server unreachable; scoring is BM25-degraded, NOT production parity (set DENEB_EMBEDDING_URL, e.g. http://127.0.0.1:8002)\n"
+
 type parseOutcome struct {
 	done     bool
 	exitCode int
@@ -292,6 +296,14 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	semantic, err := prepareSemantic(ctx, store, deps.newEmbedder(logger), deps.sleep)
 	if err != nil {
 		return err
+	}
+	if !semantic {
+		// Loud, not just a header flag: a silently BM25-degraded run produces
+		// numbers that look complete but measure a different retrieval stack —
+		// exactly how the 2026-07-20 facet sweep got benched without its
+		// semantic arm (default embedder URL is the retired :8001; production
+		// sets DENEB_EMBEDDING_URL via the gateway drop-in).
+		fmt.Fprint(stderr, bm25DegradedWarning)
 	}
 	cases, err := loadValidatedCases(cfg.goldPath, deps.loadCases)
 	if err != nil {
