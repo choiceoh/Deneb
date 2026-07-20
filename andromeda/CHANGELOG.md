@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.96](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.95...andromeda-v0.0.96) (2026-07-19)
+
+
+### ✨ Features
+
+* **andromeda:** TS state-register — tsc 타입체커 기반 워크스테이션 상태 w/r 맵 ([#4003](https://github.com/choiceoh/Deneb/issues/4003)) ([f5674b1](https://github.com/choiceoh/Deneb/commit/f5674b159b694e37f5f8a8271431e171e6b4df5c))
+* **andromeda:** 그리드 행 우클릭 컨텍스트 메뉴 (메일·할일) — 감사 W7 잔여분 ([#3959](https://github.com/choiceoh/Deneb/issues/3959)) ([31a2fe5](https://github.com/choiceoh/Deneb/commit/31a2fe53d8a1928fe7c4a5597859c80331ee104a))
+* **audit:** doc-ref-lint — 문서 코드참조 validate-or-freeze 게이트 (arXiv:2607.13285) + 실측 rot 수정 ([#3966](https://github.com/choiceoh/Deneb/issues/3966)) ([835e7bc](https://github.com/choiceoh/Deneb/commit/835e7bcf09504be7acbdaf7c929413dfee2ff8e2))
+* **audit:** doc-ref-lint 경고 전수 클린 — 휴리스틱 개선 + 문서 rot 수리 ([#3991](https://github.com/choiceoh/Deneb/issues/3991)) ([4453301](https://github.com/choiceoh/Deneb/commit/445330129a0b51cc173ad6575b88ef162185df09))
+* **workstation:** 활용 2탄 — 알림 복귀 내비·모닝 브리핑 투어·효용 원장 관찰 카드 ([#3951](https://github.com/choiceoh/Deneb/issues/3951)) ([97f97df](https://github.com/choiceoh/Deneb/commit/97f97dffdd9e3e28d0eae45f41a86f25d4712ca7))
+* **workstation:** 활용 3탄 — 결재 검토 모드·컨텍스트 팔로우·효용 원장 자기조정 ([#3954](https://github.com/choiceoh/Deneb/issues/3954)) ([dbea2df](https://github.com/choiceoh/Deneb/commit/dbea2df5fff773c98517b7ec6c2ff09cb355b00f))
+* 모닝레터 마감줄 롱프레스 완료 처리 (deneb-ui longpress + 위키 due_done) ([#3979](https://github.com/choiceoh/Deneb/issues/3979)) ([6200730](https://github.com/choiceoh/Deneb/commit/620073020c3e24ce6542f9b3a01a412a14f1fe83))
+
 ## [0.0.95](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.94...andromeda-v0.0.95) (2026-07-18)
 
 
