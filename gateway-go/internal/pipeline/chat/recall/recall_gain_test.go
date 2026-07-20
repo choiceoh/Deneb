@@ -378,8 +378,13 @@ func TestRecallStaleBeliefGuardFlagsStaleValueWithMarker(t *testing.T) {
 		t.Errorf("diary-only unexpectedly carried a %q signal (corpus drift?)", supersedeMarker)
 	}
 	// The wiki's value: it flags the stale value and surfaces the corrected one.
-	if !wikiMarksOld {
-		t.Errorf("wiki path did not flag the stale value %q with a %q marker on its own row", stale.staleOld, supersedeMarker)
+	// The wiki's value: surface the corrected fact, and either mark the stale
+	// wiki row OR hard-filter it (M4). Diary may still carry an unmarked stale
+	// line — curation must not make unmarked stale worse than diary-only.
+	// M4 hard-filters superseded wiki pages (path absent). Marker is the soft path.
+	wikiOmitsSupersededPage := !strings.Contains(wikiOut, "거래/acme-old.md")
+	if !wikiMarksOld && !wikiOmitsSupersededPage {
+		t.Errorf("wiki path neither flagged stale %q nor omitted superseded page 거래/acme-old.md", stale.staleOld)
 	}
 	if !wikiSurfacesNew {
 		t.Errorf("wiki path failed to surface the revised value %q", stale.wantAll[0])

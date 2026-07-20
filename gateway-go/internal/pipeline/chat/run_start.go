@@ -262,6 +262,7 @@ func (h *Handler) buildRunDeps() runDeps {
 		disableTier1Wiki:     h.disableTier1Wiki,
 		semanticNow:          h.semanticNow,
 		semanticTimezone:     h.semanticTimezone,
+		workspaceDir:         h.workspaceDir,
 		promptWorkspaceDir:   h.promptWorkspaceDir,
 		briefcaseMode:        h.briefcaseMode,
 		auditSystemPrompt:    h.auditSystemPrompt,

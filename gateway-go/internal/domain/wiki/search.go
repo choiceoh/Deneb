@@ -155,7 +155,7 @@ func validityFactor(meta Frontmatter, now time.Time) float64 {
 		f *= 0.3
 	}
 	if meta.SupersededBy != "" {
-		f *= 0.5
+		f *= 0.15 // hard demotion — latest-state wins (M4)
 	}
 	if meta.Updated != "" {
 		if t, err := time.Parse("2006-01-02", meta.Updated); err == nil {

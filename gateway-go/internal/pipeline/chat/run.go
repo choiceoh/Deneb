@@ -94,6 +94,7 @@ type runDeps struct {
 	disableTier1Wiki     bool
 	semanticNow          func() time.Time
 	semanticTimezone     string
+	workspaceDir         string // real agent workspace (MEMORY.md lives here)
 	promptWorkspaceDir   string
 	briefcaseMode        bool
 	strictErrors         *strictRunErrorSink

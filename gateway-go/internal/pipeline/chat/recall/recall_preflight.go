@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+	mem "github.com/choiceoh/deneb/gateway-go/internal/domain/memory"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -151,12 +152,13 @@ func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, logger *s
 }
 
 type recallEvidence struct {
-	Kind   string
-	Source string
-	Query  string
-	Note   string
-	Score  float64
-	At     int64
+	Kind      string
+	Source    string
+	Query     string
+	Note      string
+	Score     float64
+	At        int64
+	SubjectID string // empty/self = operator; used for cross-subject filtering (M6)
 }
 
 type recallSource struct {
@@ -431,6 +433,7 @@ func rankRecallEvidence(
 	applyBroadeningPenalty(evidence, queries)
 	evidence = dedupRecallEvidence(evidence)
 	applyProvenancePenalty(evidence)
+	evidence = filterCrossSubjectEvidence(evidence, message)
 
 	if temporalRange := parseRecallTemporalRangeAt(message, now); temporalRange.ok {
 		for i := range evidence {
@@ -451,6 +454,41 @@ func rankRecallEvidence(
 		return evidence[:budget]
 	}
 	return evidence
+}
+
+// filterCrossSubjectEvidence drops wiki rows whose SubjectID is a non-self
+// identity the query does not name (M6). Self/empty subjects always pass.
+func filterCrossSubjectEvidence(evidence []recallEvidence, message string) []recallEvidence {
+	if len(evidence) == 0 {
+		return evidence
+	}
+	querySubjects := recallQuerySubjects(message)
+	out := evidence[:0]
+	for _, ev := range evidence {
+		if ev.Kind == "wiki" && mem.CrossSubjectBlocked(ev.SubjectID, querySubjects) {
+			continue
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+// recallQuerySubjects extracts coarse subject tokens from the user message for
+// cross-subject gating. Not a NER — path fragments and spaced tokens.
+func recallQuerySubjects(message string) []string {
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Fields(msg) {
+		p := strings.Trim(part, `.,!?"'“”`)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // hasCue reports whether a message explicitly asks to recall prior context.
