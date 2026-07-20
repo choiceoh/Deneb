@@ -29,6 +29,7 @@ func RepairFenceGlitches(text string) (string, bool) {
 	cardStart := -1 // index in out of the open deneb-ui fence's opener line
 	inOther := false
 	isHTML, htmlDecided := false, false
+	inMarkdown, inCode := false, false
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		t := strings.TrimSpace(line)
@@ -39,8 +40,23 @@ func RepairFenceGlitches(text string) (string, bool) {
 			}
 			out = append(out, line)
 		case cardStart >= 0:
+			if isHTML {
+				lt := strings.ToLower(t)
+				if strings.HasPrefix(lt, "<markdown") && !strings.HasPrefix(lt, "</markdown") {
+					inMarkdown = true
+				}
+				if strings.HasPrefix(lt, "</markdown") {
+					inMarkdown = false
+				}
+				if strings.HasPrefix(lt, "<code") && !strings.HasPrefix(lt, "</code") {
+					inCode = true
+				}
+				if strings.HasPrefix(lt, "</code") {
+					inCode = false
+				}
+			}
 			if isFenceClose(t) {
-				if i+1 < len(lines) && isBareFenceInfoLine(lines[i+1]) {
+				if i+1 < len(lines) && isBareFenceInfoLine(lines[i+1]) && !inMarkdown && !inCode {
 					// Close + orphaned info line = the model aborted this card
 					// and restarted it. Drop the aborted attempt (keeping any
 					// prose glued before its opener) and collect the restarted
@@ -53,6 +69,7 @@ func RepairFenceGlitches(text string) (string, bool) {
 					out = append(out, "```"+FenceInfo)
 					cardStart = len(out) - 1
 					isHTML, htmlDecided = false, false
+					inMarkdown, inCode = false, false
 					i++ // skip the orphaned info line
 					repaired = true
 					continue
