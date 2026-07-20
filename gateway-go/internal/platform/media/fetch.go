@@ -324,6 +324,39 @@ func SSRFSafeDialer() func(ctx context.Context, network, addr string) (net.Conn,
 	}
 }
 
+// ValidatePublicTarget verifies rawURL is http(s) and that its host resolves
+// only to public addresses. It exists for callers that hand the URL to a
+// fetcher OUTSIDE the SSRF-safe transport (e.g. the resident browser sidecar),
+// where the dialer guard never runs. Fail-closed: resolution failures are
+// rejections. DNS rebinding between this check and the external fetch is out
+// of scope, matching SSRFSafeDialer's resolve-then-connect contract.
+func ValidatePublicTarget(ctx context.Context, rawURL string) error {
+	if err := validateURL(rawURL); err != nil {
+		return err
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	host := u.Hostname()
+	if net.ParseIP(host) != nil {
+		return nil // literal IP already vetted by validateURL
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return fmt.Errorf("SSRF: resolve %s: %w", host, err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("SSRF: no addresses for host %s", host)
+	}
+	for _, addr := range ips {
+		if isPrivateIP(addr.IP) {
+			return fmt.Errorf("SSRF: resolved IP %s for host %s is private", addr.IP, host)
+		}
+	}
+	return nil
+}
+
 // --- Helpers ---
 
 func parseContentDispositionFileName(header string) string {

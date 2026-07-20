@@ -25,8 +25,15 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
   담당한다. 기본 추출은 htmlmd이고 LocalAI는 대용량·저retention에만 게이트된다.
   binary document는 `tools/document`로 위임한다.
 - `web_fetch_stealth.go`는 stage 간 고정 sleep 없이 Chrome→(soft-block 시)
-  Firefox→Jina로 올리고, SPA shell(`js_required`/`empty_body`)은 Firefox를
-  건너뛰고 Jina로 간다. Serper scrape 타임아웃은 10s fail-fast.
+  Firefox→**상주 브라우저 사이드카(:18930, `web_fetch_browser.go`)**→Jina로
+  올리고, SPA shell(`js_required`/`empty_body`)은 Firefox를 건너뛰고 렌더
+  스테이지로 간다. Jina는 사이드카 실패 시에만 도는 외부 최후 폴백.
+  `web_fetch_tier.go`의 도메인별 티어 메모리(state dir `web-stealth-tiers.json`,
+  7d TTL·24h 하향 프로브)가 시작 스테이지를 고른다. 사이드카 디스패치는
+  `media.ValidatePublicTarget`으로 사설망을 차단한다(티어 점프가 SSRF-safe
+  transport를 우회할 수 있어 필수). Serper scrape 타임아웃은 10s fail-fast.
+- thin-content 에스컬레이션(`web_fetch_escalate.go`)도 같은 순서: 로컬
+  사이드카 렌더 먼저, Jina는 그 실패 시에만.
 - `archive.go`는 fetch된 document만 `filestore`에 보존하며 일반 HTML은
   archive하지 않는다.
 

@@ -5,14 +5,19 @@
 //
 //	Stage 0: Standard browser profile (Chrome on macOS)
 //	Stage 1: Alternate profile (Firefox on Windows) + cookie jar
-//	Stage 2: Jina Reader fallback (headless render — beats SPA / JS / bot walls)
+//	Stage 2: Resident browser sidecar render (web_fetch_browser.go — local
+//	         JS-executing render; beats SPA / JS / bot walls without the URL
+//	         leaving the machine)
+//	Stage 3: Jina Reader fallback (external last resort, only when the local
+//	         sidecar is down or its render fails)
 //
 // Each profile includes the full set of headers a real browser sends:
 // User-Agent, Accept, Accept-Language, Accept-Encoding, Sec-Fetch-*, etc.
 //
-// The Jina Reader stage is a *last-resort, external* fallback: it only runs
-// after both local browser-profile attempts fail/soft-block, honoring the
-// project's local-first principle while still recovering JS-required pages.
+// Per-domain tier memory (web_fetch_tier.go) starts the ladder at the stage
+// that last worked for the domain, skipping the lower stages that were
+// observed to fail — with a daily down-probe so domains drift back to cheaper
+// tiers when they recover.
 package web
 
 import (
@@ -22,6 +27,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -77,22 +83,36 @@ var firefoxProfile = browserProfile{
 //
 //	0: Chrome profile
 //	1: Firefox profile + cookie jar (handles cookie-gated soft-blocks)
-//	2: Jina Reader fallback (headless render; recovers SPA/JS/bot-walled pages)
+//	2: Resident browser sidecar render (local headless-equivalent; recovers
+//	   SPA/JS/bot-walled pages without an external call)
+//	3: Jina Reader fallback (external last resort)
 //
 // Fixed inter-stage sleeps are intentionally omitted — they only added latency
 // on already-failing paths. Soft-blocks still try Firefox (cookie jar); SPA
-// shells (js_required/empty_body) skip Firefox and go straight to Jina.
+// shells (js_required/empty_body) skip Firefox and go straight to the render
+// stages. Per-domain tier memory picks the start stage; every stage that can
+// run from a cold start is individually SSRF-safe (profile stages via the
+// guarded transport, the sidecar via ValidatePublicTarget, Jina by fetching
+// from Jina's own network).
 //
 // Returns on first successful non-blocked response.
 func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media.FetchResult, error) {
 	stages := []struct {
 		profile browserProfile
 		jar     bool
+		browser bool
 		jina    bool
 	}{
-		{chromeProfile, false, false},
-		{firefoxProfile, true, false},
-		{chromeProfile, false, true},
+		{chromeProfile, false, false, false},
+		{firefoxProfile, true, false, false},
+		{chromeProfile, false, true, false},
+		{chromeProfile, false, false, true},
+	}
+
+	host := stealthHost(targetURL)
+	start := stealthTiers.startStage(host, time.Now())
+	if start >= len(stages) {
+		start = len(stages) - 1
 	}
 
 	var fetchErrors []error
@@ -100,11 +120,28 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 	skipFirefox := false
 
 	for i, stage := range stages {
+		if i < start {
+			continue
+		}
 		if stage.jar && skipFirefox {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+
+		if stage.browser {
+			result, err := browserRenderFn(ctx, targetURL, maxBytes)
+			if err != nil {
+				fetchErrors = append(fetchErrors, fmt.Errorf("stage %d (browser-sidecar): %w", i, err))
+				slog.Debug("stealth browser render failed, escalating",
+					"stage", i, "url", targetURL, "error", err)
+				continue
+			}
+			stealthTiers.recordSuccess(host, i, time.Now())
+			slog.Info("web stealth fetch done",
+				"url", targetURL, "stage", i, "profile", "browser-sidecar", "jina", false, "startStage", start)
+			return result, nil
 		}
 
 		fetchURL := targetURL
@@ -160,9 +197,10 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 			continue
 		}
 
-		// SPA shell after Chrome: Firefox won't execute JS either — skip to Jina.
+		// SPA shell after Chrome: Firefox won't execute JS either — skip
+		// straight to the render stages (sidecar, then Jina).
 		if i == 0 && !stage.jina && isSPAShellResult(result) {
-			slog.Debug("spa shell detected, skipping firefox for jina",
+			slog.Debug("spa shell detected, skipping firefox for render stages",
 				"stage", i, "url", targetURL)
 			spaFallback = result
 			skipFirefox = true
@@ -170,13 +208,15 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 			continue
 		}
 
+		stealthTiers.recordSuccess(host, i, time.Now())
 		slog.Info("web stealth fetch done",
-			"url", targetURL, "stage", i, "profile", stage.profile.name, "jina", stage.jina)
+			"url", targetURL, "stage", i, "profile", stage.profile.name, "jina", stage.jina, "startStage", start)
 		return result, nil
 	}
 
-	// Jina failed after an SPA shell — return the Chrome body so thin-content
-	// escalation (or the agent) still has something rather than a hard error.
+	// Render stages failed after an SPA shell — return the Chrome body so
+	// thin-content escalation (or the agent) still has something rather than a
+	// hard error.
 	if spaFallback != nil {
 		slog.Info("web stealth fetch spa fallback",
 			"url", targetURL, "stage", 0, "profile", chromeProfile.name)
@@ -184,6 +224,16 @@ func stealthFetch(ctx context.Context, targetURL string, maxBytes int64) (*media
 	}
 
 	return nil, errors.Join(fetchErrors...)
+}
+
+// stealthHost extracts the lowercased hostname for tier-memory keying.
+// Unparseable URLs yield "" (tier memory no-ops).
+func stealthHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 // isSPAShellResult reports whether a successful origin fetch is an unrendered

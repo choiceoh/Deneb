@@ -69,3 +69,25 @@ func extractMetaLine(out, prefix string) string {
 	}
 	return ""
 }
+
+// Live smoke for the stealth ladder's browser-sidecar stage: renders a real
+// public page through the resident sidecar (:18930 / DENEB_BROWSE_URL) with
+// the real public-target guard. Opt-in: DENEB_WEB_LIVE=1.
+func TestLiveBrowserSidecarRender(t *testing.T) {
+	if os.Getenv("DENEB_WEB_LIVE") != "1" {
+		t.Skip("set DENEB_WEB_LIVE=1 for live network smoke")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	result, err := browserRender(ctx, "https://example.com/", 64_000)
+	if err != nil {
+		t.Fatalf("browserRender via resident sidecar: %v", err)
+	}
+	if !strings.Contains(string(result.Data), "Example Domain") {
+		t.Fatalf("unexpected render body:\n%.200s", result.Data)
+	}
+	if !strings.HasPrefix(result.ContentType, "text/plain") {
+		t.Fatalf("content type = %q", result.ContentType)
+	}
+	t.Logf("browser sidecar render ok: %d bytes", result.Size)
+}
