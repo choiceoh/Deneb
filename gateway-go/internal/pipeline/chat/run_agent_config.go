@@ -86,6 +86,7 @@ type agentExecutionPolicy struct {
 // context; callers also receive spawnFlag and execStats for run-level reports.
 type agentRunState struct {
 	runCache           *RunCache
+	blackboard         *toolport.Blackboard
 	skillConsults      *SkillConsultLog
 	fileCache          *agent.FileCache
 	spawnFlag          *SpawnFlag
@@ -97,6 +98,7 @@ type agentRunState struct {
 func newAgentRunState(replayedDeferredTools []string) *agentRunState {
 	state := &agentRunState{
 		runCache:           NewRunCache(),
+		blackboard:         toolport.NewBlackboard(),
 		skillConsults:      NewSkillConsultLog(),
 		fileCache:          agent.NewFileCache(agent.DefaultFileCacheMaxItems),
 		spawnFlag:          NewSpawnFlag(),
@@ -118,6 +120,7 @@ func (s *agentRunState) turnInitializer(params RunParams, sessionToolPreset stri
 		ctx = WithSessionKey(ctx, params.SessionKey)
 		ctx = WithTurnContext(ctx, NewTurnContext())
 		ctx = WithRunCache(ctx, s.runCache)
+		ctx = toolport.WithBlackboard(ctx, s.blackboard)
 		ctx = WithSkillConsultLog(ctx, s.skillConsults)
 		ctx = WithFileCache(ctx, s.fileCache)
 		ctx = WithToolPreset(ctx, sessionToolPreset)

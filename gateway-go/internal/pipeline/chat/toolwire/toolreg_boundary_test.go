@@ -76,6 +76,7 @@ func allSchemaCases() []schemaCase {
 		{name: "market", build: schema.MarketToolSchema},
 		{name: "org", build: schema.OrgToolSchema},
 		{name: "goal", build: schema.GoalToolSchema},
+		{name: "blackboard", build: schema.BlackboardToolSchema},
 		{name: "mail_archive", build: schema.MailArchiveToolSchema},
 	}
 }
@@ -307,7 +308,7 @@ func TestActionEnumsAreNonEmptyUniqueAndDocumented(t *testing.T) {
 	actionSchemas := []string{
 		"process", "cron", "message", "gateway", "sessions", "subagents",
 		"files", "skills", "wiki", "notebook", "contacts", "calendar", "polaris",
-		"observe", "fleet", "browser", "groupware", "workfeed", "goal", "mail_archive",
+		"observe", "fleet", "browser", "groupware", "workfeed", "goal", "blackboard", "mail_archive",
 	}
 	byName := make(map[string]schemaCase)
 	for _, tc := range allSchemaCases() {
@@ -429,7 +430,7 @@ func TestRegisterCoreToolsWithMinimalDependenciesHasValidUniqueContracts(t *test
 	}
 	for _, eager := range []string{
 		"read", "write", "grep", "exec", "web", "sessions_spawn", "heartbeat_update",
-		"goal", "mail_archive", "transcribe", "ocr", "org", "message",
+		"goal", "blackboard", "mail_archive", "transcribe", "ocr", "org", "message",
 	} {
 		if !seen[eager] {
 			t.Errorf("minimal core missing %q", eager)
@@ -447,7 +448,7 @@ func TestRegisterCoreToolsDeferredPolicyContractMatchesOperationalIntent(t *test
 	RegisterCoreTools(reg, &tooldeps.CoreToolDeps{WorkspaceDir: t.TempDir()})
 	deferred := map[string]bool{
 		"read": false, "write": false, "grep": false, "exec": false, "web": false,
-		"sessions_spawn": false, "heartbeat_update": false, "goal": false,
+		"sessions_spawn": false, "heartbeat_update": false, "goal": false, "blackboard": false,
 		"mail_archive": false, "transcribe": true, "ocr": true, "org": true,
 		"office": false, // eager: document work is a core operator workflow
 		"edit":   true, "gateway": true, "observe": true, "fleet": true, "browser": true, "groupware": false,

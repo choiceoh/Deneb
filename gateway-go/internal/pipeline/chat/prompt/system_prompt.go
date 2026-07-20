@@ -21,6 +21,7 @@ var toolCategories = []struct {
 	{"Business", []string{"groupware", "org", "contacts", "deal_ledger", "market"}},
 	{"Memory", []string{"wiki", "polaris"}},
 	{"System", []string{"message", "gateway"}},
+	{"Workflow", []string{"blackboard", "goal"}},
 	{"Routine", []string{"cron"}},
 	{"Schedule", []string{"calendar"}},
 	{"Sessions", []string{"sessions", "sessions_spawn", "subagents"}},
@@ -295,6 +296,7 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 		s.WriteString("- Batch INDEPENDENT read-only lookups (web fetches, mail_archive/wiki/knowledge/polaris searches, file reads) into ONE turn — read-only batches execute in parallel, so two 20s fetches cost 20s, not 40s. Mutating or order-dependent calls stay sequential, one at a time.\n")
 		s.WriteString("- Use first-class tools directly: grep not exec+grep, edit not exec+sed, mail_archive for received mail. Gmail OAuth/account actions are not exposed to the agent surface. `grep`/`find`/`tree` are fast; prefer them over shelling out.\n")
 		s.WriteString("- `code_action` (Python) is ONLY for chaining 2+ tools with logic between them, or batch/join/filter/aggregate over their data. A single lookup or write — or independent reads that just need to run together (that's the parallel batch above) — calls the tool DIRECTLY; never wrap one call in Python. Reading a mail thread or a document is a direct `mail_archive` job, not a code_action job.\n")
+		s.WriteString("- Multi-tool handoffs: use `blackboard` (plan → begin → end, or put/get) for typed keys instead of free-text summaries. Other tool args may use the exact string \"$board.<key>\" to inject a stored value; missing keys fail closed.\n")
 		s.WriteString("- When shelling out, prefer: `rg`/`fd` (search), `jq`/`yq` (JSON/YAML), `bat` (read), `duckdb` (SQL over CSV/Parquet/xlsx/json), `pandoc` (md↔docx↔pdf↔html), `convert` (ImageMagick), `qpdf`/`pdftotext` (PDF), `ffmpeg`/`yt-dlp` (media), `gh` (GitHub).\n")
 		s.WriteString("- Prefer edit over write for partial changes (smaller token footprint).\n")
 		s.WriteString("- Any tool input accepts optional \"compress\": true — large output auto-summarized by local AI, saving context tokens.\n")

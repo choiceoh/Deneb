@@ -329,14 +329,16 @@ type toolCallSegment struct {
 // calls on either side still overlap among themselves. (Previously a single
 // unsafe call forced the WHOLE turn serial, wasting the wall-clock win the
 // parallel path was built for on any mixed turn.) Safety is per-tool via
-// cfg.ParallelSafeTool (read-only set, default-deny). Any $ref keeps the whole
-// turn sequential: piping means a later call depends on an earlier call's
-// result, and the sequential path is authoritative for dependency order.
+// cfg.ParallelSafeTool (read-only set, default-deny). Any $ref or $board.*
+// keeps the whole turn sequential: piping means a later call depends on an
+// earlier call's result / blackboard write, and the sequential path is
+// authoritative for dependency order.
 func segmentToolCalls(cfg AgentConfig, calls []llm.ContentBlock) []toolCallSegment {
 	allSequential := cfg.ParallelSafeTool == nil
 	if !allSequential {
 		for _, tc := range calls {
-			if bytes.Contains(tc.Input.Bytes(), []byte(`"$ref"`)) {
+			raw := tc.Input.Bytes()
+			if bytes.Contains(raw, []byte(`"$ref"`)) || bytes.Contains(raw, []byte(`"$board.`)) {
 				allSequential = true
 				break
 			}
