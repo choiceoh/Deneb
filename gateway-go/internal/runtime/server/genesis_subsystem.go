@@ -1,6 +1,8 @@
 package server
 
 import (
+	"sync"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
 )
@@ -22,4 +24,9 @@ type GenesisSubsystem struct {
 	genesisNudger      *skilllifecycle.Nudger
 	skillCatalog       *skilllifecycle.Catalog
 	genesisTranscripts toolport.TranscriptStore
+	// retryMiner mines failed→successful tool retry pairs from transcripts
+	// into tool_retry evidence clusters (lazy: built on first sweep evidence
+	// read in selfCodingFailureEvidence).
+	retryMiner     *skilllifecycle.RetryCorrectionMiner
+	retryMinerOnce sync.Once
 }

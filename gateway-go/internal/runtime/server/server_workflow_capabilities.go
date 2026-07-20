@@ -31,6 +31,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rolehealth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
@@ -216,7 +217,15 @@ func (s *Server) selfCodingFailureEvidence(limit int) []genesis.FailureClusterSu
 	if tracker == nil {
 		return nil
 	}
-	return tracker.FailureEvidenceClusters(limit)
+	clusters := tracker.FailureEvidenceClusters(limit)
+	// tool_retry evidence: deterministic transcript mining of failed→successful
+	// tool retries (genesis/retry_correction_miner.go). Lazy so the miner only
+	// exists once the sweep actually reads evidence; the call itself is cheap
+	// (incremental scan, ≤2/day cadence from the sweep).
+	s.retryMinerOnce.Do(func() {
+		s.retryMiner = skilllifecycle.NewRetryCorrectionMiner(config.ResolveStateDir(), s.logger)
+	})
+	return genesis.MergeFailureClusters(clusters, s.retryMiner.MineAndClusters(limit, time.Now()), limit)
 }
 
 func (s *Server) registerGoalWorkflowTask(homeDir string) {

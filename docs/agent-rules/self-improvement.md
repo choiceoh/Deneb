@@ -70,6 +70,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `failure_intervention_router.go` | Failure origin → cheapest intervention surface advisory routing (`shadow`; never changes dispatch or target policy) |
 | `meta_evolution.go` | L2 slow loop — weekly meta-artifact revision (evolve/judge prompts) with epoch benches, auto-adopt + rollback watch |
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
+| `retry_correction_miner.go` | Deterministic transcript mining of failed-then-successful tool retries into `tool_retry` evidence clusters for the sweep (EMG adoption, 2026-07-21) |
 | `genesis/rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
 
 ## Surface Tiers (`surfaces/surfaces.go`)

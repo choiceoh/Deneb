@@ -18,13 +18,18 @@ import (
 // importing genesis leaf packages (generation/review) directly. Identical types —
 // assignable to handler Deps that still name the leaf packages.
 type (
-	GenesisService = generation.Service
-	MetaArtifacts  = generation.MetaArtifacts
-	Nudger         = review.Nudger
-	Catalog        = skills.Catalog
-	Evolver        = genesis.Evolver
-	Tracker        = genesis.Tracker
+	GenesisService       = generation.Service
+	MetaArtifacts        = generation.MetaArtifacts
+	Nudger               = review.Nudger
+	Catalog              = skills.Catalog
+	Evolver              = genesis.Evolver
+	Tracker              = genesis.Tracker
+	RetryCorrectionMiner = genesis.RetryCorrectionMiner
 )
+
+// NewRetryCorrectionMiner re-exports the transcript retry-pair miner
+// constructor (evidence-side; see genesis/retry_correction_miner.go).
+var NewRetryCorrectionMiner = genesis.NewRetryCorrectionMiner
 
 // GenesisBundle is the owning-module port for genesis services wired at boot.
 // Server holds these fields via GenesisSubsystem; construction lives here so
