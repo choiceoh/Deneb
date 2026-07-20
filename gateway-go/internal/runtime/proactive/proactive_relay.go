@@ -47,7 +47,10 @@ const (
 // follow-up user turn ("더 자세히 알려줘") has the proactive content in context.
 type proactiveRelayDeps struct {
 	transcriptStore toolport.TranscriptStore
-	logger          interface{ Error(string, ...any) } // *slog.Logger subset
+	logger          interface { // *slog.Logger subset
+		Warn(string, ...any)
+		Error(string, ...any)
+	}
 
 	// behaviorLog records each relay decision (delivered/suppressed/dropped/
 	// error) under system:proactive so the autonomous-delivery funnel is
@@ -116,11 +119,14 @@ type Relay = proactiveRelayDeps
 // required by Relay. Every optional boundary degrades independently.
 type Deps struct {
 	TranscriptStore toolport.TranscriptStore
-	Logger          interface{ Error(string, ...any) }
-	BehaviorLog     *relaylog.Writer
-	PushHub         *Hub
-	PushFCM         *push.Notifier
-	WorkFeed        interface {
+	Logger          interface {
+		Warn(string, ...any)
+		Error(string, ...any)
+	}
+	BehaviorLog *relaylog.Writer
+	PushHub     *Hub
+	PushFCM     *push.Notifier
+	WorkFeed    interface {
 		Append(workfeed.Item) (workfeed.Item, error)
 	}
 	CardTitler func(content string) (title, summary string)
@@ -250,6 +256,16 @@ func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string)
 	}
 
 	content = stripProactiveMetaPreamble(textprep.SubstituteLetterTokens(content))
+	// Producer-authored card bodies bypass NormalizeFinalReply, so fence
+	// emission glitches (split "```"+"deneb-ui" openers, mid-card restarts)
+	// would land in the work feed as raw markup. Repair them here — the single
+	// choke point every consumer (transcript, feed card, push preview) reads.
+	if repairedContent, glitched := textprep.RepairFenceGlitches(content); glitched {
+		if d.logger != nil {
+			d.logger.Warn("proactive relay: deneb-ui fence glitch repaired", "sessionKey", target)
+		}
+		content = repairedContent
+	}
 	if isContentlessProactive(content) {
 		d.logProactive("suppressed", "contentless", originalLength, pushPreview(content))
 		return preparedProactiveDelivery{}, false

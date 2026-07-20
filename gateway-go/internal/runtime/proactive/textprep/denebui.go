@@ -9,5 +9,6 @@ var (
 	ReplaceFences        = denebui.ReplaceFences
 	PlainText            = denebui.PlainText
 	IsFenceOpenLine      = denebui.IsFenceOpenLine
+	RepairFenceGlitches  = denebui.RepairFenceGlitches
 	StripHTMLAnswers     = denebui.StripHTMLAnswers
 )
