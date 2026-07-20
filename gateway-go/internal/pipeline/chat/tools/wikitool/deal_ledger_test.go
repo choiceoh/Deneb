@@ -64,3 +64,63 @@ func TestToolDealLedgerReturnsLedgerSummary(t *testing.T) {
 		t.Errorf("empty result = %q, %v", out, err)
 	}
 }
+
+func TestToolDealLedgerMetricDefinitionsFooter(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	now := time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC)
+	in := wiki.DealPageInput{Counterparty: "JA Solar", DocType: "계약서", Amount: "$1,000", Date: "2026-06-22", SourceRef: "mail:ja1"}
+	if _, _, err := store.UpsertDealPage(in, now); err != nil {
+		t.Fatalf("UpsertDealPage: %v", err)
+	}
+	tool := ToolDealLedger(store)
+
+	// Without the page, results carry no footer (pre-semantic-layer behavior).
+	out, err := tool(context.Background(), nil)
+	if err != nil || strings.Contains(out, "지표 정의") {
+		t.Errorf("footer without defs page: %q, %v", out, err)
+	}
+
+	page := wiki.NewPage("지표 정의", "시스템", nil)
+	page.Body = "# 지표 정의\n\n- 수주액 = 계약서+발주서 합계"
+	if err := store.WritePage("시스템/지표-정의.md", page); err != nil {
+		t.Fatalf("WritePage: %v", err)
+	}
+
+	// List path: definitions appended after totals.
+	out, err = tool(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("deal_ledger: %v", err)
+	}
+	if !strings.Contains(out, "지표 정의 (시스템/지표-정의") || !strings.Contains(out, "수주액 = 계약서+발주서 합계") {
+		t.Errorf("definitions footer missing:\n%s", out)
+	}
+	if strings.Index(out, "합계(금액 파싱분)") > strings.Index(out, "지표 정의 (") {
+		t.Errorf("footer must follow totals:\n%s", out)
+	}
+
+	// Empty-result path (mis-chosen filters) also carries the definitions.
+	out, err = tool(context.Background(), json.RawMessage(`{"counterparty":"없는회사"}`))
+	if err != nil || !strings.Contains(out, "기록 없음") || !strings.Contains(out, "수주액 = 계약서+발주서 합계") {
+		t.Errorf("empty-result footer missing: %q, %v", out, err)
+	}
+
+	// A grown page is capped with a visible truncation marker.
+	page.Body = strings.Repeat("정의 항목 줄\n", 400)
+	if err := store.WritePage("시스템/지표-정의.md", page); err != nil {
+		t.Fatalf("WritePage long: %v", err)
+	}
+	out, err = tool(context.Background(), json.RawMessage(`{"action":"sum"}`))
+	if err != nil {
+		t.Fatalf("deal_ledger sum: %v", err)
+	}
+	if !strings.Contains(out, "잘림 — 전체는 시스템/지표-정의 페이지 참조") {
+		t.Errorf("truncation marker missing:\n%s", out)
+	}
+	if got := len([]rune(out)); got > metricDefsMaxRunes+800 {
+		t.Errorf("footer not capped: %d runes", got)
+	}
+}

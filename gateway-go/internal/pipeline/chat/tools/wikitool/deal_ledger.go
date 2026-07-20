@@ -21,9 +21,39 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
+// metricDefsPage is the operator-curated metric-definition page — the semantic
+// layer over the ledger: which docTypes count toward 수주/파이프라인/매출, how
+// MW totals are read, how 기타/미파싱 rows are treated. The wiki page (not
+// code) owns the definitions, matching the 모닝레터-발송-규칙 control model;
+// it is re-read on every call so edits apply without a rebuild.
+const metricDefsPage = "시스템/지표-정의.md"
+
+// metricDefsMaxRunes caps the appended definitions block so a grown page can
+// never crowd out the ledger rows it annotates.
+const metricDefsMaxRunes = 1500
+
+// metricDefinitionsFooter renders the curated definitions page as a footer
+// block. A missing/empty page yields "" so the ledger behaves exactly as
+// before the semantic layer existed.
+func metricDefinitionsFooter(store *wiki.Store) string {
+	page, err := store.ReadPage(metricDefsPage)
+	if err != nil || page == nil {
+		return ""
+	}
+	body := strings.TrimSpace(page.Body)
+	if body == "" {
+		return ""
+	}
+	if runes := []rune(body); len(runes) > metricDefsMaxRunes {
+		body = strings.TrimSpace(string(runes[:metricDefsMaxRunes])) + "\n… (잘림 — 전체는 시스템/지표-정의 페이지 참조)"
+	}
+	return "지표 정의 (시스템/지표-정의 — 집계 해석은 이 기준을 따를 것):\n" + body
+}
+
 // ToolDealLedger returns the deal_ledger tool over the wiki store's typed
 // ledger. list = filtered rows (newest first) + totals footer; sum = totals
-// only.
+// only. When the operator-curated 지표-정의 page exists, every result carries
+// it as a footer so aggregate answers use one shared set of definitions.
 func ToolDealLedger(store *wiki.Store) toolport.ToolFunc {
 	return func(_ context.Context, raw json.RawMessage) (string, error) {
 		var args struct {
@@ -51,7 +81,13 @@ func ToolDealLedger(store *wiki.Store) toolport.ToolFunc {
 			return "", fmt.Errorf("deal_ledger: %w", err)
 		}
 		if len(recs) == 0 {
-			return "거래 원장 기록 없음 (필터: " + filterDesc(args.Counterparty, args.Project, args.DocType, args.Since, args.Until) + ")", nil
+			// Definitions matter most here: an empty result is often a
+			// mis-chosen doc_type filter, and the page names the valid ones.
+			out := "거래 원장 기록 없음 (필터: " + filterDesc(args.Counterparty, args.Project, args.DocType, args.Since, args.Until) + ")"
+			if defs := metricDefinitionsFooter(store); defs != "" {
+				out += "\n\n" + defs
+			}
+			return out, nil
 		}
 		totals := wiki.SumDealRecords(recs)
 
@@ -84,6 +120,10 @@ func ToolDealLedger(store *wiki.Store) toolport.ToolFunc {
 		if breakdown := renderCounterpartyBreakdown(recs); breakdown != "" {
 			b.WriteByte('\n')
 			b.WriteString(breakdown)
+		}
+		if defs := metricDefinitionsFooter(store); defs != "" {
+			b.WriteString("\n\n")
+			b.WriteString(defs)
 		}
 		return strings.TrimRight(b.String(), "\n"), nil
 	}
