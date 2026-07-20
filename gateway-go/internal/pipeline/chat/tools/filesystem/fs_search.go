@@ -15,8 +15,12 @@ import (
 )
 
 // ToolGrep returns a tool that searches file contents using ripgrep with defaultDir as
-// the base search path when no explicit path is provided.
-func ToolGrep(defaultDir string) toolport.ToolFunc {
+// the base search path when no explicit path is provided. extraSearchRoots
+// mirror the read tool's extra allowed roots (skill catalogs, the memory root
+// with archived capture originals) so a digest-map reference is searchable,
+// not only readable — on a promptware-tainted turn exec is blocked, leaving
+// grep/read as the only retrieval path.
+func ToolGrep(defaultDir string, extraSearchRoots ...string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Pattern      string `json:"pattern"`
@@ -40,7 +44,7 @@ func ToolGrep(defaultDir string) toolport.ToolFunc {
 
 		searchPath := defaultDir
 		if p.Path != "" {
-			searchPath = artifact.ResolvePath(p.Path, defaultDir)
+			searchPath = artifact.ResolvePathWithRoots(p.Path, defaultDir, extraSearchRoots)
 		}
 
 		// Defaults and caps.

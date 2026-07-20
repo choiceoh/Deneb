@@ -31,12 +31,29 @@ const captureBreadcrumbRunes = 200
 // is optional origin info (caption, app/sender). Returns the saved file's
 // path relative to the memory root (e.g. "captures/capture-...-audio.md").
 func (s *Store) SaveCapture(kind, context, text string) (string, error) {
-	text = strings.TrimSpace(redact.String(text))
+	rel, _, _, err := s.SaveCaptureAt(kind, context, text)
+	return rel, err
+}
+
+// NormalizeCaptureText is the exact normalization SaveCaptureAt applies to the
+// body before writing. Exposed so a caller that maps line numbers into the
+// saved file (the oversized-document digest) can normalize its own copy
+// identically — otherwise redaction/trim would shift every mapped line.
+func NormalizeCaptureText(text string) string {
+	return strings.TrimSpace(redact.String(text))
+}
+
+// SaveCaptureAt is SaveCapture returning richer coordinates: the absolute
+// saved path and the 1-based line at which the capture BODY starts inside the
+// file (after the metadata header). An oversized-document digest uses them to
+// map its chunk summaries to file line numbers the agent can open directly.
+func (s *Store) SaveCaptureAt(kind, context, text string) (rel, abs string, bodyStartLine int, err error) {
+	text = NormalizeCaptureText(text)
 	if text == "" {
-		return "", fmt.Errorf("wiki: empty capture text")
+		return "", "", 0, fmt.Errorf("wiki: empty capture text")
 	}
 	if s.diaryDir == "" {
-		return "", fmt.Errorf("wiki: no diary dir; captures disabled")
+		return "", "", 0, fmt.Errorf("wiki: no diary dir; captures disabled")
 	}
 	kind = strings.TrimSpace(kind)
 	if kind == "" {
@@ -45,31 +62,32 @@ func (s *Store) SaveCapture(kind, context, text string) (string, error) {
 
 	dir := filepath.Join(filepath.Dir(s.diaryDir), "captures")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("wiki: captures dir: %w", err)
+		return "", "", 0, fmt.Errorf("wiki: captures dir: %w", err)
 	}
 	now := time.Now()
 	name := fmt.Sprintf("capture-%s-%s.md", now.Format("20060102-150405"), kind)
 
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "# 캡처 원문 (%s)\n\n- 종류: %s\n- 시각: %s\n", kind, kind, now.Format("2006-01-02 15:04"))
+	var header strings.Builder
+	fmt.Fprintf(&header, "# 캡처 원문 (%s)\n\n- 종류: %s\n- 시각: %s\n", kind, kind, now.Format("2006-01-02 15:04"))
 	if c := strings.TrimSpace(redact.String(context)); c != "" {
-		fmt.Fprintf(&sb, "- 맥락: %s\n", c)
+		fmt.Fprintf(&header, "- 맥락: %s\n", c)
 	}
-	sb.WriteString("\n---\n\n")
-	sb.WriteString(text)
-	sb.WriteString("\n")
+	header.WriteString("\n---\n\n")
+	// The body begins on the line right after the header's final newline —
+	// counting the header's newlines keeps this correct if the format changes.
+	bodyStartLine = strings.Count(header.String(), "\n") + 1
 
-	abs := filepath.Join(dir, name)
+	abs = filepath.Join(dir, name)
 	tmp := abs + ".tmp"
-	if err := writeFileSync(tmp, []byte(sb.String()), 0o644); err != nil {
-		return "", fmt.Errorf("wiki: write capture: %w", err)
+	if err := writeFileSync(tmp, []byte(header.String()+text+"\n"), 0o644); err != nil {
+		return "", "", 0, fmt.Errorf("wiki: write capture: %w", err)
 	}
 	if err := os.Rename(tmp, abs); err != nil {
 		os.Remove(tmp)
-		return "", fmt.Errorf("wiki: rename capture: %w", err)
+		return "", "", 0, fmt.Errorf("wiki: rename capture: %w", err)
 	}
 
-	rel := filepath.Join("captures", name)
+	rel = filepath.Join("captures", name)
 	// Breadcrumb: the preview makes the capture diary-searchable (and feeds
 	// dreaming); the path lets the agent open the full original on demand.
 	preview := []rune(text)
@@ -78,7 +96,7 @@ func (s *Store) SaveCapture(kind, context, text string) (string, error) {
 	}
 	entry := fmt.Sprintf("[캡처:%s] 원문 보관 %s — %s", kind, rel, string(preview))
 	if err := s.AppendDiary(entry); err != nil {
-		return rel, fmt.Errorf("wiki: capture breadcrumb: %w", err)
+		return rel, abs, bodyStartLine, fmt.Errorf("wiki: capture breadcrumb: %w", err)
 	}
-	return rel, nil
+	return rel, abs, bodyStartLine, nil
 }

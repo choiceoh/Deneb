@@ -219,6 +219,12 @@ type CoreToolDeps struct {
 	// locations listed in the system prompt are actually readable —
 	// without this they were clamped to the workspace root. Empty disables.
 	SkillsCatalogDirs []string
+	// MemoryDir is the durable memory root ({state}/memory) whose captures/
+	// holds archived capture originals and oversized-document sources that
+	// digest maps reference by file path. The read tool accepts it as an
+	// extra allowed root so those references are actually openable — without
+	// this they were clamped to the workspace root. Empty disables.
+	MemoryDir string
 	// BundledSkillsDir is the repo's checked-in skills/ root (SourceBundled). The
 	// skills tool rejects mutating actions on paths under it so an agent can't
 	// modify or delete checked-in skill files — it must create a workspace

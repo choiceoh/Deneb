@@ -51,3 +51,40 @@ func TestSaveCapture_FileAndBreadcrumb(t *testing.T) {
 		t.Error("empty capture must be rejected")
 	}
 }
+
+// TestSaveCaptureAtBodyLineAlignsWithFile locks the digest-map contract: the
+// returned bodyStartLine must point at the exact file line where the
+// normalized body begins, with and without the optional context header line.
+func TestSaveCaptureAtBodyLineAlignsWithFile(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "memory", "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	body := "1번째 줄\n2번째 줄\n3번째 줄"
+	for _, tc := range []struct {
+		name, context string
+	}{
+		{"with context", "IM 문서"},
+		{"without context", ""},
+	} {
+		_, abs, bodyLine, err := store.SaveCaptureAt("document", tc.context, "  \n"+body+"\n\n")
+		if err != nil {
+			t.Fatalf("%s: SaveCaptureAt: %v", tc.name, err)
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			t.Fatalf("%s: read capture: %v", tc.name, err)
+		}
+		fileLines := strings.Split(string(data), "\n")
+		bodyLines := strings.Split(NormalizeCaptureText(body), "\n")
+		for i, want := range bodyLines {
+			idx := bodyLine - 1 + i
+			if idx >= len(fileLines) || fileLines[idx] != want {
+				t.Errorf("%s: file line %d = %q, want %q", tc.name, bodyLine+i, fileLines[idx], want)
+			}
+		}
+	}
+}
