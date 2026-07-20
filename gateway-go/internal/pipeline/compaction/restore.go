@@ -339,6 +339,14 @@ func StripThinkingBlocks(messages []llm.Message) ([]llm.Message, int) {
 // code fences) typically runs first — blocks it shrinks below minChars
 // fall through this pass unchanged.
 //
+// Protected results (protectedToolResultIDs) are exempt, with one carve-out:
+// when the model habitually repeats the same protected call, older copies
+// whose content is byte-identical to a newer surviving copy are stubbed too
+// (supersededProtectedResultIDs) — the payload stays resident at the newest
+// copy, so no re-fetch is provoked. minChars gates this as well: each stub
+// breaks the prefix cache at its offset once, so only duplicates big enough
+// to pay for that are cleared.
+//
 // Returns modified messages and the count of tool_result blocks that
 // were stubbed.
 func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int) ([]llm.Message, int) {
@@ -357,9 +365,16 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 	}
 	cutoff := assistantIdx[len(assistantIdx)-turnThreshold]
 
-	const placeholder = "[older tool output cleared to save context]"
+	const (
+		placeholder = "[older tool output cleared to save context]"
+		// duplicatePlaceholder marks a protected result stubbed only because a
+		// newer identical call retains the same content — pointing the model at
+		// the resident copy instead of provoking a re-fetch.
+		duplicatePlaceholder = "[duplicate tool output cleared — an identical newer call in this session retains the full result]"
+	)
 
 	protected := protectedToolResultIDs(messages)
+	superseded := supersededProtectedResultIDs(messages, protected)
 
 	stubbed := 0
 	result := make([]llm.Message, len(messages))
@@ -375,7 +390,7 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 			if blocks[j].Type != "tool_result" {
 				continue
 			}
-			if protected[blocks[j].ToolUseID] {
+			if protected[blocks[j].ToolUseID] && !superseded[blocks[j].ToolUseID] {
 				continue // tool schema payload — stubbing it forces a re-fetch
 			}
 			if utf8.RuneCountInString(blocks[j].Content) <= minChars {
@@ -389,6 +404,8 @@ func TruncateOldToolResults(messages []llm.Message, turnThreshold, minChars int)
 				blocks[j].Content = fmt.Sprintf(
 					"[older tool output cleared — full output still available via read_spillover(%q)]", ref,
 				)
+			} else if superseded[blocks[j].ToolUseID] {
+				blocks[j].Content = duplicatePlaceholder
 			} else {
 				blocks[j].Content = placeholder
 			}
