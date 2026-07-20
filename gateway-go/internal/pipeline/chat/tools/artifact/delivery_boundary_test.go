@@ -83,7 +83,8 @@ func TestResolvePathHandlesSymlinkedRootAndMissingDescendants(t *testing.T) {
 	if got != want {
 		t.Fatalf("missing descendant under symlinked root = %q, want %q", got, want)
 	}
-	if canonical := evalPathForContainment(got); canonical != filepath.Join(realRoot, "drafts", "new", "report.md") {
+	canonicalRoot := evalPathForContainment(realRoot)
+	if canonical := evalPathForContainment(got); canonical != filepath.Join(canonicalRoot, "drafts", "new", "report.md") {
 		t.Fatalf("canonical missing descendant = %q", canonical)
 	}
 }

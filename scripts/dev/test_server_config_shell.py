@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 import subprocess
 import tempfile
 import unittest
@@ -107,11 +108,12 @@ class DotenvAndTokenTests(unittest.TestCase):
         env = isolated_env(self.home)
         proc = run_bash(
             f'source "{LIB_SERVER}"; devlib_seed_client_token "{state}"; '
-            f'printf "%s|%s" "$(cat "{state}/client_token")" "$(stat -c %a "{state}/client_token")"',
+            f'cat "{state}/client_token"',
             env,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "first-token|600")
+        self.assertEqual(proc.stdout, "first-token\n")
+        self.assertEqual(stat.S_IMODE((state / "client_token").stat().st_mode), 0o600)
 
         prod.write_text("rotated-token\n", encoding="utf-8")
         proc = run_bash(
@@ -130,18 +132,20 @@ class DotenvAndTokenTests(unittest.TestCase):
         env = isolated_env(self.home, self.fake_bin)
         command = (
             f'source "{LIB_SERVER}"; devlib_ensure_client_token "{state}"; '
-            f'printf "%s|%s" "$(cat "{state}/client_token")" "$(stat -c %a "{state}/client_token")"'
+            f'cat "{state}/client_token"'
         )
         proc = run_bash(command, env)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(
             proc.stdout,
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef|600",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n",
         )
+        self.assertEqual(stat.S_IMODE((state / "client_token").stat().st_mode), 0o600)
 
         (state / "client_token").write_text("keep-me\n", encoding="utf-8")
         proc = run_bash(command, env)
-        self.assertEqual(proc.stdout, "keep-me|600")
+        self.assertEqual(proc.stdout, "keep-me\n")
+        self.assertEqual(stat.S_IMODE((state / "client_token").stat().st_mode), 0o600)
 
 
 class ReadinessFunctionTests(unittest.TestCase):

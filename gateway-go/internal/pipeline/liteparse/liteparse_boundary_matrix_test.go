@@ -625,10 +625,39 @@ func TestBoundaryParseContextCancellationKillsCommand(t *testing.T) {
 }
 
 func TestBoundaryParsePartialOutputWinsOnCancellation(t *testing.T) {
-	installBoundaryLit(t, `printf 'early extraction'; exec sleep 10`)
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	ready := filepath.Join(t.TempDir(), "partial-output-ready")
+	installBoundaryLit(t, fmt.Sprintf(`printf 'early extraction'; : > %q; exec sleep 10`, ready))
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	got, err := Parse(ctx, []byte("document"), "file.pdf")
+	type parseResult struct {
+		text string
+		err  error
+	}
+	result := make(chan parseResult, 1)
+	go func() {
+		got, err := Parse(ctx, []byte("document"), "file.pdf")
+		result <- parseResult{text: got, err: err}
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fake parser did not publish partial output")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+
+	var parsed parseResult
+	select {
+	case parsed = <-result:
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled parser did not return promptly")
+	}
+	got, err := parsed.text, parsed.err
 	if err != nil {
 		t.Fatalf("usable partial output should win on cancellation: %v", err)
 	}

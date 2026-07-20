@@ -2,10 +2,6 @@
 set -euo pipefail
 
 mode="${1:-}"
-write_flag=()
-if [[ "$mode" == "--write" ]]; then
-  write_flag=(-w)
-fi
 
 args=(
   README.md
@@ -17,8 +13,10 @@ args=(
   scripts/codespell-dictionary.txt
   -I
   scripts/codespell-ignore.txt
-  "${write_flag[@]}"
 )
+if [[ "$mode" == "--write" ]]; then
+  args+=(-w)
+fi
 
 if command -v codespell >/dev/null 2>&1; then
   codespell "${args[@]}"

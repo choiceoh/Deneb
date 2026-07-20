@@ -21,10 +21,45 @@ RESTART_WAIT_SEC="${DENEB_DEPLOY_RESTART_WAIT_SEC:-510}"
 # kept for any future host split. Empty = in-place restart (current default).
 DEPLOY_REMOTE="${DENEB_DEPLOY_REMOTE:-}"            # e.g. "srv4" (ssh host)
 DEPLOY_REMOTE_DIR="${DENEB_DEPLOY_REMOTE_DIR:-deneb}" # remote $HOME-relative repo dir
+MODEL_TOPOLOGY_DENEB_CONFIG="${DENEB_CONFIG_PATH:-$HOME/.deneb/deneb.json}"
+MODEL_TOPOLOGY_WORMHOLE_CONFIG="${DENEB_WORMHOLE_CONFIG:-$HOME/.wormhole/config.json}"
+MODEL_TOPOLOGY_PYTHON="${DENEB_MODEL_ROUTE_TOPOLOGY_PYTHON:-python3}"
 LOG_FILE="/tmp/deneb-gateway.log"
 LOG_ARCHIVE_DIR="/tmp/deneb-gateway-logs"
 LOG_ARCHIVE_KEEP=20   # keep last N pre-restart logs; older ones get pruned
 LOG_ARCHIVE_MAX_BYTES=$((200 * 1024 * 1024))  # cap archive dir at 200MB
+
+check_model_route_topology() {
+    # The remote topology builds on a host that does not own the gateway's
+    # runtime configs, so it cannot prove this cross-file graph locally. The
+    # current srv4 topology builds in place and is covered by the gate below.
+    if [[ -n "$DEPLOY_REMOTE" ]]; then
+        return 0
+    fi
+    if [[ "${DENEB_SKIP_MODEL_ROUTE_TOPOLOGY_CHECK:-}" == "1" ]]; then
+        echo "WARN: model route topology gate explicitly skipped" >&2
+        return 0
+    fi
+    # A checkout used only as a build host may have no Deneb state directory.
+    # Once a Deneb config exists, however, a malformed or missing referenced
+    # Wormhole graph must stop before the build and restart.
+    if [[ ! -f "$MODEL_TOPOLOGY_DENEB_CONFIG" ]]; then
+        echo "==> model route topology skipped (no Deneb config)"
+        return 0
+    fi
+    if ! command -v "$MODEL_TOPOLOGY_PYTHON" >/dev/null 2>&1; then
+        echo "ERROR: python3 is required for the model route topology gate" >&2
+        return 1
+    fi
+    if [[ ! -f scripts/audit/model_route_topology.py ]]; then
+        echo "ERROR: model route topology checker is missing from the production checkout" >&2
+        return 1
+    fi
+    echo "==> model route topology"
+    "$MODEL_TOPOLOGY_PYTHON" scripts/audit/model_route_topology.py \
+        --deneb-config "$MODEL_TOPOLOGY_DENEB_CONFIG" \
+        --wormhole-config "$MODEL_TOPOLOGY_WORMHOLE_CONFIG"
+}
 
 health_ok() {
     # Auto-detect listen address — gateway may bind loopback OR a specific
@@ -301,6 +336,11 @@ fi
 # invocation only; it does not touch the repo's stored config.
 echo "==> git pull"
 git -c pull.rebase=false pull --ff-only origin main
+
+# Validate the runtime model graph before spending time on a build or touching
+# the live process. This catches picker-hidden role bindings and Deneb model IDs
+# that do not resolve to Wormhole's client-facing route names.
+check_model_route_topology
 
 # Build
 echo "==> make gateway-prod"

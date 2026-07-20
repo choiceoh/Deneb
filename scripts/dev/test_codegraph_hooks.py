@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -183,13 +184,14 @@ class NudgeMainTests(unittest.TestCase):
         self.assertTrue(marker.is_file())
 
     def test_when_bash_pattern_and_dotted_rpc_take_the_expected_resolver_paths(self) -> None:
+        canonical_root = os.path.realpath(self.root)
         bash_payload = {
             "tool_name": "Bash",
             "tool_input": {"command": "rg UnknownSymbol gateway-go"},
         }
         with mock.patch.object(nudge, "is_defined_symbol", return_value=False) as symbol:
             self.assertEqual(self.invoke(bash_payload), (0, "", ""))
-        symbol.assert_called_once_with("UnknownSymbol", str(self.root))
+        symbol.assert_called_once_with("UnknownSymbol", canonical_root)
 
         rpc_payload = {
             "session_id": "rpc",
@@ -200,7 +202,7 @@ class NudgeMainTests(unittest.TestCase):
             rc, _, stderr = self.invoke(rpc_payload)
         self.assertEqual(rc, 2)
         self.assertIn("scripts/dev/rpcmap.py miniapp.people.list", stderr)
-        resolver.assert_called_once_with("miniapp.people.list", str(self.root))
+        resolver.assert_called_once_with("miniapp.people.list", canonical_root)
 
     def test_other_tools_regexes_and_unknown_dotted_names_pass(self) -> None:
         payloads = [
@@ -292,7 +294,8 @@ class AutoindexTests(unittest.TestCase):
         popen.assert_called_once()
         command = popen.call_args.args[0]
         self.assertEqual(command[:2], ["bash", "-lc"])
-        self.assertIn(f"cd {self.root}", command[2])
+        canonical_root = shlex.quote(os.path.realpath(self.root))
+        self.assertIn(f"cd {canonical_root}", command[2])
         self.assertTrue(command[2].endswith("&& codegraph init"))
         self.assertTrue(popen.call_args.kwargs["start_new_session"])
         self.assertIs(popen.call_args.kwargs["stderr"], subprocess.STDOUT)
@@ -311,8 +314,10 @@ class AutoindexTests(unittest.TestCase):
         result, popen = self.invoke()
         self.assertEqual(result, (0, "", ""))
         command = popen.call_args.args[0][2]
-        self.assertIn(f"cp -r {fresh_donor}", command)
-        self.assertNotIn(f"cp -r {old_donor}", command)
+        canonical_fresh = shlex.quote(os.path.realpath(fresh_donor))
+        canonical_old = shlex.quote(os.path.realpath(old_donor))
+        self.assertIn(f"cp -r {canonical_fresh}", command)
+        self.assertNotIn(f"cp -r {canonical_old}", command)
         self.assertIn("codegraph sync", command)
         self.assertIn("rm -rf", command)
         self.assertIn("codegraph init", command)

@@ -154,7 +154,10 @@ func TestManagerStopKillsTermIgnoringProcessGroup(t *testing.T) {
 		if errors.Is(err, syscall.ESRCH) {
 			return
 		}
-		if err != nil {
+		// Darwin can transiently report EPERM while a killed member remains in
+		// the process group as a zombie. Keep polling: ESRCH is the portable
+		// proof that the full group has disappeared.
+		if err != nil && !errors.Is(err, syscall.EPERM) {
 			t.Fatalf("probe process group %d: %v", pid, err)
 		}
 		time.Sleep(10 * time.Millisecond)

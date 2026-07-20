@@ -242,6 +242,13 @@ echo "ok (${WAIT_MS}ms)"
 PASS=0
 TOTAL=0
 
+_last_metric_value() {
+  awk -F= '
+    $1 == "metric_value" && $2 ~ /^[0-9]+([.][0-9]+)?$/ { value = $2 }
+    END { if (value != "") print value }
+  '
+}
+
 _run_metric_cmd() {
   # Run a metric command or preset; sets METRIC_VAL, QUALITY_JSON, CHECK_MS, TOTAL, PASS.
   local cmd="$1"
@@ -249,7 +256,7 @@ _run_metric_cmd() {
   CHECK_START=$(date +%s%N)
   METRIC_OUT=$(eval "$cmd" 2>&1) || true
 
-  METRIC_VAL=$(echo "$METRIC_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1 || true)
+  METRIC_VAL=$(printf '%s\n' "$METRIC_OUT" | _last_metric_value)
   if [[ -z "$METRIC_VAL" ]]; then
     echo "FAIL (no metric_value in output)"
     echo "$METRIC_OUT" | tail -5
@@ -301,7 +308,7 @@ if [[ -n "$METRIC_PRESET" ]]; then
         echo "0 (smoke failed)"
       else
         Q_OUT=$("$SCRIPT_DIR/quality-metric.sh" 2>&1) || true
-        Q_VAL=$(echo "$Q_OUT" | grep -oP 'metric_value=\K[\d.]+' | tail -1 || true)
+        Q_VAL=$(printf '%s\n' "$Q_OUT" | _last_metric_value)
         Q_VAL=${Q_VAL:-0}
         SMOKE_SCORE=$(python3 -c "print(round($SMOKE_PASS / 2 * 20))")
         Q_SCORE=$(python3 -c "print(round($Q_VAL / 100 * 80))")
