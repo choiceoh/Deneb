@@ -277,9 +277,9 @@ state-register-kt:
 	@client-android/tools/state-register/run.sh
 	@echo "regenerated docs/research/state-register-chat-ui.md"
 
-# Semantic (concept) code search: Nemotron embeddings over CodeGraph nodes,
-# RRF-fused with the FTS lexical arm. Index lives in .codegraph/ (gitignored),
-# incremental by node updated_at. Query: make codesearch Q="재시도 백오프".
+# Semantic code search: Nemotron embeddings over CodeGraph symbols plus tracked
+# repository chunks, RRF-fused with BM25+FTS. Index lives in .codegraph/
+# (gitignored), incremental by node timestamp/content hash.
 codesearch-index:
 	@cd gateway-go && go run ./cmd/codesearch index
 

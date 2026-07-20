@@ -27,6 +27,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/codesearch"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
@@ -86,8 +87,22 @@ func tuneCodegraphTool(
 		// treats as "no root → no enrichment" — so a bare read is safe and the
 		// tool call never fails on it.
 		root, _ := os.Getwd()
-		return enrichWithFolderDocs(out, root, os.ReadFile), nil
+		return enrichWithFolderDocsQuery(out, root, codegraphContextQuery(input), os.ReadFile), nil
 	}
+}
+
+func codegraphContextQuery(input json.RawMessage) string {
+	var p struct {
+		Query  string `json:"query"`
+		Symbol string `json:"symbol"`
+	}
+	if json.Unmarshal(input, &p) != nil {
+		return ""
+	}
+	if strings.TrimSpace(p.Query) != "" {
+		return p.Query
+	}
+	return p.Symbol
 }
 
 // exploreRerouteFn reroutes a single specific-symbol explore to node (nodeTarget
@@ -162,18 +177,23 @@ const (
 // (`gateway-go/internal/…/file.go`), across the languages codegraph indexes.
 var sourcePathRe = regexp.MustCompile(`[A-Za-z0-9_][\w./-]*\.(?:go|kt|kts|ts|tsx|js|jsx|rs|py|java|swift|c|cc|cpp|h|hpp)`)
 
-// enrichWithFolderDocs appends the nearest-ancestor CLAUDE.md subtree map for
-// each folder the result touches (deduped, capped, top maxFolderDocs by result
-// order). Fail-open: no paths, no maps, or read errors → the result is returned
-// unchanged. readFile is injected for testing; production passes os.ReadFile.
+// enrichWithFolderDocs preserves the historical test/helper surface. Runtime
+// calls enrichWithFolderDocsQuery so the attached Markdown is section-ranked
+// against the actual CodeGraph query rather than blindly head-truncated.
 func enrichWithFolderDocs(out, root string, readFile func(string) ([]byte, error)) string {
+	return enrichWithFolderDocsQuery(out, root, "", readFile)
+}
+
+// enrichWithFolderDocsQuery appends applicable CLAUDE/AGENTS rules and nearby
+// query-relevant repository documentation for result paths. Selection is
+// hierarchy-aware, deduplicated, UTF-8 safe, and bounded. Fail-open: no paths,
+// docs, or reads leaves the CodeGraph result unchanged.
+func enrichWithFolderDocsQuery(out, root, query string, readFile func(string) ([]byte, error)) string {
 	if root == "" {
 		return out
 	}
-	seenPath := map[string]bool{} // dedup file paths
-	seenDoc := map[string]bool{}  // dedup resolved CLAUDE.md
-	type doc struct{ rel, content string }
-	var docs []doc
+	seenPath := map[string]bool{}
+	var sourcePaths []string
 	for _, m := range sourcePathRe.FindAllString(out, -1) {
 		// Need a folder to map; skip bare basenames + repeats. Reject any `..`:
 		// the path comes from external tool output, and a `..` segment could
@@ -182,25 +202,18 @@ func enrichWithFolderDocs(out, root string, readFile func(string) ([]byte, error
 			continue
 		}
 		seenPath[m] = true
-		rel, content := nearestClaudeMd(path.Dir(m), root, readFile)
-		if rel == "" || seenDoc[rel] {
-			continue
-		}
-		seenDoc[rel] = true
-		docs = append(docs, doc{rel, content})
-		if len(docs) >= maxFolderDocs {
-			break
-		}
+		sourcePaths = append(sourcePaths, m)
 	}
+	docs := codesearch.ApplicableRepositoryDocs(root, query, sourcePaths, readFile, maxFolderDocs, perFolderDocCap)
 	if len(docs) == 0 {
 		return out
 	}
 	var b strings.Builder
 	b.WriteString(out)
-	b.WriteString("\n\n## 폴더 맥락 (CLAUDE.md)\n")
-	b.WriteString("검색 결과가 속한 폴더의 설명 — 이 코드를 다룰 때의 역할·규칙·함정이다.\n")
+	b.WriteString("\n\n## 폴더 맥락 (적용 문서)\n")
+	b.WriteString("검색 결과 경로에 적용되는 규칙과 질의 관련 섹션이다. rules는 제약, reference는 근거다.\n")
 	for _, d := range docs {
-		fmt.Fprintf(&b, "\n### %s\n%s\n", d.rel, capHead(d.content, perFolderDocCap))
+		fmt.Fprintf(&b, "\n### %s (%s)\n%s\n", d.Path, d.Role, d.Content)
 	}
 	return b.String()
 }

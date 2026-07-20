@@ -16,6 +16,7 @@ type fakeEmbedder struct {
 	vocab       []string
 	calls       int // number of Embed invocations (to assert incrementality)
 	texts       int // total texts embedded across all calls
+	inputs      []string
 	fingerprint string
 	dimensions  int
 }
@@ -33,6 +34,7 @@ func (f *fakeEmbedder) EmbeddingDimensions() int { return f.dimensions }
 func (f *fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
 	f.calls++
 	f.texts += len(texts)
+	f.inputs = append(f.inputs, texts...)
 	out := make([][]float32, len(texts))
 	for i, t := range texts {
 		lower := strings.ToLower(t)
@@ -99,11 +101,56 @@ func (f *fixedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, e
 	for i, t := range texts {
 		v, ok := f.vecs[t]
 		if !ok {
+			// File vectors carry a deterministic contextual prefix; the hand-set
+			// vector fixtures are keyed by the original visible snippet.
+			if split := strings.Index(t, "\n\n"); split >= 0 {
+				v, ok = f.vecs[t[split+2:]]
+			}
+		}
+		if !ok {
 			v = []float32{0, 0} // unknown text → zero vector (cosine 0)
 		}
 		out[i] = v
 	}
 	return out, nil
+}
+
+func TestSemanticIndex_EmbedsChunkIdentityButKeepsOriginalSnippet(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	const body = "# 납기 위험\n\n배송이 지연되면 위약금을 부과한다."
+	mustPut(t, store, "/계약/납기.md", body)
+	embed := newFakeEmbedder("배송", "위약금")
+	idx := NewSemanticIndex(filepath.Join(t.TempDir(), "idx.json"))
+
+	if _, err := idx.Reindex(ctx, store, plainText, embed); err != nil {
+		t.Fatalf("Reindex: %v", err)
+	}
+	if len(embed.inputs) != 1 {
+		t.Fatalf("embedded inputs = %d, want 1", len(embed.inputs))
+	}
+	input := embed.inputs[0]
+	for _, want := range []string{
+		"Document: 납기.md",
+		"Path: /계약/납기.md",
+		"Section: 납기 위험",
+		"Structure: markdown",
+		body,
+	} {
+		if !strings.Contains(input, want) {
+			t.Fatalf("contextual embed input missing %q:\n%s", want, input)
+		}
+	}
+
+	idx.mu.Lock()
+	stored := idx.files["/계약/납기.md"].Chunks[0]
+	idx.mu.Unlock()
+	if stored.Snippet != body {
+		t.Fatalf("stored snippet = %q, want original body %q", stored.Snippet, body)
+	}
+	if stored.Heading != "납기 위험" {
+		t.Fatalf("stored heading = %q, want 납기 위험", stored.Heading)
+	}
 }
 
 // An irrelevant query whose best chunk cosine falls below minSemanticScore must
@@ -367,11 +414,24 @@ func TestSemanticIndex_RemoveClearsAndRenameUpdatesEntry(t *testing.T) {
 		t.Fatalf("baseline hits = %+v, want 1 hit /계약/납기.txt", hits)
 	}
 
-	// Rename re-keys the entry to the new path (vectors unchanged).
+	// Rename re-keys immediately, then the next pass refreshes path context.
+	if _, err := store.Move(ctx, "/계약/납기.txt", "/보관/납기-2025.txt"); err != nil {
+		t.Fatalf("store Move: %v", err)
+	}
 	idx.Rename("/계약/납기.txt", "/보관/납기-2025.txt")
 	hits, _ = idx.Search(ctx, q, 5, embed)
 	if len(hits) != 1 || hits[0].Entry.PathDisplay != "/보관/납기-2025.txt" {
 		t.Fatalf("after Rename hits = %+v, want 1 hit /보관/납기-2025.txt", hits)
+	}
+	before := embed.texts
+	stats, err := idx.Reindex(ctx, store, plainText, embed)
+	if err != nil {
+		t.Fatalf("Reindex after Rename: %v", err)
+	}
+	// Rename marks contextual vectors stale so the next pass embeds the new path
+	// identity instead of keeping the old path in the vector forever.
+	if stats.Embedded != 1 || embed.texts <= before {
+		t.Fatalf("renamed entry was not contextually re-embedded: stats=%+v texts=%d→%d", stats, before, embed.texts)
 	}
 
 	// Remove drops it entirely.

@@ -9,9 +9,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/filestore"
 )
 
-// fixedEmbedder maps an exact text to a fixed vector (unknown text → zero
-// vector, cosine 0). Mirrors the filestore test embedder so the adapter test can
-// hand-place chunk cosines above/below the index's 0.73 floor deterministically.
+// fixedEmbedder maps an exact visible snippet to a fixed vector (unknown text →
+// zero). Filestore prepends path/section identity to document embeddings, so the
+// fixture unwraps that deterministic prefix while keeping query lookup exact.
 type fixedEmbedder struct {
 	vecs      map[string][]float32
 	unhealthy bool
@@ -22,6 +22,11 @@ func (f *fixedEmbedder) Embed(_ context.Context, texts []string) ([][]float32, e
 	out := make([][]float32, len(texts))
 	for i, t := range texts {
 		v, ok := f.vecs[t]
+		if !ok {
+			if split := strings.Index(t, "\n\n"); split >= 0 {
+				v, ok = f.vecs[t[split+2:]]
+			}
+		}
 		if !ok {
 			v = []float32{0, 0, 0}
 		}
