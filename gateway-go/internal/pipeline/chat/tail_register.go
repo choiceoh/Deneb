@@ -30,6 +30,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -48,7 +49,12 @@ const tailRegisterMaxPerSession = 200
 // separator — appendTextToMessage adds it identically on every attach).
 type persistedTailEntry struct {
 	Hash   string `json:"h"`
+	Ord    int    `json:"ord,omitempty"` // 0-based among user messages with the same content hash
 	Suffix string `json:"suffix"`
+}
+
+func tailEntryKey(hash string, ord int) string {
+	return hash + "\x00" + strconv.Itoa(ord)
 }
 
 // tailRegister owns the per-session tail entries. Entries preserve insert
@@ -90,16 +96,20 @@ func attachPersistedTails(sessionKey string, messages []llm.Message) []llm.Messa
 	if len(entries) == 0 {
 		return messages
 	}
-	byHash := make(map[string]string, len(entries))
+	byKey := make(map[string]string, len(entries))
 	for _, e := range entries {
-		byHash[e.Hash] = e.Suffix
+		byKey[tailEntryKey(e.Hash, e.Ord)] = e.Suffix
 	}
+	hashOrd := make(map[string]int, len(entries))
 	var out []llm.Message
 	for i := range messages {
 		if messages[i].Role != "user" {
 			continue
 		}
-		suffix, ok := byHash[tailContentHash(messages[i].Content.Bytes())]
+		h := tailContentHash(messages[i].Content.Bytes())
+		ord := hashOrd[h]
+		hashOrd[h] = ord + 1
+		suffix, ok := byKey[tailEntryKey(h, ord)]
 		if !ok {
 			continue
 		}
@@ -120,15 +130,18 @@ func attachPersistedTails(sessionKey string, messages []llm.Message) []llm.Messa
 }
 
 // recordPersistedTail records the joined tail suffix for a user message's
-// clean content bytes so later runs re-attach it. No-op for empty inputs; a
-// re-record of the same hash overwrites (last write wins — the wire form of
-// the latest run is the one whose cache lineage continues).
-func recordPersistedTail(sessionKey string, cleanContent []byte, additions []string) {
+// clean content bytes so later runs re-attach it. ord is the 0-based index
+// among user messages with the same content hash (duplicate utterances like
+// "ok" each carry their own recall tail). No-op for empty inputs; a
+// re-record of the same hash+ord overwrites (last write wins — the wire form
+// of the latest run is the one whose cache lineage continues).
+func recordPersistedTail(sessionKey string, cleanContent []byte, ord int, additions []string) {
 	if sessionKey == "" || len(cleanContent) == 0 || len(additions) == 0 {
 		return
 	}
 	entry := persistedTailEntry{
 		Hash:   tailContentHash(cleanContent),
+		Ord:    ord,
 		Suffix: strings.Join(additions, "\n\n"),
 	}
 	messageTails.mu.Lock()
@@ -138,7 +151,7 @@ func recordPersistedTail(sessionKey string, cleanContent []byte, additions []str
 	entries := messageTails.sessions[sessionKey]
 	replaced := false
 	for i := range entries {
-		if entries[i].Hash == entry.Hash {
+		if entries[i].Hash == entry.Hash && entries[i].Ord == entry.Ord {
 			if entries[i].Suffix == entry.Suffix {
 				messageTails.mu.Unlock()
 				return // idempotent re-record: no disk churn
@@ -258,4 +271,26 @@ func writeTailRegisterFile(path string, snapshot map[string][]persistedTailEntry
 func tailContentHash(content []byte) string {
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])
+}
+
+// userMessageHashOrdinal returns the 0-based occurrence index of the user
+// message at throughIndex among all user messages with the same content hash.
+func userMessageHashOrdinal(messages []llm.Message, throughIndex int) int {
+	if throughIndex < 0 || throughIndex >= len(messages) {
+		return 0
+	}
+	targetHash := tailContentHash(messages[throughIndex].Content.Bytes())
+	ord := 0
+	for i := 0; i <= throughIndex; i++ {
+		if messages[i].Role != "user" {
+			continue
+		}
+		if tailContentHash(messages[i].Content.Bytes()) == targetHash {
+			if i == throughIndex {
+				return ord
+			}
+			ord++
+		}
+	}
+	return 0
 }

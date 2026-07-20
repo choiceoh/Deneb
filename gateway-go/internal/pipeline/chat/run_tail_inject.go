@@ -92,18 +92,19 @@ func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skill
 // caller falls back to the legacy system-prompt placement in that case so
 // evidence is never silently dropped.
 func injectTailAdditions(messages []llm.Message, additions []string) ([]llm.Message, bool) {
-	out, ok, _ := injectTailAdditionsTracked(messages, additions)
+	out, ok, _, _ := injectTailAdditionsTracked(messages, additions)
 	return out, ok
 }
 
 // injectTailAdditionsTracked is injectTailAdditions plus the pre-injection
 // content bytes of the message that carried the additions (nil when nothing
-// was injected). The caller keys the persisted-tail register on those clean
-// transcript bytes so the next run's history reload can re-attach the same
-// suffix (tail_register.go).
-func injectTailAdditionsTracked(messages []llm.Message, additions []string) ([]llm.Message, bool, []byte) {
+// was injected) and its index in messages. The caller keys the
+// persisted-tail register on those clean transcript bytes plus the message's
+// hash-ordinal so duplicate user utterances do not share one tail
+// (tail_register.go).
+func injectTailAdditionsTracked(messages []llm.Message, additions []string) ([]llm.Message, bool, []byte, int) {
 	if len(additions) == 0 {
-		return messages, true, nil // nothing to add — trivially "done"
+		return messages, true, nil, -1 // nothing to add — trivially "done"
 	}
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role != "user" {
@@ -112,14 +113,14 @@ func injectTailAdditionsTracked(messages []llm.Message, additions []string) ([]l
 		cleanContent := append([]byte(nil), messages[i].Content.Bytes()...)
 		appended, ok := appendTextToMessage(messages[i], additions)
 		if !ok {
-			return messages, false, nil
+			return messages, false, nil, -1
 		}
 		out := make([]llm.Message, len(messages))
 		copy(out, messages)
 		out[i] = appended
-		return out, true, cleanContent
+		return out, true, cleanContent, i
 	}
-	return messages, false, nil
+	return messages, false, nil, -1
 }
 
 // appendTextToMessage returns a copy of msg with the additions appended as

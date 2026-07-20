@@ -746,9 +746,10 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 		messages = attachPersistedTails(params.SessionKey, messages)
 	}
 	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
-	messages, tailInjected, cleanTarget := injectTailAdditionsTracked(messages, tailAdds)
+	preTailMessages := messages
+	messages, tailInjected, cleanTarget, tailTargetIdx := injectTailAdditionsTracked(messages, tailAdds)
 	if tailInjected && shouldRecordTail(params, deps) {
-		recordPersistedTail(params.SessionKey, cleanTarget, tailAdds)
+		recordPersistedTail(params.SessionKey, cleanTarget, userMessageHashOrdinal(preTailMessages, tailTargetIdx), tailAdds)
 	}
 	tailForSystem := ""
 	if !tailInjected {
