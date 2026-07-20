@@ -69,6 +69,11 @@ class DeployShellTests(unittest.TestCase):
             printf 'curl %s\n' "$*" >> "$FAKE_LOG"
             exit "${CURL_RC:-0}"
         """)
+        self.topology_python = write_executable(self.bin / "model-topology-python", """
+            #!/usr/bin/env bash
+            printf 'topology-python cwd=%s args=%s\n' "$PWD" "$*" >> "$FAKE_LOG"
+            exit "${TOPOLOGY_RC:-0}"
+        """)
         write_executable(self.bin / "sleep", "#!/usr/bin/env bash\nexit 0\n")
 
     def env(self, **values: str) -> dict[str, str]:
@@ -89,6 +94,8 @@ class DeployShellTests(unittest.TestCase):
             "SS_LISTEN": "1",
             "SS_ADDRESS": "127.0.0.1:18789",
             "CURL_RC": "0",
+            "TOPOLOGY_RC": "0",
+            "DENEB_MODEL_ROUTE_TOPOLOGY_PYTHON": str(self.topology_python),
         }
         defaults.update(values)
         return isolated_env(self.home, self.bin, **defaults)
@@ -103,6 +110,20 @@ class DeployShellTests(unittest.TestCase):
 
     def calls(self) -> str:
         return self.log.read_text(encoding="utf-8") if self.log.exists() else ""
+
+    def topology_env(self, **values: str) -> dict[str, str]:
+        deneb_config = self.root / "deneb.json"
+        wormhole_config = self.root / "wormhole.json"
+        checker = self.prod / "scripts" / "audit" / "model_route_topology.py"
+        checker.parent.mkdir(parents=True, exist_ok=True)
+        checker.write_text("# topology checker fixture\n", encoding="utf-8")
+        deneb_config.write_text("{}\n", encoding="utf-8")
+        wormhole_config.write_text("{}\n", encoding="utf-8")
+        return self.env(
+            DENEB_CONFIG_PATH=str(deneb_config),
+            DENEB_WORMHOLE_CONFIG=str(wormhole_config),
+            **values,
+        )
 
     def test_when_non_main_checkout_refuses_before_pull_or_build(self) -> None:
         proc = self.invoke(env=self.env(GIT_BRANCH="feature"))
@@ -130,6 +151,39 @@ class DeployShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 7)
         self.assertNotIn("==> make gateway-prod", proc.stdout)
         self.assertNotIn("make ", self.calls())
+
+    def test_model_topology_gate_runs_after_pull_and_before_build(self) -> None:
+        proc = self.invoke("--build-only", env=self.topology_env())
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        calls = self.calls()
+        self.assertIn("topology-python cwd=", calls)
+        self.assertIn("scripts/audit/model_route_topology.py", calls)
+        self.assertLess(calls.index("topology-python cwd="), calls.index("make cwd="))
+
+    def test_model_topology_failure_stops_before_build_or_restart(self) -> None:
+        proc = self.invoke(env=self.topology_env(TOPOLOGY_RC="1"))
+
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("==> model route topology", proc.stdout)
+        calls = self.calls()
+        self.assertIn("topology-python cwd=", calls)
+        self.assertNotIn("make ", calls)
+        self.assertNotIn("systemctl", calls)
+
+    def test_model_topology_gate_has_an_explicit_emergency_bypass(self) -> None:
+        proc = self.invoke(
+            "--build-only",
+            env=self.topology_env(
+                TOPOLOGY_RC="9",
+                DENEB_SKIP_MODEL_ROUTE_TOPOLOGY_CHECK="1",
+            ),
+        )
+
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("model route topology gate explicitly skipped", proc.stderr)
+        self.assertNotIn("topology-python cwd=", self.calls())
+        self.assertIn("make cwd=", self.calls())
 
     def test_build_failure_stops_before_any_restart(self) -> None:
         proc = self.invoke(env=self.env(MAKE_RC="9"))
