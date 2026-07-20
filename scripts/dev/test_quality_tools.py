@@ -344,7 +344,15 @@ class QualityEvaluatorTests(unittest.TestCase):
                 "tests: [{name: daily-one, cat: daily}]\n",
                 encoding="utf-8",
             )
-            loaded = quality.load_tests(path)
+            yaml_adapter = mock.Mock()
+            yaml_adapter.safe_load.return_value = {
+                "profiles": {"base": ["rpc_success"]},
+                "category_defaults": {"daily": {"timeout": 5}},
+                "tests": [{"name": "daily-one", "cat": "daily"}],
+            }
+            with mock.patch.object(quality, "yaml", yaml_adapter):
+                loaded = quality.load_tests(path)
+            yaml_adapter.safe_load.assert_called_once()
         self.assertEqual(loaded[0], {"base": ["rpc_success"]})
         self.assertEqual(loaded[1], {"daily": {"timeout": 5}})
         self.assertEqual(loaded[2][0]["name"], "daily-one")

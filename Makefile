@@ -302,7 +302,7 @@ memory-ref-audit:
 # and attributing scorer failures to the "Python support tooling" lane).
 python-test:
 	@cd scripts/audit && \
-	  mods=$$(for f in test_*.py; do case "$$f" in test_codebase_health_v2*) ;; *) printf '%s ' "$${f%.py}"; esac; done); \
+	  mods=$$(for f in test_*.py; do rest=$${f#test_codebase_health_v2}; if [ "$$rest" = "$$f" ]; then printf '%s ' "$${f%.py}"; fi; done); \
 	  python3 -m unittest $$mods -v
 	@python3 -m unittest discover -s scripts/dev -p 'test_*.py' -v
 

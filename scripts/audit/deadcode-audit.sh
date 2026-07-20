@@ -61,16 +61,23 @@ known="$(grep -v '^#' "$baseline" | sort)"
 new_findings="$(comm -13 <(echo "$known") <(echo "$current"))"
 resolved="$(comm -23 <(echo "$known") <(echo "$current"))"
 
+count_nonempty_lines() {
+    awk 'NF { count++ } END { print count + 0 }'
+}
+
 if [[ -n "$resolved" ]]; then
-    echo "deadcode-audit: $(echo "$resolved" | wc -l) baseline entries no longer dead (stale — refresh with --update):"
+    resolved_count="$(printf '%s\n' "$resolved" | count_nonempty_lines)"
+    echo "deadcode-audit: $resolved_count baseline entries no longer dead (stale — refresh with --update):"
     echo "$resolved" | sed 's/^/  - /'
 fi
 
 if [[ -n "$new_findings" ]]; then
-    echo "deadcode-audit: NEW dead code ($(echo "$new_findings" | wc -l) findings):"
+    new_count="$(printf '%s\n' "$new_findings" | count_nonempty_lines)"
+    echo "deadcode-audit: NEW dead code ($new_count findings):"
     echo "$new_findings" | sed 's/^/  + /'
     echo "deadcode-audit: delete the code (preferred) or baseline it with operator approval."
     exit 1
 fi
 
-echo "deadcode-audit: clean ($(echo "$known" | wc -l) accepted baseline entries, 0 new)"
+known_count="$(printf '%s\n' "$known" | count_nonempty_lines)"
+echo "deadcode-audit: clean ($known_count accepted baseline entries, 0 new)"
