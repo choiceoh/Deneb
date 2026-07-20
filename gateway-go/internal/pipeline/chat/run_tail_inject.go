@@ -92,23 +92,34 @@ func buildTailAdditions(params RunParams, recallMemory, notebookGrounding, skill
 // caller falls back to the legacy system-prompt placement in that case so
 // evidence is never silently dropped.
 func injectTailAdditions(messages []llm.Message, additions []string) ([]llm.Message, bool) {
+	out, ok, _ := injectTailAdditionsTracked(messages, additions)
+	return out, ok
+}
+
+// injectTailAdditionsTracked is injectTailAdditions plus the pre-injection
+// content bytes of the message that carried the additions (nil when nothing
+// was injected). The caller keys the persisted-tail register on those clean
+// transcript bytes so the next run's history reload can re-attach the same
+// suffix (tail_register.go).
+func injectTailAdditionsTracked(messages []llm.Message, additions []string) ([]llm.Message, bool, []byte) {
 	if len(additions) == 0 {
-		return messages, true // nothing to add — trivially "done"
+		return messages, true, nil // nothing to add — trivially "done"
 	}
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role != "user" {
 			continue
 		}
+		cleanContent := append([]byte(nil), messages[i].Content.Bytes()...)
 		appended, ok := appendTextToMessage(messages[i], additions)
 		if !ok {
-			return messages, false
+			return messages, false, nil
 		}
 		out := make([]llm.Message, len(messages))
 		copy(out, messages)
 		out[i] = appended
-		return out, true
+		return out, true, cleanContent
 	}
-	return messages, false
+	return messages, false, nil
 }
 
 // appendTextToMessage returns a copy of msg with the additions appended as

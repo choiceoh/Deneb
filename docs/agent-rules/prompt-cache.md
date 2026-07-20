@@ -60,7 +60,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 ### 원칙 (Anthropic 4-마커 룰과 별개로 동시 적용)
 
 1. **per-turn 가변 바이트는 system 프롬프트에 절대 넣지 마라.** dynamic 블록이 "마커가 없어서 공짜"인 것은 Anthropic 이야기다 — vLLM 에선 system 의 모든 바이트가 히스토리보다 앞 prefix 다.
-2. **per-turn 주입은 마지막 user 메시지의 wire-only suffix 로.** `chat/run_tail_inject.go` (`buildTailAdditions` + `injectTailAdditions`) 가 단일 진입점이다: recall 증거, auto-delivery 지시문이 여기로 간다. transcript 에는 깨끗한 원문이 저장돼 다음 턴 히스토리는 이번 턴이 캐시한 prefix 와 byte-동일하다. 비용 = 추가분 자신의 토큰뿐.
+2. **per-turn 주입은 마지막 user 메시지의 wire-only suffix 로.** `chat/run_tail_inject.go` (`buildTailAdditions` + `injectTailAdditions`) 가 단일 진입점이다: recall 증거, auto-delivery 지시문이 여기로 간다. transcript 에는 깨끗한 원문이 저장돼 **같은 런 안의** 다음 턴 히스토리는 이번 턴이 캐시한 prefix 와 byte-동일하다. 비용 = 추가분 자신의 토큰뿐. ★단 **런 경계**에서는 히스토리 리로드가 클린 원문으로 되돌아와 그 메시지 지점부터 prefix 가 갈라진다 — content-prefix 캐시(§1.6)에서 대화 전체 재과금의 주범이었고, `chat/tail_register.go` 의 재부착이 이를 봉합한다.
 3. **세션 내 안정, 세션 간 공유.** system 에 남는 준가변 콘텐츠는 세션 동결로: tier-1 위키(`chat/tier1_cache.go`), 컨텍스트 파일(`prompt.WithSessionSnapshot`), 토픽 지식, calendar glance(일 단위). `/reset` 이 일괄 clear.
 4. **run 패밀리를 가르지 마라.** 같은 세션의 heartbeat/인터랙티브 턴이 다른 system 바이트를 받으면 prefix 패밀리가 2개로 갈라져 KV 풀을 이중 점유한다. AutoDelivered 지시문이 tail 로 간 이유이자, nil-Delivery 런이 세션 키에서 채널을 폴백(`sessionFallbackChannel`)하는 이유.
 
@@ -68,6 +68,18 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 - 엔진 전역: `curl -s http://<engine>/metrics | grep prefix_cache` (`vllm:prefix_cache_{hits,queries}_total`, 토큰 단위 누적). vLLM 컨테이너 로그의 `Prefix cache hit rate: N%` 라인은 **누적** 비율이라 시간대별 grep 으로 하락/상승 시점을 복원할 수 있다.
 - per-run: agentlog `run.cache` 이벤트 (`chat/engine_cache_sample.go` 가 턴 종료 후 /metrics 델타를 비동기 기록; vLLM usage 에 cached_tokens 가 없는 빌드에서 유일한 per-turn 신호). 단일 사용자 직렬 트래픽 기준 근사치. ⚠️ **웜홀 뒤에서는 baseURL 유도가 불가** — 2026-06-14 웜홀 전환 후 provider baseURL(`:18800`)에 /metrics 가 없어 6/14~7/5 사이 run.cache 가 조용히 죽어 있었다(실측: agent-logs 0건). 수리(2026-07-05): **`DENEB_ENGINE_METRICS_URL`** 오버라이드(`resolveEngineMetricsURL`, 사설망 호스트 검증 포함)로 실제 서빙 엔진의 /metrics 를 지정한다 — 웜홀 경유 배치에서는 이 env 가 필수, 미설정 시 샘플링은 안전하게 skip.
+
+---
+
+## 1.6. Content-prefix 캐시 프로바이더 (kimi) — 턴간 바이트 안정성
+
+> 2026-07-20 실측 (웜홀 경유 라이브 A/B + dev 게이트웨이 요청 캡처): kimi 코딩 엔드포인트는 `cache_control` 을 **완전히 무시**하는 자동 content-prefix 캐시다 — **(system, tools) 정확 일치가 전제조건**(1바이트 변경 → 부분 히트 없이 전체 콜드), messages 는 256토큰 청크 prefix 매칭, `cache_creation` 상시 0, TTL 5–30분. 마커 기반 사고("dynamic 블록은 마커가 없어 공짜", "trailing 마커가 prefix 를 지킨다")가 통하지 않는 세 번째 캐시 체제로, capability 는 `modelcaps.ContentPrefixCache` (builtin: provider id `kimi*`) 가 표식한다. §1.5 원칙에 더해 다음이 강제된다:
+
+1. **mid-run (system, tools) 불변.** 서브에이전트 완료 통지는 system append 가 아니라 다음 tool-results user 메시지의 text 블록으로 (`AgentConfig.DeferredTurnNotices`; 구 `DeferredSystemText` 는 제거). 유일하게 남은 mid-run 변이 = 지연 도구 활성화의 tools append — 모델이 미광고 도구를 호출하지 못해 (2026-07-20 kimi 프로브: in-band 스키마만으로는 fetch_tools 재호출만 반복) 활성화 턴당 1회 콜드는 도구가 호출 가능해지기 위한 불가피한 비용이다.
+2. **mid-run 히스토리 불변 (provider-conditional).** 완료 턴의 tool_result 축약(`CompactPriorToolResults`)은 content-prefix 프로바이더에서 skip (`AgentConfig.DisablePriorToolResultCompaction` ← `run_exec.go` 가 capability 로 설정). in-place 히스토리 변이가 그 지점 이후 전체를 콜드로 만들어 축약 절감보다 비싸다. 런 경계의 polaris 압축·spillover per-result 캡은 유지.
+3. **런 경계 꼬리 재부착.** §1.5 의 wire-only 꼬리는 런 안에서만 byte-stable — 다음 런은 클린 원문을 리로드해 대화 캐시 전체를 잃는다 (실측: client:main 런 경계마다 read 가 system+tools 크기에 고착, 매 런 전액 재과금). `chat/tail_register.go` 가 (클린 content 해시 → joined suffix) 를 세션별로 기록하고 `applyTailAdditions` 가 히스토리 user 메시지에 재부착한다 — transcript 는 클린 유지 (디스플레이·검색·이벤트 불변), wire 바이트만 런 간 동일. `/reset` 에서 clear, 상태 디렉토리(`user_message_tails.json`)에는 restorable 세션(client:main*)만 영속, 세션당 200개 FIFO.
+
+남은 의도적 콜드 (수용): 지연 도구 활성화(위 1), ephemeral 하트비트 트리거 메시지(비영속이라 다음 런 리로드에 없음), polaris 런 경계 압축(§5 공인 예외), 이미지 런의 `StripImagesAfterFirstTurn`.
 
 ---
 

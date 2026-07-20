@@ -435,9 +435,10 @@ func buildAgentConfig(
 		// Drop base64 image bytes from the message history after turn 0 so that
 		// subsequent tool-call turns don't retransmit the full image payload.
 		StripImagesAfterFirstTurn: hasImageAttachment(params.Attachments),
-		// Deferred context injection on turn 1+: subagent completion
-		// notifications via non-blocking channel reads.
-		DeferredSystemText:          deferredSubagentNotifications(acd.SubagentNotifyCh),
+		// Late subagent completion notifications ride the next tool-results
+		// user message (non-blocking channel drains) — never the mid-run
+		// system prompt (prompt-cache: content-prefix providers).
+		DeferredTurnNotices:         deferredSubagentNotifications(acd.SubagentNotifyCh),
 		OnTurn:                      turnHooks.onTurn,
 		OnToolTurn:                  turnHooks.onToolTurn,
 		OnTurnInit:                  state.turnInitializer(params, sessionToolPreset),

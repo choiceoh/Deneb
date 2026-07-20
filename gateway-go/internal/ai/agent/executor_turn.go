@@ -3,7 +3,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -58,14 +57,16 @@ func (p *turnRequestPreparer) initializeContext(ctx context.Context) context.Con
 	return ctx
 }
 
+// refreshDeferredInputs applies mid-run tool activations to the request's
+// tools array. This is the ONLY mid-run mutation of the (system, tools)
+// prefix left by design: a model will not call a tool absent from the tools
+// array (live-probed on kimi 2026-07-20 — with the schema in-band only, it
+// re-calls fetch_tools instead), so the one prompt-cache cold start per
+// activation turn is the price of the tool being callable at all. System
+// stays untouched mid-run; late notifications ride DeferredTurnNotices.
 func (p *turnRequestPreparer) refreshDeferredInputs(turn int) {
 	if turn <= 0 {
 		return
-	}
-	if p.cfg.DeferredSystemText != nil {
-		if extra := p.cfg.DeferredSystemText(); extra != "" {
-			p.cfg.System = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(p.cfg.System), extra).Bytes())
-		}
 	}
 	if p.cfg.DynamicToolsProvider != nil {
 		if extra := p.cfg.DynamicToolsProvider(); len(extra) > 0 {

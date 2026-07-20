@@ -497,6 +497,17 @@ func (r *agentRunner) toolResultsForNextTurn(turn int, outcome toolTurnOutcome) 
 	for _, nudge := range outcome.editThrashNudges {
 		toolResults = append(toolResults, llm.ContentBlock{Type: "text", Text: nudge})
 	}
+	// Late-arriving mid-run notifications (subagent completions) ride the new
+	// tool-results user message as trailing text blocks — never the System
+	// prompt, whose mid-run rewrite would cold-start content-prefix provider
+	// caches (see AgentConfig.DeferredTurnNotices).
+	if r.cfg.DeferredTurnNotices != nil {
+		for _, notice := range r.cfg.DeferredTurnNotices() {
+			if notice != "" {
+				toolResults = append(toolResults, llm.ContentBlock{Type: "text", Text: notice})
+			}
+		}
+	}
 	return r.preparer.appendBudgetWarning(turn, toolResults)
 }
 
@@ -510,6 +521,9 @@ func (r *agentRunner) finishCanceledToolTurn(ctx context.Context, outcome toolTu
 }
 
 func (r *agentRunner) compactPriorToolResults(turn, currentTurnStart int) {
+	if r.cfg.DisablePriorToolResultCompaction {
+		return
+	}
 	compacted := CompactPriorToolResults(r.journal.messages, currentTurnStart)
 	if compacted == 0 {
 		return

@@ -83,6 +83,10 @@ func (s *Server) configureAutonomousWorkflow(hub *rpcutil.GatewayHub) {
 	// Prompt snapshots must be configured before the service can begin a dream
 	// cycle, otherwise a restart loses byte-identical APC prompt reuse.
 	chat.ConfigurePromptSnapshots(config.ResolveStateDir(), s.logger)
+	// User-message tail register: same restart-survival contract for the
+	// per-turn tail additions, so post-restart history reloads keep the
+	// byte-identical wire form recorded by earlier runs (prompt cache).
+	chat.ConfigureTailRegister(config.ResolveStateDir(), s.logger)
 	s.autonomousSvc.OnEvent(func(event autonomous.CycleEvent) {
 		dreamWire, _ := events.PayloadOf(event)
 		hub.Broadcast("dreaming.cycle", dreamWire)

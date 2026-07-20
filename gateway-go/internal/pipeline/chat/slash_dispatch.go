@@ -114,6 +114,7 @@ func (h *Handler) handleResetCommand(sessionKey string, respond func(text string
 	toolport.ClearActiveNotebook(sessionKey) // unbind any active notebook-grounding session
 	clearNotebookGrounding(sessionKey)       // drop the frozen grounding snapshot too
 	forgetPromptSnapshot(sessionKey)         // drop the persisted copy too, not just memory
+	clearPersistedTails(sessionKey)          // recorded user-message tails go with the transcript
 	// Stop any standing goal bound to this session so /reset is a clean slate.
 	toolwire.ClearStandingGoal(sessionKey)
 	if h.transcript != nil {

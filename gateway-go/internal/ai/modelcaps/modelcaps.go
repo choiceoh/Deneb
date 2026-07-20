@@ -43,6 +43,17 @@ type Capability struct {
 	// of merely ignoring them). Kimi Code is the known case.
 	RejectsCacheControl bool
 
+	// ContentPrefixCache marks providers whose serving does automatic prompt
+	// caching keyed on the raw serialized request content — cache_control
+	// markers are decorative — with an exact-match precondition on the
+	// (system, tools) pair: any byte change there, or any mutation of an
+	// already-sent history message, cold-starts the entire prompt instead of
+	// falling back to a partial prefix hit. Kimi's coding endpoint is the
+	// measured case (2026-07-20 live A/B: markers ignored, 256-token chunks,
+	// one-byte system change → cache_read 0). Consumers use this to avoid
+	// optional mid-run history mutations that marker-based caches tolerate.
+	ContentPrefixCache bool
+
 	// ThinkingToggleKwarg names the vLLM chat_template_kwargs boolean that
 	// disables the model's thinking phase per request ("" = no template
 	// toggle). DeepSeek V4 templates use "thinking"; Qwen3-family templates
@@ -61,8 +72,18 @@ func Builtin(providerID, model string) Capability {
 	return Capability{
 		Reasoning:           IsOpenAIReasoningModel(model),
 		RejectsCacheControl: RejectsCacheControl(providerID),
+		ContentPrefixCache:  HasContentPrefixCache(providerID),
 		ThinkingToggleKwarg: ThinkingToggleKwarg(providerID, model),
 	}
+}
+
+// HasContentPrefixCache reports whether a provider's serving layer does
+// automatic content-keyed prompt caching (see Capability.ContentPrefixCache).
+// Kimi Code is the measured case; the prefix match covers operator variants
+// like "kimi-subagent". The wormhole router is byte-transparent, so a kimi
+// entry fronted by wormhole still resolves through the "kimi" provider id.
+func HasContentPrefixCache(providerID string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(providerID)), "kimi")
 }
 
 // ThinkingToggleKwarg reports the chat_template_kwargs boolean that disables
