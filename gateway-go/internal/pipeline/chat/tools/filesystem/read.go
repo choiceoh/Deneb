@@ -230,7 +230,10 @@ func useReadCache(fc *agent.FileCache, p readParams) bool {
 // still-fresh entry.
 func cachedReadResult(fc *agent.FileCache, path, displayPath string) (string, bool) {
 	entry := fc.Get(path)
-	if entry == nil || agent.FileChanged(path, entry) {
+	// An empty Content marks a staleness-only baseline (partial/function/
+	// hashes/oversize read, or a post-write entry whose render was dropped) —
+	// never serve it as a cached read.
+	if entry == nil || entry.Content == "" || agent.FileChanged(path, entry) {
 		return "", false
 	}
 	entry.ReadCount++
@@ -389,6 +392,16 @@ func ToolRead(defaultDir string, extraReadRoots ...string) toolport.ToolFunc {
 		}
 		if dirListing != "" {
 			return dirListing, nil
+		}
+
+		// Staleness baseline for EVERY successful file read, including the
+		// modes the dedup cache skips (offset/limit/function/hashes/force,
+		// oversize). Without it, an edit after a partial read of a
+		// concurrently modified file bypassed the modified-since-read guard.
+		// Default full reads upgrade the entry with the rendered output via
+		// storeReadCache below.
+		if fc != nil {
+			fc.RecordReadEvidence(path, data)
 		}
 
 		// Function extraction mode — needs the full content as string.

@@ -206,7 +206,52 @@ func (c *FileCache) UpdateAfterWrite(path string) {
 		entry.MTime = info.ModTime()
 		entry.Size = info.Size()
 		entry.ContentHash = ContentHashOf(data)
+		// The cached rendered output predates this write — serving it on the
+		// next read would resurrect pre-edit content. Drop it; the entry stays
+		// as the staleness baseline for future edits.
+		entry.Content = ""
+		entry.SpillID = ""
 	}
+}
+
+// RecordReadEvidence records that the session has seen the file's current
+// bytes without caching a rendered output. It is the staleness baseline for
+// reads that skip the dedup cache (offset/limit, function, hashes, force,
+// oversize): those previously left no entry, so CheckStaleness had nothing to
+// compare and an edit after a partial read of a concurrently modified file
+// sailed through. A same-content entry keeps its cached rendered output;
+// changed content drops it (the render no longer matches the bytes).
+func (c *FileCache) RecordReadEvidence(path string, data []byte) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	hash := ContentHashOf(data)
+	now := time.Now()
+	c.mu.Lock()
+	if entry, ok := c.entries[path]; ok {
+		entry.MTime = info.ModTime()
+		entry.Size = info.Size()
+		entry.ReadAt = now
+		entry.ReadCount++
+		if entry.ContentHash != hash {
+			entry.ContentHash = hash
+			entry.Content = ""
+			entry.SpillID = ""
+		}
+		c.moveToBack(path)
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Unlock()
+	c.Set(path, &FileCacheEntry{
+		Path:        path,
+		MTime:       info.ModTime(),
+		Size:        info.Size(),
+		ContentHash: hash,
+		ReadAt:      now,
+		ReadCount:   1,
+	})
 }
 
 // --- internal helpers ---
