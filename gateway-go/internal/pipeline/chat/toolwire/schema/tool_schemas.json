@@ -1,2525 +1,2529 @@
 [
-  {
-    "name": "read",
-    "properties": {
-      "file_path": {
-        "type": "string",
-        "description": "The absolute path to the file to read"
-      },
-      "offset": {
-        "type": "number",
-        "description": "The line number to start reading from (1-based)",
-        "minimum": 1
-      },
-      "limit": {
-        "type": "number",
-        "description": "The number of lines to read (default: 2000)",
-        "default": 2000,
-        "minimum": 1
-      },
-      "function": {
-        "type": "string",
-        "description": "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit"
-      },
-      "force": {
-        "type": "boolean",
-        "description": "Force re-read even if cached (default: false)",
-        "default": false
-      },
-      "hashes": {
-        "type": "boolean",
-        "description": "Prefix each line with a short content-hash anchor (columns: line<TAB>anchor<TAB>content). Pass an anchor to edit's anchor= to replace that line without reproducing it as old_string (saves output tokens). Default: false",
-        "default": false
-      }
-    },
-    "required": [
-      "file_path"
-    ]
+ {
+  "name": "read",
+  "properties": {
+   "file_path": {
+    "type": "string",
+    "description": "The absolute path to the file to read"
+   },
+   "offset": {
+    "type": "number",
+    "description": "The line number to start reading from (1-based)",
+    "minimum": 1
+   },
+   "limit": {
+    "type": "number",
+    "description": "The number of lines to read (default: 2000)",
+    "default": 2000,
+    "minimum": 1
+   },
+   "function": {
+    "type": "string",
+    "description": "Read only this function/method/type. For .go files uses AST; for others uses regex. Overrides offset/limit"
+   },
+   "force": {
+    "type": "boolean",
+    "description": "Force re-read even if cached (default: false)",
+    "default": false
+   },
+   "hashes": {
+    "type": "boolean",
+    "description": "Prefix each line with a short content-hash anchor (columns: line<TAB>anchor<TAB>content). Pass an anchor to edit's anchor= to replace that line without reproducing it as old_string (saves output tokens). Default: false",
+    "default": false
+   }
   },
-  {
-    "name": "research_panel",
-    "properties": {
-      "question": {
-        "type": "string",
-        "description": "The research question / sub-question to put to every healthy model in parallel. Phrase it as one self-contained prompt (the models do not see the conversation)."
-      },
-      "models": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Optional: restrict the panel to these served model names. Empty/omitted = all currently-healthy models the router serves (the default — fan out to everything that is up)."
-      }
+  "required": [
+   "file_path"
+  ]
+ },
+ {
+  "name": "research_panel",
+  "properties": {
+   "question": {
+    "type": "string",
+    "description": "The research question / sub-question to put to every healthy model in parallel. Phrase it as one self-contained prompt (the models do not see the conversation)."
+   },
+   "models": {
+    "type": "array",
+    "items": {
+     "type": "string"
     },
-    "required": [
-      "question"
-    ]
+    "description": "Optional: restrict the panel to these served model names. Empty/omitted = all currently-healthy models the router serves (the default — fan out to everything that is up)."
+   }
   },
-  {
-    "name": "read_spillover",
-    "properties": {
-      "spill_id": {
-        "type": "string",
-        "description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result"
-      },
-      "offset": {
-        "type": "integer",
-        "description": "시작 줄 번호 (1-기반, 기본 1). 이전 페이지 꼬리의 [계속: offset=N] 안내를 그대로 사용"
-      },
-      "limit": {
-        "type": "integer",
-        "description": "최대 반환 줄 수 (기본 400). 페이지는 char 예산(20K)으로도 바운드됨"
-      },
-      "grep": {
-        "type": "string",
-        "description": "Go 정규식 — 매치되는 줄만 줄번호와 함께 반환 (최대 200줄). 원하는 구간을 찾은 뒤 offset으로 그 주변을 열 때 사용"
-      }
-    },
-    "required": [
-      "spill_id"
-    ]
+  "required": [
+   "question"
+  ]
+ },
+ {
+  "name": "read_spillover",
+  "properties": {
+   "spill_id": {
+    "type": "string",
+    "description": "The spillover reference ID (e.g., sp_abc123) from a previous large tool result"
+   },
+   "offset": {
+    "type": "integer",
+    "description": "시작 줄 번호 (1-기반, 기본 1). 이전 페이지 꼬리의 [계속: offset=N] 안내를 그대로 사용"
+   },
+   "limit": {
+    "type": "integer",
+    "description": "최대 반환 줄 수 (기본 400). 페이지는 char 예산(20K)으로도 바운드됨"
+   },
+   "grep": {
+    "type": "string",
+    "description": "Go 정규식 — 매치되는 줄만 줄번호와 함께 반환 (최대 200줄). 원하는 구간을 찾은 뒤 offset으로 그 주변을 열 때 사용"
+   }
   },
-  {
-    "name": "write",
-    "properties": {
-      "file_path": {
-        "type": "string",
-        "description": "The absolute path to the file to write"
-      },
-      "content": {
-        "type": "string",
-        "description": "The content to write to the file"
-      }
-    },
-    "required": [
-      "file_path",
-      "content"
-    ]
+  "required": [
+   "spill_id"
+  ]
+ },
+ {
+  "name": "write",
+  "properties": {
+   "file_path": {
+    "type": "string",
+    "description": "The absolute path to the file to write"
+   },
+   "content": {
+    "type": "string",
+    "description": "The content to write to the file"
+   }
   },
-  {
-    "name": "edit",
-    "properties": {
-      "file_path": {
-        "type": "string",
-        "description": "The absolute path to the file to modify"
-      },
+  "required": [
+   "file_path",
+   "content"
+  ]
+ },
+ {
+  "name": "edit",
+  "properties": {
+   "file_path": {
+    "type": "string",
+    "description": "The absolute path to the file to modify"
+   },
+   "old_string": {
+    "type": "string",
+    "description": "The text to replace (must be unique unless replace_all is true). When regex=true, treated as a regex pattern"
+   },
+   "new_string": {
+    "type": "string",
+    "description": "The text to replace it with. When regex=true, supports $1/$2 backreferences"
+   },
+   "replace_all": {
+    "type": "boolean",
+    "description": "Replace all occurrences instead of requiring a unique match (default: false)",
+    "default": false
+   },
+   "regex": {
+    "type": "boolean",
+    "description": "Treat old_string as a regex pattern (default: false)",
+    "default": false
+   },
+   "line": {
+    "type": "number",
+    "description": "Replace at a specific line number (1-based). When set, old_string matches only on this line",
+    "minimum": 1
+   },
+   "anchor": {
+    "type": "string",
+    "description": "Content-hash anchor from read(hashes=true) identifying the line to replace. Replaces the whole anchored line with new_string — no old_string needed. Errors if the anchor matches zero or multiple (identical) lines"
+   },
+   "anchor_end": {
+    "type": "string",
+    "description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)"
+   },
+   "edits": {
+    "type": "array",
+    "description": "배치 편집: 같은 파일에 여러 치환을 한 번에 적용 (순차 적용 — 뒤 항목은 앞 항목 결과를 본다). 전부 성공해야 기록되는 all-or-nothing. N회 호출 대비 토큰·턴 절약; 사용 시 old_string/new_string은 생략",
+    "items": {
+     "type": "object",
+     "properties": {
       "old_string": {
-        "type": "string",
-        "description": "The text to replace (must be unique unless replace_all is true). When regex=true, treated as a regex pattern"
+       "type": "string"
       },
       "new_string": {
-        "type": "string",
-        "description": "The text to replace it with. When regex=true, supports $1/$2 backreferences"
+       "type": "string"
       },
       "replace_all": {
-        "type": "boolean",
-        "description": "Replace all occurrences instead of requiring a unique match (default: false)",
-        "default": false
-      },
-      "regex": {
-        "type": "boolean",
-        "description": "Treat old_string as a regex pattern (default: false)",
-        "default": false
-      },
-      "line": {
-        "type": "number",
-        "description": "Replace at a specific line number (1-based). When set, old_string matches only on this line",
-        "minimum": 1
-      },
-      "anchor": {
-        "type": "string",
-        "description": "Content-hash anchor from read(hashes=true) identifying the line to replace. Replaces the whole anchored line with new_string — no old_string needed. Errors if the anchor matches zero or multiple (identical) lines"
-      },
-      "anchor_end": {
-        "type": "string",
-        "description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)"
-      },
-      "edits": {
-        "type": "array",
-        "description": "배치 편집: 같은 파일에 여러 치환을 한 번에 적용 (순차 적용 — 뒤 항목은 앞 항목 결과를 본다). 전부 성공해야 기록되는 all-or-nothing. N회 호출 대비 토큰·턴 절약; 사용 시 old_string/new_string은 생략",
-        "items": {
-          "type": "object",
-          "properties": {
-            "old_string": {
-              "type": "string"
-            },
-            "new_string": {
-              "type": "string"
-            },
-            "replace_all": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "old_string",
-            "new_string"
-          ]
-        }
+       "type": "boolean"
       }
-    },
-    "required": [
-      "file_path",
+     },
+     "required": [
+      "old_string",
       "new_string"
-    ]
+     ]
+    }
+   }
   },
-  {
-    "name": "grep",
-    "properties": {
-      "pattern": {
-        "type": "string",
-        "description": "Regular expression pattern to search for"
-      },
-      "path": {
-        "type": "string",
-        "description": "File or directory to search in"
-      },
-      "include": {
-        "type": "string",
-        "description": "Glob pattern to filter files (e.g. \"*.ts\")"
-      },
-      "contextLines": {
-        "type": "number",
-        "description": "Lines of context around each match (0-10)",
-        "default": 0,
-        "minimum": 0,
-        "maximum": 10
-      },
-      "before": {
-        "type": "number",
-        "description": "Lines of context before each match (overrides contextLines for before)",
-        "minimum": 0,
-        "maximum": 10
-      },
-      "after": {
-        "type": "number",
-        "description": "Lines of context after each match (overrides contextLines for after)",
-        "minimum": 0,
-        "maximum": 10
-      },
-      "ignoreCase": {
-        "type": "boolean",
-        "description": "Case-insensitive search",
-        "default": false
-      },
-      "maxResults": {
-        "type": "number",
-        "description": "Maximum matches to return",
-        "default": 100,
-        "minimum": 1,
-        "maximum": 500
-      },
-      "fileType": {
-        "type": "string",
-        "description": "File type filter for ripgrep --type (e.g. \"go\", \"py\", \"js\")"
-      },
-      "multiline": {
-        "type": "boolean",
-        "description": "Enable multiline matching (patterns can span lines, . matches newlines)",
-        "default": false
-      },
-      "mode": {
-        "type": "string",
-        "description": "Output mode: content (default, matching lines), files_only (file paths only), count (match counts per file)",
-        "enum": [
-          "content",
-          "files_only",
-          "count"
-        ]
-      }
+  "required": [
+   "file_path",
+   "new_string"
+  ]
+ },
+ {
+  "name": "grep",
+  "properties": {
+   "pattern": {
+    "type": "string",
+    "description": "Regular expression pattern to search for"
+   },
+   "path": {
+    "type": "string",
+    "description": "File or directory to search in"
+   },
+   "include": {
+    "type": "string",
+    "description": "Glob pattern to filter files (e.g. \"*.ts\")"
+   },
+   "contextLines": {
+    "type": "number",
+    "description": "Lines of context around each match (0-10)",
+    "default": 0,
+    "minimum": 0,
+    "maximum": 10
+   },
+   "before": {
+    "type": "number",
+    "description": "Lines of context before each match (overrides contextLines for before)",
+    "minimum": 0,
+    "maximum": 10
+   },
+   "after": {
+    "type": "number",
+    "description": "Lines of context after each match (overrides contextLines for after)",
+    "minimum": 0,
+    "maximum": 10
+   },
+   "ignoreCase": {
+    "type": "boolean",
+    "description": "Case-insensitive search",
+    "default": false
+   },
+   "maxResults": {
+    "type": "number",
+    "description": "Maximum matches to return",
+    "default": 100,
+    "minimum": 1,
+    "maximum": 500
+   },
+   "fileType": {
+    "type": "string",
+    "description": "File type filter for ripgrep --type (e.g. \"go\", \"py\", \"js\")"
+   },
+   "multiline": {
+    "type": "boolean",
+    "description": "Enable multiline matching (patterns can span lines, . matches newlines)",
+    "default": false
+   },
+   "mode": {
+    "type": "string",
+    "description": "Output mode: content (default, matching lines), files_only (file paths only), count (match counts per file)",
+    "enum": [
+     "content",
+     "files_only",
+     "count"
+    ]
+   }
+  },
+  "required": [
+   "pattern"
+  ]
+ },
+ {
+  "name": "exec",
+  "max_output": 32000,
+  "properties": {
+   "command": {
+    "type": "string",
+    "description": "Shell command to execute"
+   },
+   "workdir": {
+    "type": "string",
+    "description": "Working directory (defaults to workspace root)"
+   },
+   "timeout": {
+    "type": "number",
+    "description": "Timeout in seconds (default: 60, max: 600)",
+    "default": 60,
+    "minimum": 1,
+    "maximum": 600
+   },
+   "background": {
+    "type": "boolean",
+    "description": "Run in background immediately, then use process tool to check output",
+    "default": false
+   },
+   "structured": {
+    "type": "boolean",
+    "description": "Return JSON with stdout, stderr, exit_code, runtime_ms instead of plain text",
+    "default": false
+   },
+   "env": {
+    "type": "object",
+    "description": "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
+    "additionalProperties": {
+     "type": "string"
+    }
+   }
+  },
+  "required": [
+   "command"
+  ]
+ },
+ {
+  "name": "process",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Process action",
+    "enum": [
+     "list",
+     "poll",
+     "log",
+     "write",
+     "kill"
+    ]
+   },
+   "sessionId": {
+    "type": "string",
+    "description": "Session ID for actions other than list"
+   },
+   "input": {
+    "type": "string",
+    "description": "Data to write to process stdin (required for write action)"
+   },
+   "timeout": {
+    "type": "number",
+    "description": "poll에서 완료까지 최대 대기(ms). 지정하면 프로세스가 끝나거나 시한이 지날 때까지 블록(최대 5분), 미지정 시 즉시 스냅샷 반환"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "web",
+  "properties": {
+   "url": {
+    "type": "string",
+    "description": "URL to fetch (HTML extraction + bot evasion). YouTube links return the video's transcript (split into chapter sections with [m:ss] timestamps) plus metadata (title/channel/views/tags/chapters) — use this to summarize or analyze a YouTube video from its captions without watching it. Reach for the watch tool only when you need to SEE the frames."
+   },
+   "query": {
+    "type": "string",
+    "description": "Web search query. Serper (Google) → Brave → DuckDuckGo on missing key or provider failure"
+   },
+   "queries": {
+    "type": "array",
+    "items": {
+     "type": "string"
     },
-    "required": [
-      "pattern"
+    "description": "Multiple parallel search queries (max 5)"
+   },
+   "fetch": {
+    "type": "number",
+    "description": "Auto-fetch top N results per query (1-3, default: 0)"
+   },
+   "maxChars": {
+    "type": "number",
+    "description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget"
+   },
+   "count": {
+    "type": "number",
+    "description": "Number of search results per query (default: 5)"
+   },
+   "type": {
+    "type": "string",
+    "description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
+    "enum": [
+     "news",
+     "scholar",
+     "autocomplete"
     ]
+   },
+   "academic": {
+    "type": "boolean",
+    "description": "true = 학술 레인 병행: arXiv·Semantic Scholar(무료 API)를 검색과 병렬 조회해 결과 뒤에 라벨 섹션으로 부착 (초록 포함 구조화 결과). 논문·리서치 질의에 켤 것. 쿼리에 arXiv ID·arxiv·논문·paper 토큰이 있으면 자동 발화. query 모드 전용 (url·type과 무관)"
+   }
+  }
+ },
+ {
+  "name": "browse",
+  "properties": {
+   "url": {
+    "type": "string",
+    "description": "열어 읽을 페이지 URL (http/https)"
+   },
+   "wait_ms": {
+    "type": "integer",
+    "description": "렌더 정착 대기(ms, 기본 2000·최대 5000) — SPA/그룹웨어처럼 늦게 그려지는 페이지에서 올린다"
+   }
   },
-  {
-    "name": "exec",
-    "max_output": 32000,
-    "properties": {
-      "command": {
-        "type": "string",
-        "description": "Shell command to execute"
-      },
-      "workdir": {
-        "type": "string",
-        "description": "Working directory (defaults to workspace root)"
-      },
-      "timeout": {
-        "type": "number",
-        "description": "Timeout in seconds (default: 60, max: 600)",
-        "default": 60,
-        "minimum": 1,
-        "maximum": 600
-      },
-      "background": {
-        "type": "boolean",
-        "description": "Run in background immediately, then use process tool to check output",
-        "default": false
-      },
-      "structured": {
-        "type": "boolean",
-        "description": "Return JSON with stdout, stderr, exit_code, runtime_ms instead of plain text",
-        "default": false
-      },
-      "env": {
-        "type": "object",
-        "description": "Environment variables to set for this command (key-value pairs). Blocked keys (API keys, secrets) are filtered.",
-        "additionalProperties": {
-          "type": "string"
-        }
-      }
+  "required": [
+   "url"
+  ]
+ },
+ {
+  "name": "cron",
+  "description": "Manage scheduled tasks (cron jobs). Actions: add (create), list (all jobs), status (service health),\nget (job detail), update (modify), remove (delete), run (execute now), runs (execution history).\nSchedule formats: cron expression (0 9 * * * = daily 9am), interval (30m, 1h), one-shot (ISO timestamp).\nCommon patterns: 0 9 * * * (daily 9am), 0 */2 * * * (every 2h), 0 9 * * 1-5 (weekdays 9am), @daily, @hourly.\n",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Cron action",
+    "enum": [
+     "status",
+     "list",
+     "add",
+     "update",
+     "remove",
+     "run",
+     "get",
+     "runs",
+     "wake"
+    ]
+   },
+   "name": {
+    "type": "string",
+    "description": "Job name (required for add, used as job ID)"
+   },
+   "schedule": {
+    "type": "string",
+    "description": "Schedule specification. Formats: cron (0 9 * * *), interval (1h, 30m, every 5m), timestamp (2026-04-06T08:00:00), shorthand (@daily, @hourly, @weekly)"
+   },
+   "command": {
+    "type": "string",
+    "description": "Agent message/command to execute on schedule (required for add)"
+   },
+   "jobId": {
+    "type": "string",
+    "description": "Job ID for get/update/remove/run/runs actions"
+   },
+   "enabled": {
+    "type": "boolean",
+    "description": "Enable or disable a job (for add/update)"
+   },
+   "limit": {
+    "type": "integer",
+    "description": "Max entries to return (for runs action, default 10)"
+   },
+   "tz": {
+    "type": "string",
+    "description": "Timezone for cron schedules (e.g. Asia/Seoul, UTC). Defaults to system local timezone"
+   },
+   "staggerMs": {
+    "type": "integer",
+    "description": "Random delay window in ms to distribute cron jobs (cron kind only, default: auto for top-of-hour)"
+   },
+   "anchorTime": {
+    "type": "string",
+    "description": "Anchor time for interval schedules (ISO 8601). Intervals count from this time instead of registration time"
+   },
+   "retryCount": {
+    "type": "integer",
+    "description": "Number of retry attempts on failure (0-3, default 0 = no retry)"
+   },
+   "retryBackoffMs": {
+    "type": "integer",
+    "description": "Initial backoff delay between retries in ms (default 5000). Doubles each retry, capped at 60s"
+   },
+   "deliveryMode": {
+    "type": "string",
+    "description": "How to deliver output: announce (send to the user, default) or none (run silently)",
+    "enum": [
+     "announce",
+     "none"
+    ]
+   },
+   "thinking": {
+    "type": "string",
+    "description": "Per-job thinking level for the agent turn. \"off\" disables the thinking phase (use for routine, well-templated jobs - much faster on the dual-mode main model). Levels minimal/low/medium/high set a budget; \"default\" clears the override.",
+    "enum": [
+     "off",
+     "minimal",
+     "low",
+     "medium",
+     "high",
+     "default"
+    ]
+   },
+   "job": {
+    "type": "object",
+    "description": "Job definition object (alternative to top-level name/schedule/command)",
+    "additionalProperties": true
+   },
+   "text": {
+    "type": "string",
+    "description": "System event text for wake action"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "morning_letter",
+  "description": "Collect the morning-letter sections in parallel and return a complete, validated deneb-ui message in delivery plus inspection-only raw sections. Return delivery verbatim; do not re-fetch or reformat the sections. No parameters.",
+  "properties": {},
+  "required": []
+ },
+ {
+  "name": "evening_letter",
+  "description": "Collect the evening-letter data sections in parallel — calendar (today + tomorrow), unhandled email, approaching wiki deadlines, pending groupware approvals — and return raw JSON. The end-of-day counterpart to morning_letter; the morning-only market sections (weather, FX, copper) are omitted. The agent composes the letter (reflection, tomorrow prep, priorities). No parameters.",
+  "properties": {},
+  "required": []
+ },
+ {
+  "name": "message",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Message action",
+    "enum": [
+     "send",
+     "react",
+     "reply",
+     "thread-reply"
+    ]
+   },
+   "message": {
+    "type": "string",
+    "description": "Text content to send"
+   },
+   "to": {
+    "type": "string",
+    "description": "Recipient (chat ID or user identifier)"
+   },
+   "channel": {
+    "type": "string",
+    "description": "Target channel (e.g., client)"
+   },
+   "replyTo": {
+    "type": "string",
+    "description": "Message ID to reply to"
+   },
+   "emoji": {
+    "type": "string",
+    "description": "Emoji for react action"
+   },
+   "messageId": {
+    "type": "string",
+    "description": "Message ID for react/reply actions"
+   },
+   "silent": {
+    "type": "boolean",
+    "description": "Send without notification sound"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "gateway",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Gateway action. config_get/config_set: read or write a single dotted path. config.get: full config snapshot. config.apply: replace the whole config. config.patch: merge a patch object. config.schema.lookup: schema for a path. Destructive actions (restart/update/config_set/config.apply/config.patch) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
+    "enum": [
+     "status",
+     "config_get",
+     "config_set",
+     "config_set.confirmed",
+     "update",
+     "update.confirmed",
+     "restart",
+     "restart.confirmed",
+     "config.get",
+     "config.schema.lookup",
+     "config.apply",
+     "config.apply.confirmed",
+     "config.patch",
+     "config.patch.confirmed"
+    ]
+   },
+   "path": {
+    "type": "string",
+    "description": "Dotted config path for config_get / config_set (e.g. \"model.main\"). Also used for config.schema.lookup."
+   },
+   "value": {
+    "description": "Leaf value to write (config_set only). Must be a scalar, array, or null — object replacement is rejected."
+   },
+   "action_token": {
+    "type": "string",
+    "description": "Token returned by a prior approval envelope; required when calling a .confirmed variant."
+   },
+   "raw": {
+    "type": "string",
+    "description": "Raw config JSON for apply/patch"
+   },
+   "reason": {
+    "type": "string",
+    "description": "Reason for restart or update"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "sessions",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Session action",
+    "enum": [
+     "list",
+     "history",
+     "search",
+     "send",
+     "stats"
+    ]
+   },
+   "days": {
+    "type": "number",
+    "description": "stats: 집계 기간(일). 기본 7",
+    "default": 7,
+    "minimum": 1
+   },
+   "limit": {
+    "type": "number",
+    "description": "Max sessions (list) or messages (history, default 20) to return",
+    "default": 20,
+    "minimum": 1
+   },
+   "kinds": {
+    "type": "array",
+    "items": {
+     "type": "string",
+     "enum": [
+      "main",
+      "group",
+      "cron",
+      "hook"
+     ]
     },
-    "required": [
-      "command"
-    ]
+    "description": "Filter by session kind (list action)"
+   },
+   "sessionKey": {
+    "type": "string",
+    "description": "Target session key (history/send actions)"
+   },
+   "query": {
+    "type": "string",
+    "description": "Search keyword (search action)"
+   },
+   "maxResults": {
+    "type": "number",
+    "description": "Max search results (search action, default 20)",
+    "default": 20,
+    "minimum": 1,
+    "maximum": 100
+   },
+   "message": {
+    "type": "string",
+    "description": "Message to send (send action)"
+   }
   },
-  {
-    "name": "process",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Process action",
-        "enum": [
-          "list",
-          "poll",
-          "log",
-          "write",
-          "kill"
-        ]
-      },
-      "sessionId": {
-        "type": "string",
-        "description": "Session ID for actions other than list"
-      },
-      "input": {
-        "type": "string",
-        "description": "Data to write to process stdin (required for write action)"
-      },
-      "timeout": {
-        "type": "number",
-        "description": "poll에서 완료까지 최대 대기(ms). 지정하면 프로세스가 끝나거나 시한이 지날 때까지 블록(최대 5분), 미지정 시 즉시 스냅샷 반환"
-      }
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "sessions_spawn",
+  "properties": {
+   "task": {
+    "type": "string",
+    "description": "Task description for the sub-agent"
+   },
+   "label": {
+    "type": "string",
+    "description": "Human-readable label"
+   },
+   "model": {
+    "type": "string",
+    "enum": [
+     "main",
+     "coding",
+     "lightweight",
+     "fallback"
+    ],
+    "description": "Model role to use (default: main; implementer uses coding automatically when configured)"
+   },
+   "tool_preset": {
+    "type": "string",
+    "enum": [
+     "researcher",
+     "implementer",
+     "verifier"
+    ],
+    "description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/mail_archive/wiki/knowledge/polaris/contacts/graphify; no shell, no file writes, no Gmail OAuth surface), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset"
+   }
+  },
+  "required": [
+   "task"
+  ]
+ },
+ {
+  "name": "subagents",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Sub-agent management action. 'result' returns a finished sub-agent's output (pull a result on demand, complementing the automatic completion notification).",
+    "enum": [
+     "list",
+     "result",
+     "kill",
+     "steer"
+    ]
+   },
+   "target": {
+    "type": "string",
+    "description": "Target sub-agent index, label, or session key (for result/kill/steer). Optional when exactly one sub-agent exists."
+   },
+   "message": {
+    "type": "string",
+    "description": "Steering message for steer action"
+   }
+  }
+ },
+ {
+  "name": "send_file",
+  "properties": {
+   "file_path": {
+    "type": "string",
+    "description": "Path to the file to send"
+   },
+   "type": {
+    "type": "string",
+    "description": "Media type. Auto-detected from MIME if omitted",
+    "enum": [
+     "photo",
+     "document",
+     "video",
+     "audio",
+     "voice"
+    ]
+   },
+   "caption": {
+    "type": "string",
+    "description": "Caption text (optional)"
+   },
+   "silent": {
+    "type": "boolean",
+    "description": "Send without notification sound"
+   }
+  },
+  "required": [
+   "file_path"
+  ]
+ },
+ {
+  "name": "chart",
+  "properties": {
+   "chart_type": {
+    "type": "string",
+    "description": "데이터 성격에 맞게 고른다 — 시간에 따른 추이=line, 점층 누적/면적 강조=area, 항목 간 비교=bar, 전체 대비 구성비(부분의 합=전체)=doughnut. 막대+추세선 콤보는 bar로 두고 한 시리즈에 type:line을 지정.",
+    "enum": [
+     "line",
+     "area",
+     "bar",
+     "doughnut"
+    ]
+   },
+   "title": {
+    "type": "string",
+    "description": "차트 상단 제목 (예: '월별 발주 추이')"
+   },
+   "subtitle": {
+    "type": "string",
+    "description": "제목 아래 보조 설명 한 줄 (선택, 예: '2026년 상반기 · 단위 건')"
+   },
+   "labels": {
+    "type": "array",
+    "items": {
+     "type": "string"
     },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "web",
-    "properties": {
-      "url": {
-        "type": "string",
-        "description": "URL to fetch (HTML extraction + bot evasion). YouTube links return the video's transcript (split into chapter sections with [m:ss] timestamps) plus metadata (title/channel/views/tags/chapters) — use this to summarize or analyze a YouTube video from its captions without watching it. Reach for the watch tool only when you need to SEE the frames."
+    "description": "x축 항목(line/area/bar) 또는 도넛 조각 이름. 순서대로 series의 data와 1:1 대응."
+   },
+   "series": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "시리즈 이름 (범례에 표시). 시리즈가 1개면 생략 가능."
       },
-      "query": {
-        "type": "string",
-        "description": "Web search query. Serper (Google) → Brave → DuckDuckGo on missing key or provider failure"
-      },
-      "queries": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Multiple parallel search queries (max 5)"
-      },
-      "fetch": {
-        "type": "number",
-        "description": "Auto-fetch top N results per query (1-3, default: 0)"
-      },
-      "maxChars": {
-        "type": "number",
-        "description": "Maximum content characters total (default: 20000). search+fetch may use a lower internal budget"
-      },
-      "count": {
-        "type": "number",
-        "description": "Number of search results per query (default: 5)"
+      "data": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "description": "labels와 같은 길이의 숫자 배열."
       },
       "type": {
-        "type": "string",
-        "description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
-        "enum": [
-          "news",
-          "scholar",
-          "autocomplete"
-        ]
+       "type": "string",
+       "description": "이 시리즈만 다른 모양으로 그릴 때 (콤보 차트). bar 차트 위에 추세선을 얹으려면 line.",
+       "enum": [
+        "line",
+        "bar"
+       ]
       }
-    }
-  },
-  {
-    "name": "browse",
-    "properties": {
-      "url": {
-        "type": "string",
-        "description": "열어 읽을 페이지 URL (http/https)"
-      },
-      "wait_ms": {
-        "type": "integer",
-        "description": "렌더 정착 대기(ms, 기본 2000·최대 5000) — SPA/그룹웨어처럼 늦게 그려지는 페이지에서 올린다"
-      }
+     },
+     "required": [
+      "data"
+     ]
     },
-    "required": [
-      "url"
+    "description": "데이터 시리즈 목록. line/area/bar는 여러 시리즈 가능(겹쳐 그림), doughnut은 첫 시리즈만 사용."
+   },
+   "y_unit": {
+    "type": "string",
+    "description": "값 축 단위 (예: 건, 만원, %). 눈금에 접미사로 표시되고 도넛 범례의 값에도 붙는다"
+   },
+   "stacked": {
+    "type": "boolean",
+    "description": "bar/area 시리즈를 누적으로 (구성비 추이). 여러 시리즈일 때만 의미"
+   },
+   "horizontal": {
+    "type": "boolean",
+    "description": "bar를 가로 방향으로 (항목별 순위·긴 라벨). bar 전용"
+   },
+   "send": {
+    "type": "boolean",
+    "description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용"
+   },
+   "caption": {
+    "type": "string",
+    "description": "send=true일 때 사진 캡션"
+   }
+  },
+  "required": [
+   "chart_type",
+   "labels",
+   "series"
+  ]
+ },
+ {
+  "name": "diagram",
+  "properties": {
+   "diagram_type": {
+    "type": "string",
+    "description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정(작업별 기간 막대), timeline=연혁·이력·로드맵(시점별 사건). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
+    "enum": [
+     "flowchart",
+     "gantt",
+     "timeline"
     ]
-  },
-  {
-    "name": "cron",
-    "description": "Manage scheduled tasks (cron jobs). Actions: add (create), list (all jobs), status (service health),\nget (job detail), update (modify), remove (delete), run (execute now), runs (execution history).\nSchedule formats: cron expression (0 9 * * * = daily 9am), interval (30m, 1h), one-shot (ISO timestamp).\nCommon patterns: 0 9 * * * (daily 9am), 0 */2 * * * (every 2h), 0 9 * * 1-5 (weekdays 9am), @daily, @hourly.\n",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Cron action",
-        "enum": [
-          "status",
-          "list",
-          "add",
-          "update",
-          "remove",
-          "run",
-          "get",
-          "runs",
-          "wake"
-        ]
-      },
-      "name": {
-        "type": "string",
-        "description": "Job name (required for add, used as job ID)"
-      },
-      "schedule": {
-        "type": "string",
-        "description": "Schedule specification. Formats: cron (0 9 * * *), interval (1h, 30m, every 5m), timestamp (2026-04-06T08:00:00), shorthand (@daily, @hourly, @weekly)"
-      },
-      "command": {
-        "type": "string",
-        "description": "Agent message/command to execute on schedule (required for add)"
-      },
-      "jobId": {
-        "type": "string",
-        "description": "Job ID for get/update/remove/run/runs actions"
-      },
-      "enabled": {
-        "type": "boolean",
-        "description": "Enable or disable a job (for add/update)"
-      },
-      "limit": {
-        "type": "integer",
-        "description": "Max entries to return (for runs action, default 10)"
-      },
-      "tz": {
-        "type": "string",
-        "description": "Timezone for cron schedules (e.g. Asia/Seoul, UTC). Defaults to system local timezone"
-      },
-      "staggerMs": {
-        "type": "integer",
-        "description": "Random delay window in ms to distribute cron jobs (cron kind only, default: auto for top-of-hour)"
-      },
-      "anchorTime": {
-        "type": "string",
-        "description": "Anchor time for interval schedules (ISO 8601). Intervals count from this time instead of registration time"
-      },
-      "retryCount": {
-        "type": "integer",
-        "description": "Number of retry attempts on failure (0-3, default 0 = no retry)"
-      },
-      "retryBackoffMs": {
-        "type": "integer",
-        "description": "Initial backoff delay between retries in ms (default 5000). Doubles each retry, capped at 60s"
-      },
-      "deliveryMode": {
-        "type": "string",
-        "description": "How to deliver output: announce (send to the user, default) or none (run silently)",
-        "enum": [
-          "announce",
-          "none"
-        ]
-      },
-      "thinking": {
-        "type": "string",
-        "description": "Per-job thinking level for the agent turn. \"off\" disables the thinking phase (use for routine, well-templated jobs - much faster on the dual-mode main model). Levels minimal/low/medium/high set a budget; \"default\" clears the override.",
-        "enum": [
-          "off",
-          "minimal",
-          "low",
-          "medium",
-          "high",
-          "default"
-        ]
-      },
-      "job": {
-        "type": "object",
-        "description": "Job definition object (alternative to top-level name/schedule/command)",
-        "additionalProperties": true
-      },
-      "text": {
-        "type": "string",
-        "description": "System event text for wake action"
-      }
-    },
-    "required": [
-      "action"
+   },
+   "title": {
+    "type": "string",
+    "description": "다이어그램 상단 제목 (예: '인허가 처리 절차')"
+   },
+   "subtitle": {
+    "type": "string",
+    "description": "제목 아래 보조 설명 한 줄 (선택)"
+   },
+   "direction": {
+    "type": "string",
+    "description": "flowchart 방향. TD=위→아래, LR=왼쪽→오른쪽 (기본 TD).",
+    "enum": [
+     "TD",
+     "LR",
+     "BT",
+     "RL"
     ]
-  },
-  {
-    "name": "morning_letter",
-    "description": "Collect the morning-letter sections in parallel and return a complete, validated deneb-ui message in delivery plus inspection-only raw sections. Return delivery verbatim; do not re-fetch or reformat the sections. No parameters.",
-    "properties": {},
-    "required": []
-  },
-  {
-    "name": "evening_letter",
-    "description": "Collect the evening-letter data sections in parallel — calendar (today + tomorrow), unhandled email, approaching wiki deadlines, pending groupware approvals — and return raw JSON. The end-of-day counterpart to morning_letter; the morning-only market sections (weather, FX, copper) are omitted. The agent composes the letter (reflection, tomorrow prep, priorities). No parameters.",
-    "properties": {},
-    "required": []
-  },
-  {
-    "name": "message",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Message action",
-        "enum": [
-          "send",
-          "react",
-          "reply",
-          "thread-reply"
-        ]
-      },
-      "message": {
-        "type": "string",
-        "description": "Text content to send"
-      },
-      "to": {
-        "type": "string",
-        "description": "Recipient (chat ID or user identifier)"
-      },
-      "channel": {
-        "type": "string",
-        "description": "Target channel (e.g., client)"
-      },
-      "replyTo": {
-        "type": "string",
-        "description": "Message ID to reply to"
-      },
-      "emoji": {
-        "type": "string",
-        "description": "Emoji for react action"
-      },
-      "messageId": {
-        "type": "string",
-        "description": "Message ID for react/reply actions"
-      },
-      "silent": {
-        "type": "boolean",
-        "description": "Send without notification sound"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "gateway",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Gateway action. config_get/config_set: read or write a single dotted path. config.get: full config snapshot. config.apply: replace the whole config. config.patch: merge a patch object. config.schema.lookup: schema for a path. Destructive actions (restart/update/config_set/config.apply/config.patch) require approval: the first call returns a needs_approval envelope; after the user confirms, call the .confirmed variant with the same action_token.",
-        "enum": [
-          "status",
-          "config_get",
-          "config_set",
-          "config_set.confirmed",
-          "update",
-          "update.confirmed",
-          "restart",
-          "restart.confirmed",
-          "config.get",
-          "config.schema.lookup",
-          "config.apply",
-          "config.apply.confirmed",
-          "config.patch",
-          "config.patch.confirmed"
-        ]
-      },
-      "path": {
-        "type": "string",
-        "description": "Dotted config path for config_get / config_set (e.g. \"model.main\"). Also used for config.schema.lookup."
-      },
-      "value": {
-        "description": "Leaf value to write (config_set only). Must be a scalar, array, or null — object replacement is rejected."
-      },
-      "action_token": {
-        "type": "string",
-        "description": "Token returned by a prior approval envelope; required when calling a .confirmed variant."
-      },
-      "raw": {
-        "type": "string",
-        "description": "Raw config JSON for apply/patch"
-      },
-      "reason": {
-        "type": "string",
-        "description": "Reason for restart or update"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "sessions",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Session action",
-        "enum": [
-          "list",
-          "history",
-          "search",
-          "send",
-          "stats"
-        ]
-      },
-      "days": {
-        "type": "number",
-        "description": "stats: 집계 기간(일). 기본 7",
-        "default": 7,
-        "minimum": 1
-      },
-      "limit": {
-        "type": "number",
-        "description": "Max sessions (list) or messages (history, default 20) to return",
-        "default": 20,
-        "minimum": 1
-      },
-      "kinds": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "main",
-            "group",
-            "cron",
-            "hook"
-          ]
-        },
-        "description": "Filter by session kind (list action)"
-      },
-      "sessionKey": {
-        "type": "string",
-        "description": "Target session key (history/send actions)"
-      },
-      "query": {
-        "type": "string",
-        "description": "Search keyword (search action)"
-      },
-      "maxResults": {
-        "type": "number",
-        "description": "Max search results (search action, default 20)",
-        "default": 20,
-        "minimum": 1,
-        "maximum": 100
-      },
-      "message": {
-        "type": "string",
-        "description": "Message to send (send action)"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "sessions_spawn",
-    "properties": {
-      "task": {
-        "type": "string",
-        "description": "Task description for the sub-agent"
+   },
+   "nodes": {
+    "type": "array",
+    "description": "flowchart 노드 목록. 각 노드는 고유 id로 edges에서 참조된다.",
+    "items": {
+     "type": "object",
+     "properties": {
+      "id": {
+       "type": "string",
+       "description": "노드 고유 식별자 (edges의 from/to가 이 값을 참조). 예: 'apply'."
       },
       "label": {
-        "type": "string",
-        "description": "Human-readable label"
+       "type": "string",
+       "description": "노드에 표시할 텍스트. 생략하면 id를 표시."
       },
-      "model": {
-        "type": "string",
-        "enum": [
-          "main",
-          "coding",
-          "lightweight",
-          "fallback"
-        ],
-        "description": "Model role to use (default: main; implementer uses coding automatically when configured)"
-      },
-      "tool_preset": {
-        "type": "string",
-        "enum": [
-          "researcher",
-          "implementer",
-          "verifier"
-        ],
-        "description": "Tool preset restricting which tools the sub-agent can use. researcher=context gathering (read/grep/web/mail_archive/wiki/knowledge/polaris/contacts/graphify; no shell, no file writes, no Gmail OAuth surface), implementer=researcher+write/edit/exec/process, verifier=read/grep/exec/process only (build/test validation). Omit for the full toolset"
+      "shape": {
+       "type": "string",
+       "description": "노드 모양. 의사결정/분기는 diamond, 시작/끝은 stadium, 일반 단계는 rect.",
+       "enum": [
+        "rect",
+        "round",
+        "stadium",
+        "diamond",
+        "circle"
+       ]
       }
-    },
-    "required": [
-      "task"
-    ]
-  },
-  {
-    "name": "subagents",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Sub-agent management action. 'result' returns a finished sub-agent's output (pull a result on demand, complementing the automatic completion notification).",
-        "enum": [
-          "list",
-          "result",
-          "kill",
-          "steer"
-        ]
-      },
-      "target": {
-        "type": "string",
-        "description": "Target sub-agent index, label, or session key (for result/kill/steer). Optional when exactly one sub-agent exists."
-      },
-      "message": {
-        "type": "string",
-        "description": "Steering message for steer action"
-      }
+     },
+     "required": [
+      "id"
+     ]
     }
-  },
-  {
-    "name": "send_file",
-    "properties": {
-      "file_path": {
-        "type": "string",
-        "description": "Path to the file to send"
+   },
+   "edges": {
+    "type": "array",
+    "description": "flowchart 화살표 목록. from 노드 → to 노드.",
+    "items": {
+     "type": "object",
+     "properties": {
+      "from": {
+       "type": "string",
+       "description": "출발 노드 id."
       },
-      "type": {
-        "type": "string",
-        "description": "Media type. Auto-detected from MIME if omitted",
-        "enum": [
-          "photo",
-          "document",
-          "video",
-          "audio",
-          "voice"
-        ]
+      "to": {
+       "type": "string",
+       "description": "도착 노드 id."
       },
-      "caption": {
-        "type": "string",
-        "description": "Caption text (optional)"
-      },
-      "silent": {
-        "type": "boolean",
-        "description": "Send without notification sound"
+      "label": {
+       "type": "string",
+       "description": "화살표에 붙일 조건/설명 (선택, 예: '승인', '반려')."
       }
-    },
-    "required": [
-      "file_path"
-    ]
-  },
-  {
-    "name": "chart",
-    "properties": {
-      "chart_type": {
-        "type": "string",
-        "description": "데이터 성격에 맞게 고른다 — 시간에 따른 추이=line, 점층 누적/면적 강조=area, 항목 간 비교=bar, 전체 대비 구성비(부분의 합=전체)=doughnut. 막대+추세선 콤보는 bar로 두고 한 시리즈에 type:line을 지정.",
-        "enum": [
-          "line",
-          "area",
-          "bar",
-          "doughnut"
-        ]
-      },
-      "title": {
-        "type": "string",
-        "description": "차트 상단 제목 (예: '월별 발주 추이')"
-      },
-      "subtitle": {
-        "type": "string",
-        "description": "제목 아래 보조 설명 한 줄 (선택, 예: '2026년 상반기 · 단위 건')"
-      },
-      "labels": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "x축 항목(line/area/bar) 또는 도넛 조각 이름. 순서대로 series의 data와 1:1 대응."
-      },
-      "series": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "description": "시리즈 이름 (범례에 표시). 시리즈가 1개면 생략 가능."
-            },
-            "data": {
-              "type": "array",
-              "items": {
-                "type": "number"
-              },
-              "description": "labels와 같은 길이의 숫자 배열."
-            },
-            "type": {
-              "type": "string",
-              "description": "이 시리즈만 다른 모양으로 그릴 때 (콤보 차트). bar 차트 위에 추세선을 얹으려면 line.",
-              "enum": [
-                "line",
-                "bar"
-              ]
-            }
-          },
-          "required": [
-            "data"
-          ]
-        },
-        "description": "데이터 시리즈 목록. line/area/bar는 여러 시리즈 가능(겹쳐 그림), doughnut은 첫 시리즈만 사용."
-      },
-      "y_unit": {
-        "type": "string",
-        "description": "값 축 단위 (예: 건, 만원, %). 눈금에 접미사로 표시되고 도넛 범례의 값에도 붙는다"
-      },
-      "stacked": {
-        "type": "boolean",
-        "description": "bar/area 시리즈를 누적으로 (구성비 추이). 여러 시리즈일 때만 의미"
-      },
-      "horizontal": {
-        "type": "boolean",
-        "description": "bar를 가로 방향으로 (항목별 순위·긴 라벨). bar 전용"
-      },
-      "send": {
-        "type": "boolean",
-        "description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용"
-      },
-      "caption": {
-        "type": "string",
-        "description": "send=true일 때 사진 캡션"
-      }
-    },
-    "required": [
-      "chart_type",
-      "labels",
-      "series"
-    ]
-  },
-  {
-    "name": "diagram",
-    "properties": {
-      "diagram_type": {
-        "type": "string",
-        "description": "flowchart=절차·흐름·관계·상태도(노드+화살표), gantt=일정(작업별 기간 막대), timeline=연혁·이력·로드맵(시점별 사건). 숫자 비교/추이는 diagram이 아니라 chart를 써라.",
-        "enum": [
-          "flowchart",
-          "gantt",
-          "timeline"
-        ]
-      },
-      "title": {
-        "type": "string",
-        "description": "다이어그램 상단 제목 (예: '인허가 처리 절차')"
-      },
-      "subtitle": {
-        "type": "string",
-        "description": "제목 아래 보조 설명 한 줄 (선택)"
-      },
-      "direction": {
-        "type": "string",
-        "description": "flowchart 방향. TD=위→아래, LR=왼쪽→오른쪽 (기본 TD).",
-        "enum": [
-          "TD",
-          "LR",
-          "BT",
-          "RL"
-        ]
-      },
-      "nodes": {
-        "type": "array",
-        "description": "flowchart 노드 목록. 각 노드는 고유 id로 edges에서 참조된다.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string",
-              "description": "노드 고유 식별자 (edges의 from/to가 이 값을 참조). 예: 'apply'."
-            },
-            "label": {
-              "type": "string",
-              "description": "노드에 표시할 텍스트. 생략하면 id를 표시."
-            },
-            "shape": {
-              "type": "string",
-              "description": "노드 모양. 의사결정/분기는 diamond, 시작/끝은 stadium, 일반 단계는 rect.",
-              "enum": [
-                "rect",
-                "round",
-                "stadium",
-                "diamond",
-                "circle"
-              ]
-            }
-          },
-          "required": [
-            "id"
-          ]
-        }
-      },
-      "edges": {
-        "type": "array",
-        "description": "flowchart 화살표 목록. from 노드 → to 노드.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "from": {
-              "type": "string",
-              "description": "출발 노드 id."
-            },
-            "to": {
-              "type": "string",
-              "description": "도착 노드 id."
-            },
-            "label": {
-              "type": "string",
-              "description": "화살표에 붙일 조건/설명 (선택, 예: '승인', '반려')."
-            }
-          },
-          "required": [
-            "from",
-            "to"
-          ]
-        }
-      },
-      "tasks": {
-        "type": "array",
-        "description": "gantt 작업 목록. 각 작업은 기간 막대 하나가 된다.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "description": "작업 이름."
-            },
-            "section": {
-              "type": "string",
-              "description": "작업을 묶는 구간 이름 (선택, 예: '준비', '시공'). 같은 section끼리 그룹으로 표시."
-            },
-            "start": {
-              "type": "string",
-              "description": "시작일 YYYY-MM-DD."
-            },
-            "end": {
-              "type": "string",
-              "description": "종료일 YYYY-MM-DD (duration 대신 택일)."
-            },
-            "duration": {
-              "type": "string",
-              "description": "기간 (end 대신 택일, 예: '5d', '2w')."
-            },
-            "status": {
-              "type": "string",
-              "description": "작업 상태 (선택). done=완료(회색), active=진행중(파랑), crit=중요/지연위험(빨강).",
-              "enum": [
-                "done",
-                "active",
-                "crit"
-              ]
-            }
-          },
-          "required": [
-            "name",
-            "start"
-          ]
-        }
-      },
-      "events": {
-        "type": "array",
-        "description": "timeline 사건 목록. 각 항목은 한 시점(period)과 그때 일어난 일들(items).",
-        "items": {
-          "type": "object",
-          "properties": {
-            "period": {
-              "type": "string",
-              "description": "시점 라벨 (예: '2021', '1분기', '2026-03')."
-            },
-            "items": {
-              "type": "array",
-              "description": "그 시점의 사건들 (하나 이상).",
-              "items": {
-                "type": "string"
-              }
-            },
-            "section": {
-              "type": "string",
-              "description": "시점을 묶는 시대/구간 이름 (선택, 예: '창업기', '성장기')."
-            }
-          },
-          "required": [
-            "period"
-          ]
-        }
-      },
-      "send": {
-        "type": "boolean",
-        "description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용"
-      },
-      "caption": {
-        "type": "string",
-        "description": "send=true일 때 사진 캡션"
-      }
-    },
-    "required": [
-      "diagram_type"
-    ]
-  },
-  {
-    "name": "files",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "File store action to perform",
-        "enum": [
-          "list",
-          "search",
-          "semantic_search",
-          "download",
-          "upload",
-          "share",
-          "analyze",
-          "delete",
-          "mkdir",
-          "move"
-        ]
-      },
-      "path": {
-        "type": "string",
-        "description": "Store path for list/download/share/analyze/delete/mkdir, and the source path for move (e.g. /메일/견적서.pdf). Empty means the store root (list). delete removes a file or empty folder; mkdir creates a folder (parents included)."
-      },
-      "query": {
-        "type": "string",
-        "description": "Search query (for the search action). Matches file/folder names by default; set content=true to also match inside extracted file text (PDF/Word/Excel/PowerPoint/text)."
-      },
-      "local_path": {
-        "type": "string",
-        "description": "Local file path to save into the store (for the upload action)"
-      },
-      "dest_path": {
-        "type": "string",
-        "description": "Destination store path: for upload (default: /<local filename>), and the target path for move (a rename is a move within the same folder; an existing target is auto-renamed)."
-      },
-      "overwrite": {
-        "type": "boolean",
-        "description": "Overwrite an existing file on upload; default false auto-renames",
-        "default": false
-      },
-      "extract": {
-        "type": "boolean",
-        "description": "On download, also extract text (PDF/image OCR, Excel/Word/PowerPoint, text files)",
-        "default": false
-      },
-      "recursive": {
-        "type": "boolean",
-        "description": "Recurse into subfolders on list",
-        "default": false
-      },
-      "content": {
-        "type": "boolean",
-        "description": "On search, also match inside extracted file contents (PDF/Word/Excel/PowerPoint/text), not just file names. Slower (reads and extracts each file). Default false (name-only).",
-        "default": false
-      },
-      "semantic": {
-        "type": "boolean",
-        "description": "On search, rank files by meaning (embedding vector similarity) instead of literal substring match — finds files about the query even when they phrase it differently. Equivalent to the semantic_search action. Falls back to name/content search when the embedding server is unavailable. Default false.",
-        "default": false
-      },
-      "max": {
-        "type": "number",
-        "description": "Maximum results for list/search (default: 20, max: 100)",
-        "default": 20,
-        "minimum": 1,
-        "maximum": 100
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "skills",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Action: list (search/browse skills), create, patch, delete, read, list_files, write_file, remove_file",
-        "enum": [
-          "list",
-          "create",
-          "patch",
-          "delete",
-          "read",
-          "list_files",
-          "write_file",
-          "remove_file"
-        ]
-      },
-      "query": {
-        "type": "string",
-        "description": "Search filter for list action (matches name, description, category, tag)"
-      },
-      "category": {
-        "type": "string",
-        "description": "Filter category for list, or target category for create (coding, productivity, devops, integration)"
-      },
+     },
+     "required": [
+      "from",
+      "to"
+     ]
+    }
+   },
+   "tasks": {
+    "type": "array",
+    "description": "gantt 작업 목록. 각 작업은 기간 막대 하나가 된다.",
+    "items": {
+     "type": "object",
+     "properties": {
       "name": {
-        "type": "string",
-        "description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files/write_file/remove_file"
-      },
-      "content": {
-        "type": "string",
-        "description": "Full SKILL.md content for create, or patch content"
-      },
-      "old_text": {
-        "type": "string",
-        "description": "Text to find in SKILL.md (patch action). Fuzzy whitespace matching"
-      },
-      "new_text": {
-        "type": "string",
-        "description": "Replacement text (patch action)"
-      },
-      "file_path": {
-        "type": "string",
-        "description": "Relative path within skill dir for read/write_file/remove_file. Writes/removes must stay under references/, templates/, scripts/, or assets/"
-      },
-      "file_content": {
-        "type": "string",
-        "description": "Content for write_file support file writes"
-      },
-      "apply": {
-        "type": "boolean",
-        "description": "Immediately invalidate the system prompt skills cache so the change is visible in the current session (default: false — changes load on next session to preserve prompt-cache hit rate).",
-        "default": false
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "deal_ledger",
-    "max_output": 8000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": [
-          "list",
-          "sum"
-        ],
-        "description": "list (기본): 필터된 거래 기록 목록 + 합계 / sum: 합계만. 거래 금액·물량(MW)의 합계·건수·기간 질문은 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것 — 금액 파싱·통화별 합산·물량 MW 합산이 코드로 계산된다. 기록에는 인용 검증된 거래 조건(물량·단가·지급·하자·지체상금)이 붙는다"
-      },
-      "counterparty": {
-        "type": "string",
-        "description": "거래처명 필터 (부분 일치, 예: 'JA Solar', '대한전선')"
-      },
-      "project": {
-        "type": "string",
-        "description": "프로젝트명 필터 (부분 일치)"
-      },
-      "doc_type": {
-        "type": "string",
-        "description": "문서 유형 필터 (견적, 계약, 세금계산서, 거래명세서 등 부분 일치)"
-      },
-      "since": {
-        "type": "string",
-        "description": "이 날짜 이후만 (YYYY-MM-DD, 포함)"
-      },
-      "until": {
-        "type": "string",
-        "description": "이 날짜까지만 (YYYY-MM-DD, 포함)"
-      },
-      "limit": {
-        "type": "number",
-        "description": "목록 최대 행 수 (기본 20 — 합계는 항상 전체 기준)"
-      }
-    },
-    "required": []
-  },
-  {
-    "name": "wiki",
-    "max_output": 20000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": [
-          "search",
-          "read",
-          "index",
-          "write",
-          "write-site",
-          "seed-sites",
-          "log",
-          "daily",
-          "status",
-          "close",
-          "reopen",
-          "ingest"
-        ],
-        "description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), write-site (현장 페이지 생성/편집 — project=프로젝트 폴더명, title=현장명, address/status/capacity/kinds + 공정 일정 계약일·공사개시일 등을 프로젝트/<project>/현장/<title>.md 에 기록. 미지정 필드는 보존되므로 계약일만 먼저 쓰고 준공검사일은 나중에 채워도 됨), seed-sites (기존 프로젝트 대표페이지의 sites를 현장 페이지 스텁으로 일괄 부트스트랩 — project 미지정이면 활성 프로젝트 전체. 주소·거래처·특성만 채우고 상태·용량·공정 일정은 빈 채로 두니 이후 write-site로 채운다. 멱등), log (append diary entry), daily (recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)"
-      },
-      "query": {
-        "type": "string",
-        "description": "Search query (search), page path (read/write — SEVERAL pages via paths), category name (index), diary entry body (log), or 캡처할 http(s) URL (ingest). 프로젝트 write paths follow fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md, 프로젝트/<이름>/자료/ (외부 소스 — 직접 쓰지 말고 ingest 액션 사용)"
-      },
-      "plan": {
-        "type": "string",
-        "description": "search 전용 타입 질의 계획. 줄마다 lex:, vec:, hyde:, intent:, scope: 연산자를 사용한다. 첫 검색절은 기본 2배 가중치이며 scope는 결과 제한 전에 경로 prefix를 필터링한다. 예: 'lex: 대한전선 계약 일정\\nvec: payment milestone\\nintent: 대한전선 계약\\nscope: 프로젝트/대한전선'"
-      },
-      "scopes": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "search 전용 위키 경로 prefix 필터. 예: ['프로젝트/대한전선', '업무/계약']"
-      },
-      "intent": {
-        "type": "string",
-        "description": "search 전용 원래 사용자 의도. 후보를 새로 들이지 않고 애매한 순위만 보정한다"
-      },
-      "paths": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of read-per-page. Same forms as query (path or w: ref); up to 8 pages per call."
-      },
-      "project": {
-        "type": "string",
-        "description": "ingest 전용: 자료를 연결할 프로젝트 이름. 대표페이지가 존재해야 하며(오타 유령 폴더 방지 — 없으면 전역 프로젝트/자료/ 버킷에 저장), 연결 시 페이지가 프로젝트/<이름>/자료/에 놓이고 로그.md에 ingest 섹션이 append된다."
-      },
-      "title": {
-        "type": "string",
-        "description": "Page title (write action)"
-      },
-      "id": {
-        "type": "string",
-        "description": "Short identifier (kebab-case, e.g. 'dgx-spark')"
-      },
-      "summary": {
-        "type": "string",
-        "description": "한 줄 요약 (~80자)"
-      },
-      "category": {
-        "type": "string",
-        "enum": [
-          "프로젝트",
-          "인물",
-          "시스템",
-          "업무",
-          "사용자",
-          "기타"
-        ],
-        "description": "Wiki category (write action / index filter) — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)"
-      },
-      "content": {
-        "type": "string",
-        "description": "Page body markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges — prefer over plain mentions. 출처 규율: 특정 소스(메일·자료·문서)에서 온 주장은 그 [[페이지]]나 ref를 병기하고, 출처 없는 합성 추론은 '> 합성:' 인용으로 시작한다 — 부유 주장 금지. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true. 로그 섹션 제목은 '## [YYYY-MM-DD] <op> | <주제>' 꼴 권장(op: ingest/결정/회의/이슈…) — grep 가능한 로그 문법."
-      },
-      "tags": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Tags (write action)"
-      },
-      "related": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Related page topics (write action)"
-      },
-      "cues": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "검색 진입 표현 2~5개 (write action): 나중에 이 문서를 찾을 질문에 나올 법한 동의어·별칭 — 제목/본문/tags에 이미 있는 단어는 넣지 말 것 (예: 본문이 '선수금'이면 cues=['계약금','착수금']). 검색에만 쓰이고 본문에는 안 보인다."
-      },
-      "client": {
-        "type": "string",
-        "description": "프로젝트 거래처 (프로젝트 대표페이지 write 전용) — 프로젝트 위계의 최상단 그룹핑. 작성 규칙: 계열사 단위 정식명 1개 (기아·현대차·LG전자·금호타이어 — 그룹명 아님, ㈜ 등 법인 접미어 없음, 거래 원장 페이지 표기와 일치 지향). 발주처/계약 상대가 확인되면 기입; 자체 개발 등 거래처 없는 프로젝트는 생략(추측 금지). 진행상황 모아보기가 이 값으로 그룹핑되고 회상 앵커가 거래처 언급을 소속 프로젝트들로 해석한다"
-      },
-      "sites": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "프로젝트 현장 위치 (프로젝트 대표페이지 write 전용). 작성 규칙 고정: '광역약칭 시/군 읍/면/동 [리]' — 공백 구분, 번지·마침표 없음, 광역은 약칭(전북·전남·충남·경기…). 예: ['전북 군산시 옥구읍 수산리']. 복수 현장이면 여러 항목. 메일·일정이 장소로 프로젝트를 부르는 일이 많아 회상 앵커·미팅 매칭 키로 쓰인다 — 현장이 확인되면 반드시 기입, 임의 표기(도로명·번지·도 전체명)는 금지"
-      },
-      "stage": {
-        "type": "string",
-        "enum": [
-          "제안",
-          "견적",
-          "입찰",
-          "개발",
-          "계약협의",
-          "시공",
-          "납품",
-          "운영",
-          "종결",
-          "유실"
-        ],
-        "description": "write 전용(프로젝트 대표페이지): 프로젝트 사업 단계. 제안→견적→입찰→개발→계약협의→시공/납품→운영 진행, 종결/유실은 말단. 개발=자체개발 인허가, 납품=기자재 건의 계약 이행(시공의 기자재 대응). 현장 상세 문서는 개발 또는 계약협의부터 — 영업 단계는 sites 메타데이터까지만. 어휘 밖 값은 버려진다"
-      },
-      "program": {
-        "type": "string",
-        "description": "write 전용(프로젝트 대표페이지): 사업군(프로그램) — 한 벤처의 워크스트림인 형제 프로젝트들을 묶는 축 (예: '비금-130mw' — 케이블·커넥터·EPC 폴더가 공유). client(거래처) 아래의 중간 우산. 짧은 한글 슬러그, 기존 프로그램에 합류할 땐 기존 표기를 그대로 재사용(검색으로 확인). 단독 딜은 생략"
-      },
-      "kinds": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "태양광",
-            "태양광/토지",
-            "태양광/루프탑",
-            "태양광/수상",
-            "태양광/ESS",
-            "기자재",
-            "기자재/모듈",
-            "기자재/인버터",
-            "기자재/케이블",
-            "기자재/기타",
-            "풍력",
-            "풍력/육상",
-            "풍력/해상",
-            "기타",
-            "기타/용역",
-            "기타/협력"
-          ]
-        },
-        "description": "프로젝트 특성 — 2단 고정 체계 '1차' 또는 '1차/2차' (프로젝트 대표페이지 write 전용, 복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차=토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(공급; 2차=모듈/인버터/케이블/기타), 풍력(2차=육상/해상), 기타(2차=용역/협력). 2차를 모르면 1차만 적고, 확인되면 세분화. 어휘 밖 값은 드롭됨. write-site에서도 이 현장의 특성으로 쓰인다"
-      },
-      "address": {
-        "type": "string",
-        "description": "write-site 전용: 이 현장의 정식 주소. sites와 같은 표기 규칙 '광역약칭 시/군 읍/면/동 [리]' (예: '전북 군산시 옥구읍 수산리'). 지도 배치 키"
-      },
-      "status": {
-        "type": "string",
-        "enum": [
-          "후보",
-          "계약",
-          "개설",
-          "준공"
-        ],
-        "description": "write-site 전용: 현장 생애주기 단계 (후보→계약→개설→준공). 지도는 기본적으로 계약·개설·준공만 표시하고 후보는 숨긴다"
-      },
-      "capacity": {
-        "type": "number",
-        "description": "write-site 전용: 이 현장의 용량(MW). 지도 핀 크기. 0/미지정이면 미기재"
-      },
-      "contract_date": {
-        "type": "string",
-        "description": "write-site 전용 공정 일정: 계약일 YYYY-MM-DD"
-      },
-      "construction_start": {
-        "type": "string",
-        "description": "write-site 전용 공정 일정: 공사개시일 YYYY-MM-DD"
-      },
-      "module_delivery": {
-        "type": "string",
-        "description": "write-site 전용 공정 일정: 모듈입고 — 날짜 또는 기간('2026-08-01~2026-08-15')"
-      },
-      "pre_use_inspection": {
-        "type": "string",
-        "description": "write-site 전용 공정 일정: 사용전검사일 YYYY-MM-DD"
-      },
-      "completion_inspection": {
-        "type": "string",
-        "description": "write-site 전용 공정 일정: 준공검사일 YYYY-MM-DD"
-      },
-      "supersedes": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Existing wiki page paths this write replaces (new fact contradicts/supersedes them). Marking them demotes stale pages in recall/search."
-      },
-      "force": {
-        "type": "boolean",
-        "description": "write action: 새 문서 생성 시 유사 문서가 발견되면 기본적으로 생성이 거부되고 기존 경로가 안내된다. 안내된 문서가 정말 별개 주제일 때만 force=true로 생성을 강행",
-        "default": false
-      },
-      "importance": {
-        "type": "number",
-        "description": "Page importance 0.0-1.0 (write action, default: 0.5)",
-        "minimum": 0,
-        "maximum": 1
-      },
-      "type": {
-        "type": "string",
-        "enum": [
-          "concept",
-          "entity",
-          "source",
-          "comparison",
-          "log"
-        ],
-        "description": "Page type (write action)"
-      },
-      "confidence": {
-        "type": "string",
-        "enum": [
-          "high",
-          "medium",
-          "low"
-        ],
-        "description": "Confidence level (write action): high (verified), medium (reasonable inference), low (uncertain)"
-      },
-      "due": {
-        "type": "string",
-        "description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan."
+       "type": "string",
+       "description": "작업 이름."
       },
       "section": {
-        "type": "string",
-        "description": "Read a specific section (read action)"
-      },
-      "from_line": {
-        "type": "integer",
-        "description": "read 전용 절대 시작 줄(1 기반). search 결과의 Lx-Ly 주소를 그대로 사용",
-        "minimum": 1
-      },
-      "max_lines": {
-        "type": "integer",
-        "description": "read 전용 반환 줄 수(기본 120, 최대 400)",
-        "minimum": 1,
-        "maximum": 400
-      },
-      "explain": {
-        "type": "boolean",
-        "description": "search 전용 검색 신호·융합·rerank 진단 포함",
-        "default": false
-      },
-      "rerank": {
-        "type": "boolean",
-        "description": "search 전용 선택적 reranker 강제 실행. 기본은 상위 후보가 애매할 때만 실행",
-        "default": false
-      },
-      "limit": {
-        "type": "integer",
-        "description": "Max results (search: default 10)",
-        "minimum": 1,
-        "maximum": 50
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "notebook",
-    "max_output": 24000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": [
-          "create",
-          "for_deal",
-          "pin_to_deal",
-          "list",
-          "show",
-          "add_source",
-          "remove_source",
-          "delete",
-          "brief",
-          "open",
-          "close",
-          "mode"
-        ],
-        "description": "create: 노트북 생성. for_deal: 딜/프로젝트의 노트북 보기(없으면 생성, deal_ref). pin_to_deal: 딜 노트북에 자료 한 번에 저장(없으면 생성; deal_ref+kind+ref/text). list: 노트북 목록. show: 핀된 자료 보기(id 또는 deal_ref). add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료 근거 인용([S1]) 1회 브리핑 데이터(모델 종합; id 또는 deal_ref). open: 이 세션을 노트북에 묶어 이후 모든 답을 그 자료 위주로(id 또는 deal_ref). close: 노트북 닫고 일반 모드 복귀. mode: 그라운딩 강도 전환(id+mode=soft|strict)."
-      },
-      "deal_ref": {
-        "type": "string",
-        "description": "딜/프로젝트 고유코드 (for_deal/pin_to_deal, 또는 show/brief에서 id 대신). 위키 프로젝트 페이지 frontmatter의 code(예: pl1-wdo-dev-001 — 부서-고객-거래타입-순번)를 쓴다. 코드는 페이지가 이동·재분류돼도 안 변하는 식별자라, raw 증거(노트북)와 정제 사실(위키)이 한 딜로 안정적으로 묶인다(둘 다 같은 코드)."
-      },
-      "deal_name": {
-        "type": "string",
-        "description": "딜 노트북 자동 생성 시 이름 (for_deal/pin_to_deal, 선택; 미지정 시 deal_ref 사용)."
-      },
-      "id": {
-        "type": "string",
-        "description": "노트북 id (show/add_source/remove_source/delete/brief)."
-      },
-      "name": {
-        "type": "string",
-        "description": "노트북 이름 (create) — 예: '탑솔라 딜'."
-      },
-      "description": {
-        "type": "string",
-        "description": "노트북 설명 (create, 선택)."
-      },
-      "kind": {
-        "type": "string",
-        "enum": [
-          "wiki",
-          "note",
-          "file",
-          "url",
-          "mail",
-          "diary"
-        ],
-        "description": "자료 유형 (add_source): wiki=위키 페이지(ref=경로, 라이브). note=붙여넣기 텍스트(text). file=파일 경로(ref=경로; PDF·이미지 OCR, 그 외 텍스트). url=웹페이지(ref=URL, 본문 추출). mail=메일 스레드(ref=스레드/메시지 id). diary=일기 항목(ref=날짜/id). file·url·mail·diary는 추가 시점에 본문을 스냅샷."
-      },
-      "ref": {
-        "type": "string",
-        "description": "자료 위치 (kind별): wiki=페이지 경로('프로젝트/topsolar.md'/'w:프로젝트/topsolar'), file=파일 경로(PDF·이미지·텍스트), url=웹 주소(https://…), mail=메일 스레드/메시지 id, diary=일기 날짜/id."
-      },
-      "title": {
-        "type": "string",
-        "description": "자료 표시 이름 (add_source, 선택; wiki는 미지정 시 페이지 제목 자동)."
-      },
-      "text": {
-        "type": "string",
-        "description": "자료 본문 (kind=note) — 메일 본문·견적·회의 메모 등 붙여넣기 텍스트."
-      },
-      "source": {
-        "type": "string",
-        "description": "제거할 자료의 인용 태그 (remove_source) — 예: 'S2'."
-      },
-      "focus": {
-        "type": "string",
-        "description": "브리핑 초점 (brief, 선택) — 예: '계약 조건과 리스크 위주로'."
-      },
-      "mode": {
-        "type": "string",
-        "enum": [
-          "soft",
-          "strict"
-        ],
-        "description": "그라운딩 강도 (mode 액션): soft=자료 우선이되 부족하면 일반 지식으로 보충하고 (자료 밖) 표시(기본), strict=자료에만 근거하고 없으면 '자료에 없음'."
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "contacts",
-    "max_output": 8000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": [
-          "lookup",
-          "search",
-          "by_company"
-        ],
-        "description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건, 초과 시 표시). by_company: 회사명으로 소속 인물 전체 열거 (이름순, 최대 50명)."
-      },
-      "query": {
-        "type": "string",
-        "description": "조회할 전화번호 (lookup) 또는 검색어 — 이름/회사/이메일/번호 일부 (search)."
-      }
-    },
-    "required": [
-      "action",
-      "query"
-    ]
-  },
-  {
-    "name": "calendar",
-    "max_output": 8000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": [
-          "list",
-          "get",
-          "create",
-          "update",
-          "delete",
-          "free_slots",
-          "brief",
-          "prep",
-          "capture",
-          "audit",
-          "timeline"
-        ],
-        "description": "list: 일정 조회 (기본 지금부터 48시간; from/to로 명시 범위, 또는 hours_ahead). 겹치는 일정은 ⚠️로, 연결된 일정은 [미팅]·「메일 제목」으로 출처 표시. get: id로 상세(참석자·장소·Meet·메모·연결 출처 — 미팅 준비용). create: 일정 추가(로컬). update: 로컬 일정 수정. delete: 로컬 일정 삭제. free_slots: 근무시간 내 빈 시간(미팅 넣을 자리) 찾기. brief: 오늘(기본; hours_ahead/from·to로 기간) 일정을 연결된 메일 맥락·겹침과 함께 브리핑 골격으로 정리 — 연결된 일정은 mail_archive로 맥락 보강해 '왜 중요한지·무엇을 준비할지'까지 서술. prep: 미팅 준비 — id(생략 시 다음 일정)의 상세 + 연결된 메일을 mail_archive로 열어 직전 합의·미결·준비물 체크리스트 작성 지시. capture: 회의록 정리(끝난 미팅) — id(생략 시 방금 끝난 미팅)의 메모·녹취를 결정·액션·리스크·후속으로 정리하고 update로 일정 description에 기록(일정 자체가 회의 기록). 임원 본인 후속만 강조, 위임 실무는 본문에. audit: 일정 점검·시간 보호 — 기간(기본 7일; from/to·hours_ahead) 내 더블부킹·과부하 날·버퍼 없는 연속 회의를 짚고 보호할 포커스 블록을 제안. timeline: 워크그래프 — query(거래처·프로젝트·인물·장소)와 관련된 일정을 과거 90일~향후 90일(또는 from/to)에서 모아 한 타임라인으로, 연결된 메일·위키·거래 맥락을 엮도록 안내. 구글 일정은 읽기 전용이라 수정·삭제 불가."
-      },
-      "id": {
-        "type": "string",
-        "description": "이벤트 ID (get/update/delete). list 결과의 'id=...' 값을 그대로 사용. 'local:' 접두사면 로컬(수정·삭제 가능), 아니면 구글(읽기 전용)."
-      },
-      "from": {
-        "type": "string",
-        "description": "list 조회 시작 시각 (RFC3339, 예: 2026-06-10T00:00:00+09:00). to와 함께 명시 범위 조회."
-      },
-      "to": {
-        "type": "string",
-        "description": "list 조회 끝 시각 (RFC3339)."
-      },
-      "hours_ahead": {
-        "type": "integer",
-        "description": "list에서 from/to 대신 '지금부터 N시간' (기본 48, 최대 336)."
-      },
-      "summary": {
-        "type": "string",
-        "description": "일정 제목 (create/update 필수)."
+       "type": "string",
+       "description": "작업을 묶는 구간 이름 (선택, 예: '준비', '시공'). 같은 section끼리 그룹으로 표시."
       },
       "start": {
-        "type": "string",
-        "description": "시작 시각 (RFC3339, create/update 필수, 예: 2026-06-10T15:00:00+09:00). KST는 +09:00 오프셋."
+       "type": "string",
+       "description": "시작일 YYYY-MM-DD."
       },
       "end": {
-        "type": "string",
-        "description": "종료 시각 (RFC3339, 선택). 생략 시 1시간(종일은 1일) 자동."
+       "type": "string",
+       "description": "종료일 YYYY-MM-DD (duration 대신 택일)."
       },
-      "location": {
-        "type": "string",
-        "description": "장소 (선택)."
+      "duration": {
+       "type": "string",
+       "description": "기간 (end 대신 택일, 예: '5d', '2w')."
       },
-      "description": {
-        "type": "string",
-        "description": "설명·메모 (선택)."
-      },
-      "all_day": {
-        "type": "boolean",
-        "description": "종일 일정 여부 (선택)."
-      },
-      "duration_min": {
-        "type": "integer",
-        "description": "free_slots: 찾을 빈 시간의 최소 길이(분, 기본 30)."
-      },
-      "day_start": {
-        "type": "integer",
-        "description": "free_slots: 근무시간 시작 시(0-23, 기본 9 = 오전 9시)."
-      },
-      "day_end": {
-        "type": "integer",
-        "description": "free_slots: 근무시간 끝 시(1-24, 기본 18 = 오후 6시)."
-      },
-      "query": {
-        "type": "string",
-        "description": "timeline: 관련 일정을 모을 대상 — 거래처·프로젝트·인물·장소 이름(제목·연결 메일 제목·장소·참석자와 매칭)."
-      },
-      "include_weekends": {
-        "type": "boolean",
-        "description": "free_slots에서 토/일도 후보로 포함할지 (기본 false — 주말은 업무 시간이 아니므로 제외). 점심 12–13시는 근무창이 점심을 온전히 포함할 때 자동 제외"
+      "status": {
+       "type": "string",
+       "description": "작업 상태 (선택). done=완료(회색), active=진행중(파랑), crit=중요/지연위험(빨강).",
+       "enum": [
+        "done",
+        "active",
+        "crit"
+       ]
       }
-    },
-    "required": [
-      "action"
+     },
+     "required": [
+      "name",
+      "start"
+     ]
+    }
+   },
+   "events": {
+    "type": "array",
+    "description": "timeline 사건 목록. 각 항목은 한 시점(period)과 그때 일어난 일들(items).",
+    "items": {
+     "type": "object",
+     "properties": {
+      "period": {
+       "type": "string",
+       "description": "시점 라벨 (예: '2021', '1분기', '2026-03')."
+      },
+      "items": {
+       "type": "array",
+       "description": "그 시점의 사건들 (하나 이상).",
+       "items": {
+        "type": "string"
+       }
+      },
+      "section": {
+       "type": "string",
+       "description": "시점을 묶는 시대/구간 이름 (선택, 예: '창업기', '성장기')."
+      }
+     },
+     "required": [
+      "period"
+     ]
+    }
+   },
+   "send": {
+    "type": "boolean",
+    "description": "true면 렌더 즉시 사용자에게 사진으로 전송 (별도 send_file 호출 불필요). caption 미지정 시 title 사용"
+   },
+   "caption": {
+    "type": "string",
+    "description": "send=true일 때 사진 캡션"
+   }
+  },
+  "required": [
+   "diagram_type"
+  ]
+ },
+ {
+  "name": "files",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "File store action to perform",
+    "enum": [
+     "list",
+     "search",
+     "semantic_search",
+     "download",
+     "upload",
+     "share",
+     "analyze",
+     "delete",
+     "mkdir",
+     "move"
     ]
+   },
+   "path": {
+    "type": "string",
+    "description": "Store path for list/download/share/analyze/delete/mkdir, and the source path for move (e.g. /메일/견적서.pdf). Empty means the store root (list). delete removes a file or empty folder; mkdir creates a folder (parents included)."
+   },
+   "query": {
+    "type": "string",
+    "description": "Search query (for the search action). Matches file/folder names by default; set content=true to also match inside extracted file text (PDF/Word/Excel/PowerPoint/text)."
+   },
+   "local_path": {
+    "type": "string",
+    "description": "Local file path to save into the store (for the upload action)"
+   },
+   "dest_path": {
+    "type": "string",
+    "description": "Destination store path: for upload (default: /<local filename>), and the target path for move (a rename is a move within the same folder; an existing target is auto-renamed)."
+   },
+   "overwrite": {
+    "type": "boolean",
+    "description": "Overwrite an existing file on upload; default false auto-renames",
+    "default": false
+   },
+   "extract": {
+    "type": "boolean",
+    "description": "On download, also extract text (PDF/image OCR, Excel/Word/PowerPoint, text files)",
+    "default": false
+   },
+   "recursive": {
+    "type": "boolean",
+    "description": "Recurse into subfolders on list",
+    "default": false
+   },
+   "content": {
+    "type": "boolean",
+    "description": "On search, also match inside extracted file contents (PDF/Word/Excel/PowerPoint/text), not just file names. Slower (reads and extracts each file). Default false (name-only).",
+    "default": false
+   },
+   "semantic": {
+    "type": "boolean",
+    "description": "On search, rank files by meaning (embedding vector similarity) instead of literal substring match — finds files about the query even when they phrase it differently. Equivalent to the semantic_search action. Falls back to name/content search when the embedding server is unavailable. Default false.",
+    "default": false
+   },
+   "max": {
+    "type": "number",
+    "description": "Maximum results for list/search (default: 20, max: 100)",
+    "default": 20,
+    "minimum": 1,
+    "maximum": 100
+   }
   },
-  {
-    "name": "polaris",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "search: 현재 세션의 과거 메시지에서 키워드 검색 (모든 메시지가 SQLite FTS에 무손실 저장). describe: 압축된 요약 구간 ID 목록 (time_range 필터). expand: 특정 summary_id의 원문 메시지 복원, question 추가 시 LLM이 원문 기반 답변.",
-        "enum": [
-          "search",
-          "describe",
-          "expand"
-        ]
-      },
-      "query": {
-        "type": "string",
-        "description": "검색 키워드 (search action)"
-      },
-      "max_results": {
-        "type": "integer",
-        "description": "최대 결과 수 (search action, default: 10)",
-        "default": 10,
-        "minimum": 1,
-        "maximum": 50
-      },
-      "time_range": {
-        "type": "string",
-        "description": "시간 범위 (describe action): today, this_week, all",
-        "default": "all",
-        "enum": [
-          "today",
-          "this_week",
-          "all"
-        ]
-      },
-      "summary_id": {
-        "type": "integer",
-        "description": "요약 노드 ID (expand action, describe 결과에서 획득)",
-        "minimum": 1
-      },
-      "question": {
-        "type": "string",
-        "description": "원본 대화에서 알고 싶은 질문 (expand action, 선택)"
-      }
-    },
-    "required": [
-      "action"
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "skills",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Action: list (search/browse skills), create, patch, delete, read, list_files, write_file, remove_file",
+    "enum": [
+     "list",
+     "create",
+     "patch",
+     "delete",
+     "read",
+     "list_files",
+     "write_file",
+     "remove_file"
     ]
+   },
+   "query": {
+    "type": "string",
+    "description": "Search filter for list action (matches name, description, category, tag)"
+   },
+   "category": {
+    "type": "string",
+    "description": "Filter category for list, or target category for create (coding, productivity, devops, integration)"
+   },
+   "name": {
+    "type": "string",
+    "description": "Skill name (lowercase, hyphens). Required for create/patch/delete/read/list_files/write_file/remove_file"
+   },
+   "content": {
+    "type": "string",
+    "description": "Full SKILL.md content for create, or patch content"
+   },
+   "old_text": {
+    "type": "string",
+    "description": "Text to find in SKILL.md (patch action). Fuzzy whitespace matching"
+   },
+   "new_text": {
+    "type": "string",
+    "description": "Replacement text (patch action)"
+   },
+   "file_path": {
+    "type": "string",
+    "description": "Relative path within skill dir for read/write_file/remove_file. Writes/removes must stay under references/, templates/, scripts/, or assets/"
+   },
+   "file_content": {
+    "type": "string",
+    "description": "Content for write_file support file writes"
+   },
+   "apply": {
+    "type": "boolean",
+    "description": "Immediately invalidate the system prompt skills cache so the change is visible in the current session (default: false — changes load on next session to preserve prompt-cache hit rate).",
+    "default": false
+   }
   },
-  {
-    "name": "knowledge",
-    "properties": {
-      "op": {
-        "type": "string",
-        "description": "recall: 위키 지식베이스 의미+키워드 검색. read: ref로 단건 fetch — `w:인물/박부장` 같이 prefix가 layer 라우팅. record: wiki에 큐레이션 페이지 작성·갱신.",
-        "enum": [
-          "recall",
-          "read",
-          "record"
-        ]
-      },
-      "query": {
-        "type": "string",
-        "description": "검색 키워드 (op=recall)"
-      },
-      "limit": {
-        "type": "integer",
-        "description": "결과 개수 상한 (op=recall, 기본 10, max 50)",
-        "default": 10,
-        "minimum": 1,
-        "maximum": 50
-      },
-      "sources": {
-        "type": "array",
-        "items": {
-          "type": "string",
-          "enum": [
-            "wiki",
-            "files"
-          ]
-        },
-        "description": "검색할 소스 제한 (op=recall, 생략 시 planner가 사용 가능한 소스를 모두 병렬 검색)"
-      },
-      "scopes": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "경로/프로젝트 범위 (op=recall) — 예: `프로젝트/탑솔라`, `files:/계약`"
-      },
-      "ref": {
-        "type": "string",
-        "description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`"
-      },
-      "page": {
-        "type": "string",
-        "description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `프로젝트/ABC상사-NDA`"
-      },
-      "title": {
-        "type": "string",
-        "description": "페이지 제목 (op=record, 미지정 시 page의 마지막 segment 사용)"
-      },
-      "category": {
-        "type": "string",
-        "description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자·기타"
-      },
-      "body": {
-        "type": "string",
-        "description": "페이지 본문 markdown (op=record). 비어 있으면 새 페이지에 기본 골격 자동 삽입"
-      },
-      "summary": {
-        "type": "string",
-        "description": "인덱스용 한 줄 요약 (op=record, ~80자)"
-      },
-      "tags": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "검색 태그 (op=record)"
-      },
-      "related": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "관련 페이지 경로들 (op=record)"
-      },
-      "supersedes": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "새 기록이 모순/갱신으로 대체하는 기존 wiki 페이지 경로들 (op=record). stale 페이지는 superseded_by로 표시되어 recall/search에서 감가된다."
-      },
-      "importance": {
-        "type": "number",
-        "description": "Tier1 surfacing 가중치 0.0~1.0 (op=record, 0.85↑은 시스템 프롬프트에 자동 노출)",
-        "minimum": 0,
-        "maximum": 1
-      }
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "deal_ledger",
+  "max_output": 8000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "enum": [
+     "list",
+     "sum"
+    ],
+    "description": "list (기본): 필터된 거래 기록 목록 + 합계 / sum: 합계만. 거래 금액·물량(MW)의 합계·건수·기간 질문은 산문을 눈대중으로 합산하지 말고 반드시 이 도구를 쓸 것 — 금액 파싱·통화별 합산·물량 MW 합산이 코드로 계산된다. 기록에는 인용 검증된 거래 조건(물량·단가·지급·하자·지체상금)이 붙는다"
+   },
+   "counterparty": {
+    "type": "string",
+    "description": "거래처명 필터 (부분 일치, 예: 'JA Solar', '대한전선')"
+   },
+   "project": {
+    "type": "string",
+    "description": "프로젝트명 필터 (부분 일치)"
+   },
+   "doc_type": {
+    "type": "string",
+    "description": "문서 유형 필터 (견적, 계약, 세금계산서, 거래명세서 등 부분 일치)"
+   },
+   "since": {
+    "type": "string",
+    "description": "이 날짜 이후만 (YYYY-MM-DD, 포함)"
+   },
+   "until": {
+    "type": "string",
+    "description": "이 날짜까지만 (YYYY-MM-DD, 포함)"
+   },
+   "limit": {
+    "type": "number",
+    "description": "목록 최대 행 수 (기본 20 — 합계는 항상 전체 기준)"
+   }
+  },
+  "required": []
+ },
+ {
+  "name": "wiki",
+  "max_output": 20000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "enum": [
+     "search",
+     "read",
+     "index",
+     "write",
+     "write-site",
+     "seed-sites",
+     "log",
+     "daily",
+     "status",
+     "close",
+     "reopen",
+     "ingest"
+    ],
+    "description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), write-site (현장 페이지 생성/편집 — project=프로젝트 폴더명, title=현장명, address/status/capacity/kinds + 공정 일정 계약일·공사개시일 등을 프로젝트/<project>/현장/<title>.md 에 기록. 미지정 필드는 보존되므로 계약일만 먼저 쓰고 준공검사일은 나중에 채워도 됨), seed-sites (기존 프로젝트 대표페이지의 sites를 현장 페이지 스텁으로 일괄 부트스트랩 — project 미지정이면 활성 프로젝트 전체. 주소·거래처·특성만 채우고 상태·용량·공정 일정은 빈 채로 두니 이후 write-site로 채운다. 멱등), log (append diary entry), daily (recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)"
+   },
+   "query": {
+    "type": "string",
+    "description": "Search query (search), page path (read/write — SEVERAL pages via paths), category name (index), diary entry body (log), or 캡처할 http(s) URL (ingest). 프로젝트 write paths follow fixed layout: 프로젝트/<이름>/대표.md (대표페이지), 프로젝트/<이름>/로그.md (진행 로그 — 사건·소식은 여기에 append), 프로젝트/<이름>/기자재/<문서>.md, 프로젝트/<이름>/자료/ (외부 소스 — 직접 쓰지 말고 ingest 액션 사용)"
+   },
+   "plan": {
+    "type": "string",
+    "description": "search 전용 타입 질의 계획. 줄마다 lex:, vec:, hyde:, intent:, scope: 연산자를 사용한다. 첫 검색절은 기본 2배 가중치이며 scope는 결과 제한 전에 경로 prefix를 필터링한다. 예: 'lex: 대한전선 계약 일정\\nvec: payment milestone\\nintent: 대한전선 계약\\nscope: 프로젝트/대한전선'"
+   },
+   "scopes": {
+    "type": "array",
+    "items": {
+     "type": "string"
     },
-    "required": [
-      "op"
+    "description": "search 전용 위키 경로 prefix 필터. 예: ['프로젝트/대한전선', '업무/계약']"
+   },
+   "intent": {
+    "type": "string",
+    "description": "search 전용 원래 사용자 의도. 후보를 새로 들이지 않고 애매한 순위만 보정한다"
+   },
+   "paths": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Read several wiki pages in ONE call (read action) — after a search, pass every relevant page path here instead of read-per-page. Same forms as query (path or w: ref); up to 8 pages per call."
+   },
+   "project": {
+    "type": "string",
+    "description": "ingest 전용: 자료를 연결할 프로젝트 이름. 대표페이지가 존재해야 하며(오타 유령 폴더 방지 — 없으면 전역 프로젝트/자료/ 버킷에 저장), 연결 시 페이지가 프로젝트/<이름>/자료/에 놓이고 로그.md에 ingest 섹션이 append된다."
+   },
+   "title": {
+    "type": "string",
+    "description": "Page title (write action)"
+   },
+   "id": {
+    "type": "string",
+    "description": "Short identifier (kebab-case, e.g. 'dgx-spark')"
+   },
+   "summary": {
+    "type": "string",
+    "description": "한 줄 요약 (~80자)"
+   },
+   "category": {
+    "type": "string",
+    "enum": [
+     "프로젝트",
+     "인물",
+     "시스템",
+     "업무",
+     "사용자",
+     "기타"
+    ],
+    "description": "Wiki category (write action / index filter) — one of the 6: 프로젝트(일·거래·결정), 인물(사람·조직), 시스템(Deneb 구성·운영), 업무(직무 도메인 지식), 사용자(개인 선호·규칙), 기타(시사·잡학·그 외)"
+   },
+   "content": {
+    "type": "string",
+    "description": "Page body markdown (write action) or diary entry body (log action). In write bodies, link related pages inline with [[path-or-title]] (e.g. [[프로젝트/dgx-spark]] or [[홍길동]]); these become knowledge-graph edges — prefer over plain mentions. 출처 규율: 특정 소스(메일·자료·문서)에서 온 주장은 그 [[페이지]]나 ref를 병기하고, 출처 없는 합성 추론은 '> 합성:' 인용으로 시작한다 — 부유 주장 금지. 프로젝트/<이름>/로그.md에 쓰면 content가 날짜 H2 섹션으로 기존 로그에 append된다 — 새 항목만 보낼 것(전체 본문 재전송 금지); 전체 재작성이 정말 필요하면 force=true. 로그 섹션 제목은 '## [YYYY-MM-DD] <op> | <주제>' 꼴 권장(op: ingest/결정/회의/이슈…) — grep 가능한 로그 문법."
+   },
+   "tags": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Tags (write action)"
+   },
+   "related": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Related page topics (write action)"
+   },
+   "cues": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "검색 진입 표현 2~5개 (write action): 나중에 이 문서를 찾을 질문에 나올 법한 동의어·별칭 — 제목/본문/tags에 이미 있는 단어는 넣지 말 것 (예: 본문이 '선수금'이면 cues=['계약금','착수금']). 검색에만 쓰이고 본문에는 안 보인다."
+   },
+   "client": {
+    "type": "string",
+    "description": "프로젝트 거래처 (프로젝트 대표페이지 write 전용) — 프로젝트 위계의 최상단 그룹핑. 작성 규칙: 계열사 단위 정식명 1개 (기아·현대차·LG전자·금호타이어 — 그룹명 아님, ㈜ 등 법인 접미어 없음, 거래 원장 페이지 표기와 일치 지향). 발주처/계약 상대가 확인되면 기입; 자체 개발 등 거래처 없는 프로젝트는 생략(추측 금지). 진행상황 모아보기가 이 값으로 그룹핑되고 회상 앵커가 거래처 언급을 소속 프로젝트들로 해석한다"
+   },
+   "sites": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "프로젝트 현장 위치 (프로젝트 대표페이지 write 전용). 작성 규칙 고정: '광역약칭 시/군 읍/면/동 [리]' — 공백 구분, 번지·마침표 없음, 광역은 약칭(전북·전남·충남·경기…). 예: ['전북 군산시 옥구읍 수산리']. 복수 현장이면 여러 항목. 메일·일정이 장소로 프로젝트를 부르는 일이 많아 회상 앵커·미팅 매칭 키로 쓰인다 — 현장이 확인되면 반드시 기입, 임의 표기(도로명·번지·도 전체명)는 금지"
+   },
+   "stage": {
+    "type": "string",
+    "enum": [
+     "제안",
+     "견적",
+     "입찰",
+     "개발",
+     "계약협의",
+     "시공",
+     "납품",
+     "운영",
+     "종결",
+     "유실"
+    ],
+    "description": "write 전용(프로젝트 대표페이지): 프로젝트 사업 단계. 제안→견적→입찰→개발→계약협의→시공/납품→운영 진행, 종결/유실은 말단. 개발=자체개발 인허가, 납품=기자재 건의 계약 이행(시공의 기자재 대응). 현장 상세 문서는 개발 또는 계약협의부터 — 영업 단계는 sites 메타데이터까지만. 어휘 밖 값은 버려진다"
+   },
+   "program": {
+    "type": "string",
+    "description": "write 전용(프로젝트 대표페이지): 사업군(프로그램) — 한 벤처의 워크스트림인 형제 프로젝트들을 묶는 축 (예: '비금-130mw' — 케이블·커넥터·EPC 폴더가 공유). client(거래처) 아래의 중간 우산. 짧은 한글 슬러그, 기존 프로그램에 합류할 땐 기존 표기를 그대로 재사용(검색으로 확인). 단독 딜은 생략"
+   },
+   "kinds": {
+    "type": "array",
+    "items": {
+     "type": "string",
+     "enum": [
+      "태양광",
+      "태양광/토지",
+      "태양광/루프탑",
+      "태양광/수상",
+      "태양광/ESS",
+      "기자재",
+      "기자재/모듈",
+      "기자재/인버터",
+      "기자재/케이블",
+      "기자재/기타",
+      "풍력",
+      "풍력/육상",
+      "풍력/해상",
+      "기타",
+      "기타/용역",
+      "기타/협력"
+     ]
+    },
+    "description": "프로젝트 특성 — 2단 고정 체계 '1차' 또는 '1차/2차' (프로젝트 대표페이지 write 전용, 복수 허용): 태양광(발전소 사업 — 시공·개발·인허가 포함; 2차=토지/루프탑/수상/ESS — ESS 사업도 태양광), 기자재(공급; 2차=모듈/인버터/케이블/기타), 풍력(2차=육상/해상), 기타(2차=용역/협력). 2차를 모르면 1차만 적고, 확인되면 세분화. 어휘 밖 값은 드롭됨. write-site에서도 이 현장의 특성으로 쓰인다"
+   },
+   "address": {
+    "type": "string",
+    "description": "write-site 전용: 이 현장의 정식 주소. sites와 같은 표기 규칙 '광역약칭 시/군 읍/면/동 [리]' (예: '전북 군산시 옥구읍 수산리'). 지도 배치 키"
+   },
+   "status": {
+    "type": "string",
+    "enum": [
+     "후보",
+     "계약",
+     "개설",
+     "준공"
+    ],
+    "description": "write-site 전용: 현장 생애주기 단계 (후보→계약→개설→준공). 지도는 기본적으로 계약·개설·준공만 표시하고 후보는 숨긴다"
+   },
+   "capacity": {
+    "type": "number",
+    "description": "write-site 전용: 이 현장의 용량(MW). 지도 핀 크기. 0/미지정이면 미기재"
+   },
+   "contract_date": {
+    "type": "string",
+    "description": "write-site 전용 공정 일정: 계약일 YYYY-MM-DD"
+   },
+   "construction_start": {
+    "type": "string",
+    "description": "write-site 전용 공정 일정: 공사개시일 YYYY-MM-DD"
+   },
+   "module_delivery": {
+    "type": "string",
+    "description": "write-site 전용 공정 일정: 모듈입고 — 날짜 또는 기간('2026-08-01~2026-08-15')"
+   },
+   "pre_use_inspection": {
+    "type": "string",
+    "description": "write-site 전용 공정 일정: 사용전검사일 YYYY-MM-DD"
+   },
+   "completion_inspection": {
+    "type": "string",
+    "description": "write-site 전용 공정 일정: 준공검사일 YYYY-MM-DD"
+   },
+   "supersedes": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Existing wiki page paths this write replaces (new fact contradicts/supersedes them). Marking them demotes stale pages in recall/search."
+   },
+   "force": {
+    "type": "boolean",
+    "description": "write action: 새 문서 생성 시 유사 문서가 발견되면 기본적으로 생성이 거부되고 기존 경로가 안내된다. 안내된 문서가 정말 별개 주제일 때만 force=true로 생성을 강행",
+    "default": false
+   },
+   "importance": {
+    "type": "number",
+    "description": "Page importance 0.0-1.0 (write action, default: 0.5)",
+    "minimum": 0,
+    "maximum": 1
+   },
+   "type": {
+    "type": "string",
+    "enum": [
+     "concept",
+     "entity",
+     "source",
+     "comparison",
+     "log"
+    ],
+    "description": "Page type (write action)"
+   },
+   "confidence": {
+    "type": "string",
+    "enum": [
+     "high",
+     "medium",
+     "low"
+    ],
+    "description": "Confidence level (write action): high (verified), medium (reasonable inference), low (uncertain)"
+   },
+   "due": {
+    "type": "string",
+    "description": "Upcoming deadline in YYYY-MM-DD (write action): payment due, delivery, or milestone date. Surfaced by the morning letter deadline scan."
+   },
+   "section": {
+    "type": "string",
+    "description": "Read a specific section (read action)"
+   },
+   "from_line": {
+    "type": "integer",
+    "description": "read 전용 절대 시작 줄(1 기반). search 결과의 Lx-Ly 주소를 그대로 사용",
+    "minimum": 1
+   },
+   "max_lines": {
+    "type": "integer",
+    "description": "read 전용 반환 줄 수(기본 120, 최대 400)",
+    "minimum": 1,
+    "maximum": 400
+   },
+   "explain": {
+    "type": "boolean",
+    "description": "search 전용 검색 신호·융합·rerank 진단 포함",
+    "default": false
+   },
+   "rerank": {
+    "type": "boolean",
+    "description": "search 전용 선택적 reranker 강제 실행. 기본은 상위 후보가 애매할 때만 실행",
+    "default": false
+   },
+   "limit": {
+    "type": "integer",
+    "description": "Max results (search: default 10)",
+    "minimum": 1,
+    "maximum": 50
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "notebook",
+  "max_output": 24000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "enum": [
+     "create",
+     "for_deal",
+     "pin_to_deal",
+     "list",
+     "show",
+     "add_source",
+     "remove_source",
+     "delete",
+     "brief",
+     "open",
+     "close",
+     "mode"
+    ],
+    "description": "create: 노트북 생성. for_deal: 딜/프로젝트의 노트북 보기(없으면 생성, deal_ref). pin_to_deal: 딜 노트북에 자료 한 번에 저장(없으면 생성; deal_ref+kind+ref/text). list: 노트북 목록. show: 핀된 자료 보기(id 또는 deal_ref). add_source: 자료 핀. remove_source: 자료 제거. delete: 노트북 삭제. brief: 핀된 자료 근거 인용([S1]) 1회 브리핑 데이터(모델 종합; id 또는 deal_ref). open: 이 세션을 노트북에 묶어 이후 모든 답을 그 자료 위주로(id 또는 deal_ref). close: 노트북 닫고 일반 모드 복귀. mode: 그라운딩 강도 전환(id+mode=soft|strict)."
+   },
+   "deal_ref": {
+    "type": "string",
+    "description": "딜/프로젝트 고유코드 (for_deal/pin_to_deal, 또는 show/brief에서 id 대신). 위키 프로젝트 페이지 frontmatter의 code(예: pl1-wdo-dev-001 — 부서-고객-거래타입-순번)를 쓴다. 코드는 페이지가 이동·재분류돼도 안 변하는 식별자라, raw 증거(노트북)와 정제 사실(위키)이 한 딜로 안정적으로 묶인다(둘 다 같은 코드)."
+   },
+   "deal_name": {
+    "type": "string",
+    "description": "딜 노트북 자동 생성 시 이름 (for_deal/pin_to_deal, 선택; 미지정 시 deal_ref 사용)."
+   },
+   "id": {
+    "type": "string",
+    "description": "노트북 id (show/add_source/remove_source/delete/brief)."
+   },
+   "name": {
+    "type": "string",
+    "description": "노트북 이름 (create) — 예: '탑솔라 딜'."
+   },
+   "description": {
+    "type": "string",
+    "description": "노트북 설명 (create, 선택)."
+   },
+   "kind": {
+    "type": "string",
+    "enum": [
+     "wiki",
+     "note",
+     "file",
+     "url",
+     "mail",
+     "diary"
+    ],
+    "description": "자료 유형 (add_source): wiki=위키 페이지(ref=경로, 라이브). note=붙여넣기 텍스트(text). file=파일 경로(ref=경로; PDF·이미지 OCR, 그 외 텍스트). url=웹페이지(ref=URL, 본문 추출). mail=메일 스레드(ref=스레드/메시지 id). diary=일기 항목(ref=날짜/id). file·url·mail·diary는 추가 시점에 본문을 스냅샷."
+   },
+   "ref": {
+    "type": "string",
+    "description": "자료 위치 (kind별): wiki=페이지 경로('프로젝트/topsolar.md'/'w:프로젝트/topsolar'), file=파일 경로(PDF·이미지·텍스트), url=웹 주소(https://…), mail=메일 스레드/메시지 id, diary=일기 날짜/id."
+   },
+   "title": {
+    "type": "string",
+    "description": "자료 표시 이름 (add_source, 선택; wiki는 미지정 시 페이지 제목 자동)."
+   },
+   "text": {
+    "type": "string",
+    "description": "자료 본문 (kind=note) — 메일 본문·견적·회의 메모 등 붙여넣기 텍스트."
+   },
+   "source": {
+    "type": "string",
+    "description": "제거할 자료의 인용 태그 (remove_source) — 예: 'S2'."
+   },
+   "focus": {
+    "type": "string",
+    "description": "브리핑 초점 (brief, 선택) — 예: '계약 조건과 리스크 위주로'."
+   },
+   "mode": {
+    "type": "string",
+    "enum": [
+     "soft",
+     "strict"
+    ],
+    "description": "그라운딩 강도 (mode 액션): soft=자료 우선이되 부족하면 일반 지식으로 보충하고 (자료 밖) 표시(기본), strict=자료에만 근거하고 없으면 '자료에 없음'."
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "contacts",
+  "max_output": 8000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "enum": [
+     "lookup",
+     "search",
+     "by_company"
+    ],
+    "description": "lookup: 전화번호로 인물 찾기 (정규화·+82↔0·뒷자리 폴백). search: 이름·회사·이메일·번호 부분일치 검색 (최대 20건, 초과 시 표시). by_company: 회사명으로 소속 인물 전체 열거 (이름순, 최대 50명)."
+   },
+   "query": {
+    "type": "string",
+    "description": "조회할 전화번호 (lookup) 또는 검색어 — 이름/회사/이메일/번호 일부 (search)."
+   }
+  },
+  "required": [
+   "action",
+   "query"
+  ]
+ },
+ {
+  "name": "calendar",
+  "max_output": 8000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "enum": [
+     "list",
+     "get",
+     "create",
+     "update",
+     "delete",
+     "free_slots",
+     "brief",
+     "prep",
+     "capture",
+     "audit",
+     "timeline"
+    ],
+    "description": "list: 일정 조회 (기본 지금부터 48시간; from/to로 명시 범위, 또는 hours_ahead). 겹치는 일정은 ⚠️로, 연결된 일정은 [미팅]·「메일 제목」으로 출처 표시. get: id로 상세(참석자·장소·Meet·메모·연결 출처 — 미팅 준비용). create: 일정 추가(로컬). update: 로컬 일정 수정. delete: 로컬 일정 삭제. free_slots: 근무시간 내 빈 시간(미팅 넣을 자리) 찾기. brief: 오늘(기본; hours_ahead/from·to로 기간) 일정을 연결된 메일 맥락·겹침과 함께 브리핑 골격으로 정리 — 연결된 일정은 mail_archive로 맥락 보강해 '왜 중요한지·무엇을 준비할지'까지 서술. prep: 미팅 준비 — id(생략 시 다음 일정)의 상세 + 연결된 메일을 mail_archive로 열어 직전 합의·미결·준비물 체크리스트 작성 지시. capture: 회의록 정리(끝난 미팅) — id(생략 시 방금 끝난 미팅)의 메모·녹취를 결정·액션·리스크·후속으로 정리하고 update로 일정 description에 기록(일정 자체가 회의 기록). 임원 본인 후속만 강조, 위임 실무는 본문에. audit: 일정 점검·시간 보호 — 기간(기본 7일; from/to·hours_ahead) 내 더블부킹·과부하 날·버퍼 없는 연속 회의를 짚고 보호할 포커스 블록을 제안. timeline: 워크그래프 — query(거래처·프로젝트·인물·장소)와 관련된 일정을 과거 90일~향후 90일(또는 from/to)에서 모아 한 타임라인으로, 연결된 메일·위키·거래 맥락을 엮도록 안내. 구글 일정은 읽기 전용이라 수정·삭제 불가."
+   },
+   "id": {
+    "type": "string",
+    "description": "이벤트 ID (get/update/delete). list 결과의 'id=...' 값을 그대로 사용. 'local:' 접두사면 로컬(수정·삭제 가능), 아니면 구글(읽기 전용)."
+   },
+   "from": {
+    "type": "string",
+    "description": "list 조회 시작 시각 (RFC3339, 예: 2026-06-10T00:00:00+09:00). to와 함께 명시 범위 조회."
+   },
+   "to": {
+    "type": "string",
+    "description": "list 조회 끝 시각 (RFC3339)."
+   },
+   "hours_ahead": {
+    "type": "integer",
+    "description": "list에서 from/to 대신 '지금부터 N시간' (기본 48, 최대 336)."
+   },
+   "summary": {
+    "type": "string",
+    "description": "일정 제목 (create/update 필수)."
+   },
+   "start": {
+    "type": "string",
+    "description": "시작 시각 (RFC3339, create/update 필수, 예: 2026-06-10T15:00:00+09:00). KST는 +09:00 오프셋."
+   },
+   "end": {
+    "type": "string",
+    "description": "종료 시각 (RFC3339, 선택). 생략 시 1시간(종일은 1일) 자동."
+   },
+   "location": {
+    "type": "string",
+    "description": "장소 (선택)."
+   },
+   "description": {
+    "type": "string",
+    "description": "설명·메모 (선택)."
+   },
+   "all_day": {
+    "type": "boolean",
+    "description": "종일 일정 여부 (선택)."
+   },
+   "duration_min": {
+    "type": "integer",
+    "description": "free_slots: 찾을 빈 시간의 최소 길이(분, 기본 30)."
+   },
+   "day_start": {
+    "type": "integer",
+    "description": "free_slots: 근무시간 시작 시(0-23, 기본 9 = 오전 9시)."
+   },
+   "day_end": {
+    "type": "integer",
+    "description": "free_slots: 근무시간 끝 시(1-24, 기본 18 = 오후 6시)."
+   },
+   "query": {
+    "type": "string",
+    "description": "timeline: 관련 일정을 모을 대상 — 거래처·프로젝트·인물·장소 이름(제목·연결 메일 제목·장소·참석자와 매칭)."
+   },
+   "include_weekends": {
+    "type": "boolean",
+    "description": "free_slots에서 토/일도 후보로 포함할지 (기본 false — 주말은 업무 시간이 아니므로 제외). 점심 12–13시는 근무창이 점심을 온전히 포함할 때 자동 제외"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "polaris",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "search: 현재 세션의 과거 메시지에서 키워드 검색 (모든 메시지가 SQLite FTS에 무손실 저장). describe: 압축된 요약 구간 ID 목록 (time_range 필터). expand: 특정 summary_id의 원문 메시지 복원, question 추가 시 LLM이 원문 기반 답변.",
+    "enum": [
+     "search",
+     "describe",
+     "expand"
     ]
-  },
-  {
-    "name": "fetch_tools",
-    "properties": {
-      "names": {
-        "type": "array",
-        "description": "Exact tool names to activate (from the deferred tools list)",
-        "items": {
-          "type": "string"
-        },
-        "minItems": 1,
-        "maxItems": 10
-      },
-      "query": {
-        "type": "string",
-        "description": "Keyword search to find matching deferred tools (alternative to names)"
-      }
-    },
-    "required": []
-  },
-  {
-    "name": "graphify",
-    "properties": {
-      "action": {
-        "type": "string",
-        "enum": [
-          "query",
-          "path",
-          "explain"
-        ],
-        "description": "query: BFS/DFS traversal of the knowledge graph for a natural-language question. explain: plain-language description of a node and its neighbors. path: shortest path between two nodes"
-      },
-      "question": {
-        "type": "string",
-        "description": "Required for action=query. Natural-language question"
-      },
-      "node": {
-        "type": "string",
-        "description": "Required for action=explain. Node label (page id, file path, symbol, or function name) to explain"
-      },
-      "from": {
-        "type": "string",
-        "description": "Required for action=path. Source node label"
-      },
-      "to": {
-        "type": "string",
-        "description": "Required for action=path. Target node label"
-      },
-      "budget": {
-        "type": "number",
-        "description": "Optional for action=query. Max output tokens (default: 2000)",
-        "minimum": 100,
-        "maximum": 20000
-      },
-      "dfs": {
-        "type": "boolean",
-        "description": "Optional for action=query. Use depth-first instead of breadth-first traversal (default: false)",
-        "default": false
-      },
-      "graph": {
-        "type": "string",
-        "description": "Which graph to query. \"wiki\" (default, ~/.deneb/wiki-graph/graph.json — concept/entity knowledge from the wiki dreamer), \"code\" (workspace/graphify-out/graph.json — call/import graph built by graphify update), or an absolute/relative path to a custom graph.json"
-      }
-    },
-    "required": [
-      "action"
+   },
+   "query": {
+    "type": "string",
+    "description": "검색 키워드 (search action)"
+   },
+   "max_results": {
+    "type": "integer",
+    "description": "최대 결과 수 (search action, default: 10)",
+    "default": 10,
+    "minimum": 1,
+    "maximum": 50
+   },
+   "time_range": {
+    "type": "string",
+    "description": "시간 범위 (describe action): today, this_week, all",
+    "default": "all",
+    "enum": [
+     "today",
+     "this_week",
+     "all"
     ]
+   },
+   "summary_id": {
+    "type": "integer",
+    "description": "요약 노드 ID (expand action, describe 결과에서 획득)",
+    "minimum": 1
+   },
+   "question": {
+    "type": "string",
+    "description": "원본 대화에서 알고 싶은 질문 (expand action, 선택)"
+   }
   },
-  {
-    "name": "heartbeat_update",
-    "properties": {
-      "content": {
-        "type": "string",
-        "description": "Full new contents of ~/.deneb/HEARTBEAT.md. Pass empty string to clear the file. The autonomous heartbeat loop reads this file every 30 minutes; remove completed/cancelled items, update progress on ongoing items, and use a '## archive' section for items that have stalled."
-      }
-    },
-    "required": [
-      "content"
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "knowledge",
+  "properties": {
+   "op": {
+    "type": "string",
+    "description": "recall: 위키 지식베이스 의미+키워드 검색. read: ref로 단건 fetch — `w:인물/박부장` 같이 prefix가 layer 라우팅. record: wiki에 큐레이션 페이지 작성·갱신.",
+    "enum": [
+     "recall",
+     "read",
+     "record"
     ]
+   },
+   "query": {
+    "type": "string",
+    "description": "검색 키워드 (op=recall)"
+   },
+   "limit": {
+    "type": "integer",
+    "description": "결과 개수 상한 (op=recall, 기본 10, max 50)",
+    "default": 10,
+    "minimum": 1,
+    "maximum": 50
+   },
+   "sources": {
+    "type": "array",
+    "items": {
+     "type": "string",
+     "enum": [
+      "wiki",
+      "files"
+     ]
+    },
+    "description": "검색할 소스 제한 (op=recall, 생략 시 planner가 사용 가능한 소스를 모두 병렬 검색)"
+   },
+   "scopes": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "경로/프로젝트 범위 (op=recall) — 예: `프로젝트/탑솔라`, `files:/계약`"
+   },
+   "ref": {
+    "type": "string",
+    "description": "단건 ref (op=read). 형식 `<layer>:<id>` — 예: `w:인물/박부장`"
+   },
+   "page": {
+    "type": "string",
+    "description": "wiki 페이지 상대 경로 (op=record). 카테고리/이름 형식 — 예: `인물/박부장`, `프로젝트/ABC상사-NDA`"
+   },
+   "title": {
+    "type": "string",
+    "description": "페이지 제목 (op=record, 미지정 시 page의 마지막 segment 사용)"
+   },
+   "category": {
+    "type": "string",
+    "description": "프론트매터 카테고리 (op=record) — 프로젝트·인물·시스템·업무·사용자·기타"
+   },
+   "body": {
+    "type": "string",
+    "description": "페이지 본문 markdown (op=record). 비어 있으면 새 페이지에 기본 골격 자동 삽입"
+   },
+   "summary": {
+    "type": "string",
+    "description": "인덱스용 한 줄 요약 (op=record, ~80자)"
+   },
+   "tags": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "검색 태그 (op=record)"
+   },
+   "related": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "관련 페이지 경로들 (op=record)"
+   },
+   "supersedes": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "새 기록이 모순/갱신으로 대체하는 기존 wiki 페이지 경로들 (op=record). stale 페이지는 superseded_by로 표시되어 recall/search에서 감가된다."
+   },
+   "importance": {
+    "type": "number",
+    "description": "Tier1 surfacing 가중치 0.0~1.0 (op=record, 0.85↑은 시스템 프롬프트에 자동 노출)",
+    "minimum": 0,
+    "maximum": 1
+   }
   },
-  {
-    "name": "todo",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "list | add | done | delete"
-      },
-      "title": {
-        "type": "string",
-        "description": "Title of the to-do (required for add)"
-      },
+  "required": [
+   "op"
+  ]
+ },
+ {
+  "name": "fetch_tools",
+  "properties": {
+   "names": {
+    "type": "array",
+    "description": "Exact tool names to activate (from the deferred tools list)",
+    "items": {
+     "type": "string"
+    },
+    "minItems": 1,
+    "maxItems": 10
+   },
+   "query": {
+    "type": "string",
+    "description": "Keyword search to find matching deferred tools (alternative to names)"
+   }
+  },
+  "required": []
+ },
+ {
+  "name": "graphify",
+  "properties": {
+   "action": {
+    "type": "string",
+    "enum": [
+     "query",
+     "path",
+     "explain"
+    ],
+    "description": "query: BFS/DFS traversal of the knowledge graph for a natural-language question. explain: plain-language description of a node and its neighbors. path: shortest path between two nodes"
+   },
+   "question": {
+    "type": "string",
+    "description": "Required for action=query. Natural-language question"
+   },
+   "node": {
+    "type": "string",
+    "description": "Required for action=explain. Node label (page id, file path, symbol, or function name) to explain"
+   },
+   "from": {
+    "type": "string",
+    "description": "Required for action=path. Source node label"
+   },
+   "to": {
+    "type": "string",
+    "description": "Required for action=path. Target node label"
+   },
+   "budget": {
+    "type": "number",
+    "description": "Optional for action=query. Max output tokens (default: 2000)",
+    "minimum": 100,
+    "maximum": 20000
+   },
+   "dfs": {
+    "type": "boolean",
+    "description": "Optional for action=query. Use depth-first instead of breadth-first traversal (default: false)",
+    "default": false
+   },
+   "graph": {
+    "type": "string",
+    "description": "Which graph to query. \"wiki\" (default, ~/.deneb/wiki-graph/graph.json — concept/entity knowledge from the wiki dreamer), \"code\" (workspace/graphify-out/graph.json — call/import graph built by graphify update), or an absolute/relative path to a custom graph.json"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "heartbeat_update",
+  "properties": {
+   "content": {
+    "type": "string",
+    "description": "Full new contents of ~/.deneb/HEARTBEAT.md. Pass empty string to clear the file. The autonomous heartbeat loop reads this file every 30 minutes; remove completed/cancelled items, update progress on ongoing items, and use a '## archive' section for items that have stalled."
+   }
+  },
+  "required": [
+   "content"
+  ]
+ },
+ {
+  "name": "todo",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "list | add | done | delete"
+   },
+   "title": {
+    "type": "string",
+    "description": "Title of the to-do (required for add)"
+   },
+   "id": {
+    "type": "string",
+    "description": "To-do id for done/delete (run list first to get it)"
+   },
+   "done": {
+    "type": "boolean",
+    "description": "Completion state for the done action (default true)"
+   },
+   "due": {
+    "type": "string",
+    "description": "Optional due date, YYYY-MM-DD"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "watch",
+  "properties": {
+   "source": {
+    "type": "string",
+    "description": "YouTube URL or local video file path. Extracts representative frames + the subtitle transcript (with chapter sections) and analyzes them with the vision model — the model SEES the screen, not just the captions. Use detail=transcript for caption/ASR-only summaries (skips video download and frames)."
+   },
+   "task": {
+    "type": "string",
+    "description": "What to analyze in the video (e.g. 'analyze the hook in the first 3 seconds', 'where does the UI break?'). Default: general analysis"
+   },
+   "start": {
+    "type": "number",
+    "description": "Optional analysis window start in seconds"
+   },
+   "end": {
+    "type": "number",
+    "description": "Optional analysis window end in seconds"
+   },
+   "detail": {
+    "type": "string",
+    "description": "frames (default): scene frames + subtitles with vision analysis. transcript: captions/ASR only — skips video download and frames (faster for summaries; YouTube only).",
+    "enum": [
+     "frames",
+     "transcript"
+    ]
+   }
+  },
+  "required": [
+   "source"
+  ]
+ },
+ {
+  "name": "observe",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
+    "enum": [
+     "turn",
+     "logs",
+     "behavior",
+     "effort",
+     "proactive",
+     "provenance",
+     "health"
+    ]
+   },
+   "runId": {
+    "type": "string",
+    "description": "Run id — required for action=turn; optional filter for action=logs"
+   },
+   "session": {
+    "type": "string",
+    "description": "Session key filter for action=logs"
+   },
+   "level": {
+    "type": "string",
+    "description": "Min log level for action=logs: debug | info | warn | error (default debug)"
+   },
+   "days": {
+    "type": "number",
+    "description": "Window in days for action=behavior and action=effort (omit = all retained history)"
+   },
+   "limit": {
+    "type": "number",
+    "description": "Max log lines for action=logs"
+   },
+   "contains": {
+    "type": "string",
+    "description": "Substring filter on the log message for action=logs"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "fleet",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "What to do with the SparkFleet GPU control plane: status (nodes + recipes + recent failed jobs at a glance) | recipes (every model recipe with running/health) | jobs (recent background jobs) | launch | stop | restart (a recipe by name) | cancel (a background job by id) | diagnose (crash triage of a running recipe's container)",
+    "enum": [
+     "status",
+     "recipes",
+     "jobs",
+     "launch",
+     "stop",
+     "restart",
+     "cancel",
+     "diagnose"
+    ]
+   },
+   "recipe": {
+    "type": "string",
+    "description": "Recipe name — required for launch / stop / restart / diagnose"
+   },
+   "jobId": {
+    "type": "string",
+    "description": "Background job id — required for cancel"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "browser",
+  "max_output": 32000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Browser bridge action: status (hub connected/busy) | execute (run a natural-language task in the user's Chrome — blocking) | stop (cancel the running task)",
+    "enum": [
+     "status",
+     "execute",
+     "stop"
+    ]
+   },
+   "task": {
+    "type": "string",
+    "description": "Natural-language instructions for action=execute. Be specific: steps and what information to return after the task."
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "groupware",
+  "max_output": 32000,
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Read-only Amaranth. Triggers: 재고→stock, 매출→sales summary, 단가→price, 사원연락처→people, 결재/공지→approval|board. status|list|read|attachment|summary. Never mutate.",
+    "enum": [
+     "status",
+     "list",
+     "read",
+     "attachment",
+     "summary"
+    ]
+   },
+   "area": {
+    "type": "string",
+    "description": "Surface: approval|board|sales|stock|po|receive|ship|price|people. Prefer by trigger (재고=stock, 매출=sales, 사원=people, 결재=approval).",
+    "enum": [
+     "approval",
+     "board",
+     "sales",
+     "stock",
+     "po",
+     "receive",
+     "ship",
+     "price",
+     "people"
+    ]
+   },
+   "query": {
+    "type": "string",
+    "description": "Keyword (품목·거래처·사원이름) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. people: name required; enriches/creates wiki 인물 + org chart read match. Prefix lines: raw voucher lines. Required for action=read and area=people."
+   },
+   "doc_id": {
+    "type": "string",
+    "description": "Approval document id shown by action=read. Required for action=attachment."
+   },
+   "attachment": {
+    "type": "string",
+    "description": "Exactly one attachment to download/extract: 1-based number, filename/title, fileKey, or fileId from the read result. Required for action=attachment."
+   },
+   "limit": {
+    "type": "integer",
+    "description": "Max lines for list areas (default 20, max 50; people detail capped at 20)."
+   },
+   "folder": {
+    "type": "string",
+    "description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/people/board.",
+    "enum": [
+     "pending",
+     "done",
+     "cc",
+     "total",
+     "all",
+     "ytd",
+     "month",
+     "today",
+     "year",
+     "last_year"
+    ]
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "phone_read",
+  "properties": {
+   "what": {
+    "type": "string",
+    "description": "조회 종류: location(최근 위치 — 앱 상태 캐시) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬). 캐시가 오래됐으면 갱신 요청 후 재시도 안내가 온다.",
+    "enum": [
+     "location",
+     "battery",
+     "usage"
+    ]
+   }
+  },
+  "required": [
+   "what"
+  ]
+ },
+ {
+  "name": "phone_write",
+  "properties": {
+   "to": {
+    "type": "string",
+    "description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS 미지원은 실패로 회신됨) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
+    "enum": [
+     "notify",
+     "speak",
+     "clipboard",
+     "open_url",
+     "open_app",
+     "share",
+     "message",
+     "dial",
+     "photo",
+     "alarm",
+     "timer"
+    ]
+   },
+   "target": {
+    "type": "string",
+    "description": "액션 대상: open_url=URL, open_app=패키지/앱명, message=수신자, dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)"
+   },
+   "text": {
+    "type": "string",
+    "description": "알림/음성/클립보드/공유/문자 텍스트 (notify/speak/clipboard/share/message), alarm/timer에서는 라벨"
+   },
+   "title": {
+    "type": "string",
+    "description": "notify 제목 (없으면 Deneb)"
+   }
+  },
+  "required": [
+   "to"
+  ]
+ },
+ {
+  "name": "workstation",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "open(화면 열기) | split(분할 추가) | close(분할 닫기) | focus(포커스 이동) | layout(분할 구성 일괄 지정) | wiki(위키 페이지 열기) | spotlight(항목 강조 — 열고 하이라이트) | prefill(할일 초안 채워 모달 오픈, 저장은 사용자)"
+   },
+   "view": {
+    "type": "string",
+    "description": "대상 pane 키 (open/split/focus/close): today|projects|progress|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe|sitemap"
+   },
+   "views": {
+    "type": "string",
+    "description": "layout 전용 — 쉼표로 구분한 pane 키 1~3개, 왼쪽부터 배치 (예: \"mail,calendar\")"
+   },
+   "ref": {
+    "type": "string",
+    "description": "열 항목의 리소스 id (예: 메일 id) — 해당 pane이 그 항목을 바로 연다. spotlight에선 강조할 항목 id(필수)"
+   },
+   "path": {
+    "type": "string",
+    "description": "위키 페이지 경로 (action=wiki 또는 open+위키)"
+   },
+   "query": {
+    "type": "string",
+    "description": "view=search일 때 주입할 검색어 — 열리면서 바로 검색 실행"
+   },
+   "date": {
+    "type": "string",
+    "description": "YYYY-MM-DD — 메일/결재처럼 날짜 페이저가 있는 pane을 그 날짜로 점프 (open/split 전용)"
+   },
+   "title": {
+    "type": "string",
+    "description": "prefill 전용 — 할일 제목"
+   },
+   "due": {
+    "type": "string",
+    "description": "prefill 전용 — 마감일 YYYY-MM-DD (선택)"
+   },
+   "note": {
+    "type": "string",
+    "description": "prefill 전용 — 메모 (선택)"
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "workfeed",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시) | publish(사용자가 요청한 산출물을 작업 피드 카드로 발행)",
+    "enum": [
+     "list",
+     "read",
+     "ack",
+     "publish"
+    ]
+   },
+   "id": {
+    "type": "string",
+    "description": "카드 ID (read/ack 필수)"
+   },
+   "limit": {
+    "type": "number",
+    "description": "list 최대 개수 (기본 20)",
+    "default": 20,
+    "minimum": 1
+   },
+   "include_acked": {
+    "type": "boolean",
+    "description": "true면 처리 완료된 카드까지 포함 (기본 미처리만)"
+   },
+   "title": {
+    "type": "string",
+    "description": "publish 필수 — 카드 한 줄 제목 (문서/사안을 식별할 수 있게)"
+   },
+   "summary": {
+    "type": "string",
+    "description": "publish 선택 — 피드에서 보이는 2줄 미리보기. 비우면 body에서 자동 추출"
+   },
+   "body": {
+    "type": "string",
+    "description": "publish 필수 — 산출물 본문(마크다운). 핵심 결론 + 액션아이템(회람 대상·기한 포함)을 담는다"
+   },
+   "priority": {
+    "type": "string",
+    "description": "publish 선택 — urgent | high | normal | low. 비우면 본문에서 자동 추론",
+    "enum": [
+     "urgent",
+     "high",
+     "normal",
+     "low"
+    ]
+   },
+   "ref_type": {
+    "type": "string",
+    "description": "publish 선택 — 근거 페이지 유형(예: wiki). ref_id와 함께 카드를 그 페이지에 연결"
+   },
+   "ref_id": {
+    "type": "string",
+    "description": "publish 선택 — 근거 페이지 식별자(예: 위키 경로)"
+   }
+  },
+  "required": []
+ },
+ {
+  "name": "transcribe",
+  "properties": {
+   "path": {
+    "type": "string",
+    "description": "디스크의 오디오 파일 절대 경로 (m4a/mp3/oga/wav/webm/flac, 최대 60분)"
+   },
+   "hotwords": {
+    "type": "string",
+    "description": "고유명사 교정 힌트 (쉼표 구분 — 거래처·인명·제품명). 주소록/위키 힌트는 자동 병합"
+   }
+  },
+  "required": [
+   "path"
+  ]
+ },
+ {
+  "name": "ocr",
+  "properties": {
+   "path": {
+    "type": "string",
+    "description": "디스크의 이미지/스캔 PDF/오피스 문서 절대 경로"
+   }
+  },
+  "required": [
+   "path"
+  ]
+ },
+ {
+  "name": "market",
+  "properties": {},
+  "required": []
+ },
+ {
+  "name": "org",
+  "properties": {
+   "query": {
+    "type": "string",
+    "description": "이름 검색어 (사람/팀/회사, 부분 일치). 생략하면 전체 조직도"
+   }
+  },
+  "required": []
+ },
+ {
+  "name": "goal",
+  "description": "Set and manage a standing goal (Ralph loop) the agent keeps working toward across turns while the user is idle.",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "Goal action",
+    "enum": [
+     "set",
+     "subgoal",
+     "status",
+     "pause",
+     "resume",
+     "stop"
+    ]
+   },
+   "goal": {
+    "type": "string",
+    "description": "Objective text (required for action=set). Free-form, e.g. '탑솔라 6월 견적을 정리해 초안까지'."
+   },
+   "subgoal": {
+    "type": "string",
+    "description": "A specific completion criterion to add (required for action=subgoal). The judge requires per-criterion evidence before marking the goal done."
+   },
+   "max_turns": {
+    "type": "number",
+    "description": "Optional run budget for action=set (default 20). Auto-pauses (resumable) when exhausted."
+   }
+  },
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "blackboard",
+  "description": "Typed I/O board for multi-tool workflows. Prefer named keys over free-text handoffs. Actions: plan, begin, end, put, get, require, list, clear. Other tools may use \"$board.<key>\" string args to inject values (fail-closed if missing).",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "plan(steps) | begin(step) | end(step,outputs) | put(key,value) | get(key) | require(keys) | list | clear",
+    "enum": [
+     "plan",
+     "begin",
+     "end",
+     "put",
+     "get",
+     "require",
+     "list",
+     "clear"
+    ]
+   },
+   "key": {
+    "type": "string",
+    "description": "Board key for put/get (letters, digits, underscore)."
+   },
+   "value": {
+    "description": "JSON value for put (string/number/bool/object/array)."
+   },
+   "keys": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Keys for require — fails closed if any are missing."
+   },
+   "step": {
+    "type": "string",
+    "description": "Step id for begin/end."
+   },
+   "steps": {
+    "type": "array",
+    "description": "Ordered step contracts for action=plan.",
+    "items": {
+     "type": "object",
+     "properties": {
       "id": {
-        "type": "string",
-        "description": "To-do id for done/delete (run list first to get it)"
-      },
-      "done": {
-        "type": "boolean",
-        "description": "Completion state for the done action (default true)"
-      },
-      "due": {
-        "type": "string",
-        "description": "Optional due date, YYYY-MM-DD"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "watch",
-    "properties": {
-      "source": {
-        "type": "string",
-        "description": "YouTube URL or local video file path. Extracts representative frames + the subtitle transcript (with chapter sections) and analyzes them with the vision model — the model SEES the screen, not just the captions. Use detail=transcript for caption/ASR-only summaries (skips video download and frames)."
-      },
-      "task": {
-        "type": "string",
-        "description": "What to analyze in the video (e.g. 'analyze the hook in the first 3 seconds', 'where does the UI break?'). Default: general analysis"
-      },
-      "start": {
-        "type": "number",
-        "description": "Optional analysis window start in seconds"
-      },
-      "end": {
-        "type": "number",
-        "description": "Optional analysis window end in seconds"
-      },
-      "detail": {
-        "type": "string",
-        "description": "frames (default): scene frames + subtitles with vision analysis. transcript: captions/ASR only — skips video download and frames (faster for summaries; YouTube only).",
-        "enum": [
-          "frames",
-          "transcript"
-        ]
-      }
-    },
-    "required": [
-      "source"
-    ]
-  },
-  {
-    "name": "observe",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "What to observe about your own runtime: turn | logs | behavior | effort | proactive | provenance | health (self-improvement machinery: loop liveness, no-op frontier, silent failures)",
-        "enum": [
-          "turn",
-          "logs",
-          "behavior",
-          "effort",
-          "proactive",
-          "provenance",
-          "health"
-        ]
-      },
-      "runId": {
-        "type": "string",
-        "description": "Run id — required for action=turn; optional filter for action=logs"
-      },
-      "session": {
-        "type": "string",
-        "description": "Session key filter for action=logs"
-      },
-      "level": {
-        "type": "string",
-        "description": "Min log level for action=logs: debug | info | warn | error (default debug)"
-      },
-      "days": {
-        "type": "number",
-        "description": "Window in days for action=behavior and action=effort (omit = all retained history)"
-      },
-      "limit": {
-        "type": "number",
-        "description": "Max log lines for action=logs"
-      },
-      "contains": {
-        "type": "string",
-        "description": "Substring filter on the log message for action=logs"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "fleet",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "What to do with the SparkFleet GPU control plane: status (nodes + recipes + recent failed jobs at a glance) | recipes (every model recipe with running/health) | jobs (recent background jobs) | launch | stop | restart (a recipe by name) | cancel (a background job by id) | diagnose (crash triage of a running recipe's container)",
-        "enum": [
-          "status",
-          "recipes",
-          "jobs",
-          "launch",
-          "stop",
-          "restart",
-          "cancel",
-          "diagnose"
-        ]
-      },
-      "recipe": {
-        "type": "string",
-        "description": "Recipe name — required for launch / stop / restart / diagnose"
-      },
-      "jobId": {
-        "type": "string",
-        "description": "Background job id — required for cancel"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "browser",
-    "max_output": 32000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Browser bridge action: status (hub connected/busy) | execute (run a natural-language task in the user's Chrome — blocking) | stop (cancel the running task)",
-        "enum": [
-          "status",
-          "execute",
-          "stop"
-        ]
-      },
-      "task": {
-        "type": "string",
-        "description": "Natural-language instructions for action=execute. Be specific: steps and what information to return after the task."
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "groupware",
-    "max_output": 32000,
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Read-only Amaranth. Triggers: 재고→stock, 매출→sales summary, 단가→price, 사원연락처→people, 결재/공지→approval|board. status|list|read|attachment|summary. Never mutate.",
-        "enum": [
-          "status",
-          "list",
-          "read",
-          "attachment",
-          "summary"
-        ]
-      },
-      "area": {
-        "type": "string",
-        "description": "Surface: approval|board|sales|stock|po|receive|ship|price|people. Prefer by trigger (재고=stock, 매출=sales, 사원=people, 결재=approval).",
-        "enum": [
-          "approval",
-          "board",
-          "sales",
-          "stock",
-          "po",
-          "receive",
-          "ship",
-          "price",
-          "people"
-        ]
-      },
-      "query": {
-        "type": "string",
-        "description": "Keyword (품목·거래처·사원이름) or YYYYMMDD:YYYYMMDD [keyword]. price: 모듈/인버터→itemCd M-/I-. people: name required; enriches/creates wiki 인물 + org chart read match. Prefix lines: raw voucher lines. Required for action=read and area=people."
-      },
-      "doc_id": {
-        "type": "string",
-        "description": "Approval document id shown by action=read. Required for action=attachment."
-      },
-      "attachment": {
-        "type": "string",
-        "description": "Exactly one attachment to download/extract: 1-based number, filename/title, fileKey, or fileId from the read result. Required for action=attachment."
-      },
-      "limit": {
-        "type": "integer",
-        "description": "Max lines for list areas (default 20, max 50; people detail capped at 20)."
-      },
-      "folder": {
-        "type": "string",
-        "description": "approval: pending|done|cc|total|all. sales/stock/po/receive/ship: ytd|month|today|year|last_year (receive/ship default month; sales/stock/po default ytd). Ignored for price/people/board.",
-        "enum": [
-          "pending",
-          "done",
-          "cc",
-          "total",
-          "all",
-          "ytd",
-          "month",
-          "today",
-          "year",
-          "last_year"
-        ]
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "phone_read",
-    "properties": {
-      "what": {
-        "type": "string",
-        "description": "조회 종류: location(최근 위치 — 앱 상태 캐시) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬). 캐시가 오래됐으면 갱신 요청 후 재시도 안내가 온다.",
-        "enum": [
-          "location",
-          "battery",
-          "usage"
-        ]
-      }
-    },
-    "required": [
-      "what"
-    ]
-  },
-  {
-    "name": "phone_write",
-    "properties": {
-      "to": {
-        "type": "string",
-        "description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS 미지원은 실패로 회신됨) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
-        "enum": [
-          "notify",
-          "speak",
-          "clipboard",
-          "open_url",
-          "open_app",
-          "share",
-          "message",
-          "dial",
-          "photo",
-          "alarm",
-          "timer"
-        ]
-      },
-      "target": {
-        "type": "string",
-        "description": "액션 대상: open_url=URL, open_app=패키지/앱명, message=수신자, dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)"
-      },
-      "text": {
-        "type": "string",
-        "description": "알림/음성/클립보드/공유/문자 텍스트 (notify/speak/clipboard/share/message), alarm/timer에서는 라벨"
-      },
-      "title": {
-        "type": "string",
-        "description": "notify 제목 (없으면 Deneb)"
-      }
-    },
-    "required": [
-      "to"
-    ]
-  },
-  {
-    "name": "workstation",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "open(화면 열기) | split(분할 추가) | close(분할 닫기) | focus(포커스 이동) | layout(분할 구성 일괄 지정) | wiki(위키 페이지 열기) | spotlight(항목 강조 — 열고 하이라이트) | prefill(할일 초안 채워 모달 오픈, 저장은 사용자)"
-      },
-      "view": {
-        "type": "string",
-        "description": "대상 pane 키 (open/split/focus/close): today|projects|progress|todo|notebook|mail|calendar|wiki|search|people|crons|fleet|workfeed|approvals|groupware|skills|rsi|observe|sitemap"
-      },
-      "views": {
-        "type": "string",
-        "description": "layout 전용 — 쉼표로 구분한 pane 키 1~3개, 왼쪽부터 배치 (예: \"mail,calendar\")"
-      },
-      "ref": {
-        "type": "string",
-        "description": "열 항목의 리소스 id (예: 메일 id) — 해당 pane이 그 항목을 바로 연다. spotlight에선 강조할 항목 id(필수)"
-      },
-      "path": {
-        "type": "string",
-        "description": "위키 페이지 경로 (action=wiki 또는 open+위키)"
-      },
-      "query": {
-        "type": "string",
-        "description": "view=search일 때 주입할 검색어 — 열리면서 바로 검색 실행"
-      },
-      "date": {
-        "type": "string",
-        "description": "YYYY-MM-DD — 메일/결재처럼 날짜 페이저가 있는 pane을 그 날짜로 점프 (open/split 전용)"
-      },
-      "title": {
-        "type": "string",
-        "description": "prefill 전용 — 할일 제목"
-      },
-      "due": {
-        "type": "string",
-        "description": "prefill 전용 — 마감일 YYYY-MM-DD (선택)"
-      },
-      "note": {
-        "type": "string",
-        "description": "prefill 전용 — 메모 (선택)"
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "workfeed",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "list(카드 목록, 기본) | read(카드 본문 — 열람 표시 겸함) | ack(처리 완료 표시) | publish(사용자가 요청한 산출물을 작업 피드 카드로 발행)",
-        "enum": [
-          "list",
-          "read",
-          "ack",
-          "publish"
-        ]
-      },
-      "id": {
-        "type": "string",
-        "description": "카드 ID (read/ack 필수)"
-      },
-      "limit": {
-        "type": "number",
-        "description": "list 최대 개수 (기본 20)",
-        "default": 20,
-        "minimum": 1
-      },
-      "include_acked": {
-        "type": "boolean",
-        "description": "true면 처리 완료된 카드까지 포함 (기본 미처리만)"
-      },
-      "title": {
-        "type": "string",
-        "description": "publish 필수 — 카드 한 줄 제목 (문서/사안을 식별할 수 있게)"
-      },
-      "summary": {
-        "type": "string",
-        "description": "publish 선택 — 피드에서 보이는 2줄 미리보기. 비우면 body에서 자동 추출"
-      },
-      "body": {
-        "type": "string",
-        "description": "publish 필수 — 산출물 본문(마크다운). 핵심 결론 + 액션아이템(회람 대상·기한 포함)을 담는다"
-      },
-      "priority": {
-        "type": "string",
-        "description": "publish 선택 — urgent | high | normal | low. 비우면 본문에서 자동 추론",
-        "enum": [
-          "urgent",
-          "high",
-          "normal",
-          "low"
-        ]
-      },
-      "ref_type": {
-        "type": "string",
-        "description": "publish 선택 — 근거 페이지 유형(예: wiki). ref_id와 함께 카드를 그 페이지에 연결"
-      },
-      "ref_id": {
-        "type": "string",
-        "description": "publish 선택 — 근거 페이지 식별자(예: 위키 경로)"
-      }
-    },
-    "required": []
-  },
-  {
-    "name": "transcribe",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "디스크의 오디오 파일 절대 경로 (m4a/mp3/oga/wav/webm/flac, 최대 60분)"
-      },
-      "hotwords": {
-        "type": "string",
-        "description": "고유명사 교정 힌트 (쉼표 구분 — 거래처·인명·제품명). 주소록/위키 힌트는 자동 병합"
-      }
-    },
-    "required": [
-      "path"
-    ]
-  },
-  {
-    "name": "ocr",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "디스크의 이미지/스캔 PDF/오피스 문서 절대 경로"
-      }
-    },
-    "required": [
-      "path"
-    ]
-  },
-  {
-    "name": "market",
-    "properties": {},
-    "required": []
-  },
-  {
-    "name": "org",
-    "properties": {
-      "query": {
-        "type": "string",
-        "description": "이름 검색어 (사람/팀/회사, 부분 일치). 생략하면 전체 조직도"
-      }
-    },
-    "required": []
-  },
-  {
-    "name": "goal",
-    "description": "Set and manage a standing goal (Ralph loop) the agent keeps working toward across turns while the user is idle.",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "Goal action",
-        "enum": [
-          "set",
-          "subgoal",
-          "status",
-          "pause",
-          "resume",
-          "stop"
-        ]
+       "type": "string",
+       "description": "Stable step id"
       },
       "goal": {
-        "type": "string",
-        "description": "Objective text (required for action=set). Free-form, e.g. '탑솔라 6월 견적을 정리해 초안까지'."
+       "type": "string",
+       "description": "App/tool-scoped goal for this step"
       },
-      "subgoal": {
-        "type": "string",
-        "description": "A specific completion criterion to add (required for action=subgoal). The judge requires per-criterion evidence before marking the goal done."
-      },
-      "max_turns": {
-        "type": "number",
-        "description": "Optional run budget for action=set (default 20). Auto-pauses (resumable) when exhausted."
-      }
-    },
-    "required": [
-      "action"
-    ]
-  },
-  {
-    "name": "blackboard",
-    "description": "Typed I/O board for multi-tool workflows. Prefer named keys over free-text handoffs. Actions: plan, begin, end, put, get, require, list, clear. Other tools may use \"$board.<key>\" string args to inject values (fail-closed if missing).",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "plan(steps) | begin(step) | end(step,outputs) | put(key,value) | get(key) | require(keys) | list | clear",
-        "enum": [
-          "plan",
-          "begin",
-          "end",
-          "put",
-          "get",
-          "require",
-          "list",
-          "clear"
-        ]
-      },
-      "key": {
-        "type": "string",
-        "description": "Board key for put/get (letters, digits, underscore)."
-      },
-      "value": {
-        "description": "JSON value for put (string/number/bool/object/array)."
-      },
-      "keys": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Keys for require — fails closed if any are missing."
-      },
-      "step": {
-        "type": "string",
-        "description": "Step id for begin/end."
-      },
-      "steps": {
-        "type": "array",
-        "description": "Ordered step contracts for action=plan.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string",
-              "description": "Stable step id"
-            },
-            "goal": {
-              "type": "string",
-              "description": "App/tool-scoped goal for this step"
-            },
-            "inputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Required board keys before begin"
-            },
-            "outputs": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              },
-              "description": "Keys that end must write"
-            }
-          },
-          "required": [
-            "id"
-          ]
-        }
+      "inputs": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Required board keys before begin"
       },
       "outputs": {
-        "type": "object",
-        "description": "Declared output key→JSON value map for action=end.",
-        "additionalProperties": true
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Keys that end must write"
       }
-    },
-    "required": [
-      "action"
-    ]
+     },
+     "required": [
+      "id"
+     ]
+    }
+   },
+   "outputs": {
+    "type": "object",
+    "description": "Declared output key→JSON value map for action=end.",
+    "additionalProperties": true
+   }
   },
-  {
-    "name": "mail_archive",
-    "properties": {
-      "action": {
-        "type": "string",
-        "description": "list(최근/오늘 메일 목록+Locator) | search(키워드 검색+Locator) | read(Locator/ID 또는 query로 원문 열기; 첨부는 이름만 표시) | thread(References/In-Reply-To + 제목/참여자 fallback 기반 전체 스레드 복원) | project_history(회사·프로젝트 키워드 시간선+스레드 후보; 로컬 FTS+업무 신호 랭킹) | attachment(그 메일의 첨부 PDF/Excel/Word/이미지를 실제로 열어 본문 텍스트를 추출 — 견적서·계약서·세금계산서 내용을 직접 읽을 때. message_id 또는 query로 메일을 지정하고, attachment로 어떤 첨부인지 고른다)",
-        "enum": [
-          "list",
-          "search",
-          "read",
-          "thread",
-          "project_history",
-          "history",
-          "attachment"
-        ]
-      },
-      "mailbox": {
-        "type": "string",
-        "description": "조회할 메일함 selector. all(기본: 설정된 자체 아카이브 전체) | INBOX(자동보관 수신함) | archive/backfill(일반/과거 백필 mailbox; Archive/All Mail/Gmail 후보) | legacy_gmail(구 Gmail 백필 mailbox) | 실제 IMAP mailbox 이름"
-      },
-      "days": {
-        "type": "number",
-        "description": "list/search에서 최근 며칠치로 범위를 한정할지 (list 기본 1=오늘, search 기본 무제한). 예: 7=최근 7일",
-        "minimum": 1
-      },
-      "query": {
-        "type": "string",
-        "description": "search/project_history의 검색어. read/thread에서 message_id가 없으면 이 query의 최신 상위 메일을 seed로 사용"
-      },
-      "message_id": {
-        "type": "string",
-        "description": "read/thread/attachment에서 열 기준. mail_archive 결과의 Locator를 그대로 넣는 것이 가장 안정적이며, 일반 Message-ID-derived ID도 가능"
-      },
-      "attachment": {
-        "type": "string",
-        "description": "action=attachment에서 어떤 첨부를 읽을지 선택. 비우면 그 메일의 모든 문서·이미지 첨부를 추출. 파일명 일부(예: '견적', '계약서') 또는 1-기반 인덱스('1','2')로 특정 첨부만 지정"
-      },
-      "limit": {
-        "type": "number",
-        "description": "최대 반환 건수 (기본 50, 내부 상한 200)",
-        "minimum": 1
-      },
-      "include_body": {
-        "type": "boolean",
-        "description": "search/project_history/list 결과에 본문 일부까지 포함할지. 기본 false; 전체 맥락은 read/thread를 선호"
-      },
-      "as_json": {
-        "type": "boolean",
-        "description": "true면 사람이 읽는 텍스트 대신 구조화 JSON을 반환한다. code_action에서는 deneb.mail_archive(..., as_json=True)로 메시지/히스토리, Locator, rank_reasons, related_wiki, related_events를 바로 조인·필터링할 수 있다"
-      }
-    },
-    "required": [
-      "action"
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "mail_archive",
+  "properties": {
+   "action": {
+    "type": "string",
+    "description": "list(최근/오늘 메일 목록+Locator) | search(키워드 검색+Locator) | read(Locator/ID 또는 query로 원문 열기; 첨부는 이름만 표시) | thread(References/In-Reply-To + 제목/참여자 fallback 기반 전체 스레드 복원) | project_history(회사·프로젝트 키워드 시간선+스레드 후보; 로컬 FTS+업무 신호 랭킹) | attachment(그 메일의 첨부 PDF/Excel/Word/이미지를 실제로 열어 본문 텍스트를 추출 — 견적서·계약서·세금계산서 내용을 직접 읽을 때. message_id 또는 query로 메일을 지정하고, attachment로 어떤 첨부인지 고른다)",
+    "enum": [
+     "list",
+     "search",
+     "read",
+     "thread",
+     "project_history",
+     "history",
+     "attachment"
     ]
+   },
+   "mailbox": {
+    "type": "string",
+    "description": "조회할 메일함 selector. all(기본: 설정된 자체 아카이브 전체) | INBOX(자동보관 수신함) | archive/backfill(일반/과거 백필 mailbox; Archive/All Mail/Gmail 후보) | legacy_gmail(구 Gmail 백필 mailbox) | 실제 IMAP mailbox 이름"
+   },
+   "days": {
+    "type": "number",
+    "description": "list/search에서 최근 며칠치로 범위를 한정할지 (list 기본 1=오늘, search 기본 무제한). 예: 7=최근 7일",
+    "minimum": 1
+   },
+   "query": {
+    "type": "string",
+    "description": "search/project_history의 검색어. read/thread에서 message_id가 없으면 이 query의 최신 상위 메일을 seed로 사용"
+   },
+   "message_id": {
+    "type": "string",
+    "description": "read/thread/attachment에서 열 기준. mail_archive 결과의 Locator를 그대로 넣는 것이 가장 안정적이며, 일반 Message-ID-derived ID도 가능"
+   },
+   "attachment": {
+    "type": "string",
+    "description": "action=attachment에서 어떤 첨부를 읽을지 선택. 비우면 그 메일의 모든 문서·이미지 첨부를 추출. 파일명 일부(예: '견적', '계약서') 또는 1-기반 인덱스('1','2')로 특정 첨부만 지정"
+   },
+   "limit": {
+    "type": "number",
+    "description": "최대 반환 건수 (기본 50, 내부 상한 200)",
+    "minimum": 1
+   },
+   "include_body": {
+    "type": "boolean",
+    "description": "search/project_history/list 결과에 본문 일부까지 포함할지. 기본 false; 전체 맥락은 read/thread를 선호"
+   },
+   "as_json": {
+    "type": "boolean",
+    "description": "true면 사람이 읽는 텍스트 대신 구조화 JSON을 반환한다. code_action에서는 deneb.mail_archive(..., as_json=True)로 메시지/히스토리, Locator, rank_reasons, related_wiki, related_events를 바로 조인·필터링할 수 있다"
+   }
   },
-  {
-    "name": "preference",
-    "properties": {
-      "rule": {
-        "type": "string",
-        "description": "저장할 서 있는 선호/행동 규칙 한 줄 (예: '보고는 항상 결론부터 3줄 요약으로', '주말엔 알림 최소화'). SOUL.md에 append-only로 추가되고 다음 세션부터 반영된다. 추가만 가능하며 삭제·수정은 사용자만 SOUL.md 편집으로 한다."
-      }
-    },
-    "required": [
-      "rule"
-    ]
+  "required": [
+   "action"
+  ]
+ },
+ {
+  "name": "preference",
+  "properties": {
+   "rule": {
+    "type": "string",
+    "description": "저장할 서 있는 선호/행동 규칙 한 줄 (예: '보고는 항상 결론부터 3줄 요약으로', '주말엔 알림 최소화'). SOUL.md에 append-only로 추가되고 다음 세션부터 반영된다. 추가만 가능하며 삭제·수정은 사용자만 SOUL.md 편집으로 한다."
+   }
   },
-  {
-    "name": "wiki_forget",
-    "properties": {
-      "path": {
-        "type": "string",
-        "description": "잊을(영구 삭제할) 위키 페이지 경로 (예: 인물/홍길동.md 또는 w: ref). 먼저 wiki search로 정확한 경로를 확인하라."
-      },
-      "reason": {
-        "type": "string",
-        "description": "잊는 사유 한 줄 — 감사 로그에 기록된다 (오정보·프라이버시 등)."
-      }
-    },
-    "required": [
-      "path",
-      "reason"
-    ]
+  "required": [
+   "rule"
+  ]
+ },
+ {
+  "name": "wiki_forget",
+  "properties": {
+   "path": {
+    "type": "string",
+    "description": "잊을(영구 삭제할) 위키 페이지 경로 (예: 인물/홍길동.md 또는 w: ref). 먼저 wiki search로 정확한 경로를 확인하라."
+   },
+   "reason": {
+    "type": "string",
+    "description": "잊는 사유 한 줄 — 감사 로그에 기록된다 (오정보·프라이버시 등)."
+   }
   },
-  {
-    "name": "office",
-    "max_output": 32000,
-    "properties": {
-      "command": {
-        "type": "string",
-        "enum": [
-          "create",
-          "view",
-          "get",
-          "query",
-          "set",
-          "add",
-          "remove",
-          "move",
-          "swap",
-          "import",
-          "merge",
-          "batch",
-          "dump",
-          "validate",
-          "refresh",
-          "raw",
-          "raw-set",
-          "add-part",
-          "help"
-        ],
-        "description": "officecli subcommand. READ: view (args=[mode]; modes outline, stats, text, annotated, issues, html, svg, screenshot, pdf, forms), get (node by data-path), query (CSS-like selector), validate (OpenXML schema check), dump (subtree -> replayable batch), raw (raw XML of a part), help (schema reference; args=[format,verb,element], e.g. [\"xlsx\",\"set\",\"cell\"]). WRITE: create (blank doc), set (node props via --prop), add (element under a parent), remove, move, swap, import (CSV/TSV -> xlsx sheet), merge (template {{key}} + JSON data), batch (many ops in one pass), raw-set / add-part (OpenXML escape hatch), refresh (recalc TOC/PAGE fields -- .docx needs Word+Windows)."
-      },
-      "file": {
-        "type": "string",
-        "description": "Document path (.docx/.xlsx/.pptx). Relative paths resolve against the workspace; absolute paths are allowed. Required for every command except help."
-      },
-      "args": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        },
-        "description": "Positional args + flags passed after the file. Cells use /<SheetName>/<A1Ref> (e.g. /Sheet1/A3, /Sheet1/B2:C3); structural nodes use 1-based index paths (e.g. /sheet[1]/row[2], /slide[1]/shape[2], /body/paragraph[1]). Examples -- view: [\"outline\"]; get: [\"/Sheet1/A3\"]; set a formula (350+ Excel funcs auto-evaluate): [\"/Sheet1/B2\",\"--prop\",\"formula=SUM(B3:B9)\"]; set value+style: [\"/Sheet1/A1\",\"--prop\",\"value=Hello\",\"--prop\",\"bold=true\"]; add: [\"/sheet[1]\",\"--type\",\"row\"]. Run command=help (e.g. args=[\"xlsx\",\"set\",\"cell\"]) to discover verbs, elements, and --prop keys."
-      },
-      "stdin": {
-        "type": "string",
-        "description": "Piped to the command's stdin for large payloads -- batch (a JSON array of {command,...} ops), raw-set (raw XML), merge (JSON data map). Prefer this over stuffing big JSON into args."
-      }
-    },
-    "required": [
-      "command"
-    ]
-  },
-  {
-    "name": "code_search",
-    "properties": {
-      "query": {
-        "type": "string",
-        "description": "자연어 개념 질의 (한국어 가능). 예: \"재시도 백오프\", \"음성 전사 화자분리\", \"결재 승인 반려\". 심볼 이름을 몰라도 무엇을 하는 코드인지로 검색."
-      },
-      "k": {
-        "type": "integer",
-        "description": "반환 개수 (기본 10)"
-      }
-    },
-    "required": [
-      "query"
+  "required": [
+   "path",
+   "reason"
+  ]
+ },
+ {
+  "name": "office",
+  "max_output": 32000,
+  "properties": {
+   "command": {
+    "type": "string",
+    "enum": [
+     "create",
+     "view",
+     "get",
+     "query",
+     "set",
+     "add",
+     "remove",
+     "move",
+     "swap",
+     "import",
+     "merge",
+     "batch",
+     "dump",
+     "validate",
+     "refresh",
+     "raw",
+     "raw-set",
+     "add-part",
+     "help"
     ],
-    "additionalProperties": false
-  }
+    "description": "officecli subcommand. READ: view (args=[mode]; modes outline, stats, text, annotated, issues, html, svg, screenshot, pdf, forms), get (node by data-path), query (CSS-like selector), validate (OpenXML schema check), dump (subtree -> replayable batch), raw (raw XML of a part), help (schema reference; args=[format,verb,element], e.g. [\"xlsx\",\"set\",\"cell\"]). WRITE: create (blank doc), set (node props via --prop), add (element under a parent), remove, move, swap, import (CSV/TSV -> xlsx sheet), merge (template {{key}} + JSON data), batch (many ops in one pass), raw-set / add-part (OpenXML escape hatch), refresh (recalc TOC/PAGE fields -- .docx needs Word+Windows)."
+   },
+   "file": {
+    "type": "string",
+    "description": "Document path (.docx/.xlsx/.pptx). Relative paths resolve against the workspace; absolute paths are allowed. Required for every command except help."
+   },
+   "args": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    },
+    "description": "Positional args + flags passed after the file. Cells use /<SheetName>/<A1Ref> (e.g. /Sheet1/A3, /Sheet1/B2:C3); structural nodes use 1-based index paths (e.g. /sheet[1]/row[2], /slide[1]/shape[2], /body/paragraph[1]). Examples -- view: [\"outline\"]; get: [\"/Sheet1/A3\"]; set a formula (350+ Excel funcs auto-evaluate): [\"/Sheet1/B2\",\"--prop\",\"formula=SUM(B3:B9)\"]; set value+style: [\"/Sheet1/A1\",\"--prop\",\"value=Hello\",\"--prop\",\"bold=true\"]; add: [\"/sheet[1]\",\"--type\",\"row\"]. Run command=help (e.g. args=[\"xlsx\",\"set\",\"cell\"]) to discover verbs, elements, and --prop keys."
+   },
+   "stdin": {
+    "type": "string",
+    "description": "Piped to the command's stdin for large payloads -- batch (a JSON array of {command,...} ops), raw-set (raw XML), merge (JSON data map). Prefer this over stuffing big JSON into args."
+   }
+  },
+  "required": [
+   "command"
+  ]
+ },
+ {
+  "name": "code_search",
+  "properties": {
+   "query": {
+    "type": "string",
+    "description": "자연어 개념 질의 (한국어 가능). 예: \"재시도 백오프\", \"음성 전사 화자분리\", \"결재 승인 반려\". 심볼 이름을 몰라도 무엇을 하는 코드인지로 검색."
+   },
+   "k": {
+    "type": "integer",
+    "description": "반환 개수 (기본 10)"
+   }
+  },
+  "required": [
+   "query"
+  ],
+  "additionalProperties": false
+ }
 ]

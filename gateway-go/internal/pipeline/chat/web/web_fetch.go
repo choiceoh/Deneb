@@ -53,6 +53,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 			MaxChars int      `json:"maxChars"`
 			Count    int      `json:"count"`
 			Type     string   `json:"type"`
+			Academic bool     `json:"academic"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			//nolint:nilerr // tool returns user-facing error in result string
@@ -102,15 +103,28 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 				}
 				return webSearchWithType(ctx, p.Type, p.Query, p.Count)
 			}
+			// Academic lane rides ALONGSIDE the main search (labeled append,
+			// never rank fusion) — started first so it overlaps the search.
+			laneCh := startAcademicLane(ctx, p.Query, p.Academic)
+			var out string
+			var err error
 			if p.Fetch > 0 {
 				// Search+fetch mode: search then auto-fetch top N.
 				if p.Fetch > 3 {
 					p.Fetch = 3
 				}
-				return webSearchAndFetch(ctx, cache, localAI, spill, p.Query, p.Count, p.Fetch, p.MaxChars)
+				out, err = webSearchAndFetch(ctx, cache, localAI, spill, p.Query, p.Count, p.Fetch, p.MaxChars)
+			} else {
+				// Search-only mode: return search results.
+				out, err = webSearch(ctx, p.Query, p.Count)
 			}
-			// Search-only mode: return search results.
-			return webSearch(ctx, p.Query, p.Count)
+			if err != nil {
+				return out, err
+			}
+			if lane := joinAcademicLane(laneCh); lane != "" {
+				out += "\n\n" + lane
+			}
+			return out, nil
 
 		default:
 			return formatFetchError(webFetchErr{
