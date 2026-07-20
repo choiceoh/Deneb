@@ -18,6 +18,13 @@
 // project set over time without re-doing the same page. State lives beside the
 // other autonomous state files (~/.deneb/wiki-research-state.json).
 //
+// The research turn itself follows a within-run epistemic working-memory
+// protocol (SLEUTH, arXiv:2607.12267): the agent re-emits a facts/hypotheses/
+// open-questions block at the head of every response so multi-hop findings
+// survive context dilution and the 20k-token history cap, then folds the block
+// into the page's 현재 상태 / ## 미해결 질문 sections — the cross-run half of
+// the same epistemic state.
+//
 // Like the daily memory backup, it is registered only for the production state
 // dir — a dev/live-test gateway must not mutate the shared curated wiki.
 package wikiwork
@@ -381,8 +388,21 @@ func (t *wikiResearchTask) buildPrompt(c *wikiResearchCandidate) string {
 	// Operator steering (WIKI.md): re-read every cycle so a brief edit takes
 	// effect on the next research turn without a restart (see wiki/brief.go).
 	b.WriteString(wiki.WikiBriefSection(wiki.LoadWikiBrief(t.workspaceDir)))
+	// Within-run working-memory block (SLEUTH): re-emitted in full at the head
+	// of every model response, so the newest message always carries the whole
+	// investigation state even after history compaction buries early turns.
+	// The commit rule is state-conditional ("questions empty/immaterial → go
+	// write"), NOT budget-based — a turn-budget pre-warning was tried on the
+	// main agent loop and regressed into premature give-ups (see agent/grace.go).
 	b.WriteString(`
 이 페이지의 주제에 대해 내부 소스만으로 심층 리서치를 수행해 페이지를 최신화하세요. 외부 웹 검색은 하지 않습니다 (도구에 없음).
+
+작업 기억 규약 (매 응답 유지): 이 리서치는 여러 도구 호출에 걸친 멀티홉 조사라, 초기 발견이 뒤의 검색 결과에 파묻히기 쉽습니다. 도구를 호출하는 매 응답의 맨 앞에 아래 상태 블록 전체를 최신 상태로 다시 쓰고 시작하세요:
+   [사실] F1. <확정 사실> (출처: [[페이지]] 또는 메일·대화 식별자) — 도구 결과로 확인된 것만 번호를 이어 누적합니다. 앞의 사실이 틀렸다고 판명되면 삭제하지 말고 "Fn. (정정: F1 무효) <바른 사실>"로 남기세요.
+   [가설] H1. <페이지에 반영할 후보 변경·판단> | 지지: F# | 모순: F# — 새 사실이 나올 때마다 갱신합니다.
+   [질문] Q1. <남은 불확실성> | 다음 행동: <도구와 쿼리> | 우선순위: 상/중/하 — 답이 확인된 질문은 제거합니다.
+   다음 도구 호출은 항상 [질문] 중 우선순위가 가장 높은 것의 '다음 행동'입니다. [질문]이 비었거나 남은 질문의 답이 페이지 반영 내용을 바꾸지 못하면, 추가 확인 검색 없이 곧장 3의 페이지 반영으로 진행하세요.
+   종료 시 접기: [사실]은 출처와 함께 본문과 "현재 상태"에 반영하고, 확정하지 못한 [가설]은 본문에 쓰지 않으며(추측 금지), 내부 소스로 답을 못 찾은 [질문] 중 프로젝트 진행에 실제로 중요한 것만 4의 규칙대로 "## 미해결 질문"에 남깁니다.
 
 1. 먼저 wiki(action=read)로 대상 페이지 본문 전체와 관련(related) 페이지를 읽어 현재 내용을 파악합니다.
 2. 다음 내부 소스에서 마지막 갱신일 이후의 새 정보를 찾습니다:
