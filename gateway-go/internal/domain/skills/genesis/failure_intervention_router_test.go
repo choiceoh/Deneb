@@ -14,6 +14,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 		surface    string
 		confidence string
 		reason     string
+		dimension  string
 	}{
 		{
 			name: "context delivery loss is not a tool repair",
@@ -22,7 +23,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Example: "tool output was truncated before the model saw the answer",
 			},
 			origin: FailureOriginContextDelivery, surface: InterventionSurfaceRetrievalContext,
-			confidence: FailureRouteConfidenceHigh, reason: "explicit_context_delivery_loss",
+			confidence: FailureRouteConfidenceHigh, reason: "explicit_context_delivery_loss", dimension: HarnessDimensionContextAssembly,
 		},
 		{
 			name: "narrow fact miss routes to memory",
@@ -31,7 +32,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Example: "missing fact: customer's preferred billing cycle was not remembered",
 			},
 			origin: FailureOriginKnowledge, surface: InterventionSurfaceMemory,
-			confidence: FailureRouteConfidenceMedium, reason: "explicit_knowledge_or_recall_gap",
+			confidence: FailureRouteConfidenceMedium, reason: "explicit_knowledge_or_recall_gap", dimension: HarnessDimensionMemory,
 		},
 		{
 			name: "tool contract",
@@ -39,7 +40,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Skill: "mail", Signature: "terminal=schema-format|mechanism=structured-contract",
 			},
 			origin: FailureOriginToolRuntime, surface: InterventionSurfaceToolRuntime,
-			confidence: FailureRouteConfidenceMedium, reason: "tool_boundary_or_contract_signal",
+			confidence: FailureRouteConfidenceMedium, reason: "tool_boundary_or_contract_signal", dimension: HarnessDimensionToolInteraction,
 		},
 		{
 			name: "workflow timeout",
@@ -47,7 +48,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Skill: "deploy", Signature: "terminal=timeout|mechanism=bounded-execution",
 			},
 			origin: FailureOriginWorkflow, surface: InterventionSurfaceWorkflow,
-			confidence: FailureRouteConfidenceMedium, reason: "execution_or_sequence_signal",
+			confidence: FailureRouteConfidenceMedium, reason: "execution_or_sequence_signal", dimension: HarnessDimensionOrchestration,
 		},
 		{
 			name: "skill behavior drift",
@@ -56,7 +57,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Signature: "terminal=heldout-assertion|mechanism=skill-behavior-drift",
 			},
 			origin: FailureOriginInstruction, surface: InterventionSurfaceSkill,
-			confidence: FailureRouteConfidenceMedium, reason: "skill_contract_or_behavior_signal",
+			confidence: FailureRouteConfidenceMedium, reason: "skill_contract_or_behavior_signal", dimension: HarnessDimensionContextAssembly,
 		},
 		{
 			name: "explicit evaluator defect remains advisory",
@@ -65,7 +66,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Example: "false reject caused by verifier bug",
 			},
 			origin: FailureOriginEvaluator, surface: InterventionSurfaceEvaluator,
-			confidence: FailureRouteConfidenceMedium, reason: "explicit_evaluator_defect",
+			confidence: FailureRouteConfidenceMedium, reason: "explicit_evaluator_defect", dimension: HarnessDimensionOutput,
 		},
 		{
 			name: "ordinary rejection is improvement workflow evidence",
@@ -73,7 +74,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Kind: FailureClusterKindRejection, Skill: "judge", Signature: "surface-mismatch",
 			},
 			origin: FailureOriginImprovementProcess, surface: InterventionSurfaceWorkflow,
-			confidence: FailureRouteConfidenceMedium, reason: "candidate_generation_or_scoping_rejection",
+			confidence: FailureRouteConfidenceMedium, reason: "candidate_generation_or_scoping_rejection", dimension: HarnessDimensionOrchestration,
 		},
 		{
 			name: "model signal cannot authorize weight changes",
@@ -81,7 +82,7 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 				Skill: "reasoner", Model: "small-local", Signature: "terminal=model-capability|mechanism=reasoning-limit",
 			},
 			origin: FailureOriginModelCapability, surface: InterventionSurfaceModelRole,
-			confidence: FailureRouteConfidenceLow, reason: "explicit_capability_signal_without_counterfactual",
+			confidence: FailureRouteConfidenceLow, reason: "explicit_capability_signal_without_counterfactual", dimension: HarnessDimensionGeneration,
 		},
 		{
 			name: "unknown global failure goes to triage",
@@ -104,7 +105,28 @@ func TestRouteFailureClusterSeparatesOriginFromIntervention(t *testing.T) {
 			if !reflect.DeepEqual(route.ReasonCodes, []string{test.reason}) {
 				t.Fatalf("reason codes = %v, want [%s]", route.ReasonCodes, test.reason)
 			}
+			if test.dimension == "" {
+				if route.HarnessDiagnosis != nil {
+					t.Fatalf("diagnosis = %+v, want none", route.HarnessDiagnosis)
+				}
+			} else if route.HarnessDiagnosis == nil || route.HarnessDiagnosis.Primary != test.dimension {
+				t.Fatalf("diagnosis = %+v, want primary %s", route.HarnessDiagnosis, test.dimension)
+			}
 		})
+	}
+}
+
+func TestRouteFailureClusterPreservesCoupledHarnessDimensions(t *testing.T) {
+	memory := routeFailureCluster(FailureClusterSummary{Skill: "brief", Example: "memory miss: not remembered"})
+	if memory.HarnessDiagnosis == nil ||
+		!reflect.DeepEqual(memory.HarnessDiagnosis.Secondary, []string{HarnessDimensionContextAssembly}) {
+		t.Fatalf("memory diagnosis = %+v", memory.HarnessDiagnosis)
+	}
+
+	tool := routeFailureCluster(FailureClusterSummary{Skill: "mail", Signature: "terminal=schema-format|mechanism=structured-contract"})
+	if tool.HarnessDiagnosis == nil ||
+		!reflect.DeepEqual(tool.HarnessDiagnosis.Secondary, []string{HarnessDimensionOutput}) {
+		t.Fatalf("tool diagnosis = %+v", tool.HarnessDiagnosis)
 	}
 }
 

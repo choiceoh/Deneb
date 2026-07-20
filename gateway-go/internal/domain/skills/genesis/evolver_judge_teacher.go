@@ -233,15 +233,16 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 	if resp.Skip || resp.Changes == nil {
 		return acceptedSkillCandidate{}, nil
 	}
+	audit := withHarnessDimensions(HarnessEditAudit{
+		TargetSignature:        strings.TrimSpace(resp.Changes.TargetSignature),
+		EditedSurface:          strings.TrimSpace(resp.Changes.EditedSurface),
+		ExpectedBehaviorChange: strings.TrimSpace(resp.Changes.ExpectedBehaviorChange),
+		RegressionRisk:         strings.TrimSpace(resp.Changes.RegressionRisk),
+	})
 	return acceptedSkillCandidate{
 		Body:        stripEchoedFrontmatter(resp.Changes.Body),
 		Description: strings.TrimSpace(resp.Changes.Description),
-		Audit: HarnessEditAudit{
-			TargetSignature:        strings.TrimSpace(resp.Changes.TargetSignature),
-			EditedSurface:          strings.TrimSpace(resp.Changes.EditedSurface),
-			ExpectedBehaviorChange: strings.TrimSpace(resp.Changes.ExpectedBehaviorChange),
-			RegressionRisk:         strings.TrimSpace(resp.Changes.RegressionRisk),
-		},
+		Audit:       audit,
 	}, nil
 }
 

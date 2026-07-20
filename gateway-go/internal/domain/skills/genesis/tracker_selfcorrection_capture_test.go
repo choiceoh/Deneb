@@ -140,6 +140,7 @@ func TestPromoteFailureClusterCandidates(t *testing.T) {
 		"intervention:workflow",
 		"confidence:medium",
 		"reasons:execution_or_sequence_signal",
+		"harnessPrimary:" + HarnessDimensionOrchestration,
 	} {
 		if !strings.Contains(cands[0].Evidence, want) {
 			t.Fatalf("candidate evidence missing %q: %s", want, cands[0].Evidence)

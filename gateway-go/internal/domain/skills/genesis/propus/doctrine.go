@@ -32,7 +32,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 	return PropusDoctrineSpec{
 		Name:     "Propus",
 		Codename: "propus",
-		Version:  "2026-06-hermes-evolution-guardrails",
+		Version:  "2026-07-memoharness-experience",
 		Lifecycle: []string{
 			"observe",
 			"propose",
@@ -71,6 +71,13 @@ func PropusDoctrine() PropusDoctrineSpec {
 				Title:             "Self-Harness: Harnesses That Improve Themselves",
 				OriginalPrinciple: "Harness improvement should mine repeated verifier-grounded failure mechanisms, propose bounded edits to concrete harness surfaces, and promote only regression-tested candidates while keeping the base model fixed.",
 				PropusRule:        "Every evolve candidate must name one supported failure signature, edited surface, expected behavior change, and regression risk before validation.",
+			},
+			{
+				ID:                "arxiv:2607.14159",
+				Title:             "MemoHarness: Agent Harnesses That Learn from Experience",
+				OriginalPrinciple: "A harness can improve a fixed agent through case-specific and global experience organized across six control dimensions: context assembly, tool interaction, generation control, orchestration, memory management, and output processing.",
+				PropusRule:        "Attach a deterministic six-dimensional diagnosis to failure and edit experience, retrieve bounded confirmed and rejected precedents as advisory context, and never let retrieved experience authorize promotion.",
+				EvidenceGrade:     "supporting-transfer",
 			},
 			{
 				ID:                "arxiv:2605.22794",
@@ -117,6 +124,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"same_failure_candidate_must_not_repeat_without_new_evidence",
 			"judgement_uses_externalized_evidence_not_same_turn_introspection",
 			"evolve_candidate_declares_failure_signature_surface_behavior_and_risk",
+			"harness_dimension_and_retrieved_experience_are_diagnostic_not_authority",
 			"validation_selection_records_mixed_frontier_and_easy_anchor_tiers",
 			"propus_change_axis_is_diagnostic_metadata_not_completion_proof",
 			"opportunity_backlog_tracks_tried_routes_and_unexplored_forks",
@@ -130,6 +138,7 @@ func PropusDoctrine() PropusDoctrineSpec {
 			"deduped_and_curator_visible",
 			"post_evolve_watch_or_rollback",
 			"failure_signature_surface_behavior_risk_audit",
+			"experience_retrieval_is_bounded_and_cannot_bypass_validation",
 			"mixed_frontier_with_easy_anchor_tiers_recorded",
 			"change_axis_recorded_for_diagnostics_not_completion_claim",
 			"exploration_map_updates_tried_and_frontier_routes",

@@ -22,6 +22,8 @@ func LifecycleEntries(entries []genesis.LifecycleLogEntry) []propus.LifecycleLog
 				EditedSurface:          audit.EditedSurface,
 				ExpectedBehaviorChange: audit.ExpectedBehaviorChange,
 				RegressionRisk:         audit.RegressionRisk,
+				PrimaryDimension:       audit.PrimaryDimension,
+				SecondaryDimensions:    append([]string(nil), audit.SecondaryDimensions...),
 			}
 		}
 		out = append(out, item)

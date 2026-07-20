@@ -122,6 +122,7 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 - 현재 SKILL.md 내용
 - 사용 이력: 성공 횟수, 실패 횟수, 실패 패턴
 - Self-Harness failure evidence bundle이 있으면, 최근 실제 실패를 terminal cause / causal status / reusable agent mechanism으로 묶은 근거로 취급할 것
+- failure evidence나 검증 완주 사례에 harness dimension(D1 context assembly, D2 tool interaction, D3 generation control, D4 orchestration, D5 memory management, D6 output processing)이 있으면 변경 위치를 좁히는 진단 메타데이터로만 사용할 것. 차원 자체는 변경·승격 권한이 아니다
 - 최근 반려된 개선 시도와 반려 사유(rejected-edit buffer)가 있으면 같은 실패를 반복하지 말 것
 - Optimizer slow/meta memory가 있으면 accepted 방향은 보존하고 rejected/rollback 방향은 피할 것
 - Held-out validation/replay cases가 있으면 그 절차·도구 호출·검증 관찰을 회귀시키지 말 것
@@ -145,6 +146,7 @@ const evolveSystemPrompt = `당신은 AI 에이전트의 스킬 개선 시스템
 15. **Size/cache guard**: 후보는 frontmatter 포함 15KB 이하로 유지하고, 대화 중 시스템 프롬프트·도구셋·외부 support file 변경을 요구하지 마라. 이 evolve 경로는 SKILL.md body만 바꾼다
 16-a. **Tool gap 선언**: 반복 실패의 근본 원인이 스킬 본문이 아니라 **도구 결함/부재**(툴 에러, 없는 기능, 잘못된 파라미터 계약)라면, skip과 함께 tool_gap을 선언하라. tool은 실패 트레이스에 실제로 나타난 도구명이어야 한다(시스템이 대조함). 이 선언은 스킬 개선과 도구 수리를 짝지어 코딩 후보 큐로 보낸다
 16. **Reproduction case**: skip=false라면 reproduction_case를 함께 저작하라 — 이번 수정이 고치는 결함을 재현하는 검증 케이스로, "원본 body는 FAIL하고 후보 body는 PASS"해야 한다. required_substrings에는 후보에 새로 들어간(원본에 없는) 절차·검증 문구를, forbidden_substrings에는 후보에서 제거된 잘못된 지시를 담아라. 시스템이 결정적으로 재확인하므로 조건을 만족하지 못하는 케이스는 조용히 버려진다 — 확신이 없으면 생략해도 된다
+17. **MemoHarness-style 경험 적용**: 진단된 주 차원과 같은 차원에서 검증 완주한 사례를 우선 참고하되 그대로 복제하지 마라. D2/D3/D5 결함이 SKILL.md body로 해결되지 않으면 억지 프롬프트 패치 대신 skip 또는 tool_gap/source-level correction을 선택하라. 반려 경험과 성공 경험은 방향 제안일 뿐이며 모든 후보는 동일한 결정적 검증 게이트를 통과해야 한다
 
 ## 출력 형식
 

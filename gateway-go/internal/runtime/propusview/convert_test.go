@@ -26,6 +26,8 @@ func TestLifecycleEntriesProjectionPreservesFieldsAndCopiesAudit(t *testing.T) {
 				EditedSurface:          "surface-0",
 				ExpectedBehaviorChange: "change-0",
 				RegressionRisk:         "risk-0",
+				PrimaryDimension:       genesis.HarnessDimensionToolInteraction,
+				SecondaryDimensions:    []string{genesis.HarnessDimensionOutput},
 			},
 		},
 		{
@@ -269,11 +271,14 @@ func TestLifecycleEntriesProjectionPreservesFieldsAndCopiesAudit(t *testing.T) {
 		if input[i].SelfHarnessAudit != nil {
 			want := input[i].SelfHarnessAudit
 			audit := got[i].SelfHarnessAudit
-			if audit.TargetSignature != want.TargetSignature || audit.EditedSurface != want.EditedSurface || audit.ExpectedBehaviorChange != want.ExpectedBehaviorChange || audit.RegressionRisk != want.RegressionRisk {
+			if audit.TargetSignature != want.TargetSignature || audit.EditedSurface != want.EditedSurface || audit.ExpectedBehaviorChange != want.ExpectedBehaviorChange || audit.RegressionRisk != want.RegressionRisk || audit.PrimaryDimension != want.PrimaryDimension || !reflect.DeepEqual(audit.SecondaryDimensions, want.SecondaryDimensions) {
 				t.Fatalf("entry %d audit = %#v, want %#v", i, audit, want)
 			}
 			if any(audit) == any(want) {
 				t.Fatalf("entry %d audit pointer aliases input", i)
+			}
+			if len(audit.SecondaryDimensions) > 0 && &audit.SecondaryDimensions[0] == &want.SecondaryDimensions[0] {
+				t.Fatalf("entry %d audit dimension slice aliases input", i)
 			}
 		}
 	}

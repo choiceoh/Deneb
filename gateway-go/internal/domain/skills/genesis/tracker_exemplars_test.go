@@ -10,8 +10,9 @@ import (
 )
 
 type exemplarSemanticEmbedder struct {
-	mu    sync.Mutex
-	kinds []string
+	mu      sync.Mutex
+	kinds   []string
+	queries []string
 }
 
 func (e *exemplarSemanticEmbedder) IsHealthy() bool { return true }
@@ -34,6 +35,9 @@ func (e *exemplarSemanticEmbedder) Embed(_ context.Context, texts []string) ([][
 func (e *exemplarSemanticEmbedder) EmbedKind(_ context.Context, kind string, texts []string) ([][]float32, error) {
 	e.mu.Lock()
 	e.kinds = append(e.kinds, kind)
+	if kind == "query" {
+		e.queries = append(e.queries, texts...)
+	}
 	e.mu.Unlock()
 	out := make([][]float32, len(texts))
 	for i, text := range texts {
@@ -50,6 +54,12 @@ func (e *exemplarSemanticEmbedder) snapshotKinds() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return append([]string(nil), e.kinds...)
+}
+
+func (e *exemplarSemanticEmbedder) snapshotQueries() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.queries...)
 }
 
 func TestConfirmedEvolveExemplars_RetrievalContract(t *testing.T) {
@@ -80,6 +90,9 @@ func TestConfirmedEvolveExemplars_RetrievalContract(t *testing.T) {
 		if ex.SkillName == "skill-self" || ex.SkillName == "skill-c" {
 			t.Fatalf("retrieval leaked %q", ex.SkillName)
 		}
+		if ex.Audit.PrimaryDimension == "" {
+			t.Fatalf("retrieved legacy-compatible exemplar lacks diagnosis: %+v", ex)
+		}
 	}
 	// newest first
 	if got[0].SkillName != "skill-b" {
@@ -102,7 +115,7 @@ func TestFormatConfirmedEvolveExemplars(t *testing.T) {
 		SkillName: "skill-a",
 		Audit:     HarnessEditAudit{TargetSignature: "sig", EditedSurface: "Procedure", ExpectedBehaviorChange: "회상 선행"},
 	}})
-	for _, want := range []string{"검증 완주한 개선 사례", "[skill-a]", "Procedure", "회상 선행"} {
+	for _, want := range []string{"검증 완주한 개선 사례", "[skill-a]", HarnessDimensionContextAssembly, HarnessDimensionOrchestration, "Procedure", "회상 선행"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("section missing %q:\n%s", want, out)
 		}
@@ -198,6 +211,9 @@ func TestConfirmedEvolveExemplars_SemanticFallbackFindsAnalogousSuccess(t *testi
 	}
 	if want := []string{"passage", "query"}; !reflect.DeepEqual(embedder.snapshotKinds(), want) {
 		t.Fatalf("embedding roles = %v, want %v", embedder.snapshotKinds(), want)
+	}
+	if queries := embedder.snapshotQueries(); len(queries) != 1 || !strings.Contains(queries[0], HarnessDimensionContextAssembly) {
+		t.Fatalf("semantic query lacks harness dimension: %+v", queries)
 	}
 }
 

@@ -22,10 +22,12 @@ const (
 
 // Audit describes the intended scope and behavior change of a generated edit.
 type Audit struct {
-	TargetSignature        string `json:"targetSignature,omitempty"`
-	EditedSurface          string `json:"editedSurface,omitempty"`
-	ExpectedBehaviorChange string `json:"expectedBehaviorChange,omitempty"`
-	RegressionRisk         string `json:"regressionRisk,omitempty"`
+	TargetSignature        string   `json:"targetSignature,omitempty"`
+	EditedSurface          string   `json:"editedSurface,omitempty"`
+	ExpectedBehaviorChange string   `json:"expectedBehaviorChange,omitempty"`
+	RegressionRisk         string   `json:"regressionRisk,omitempty"`
+	PrimaryDimension       string   `json:"primaryDimension,omitempty"`
+	SecondaryDimensions    []string `json:"secondaryDimensions,omitempty"`
 }
 
 // Empty reports whether the audit carries no transition metadata.
@@ -33,7 +35,9 @@ func (a Audit) Empty() bool {
 	return strings.TrimSpace(a.TargetSignature) == "" &&
 		strings.TrimSpace(a.EditedSurface) == "" &&
 		strings.TrimSpace(a.ExpectedBehaviorChange) == "" &&
-		strings.TrimSpace(a.RegressionRisk) == ""
+		strings.TrimSpace(a.RegressionRisk) == "" &&
+		strings.TrimSpace(a.PrimaryDimension) == "" &&
+		len(a.SecondaryDimensions) == 0
 }
 
 // Ptr returns nil for an empty audit and a stable pointer otherwise.

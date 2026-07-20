@@ -171,6 +171,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 // logEvolveWithProvenance is LogEvolveWithAudit plus the evaluator-attribution
 // certificate (RSI P1.5). prov may be nil (legacy callers).
 func (t *Tracker) logEvolveWithProvenance(skillName, newVersion, description string, audit HarnessEditAudit, prov *evolveProvenance) error {
+	audit = withHarnessDimensions(audit)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -250,6 +251,7 @@ func (t *Tracker) confirmEvolve(skillName string, audit HarnessEditAudit, uses, 
 // reports whether the target failure signature never recurred and no failures
 // occurred within the window.
 func (t *Tracker) logEvolveConfirmed(skillName string, audit HarnessEditAudit, clean bool) error {
+	audit = withHarnessDimensions(audit)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	reason := "partial: held up but target signature recurred below threshold"
@@ -330,6 +332,7 @@ func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit Har
 // logEvolveRejectedWithProvenance is LogEvolveRejectedWithAudit plus the
 // evaluator-attribution certificate (RSI P1.5). prov may be nil.
 func (t *Tracker) logEvolveRejectedWithProvenance(skillName, reason string, audit HarnessEditAudit, prov *evolveProvenance) error {
+	audit = withHarnessDimensions(audit)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -395,6 +398,10 @@ func (t *Tracker) RecentLifecycleLog(limit int) ([]LifecycleLogEntry, error) {
 	for i := range entries {
 		if entries[i].Type == "" {
 			entries[i].Type = "genesis"
+		}
+		if entries[i].SelfHarnessAudit != nil {
+			audit := withHarnessDimensions(*entries[i].SelfHarnessAudit)
+			entries[i].SelfHarnessAudit = audit.Ptr()
 		}
 	}
 	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {

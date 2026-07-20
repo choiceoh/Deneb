@@ -251,7 +251,11 @@ func (t *Tracker) fillConfirmedExemplarsSemantic(
 		if entry.Type != "evolve_confirmed" || entry.SkillName == excludeSkill || entry.SelfHarnessAudit == nil {
 			continue
 		}
-		exemplar := confirmedEvolveExemplar{SkillName: entry.SkillName, Audit: *entry.SelfHarnessAudit, CreatedAt: entry.CreatedAt}
+		exemplar := confirmedEvolveExemplar{
+			SkillName: entry.SkillName,
+			Audit:     withHarnessDimensions(*entry.SelfHarnessAudit),
+			CreatedAt: entry.CreatedAt,
+		}
 		if strings.TrimSpace(exemplar.Audit.TargetSignature) == "" {
 			continue
 		}
@@ -268,7 +272,11 @@ func (t *Tracker) fillConfirmedExemplarsSemantic(
 	if !ok {
 		return base
 	}
-	queries, err := embedindex.EmbedQueries(ctx, embedder, []string{"Current failure signatures:\n" + strings.Join(wanted, "\n")})
+	query := "Current failure signatures:\n" + strings.Join(wanted, "\n")
+	if dimensions := harnessDimensionsForSignatures(wanted); len(dimensions) > 0 {
+		query += "\nCurrent harness dimensions:\n" + strings.Join(dimensions, "\n")
+	}
+	queries, err := embedindex.EmbedQueries(ctx, embedder, []string{query})
 	if err != nil || len(queries) != 1 {
 		return base
 	}
@@ -319,11 +327,16 @@ func embedConfirmedExemplarPassages(ctx context.Context, embedder embedindex.Emb
 }
 
 func confirmedExemplarPassage(exemplar confirmedEvolveExemplar) string {
+	audit := withHarnessDimensions(exemplar.Audit)
 	return "Confirmed improvement\n" +
-		"Failure: " + exemplar.Audit.TargetSignature + "\n" +
-		"Edited surface: " + exemplar.Audit.EditedSurface + "\n" +
-		"Behavior change: " + exemplar.Audit.ExpectedBehaviorChange + "\n" +
-		"Regression risk: " + exemplar.Audit.RegressionRisk
+		"Failure: " + audit.TargetSignature + "\n" +
+		"Harness dimension: " + formatHarnessDiagnosis(&HarnessDimensionDiagnosis{
+		Primary:   audit.PrimaryDimension,
+		Secondary: audit.SecondaryDimensions,
+	}) + "\n" +
+		"Edited surface: " + audit.EditedSurface + "\n" +
+		"Behavior change: " + audit.ExpectedBehaviorChange + "\n" +
+		"Regression risk: " + audit.RegressionRisk
 }
 
 func confirmedExemplarKey(exemplar confirmedEvolveExemplar) string {
@@ -352,7 +365,11 @@ func confirmedExemplarsMatching(entries []LifecycleLogEntry, wanted []string, ex
 		if !matched {
 			continue
 		}
-		out = append(out, confirmedEvolveExemplar{SkillName: e.SkillName, Audit: *e.SelfHarnessAudit, CreatedAt: e.CreatedAt})
+		out = append(out, confirmedEvolveExemplar{
+			SkillName: e.SkillName,
+			Audit:     withHarnessDimensions(*e.SelfHarnessAudit),
+			CreatedAt: e.CreatedAt,
+		})
 		if len(out) >= limit {
 			break
 		}

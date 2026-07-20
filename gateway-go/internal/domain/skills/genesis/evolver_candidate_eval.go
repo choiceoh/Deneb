@@ -84,6 +84,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 		ExpectedBehaviorChange: strings.TrimSpace(resp.Changes.ExpectedBehaviorChange),
 		RegressionRisk:         strings.TrimSpace(resp.Changes.RegressionRisk),
 	}
+	audit = withHarnessDimensions(audit)
 	committedDescription := strings.TrimSpace(resp.Changes.Description)
 	committedAudit := audit
 	prov := e.newProvenance()

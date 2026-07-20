@@ -7,10 +7,12 @@ import (
 
 // HarnessEditAudit identifies the bounded self-harness edit behind an event.
 type HarnessEditAudit struct {
-	TargetSignature        string `json:"targetSignature,omitempty"`
-	EditedSurface          string `json:"editedSurface,omitempty"`
-	ExpectedBehaviorChange string `json:"expectedBehaviorChange,omitempty"`
-	RegressionRisk         string `json:"regressionRisk,omitempty"`
+	TargetSignature        string   `json:"targetSignature,omitempty"`
+	EditedSurface          string   `json:"editedSurface,omitempty"`
+	ExpectedBehaviorChange string   `json:"expectedBehaviorChange,omitempty"`
+	RegressionRisk         string   `json:"regressionRisk,omitempty"`
+	PrimaryDimension       string   `json:"primaryDimension,omitempty"`
+	SecondaryDimensions    []string `json:"secondaryDimensions,omitempty"`
 }
 
 // LifecycleLogEntry is the lifecycle projection consumed by Propus summaries.

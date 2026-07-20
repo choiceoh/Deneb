@@ -46,12 +46,13 @@ const (
 // ReasonCodes are stable, machine-readable evidence labels. Alternatives are
 // advisory fallbacks for a reviewer; neither field authorizes a mutation.
 type FailureInterventionRoute struct {
-	Mode                string   `json:"mode"`
-	FailureOrigin       string   `json:"failureOrigin"`
-	InterventionSurface string   `json:"interventionSurface"`
-	Confidence          string   `json:"confidence"`
-	ReasonCodes         []string `json:"reasonCodes,omitempty"`
-	Alternatives        []string `json:"alternatives,omitempty"`
+	Mode                string                     `json:"mode"`
+	FailureOrigin       string                     `json:"failureOrigin"`
+	InterventionSurface string                     `json:"interventionSurface"`
+	Confidence          string                     `json:"confidence"`
+	ReasonCodes         []string                   `json:"reasonCodes,omitempty"`
+	Alternatives        []string                   `json:"alternatives,omitempty"`
+	HarnessDiagnosis    *HarnessDimensionDiagnosis `json:"harnessDiagnosis,omitempty"`
 }
 
 func routeFailureCluster(cluster FailureClusterSummary) FailureInterventionRoute {
@@ -189,7 +190,7 @@ func routeFailureCluster(cluster FailureClusterSummary) FailureInterventionRoute
 }
 
 func newFailureRoute(origin, surface, confidence string, reasons []string, alternatives ...string) FailureInterventionRoute {
-	return FailureInterventionRoute{
+	route := FailureInterventionRoute{
 		Mode:                FailureRouteModeShadow,
 		FailureOrigin:       origin,
 		InterventionSurface: surface,
@@ -197,6 +198,8 @@ func newFailureRoute(origin, surface, confidence string, reasons []string, alter
 		ReasonCodes:         cleanFailureRouteValues(reasons),
 		Alternatives:        cleanFailureRouteValues(alternatives),
 	}
+	route.HarnessDiagnosis = diagnoseHarnessRoute(route.FailureOrigin, route.InterventionSurface, route.ReasonCodes).ptr()
+	return route
 }
 
 func cleanFailureRouteValues(values []string) []string {
@@ -222,6 +225,12 @@ func formatFailureRouteEvidence(route FailureInterventionRoute) string {
 	}
 	if len(route.Alternatives) > 0 {
 		line += "; alternatives:" + strings.Join(route.Alternatives, ",")
+	}
+	if route.HarnessDiagnosis != nil {
+		line += "; harnessPrimary:" + route.HarnessDiagnosis.Primary
+		if len(route.HarnessDiagnosis.Secondary) > 0 {
+			line += "; harnessSecondary:" + strings.Join(route.HarnessDiagnosis.Secondary, ",")
+		}
 	}
 	return line
 }
