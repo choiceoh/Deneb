@@ -1439,7 +1439,9 @@ func TestUsageStatsRecordsStructuredFailureTrace(t *testing.T) {
 	trace := stats.RecentFailureTraces[0]
 	if trace.Signature != "terminal=timeout|mechanism=bounded-execution" ||
 		trace.TerminalCause != "timeout" ||
-		!strings.Contains(trace.CausalStatus, "tool trace") {
+		!strings.Contains(trace.CausalStatus, "tool trace") ||
+		trace.HarnessDiagnosis == nil ||
+		trace.HarnessDiagnosis.Primary != HarnessDimensionOrchestration {
 		t.Fatalf("unexpected normalized failure trace: %+v", trace)
 	}
 }

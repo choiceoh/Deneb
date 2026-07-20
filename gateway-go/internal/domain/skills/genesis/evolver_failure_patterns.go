@@ -13,12 +13,13 @@ import (
 )
 
 type skillFailurePattern struct {
-	Signature      string
-	TerminalCause  string
-	CausalStatus   string
-	AgentMechanism string
-	Support        int
-	Examples       []string
+	Signature        string
+	TerminalCause    string
+	CausalStatus     string
+	AgentMechanism   string
+	HarnessDiagnosis *HarnessDimensionDiagnosis
+	Support          int
+	Examples         []string
 }
 
 func mineSkillFailurePatterns(stats *UsageStats) []skillFailurePattern {
@@ -98,16 +99,20 @@ func mineRawErrorPatterns(bySignature map[string]*skillFailurePattern, rawErrors
 // signature so pre-labeled traces never surface half-classified patterns.
 func backfillFailureClassification(bySignature map[string]*skillFailurePattern) {
 	for signature, pattern := range bySignature {
-		if strings.TrimSpace(pattern.TerminalCause) != "" && strings.TrimSpace(pattern.AgentMechanism) != "" {
-			continue
+		if strings.TrimSpace(pattern.TerminalCause) == "" || strings.TrimSpace(pattern.AgentMechanism) == "" {
+			_, terminalCause, mechanism := classifySkillFailure(signature)
+			if pattern.TerminalCause == "" {
+				pattern.TerminalCause = terminalCause
+			}
+			if pattern.AgentMechanism == "" {
+				pattern.AgentMechanism = mechanism
+			}
 		}
-		_, terminalCause, mechanism := classifySkillFailure(signature)
-		if pattern.TerminalCause == "" {
-			pattern.TerminalCause = terminalCause
-		}
-		if pattern.AgentMechanism == "" {
-			pattern.AgentMechanism = mechanism
-		}
+		pattern.HarnessDiagnosis = harnessDiagnosisForFailurePattern(
+			signature,
+			pattern.TerminalCause,
+			pattern.AgentMechanism,
+		)
 	}
 }
 
@@ -204,6 +209,9 @@ func formatFailurePatternsForPrompt(stats *UsageStats) string {
 		fmt.Fprintf(&b, "- terminal cause: %s\n", pattern.TerminalCause)
 		fmt.Fprintf(&b, "- causal status: %s\n", pattern.CausalStatus)
 		fmt.Fprintf(&b, "- agent mechanism: %s\n", pattern.AgentMechanism)
+		if diagnosis := formatHarnessDiagnosis(pattern.HarnessDiagnosis); diagnosis != "" {
+			fmt.Fprintf(&b, "- harness dimension (shadow): %s\n", diagnosis)
+		}
 		writePromptList(&b, "examples", pattern.Examples)
 	}
 	return b.String()

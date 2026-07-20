@@ -204,11 +204,18 @@ func (e *Evolver) queueRepeatedPatchFirstReviewDraft(skillName, reason, source s
 }
 
 func selfHarnessAuditSummary(audit HarnessEditAudit) string {
+	audit = withHarnessDimensions(audit)
 	parts := []string{
 		"target=" + strings.TrimSpace(audit.TargetSignature),
 		"surface=" + strings.TrimSpace(audit.EditedSurface),
 		"behavior=" + strings.TrimSpace(audit.ExpectedBehaviorChange),
 		"risk=" + strings.TrimSpace(audit.RegressionRisk),
+	}
+	if audit.PrimaryDimension != "" {
+		parts = append(parts, "dimension="+audit.PrimaryDimension)
+	}
+	if len(audit.SecondaryDimensions) > 0 {
+		parts = append(parts, "secondary="+strings.Join(audit.SecondaryDimensions, ","))
 	}
 	return strings.Join(parts, "; ")
 }

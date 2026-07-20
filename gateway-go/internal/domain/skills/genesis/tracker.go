@@ -84,15 +84,16 @@ type UsageRecord struct {
 // Propus/Self-Harness a stable terminal signature and the tool boundary that
 // produced it when transcript data is available.
 type UsageFailureTrace struct {
-	Signature      string `json:"signature,omitempty"`
-	TerminalCause  string `json:"terminalCause,omitempty"`
-	CausalStatus   string `json:"causalStatus,omitempty"`
-	AgentMechanism string `json:"agentMechanism,omitempty"`
-	ToolName       string `json:"toolName,omitempty"`
-	ToolInput      string `json:"toolInput,omitempty"`
-	ToolOutput     string `json:"toolOutput,omitempty"`
-	ToolError      bool   `json:"toolError,omitempty"`
-	ErrorMsg       string `json:"errorMsg,omitempty"`
+	Signature        string                     `json:"signature,omitempty"`
+	TerminalCause    string                     `json:"terminalCause,omitempty"`
+	CausalStatus     string                     `json:"causalStatus,omitempty"`
+	AgentMechanism   string                     `json:"agentMechanism,omitempty"`
+	HarnessDiagnosis *HarnessDimensionDiagnosis `json:"harnessDiagnosis,omitempty"`
+	ToolName         string                     `json:"toolName,omitempty"`
+	ToolInput        string                     `json:"toolInput,omitempty"`
+	ToolOutput       string                     `json:"toolOutput,omitempty"`
+	ToolError        bool                       `json:"toolError,omitempty"`
+	ErrorMsg         string                     `json:"errorMsg,omitempty"`
 }
 
 // UsageStats aggregates usage metrics for a skill.
@@ -433,6 +434,14 @@ func usageFailureTraceFromRecord(record UsageRecord) *UsageFailureTrace {
 	if trace.Signature == "" {
 		return nil
 	}
+	// Derive the dimension from verifier-grounded classification on every read.
+	// This gives legacy JSONL rows the same per-case diagnosis and prevents a
+	// caller/model-authored diagnosis from becoming authority.
+	trace.HarnessDiagnosis = harnessDiagnosisForFailurePattern(
+		trace.Signature,
+		trace.TerminalCause,
+		trace.AgentMechanism,
+	)
 	return &trace
 }
 

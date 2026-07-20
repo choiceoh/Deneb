@@ -34,8 +34,9 @@ func (t *Tracker) RecordRejectedSkillEdit(record RejectedSkillEditRecord) error 
 	record.Reason = strings.TrimSpace(record.Reason)
 	record.Source = strings.TrimSpace(record.Source)
 	record.CandidateBody = strings.TrimSpace(genesiscommon.TruncateRunes(record.CandidateBody, 1997))
-	if record.SelfHarnessAudit != nil && record.SelfHarnessAudit.Empty() {
-		record.SelfHarnessAudit = nil
+	if record.SelfHarnessAudit != nil {
+		audit := withHarnessDimensions(*record.SelfHarnessAudit)
+		record.SelfHarnessAudit = audit.Ptr()
 	}
 	if record.SkillName == "" {
 		return fmt.Errorf("genesis-tracker: rejected edit skillName is required")

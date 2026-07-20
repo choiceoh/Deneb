@@ -1,6 +1,7 @@
 package guardrails
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -123,10 +124,16 @@ func TestAuditEmptyAndPtrMatrix(t *testing.T) {
 			if tc.empty && ptr != nil {
 				t.Fatalf("Ptr() = %#v, want nil", ptr)
 			}
-			if !tc.empty && (ptr == nil || *ptr != audit) {
+			if !tc.empty && (ptr == nil || !reflect.DeepEqual(*ptr, audit)) {
 				t.Fatalf("Ptr() = %#v, want copy of %#v", ptr, audit)
 			}
 		})
+	}
+	if (Audit{PrimaryDimension: "D4-orchestration"}).Empty() {
+		t.Fatal("primary harness dimension should make an audit non-empty")
+	}
+	if (Audit{SecondaryDimensions: []string{"D6-output-processing"}}).Empty() {
+		t.Fatal("secondary harness dimensions should make an audit non-empty")
 	}
 }
 

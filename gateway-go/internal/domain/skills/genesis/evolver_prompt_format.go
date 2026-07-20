@@ -194,11 +194,18 @@ func formatConfirmedEvolveExemplars(exemplars []confirmedEvolveExemplar) string 
 	sb.WriteString("\n\n## 같은 실패 계열에서 검증 완주한 개선 사례 (교차 스킬 참고)\n")
 	sb.WriteString("아래 편집 방향은 유사한 실패 시그니처에서 실제 사용 관찰까지 살아남았다:\n")
 	for _, ex := range exemplars {
-		line := "- [" + ex.SkillName + "] 대상: " + genesiscommon.TruncateRunes(strings.TrimSpace(ex.Audit.TargetSignature), 100)
-		if s := strings.TrimSpace(ex.Audit.EditedSurface); s != "" {
+		audit := withHarnessDimensions(ex.Audit)
+		line := "- [" + ex.SkillName + "] 대상: " + genesiscommon.TruncateRunes(strings.TrimSpace(audit.TargetSignature), 100)
+		if diagnosis := formatHarnessDiagnosis(&HarnessDimensionDiagnosis{
+			Primary:   audit.PrimaryDimension,
+			Secondary: audit.SecondaryDimensions,
+		}); diagnosis != "" {
+			line += " · 차원: " + diagnosis
+		}
+		if s := strings.TrimSpace(audit.EditedSurface); s != "" {
 			line += " · 편집면: " + genesiscommon.TruncateRunes(s, 40)
 		}
-		if c := strings.TrimSpace(ex.Audit.ExpectedBehaviorChange); c != "" {
+		if c := strings.TrimSpace(audit.ExpectedBehaviorChange); c != "" {
 			line += " · 효과: " + genesiscommon.TruncateRunes(c, 120)
 		}
 		sb.WriteString(line + "\n")

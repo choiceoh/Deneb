@@ -755,6 +755,9 @@ func TestMineSkillFailurePatternsClustersRealFailures(t *testing.T) {
 		"terminal cause",
 		"causal status",
 		"agent mechanism",
+		"harness dimension (shadow)",
+		HarnessDimensionToolInteraction,
+		HarnessDimensionOrchestration,
 		"structured output contract",
 	} {
 		if !strings.Contains(section, want) {
