@@ -44,6 +44,8 @@ const (
 	academicPerSourceCap = 4
 	// academicAbstractRunes bounds each rendered abstract.
 	academicAbstractRunes = 220
+	// hnHitCap bounds the HN discussion sub-block.
+	hnHitCap = 3
 )
 
 // academicHit is one normalized paper hit from either source.
@@ -62,6 +64,7 @@ type academicHit struct {
 var (
 	arxivSearchFn           = arxivSearch
 	semanticScholarSearchFn = semanticScholarSearch
+	hnSearchFn              = hnSearch
 )
 
 // arxivIDRe matches modern arXiv identifiers ("2607.12161", optional version).
@@ -111,20 +114,23 @@ func joinAcademicLane(ch <-chan string) string {
 	return <-ch
 }
 
-// academicLane queries both sources in parallel and renders the labeled block.
+// academicLane queries the three sources in parallel and renders the labeled
+// block: papers (arXiv + S2, deduped) followed by an HN discussion sub-block.
 func academicLane(ctx context.Context, query string) string {
 	var (
 		wg        sync.WaitGroup
 		arxivHits []academicHit
 		s2Hits    []academicHit
+		hnHits    []hnHit
 	)
+	recoverSource := func(name string) {
+		if r := recover(); r != nil {
+			slog.Error("academic source panic", "source", name, "panic", r)
+		}
+	}
 	run := func(name string, out *[]academicHit, fn func(context.Context, string, int) ([]academicHit, error)) {
 		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("academic source panic", "source", name, "panic", r)
-			}
-		}()
+		defer recoverSource(name)
 		hits, err := fn(ctx, query, academicPerSourceCap)
 		if err != nil {
 			slog.Debug("academic source failed", "source", name, "error", err)
@@ -132,9 +138,19 @@ func academicLane(ctx context.Context, query string) string {
 		}
 		*out = hits
 	}
-	wg.Add(2)
+	wg.Add(3)
 	go run("arxiv", &arxivHits, arxivSearchFn)
 	go run("s2", &s2Hits, semanticScholarSearchFn)
+	go func() {
+		defer wg.Done()
+		defer recoverSource("hn")
+		hits, err := hnSearchFn(ctx, query, hnHitCap)
+		if err != nil {
+			slog.Debug("academic source failed", "source", "hn", "error", err)
+			return
+		}
+		hnHits = hits
+	}()
 	wg.Wait()
 
 	// Dedupe: an S2 hit that IS an arXiv paper already listed adds nothing.
@@ -150,15 +166,18 @@ func academicLane(ctx context.Context, query string) string {
 			continue
 		}
 		merged = append(merged, h)
+		if h.ArxivID != "" {
+			seen[h.ArxivID] = true
+		}
 	}
-	if len(merged) == 0 {
+	if len(merged) == 0 && len(hnHits) == 0 {
 		return ""
 	}
 	slog.Info("web academic lane attached",
-		"arxivHits", len(arxivHits), "s2Hits", len(s2Hits), "merged", len(merged))
+		"arxivHits", len(arxivHits), "s2Hits", len(s2Hits), "hnHits", len(hnHits), "merged", len(merged))
 
 	var sb strings.Builder
-	sb.WriteString("── 학술 레인 (arXiv · Semantic Scholar — 무료 구조화 검색) ──\n")
+	sb.WriteString("── 학술·기술 레인 (arXiv · Semantic Scholar · HN — 무료 구조화 검색) ──\n")
 	for i, h := range merged {
 		fmt.Fprintf(&sb, "%d. %s", i+1, h.Title)
 		if a := renderAuthors(h.Authors); a != "" {
@@ -179,6 +198,24 @@ func academicLane(ctx context.Context, query string) string {
 		sb.WriteByte('\n')
 		if abs := collapseWhitespace(h.Abstract); abs != "" {
 			sb.WriteString("   초록: " + truncateRunes(abs, academicAbstractRunes) + "\n")
+		}
+	}
+	if len(hnHits) > 0 {
+		sb.WriteString("HN 토론 (포인트·댓글 = 실무자 검증 신호):\n")
+		for _, h := range hnHits {
+			sb.WriteString("- " + h.Title)
+			fmt.Fprintf(&sb, " — %dp·%dc", h.Points, h.Comments)
+			if h.Year != "" {
+				sb.WriteString(" (" + h.Year + ")")
+			}
+			if h.ArxivID != "" && seen[h.ArxivID] {
+				sb.WriteString(" [위 논문 토론]")
+			}
+			sb.WriteString(" | " + h.ItemURL)
+			if h.URL != "" {
+				sb.WriteString(" | 기사: " + h.URL)
+			}
+			sb.WriteByte('\n')
 		}
 	}
 	return strings.TrimRight(sb.String(), "\n")
@@ -365,6 +402,87 @@ func parseS2Response(body []byte) ([]academicHit, error) {
 			ArxivID:   d.ExternalIds.ArXiv,
 			Abstract:  d.Abstract,
 			Citations: d.CitationCount,
+		})
+	}
+	return hits, nil
+}
+
+// --- Hacker News (Algolia API, keyless) ---
+//
+// HN is the third lane source because Google ranks HN threads poorly while
+// points/comments carry a practitioner-validation signal Serper lacks — and
+// paper queries often have an HN thread with reproduction reports and
+// counterpoints attached.
+
+// hnHit is one HN story hit.
+type hnHit struct {
+	Title    string
+	URL      string // linked article (may be empty for Ask HN)
+	ItemURL  string // news.ycombinator.com discussion permalink
+	Points   int
+	Comments int
+	Year     string
+	ArxivID  string // extracted from the linked URL when it points at arXiv
+}
+
+type hnResponse struct {
+	Hits []struct {
+		Title       string `json:"title"`
+		URL         string `json:"url"`
+		Points      int    `json:"points"`
+		NumComments int    `json:"num_comments"`
+		ObjectID    string `json:"objectID"`
+		CreatedAt   string `json:"created_at"`
+	} `json:"hits"`
+}
+
+// hnSearch queries the HN Algolia search API (relevance+points ranking).
+func hnSearch(ctx context.Context, query string, limit int) ([]hnHit, error) {
+	cleaned, _ := academicAPIQuery(query)
+	if strings.TrimSpace(cleaned) == "" {
+		return nil, nil
+	}
+	params := url.Values{
+		"query":       {cleaned},
+		"tags":        {"story"},
+		"hitsPerPage": {fmt.Sprint(limit)},
+	}
+	body, err := academicGet(ctx, "https://hn.algolia.com/api/v1/search?"+params.Encode())
+	if err != nil {
+		return nil, err
+	}
+	return parseHNResponse(body)
+}
+
+// parseHNResponse converts the Algolia payload to hits.
+func parseHNResponse(body []byte) ([]hnHit, error) {
+	var resp hnResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("hn: parse: %w", err)
+	}
+	var hits []hnHit
+	for _, h := range resp.Hits {
+		if strings.TrimSpace(h.Title) == "" {
+			continue
+		}
+		year := ""
+		if len(h.CreatedAt) >= 4 {
+			year = h.CreatedAt[:4]
+		}
+		arxivID := ""
+		if strings.Contains(h.URL, "arxiv.org/") {
+			if m := arxivIDRe.FindStringSubmatch(h.URL); m != nil {
+				arxivID = m[1]
+			}
+		}
+		hits = append(hits, hnHit{
+			Title:    collapseWhitespace(h.Title),
+			URL:      h.URL,
+			ItemURL:  "https://news.ycombinator.com/item?id=" + h.ObjectID,
+			Points:   h.Points,
+			Comments: h.NumComments,
+			Year:     year,
+			ArxivID:  arxivID,
 		})
 	}
 	return hits, nil
