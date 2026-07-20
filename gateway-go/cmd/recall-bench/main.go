@@ -377,7 +377,7 @@ func reportRecallHealth(
 		fmt.Fprintln(stderr, "recall-bench: store does not expose recall-health surface; skipping")
 		return
 	}
-	util := computeLedgerUtility(hs.RecallHitScoreCounts(time.Now()))
+	util := computeLedgerUtility(hs.RecallUsageScoreCounts(time.Now()))
 	cov := computeGoldCoverage(cases, hs.KnownProjects())
 	health := computeRecallHealth(result, cov)
 	writeRecallHealth(stdout, &util, cov, health)

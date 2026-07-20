@@ -19,9 +19,9 @@ func TestComputeDreamQuality_ReturnsAllThreeAxes(t *testing.T) {
 			{Confidence: "low"},  // 0.3 → mean 0.65
 		},
 		priorPaths: []processedDiaryCapsule{
-			{At: old, Paths: []string{"프로젝트/a.md", "프로젝트/b.md"}}, // 1 of 2 recalled → utility 0.5
+			{At: old, Paths: []string{"프로젝트/a.md", "프로젝트/b.md"}}, // 1 of 2 used → utility 0.5
 		},
-		recalls: map[string]int{"프로젝트/a.md": 3},
+		recalls: map[string]RecallUsage{"프로젝트/a.md": {Injects: 2, Reads: 1}}, // observed use → full credit
 		now:     now,
 	}
 	q := computeDreamQuality(in)
@@ -37,6 +37,30 @@ func TestComputeDreamQuality_ReturnsAllThreeAxes(t *testing.T) {
 	// (0.5*0.4 + 0.65*0.2 + 0.5*0.4) / (0.4+0.2+0.4) * 100 = 53
 	if want := (0.5*0.4 + 0.65*0.2 + 0.5*0.4) / 1.0 * 100; !approx(q.Score, want) {
 		t.Errorf("Score = %.2f, want %.2f", q.Score, want)
+	}
+}
+
+func TestComputeDreamQuality_InjectOnlyEarnsHalfCredit(t *testing.T) {
+	// Exposure without observed use must not score like real engagement
+	// (bridge-evidence adoption): a page only ever injected earns half credit,
+	// a page the model read or the answer cited earns full.
+	now := time.Now()
+	old := now.Add(-72 * time.Hour).Format(time.RFC3339)
+	q := computeDreamQuality(dreamQualityInputs{
+		priorPaths: []processedDiaryCapsule{
+			{At: old, Paths: []string{"프로젝트/injected.md", "프로젝트/used.md"}},
+		},
+		recalls: map[string]RecallUsage{
+			"프로젝트/injected.md": {Injects: 5},           // exposure only → 0.5
+			"프로젝트/used.md":     {Injects: 1, Cites: 1}, // cited → 1.0
+		},
+		now: now,
+	})
+	if !approx(q.Utility, 0.75) { // (0.5 + 1.0) / 2
+		t.Errorf("Utility = %.3f, want 0.75 (half credit for inject-only)", q.Utility)
+	}
+	if q.RecalledPages != 2 {
+		t.Errorf("RecalledPages = %d, want 2 (any ledger presence counts)", q.RecalledPages)
 	}
 }
 
@@ -67,7 +91,7 @@ func TestComputeDreamQuality_FreshPagesScoreWithoutUtility(t *testing.T) {
 		applied:    1,
 		updates:    []wikiUpdate{{Confidence: "medium"}},
 		priorPaths: []processedDiaryCapsule{{At: fresh, Paths: []string{"프로젝트/new.md"}}},
-		recalls:    map[string]int{},
+		recalls:    map[string]RecallUsage{},
 		now:        now,
 	})
 	// The fresh page must not enter the utility denominator, so utility is

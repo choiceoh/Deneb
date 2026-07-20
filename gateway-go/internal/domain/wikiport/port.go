@@ -15,6 +15,8 @@ type (
 	Store                   = wiki.Store
 	Config                  = wiki.Config
 	SearchOptions           = wiki.SearchOptions
+	RecallEvent             = wiki.RecallEvent
+	RecallUsage             = wiki.RecallUsage
 	WikiDreamer             = wiki.WikiDreamer
 	Page                    = wiki.Page
 	Frontmatter             = wiki.Frontmatter
@@ -61,7 +63,6 @@ type (
 	MergeResult             = wiki.MergeResult
 	SnapshotResult          = wiki.SnapshotResult
 	PersonSeed              = wiki.PersonSeed
-	RecallHitRecord         = wiki.RecallHitRecord
 )
 
 const (
@@ -241,6 +242,13 @@ func IsMailAnalysisPath(relPath string) bool {
 func IsMaterialPath(relPath string) bool {
 	return wiki.IsMaterialPath(relPath)
 }
+
+// Recall-utility ledger event kinds (see wiki.RecordRecallEvents).
+const (
+	RecallEventInject = wiki.RecallEventInject
+	RecallEventRead   = wiki.RecallEventRead
+	RecallEventCite   = wiki.RecallEventCite
+)
 
 func OpenQuestionsIn(body string) []OpenQuestionItem {
 	return wiki.OpenQuestionsIn(body)

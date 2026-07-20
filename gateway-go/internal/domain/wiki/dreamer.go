@@ -457,7 +457,7 @@ func (wd *WikiDreamer) scoreDreamCycle(cycle *dreamCycle) {
 		applied:    cycle.created + cycle.updated,
 		updates:    cycle.updates,
 		priorPaths: priorCapsules,
-		recalls:    wd.store.RecallHitScoreCounts(now),
+		recalls:    wd.store.RecallUsageScoreCounts(now),
 		now:        now,
 	})
 	cycle.report.QualityScore = q.Score

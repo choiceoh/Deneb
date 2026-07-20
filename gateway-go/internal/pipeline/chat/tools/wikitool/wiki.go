@@ -256,6 +256,15 @@ func wikiReadRange(ctx context.Context, store *wiki.Store, path, section string,
 		return fmt.Sprintf("페이지 읽기 실패: %v", err), nil
 	}
 
+	// 효용 접지: a model-driven page open is observed USE — the strongest recall
+	// utility signal, unlike mere evidence injection (bridge-evidence adoption).
+	// Best-effort derived telemetry by ledger contract; must never fail a read.
+	_ = store.RecordRecallEvents([]wiki.RecallEvent{{
+		Path:    path,
+		Event:   wiki.RecallEventRead,
+		Session: toolport.SessionKeyFromContext(ctx),
+	}})
+
 	// If section specified, return just that section.
 	if section != "" {
 		content := page.Section(section)

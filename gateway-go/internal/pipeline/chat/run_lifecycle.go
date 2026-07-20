@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	chatrecall "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
@@ -100,6 +101,15 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 	if deps.reportCardHealth != nil {
 		deps.reportCardHealth(result.Text, params.SessionKey, logger)
 	}
+	// 효용 접지 (cite): of the wiki pages the recall preflight injected this
+	// turn, record which ones the answer actually referenced. AllText covers
+	// multi-turn runs whose final turn is tool-only; consume-once semantics
+	// live in RecordAnswerCitations. Best-effort — never affects delivery.
+	answer := strings.TrimSpace(result.AllText)
+	if answer == "" {
+		answer = strings.TrimSpace(result.Text)
+	}
+	chatrecall.RecordAnswerCitations(deps.memory.Wiki, params.SessionKey, answer, logger)
 	// Deliverable → 작업 피드 auto safety net: a document-analysis turn whose result
 	// the model did not publish itself gets filed as a doc_analysis card. Anchored
 	// on a hard signal (a document was ingested this turn), so ordinary chat never

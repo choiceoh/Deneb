@@ -119,36 +119,44 @@ func recallContentKey(note string) string {
 }
 
 // recordRecallUtility tees the injected wiki-page evidence into the store's
-// recall-utility ledger (효용 접지), carrying the retrieval context (query label,
-// injection rank, preflight score) so real-traffic (query → page) pairs can be
-// mined as gold-set candidates. Only Kind=="wiki" rows carry a real page
-// relPath as Source (org rows may hold "조직도: 이름"); other kinds are diary/
-// transcript/file, not dreamer-managed pages, so they are not scored. Rank is
-// the row's 1-based position in the FULL ranked evidence list (all kinds) —
-// i.e. its position in the recall block the model actually saw. Best-effort:
-// a nil store or a write error is swallowed after a single Warn — losing this
+// recall-utility ledger (효용 접지) as inject events, each carrying the
+// retrieval context (query label, injection rank, preflight score — so
+// real-traffic (query → page) pairs can be mined as gold-set candidates) and
+// the session, so downstream usage events (read/cite) can be attributed
+// against the exposure. Only Kind=="wiki" rows carry a real page relPath as
+// Source (org rows may hold "조직도: 이름"); other kinds are diary/transcript/
+// file, not dreamer-managed pages, so they are not scored. Rank is the row's
+// 1-based position in the FULL ranked evidence list (all kinds) — i.e. its
+// position in the recall block the model actually saw. Returns the recorded
+// paths so the caller can arm the end-of-turn citation pass. Best-effort: a
+// nil store or a write error is swallowed after a single Warn — losing this
 // derived telemetry is not user-observable and self-heals next turn.
-func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, logger *slog.Logger) {
+func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKey string, logger *slog.Logger) []string {
 	if store == nil || len(evidence) == 0 {
-		return
+		return nil
 	}
-	hits := make([]wiki.RecallHitRecord, 0, len(evidence))
+	events := make([]wiki.RecallEvent, 0, len(evidence))
+	paths := make([]string, 0, len(evidence))
 	for i, ev := range evidence {
 		if ev.Kind == "wiki" && ev.Source != "" {
-			hits = append(hits, wiki.RecallHitRecord{
-				Path:  ev.Source,
-				Query: ev.Query,
-				Rank:  i + 1,
-				Score: ev.Score,
+			events = append(events, wiki.RecallEvent{
+				Path:    ev.Source,
+				Event:   wiki.RecallEventInject,
+				Query:   ev.Query,
+				Rank:    i + 1,
+				Score:   ev.Score,
+				Session: sessionKey,
 			})
+			paths = append(paths, ev.Source)
 		}
 	}
-	if len(hits) == 0 {
-		return
+	if len(events) == 0 {
+		return nil
 	}
-	if err := store.RecordRecallHits(hits); err != nil && logger != nil {
+	if err := store.RecordRecallEvents(events); err != nil && logger != nil {
 		logger.Warn("recall preflight: recall-hit ledger write failed", "error", err)
 	}
+	return paths
 }
 
 type recallEvidence struct {
@@ -284,6 +292,11 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			logger.Info("recall preflight: no evidence",
 				"session", params.SessionKey, "sources", collection.sourceSummary, "truncated", truncated)
 		}
+		// A turn that injected nothing must clear the citation candidates, or a
+		// previous turn's paths would be mis-attributed to this turn's answer.
+		if !deps.Briefcase {
+			StoreInjectedPaths(params.SessionKey, nil)
+		}
 		// Explicit recall tells the user nothing was found; silent auto-recall on a
 		// non-cue turn stays invisible so every-turn search adds no noise.
 		if cue {
@@ -298,9 +311,14 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			"session", params.SessionKey, "count", len(evidence), "sources", collection.sourceSummary, "truncated", truncated)
 	}
 	// 효용 접지: record which wiki pages this turn actually pulled into context so
-	// the dream cycle can learn which of its writes earn their keep (recall_hits.go).
+	// the dream cycle can learn which of its writes earn their keep (recall_hits.go),
+	// and arm the end-of-turn citation pass with the same paths (skipped in
+	// briefcase mode — casepack replays have no citation pass to consume them).
 	// Best-effort telemetry — a ledger write must never affect the turn.
-	recordRecallUtility(deps.Wiki, evidence, logger)
+	injected := recordRecallUtility(deps.Wiki, evidence, params.SessionKey, logger)
+	if !deps.Briefcase {
+		StoreInjectedPaths(params.SessionKey, injected)
+	}
 	return formatRecallEvidenceAt(evidence, deps.now()), truncated
 }
 

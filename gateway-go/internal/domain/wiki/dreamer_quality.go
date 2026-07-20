@@ -49,7 +49,7 @@ type dreamQualityInputs struct {
 	applied    int
 	updates    []wikiUpdate            // to average applied confidence
 	priorPaths []processedDiaryCapsule // capsule history (prior cycles only)
-	recalls    map[string]int          // page → recall count in the score window
+	recalls    map[string]RecallUsage  // page → kind-split ledger usage in the score window
 	now        time.Time
 }
 
@@ -90,9 +90,12 @@ func computeDreamQuality(in dreamQualityInputs) dreamQuality {
 	}
 
 	// Utility: of pages written by PRIOR cycles that are past the grace window,
-	// what fraction has since been recalled into a chat turn.
+	// how much use they earned. Observed use (the model opened the page or the
+	// answer referenced it) earns full credit; injection alone earns half —
+	// exposure does not predict use (bridge-evidence adoption), so "was pulled
+	// into context once" must not saturate the axis like real engagement does.
 	seen := make(map[string]struct{})
-	denom, num := 0, 0
+	denom, num := 0, 0.0
 	for _, cap := range in.priorPaths {
 		at, err := time.Parse(time.RFC3339, cap.At)
 		if err != nil || in.now.Sub(at) < utilityGrace {
@@ -107,14 +110,19 @@ func computeDreamQuality(in dreamQualityInputs) dreamQuality {
 			}
 			seen[p] = struct{}{}
 			denom++
-			if in.recalls[p] > 0 {
-				num++
+			usage := in.recalls[p]
+			switch {
+			case usage.Used():
+				num += 1.0
+				q.RecalledPages++
+			case usage.Injects > 0:
+				num += 0.5
 				q.RecalledPages++
 			}
 		}
 	}
 	if denom > 0 {
-		u := float64(num) / float64(denom)
+		u := num / float64(denom)
 		q.Utility = u
 		axes = append(axes, axis{value: u, weight: 0.4, ok: true})
 	}
