@@ -91,6 +91,40 @@ func TestWikiResearchPromptRendersOpenQuestionLifecycleRules(t *testing.T) {
 	}
 }
 
+// TestWikiResearchPromptRendersWorkingMemoryProtocol pins the within-run
+// epistemic working-memory protocol (SLEUTH, arXiv:2607.12267): the tripartite
+// facts/hypotheses/questions block re-emitted every response, the
+// question-drives-next-tool-call coupling, the state-conditional commit rule
+// (never budget-based — see agent/grace.go), the correction path that keeps
+// a wrong early fact from being silently entrenched, and the fold-back of the
+// block into the page's 현재 상태 / 미해결 질문 sections.
+func TestWikiResearchPromptRendersWorkingMemoryProtocol(t *testing.T) {
+	task := &wikiResearchTask{}
+	got := task.buildPrompt(&wikiResearchCandidate{path: "프로젝트/a/대표.md"})
+	for _, want := range []string{
+		"작업 기억 규약",
+		"[사실] F1.",
+		"[가설] H1.",
+		"[질문] Q1.",
+		"지지: F# | 모순: F#",
+		"우선순위가 가장 높은 것의 '다음 행동'",
+		"추가 확인 검색 없이",
+		"(정정: F1 무효)",
+		"종료 시 접기",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing working-memory rule %q", want)
+		}
+	}
+	// The commit rule must stay state-conditional: a turn-budget pre-warning
+	// regressed into premature give-ups on the main agent loop (grace.go).
+	for _, absent := range []string{"턴 예산", "예산의 70%"} {
+		if strings.Contains(got, absent) {
+			t.Errorf("prompt unexpectedly contains budget-based commit trigger %q", absent)
+		}
+	}
+}
+
 // TestWikiResearchPromptIncludesOperatorBriefOnlyWithWorkspaceDir pins the WIKI.md steering injection:
 // present brief content reaches the research prompt; an unset workspace adds
 // no section.
