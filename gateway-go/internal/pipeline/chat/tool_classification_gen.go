@@ -45,6 +45,7 @@ var parallelSafeTools = map[string]struct{}{
 // Structured-output tools are already handled by post-processors.
 // Internal / already-small tools add no compression value.
 var toolCompressSkipSet = map[string]struct{}{
+	"blackboard":      {},
 	"deal_ledger":     {},
 	"grep":            {},
 	"notebook":        {},

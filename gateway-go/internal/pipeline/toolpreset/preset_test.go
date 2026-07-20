@@ -49,7 +49,7 @@ func TestAllowedTools_Researcher(t *testing.T) {
 	for _, name := range []string{
 		"read", "grep", "read_spillover", "web",
 		"wiki", "knowledge", "polaris",
-		"mail_archive", "contacts", "graphify", "fetch_tools",
+		"mail_archive", "contacts", "graphify", "blackboard", "fetch_tools",
 	} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("researcher preset should include %q", name)
@@ -187,7 +187,7 @@ func TestAllowedTools_Coding(t *testing.T) {
 	for _, name := range []string{
 		"read", "grep", "read_spillover",
 		"write", "edit", "exec", "process",
-		"web", "fetch_tools",
+		"web", "blackboard", "fetch_tools",
 	} {
 		if _, ok := allowed[name]; !ok {
 			t.Errorf("coding preset should include %q", name)

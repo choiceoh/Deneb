@@ -1981,6 +1981,75 @@ func GoalToolSchema() map[string]any {
 	}
 }
 
+func BlackboardToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "plan(steps) | begin(step) | end(step,outputs) | put(key,value) | get(key) | require(keys) | list | clear",
+				"enum":        []string{"plan", "begin", "end", "put", "get", "require", "list", "clear"},
+			},
+			"key": map[string]any{
+				"type":        "string",
+				"description": "Board key for put/get (letters, digits, underscore).",
+			},
+			"keys": map[string]any{
+				"type":        "array",
+				"description": "Keys for require — fails closed if any are missing.",
+				"items": map[string]any{
+					"type": "string",
+				},
+			},
+			"outputs": map[string]any{
+				"type":                 "object",
+				"description":          "Declared output key→JSON value map for action=end.",
+				"additionalProperties": true,
+			},
+			"step": map[string]any{
+				"type":        "string",
+				"description": "Step id for begin/end.",
+			},
+			"steps": map[string]any{
+				"type":        "array",
+				"description": "Ordered step contracts for action=plan.",
+				"items": map[string]any{
+					"type":     "object",
+					"required": []string{"id"},
+					"properties": map[string]any{
+						"goal": map[string]any{
+							"type":        "string",
+							"description": "App/tool-scoped goal for this step",
+						},
+						"id": map[string]any{
+							"type":        "string",
+							"description": "Stable step id",
+						},
+						"inputs": map[string]any{
+							"type":        "array",
+							"description": "Required board keys before begin",
+							"items": map[string]any{
+								"type": "string",
+							},
+						},
+						"outputs": map[string]any{
+							"type":        "array",
+							"description": "Keys that end must write",
+							"items": map[string]any{
+								"type": "string",
+							},
+						},
+					},
+				},
+			},
+			"value": map[string]any{
+				"description": "JSON value for put (string/number/bool/object/array).",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func MailArchiveToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",

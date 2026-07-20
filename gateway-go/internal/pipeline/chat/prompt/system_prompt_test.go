@@ -145,10 +145,11 @@ func TestWriteCompactToolListSortsUncategorizedTools(t *testing.T) {
 	writeCompactToolList(&prompt, toolNameSet{
 		"office":           {},
 		"goal":             {},
+		"blackboard":       {},
 		"mail_archive":     {},
 		"heartbeat_update": {},
 	})
-	if got, want := prompt.String(), "Other: goal, heartbeat_update, mail_archive, office\n"; got != want {
+	if got, want := prompt.String(), "Workflow: blackboard, goal\nOther: heartbeat_update, mail_archive, office\n"; got != want {
 		t.Fatalf("uncategorized tool list = %q, want stable ordering %q", got, want)
 	}
 }

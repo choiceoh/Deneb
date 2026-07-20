@@ -219,7 +219,7 @@ func prepareToolInput(ctx context.Context, name string, input json.RawMessage, b
 			input = repaired
 		}
 	}
-	if briefcasePreset && (hasTopLevelJSONKey(input, "compress") || hasTopLevelJSONKey(input, "$ref")) {
+	if briefcasePreset && (hasTopLevelJSONKey(input, "compress") || hasTopLevelJSONKey(input, "$ref") || bytes.Contains(input, []byte(`"$board.`))) {
 		return input, false, fmt.Errorf("tool %q uses metadata forbidden by the briefcase preset", name)
 	}
 	// Check for compress flag before executing (avoids re-parsing in every tool).
@@ -228,6 +228,11 @@ func prepareToolInput(ctx context.Context, name string, input json.RawMessage, b
 	// Resolve $ref: wait for the referenced tool result and inject it.
 	if !briefcasePreset {
 		input = resolveRef(ctx, input)
+		resolved, boardErr := resolveBoardRefs(ctx, input)
+		if boardErr != nil {
+			return input, wantCompress, boardErr
+		}
+		input = resolved
 	}
 	return input, wantCompress, nil
 }
@@ -575,6 +580,82 @@ func injectRefContent(input json.RawMessage, content string) json.RawMessage {
 		return input
 	}
 	return result
+}
+
+// resolveBoardRefs replaces string values exactly equal to "$board.<key>" with
+// the typed JSON value from the run blackboard. Missing keys fail closed.
+func resolveBoardRefs(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	if !bytes.Contains(input, []byte(`"$board.`)) {
+		return input, nil
+	}
+	board := toolport.BlackboardFromContext(ctx)
+	if board == nil {
+		return input, fmt.Errorf("blackboard: $board reference used but blackboard is not available")
+	}
+	var root any
+	if err := json.Unmarshal(input, &root); err != nil {
+		return input, nil
+	}
+	replaced, err := replaceBoardRefs(root, board)
+	if err != nil {
+		return input, err
+	}
+	out, err := json.Marshal(replaced)
+	if err != nil {
+		return input, err
+	}
+	return out, nil
+}
+
+func replaceBoardRefs(node any, board *toolport.Blackboard) (any, error) {
+	switch v := node.(type) {
+	case string:
+		key, ok := boardRefKey(v)
+		if !ok {
+			return v, nil
+		}
+		entry, found := board.Get(key)
+		if !found {
+			return nil, fmt.Errorf("blackboard: missing key %q for $board.%s", key, key)
+		}
+		var decoded any
+		if err := json.Unmarshal(entry.Value, &decoded); err != nil {
+			return nil, fmt.Errorf("blackboard: key %q is not valid JSON: %w", key, err)
+		}
+		return decoded, nil
+	case map[string]any:
+		for k, child := range v {
+			next, err := replaceBoardRefs(child, board)
+			if err != nil {
+				return nil, err
+			}
+			v[k] = next
+		}
+		return v, nil
+	case []any:
+		for i, child := range v {
+			next, err := replaceBoardRefs(child, board)
+			if err != nil {
+				return nil, err
+			}
+			v[i] = next
+		}
+		return v, nil
+	default:
+		return v, nil
+	}
+}
+
+func boardRefKey(s string) (string, bool) {
+	const prefix = "$board."
+	if !strings.HasPrefix(s, prefix) {
+		return "", false
+	}
+	key := strings.TrimSpace(s[len(prefix):])
+	if key == "" || strings.ContainsAny(key, ".$/ ") {
+		return "", false
+	}
+	return key, true
 }
 
 // Names returns all registered tool names in registration order.

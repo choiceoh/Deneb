@@ -274,6 +274,17 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Fn:          surface.ToolGoal(),
 	})
 
+	// Typed blackboard: fail-closed I/O contracts for multi-tool workflows.
+	// Prefer named keys over free-text handoffs between mail/wiki/web/etc.
+	registry.RegisterTool(toolport.ToolDef{
+		Name: "blackboard",
+		Description: "크로스툴·다단계 워크플로에서 중간값을 typed key로 넘긴다(free-text 요약 대체). " +
+			"action=plan(steps[{id,goal,inputs,outputs}]) → begin(step) → 작업 → end(step,outputs) | put/get/require/list/clear. " +
+			"필수 입력·출력이 없으면 실패로 닫힌다. 다른 툴 인자에는 문자열 \"$board.<key>\"로 주입 가능.",
+		InputSchema: schema.BlackboardToolSchema(),
+		Fn:          surface.ToolBlackboard(),
+	})
+
 	// Research panel: fan a question out to every healthy model in parallel
 	// (deep-research skill). Deferred — only deliberate deep research needs it,
 	// so interactive turns don't pay for the schema. nil ConsultPanel (no model

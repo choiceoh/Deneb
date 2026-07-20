@@ -27,6 +27,7 @@ const (
 	ctxKeySkillConsult
 	ctxKeyToolExecStats
 	ctxKeyToolDryRun
+	ctxKeyBlackboard
 )
 
 // WithDeliveryContext attaches a DeliveryContext to the context.
@@ -138,6 +139,17 @@ func WithRunCache(ctx context.Context, rc *RunCache) context.Context {
 func RunCacheFromContext(ctx context.Context) *RunCache {
 	rc, _ := ctx.Value(ctxKeyRunCache).(*RunCache)
 	return rc
+}
+
+// WithBlackboard attaches a run-scoped typed blackboard for multi-tool I/O.
+func WithBlackboard(ctx context.Context, board *Blackboard) context.Context {
+	return context.WithValue(ctx, ctxKeyBlackboard, board)
+}
+
+// BlackboardFromContext extracts the Blackboard from a context.
+func BlackboardFromContext(ctx context.Context) *Blackboard {
+	board, _ := ctx.Value(ctxKeyBlackboard).(*Blackboard)
+	return board
 }
 
 // WithFileCache attaches a FileCache to the context for cross-turn file read dedup.

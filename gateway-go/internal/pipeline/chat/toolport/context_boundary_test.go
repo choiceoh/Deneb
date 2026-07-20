@@ -53,7 +53,8 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 	base := context.Background()
 	if DeliveryFromContext(base) != nil || ReplyFuncFromContext(base) != nil ||
 		MediaSendFuncFromContext(base) != nil || TurnContextFromContext(base) != nil ||
-		RunCacheFromContext(base) != nil || FileCacheFromContext(base) != nil ||
+		RunCacheFromContext(base) != nil || BlackboardFromContext(base) != nil ||
+		FileCacheFromContext(base) != nil ||
 		CheckpointerFromContext(base) != nil || SpawnFlagFromContext(base) != nil ||
 		DeferredActivationFromContext(base) != nil {
 		t.Fatal("empty context returned a pointer/function value")
@@ -90,6 +91,7 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 	})
 	tc := NewTurnContext()
 	rc := NewRunCache()
+	board := NewBlackboard()
 	fc := agent.NewFileCache(8)
 	cp := &recordingCheckpointer{}
 	flag := NewSpawnFlag()
@@ -104,6 +106,7 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 	ctx = WithMaxUploadBytes(ctx, 12_345)
 	ctx = WithTurnContext(ctx, tc)
 	ctx = WithRunCache(ctx, rc)
+	ctx = WithBlackboard(ctx, board)
 	ctx = WithFileCache(ctx, fc)
 	ctx = WithToolPreset(ctx, "coding")
 	ctx = WithCheckpointer(ctx, cp)
@@ -111,7 +114,8 @@ func TestContextValuesRoundTripAndDefaults(t *testing.T) {
 	ctx = WithDeferredActivation(ctx, da)
 
 	if DeliveryFromContext(ctx) != delivery || TurnContextFromContext(ctx) != tc ||
-		RunCacheFromContext(ctx) != rc || FileCacheFromContext(ctx) != fc ||
+		RunCacheFromContext(ctx) != rc || BlackboardFromContext(ctx) != board ||
+		FileCacheFromContext(ctx) != fc ||
 		CheckpointerFromContext(ctx) != cp || SpawnFlagFromContext(ctx) != flag ||
 		DeferredActivationFromContext(ctx) != da {
 		t.Fatal("pointer context value did not round-trip by identity")

@@ -2293,6 +2293,86 @@
     ]
   },
   {
+    "name": "blackboard",
+    "description": "Typed I/O board for multi-tool workflows. Prefer named keys over free-text handoffs. Actions: plan, begin, end, put, get, require, list, clear. Other tools may use \"$board.<key>\" string args to inject values (fail-closed if missing).",
+    "properties": {
+      "action": {
+        "type": "string",
+        "description": "plan(steps) | begin(step) | end(step,outputs) | put(key,value) | get(key) | require(keys) | list | clear",
+        "enum": [
+          "plan",
+          "begin",
+          "end",
+          "put",
+          "get",
+          "require",
+          "list",
+          "clear"
+        ]
+      },
+      "key": {
+        "type": "string",
+        "description": "Board key for put/get (letters, digits, underscore)."
+      },
+      "value": {
+        "description": "JSON value for put (string/number/bool/object/array)."
+      },
+      "keys": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Keys for require — fails closed if any are missing."
+      },
+      "step": {
+        "type": "string",
+        "description": "Step id for begin/end."
+      },
+      "steps": {
+        "type": "array",
+        "description": "Ordered step contracts for action=plan.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Stable step id"
+            },
+            "goal": {
+              "type": "string",
+              "description": "App/tool-scoped goal for this step"
+            },
+            "inputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Required board keys before begin"
+            },
+            "outputs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Keys that end must write"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      },
+      "outputs": {
+        "type": "object",
+        "description": "Declared output key→JSON value map for action=end.",
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  {
     "name": "mail_archive",
     "properties": {
       "action": {

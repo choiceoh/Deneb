@@ -61,6 +61,21 @@ func RunCacheFromContext(ctx context.Context) *RunCache {
 	return toolport.RunCacheFromContext(ctx)
 }
 
+// WithBlackboard attaches a run-scoped typed blackboard to ctx.
+func WithBlackboard(ctx context.Context, board *toolport.Blackboard) context.Context {
+	return toolport.WithBlackboard(ctx, board)
+}
+
+// BlackboardFromContext extracts the Blackboard from ctx. Returns nil if not set.
+func BlackboardFromContext(ctx context.Context) *toolport.Blackboard {
+	return toolport.BlackboardFromContext(ctx)
+}
+
+// NewBlackboard creates an empty typed blackboard.
+func NewBlackboard() *toolport.Blackboard {
+	return toolport.NewBlackboard()
+}
+
 // WithFileCache attaches a FileCache to ctx for cross-turn file read dedup.
 func WithFileCache(ctx context.Context, fc *agent.FileCache) context.Context {
 	return toolport.WithFileCache(ctx, fc)

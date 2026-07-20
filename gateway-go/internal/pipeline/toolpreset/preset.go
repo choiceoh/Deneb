@@ -104,6 +104,7 @@ var researcherTools = toSet(
 	"read", "grep", "read_spillover", // file inspection
 	"web",                          // web search + page fetch
 	"wiki", "knowledge", "polaris", // knowledge bases + recall
+	"blackboard",                   // typed multi-tool I/O contracts
 	"fetch_tools",
 )
 
@@ -165,6 +166,7 @@ var codingTools = toSet(
 	"read", "grep", "read_spillover",
 	"write", "exec",
 	"web",
+	"blackboard", // typed multi-tool I/O contracts
 	"fetch_tools",
 )
 

@@ -37,7 +37,8 @@
       "deal_ledger": true,
       "notebook": true,
       "sessions": true,
-      "skill_lifecycle": true
+      "skill_lifecycle": true,
+      "blackboard": true
     }
   }
 }
