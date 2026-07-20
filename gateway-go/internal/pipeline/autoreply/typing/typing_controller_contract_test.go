@@ -85,17 +85,52 @@ func TestTypingControllerTTLExpiryCanRestart(t *testing.T) {
 	waitFor(t, 100*time.Millisecond, func() bool { return starts.Load() > firstStarts }, "restart callback")
 }
 
+// fakeClock is a mutex-guarded manual clock for pinning TypingController TTL
+// math, so TTL assertions never depend on real scheduler timing.
+type fakeClock struct {
+	mu  sync.Mutex
+	cur time.Time
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cur
+}
+
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	c.cur = c.cur.Add(d)
+	c.mu.Unlock()
+}
+
 func TestRefreshTypingTTLUpdatesActiveDeadline(t *testing.T) {
-	controller := NewTypingController(TypingControllerConfig{IntervalMs: 2, TtlMs: 15})
+	var ticks atomic.Int32
+	clock := &fakeClock{cur: time.Unix(0, 0)}
+	controller := NewTypingController(TypingControllerConfig{
+		IntervalMs: 2,
+		TtlMs:      15,
+		OnStart:    func() { ticks.Add(1) },
+	})
+	controller.now = clock.Now // before Start: keepalive goroutine not yet running
 	defer controller.Cleanup()
-	controller.Start()
-	time.Sleep(10 * time.Millisecond)
-	controller.RefreshTypingTTL()
-	time.Sleep(9 * time.Millisecond)
+	controller.Start() // deadline = 15ms on the fake clock
+
+	clock.Advance(10 * time.Millisecond)
+	controller.RefreshTypingTTL() // deadline = 10ms + 15ms = 25ms
+	// Past the original 15ms deadline but inside the refreshed one.
+	clock.Advance(9 * time.Millisecond)
+
+	// Let the keepalive loop evaluate the TTL a couple of times at the frozen
+	// 19ms clock; with the refreshed deadline it must survive every check.
+	base := ticks.Load()
+	waitFor(t, time.Second, func() bool { return ticks.Load() >= base+2 }, "keepalive ticks after refresh")
 	if !controller.IsActive() {
 		t.Fatal("controller expired before refreshed deadline")
 	}
-	waitFor(t, 100*time.Millisecond, func() bool { return !controller.IsActive() }, "refreshed TTL expiry")
+
+	clock.Advance(10 * time.Millisecond) // 29ms > refreshed 25ms deadline
+	waitFor(t, time.Second, func() bool { return !controller.IsActive() }, "refreshed TTL expiry")
 }
 
 func TestStartTypingOnTextSilentAndCustomTokens(t *testing.T) {
@@ -241,7 +276,9 @@ func TestFullTypingSignalerThinkingModeToolProgressRestartsAfterTTLExpiry(t *tes
 	if !controller.IsActive() {
 		t.Fatal("thinking mode did not start on visible text")
 	}
+	controller.mu.Lock() // keepalive goroutine reads ttlDeadline under mu
 	controller.ttlDeadline = time.Now().Add(-time.Second)
+	controller.mu.Unlock()
 	waitFor(t, 100*time.Millisecond, func() bool { return !controller.IsActive() }, "thinking TTL expiry")
 	signaler.SignalToolProgress(45)
 	if !controller.IsActive() {

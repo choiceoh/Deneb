@@ -32,6 +32,7 @@ type TypingController struct {
 	intervalMs   int64
 	ttlMs        int64 // auto-stop after TTL expires (default 30000ms)
 	ttlDeadline  time.Time
+	now          func() time.Time // clock seam so tests can pin TTL math to a fake clock
 	policy       types.TypingPolicy
 	silentToken  string
 }
@@ -67,6 +68,7 @@ func NewTypingController(cfg TypingControllerConfig) *TypingController {
 		onCleanup:   cfg.OnCleanup,
 		intervalMs:  intervalMs,
 		ttlMs:       ttlMs,
+		now:         time.Now,
 		policy:      cfg.Policy,
 		silentToken: silentToken,
 		done:        make(chan struct{}),
@@ -89,13 +91,13 @@ func (tc *TypingController) StartTypingLoop() {
 	}
 	if tc.started {
 		// Already running — just refresh TTL.
-		tc.ttlDeadline = time.Now().Add(time.Duration(tc.ttlMs) * time.Millisecond)
+		tc.ttlDeadline = tc.now().Add(time.Duration(tc.ttlMs) * time.Millisecond)
 		tc.mu.Unlock()
 		return
 	}
 	tc.started = true
 	tc.active = true
-	tc.ttlDeadline = time.Now().Add(time.Duration(tc.ttlMs) * time.Millisecond)
+	tc.ttlDeadline = tc.now().Add(time.Duration(tc.ttlMs) * time.Millisecond)
 	tc.mu.Unlock()
 
 	if tc.onStart != nil {
@@ -119,7 +121,7 @@ func (tc *TypingController) StartTypingLoop() {
 					return
 				}
 				// Check TTL expiry.
-				if time.Now().After(tc.ttlDeadline) {
+				if tc.now().After(tc.ttlDeadline) {
 					tc.active = false
 					tc.started = false
 					tc.mu.Unlock()
@@ -156,7 +158,7 @@ func (tc *TypingController) RefreshTypingTTL() {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if !tc.sealed {
-		tc.ttlDeadline = time.Now().Add(time.Duration(tc.ttlMs) * time.Millisecond)
+		tc.ttlDeadline = tc.now().Add(time.Duration(tc.ttlMs) * time.Millisecond)
 	}
 }
 
