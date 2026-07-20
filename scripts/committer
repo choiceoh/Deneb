@@ -192,4 +192,30 @@ if [ "$committed" = false ]; then
   exit 1
 fi
 
+# Commit↔session provenance ledger (arXiv 2607.14390 adoption): one JSONL line
+# per agent commit joins a change to the session that produced it — the raw
+# material for RSI accept-side labels (session → landed commit → survived) and
+# curriculum demand mining. committer is the sanctioned agent commit path, so
+# instrumenting it covers every agent lane without touching .git/hooks; lanes
+# that bypass it (wt LLM commits, release-please) are recoverable from their
+# branch naming. Best-effort by contract: the ledger must never fail or delay
+# a commit — every error path is swallowed. It lives OUTSIDE the repo (default
+# ~/.deneb, override DENEB_COMMIT_LEDGER_DIR for tests); a machine without the
+# state dir records nothing. Session id comes from the agent harness env
+# (CLAUDE_CODE_SESSION_ID); ZCode/Cursor sessions are identified by their
+# zcode/<id> / cursor/<id> branch instead.
+record_commit_session_ledger() {
+  local ledger_dir="${DENEB_COMMIT_LEDGER_DIR:-$HOME/.deneb}"
+  [ -d "$ledger_dir" ] || return 0
+  local sha branch worktree session
+  sha=$(git rev-parse HEAD 2>/dev/null) || return 0
+  branch=$(git branch --show-current 2>/dev/null | tr -d '"\\') || branch=""
+  worktree=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" | tr -d '"\\') || worktree=""
+  session=$(printf '%s' "${CLAUDE_CODE_SESSION_ID:-}" | tr -d '"\\')
+  printf '{"sha":"%s","branch":"%s","worktree":"%s","session":"%s","at":%s}\n' \
+    "$sha" "$branch" "$worktree" "$session" "$(date +%s%3N)" \
+    >>"$ledger_dir/commit-sessions.jsonl" 2>/dev/null || true
+}
+record_commit_session_ledger || true
+
 printf 'Committed "%s" with %d files\n' "$commit_message" "${#files[@]}"
