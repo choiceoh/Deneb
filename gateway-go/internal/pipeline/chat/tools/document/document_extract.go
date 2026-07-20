@@ -219,25 +219,23 @@ func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 
 	// Rasterize only the candidate pages and re-read them with OCR. Any
 	// failure (rasterizer or OCR unavailable) leaves the pdftotext text in place.
-	imgs, rerr := rasterizePDFPages(ctx, pdf, candidates)
-	if rerr != nil {
-		return strings.TrimSpace(raw), nil
-	}
-	isTable := make(map[int]bool, len(tableIdx))
-	for _, i := range tableIdx {
-		isTable[i] = true
-	}
-	for _, i := range candidates {
-		img := imgs[i]
-		if img == nil {
-			continue // page failed to render — keep pdftotext
+	if imgs, rerr := rasterizePDFPages(ctx, pdf, candidates); rerr == nil {
+		isTable := make(map[int]bool, len(tableIdx))
+		for _, i := range tableIdx {
+			isTable[i] = true
 		}
-		text, oerr := ocrImageBytes(ctx, img)
-		if oerr != nil {
-			continue
-		}
-		if upgraded, ok := upgradePage(pages[i], text, isTable[i]); ok {
-			pages[i] = upgraded
+		for _, i := range candidates {
+			img := imgs[i]
+			if img == nil {
+				continue // page failed to render — keep pdftotext
+			}
+			text, oerr := ocrImageBytes(ctx, img)
+			if oerr != nil {
+				continue
+			}
+			if upgraded, ok := upgradePage(pages[i], text, isTable[i]); ok {
+				pages[i] = upgraded
+			}
 		}
 	}
 	return strings.TrimSpace(strings.Join(pages, "\n\n")), nil
