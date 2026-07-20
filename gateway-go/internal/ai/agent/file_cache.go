@@ -65,8 +65,11 @@ func (c *FileCache) MaxEntrySize() int64 {
 	return c.maxEntrySize
 }
 
-// Get returns the cached entry for path, or nil if not cached.
-// Moves the entry to the back of the LRU order on hit.
+// Get returns a snapshot copy of the cached entry for path, or nil if not
+// cached. Handing out the live pointer let unlocked readers race the in-place
+// mutations UpdateAfterWrite / RecordReadEvidence perform under the cache
+// lock (torn time.Time reads in FileChanged); the copy keeps concurrent tool
+// execution safe. Moves the entry to the back of the LRU order on hit.
 func (c *FileCache) Get(path string) *FileCacheEntry {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -78,7 +81,18 @@ func (c *FileCache) Get(path string) *FileCacheEntry {
 
 	// Move to back (most recently used).
 	c.moveToBack(path)
-	return entry
+	snapshot := *entry
+	return &snapshot
+}
+
+// TouchRead counts a cache-served read on the live entry (Get returns
+// snapshots, so callers can no longer increment the counter themselves).
+func (c *FileCache) TouchRead(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if entry, ok := c.entries[path]; ok {
+		entry.ReadCount++
+	}
 }
 
 // Set adds or replaces a cache entry. Evicts the oldest entry if at capacity.
@@ -154,8 +168,14 @@ func FormatCachedRead(displayPath string, entry *FileCacheEntry) string {
 // Returns nil when the file is fresh or was never cached (first write is always
 // allowed). Returns a descriptive error when the file is stale.
 func (c *FileCache) CheckStaleness(path string) error {
+	// Snapshot under the lock — the live entry may be mutated in place by
+	// UpdateAfterWrite / RecordReadEvidence on a concurrent tool call.
 	c.mu.RLock()
-	entry, ok := c.entries[path]
+	live, ok := c.entries[path]
+	var entry FileCacheEntry
+	if ok {
+		entry = *live
+	}
 	c.mu.RUnlock()
 	if !ok {
 		return nil // never read → no staleness to detect

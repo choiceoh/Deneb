@@ -75,3 +75,60 @@ func TestUpdateAfterWriteDropsStaleRender(t *testing.T) {
 		t.Fatalf("post-write entry must be a fresh staleness baseline: %v", err)
 	}
 }
+
+// Get must hand out snapshots: mutating the returned entry (or the cache
+// mutating the live one) must not leak across the boundary — concurrent tool
+// calls previously raced cachedReadResult's counter bump against locked
+// in-place updates.
+func TestGetReturnsSnapshotIsolatedFromLiveEntry(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "f.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fc := NewFileCache(0)
+	data, _ := os.ReadFile(path)
+	fc.RecordReadEvidence(path, data)
+
+	snap := fc.Get(path)
+	snap.Content = "tampered"
+	snap.ReadCount = 999
+	if live := fc.Get(path); live.Content == "tampered" || live.ReadCount == 999 {
+		t.Fatalf("snapshot mutation leaked into the cache: %+v", live)
+	}
+
+	fc.TouchRead(path)
+	if got := fc.Get(path).ReadCount; got != 2 {
+		t.Fatalf("TouchRead must bump the live counter (evidence read 1 + touch), got %d", got)
+	}
+}
+
+// Concurrent staleness checks, snapshot reads, and in-place updates must be
+// race-free (run under -race in CI).
+func TestFileCacheConcurrentAccessIsRaceFree(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "f.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fc := NewFileCache(0)
+	data, _ := os.ReadFile(path)
+	fc.RecordReadEvidence(path, data)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			fc.UpdateAfterWrite(path)
+			fc.RecordReadEvidence(path, data)
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		_ = fc.CheckStaleness(path)
+		if entry := fc.Get(path); entry != nil {
+			_ = FileChanged(path, entry)
+		}
+		fc.TouchRead(path)
+	}
+	<-done
+}

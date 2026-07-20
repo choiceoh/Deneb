@@ -236,7 +236,7 @@ func cachedReadResult(fc *agent.FileCache, path, displayPath string) (string, bo
 	if entry == nil || entry.Content == "" || agent.FileChanged(path, entry) {
 		return "", false
 	}
-	entry.ReadCount++
+	fc.TouchRead(path)
 	return agent.FormatCachedRead(displayPath, entry), true
 }
 
