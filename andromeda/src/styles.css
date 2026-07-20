@@ -2404,6 +2404,17 @@ input[type="checkbox"] {
   line-height: 1.2;
   white-space: nowrap;
 }
+.workfeed-kind.waiting {
+  background: color-mix(in srgb, var(--accent-deep, #2f6fed) 16%, transparent);
+  color: var(--accent-deep, #2f6fed);
+  font-weight: 600;
+}
+.workfeed-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 .workfeed-row-main {
   min-width: 0;
 }

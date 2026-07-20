@@ -634,6 +634,39 @@ describe("WorkfeedPane boundary behavior", () => {
       expect(screen.getByRole("region", { name: "피드 상세" })).toHaveTextContent("일정 충돌");
     });
 
+    it("opens the 질문 대기 inbox from query=questions without clearing an id open", async () => {
+      function TargetSetter() {
+        const { openPane } = useWorkspace();
+        return <button onClick={() => openPane("workfeed", { query: "questions" })}>questions target</button>;
+      }
+      renderWithProviders(
+        <>
+          <TargetSetter />
+          <WorkfeedPane />
+        </>,
+        {
+          connected: true,
+          dataProvider: fakeProvider({
+            workfeed: [
+              ...todayItems,
+              {
+                id: "open-q",
+                source: "proactive",
+                title: "미답 선제",
+                question: true,
+                createdAtMs: at(-1, 12),
+              },
+            ],
+          }),
+        },
+      );
+      await screen.findByText("일정 충돌");
+      await userEvent.click(screen.getByRole("button", { name: "questions target" }));
+      expect(await screen.findByText("미답 선제")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /질문 대기/ })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByText("일정 충돌")).not.toBeInTheDocument();
+    });
+
     it("publishes only the selected day with titles, sources and bodies", async () => {
       function Projection() {
         const { aiText } = useAiFeed();
