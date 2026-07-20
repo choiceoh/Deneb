@@ -154,6 +154,63 @@ func TestMetaEvolution_SkipCycleBenchesIncumbentOnlyWhenCalibrationKnobSet(t *te
 	}
 }
 
+// A skip-cycle incumbent-only bench whose every scenario itself skips carries
+// ZERO gradable pairs — counting it toward the calibration ladder's per-epoch
+// n manufactured invalid samples (2026-07-16: producer skip-bench, 4 skills,
+// all "one-sided skip/unparsable"). Such a bench must be dropped, not
+// recorded; the cycle stays a benchless skip.
+func TestMetaEvolution_SkipCycleZeroSampleBenchIsDropped(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_META_BENCH_ON_SKIP", "1")
+	tr, err := NewTracker(slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Teacher declines to propose → the cycle is a skip.
+	payload, _ := json.Marshal(map[string]any{"skip": true, "reason": "개정할 근거 없음"})
+	teacher := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeTestSSEJSON(t, w, string(payload))
+	}))
+	defer teacher.Close()
+
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	e := NewEvolver(nil, skills.NewCatalog(nil), tr, "", quiet)
+	e.SetTeacher(llm.NewClient(teacher.URL, "test-key"), "teacher")
+
+	meta := generation.NewMetaArtifacts(filepath.Join(t.TempDir(), "meta"), quiet)
+	meta.MaterializeDefaults(nil)
+
+	// Rotate to the genesis epoch (compiled-in shadow-scenario corpus).
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochProducer, Artifact: "a", FromVersion: "aaa"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.LogMetaRevision(MetaRevisionRecord{Epoch: metaEpochEvaluator, Artifact: "b", FromVersion: "bbb"}); err != nil {
+		t.Fatal(err)
+	}
+	task := &MetaEvolutionTask{
+		Tracker: tr, Meta: meta, Evolver: e, Logger: quiet,
+		// The genesis producer honestly skips every scenario → zero
+		// both-sides-scored pairs.
+		GenesisGen: func(context.Context, string, string) (string, error) {
+			return `{"skip": true, "reason": "기존 스킬로 충분"}`, nil
+		},
+	}
+	if epoch, _ := task.nextEpoch(); epoch != metaEpochGenesis {
+		t.Fatalf("precondition: epoch = %q, want genesis", epoch)
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := tr.RecentMetaRevisions(1)
+	if err != nil || len(ledger) == 0 {
+		t.Fatalf("no cycle record (err=%v)", err)
+	}
+	if ledger[0].BenchGenesis != nil {
+		t.Fatalf("zero-sample skip bench must be dropped, got %+v", ledger[0].BenchGenesis)
+	}
+}
+
 func TestMetaProposalGateRejectsIdenticalOversizedAndSchemaBreakingProposals(t *testing.T) {
 	incumbent := strings.Repeat("현재 프롬프트 내용. ", 30)
 	valid := incumbent + `

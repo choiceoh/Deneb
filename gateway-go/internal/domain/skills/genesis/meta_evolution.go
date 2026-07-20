@@ -605,6 +605,13 @@ func (t *MetaEvolutionTask) benchIncumbentOnSkip(ctx context.Context, epoch, inc
 			return nil, nil, nil
 		}
 		out := runProducerShadowBench(ctx, incumbent, incumbent, scenarios, gen)
+		if out.Skills == 0 {
+			// Every scenario skipped or failed to parse on at least one side —
+			// zero gradable pairs. Counting that toward the ladder's per-epoch n
+			// manufactured invalid calibration samples (2026-07-16: 4 skills,
+			// all "one-sided skip/unparsable"). No sample, no count.
+			return nil, nil, nil
+		}
 		return nil, &out, nil
 	case metaEpochGenesis:
 		if t.GenesisGen == nil {
@@ -615,6 +622,11 @@ func (t *MetaEvolutionTask) benchIncumbentOnSkip(ctx context.Context, epoch, inc
 			return nil, nil, nil
 		}
 		out := runGenesisShadowBench(ctx, incumbent, incumbent, scenarios, t.GenesisGen)
+		if out.Scenarios == 0 {
+			// Same invariant as the producer arm: zero both-sides-scored
+			// scenarios is no sample and must not inflate the ladder's n.
+			return nil, nil, nil
+		}
 		return nil, nil, &out
 	}
 	return nil, nil, nil

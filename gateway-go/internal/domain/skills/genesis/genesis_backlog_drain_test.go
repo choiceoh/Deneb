@@ -142,6 +142,95 @@ func TestGenesisBacklogDrain_SkipCooldownThenRetry(t *testing.T) {
 
 // Dedup from Persist is terminal — an existing skill covering the demand
 // means the pattern never retries.
+// TestGenesisBacklogDrain_EvolveBacklogReconciliation closes the evolve-route
+// accounting gap (2026-07-20: 23 route=evolve opportunities with no consumption
+// marking): consumed when the skill saw an evolve attempt after filing, stale
+// past 14d with none, open (unmarked) while fresh. Accounting only — the drain
+// never fires an evolve.
+func TestGenesisBacklogDrain_EvolveBacklogReconciliation(t *testing.T) {
+	gen := &fakeBacklogGenesis{}
+	task, tracker := newDrainTask(t, gen)
+	now := time.Now()
+
+	// Consumed: opportunity filed, then the skill actually evolved.
+	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
+		Route: "evolve", SkillName: "alpha-skill",
+		Candidate: "improve alpha retries: flaky backoff handling",
+		CreatedAt: now.Add(-2 * time.Hour).UnixMilli(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tracker.LogEvolve("alpha-skill", "0.1.1", "tightened retries"); err != nil {
+		t.Fatal(err)
+	}
+	// Stale: filed 20d ago, never attempted.
+	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
+		Route: "evolve", SkillName: "beta-skill",
+		Candidate: "rewrite beta guidance: verbose sections",
+		CreatedAt: now.Add(-20 * 24 * time.Hour).UnixMilli(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Open: fresh and unconsumed — must stay unmarked.
+	if err := tracker.RecordSkillOpportunity(SkillOpportunityRecord{
+		Route: "evolve", SkillName: "gamma-skill",
+		Candidate: "extend gamma coverage: new edge cases",
+		CreatedAt: now.Add(-1 * time.Hour).UnixMilli(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	state := loadGenesisDrainState(task.StatePath)
+	if got := state["evolve:improve alpha retries"]; got.Outcome != "evolve-consumed" || got.SkillName != "alpha-skill" {
+		t.Fatalf("consumed disposition missing: %+v (state %+v)", got, state)
+	}
+	if got := state["evolve:rewrite beta guidance"]; got.Outcome != "evolve-stale" {
+		t.Fatalf("stale disposition missing: %+v", got)
+	}
+	if _, ok := state["evolve:extend gamma coverage"]; ok {
+		t.Fatal("fresh unconsumed pattern must stay open (unmarked)")
+	}
+	// Idempotent: a second run adds no new dispositions.
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if again := loadGenesisDrainState(task.StatePath); len(again) != 2 {
+		t.Fatalf("reconcile must be idempotent, state = %+v", again)
+	}
+}
+
+// TestEvolveAttemptedSinceMatchesSkillAndWindow pins the reconciler's
+// consumption evidence: committed evolves and executed evolve-route proposals
+// count, other skills and out-of-window records do not.
+func TestEvolveAttemptedSinceMatchesSkillAndWindow(t *testing.T) {
+	tracker := newTestTracker(t)
+	if err := tracker.LogEvolve("alpha", "0.1.1", "d"); err != nil {
+		t.Fatal(err)
+	}
+	nowMs := time.Now().UnixMilli()
+	if ok, err := tracker.EvolveAttemptedSince("alpha", nowMs-time.Hour.Milliseconds()); err != nil || !ok {
+		t.Fatalf("committed evolve inside window not seen (ok=%v err=%v)", ok, err)
+	}
+	if ok, _ := tracker.EvolveAttemptedSince("alpha", nowMs+time.Hour.Milliseconds()); ok {
+		t.Fatal("future window must not match")
+	}
+	if ok, _ := tracker.EvolveAttemptedSince("beta", 0); ok {
+		t.Fatal("other skill must not match")
+	}
+	if err := tracker.LogEvolutionProposal(EvolutionProposalRecord{
+		Route: "evolve", SkillName: "gamma", Executed: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := tracker.EvolveAttemptedSince("gamma", nowMs-1000); !ok {
+		t.Fatal("executed evolve proposal must count as an attempt")
+	}
+}
+
 func TestGenesisBacklogDrain_DedupIsTerminal(t *testing.T) {
 	gen := &fakeBacklogGenesis{
 		skill:      &generation.GeneratedSkill{Name: "already-there", Category: "ops", Description: "d"},
