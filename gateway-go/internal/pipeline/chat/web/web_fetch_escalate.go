@@ -6,9 +6,10 @@
 // returning a near-empty React/Next.js shell yielded an empty body and stopped.
 //
 // Here we turn that detection into an ACTION: when the extracted content is thin
-// AND a JS/empty signal is present, we retry ONCE through a headless backend
-// (Jina Reader, the same external last-resort used by the stealth pipeline's
-// final stage). Exactly one retry — never a loop — and if it doesn't produce
+// AND a JS/empty signal is present, we retry ONCE through a headless backend —
+// the resident browser sidecar first (local render, web_fetch_browser.go), then
+// Jina Reader as the external last resort, mirroring the stealth ladder's
+// ordering. Exactly one retry round — never a loop — and if it doesn't produce
 // more content we keep the original result.
 package web
 
@@ -72,7 +73,12 @@ func escalateThinContent(
 	localAI *LocalAIExtractor,
 	meta *webFetchMeta,
 ) (content string, ok bool) {
-	result, err := jinaFetchFn(ctx, targetURL, maxBytes)
+	// Local render first; the external proxy only sees the URL when the
+	// resident sidecar is down or its render came back empty.
+	result, err := browserRenderFn(ctx, targetURL, maxBytes)
+	if err != nil || result == nil || len(result.Data) == 0 {
+		result, err = jinaFetchFn(ctx, targetURL, maxBytes)
+	}
 	if err != nil || result == nil || len(result.Data) == 0 {
 		slog.Debug("thin-content escalation: headless backend yielded nothing",
 			"url", targetURL, "error", err)

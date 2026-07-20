@@ -64,6 +64,8 @@ func TestShouldEscalateThinContent_NilSafe(t *testing.T) {
 
 // withMockJina swaps the headless backend for the duration of a test, restoring
 // the real one afterward, and returns a counter of how many times it was called.
+// It also neutralizes the local browser-sidecar stage (which now runs BEFORE
+// Jina) so Jina-focused tests keep exercising the external path hermetically.
 func withMockJina(t *testing.T, fn func(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error)) *int32 {
 	t.Helper()
 	var calls int32
@@ -72,8 +74,86 @@ func withMockJina(t *testing.T, fn func(ctx context.Context, url string, maxByte
 		atomic.AddInt32(&calls, 1)
 		return fn(ctx, url, maxBytes)
 	}
-	t.Cleanup(func() { jinaFetchFn = orig })
+	origBrowser := browserRenderFn
+	browserRenderFn = func(context.Context, string, int64) (*media.FetchResult, error) {
+		return nil, errBrowserDisabledInTest
+	}
+	t.Cleanup(func() {
+		jinaFetchFn = orig
+		browserRenderFn = origBrowser
+	})
 	return &calls
+}
+
+// errBrowserDisabledInTest marks the neutralized local render stage.
+var errBrowserDisabledInTest = errors.New("browser sidecar disabled in test")
+
+// withMockBrowserRender swaps the local browser-sidecar render, restoring it
+// afterward, and returns a call counter. Apply AFTER withMockJina when both
+// backends need mocks (cleanups run LIFO).
+func withMockBrowserRender(t *testing.T, fn func(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error)) *int32 {
+	t.Helper()
+	var calls int32
+	orig := browserRenderFn
+	browserRenderFn = func(ctx context.Context, url string, maxBytes int64) (*media.FetchResult, error) {
+		atomic.AddInt32(&calls, 1)
+		return fn(ctx, url, maxBytes)
+	}
+	t.Cleanup(func() { browserRenderFn = orig })
+	return &calls
+}
+
+func TestEscalateThinContentPrefersLocalBrowserRender(t *testing.T) {
+	rendered := strings.Repeat("로컬 렌더 본문입니다. ", 200)
+	jinaCalls := withMockJina(t, func(_ context.Context, _ string, _ int64) (*media.FetchResult, error) {
+		t.Error("jina must not be called when the local render succeeds")
+		return nil, errors.New("unexpected")
+	})
+	browserCalls := withMockBrowserRender(t, func(_ context.Context, _ string, _ int64) (*media.FetchResult, error) {
+		return &media.FetchResult{
+			Data:        []byte(rendered),
+			ContentType: "text/plain; charset=utf-8",
+			Size:        len(rendered),
+		}, nil
+	})
+
+	meta := webFetchMeta{URL: "https://spa.example.com/app", ExtractChars: 12, Signals: []string{"js_required"}}
+	content, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &LocalAIExtractor{}, &meta)
+	if !ok || !strings.Contains(content, "로컬 렌더 본문") {
+		t.Fatalf("local render escalation failed: ok=%v", ok)
+	}
+	if got := atomic.LoadInt32(browserCalls); got != 1 {
+		t.Errorf("browser render called %d times, want 1", got)
+	}
+	if got := atomic.LoadInt32(jinaCalls); got != 0 {
+		t.Errorf("jina called %d times, want 0", got)
+	}
+}
+
+func TestEscalateThinContentFallsBackToJinaWhenBrowserFails(t *testing.T) {
+	rendered := strings.Repeat("외부 렌더 본문입니다. ", 200)
+	jinaCalls := withMockJina(t, func(_ context.Context, _ string, _ int64) (*media.FetchResult, error) {
+		return &media.FetchResult{
+			Data:        []byte(rendered),
+			ContentType: "text/plain",
+			Size:        len(rendered),
+		}, nil
+	})
+	browserCalls := withMockBrowserRender(t, func(_ context.Context, _ string, _ int64) (*media.FetchResult, error) {
+		return nil, errors.New("sidecar down")
+	})
+
+	meta := webFetchMeta{URL: "https://spa.example.com/app", ExtractChars: 12, Signals: []string{"empty_body"}}
+	content, ok := escalateThinContent(context.Background(), meta.URL, 1<<20, &LocalAIExtractor{}, &meta)
+	if !ok || !strings.Contains(content, "외부 렌더 본문") {
+		t.Fatalf("jina fallback failed: ok=%v", ok)
+	}
+	if got := atomic.LoadInt32(browserCalls); got != 1 {
+		t.Errorf("browser render called %d times, want 1", got)
+	}
+	if got := atomic.LoadInt32(jinaCalls); got != 1 {
+		t.Errorf("jina called %d times, want 1", got)
+	}
 }
 
 func TestEscalateThinContentUpdatesMetaWithRicherResult(t *testing.T) {

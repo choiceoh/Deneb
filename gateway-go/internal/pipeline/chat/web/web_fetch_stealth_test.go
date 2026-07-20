@@ -1,8 +1,11 @@
 package web
 
 import (
+	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
 )
@@ -174,5 +177,56 @@ func TestBrowserProfilesEmitHeadersWithoutBotUserAgent(t *testing.T) {
 				t.Error("User-Agent too short to be realistic")
 			}
 		})
+	}
+}
+
+// withFreshTiers isolates the package tier memory for a test.
+func withFreshTiers(t *testing.T) *tierMemory {
+	t.Helper()
+	orig := stealthTiers
+	fresh := newTierMemory("")
+	stealthTiers = fresh
+	t.Cleanup(func() { stealthTiers = orig })
+	return fresh
+}
+
+func TestStealthFetchStartsAtLearnedBrowserStage(t *testing.T) {
+	tiers := withFreshTiers(t)
+	now := time.Now()
+	tiers.recordSuccess("learned.example", 2, now)
+
+	rendered := "학습된 도메인 렌더 본문"
+	var browserCalls atomic.Int32
+	origBrowser := browserRenderFn
+	browserRenderFn = func(_ context.Context, url string, _ int64) (*media.FetchResult, error) {
+		browserCalls.Add(1)
+		if !strings.Contains(url, "learned.example") {
+			t.Errorf("browser render got url %q", url)
+		}
+		return &media.FetchResult{
+			Data:        []byte(rendered),
+			ContentType: "text/plain; charset=utf-8",
+			Size:        len(rendered),
+			StatusCode:  200,
+		}, nil
+	}
+	t.Cleanup(func() { browserRenderFn = origBrowser })
+
+	// The learned tier must jump straight to the browser stage: stages 0/1
+	// would hit the real network (learned.example does not resolve) and fail
+	// this test with a non-render result.
+	result, err := stealthFetch(context.Background(), "https://learned.example/page", 1<<20)
+	if err != nil {
+		t.Fatalf("stealthFetch: %v", err)
+	}
+	if string(result.Data) != rendered {
+		t.Errorf("data = %q", result.Data)
+	}
+	if got := browserCalls.Load(); got != 1 {
+		t.Errorf("browser render called %d times, want 1", got)
+	}
+	// Success re-confirms the learned tier.
+	if got := tiers.startStage("learned.example", now.Add(time.Minute)); got != 2 {
+		t.Errorf("post-success start = %d, want 2", got)
 	}
 }
