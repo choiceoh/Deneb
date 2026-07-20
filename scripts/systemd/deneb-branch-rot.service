@@ -1,0 +1,9 @@
+[Unit]
+Description=Deneb branch-rot miner (worktrunk fleet sensor -> L4 recovery candidates)
+
+[Service]
+Type=oneshot
+# wt and gh are npm/binary installs under ~/.local/bin; the systemd user
+# manager's minimal PATH lacks it (same lesson as coding-dispatch).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/deneb/scripts/audit/branch-rot-miner.py --checkout %h/deneb-dev

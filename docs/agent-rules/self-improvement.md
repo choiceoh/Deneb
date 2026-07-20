@@ -161,7 +161,13 @@ acceptance machinery stays forbidden at record time.
   rates from the `miniapp.observe.behavior` aggregate and files the worst
   offenders as tool-description/schema clarification candidates (the tool
   descriptions are Go `ToolDef.Description` literals = the gateway-source
-  surface; this grounds the previously-unconsumed agentlog quality signal). All
+  surface; this grounds the previously-unconsumed agentlog quality signal);
+  `scripts/audit/branch_rot_miner.py` mines the worktrunk fleet snapshot
+  (`wt list --format json` on the dev checkout — docs/tools/worktrunk.md) for
+  branches sitting ahead of main past a staleness bar with no open PR, splitting
+  wt's trees-match detection into retire (already integrated, verify-then-delete)
+  vs recover (rebase, then land or retire with rationale) candidates
+  (deneb-branch-rot.timer, weekly). All
   file via the `miniapp.self_improvement_coding.record` RPC and share one
   RPC/reopen/cap edge (imported from the health miner so they cannot drift).
   Deliberately NOT gateway PeriodicTasks — the inputs (git checkout, journald,
@@ -206,7 +212,7 @@ acceptance machinery stays forbidden at record time.
   direct operator directive ahead of a reviewed batch — narrow description/perf
   candidates, previewable via the tool-quality-dryrun workflow). **Staged** (file
   for review, no auto-dispatch): `runtime-error`, `deadcode-finding`,
-  `sop-mining`. **Graduation execution is DELEGATED to the loop (operator
+  `sop-mining`, `branch-rot` (2026-07-20). **Graduation execution is DELEGATED to the loop (operator
   directive 2026-07-14)**: `LadderWatchTask` unlocks a staged source once the
   review lane endorses it (accepted≥2, rejected=0 — a rejection is a standing
   veto) by writing the shared graduation state

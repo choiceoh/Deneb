@@ -132,6 +132,26 @@ wt step for-each -- <cmd>  # run a command in every worktree (fleet ops)
 
 (`scripts/dev/zcode-cleanup.sh` still handles the `zcode/*` namespace.)
 
+## Automated consumers
+
+worktrunk is not an operator-only surface — the fleet snapshot feeds the RSI
+loop:
+
+- **Branch-rot miner** (`scripts/audit/branch_rot_miner.py`,
+  `deneb-branch-rot.timer` weekly): reads `wt list --format json` for the dev
+  checkout and files stale ahead-of-main branches (no open PR, past the
+  staleness bar) as propose-only scope=code recovery candidates through the
+  self-correction review lane. wt's trees-match integration detection splits
+  retire (content already in main — verify, then delete) from recover
+  (rebase → land or retire) candidates, and the cached `--full` LLM branch
+  summaries ride along as review evidence. Source namespace `branch-rot`
+  starts Staged on the dispatch ladder — see
+  [self-improvement](/agent-rules/self-improvement).
+- The RSI **coding dispatch** lane keeps its own per-attempt worktree
+  mechanics (`scripts/dev/coding-dispatch.sh` — unique branch + worktree per
+  attempt with its own cleanup); its worktrees appear in `wt -C ~/deneb list` <!-- docref:ignore -->
+  like any other, so the whole agent fleet is visible from one place.
+
 ## Parallel agents
 
 `wt switch -x` creates a worktree and launches a command inside it:
