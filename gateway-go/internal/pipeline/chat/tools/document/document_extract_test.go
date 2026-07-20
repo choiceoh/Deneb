@@ -2,6 +2,8 @@ package document
 
 import (
 	"context"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -134,4 +136,87 @@ func TestPageHasTableReturnsTrueForAlignedColumns(t *testing.T) {
 	if pageHasTable(prose) {
 		t.Error("prose should not be detected as a table")
 	}
+}
+
+func TestClassifyPagesSeparatesTableAndVisualPages(t *testing.T) {
+	prose := strings.Repeat("이 페이지는 표도 그림도 아닌 충분히 긴 일반 본문 문단입니다. ", 8)
+	table := "품목       수량      단가\n" +
+		"모듈       100       5000\n" +
+		"인버터     20        30000\n"
+	caption := "그림 3. 연도별 발전량 추이\n\n12"
+
+	tableIdx, visualIdx := classifyPages([]string{prose, table, "", caption})
+	if !reflect.DeepEqual(tableIdx, []int{1}) {
+		t.Errorf("tableIdx = %v, want [1]", tableIdx)
+	}
+	// Page 2 (empty text layer) and page 3 (caption only) are visual candidates;
+	// the prose page must qualify as neither.
+	if !reflect.DeepEqual(visualIdx, []int{2, 3}) {
+		t.Errorf("visualIdx = %v, want [2 3]", visualIdx)
+	}
+}
+
+func TestPageNearlyEmptyThreshold(t *testing.T) {
+	for _, sparse := range []string{"", "   ", "12", "그림 3. 연도별 발전량 추이   7"} {
+		if !pageNearlyEmpty(sparse) {
+			t.Errorf("pageNearlyEmpty(%q) = false, want true", sparse)
+		}
+	}
+	long := strings.Repeat("실제 본문이 이어지는 문단, ", 20)
+	if pageNearlyEmpty(long) {
+		t.Errorf("%d-rune prose page classified as nearly empty", len([]rune(long)))
+	}
+}
+
+func TestUpgradePageGuards(t *testing.T) {
+	mdTable := "| 품목 | 수량 |\n| --- | --- |\n| 모듈 | 100 |"
+
+	// Table page: only a confirmed markdown table replaces the original.
+	if got, ok := upgradePage("orig", mdTable, true); !ok || got != mdTable {
+		t.Errorf("table page with markdown OCR: got (%q, %v), want replacement", got, ok)
+	}
+	if _, ok := upgradePage("orig", "표가 아닌 그냥 줄글", true); ok {
+		t.Error("table page must keep pdftotext when OCR produced no markdown table")
+	}
+
+	// Visual page: OCR must have recovered more than the text layer carried,
+	// and the replacement is labeled as machine-read.
+	got, ok := upgradePage("  12  ", "설비 전경 사진: 태양광 모듈 어레이와 인버터실 외관", false)
+	if !ok || !strings.HasPrefix(got, "[그림/차트 페이지 OCR]\n") {
+		t.Errorf("visual page recovery: got (%q, %v), want labeled replacement", got, ok)
+	}
+	if _, ok := upgradePage("원문 텍스트 레이어가 이미 더 길고 충분한 페이지", "짧음", false); ok {
+		t.Error("visual page must keep pdftotext when OCR recovered less than the original")
+	}
+	if _, ok := upgradePage("", "   ", false); ok {
+		t.Error("blank OCR output must not replace anything")
+	}
+}
+
+// TestPDFStructuredExtractionLive runs the full structured-extraction chain
+// (pdftotext → classify → selective raster → PaddleOCR-VL) against a real PDF
+// and a live OCR server. Opt-in only:
+//
+//	DENEB_PDF_STRUCTURED_LIVE=/path/to.pdf go test -run PDFStructuredExtractionLive -v ./...
+//
+// Skipped in CI (no GPU / no poppler). Used to confirm the chain end-to-end on
+// the DGX host — including visual-page recovery when the PDF has figure pages.
+func TestPDFStructuredExtractionLive(t *testing.T) {
+	path := os.Getenv("DENEB_PDF_STRUCTURED_LIVE")
+	if path == "" {
+		t.Skip("set DENEB_PDF_STRUCTURED_LIVE=/path/to.pdf to run against live CLIs + OCR server")
+	}
+	pdf, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read pdf: %v", err)
+	}
+	text, err := pdfToTextStructured(context.Background(), pdf)
+	if err != nil {
+		t.Fatalf("pdfToTextStructured: %v", err)
+	}
+	if strings.TrimSpace(text) == "" {
+		t.Fatal("empty extraction result")
+	}
+	t.Logf("extracted %d chars; visual pages recovered: %v\n%s",
+		len(text), strings.Contains(text, "[그림/차트 페이지 OCR]"), text)
 }

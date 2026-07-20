@@ -6,7 +6,9 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // --- shared document extraction (mail attachments, files, and web fetch) ---
@@ -184,46 +186,109 @@ func isMarkdownExt(lowerName string) bool {
 	return strings.HasSuffix(lowerName, ".md") || strings.HasSuffix(lowerName, ".markdown")
 }
 
-// pdfToTextStructured extracts a digital PDF's text with pdftotext, then upgrades
-// pages that look like they contain a table: those pages are rasterized and
-// re-read with PaddleOCR-VL so the table comes back as markdown instead of
-// whitespace-aligned columns. Pages without a confirmed table keep the faster,
-// lossless pdftotext output. Degrades to plain pdftotext whenever rasterization
-// or OCR is unavailable, so it is a safe drop-in for pdfToText.
+// pdfToTextStructured extracts a digital PDF's text with pdftotext, then
+// upgrades pages where the raster carries more than the text layer:
+//   - pages that look like they contain a table are re-read with PaddleOCR-VL
+//     so the table comes back as markdown instead of whitespace-aligned columns;
+//   - pages whose text layer is nearly empty (full-page charts, photos, stamps,
+//     scanned inserts in an otherwise born-digital PDF) are OCRed so their
+//     content stops being invisible to the model.
+//
+// All other pages keep the faster, lossless pdftotext output. Degrades to plain
+// pdftotext whenever rasterization or OCR is unavailable, so it is a safe
+// drop-in for pdfToText.
 func pdfToTextStructured(ctx context.Context, pdf []byte) (string, error) {
 	raw, err := pdfToText(ctx, pdf)
 	if err != nil {
 		return "", err
 	}
 
-	pages := strings.Split(raw, "\f") // pdftotext separates pages with form feeds
-	var tableIdx []int
-	for i, p := range pages {
-		if pageHasTable(p) {
-			tableIdx = append(tableIdx, i)
-		}
-	}
-	if len(tableIdx) == 0 {
-		return strings.TrimSpace(raw), nil // no tables → nothing to upgrade
+	// pdftotext separates pages with form feeds and emits a trailing one; drop
+	// the empty tail so it can't register as a visual-page candidate.
+	pages := strings.Split(strings.TrimRight(raw, "\f"), "\f")
+	tableIdx, visualIdx := classifyPages(pages)
+	if len(tableIdx) == 0 && len(visualIdx) == 0 {
+		return strings.TrimSpace(raw), nil // nothing to upgrade
 	}
 
-	// Rasterize the table pages and re-read them with OCR. Any failure
-	// (rasterizer or OCR unavailable) leaves the pdftotext text in place.
-	if imgs, rerr := rasterizePDF(ctx, pdf, ocrPageCap); rerr == nil {
-		for _, i := range tableIdx {
-			if i >= len(imgs) || imgs[i] == nil {
-				continue // page beyond the raster cap — keep pdftotext
-			}
-			text, oerr := ocrImageBytes(ctx, imgs[i])
-			// Swap in the OCR page only when it actually produced a markdown
-			// table; otherwise keep pdftotext so a false positive can't lose
-			// prose to OCR truncation.
-			if oerr == nil && strings.Contains(text, "| ---") {
-				pages[i] = text
-			}
+	// Bound the GPU work per document: at most ocrPageCap candidate pages,
+	// kept in page order so the earliest content wins the budget.
+	candidates := append(append([]int{}, tableIdx...), visualIdx...)
+	sort.Ints(candidates)
+	if len(candidates) > ocrPageCap {
+		candidates = candidates[:ocrPageCap]
+	}
+
+	// Rasterize only the candidate pages and re-read them with OCR. Any
+	// failure (rasterizer or OCR unavailable) leaves the pdftotext text in place.
+	imgs, rerr := rasterizePDFPages(ctx, pdf, candidates)
+	if rerr != nil {
+		return strings.TrimSpace(raw), nil
+	}
+	isTable := make(map[int]bool, len(tableIdx))
+	for _, i := range tableIdx {
+		isTable[i] = true
+	}
+	for _, i := range candidates {
+		img := imgs[i]
+		if img == nil {
+			continue // page failed to render — keep pdftotext
+		}
+		text, oerr := ocrImageBytes(ctx, img)
+		if oerr != nil {
+			continue
+		}
+		if upgraded, ok := upgradePage(pages[i], text, isTable[i]); ok {
+			pages[i] = upgraded
 		}
 	}
 	return strings.TrimSpace(strings.Join(pages, "\n\n")), nil
+}
+
+// classifyPages returns the 0-based indices of pages worth re-reading from the
+// raster: tableIdx for pages whose pdftotext layout looks like a table,
+// visualIdx for pages whose text layer is nearly empty — the signature of a
+// full-page figure, chart, photo, or stamp in a born-digital PDF.
+func classifyPages(pages []string) (tableIdx, visualIdx []int) {
+	for i, p := range pages {
+		switch {
+		case pageHasTable(p):
+			tableIdx = append(tableIdx, i)
+		case pageNearlyEmpty(p):
+			visualIdx = append(visualIdx, i)
+		}
+	}
+	return tableIdx, visualIdx
+}
+
+// visualPageMaxRunes is the text-layer size below which a page counts as
+// nearly empty. Real prose pages carry thousands of runes; a figure-only page
+// carries a header, a caption, and a page number at most.
+const visualPageMaxRunes = 100
+
+// pageNearlyEmpty reports whether a pdftotext page carries almost no text.
+func pageNearlyEmpty(page string) bool {
+	return utf8.RuneCountInString(strings.TrimSpace(page)) < visualPageMaxRunes
+}
+
+// upgradePage decides whether OCR output replaces a page's pdftotext text.
+// Table pages are replaced only when OCR actually produced a markdown table —
+// a false positive must not lose prose to OCR truncation. Nearly-empty pages
+// are replaced whenever OCR recovered more than the text layer carried; the
+// result is labeled so the model knows the text is machine-read, not
+// author-written.
+func upgradePage(orig, ocrText string, isTable bool) (string, bool) {
+	if isTable {
+		if strings.Contains(ocrText, "| ---") {
+			return ocrText, true
+		}
+		return "", false
+	}
+	got := strings.TrimSpace(ocrText)
+	if got == "" || utf8.RuneCountInString(got) <= utf8.RuneCountInString(strings.TrimSpace(orig)) {
+		return "", false
+	}
+	return "[그림/차트 페이지 OCR]\n" + got, true
 }
 
 // pageHasTable reports whether a pdftotext -layout page likely contains a table:
