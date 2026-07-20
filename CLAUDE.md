@@ -107,4 +107,4 @@ codegraph explore  "영역..."  # 지형 one-shot (다중 토큰; --max-files �
 | rsi-bench.md | RSI Bench 과정·효용 점수·baseline·ratchet |
 | git-pr.md · testing.md · docs.md · build-status.md · collaboration.md · optimization.md | 각 주제 상세 |
 
-**도구 가이드** (`docs/tools/`): [zcode-environment.md](docs/tools/zcode-environment.md) (워크트리 격리·CodeGraph·훅 파이프라인·헬퍼 스크립트) · [creating-skills.md](docs/tools/creating-skills.md) (스킬 작성).
+**도구 가이드** (`docs/tools/`): [zcode-environment.md](docs/tools/zcode-environment.md) (워크트리 격리·CodeGraph·훅 파이프라인·헬퍼 스크립트) · [creating-skills.md](docs/tools/creating-skills.md) (스킬 작성) · [worktrunk.md](docs/tools/worktrunk.md) (`wt` 수동 병렬 워크트리 CLI — `.worktrees/<branch>`, 머지는 여전히 pr.sh land).

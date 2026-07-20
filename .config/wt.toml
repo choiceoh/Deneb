@@ -1,0 +1,24 @@
+# Worktrunk project config — https://worktrunk.dev
+#
+# Worktrunk (`wt`) is the operator's manual lane for parallel worktrees in the
+# dev checkout. Agent harnesses (ZCode / Cursor / Claude Code / Codex) keep
+# their own hook-based worktree isolation — see docs/tools/zcode-environment.md.
+# Worktree placement follows the existing repo convention
+# `<repo>/.worktrees/<branch>` via the user-config path template — see
+# docs/tools/worktrunk.md.
+
+# Seed the CodeGraph index for a fresh worktree: same bootstrap the agent
+# harnesses use (copies a sibling/ancestor index + `codegraph sync`,
+# backgrounded, fail-open — codegraph_worktree_index.py).
+post-start = "python3 scripts/dev/codegraph-autoindex.py"
+
+# Landing goes through PRs + `scripts/dev/pr.sh land` (green-gate, squash,
+# landed-verify). Block `wt merge` so local squash-merges cannot bypass that
+# flow. Escape hatch for throwaway branches: `wt merge --no-hooks`.
+pre-merge = "echo 'wt merge is disabled in this repo: push the branch and use scripts/dev/pr.sh land <pr> instead (docs/agent-rules/git-pr.md).' && exit 1"
+
+[commit.generation]
+template-append = """
+- Conventional Commits required: `type(scope): subject` — type in feat|fix|perf|refactor|docs|test|chore|ci|build, scope = module (chat, native, andromeda, ...).
+- Korean subject lines are fine; keep code identifiers in English.
+"""
