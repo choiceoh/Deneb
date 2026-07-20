@@ -417,24 +417,30 @@ describe("WorkfeedPane boundary behavior", () => {
       expect(chats).toHaveLength(0);
     });
 
-    it("opens an accessible reject dialog with document context and a 500-character limit", async () => {
-      renderFeed([approvalItem]);
-      await userEvent.click(await screen.findByText("모듈 구매 품의"));
-      await userEvent.click(screen.getByRole("button", { name: "반려" }));
+    // 501-keystroke type()이 느린 머신에서 5s 기본 타임아웃을 넘고, 죽은 뒤에도
+    // 좀비 타이핑이 다음 테스트의 textarea를 오염시킨다 — 여유 타임아웃 필수.
+    it(
+      "opens an accessible reject dialog with document context and a 500-character limit",
+      { timeout: 30_000 },
+      async () => {
+        renderFeed([approvalItem]);
+        await userEvent.click(await screen.findByText("모듈 구매 품의"));
+        await userEvent.click(screen.getByRole("button", { name: "반려" }));
 
-      const dialog = screen.getByRole("dialog", { name: "결재 반려" });
-      expect(dialog).toHaveTextContent("모듈 구매 품의");
-      expect(dialog).toHaveTextContent("문서 참조: DOC-99178");
-      const comment = within(dialog).getByRole("textbox", { name: "반려 사유 (선택)" });
-      expect(comment).toHaveAttribute("maxlength", "500");
-      await userEvent.type(comment, "가".repeat(501));
-      expect(comment).toHaveValue("가".repeat(500));
-      expect(within(dialog).getByText("500/500")).toBeInTheDocument();
+        const dialog = screen.getByRole("dialog", { name: "결재 반려" });
+        expect(dialog).toHaveTextContent("모듈 구매 품의");
+        expect(dialog).toHaveTextContent("문서 참조: DOC-99178");
+        const comment = within(dialog).getByRole("textbox", { name: "반려 사유 (선택)" });
+        expect(comment).toHaveAttribute("maxlength", "500");
+        await userEvent.type(comment, "가".repeat(501));
+        expect(comment).toHaveValue("가".repeat(500));
+        expect(within(dialog).getByText("500/500")).toBeInTheDocument();
 
-      await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
-      expect(screen.queryByRole("dialog", { name: "결재 반려" })).not.toBeInTheDocument();
-      expect(rpc.filter((call) => call.method === "miniapp.workfeed.action.run")).toHaveLength(0);
-    });
+        await userEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+        expect(screen.queryByRole("dialog", { name: "결재 반려" })).not.toBeInTheDocument();
+        expect(rpc.filter((call) => call.method === "miniapp.workfeed.action.run")).toHaveLength(0);
+      },
+    );
 
     it("submits a nonblank reject comment and omits comments from approve", async () => {
       renderFeed([approvalItem]);

@@ -55,15 +55,17 @@ export function ApprovalsPane() {
   // 자동 랜딩 원샷 플래그 — 아래 렌더 조정 블록과 date 점프 타깃이 공유한다.
   const [landed, setLanded] = useState(false);
 
-  // 결재 검토 모드: 미결(canAct) 문서를 열면 제목/기안자와 매칭되는 프로젝트
-  // 또는 인물 위키를 옆 타일로 자동 배치 — 승인·반려 근거가 클릭 없이 보인다.
-  // 읽기 전용 조종(위키 열람)뿐이라 수용 게이트와 무관. 문서당 1회만, 매칭
-  // 실패 시 조용히 아무것도 안 한다.
+  // 결재 검토 모드: 미결(canAct) 문서를 열면 제목과 매칭되는 프로젝트/인물
+  // 위키를 옆 타일로 자동 배치 — 승인·반려 근거가 클릭 없이 보인다.
+  // 기안자 이름은 매칭 대상이 아니다: 기안자는 거의 항상 인물 위키에 있어
+  // 문서를 열 때마다 기안자 프로필이 떠 "결재 내용 대신 사람 정보"로 읽혔다.
+  // 근거는 문서가 다루는 대상(제목)에서만 찾는다. 읽기 전용 조종(위키 열람)
+  // 뿐이라 수용 게이트와 무관. 문서당 1회만, 매칭 실패 시 조용히 아무것도 안 한다.
   const reviewProjects = useCachedList<ProjectDigest>("progress", connected);
   const reviewPeople = useCachedList<Person>("people", connected);
   const reviewedRef = useRef(new Set<string>());
   const selForReview = selectedId != null ? rows.find((a) => String(a.id) === String(selectedId)) : undefined;
-  const reviewTitle = selForReview?.canAct ? `${selForReview.title ?? ""} ${selForReview.drafter ?? ""}` : "";
+  const reviewTitle = selForReview?.canAct ? (selForReview.title ?? "") : "";
   useEffect(() => {
     if (!selectedId || !reviewTitle.trim()) return;
     const key = String(selectedId);
