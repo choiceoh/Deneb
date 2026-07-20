@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
@@ -246,6 +247,119 @@ func TestParseWikiUpdates_NumericConfidenceNotSkipped(t *testing.T) {
 		if string(updates[i].Confidence) != want {
 			t.Errorf("updates[%d].Confidence = %q, want %q", i, updates[i].Confidence, want)
 		}
+	}
+}
+
+// TestParseWikiUpdates_ObjectShapes guards the 2026-07-20 object-response bug:
+// the LLM sometimes ignores the bare-array contract and emits a wrapper object
+// or a single update object — both used to fail the whole cycle into an 8h
+// backoff. Both must unwrap; ambiguous objects still error.
+func TestParseWikiUpdates_ObjectShapes(t *testing.T) {
+	t.Run("wrapper object unwraps its array field", func(t *testing.T) {
+		text := `{"updates": [
+			{"action":"create","path":"a.md","title":"A"},
+			{"action":"update","path":"b.md","title":"B"}
+		]}`
+		updates, partial, err := parseWikiUpdates(text, nil)
+		if err != nil {
+			t.Fatalf("parse: %v (wrapper object used to fail here)", err)
+		}
+		if partial {
+			t.Error("intact wrapper must not report partial")
+		}
+		if len(updates) != 2 || updates[0].Path != "a.md" {
+			t.Fatalf("updates = %+v, want both items", updates)
+		}
+	})
+
+	t.Run("single update object becomes a one-item batch", func(t *testing.T) {
+		updates, partial, err := parseWikiUpdates(`{"action":"create","path":"a.md","title":"A"}`, nil)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if partial || len(updates) != 1 || updates[0].Path != "a.md" {
+			t.Fatalf("updates = %+v partial=%v, want the single item", updates, partial)
+		}
+	})
+
+	t.Run("truncated wrapper salvages the complete prefix", func(t *testing.T) {
+		text := `{"updates": [
+			{"action":"create","path":"a.md","title":"A"},
+			{"action":"create","path":"b.md","title":"B","content":"잘리는 중`
+		updates, partial, err := parseWikiUpdates(text, nil)
+		if err != nil {
+			t.Fatalf("expected salvage, got error: %v", err)
+		}
+		if !partial {
+			t.Error("truncated wrapper must report partial")
+		}
+		if len(updates) != 1 || updates[0].Path != "a.md" {
+			t.Fatalf("updates = %+v, want the one complete item", updates)
+		}
+	})
+
+	t.Run("object with no array and no item fields still errors", func(t *testing.T) {
+		if _, _, err := parseWikiUpdates(`{"note":"no updates here"}`, nil); err == nil {
+			t.Fatal("expected error for an unrecognizable object")
+		}
+	})
+}
+
+// TestNormalizeDreamAction pins the synonym fold: create/update variants map
+// onto the contract, empty defaults to update (create-on-missing), and
+// deletion-like or unknown verbs stay unknown so they are dropped, never
+// guessed into a destructive write.
+func TestNormalizeDreamAction(t *testing.T) {
+	cases := map[string]string{
+		"create": "create", "New": "create",
+		"update": "update", "append": "update", "Merge": "update",
+		"modify": "update", "edit": "update", "revise": "update", "add": "update",
+		"": "update", " Update ": "update",
+		"delete": "", "remove": "", "supersede": "", "rename": "",
+	}
+	for in, want := range cases {
+		if got := normalizeDreamAction(in); got != want {
+			t.Errorf("normalizeDreamAction(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestDreamTransientSynthesisBackoff verifies the short-retry ladder: a
+// transport-class synthesis failure holds ShouldDream for the retry delay
+// without consuming triggers, and the budget escalates to the full backoff
+// after wikiDreamTransientRetryMax consecutive misses (12 of 14 synthesis
+// failures in the 2026-07-20 week were transient and each cost a full 8h).
+func TestDreamTransientSynthesisBackoff(t *testing.T) {
+	wd := &WikiDreamer{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	wd.turnCount = wikiDreamTurnThreshold // trigger demand present
+
+	if !wd.ShouldDream(context.Background()) {
+		t.Fatal("turn threshold should trigger before any failure")
+	}
+	for i := 1; i <= wikiDreamTransientRetryMax; i++ {
+		if !wd.noteTransientSynthesisFailure() {
+			t.Fatalf("failure %d should stay within the short-retry budget", i)
+		}
+		if wd.ShouldDream(context.Background()) {
+			t.Fatalf("ShouldDream must be held during the retry delay (failure %d)", i)
+		}
+		// Simulate the delay passing: the hold expires, demand re-fires.
+		wd.cmu.Lock()
+		wd.synthRetryNotBefore = time.Now().Add(-time.Second)
+		wd.cmu.Unlock()
+		if !wd.ShouldDream(context.Background()) {
+			t.Fatalf("expired hold must release the trigger (failure %d)", i)
+		}
+	}
+	if wd.noteTransientSynthesisFailure() {
+		t.Fatal("budget exhausted: the caller must fall back to the full-interval backoff")
+	}
+	wd.clearTransientSynthesisFailures()
+	if wd.synthTransientFails != 0 || !wd.synthRetryNotBefore.IsZero() {
+		t.Fatal("success must clear the transient-failure state")
+	}
+	if !wd.ShouldDream(context.Background()) {
+		t.Fatal("cleared state must release the trigger")
 	}
 }
 
