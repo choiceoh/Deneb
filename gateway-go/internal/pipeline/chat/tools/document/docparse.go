@@ -75,10 +75,13 @@ func pdfToText(ctx context.Context, pdf []byte) (string, error) {
 		return "", err
 	}
 
-	text := strings.TrimSpace(out.String())
-	if text == "" {
+	text := out.String()
+	if strings.TrimSpace(text) == "" {
 		return "", fmt.Errorf("추출된 텍스트가 없습니다 (스캔본 PDF일 수 있음)")
 	}
+	// Returned untrimmed: form feeds are whitespace, so trimming here would
+	// swallow the separators of empty leading/trailing pages and shift every
+	// page index in pdfToTextStructured off by one.
 	return text, nil
 }
 
@@ -585,6 +588,60 @@ func rasterizePDF(ctx context.Context, pdf []byte, maxPages int) ([][]byte, erro
 	out := make([][]byte, maxN)
 	for n, b := range byNum {
 		out[n-1] = b
+	}
+	return out, nil
+}
+
+// rasterizePDFPages renders only the given 0-based page indices to PNG
+// (200 DPI) via pdftoppm — one bounded invocation per page, so a candidate
+// deep in a long document (a chart on page 27) doesn't require rasterizing
+// everything before it. Returns a map keyed by the same indices; a missing
+// key means that page failed to render (out of range, corrupt).
+func rasterizePDFPages(ctx context.Context, pdf []byte, pageIdx []int) (map[int][]byte, error) {
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		return nil, fmt.Errorf("pdftoppm 미설치 (poppler-utils)")
+	}
+
+	dir, err := os.MkdirTemp("", "deneb-pdfraster-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "in.pdf"), pdf, 0o600); err != nil {
+		return nil, err
+	}
+
+	runCtx, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+
+	for _, idx := range pageIdx {
+		n := strconv.Itoa(idx + 1)
+		// Every argument is a literal (page numbers are ints), no shell, and the
+		// command runs inside the temp dir — same containment as rasterizePDF.
+		rast := exec.CommandContext(runCtx, "pdftoppm", "-png", "-r", "200", "-f", n, "-l", n, "in.pdf", "page") //nolint:gosec // G204 — literal args, no shell, temp dir
+		rast.Dir = dir
+		_ = rast.Run() // a page out of range just produces no file
+	}
+
+	// pdftoppm may or may not zero-pad the page number depending on version —
+	// parse it back from the filename like rasterizePDF does.
+	files, _ := filepath.Glob(filepath.Join(dir, "page") + "-*.png")
+	out := make(map[int][]byte, len(pageIdx))
+	for _, f := range files {
+		numStr := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(f), "page-"), ".png")
+		n, err := strconv.Atoi(numStr)
+		if err != nil {
+			continue
+		}
+		b, rerr := os.ReadFile(f)
+		if rerr != nil {
+			continue
+		}
+		out[n-1] = b
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("래스터화된 페이지 없음")
 	}
 	return out, nil
 }
