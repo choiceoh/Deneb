@@ -169,3 +169,187 @@ func TestTruncateOldToolResults_ProtectsSkillsReadResult(t *testing.T) {
 		t.Errorf("skills read result was stubbed: %q", got[:min(40, len(got))])
 	}
 }
+
+// fetchToolsCallMsgInput is fetchToolsCallMsg with an explicit input JSON.
+func fetchToolsCallMsgInput(t *testing.T, id, input string) llm.Message {
+	t.Helper()
+	blocks := []llm.ContentBlock{{
+		Type: "tool_use", ID: id, Name: "fetch_tools",
+		Input: llm.FlexibleFromRaw([]byte(input)),
+	}}
+	raw, err := json.Marshal(blocks)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(raw)}
+}
+
+// errorResultMsgFor is toolResultMsgFor with is_error set.
+func errorResultMsgFor(t *testing.T, toolUseID, content string) llm.Message {
+	t.Helper()
+	blocks := []llm.ContentBlock{{Type: "tool_result", ToolUseID: toolUseID, Content: content, IsError: true}}
+	raw, err := json.Marshal(blocks)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return llm.Message{Role: "user", Content: llm.FlexibleFromRaw(raw)}
+}
+
+const dupPlaceholder = "[duplicate tool output cleared — an identical newer call in this session retains the full result]"
+
+// A habitual repeat of the same protected call (same input up to JSON key
+// order, byte-identical result) must not stay resident twice: the older copy
+// is stubbed, the newest keeps the payload. cache-cost-audit 2026-07-20 (7d):
+// 36 of 69 repeated fetch_tools calls happened with the earlier result still
+// resident, median 12.6KB per copy.
+func TestTruncateOldToolResults_StubsSupersededDuplicateSchema(t *testing.T) {
+	schema := strings.Repeat("도구 스키마 ", 100)
+	messages := []llm.Message{
+		fetchToolsCallMsgInput(t, "ft_1", `{"tools":["graphify"],"reason":"card"}`),
+		toolResultMsgFor(t, "ft_1", schema),
+		fetchToolsCallMsgInput(t, "ft_2", `{"reason":"card","tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_2", schema),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+		assistantMsg(t, "a6"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("stubbed = %d, want 1 (only the older duplicate)", stubbed)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != dupPlaceholder {
+		t.Errorf("older duplicate content = %q, want duplicate placeholder", got)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[3].Content.Bytes())); got != schema {
+		t.Errorf("newest copy was stubbed: %q", got[:min(40, len(got))])
+	}
+}
+
+// The newest copy can sit inside the protected tail; the older duplicate
+// before the cutoff is still cleared.
+func TestTruncateOldToolResults_SupersededByCopyBeyondCutoff(t *testing.T) {
+	schema := strings.Repeat("도구 스키마 ", 100)
+	messages := []llm.Message{
+		fetchToolsCallMsgInput(t, "ft_1", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_1", schema),
+		assistantMsg(t, "a2"),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		fetchToolsCallMsgInput(t, "ft_5", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_5", schema),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("stubbed = %d, want 1", stubbed)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != dupPlaceholder {
+		t.Errorf("older duplicate content = %q, want duplicate placeholder", got)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[6].Content.Bytes())); got != schema {
+		t.Errorf("newest copy in the protected tail was stubbed")
+	}
+}
+
+// Different inputs and drifted outputs are not duplicates — both copies stay
+// protected and resident.
+func TestTruncateOldToolResults_NoDedupAcrossInputOrOutputDrift(t *testing.T) {
+	schemaA := strings.Repeat("스키마 A ", 100)
+	schemaB := strings.Repeat("스키마 B ", 100)
+	messages := []llm.Message{
+		fetchToolsCallMsgInput(t, "ft_1", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_1", schemaA),
+		fetchToolsCallMsgInput(t, "ft_2", `{"tools":["observe"]}`), // different input
+		toolResultMsgFor(t, "ft_2", schemaA),
+		fetchToolsCallMsgInput(t, "ft_3", `{"tools":["graphify"]}`), // same input, drifted output
+		toolResultMsgFor(t, "ft_3", schemaB),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+		assistantMsg(t, "a6"),
+		assistantMsg(t, "a7"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 0 {
+		t.Fatalf("stubbed = %d, want 0 (no byte-identical newer copy)", stubbed)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != schemaA {
+		t.Errorf("ft_1 modified: %q", got[:min(40, len(got))])
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[5].Content.Bytes())); got != schemaB {
+		t.Errorf("ft_3 modified")
+	}
+}
+
+// A newer identical call that FAILED must not clear the older good copy —
+// the survivor is the newest non-error occurrence.
+func TestTruncateOldToolResults_ErrorRepeatDoesNotSupersede(t *testing.T) {
+	schema := strings.Repeat("도구 스키마 ", 100)
+	messages := []llm.Message{
+		fetchToolsCallMsgInput(t, "ft_1", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_1", schema),
+		fetchToolsCallMsgInput(t, "ft_2", `{"tools":["graphify"]}`),
+		errorResultMsgFor(t, "ft_2", schema),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+		assistantMsg(t, "a6"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 0 {
+		t.Fatalf("stubbed = %d, want 0 (error repeat keeps the older copy)", stubbed)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != schema {
+		t.Errorf("older good copy was stubbed")
+	}
+}
+
+// The duplicate stub keeps deferred-tool activation notices, same as the
+// normal stub path — history replay still sees the activation evidence.
+func TestTruncateOldToolResults_SupersededStubKeepsActivationNotice(t *testing.T) {
+	notice := "[스킬 필요 도구 활성화: graphify — 스키마가 로드되어 fetch_tools 없이 바로 호출할 수 있습니다.]"
+	schema := strings.Repeat("도구 스키마 ", 100) + "\n\n" + notice
+	messages := []llm.Message{
+		fetchToolsCallMsgInput(t, "ft_1", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_1", schema),
+		fetchToolsCallMsgInput(t, "ft_2", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_2", schema),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+		assistantMsg(t, "a6"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("stubbed = %d, want 1", stubbed)
+	}
+	got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes()))
+	if !strings.HasPrefix(got, dupPlaceholder) {
+		t.Errorf("stub must lead with the duplicate placeholder, got %q", got)
+	}
+	if !strings.Contains(got, notice) {
+		t.Errorf("stub must keep the activation notice, got %q", got)
+	}
+}
+
+// Small identical duplicates are not worth a prefix-cache break — minChars
+// gates the duplicate stub exactly like the normal stub.
+func TestTruncateOldToolResults_SmallDuplicatesStayResident(t *testing.T) {
+	small := strings.Repeat("가", 200) // 200 runes < 256
+	messages := []llm.Message{
+		fetchToolsCallMsgInput(t, "ft_1", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_1", small),
+		fetchToolsCallMsgInput(t, "ft_2", `{"tools":["graphify"]}`),
+		toolResultMsgFor(t, "ft_2", small),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+		assistantMsg(t, "a6"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 0 {
+		t.Fatalf("stubbed = %d, want 0 (below minChars)", stubbed)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != small {
+		t.Errorf("small duplicate modified: %q", got)
+	}
+}

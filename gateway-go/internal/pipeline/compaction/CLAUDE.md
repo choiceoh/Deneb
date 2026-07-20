@@ -13,7 +13,8 @@ and never owns durable session state.
 - `embedding.go` provides relevance/diversity selection with recency fallback.
 - `protected.go` (protected-tool helpers) and `micro.go` shrink historical
   results without breaking tool pairs or protected payloads (fetch_tools
-  schemas, skills read/list results).
+  schemas, skills read/list results); byte-identical older duplicates of a
+  protected call are deduped to the newest copy.
 - `restore.go` removes thinking blocks and recovers recent file-read context.
 - `context_fence.go`: `FormatContextFence` marks untrusted recovered context.
 

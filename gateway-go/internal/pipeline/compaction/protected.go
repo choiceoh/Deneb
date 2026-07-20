@@ -91,3 +91,104 @@ func isProtectedToolUse(b llm.ContentBlock) bool {
 		return false
 	}
 }
+
+// supersededProtectedResultIDs returns the tool_use ids of protected results
+// that a newer identical call has superseded: same tool name, same canonical
+// input JSON, and byte-identical result content. Protection keeps habitually
+// repeated calls resident FOREVER — every copy of the same payload piles up
+// in the session (cache-cost-audit 2026-07-20, 7d: 36 of 69 repeated
+// fetch_tools calls happened while the earlier result was still resident,
+// median result 12.6KB). Tier 2b may stub these older duplicates: the content
+// survives verbatim at the newest copy, so no re-fetch is provoked.
+//
+// The survivor is the newest non-error occurrence in each group. Older copies
+// qualify only when their content equals the survivor's exactly — output
+// drift, error results, and spilled results (unique sp_ ids) never match, so
+// nothing non-redundant is ever cleared.
+func supersededProtectedResultIDs(messages []llm.Message, protected map[string]bool) map[string]bool {
+	if len(protected) == 0 {
+		return nil
+	}
+
+	// Key each protected call by (tool name, canonical input JSON).
+	keys := map[string]string{}
+	for _, m := range messages {
+		if m.Role != "assistant" {
+			continue
+		}
+		var blocks []llm.ContentBlock
+		if err := json.Unmarshal(m.Content.Bytes(), &blocks); err != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type == "tool_use" && protected[b.ID] {
+				keys[b.ID] = b.Name + "\x00" + canonicalJSON(b.Input.Bytes())
+			}
+		}
+	}
+
+	// Collect each group's results in conversation order.
+	type occurrence struct {
+		id      string
+		content string
+		isError bool
+	}
+	groups := map[string][]occurrence{}
+	for _, m := range messages {
+		var blocks []llm.ContentBlock
+		if err := json.Unmarshal(m.Content.Bytes(), &blocks); err != nil {
+			continue
+		}
+		for _, b := range blocks {
+			if b.Type != "tool_result" {
+				continue
+			}
+			key, ok := keys[b.ToolUseID]
+			if !ok {
+				continue
+			}
+			groups[key] = append(groups[key], occurrence{b.ToolUseID, b.Content, b.IsError})
+		}
+	}
+
+	var superseded map[string]bool
+	for _, occ := range groups {
+		survivor := -1
+		for i := len(occ) - 1; i >= 0; i-- {
+			if !occ[i].isError {
+				survivor = i
+				break
+			}
+		}
+		if survivor <= 0 {
+			continue
+		}
+		for i := 0; i < survivor; i++ {
+			if occ[i].content != occ[survivor].content {
+				continue
+			}
+			if superseded == nil {
+				superseded = map[string]bool{}
+			}
+			superseded[occ[i].id] = true
+		}
+	}
+	return superseded
+}
+
+// canonicalJSON re-marshals input JSON so that key order cannot defeat
+// duplicate detection; non-JSON input falls back to the raw string.
+func canonicalJSON(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return string(raw)
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return string(raw)
+	}
+	return string(b)
+}
