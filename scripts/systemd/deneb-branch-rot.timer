@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Deneb branch-rot miner weekly
+
+[Timer]
+# Monday early morning, after the nightly benches; branch rot moves at repo
+# cadence, weekly is plenty (candidates are capped and deduped per run).
+OnCalendar=Mon *-*-* 05:10:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
