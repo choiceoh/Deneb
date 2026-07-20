@@ -169,6 +169,12 @@ def main() -> int:
         help="gateway-classified dispatch phase; marker projection only",
     )
     ap.add_argument(
+        "--decline-note",
+        default="",
+        help="executor-authored decline reason (.dispatch-decline.md); stored "
+        "as declineReason when the final outcome is declined",
+    )
+    ap.add_argument(
         "--upgrade-only",
         action="store_true",
         help="reprobe mode: upgrade to landed on MERGED; preserve marker mtime "
@@ -233,6 +239,11 @@ def main() -> int:
     marker["outcomeAt"] = int(time.time() * 1000)
     if pr_state:
         marker["outcomePrState"] = pr_state
+    # A structured decline reason spares post-mortems the session-transcript
+    # archaeology (2026-07-20: "why declined" required digging a 39K-line log).
+    decline_note = args.decline_note.strip()
+    if outcome == "declined" and decline_note:
+        marker["declineReason"] = decline_note[:1000]
 
     write_marker(path, marker, mtime_sec=prior_mtime if args.preserve_mtime else None)
     print(outcome)

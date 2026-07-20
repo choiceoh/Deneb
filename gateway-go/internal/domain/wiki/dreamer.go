@@ -6,8 +6,10 @@ package wiki
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +44,22 @@ const (
 	diaryProcessStateFile = ".diary-process-state.json"
 	dreamProposalFile     = ".dream-last-proposal.json"
 	processedCapsuleLimit = 12
+	// Transient-failure retry: a synthesis LLM call that dies on transport
+	// (wormhole timeout, deploy hot-swap canceling the context) used to back
+	// off the full 8h interval — 12 of the 14 synthesis failures in the week
+	// of 2026-07-20 were this class, each costing a cycle. Such failures now
+	// hold ShouldDream for a short delay and retry, escalating to the full
+	// backoff after wikiDreamTransientRetryMax consecutive misses so a wedged
+	// backend still cannot hot-loop.
+	wikiDreamTransientRetryDelay = 30 * time.Minute
+	wikiDreamTransientRetryMax   = 2
 )
+
+// errSynthesisLLMCall marks a synthesis failure where the LLM call itself
+// died (transport/backend), as opposed to a parse failure on a delivered
+// response. Call failures are transient by nature — nothing was consumed —
+// so the cycle retries on the short delay instead of a full interval.
+var errSynthesisLLMCall = errors.New("synthesis LLM call")
 
 // Compile-time interface compliance.
 var _ autonomous.Dreamer = (*WikiDreamer)(nil)
@@ -153,12 +170,24 @@ type WikiDreamer struct {
 	// the capsule itself is already on disk and the regular thresholds still
 	// pick it up.
 	prefSignals int
+	// synthRetryNotBefore holds ShouldDream after a transient synthesis
+	// failure (see errSynthesisLLMCall); synthTransientFails counts the
+	// consecutive misses that escalate to a full-interval backoff. In-memory
+	// on purpose: when a deploy hot-swap kills the synthesis call, the fresh
+	// process retries on its first tick (lastDream was not advanced).
+	synthRetryNotBefore time.Time
+	synthTransientFails int
 
 	// polarisContextFn optionally returns formatted recent polaris compression
 	// summaries to inject into the synthesis prompt as a higher-density fact
 	// source alongside raw diary entries. Wired by the chat pipeline; the wiki
 	// package does not import polaris directly.
 	polarisContextFn func() string
+
+	// rulesEvolve arms the RHI self-comparison + rules-revision lane
+	// (dreamer_selfcompare.go). Off by default; the server enables it only for
+	// the production state dir.
+	rulesEvolve bool
 
 	// workspaceDir is the agent workspace containing MEMORY.md. Empty disables
 	// memory curation (see memory_curation.go).
@@ -298,7 +327,15 @@ func (wd *WikiDreamer) ShouldDream(_ context.Context) bool {
 	turns := wd.turnCount
 	last := wd.lastDream
 	prefs := wd.prefSignals
+	hold := wd.synthRetryNotBefore
 	wd.cmu.Unlock()
+
+	// A transient synthesis failure holds every trigger (turns included —
+	// active chatting must not hot-loop a dead LLM backend) until the retry
+	// delay passes.
+	if time.Now().Before(hold) {
+		return false
+	}
 
 	if turns >= wikiDreamTurnThreshold {
 		wd.logger.Info("wiki-dream: turn threshold reached", "turns", turns)
@@ -329,9 +366,13 @@ type dreamCycle struct {
 	updates     []wikiUpdate
 	partial     bool
 	proposal    dreamProposalReport
-	created     int
-	updated     int
-	userPages   int
+	// prevProposal is the last cycle's persisted report, loaded before this
+	// cycle's save overwrites it — the self-comparison anchor (rulesEvolve
+	// lane only; nil otherwise).
+	prevProposal *dreamProposalReport
+	created      int
+	updated      int
+	userPages    int
 	// appliedPaths are the pages this cycle actually wrote (created or
 	// updated). The processed-capsule history records THESE, not the proposed
 	// paths — a dropped proposal never existed on disk, and recording it would
@@ -372,6 +413,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 	wd.applyDreamUpdates(ctx, cycle)
 	wd.captureDreamOpenLoops(ctx, cycle)
 	wd.captureDreamThemes(ctx, cycle)
+	wd.captureDreamSelfComparison(ctx, cycle)
 	wd.seedDreamPersonPages(ctx, cycle)
 	wd.applyDreamProjectDigests(ctx, cycle)
 	wd.applyDreamUserDirectives(cycle)
@@ -479,11 +521,19 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 
 	updates, partial, err := wd.synthesize(ctx, cycle.synthInput, cycle.scan.State)
 	if err != nil {
+		if errors.Is(err, errSynthesisLLMCall) && wd.noteTransientSynthesisFailure() {
+			wd.logger.Error("wiki-dream: synthesis failed; retrying after short delay",
+				"error", err, "retryIn", wikiDreamTransientRetryDelay)
+			cycle.addPhaseError("synthesis (transient): %v", err)
+			wd.finishTransientDreamSynthesis(cycle)
+			return false
+		}
 		wd.logger.Error("wiki-dream: synthesis failed; backing off one interval", "error", err)
 		cycle.addPhaseError("synthesis: %v", err)
 		wd.finishFailedDreamSynthesis(cycle)
 		return false
 	}
+	wd.clearTransientSynthesisFailures()
 	// WikiUpdatesProposed counts what synthesis proposed, BEFORE the critique —
 	// so the quality precision axis (applied/proposed) reflects both the offline
 	// critique and the apply guards.
@@ -497,6 +547,12 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 	cycle.updates = updates
 	cycle.partial = partial
 	cycle.proposal = buildDreamProposalReport(cycle.scan, updates)
+	// Stash the PREVIOUS cycle's report before the save below overwrites it —
+	// the self-comparison pass judges this cycle against it (RHI trajectory-
+	// local anchor, dreamer_selfcompare.go).
+	if wd.rulesEvolve {
+		cycle.prevProposal = wd.loadPrevDreamProposal()
+	}
 	cycle.report.WikiProposalPath = wd.dreamProposalPath()
 	if err := wd.saveDreamProposalReport(cycle.proposal); err != nil {
 		cycle.addPhaseError("proposal-save: %v", err)
@@ -504,11 +560,56 @@ func (wd *WikiDreamer) synthesizeDreamCycle(ctx context.Context, cycle *dreamCyc
 	return true
 }
 
+// loadPrevDreamProposal reads the last cycle's persisted proposal report; nil
+// when absent or unreadable (first cycle, rotated state).
+func (wd *WikiDreamer) loadPrevDreamProposal() *dreamProposalReport {
+	data, err := os.ReadFile(wd.dreamProposalPath())
+	if err != nil {
+		return nil
+	}
+	var report dreamProposalReport
+	if json.Unmarshal(data, &report) != nil {
+		return nil
+	}
+	return &report
+}
+
 func (wd *WikiDreamer) finishFailedDreamSynthesis(cycle *dreamCycle) {
 	// Back off a full interval so a missing or wedged LLM cannot hot-loop.
 	wd.resetCounters()
 	cycle.report.PhaseErrors = cycle.phaseErrors
 	cycle.report.DurationMs = time.Since(cycle.startedAt).Milliseconds()
+}
+
+// finishTransientDreamSynthesis records the failure WITHOUT consuming the
+// cycle's triggers: turn count, pref signals and lastDream stay so the retry
+// (gated by synthRetryNotBefore) re-fires on the same accumulated demand.
+func (wd *WikiDreamer) finishTransientDreamSynthesis(cycle *dreamCycle) {
+	cycle.report.PhaseErrors = cycle.phaseErrors
+	cycle.report.DurationMs = time.Since(cycle.startedAt).Milliseconds()
+}
+
+// noteTransientSynthesisFailure arms the short-delay retry. It returns false
+// once the consecutive-failure budget is spent — the caller then falls back
+// to the full-interval backoff — and resets the streak so the next interval
+// starts with a fresh budget.
+func (wd *WikiDreamer) noteTransientSynthesisFailure() bool {
+	wd.cmu.Lock()
+	defer wd.cmu.Unlock()
+	wd.synthTransientFails++
+	if wd.synthTransientFails > wikiDreamTransientRetryMax {
+		wd.synthTransientFails = 0
+		return false
+	}
+	wd.synthRetryNotBefore = time.Now().Add(wikiDreamTransientRetryDelay)
+	return true
+}
+
+func (wd *WikiDreamer) clearTransientSynthesisFailures() {
+	wd.cmu.Lock()
+	wd.synthTransientFails = 0
+	wd.synthRetryNotBefore = time.Time{}
+	wd.cmu.Unlock()
 }
 
 func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle) {

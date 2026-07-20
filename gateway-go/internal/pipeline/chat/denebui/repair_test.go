@@ -154,6 +154,30 @@ func TestRepairFenceGlitches_RestartKeepsOpenerProsePrefix(t *testing.T) {
 	}
 }
 
+// Cards that document fence syntax inside <markdown> must not be truncated by
+// restart detection.
+func TestRepairFenceGlitches_MarkdownTutorialUntouched(t *testing.T) {
+	in := strings.Join([]string{
+		"```deneb-ui",
+		"<column>",
+		"<markdown>",
+		"Example fence:",
+		"```",
+		"deneb-ui",
+		"</markdown>",
+		"</column>",
+		"```",
+	}, "\n")
+
+	got, repaired := RepairFenceGlitches(in)
+	if repaired {
+		t.Fatalf("markdown tutorial was corrupted:\n%s", got)
+	}
+	if got != in {
+		t.Fatalf("content changed:\n%s", got)
+	}
+}
+
 // NormalizeFinalReply must deliver a repaired card instead of raw markup.
 func TestNormalizeFinalReply_RepairsSplitOpener(t *testing.T) {
 	in := strings.Join([]string{

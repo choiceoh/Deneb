@@ -43,6 +43,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
 const (
@@ -75,6 +76,18 @@ const (
 	runtimeErrorStateTTL = 7 * 24 * time.Hour
 	// runtimeErrorMaxCandidatesPerRun bounds queue growth per run.
 	runtimeErrorMaxCandidatesPerRun = 2
+	// runtimeErrorFreshnessWindow keeps self-resolved bursts out of dispatch:
+	// a signature whose LAST occurrence is older than this is history, not a
+	// live defect. Live 2026-07-20: a wormhole/kimi outage burst from the
+	// 07-18/19 window — already fixed operator-side — burned 2 of the day's 4
+	// dispatch slots on candidates codex could only decline. The 7d TTL still
+	// keeps such signatures as evidence; they just cannot author dispatches
+	// until they fire again.
+	runtimeErrorFreshnessWindow = 24 * time.Hour
+	// runtimeErrorImpactQuietTargetHours defines "fixed" for the impact
+	// contract issued with each candidate: the signature staying quiet this
+	// long after the fix survived the rollback watch verifies usefulness.
+	runtimeErrorImpactQuietTargetHours = 48
 	// runtimeErrorRingScan is how many recent error lines to pull from the ring.
 	runtimeErrorRingScan = 3000
 	// runtimeErrorSourcePrefix is the candidate Source namespace. On the
@@ -85,6 +98,11 @@ const (
 	// runtimeErrorMiningSkill labels these non-skill, runtime-level candidates.
 	runtimeErrorMiningSkill = "gateway-runtime"
 )
+
+// runtimeErrorImpactObservationWindow delays impact measurement until the
+// quiet-hours metric can actually reach its target. Var, not const: tests
+// shrink it to measure immediately.
+var runtimeErrorImpactObservationWindow = runtimeErrorImpactQuietTargetHours * time.Hour
 
 // externalFaultPattern matches transient/external faults that are NOT source
 // defects — they must never become code candidates.
@@ -338,14 +356,28 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 	}
 
 	// Deterministic order: most-recurring first, signature as tie-break.
+	// Freshness gate: recurrence alone is not enough — the signature must
+	// still be firing, or the "defect" is a self-resolved burst that would
+	// only burn a dispatch slot on an honest decline.
+	freshCutoff := now.Add(-runtimeErrorFreshnessWindow).UnixMilli()
+	staleHeld := 0
 	ranked := make([]*runtimeErrorAgg, 0, len(state.Sigs))
 	for sig, e := range state.Sigs {
-		if e.Count >= e.recurrenceFloor() {
-			ranked = append(ranked, &runtimeErrorAgg{
-				sig: sig, count: e.Count, lastAt: e.LastAt,
-				exampleMsg: e.ExampleMsg, exampleErr: e.ExampleErr,
-			})
+		if e.Count < e.recurrenceFloor() {
+			continue
 		}
+		if e.LastAt < freshCutoff {
+			staleHeld++
+			continue
+		}
+		ranked = append(ranked, &runtimeErrorAgg{
+			sig: sig, count: e.Count, lastAt: e.LastAt,
+			exampleMsg: e.ExampleMsg, exampleErr: e.ExampleErr,
+		})
+	}
+	if staleHeld > 0 {
+		logger.Debug("runtime-error-mining: recurring-but-quiet signatures held out of authoring",
+			"held", staleHeld, "freshnessWindow", runtimeErrorFreshnessWindow)
 	}
 	sort.Slice(ranked, func(i, j int) bool {
 		if ranked[i].count != ranked[j].count {
@@ -372,7 +404,7 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 		if selfCorrectionReopenBlocked(existing, source, a.lastAt, now) {
 			continue
 		}
-		evidence := buildRuntimeErrorEvidence(a)
+		evidence := buildRuntimeErrorEvidence(a, now)
 		if _, rerr := t.Tracker.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 			Scope:     "code",
 			SkillName: runtimeErrorMiningSkill,
@@ -385,6 +417,17 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 			Risk: "Diagnose from the evidence before editing. If the root cause is not clearly in our source " +
 				"(external dependency, user input, transient), land nothing and record why.",
 			Source: source,
+			// The usefulness contract this miner can measure itself: the
+			// signature staying quiet after the fix. measurePendingImpacts
+			// closes the loop from the same rolling window.
+			ImpactContract: &rsilifecycle.ImpactContract{
+				Metric:              "quiet-hours since last occurrence of runtime-error signature " + runtimeErrorSignatureHash(a.sig),
+				Direction:           selfCorrectionImpactDirectionIncrease,
+				Baseline:            0,
+				Target:              runtimeErrorImpactQuietTargetHours,
+				MinSamples:          1,
+				ObservationWindowMs: runtimeErrorImpactObservationWindow.Milliseconds(),
+			},
 		}); rerr != nil {
 			// Forbidden-surface rejections are expected and healthy (errors born
 			// in acceptance-machinery/security code must not become auto-fix
@@ -399,15 +442,68 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 		logger.Info("runtime-error-mining: authored code candidates for recurring errors (propose-only)",
 			"count", authored, "distinctSignatures", len(ranked))
 	}
+	t.measurePendingImpacts(existing, state, now, logger)
 	return nil
 }
 
+// measurePendingImpacts closes the usefulness loop on this miner's landed
+// candidates: a watch_passed dispatch with an unmeasured impact contract is
+// judged against the live rolling window. The metric is quiet-hours since the
+// signature last fired — a fixed defect verifies deterministically, a
+// persisting one records no_effect (before this, 6 of 7 landed L4 candidates
+// had no effect measurement at all: 확인 0 · 대기 1 on 2026-07-20). Errors are
+// expected while the observation window is still open; those stay at Debug
+// and retry on the next mining run.
+func (t *RuntimeErrorMiningTask) measurePendingImpacts(existing []SelfCorrectionCandidateRecord, state *runtimeErrorState, now time.Time, logger *slog.Logger) {
+	for i := range existing {
+		cand := existing[i]
+		if !strings.HasPrefix(cand.Source, runtimeErrorSourcePrefix+":") {
+			continue
+		}
+		if cand.DispatchPhase != selfCorrectionDispatchWatchPassed ||
+			cand.ImpactContract == nil || cand.ImpactResult != nil {
+			continue
+		}
+		// A signature absent from the rolling state aged out entirely — quiet
+		// for at least the window TTL.
+		quietHours := runtimeErrorStateTTL.Hours()
+		if e, ok := state.Sigs[cand.Candidate]; ok {
+			quietHours = now.Sub(time.UnixMilli(e.LastAt)).Hours()
+		}
+		if quietHours < 0 {
+			quietHours = 0
+		}
+		rec, err := t.Tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+			ID:        cand.ID,
+			AttemptID: cand.AttemptID,
+			ImpactResult: &rsilifecycle.ImpactResult{
+				Observed: quietHours,
+				Samples:  1,
+				Note:     "runtime-error miner self-measurement: quiet-hours from the rolling signature window",
+			},
+		})
+		if err != nil {
+			logger.Debug("runtime-error-mining: impact measurement deferred",
+				"id", cand.ID, "error", err)
+			continue
+		}
+		status := ""
+		if rec.ImpactResult != nil {
+			status = rec.ImpactResult.Status
+		}
+		logger.Info("runtime-error-mining: impact verdict recorded",
+			"id", cand.ID, "status", status, "quietHours", int(quietHours))
+	}
+}
+
 // buildRuntimeErrorEvidence renders the grounded evidence block: recurrence
-// count, the example message, and the most useful attrs (error, runId).
-func buildRuntimeErrorEvidence(a *runtimeErrorAgg) string {
+// count, recency, the example message, and the most useful attrs (error, runId).
+func buildRuntimeErrorEvidence(a *runtimeErrorAgg, now time.Time) string {
 	var b strings.Builder
 	b.WriteString(strconv.Itoa(a.count))
-	b.WriteString("× in the rolling 7d window (restart-surviving). example: ")
+	b.WriteString("× in the rolling 7d window (restart-surviving); last seen ")
+	b.WriteString(now.Sub(time.UnixMilli(a.lastAt)).Round(time.Minute).String())
+	b.WriteString(" ago. example: ")
 	b.WriteString(common.TruncateRunes(a.exampleMsg, 300))
 	if e := strings.TrimSpace(a.exampleErr); e != "" {
 		b.WriteString("\nerror=")

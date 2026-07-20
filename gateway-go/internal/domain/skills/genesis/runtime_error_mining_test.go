@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,6 +148,14 @@ func TestRuntimeErrorMining_RecurringCodeErrorBecomesCandidate(t *testing.T) {
 	if got := c.Source; len(got) < len(runtimeErrorSourcePrefix) || got[:len(runtimeErrorSourcePrefix)] != runtimeErrorSourcePrefix {
 		t.Fatalf("candidate source = %q, want %s prefix", c.Source, runtimeErrorSourcePrefix)
 	}
+	// Every authored candidate carries the self-measurable usefulness contract
+	// (quiet-hours after the fix) — landed dispatches without one were
+	// invisible to effect judgment (확인 0 · 대기 1 on 2026-07-20).
+	if c.ImpactContract == nil ||
+		c.ImpactContract.Direction != selfCorrectionImpactDirectionIncrease ||
+		c.ImpactContract.Target != runtimeErrorImpactQuietTargetHours {
+		t.Fatalf("candidate must carry the quiet-hours impact contract: %+v", c.ImpactContract)
+	}
 
 	// Second run over the same ring → dedup, no new candidate.
 	if err := task.Run(context.Background()); err != nil {
@@ -155,6 +164,93 @@ func TestRuntimeErrorMining_RecurringCodeErrorBecomesCandidate(t *testing.T) {
 	again, _ := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50)
 	if len(again) != 1 {
 		t.Fatalf("dedup failed: %d candidates after re-run", len(again))
+	}
+}
+
+// TestRuntimeErrorMining_StaleSignaturesHeldFromAuthoring guards the
+// freshness gate: a signature that recurred past the floor but stopped firing
+// (self-resolved burst — live 2026-07-20: a fixed wormhole/kimi outage burned
+// 2 dispatch slots on honest declines) must not author a candidate. The 7d
+// TTL still keeps it as evidence.
+func TestRuntimeErrorMining_StaleSignaturesHeldFromAuthoring(t *testing.T) {
+	staleBase := time.Now().Add(-3 * 24 * time.Hour).UnixMilli()
+	var lines []observe.LogLine
+	for i := 0; i < 6; i++ { // recurring but quiet for 3d
+		lines = append(lines, observe.LogLine{Ts: staleBase + int64(i), Level: "error", Msg: "stale burst defect in xHandler"})
+	}
+	for i := 0; i < 6; i++ { // recurring AND still firing
+		lines = append(lines, errLine("live defect in yHandler seq=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, lines)
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected only the live signature to author, got %d: %+v", len(got), got)
+	}
+	if !strings.Contains(got[0].Title, "live defect") {
+		t.Fatalf("wrong signature authored: %q", got[0].Title)
+	}
+	if e := loadRuntimeErrorState(task.StatePath).Sigs[normalizeErrorSignature("stale burst defect in xHandler")]; e == nil {
+		t.Fatal("stale signature must stay in the rolling window as evidence")
+	}
+}
+
+// TestRuntimeErrorMining_SelfMeasuresImpactAfterWatchPass closes problem 7's
+// loop in miniature: author (contract attached) → accept → deliver to
+// watch_passed → the next mining run measures quiet-hours from the rolling
+// window and records the usefulness verdict itself.
+func TestRuntimeErrorMining_SelfMeasuresImpactAfterWatchPass(t *testing.T) {
+	prevWindow := runtimeErrorImpactObservationWindow
+	runtimeErrorImpactObservationWindow = 0
+	defer func() { runtimeErrorImpactObservationWindow = prevWindow }()
+
+	var lines []observe.LogLine
+	for i := 0; i < 6; i++ {
+		lines = append(lines, errLine("nil deref in fooHandler seq=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, lines)
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 10)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("expected 1 authored candidate (err=%v), got %d", err, len(got))
+	}
+	cand := got[0]
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: cand.ID, Status: SelfCorrectionStatusAccepted, Reviewer: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	watchPassImpactCandidate(t, tracker, cand.ID, "attempt-1")
+
+	// The fix landed and the signature went quiet for 72h (> target 48h).
+	st := loadRuntimeErrorState(task.StatePath)
+	for _, e := range st.Sigs {
+		e.LastAt = time.Now().Add(-72 * time.Hour).UnixMilli()
+	}
+	if err := saveRuntimeErrorState(task.StatePath, st); err != nil {
+		t.Fatal(err)
+	}
+
+	task.ErrorLines = func(int) []observe.LogLine { return nil }
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("expected the single candidate back (err=%v), got %d", err, len(rows))
+	}
+	if rows[0].ImpactResult == nil {
+		t.Fatalf("mining run must record the impact verdict itself: %+v", rows[0])
+	}
+	if rows[0].ImpactResult.Status != selfCorrectionImpactVerified {
+		t.Fatalf("quiet 72h >= target 48h must verify, got %q", rows[0].ImpactResult.Status)
 	}
 }
 

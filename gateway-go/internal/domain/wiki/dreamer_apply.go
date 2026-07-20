@@ -132,32 +132,61 @@ type wikiUpdate struct {
 func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, partial bool, err error) {
 	var rawItems []json.RawMessage
 	if uerr := json.Unmarshal([]byte(text), &rawItems); uerr != nil {
-		// Damaged array — a mid-string truncation (output budget) or a stray
-		// unescaped character inside a Korean value (observed 2026-07-03:
-		// "invalid character 'ì' after object key:value pair") used to zero
-		// the whole cycle and back off 8h. Salvage every complete element
-		// before the damage point instead; only a response that is not a JSON
-		// array at all still fails (worth backing off on). A COMPLETE array
-		// followed by trailing junk (which also fails the strict Unmarshal) is
-		// not damage — nothing was lost, so it must not report partial, or the
-		// caller would hold diary offsets and re-consume the cycle for nothing.
-		salvaged, complete := salvageJSONArrayPrefix(text)
-		if len(salvaged) == 0 && !complete {
-			return nil, false, uerr
-		}
-		if logger != nil {
-			if complete {
-				logger.Warn("wiki-dream: synthesis array carried trailing junk; using the complete array",
-					"error", uerr, "items", len(salvaged))
-			} else {
-				logger.Warn("wiki-dream: synthesis array damaged; applying salvaged prefix",
-					"error", uerr, "salvaged", len(salvaged))
+		// Object-shaped response — the LLM sometimes ignores the bare-array
+		// contract and emits either a single update object or a wrapper like
+		// {"updates": [...]} (observed 2026-07-20, full cycle lost to backoff).
+		// Both carry valid knowledge; unwrap instead of failing.
+		if arr, shape, ok := unwrapUpdatesObject(text); ok {
+			if logger != nil {
+				logger.Warn("wiki-dream: synthesis returned an object; unwrapped",
+					"shape", shape, "items", len(arr))
 			}
+			rawItems = arr
+		} else {
+			return parseWikiUpdatesSalvage(text, uerr, logger)
 		}
-		rawItems = salvaged
-		partial = !complete
 	}
-	updates = make([]wikiUpdate, 0, len(rawItems))
+	return decodeWikiUpdateItems(rawItems, false, logger)
+}
+
+// parseWikiUpdatesSalvage is the damaged-response tail of parseWikiUpdates.
+// A mid-string truncation (output budget) or a stray unescaped character
+// inside a Korean value (observed 2026-07-03: "invalid character 'ì' after
+// object key:value pair") used to zero the whole cycle and back off 8h.
+// Salvage every complete element before the damage point instead; only a
+// response that is not a JSON array at all still fails (worth backing off
+// on). A COMPLETE array followed by trailing junk (which also fails the
+// strict Unmarshal) is not damage — nothing was lost, so it must not report
+// partial, or the caller would hold diary offsets and re-consume the cycle
+// for nothing. A damaged OBJECT wrapper still has its updates array inside —
+// slice from the first '[' so the array salvage applies there too.
+func parseWikiUpdatesSalvage(text string, uerr error, logger *slog.Logger) ([]wikiUpdate, bool, error) {
+	salvageText := text
+	if t := strings.TrimSpace(text); t != "" && t[0] == '{' {
+		if idx := strings.Index(t, "["); idx >= 0 {
+			salvageText = t[idx:]
+		}
+	}
+	salvaged, complete := salvageJSONArrayPrefix(salvageText)
+	if len(salvaged) == 0 && !complete {
+		return nil, false, uerr
+	}
+	if logger != nil {
+		if complete {
+			logger.Warn("wiki-dream: synthesis array carried trailing junk; using the complete array",
+				"error", uerr, "items", len(salvaged))
+		} else {
+			logger.Warn("wiki-dream: synthesis array damaged; applying salvaged prefix",
+				"error", uerr, "salvaged", len(salvaged))
+		}
+	}
+	return decodeWikiUpdateItems(salvaged, !complete, logger)
+}
+
+// decodeWikiUpdateItems decodes each raw element leniently: one malformed
+// item is skipped (logged), not fatal to the batch.
+func decodeWikiUpdateItems(rawItems []json.RawMessage, partial bool, logger *slog.Logger) ([]wikiUpdate, bool, error) {
+	updates := make([]wikiUpdate, 0, len(rawItems))
 	skipped := 0
 	for _, item := range rawItems {
 		var u wikiUpdate
@@ -176,6 +205,43 @@ func parseWikiUpdates(text string, logger *slog.Logger) (updates []wikiUpdate, p
 			"skipped", skipped, "applied", len(updates))
 	}
 	return updates, partial, nil
+}
+
+// unwrapUpdatesObject handles the two object-shaped synthesis responses seen
+// in place of the contract's bare array: a single update object (item fields
+// at top level) and a wrapper object holding the array under one key. Returns
+// ok=false for anything ambiguous — the caller then runs the salvage path.
+func unwrapUpdatesObject(text string) (items []json.RawMessage, shape string, ok bool) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || trimmed[0] != '{' {
+		return nil, "", false
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(trimmed), &obj); err != nil {
+		return nil, "", false
+	}
+	// Single update object: action+path identify it as one item, not a wrapper.
+	if _, hasAction := obj["action"]; hasAction {
+		if _, hasPath := obj["path"]; hasPath {
+			return []json.RawMessage{json.RawMessage(trimmed)}, "single-update", true
+		}
+	}
+	// Wrapper: exactly one array-valued field carries the updates. More than
+	// one array field is ambiguous — refuse rather than guess.
+	var arrays [][]json.RawMessage
+	for _, v := range obj {
+		if t := strings.TrimSpace(string(v)); t == "" || t[0] != '[' {
+			continue
+		}
+		var arr []json.RawMessage
+		if err := json.Unmarshal(v, &arr); err == nil {
+			arrays = append(arrays, arr)
+		}
+	}
+	if len(arrays) == 1 {
+		return arrays[0], "wrapper", true
+	}
+	return nil, "", false
 }
 
 // salvageJSONArrayPrefix decodes complete elements off the front of a JSON
@@ -243,7 +309,9 @@ func (wd *WikiDreamer) synthesize(ctx context.Context, diaryContent string, stat
 	resp, err := wd.client.Complete(ctx,
 		wd.llmRequest("You are a wiki knowledge base maintainer. Respond only with a JSON array.", prompt, wd.synthesisBudget()))
 	if err != nil {
-		return nil, false, fmt.Errorf("LLM call: %w", err)
+		// errSynthesisLLMCall marks this as transient (nothing was delivered);
+		// the caller retries on the short delay instead of a full interval.
+		return nil, false, fmt.Errorf("%w: %w", errSynthesisLLMCall, err)
 	}
 
 	// Extract JSON from response.
@@ -539,6 +607,14 @@ func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
 	if u.Path == "" || u.Title == "" {
 		return u, false
 	}
+	// Fold action synonyms onto the create/update contract early so the
+	// retarget guard (which matches on "create") and the persist dispatch see
+	// the canonical verb. Unknown verbs pass through and are dropped (logged)
+	// at persistDreamUpdate — deletion-like verbs must never be inferred.
+	if canonical := normalizeDreamAction(u.Action); canonical != "" && canonical != u.Action {
+		wd.logger.Info("wiki-dream: normalized update action", "from", u.Action, "to", canonical, "path", u.Path)
+		u.Action = canonical
+	}
 	// Store.WritePage also strips frontmatter on create, but update content is
 	// merged before that boundary and must be cleaned here.
 	u.Content = stripLeadingFrontmatter(u.Content)
@@ -635,6 +711,23 @@ type dreamWriteOutcome struct {
 	updated int
 	wrote   bool
 	failed  bool
+}
+
+// normalizeDreamAction folds the LLM's action synonyms onto the create/update
+// contract. An empty action defaults to "update" (updateDreamPage creates the
+// page when missing, so no knowledge is lost either way). Unknown verbs —
+// notably anything deletion-like — return "" and stay dropped by the caller:
+// destructive intent must never be inferred from a fuzzy match. Observed
+// 2026-07-20: "unknown update action dropped" ×2 in the 7d journal window.
+func normalizeDreamAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "create", "new":
+		return "create"
+	case "update", "", "append", "merge", "modify", "edit", "revise", "add":
+		return "update"
+	default:
+		return ""
+	}
 }
 
 // persistDreamUpdate owns the create/update dispatch. Unknown actions retain
