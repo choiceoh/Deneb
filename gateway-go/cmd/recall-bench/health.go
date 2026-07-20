@@ -31,7 +31,7 @@ import (
 // production recall-utility ledger and the known-project roster. The real
 // *wiki.Store satisfies both; the bench's test fake stubs them.
 type healthStore interface {
-	RecallHitScoreCounts(now time.Time) map[string]int
+	RecallUsageScoreCounts(now time.Time) map[string]wiki.RecallUsage
 	KnownProjects() []wiki.ProjectRef
 }
 
@@ -40,25 +40,33 @@ type healthStore interface {
 var _ healthStore = (*wiki.Store)(nil)
 
 // ledgerUtility summarizes the production recall-hit ledger over the score
-// window: which pages recall actually pulled into chat turns, and how often.
+// window: which pages recall actually pulled into chat turns, how often, and
+// how many of them the model then observably USED (read-through or answer
+// citation) — exposure and use reported separately, since injection alone
+// does not predict use (bridge-evidence adoption).
 type ledgerUtility struct {
 	distinctPages int
 	totalHits     int
-	repeatPages   int      // pages recalled >= 2 times — the ones earning their keep
+	repeatPages   int      // pages with >= 2 ledger events — the ones earning their keep
+	usedPages     int      // pages with observed use (read/cite), not just injection
 	topPages      []string // up to 5, "path (n)"
 }
 
-func computeLedgerUtility(counts map[string]int) ledgerUtility {
-	u := ledgerUtility{distinctPages: len(counts)}
+func computeLedgerUtility(usage map[string]wiki.RecallUsage) ledgerUtility {
+	u := ledgerUtility{distinctPages: len(usage)}
 	type pc struct {
 		path string
 		n    int
 	}
-	ranked := make([]pc, 0, len(counts))
-	for p, n := range counts {
+	ranked := make([]pc, 0, len(usage))
+	for p, us := range usage {
+		n := us.Injects + us.Reads + us.Cites
 		u.totalHits += n
 		if n >= 2 {
 			u.repeatPages++
+		}
+		if us.Used() {
+			u.usedPages++
 		}
 		ranked = append(ranked, pc{p, n})
 	}
@@ -174,8 +182,8 @@ func computeRecallHealth(result benchmarkResult, cov goldCoverage) recallHealth 
 // writeRecallHealth appends the loop-closing report after the bench result line.
 func writeRecallHealth(out io.Writer, util *ledgerUtility, cov goldCoverage, health recallHealth) {
 	if util != nil {
-		fmt.Fprintf(out, "RECALL_UTIL distinctPages=%d totalHits=%d repeatPages=%d\n",
-			util.distinctPages, util.totalHits, util.repeatPages)
+		fmt.Fprintf(out, "RECALL_UTIL distinctPages=%d totalHits=%d repeatPages=%d usedPages=%d\n",
+			util.distinctPages, util.totalHits, util.repeatPages, util.usedPages)
 		if len(util.topPages) > 0 {
 			fmt.Fprintf(out, "  top recalled: %v\n", util.topPages)
 		}

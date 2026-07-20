@@ -8,10 +8,10 @@ import (
 )
 
 func TestComputeLedgerUtilityReturnsCountsAndTopPages(t *testing.T) {
-	u := computeLedgerUtility(map[string]int{
-		"프로젝트/a/대표.md": 5,
-		"프로젝트/b/대표.md": 2,
-		"인물/c.md":      1,
+	u := computeLedgerUtility(map[string]wiki.RecallUsage{
+		"프로젝트/a/대표.md": {Injects: 3, Reads: 1, Cites: 1}, // 5 events, used
+		"프로젝트/b/대표.md": {Injects: 2},                     // exposure only
+		"인물/c.md":      {Reads: 1},                       // direct model read, used
 	})
 	if u.distinctPages != 3 {
 		t.Errorf("distinctPages = %d, want 3", u.distinctPages)
@@ -21,6 +21,9 @@ func TestComputeLedgerUtilityReturnsCountsAndTopPages(t *testing.T) {
 	}
 	if u.repeatPages != 2 { // a(5) and b(2) are >=2; c(1) is not
 		t.Errorf("repeatPages = %d, want 2", u.repeatPages)
+	}
+	if u.usedPages != 2 { // a (read+cite) and c (read); b is inject-only
+		t.Errorf("usedPages = %d, want 2", u.usedPages)
 	}
 	if len(u.topPages) == 0 || !strings.HasPrefix(u.topPages[0], "프로젝트/a/대표.md (5)") {
 		t.Errorf("topPages[0] = %v, want highest-count first", u.topPages)

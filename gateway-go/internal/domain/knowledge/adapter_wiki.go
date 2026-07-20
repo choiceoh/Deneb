@@ -86,6 +86,12 @@ func (a *wikiAdapter) Read(_ context.Context, id string) (*Document, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read wiki page %q: %w", id, err)
 	}
+	// 효용 접지: Router.Read's only caller is the chat knowledge tool, so this
+	// is a model-driven page open — observed USE for the recall-utility ledger
+	// (bridge-evidence adoption). No session at this layer (the domain cannot
+	// read chat context keys); path-level attribution is what the scoring uses.
+	// Best-effort derived telemetry by ledger contract; must never fail a read.
+	_ = a.store.RecordRecallEvents([]wiki.RecallEvent{{Path: id, Event: wiki.RecallEventRead}})
 	meta := map[string]string{}
 	if page.Meta.Category != "" {
 		meta["category"] = page.Meta.Category
