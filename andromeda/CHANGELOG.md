@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.97](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.96...andromeda-v0.0.97) (2026-07-20)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** route session-less workfeed action prompts into the AI panel ([#4019](https://github.com/choiceoh/Deneb/issues/4019)) ([f4bcc74](https://github.com/choiceoh/Deneb/commit/f4bcc746c3daa424ffc008f0a42f206fb11ee800))
+
 ## [0.0.96](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.95...andromeda-v0.0.96) (2026-07-19)
 
 
