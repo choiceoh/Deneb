@@ -311,6 +311,19 @@ Five workstreams, in priority order:
    excluded to keep the lane deterministic; revisit only with a labeled
    decline signal.
 
+   *Slice-5 LANDED (high-effort-run mining — SearchOS host-miner pattern,
+   arXiv 2607.15257, 2026-07-20 review).* The implicit half of the demand
+   signal: `agentlog.HighEffortUserRuns` selects REAL client runs that ended
+   cleanly (end_turn, non-proactive) yet ground through ≥8 tool calls —
+   the agent managed, but the hard way — and the digest renders each as a
+   QUOTED request + effort stats (tool calls/turns, top-tool histogram,
+   skills-consult marker), heaviest-first over a 14d window. Deterministic
+   selection, LLM triage: the existing curriculum honesty gates (skip-first,
+   12-rune verbatim quote, dedup window) decide whether a recurring grind
+   shape warrants a skill, mirroring SearchOS's "opened repeatedly with poor
+   generic yield → purpose-built skill" triage. The Slice-4 decline scope
+   cut stands — this mines effort, not refusals.
+
 2. **Calibration campaign — run the #3461 knobs, bounded (operator lever,
    zero new code).** Weekly meta cadence gives the slow loop ~4 fitness
    points a month; the benches and e-process are starved by default cadence,
