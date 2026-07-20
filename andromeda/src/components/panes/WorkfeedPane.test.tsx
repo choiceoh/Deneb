@@ -1,10 +1,23 @@
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DataProvider } from "@/crud";
 import { fakeProvider, renderWithProviders } from "@/test/util";
 import { startOfDay } from "@/format";
+import { useWorkspace } from "@/workspaceContext";
 import { WorkfeedPane } from "./WorkfeedPane";
+
+// Stand-in for AIPanel's ask-sink registration so a test can observe prompts the
+// pane routes into the AI panel (cards with no asking session).
+function AskSinkProbe({ onAsk }: { onAsk: (text: string) => void }) {
+  const { setAskSink } = useWorkspace();
+  useEffect(() => {
+    setAskSink(onAsk);
+    return () => setAskSink(null);
+  }, [setAskSink, onAsk]);
+  return null;
+}
 
 // The list flows through the (fake) data provider; the action RPCs go straight to
 // callRpc → fetch. Stub fetch to capture RPCs and follow-up chat stream deliveries.
@@ -47,7 +60,15 @@ beforeEach(() => {
         body.method === "miniapp.workfeed.answer"
           ? { ok: true, sessionKey: "client:main", prompt: params.answer, removeFromFeed: true }
           : body.method === "miniapp.workfeed.action.run"
-            ? { ok: true, sessionKey: "client:main", prompt: "후속 액션 실행", removeFromFeed: true }
+            ? params.actionId === "kbinterview:start"
+              ? // Periodic-task card (kb-interview): no asking session, prompt only.
+                {
+                  ok: true,
+                  sessionKey: "",
+                  prompt: "지식 인터뷰: '단가' 도메인을 인터뷰로 정리하자.",
+                  removeFromFeed: true,
+                }
+              : { ok: true, sessionKey: "client:main", prompt: "후속 액션 실행", removeFromFeed: true }
             : { ok: true };
       return new Response(JSON.stringify({ ok: true, payload }), {
         status: 200,
@@ -79,6 +100,45 @@ describe("WorkfeedPane", () => {
     expect(answer?.params).toMatchObject({ itemId: "w1", answer: "승인합니다" });
     await waitFor(() => expect(chatCalls).toHaveLength(1));
     expect(chatCalls[0]).toMatchObject({ message: "승인합니다", sessionKey: "client:main" });
+  });
+
+  it("routes a session-less action prompt into the AI panel instead of dropping it", async () => {
+    // Regression: the kb-interview 인터뷰 시작 chip (periodic-task card, no asking
+    // session) settled the card but the returned prompt was silently discarded —
+    // "인터뷰 시작을 눌러도 아무것도 안 일어남".
+    const asked: string[] = [];
+    const dataProvider = fakeProvider({
+      workfeed: [
+        {
+          id: "kb1",
+          source: "kb-interview-suggest",
+          title: "지식 인터뷰 제안: 단가/마진 인텔리전스",
+          body: "인터뷰로 정리할까요?",
+          question: true,
+          actions: [{ id: "kbinterview:start", kind: "answer", label: "인터뷰 시작" }],
+        },
+      ],
+    });
+    renderWithProviders(
+      <>
+        <AskSinkProbe onAsk={(text) => asked.push(text)} />
+        <WorkfeedPane />
+      </>,
+      { connected: true, dataProvider },
+    );
+
+    await userEvent.click(await screen.findByText("지식 인터뷰 제안: 단가/마진 인텔리전스"));
+    const detail = screen.getByLabelText("피드 상세");
+    await userEvent.click(within(detail).getByRole("button", { name: "인터뷰 시작" }));
+
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.workfeed.action.run")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.workfeed.action.run")?.params).toMatchObject({
+      itemId: "kb1",
+      actionId: "kbinterview:start",
+    });
+    // The prompt lands in the AI panel's conversation, not a background stream.
+    await waitFor(() => expect(asked).toEqual(["지식 인터뷰: '단가' 도메인을 인터뷰로 정리하자."]));
+    expect(chatCalls).toHaveLength(0);
   });
 
   it("preserves generic action chips hidden on a non-question card (wide body)", async () => {

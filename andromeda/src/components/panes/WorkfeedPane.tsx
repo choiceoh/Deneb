@@ -30,7 +30,8 @@ function addDays(dayMs: number, delta: number): number {
 // Fallback question detection for payloads predating the WorkItem.question flag:
 // a "question"-tagged source expects a free-text reply. WorkItemDetail prefers the
 // authoritative flag and only falls back to this. The gateway settles the card via
-// workfeed.answer/action.run, then returns a sessionKey+prompt to deliver.
+// workfeed.answer/action.run, then returns a sessionKey+prompt to deliver — to the
+// asking session when there is one, else into the AI panel's current conversation.
 const isQuestion = (w: WorkItem) => (w.source ?? "").includes("question");
 const ignoreUiSubmit = () => {};
 
@@ -54,7 +55,7 @@ interface WorkfeedTurn {
 }
 
 export function WorkfeedPane() {
-  const { connected, cfg } = useWorkspace();
+  const { connected, cfg, askDeneb, setAiCollapsed } = useWorkspace();
   // The day currently in view (local midnight). Lands on today; prev/next step it.
   const [dayMs, setDayMs] = useState<number>(() => startOfDay());
   // Fetch ONLY the selected day's items, server-side ranged (sinceMs..beforeMs) at the
@@ -78,7 +79,17 @@ export function WorkfeedPane() {
       const turn = data as WorkfeedTurn;
       const sessionKey = typeof turn?.sessionKey === "string" ? turn.sessionKey.trim() : "";
       const prompt = typeof turn?.prompt === "string" ? turn.prompt.trim() : "";
-      if (!sessionKey || !prompt) return;
+      if (!prompt) return;
+      if (!sessionKey) {
+        // A prompt without an asking session (e.g. the kb-interview 인터뷰 시작 chip —
+        // a periodic-task card, no session ever asked it) means "start this where the
+        // user is": route it into the AI panel's current conversation so the turn is
+        // visible and answerable. Dropping it here settled the card with nothing
+        // happening — the suggestion was consumed and the interview never started.
+        setAiCollapsed(false);
+        if (!askDeneb(prompt)) throw new Error("AI 패널이 준비되지 않아 요청을 보내지 못했습니다");
+        return;
+      }
       let streamError = "";
       await chatStream(
         cfg,
@@ -273,7 +284,8 @@ function WorkItemDetail({
 
   // Run a chip's work-feed action. Mirrors the native answerWorkFeed(actionId) path:
   // the gateway settles the card and returns {sessionKey, prompt}, which useAction's
-  // onResult streams to the asking session — the same handler the free-text field uses.
+  // onResult streams to the asking session (or into the AI panel when the card has
+  // no asking session) — the same handler the free-text field uses.
   // Approval chips confirm first — Amaranth mutate is irreversible from the feed.
   // Rejection uses an in-app dialog so an optional reason can travel with the action.
   const [confirmAction, setConfirmAction] = useState<WorkAction | null>(null);
