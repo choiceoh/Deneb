@@ -110,6 +110,7 @@ type searchDB struct {
 	mu         sync.RWMutex
 	now        func() time.Time
 	fieldBoost float64
+	facetBoost float64
 	// validity holds the per-page staleness factor (see validityFactor),
 	// computed when the page is (re)indexed. Search multiplies scores by it
 	// so archived/superseded/aging facts stop outranking current ones.
@@ -123,14 +124,17 @@ func newSearchDB(now func() time.Time, fieldBoost float64) *searchDB {
 	if fieldBoost <= 0 {
 		fieldBoost = wikiFieldBoostValue()
 	}
-	return &searchDB{idx: textsearch.New(), validity: make(map[string]float64), now: now, fieldBoost: fieldBoost}
+	return &searchDB{
+		idx: textsearch.New(), validity: make(map[string]float64), now: now,
+		fieldBoost: fieldBoost, facetBoost: wikiFacetBoostValue(),
+	}
 }
 
 // indexPage upserts a page into the search index.
 func (s *searchDB) indexPage(relPath string, page *Page) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.idx.UpsertFields(relPath, searchablePageFieldsWithBoost(page, s.fieldBoost)...)
+	s.idx.UpsertFields(relPath, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
 	if page != nil {
 		s.validity[relPath] = validityFactor(page.Meta, s.now())
 	}
@@ -282,7 +286,7 @@ func (s *searchDB) rebuildIndex(dir string) error {
 				"path", rel, "error", err)
 			return nil //nolint:nilerr // skip unparseable files
 		}
-		s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost)...)
+		s.idx.UpsertFields(rel, searchablePageFieldsWithBoost(page, s.fieldBoost, s.facetBoost)...)
 		s.validity[rel] = validityFactor(page.Meta, s.now())
 		return nil
 	})
@@ -313,11 +317,30 @@ func wikiFieldBoostValue() float64 {
 	return wikiFieldBoost
 }
 
-func searchablePageFieldsWithBoost(page *Page, boost float64) []textsearch.Field {
+// wikiFacetBoost is the term-frequency weight for the hidden facet field
+// (facetText): structured frontmatter identity metadata — 거래처, 현장 경로,
+// frozen codes, emails — indexed as retrieval anchors. Facet vocabulary is
+// identity-grade ("what the page IS"), so it shares the identity-field weight.
+// Unlike DENEB_WIKI_FIELD_BOOST, 0 is a VALID override: it omits the field
+// entirely, making the index byte-identical to the pre-facet baseline — the
+// A/B lever recall-bench uses. Override via DENEB_WIKI_FACET_BOOST; baked at
+// index time like every other search knob.
+const wikiFacetBoost = 2.5
+
+func wikiFacetBoostValue() float64 {
+	if v := os.Getenv("DENEB_WIKI_FACET_BOOST"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return f
+		}
+	}
+	return wikiFacetBoost
+}
+
+func searchablePageFieldsWithBoost(page *Page, boost, facetBoost float64) []textsearch.Field {
 	if page == nil {
 		return nil
 	}
-	return []textsearch.Field{
+	fields := []textsearch.Field{
 		{Text: page.Meta.Title, Weight: boost},
 		{Text: page.Meta.Summary, Weight: boost},
 		{Text: page.Meta.ID, Weight: boost},
@@ -337,6 +360,46 @@ func searchablePageFieldsWithBoost(page *Page, boost float64) []textsearch.Field
 		{Text: strings.Join(page.Meta.Cues, " "), Weight: boost, Hidden: true},
 		{Text: page.Body, Weight: 1},
 	}
+	if facetBoost > 0 {
+		if facet := facetText(page); facet != "" {
+			// Hidden for the same reason as cues: retrieval anchors, never content.
+			fields = append(fields, textsearch.Field{Text: facet, Weight: facetBoost, Hidden: true})
+		}
+	}
+	return fields
+}
+
+// facetText joins the page's structured identity metadata into one
+// retrieval-only field: frozen codes (Code/PID), venture group (Program),
+// counterparty (Client), site paths (Sites, plus a 현장 page's Address), and
+// identity emails. Mail subjects and calendar events name a project by its
+// counterparty or site far more often than by its title (see the Sites field
+// comment in page.go), yet none of these frontmatter fields were lexically
+// searchable — the facet closes that vocabulary gap with an orthogonal
+// evidence layer (the "facet term" of arXiv 2607.14390, the only retrieval
+// mechanism that survived that paper's mechanism study). Deterministic
+// frontmatter only — no LLM, no derived text. Bucket vocabularies
+// (Kinds/Stage/Status) stay out: shared across many pages, they would crowd
+// exactly like a boosted Category would.
+func facetText(page *Page) string {
+	parts := make([]string, 0, 8)
+	add := func(s string) {
+		if s = strings.TrimSpace(s); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	add(page.Meta.Code)
+	add(page.Meta.PID)
+	add(page.Meta.Program)
+	add(page.Meta.Client)
+	for _, s := range page.Meta.Sites {
+		add(s)
+	}
+	add(page.Meta.Address)
+	for _, e := range page.Meta.Emails {
+		add(e)
+	}
+	return strings.Join(parts, " ")
 }
 
 // close is a no-op (in-memory index, nothing to close).
