@@ -20,10 +20,13 @@ import (
 // returned finish_reason=length with EMPTY content, failing every replay —
 // evolve's behavioral gate (fail-open, so it silently stopped guarding) AND the
 // skill-workout lane (observed 2026-07-09: reasoning_chars=4540, "replay
-// executor failed, ending cycle"). Budget reasoning (~1.5K tokens observed) +
-// the short plan, with headroom; the model still stops at the plan, so a
-// non-runaway call does not actually consume this whole cap.
-const replayExecutorMaxTokens = 4096
+// executor failed, ending cycle"). 4096 was then overrun too: ablation replay
+// starved 3× in one day (2026-07-20: reasoning_chars=17628 ≈ 5K tokens on one
+// call, an 8300-char plan truncated at the cap on another), skipping utility
+// measurement. Budget observed worst-case reasoning + plan with ~3× headroom;
+// the model still stops at the plan, so a non-runaway call does not actually
+// consume this whole cap (local GPU — the cap costs latency, not money).
+const replayExecutorMaxTokens = 16384
 
 // emittedToolCall is one tool invocation the executor model says it would make
 // when following a skill. Args is intentionally a flat string so the existing

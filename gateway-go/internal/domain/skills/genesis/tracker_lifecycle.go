@@ -88,6 +88,37 @@ func (t *Tracker) LogGenesis(skillName, source, sessionKey, category, descriptio
 	return t.markSkillAgentCreatedLocked(skillName, createdAt)
 }
 
+// EvolveAttemptedSince reports whether skillName saw a committed evolve, a
+// rollback, or an executed evolve-route proposal at/after sinceMs — the
+// evolve-backlog reconciler's consumption evidence (an attempt, even a
+// rejected or rolled-back one, means the opportunity was consumed).
+func (t *Tracker) EvolveAttemptedSince(skillName string, sinceMs int64) (bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return false, fmt.Errorf("genesis-tracker: load lifecycle log: %w", err)
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if e.CreatedAt < sinceMs {
+			break // append-ordered file — everything earlier is older
+		}
+		if e.SkillName != skillName {
+			continue
+		}
+		switch e.Type {
+		case "evolved", "evolve_rolled_back":
+			return true, nil
+		case "evolution_proposal":
+			if e.Route == "evolve" && e.Executed {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // LogEvolutionProposal records a Propus routing decision.
 func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 	t.mu.Lock()

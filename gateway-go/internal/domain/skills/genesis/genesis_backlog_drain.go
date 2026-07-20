@@ -50,6 +50,11 @@ const (
 	genesisDrainRetryCooldown = 7 * 24 * time.Hour
 	// genesisDrainBacklogScan bounds the ledger read per run.
 	genesisDrainBacklogScan = 300
+	// evolveOpportunityStaleAfter closes the accounting loop on route=evolve
+	// opportunities (2026-07-20: 23 records with no consumption marking — the
+	// "evaporation" gap): one this old with no evolve attempt on its skill is
+	// marked stale instead of accumulating as an open unknown forever.
+	evolveOpportunityStaleAfter = 14 * 24 * time.Hour
 )
 
 // backlogGenesis is the narrow generation port the drain consumes —
@@ -200,6 +205,53 @@ func collectGenesisDemand(
 	return out
 }
 
+// reconcileEvolveBacklog marks each route=evolve opportunity pattern's
+// disposition: "evolve-consumed" when its skill saw an evolve attempt after
+// the signal was filed, "evolve-stale" when it aged past
+// evolveOpportunityStaleAfter with no attempt. Patterns still inside the
+// window stay unmarked (open). Newest record per pattern decides, so an old
+// sibling cannot stale a pattern whose demand is still fresh. Accounting
+// only — this never fires an evolve.
+func (t *GenesisBacklogDrainTask) reconcileEvolveBacklog(
+	records []SkillOpportunityRecord,
+	state map[string]genesisDrainOutcome,
+	now time.Time,
+) (consumed, stale int) {
+	seen := map[string]bool{}
+	// RecentSkillOpportunities returns newest-first; the first record seen per
+	// pattern is therefore the freshest and decides the disposition.
+	for _, rec := range records {
+		if rec.Route != "evolve" {
+			continue
+		}
+		key := opportunityPatternKey(rec.Candidate)
+		if key == "" {
+			continue
+		}
+		key = "evolve:" + key
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if _, done := state[key]; done {
+			continue
+		}
+		skill := strings.TrimSpace(rec.SkillName)
+		if skill != "" {
+			if ok, err := t.Tracker.EvolveAttemptedSince(skill, rec.CreatedAt); err == nil && ok {
+				state[key] = genesisDrainOutcome{Outcome: "evolve-consumed", SkillName: skill, At: now.UnixMilli()}
+				consumed++
+				continue
+			}
+		}
+		if now.UnixMilli()-rec.CreatedAt > evolveOpportunityStaleAfter.Milliseconds() {
+			state[key] = genesisDrainOutcome{Outcome: "evolve-stale", SkillName: skill, At: now.UnixMilli()}
+			stale++
+		}
+	}
+	return consumed, stale
+}
+
 // composeDrainBrief renders one demand group as the generation brief:
 // recurrence framing plus each signal's candidate prose, evidence, and reason.
 func composeDrainBrief(g genesisDemandGroup) string {
@@ -239,6 +291,17 @@ func (t *GenesisBacklogDrainTask) Run(ctx context.Context) error {
 	path := t.statePath()
 	state := loadGenesisDrainState(path)
 	now := time.Now()
+
+	// Evolve-route accounting rides the same state file: pattern-keyed
+	// dispositions, namespaced "evolve:" so they can never collide with (or
+	// be retried as) genesis demand.
+	if consumed, stale := t.reconcileEvolveBacklog(records, state, now); consumed+stale > 0 {
+		if err := saveGenesisDrainState(path, state); err != nil {
+			logger.Warn("genesis-backlog-drain: state save failed", "error", err)
+		}
+		logger.Info("genesis-backlog-drain: evolve backlog reconciled",
+			"consumed", consumed, "stale", stale)
+	}
 
 	demand := collectGenesisDemand(records, state, now)
 	if len(demand) == 0 {

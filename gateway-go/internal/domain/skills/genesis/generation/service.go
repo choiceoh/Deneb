@@ -501,10 +501,15 @@ func (s *Service) judgeGenerated(ctx context.Context, skill *GeneratedSkill) (pa
 %s`, skill.Name, skill.Description, skill.Body, s.listExistingSkillDescriptions())
 
 	events, err := s.judgeClient.StreamChat(ctx, llm.ChatRequest{
-		Model:          s.judgeModel,
-		Messages:       []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:         llm.SystemString(s.metaLoad(MetaGenesisJudgeSystemPrompt, genesisJudgeSystemPrompt)),
-		MaxTokens:      1024,
+		Model:    s.judgeModel,
+		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
+		System:   llm.SystemString(s.metaLoad(MetaGenesisJudgeSystemPrompt, genesisJudgeSystemPrompt)),
+		// 4096, not 1024: reasoning models that ignore thinking=disabled spend
+		// the budget on chain-of-thought and return empty content, and this
+		// judge FAILS OPEN ("accepting on heuristic") — a starved budget
+		// silently weakens the acceptance gate (same class as the relevance
+		// classifier starvation fixed in #4007).
+		MaxTokens:      4096,
 		Stream:         true,
 		Thinking:       s.judgeThinking,
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
