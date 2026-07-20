@@ -114,16 +114,22 @@ class CICheckShellTests(unittest.TestCase):
         # doc-reference validate-or-freeze gate (doc-ref-lint).
         proc = self.invoke("--audit")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("3 gates, selected lanes run in parallel", proc.stdout)
-        for gate in ("runtime-health-test", "health-v2-test", "doc-ref-lint"):
+        self.assertIn("4 gates, selected lanes run in parallel", proc.stdout)
+        for gate in (
+            "runtime-health-test",
+            "health-v2-test",
+            "cache-cost-audit-test",
+            "doc-ref-lint",
+        ):
             self.assertRegex(proc.stdout, rf"{gate}\s+PASS")
-        self.assertIn("3 passed, 0 failed", proc.stdout)
+        self.assertIn("4 passed, 0 failed", proc.stdout)
         self.assertIn("make ci PASSED", proc.stdout)
         self.assertEqual(
             self.calls(),
             [
                 "make runtime-health-test",
                 "make health-v2-test",
+                "make cache-cost-audit-test",
                 "make doc-ref-lint",
             ],
         )
@@ -216,6 +222,7 @@ class CICheckShellTests(unittest.TestCase):
             [
                 "make runtime-health-test",
                 "make health-v2-test",
+                "make cache-cost-audit-test",
                 "make doc-ref-lint",
             ],
         )
@@ -225,7 +232,7 @@ class CICheckShellTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("can't resolve 'origin/main' merge-base", proc.stderr)
         self.assertIn("Go:run  Kotlin:run  Audit:run", proc.stdout)
-        self.assertIn("12 passed, 0 failed", proc.stdout)
+        self.assertIn("13 passed, 0 failed", proc.stdout)
         make_calls = [call for call in self.calls() if call.startswith("make ")]
         self.assertIn("make go-test-cached", make_calls)
         self.assertIn("make kotlin-android-compile", make_calls)
