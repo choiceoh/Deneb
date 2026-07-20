@@ -390,6 +390,16 @@ recall-health:
 runtime-health-test:
 	@python3 -m unittest discover -s scripts/audit -p 'test_runtime_health.py' -v
 
+# Cache-aware cost decomposition over ~/.deneb/agent-logs (advisory, read-only):
+# per-model uncached/read/write split with price-weighted volume, within-run
+# reuse stalls, run-boundary prefix survival, beyond-cutoff tool re-calls.
+# Decision metric for context-reduction changes (arXiv:2607.12161 adoption).
+cache-cost-audit:
+	@python3 scripts/audit/cache-cost-audit.py $(ARGS)
+
+cache-cost-audit-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_cache_cost_audit.py' -v
+
 # Agent-doc coverage (advisory) — rank gateway-go subsystems by weight and flag
 # heavy ones with no module CLAUDE.md and no agent-rule glob, i.e. the subsystems
 # most worth a narrative doc. Draft one with Deneb's own model (grounded in source

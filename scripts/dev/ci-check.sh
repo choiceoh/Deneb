@@ -60,7 +60,7 @@ KOTLIN_GATES=(kotlin-spotless kotlin-detekt kotlin-desktop-smoke-test kotlin-and
 # one-file systemd diff, while CI stayed green) and a gate that cries wolf
 # trains everyone to ignore red. Scorer unit tests (health-v2-test) remain.
 # Run the ratchet manually via `make health-v2-check` or the nightly sweep.
-AUDIT_GATES=(runtime-health-test health-v2-test doc-ref-lint)
+AUDIT_GATES=(runtime-health-test health-v2-test cache-cost-audit-test doc-ref-lint)
 
 # --- Args --------------------------------------------------------------------
 RUN_GO=true
