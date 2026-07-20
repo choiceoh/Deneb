@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -49,6 +50,27 @@ func TestLoadGoldSkipsCommentsAndCountsMalformedRows(t *testing.T) {
 	}
 	if len(cases) != 2 || malformed != 1 || cases[1].ID != "two" {
 		t.Fatalf("cases=%#v malformed=%d", cases, malformed)
+	}
+}
+
+func TestLoadGoldParsesLifecycleFieldsAndRejectsUnknownOpType(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gold.jsonl")
+	data := `{"id":"upd","question":"q","gold_paths":["new.md"],"must_not":["옛담당"],"op_type":"update","stale_values":["1.0억"]}` + "\n" +
+		`{"id":"typo","question":"q","gold_paths":["a.md"],"op_type":"updated"}` + "\n" +
+		`{"id":"plain","question":"q","gold_paths":["b.md"]}` + "\n"
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases, malformed, err := loadGold(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) != 2 || malformed != 1 {
+		t.Fatalf("cases=%d malformed=%d, want 2/1 (unknown op_type must count malformed)", len(cases), malformed)
+	}
+	c := cases[0]
+	if c.OpType != "update" || len(c.StaleValues) != 1 || c.StaleValues[0] != "1.0억" || len(c.MustNot) != 1 {
+		t.Fatalf("lifecycle fields not parsed: %#v", c)
 	}
 }
 
@@ -382,5 +404,71 @@ func TestCaseHitFallsBackToContentWhenPathStale(t *testing.T) {
 	}
 	if findGoldRank([]wiki.SearchResult{res}, c, 8, newContentMatcher(dir)) != 0 {
 		t.Fatal("findGoldRank must rank the content-hit page at 0")
+	}
+}
+
+func TestLifecycleMetricsScoreStaleAndLeakExposureInTopK(t *testing.T) {
+	dir := t.TempDir()
+	pages := map[string]string{
+		"프로젝트/new.md":  "계약금액 2.5억 확정, 담당 김현우.",
+		"업무/old.md":    "계약금액 1.0억 (구버전).",
+		"프로젝트/etc.md":  "무관한 회의 메모.",
+		"프로젝트/leak.md": "금지된 옛담당 박민수 언급.",
+	}
+	for rel, body := range pages {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	results := map[string][]wiki.SearchResult{
+		"stale-exposed": {{Path: "프로젝트/new.md"}, {Path: "업무/old.md"}},
+		"stale-clean":   {{Path: "프로젝트/new.md"}, {Path: "프로젝트/etc.md"}},
+		"leak-exposed":  {{Path: "프로젝트/new.md"}, {Path: "프로젝트/leak.md"}},
+		// The stale page sits BELOW the K=2 window — must not count as exposed.
+		"stale-below-k": {{Path: "프로젝트/new.md"}, {Path: "프로젝트/etc.md"}, {Path: "업무/old.md"}},
+	}
+	cases := []goldCase{
+		{ID: "u1", Question: "stale-exposed", GoldPaths: []string{"프로젝트/new"}, OpType: "update", StaleValues: []string{"1.0억"}},
+		{ID: "u2", Question: "stale-clean", GoldPaths: []string{"프로젝트/new"}, OpType: "update", StaleValues: []string{"1.0억"}},
+		{ID: "u3", Question: "stale-below-k", GoldPaths: []string{"프로젝트/new"}, OpType: "update", StaleValues: []string{"1.0억"}},
+		{ID: "f1", Question: "leak-exposed", GoldPaths: []string{"프로젝트/new"}, OpType: "forget", MustNot: []string{"없는값|박민수"}},
+	}
+	search := func(_ context.Context, query string, _ int) ([]wiki.SearchResult, error) {
+		return results[query], nil
+	}
+	content, holds := newContentScorers(dir)
+
+	res := evaluateCasesWithSearch(context.Background(), cases, 2, false, io.Discard, search, content, holds)
+	if res.staleCases != 3 || res.staleExposed != 1 {
+		t.Fatalf("stale = %d/%d, want 1/3", res.staleExposed, res.staleCases)
+	}
+	if res.leakCases != 1 || res.leakExposed != 1 {
+		t.Fatalf("leak = %d/%d, want 1/1", res.leakExposed, res.leakCases)
+	}
+	if res.opUpdate != 3 || res.opForget != 1 {
+		t.Fatalf("op counts = update:%d forget:%d, want 3/1", res.opUpdate, res.opForget)
+	}
+
+	var out bytes.Buffer
+	writeLifecycleMetrics(&out, "RECALL_BENCH_LIFECYCLE", 2, res)
+	want := "RECALL_BENCH_LIFECYCLE k=2 stale_rate=33.3% (1/3) leak_rate=100.0% (1/1) op_update=3 op_forget=1\n"
+	if out.String() != want {
+		t.Fatalf("lifecycle line = %q, want %q", out.String(), want)
+	}
+
+	// nil holder (no --content) must keep lifecycle counters at zero, and the
+	// writer must stay silent so existing runs keep byte-identical output.
+	plain := evaluateCasesWithSearch(context.Background(), cases, 2, false, io.Discard, search, content, nil)
+	if plain.staleCases != 0 || plain.leakCases != 0 || plain.opUpdate != 0 || plain.opForget != 0 {
+		t.Fatalf("nil holder must not score lifecycle: %+v", plain)
+	}
+	out.Reset()
+	writeLifecycleMetrics(&out, "RECALL_BENCH_LIFECYCLE", 2, plain)
+	if out.Len() != 0 {
+		t.Fatalf("lifecycle line must be suppressed without lifecycle cases, got %q", out.String())
 	}
 }
