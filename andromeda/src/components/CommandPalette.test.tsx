@@ -90,6 +90,17 @@ describe("CommandPalette", () => {
     expect(again.askDeneb).toHaveBeenCalledWith("면허 대여");
   });
 
+  it("모닝 브리핑 투어: opens today locally, uncollapses the AI panel, then asks Deneb", async () => {
+    const value = renderPalette();
+    await userEvent.type(screen.getByRole("textbox", { name: "명령 입력" }), "모닝");
+    await userEvent.click(await screen.findByText("모닝 브리핑 투어"));
+    // 즉시 반응: 1단계 레이아웃은 에이전트 왕복 없이 로컬에서 바로 연다.
+    expect(value.applyLayout).toHaveBeenCalledWith(["today"]);
+    // 브리핑이 접힌 패널 속으로 흘러가 "안 되는" 것처럼 보이지 않게 편다.
+    expect(value.setAiCollapsed).toHaveBeenCalledWith(false);
+    expect(value.askDeneb).toHaveBeenCalledWith(expect.stringContaining("모닝 브리핑 투어"));
+  });
+
   it("closes on Escape and runs the active row on Enter", async () => {
     const value = renderPalette();
     const input = screen.getByRole("textbox", { name: "명령 입력" });
