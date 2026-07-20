@@ -190,6 +190,65 @@ func TestWikiUpdateSupersedesAcceptsStringOrArray(t *testing.T) {
 	}
 }
 
+// TestWikiUpdateConfidenceAcceptsStringOrNumber guards the 2026-07-20 synthesis
+// parse bug: the LLM emits `confidence` as either a label string or a numeric
+// score (0.9 — conflating it with importance), and a number used to skip the
+// whole update item ("cannot unmarshal number into ... of type string"), losing
+// valid knowledge. Numbers must fold onto the label scale (flexConfidence).
+func TestWikiUpdateConfidenceAcceptsStringOrNumber(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want string
+	}{
+		{`{"confidence":"high"}`, "high"},
+		{`{"confidence":"medium"}`, "medium"},
+		{`{"confidence":0.9}`, "high"},
+		{`{"confidence":0.8}`, "high"},
+		{`{"confidence":1}`, "high"},
+		{`{"confidence":0.7}`, "medium"},
+		{`{"confidence":0.5}`, "medium"},
+		{`{"confidence":0.3}`, "low"},
+		{`{"confidence":0}`, "low"},
+		{`{"confidence":null}`, ""},
+		{`{}`, ""},
+	}
+	for _, c := range cases {
+		var u wikiUpdate
+		if err := json.Unmarshal([]byte(c.raw), &u); err != nil {
+			t.Fatalf("Unmarshal(%s): %v (the numeric case used to fail here)", c.raw, err)
+		}
+		if string(u.Confidence) != c.want {
+			t.Fatalf("%s → %q, want %q", c.raw, u.Confidence, c.want)
+		}
+	}
+}
+
+// TestParseWikiUpdates_NumericConfidenceNotSkipped pins the parse-level effect
+// of the same bug: a numeric confidence must not cost the item its slot in the
+// applied batch (7 consecutive skips were observed in one dream cycle).
+func TestParseWikiUpdates_NumericConfidenceNotSkipped(t *testing.T) {
+	text := `[
+		{"action":"create","path":"a.md","title":"A","confidence":0.9},
+		{"action":"create","path":"b.md","title":"B","confidence":"medium"},
+		{"action":"create","path":"c.md","title":"C"}
+	]`
+	updates, partial, err := parseWikiUpdates(text, nil)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if partial {
+		t.Error("intact array must not report partial")
+	}
+	if len(updates) != 3 {
+		t.Fatalf("expected all 3 items to survive, got %d: %+v", len(updates), updates)
+	}
+	for i, want := range []string{"high", "medium", ""} {
+		if string(updates[i].Confidence) != want {
+			t.Errorf("updates[%d].Confidence = %q, want %q", i, updates[i].Confidence, want)
+		}
+	}
+}
+
 // TestParseWikiUpdates_SkipsMalformedItem verifies one malformed update is
 // skipped while the well-formed ones still apply — the whole batch used to fail
 // on a single bad field and, if deterministic, stall the diary pipeline (the

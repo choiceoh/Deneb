@@ -82,7 +82,7 @@ func computeDreamQuality(in dreamQualityInputs) dreamQuality {
 	if len(in.updates) > 0 {
 		var sum float64
 		for _, u := range in.updates {
-			sum += confidenceWeight(u.Confidence)
+			sum += confidenceWeight(string(u.Confidence))
 		}
 		c := sum / float64(len(in.updates))
 		q.Confidence = c

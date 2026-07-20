@@ -58,6 +58,44 @@ func splitFlexList(s string) flexStringList {
 	return out
 }
 
+// flexConfidence is a confidence label ("high"/"medium"/"low") that also
+// accepts a numeric score: the synthesis LLM occasionally emits 0.9-style
+// numbers (likely conflating confidence with the numeric importance field),
+// and the strict string field made parseWikiUpdates skip the whole update
+// item — 7 consecutive skips observed in one 2026-07-20 cycle. Numbers fold
+// onto the label scale; strings pass through unchanged.
+type flexConfidence string
+
+// UnmarshalJSON decodes the supported flexible JSON representation.
+func (c *flexConfidence) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*c = ""
+		return nil
+	}
+	if trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*c = flexConfidence(s)
+		return nil
+	}
+	var n float64
+	if err := json.Unmarshal(data, &n); err != nil {
+		return fmt.Errorf("flexConfidence: expected JSON string or number, got %.40s", trimmed)
+	}
+	switch {
+	case n >= 0.8:
+		*c = "high"
+	case n >= 0.5:
+		*c = "medium"
+	default:
+		*c = "low"
+	}
+	return nil
+}
+
 // wikiUpdate represents a single page update instruction from the LLM.
 type wikiUpdate struct {
 	Action     string         `json:"action"` // "create" or "update"
@@ -72,7 +110,7 @@ type wikiUpdate struct {
 	Content    string         `json:"content"` // markdown body or section to append
 	Importance float64        `json:"importance"`
 	Type       string         `json:"type"`       // concept, entity, source, comparison, log
-	Confidence string         `json:"confidence"` // high, medium, low
+	Confidence flexConfidence `json:"confidence"` // high, medium, low; numeric scores fold onto the labels
 	Due        string         `json:"due"`        // YYYY-MM-DD upcoming deadline (프로젝트, 거래성 건)
 	Supersedes flexStringList `json:"supersedes"` // relPath(s) of existing page(s) this update REPLACES; accepts a string or an array (the LLM emits both, and an array used to fail synthesis parsing)
 	Resource   string         `json:"resource"`   // OKF resource: stable URI/id of the concept's underlying asset (gmail thread, deal ref, calendar event, file path); empty for abstract concepts
@@ -298,7 +336,7 @@ const defaultWikiSynthesisRules = `## 규칙
 - 지식 정리: 반복될 운영법·실패 회피법은 loose log 페이지를 늘리지 말고 기존 프로젝트/시스템/업무 페이지의 troubleshooting/recipe 성격 섹션에 병합하라. 새 페이지가 필요하면 반드시 6개 카테고리 아래에 둔다
 - importance: 0.5(일반) ~ 0.9(핵심 결정)
 - type: 페이지 유형 — concept(개념), entity(인물/조직), source(출처), comparison(비교), log(이력)
-- confidence: 정보 신뢰도 — high(검증됨), medium(합리적 추론), low(불확실)
+- confidence: 정보 신뢰도 — 반드시 "high"(검증됨), "medium"(합리적 추론), "low"(불확실) 중 하나의 **문자열**. 0.9 같은 숫자 금지 — 숫자 척도는 importance다
 - due: 임박한 결제기한·마감일 (YYYY-MM-DD). 프로젝트의 거래성 건에서만 사용, 없으면 생략
 - supersedes: 새 일지 내용이 기존 페이지의 사실과 **모순되거나 그것을 대체**할 때, 대체되는 기존 페이지 경로 (인덱스에서 선택). 단순 추가 정보면 생략 — 사실이 바뀐 경우에만 (예: 단가 변경, 담당자 교체, 정책 폐기)
 - 사용자 모델(사용자 카테고리): 사용자가 어떤 사람인지의 **현행 프로필**을 축별 페이지로 유지하라 — ①소통(호칭·말투·답변 형식·길이) ②업무 리듬(시간대·루틴·보고 방식) ③도구·포맷 취향 ④판단·결정 성향(위험 감수·우선순위 기준) ⑤개인 컨텍스트(업무에 필요한 만큼만). 축 하나=페이지 하나로 작게 나누고, 각 규칙에 근거(날짜+발화/행동 요지)를 함께 남기고, cues를 채워라
@@ -420,7 +458,7 @@ func newPageFromUpdate(u wikiUpdate, code string) *Page {
 		page.Meta.Type = u.Type
 	}
 	if u.Confidence != "" {
-		page.Meta.Confidence = u.Confidence
+		page.Meta.Confidence = string(u.Confidence)
 	}
 	if u.Due != "" {
 		page.Meta.Due = u.Due
@@ -695,7 +733,7 @@ func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code strin
 		existing.Meta.Type = u.Type
 	}
 	if u.Confidence != "" {
-		existing.Meta.Confidence = u.Confidence
+		existing.Meta.Confidence = string(u.Confidence)
 	}
 	if u.Due != "" {
 		existing.Meta.Due = u.Due
