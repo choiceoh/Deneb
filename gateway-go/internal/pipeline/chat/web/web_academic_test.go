@@ -94,12 +94,24 @@ func TestParseS2ResponseExtractsHits(t *testing.T) {
 	}
 }
 
-// withMockAcademicSources swaps both source searchers for a test.
+// withMockAcademicSources swaps the paper searchers for a test and neutralizes
+// the HN source (use withMockHN to mock it explicitly).
 func withMockAcademicSources(t *testing.T, arxiv, s2 func(context.Context, string, int) ([]academicHit, error)) {
 	t.Helper()
-	origA, origS := arxivSearchFn, semanticScholarSearchFn
+	origA, origS, origH := arxivSearchFn, semanticScholarSearchFn, hnSearchFn
 	arxivSearchFn, semanticScholarSearchFn = arxiv, s2
-	t.Cleanup(func() { arxivSearchFn, semanticScholarSearchFn = origA, origS })
+	hnSearchFn = func(context.Context, string, int) ([]hnHit, error) { return nil, nil }
+	t.Cleanup(func() {
+		arxivSearchFn, semanticScholarSearchFn, hnSearchFn = origA, origS, origH
+	})
+}
+
+// withMockHN swaps the HN searcher; apply after withMockAcademicSources.
+func withMockHN(t *testing.T, fn func(context.Context, string, int) ([]hnHit, error)) {
+	t.Helper()
+	orig := hnSearchFn
+	hnSearchFn = fn
+	t.Cleanup(func() { hnSearchFn = orig })
 }
 
 func TestAcademicLaneMergesAndDedupesByArxivID(t *testing.T) {
@@ -117,7 +129,7 @@ func TestAcademicLaneMergesAndDedupesByArxivID(t *testing.T) {
 		})
 
 	block := academicLane(context.Background(), "any query")
-	if !strings.Contains(block, "학술 레인") {
+	if !strings.Contains(block, "학술·기술 레인") {
 		t.Fatalf("label missing:\n%s", block)
 	}
 	if !strings.Contains(block, "Paper A") || strings.Contains(block, "Paper A (dup)") {
@@ -188,11 +200,77 @@ func TestWebToolAppendsAcademicLaneToSearchOutput(t *testing.T) {
 	if !strings.Contains(out, "Regular result") {
 		t.Errorf("main search results missing:\n%s", out)
 	}
-	idx := strings.Index(out, "학술 레인")
+	idx := strings.Index(out, "학술·기술 레인")
 	if idx < 0 || idx < strings.Index(out, "Regular result") {
 		t.Errorf("academic lane must follow main results:\n%s", out)
 	}
 	if !strings.Contains(out, "Lane Paper") || !strings.Contains(out, "arXiv:2607.42424") {
 		t.Errorf("lane content missing:\n%s", out)
+	}
+}
+
+func TestParseHNResponseExtractsHits(t *testing.T) {
+	body := `{"hits":[
+	 {"title":"Prompt caching  deep dive","url":"https://arxiv.org/abs/2607.12161v1","points":312,"num_comments":140,"objectID":"41000001","created_at":"2026-07-18T02:00:00Z"},
+	 {"title":"","url":"https://x.example","points":5,"num_comments":0,"objectID":"41000002","created_at":"2026-01-01T00:00:00Z"},
+	 {"title":"Ask HN: cache strategies?","points":42,"num_comments":33,"objectID":"41000003","created_at":"2025-11-02T00:00:00Z"}]}`
+	hits, err := parseHNResponse([]byte(body))
+	if err != nil || len(hits) != 2 {
+		t.Fatalf("parse: %v hits=%d", err, len(hits))
+	}
+	h := hits[0]
+	if h.Title != "Prompt caching deep dive" || h.ArxivID != "2607.12161" || h.Points != 312 || h.Year != "2026" {
+		t.Errorf("hit = %+v", h)
+	}
+	if h.ItemURL != "https://news.ycombinator.com/item?id=41000001" {
+		t.Errorf("item url = %q", h.ItemURL)
+	}
+	if hits[1].URL != "" || hits[1].ArxivID != "" {
+		t.Errorf("ask-hn hit = %+v", hits[1])
+	}
+}
+
+func TestAcademicLaneRendersHNBlockWithPaperAnnotation(t *testing.T) {
+	withMockAcademicSources(t,
+		func(context.Context, string, int) ([]academicHit, error) {
+			return []academicHit{{Title: "Paper A", ArxivID: "2607.00001", Year: "2026"}}, nil
+		},
+		func(context.Context, string, int) ([]academicHit, error) { return nil, nil })
+	withMockHN(t, func(context.Context, string, int) ([]hnHit, error) {
+		return []hnHit{
+			{Title: "Discussion of Paper A", ArxivID: "2607.00001", Points: 300, Comments: 120, ItemURL: "https://news.ycombinator.com/item?id=1", URL: "https://arxiv.org/abs/2607.00001"},
+			{Title: "Unrelated tool thread", Points: 90, Comments: 40, Year: "2025", ItemURL: "https://news.ycombinator.com/item?id=2", URL: "https://blog.example/post"},
+		}, nil
+	})
+
+	block := academicLane(context.Background(), "q")
+	if !strings.Contains(block, "HN 토론") {
+		t.Fatalf("hn block missing:\n%s", block)
+	}
+	if !strings.Contains(block, "Discussion of Paper A — 300p·120c [위 논문 토론]") {
+		t.Errorf("paper annotation missing:\n%s", block)
+	}
+	if !strings.Contains(block, "Unrelated tool thread — 90p·40c (2025)") {
+		t.Errorf("plain hn hit wrong:\n%s", block)
+	}
+	if !strings.Contains(block, "기사: https://blog.example/post") {
+		t.Errorf("article link missing:\n%s", block)
+	}
+	// Papers render before the HN sub-block.
+	if strings.Index(block, "Paper A") > strings.Index(block, "HN 토론") {
+		t.Errorf("ordering wrong:\n%s", block)
+	}
+}
+
+func TestAcademicLaneHNOnlyStillRenders(t *testing.T) {
+	withMockAcademicSources(t,
+		func(context.Context, string, int) ([]academicHit, error) { return nil, nil },
+		func(context.Context, string, int) ([]academicHit, error) { return nil, nil })
+	withMockHN(t, func(context.Context, string, int) ([]hnHit, error) {
+		return []hnHit{{Title: "Solo thread", Points: 10, Comments: 3, ItemURL: "https://news.ycombinator.com/item?id=9"}}, nil
+	})
+	block := academicLane(context.Background(), "q")
+	if !strings.Contains(block, "Solo thread") {
+		t.Errorf("hn-only lane empty:\n%s", block)
 	}
 }

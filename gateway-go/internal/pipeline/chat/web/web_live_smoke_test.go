@@ -104,7 +104,7 @@ func TestLiveAcademicLane(t *testing.T) {
 	if block == "" {
 		t.Fatal("live academic lane returned nothing (both APIs failed?)")
 	}
-	if !strings.Contains(block, "학술 레인") || !strings.Contains(block, "arXiv") {
+	if !strings.Contains(block, "학술·기술 레인") || !strings.Contains(block, "arXiv") {
 		t.Fatalf("unexpected block:\n%.400s", block)
 	}
 	t.Logf("live academic lane ok:\n%.600s", block)
