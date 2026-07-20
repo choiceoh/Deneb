@@ -116,11 +116,14 @@ export function WorkfeedPane() {
   // clear the current selection.
   usePaneTarget(
     "workfeed",
-    useCallback((t: PaneTarget) => {
-      if (t.query === "questions") setQuestionsOnly(true);
-      if (t.id === undefined) return t.query === "questions" ? undefined : false;
-      setSelectedId(t.id);
-    }, []),
+    useCallback(
+      (t: PaneTarget) => {
+        if (t.query === "questions") setQuestionsOnly(true);
+        if (t.id === undefined) return t.query === "questions" ? undefined : false;
+        setSelectedId(t.id);
+      },
+      [setSelectedId],
+    ),
   );
 
   // Render-time clock read — day bucketing/pager bounds must track wall-clock at
