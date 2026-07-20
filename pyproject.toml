@@ -6,5 +6,6 @@ line-length = 100
 # These launchers add scripts/audit to sys.path before importing the local
 # health modules. Moving the imports above that bootstrap breaks direct runs.
 "scripts/audit/codebase_health_v2.py" = ["E402"]
+"scripts/audit/test_cache_cost_audit.py" = ["E402"]
 "scripts/audit/test_codebase_health_v2_support.py" = ["E402"]
 "scripts/audit/test_runtime_health.py" = ["E402"]

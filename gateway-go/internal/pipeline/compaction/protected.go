@@ -32,12 +32,25 @@ func spilloverRef(content string) string {
 // protectedToolResultIDs collects the tool_use ids whose results must survive
 // the cheap pruning passes (MicroCompact, TruncateOldToolResults).
 //
-// Currently protected: fetch_tools. Its result IS the tool schema the model
-// needs for the rest of the run — pruning it forces an identical re-fetch a
-// few turns later, which the pruners then clear again. Production measurement
-// (2026-07-05, 14d agent-logs): 20% of fetch_tools calls were same-input,
-// same-output repeats inside one run, up to 7 re-fetches in a single
-// email-analysis run.
+// Currently protected:
+//
+//   - fetch_tools: its result IS the tool schema the model needs for the rest
+//     of the run — pruning it forces an identical re-fetch a few turns later,
+//     which the pruners then clear again. Production measurement (2026-07-05,
+//     14d agent-logs): 20% of fetch_tools calls were same-input, same-output
+//     repeats inside one run, up to 7 re-fetches in a single run.
+//   - skills action=read/list: skill bodies and the manifest are deterministic
+//     and re-consulted throughout a session under the JIT loading contract.
+//     Production measurement (2026-07-20, 7d agent-logs): 38 of 73 skills
+//     calls (52%) were identical re-executions more than 4 assistant turns
+//     after the first call — the window where Tier 2b had already stubbed the
+//     earlier result — and zero re-executions happened while the result was
+//     still resident. Mutating actions (create/patch/delete/write_file/
+//     remove_file) stay unprotected; their acks are small enough that the
+//     pruners skip them anyway.
+//
+// The LLM summary tiers do not consult this list, so a very long session still
+// bounds the resident cost of protected results.
 func protectedToolResultIDs(messages []llm.Message) map[string]bool {
 	var ids map[string]bool
 	for _, m := range messages {
@@ -49,7 +62,7 @@ func protectedToolResultIDs(messages []llm.Message) map[string]bool {
 			continue
 		}
 		for _, b := range blocks {
-			if b.Type == "tool_use" && b.Name == "fetch_tools" && b.ID != "" {
+			if b.Type == "tool_use" && b.ID != "" && isProtectedToolUse(b) {
 				if ids == nil {
 					ids = map[string]bool{}
 				}
@@ -58,4 +71,23 @@ func protectedToolResultIDs(messages []llm.Message) map[string]bool {
 		}
 	}
 	return ids
+}
+
+// isProtectedToolUse reports whether the result of this tool_use must survive
+// the cheap pruning passes.
+func isProtectedToolUse(b llm.ContentBlock) bool {
+	switch b.Name {
+	case "fetch_tools":
+		return true
+	case "skills":
+		var in struct {
+			Action string `json:"action"`
+		}
+		if err := json.Unmarshal(b.Input.Bytes(), &in); err != nil {
+			return false
+		}
+		return in.Action == "read" || in.Action == "list"
+	default:
+		return false
+	}
 }
