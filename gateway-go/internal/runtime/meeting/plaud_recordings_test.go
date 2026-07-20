@@ -345,6 +345,125 @@ func TestPlaudEmptyTranscriptGivesUpQuietlyAfterBudget(t *testing.T) {
 	}
 }
 
+// plaudListJSON builds a list_files payload with meeting-sized recordings.
+func plaudListJSON(ids ...string) string {
+	rows := make([]map[string]any, 0, len(ids))
+	for _, id := range ids {
+		rows = append(rows, map[string]any{
+			"id":       id,
+			"name":     "회의 " + id,
+			"start_at": "2026-07-10T01:00:00",
+			"duration": 1800000,
+		})
+	}
+	out, _ := json.Marshal(map[string]any{"type": "list", "data": rows})
+	return string(out)
+}
+
+// A full first page (>= the server's default cap) must trigger a second page
+// request; a short page ends the loop with the union of both.
+func TestPlaudListRecordingsPagesUntilShortPage(t *testing.T) {
+	page1 := make([]string, 0, plaudListPageFloor)
+	for i := 0; i < plaudListPageFloor; i++ {
+		page1 = append(page1, "p1-"+string(rune('a'+i)))
+	}
+	page2 := []string{"p2-a", "p2-b", "p2-c"}
+
+	var pages []float64
+	exec := func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		if name != plaudListTool {
+			t.Fatalf("unexpected tool %s", name)
+		}
+		var a map[string]any
+		if err := json.Unmarshal(args, &a); err != nil {
+			t.Fatalf("args: %v", err)
+		}
+		if got, _ := a["page_size"].(float64); got != plaudListPageSize {
+			t.Fatalf("page_size = %v, want %d", a["page_size"], plaudListPageSize)
+		}
+		page, _ := a["page"].(float64)
+		pages = append(pages, page)
+		if page == 1 {
+			return plaudListJSON(page1...), nil
+		}
+		return plaudListJSON(page2...), nil
+	}
+	s, _ := newTestPlaudService(t, exec)
+	files, err := s.listRecordings(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) != len(page1)+len(page2) {
+		t.Fatalf("want %d files, got %d", len(page1)+len(page2), len(files))
+	}
+	if len(pages) != 2 || pages[0] != 1 || pages[1] != 2 {
+		t.Fatalf("pages requested = %v, want [1 2]", pages)
+	}
+}
+
+// When the tool ignores page params (documented for filtered calls) every page
+// returns the same rows — the loop must stop as soon as a page adds nothing.
+func TestPlaudListRecordingsStopsWhenPagingIgnored(t *testing.T) {
+	rows := make([]string, 0, plaudListPageFloor)
+	for i := 0; i < plaudListPageFloor; i++ {
+		rows = append(rows, "same-"+string(rune('a'+i)))
+	}
+	calls := 0
+	exec := func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		calls++
+		return plaudListJSON(rows...), nil
+	}
+	s, _ := newTestPlaudService(t, exec)
+	files, err := s.listRecordings(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) != len(rows) {
+		t.Fatalf("want %d unique files, got %d", len(rows), len(files))
+	}
+	if calls != 2 {
+		t.Fatalf("want exactly 2 list calls (page 2 adds nothing), got %d", calls)
+	}
+}
+
+// A chunk whose gist call fails must degrade to a raw excerpt, not sink the
+// whole reduce (the 2026-07-10 all-or-nothing fallback cut the meeting tail).
+func TestPlaudReduceTranscriptSurvivesChunkFailure(t *testing.T) {
+	s, _ := newTestPlaudService(t, func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		return "", nil
+	})
+	calls := 0
+	s.gist = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+		calls++
+		if calls == 2 {
+			return "", testError("output truncated at max_tokens")
+		}
+		if calls == 1 {
+			return "첫 조각 요약", nil
+		}
+		return "마지막 조각 요약", nil
+	}
+	transcript := strings.Repeat("가", plaudChunkRunes) +
+		strings.Repeat("나", plaudChunkRunes) +
+		strings.Repeat("다", plaudChunkRunes/2)
+	out, err := s.reduceTranscript(context.Background(), transcript)
+	if err != nil {
+		t.Fatalf("reduce: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("want 3 gist calls, got %d", calls)
+	}
+	if !strings.Contains(out, "첫 조각 요약") || !strings.Contains(out, "마지막 조각 요약") {
+		t.Fatalf("healthy gists missing:\n%.200s", out)
+	}
+	if !strings.Contains(out, strings.Repeat("나", 100)) {
+		t.Fatal("failed chunk must contribute a raw excerpt")
+	}
+	if strings.Contains(out, strings.Repeat("나", plaudChunkFallbackRunes+1)) {
+		t.Fatal("raw excerpt must be bounded")
+	}
+}
+
 func keysOfPlaudPages(m map[string]*wiki.Page) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

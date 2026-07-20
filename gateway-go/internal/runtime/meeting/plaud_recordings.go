@@ -52,9 +52,20 @@ const (
 	plaudListTool       = "plaud_list_files"
 	plaudTranscriptTool = "plaud_get_transcript"
 	plaudToolTimeout    = 3 * time.Minute
-	// plaudListWindowDays bounds each list call; generous so a multi-day
-	// gateway outage never loses recordings, tiny next to the full library.
-	plaudListWindowDays = 7
+	// plaudListWindowDays bounds each list call. The recorder can sit unsynced
+	// for days (2026-07-20: a 07-14 recording synced 6 days late and survived
+	// the old 7-day window by one day) — cover a vacation-length gap. Must stay
+	// well under plaudStateRetention or pruned entries could re-trigger.
+	plaudListWindowDays = 30
+	// plaudListPageSize is requested per list call; plaudListPageFloor is the
+	// server's default page cap — a page with at least that many rows may be
+	// truncated regardless of the requested size (the tool docs say page params
+	// are ignored when date filters are set, but the observed cap semantics are
+	// unspecified), so keep paging until a page comes back smaller or adds
+	// nothing new. plaudListMaxPages bounds the loop either way.
+	plaudListPageSize  = 100
+	plaudListPageFloor = 20
+	plaudListMaxPages  = 5
 	// plaudMaxPerTick bounds one tick's LLM work; the unprocessed rest stays
 	// unseen and comes around next tick.
 	plaudMaxPerTick = 3
@@ -74,9 +85,14 @@ const (
 	// longer ones are map-reduced (chunk gists via the RoleTiny stage-1 model,
 	// then one synthesis over the gists) so a 2-hour workshop cannot blow the
 	// main-role (RoleMain) model's context or cost.
-	plaudDirectRunes    = 28000
-	plaudChunkRunes     = 12000
-	plaudChunkMaxTokens = 500
+	plaudDirectRunes = 28000
+	plaudChunkRunes  = 12000
+	// plaudChunkMaxTokens: a "10줄 이내" Korean gist overran 500 on 2026-07-10
+	// and the whole reduce fell back to truncation; 800 gives headroom.
+	plaudChunkMaxTokens = 800
+	// plaudChunkFallbackRunes bounds the raw excerpt substituted for a chunk
+	// whose gist call failed (coverage beats elegance for a lost chunk).
+	plaudChunkFallbackRunes = 2000
 	// plaudSynthesisTokens covers the report plus the 표기 교정 appendix; the
 	// first-tick incident showed 1600 is tight even for the report alone.
 	plaudSynthesisTokens   = 2800
@@ -285,16 +301,9 @@ func (s *plaudRecordingsService) Start(ctx context.Context) {
 
 func (s *plaudRecordingsService) tick(ctx context.Context) {
 	now := s.now()
-	listCtx, cancel := context.WithTimeout(ctx, plaudToolTimeout)
-	out, err := s.listRecordings(listCtx, now)
-	cancel()
+	files, err := s.listRecordings(ctx, now)
 	if err != nil {
 		s.handleToolError(err)
-		return
-	}
-	files, err := parsePlaudList(out)
-	if err != nil {
-		s.logger.Warn("plaud recordings: list parse failed", "error", err)
 		return
 	}
 	if !s.baselined() {
@@ -577,7 +586,15 @@ func (s *plaudRecordingsService) reduceTranscript(ctx context.Context, transcrip
 			string(runes[start:end]), plaudChunkMaxTokens)
 		cancel()
 		if err != nil {
-			return "", err
+			if ctx.Err() != nil {
+				return "", err
+			}
+			// One bad chunk must not sink the whole reduce — the old
+			// all-or-nothing fallback cut the meeting tail off (2026-07-10,
+			// gist overran max_tokens). Substitute a raw excerpt instead.
+			s.logger.Warn("plaud recordings: chunk gist failed, using raw excerpt",
+				"chunk", start/plaudChunkRunes, "error", err)
+			gist = textutil.TruncateRunes(string(runes[start:end]), plaudChunkFallbackRunes, "")
 		}
 		gists = append(gists, strings.TrimSpace(gist))
 	}
@@ -626,19 +643,65 @@ func (s *plaudRecordingsService) notifyAuthExpiredOnce() {
 	}
 }
 
-func (s *plaudRecordingsService) listRecordings(ctx context.Context, now time.Time) (string, error) {
+// listRecordings pulls the recent-window recording list, paging defensively:
+// the tool may honor page params, cap a filtered response at its default page
+// size, or ignore paging entirely — dedup by ID makes all three converge.
+func (s *plaudRecordingsService) listRecordings(ctx context.Context, now time.Time) ([]plaudFile, error) {
+	var all []plaudFile
+	byID := map[string]bool{}
+	for page := 1; page <= plaudListMaxPages; page++ {
+		out, err := s.listPage(ctx, now, page)
+		var files []plaudFile
+		if err == nil {
+			files, err = parsePlaudList(out)
+			if err != nil {
+				err = fmt.Errorf("list parse: %w", err)
+			}
+		}
+		if err != nil {
+			if page > 1 {
+				// A later page failing must not drop the rows already fetched.
+				s.logger.Warn("plaud recordings: list page failed, using partial list",
+					"page", page, "error", err)
+				break
+			}
+			return nil, err
+		}
+		added := 0
+		for _, f := range files {
+			if f.ID == "" || byID[f.ID] {
+				continue
+			}
+			byID[f.ID] = true
+			all = append(all, f)
+			added++
+		}
+		if added == 0 || len(files) < plaudListPageFloor {
+			break
+		}
+	}
+	return all, nil
+}
+
+// listPage fetches one page, keeping the alt-tool fallback from the
+// pre-pagination era (the alt tool tolerates unknown page params).
+func (s *plaudRecordingsService) listPage(ctx context.Context, now time.Time, page int) (string, error) {
+	callCtx, cancel := context.WithTimeout(ctx, plaudToolTimeout)
+	defer cancel()
 	args, _ := json.Marshal(map[string]any{
 		"date_from": now.UTC().AddDate(0, 0, -plaudListWindowDays).Format("2006-01-02"),
 		"date_to":   now.UTC().Format("2006-01-02"),
+		"page":      page,
+		"page_size": plaudListPageSize,
 	})
-	out, err := s.execTool(ctx, plaudListTool, args)
+	out, err := s.execTool(callCtx, plaudListTool, args)
 	if err == nil {
 		return out, nil
 	}
 	if !strings.Contains(err.Error(), "unknown tool") {
 		return "", err
 	}
-	out, err2 := s.execTool(ctx, plaudListToolAlt, args)
+	out, err2 := s.execTool(callCtx, plaudListToolAlt, args)
 	if err2 != nil {
 		return "", err
 	}
