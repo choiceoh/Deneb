@@ -307,9 +307,18 @@ func (p *Page) Render() []byte {
 	if p.Meta.Archived {
 		buf.WriteString("archived: true\n")
 	}
-	if p.Meta.Type != "" {
-		buf.WriteString("type: " + sanitizeScalar(p.Meta.Type) + "\n")
+	// OKF v0.1 requires every concept document to carry a non-empty type, so
+	// untyped pages default by category at render (인물 = entity, else
+	// concept) instead of omitting the field.
+	pageType := strings.TrimSpace(p.Meta.Type)
+	if pageType == "" {
+		if p.Meta.Category == "인물" {
+			pageType = "entity"
+		} else {
+			pageType = "concept"
+		}
 	}
+	buf.WriteString("type: " + sanitizeScalar(pageType) + "\n")
 	if p.Meta.Confidence != "" {
 		buf.WriteString("confidence: " + sanitizeScalar(p.Meta.Confidence) + "\n")
 	}
