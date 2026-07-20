@@ -43,9 +43,10 @@ type fakeWiki map[string]struct{}
 
 func (f fakeWiki) ActiveCounterpartyDomains(string) map[string]struct{} { return f }
 
-// fakeFailed is an in-memory FailedRequestSource capturing the window it got.
+// fakeFailed is an in-memory AgentLogSource capturing the window it got.
 type fakeFailed struct {
 	reqs    []agentlog.FailedRequest
+	grinds  []agentlog.HighEffortRun
 	sinceMs *int64
 }
 
@@ -54,6 +55,10 @@ func (f fakeFailed) FailedUserRequests(sinceMs int64, _ int) []agentlog.FailedRe
 		*f.sinceMs = sinceMs
 	}
 	return f.reqs
+}
+
+func (f fakeFailed) HighEffortUserRuns(int64, int, int) []agentlog.HighEffortRun {
+	return f.grinds
 }
 
 // truncRunes caps at n runes with an ellipsis (Korean runes count as 1 each).
@@ -153,27 +158,60 @@ func TestDigest_FailedRequests(t *testing.T) {
 	}
 }
 
+// The digest surfaces completed-but-grinding runs (implicit demand): quoted
+// request, effort stats, top-tool histogram, and the skill-consult marker.
+// An empty source stays silent.
+func TestDigest_HighEffortRuns(t *testing.T) {
+	src := Sources{
+		AgentLog: fakeFailed{grinds: []agentlog.HighEffortRun{
+			{Message: "경쟁사 케이블 단가 비교해줘", ToolCalls: 14, Turns: 5, TopTools: "wiki×6 · exec×4", Ts: time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC).UnixMilli()},
+			{Message: "주간 발주 현황 정리", ToolCalls: 9, Turns: 3, UsedSkill: true, Ts: time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC).UnixMilli()},
+		}},
+		Now: func() time.Time { return time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC) },
+	}
+	got := Digest(src)
+	if !strings.Contains(got, "고비용 완주 런") {
+		t.Fatalf("digest missing high-effort section:\n%s", got)
+	}
+	if !strings.Contains(got, `"경쟁사 케이블 단가 비교해줘" — 도구 14회/5턴, 주도구 wiki×6 · exec×4`) {
+		t.Fatalf("high-effort run must carry quote, effort stats, and top tools:\n%s", got)
+	}
+	if !strings.Contains(got, `"주간 발주 현황 정리" — 도구 9회/3턴 (스킬 참조함)`) {
+		t.Fatalf("skill-consulted run must carry the marker without a top-tools suffix:\n%s", got)
+	}
+
+	if got := Digest(Sources{AgentLog: fakeFailed{}}); got != "" {
+		t.Fatalf("no grinding runs should keep the digest silent, got %q", got)
+	}
+}
+
 // M6: the failed-request section — the strongest demand evidence — must render
 // BEFORE feed/domain/calendar so a downstream rune-budget truncation cannot
 // silently starve it.
 func TestDigest_FailedRequestsRenderFirst(t *testing.T) {
 	src := Sources{
-		AgentLog: fakeFailed{reqs: []agentlog.FailedRequest{
-			{Message: "실패한 능력 요청", Error: "no capability", Ts: time.Date(2026, 7, 12, 9, 0, 0, 0, time.UTC).UnixMilli()},
-		}},
+		AgentLog: fakeFailed{
+			reqs: []agentlog.FailedRequest{
+				{Message: "실패한 능력 요청", Error: "no capability", Ts: time.Date(2026, 7, 12, 9, 0, 0, 0, time.UTC).UnixMilli()},
+			},
+			grinds: []agentlog.HighEffortRun{
+				{Message: "갈아서 해결한 요청", ToolCalls: 11, Turns: 4, Ts: time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC).UnixMilli()},
+			},
+		},
 		Feed: fakeFeed{items: []workfeed.Item{{Title: "피드 항목 하나"}}},
 		Wiki: fakeWiki{"acme.com": {}},
 		Now:  func() time.Time { return time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC) },
 	}
 	got := Digest(src)
 	failedAt := strings.Index(got, "실패한 요청")
+	grindAt := strings.Index(got, "고비용 완주 런")
 	feedAt := strings.Index(got, "업무 피드")
 	domainAt := strings.Index(got, "위키 상대 도메인")
-	if failedAt < 0 || feedAt < 0 || domainAt < 0 {
-		t.Fatalf("expected all three sections present:\n%s", got)
+	if failedAt < 0 || grindAt < 0 || feedAt < 0 || domainAt < 0 {
+		t.Fatalf("expected all four sections present:\n%s", got)
 	}
-	if !(failedAt < feedAt && failedAt < domainAt) {
-		t.Fatalf("failed-request section must render first (failed=%d feed=%d domain=%d):\n%s", failedAt, feedAt, domainAt, got)
+	if !(failedAt < grindAt && grindAt < feedAt && failedAt < domainAt) {
+		t.Fatalf("demand sections must lead (failed=%d grind=%d feed=%d domain=%d):\n%s", failedAt, grindAt, feedAt, domainAt, got)
 	}
 }
 

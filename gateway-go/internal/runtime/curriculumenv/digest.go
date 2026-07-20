@@ -34,15 +34,22 @@ const (
 	domainWindow  = 7 * 24 * time.Hour
 	forwardWindow = 14 * 24 * time.Hour
 	failedWindow  = 14 * 24 * time.Hour
+	// grindWindow bounds the high-effort-run lookback — like failures, heavy
+	// completed runs are scarce at single-operator cadence.
+	grindWindow = 14 * 24 * time.Hour
 )
 
-// feedCap / domainCap / eventCap / failedCap bound each section so the digest
-// stays compact.
+// feedCap / domainCap / eventCap / failedCap / grindCap bound each section so
+// the digest stays compact.
 const (
 	feedCap   = 20
 	domainCap = 15
 	eventCap  = 15
 	failedCap = 8
+	grindCap  = 6
+	// grindMinToolCalls is the effort floor for the high-effort section: below
+	// it a run is ordinary tool use, not grinding worth a purpose-built skill.
+	grindMinToolCalls = 8
 )
 
 // upcomingCalEvents returns business-calendar events overlapping [from, to).
@@ -70,10 +77,13 @@ type WikiDomainSource interface {
 	ActiveCounterpartyDomains(cutoff string) map[string]struct{}
 }
 
-// FailedRequestSource is the narrow slice of the agent behavioral log the
-// digest needs. *agentlog.Writer satisfies it structurally.
-type FailedRequestSource interface {
+// AgentLogSource is the narrow slice of the agent behavioral log the digest
+// needs: explicit capability gaps (failed requests) and implicit ones
+// (completed-but-grinding runs — the SearchOS host-miner half of the demand
+// signal). *agentlog.Writer satisfies it structurally.
+type AgentLogSource interface {
 	FailedUserRequests(sinceMs int64, limit int) []agentlog.FailedRequest
+	HighEffortUserRuns(sinceMs int64, minToolCalls, limit int) []agentlog.HighEffortRun
 }
 
 // Sources are the injected environment stores the digest reads (feed + wiki +
@@ -85,7 +95,7 @@ type FailedRequestSource interface {
 type Sources struct {
 	Feed     FeedLister
 	Wiki     WikiDomainSource
-	AgentLog FailedRequestSource
+	AgentLog AgentLogSource
 	Now      func() time.Time
 }
 
@@ -105,6 +115,7 @@ func Digest(s Sources) string {
 	// (curriculum.assembleDemandEvidence) truncates the digest to a rune
 	// budget. Rendering it last meant a busy feed+calendar silently starved it.
 	writeFailedRequestsSection(&b, s.AgentLog, now)
+	writeHighEffortSection(&b, s.AgentLog, now)
 	writeFeedSection(&b, s.Feed)
 	writeWikiDomainsSection(&b, s.Wiki, now)
 	writeUpcomingEventsSection(&b, now)
@@ -116,7 +127,7 @@ func Digest(s Sources) string {
 // with the request text so the 12-rune verbatim-quote grounding gate can bind a
 // proposal to the actual ask. Live-test synthetic sessions are excluded at the
 // source (agentlog.FailedUserRequests).
-func writeFailedRequestsSection(b *strings.Builder, agentLog FailedRequestSource, now func() time.Time) {
+func writeFailedRequestsSection(b *strings.Builder, agentLog AgentLogSource, now func() time.Time) {
 	if agentLog == nil {
 		return
 	}
@@ -129,6 +140,37 @@ func writeFailedRequestsSection(b *strings.Builder, agentLog FailedRequestSource
 		line := fmt.Sprintf("- %s: \"%s\"", time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80))
 		if e := strings.TrimSpace(r.Error); e != "" {
 			line += " — 오류: " + truncRunes(e, 60)
+		}
+		b.WriteString(line + "\n")
+	}
+}
+
+// writeHighEffortSection renders completed real-user runs that ground through
+// an unusually high tool-call count — the implicit demand signal (the agent
+// managed, but the hard way; a recurring shape at this cost is a skill
+// candidate). Quoted request text lets the 12-rune verbatim-quote grounding
+// gate bind a proposal to the actual ask, same as the failed section.
+func writeHighEffortSection(b *strings.Builder, agentLog AgentLogSource, now func() time.Time) {
+	if agentLog == nil {
+		return
+	}
+	runs := agentLog.HighEffortUserRuns(now().Add(-grindWindow).UnixMilli(), grindMinToolCalls, grindCap)
+	if len(runs) == 0 {
+		return
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(b, "고비용 완주 런(도구 %d회 이상 갈아서 해결한 실제 요청 — 유사 요청이 반복되면 스킬 후보, 최대 %d):\n",
+		grindMinToolCalls, grindCap)
+	for _, r := range runs {
+		line := fmt.Sprintf("- %s: \"%s\" — 도구 %d회/%d턴",
+			time.UnixMilli(r.Ts).Format("01-02"), truncRunes(r.Message, 80), r.ToolCalls, r.Turns)
+		if r.TopTools != "" {
+			line += ", 주도구 " + r.TopTools
+		}
+		if r.UsedSkill {
+			line += " (스킬 참조함)"
 		}
 		b.WriteString(line + "\n")
 	}
