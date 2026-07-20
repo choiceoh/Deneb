@@ -22,3 +22,8 @@ template-append = """
 - Conventional Commits required: `type(scope): subject` — type in feat|fix|perf|refactor|docs|test|chore|ci|build, scope = module (chat, native, andromeda, ...).
 - Korean subject lines are fine; keep code identifiers in English.
 """
+
+[aliases]
+# One command from worktree to landed: push, ensure a PR exists, then run the
+# repo landing pipeline (green-gate watch -> squash -> landed-verify).
+land = "git push -u origin {{ branch }} && (gh pr view {{ branch }} --json number --jq .number >/dev/null 2>&1 || gh pr create --base main --fill) && scripts/dev/pr.sh land $(gh pr view {{ branch }} --json number --jq .number)"
