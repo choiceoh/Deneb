@@ -200,9 +200,16 @@ export function CommandPalette() {
         label: "모닝 브리핑 투어",
         hint: "데네브가 화면을 옮기며 브리핑",
         run: () => {
+          // 클릭 즉시 화면이 반응해야 한다: 투어 1단계(today 레이아웃)는 에이전트
+          // 왕복(첫 화면 명령까지 수 분)을 기다리지 않고 로컬에서 바로 연다. 채팅
+          // 탭에서 눌러도 이 layout이 작업 화면으로 복귀시킨다.
+          applyLayout(["today"]);
+          // 브리핑은 데네브 패널로 스트리밍된다 — 접힌(기본) 패널 속으로 흘러가면
+          // 투어 전체가 "안 되는" 것처럼 보이므로 반드시 펴 준다.
+          setAiCollapsed(false);
           if (
             !askDeneb(
-              "오늘 모닝 브리핑 투어를 시작해줘. workstation 도구로 화면을 직접 옮기면서 단계마다 한두 문장으로 브리핑해: ① layout으로 today를 열고 오늘 핵심(미결·일정·마감) 요약 ② open mail(어제 날짜 date 지정)로 어제 메일 중 답장 필요한 것 짚기 ③ approvals를 열고 미결이 있으면 spotlight로 강조 ④ 마지막으로 오늘 가장 먼저 할 일 1가지 추천.",
+              "오늘 모닝 브리핑 투어를 시작해줘. today 화면은 방금 열어뒀어. workstation 도구로 화면을 직접 옮기면서 단계마다 한두 문장으로 브리핑해: ① 이미 열린 today 화면 기준으로 오늘 핵심(미결·일정·마감) 요약 ② open mail(어제 날짜 date 지정)로 어제 메일 중 답장 필요한 것 짚기 ③ approvals를 열고 미결이 있으면 spotlight로 강조 ④ 마지막으로 오늘 가장 먼저 할 일 1가지 추천. 각 단계는 데이터 조회보다 화면 이동을 먼저 해.",
             )
           )
             palLog.warn("ask sink unavailable");
