@@ -44,8 +44,11 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <!-- Share-sheet capture: receive text/image/audio/document shared from
-                 any app into the Deneb chat. PDF rides the same document-capture
-                 path as the in-app picker (gateway extraction). -->
+                 any app into the Deneb chat. Documents ride the same capture path
+                 as the in-app picker (gateway extraction) — keep the accepted set
+                 in lockstep with the gateway dispatcher (document_extract.go):
+                 PDF/CSV/OOXML(docx·xlsx·pptx)/Markdown. HWP stays out until the
+                 gateway grows an extractor for it. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -55,6 +58,10 @@
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="text/csv" />
                 <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
             </intent-filter>
             <!-- Multi-image share: several receipt photos / scan pages at once. -->
             <intent-filter>
