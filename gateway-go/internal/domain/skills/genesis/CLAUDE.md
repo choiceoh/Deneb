@@ -67,7 +67,9 @@ review와 delivery를 분리하고, `watch_passed` 이후에만 `applied`를 파
 1. `validation_replay.go`의 behavioral replay
 2. bounded edit와 self-harness audit의 결정적 selection preflight
 3. `validation_engine.go`의 visible/blind held-out 및 케이스 단위 flip gate
-4. LLM self-test judge와 teacher escalation
+4. LLM self-test judge와 teacher escalation (승인 verdict는 order-swap 일관성
+   프로브 통과 필수 — 역방향 쌍을 기각해야 하며, 양방향 승인/프로브 오류는
+   fail-closed. 킬스위치 `DENEB_JUDGE_SWAP_CHECK=0`)
 5. K개 후보 중 held-out margin이 가장 높은 후보 커밋
 6. `tracker_usage.go`의 post-evolve rollback watch
 

@@ -463,9 +463,18 @@ func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
 		}
 	}))
 	defer teacherServer.Close()
+	// Order-consistent judge fake: accepts the forward pair, rejects the
+	// order-swap probe's reversed pair (a position-blind always-accept fake
+	// would be refused by the swap consistency gate, by design).
+	lightweightCalls := 0
 	lightweightServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lightweightCalls++
 		w.Header().Set("Content-Type", "text/event-stream")
-		writeTestSSEJSON(t, w, `{"pass":true,"original_score":80,"candidate_score":90,"reason":"teacher rewrite is safer"}`)
+		if lightweightCalls%2 == 1 {
+			writeTestSSEJSON(t, w, `{"pass":true,"original_score":80,"candidate_score":90,"reason":"teacher rewrite is safer"}`)
+			return
+		}
+		writeTestSSEJSON(t, w, `{"pass":false,"original_score":90,"candidate_score":80,"reason":"reversed pair is a regression"}`)
 	}))
 	defer lightweightServer.Close()
 
