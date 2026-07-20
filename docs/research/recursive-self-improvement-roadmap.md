@@ -14,6 +14,7 @@
 | MetaSkill-Evolve (2026-07-06) | [2607.05297](https://arxiv.org/abs/2607.05297) | The improvement pipeline itself is a **meta-skill**, evolved on a slow timescale while task skills evolve on a fast one (two-timescale). Pipeline decomposed into Analyzer/Retriever/Allocator/Proposer/Evolver. | The fast loop already exists (evolver + nudger + idle backstop). The slow loop does not: our improvement procedure is hardcoded Go. Externalize its LLM-facing parts and evolve them. |
 | CoEvoSkills (2026-04-02) | [2604.01687](https://arxiv.org/abs/2604.01687) | Co-evolve the skill **generator** with a **surrogate verifier**, so verification quality grows with generation quality instead of staying a fixed bottleneck. | Our judge/validation stack is static. Post-hoc outcomes (rollbacks, post-evolve usage) are exactly the labels a verifier can learn from — the tracker already records them. |
 | SkillSmith (2026-05-31) | [2606.01314](https://arxiv.org/abs/2606.01314) | Evolve skills and **tools together** as atomic bundles — skill-only evolution plateaus when the missing capability is a tool. | Tools are Go source = forbidden self-edit surface (`editable_surfaces.go`), by design. The bundle idea maps to pairing a skill evolve with a **self-correction coding candidate** (propose-only, operator-gated). |
+| RHI (2026-07-17) | [2607.15524](https://arxiv.org/abs/2607.15524) | **Trajectory-local self-comparison**: judge each harness revision only against its immediate predecessor (Θ(1)/iteration, no population), accumulate the pairwise preference history, and let the recurring-issue delta checklist steer the next revision. Gains come from task-specific context management (contracts), not longer reasoning. | Adopted as the dreamer-local slow loop over `wiki-dream-rules.md` (P2 note above): comparison ledger + weakness delta checklist + gated revision. RHI's ungated replacement is replaced with Deneb's contract gate + `.bak` + loss-streak rollback. Contracts-first finding informs subagent prompt design (return contracts over instructions). |
 
 ## What already exists (do not rebuild)
 
@@ -119,6 +120,22 @@ card; the drift self-brake (`evolution_drift.go`) freezes auto-adoption back
 to propose-only on reward-hacking signals. First live cycle verified in
 production (2026-07-11 19:56 KST: producer epoch proposed quantifying evolve
 rule 14).
+
+*RHI self-comparison lane LANDED (2026-07-20, arXiv 2607.15524 adoption).* A
+second, dreamer-local slow loop over the FOURTH evolvable artifact —
+`wiki-dream-rules.md`, the externalized synthesis rules override
+`loadWikiSynthesisRules` always anticipated: each dream cycle's proposal
+report is pairwise-judged against its immediate predecessor
+(trajectory-local, one small LLM call), the verdict + fixed-vocabulary
+weakness tags accumulate in `.dream-selfcompare.jsonl`, and once a weakness
+recurs (RHI's delta-checklist signal) a weekly-capped revision pass rewrites
+the rules. RHI's unconditional replacement is deliberately not adopted:
+adoption passes a deterministic contract gate (load-bearing invariant lines
+must survive — the gate is itself regression-coupled to the compiled default
+rules in tests), keeps a `.bak`, and a post-revision loss streak (≥2
+previous-wins, 0 current-wins in the first 3 comparisons) auto-restores it.
+Production-only (`SetRulesEvolution`, fail-closed; kill switch
+`DENEB_DREAM_RULES_EVOLVE=0`).
 
 A weekly autonomous task proposes ONE meta-artifact revision per cycle. The
 original fitness design ("EvolutionHealthSummary deltas + auto-revert") was
