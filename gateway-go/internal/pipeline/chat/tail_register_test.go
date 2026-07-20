@@ -3,6 +3,7 @@ package chat
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -34,11 +35,11 @@ func TestTailRegisterRoundTripByteIdentical(t *testing.T) {
 	adds := []string{"<recall-context>증거</recall-context>", "[전달 정책 — 이번 턴]\n- 정책"}
 
 	// The recording run's wire form.
-	injected, ok, cleanContent := injectTailAdditionsTracked([]llm.Message{clean}, adds)
+	injected, ok, cleanContent, targetIdx := injectTailAdditionsTracked([]llm.Message{clean}, adds)
 	if !ok || cleanContent == nil {
 		t.Fatal("injection failed")
 	}
-	recordPersistedTail(session, cleanContent, adds)
+	recordPersistedTail(session, cleanContent, userMessageHashOrdinal([]llm.Message{clean}, targetIdx), adds)
 
 	// The next run reloads the clean message from the transcript.
 	attached := attachPersistedTails(session, []llm.Message{clean})
@@ -60,11 +61,11 @@ func TestTailRegisterRoundTripBlockContent(t *testing.T) {
 	})
 	adds := []string{"recall"}
 
-	injected, ok, cleanContent := injectTailAdditionsTracked([]llm.Message{clean}, adds)
+	injected, ok, cleanContent, targetIdx := injectTailAdditionsTracked([]llm.Message{clean}, adds)
 	if !ok {
 		t.Fatal("injection failed")
 	}
-	recordPersistedTail(session, cleanContent, adds)
+	recordPersistedTail(session, cleanContent, userMessageHashOrdinal([]llm.Message{clean}, targetIdx), adds)
 
 	attached := attachPersistedTails(session, []llm.Message{clean})
 	if got, want := string(attached[0].Content.Bytes()), string(injected[0].Content.Bytes()); got != want {
@@ -74,7 +75,7 @@ func TestTailRegisterRoundTripBlockContent(t *testing.T) {
 
 func TestTailRegisterUnknownMessagesPassThrough(t *testing.T) {
 	resetTailRegister(t, "")
-	recordPersistedTail("client:main", []byte(`"other"`), []string{"tail"})
+	recordPersistedTail("client:main", []byte(`"other"`), 0, []string{"tail"})
 
 	msgs := []llm.Message{llm.NewTextMessage("user", "no tail recorded")}
 	if attached := attachPersistedTails("client:main", msgs); &attached[0] != &msgs[0] && string(attached[0].Content.Bytes()) != string(msgs[0].Content.Bytes()) {
@@ -90,7 +91,7 @@ func TestTailRegisterEvictsOldestBeyondCap(t *testing.T) {
 	resetTailRegister(t, "")
 	const session = "client:main"
 	for i := 0; i < tailRegisterMaxPerSession+10; i++ {
-		recordPersistedTail(session, []byte{byte(i), byte(i >> 8)}, []string{"t"})
+		recordPersistedTail(session, []byte{byte(i), byte(i >> 8)}, 0, []string{"t"})
 	}
 	messageTails.mu.Lock()
 	n := len(messageTails.sessions[session])
@@ -107,8 +108,8 @@ func TestTailRegisterEvictsOldestBeyondCap(t *testing.T) {
 func TestTailRegisterPersistsRestorableSessionsAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
 	resetTailRegister(t, dir)
-	recordPersistedTail("client:main", []byte(`"persisted"`), []string{"tail-main"})
-	recordPersistedTail("system:cron", []byte(`"volatile"`), []string{"tail-cron"})
+	recordPersistedTail("client:main", []byte(`"persisted"`), 0, []string{"tail-main"})
+	recordPersistedTail("system:cron", []byte(`"volatile"`), 0, []string{"tail-cron"})
 
 	if _, err := os.Stat(filepath.Join(dir, tailRegisterFileName)); err != nil {
 		t.Fatalf("register file not written: %v", err)
@@ -135,11 +136,50 @@ func TestTailRegisterPersistsRestorableSessionsAcrossRestart(t *testing.T) {
 
 func TestTailRegisterClearDropsSession(t *testing.T) {
 	resetTailRegister(t, "")
-	recordPersistedTail("client:main", []byte(`"m"`), []string{"tail"})
+	recordPersistedTail("client:main", []byte(`"m"`), 0, []string{"tail"})
 	clearPersistedTails("client:main")
 
 	msgs := []llm.Message{{Role: "user", Content: llm.FlexibleFromRaw([]byte(`"m"`))}}
 	if got := attachPersistedTails("client:main", msgs); string(got[0].Content.Bytes()) != `"m"` {
 		t.Fatal("cleared session still attaches tails")
+	}
+}
+
+// Duplicate user utterances must not share one recorded tail — the second
+// "확인" carries different recall evidence than the first.
+func TestTailRegisterDuplicateUserMessagesGetDistinctTails(t *testing.T) {
+	resetTailRegister(t, "")
+	const session = "client:main"
+	first := llm.NewTextMessage("user", "확인")
+	second := llm.NewTextMessage("user", "확인")
+	history := []llm.Message{
+		first,
+		llm.NewTextMessage("assistant", "첫 답변"),
+		second,
+	}
+
+	firstAdds := []string{"<recall-context>계약 A</recall-context>"}
+	secondAdds := []string{"<recall-context>계약 B</recall-context>"}
+
+	_, ok, clean1, idx1 := injectTailAdditionsTracked([]llm.Message{first}, firstAdds)
+	if !ok {
+		t.Fatal("first injection failed")
+	}
+	recordPersistedTail(session, clean1, userMessageHashOrdinal([]llm.Message{first}, idx1), firstAdds)
+
+	_, ok, clean2, idx2 := injectTailAdditionsTracked(history, secondAdds)
+	if !ok {
+		t.Fatal("second injection failed")
+	}
+	recordPersistedTail(session, clean2, userMessageHashOrdinal(history, idx2), secondAdds)
+
+	attached := attachPersistedTails(session, history)
+	firstBody := string(attached[0].Content.Bytes())
+	secondBody := string(attached[2].Content.Bytes())
+	if !strings.Contains(firstBody, "계약 A") || strings.Contains(firstBody, "계약 B") {
+		t.Fatalf("first duplicate got wrong tail: %q", firstBody)
+	}
+	if !strings.Contains(secondBody, "계약 B") || strings.Contains(secondBody, "계약 A") {
+		t.Fatalf("second duplicate got wrong tail: %q", secondBody)
 	}
 }
