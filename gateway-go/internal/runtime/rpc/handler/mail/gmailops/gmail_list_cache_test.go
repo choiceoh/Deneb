@@ -186,39 +186,134 @@ func TestGmailListRecent_MarkReadKeepsCache(t *testing.T) {
 	}
 }
 
+func TestGmailListRecent_StaleRefreshDoesNotRestoreAfterArchive(t *testing.T) {
+	var calls int
+	releaseFetch := make(chan struct{})
+	client := &fakeGmailClient{
+		searchPageFn: func(_ context.Context, _, _ string, _ int) ([]gmail.MessageSummary, string, error) {
+			calls++
+			if calls > 1 {
+				<-releaseFetch
+			}
+			return []gmail.MessageSummary{{ID: "m1", Labels: []string{"INBOX"}}}, "", nil
+		},
+		modifyLabelsFn: func(_ context.Context, _ string, _, _ []string) error { return nil },
+		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: "m1", Labels: []string{"INBOX"}}, nil
+		},
+	}
+	cache := newListCache(30 * time.Second)
+	listH := gmailListRecent(depsFor(client), cache)
+	archiveH := gmailArchive(depsFor(client), cache)
+
+	// Seed a stale entry (past TTL, within ceiling).
+	now := time.Now()
+	cache.put("{in:inbox is:unread} newer_than:30d|60||0", map[string]any{
+		"messages": []mailRowOut{{ID: "m1"}},
+	}, now.Add(-2*time.Minute))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resp := listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+		if !resp.OK {
+			t.Errorf("stale list failed: %+v", resp.Error)
+		}
+	}()
+
+	// Wait for the blocked background refresh to start.
+	deadline := time.Now().Add(2 * time.Second)
+	for calls < 1 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if calls < 1 {
+		t.Fatal("background stale refresh never started")
+	}
+
+	resp := archiveH(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	if !resp.OK {
+		t.Fatalf("archive failed: %+v", resp.Error)
+	}
+
+	close(releaseFetch)
+	<-done
+
+	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+
+	if calls != 2 {
+		t.Fatalf("list fetched %d times, want 2 (stale refresh must not resurrect cache after archive)", calls)
+	}
+}
+
 func TestListCache_StaleServeAndSingleFlightRefresh(t *testing.T) {
 	c := newListCache(30 * time.Second)
 	now := time.Now()
 	c.put("k", map[string]any{"v": 1}, now)
 
 	// Fresh window: not stale (the fresh get path owns it).
-	if _, ok, _ := c.getStale("k", now.Add(10*time.Second)); ok {
+	if _, ok, _, _ := c.getStale("k", now.Add(10*time.Second)); ok {
 		t.Fatal("fresh entry must not be served via the stale path")
 	}
 
 	// Past TTL, within ceiling: served, and the first caller wins the refresh.
 	at := now.Add(2 * time.Minute)
-	payload, ok, refresh := c.getStale("k", at)
-	if !ok || payload["v"] != 1 || !refresh {
-		t.Fatalf("want stale hit + refresh claim, got ok=%v refresh=%v", ok, refresh)
+	payload, ok, refresh, gen := c.getStale("k", at)
+	if !ok || payload["v"] != 1 || !refresh || gen != 0 {
+		t.Fatalf("want stale hit + refresh claim, got ok=%v refresh=%v gen=%d", ok, refresh, gen)
 	}
-	if _, ok, refresh := c.getStale("k", at); !ok || refresh {
+	if _, ok, refresh, _ := c.getStale("k", at); !ok || refresh {
 		t.Fatalf("second caller must be served without a duplicate refresh claim (ok=%v refresh=%v)", ok, refresh)
 	}
 	c.refreshDone("k")
-	if _, ok, refresh := c.getStale("k", at); !ok || !refresh {
+	if _, ok, refresh, _ := c.getStale("k", at); !ok || !refresh {
 		t.Fatalf("after refreshDone the claim must be available again (ok=%v refresh=%v)", ok, refresh)
 	}
 
 	// Past the ceiling: dead.
-	if _, ok, _ := c.getStale("k", now.Add(listCacheStaleServeCeiling+time.Second)); ok {
+	if _, ok, _, _ := c.getStale("k", now.Add(listCacheStaleServeCeiling+time.Second)); ok {
 		t.Fatal("entry past the stale ceiling must not be served")
 	}
 
 	// Nil safety mirrors the other methods.
 	var nilCache *listCache
-	if _, ok, _ := nilCache.getStale("k", at); ok {
+	if _, ok, _, _ := nilCache.getStale("k", at); ok {
 		t.Fatal("nil cache must miss")
 	}
 	nilCache.refreshDone("k")
+}
+
+func TestListCache_PutIfGenerationSkipsAfterInvalidate(t *testing.T) {
+	c := newListCache(30 * time.Second)
+	now := time.Now()
+	c.put("k", map[string]any{"v": 1}, now.Add(-2*time.Minute))
+
+	_, ok, refresh, gen := c.getStale("k", now)
+	if !ok || !refresh {
+		t.Fatalf("want stale refresh claim, got ok=%v refresh=%v", ok, refresh)
+	}
+
+	c.invalidate()
+
+	c.putIfGeneration("k", map[string]any{"v": 2}, now, gen)
+	if _, hit := c.get("k", now); hit {
+		t.Fatal("stale background put must not restore cache after invalidate")
+	}
+}
+
+func TestListCache_InvalidateClearsInFlightRefreshClaim(t *testing.T) {
+	c := newListCache(30 * time.Second)
+	now := time.Now()
+	c.put("k", map[string]any{"v": 1}, now.Add(-2*time.Minute))
+
+	_, ok, refresh, _ := c.getStale("k", now)
+	if !ok || !refresh {
+		t.Fatal("want refresh claim")
+	}
+
+	c.invalidate()
+
+	_, ok, refresh, _ = c.getStale("k", now.Add(-2*time.Minute))
+	if ok || refresh {
+		t.Fatalf("after invalidate a new stale refresh must not be blocked (ok=%v refresh=%v)", ok, refresh)
+	}
 }
