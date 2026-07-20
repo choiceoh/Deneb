@@ -5,14 +5,19 @@ Reads the wt-provided commit prompt (diff + instructions, including the
 project `template-append` from .config/wt.toml) on stdin and prints the
 commit message on stdout. Backed by the wormhole (single local URL + token,
 fronting glm-5.2 and the local GPU models) so it needs no external API key
-and works unmetered. Wire it in the worktrunk *user* config:
+and works unmetered. Deployed host-wide (checkouts on branches predating this
+file still need it, e.g. for `wt list --full` summaries):
+
+    install -m 755 scripts/dev/wt-commit-msg.py ~/.local/bin/wt-commit-msg
+
+and wired in the worktrunk *user* config:
 
     [commit.generation]
-    command = "python3 scripts/dev/wt-commit-msg.py"
+    command = "wt-commit-msg"
 
-The command runs with the worktree as cwd, so the relative path resolves in
-any Deneb checkout. Default model is the local GPU one; override with
-WT_COMMIT_MODEL=glm-5.2 for higher quality.
+This repo file is the source of truth — re-run the install line after editing.
+Default model is the local GPU one; override with WT_COMMIT_MODEL=glm-5.2 for
+higher quality.
 """
 
 import json
@@ -59,7 +64,11 @@ def main() -> int:
         print(f"wt-commit-msg: wormhole call failed: {e}", file=sys.stderr)
         return 1
     msg = re.sub(r"<think>.*?</think>", "", msg, flags=re.S).strip()
-    msg = re.sub(r"^```[a-z]*\n(.*?)\n```$", r"\1", msg, flags=re.S).strip()
+    # chatty models wrap the message in a fence with preamble/epilogue around
+    # it — if any fenced block exists, that block IS the message
+    fenced = re.search(r"```[a-zA-Z]*\n(.*?)```", msg, flags=re.S)
+    if fenced:
+        msg = fenced.group(1).strip()
     if not msg:
         print("wt-commit-msg: model returned an empty message", file=sys.stderr)
         return 1

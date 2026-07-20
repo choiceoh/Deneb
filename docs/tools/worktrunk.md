@@ -33,11 +33,17 @@ wt config shell install bash   # one line in ~/.bashrc: cd-on-switch + completio
 
 ## Configuration
 
-- **User config** `~/.config/worktrunk/config.toml` — personal; holds the path
-  template that pins worktrees to the repo convention: <!-- docref:ignore -->
+- **User config** `~/.config/worktrunk/config.toml` — personal; pins worktrees
+  to the repo convention and enables the LLM features: <!-- docref:ignore -->
 
   ```toml
   worktree-path = "{{ repo_path }}/.worktrees/{{ branch | sanitize }}"
+
+  [list]
+  summary = true                 # LLM one-line branch summaries in `wt list --full`
+
+  [commit.generation]
+  command = "wt-commit-msg"      # host-deployed from scripts/dev/wt-commit-msg.py
   ```
 
   `.worktrees/` is gitignored, and existing `~/deneb-dev/.worktrees/*` trees
@@ -69,15 +75,28 @@ with "Cannot prompt". Agents therefore run `wt -y <cmd>` instead, which skips
 the prompt **for that invocation only** (verified: `-y` does not persist an
 approval). Re-approval is required whenever a hook command changes.
 
-## LLM commit messages
+## LLM commit messages and branch summaries
 
-`wt step commit` (stage + commit with a generated message) and squash
-messages are powered by `scripts/dev/wt-commit-msg.py`, wired in the user
-config `[commit.generation]`. The script calls the wormhole
-(`127.0.0.1:18800`, token read at runtime from `~/.wormhole/config.json`) <!-- docref:ignore -->
-with the local GPU model — no external API key, unmetered. Override with
+`wt step commit` (stage + commit with a generated message), squash messages,
+and the `wt list --full` per-branch summaries (`[list] summary = true`,
+cached until the branch diff changes) are all powered by
+`scripts/dev/wt-commit-msg.py`. It calls the wormhole (`127.0.0.1:18800`,
+token read at runtime from `~/.wormhole/config.json`) with the local GPU <!-- docref:ignore -->
+model — no external API key, unmetered. Override with
 `WT_COMMIT_MODEL=glm-5.2` for higher quality. The Conventional Commits rule
 is injected automatically via `template-append` in `.config/wt.toml`.
+
+The script is deployed host-wide as `~/.local/bin/wt-commit-msg` (re-run <!-- docref:ignore -->
+`install -m 755 scripts/dev/wt-commit-msg.py ~/.local/bin/wt-commit-msg` <!-- docref:ignore -->
+after editing it) so it also works in checkouts whose branch predates the
+repo file — a worktree-relative command would silently break there.
+
+## Shell prompt statusline
+
+`~/.bashrc` appends a guarded block that prints `wt list statusline` (~80ms) <!-- docref:ignore -->
+above the prompt inside git repos and nothing elsewhere — branch, dirty
+state, ahead/behind, and CI at a glance. Remove the block to disable. The
+Claude Code statusline equivalent is wired separately (below).
 
 ## Claude Code plugin and statusline
 
