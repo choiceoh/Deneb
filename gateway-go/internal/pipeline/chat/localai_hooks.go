@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
@@ -17,13 +16,18 @@ import (
 //  2. Tool Output Compression: after tool execution, compress large outputs
 
 // deferredSubagentNotifications wraps a subagent notification channel into a
-// DeferredSystemText function. On each turn, it drains all available
-// notifications and returns them joined. Returns nil if the channel is nil.
-func deferredSubagentNotifications(subagentCh <-chan string) func() string {
+// DeferredTurnNotices function: each poll drains all available notifications.
+// The executor appends them as text blocks on the next tool-results user
+// message — NOT the system prompt, whose mid-run growth invalidated the
+// (system, tools) prefix for content-prefix provider caches (kimi) on every
+// late notification. Undrained notices stay in the buffered channel (it is
+// session-scoped) and surface on the next run. Returns nil if the channel is
+// nil.
+func deferredSubagentNotifications(subagentCh <-chan string) func() []string {
 	if subagentCh == nil {
 		return nil
 	}
-	return func() string {
+	return func() []string {
 		var parts []string
 		for {
 			select {
@@ -32,7 +36,7 @@ func deferredSubagentNotifications(subagentCh <-chan string) func() string {
 					parts = append(parts, notif)
 				}
 			default:
-				return strings.Join(parts, "\n\n")
+				return parts
 			}
 		}
 	}

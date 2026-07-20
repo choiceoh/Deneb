@@ -17,10 +17,6 @@ func TestTurnRequestPreparerPreservesPreparationOrder(t *testing.T) {
 			order = append(order, "context")
 			return ctx
 		},
-		DeferredSystemText: func() string {
-			order = append(order, "system")
-			return "late context"
-		},
 		DynamicToolsProvider: func() []llm.Tool {
 			order = append(order, "tools")
 			return []llm.Tool{{Name: "read"}}
@@ -44,7 +40,7 @@ func TestTurnRequestPreparerPreservesPreparationOrder(t *testing.T) {
 
 	order = nil
 	preparer.prepare(context.Background(), 1, messages, nil)
-	if want := []string{"context", "system", "tools", "messages", "thinking"}; !slices.Equal(order, want) {
+	if want := []string{"context", "tools", "messages", "thinking"}; !slices.Equal(order, want) {
 		t.Fatalf("turn 1 preparation order = %v, want %v", order, want)
 	}
 }
@@ -63,21 +59,15 @@ func TestTurnRequestPreparerNilTurnContextKeepsPreviousContext(t *testing.T) {
 }
 
 func TestTurnRequestPreparerLoadsDeferredInputsAfterFirstTurn(t *testing.T) {
-	systemTexts := []string{"first late context", "second late context"}
 	toolSets := [][]llm.Tool{
 		{{Name: "read"}},
 		{{Name: "read"}, {Name: "search"}},
 	}
-	deferredCall := 0
 	dynamicCall := 0
+	baseSystem := json.RawMessage(llm.SystemString("base").Bytes())
 	cfg := AgentConfig{
-		System: json.RawMessage(llm.SystemString("base").Bytes()),
+		System: baseSystem,
 		Tools:  []llm.Tool{{Name: "write"}},
-		DeferredSystemText: func() string {
-			text := systemTexts[deferredCall]
-			deferredCall++
-			return text
-		},
 		DynamicToolsProvider: func() []llm.Tool {
 			tools := toolSets[dynamicCall]
 			dynamicCall++
@@ -87,17 +77,20 @@ func TestTurnRequestPreparerLoadsDeferredInputsAfterFirstTurn(t *testing.T) {
 	preparer := newTurnRequestPreparer(&cfg)
 
 	preparer.prepare(context.Background(), 0, nil, nil)
-	if deferredCall != 0 || dynamicCall != 0 {
-		t.Fatalf("turn 0 polled deferred inputs: system=%d tools=%d", deferredCall, dynamicCall)
+	if dynamicCall != 0 {
+		t.Fatalf("turn 0 polled deferred tools: %d", dynamicCall)
 	}
 	preparer.prepare(context.Background(), 1, nil, nil)
 	prepared := preparer.prepare(context.Background(), 2, nil, nil)
 
-	if deferredCall != 2 || dynamicCall != 2 {
-		t.Fatalf("later turns polled deferred inputs: system=%d tools=%d, want 2 each", deferredCall, dynamicCall)
+	if dynamicCall != 2 {
+		t.Fatalf("later turns polled deferred tools: %d, want 2", dynamicCall)
 	}
-	if got, want := llm.ExtractSystemText(prepared.request.System), "base\n\nfirst late context\n\nsecond late context"; got != want {
-		t.Fatalf("system text = %q, want %q", got, want)
+	// The system prompt must stay byte-identical mid-run: content-prefix
+	// provider caches (kimi) cold-start on any (system, tools) byte change,
+	// so late notifications ride DeferredTurnNotices instead of System.
+	if got, want := llm.ExtractSystemText(prepared.request.System), "base"; got != want {
+		t.Fatalf("system text = %q, want unchanged %q", got, want)
 	}
 	toolNames := make([]string, 0, len(prepared.request.Tools))
 	for _, tool := range prepared.request.Tools {

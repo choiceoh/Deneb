@@ -193,6 +193,12 @@ func executeAgentRun(
 		skillConsults.Add(name)
 	}
 	cfg.Model = model // set the resolved model
+	// Content-prefix-cache providers (kimi) do exact-prefix matching over the
+	// raw request: the mid-run tool-result shrink (CompactPriorToolResults)
+	// mutates already-sent history bytes and forces a full cold re-prefill on
+	// every later call — costing far more than the shrink saves. Keep the
+	// history bytes stable there; marker-based providers keep the shrink.
+	cfg.DisablePriorToolResultCompaction = modelCapability(deps, providerID, model).ContentPrefixCache
 	// Per-model defaults (profile sampling, tuned max-tokens floor) — only
 	// fills values the request left unset; request-level params, cache-safe.
 	applyModelTuning(&cfg, deps, params, providerID, model)
@@ -729,13 +735,36 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 			"autoActivatedTools": autoActivatedTools,
 		})
 	}
+	// Re-attach the tails recorded for HISTORICAL user messages first: the
+	// transcript stores clean messages (display/search never see recall
+	// blocks), so without this the request bytes diverge from the previous
+	// run's cache at the first tailed message and content-prefix providers
+	// (kimi) re-bill the whole conversation every run (tail_register.go).
+	if !deps.briefcaseMode {
+		messages = attachPersistedTails(params.SessionKey, messages)
+	}
 	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
-	messages, tailInjected := injectTailAdditions(messages, tailAdds)
+	messages, tailInjected, cleanTarget := injectTailAdditionsTracked(messages, tailAdds)
+	if tailInjected && shouldRecordTail(params, deps) {
+		recordPersistedTail(params.SessionKey, cleanTarget, tailAdds)
+	}
 	tailForSystem := ""
 	if !tailInjected {
 		tailForSystem = strings.Join(tailAdds, "\n\n")
 	}
 	return messages, tailForSystem, autoLoadedSkills, autoActivatedTools
+}
+
+// shouldRecordTail reports whether this run's injected tail belongs in the
+// persisted-tail register: only when the injection target is the current
+// turn's transcript-persisted user message, i.e. the same bytes the next
+// run's history reload returns. Ephemeral (heartbeat) triggers and prebuilt
+// message lists are wire-only — recording them would attach tails to bytes
+// that never reload.
+func shouldRecordTail(params RunParams, deps runDeps) bool {
+	return !deps.briefcaseMode && !params.EphemeralUser &&
+		deps.transcript != nil && params.Message != "" &&
+		len(params.PrebuiltMessages) == 0
 }
 
 // wireBeforeAPICall assembles cfg.BeforeAPICall and applies the provider's

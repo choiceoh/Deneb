@@ -59,12 +59,16 @@ type AgentConfig struct {
 	// nil is a no-op; returning a modified ctx replaces the current turn context.
 	OnTurnInit func(ctx context.Context) context.Context
 
-	// DeferredSystemText is called before each turn starting from turn 1.
-	// When it returns a non-empty string, that text is appended to System and
-	// remains in subsequent requests. The hook stays installed and is polled
-	// on every later turn so multiple late-arriving sources can be injected
-	// without blocking the first turn.
-	DeferredSystemText func() string
+	// DeferredTurnNotices is polled once per committed tool turn; each
+	// returned string is appended as a trailing text block to that turn's
+	// tool-results user message. This is the delivery channel for
+	// late-arriving mid-run notifications (subagent completions): appending
+	// them to System between turns — the previous mechanism — rewrote the
+	// (system, tools) prefix mid-run, which content-prefix provider caches
+	// (kimi) punish with a full cold start; a tail block on the NEW user
+	// message costs only its own tokens. Undrained notices stay in the
+	// caller's buffered channel and surface on the next run's drains.
+	DeferredTurnNotices func() []string
 
 	// Thinking configures extended thinking for this run (mapped to reasoning_effort).
 	// nil = disabled (default). Set via session ThinkingLevel or /think command.
@@ -141,6 +145,16 @@ type AgentConfig struct {
 	// DisableStreamRetry prevents replay after a mid-stream idle/error event.
 	// Deterministic runs fail closed rather than duplicate a partial request.
 	DisableStreamRetry bool
+
+	// DisablePriorToolResultCompaction keeps completed turns' tool_result
+	// blocks at full size instead of shrinking them mid-run
+	// (CompactPriorToolResults). Set for content-prefix-cache providers
+	// (kimi): the in-place history rewrite breaks their exact-prefix match,
+	// so every later call re-bills the whole prompt at the cold rate — far
+	// more than the compaction saves. Carried tool results are still bounded
+	// per-result by the spillover cap, and run-boundary (polaris) compaction
+	// is unaffected.
+	DisablePriorToolResultCompaction bool
 	// RequireProviderModel fails the run unless every streamed turn reports one
 	// stable provider model identifier in message_start.
 	RequireProviderModel bool
