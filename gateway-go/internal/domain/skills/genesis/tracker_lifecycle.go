@@ -121,6 +121,11 @@ type evolveProvenance struct {
 	JudgeScoreOriginal    *float64 `json:"judgeScoreOriginal,omitempty"`
 	JudgeScoreCandidate   *float64 `json:"judgeScoreCandidate,omitempty"`
 	HeldOutMargin         *float64 `json:"heldOutMargin,omitempty"`
+	// JudgeSwapConsistent records the order-swap consistency probe outcome for
+	// an accepting forward verdict (RSI P3): true = the reversed pair was
+	// rejected as required; false = the judge blessed both orders and the
+	// evolve was refused. Absent when the probe was disabled or never reached.
+	JudgeSwapConsistent *bool `json:"judgeSwapConsistent,omitempty"`
 }
 
 // rollbackBaselineTest is the baseline-aware test's verdict at the moment a

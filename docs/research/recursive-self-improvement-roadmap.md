@@ -196,6 +196,25 @@ resets the curriculum via version scoping — a fresh judge re-earns tier 3.
 Weaken classes stay OUT of the meta-judge promotion gate, same separation as
 the drop tier.
 
+**Order-swap consistency gate landed 2026-07-20:** the L1 judge's accepting
+forward verdict must now survive an order-swap probe — the same judge re-grades
+the pair with the bodies in swapped prompt slots and must REJECT that reversed
+pair; blessing both directions means the verdict tracked slot position, not
+content (fail-closed on inconsistency and on probe errors; kill switch
+`DENEB_JUDGE_SWAP_CHECK=0`). The outcome is attributed on the provenance
+certificate (`judgeSwapConsistent`), so per-judge-version position-bias rates
+accumulate as another organic L3 label stream requiring no gold answers.
+Adapted from the 2026-07 literature sweep: pairwise contrastive validation
+(arXiv:2607.14408) and the both-orders agreement audit protocol (Double
+Ratchet, arXiv:2607.12790). Deferred from the same papers: accept-side gold
+pairs for the evaluator-epoch bench mined from 개선 확정 operator labels
+(Double Ratchet's validity gate would close the all-reject blind spot the
+degradation-only bench leaves open), and pairwise Soft-Elo parent selection
+(pointless before evolve throughput improves — P5-1). SPyCE
+(arXiv:2607.13854) was reviewed for its skill-policy co-evolution loop and
+adds no gate we lack; its explicit lack of drift protection is the failure
+mode the charter/e-process/drift-brake stack already guards against.
+
 Label quality is triple-threatened (2026H1 sweep) — three preconditions:
 
 1. **Baseline-aware rollback first** (PACE): the current baseline-blind

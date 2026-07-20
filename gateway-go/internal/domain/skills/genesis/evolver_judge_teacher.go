@@ -38,7 +38,12 @@ func (e *Evolver) pickCandidateJudge() (*llm.Client, string) {
 
 // judgeCandidate asks a model to validate a rewritten skill body against the
 // original. Returns (pass, reason, err). On any error the caller keeps the
-// original (fail-closed).
+// original (fail-closed). An accepting forward verdict must additionally
+// survive the order-swap consistency probe: the same judge re-grades the pair
+// with the bodies in swapped slots and must REJECT that reversed pair
+// (RSI P3 — pairwise contrastive judging arXiv:2607.14408; both-orders
+// agreement protocol arXiv:2607.12790). A judge that blesses both directions
+// graded the slot position, not the content — fail closed.
 func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *llm.Client, model, originalContent, candidateBody string, stats *UsageStats, prov *evolveProvenance) (pass bool, reason string, err error) {
 	if client == nil {
 		return false, "", fmt.Errorf("judge: nil client")
@@ -46,6 +51,57 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	cases := e.validationCasesForPrompt(skillName)
 	validationSection := formatValidationCasesForPrompt(cases)
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
+	covered := len(cases) > 0
+
+	resp, err := e.judgeVerdictOnce(ctx, client, model, originalContent, candidateBody, stats, failurePatternSection, validationSection)
+	if err != nil {
+		return false, "", err
+	}
+	if prov != nil {
+		prov.JudgeScoreOriginal = resp.OriginalScore
+		prov.JudgeScoreCandidate = resp.CandidateScore
+	}
+	pass, reason = acceptJudgeVerdict(resp, covered)
+	if pass && !covered {
+		// No held-out validation cases cover this skill, so the held-out gate
+		// failed open and the judge verdict is the only behavioral check. Require a
+		// larger score margin before accepting such a blind evolve (#5). Scores are
+		// guaranteed non-nil here because acceptJudgeVerdict only passes with both
+		// present.
+		if resp.OriginalScore != nil && resp.CandidateScore != nil &&
+			*resp.CandidateScore-*resp.OriginalScore < skillUncoveredJudgeMinScoreDelta {
+			return false, fmt.Sprintf("uncovered skill (no validation cases): candidate margin %.1f below the %.1f required without held-out coverage: %s",
+				*resp.CandidateScore-*resp.OriginalScore, skillUncoveredJudgeMinScoreDelta, reason), nil
+		}
+	}
+	if !pass {
+		return false, reason, nil
+	}
+
+	if judgeSwapCheckEnabled() {
+		swapped, err := e.judgeVerdictOnce(ctx, client, model, candidateBody, originalContent, stats, failurePatternSection, validationSection)
+		if err != nil {
+			// Fail-closed like every other judge error: without the swapped
+			// verdict the both-orders agreement cannot be confirmed.
+			return false, "", fmt.Errorf("judge swap probe: %w", err)
+		}
+		consistent := !judgeSwapInconsistent(swapped, covered)
+		if prov != nil {
+			prov.JudgeSwapConsistent = &consistent
+		}
+		if !consistent {
+			return false, fmt.Sprintf("judge order-swap inconsistency: reversed pair also accepted (swap scores original=%s candidate=%s) — verdict tracked slot position, not content: %s",
+				judgeScoreString(swapped.OriginalScore), judgeScoreString(swapped.CandidateScore), reason), nil
+		}
+	}
+	return true, reason, nil
+}
+
+// judgeVerdictOnce runs one strict-improvement judge call with the given
+// bodies in the 원본/개선안 prompt slots and parses the verdict. Slot
+// assignment is the caller's contract — the order-swap probe deliberately
+// reverses it.
+func (e *Evolver) judgeVerdictOnce(ctx context.Context, client *llm.Client, model, originalSlot, candidateSlot string, stats *UsageStats, failurePatternSection, validationSection string) (judgeVerdict, error) {
 	userPrompt := fmt.Sprintf(`## 원본 SKILL.md
 %s
 
@@ -55,7 +111,7 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 ## 사용 이력
 - 총 %d회, 성공 %d, 실패 %d (%.0f%%)
 - 최근 에러: %s%s%s`,
-		originalContent, candidateBody,
+		originalSlot, candidateSlot,
 		stats.TotalUses, stats.SuccessCount, stats.FailureCount, stats.SuccessRate*100,
 		formatRecentErrors(stats.RecentErrors),
 		failurePatternSection,
@@ -75,33 +131,41 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
-		return false, "", fmt.Errorf("judge LLM call: %w", err)
+		return judgeVerdict{}, fmt.Errorf("judge LLM call: %w", err)
 	}
 	if strings.TrimSpace(raw) == "" {
-		return false, "", fmt.Errorf("judge: empty verdict")
+		return judgeVerdict{}, fmt.Errorf("judge: empty verdict")
 	}
 	resp, err := jsonutil.UnmarshalLLM[judgeVerdict](raw)
 	if err != nil {
-		return false, "", fmt.Errorf("judge: parse verdict: %w", err)
+		return judgeVerdict{}, fmt.Errorf("judge: parse verdict: %w", err)
 	}
-	if prov != nil {
-		prov.JudgeScoreOriginal = resp.OriginalScore
-		prov.JudgeScoreCandidate = resp.CandidateScore
+	return resp, nil
+}
+
+// judgeSwapCheckEnabled gates the order-swap consistency probe (default on).
+// Kill switch: DENEB_JUDGE_SWAP_CHECK=0.
+func judgeSwapCheckEnabled() bool {
+	return envBool("DENEB_JUDGE_SWAP_CHECK", true)
+}
+
+// judgeSwapInconsistent reports whether the swapped-order verdict ALSO cleared
+// the strict-improvement rule — the judge blessed both directions of the same
+// pair, so its forward accept carries no information about the bodies. The
+// same base margin rule as the forward pass applies; the stricter
+// uncovered-blind margin stays forward-only (a swap acceptance at the base
+// margin is already a contradiction).
+func judgeSwapInconsistent(swapped judgeVerdict, covered bool) bool {
+	pass, _ := acceptJudgeVerdict(swapped, covered)
+	return pass
+}
+
+// judgeScoreString formats an optional judge score for reject reasons.
+func judgeScoreString(score *float64) string {
+	if score == nil {
+		return "?"
 	}
-	pass, reason = acceptJudgeVerdict(resp, len(cases) > 0)
-	if pass && len(cases) == 0 {
-		// No held-out validation cases cover this skill, so the held-out gate
-		// failed open and the judge verdict is the only behavioral check. Require a
-		// larger score margin before accepting such a blind evolve (#5). Scores are
-		// guaranteed non-nil here because acceptJudgeVerdict only passes with both
-		// present.
-		if resp.OriginalScore != nil && resp.CandidateScore != nil &&
-			*resp.CandidateScore-*resp.OriginalScore < skillUncoveredJudgeMinScoreDelta {
-			return false, fmt.Sprintf("uncovered skill (no validation cases): candidate margin %.1f below the %.1f required without held-out coverage: %s",
-				*resp.CandidateScore-*resp.OriginalScore, skillUncoveredJudgeMinScoreDelta, reason), nil
-		}
-	}
-	return pass, reason, nil
+	return fmt.Sprintf("%.1f", *score)
 }
 
 // judgeVerdict is the strict-improvement judge's decision on a candidate skill.
