@@ -112,6 +112,18 @@ func (c *listCache) refreshDone(key string) {
 	delete(c.refreshing, key)
 }
 
+// currentGeneration returns the cache generation. Callers that fetch
+// asynchronously must capture this before the fetch and pass it to
+// putIfGeneration so a concurrent invalidate cannot be overwritten.
+func (c *listCache) currentGeneration() uint64 {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.generation
+}
+
 // put stores payload under key, stamped at now.
 func (c *listCache) put(key string, payload map[string]any, now time.Time) {
 	if c == nil {

@@ -282,6 +282,58 @@ func TestListCache_StaleServeAndSingleFlightRefresh(t *testing.T) {
 	nilCache.refreshDone("k")
 }
 
+func TestGmailListRecent_SyncFetchDoesNotRestoreAfterArchive(t *testing.T) {
+	var calls int
+	releaseFetch := make(chan struct{})
+	client := &fakeGmailClient{
+		searchPageFn: func(_ context.Context, _, _ string, _ int) ([]gmail.MessageSummary, string, error) {
+			calls++
+			if calls > 1 {
+				<-releaseFetch
+			}
+			return []gmail.MessageSummary{{ID: "m1", Labels: []string{"INBOX"}}}, "", nil
+		},
+		modifyLabelsFn: func(_ context.Context, _ string, _, _ []string) error { return nil },
+		getMessageFn: func(_ context.Context, _ string) (*gmail.MessageDetail, error) {
+			return &gmail.MessageDetail{ID: "m1", Labels: []string{"INBOX"}}, nil
+		},
+	}
+	cache := newListCache(30 * time.Second)
+	listH := gmailListRecent(depsFor(client), cache)
+	archiveH := gmailArchive(depsFor(client), cache)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resp := listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+		if !resp.OK {
+			t.Errorf("sync list failed: %+v", resp.Error)
+		}
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for calls < 1 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if calls < 1 {
+		t.Fatal("sync fetch never started")
+	}
+
+	resp := archiveH(authedCtx(), reqWith(t, "miniapp.gmail.archive", map[string]any{"id": "m1"}))
+	if !resp.OK {
+		t.Fatalf("archive failed: %+v", resp.Error)
+	}
+
+	close(releaseFetch)
+	<-done
+
+	listH(authedCtx(), reqWith(t, "miniapp.gmail.list_recent", nil))
+
+	if calls != 2 {
+		t.Fatalf("list fetched %d times, want 2 (sync fetch must not resurrect cache after archive)", calls)
+	}
+}
+
 func TestListCache_PutIfGenerationSkipsAfterInvalidate(t *testing.T) {
 	c := newListCache(30 * time.Second)
 	now := time.Now()

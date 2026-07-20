@@ -365,11 +365,12 @@ func gmailListRecent(deps GmailDeps, cache *listCache) rpcutil.HandlerFunc {
 			return rpcutil.RespondOK(req.ID, stale)
 		}
 
+		fetchGen := cache.currentGeneration()
 		payload, errResp := fetchPage(ctx)
 		if errResp != nil {
 			return errResp
 		}
-		cache.put(cacheKey, payload, now)
+		cache.putIfGeneration(cacheKey, payload, now, fetchGen)
 		return rpcutil.RespondOK(req.ID, payload)
 	})
 }
