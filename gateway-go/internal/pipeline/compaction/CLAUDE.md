@@ -12,7 +12,8 @@ and never owns durable session state.
   summary compaction through `Summarizer`.
 - `embedding.go` provides relevance/diversity selection with recency fallback.
 - `protected.go` (protected-tool helpers) and `micro.go` shrink historical
-  results without breaking tool pairs or fetch-tools schemas.
+  results without breaking tool pairs or protected payloads (fetch_tools
+  schemas, skills read/list results).
 - `restore.go` removes thinking blocks and recovers recent file-read context.
 - `context_fence.go`: `FormatContextFence` marks untrusted recovered context.
 

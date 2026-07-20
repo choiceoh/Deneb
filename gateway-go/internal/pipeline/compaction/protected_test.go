@@ -111,3 +111,61 @@ func TestProtectedToolResultIDs_ReturnsOnlyFetchToolsIDs(t *testing.T) {
 		t.Fatalf("protected ids = %v, want only ft_1", ids)
 	}
 }
+
+// skillsCallMsg is an assistant message that called the skills tool with the
+// given input JSON.
+func skillsCallMsg(t *testing.T, id, input string) llm.Message {
+	t.Helper()
+	blocks := []llm.ContentBlock{{
+		Type: "tool_use", ID: id, Name: "skills",
+		Input: llm.FlexibleFromRaw([]byte(input)),
+	}}
+	raw, err := json.Marshal(blocks)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return llm.Message{Role: "assistant", Content: llm.FlexibleFromRaw(raw)}
+}
+
+// Read/list results are deterministic JIT-loaded payloads the model re-fetches
+// when stubbed (2026-07-20: 52% of skills calls were beyond-cutoff repeats);
+// mutating actions stay prunable.
+func TestProtectedToolResultIDs_SkillsReadListOnly(t *testing.T) {
+	messages := []llm.Message{
+		skillsCallMsg(t, "sk_read", `{"action":"read","name":"morning-letter"}`),
+		skillsCallMsg(t, "sk_list", `{"action":"list"}`),
+		skillsCallMsg(t, "sk_patch", `{"action":"patch","name":"morning-letter"}`),
+		skillsCallMsg(t, "sk_bad", `"read"`),
+	}
+	ids := protectedToolResultIDs(messages)
+	if !ids["sk_read"] || !ids["sk_list"] {
+		t.Fatalf("protected ids = %v, want sk_read and sk_list protected", ids)
+	}
+	if ids["sk_patch"] || ids["sk_bad"] || len(ids) != 2 {
+		t.Fatalf("protected ids = %v, want only sk_read and sk_list", ids)
+	}
+}
+
+// A skills read result past the turn threshold must survive Tier 2b stubbing
+// exactly like a fetch_tools schema, while a mutating action's oversized
+// result is still stubbed.
+func TestTruncateOldToolResults_ProtectsSkillsReadResult(t *testing.T) {
+	body := strings.Repeat("스킬 본문 ", 100)
+	messages := []llm.Message{
+		skillsCallMsg(t, "sk_read", `{"action":"read","name":"morning-letter"}`),
+		toolResultMsgFor(t, "sk_read", body),
+		skillsCallMsg(t, "sk_patch", `{"action":"patch","name":"morning-letter"}`),
+		toolResultMsgFor(t, "sk_patch", strings.Repeat("x", 500)),
+		assistantMsg(t, "a3"),
+		assistantMsg(t, "a4"),
+		assistantMsg(t, "a5"),
+		assistantMsg(t, "a6"),
+	}
+	out, stubbed := TruncateOldToolResults(messages, 4, 256)
+	if stubbed != 1 {
+		t.Fatalf("stubbed = %d, want 1 (only the patch ack)", stubbed)
+	}
+	if got := toolResultContentFor(t, json.RawMessage(out[1].Content.Bytes())); got != body {
+		t.Errorf("skills read result was stubbed: %q", got[:min(40, len(got))])
+	}
+}
