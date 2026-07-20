@@ -32,13 +32,49 @@ func TestIsIrreversibleToolReturnsExpectedClassification(t *testing.T) {
 	}
 }
 
-func TestUntrustedToolGate_CleanTurnAllows(t *testing.T) {
+func TestUntrustedToolGate_CleanInternalTurnAllows(t *testing.T) {
 	g := newUntrustedToolGate("client:main", "run1", nil, nil)
 	g.seed("정상적인 사용자 메시지입니다", "")
-	g.observeToolResult("web", "t1", "perfectly clean fetched content", false)
+	// A clean read from an INTERNAL (operator-owned) tool does not taint: exec
+	// stays available on ordinary work turns.
+	g.observeToolResult("read", "t1", "perfectly clean local file content", false)
 
 	if block, _ := g.beforeToolCall("exec", "c1", []byte(`{"command":"ls"}`)); block {
-		t.Fatal("clean turn must not block exec")
+		t.Fatal("clean internal turn must not block exec")
+	}
+}
+
+func TestUntrustedToolGate_ExternalOriginTaintsEvenWhenClean(t *testing.T) {
+	// The origin path: a signature-clean read from an external-origin tool taints
+	// the turn on its own, so an injection that evades promptguard still cannot
+	// reach an irreversible tool in the same turn (the cross-turn sleeper class).
+	for _, tool := range []string{"web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr"} {
+		t.Run(tool, func(t *testing.T) {
+			g := newUntrustedToolGate("client:main", "run1", nil, nil)
+			g.observeToolResult(tool, "t1", "content with no promptguard signature at all", false)
+			if block, _ := g.beforeToolCall("exec", "c1", []byte(`{"command":"ls"}`)); !block {
+				t.Fatalf("clean %q output must taint the turn and block exec", tool)
+			}
+			// Reads stay allowed even on an origin-tainted turn.
+			if block, _ := g.beforeToolCall("read", "c2", []byte(`{"path":"/x"}`)); block {
+				t.Fatalf("read must stay allowed after %q taints the turn", tool)
+			}
+		})
+	}
+}
+
+func TestReadsExternalOrigin(t *testing.T) {
+	external := []string{"web", "browse", "browser", "research_panel", "watch", "mail_archive", "ocr"}
+	internal := []string{"read", "wiki", "files", "market", "calendar", "contacts", "office", "exec", "grep", "todo"}
+	for _, tool := range external {
+		if !readsExternalOrigin(tool) {
+			t.Errorf("readsExternalOrigin(%q) = false, want true", tool)
+		}
+	}
+	for _, tool := range internal {
+		if readsExternalOrigin(tool) {
+			t.Errorf("readsExternalOrigin(%q) = true, want false", tool)
+		}
 	}
 }
 
