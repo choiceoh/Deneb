@@ -27,6 +27,7 @@ package meeting
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -60,8 +61,15 @@ const (
 	// plaudMinDuration skips accidental taps; short voice memos still pass.
 	plaudMinDuration = 2 * time.Minute
 	// plaudMinTranscriptRunes: below this the ASR heard nothing worth a
-	// synthesis call (noise, silence) — mark seen, skip.
+	// synthesis call — either a silent recording or a transcript that isn't
+	// ready yet; the retry budget below decides which.
 	plaudMinTranscriptRunes = 200
+	// plaudTranscriptWaitTicks: Plaud lists a recording as soon as the device
+	// syncs, but cloud transcription can lag behind by minutes (2026-07-20:
+	// two real meetings were permanently skipped as "silent" in that gap). An
+	// empty transcript is retried this many ticks (~1h) before the recording
+	// is accepted as genuinely silent.
+	plaudTranscriptWaitTicks = 4
 	// Transcripts under the direct limit go to the synthesis model whole;
 	// longer ones are map-reduced (chunk gists via the RoleTiny stage-1 model,
 	// then one synthesis over the gists) so a 2-hour workshop cannot blow the
@@ -81,6 +89,11 @@ const (
 
 // plaudRecordingsDisableEnv kills the service without a deploy (incident lever).
 const plaudRecordingsDisableEnv = "DENEB_PLAUD_RECORDINGS_DISABLE"
+
+// errTranscriptNotReady flags a recording whose transcript came back (near)
+// empty — transcription may simply not have finished yet, so the tick loop
+// retries within plaudTranscriptWaitTicks instead of marking it seen.
+var errTranscriptNotReady = errors.New("transcript empty or not ready")
 
 // PlaudDisableEnv disables autonomous Plaud recording ingestion when set to 1.
 const PlaudDisableEnv = plaudRecordingsDisableEnv
@@ -296,6 +309,21 @@ func (s *plaudRecordingsService) tick(ctx context.Context) {
 		}
 		if err := s.processRecording(ctx, f, now); err != nil {
 			n := s.bumpFailure(f.ID)
+			if errors.Is(err, errTranscriptNotReady) {
+				// Not an operator-card failure: the recording is listed but its
+				// cloud transcript may still be minutes away. Give up quietly
+				// once the wait budget says it is a genuinely silent recording.
+				if n >= plaudTranscriptWaitTicks {
+					s.logger.Info("plaud recordings: transcript still empty, treating as silent recording",
+						"id", f.ID, "name", f.Name, "attempts", n)
+					s.markSeen(f.ID, s.now())
+					s.clearFailure(f.ID)
+				} else {
+					s.logger.Info("plaud recordings: transcript not ready, will retry",
+						"id", f.ID, "name", f.Name, "attempts", n)
+				}
+				continue
+			}
 			s.logger.Error("plaud recordings: analysis failed (will retry)",
 				"id", f.ID, "name", f.Name, "failures", n, "error", err)
 			if n >= plaudMaxFailures {
@@ -342,11 +370,7 @@ func (s *plaudRecordingsService) processRecording(ctx context.Context, f plaudFi
 	}
 	transcript := parsePlaudTranscript(raw)
 	if utf8.RuneCountInString(transcript) < plaudMinTranscriptRunes {
-		// Nothing worth a synthesis call — a silent or noise-only recording.
-		s.logger.Info("plaud recordings: transcript too short, skipping analysis",
-			"id", f.ID, "name", f.Name, "runes", utf8.RuneCountInString(transcript))
-		s.markSeen(f.ID, now)
-		return nil
+		return fmt.Errorf("%w (%d runes)", errTranscriptNotReady, utf8.RuneCountInString(transcript))
 	}
 
 	cands := s.projectCandidates()
