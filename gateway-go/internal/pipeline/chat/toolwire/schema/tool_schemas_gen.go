@@ -304,6 +304,10 @@ func WebToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"academic": map[string]any{
+				"type":        "boolean",
+				"description": "true = 학술 레인 병행: arXiv·Semantic Scholar(무료 API)를 검색과 병렬 조회해 결과 뒤에 라벨 섹션으로 부착 (초록 포함 구조화 결과). 논문·리서치 질의에 켤 것. 쿼리에 arXiv ID·arxiv·논문·paper 토큰이 있으면 자동 발화. query 모드 전용 (url·type과 무관)",
+			},
 			"count": map[string]any{
 				"type":        "number",
 				"description": "Number of search results per query (default: 5)",

@@ -91,3 +91,21 @@ func TestLiveBrowserSidecarRender(t *testing.T) {
 	}
 	t.Logf("browser sidecar render ok: %d bytes", result.Size)
 }
+
+// Live smoke for the academic lane against the real keyless APIs.
+// Opt-in: DENEB_WEB_LIVE=1.
+func TestLiveAcademicLane(t *testing.T) {
+	if os.Getenv("DENEB_WEB_LIVE") != "1" {
+		t.Skip("set DENEB_WEB_LIVE=1 for live network smoke")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	block := academicLane(ctx, "large language model prompt caching arxiv")
+	if block == "" {
+		t.Fatal("live academic lane returned nothing (both APIs failed?)")
+	}
+	if !strings.Contains(block, "학술 레인") || !strings.Contains(block, "arXiv") {
+		t.Fatalf("unexpected block:\n%.400s", block)
+	}
+	t.Logf("live academic lane ok:\n%.600s", block)
+}
