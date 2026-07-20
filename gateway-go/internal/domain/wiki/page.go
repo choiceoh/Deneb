@@ -185,6 +185,10 @@ type Frontmatter struct {
 	Archived   bool
 	Type       string // concept, entity, source, comparison, log
 	Confidence string // high, medium, low
+	// SubjectID scopes personal facts to an identity (HealthClaw M6).
+	// "self" / empty = operator; person pages may use PID or a stable slug.
+	// Recall drops cross-subject hits when the query does not name them.
+	SubjectID string
 	// SupersededBy points at the page that replaced this one's facts. Set by
 	// the dreamer when new information contradicts/replaces an old page;
 	// search demotes superseded pages so stale facts stop surfacing as
@@ -321,6 +325,9 @@ func (p *Page) Render() []byte {
 	buf.WriteString("type: " + sanitizeScalar(pageType) + "\n")
 	if p.Meta.Confidence != "" {
 		buf.WriteString("confidence: " + sanitizeScalar(p.Meta.Confidence) + "\n")
+	}
+	if p.Meta.SubjectID != "" {
+		buf.WriteString("subject_id: " + sanitizeScalar(p.Meta.SubjectID) + "\n")
 	}
 	if p.Meta.SupersededBy != "" {
 		buf.WriteString("superseded_by: " + sanitizeScalar(p.Meta.SupersededBy) + "\n")
@@ -742,6 +749,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.Type = val
 		case "confidence":
 			fm.Confidence = val
+		case "subject_id":
+			fm.SubjectID = strings.TrimSpace(val)
 		case "superseded_by":
 			fm.SupersededBy = val
 		}

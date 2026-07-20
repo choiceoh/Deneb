@@ -95,6 +95,7 @@ func finishTurnSideEffects(deps runDeps, params RunParams, result *agent.AgentRe
 	// Diary recording: append raw conversation turn to today's diary.
 	// Wiki page curation is handled by the main LLM via system prompt.
 	maybeRecordRunDiary(deps, params, result, logger)
+	maybeRunMemoryInduction(deps, params, result, logger)
 	// deneb-ui card health observes the already-normalized final response.
 	if deps.reportCardHealth != nil {
 		deps.reportCardHealth(result.Text, params.SessionKey, logger)

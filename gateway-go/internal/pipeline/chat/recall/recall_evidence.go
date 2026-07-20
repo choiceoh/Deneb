@@ -206,10 +206,22 @@ func recallWikiEvidenceResult(ctx context.Context, store *wiki.Store, queries []
 		if _, ok := seen[r.Path]; ok {
 			continue
 		}
+		// M4: hard-filter superseded pages from recall — demotion alone still
+		// let stale values occupy budget slots and confuse latest-state answers.
+		subjectID := ""
+		if page, err := store.ReadPage(r.Path); err == nil && page != nil {
+			if page.Meta.SupersededBy != "" {
+				continue
+			}
+			// Only explicit subject_id gates recall — do not infer from PID, or
+			// ordinary 인물 pages vanish from queries that use display names.
+			subjectID = page.Meta.SubjectID
+		}
 		seen[r.Path] = struct{}{}
 		evidence = append(evidence, recallEvidence{
 			Kind: "wiki", Source: r.Path, Query: queryLabel,
 			Note: formatRecallWikiNote(store, r), Score: 0.80 + r.Score,
+			SubjectID: subjectID,
 		})
 	}
 	return evidence, nil

@@ -19,8 +19,8 @@ func TestValidityFactor_ScalesWithAgeArchivedAndSupersededStatus(t *testing.T) {
 		{"old-180d", Frontmatter{Updated: "2025-11-01"}, 0.85, 0.85},
 		{"old-365d", Frontmatter{Updated: "2024-01-01"}, 0.7, 0.7},
 		{"archived", Frontmatter{Archived: true, Updated: "2026-06-01"}, 0.3, 0.3},
-		{"superseded", Frontmatter{SupersededBy: "거래/new.md", Updated: "2026-06-01"}, 0.5, 0.5},
-		{"superseded-and-old", Frontmatter{SupersededBy: "x.md", Updated: "2024-01-01"}, 0.35, 0.34},
+		{"superseded", Frontmatter{SupersededBy: "거래/new.md", Updated: "2026-06-01"}, 0.15, 0.15},
+		{"superseded-and-old", Frontmatter{SupersededBy: "x.md", Updated: "2024-01-01"}, 0.105, 0.104},
 	}
 	for _, c := range cases {
 		got := validityFactor(c.meta, now)
