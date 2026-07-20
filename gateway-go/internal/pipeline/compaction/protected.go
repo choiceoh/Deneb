@@ -19,8 +19,8 @@ var spilloverRefPattern = regexp.MustCompile(`read_spillover\("(sp_[0-9a-fA-F]+)
 // pointer: the full output still lives in the spill file (cleaned only at
 // session end), so stubbing or fence-stripping the pointer away strands it —
 // the agent can no longer read_spillover the result it was told to page
-// through. protectedToolResultIDs only covers fetch_tools by tool_use id; a
-// spilled result is identified by this content marker instead.
+// through. protectedToolResultIDs keys protection by tool_use id; a spilled
+// result is identified by this content marker instead.
 func spilloverRef(content string) string {
 	m := spilloverRefPattern.FindStringSubmatch(content)
 	if len(m) == 2 {
