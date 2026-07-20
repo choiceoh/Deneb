@@ -224,6 +224,11 @@ func (t *Tracker) MetaEvolutionHealth() MetaEvolutionHealth {
 		if e.CreatedAt < cutoff {
 			continue
 		}
+		// Skip cycles (Action=="" && !Proposed) are not revisions — counting
+		// them inflated L2 「개정(7일)」 whenever the producer declined to patch.
+		if e.Action == "" && !e.Proposed {
+			continue
+		}
 		out.Revisions7d++
 		if e.Proposed {
 			out.Proposed7d++
@@ -356,6 +361,7 @@ func (t *MetaEvolutionTask) Run(ctx context.Context) error {
 	}
 
 	t.maybeRevertAdoption(logger)
+	t.maybeRevertStormPoisonedEvaluatorAdoption(logger)
 	// Self-brake: read the ledgers for reward-hacking/drift signals and freeze
 	// auto-adoption if the trajectory has gone bad (meta-monitor). Transition
 	// surfaces to the operator via OnDriftFreeze. Use the FRESH verdict at the
@@ -681,6 +687,88 @@ func (t *MetaEvolutionTask) maybeRevertAdoption(logger *slog.Logger) {
 		if t.OnReverted != nil {
 			t.OnReverted(p.Artifact, reason)
 		}
+	}
+}
+
+// stormPoisonedJudgeMinPairs is how many usable planted-defect pairs must
+// clear with zero fuel misses before a miss-rate-justified judge adoption is
+// treated as storm-poisoned and reverted.
+const stormPoisonedJudgeMinPairs = 12
+
+// maybeRevertStormPoisonedEvaluatorAdoption undoes a judge-prompt adoption
+// that was justified by infra-error-inflated P3 miss rates. When the
+// incumbent's usable probe ledger is clean (zero fuel misses over a minimum
+// pair budget) and the adoption/proposal reason cited miss rates, restore
+// the pre-adoption backup — the patch had no real judge-quality signal.
+func (t *MetaEvolutionTask) maybeRevertStormPoisonedEvaluatorAdoption(logger *slog.Logger) {
+	if t.Meta == nil || t.Tracker == nil {
+		return
+	}
+	artifact := generation.MetaSkillJudgeSystemPrompt
+	prior, err := t.Tracker.RecentMetaRevisions(30)
+	if err != nil {
+		return
+	}
+	var adopt *MetaRevisionRecord
+	var proposalReason string
+	for i := range prior {
+		p := &prior[i]
+		if p.Artifact != artifact {
+			continue
+		}
+		if adopt == nil && (p.Action == "adopted" || p.Action == "auto_adopted") {
+			adopt = p
+			continue
+		}
+		if adopt != nil && p.Proposed && proposalReason == "" {
+			proposalReason = p.Reason
+			break
+		}
+	}
+	if adopt == nil {
+		return
+	}
+	reasonBlob := adopt.Reason + " " + proposalReason
+	if !strings.Contains(reasonBlob, "놓침") && !strings.Contains(strings.ToLower(reasonBlob), "miss") {
+		return // adoption was not justified by miss-rate evidence
+	}
+	fallback := generation.DefaultMetaArtifacts()[artifact]
+	version := t.Meta.Version(artifact, fallback)
+	if version == "" || (adopt.ToVersion != "" && adopt.ToVersion != version) {
+		return // live artifact no longer matches the adopted revision
+	}
+	ev := t.collectJudgeAccuracyEvidence(version)
+	if !ev.clean() {
+		return // real misses/false-rejects remain — keep the patch
+	}
+	pairs := 0
+	for _, ct := range ev.byClass {
+		pairs += ct[1]
+	}
+	if pairs < stormPoisonedJudgeMinPairs {
+		return // not enough usable probe mass to call the ledger "clean"
+	}
+	restored, rerr := t.Meta.RevertAdoption(artifact)
+	if rerr != nil {
+		logger.Warn("meta-evolution: storm-poisoned judge revert failed",
+			"artifact", artifact, "error", rerr)
+		return
+	}
+	reason := fmt.Sprintf("reverted storm-poisoned judge adoption %s: usable probe ledger is clean (%d pairs, 0 fuel misses) — adoption cited infra-inflated miss rates",
+		adopt.ToVersion, pairs)
+	if lerr := t.Tracker.LogMetaRevision(MetaRevisionRecord{
+		Artifact:    artifact,
+		FromVersion: adopt.ToVersion,
+		ToVersion:   restored,
+		Action:      "auto_reverted",
+		Reason:      reason,
+	}); lerr != nil {
+		logger.Warn("meta-evolution: storm-poisoned revert ledger write failed", "error", lerr)
+	}
+	logger.Warn("meta-evolution: storm-poisoned judge adoption AUTO-REVERTED",
+		"artifact", artifact, "from", adopt.ToVersion, "to", restored, "pairs", pairs)
+	if t.OnReverted != nil {
+		t.OnReverted(artifact, reason)
 	}
 }
 

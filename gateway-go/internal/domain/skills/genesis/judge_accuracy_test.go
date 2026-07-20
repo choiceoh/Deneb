@@ -284,3 +284,30 @@ func TestJudgeAccuracyProbeUsableRejectsErrorStormRows(t *testing.T) {
 		t.Fatal("fuel filter wrong")
 	}
 }
+
+// Storm rows must not starve the recent window — otherwise L3 / weaken-tier /
+// meta evidence only see infra noise and never the healthy runs behind it.
+func TestRecentJudgeAccuracySkipsUnusableStormRows(t *testing.T) {
+	_, tr := accuracyFixture(t)
+	storm := judgeAccuracyRecord{
+		JudgeVersion: "v-storm", Pairs: 24, Correct: 0,
+		ByClass: map[string][2]int{"fake-tool": {0, 12}},
+		Misses:  []judgeMissExhibit{{Skill: "sk", Degradation: "fake-tool", Verdict: "error"}},
+	}
+	healthy := judgeAccuracyRecord{
+		JudgeVersion: "v-ok", Pairs: 4, Correct: 4,
+		ByClass: map[string][2]int{"fake-tool": {4, 4}},
+	}
+	for _, rec := range []judgeAccuracyRecord{healthy, storm, storm, storm} {
+		if err := tr.logJudgeAccuracy(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recs, err := tr.recentJudgeAccuracy(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 1 || recs[0].JudgeVersion != "v-ok" {
+		t.Fatalf("recent window = %+v, want only the healthy run", recs)
+	}
+}

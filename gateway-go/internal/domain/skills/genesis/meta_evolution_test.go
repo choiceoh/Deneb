@@ -491,12 +491,18 @@ func TestMetaEvolutionHealthWindowsRevisionsAndDisplaysNewest(t *testing.T) {
 	if err := tr.LogMetaRevision(fresh); err != nil {
 		t.Fatal(err)
 	}
+	// Skip cycles must not inflate 「개정(7일)」.
+	if err := tr.LogMetaRevision(MetaRevisionRecord{
+		Epoch: metaEpochProducer, Artifact: generation.MetaEvolveSystemPrompt, Reason: "skip: no clear weakness",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	h := tr.MetaEvolutionHealth()
 	if h.Revisions7d != 1 || h.Proposed7d != 1 {
-		t.Fatalf("window counts = %+v (ancient entry must be excluded)", h)
+		t.Fatalf("window counts = %+v (ancient+skip must be excluded; only the proposal counts)", h)
 	}
-	if h.LastArtifact != generation.MetaSkillJudgeSystemPrompt || !h.LastProposed || h.LastReason != "recent proposal" {
-		t.Fatalf("newest summary = %+v", h)
+	if h.LastArtifact != generation.MetaEvolveSystemPrompt || h.LastProposed {
+		t.Fatalf("newest summary should be the skip row for display, not count as revision: %+v", h)
 	}
 }
 

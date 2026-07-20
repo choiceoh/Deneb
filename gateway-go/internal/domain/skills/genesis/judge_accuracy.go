@@ -271,6 +271,9 @@ func (t *Tracker) recentJudgeAccuracy(limit int) ([]judgeAccuracyRecord, error) 
 		if entries[i].Pairs == 0 && len(entries[i].ByClass) == 0 && len(entries[i].FalseRejects) == 0 {
 			continue // operator-only labels have their own query below
 		}
+		if !judgeAccuracyProbeUsable(entries[i]) {
+			continue // infra outage rows must not consume the recent window
+		}
 		out = append(out, entries[i])
 	}
 	return out, nil

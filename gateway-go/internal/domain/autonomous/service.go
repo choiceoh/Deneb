@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
 // Notifier delivers significant events to the user.
@@ -114,6 +115,29 @@ func (s *Service) stateFilePathLocked() string {
 	return filepath.Join(s.stateDir, "autonomous_state.json")
 }
 
+// readPersistedTaskState loads task-name → lastRunAt from path. Missing or
+// corrupt files return an empty map (never nil) so callers can merge safely.
+func readPersistedTaskState(path string, logger *slog.Logger) map[string]int64 {
+	out := map[string]int64{}
+	data, err := os.ReadFile(path) //nolint:gosec // state path owned by the service
+	if err != nil {
+		if !os.IsNotExist(err) && logger != nil {
+			logger.Warn("autonomous: failed to read task-state file", "error", err)
+		}
+		return out
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		if logger != nil {
+			logger.Warn("autonomous: failed to parse task-state file", "error", err)
+		}
+		return map[string]int64{}
+	}
+	if out == nil {
+		return map[string]int64{}
+	}
+	return out
+}
+
 // loadStateLocked restores persisted LastRunAt values into taskStatus so
 // periodic intervals survive restarts. Called once from Start(). A missing file
 // is normal on first boot. Caller must hold s.mu.
@@ -122,18 +146,7 @@ func (s *Service) loadStateLocked() {
 	if path == "" {
 		return
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			s.logger.Warn("autonomous: failed to read task-state file", "error", err)
-		}
-		return
-	}
-	var persisted map[string]int64 // task name -> lastRunAt (unix millis)
-	if err := json.Unmarshal(data, &persisted); err != nil {
-		s.logger.Warn("autonomous: failed to parse task-state file", "error", err)
-		return
-	}
+	persisted := readPersistedTaskState(path, s.logger)
 	for name, lastRun := range persisted {
 		if st, ok := s.taskStatus[name]; ok {
 			st.LastRunAt = lastRun
@@ -141,9 +154,12 @@ func (s *Service) loadStateLocked() {
 	}
 }
 
-// saveState persists current LastRunAt values. Best-effort: a write failure is
-// logged but never interrupts task execution. Snapshots under the lock, then
-// writes the file without holding it.
+// saveState merges this process's non-zero LastRunAt values into the on-disk
+// map and writes atomically. Merge (not replace) is load-bearing: a
+// dev/live-test process registers only a subset of tasks but used to share
+// ~/.deneb/autonomous_state.json — a full replace wiped prod-only keys
+// (judge-accuracy, skill-workout, …) and every subsequent prod restart
+// re-fired those lanes after the 30s grace on a cold LLM.
 func (s *Service) saveState() {
 	s.mu.Lock()
 	path := s.stateFilePathLocked()
@@ -151,20 +167,24 @@ func (s *Service) saveState() {
 		s.mu.Unlock()
 		return
 	}
-	snapshot := make(map[string]int64, len(s.taskStatus))
+	ours := make(map[string]int64, len(s.taskStatus))
 	for name, st := range s.taskStatus {
 		if st.LastRunAt > 0 {
-			snapshot[name] = st.LastRunAt
+			ours[name] = st.LastRunAt
 		}
 	}
 	s.mu.Unlock()
 
-	data, err := json.Marshal(snapshot)
+	merged := readPersistedTaskState(path, s.logger)
+	for name, lastRun := range ours {
+		merged[name] = lastRun
+	}
+	data, err := json.Marshal(merged)
 	if err != nil {
 		s.logger.Warn("autonomous: failed to marshal task state", "error", err)
 		return
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := atomicfile.WriteFile(path, data, &atomicfile.Options{Perm: 0o600}); err != nil {
 		s.logger.Warn("autonomous: failed to write task-state file", "error", err)
 	}
 }
@@ -183,17 +203,33 @@ func (s *Service) TaskStatus(name string) *TaskStatus {
 }
 
 // Start initializes the service and starts all registered periodic tasks.
-// Dreaming timer is started when SetDreamer is called.
+// Dreaming timer is started when SetDreamer is called. Idempotent while loops
+// are already running; after Stop() it recreates svcCtx (Stop cancels it) so
+// config-reload Stop→Start does not spawn children of a dead context.
 func (s *Service) Start() {
 	s.mu.Lock()
+	if len(s.taskCancels) > 0 {
+		s.mu.Unlock()
+		return // loops already running
+	}
+	if s.svcCtx == nil || s.svcCtx.Err() != nil {
+		s.svcCtx, s.svcCancel = context.WithCancel(context.Background())
+	}
 	s.started = true
 	s.loadStateLocked() // restore LastRunAt so intervals survive restarts
 	tasks := make([]PeriodicTask, len(s.tasks))
 	copy(tasks, s.tasks)
+	svcCtx := s.svcCtx
+	// Restart the dream timer after Stop cancelled it.
+	if s.dreamer != nil && s.dreamTimerCancel == nil {
+		dctx, dcancel := context.WithCancel(svcCtx)
+		s.dreamTimerCancel = dcancel
+		go s.dreamTimerLoop(dctx)
+	}
 	s.mu.Unlock()
 
 	for _, task := range tasks {
-		ctx, cancel := context.WithCancel(s.svcCtx) //nolint:gosec // G118 — cancel stored in s.taskCancels
+		ctx, cancel := context.WithCancel(svcCtx) //nolint:gosec // G118 — cancel stored in s.taskCancels
 		s.mu.Lock()
 		s.taskCancels = append(s.taskCancels, cancel)
 		s.mu.Unlock()
@@ -219,9 +255,14 @@ func (s *Service) Stop() {
 		s.dreamTimerCancel = nil
 	}
 	// Cancel service-level context to stop any in-flight async operations.
+	// Nil out so the next Start() allocates a fresh parent context — leaving a
+	// cancelled svcCtx made config-reload Stop→Start spawn immediately-dead loops.
 	if s.svcCancel != nil {
 		s.svcCancel()
+		s.svcCancel = nil
+		s.svcCtx = nil
 	}
+	s.started = false
 	s.logger.Info("autonomous service stopped")
 }
 
