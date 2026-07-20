@@ -112,6 +112,31 @@ class MarkerRewriteTest(unittest.TestCase):
             self.assertEqual((rc, printed), (0, "attempted"))
             self.assertEqual(json.loads(marker.read_text()), before)
 
+    def test_decline_note_is_stored_only_on_declined(self):
+        with TemporaryDirectory() as td:
+            marker = Path(td) / "sc-d.json"
+            marker.write_text(json.dumps({"id": "sc-d"}) + "\n")
+            rc, printed = run_main(
+                ["--marker", str(marker), "--rc", "0", "--ahead", "0",
+                 "--decline-note", "root cause is external (kimi 401); nothing to land"]
+            )
+            self.assertEqual((rc, printed), (0, "declined"))
+            rec = json.loads(marker.read_text())
+            self.assertEqual(
+                rec["declineReason"],
+                "root cause is external (kimi 401); nothing to land",
+            )
+
+            # A landed outcome must not carry a stale decline reason.
+            marker2 = Path(td) / "sc-l.json"
+            marker2.write_text(json.dumps({"id": "sc-l"}) + "\n")
+            rc, printed = run_main(
+                ["--marker", str(marker2), "--rc", "0", "--ahead", "1",
+                 "--pr-state", "MERGED", "--decline-note", "leftover note"]
+            )
+            self.assertEqual((rc, printed), (0, "landed"))
+            self.assertNotIn("declineReason", json.loads(marker2.read_text()))
+
     def test_unreadable_marker_never_fails_the_lane(self):
         with TemporaryDirectory() as td:
             missing = Path(td) / "nope.json"
