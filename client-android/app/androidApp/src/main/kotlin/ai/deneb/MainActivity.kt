@@ -370,7 +370,11 @@ class MainActivity : ComponentActivity() {
             handleSharedAudio(intent)
             return
         }
-        if (isSharedDocumentMime(intent.type)) {
+        // Document route only when an actual stream rides along: apps share
+        // markdown/CSV as inline EXTRA_TEXT too (no EXTRA_STREAM), and those must
+        // fall through to the text capture below instead of dying silently in
+        // handleSharedDocument's missing-uri return.
+        if (isSharedDocumentMime(intent.type) && intent.hasExtra(Intent.EXTRA_STREAM)) {
             handleSharedDocument(intent)
             return
         }
