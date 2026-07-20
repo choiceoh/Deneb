@@ -269,8 +269,9 @@ func buildWikiSynthesisPromptWithRules(rules, indexContent, processedHistory, po
 // loadWikiSynthesisRules); the apply guards enforce structure regardless, so a
 // bad override degrades synthesis quality but cannot corrupt the store.
 const defaultWikiSynthesisRules = `## 규칙
-- 일시적인 내용(인사, 잡담)은 무시
+- 지속성 게이트: 내용을 임시(일회성)/지속(계속 참조됨)/반복(패턴)으로 가늠해 **지속·반복만** 위키에 기록하라 — 인사·잡담·영수증·프로모션·일회성 알림·루틴 보안공지는 임시라 무시 (행동이 필요하거나 반복 패턴이거나 명시 요청이면 예외)
 - 중요한 결정, 새로운 사실, 인물 정보, 프로젝트 진행 등만 위키에 반영
+- 업무/반복신호.md는 시스템이 자동 관리하는 원장 — 생성/수정 금지
 - 수요 우선순위: 챗 회상 수요의 대부분은 프로젝트 페이지다(회상-히트 원장 실측 ~86%). 일지에 프로젝트 관련 사실과 일반 지식이 섞여 있으면 프로젝트 반영을 우선하고, 기타(세상 지식·시사·잡학) 페이지는 지속 참조 가치가 분명할 때만 만들어라 — 일회성 브라우징 주제는 자료/일지로 충분하다
 - 기존 페이지가 있으면 action:"update", 없으면 action:"create"
 - 최근 처리 이력에 이미 반영된 주제/경로는 새 사실이 추가된 경우에만 update하고, 같은 내용을 반복 생성하지 마라
@@ -525,6 +526,14 @@ func (wd *WikiDreamer) prepareDreamUpdate(u wikiUpdate) (wikiUpdate, bool) {
 	}
 	if isDailyMailDigestPage(u.Title, u.Path) {
 		wd.logger.Warn("wiki-dream: skipped daily mail digest page",
+			"path", u.Path, "title", u.Title)
+		return u, false
+	}
+	// The recurring-signal ledger is deterministically maintained by
+	// captureDreamThemes; a synthesis write would corrupt its table via the
+	// append-merge path (prompts are advisory, this is the enforcement).
+	if u.Path == ThemePagePath {
+		wd.logger.Warn("wiki-dream: skipped themes ledger page (system-maintained)",
 			"path", u.Path, "title", u.Title)
 		return u, false
 	}

@@ -177,6 +177,10 @@ func Categories() []string {
 	return append([]string(nil), wiki.Categories...)
 }
 
+func DroppedEnumNotes(stage string, kinds []string) []string {
+	return wiki.DroppedEnumNotes(stage, kinds)
+}
+
 func AppendDiaryTo(diaryDir, content string) error {
 	return wiki.AppendDiaryTo(diaryDir, content)
 }

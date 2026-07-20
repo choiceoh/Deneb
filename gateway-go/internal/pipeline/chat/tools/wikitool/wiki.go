@@ -129,7 +129,11 @@ func wikiWriteSite(store *wiki.Store, project, name string, f wiki.SiteFields) (
 	if err != nil {
 		return "", fmt.Errorf("현장 페이지 저장 실패: %w", err)
 	}
-	return fmt.Sprintf("현장 페이지 저장됨: %s (상태 %s)", path, orDash(f.Status)), nil
+	msg := fmt.Sprintf("현장 페이지 저장됨: %s (상태 %s)", path, orDash(f.Status))
+	if notes := wiki.DroppedEnumNotes("", f.Kinds); len(notes) > 0 {
+		msg += "\n⚠️ " + strings.Join(notes, "\n⚠️ ")
+	}
+	return msg, nil
 }
 
 func orDash(s string) string {
@@ -632,7 +636,13 @@ func formatWikiWriteResult(path string, req wikiWriteRequest, note string, exist
 	if len(failed) > 0 {
 		note += fmt.Sprintf(" · 대체 표시 실패: %s", strings.Join(failed, ", "))
 	}
-	return fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, req.title, note)
+	result := fmt.Sprintf("위키 페이지 %s: %s (%s)%s", action, path, req.title, note)
+	// Out-of-vocabulary stage/kinds are silently dropped at render (enum
+	// discipline); surface the drop so the model can correct it this turn.
+	if notes := wiki.DroppedEnumNotes(req.stage, req.kinds); len(notes) > 0 {
+		result += "\n⚠️ " + strings.Join(notes, "\n⚠️ ")
+	}
+	return result
 }
 
 // appendProjectLogSection appends a write's content to a project 로그.md body

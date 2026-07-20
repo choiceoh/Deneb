@@ -371,6 +371,7 @@ func (wd *WikiDreamer) RunDream(ctx context.Context) (*autonomous.DreamReport, e
 
 	wd.applyDreamUpdates(ctx, cycle)
 	wd.captureDreamOpenLoops(ctx, cycle)
+	wd.captureDreamThemes(ctx, cycle)
 	wd.seedDreamPersonPages(ctx, cycle)
 	wd.applyDreamProjectDigests(ctx, cycle)
 	wd.applyDreamUserDirectives(cycle)
