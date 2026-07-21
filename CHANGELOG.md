@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.126.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.126.0...deneb-v4.126.1) (2026-07-21)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** render mail analysis through AssistantText so the lead deneb-ui card renders ([#4088](https://github.com/choiceoh/Deneb/issues/4088)) ([56bf8b9](https://github.com/choiceoh/Deneb/commit/56bf8b931572479cfd45c5f255ffcbfa9df51cbf))
+* **wiki:** recover string-encoded dream updates ([#4085](https://github.com/choiceoh/Deneb/issues/4085)) ([0f74b05](https://github.com/choiceoh/Deneb/commit/0f74b05e62e8a4bbe1376b3a6de568b5f6333d4e))
+
 ## [4.126.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.125.0...deneb-v4.126.0) (2026-07-21)
 
 
