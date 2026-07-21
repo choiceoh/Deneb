@@ -742,14 +742,17 @@ func applyTailAdditions(params RunParams, deps runDeps, prep prepResult, session
 	// blocks), so without this the request bytes diverge from the previous
 	// run's cache at the first tailed message and content-prefix providers
 	// (kimi) re-bill the whole conversation every run (tail_register.go).
+	cleanMessagesForOrdinal := messages
 	if !deps.briefcaseMode {
 		messages = attachPersistedTails(params.SessionKey, messages)
 	}
 	tailAdds := buildTailAdditions(params, prep.RecallMemory, notebookGrounding, skillHints)
-	preTailMessages := messages
 	messages, tailInjected, cleanTarget, tailTargetIdx := injectTailAdditionsTracked(messages, tailAdds)
 	if tailInjected && shouldRecordTail(params, deps) {
-		recordPersistedTail(params.SessionKey, cleanTarget, userMessageHashOrdinal(preTailMessages, tailTargetIdx), tailAdds)
+		// Ordinal must be computed from clean transcript bytes — attachPersistedTails
+		// mutates historical user messages in-place, and hashing tailed content
+		// would collapse duplicate utterances ("확인", "ok") onto ord 0.
+		recordPersistedTail(params.SessionKey, cleanTarget, userMessageHashOrdinal(cleanMessagesForOrdinal, tailTargetIdx), tailAdds)
 	}
 	tailForSystem := ""
 	if !tailInjected {

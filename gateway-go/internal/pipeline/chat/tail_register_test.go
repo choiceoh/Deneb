@@ -183,3 +183,46 @@ func TestTailRegisterDuplicateUserMessagesGetDistinctTails(t *testing.T) {
 		t.Fatalf("second duplicate got wrong tail: %q", secondBody)
 	}
 }
+
+// TestTailRegisterOrdinalUsesCleanTranscript pins run_exec ordering: historical
+// tails are re-attached before the current turn's tail is recorded, so the
+// hash-ordinal for record must come from the clean transcript — not from
+// messages that already carry persisted suffixes.
+func TestTailRegisterOrdinalUsesCleanTranscript(t *testing.T) {
+	resetTailRegister(t, "")
+	const session = "client:main"
+	first := llm.NewTextMessage("user", "확인")
+	second := llm.NewTextMessage("user", "확인")
+	history := []llm.Message{
+		first,
+		llm.NewTextMessage("assistant", "첫 답변"),
+		second,
+	}
+
+	firstAdds := []string{"<recall-context>계약 A</recall-context>"}
+	secondAdds := []string{"<recall-context>계약 B</recall-context>"}
+
+	_, ok, clean1, idx1 := injectTailAdditionsTracked([]llm.Message{first}, firstAdds)
+	if !ok {
+		t.Fatal("first injection failed")
+	}
+	recordPersistedTail(session, clean1, userMessageHashOrdinal([]llm.Message{first}, idx1), firstAdds)
+
+	cleanForOrdinal := history
+	attached := attachPersistedTails(session, history)
+	_, ok, clean2, idx2 := injectTailAdditionsTracked(attached, secondAdds)
+	if !ok {
+		t.Fatal("second injection failed")
+	}
+	recordPersistedTail(session, clean2, userMessageHashOrdinal(cleanForOrdinal, idx2), secondAdds)
+
+	final := attachPersistedTails(session, history)
+	firstBody := string(final[0].Content.Bytes())
+	secondBody := string(final[2].Content.Bytes())
+	if !strings.Contains(firstBody, "계약 A") || strings.Contains(firstBody, "계약 B") {
+		t.Fatalf("first duplicate got wrong tail: %q", firstBody)
+	}
+	if !strings.Contains(secondBody, "계약 B") || strings.Contains(secondBody, "계약 A") {
+		t.Fatalf("second duplicate got wrong tail: %q", secondBody)
+	}
+}
