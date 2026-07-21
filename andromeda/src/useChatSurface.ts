@@ -1,4 +1,4 @@
-import { type ChangeEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ChangeEvent, type RefObject, useEffect, useRef, useState } from "react";
 
 import { inferAttachmentMimeType } from "@/attachmentMime";
 import { readFileBase64, splitAttachable } from "@/attachments";
@@ -80,12 +80,15 @@ export function useComposerBehavior(
 // 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다. 입력창의 텍스트는 첫 비-음성
 // 파일의 캡션으로 동봉한다.
 //
-// 동시성 방어 2겹 (원 구현의 주석 요지):
-// - attaching(컴포넌트 소유 state) — busy가 파일 읽기 틈에 잠깐 내려가는 동안에도 세션
-//   전환/삭제/새 대화를 막는다. 컴포넌트가 useSessions에 넘겨야 해서 state는 밖에 산다.
-// - attachingRef — 동기 재진입 차단. busyRef 미러는 useLayoutEffect(커밋 시 동기 반영)라
-//   다음 매크로태스크(FileReader 콜백)가 낡은 값을 읽을 수 없다. 파일 읽기 틈에 배치 밖의
-//   턴(다시 생성 등)이 시작됐다면 남은 파일은 건너뛴다 — 턴 인터리브 방지.
+// 배치는 파일마다 `await capture(...)`로 직렬화된다 — 한 번에 하나만 처리되므로 자기들끼리
+// 겹칠 일이 없다. 배치가 도는 동안 attaching=true라 새 전송·세션 전환·삭제·새 대화가 모두
+// 막힌다(attaching state는 useSessions로 넘어가고, attachingRef는 동기 재진입을 막는다).
+//
+// ⚠️ 과거엔 파일 사이마다 공유 busy(useChat 상태)를 재확인해 "배치 밖 턴이 끼면 남은 파일
+// 건너뛰기"를 시도했으나, 실제 capture가 그 busy를 켰다 끄는 주체다 — 직전 capture의 busy
+// 해제가 다음 파일 검사 시점까지 리렌더로 반영된다는 보장이 없어(Tauri webview 스케줄러),
+// 배치가 자기 자신의 첨부를 "다른 응답 진행 중"으로 오인해 첫 파일만 남기고 전부 드롭했다.
+// 그래서 그 재확인을 없앴다 — 직렬 await + attaching 게이트로 충분하다.
 // A file waiting in the composer (frontier staging UX: pick/drop/paste collects
 // chips; nothing uploads until 전송). previewUrl is an object URL for images —
 // intentionally NOT revoked on send, because the transcript keeps rendering it
@@ -126,10 +129,6 @@ export function useAttachPipeline({
   onBatchDone?: () => void; // e.g. refresh the session list once the batch lands
 }) {
   const attachingRef = useRef(false);
-  const busyRef = useRef(busy);
-  useLayoutEffect(() => {
-    busyRef.current = busy;
-  });
 
   // 건너뛴 파일 안내(미지원 형식·크기 초과·읽기 실패) — 컴포저 위에 잠깐 떴다 사라진다.
   const [attachNote, setAttachNote] = useState("");
@@ -198,11 +197,6 @@ export function useAttachPipeline({
       for (const item of batch) {
         try {
           const base64 = await readFileBase64(item.file);
-          // 읽기(≥1 태스크 경계) 후 확인이라 직전 capture의 busy 해제는 ref에 반영돼 있다.
-          if (busyRef.current) {
-            showAttachNote([`${item.name} — 다른 응답이 진행 중이라 건너뜀`]);
-            continue;
-          }
           pin();
           await capture(
             { name: item.name, mimeType: item.mimeType, base64 },
