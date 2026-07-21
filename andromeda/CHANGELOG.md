@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.98](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.97...andromeda-v0.0.98) (2026-07-21)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 결재 검토 모드가 기안자 인물 위키를 여는 소음 제거 — 제목만 매칭 ([#4026](https://github.com/choiceoh/Deneb/issues/4026)) ([768ca06](https://github.com/choiceoh/Deneb/commit/768ca0600ab681a8c6e07f07b5ca2145ac57c7eb))
+* **andromeda:** 모닝 브리핑 투어 즉시 반응 — today 로컬 오픈 + 데네브 패널 펼침 ([#4033](https://github.com/choiceoh/Deneb/issues/4033)) ([42a73be](https://github.com/choiceoh/Deneb/commit/42a73bea3a5ff5ca5b5b445f4e6e1d2030034300))
+* **andromeda:** 오늘 질문 대기 KPI가 미응답 피드 인박스로 열리게 ([#4038](https://github.com/choiceoh/Deneb/issues/4038)) ([eedc7af](https://github.com/choiceoh/Deneb/commit/eedc7af4bd10e3172c45b268e2fef0f3eaee15a2))
+
 ## [0.0.97](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.96...andromeda-v0.0.97) (2026-07-20)
 
 

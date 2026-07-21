@@ -1,5 +1,76 @@
 # Changelog
 
+## [4.126.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.125.0...deneb-v4.126.0) (2026-07-21)
+
+
+### ✨ Features
+
+* **audit:** cache-aware cost decomposition audit over agent logs (arXiv:2607.12161) ([#4048](https://github.com/choiceoh/Deneb/issues/4048)) ([bcabe21](https://github.com/choiceoh/Deneb/commit/bcabe21737b35cd2b788ba0adc04d9db0684c219))
+* **audit:** meeting/log-provenance and traffic-use gold miners ([#4077](https://github.com/choiceoh/Deneb/issues/4077)) ([48e015d](https://github.com/choiceoh/Deneb/commit/48e015d46fc543b46e7fcd5d21e6cce3112c2467))
+* **audit:** mine accept-side improvement labels from provenance ledgers ([#4065](https://github.com/choiceoh/Deneb/issues/4065)) ([807b2d8](https://github.com/choiceoh/Deneb/commit/807b2d8ea5a30794005f01984596e7efb488be75))
+* **audit:** program-family gold + deterministic cue backfill + title convention ([#4076](https://github.com/choiceoh/Deneb/issues/4076)) ([118892f](https://github.com/choiceoh/Deneb/commit/118892f17a2434511a639716e1e5b3103792eb2a))
+* **chat:** add Hacker News as third academic-lane source ([#4079](https://github.com/choiceoh/Deneb/issues/4079)) ([7089345](https://github.com/choiceoh/Deneb/commit/70893452baffd746baf74adffdb6c02105fe29a2))
+* **chat:** add typed blackboard for multi-tool I/O contracts ([#4045](https://github.com/choiceoh/Deneb/issues/4045)) ([09617fd](https://github.com/choiceoh/Deneb/commit/09617fd88a2a2eb4d0689e6fcd23648876b5fc79))
+* **chat:** attach curated metric definitions to deal_ledger results ([#4071](https://github.com/choiceoh/Deneb/issues/4071)) ([57fc9af](https://github.com/choiceoh/Deneb/commit/57fc9afa77d4869f2fa3483aed06a4047c658714))
+* **chat:** attach free academic lane (arXiv + Semantic Scholar) to web search ([#4078](https://github.com/choiceoh/Deneb/issues/4078)) ([e1fd2ed](https://github.com/choiceoh/Deneb/commit/e1fd2edff88b5111d359d6052350196f7fa2a5e9))
+* **chat:** batch page OCR, chart-mode data reads, and lightweight-model digests for oversized documents ([#4023](https://github.com/choiceoh/Deneb/issues/4023)) ([95d7073](https://github.com/choiceoh/Deneb/commit/95d7073ce2b84698c1e927d959c419af9b69eb0f))
+* **chat:** line-mapped digest map with agent-openable archived originals ([#4028](https://github.com/choiceoh/Deneb/issues/4028)) ([025215e](https://github.com/choiceoh/Deneb/commit/025215ee4a6899833ca98206516eeeed958b18e4))
+* **chat:** route stealth renders through the resident browser sidecar with per-domain tier memory ([#4075](https://github.com/choiceoh/Deneb/issues/4075)) ([5e07159](https://github.com/choiceoh/Deneb/commit/5e0715986bf5d6361e507973d35bdda92a124226))
+* **chat:** stage-decomposed run latency + runtime-corroborated deadcode mining ([#4068](https://github.com/choiceoh/Deneb/issues/4068)) ([0ea89a5](https://github.com/choiceoh/Deneb/commit/0ea89a501e095d1dbbb165cf62fa3aa27ad55b63))
+* **client-android:** 공유 시트에서 docx·xlsx·pptx·Markdown 문서 수신 ([#4070](https://github.com/choiceoh/Deneb/issues/4070)) ([acd9f2b](https://github.com/choiceoh/Deneb/commit/acd9f2b5cafbd0dbcaff939cf15ccc3c73b039cf))
+* **dev:** adopt worktrunk (wt) for manual parallel worktrees ([#4025](https://github.com/choiceoh/Deneb/issues/4025)) ([74ccc6f](https://github.com/choiceoh/Deneb/commit/74ccc6fc2844e4a6187e54201ec51b2850be7610))
+* **dev:** worktrunk full-utility pass — branch summaries, host-deployed generator, prompt statusline ([#4030](https://github.com/choiceoh/Deneb/issues/4030)) ([e89a7cb](https://github.com/choiceoh/Deneb/commit/e89a7cb58ebbe640a14649c3b52e6050eb240421))
+* **dev:** worktrunk utility pass — LLM commit messages, wt land alias, plugin/statusline docs ([#4027](https://github.com/choiceoh/Deneb/issues/4027)) ([1f501a0](https://github.com/choiceoh/Deneb/commit/1f501a0e974011c68392c99a2f82f0ae41689a4e))
+* **genesis:** learn from six-axis harness experience ([#4024](https://github.com/choiceoh/Deneb/issues/4024)) ([46fafa8](https://github.com/choiceoh/Deneb/commit/46fafa84f0bb8c639c403ee4955b873066ec2b9e))
+* **genesis:** mine failed-to-successful tool retries into tool_retry evidence clusters ([#4080](https://github.com/choiceoh/Deneb/issues/4080)) ([2c41d6c](https://github.com/choiceoh/Deneb/commit/2c41d6ce9ee7389db0ee939e5d2fc6e42885f146))
+* **genesis:** mine high-effort runs as curriculum demand evidence ([#4040](https://github.com/choiceoh/Deneb/issues/4040)) ([efc8e21](https://github.com/choiceoh/Deneb/commit/efc8e21bb96099643864c8be6e5bf72f203265e8))
+* **genesis:** order-swap consistency probe on the L1 evolve judge (RSI P3) ([#4044](https://github.com/choiceoh/Deneb/issues/4044)) ([3b3182e](https://github.com/choiceoh/Deneb/commit/3b3182edf522e207d020e9b37dfb5e8d0171d515))
+* **memory:** governed induction + selective recall for hit-rate package ([#4052](https://github.com/choiceoh/Deneb/issues/4052)) ([4ea3ffa](https://github.com/choiceoh/Deneb/commit/4ea3ffa8b0c7035ba7a8be134f964b3ec380406e))
+* **recall:** recall-bench 라이프사이클 지표 — must_not/op_type/stale_values 골드 파싱 + stale/leak rate ([#4049](https://github.com/choiceoh/Deneb/issues/4049)) ([54706f1](https://github.com/choiceoh/Deneb/commit/54706f16d4b1c9b947315da34c5cce557b2f038c))
+* **recall:** record episodic gate-shadow signals in the utility ledger ([#4061](https://github.com/choiceoh/Deneb/issues/4061)) ([a6dc3d4](https://github.com/choiceoh/Deneb/commit/a6dc3d466fda61398c56ff58491091cc42a2cc79))
+* **rsi:** branch-rot miner — worktrunk fleet sensor files stale-branch recovery candidates ([#4032](https://github.com/choiceoh/Deneb/issues/4032)) ([7f101b6](https://github.com/choiceoh/Deneb/commit/7f101b6159e9fd9714260363754bd55424920f92))
+* **scripts:** record commit-session provenance ledger in committer ([#4064](https://github.com/choiceoh/Deneb/issues/4064)) ([255c6b8](https://github.com/choiceoh/Deneb/commit/255c6b82d1975ca10d6c146106c2efb6e75658b5))
+* validate model routes and harden macOS dev checks ([#4029](https://github.com/choiceoh/Deneb/issues/4029)) ([4ffb102](https://github.com/choiceoh/Deneb/commit/4ffb102c2cfe271177167f91fe0721b68d924856))
+* **wiki:** adopt SLEUTH working-memory protocol in research task prompt ([#4046](https://github.com/choiceoh/Deneb/issues/4046)) ([2cdfeb1](https://github.com/choiceoh/Deneb/commit/2cdfeb10d19698047f305e737ddd6fff2500b33c))
+* **wiki:** carry query, rank, and score in recall-hit ledger lines ([#4050](https://github.com/choiceoh/Deneb/issues/4050)) ([d85fded](https://github.com/choiceoh/Deneb/commit/d85fdedd09d0b1425be7a44c3c5e81cdb469f755))
+* **wiki:** enum-drop feedback, OKF type default, recurring-signal ledger ([#4035](https://github.com/choiceoh/Deneb/issues/4035)) ([bdb0a1d](https://github.com/choiceoh/Deneb/commit/bdb0a1d0cf35f4ca0b565cd06dddd563de51a387))
+* **wiki:** expose facet identity metadata in rerank documents ([#4073](https://github.com/choiceoh/Deneb/issues/4073)) ([7d0fc3f](https://github.com/choiceoh/Deneb/commit/7d0fc3f6d0cf5829d31dfc203c9fea286d94c509))
+* **wiki:** ground recall ledger in observed use, not injection ([#4055](https://github.com/choiceoh/Deneb/issues/4055)) ([49b3ee5](https://github.com/choiceoh/Deneb/commit/49b3ee5f958f7ddb9623af48d6c3350ac58bf096))
+* **wiki:** identity-anchored gold mining + machine-id backlink guard ([#4074](https://github.com/choiceoh/Deneb/issues/4074)) ([95fb688](https://github.com/choiceoh/Deneb/commit/95fb6886d89b82ea6b86ee9652fd8e320ff3d7f3))
+* **wiki:** index frontmatter identity metadata as hidden search facet ([#4053](https://github.com/choiceoh/Deneb/issues/4053)) ([ee6c782](https://github.com/choiceoh/Deneb/commit/ee6c78298d130ca74791f2a394f542ac912ef487))
+* **wiki:** RHI self-comparison ledger and gated synthesis-rules evolution ([#4043](https://github.com/choiceoh/Deneb/issues/4043)) ([d2e1303](https://github.com/choiceoh/Deneb/commit/d2e1303fdd8088f7ee34335e6f80516e722ee5cb))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 결재 검토 모드가 기안자 인물 위키를 여는 소음 제거 — 제목만 매칭 ([#4026](https://github.com/choiceoh/Deneb/issues/4026)) ([768ca06](https://github.com/choiceoh/Deneb/commit/768ca0600ab681a8c6e07f07b5ca2145ac57c7eb))
+* **andromeda:** 모닝 브리핑 투어 즉시 반응 — today 로컬 오픈 + 데네브 패널 펼침 ([#4033](https://github.com/choiceoh/Deneb/issues/4033)) ([42a73be](https://github.com/choiceoh/Deneb/commit/42a73bea3a5ff5ca5b5b445f4e6e1d2030034300))
+* **andromeda:** 오늘 질문 대기 KPI가 미응답 피드 인박스로 열리게 ([#4038](https://github.com/choiceoh/Deneb/issues/4038)) ([eedc7af](https://github.com/choiceoh/Deneb/commit/eedc7af4bd10e3172c45b268e2fef0f3eaee15a2))
+* **autonomous:** merge task state + heal storm-poisoned judge adoption ([#4034](https://github.com/choiceoh/Deneb/issues/4034)) ([2596ac0](https://github.com/choiceoh/Deneb/commit/2596ac0d24cfa4f15405d9bb0cadd76351ed2535))
+* **chat:** file/run cache audit — partial-read stale guard, snapshot race, spelling-blind invalidation ([#4059](https://github.com/choiceoh/Deneb/issues/4059)) ([cec0e09](https://github.com/choiceoh/Deneb/commit/cec0e09e21ae3c8f5477f925e26b619567aa1710))
+* **chat:** key persisted tails by content-hash ordinal for duplicate user messages ([#4067](https://github.com/choiceoh/Deneb/issues/4067)) ([63a387b](https://github.com/choiceoh/Deneb/commit/63a387b8a2bafe608a6f10ff089b11c99233074a))
+* **chat:** repair split/restarted deneb-ui fence glitches before delivery ([#4037](https://github.com/choiceoh/Deneb/issues/4037)) ([69c3405](https://github.com/choiceoh/Deneb/commit/69c3405eb116b016651d0469f246920784712848))
+* **chat:** satisfy revive context-as-argument in staleness test helper ([#4060](https://github.com/choiceoh/Deneb/issues/4060)) ([9dd337e](https://github.com/choiceoh/Deneb/commit/9dd337e13b5d033f959300b8dd0ed6de33e9fcc0))
+* **chat:** taint turn on external-origin tool reads, not just promptguard hits ([#4082](https://github.com/choiceoh/Deneb/issues/4082)) ([62c679f](https://github.com/choiceoh/Deneb/commit/62c679fc069640daf090fdc54d03f489a4ed00cb))
+* **gateway:** guard mail sync cache + deneb-ui fence restart false positive ([#4041](https://github.com/choiceoh/Deneb/issues/4041)) ([179e083](https://github.com/choiceoh/Deneb/commit/179e08362321727567515935913edb1ab6afd27c))
+* **genesis:** freshness-gate runtime-error dispatch, close its impact loop, capture decline reasons ([#4047](https://github.com/choiceoh/Deneb/issues/4047)) ([8079ca3](https://github.com/choiceoh/Deneb/commit/8079ca39cfb7f9b4b5b4c7dfc32df669be6662df))
+* **genesis:** isolate state dir + heal storm judge on P3 cadence ([#4036](https://github.com/choiceoh/Deneb/issues/4036)) ([654b0e9](https://github.com/choiceoh/Deneb/commit/654b0e9ec52a55023d6a11dd62c80376b7d5fb8a))
+* **genesis:** stop counting infra verdict errors as L3 judge misses ([#4031](https://github.com/choiceoh/Deneb/issues/4031)) ([5cd835b](https://github.com/choiceoh/Deneb/commit/5cd835bb078010602d1d5b4c80dc463f3b290796))
+* **genesis:** unstarve measurement budgets, account evolve backlog, drop zero-sample skip benches ([#4054](https://github.com/choiceoh/Deneb/issues/4054)) ([5290808](https://github.com/choiceoh/Deneb/commit/5290808ebd30aaf011875ef75a898a411b444384))
+* **groupware:** align approval detail search window ([#4066](https://github.com/choiceoh/Deneb/issues/4066)) ([394c658](https://github.com/choiceoh/Deneb/commit/394c65825e5f156169e18c78cdf16f67cdac7c0a))
+* **meeting:** widen Plaud list window and page defensively, keep long-meeting tail coverage ([#4021](https://github.com/choiceoh/Deneb/issues/4021)) ([8884275](https://github.com/choiceoh/Deneb/commit/8884275f119c5fa580d7cb04400ae0872a32c4ce))
+* **web:** fall back to browser sidecar when Reddit .json is IP-blocked ([#4081](https://github.com/choiceoh/Deneb/issues/4081)) ([0b8f95d](https://github.com/choiceoh/Deneb/commit/0b8f95d1ed397945738b90223d248dcb34148b75))
+* **wiki:** accept numeric confidence in dreamer synthesis parsing ([#4039](https://github.com/choiceoh/Deneb/issues/4039)) ([d9ccfcb](https://github.com/choiceoh/Deneb/commit/d9ccfcba6e7e6cde15b7de3970e496c43c5a8bde))
+* **wiki:** retry transient dream synthesis failures instead of full backoff ([#4042](https://github.com/choiceoh/Deneb/issues/4042)) ([41d7acd](https://github.com/choiceoh/Deneb/commit/41d7acd01585eefab2bd117ab7cb001ebf5637ce))
+
+
+### ⚡ Performance
+
+* **chat:** route easy helper tasks from lightweight to tiny role ([#4084](https://github.com/choiceoh/Deneb/issues/4084)) ([f55659e](https://github.com/choiceoh/Deneb/commit/f55659eafb38729fa43024634b75dd49985bf06b))
+* **chat:** stabilize turn-to-turn prompt bytes for content-prefix caches ([#4058](https://github.com/choiceoh/Deneb/issues/4058)) ([37e56d1](https://github.com/choiceoh/Deneb/commit/37e56d16450455e32c0b665315fffbc1ace06e2d))
+* **compaction:** dedupe superseded protected tool results in Tier 2b ([#4056](https://github.com/choiceoh/Deneb/issues/4056)) ([cb0061b](https://github.com/choiceoh/Deneb/commit/cb0061b13ea3b98e8519b211ed684ee7741a57e4))
+* **compaction:** protect skills read/list results from cheap pruning ([#4051](https://github.com/choiceoh/Deneb/issues/4051)) ([c606d55](https://github.com/choiceoh/Deneb/commit/c606d55a472c910f3665ab890b6fb5e8448cf398))
+
 ## [4.125.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.124.0...deneb-v4.125.0) (2026-07-20)
 
 
