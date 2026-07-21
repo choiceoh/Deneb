@@ -190,11 +190,19 @@ func decodeWikiUpdateItems(rawItems []json.RawMessage, partial bool, logger *slo
 	skipped := 0
 	for _, item := range rawItems {
 		var u wikiUpdate
-		if err := json.Unmarshal(item, &u); err != nil {
+		if err := decodeWikiUpdateItem(item, &u); err != nil {
 			skipped++
 			if logger != nil {
-				logger.Warn("wiki-dream: skipped malformed update item",
-					"error", err, "raw", fmt.Sprintf("%.200s", string(item)))
+				if strings.HasPrefix(strings.TrimSpace(string(item)), `"`) {
+					// Free-form string elements are an external synthesis-quality
+					// issue, not a runtime failure. The aggregate warning below
+					// still exposes the dropped count without reporting an error.
+					logger.Debug("wiki-dream: skipped non-object update item",
+						"raw", fmt.Sprintf("%.200s", string(item)))
+				} else {
+					logger.Warn("wiki-dream: skipped malformed update item",
+						"error", err, "raw", fmt.Sprintf("%.200s", string(item)))
+				}
 			}
 			continue
 		}
@@ -205,6 +213,27 @@ func decodeWikiUpdateItems(rawItems []json.RawMessage, partial bool, logger *slo
 			"skipped", skipped, "applied", len(updates))
 	}
 	return updates, partial, nil
+}
+
+// decodeWikiUpdateItem tolerates one extra JSON-string encoding around an
+// update object. Synthesis models occasionally emit an intact object as a
+// quoted array element; treating that recoverable shape as malformed drops a
+// valid update and produces a recurring warning.
+func decodeWikiUpdateItem(item json.RawMessage, update *wikiUpdate) error {
+	err := json.Unmarshal(item, update)
+	if err == nil {
+		return nil
+	}
+
+	var encoded string
+	if stringErr := json.Unmarshal(item, &encoded); stringErr != nil {
+		return err
+	}
+	encoded = strings.TrimSpace(encoded)
+	if encoded == "" || encoded[0] != '{' {
+		return err
+	}
+	return json.Unmarshal([]byte(encoded), update)
 }
 
 // unwrapUpdatesObject handles the two object-shaped synthesis responses seen

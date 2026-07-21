@@ -1,6 +1,7 @@
 package wiki
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -388,6 +389,33 @@ func TestParseWikiUpdates_SkipsMalformedItem(t *testing.T) {
 	}
 	if len(updates[1].Supersedes) != 2 {
 		t.Fatalf("supersedes array should still parse: %+v", updates[1].Supersedes)
+	}
+}
+
+func TestParseWikiUpdates_DecodesStringEncodedItem(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	text := `[
+		{"action":"create","path":"good/a.md","title":"A"},
+		"{\"action\":\"update\",\"path\":\"good/b.md\",\"title\":\"B\"}",
+		"not an update object"
+	]`
+	updates, partial, err := parseWikiUpdates(text, logger)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if partial {
+		t.Error("string-encoded items in an intact array must not report partial")
+	}
+	if len(updates) != 2 {
+		t.Fatalf("expected regular and string-encoded updates, got %d: %+v", len(updates), updates)
+	}
+	if updates[0].Path != "good/a.md" || updates[1].Path != "good/b.md" {
+		t.Fatalf("wrong updates kept: %+v", updates)
+	}
+	if got := logs.String(); strings.Contains(got, "skipped malformed update item") ||
+		!strings.Contains(got, "synthesis dropped malformed items") {
+		t.Fatalf("string item log classification = %q", got)
 	}
 }
 
