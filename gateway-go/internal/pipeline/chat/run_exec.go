@@ -218,7 +218,17 @@ func executeAgentRun(
 	// Untrusted-origin tool gate (interactive runs only): block irreversible
 	// tools once promptware enters the turn. Placed here so prep.RecallMemory is
 	// available to seed the taint; composes with any gate wireStreamHooks set.
-	wireUntrustedToolGate(&hc, params, prep, deps, logger)
+	untrustedGate := wireUntrustedToolGate(&hc, params, prep, deps, logger)
+	if untrustedGate != nil {
+		origTurnInit := cfg.OnTurnInit
+		cfg.OnTurnInit = func(ctx context.Context) context.Context {
+			if origTurnInit != nil {
+				ctx = origTurnInit(ctx)
+			}
+			untrustedGate.bindTurnContext(TurnContextFromContext(ctx))
+			return ctx
+		}
+	}
 
 	hooks := hc.Build()
 

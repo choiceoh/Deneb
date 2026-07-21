@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
 )
 
@@ -45,6 +46,7 @@ const untrustedTurnBlockReason = "이 대화 턴에 외부·신뢰불가 출처(
 // observer (which sets it) and the before-tool-call gate (which reads it).
 type untrustedToolGate struct {
 	tainted    atomic.Bool
+	turnCtx    atomic.Pointer[toolport.TurnContext]
 	sessionKey string
 	runID      string
 	broadcast  BroadcastFunc // optional
@@ -53,6 +55,15 @@ type untrustedToolGate struct {
 
 func newUntrustedToolGate(sessionKey, runID string, broadcast BroadcastFunc, logger *slog.Logger) *untrustedToolGate {
 	return &untrustedToolGate{sessionKey: sessionKey, runID: runID, broadcast: broadcast, logger: logger}
+}
+
+// bindTurnContext pins the current turn's TurnContext for code_action bridge
+// taint propagation. Called from AgentConfig.OnTurnInit each agent turn.
+func (g *untrustedToolGate) bindTurnContext(tc *toolport.TurnContext) {
+	if g == nil {
+		return
+	}
+	g.turnCtx.Store(tc)
 }
 
 // seed taints the run up front if the inbound message or the recall evidence
@@ -89,6 +100,15 @@ func (g *untrustedToolGate) observeToolResult(name, _ /*toolUseID*/, result stri
 	// injection gap deterministically instead of relying on signature recall.
 	if readsExternalOrigin(name) {
 		g.markTainted("external-origin:" + name)
+		return
+	}
+	// code_action dials back into the registry without surfacing nested tool
+	// results to OnToolResult; external reads inside the script mark the turn
+	// context instead (ToolRegistry.Execute). Taint when the wrapper completes.
+	if name == "code_action" {
+		if tc := g.turnCtx.Load(); tc != nil && tc.ExternalOriginTouched() {
+			g.markTainted("external-origin:code_action")
+		}
 	}
 }
 
@@ -174,12 +194,13 @@ func readsExternalOrigin(name string) bool {
 // seed the taint and the gate registers AFTER any goal-loop guard — the
 // compositor composes before-tool-call gates first-block-wins in registration
 // order, so no hand-rolled chaining is needed here.
-func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prepResult, deps runDeps, logger *slog.Logger) {
+func wireUntrustedToolGate(hc *agent.HookCompositor, params RunParams, prep prepResult, deps runDeps, logger *slog.Logger) *untrustedToolGate {
 	if !params.GateUntrustedTools {
-		return
+		return nil
 	}
 	gate := newUntrustedToolGate(params.SessionKey, params.ClientRunID, deps.broadcast, logger)
 	gate.seed(params.Message, prep.RecallMemory)
 	hc.OnToolResult(gate.observeToolResult)
 	hc.OnBeforeToolCall(gate.beforeToolCall)
+	return gate
 }
