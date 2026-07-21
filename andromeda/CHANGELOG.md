@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.99](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.98...andromeda-v0.0.99) (2026-07-21)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** render mail analysis through AssistantText so the lead deneb-ui card renders ([#4088](https://github.com/choiceoh/Deneb/issues/4088)) ([56bf8b9](https://github.com/choiceoh/Deneb/commit/56bf8b931572479cfd45c5f255ffcbfa9df51cbf))
+
 ## [0.0.98](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.97...andromeda-v0.0.98) (2026-07-21)
 
 
