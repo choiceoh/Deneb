@@ -85,7 +85,10 @@ func compressToolOutput(ctx context.Context, toolName, output string, logger *sl
 		prompt = textutil.TruncateBytes(prompt, 32000) + "\n[... truncated]"
 	}
 
-	compressed, err := pilot.CallLocalLLM(ctx, compressSystemPrompt, prompt, compressMaxTokens)
+	// Tiny role (2026-07-21 helper eval): bounded 30-line compression is easy
+	// tier, fail-open (original kept on any failure), and this runs INSIDE the
+	// turn — the 2.5x latency win lands directly on turn feel.
+	compressed, err := pilot.CallTinyLLM(ctx, compressSystemPrompt, prompt, compressMaxTokens)
 	if err != nil {
 		logger.Debug("tool output compression failed, using original", "tool", toolName, "error", err)
 		return output

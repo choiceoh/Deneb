@@ -267,7 +267,11 @@ func (t *goalTask) judge(ctx context.Context, goal string, subgoals []string, an
 		goalBlock = b.String()
 	}
 	user := fmt.Sprintf(goalJudgeUserTmpl, goalBlock, textutil.TruncateRunes(answer, 4000, "\n...(truncated)"))
-	out, err := pilot.CallLocalLLM(jctx, system, user, 512, json.RawMessage(`{"temperature":0}`))
+	// Tiny role (2026-07-21 helper eval: quality parity, 2.5x faster than the
+	// lightweight lane): a one-word satisfied/continue verdict is exactly the
+	// trivial-classification class the tiny role owns, and the judge is
+	// fail-open with the turn budget as backstop.
+	out, err := pilot.CallTinyLLM(jctx, system, user, 512, json.RawMessage(`{"temperature":0}`))
 	if err != nil {
 		return "continue", "judge 오류(계속): " + textutil.TruncateRunes(err.Error(), 120, "\n...(truncated)"), false // fail-open
 	}

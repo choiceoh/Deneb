@@ -151,7 +151,8 @@ func summarizeTranscript(ctx context.Context, r *media.YouTubeResult) (string, e
 func callYoutubeSummarizer(ctx context.Context, system, prompt string, maxTokens int) (string, error) {
 	sctx, cancel := context.WithTimeout(ctx, youtubeSummaryTimeout)
 	defer cancel()
-	return pilot.CallLocalLLM(sctx, system+"\n"+pilot.ReflectionDirective, prompt, maxTokens)
+	// Tiny role (2026-07-21 helper eval: summary tasks 2:1, 2.5x faster).
+	return pilot.CallTinyLLM(sctx, system+"\n"+pilot.ReflectionDirective, prompt, maxTokens)
 }
 
 // splitTranscriptChunks slices the transcript into summarizer-sized chunks,
