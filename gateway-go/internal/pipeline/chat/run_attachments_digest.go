@@ -57,7 +57,10 @@ func defaultChunkSummarizer() chunkSummarizer {
 		return nil
 	}
 	return func(ctx context.Context, system, user string, maxTokens int) (string, error) {
-		return pilot.CallLocalLLM(ctx, system, user, maxTokens)
+		// Tiny role (2026-07-21 helper eval): per-chunk topic digests are bounded
+		// easy summaries at volume — the 2.5x speed compounds across a 300-page
+		// PDF's chunk fan-out.
+		return pilot.CallTinyLLM(ctx, system, user, maxTokens)
 	}
 }
 
