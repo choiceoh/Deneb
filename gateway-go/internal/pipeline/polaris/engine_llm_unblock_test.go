@@ -9,9 +9,11 @@
 package polaris
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -204,6 +206,8 @@ func TestCompactAndPersistSavesJoinedChunkSummary(t *testing.T) {
 func TestCompactAndPersistSafetyTrimPreservesFencesWithAccurateTokens(t *testing.T) {
 	e, s := testEngine(t)
 	sess := "s1"
+	var logBuf bytes.Buffer
+	e.logger = slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	// 6 big single-chunk messages (~19.5K tokens each) + 12-message tail.
 	big := func(i int) string { return fmt.Sprintf("BIG-%d %s", i, makeString(39_000)) }
@@ -241,6 +245,9 @@ func TestCompactAndPersistSafetyTrimPreservesFencesWithAccurateTokens(t *testing
 	if result.TokensAfter != actual {
 		t.Fatalf("Result.TokensAfter = %d, want %d (post-trim); stale pre-trim counts re-create the spurious 'failed to reduce below budget' warning",
 			result.TokensAfter, actual)
+	}
+	if logLine := logBuf.String(); !strings.Contains(logLine, `level=INFO msg="polaris: post-compaction safety trim fired"`) {
+		t.Fatalf("safety trim must be an informational budget-enforcement event, log=%q", logLine)
 	}
 
 	// Progress persisted: a leaf node covering the digested prefix exists.
