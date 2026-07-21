@@ -20,6 +20,7 @@ function Probe() {
       <output data-testid="tiles">{value.tiles.join(",")}</output>
       <output data-testid="layouts">{value.layouts.map((l) => `${l.name}:${l.views.join("+")}`).join("|")}</output>
       <output data-testid="pane-target">{value.paneTarget ? JSON.stringify(value.paneTarget) : "none"}</output>
+      <output data-testid="spotlight">{value.spotlight ? value.spotlight.view : "none"}</output>
       <output data-testid="ai-text">{aiText}</output>
       <output data-testid="active-resource">{activeResource ?? "none"}</output>
       <output data-testid="wiki-target">{value.wikiTarget ?? "none"}</output>
@@ -111,6 +112,19 @@ describe("WorkspaceProvider core state", () => {
 
     expect(screen.getByTestId("view")).toHaveTextContent("todo");
     expect(screen.getByTestId("pane-target")).toHaveTextContent("none");
+  });
+
+  it("flashes the destination tile on every deep-link open (spotlight)", async () => {
+    renderProvider();
+    expect(screen.getByTestId("spotlight")).toHaveTextContent("none");
+
+    // A deep-link jump (오늘 KPI·타임라인·팔레트 열기 모두 openPane) must flash where
+    // it landed — otherwise arriving on an already-tiled pane is invisible.
+    await userEvent.click(screen.getByRole("button", { name: "open todo" }));
+    expect(screen.getByTestId("spotlight")).toHaveTextContent("todo");
+
+    await userEvent.click(screen.getByRole("button", { name: "run open command" }));
+    expect(screen.getByTestId("spotlight")).toHaveTextContent("mail");
   });
 
   it("publishes a typed pane target with its destination view", async () => {

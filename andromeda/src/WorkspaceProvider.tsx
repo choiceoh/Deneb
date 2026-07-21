@@ -200,6 +200,12 @@ export function WorkspaceProvider({
     (nextView: View, target?: Omit<PaneTarget, "view">) => {
       setPaneTarget(target ? { view: nextView, ...target } : null);
       setView(nextView);
+      // Flash the destination tile so a deep-link (오늘 KPI·타임라인·마감 레이더·
+      // 팔레트 열기·게이트웨이 open push) is visibly "where you landed" — otherwise
+      // jumping to an already-tiled pane only shifts focus + a filter toggle, which
+      // is easy to miss (e.g. 질문 대기 KPI → already-open 피드). Fresh seq each call
+      // re-fires the flash even on the same, already-visible tile.
+      setSpotlight({ view: nextView, seq: Date.now() });
     },
     [setView],
   );
@@ -217,8 +223,9 @@ export function WorkspaceProvider({
           );
           break;
         case "spotlight":
+          // openPane already flashes the destination tile; the id+spotlight target
+          // still drives the pane's own spotlight affordance (row highlight).
           openPane(cmd.view, { id: cmd.ref, spotlight: true });
-          setSpotlight({ view: cmd.view, seq: Date.now() });
           break;
         case "prefill":
           openPane(cmd.view, { prefill: { title: cmd.title, due: cmd.due, note: cmd.note } });
