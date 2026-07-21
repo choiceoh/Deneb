@@ -54,8 +54,10 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 //     avoids noise during transient spikes but catches the runaway case.
 //   - /proc/pressure/memory "some" 10s avg >= 1.0 %  — host is stalling on
 //     memory for this process or its peers; OOM killer is a short step away.
-//   - Heap grew > 2× since the last tick — detect the leak-in-progress curve
-//     before it hits the absolute threshold.
+//   - Retained heap (HeapSys - HeapReleased) grew > 2× since the last tick —
+//     detect process-footprint growth before it hits the absolute threshold.
+//     Alloc is intentionally not used for this comparison because its normal
+//     GC sawtooth can more than double between adjacent samples.
 //
 // At every tick we also Debug-log Go runtime stats so a future `--log-level
 // debug` restart can show the full curve without code changes.
@@ -63,14 +65,8 @@ func runMemPressureMonitor(ctx context.Context, logger *slog.Logger) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	const (
-		tickEvery        = 30 * time.Second
-		heapWarnBytes    = uint64(6 * 1024 * 1024 * 1024) // 6 GiB
-		psiWarnPercent   = 1.0                            // 1 % stall
-		growthFactorWarn = 2.0
-	)
-	var prevAlloc uint64
-	ticker := time.NewTicker(tickEvery)
+	var previous memPressureSnapshot
+	ticker := time.NewTicker(memPressureTickEvery)
 	defer ticker.Stop()
 	for {
 		select {
@@ -80,31 +76,69 @@ func runMemPressureMonitor(ctx context.Context, logger *slog.Logger) {
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
 			psi := readPSIMemorySome()
+			current := newMemPressureSnapshot(m, psi)
 			// Debug line every tick for full-history trace when enabled.
 			logger.Debug("mem pressure tick",
 				"heapAlloc", m.HeapAlloc,
 				"heapSys", m.HeapSys,
+				"heapRetained", current.retainedHeap,
 				"alloc", m.Alloc,
 				"numGoroutine", runtime.NumGoroutine(),
 				"psiSome10", psi)
-			shouldWarn := m.Alloc >= heapWarnBytes ||
-				psi >= psiWarnPercent ||
-				(prevAlloc > 0 && float64(m.Alloc) >= growthFactorWarn*float64(prevAlloc) && m.Alloc > 512*1024*1024)
-			if shouldWarn {
+			if shouldWarnMemPressure(previous, current) {
 				logger.Warn("mem pressure",
 					"alloc", m.Alloc,
 					"heapAlloc", m.HeapAlloc,
 					"heapInuse", m.HeapInuse,
 					"heapSys", m.HeapSys,
+					"heapReleased", m.HeapReleased,
+					"heapRetained", current.retainedHeap,
 					"gcPauseTotalNs", m.PauseTotalNs,
 					"numGC", m.NumGC,
 					"numGoroutine", runtime.NumGoroutine(),
 					"psiSome10Pct", psi,
-					"growthFactor", safeGrowth(prevAlloc, m.Alloc))
+					"retainedGrowthFactor", safeGrowth(previous.retainedHeap, current.retainedHeap))
 			}
-			prevAlloc = m.Alloc
+			previous = current
 		}
 	}
+}
+
+const (
+	memPressureTickEvery        = 30 * time.Second
+	memPressureHeapWarnBytes    = uint64(6 * 1024 * 1024 * 1024) // 6 GiB
+	memPressurePSIWarnPercent   = 1.0                            // 1 % stall
+	memPressureGrowthFactorWarn = 2.0
+	memPressureGrowthFloorBytes = uint64(512 * 1024 * 1024)
+)
+
+type memPressureSnapshot struct {
+	alloc        uint64
+	retainedHeap uint64
+	psiSome10    float64
+}
+
+func newMemPressureSnapshot(m runtime.MemStats, psiSome10 float64) memPressureSnapshot {
+	return memPressureSnapshot{
+		alloc:        m.Alloc,
+		retainedHeap: retainedHeapBytes(m.HeapSys, m.HeapReleased),
+		psiSome10:    psiSome10,
+	}
+}
+
+func retainedHeapBytes(heapSys, heapReleased uint64) uint64 {
+	if heapReleased >= heapSys {
+		return 0
+	}
+	return heapSys - heapReleased
+}
+
+func shouldWarnMemPressure(previous, current memPressureSnapshot) bool {
+	return current.alloc >= memPressureHeapWarnBytes ||
+		current.psiSome10 >= memPressurePSIWarnPercent ||
+		(previous.retainedHeap > 0 &&
+			float64(current.retainedHeap) >= memPressureGrowthFactorWarn*float64(previous.retainedHeap) &&
+			current.retainedHeap > memPressureGrowthFloorBytes)
 }
 
 // readPSIMemorySome parses /proc/pressure/memory and returns the "some" 10s
