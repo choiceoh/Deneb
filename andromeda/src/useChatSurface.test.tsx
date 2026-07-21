@@ -390,6 +390,30 @@ describe("useAttachPipeline", () => {
     expect(result.current.staged).toHaveLength(0);
   });
 
+  // The batch must capture EVERY staged file, not just the first. The production
+  // drop (6→1) came from a per-file re-check of the shared `busy` that the batch's
+  // own captures set — its exact webview timing isn't jsdom-reproducible (act()
+  // batches the busy transitions away), so this asserts the completeness contract:
+  // N staged files → N captures, in order.
+  it("captures every staged file in the batch, not just the first", async () => {
+    const { result, props } = attachHarness({ input: "" });
+    const files = ["a", "b", "c", "d", "e", "f"].map((n) => new File([n], `${n}.png`, { type: "image/png" }));
+
+    await act(async () => result.current.attachFiles(files));
+    await act(async () => result.current.sendStaged());
+
+    expect(props.capture).toHaveBeenCalledTimes(6);
+    files.forEach((f, i) => {
+      expect(props.capture).toHaveBeenNthCalledWith(
+        i + 1,
+        expect.objectContaining({ name: f.name }),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+    expect(result.current.staged).toHaveLength(0);
+  });
+
   it("without consume composer text for an audio-only batch", async () => {
     const { result, props } = attachHarness();
     const audio = new File(["voice"], "voice.wav", { type: "audio/wav" });
