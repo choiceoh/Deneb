@@ -2696,6 +2696,22 @@ input[type="checkbox"] {
 }
 
 /* mail detail: action bar + enrichment cards (분석 · 발신자 · 질문) */
+/* One row: 분석/본문 tabs on the left, actions (보관·삭제·인쇄) on the right. Wraps to
+   two rows on a narrow pane (tabs stay left, actions drop below). */
+.mail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+/* Scoped reset — the tabs/actions own their own margin elsewhere (ERP·결재 panes),
+   so only zero it inside the toolbar where the wrapper owns the spacing. */
+.mail-toolbar .mail-view-tabs,
+.mail-toolbar .mail-actions {
+  margin: 0;
+}
 .mail-actions {
   display: flex;
   flex-wrap: wrap;

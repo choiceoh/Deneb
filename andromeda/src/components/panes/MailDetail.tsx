@@ -88,44 +88,46 @@ export function MailDetail({
         )}
       </div>
 
-      <div className="mail-actions no-print">
-        {mail.isUnread && (
-          <button className="btn" onClick={onMarkRead} disabled={busy} title="읽음으로 표시">
-            읽음
+      {/* 한 줄 툴바: 분석/본문 토글은 왼쪽, 액션(보관·삭제·인쇄)은 오른쪽. 분석이 기본 —
+          the synthesis (왜 지금 중요한가) leads; switch to 본문 for the full raw text. */}
+      <div className="mail-toolbar no-print">
+        <div className="mail-view-tabs" role="group" aria-label="메일 보기 방식">
+          <button
+            className={"mail-view-tab" + (mailView === "analysis" ? " active" : "")}
+            aria-pressed={mailView === "analysis"}
+            onClick={() => setMailView("analysis")}
+          >
+            분석
           </button>
-        )}
-        <button className="btn" onClick={onArchive} disabled={busy} title="보관(받은편지함에서 제거)">
-          보관
-        </button>
-        <button className="btn" onClick={onTrash} disabled={busy} title="휴지통으로">
-          삭제
-        </button>
-        <button
-          className="btn"
-          onClick={() => printElement(detailRef.current)}
-          title="이 메일을 인쇄 (프린터 또는 PDF)"
-        >
-          인쇄
-        </button>
-      </div>
+          <button
+            className={"mail-view-tab" + (mailView === "body" ? " active" : "")}
+            aria-pressed={mailView === "body"}
+            onClick={() => setMailView("body")}
+          >
+            본문
+          </button>
+        </div>
 
-      {/* 분석 ↔ 본문 토글 (분석 기본): the synthesis (왜 지금 중요한가) leads; switch to
-          본문 for the full raw text. */}
-      <div className="mail-view-tabs no-print" role="group" aria-label="메일 보기 방식">
-        <button
-          className={"mail-view-tab" + (mailView === "analysis" ? " active" : "")}
-          aria-pressed={mailView === "analysis"}
-          onClick={() => setMailView("analysis")}
-        >
-          분석
-        </button>
-        <button
-          className={"mail-view-tab" + (mailView === "body" ? " active" : "")}
-          aria-pressed={mailView === "body"}
-          onClick={() => setMailView("body")}
-        >
-          본문
-        </button>
+        <div className="mail-actions">
+          {mail.isUnread && (
+            <button className="btn" onClick={onMarkRead} disabled={busy} title="읽음으로 표시">
+              읽음
+            </button>
+          )}
+          <button className="btn" onClick={onArchive} disabled={busy} title="보관(받은편지함에서 제거)">
+            보관
+          </button>
+          <button className="btn" onClick={onTrash} disabled={busy} title="휴지통으로">
+            삭제
+          </button>
+          <button
+            className="btn"
+            onClick={() => printElement(detailRef.current)}
+            title="이 메일을 인쇄 (프린터 또는 PDF)"
+          >
+            인쇄
+          </button>
+        </div>
       </div>
 
       {mailView === "analysis" ? (
