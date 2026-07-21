@@ -178,7 +178,7 @@ func (e *Engine) CompactAndPersist(
 		compacted = trimWithFenceProtection(compacted, contextBudget)
 		after := compact.EstimateMessagesTokens(compacted)
 		result.TokensAfter = after
-		e.logger.Warn("polaris: post-compaction safety trim fired",
+		e.logger.Info("polaris: post-compaction safety trim fired",
 			"tokensBefore", before, "tokensAfter", after, "budget", contextBudget)
 	}
 
