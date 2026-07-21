@@ -22,6 +22,7 @@ Health Bench 3.0 점수와 비교하거나 산술 변환하지 않는다.
 - `swap-consistency` / `ability-transfer`는 전용 코퍼스 전까지 **proxy ceiling** (각각 ≤58, 포화 시 swap ≤52).
 - L4 `dispatch-land`는 마커 **`outcome`**(landed/…)을 착지로 센다 — review `status`는 accepted로 남을 수 있음. 착지는 **RHAE식 효율 가중**(`ledgers.land_efficiency`): 1차 시도 착지=1.0, 재시도는 `(1/attempts)²`로 감쇠, 상한 `LAND_EFFICIENCY_CAP`(1.15). attempts는 attemptId 말미 서수, 파싱 불가=1(무벌점).
 - Snapshot 케이던스: `make bench-refresh` / `scripts/systemd/setup-bench-refresh.sh` (일 04:30).
+- **Token-economics readout는 advisory** (`scripts/audit/rsi_bench/token_economics.py`, arXiv:2607.06906): agent-logs(`~/.deneb/agent-logs/`)에서 τ(완수 태스크당 토큰)·CPM(백만토큰당 완수)·cacheHit를 계산해 payload `token_economics` 사이드카 + `DENEB_RSI_TOKEN_ECONOMICS` 렌더 라인으로만 노출한다 — **Metric/도메인 점수·ratchet·confidence·baseline check 전부 무접촉** (self-improvement이 품질만 보고 token-max하는 걸 *가시화*할 뿐, 게이트 아님). 래칫 항 승격은 신뢰 baseline 확보 후 2단계.
 
 ## Rubric 1.2.0
 

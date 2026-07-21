@@ -31,6 +31,7 @@ from rsi_bench.cache import (  # noqa: E402
 from rsi_bench.model import RUBRIC_VERSION, Report  # noqa: E402
 from rsi_bench.process import evaluate_process  # noqa: E402
 from rsi_bench.report import render_human, render_markdown  # noqa: E402
+from rsi_bench.token_economics import load_token_economics  # noqa: E402
 from rsi_bench.utility import evaluate_utility  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -174,6 +175,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
 
         payload = report.to_dict()
+        # Advisory token-economics sidecar (arXiv:2607.06906): tau/CPM per completed
+        # task from the runtime's own agent-logs, so the loop can SEE whether it is
+        # token-maxing. Deliberately outside the scored Report — never enters a
+        # domain score, the ratchet, confidence, or the baseline check.
+        token_economics = load_token_economics()
+        payload["token_economics"] = token_economics.to_dict()
         if args.write_snapshot is not None:
             args.write_snapshot.parent.mkdir(parents=True, exist_ok=True)
             args.write_snapshot.write_text(
@@ -194,6 +201,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"rubric={RUBRIC_VERSION} process={payload['score']['domains']['process']} "
                 f"utility={payload['score']['domains']['utility']}\n"
             )
+            # Next to the score, never inside it: CPM/tau make token-maxing visible.
+            text += f"DENEB_RSI_TOKEN_ECONOMICS {token_economics.summary()} [advisory]\n"
 
         if args.json_out:
             args.json_out.write_text(
