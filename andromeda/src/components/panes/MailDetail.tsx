@@ -23,12 +23,17 @@ import { Icon } from "@/components/Icon";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useWorkspace } from "@/workspaceContext";
 import { Markdown } from "@/components/Markdown";
+import { AssistantText } from "@/components/DenebUi";
 import { Modal } from "@/components/Modal";
 import { FileViewer } from "@/components/FileViewer";
 import { viewKindFor } from "@/components/fileView";
 import { mailBody } from "./mailBody";
 
 const HOT_IMPORTANCE = /urgent|high|중요|긴급|priority/i;
+
+// The mail analysis card is read-only here (this reader can't route card answers
+// back to the agent), so its submit callback is a no-op — mirrors WorkfeedPane.
+const ignoreMailUiSubmit = () => {};
 
 export function MailDetail({
   mail,
@@ -351,7 +356,12 @@ function AnalysisCard({ mailId }: { mailId: string }) {
         <div className="mail-card-line">분석 중… (수십 초 걸릴 수 있어요)</div>
       ) : analysis ? (
         <>
-          <Markdown text={analysis} />
+          {/* Mail analyses now lead with a deneb-ui card (analysisSystemPrompt
+              authors one), so render through AssistantText/splitDenebUi — a plain
+              Markdown render leaks the ```deneb-ui fence as a raw code block. The
+              analysis card is informational and this reader can't route answers,
+              so it renders non-interactively (same as WorkfeedPane's body). */}
+          <AssistantText text={analysis} onUiSubmit={ignoreMailUiSubmit} interactive={false} />
           {(data?.relatedProjects?.length ?? 0) > 0 && (
             <div className="mail-chips">
               {data!.relatedProjects!.map((p) => (

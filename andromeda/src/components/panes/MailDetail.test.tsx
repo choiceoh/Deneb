@@ -9,11 +9,14 @@ import { renderWithProviders } from "@/test/util";
 // cares about: a populated sender context (so the 발신자 card has something to
 // fold) and a cached-analysis miss (so the AI 분석 card renders its idle state).
 // Everything else stays real via importOriginal.
+// Mutable analysis payload so one test can return a card-leading analysis.
+let mockAnalysis: { analysis?: string; analysisQuality?: string } | null = null;
+
 vi.mock("@/gateway", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/gateway")>();
   return {
     ...actual,
-    cachedMailAnalysis: vi.fn(async () => null),
+    cachedMailAnalysis: vi.fn(async () => mockAnalysis),
     senderContext: vi.fn(async () => ({
       sender: "유광열 <yu@topsolar.co.kr>",
       recent: { count: 5, windowDays: 30, truncated: false, lastReceivedAt: "2026-06-20T09:00:00+09:00" },
@@ -114,6 +117,33 @@ describe("MailDetail layout", () => {
     } finally {
       urlObj.createObjectURL = prevCreate;
       vi.unstubAllGlobals();
+    }
+  });
+
+  it("renders a card-leading analysis as a deneb-ui card, not a raw code block", async () => {
+    // Regression: mail analyses now lead with a ```deneb-ui card. MailDetail
+    // rendered the analysis via plain Markdown, which leaked the fence as a
+    // copyable code block. It must route through AssistantText/splitDenebUi.
+    mockAnalysis = {
+      analysis:
+        "```deneb-ui\n" +
+        '<column><card><text style="title">중요도: 확인</text>' +
+        '<text style="body">근저당 말소 예정</text></card></column>\n' +
+        "```\n\n## 왜 지금 왔나\n\n곡성 리스 PF 심의 후속입니다.",
+      analysisQuality: "중요",
+    };
+    try {
+      const { container } = renderDetail();
+      // The card renders through the deneb-ui renderer (.dui root), and the
+      // prose tail still renders. The literal fence must NOT survive as a
+      // <code>/<pre> block.
+      await vi.waitFor(() => expect(container.querySelector(".dui")).toBeTruthy());
+      expect(screen.getByText("근저당 말소 예정")).toBeTruthy();
+      expect(screen.getByText(/왜 지금 왔나/)).toBeTruthy();
+      expect(container.querySelector("pre code")).toBeNull();
+      expect(container.textContent).not.toContain("```deneb-ui");
+    } finally {
+      mockAnalysis = null;
     }
   });
 });
