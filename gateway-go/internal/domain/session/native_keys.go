@@ -9,6 +9,13 @@ const (
 	DreamWorkSessionKey = NativeWorkSessionKey + ":dream"
 	// NativeWorkSessionTarget is the channel target portion of client:main.
 	NativeWorkSessionTarget = "main"
+	// HeartbeatWorkSessionKey is the ISOLATED session the 30-min heartbeat turn
+	// reasons in. Kept separate from client:main so autonomous ticks never
+	// assemble or compact the user's live conversation (the old client:main
+	// piggyback forced a Polaris compaction of client:main every tick). The
+	// heartbeat's user-facing report is delivered separately via the proactive
+	// relay (RelayNative → client:main + push), so isolation costs no visibility.
+	HeartbeatWorkSessionKey = "submain:heartbeat"
 )
 
 // RestorableTranscriptChannel classifies transcript keys that should be

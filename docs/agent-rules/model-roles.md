@@ -19,6 +19,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 |---|---|---|---|
 | main | `RoleMain` | **대화형** 턴 — 사용자 대면 최고 지능 (가장 강력) | ⚠️ **클라우드** (kimi/kimi-for-coding 구독제, ≥07-17) |
 | main2 | `RoleMain2` | **opt-in 제2 메인** — main급 품질의 **난이도-라우팅 수신자**: 명백히 단순한 대화 턴(볼륨 대부분)이 여기로 흘러 플래그십 쿼터를 분석급 턴에 보존. **main과 상호 폴백 페어**: main 죽으면 main2가, main2 죽으면 main이 1순위로 이어받아(같은 티어 품질 보존) 그다음에야 lightweight로 강등. 미설정 시 체인 자동 스킵+라우팅 off(단일 main 동작) | 클라우드 (wormhole/glm-5.2 구독제) |
+| submain | `RoleSubmain` | **opt-in 자율 배경 레인** — heartbeat·phone-event 인입을 대화형 main 구독에서 분리해 실어 main 처리 여력을 확보하고, (세션 격리와 함께) 자동 턴이 live `client:main` 컨텍스트를 압축·오염하지 않게 한다. main2가 제외하는 automation 트래픽을 의도적으로 수신. 미설정 시 부재(호출자 `""`→main). | 클라우드 (wormhole/glm-5.2 구독제, 정액이라 비용중립) |
 | coding | `RoleCoding` | 코드 수정·구현자 서브에이전트·스킬 패치 | 클라우드 (glm-5.2) |
 | lightweight | `RoleLightweight` | **바운드 요약**·로컬 잡일꾼 | 로컬 (wormhole/dsv4-nothink@srv2 — qwen3.6에서 교체) |
 | tiny | `RoleTiny` | **단순 분류/추출** (가장 작음) | 로컬 (wormhole/dsv4-nothink) |
@@ -72,6 +73,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 스킬 진화 behavioral replay (도구호출 회귀 검증) | `domain/skills/genesis/validation_executor.go` (executor) + `init_genesis.go` 배선 | **lightweight** | 후보 SKILL.md를 부작용 없이 시뮬레이션해 도구호출 plan을 뽑고, original↔candidate 행동 회귀를 채점하는 검증 게이트. 로컬·바운드. **왜 lightweight인가**: main은 챗 핫패스와 GPU 경합 + 과비용이고, 게이트는 두 본문을 **같은 모델**로 비교하므로 절대 충실도보다 일관된 판별력이 중요(executor 편향은 델타에서 상쇄). `DENEB_SKILL_EVOLVE_REPLAY`로 opt-in, fail-open |
 | 프로젝트별 최신 근황 digest | `domain/wiki/project_digest.go` (드림 사이클 Phase 3d) → 프로젝트 대표페이지 `## 현재 상태` 섹션 (`project_status.go`) → `miniapp.project.digests` (모아보기 화면) | **lightweight** | 드림 사이클이 소비하는 그 일지/메모 입력을 프로젝트별로 롤업(헤드라인+불릿 2~3)하는 내부 배경 요약. open_loops와 동형의 격리된 1콜, fail-open, 실제 `프로젝트/*` 페이지에 앵커. **왜 lightweight인가**: 컴팩션·youtube와 같은 내부 배경 요약 도그마(로컬·바운드) — analysis(클라우드)로 둘 이유 없음. 화면은 대표페이지 섹션만 읽어 LLM 핫패스 아님. 메일분석 이벤트 갱신(`wiki_mail_analysis.go` → `AppendProjectStatusLine`)은 **LLM 없는 결정적 날짜 불릿**이라 아래 표 참조 |
 | 위키 자료 인제스트 요약 (`wiki action="ingest"` URL/유튜브 캡처) | `chat/tools/wikitool/wiki_ingest.go` | **lightweight** | 컴팩션·youtube와 동형의 내부 배경 요약 (도그마 #1). 바운드(입력 16K룬·출력 700tok), fail-open — 요약 실패 시 발췌로 캡처 자체는 보존, force 재인제스트로 재시도 |
+| 폰 이벤트 판단턴 (알림·문맥·클립보드 → 능동 알림) | `runtime/phoneevents/handler.go` (`processJudgment`), 배선 `server/phone_event_config.go` | **submain** (설정 시), 미설정 시 **main** | 자율 배경 레인 격리 — 고빈도(하루 ~47회, 전체 입력 토큰 ~19%) 판단턴을 대화형 main(kimi) 구독에서 glm 서브메인으로 이전해 main 처리 여력을 확보. glm 정액이라 비용중립. 도구호출 역할이나 별도 벤치 불요 — 이미 coding 역할로 실증된 glm 재사용(도그마 #7). 폰 이벤트는 이미 `phone-event:*` 격리 세션이라 **모델만 전환**, tiny-gate(`worthFullJudgment`)는 그대로 tiny 유지. 미설정 시 부재로 무동작 |
+| 하트비트 30분 점검턴 | `runtime/heartbeat/heartbeat_task.go` (`Run`), 배선 `server/server_workflow_capabilities.go` | **submain** (설정 시), 미설정 시 **main** | 최대 자율 배경 소비자(하루 ~17회, 전체 입력 토큰 ~35%)를 서브메인으로 이전. **핵심은 모델보다 세션 격리** — 기존엔 `client:main`에서 돌며 매 틱 사용자 대화를 강제 압축(12K 예산)해 라이브 세션이 세부를 잃던 주범. 이제 `submain:heartbeat` 독립 세션에서 추론하고, 리포트는 `RelayNative`(→client:main+푸시)로 별도 배달(`AutoDeliveredOutput`로 in-loop message 도구 비활성). 미설정 시 세션 격리·배달은 그대로 적용되고 모델만 main |
 
 ## LLM 안 쓰는 곳 (의도적)
 

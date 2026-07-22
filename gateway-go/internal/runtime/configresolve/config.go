@@ -226,6 +226,13 @@ func VisionModel(logger *slog.Logger) string {
 	return agentRoleModel("visionModel", logger)
 }
 
+// SubmainModel reads the optional agents.submainModel override from
+// deneb.json — the autonomous-background lane (heartbeat, phone-event ingest).
+// Empty leaves RoleSubmain absent, so those tasks stay on the main role.
+func SubmainModel(logger *slog.Logger) string {
+	return agentRoleModel("submainModel", logger)
+}
+
 // agentRoleModel reads a string field directly under "agents" in
 // deneb.json (e.g. "lightweightModel"). Returns "" when absent/unparseable.
 func agentRoleModel(field string, logger *slog.Logger) string {

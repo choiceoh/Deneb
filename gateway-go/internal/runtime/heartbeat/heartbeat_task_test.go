@@ -1,6 +1,7 @@
 package heartbeat
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,7 +11,24 @@ import (
 	"time"
 
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+// deliveryCaptureRunner is a SyncRunner test double that records the request it
+// received and returns a canned result.
+type deliveryCaptureRunner struct {
+	called bool
+	req    chatport.SyncRequest
+	result *chatport.SyncResult
+}
+
+func (c *deliveryCaptureRunner) ChatReady() bool { return true }
+
+func (c *deliveryCaptureRunner) RunSync(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+	c.called = true
+	c.req = req
+	return c.result, nil
+}
 
 func TestWithinActiveHours_boundaries(t *testing.T) {
 	loc, err := time.LoadLocation("Asia/Seoul")
@@ -120,6 +138,76 @@ func TestHeartbeatSyncRequestWithoutTranscriptPersistence(t *testing.T) {
 	}
 	if !req.EphemeralAssistant {
 		t.Fatal("heartbeat assistant/tool output must not persist into short-term chat context")
+	}
+	if !req.AutoDeliveredOutput {
+		t.Fatal("heartbeat report is delivered by the proactive relay, so AutoDeliveredOutput must be true")
+	}
+}
+
+// A content-driven heartbeat tick must run in the ISOLATED submain session (not
+// client:main), on the configured model, with AutoDeliveredOutput set, and must
+// hand the report's BestText to the proactive-relay deliver closure — the wiring
+// that isolates the tick from the user's live conversation while keeping the
+// report visible.
+func TestHeartbeatRunIsolatesSessionAndDeliversReport(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Skipf("Asia/Seoul tzdata unavailable: %v", err)
+	}
+	home := t.TempDir()
+	dir := filepath.Join(home, ".deneb")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A real task line guarantees the tick warrants a turn.
+	if err := os.WriteFile(filepath.Join(dir, "HEARTBEAT.md"), []byte("- 납품 확인 진행중\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := &deliveryCaptureRunner{result: &chatport.SyncResult{
+		Text:     "## 납품 현황\n- 오늘 확인 필요",
+		BestText: "## 납품 현황\n- 오늘 확인 필요",
+	}}
+
+	deliveredText := ""
+	deliverCalled := false
+	tk := NewTask(TaskConfig{
+		ChatHandler: runner,
+		Logger:      slog.Default(),
+		HomeDir:     home,
+		Model:       "submain",
+		Deliver: func(text string) (bool, error) {
+			deliverCalled = true
+			deliveredText = text
+			return true, nil
+		},
+		// Active hours, and no ActivityTracker so the idle gate is skipped.
+		Now: func() time.Time { return time.Date(2026, 5, 3, 10, 0, 0, 0, loc) },
+	})
+
+	if err := tk.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !runner.called {
+		t.Fatal("expected the content-driven tick to dispatch a turn")
+	}
+	if runner.req.SessionKey != runtimesession.HeartbeatWorkSessionKey {
+		t.Errorf("session = %q, want isolated %q", runner.req.SessionKey, runtimesession.HeartbeatWorkSessionKey)
+	}
+	if runner.req.SessionKey == runtimesession.NativeWorkSessionKey {
+		t.Error("heartbeat must NOT run in the live client:main session")
+	}
+	if runner.req.Model != "submain" {
+		t.Errorf("model = %q, want submain", runner.req.Model)
+	}
+	if !runner.req.AutoDeliveredOutput {
+		t.Error("AutoDeliveredOutput must be true so the agent skips the in-loop message tool")
+	}
+	if !deliverCalled {
+		t.Fatal("report was never handed to the proactive-relay deliver closure")
+	}
+	if deliveredText != runner.result.BestText {
+		t.Errorf("delivered %q, want BestText %q", deliveredText, runner.result.BestText)
 	}
 }
 

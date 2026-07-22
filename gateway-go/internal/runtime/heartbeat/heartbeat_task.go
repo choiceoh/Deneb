@@ -7,11 +7,13 @@
 // unless the proactive signal pass or the research lane (heartbeat_research.go,
 // self-queued "[연구]" items from accumulated new data) warrants a turn.
 //
-// The heartbeat turn is dispatched into the user's most recently active native
-// client session (tracked via ActivityTracker.LastSessionKey), falling back to
-// client:main when no native session has been seen yet. Sharing the session
-// means the agent sees prior commitments and user replies in the same
-// transcript, instead of running in an isolated stateless channel.
+// The heartbeat turn reasons in an ISOLATED session (HeartbeatWorkSessionKey,
+// "submain:heartbeat"), NOT the user's live client:main. Running on client:main
+// used to force a Polaris compaction of the user's conversation every tick (the
+// 12K history budget below) — the top cause of the live session losing detail.
+// Progress state lives in HEARTBEAT.md, so the isolated session needs no shared
+// transcript; the user-facing report is delivered separately via the proactive
+// relay (RelayNative → client:main + push), so isolation costs no visibility.
 //
 // Persistence is isolated from the chat transcript:
 //   - EphemeralUser=true   → the trigger user-role message is NOT persisted
@@ -113,6 +115,17 @@ type heartbeatTask struct {
 	// heartbeat_idle_review.go.
 	idleSkillReview func(ctx context.Context) (fired bool, detail string)
 
+	// model is the model role the heartbeat turn runs on ("submain" when
+	// agents.submainModel is configured, else "" → main). Moves autonomous
+	// volume off the interactive main subscription.
+	model string
+
+	// deliver, when set, hands the finished report to the proactive relay
+	// (RelayNative → client:main + push). The turn now reasons in an isolated
+	// session, so this explicit relay is how the report reaches the user;
+	// RelayNative suppresses NO_REPLY/empty output. Nil in tests → no delivery.
+	deliver func(text string) (bool, error)
+
 	// nowFn overrides the task clock in tests so the active-hours gate is
 	// deterministic (a real run leaves it nil → time.Now).
 	nowFn func() time.Time
@@ -136,6 +149,8 @@ type TaskConfig struct {
 	SelfImproveSignals        func() (genesis.SelfCorrectionFunnelSummary, int)
 	SelfImproveEvidence       func(limit int) []genesis.FailureClusterSummary
 	IdleSkillReview           func(context.Context) (bool, string)
+	Model                     string
+	Deliver                   func(text string) (bool, error)
 	Now                       func() time.Time
 }
 
@@ -155,6 +170,8 @@ func NewTask(cfg TaskConfig) *Task {
 		selfImproveSignals:        cfg.SelfImproveSignals,
 		selfImproveEvidence:       cfg.SelfImproveEvidence,
 		idleSkillReview:           cfg.IdleSkillReview,
+		model:                     cfg.Model,
+		deliver:                   cfg.Deliver,
 		nowFn:                     cfg.Now,
 	}
 }
@@ -178,10 +195,11 @@ func (t *heartbeatTask) Interval() time.Duration { return 30 * time.Minute }
 const (
 	heartbeatActiveStartHour = 8
 	heartbeatActiveEndHour   = 23
-	// Heartbeat piggybacks on a live client session for recent commitments, but
-	// production logs showed routine ticks assembling 60K+ history tokens from
-	// client:main. Keep enough recent transcript to resolve follow-ups while
-	// forcing Polaris to summarize the long tail before the autonomous check.
+	// Safety bound on assembled history. The heartbeat now runs in an isolated,
+	// ephemeral session (HeartbeatWorkSessionKey) that persists nothing, so in
+	// practice there is no history to trim — this cap only guards an unexpectedly
+	// non-empty assembly. It no longer forces a compaction of the user's
+	// client:main session (the prior behavior that lost live-chat detail).
 	heartbeatHistoryBudget = 12_000
 )
 
@@ -196,7 +214,7 @@ const (
 const heartbeatTriggerTemplate = prompt.HeartbeatTriggerPrefix + ` 30분 주기 자동 점검입니다. 사용자가 직접 보낸 메시지가 아닙니다.
 
 규칙:
-- 아래 HEARTBEAT.md 지시를 따르되, 같은 세션의 직전 대화(사용자 응답·이전 약속)를 반드시 반영하세요.
+- 아래 HEARTBEAT.md 지시를 따르세요. 이 점검은 독립 세션에서 돌아 대화 맥락을 공유하지 않으니, 진행 상태·직전 보고 여부·이전 약속은 HEARTBEAT.md의 마지막 보고 시각·상태 줄을 유일한 기준으로 판단하세요.
 - 이미 사용자가 답해서 처리된 항목은 다시 묻지 말고 곧장 실행하세요.
 - 진행에 꼭 필요한데 사용자만 아는 핵심 정보가 비어 막혔다면, 추측으로 메우지 말고 그 항목에서 한 번 질문하세요. 단 아직 답을 못 받은 같은 질문을 다음 점검에서 반복하지는 마세요(NO_REPLY 유지) — 답이 오면 그때 진행합니다.
 - 직전 하트비트에서 이미 같은 보고를 했고 새 진전이 없으면 본문에 정확히 ` + "`NO_REPLY`" + ` 한 단어만 출력하세요(다른 텍스트 금지). 사용자가 같은 응답을 두 번 받지 않도록 매우 엄격히 지키세요.
@@ -310,15 +328,12 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		t.logger.Info("heartbeat: proactive signals detected", "hasHeartbeatMd", content != "")
 	}
 
-	// Resolve the target session: latest active native session, or the native
-	// work home if the app has not recorded a session yet. Heartbeat piggybacks
-	// on the user's native transcript so prior commitments and replies are
-	// visible to the agent.
-	lastSessionKey := ""
-	if t.activity != nil {
-		lastSessionKey = t.activity.LastSessionKey()
-	}
-	sessionKey := runtimesession.HeartbeatTargetSession(lastSessionKey)
+	// The heartbeat reasons in its OWN isolated session (never client:main), so
+	// the autonomous tick doesn't assemble or compact the user's live
+	// conversation — the prior client:main piggyback forced a Polaris compaction
+	// every tick. The user-facing report is delivered separately via t.deliver
+	// (the proactive relay), not by sharing this session's transcript.
+	sessionKey := runtimesession.HeartbeatWorkSessionKey
 
 	triggerMsg := fmt.Sprintf(heartbeatTriggerTemplate, composeHeartbeatBody(signalSummary, content, selfCodingNudge, sweepNudge, researchNudge))
 
@@ -328,6 +343,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	req := heartbeatSyncRequest()
 	req.SessionKey = sessionKey
 	req.Message = triggerMsg
+	req.Model = t.model
 	result, err := t.chatHandler.RunSync(runCtx, req)
 
 	// Fixture harvest (P0 of instruction-surface evolve): persist this firing's
@@ -360,9 +376,22 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 		return fmt.Errorf("heartbeat: agent turn failed: %w", err)
 	}
 
+	// Deliver the report to the user's channel via the proactive relay. The turn
+	// ran in an isolated session, so this explicit relay (RelayNative →
+	// client:main + push) is how the user sees it; RelayNative suppresses
+	// NO_REPLY/empty output, so a nothing-to-report tick delivers nothing.
+	delivered := false
+	if t.deliver != nil {
+		var derr error
+		if delivered, derr = t.deliver(result.BestText); derr != nil {
+			t.logger.Error("heartbeat: report delivery failed", "error", derr)
+		}
+	}
+
 	t.logger.Info(
 		"heartbeat completed",
-		"output_len", len(result.Text),
+		"output_len", len(result.BestText),
+		"delivered", delivered,
 		"session", sessionKey,
 	)
 	return nil
@@ -487,6 +516,10 @@ func heartbeatSyncRequest() chatport.SyncRequest {
 		MaxHistoryTokens:   heartbeatHistoryBudget,
 		EphemeralUser:      true,
 		EphemeralAssistant: true,
+		// The report is delivered by the proactive relay after the run (see Run),
+		// so tell the agent NOT to use the in-loop message tool — that path is a
+		// benign no-op under auto-delivery and would otherwise error.
+		AutoDeliveredOutput: true,
 	}
 }
 

@@ -53,7 +53,11 @@ type ActionResult struct {
 
 // Config supplies the late-bound runtime dependencies for phone event handling.
 type Config struct {
-	ChatHandler        chatport.SyncRunner
+	ChatHandler chatport.SyncRunner
+	// JudgmentModel is the model role (e.g. "submain") the phone-event judgment
+	// turn runs on. Empty → the turn resolves to the main role as before; setting
+	// it moves this high-volume lane off the interactive main subscription.
+	JudgmentModel      string
 	Relay              *proactive.Relay
 	ResolvePhoneAction func(ActionResult) bool
 	ShutdownContext    context.Context
@@ -85,6 +89,7 @@ type Config struct {
 // Handler accepts phone telemetry and runs proactive judgment turns.
 type Handler struct {
 	chatHandler         chatport.SyncRunner
+	judgmentModel       string
 	relay               *proactive.Relay
 	resolvePhoneAction  func(ActionResult) bool
 	shutdownContext     context.Context
@@ -103,6 +108,7 @@ func New(cfg Config) *Handler {
 	}
 	return &Handler{
 		chatHandler:         cfg.ChatHandler,
+		judgmentModel:       cfg.JudgmentModel,
 		relay:               cfg.Relay,
 		resolvePhoneAction:  cfg.ResolvePhoneAction,
 		shutdownContext:     shutdownContext,
@@ -524,6 +530,7 @@ func (s *Handler) processJudgment(ctx context.Context, eventType, source, text s
 	result, err := s.chatHandler.RunSync(ctx, chatport.SyncRequest{
 		SessionKey:          sessionKey,
 		Message:             msg,
+		Model:               s.judgmentModel, // submain lane when configured, else main
 		MaxTokens:           &maxTok,
 		EphemeralUser:       true, // throwaway session — persist nothing
 		EphemeralAssistant:  true,

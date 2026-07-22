@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
@@ -16,6 +17,7 @@ import (
 func (s *Server) phoneEventHandlerConfig() phoneevents.Config {
 	return phoneevents.Config{
 		ChatHandler:         s.chatHandler,
+		JudgmentModel:       s.submainRoleIfConfigured(),
 		Relay:               &s.proactiveRelay,
 		ShutdownContext:     s.ShutdownCtx(),
 		Logger:              s.logger,
@@ -68,4 +70,16 @@ func (s *Server) approvalBrowserEnrich(ctx context.Context, source, text string)
 		groupwareURL = "https://tsgw.topsolar.kr" //nolint:gosec // default groupware base URL, not a credential
 	}
 	return runtimeops.ApprovalBrowserEnrich(ctx, base, token, groupwareURL, source, text)
+}
+
+// submainRoleIfConfigured returns the "submain" role name when agents.submainModel
+// is set, else "" (the caller then resolves to the main role as before). This is
+// the single gate that keeps the autonomous lanes (phone-event, heartbeat) on the
+// submain model only when the operator has configured one — an unconfigured deploy
+// behaves exactly as before.
+func (s *Server) submainRoleIfConfigured() string {
+	if s.modelRegistry != nil && s.modelRegistry.FullModelID(modelrole.RoleSubmain) != "" {
+		return string(modelrole.RoleSubmain)
+	}
+	return ""
 }

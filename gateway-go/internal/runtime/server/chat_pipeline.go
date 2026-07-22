@@ -52,6 +52,7 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 		CodingModel:      configresolve.CodingModel(s.logger),
 		FallbackModel:    configresolve.FallbackModel(s.logger),
 		VisionModel:      configresolve.VisionModel(s.logger),
+		SubmainModel:     configresolve.SubmainModel(s.logger),
 		Providers:        configresolve.ProviderCatalog(s.logger),
 	})
 	*regPtr = reg

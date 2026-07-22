@@ -134,6 +134,8 @@ func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
 		SelfImproveSignals:        s.selfCodingFunnelSignals,
 		SelfImproveEvidence:       s.selfCodingFailureEvidence,
 		IdleSkillReview:           s.idleSkillReviewLaneIfProduction(homeDir),
+		Model:                     s.submainRoleIfConfigured(),
+		Deliver:                   func(text string) (bool, error) { return s.proactiveRelay.RelayNative(text) },
 	}))
 }
 
