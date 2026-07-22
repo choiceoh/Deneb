@@ -95,6 +95,20 @@ function installNotebookGateway(
           sources[id] = [...(sources[id] ?? []), source];
           return reply(source);
         }
+        case "miniapp.notebook.add_ref": {
+          // The gateway would fetch/read the ref into text; the stub pins a source
+          // whose text stands in for the ingested content.
+          const id = String(params.id);
+          const source: Source = {
+            cite: `S${(sources[id]?.length ?? 0) + 1}`,
+            kind: String(params.kind ?? "url"),
+            title: String(params.title || params.ref || ""),
+            text: `읽어온 본문: ${String(params.ref ?? "")}`,
+            ref: String(params.ref ?? ""),
+          };
+          sources[id] = [...(sources[id] ?? []), source];
+          return reply(source);
+        }
         case "miniapp.notebook.remove_source": {
           const id = String(params.id);
           sources[id] = (sources[id] ?? []).filter((source) => source.cite !== params.cite);
@@ -327,12 +341,33 @@ describe("NotebookPane boundary behavior", () => {
     });
 
     // 파일 no longer rides add_source-by-ref — it uses a picker + add_file (covered
-    // in NotebookPane.test.tsx). The remaining kinds still pin by a typed ref.
+    // in NotebookPane.test.tsx). wiki still pins by a typed ref via add_source (its
+    // page is read live at brief time, so it needs no ingestion).
+    it("when adds a wiki source by canonical ref via add_source", async () => {
+      renderNotebook();
+      await screen.findByRole("heading", { name: "최신 노트북" });
+      await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
+      const dialog = screen.getByRole("dialog", { name: /인용자료 추가/ });
+      await userEvent.click(within(dialog).getByRole("button", { name: "위키" }));
+      fireEvent.change(within(dialog).getByLabelText("제목 (선택)"), { target: { value: "  근거 자료  " } });
+      fireEvent.change(within(dialog).getByLabelText("위키 경로"), { target: { value: "  프로젝트/계약.md  " } });
+      await userEvent.click(within(dialog).getByRole("button", { name: "추가" }));
+      await waitFor(() => expect(lastCall(calls, "miniapp.notebook.add_source")).toBeDefined());
+      expect(lastCall(calls, "miniapp.notebook.add_source")?.params).toMatchObject({
+        id: "latest",
+        kind: "wiki",
+        title: "근거 자료",
+        ref: "프로젝트/계약.md",
+      });
+    });
+
+    // url/mail/diary carry only a ref the user typed; the gateway reads it into text,
+    // so they route to add_ref (not add_source, which would reject them for no text).
     it.each([
-      ["위키", "위키 경로", "프로젝트/계약.md", "wiki"],
       ["메일", "메일 ID", "message-42", "mail"],
       ["URL", "URL", "https://example.com/source", "url"],
-    ])("when adds a %s source by canonical ref", async (tab, field, ref, kind) => {
+      ["일기", "일기 날짜/ID", "2026-06-24", "diary"],
+    ])("when ingests a %s source by ref via add_ref", async (tab, field, ref, kind) => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
       await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
@@ -341,13 +376,15 @@ describe("NotebookPane boundary behavior", () => {
       fireEvent.change(within(dialog).getByLabelText("제목 (선택)"), { target: { value: "  근거 자료  " } });
       fireEvent.change(within(dialog).getByLabelText(field), { target: { value: `  ${ref}  ` } });
       await userEvent.click(within(dialog).getByRole("button", { name: "추가" }));
-      await waitFor(() => expect(lastCall(calls, "miniapp.notebook.add_source")).toBeDefined());
-      expect(lastCall(calls, "miniapp.notebook.add_source")?.params).toMatchObject({
+      await waitFor(() => expect(lastCall(calls, "miniapp.notebook.add_ref")).toBeDefined());
+      expect(lastCall(calls, "miniapp.notebook.add_ref")?.params).toMatchObject({
         id: "latest",
         kind,
         title: "근거 자료",
         ref,
       });
+      // add_source must NOT be used for these ingested kinds.
+      expect(lastCall(calls, "miniapp.notebook.add_source")).toBeUndefined();
     });
 
     it("preserves add-source input after a gateway failure", async () => {

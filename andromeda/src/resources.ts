@@ -132,6 +132,9 @@ export const NOTEBOOK_RPC = {
   // Pin a picked local document — the gateway extracts its text server-side, so no
   // file path is typed (unlike add_source's ref-only file kind, which never worked).
   addFile: "miniapp.notebook.add_file",
+  // Pin an external ref (url/mail/diary) — the gateway fetches/reads it server-side
+  // into text, the same fix as add_file for the other kinds add_source can't ingest.
+  addRef: "miniapp.notebook.add_ref",
   removeSource: "miniapp.notebook.remove_source",
 } as const;
 

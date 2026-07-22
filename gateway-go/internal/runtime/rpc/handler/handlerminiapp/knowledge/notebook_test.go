@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -104,6 +105,92 @@ func TestNotebookAddSourceRejections(t *testing.T) {
 	}
 	if resp := callNotebook(t, m, "miniapp.notebook.create", map[string]any{"description": "no name"}); resp.OK {
 		t.Error("create without a name should fail")
+	}
+}
+
+// notebookTestMethodsWithReaders wires fake url/mail/diary readers so add_ref
+// registers. The url reader echoes the ref as text, mail returns a fixed body,
+// and diary is intentionally left nil to assert the per-kind unavailable branch.
+func notebookTestMethodsWithReaders(t *testing.T) map[string]rpcutil.HandlerFunc {
+	t.Helper()
+	store, err := notebook.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	return NotebookMethods(NotebookDeps{
+		Store: func() (*notebook.Store, error) { return store, nil },
+		FetchURL: func(_ context.Context, ref string) (string, error) {
+			if ref == "https://boom.example" {
+				return "", errors.New("안전하지 않은 URL")
+			}
+			return "본문 of " + ref, nil
+		},
+		ReadMail: func(_ context.Context, ref string) (string, error) {
+			return "메일 스레드 " + ref + " 본문", nil
+		},
+		// ReadDiary left nil on purpose.
+	})
+}
+
+// TestNotebookAddRefIngestsUrlAndMail exercises the ref-ingestion path: url and
+// mail refs are read server-side and pinned with the fetched text (not a bare ref).
+func TestNotebookAddRefIngestsUrlAndMail(t *testing.T) {
+	m := notebookTestMethodsWithReaders(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+
+	url := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_ref",
+		map[string]any{"id": id, "kind": "url", "ref": "https://example.com/a"}))
+	if url["kind"] != "url" || url["ref"] != "https://example.com/a" {
+		t.Errorf("url source = %v, want kind=url + ref", url)
+	}
+	if url["text"] != "본문 of https://example.com/a" {
+		t.Errorf("url text = %v, want the fetched body", url["text"])
+	}
+	if url["title"] != "https://example.com/a" {
+		t.Errorf("url title = %v, want the ref as default title", url["title"])
+	}
+
+	mail := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_ref",
+		map[string]any{"id": id, "kind": "mail", "ref": "thread-7", "title": "협상 메일"}))
+	if mail["kind"] != "mail" || mail["title"] != "협상 메일" {
+		t.Errorf("mail source = %v, want kind=mail + explicit title", mail)
+	}
+}
+
+func TestNotebookAddRefRejections(t *testing.T) {
+	m := notebookTestMethodsWithReaders(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+
+	if resp := callNotebook(t, m, "miniapp.notebook.add_ref", map[string]any{"kind": "url", "ref": "https://x"}); resp.OK {
+		t.Error("add_ref without id should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.add_ref", map[string]any{"id": id, "kind": "url"}); resp.OK {
+		t.Error("add_ref without ref should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.add_ref", map[string]any{"id": id, "kind": "note", "ref": "x"}); resp.OK {
+		t.Error("add_ref with an unsupported kind should fail")
+	}
+	// diary reader is nil → the kind is unavailable even though add_ref is registered.
+	if resp := callNotebook(t, m, "miniapp.notebook.add_ref", map[string]any{"id": id, "kind": "diary", "ref": "2026-06-22"}); resp.OK {
+		t.Error("add_ref for a kind whose reader is nil should fail as unavailable")
+	}
+	// A reader error (unsafe URL) becomes a graceful failure, not a pin.
+	if resp := callNotebook(t, m, "miniapp.notebook.add_ref", map[string]any{"id": id, "kind": "url", "ref": "https://boom.example"}); resp.OK {
+		t.Error("add_ref whose reader errors should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.add_ref", map[string]any{"id": "nope", "kind": "url", "ref": "https://x"}); resp.OK {
+		t.Error("add_ref to an unknown notebook should fail")
+	}
+}
+
+// TestNotebookAddRefOmittedWithoutReaders pins the conditional registration:
+// with no readers wired, add_ref must not be a registered method.
+func TestNotebookAddRefOmittedWithoutReaders(t *testing.T) {
+	m := notebookTestMethods(t)
+	if _, ok := m["miniapp.notebook.add_ref"]; ok {
+		t.Error("add_ref should not register when no url/mail/diary reader is wired")
 	}
 }
 

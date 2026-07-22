@@ -139,11 +139,21 @@ export function NotebookPane() {
 
   async function addSource(src: NewSource) {
     if (!active) return;
-    const r = await call(
-      NOTEBOOK_RPC.addSource,
-      { id: active.id, kind: src.kind, title: src.title, text: src.text, ref: src.ref },
-      "추가 중…",
-    );
+    // url/mail/diary carry only a ref the user typed — the gateway must READ that
+    // ref into text (add_ref), because add_source rejects them for lack of text.
+    // note (text) and wiki (ref read live at brief time) still go through add_source.
+    const ingested = src.kind === "url" || src.kind === "mail" || src.kind === "diary";
+    const r = ingested
+      ? await call(
+          NOTEBOOK_RPC.addRef,
+          { id: active.id, kind: src.kind, ref: src.ref, title: src.title },
+          "가져오는 중…",
+        )
+      : await call(
+          NOTEBOOK_RPC.addSource,
+          { id: active.id, kind: src.kind, title: src.title, text: src.text, ref: src.ref },
+          "추가 중…",
+        );
     if (!r.ok) return;
     setAddingSource(false);
     await openNotebook(active.id); // reload to show the new source
