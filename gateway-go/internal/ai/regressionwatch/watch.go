@@ -76,13 +76,17 @@ func (t *Task) Run(ctx context.Context) error {
 	}
 
 	regs := detect(base, current, t.deps.Thresholds)
+	fp := Fingerprint(regs)
+	logRegression := t.deps.Logger.Debug
+	if fp != base.NotifiedFingerprint {
+		logRegression = t.deps.Logger.Warn
+	}
 	for _, r := range regs {
-		// Observe-only on the GOAL path: a regression is a Warn, not an
-		// optimize goal. When the goal path lands (Stage 4), this is where an
-		// optimize goal would be enqueued after a dev-bench confirmation pass.
-		// Until then the safe, valuable close is a proactive operator
-		// notification (emitted below) IN ADDITION to this Warn.
-		t.deps.Logger.Warn("regression-watch: regression detected (observe-only)",
+		// Observe-only on the GOAL path: a new regression set is a Warn, not an
+		// optimize goal. A standing set intentionally keeps tripping because its
+		// baseline is held steady, but after the operator notification has been
+		// fingerprinted the repeat is diagnostic detail rather than a new warning.
+		logRegression("regression-watch: regression detected (observe-only)",
 			"signal", r.Key,
 			"baseline", r.Baseline,
 			"current", r.Value,
@@ -99,7 +103,6 @@ func (t *Task) Run(ctx context.Context) error {
 	// on the persisted baseline so a gateway restart doesn't re-ping.
 	//   - empty set: nothing to send, and clear the marker so the NEXT distinct
 	//     regression notifies even if it happens to repeat an earlier set.
-	fp := Fingerprint(regs)
 	if t.deps.Notify != nil && len(regs) > 0 && fp != base.NotifiedFingerprint {
 		if err := t.deps.Notify(ctx, formatNotification(regs)); err != nil {
 			// Delivery failure must not abort the cycle or lose the baseline
