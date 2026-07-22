@@ -4,6 +4,7 @@ import ai.deneb.data.Conversation
 import ai.deneb.data.DataRepository
 import ai.deneb.data.TaskScheduler
 import ai.deneb.data.UiSubmission
+import ai.deneb.data.isStageableExtension
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.answerWorkFeedItem
 import ai.deneb.deneb.denebServiceEntries
@@ -28,6 +29,7 @@ import deneb.composeapp.generated.resources.conversation_untitled
 import deneb.composeapp.generated.resources.error_unsupported_file_type
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.extension
+import io.github.vinceglb.filekit.name
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -398,16 +400,19 @@ class ChatViewModel(
     }
 
     private fun addFile(file: PlatformFile) {
-        val ext = file.extension.lowercase()
-        val supported = dataRepository.supportedFileExtensions()
-        if (ext.isEmpty() || ext !in supported) {
+        if (!isStageableExtension(file.extension, dataRepository.supportedFileExtensions())) {
             _state.update {
                 it.copy(snackbarMessage = Res.string.error_unsupported_file_type)
             }
             return
         }
         _state.update {
-            it.copy(files = (it.files + file).toImmutableList())
+            // Skip a file already staged (same name) so a double-pick doesn't duplicate it.
+            if (it.files.any { staged -> staged.name == file.name }) {
+                it
+            } else {
+                it.copy(files = (it.files + file).toImmutableList())
+            }
         }
     }
 

@@ -69,6 +69,26 @@ class AttachmentRouteTest {
     }
 
     @Test
+    fun stagingAcceptsAudioEvenWhenNotInTheSupportedDocumentSet() {
+        // supportedFileExtensions (image + text + document) carries no audio, but the
+        // picker offers audio for transcription — so staging must accept it, or a picked
+        // recording is wrongly rejected (regression when the composer moved to staging).
+        for (ext in listOf("m4a", "MP3", "wav", "ogg", "opus", "aac", "flac")) {
+            assertTrue(isStageableExtension(ext, supportedFileExtensions), ext)
+        }
+    }
+
+    @Test
+    fun stagingAcceptsSupportedDocsAndImagesButRejectsUnknownOrEmpty() {
+        for (ext in listOf("docx", "pdf", "png", "txt", "hwp", "PDF")) {
+            assertTrue(isStageableExtension(ext, supportedFileExtensions + "pdf"), ext)
+        }
+        for (ext in listOf("zip", "exe", "")) {
+            assertEquals(false, isStageableExtension(ext, supportedFileExtensions), ext)
+        }
+    }
+
+    @Test
     fun withoutCapturesEverythingAttaches() {
         // Desktop/iOS (no capture launchers): images and audio attach like any file.
         for (ext in listOf("jpg", "png", "m4a", "mp3", "pdf", "txt")) {
