@@ -79,6 +79,7 @@ function chatState(overrides: Partial<ChatState> = {}): ChatState {
     turns: [],
     send: vi.fn(async () => {}),
     capture: vi.fn(async () => {}),
+    captureBatch: vi.fn(async () => {}),
     stop: vi.fn(),
     regenerate: vi.fn(),
     editResend: vi.fn(),

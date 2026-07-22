@@ -123,6 +123,12 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	if deps.ExtractDocument != nil {
 		m["miniapp.capture.document"] = handleMiniappCaptureDocument(deps)
 	}
+	// Batch capture (attach N files at once → ONE turn over pointers, cross-
+	// analyzed) reuses whichever extractors are wired; register it if any capture
+	// kind is available (per-file kinds that lack a sidecar are skipped with a note).
+	if deps.ExtractDocument != nil || deps.OcrImage != nil || deps.Transcribe != nil {
+		m["miniapp.capture.batch"] = handleMiniappCaptureBatch(deps)
+	}
 	// Web translation (in-app browser in-place translate) needs the translation
 	// model role wired; skip the method cleanly when it isn't.
 	if deps.Translate != nil {
@@ -320,6 +326,239 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 			"sessionKey": sessionKey,
 		})
 	}
+}
+
+// Batch capture bounds. A batch carries POINTERS, not inlined content, so the
+// per-file preview stays small (the agent reads the full file if it needs to),
+// and the file count is capped so a stray huge selection can't fan out unbounded.
+const (
+	batchPreviewRunes = 500
+	maxBatchFiles     = 20
+)
+
+// batchFile is one prepared attachment in a capture batch: either archived (path +
+// preview, the agent opens it on demand) or, when persistence is unavailable,
+// carried inline; or skipped with a reason.
+type batchFile struct {
+	name, kind, path, preview, inline, skip string
+}
+
+// stripDataURL removes an optional `data:...;base64,` prefix from a base64 blob.
+func stripDataURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "data:") {
+		if i := strings.IndexByte(raw, ','); i > 0 {
+			raw = raw[i+1:]
+		}
+	}
+	return raw
+}
+
+// previewText collapses whitespace and caps the extracted text to n runes for the
+// pointer turn — enough for the agent to decide whether to read the full file.
+func previewText(text string, n int) string {
+	s := strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
+// extractBatchFile dispatches one attached file to the right extractor by MIME and
+// returns a human kind label ("문서"/"이미지"/"녹음"), the SaveCapture store kind, and
+// the extracted text. It reuses the same extractors as the single-file capture
+// handlers so batch and single paths can't drift.
+func extractBatchFile(ctx context.Context, deps Deps, data []byte, filename, mime string) (kindLabel, storeKind, text string, err error) {
+	switch {
+	case strings.HasPrefix(mime, "image/"):
+		if deps.OcrImage == nil {
+			return "이미지", "image", "", fmt.Errorf("이미지 OCR 미지원")
+		}
+		text, err = deps.OcrImage(ctx, data)
+		return "이미지", "image", text, err
+	case strings.HasPrefix(mime, "audio/"):
+		if deps.Transcribe == nil {
+			return "녹음", "audio", "", fmt.Errorf("음성 전사 미지원")
+		}
+		var hotwords string
+		if deps.Hotwords != nil {
+			hotwords = deps.Hotwords()
+		}
+		text, err = deps.Transcribe(ctx, data, mime, hotwords)
+		return "녹음", "audio", text, err
+	default:
+		if deps.ExtractDocument == nil {
+			return "문서", "document", "", fmt.Errorf("문서 추출 미지원")
+		}
+		return "문서", "document", deps.ExtractDocument(ctx, data, filename, mime), nil
+	}
+}
+
+// handleMiniappCaptureBatch materializes N attached files and runs ONE agent turn
+// over a POINTER list — the multi-file path, instead of one turn per file. Each
+// file is extracted (OCR / transcript / document text) with the same extractors as
+// the single-file handlers and archived via SaveCapture (which lands under the
+// memory read-root the `read`/`office` tools can open). The turn carries the file
+// list + short previews + agent-openable paths, and instructs the agent to read
+// whichever files it needs and cross-reference them — so six attachments land as
+// one context to analyze together, not six isolated turns. Bulky content is never
+// inlined (the agent pulls it on demand), which keeps the turn token-lean.
+//
+// Params:
+//   - files      ([]{data(base64), mimeType, filename}, required)
+//   - caption    (string, optional): the question the user typed with the batch
+//   - sessionKey (string, optional): defaults to "client:main"
+func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			Files []struct {
+				Data     string `json:"data"`
+				MimeType string `json:"mimeType"`
+				Filename string `json:"filename"`
+			} `json:"files"`
+			Caption    string `json:"caption"`
+			SessionKey string `json:"sessionKey"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		if len(p.Files) == 0 {
+			return rpcerr.MissingParam("files").Response(req.ID)
+		}
+		sessionKey := DefaultSessionKey(p.SessionKey)
+
+		var files []batchFile
+		var dropped int
+		for i, f := range p.Files {
+			if i >= maxBatchFiles {
+				dropped = len(p.Files) - maxBatchFiles
+				break
+			}
+			name := strings.TrimSpace(f.Filename)
+			if name == "" {
+				name = fmt.Sprintf("attachment-%d", i+1)
+			}
+			raw := stripDataURL(f.Data)
+			if raw == "" {
+				files = append(files, batchFile{name: name, skip: "빈 파일"})
+				continue
+			}
+			data, derr := base64.StdEncoding.DecodeString(raw)
+			if derr != nil || len(data) == 0 {
+				files = append(files, batchFile{name: name, skip: "base64 디코드 실패"})
+				continue
+			}
+			kindLabel, storeKind, text, xerr := extractBatchFile(ctx, deps, data, name, f.MimeType)
+			if xerr != nil || strings.TrimSpace(text) == "" {
+				reason := "내용을 추출하지 못함"
+				if xerr != nil {
+					reason = strings.TrimSpace(xerr.Error())
+				}
+				files = append(files, batchFile{name: name, kind: kindLabel, skip: reason})
+				continue
+			}
+			// Archive the extracted text under the memory read-root so the agent can
+			// open it with `read`. If persistence is unavailable, fall back to
+			// inlining the (digested) text so the content is never lost.
+			var abs string
+			if deps.SaveCapture != nil {
+				if _, a, _, serr := deps.SaveCapture(storeKind, p.Caption, text); serr != nil {
+					slog.Error("capture batch: raw persistence failed", "file", name, "error", serr)
+				} else {
+					abs = a
+				}
+			}
+			item := batchFile{name: name, kind: kindLabel, preview: previewText(text, batchPreviewRunes)}
+			if abs != "" {
+				item.path = abs
+			} else if deps.DigestOversized != nil {
+				item.inline = strings.TrimSpace(deps.DigestOversized(ctx, name, text, "", 0))
+			} else {
+				item.inline = previewText(text, batchPreviewRunes*4)
+			}
+			files = append(files, item)
+		}
+
+		saved := 0
+		for _, f := range files {
+			if f.skip == "" {
+				saved++
+			}
+		}
+		if saved == 0 {
+			return rpcerr.Unavailable("첨부 파일에서 읽을 내용을 찾지 못했습니다").Response(req.ID)
+		}
+
+		message := buildBatchCaptureMessage(files, p.Caption, dropped)
+		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
+		if err != nil {
+			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
+		}
+		recordWorkFeed(deps, workfeed.Item{
+			Source:     workfeed.SourceCaptureDocument,
+			Title:      fmt.Sprintf("첨부 %d개", saved),
+			Summary:    workfeed.Preview(res.BestText, 180),
+			Body:       res.BestText,
+			SessionKey: sessionKey,
+		})
+		out := make([]map[string]any, 0, len(files))
+		for _, f := range files {
+			out = append(out, map[string]any{"name": f.name, "kind": f.kind, "skipped": f.skip != ""})
+		}
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"text":       res.Text,
+			"files":      out,
+			"model":      res.Model,
+			"sessionKey": sessionKey,
+		})
+	}
+}
+
+// buildBatchCaptureMessage renders the pointer turn: caption context, an explicit
+// instruction to READ the files (previews are not the full content) and cross-
+// reference them, then the numbered file list with openable paths + previews.
+func buildBatchCaptureMessage(files []batchFile, caption string, dropped int) string {
+	var b strings.Builder
+	if c := strings.TrimSpace(caption); c != "" {
+		// The caption carries the question the user typed with the batch; lead with
+		// it so the turn analyzes the files in that light.
+		b.WriteString("📲 공유 맥락:\n")
+		b.WriteString(c)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("📎 첨부 파일을 저장했습니다. 아래 목록의 **미리보기는 전문이 아니다** — 분석에 필요한 파일은 반드시 원문을 열어서 읽어라: 문서·이미지(OCR)·녹음(전사)은 `read <경로>`, 스프레드시트의 셀·시트 구조는 `office`. 여러 파일이면 함께 비교·교차분석하라.\n\n")
+	n := 0
+	for _, f := range files {
+		if f.skip != "" {
+			continue
+		}
+		n++
+		fmt.Fprintf(&b, "%d. %s (%s)\n", n, f.name, f.kind)
+		switch {
+		case f.path != "":
+			fmt.Fprintf(&b, "   경로: %s\n", f.path)
+			if f.preview != "" {
+				fmt.Fprintf(&b, "   미리보기: %s\n", f.preview)
+			}
+		case f.inline != "":
+			// Not archived — the content rides inline so nothing is lost.
+			fmt.Fprintf(&b, "   내용:\n%s\n", f.inline)
+		}
+		b.WriteString("\n")
+	}
+	var skips []string
+	for _, f := range files {
+		if f.skip != "" {
+			skips = append(skips, f.name+" — "+f.skip)
+		}
+	}
+	if dropped > 0 {
+		skips = append(skips, fmt.Sprintf("외 %d개 — 한 번에 %d개까지만 처리", dropped, maxBatchFiles))
+	}
+	if len(skips) > 0 {
+		b.WriteString("(건너뜀: " + strings.Join(skips, " · ") + ")\n")
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // handleMiniappWebTranslate translates a batch of web-page text segments for the

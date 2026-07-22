@@ -32,7 +32,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     stoppable,
     turns,
     send,
-    capture,
+    captureBatch,
     stop,
     regenerate,
     editResend,
@@ -88,7 +88,7 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     setInput,
     setAttaching,
     pin,
-    capture: (file, caption, previewUrl) => capture(file, { sessionKey, caption, previewUrl }),
+    captureBatch: (files, caption) => captureBatch(files, { sessionKey, caption }),
     // 배치가 끝나면 세션 목록을 한 번 갱신 — 게이트웨이가 세션을 만들거나 라벨을 바꿨을 수 있다.
     onBatchDone: () => void refreshSessions(),
   });

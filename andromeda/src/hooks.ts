@@ -77,6 +77,10 @@ export interface ChatState {
   turns: ChatTurn[];
   send: (message: string, opts?: SendOpts) => Promise<void>;
   capture: (file: { name: string; mimeType: string; base64: string }, opts?: SendOpts) => Promise<void>;
+  captureBatch: (
+    files: { name: string; mimeType: string; base64: string; previewUrl?: string }[],
+    opts?: SendOpts,
+  ) => Promise<void>;
   stop: () => void;
   regenerate: () => void;
   // Edit the last user message and resend it (drops the trailing exchange).
@@ -383,6 +387,59 @@ export function useChat(cfg: GatewayConfig): ChatState {
     }
   }
 
+  // Attach N files in ONE turn. The gateway (miniapp.capture.batch) materializes
+  // each file to the agent-readable memory store and runs a single agent turn over
+  // a pointer list — the agent reads whichever files it needs with read/office and
+  // cross-references them. So a batch is one user turn (the file list) + one
+  // assistant turn (the analysis), instead of one capture turn per file.
+  async function captureBatch(
+    files: { name: string; mimeType: string; base64: string; previewUrl?: string }[],
+    opts: SendOpts = {},
+  ) {
+    const usable = files.filter((f) => f.base64);
+    if (busy || usable.length === 0) return;
+    resetVariants();
+    const caption = opts.caption?.trim() ?? "";
+    const label =
+      `📎 첨부 ${usable.length}개\n` + usable.map((f) => `• ${f.name}`).join("\n") + (caption ? `\n\n${caption}` : "");
+    const firstPreview = usable.find((f) => f.previewUrl)?.previewUrl;
+    const assistantId = chatTurnId();
+    setThinking("");
+    setTurns((prev) => [
+      ...prev,
+      { id: chatTurnId(), role: "user", text: label, imageUrl: firstPreview, status: "done" },
+      {
+        id: assistantId,
+        role: "assistant",
+        text: "",
+        parts: [],
+        status: "streaming",
+        model: opts.model,
+        canRegenerate: false,
+      },
+    ]);
+    setBusy(true);
+    const patch = (update: (turn: ChatTurn) => ChatTurn) =>
+      setTurns((prev) => prev.map((turn) => (turn.id === assistantId ? update(turn) : turn)));
+    try {
+      const params: Record<string, unknown> = {
+        files: usable.map((f) => ({ data: f.base64, mimeType: f.mimeType, filename: f.name })),
+        sessionKey: opts.sessionKey,
+      };
+      if (caption) params.caption = caption;
+      const res = await callRpc<{ text?: string }>(cfg, "miniapp.capture.batch", params);
+      const text = res?.text?.trim() || "첨부에서 내용을 추출하지 못했거나 분석에 실패했습니다.";
+      patch((turn) => ({ ...turn, parts: [{ kind: "text" as const, text }], text, status: "done" }));
+      for (const resource of ["workfeed", "wiki", "search"]) clearCachedResource(resource);
+      invalidate({ resource: "workfeed", invalidates: ["list"] });
+    } catch (e) {
+      const line = `[오류] ${(e as Error)?.message ?? "첨부 실패"}`;
+      patch((turn) => ({ ...turn, parts: [{ kind: "text" as const, text: line }], text: line, status: "error" }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // External setTurns (session switch / transcript load) starts a fresh thread —
   // stashed variants belong to the previous one.
   function setTurnsExternal(next: ChatTurn[]) {
@@ -397,6 +454,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
     turns,
     send,
     capture,
+    captureBatch,
     stop,
     regenerate,
     editResend,

@@ -56,7 +56,7 @@ export function AIPanel({
     stoppable,
     turns,
     send,
-    capture,
+    captureBatch,
     stop,
     regenerate,
     editResend,
@@ -117,7 +117,7 @@ export function AIPanel({
     setInput,
     setAttaching,
     pin,
-    capture: (file, caption, previewUrl) => capture(file, { sessionKey, caption, previewUrl }),
+    captureBatch: (files, caption) => captureBatch(files, { sessionKey, caption }),
   });
 
   function submit(message = input) {

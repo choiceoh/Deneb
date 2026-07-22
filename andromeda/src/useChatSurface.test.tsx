@@ -270,10 +270,9 @@ interface AttachHarnessProps {
   setInput?: (value: string) => void;
   setAttaching?: (value: boolean) => void;
   pin?: () => void;
-  capture?: (
-    file: { name: string; mimeType: string; base64: string },
+  captureBatch?: (
+    files: { name: string; mimeType: string; base64: string; previewUrl?: string }[],
     caption: string,
-    previewUrl?: string,
   ) => Promise<void>;
   onBatchDone?: () => void;
 }
@@ -286,7 +285,7 @@ function attachHarness(overrides: AttachHarnessProps = {}) {
     setInput: vi.fn(),
     setAttaching: vi.fn(),
     pin: vi.fn(),
-    capture: vi.fn(async () => {}),
+    captureBatch: vi.fn(async () => {}),
     onBatchDone: vi.fn(),
     ...overrides,
   };
@@ -304,7 +303,7 @@ describe("useAttachPipeline", () => {
 
     await act(async () => result.current.attachFiles([...files]));
 
-    expect(props.capture).not.toHaveBeenCalled();
+    expect(props.captureBatch).not.toHaveBeenCalled();
     expect(props.setAttaching).not.toHaveBeenCalled();
     expect(props.onBatchDone).not.toHaveBeenCalled();
   });
@@ -317,7 +316,7 @@ describe("useAttachPipeline", () => {
 
     expect(result.current.attachNote).toBe("program.exe — 지원하지 않는 형식이라 건너뜀");
     expect(props.setAttaching).not.toHaveBeenCalled();
-    expect(props.capture).not.toHaveBeenCalled();
+    expect(props.captureBatch).not.toHaveBeenCalled();
   });
 
   it("clears skip feedback after six seconds", async () => {
@@ -340,7 +339,7 @@ describe("useAttachPipeline", () => {
 
     expect(result.current.staged).toHaveLength(1);
     expect(result.current.staged[0]).toMatchObject({ name: "photo.png", mimeType: "image/png" });
-    expect(props.capture).not.toHaveBeenCalled();
+    expect(props.captureBatch).not.toHaveBeenCalled();
     expect(props.setAttaching).not.toHaveBeenCalled();
   });
 
@@ -354,7 +353,25 @@ describe("useAttachPipeline", () => {
     expect(result.current.staged).toHaveLength(0);
   });
 
-  it("when uses the first non-audio file as the batch caption target", async () => {
+  it("sends the whole staged set in ONE captureBatch call (six files, one turn)", async () => {
+    const { result, props } = attachHarness({ input: "" });
+    const files = ["a", "b", "c", "d", "e", "f"].map((n) => new File([n], `${n}.png`, { type: "image/png" }));
+
+    await act(async () => result.current.attachFiles(files));
+    await act(async () => result.current.sendStaged());
+
+    // The whole point: six files, ONE batch call — not one turn per file (the old
+    // per-file loop dropped all but the first). The gateway turns this into a
+    // single pointer turn the agent reads and cross-references.
+    expect(props.captureBatch).toHaveBeenCalledTimes(1);
+    const [sent] = (props.captureBatch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(sent.map((f: { name: string }) => f.name)).toEqual(files.map((f) => f.name));
+    expect(props.pin).toHaveBeenCalledTimes(1);
+    expect(props.onBatchDone).toHaveBeenCalledTimes(1);
+    expect(result.current.staged).toHaveLength(0);
+  });
+
+  it("passes the composer text as the batch caption when a non-audio file is present", async () => {
     const { result, props } = attachHarness();
     const audio = new File(["voice"], "voice.mp3", { type: "audio/mpeg" });
     const image = new File(["pixels"], "photo.png", { type: "image/png" });
@@ -363,55 +380,15 @@ describe("useAttachPipeline", () => {
     await act(async () => result.current.attachFiles([audio, image, document]));
     await act(async () => result.current.sendStaged());
 
+    expect(props.captureBatch).toHaveBeenCalledTimes(1);
+    const [sent, caption] = (props.captureBatch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(sent.map((f: { name: string }) => f.name)).toEqual(["voice.mp3", "photo.png", "brief.txt"]);
+    expect(caption).toBe("파일 설명");
     expect(props.setInput).toHaveBeenCalledWith("");
     expect(props.setAttaching).toHaveBeenNthCalledWith(1, true);
     expect(props.setAttaching).toHaveBeenLastCalledWith(false);
-    expect(props.capture).toHaveBeenCalledTimes(3);
-    expect(props.capture).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ name: "voice.mp3", mimeType: "audio/mpeg" }),
-      "",
-      undefined,
-    );
-    expect(props.capture).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ name: "photo.png", mimeType: "image/png" }),
-      "파일 설명",
-      expect.any(String), // 이미지의 object-URL 썸네일이 함께 흐른다
-    );
-    expect(props.capture).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ name: "brief.txt", mimeType: "text/plain" }),
-      "",
-      undefined,
-    );
-    expect(props.pin).toHaveBeenCalledTimes(3);
-    expect(props.onBatchDone).toHaveBeenCalledTimes(1);
-    expect(result.current.staged).toHaveLength(0);
-  });
-
-  // The batch must capture EVERY staged file, not just the first. The production
-  // drop (6→1) came from a per-file re-check of the shared `busy` that the batch's
-  // own captures set — its exact webview timing isn't jsdom-reproducible (act()
-  // batches the busy transitions away), so this asserts the completeness contract:
-  // N staged files → N captures, in order.
-  it("captures every staged file in the batch, not just the first", async () => {
-    const { result, props } = attachHarness({ input: "" });
-    const files = ["a", "b", "c", "d", "e", "f"].map((n) => new File([n], `${n}.png`, { type: "image/png" }));
-
-    await act(async () => result.current.attachFiles(files));
-    await act(async () => result.current.sendStaged());
-
-    expect(props.capture).toHaveBeenCalledTimes(6);
-    files.forEach((f, i) => {
-      expect(props.capture).toHaveBeenNthCalledWith(
-        i + 1,
-        expect.objectContaining({ name: f.name }),
-        expect.anything(),
-        expect.anything(),
-      );
-    });
-    expect(result.current.staged).toHaveLength(0);
+    // The image chip's object-URL thumbnail rides along for the transcript.
+    expect(sent.find((f: { name: string }) => f.name === "photo.png").previewUrl).toEqual(expect.any(String));
   });
 
   it("without consume composer text for an audio-only batch", async () => {
@@ -422,7 +399,10 @@ describe("useAttachPipeline", () => {
     await act(async () => result.current.sendStaged());
 
     expect(props.setInput).not.toHaveBeenCalled();
-    expect(props.capture).toHaveBeenCalledWith(expect.objectContaining({ name: "voice.wav" }), "", undefined);
+    expect(props.captureBatch).toHaveBeenCalledTimes(1);
+    const [sent, caption] = (props.captureBatch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(sent).toEqual([expect.objectContaining({ name: "voice.wav" })]);
+    expect(caption).toBe("");
   });
 
   it("sends a bare base64 payload with inferred MIME", async () => {
@@ -432,17 +412,15 @@ describe("useAttachPipeline", () => {
     await act(async () => result.current.attachFiles([image]));
     await act(async () => result.current.sendStaged());
 
-    expect(props.capture).toHaveBeenCalledWith(
-      { name: "PHOTO.PNG", mimeType: "image/png", base64: "aGVsbG8=" },
-      "",
-      expect.any(String),
-    );
+    expect(props.captureBatch).toHaveBeenCalledTimes(1);
+    const [sent] = (props.captureBatch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(sent[0]).toMatchObject({ name: "PHOTO.PNG", mimeType: "image/png", base64: "aGVsbG8=" });
   });
 
   it("when blocks synchronous re-entry while a batch is active", async () => {
     let release!: () => void;
-    const capture = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
-    const { result } = attachHarness({ capture });
+    const captureBatch = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const { result } = attachHarness({ captureBatch });
     const image = new File(["image"], "image.png", { type: "image/png" });
 
     await act(async () => result.current.attachFiles([image]));
@@ -451,37 +429,22 @@ describe("useAttachPipeline", () => {
       first = result.current.sendStaged();
     });
     await waitFor(() => expect(result.current.attachingRef.current).toBe(true));
-    // Re-entry while the batch is in flight is a no-op (staged is already
-    // drained; a second call must not double-run the loop).
+    // Re-entry while the batch is in flight is a no-op (staged is already drained).
     await act(async () => result.current.sendStaged());
-    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(captureBatch).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       release();
       await first;
     });
-    expect(capture).toHaveBeenCalledTimes(1);
+    expect(captureBatch).toHaveBeenCalledTimes(1);
   });
 
-  it("continues after one capture rejects and reports the skipped file", async () => {
-    const capture = vi.fn().mockRejectedValueOnce(new Error("capture failed")).mockResolvedValueOnce(undefined);
-    const { result, props } = attachHarness({ capture });
-    const first = new File(["one"], "one.png", { type: "image/png" });
-    const second = new File(["two"], "two.png", { type: "image/png" });
-
-    await act(async () => result.current.attachFiles([first, second]));
-    await act(async () => result.current.sendStaged());
-
-    expect(capture).toHaveBeenCalledTimes(2);
-    expect(result.current.attachNote).toBe("one.png — 읽기 실패라 건너뜀");
-    expect(props.onBatchDone).toHaveBeenCalledTimes(1);
-  });
-
-  it("always leaves attaching state when capture fails", async () => {
-    const capture = vi.fn(async () => {
-      throw new Error("capture failed");
+  it("always leaves attaching state when the batch fails", async () => {
+    const captureBatch = vi.fn(async () => {
+      throw new Error("batch failed");
     });
-    const { result, props } = attachHarness({ capture });
+    const { result, props } = attachHarness({ captureBatch });
     const image = new File(["image"], "image.png", { type: "image/png" });
 
     await act(async () => result.current.attachFiles([image]));
@@ -505,7 +468,7 @@ describe("useAttachPipeline", () => {
     act(() => result.current.onPick({ target: input } as never));
 
     expect(input.value).toBe("");
-    expect(props.capture).not.toHaveBeenCalled();
+    expect(props.captureBatch).not.toHaveBeenCalled();
   });
 
   it("cancels a pending feedback timer on unmount", async () => {
