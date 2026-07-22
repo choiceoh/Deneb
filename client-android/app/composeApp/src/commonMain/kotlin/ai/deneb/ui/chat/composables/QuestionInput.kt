@@ -5,6 +5,7 @@ import ai.deneb.currentPlatform
 import ai.deneb.data.MAX_BATCH_FILES
 import ai.deneb.data.ServiceEntry
 import ai.deneb.data.audioExtensions
+import ai.deneb.data.formatFileSize
 import ai.deneb.data.imageExtensions
 import ai.deneb.ui.components.animatedGradientBorder
 import ai.deneb.ui.components.rememberHaptics
@@ -39,6 +40,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,6 +74,7 @@ import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.extension
 import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.size
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.compose.resources.painterResource
@@ -111,6 +114,11 @@ fun QuestionInput(
                     } else {
                         Res.drawable.ic_file
                     }
+                    // Show the size beside the name so the user can eyeball a large file
+                    // before sending. size() is async, so the label fills in when ready.
+                    val sizeLabel by produceState<String?>(null, file) {
+                        value = runCatching { formatFileSize(file.size()) }.getOrNull()
+                    }
                     SuggestionChip(
                         modifier = Modifier.handCursor(),
                         onClick = { removeFile(file) },
@@ -126,7 +134,7 @@ fun QuestionInput(
                             DisableSelection {
                                 Text(
                                     modifier = Modifier.handCursor(),
-                                    text = truncateFileName(file.name),
+                                    text = truncateFileName(file.name) + (sizeLabel?.let { "  ·  $it" } ?: ""),
                                 )
                             }
                         },

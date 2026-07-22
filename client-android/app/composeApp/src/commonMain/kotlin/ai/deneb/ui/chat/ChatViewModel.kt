@@ -5,6 +5,7 @@ import ai.deneb.data.DataRepository
 import ai.deneb.data.TaskScheduler
 import ai.deneb.data.UiSubmission
 import ai.deneb.data.isStageableExtension
+import ai.deneb.data.isWithinAttachmentSize
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.answerWorkFeedItem
 import ai.deneb.deneb.denebServiceEntries
@@ -26,10 +27,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.conversation_untitled
+import deneb.composeapp.generated.resources.error_file_too_large
 import deneb.composeapp.generated.resources.error_unsupported_file_type
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.extension
 import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.size
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -406,12 +409,23 @@ class ChatViewModel(
             }
             return
         }
-        _state.update {
-            // Skip a file already staged (same name) so a double-pick doesn't duplicate it.
-            if (it.files.any { staged -> staged.name == file.name }) {
-                it
-            } else {
-                it.copy(files = (it.files + file).toImmutableList())
+        // Skip a file already staged (same name) so a double-pick doesn't duplicate it.
+        if (_state.value.files.any { it.name == file.name }) return
+        viewModelScope.launch {
+            // Cap non-image uploads (images are downsampled before send) so a huge pick
+            // can't OOM the device or bloat the turn payload — checked via size(), which
+            // does not read the whole file into memory.
+            val size = runCatching { file.size() }.getOrNull() ?: 0L
+            if (!isWithinAttachmentSize(file.extension, size)) {
+                _state.update { it.copy(snackbarMessage = Res.string.error_file_too_large) }
+                return@launch
+            }
+            _state.update {
+                if (it.files.any { staged -> staged.name == file.name }) {
+                    it
+                } else {
+                    it.copy(files = (it.files + file).toImmutableList())
+                }
             }
         }
     }

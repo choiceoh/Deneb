@@ -1,12 +1,5 @@
 package ai.deneb.data
 
-enum class FileCategory {
-    IMAGE,
-    TEXT,
-    PDF,
-    UNSUPPORTED,
-}
-
 // Max files the multi-select attach picker offers in one batch — mirrors the
 // gateway's maxBatchFiles so a huge selection can't fan out past what the batch
 // capture turn accepts (it caps again server-side).
@@ -15,18 +8,6 @@ const val MAX_BATCH_FILES = 20
 // Skip downsampling (and decoding) a picked image larger than this: it is sent
 // as-is, so a pathological multi-gigabyte file can't OOM the device on decode.
 const val MAX_RAW_IMAGE_BYTES = 50_000_000
-
-private val textMimeTypes = setOf(
-    "application/json",
-    "application/xml",
-    "application/javascript",
-    "application/x-yaml",
-    "application/yaml",
-    "application/x-sh",
-    "application/sql",
-    "application/graphql",
-    "application/toml",
-)
 
 private val textExtensions = setOf(
     "txt", "md", "json", "csv", "xml", "yaml", "yml",
@@ -135,20 +116,17 @@ fun documentCaptureMime(fileName: String): String {
     }
 }
 
-fun classifyFile(mimeType: String?, fileName: String?): FileCategory {
-    if (mimeType != null) {
-        if (mimeType.startsWith("image/")) return FileCategory.IMAGE
-        if (mimeType == "application/pdf") return FileCategory.PDF
-        if (mimeType.startsWith("text/") || mimeType in textMimeTypes) return FileCategory.TEXT
-    }
-    // Fall back to extension
-    val ext = fileName?.substringAfterLast('.', "")?.lowercase()
-    if (ext != null && ext in imageExtensions) return FileCategory.IMAGE
-    if (ext != null && ext in textExtensions) return FileCategory.TEXT
-    if (ext == "pdf") return FileCategory.PDF
+// Largest non-image attachment the composer stages: images are downsampled before
+// upload, but a document / video / audio file rides as-is (base64), so cap it to keep
+// a huge pick from OOMing the device or bloating the turn payload.
+const val MAX_ATTACHMENT_BYTES = 25_000_000L
 
-    // If mimeType is null and no recognized extension, unsupported
-    if (mimeType == null) return FileCategory.UNSUPPORTED
+/** Whether a staged [sizeBytes] file of this [extension] is within the upload cap. */
+fun isWithinAttachmentSize(extension: String, sizeBytes: Long): Boolean = extension.lowercase() in imageExtensions || sizeBytes <= MAX_ATTACHMENT_BYTES
 
-    return FileCategory.UNSUPPORTED
+/** Human-readable file size for the attachment chips, e.g. "2.3 MB", "812 KB", "40 B". */
+fun formatFileSize(bytes: Long): String = when {
+    bytes >= 1_000_000 -> "${(bytes / 100_000) / 10.0} MB"
+    bytes >= 1_000 -> "${bytes / 1_000} KB"
+    else -> "$bytes B"
 }

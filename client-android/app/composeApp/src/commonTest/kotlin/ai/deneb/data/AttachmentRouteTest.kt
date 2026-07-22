@@ -97,31 +97,20 @@ class AttachmentRouteTest {
     }
 
     @Test
-    fun classifyFileUsesRecognizedMimeTypes() {
-        assertEquals(FileCategory.IMAGE, classifyFile("image/avif", "file.bin"))
-        assertEquals(FileCategory.PDF, classifyFile("application/pdf", "file.bin"))
-        assertEquals(FileCategory.TEXT, classifyFile("text/csv", "file.bin"))
-        assertEquals(FileCategory.TEXT, classifyFile("application/x-yaml", "file.bin"))
+    fun attachmentSizeGuardCapsNonImagesButNotImages() {
+        // Images are downsampled before upload, so they are always within size.
+        assertTrue(isWithinAttachmentSize("png", 40_000_000L), "image")
+        assertTrue(isWithinAttachmentSize("JPG", 999_000_000L), "image ci")
+        // Non-images are capped.
+        assertTrue(isWithinAttachmentSize("pdf", 10_000_000L), "small pdf")
+        assertEquals(false, isWithinAttachmentSize("pdf", MAX_ATTACHMENT_BYTES + 1), "oversize pdf")
+        assertEquals(false, isWithinAttachmentSize("mp4", 50_000_000L), "oversize video")
     }
 
     @Test
-    fun classifyFilePrefersMimeTypeOverConflictingExtension() {
-        assertEquals(FileCategory.IMAGE, classifyFile("image/png", "notes.txt"))
-        assertEquals(FileCategory.TEXT, classifyFile("text/plain", "scan.pdf"))
-        assertEquals(FileCategory.PDF, classifyFile("application/pdf", "photo.jpg"))
-    }
-
-    @Test
-    fun classifyFileFallsBackToCaseInsensitiveExtensions() {
-        assertEquals(FileCategory.IMAGE, classifyFile("application/octet-stream", "PHOTO.HEIC"))
-        assertEquals(FileCategory.TEXT, classifyFile(null, "README.MD"))
-        assertEquals(FileCategory.PDF, classifyFile(null, "contract.PDF"))
-    }
-
-    @Test
-    fun classifyFileRejectsUnknownOrMissingTypes() {
-        assertEquals(FileCategory.UNSUPPORTED, classifyFile(null, null))
-        assertEquals(FileCategory.UNSUPPORTED, classifyFile(null, "archive.zip"))
-        assertEquals(FileCategory.UNSUPPORTED, classifyFile("application/octet-stream", "archive.zip"))
+    fun formatFileSizeIsHumanReadable() {
+        assertEquals("40 B", formatFileSize(40))
+        assertEquals("2 KB", formatFileSize(2_000))
+        assertEquals("2.3 MB", formatFileSize(2_300_000))
     }
 }
