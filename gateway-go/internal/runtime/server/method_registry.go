@@ -578,6 +578,10 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 				text, _ := toolbind.ExtractDocumentText(ctx, data, filename, mimeType)
 				return text
 			},
+			// Image OCR / audio-video ASR — the same sidecars chat capture uses, so a
+			// photo of a contract or a meeting recording becomes notebook grounding.
+			OcrImage:   toolbind.OCRImage,
+			Transcribe: toolbind.TranscribeAudio,
 			// Same SSRF-safe readers the notebook chat tool uses for url/mail/diary
 			// sources. FetchURL/ReadMail need no runtime state; ReadDiary reads
 			// s.wikiStore lazily (set during chat init, long before any add_ref call —

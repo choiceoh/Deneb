@@ -33,9 +33,15 @@ type NotebookDeps struct {
 	// spreadsheet/hwp/…) so the desktop client can pin a file to a notebook by
 	// PICKING it — no manual path entry. This is the "gateway reads server-side"
 	// half that add_source's ref-only file kind was waiting on. Nil when the
-	// extractor isn't wired, in which case miniapp.notebook.add_file is skipped
-	// cleanly (clients fall back to the note/wiki source kinds).
+	// extractor isn't wired, in which case miniapp.notebook.add_file falls back to
+	// OCR/ASR only (or is skipped if none are wired).
 	ExtractText func(ctx context.Context, data []byte, filename, mimeType string) string
+	// OcrImage/Transcribe extend add_file to non-document attachments, the same
+	// extractors chat capture uses: a photo of a contract (image → OCR text) or a
+	// meeting recording (audio/video → ASR transcript) becomes grounding material,
+	// not just pdf/docx. Nil disables that file class; add_file dispatches by MIME.
+	OcrImage   func(ctx context.Context, image []byte) (string, error)
+	Transcribe func(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error)
 	// FetchURL/ReadMail/ReadDiary snapshot an external ref (a URL, a mail thread
 	// id, a diary date) to readable text at add time — the same server-side
 	// readers the notebook chat tool uses. Wiring any of them registers
@@ -62,9 +68,9 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.notebook.remove_source": notebookRemoveSourceRPC(deps),
 		"miniapp.notebook.set_mode":      notebookSetModeRPC(deps),
 	}
-	// File ingestion needs the in-house document extractor wired; skip the method
-	// cleanly when it isn't (the client keeps note/wiki and hides the 파일 picker).
-	if deps.ExtractText != nil {
+	// File ingestion registers when any extractor is wired (document / image OCR /
+	// audio ASR); skip the method cleanly when none are (client hides the 파일 picker).
+	if deps.ExtractText != nil || deps.OcrImage != nil || deps.Transcribe != nil {
 		m["miniapp.notebook.add_file"] = notebookAddFileRPC(deps)
 	}
 	// Ref ingestion (url/mail/diary) registers when any reader is wired; the
@@ -244,12 +250,14 @@ func notebookAddSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 	})
 }
 
-// notebookAddFileRPC ingests an UPLOADED document into a notebook: the desktop
-// client sends the file bytes (base64) after the user picks a file — no path to
-// type — and the gateway extracts the readable text (pdf/docx/spreadsheet/hwp/…)
-// and pins it as a kind=file source. This is the server-side reader that
-// add_source's ref-only file kind (which validation rejects for lack of text)
-// was always meant to have.
+// notebookAddFileRPC ingests an UPLOADED file into a notebook: the desktop client
+// sends the file bytes (base64) after the user picks (or drops) a file — no path
+// to type — and the gateway turns it into readable text and pins it as a kind=file
+// source. It dispatches by MIME to the same extractors chat capture uses: images
+// via OCR, audio/video via ASR, everything else via the document extractor
+// (pdf/docx/spreadsheet/hwp/…). This is the server-side reader that add_source's
+// ref-only file kind (which validation rejects for lack of text) was always meant
+// to have.
 func notebookAddFileRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 	type params struct {
 		ID         string `json:"id"`
@@ -278,7 +286,30 @@ func notebookAddFileRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			return rpcerr.InvalidRequest("file is not valid base64").Response(req.ID)
 		}
 		filename := strings.TrimSpace(p.Filename)
-		text := strings.TrimSpace(deps.ExtractText(ctx, data, filename, p.MimeType))
+		mime := strings.TrimSpace(p.MimeType)
+		// Dispatch by MIME to the matching extractor, falling back to the document
+		// extractor (it also OCRs scanned PDFs/images). A nil extractor for the
+		// class means the sidecar isn't wired — report it rather than mis-routing.
+		var text string
+		switch {
+		case strings.HasPrefix(mime, "image/") && deps.OcrImage != nil:
+			t, ierr := deps.OcrImage(ctx, data)
+			if ierr != nil {
+				return rpcerr.WrapUnavailable("이미지에서 텍스트를 읽지 못했습니다", ierr).Response(req.ID)
+			}
+			text = t
+		case (strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/")) && deps.Transcribe != nil:
+			t, terr := deps.Transcribe(ctx, data, mime, "")
+			if terr != nil {
+				return rpcerr.WrapUnavailable("음성을 전사하지 못했습니다", terr).Response(req.ID)
+			}
+			text = t
+		case deps.ExtractText != nil:
+			text = deps.ExtractText(ctx, data, filename, mime)
+		default:
+			return rpcerr.Unavailable("no extractor is available for this file type").Response(req.ID)
+		}
+		text = strings.TrimSpace(text)
 		if text == "" {
 			return rpcerr.Unavailable("no text could be extracted from the file").Response(req.ID)
 		}
