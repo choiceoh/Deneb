@@ -3,6 +3,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.data.documentCaptureMime
 import ai.deneb.deneb.DenebAttachment
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.captureAudio
@@ -278,18 +279,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // captureDocumentFromPlatformFile reads a picked document (pdf/text/code/csv)
-    // and runs the gateway's document-extraction capture turn. The gateway sniffs
-    // the bytes + filename, so a pdf -> "application/pdf" and everything else ->
-    // "text/plain" (the csv case still matches by .csv suffix server-side) is
-    // enough to drive its format dispatch.
+    // captureDocumentFromPlatformFile reads a picked document (pdf / text / code /
+    // Office / HWP / ODF) and runs the gateway's document-extraction capture turn.
+    // The MIME is derived by documentCaptureMime: pdf and text/code get an explicit
+    // hint, while OOXML and the host-converted formats (HWP / legacy Office / ODF)
+    // send none so the gateway routes them by filename — a blanket "text/plain"
+    // would make it read a binary HWP as garbage text before its converter runs.
     private fun captureDocumentFromPlatformFile(file: PlatformFile) {
         val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        val mime = if (file.name.substringAfterLast('.', "").lowercase() == "pdf") {
-            "application/pdf"
-        } else {
-            "text/plain"
-        }
+        val mime = documentCaptureMime(file.name)
         lifecycleScope.launch {
             val bytes = runCatching { file.readBytes() }.getOrNull()
             if (bytes == null || bytes.isEmpty()) return@launch

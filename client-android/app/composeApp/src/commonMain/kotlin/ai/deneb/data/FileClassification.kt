@@ -100,6 +100,30 @@ fun routeAttachment(extension: String, capturesAvailable: Boolean): AttachmentRo
     }
 }
 
+/**
+ * MIME to send with a picked document on the capture (`miniapp.capture.document`)
+ * path so the gateway's extractDocument dispatch routes it correctly. The gateway
+ * is filename-first, but a `text/plain` hint short-circuits its plain-text branch
+ * BEFORE the converter fallback — so a binary format it converts on the host (HWP
+ * via hwp5txt, legacy Office / ODF via LibreOffice) would come back as its raw
+ * bytes read as garbage text. So:
+ *   - PDF announces application/pdf (its own gateway branch);
+ *   - genuine text / code files keep text/plain — the gateway's isTextFile list is
+ *     narrower than our [textExtensions], so those NEED the hint to be read as text;
+ *   - every other document (OOXML + the converter formats) sends no MIME and lets
+ *     the gateway route by filename — OOXML by suffix, HWP/legacy/ODF via the
+ *     converter default case.
+ * Pure + testable; MainActivity's picker path just calls it.
+ */
+fun documentCaptureMime(fileName: String): String {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    return when {
+        ext == "pdf" -> "application/pdf"
+        ext in textExtensions -> "text/plain"
+        else -> ""
+    }
+}
+
 fun classifyFile(mimeType: String?, fileName: String?): FileCategory {
     if (mimeType != null) {
         if (mimeType.startsWith("image/")) return FileCategory.IMAGE
