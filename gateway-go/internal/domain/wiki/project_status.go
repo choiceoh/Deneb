@@ -18,6 +18,7 @@
 package wiki
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -321,10 +322,22 @@ func (s *Store) setProjectStatus(relPath string, lines []string, due string, now
 	})
 }
 
-// AppendProjectStatusLine prepends one dated bullet to a project page's 현재 상태
-// (the event-driven mail path). Idempotent by ref: a line already recorded for
-// that ref is a no-op (keeps Updated stable). Creates the page if absent.
+// AppendProjectStatusLine prepends one capture-dated bullet to a project page's
+// 현재 상태 (the event-driven mail/meeting path). Idempotent by ref: a line
+// already recorded for that ref is a no-op (keeps Updated stable). Creates the
+// page if absent.
 func (s *Store) AppendProjectStatusLine(relPath, line, ref string, now time.Time) error {
+	return s.AppendProjectStatusLineAt(relPath, line, "", ref, now)
+}
+
+// AppendProjectStatusLineAt is AppendProjectStatusLine with an optional event
+// date (YYYY-MM-DD) — "when it happened" (e.g. a 견적서's document date), distinct
+// from now ("when captured"). When the event date is a valid date on a DIFFERENT
+// day than capture, the bullet leads with the event date and notes the capture
+// day ("… (8/3 기록)") so the reader isn't misled into reading the processing day
+// as the event day; an empty/invalid/same-day event date renders capture-dated as
+// before.
+func (s *Store) AppendProjectStatusLineAt(relPath, line, eventDate, ref string, now time.Time) error {
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return nil
@@ -338,11 +351,39 @@ func (s *Store) AppendProjectStatusLine(relPath, line, ref string, now time.Time
 			}
 			marker = " " + dealRefMarker(r)
 		}
-		bullet := "- " + now.Format("1월 2일") + " " + line + marker
+		lead, captureNote := statusBulletDates(eventDate, now)
+		bullet := "- " + lead + " " + line + captureNote + marker
 		page.Body = prependStatusBullet(page.Body, bullet)
 		page.Meta.Updated = now.Format("2006-01-02")
 		return page, nil
 	})
+}
+
+// statusBulletDates renders a status bullet's leading date and optional capture
+// note. With a valid event date on a different day than capture, lead is the
+// event date ("1월 2일") and captureNote is " (1/2 기록)"; otherwise lead is the
+// capture date and captureNote is empty (dual-timestamp only when it adds info).
+func statusBulletDates(eventDate string, now time.Time) (lead, captureNote string) {
+	ev, ok := parseStatusEventDate(eventDate)
+	if !ok || ev.Format("2006-01-02") == now.Format("2006-01-02") {
+		return now.Format("1월 2일"), ""
+	}
+	return ev.Format("1월 2일"), fmt.Sprintf(" (%d/%d 기록)", int(now.Month()), now.Day())
+}
+
+// parseStatusEventDate reads a leading YYYY-MM-DD from s (the deal extractor's
+// primary date format; trailing text is tolerated). Returns ok=false for empty
+// or non-date input so the caller falls back to the capture date.
+func parseStatusEventDate(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if len(s) < 10 {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("2006-01-02", s[:10])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // ensureProjectPage returns existing, or a minimal new project page named after
