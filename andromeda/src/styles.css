@@ -1644,15 +1644,25 @@ input[type="checkbox"] {
   background: var(--accent-soft);
 }
 
-/* regenerate / save-note / print affordances under an answer */
-.ai-regen,
-.ai-save-note,
-.ai-print {
-  align-self: flex-start;
-  display: inline-flex;
+/* action row under an answer — 다시 생성 / 복사 / 인쇄 / 노트 저장 sit inline on one
+   line (the buttons are otherwise stacked, each on its own row of .ai-turn's grid). */
+.ai-turn-actions {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   margin-top: 2px;
+}
+.ai-turn-actions:empty {
+  display: none;
+}
+.ai-regen,
+.ai-copy,
+.ai-save-note,
+.ai-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
 }
 .ai-save-note:disabled {
