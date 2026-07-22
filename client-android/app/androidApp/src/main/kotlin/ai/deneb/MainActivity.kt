@@ -153,12 +153,9 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 captureActions = CaptureActions(
-                    // The chat input owns the single picker now and hands us the
-                    // already-picked file (classified by type) plus the composer text
-                    // as the caption — we read the bytes and run the gateway capture.
-                    onImageFile = { file, caption -> captureFromPlatformFile(file, audio = false, caption) },
-                    onAudioFile = { file, caption -> captureFromPlatformFile(file, audio = true, caption) },
-                    onDocumentFile = { file, caption -> captureDocumentFromPlatformFile(file, caption) },
+                    // The chat input stages the picked files and hands us the whole set
+                    // on send, plus the composer text as the caption — we read the bytes
+                    // and run one gateway batch capture.
                     onFilesBatch = { files, caption -> captureFilesBatch(files, caption) },
                     onVoiceInput = { launchVoiceCapture() },
                 ),
@@ -290,35 +287,9 @@ class MainActivity : ComponentActivity() {
         captureFile(bytes, sharedDisplayName(uri) ?: if (audio) "recording" else "image", mime)
     }
 
-    // captureFromPlatformFile is the attach-picker counterpart of captureFromUri:
-    // the chat input already picked the file (FileKit) and classified it by type,
-    // so we read its bytes and route image -> PaddleOCR / audio -> VibeVoice-ASR. The
-    // caption is whatever the user typed in the composer alongside the attachment.
-    private fun captureFromPlatformFile(file: PlatformFile, audio: Boolean, caption: String = "") {
-        val mime = mimeForFileName(file.name, audio)
-        lifecycleScope.launch {
-            val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
-            sendSingleFileBatch(bytes, file.name, mime, caption)
-        }
-    }
-
-    // captureDocumentFromPlatformFile reads a picked document (pdf / text / code /
-    // Office / HWP / ODF) and sends it through the batch/pointer path so the agent
-    // reads it with a tool. The MIME is derived by documentCaptureMime: pdf and
-    // text/code get an explicit hint, while OOXML and the host-converted formats
-    // (HWP / legacy Office / ODF) send none so the gateway routes them by filename —
-    // a blanket "text/plain" would make it read a binary HWP as garbage text before
-    // its converter runs. The caption carries the composer text typed with the file.
-    private fun captureDocumentFromPlatformFile(file: PlatformFile, caption: String = "") {
-        lifecycleScope.launch {
-            val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
-            sendSingleFileBatch(bytes, file.name, documentCaptureMime(file.name), caption)
-        }
-    }
-
-    // Several files picked at once -> ONE batch turn: read each, derive its per-type
-    // MIME (same routing as the single picker), and hand the set to captureBatch so the
-    // agent reads and cross-references them together. The composer text is the caption.
+    // Files staged in the composer, sent together on submit -> ONE batch turn: read each,
+    // derive its per-type MIME, and hand the set to captureBatch so the agent reads and
+    // cross-references them together. The composer text is the caption.
     private fun captureFilesBatch(files: List<PlatformFile>, caption: String) {
         lifecycleScope.launch {
             val attachments = files.mapNotNull { file ->
@@ -487,9 +458,9 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 
-    // Shared document (PDF/CSV) -> gateway extraction -> chat. Same path as the
-    // in-app picker (captureDocumentFromPlatformFile): a contract PDF shared from
-    // mail/KakaoTalk lands in the chat as extracted text plus one agent turn.
+    // Shared document (PDF/CSV) -> gateway extraction -> chat. A contract PDF shared
+    // from mail/KakaoTalk lands in the chat as extracted text plus one agent turn —
+    // this fires immediately (no composer to stage into, unlike the in-app picker).
     private fun handleSharedDocument(intent: Intent) {
         @Suppress("DEPRECATION")
         val uri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

@@ -2,12 +2,10 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
-import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.MAX_BATCH_FILES
 import ai.deneb.data.ServiceEntry
 import ai.deneb.data.audioExtensions
 import ai.deneb.data.imageExtensions
-import ai.deneb.data.routeAttachment
 import ai.deneb.ui.components.animatedGradientBorder
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
@@ -42,7 +40,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -138,31 +135,41 @@ fun QuestionInput(
             }
         }
 
+        // Platform capture actions (Android); null on desktop/iOS, where the attach
+        // picker just stages files onto the outgoing message.
+        val captures = LocalCaptureActions.current
+
         fun submitQuestion() {
             val text = textState.text
-            if (text.isNotBlank()) {
-                haptics.confirm()
+            val staged = files.toList()
+            if (text.isBlank() && staged.isEmpty()) return
+            haptics.confirm()
+            val captureActions = captures
+            if (captureActions != null && staged.isNotEmpty()) {
+                // Android: the staged attachments go to the gateway as ONE batch capture
+                // with the typed text as the caption; clear the chips once handed off.
+                captureActions.onFilesBatch(staged, text.trim())
+                staged.forEach(removeFile)
+            } else {
+                // A normal chat turn (or desktop/iOS, whose ask() carries staged files).
                 ask(text.trim())
-                onTextStateChange(TextFieldValue(""))
-                // Drop the soft keyboard after a send so it doesn't cover the
-                // reply. No-op on desktop, where keyboardController is null.
-                keyboardController?.hide()
-                // NOTE: do NOT focusManager.clearFocus() here on mobile. Ending the
-                // text-input session while the Android IME still holds an in-flight
-                // composition (routine with the Korean/Samsung IME) makes it re-commit
-                // that composition through onValueChange AFTER we cleared the field —
-                // putting the just-sent text right back in the box. Keeping focus
-                // clears reliably; a blinking caret over the reply is the fair trade
-                // (reverts the #2920 composer-caret change that caused the regression).
             }
+            onTextStateChange(TextFieldValue(""))
+            // Drop the soft keyboard after a send so it doesn't cover the
+            // reply. No-op on desktop, where keyboardController is null.
+            keyboardController?.hide()
+            // NOTE: do NOT focusManager.clearFocus() here on mobile. Ending the
+            // text-input session while the Android IME still holds an in-flight
+            // composition (routine with the Korean/Samsung IME) makes it re-commit
+            // that composition through onValueChange AFTER we cleared the field —
+            // putting the just-sent text right back in the box. Keeping focus
+            // clears reliably; a blinking caret over the reply is the fair trade
+            // (reverts the #2920 composer-caret change that caused the regression).
         }
 
-        // One attach picker, no "what to insert" menu: with platform captures
-        // present (Android), it also accepts images/audio and the result is routed
-        // by file type — an image to OCR, an audio file to transcription, anything
-        // else attached for the next message. Without captures (desktop/iOS) it is
-        // the plain document attach it always was.
-        val captures = LocalCaptureActions.current
+        // One attach picker, no "what to insert" menu: it stages the picked files as
+        // chips (image / audio / document alike). On submit they go to the gateway as
+        // one batch capture (Android) or ride the message (desktop/iOS).
         val pickerExtensions = remember(supportedFileExtensions, captures) {
             if (captures != null) {
                 (supportedFileExtensions + imageExtensions + audioExtensions).distinct()
@@ -171,44 +178,16 @@ fun QuestionInput(
             }
         }
         val allowFileAttachment = pickerExtensions.isNotEmpty()
-        // The picker result fires after the modal system picker returns; read the
-        // composer text through rememberUpdatedState so the remembered launcher sees
-        // the latest value (not a stale closure captured at first composition).
-        val composerText by rememberUpdatedState(textState.text)
         val filePickerLauncher = if (allowFileAttachment) {
             rememberFilePickerLauncher(
                 type = FileKitType.File(extensions = pickerExtensions),
-                // Allow selecting several files at once (capped to the gateway's batch
-                // limit); one still keeps its typed route, many go to one batch turn.
+                // Several files at once, capped to the gateway's batch limit.
                 mode = FileKitMode.Multiple(maxItems = MAX_BATCH_FILES),
-            ) { files ->
-                if (files.isNullOrEmpty()) return@rememberFilePickerLauncher
-                // The text typed alongside the attachment becomes the capture's caption,
-                // so "이 계약서 요약해줘" + a PDF analyzes the PDF in that light.
-                val caption = composerText.trim()
-                val single = files.singleOrNull()
-                if (single != null) {
-                    // One file keeps its typed route: image -> OCR, audio ->
-                    // transcription, document -> extract. Without platform captures
-                    // (desktop/iOS) fall back to attaching for the next message.
-                    when (routeAttachment(single.extension, captures != null)) {
-                        AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(single, caption)
-
-                        AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(single, caption)
-
-                        AttachmentRoute.FILE_ATTACH ->
-                            if (captures != null) captures.onDocumentFile(single, caption) else addFile(single)
-                    }
-                } else if (captures != null) {
-                    // Several files -> one batch turn the agent reads and cross-references.
-                    captures.onFilesBatch(files, caption)
-                } else {
-                    files.forEach(addFile)
-                }
-                // A capture consumed the composer text as its caption — clear it so the
-                // same text isn't also sent as a separate turn. The desktop/iOS addFile
-                // path keeps the text (the staged file rides the next message with it).
-                if (captures != null) onTextStateChange(TextFieldValue(""))
+            ) { picked ->
+                if (picked.isNullOrEmpty()) return@rememberFilePickerLauncher
+                // Stage the picks as chips instead of sending immediately, so the user can
+                // review, add more, or type a question first; submit sends them together.
+                picked.forEach(addFile)
             }
         } else {
             null
@@ -293,7 +272,8 @@ fun QuestionInput(
                             onSelectService = onSelectService,
                         )
                     }
-                    if (isLoading && textState.text.isNotBlank()) {
+                    val hasSendable = textState.text.isNotBlank() || files.isNotEmpty()
+                    if (isLoading && hasSendable) {
                         // Queue-send: typing while a reply streams keeps the send
                         // affordance next to stop — the message queues client-side and
                         // fires the moment this turn completes (ask() handles the queue).
@@ -301,7 +281,7 @@ fun QuestionInput(
                     }
                     if (isLoading) {
                         TrailingIcon(icon = Res.drawable.ic_stop, onClick = cancel, isPulsing = true, contentDescription = "중지")
-                    } else if (textState.text.isNotBlank()) {
+                    } else if (hasSendable) {
                         TrailingIcon(icon = Res.drawable.ic_up, onClick = { submitQuestion() }, contentDescription = "보내기")
                     } else if (captures != null) {
                         // Live voice dictation (system speech recognizer → chat). Moved here
