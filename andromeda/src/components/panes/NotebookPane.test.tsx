@@ -10,11 +10,13 @@ import { NotebookPane } from "./NotebookPane";
 // latest notebook so write round-trips show up in the UI.
 let added: { cite: string; kind: string; title: string; text: string; ref: string }[];
 let zttSources: { cite: string; kind: string; title: string; text: string; ref: string }[];
+let uploaded: { filename: string; title: string; mimeType: string; dataBase64: string }[];
 let createdName: string;
 let notebookRows: { id: string; name: string; sourceCount: number; updated: number }[];
 
 beforeEach(() => {
   added = [];
+  uploaded = [];
   zttSources = [{ cite: "S1", kind: "note", title: "잔금 안내", text: "최종 5% 잔금 $401K, 마감 6/25.", ref: "" }];
   createdName = "";
   notebookRows = [{ id: "ztt", name: "ZTT", sourceCount: 1, updated: 1782190313958 }];
@@ -48,6 +50,28 @@ beforeEach(() => {
             title: String(params.title ?? ""),
             text: String(params.text ?? ""),
             ref: String(params.ref ?? ""),
+          };
+          added.push(s);
+          notebookRows = notebookRows.map((notebook) =>
+            notebook.id === params.id ? { ...notebook, sourceCount: added.length, updated: 3 } : notebook,
+          );
+          return reply(s);
+        }
+        case "miniapp.notebook.add_file": {
+          uploaded.push({
+            filename: String(params.filename ?? ""),
+            title: String(params.title ?? ""),
+            mimeType: String(params.mimeType ?? ""),
+            dataBase64: String(params.dataBase64 ?? ""),
+          });
+          // The gateway would extract text server-side; the in-test stub pins a file
+          // source titled by the (optional) title, defaulting to the filename.
+          const s = {
+            cite: `S${added.length + 1}`,
+            kind: "file",
+            title: String(params.title || params.filename || ""),
+            text: "추출된 본문",
+            ref: String(params.filename ?? ""),
           };
           added.push(s);
           notebookRows = notebookRows.map((notebook) =>
@@ -221,7 +245,7 @@ describe("NotebookPane", () => {
     expect((await screen.findAllByText("탑솔라")).length).toBeGreaterThan(0);
   });
 
-  it("when pins gateway-ingested source kinds by ref", async () => {
+  it("when attaches a picked document — uploads its bytes for server-side extraction, no path typed", async () => {
     renderWithProviders(<NotebookPane />, { connected: true });
 
     await userEvent.click(await screen.findByRole("button", { name: "새 노트북" }));
@@ -229,14 +253,48 @@ describe("NotebookPane", () => {
     await userEvent.click(screen.getByRole("button", { name: "생성" }));
     expect(await screen.findByRole("heading", { name: "파일 딜" })).toBeInTheDocument();
 
+    // + 인용자료 → 파일 kind → a native file picker replaces the path text field.
     await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
     await userEvent.click(screen.getByRole("button", { name: "파일" }));
     await userEvent.type(screen.getByLabelText("제목 (선택)"), "계약서");
-    await userEvent.type(screen.getByLabelText("파일 경로"), "contracts/topsolar.pdf");
+    expect(screen.queryByLabelText("파일 경로")).not.toBeInTheDocument();
+    expect(screen.getByText("선택된 파일 없음")).toBeInTheDocument();
+
+    // Pick a document → its name/size shows and 추가 enables (no path to type).
+    const file = new File(["계약서 본문 내용"], "topsolar.pdf", { type: "application/pdf" });
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+    expect(await screen.findByText(/topsolar\.pdf/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "추가" }));
 
-    expect(added.at(-1)).toMatchObject({ kind: "file", ref: "contracts/topsolar.pdf", title: "계약서" });
+    // add_file carried the raw bytes + filename + mime — NOT a typed path.
+    const last = uploaded.at(-1);
+    expect(last).toMatchObject({ filename: "topsolar.pdf", title: "계약서", mimeType: "application/pdf" });
+    expect(last?.dataBase64.length).toBeGreaterThan(0);
+    // The pinned file source shows up after the reload.
     expect((await screen.findAllByText("계약서")).length).toBeGreaterThan(0);
+  });
+
+  it("rejects an unsupported file with an in-dialog notice and no upload", async () => {
+    // applyAccept:false simulates a user who bypasses the dialog's format filter
+    // (some OSes allow "All files") — the client-side guard must still refuse it.
+    const user = userEvent.setup({ applyAccept: false });
+    renderWithProviders(<NotebookPane />, { connected: true });
+
+    await user.click(await screen.findByRole("button", { name: "새 노트북" }));
+    await user.type(screen.getByLabelText("이름"), "파일 딜");
+    await user.click(screen.getByRole("button", { name: "생성" }));
+    expect(await screen.findByRole("heading", { name: "파일 딜" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "자료 추가" }));
+    await user.click(screen.getByRole("button", { name: "파일" }));
+
+    const bad = new File(["MZ..."], "installer.exe", { type: "application/octet-stream" });
+    await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, bad);
+
+    expect(await screen.findByText(/문서 파일만 지원합니다/)).toBeInTheDocument();
+    // 추가 stays disabled and nothing was uploaded.
+    expect(screen.getByRole("button", { name: "추가" })).toBeDisabled();
+    expect(uploaded).toHaveLength(0);
   });
 
   it("when removes a source from the open notebook", async () => {

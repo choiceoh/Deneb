@@ -571,6 +571,12 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 				}
 				return s.notebookStore, nil
 			},
+			// Same in-house extractor the file browser and chat attachments use, so a
+			// picked notebook file is read exactly like a chat-attached document.
+			ExtractText: func(ctx context.Context, data []byte, filename, mimeType string) string {
+				text, _ := toolbind.ExtractDocumentText(ctx, data, filename, mimeType)
+				return text
+			},
 		}),
 		minischedule.CronsMethods(minischedule.CronsDeps{
 			Service: func() (minischedule.CronService, error) {

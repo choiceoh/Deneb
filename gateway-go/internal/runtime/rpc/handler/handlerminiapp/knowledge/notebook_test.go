@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -17,6 +18,26 @@ func notebookTestMethods(t *testing.T) map[string]rpcutil.HandlerFunc {
 		t.Fatalf("NewStore: %v", err)
 	}
 	return NotebookMethods(NotebookDeps{Store: func() (*notebook.Store, error) { return store, nil }})
+}
+
+// notebookTestMethodsWithExtractor wires a fake extractor so add_file registers.
+// The fake echoes decoded bytes as "text" and returns empty for a sentinel blob,
+// letting the test drive both the happy path and the no-text-extracted rejection.
+func notebookTestMethodsWithExtractor(t *testing.T) map[string]rpcutil.HandlerFunc {
+	t.Helper()
+	store, err := notebook.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	return NotebookMethods(NotebookDeps{
+		Store: func() (*notebook.Store, error) { return store, nil },
+		ExtractText: func(_ context.Context, data []byte, _, _ string) string {
+			if string(data) == "no-text" {
+				return ""
+			}
+			return string(data)
+		},
+	})
 }
 
 func callNotebook(t *testing.T, m map[string]rpcutil.HandlerFunc, method string, params any) *protocol.ResponseFrame {
@@ -83,6 +104,70 @@ func TestNotebookAddSourceRejections(t *testing.T) {
 	}
 	if resp := callNotebook(t, m, "miniapp.notebook.create", map[string]any{"description": "no name"}); resp.OK {
 		t.Error("create without a name should fail")
+	}
+}
+
+// TestNotebookAddFileExtractsAndPins exercises the picked-file path: a base64
+// document is extracted server-side and pinned as a kind=file source with the
+// filename as ref/title — no path typed by the user.
+func TestNotebookAddFileExtractsAndPins(t *testing.T) {
+	m := notebookTestMethodsWithExtractor(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+
+	blob := base64.StdEncoding.EncodeToString([]byte("계약서 본문 텍스트"))
+	src := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "계약서.pdf", "dataBase64": blob}))
+	if src["kind"] != "file" || src["cite"] != "S1" {
+		t.Errorf("add_file source = %v, want kind=file cite=S1", src)
+	}
+	if src["ref"] != "계약서.pdf" || src["title"] != "계약서.pdf" {
+		t.Errorf("add_file ref/title = %v/%v, want the filename for both", src["ref"], src["title"])
+	}
+	if src["text"] != "계약서 본문 텍스트" {
+		t.Errorf("add_file text = %v, want the extracted text", src["text"])
+	}
+
+	// An explicit title overrides the filename default; a data-URL prefix is tolerated.
+	src = decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "견적.xlsx", "title": "1차 견적", "dataBase64": "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString([]byte("견적 표"))}))
+	if src["title"] != "1차 견적" {
+		t.Errorf("add_file title = %v, want the explicit title", src["title"])
+	}
+}
+
+func TestNotebookAddFileRejections(t *testing.T) {
+	m := notebookTestMethodsWithExtractor(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+
+	goodBlob := base64.StdEncoding.EncodeToString([]byte("x"))
+	if resp := callNotebook(t, m, "miniapp.notebook.add_file", map[string]any{"filename": "a.pdf", "dataBase64": goodBlob}); resp.OK {
+		t.Error("add_file without id should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.add_file", map[string]any{"id": id, "filename": "a.pdf"}); resp.OK {
+		t.Error("add_file without dataBase64 should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.add_file", map[string]any{"id": id, "filename": "a.pdf", "dataBase64": "!!not base64!!"}); resp.OK {
+		t.Error("add_file with invalid base64 should fail")
+	}
+	// The extractor returns "" for the "no-text" sentinel → unextractable file rejected.
+	noText := base64.StdEncoding.EncodeToString([]byte("no-text"))
+	if resp := callNotebook(t, m, "miniapp.notebook.add_file", map[string]any{"id": id, "filename": "scan.pdf", "dataBase64": noText}); resp.OK {
+		t.Error("add_file whose file yields no text should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.add_file", map[string]any{"id": "nope", "filename": "a.pdf", "dataBase64": goodBlob}); resp.OK {
+		t.Error("add_file to an unknown notebook should fail")
+	}
+}
+
+// TestNotebookAddFileOmittedWithoutExtractor pins the conditional registration:
+// with no extractor wired, add_file must not be a registered method (clients then
+// fall back to the note/wiki source kinds instead of hitting a broken surface).
+func TestNotebookAddFileOmittedWithoutExtractor(t *testing.T) {
+	m := notebookTestMethods(t)
+	if _, ok := m["miniapp.notebook.add_file"]; ok {
+		t.Error("add_file should not register when ExtractText is nil")
 	}
 }
 
