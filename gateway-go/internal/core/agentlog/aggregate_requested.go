@@ -38,26 +38,41 @@ func (w *Writer) AggregateByRequestedModel(sinceMs int64) []RequestedModelStat {
 	paths, _ := filepath.Glob(filepath.Join(w.baseDir, "*.jsonl"))
 	for _, path := range paths {
 		for _, entry := range readAllEntries(path) {
-			if entry.Type != TypeRunEnd {
-				continue
-			}
 			if sinceMs > 0 && entry.Ts < sinceMs {
 				continue
 			}
-			var data RunEndData
-			if json.Unmarshal(entry.Data, &data) != nil {
+			var key string
+			var in, out, cache, tools int
+			switch entry.Type {
+			case TypeRunEnd:
+				var data RunEndData
+				if json.Unmarshal(entry.Data, &data) != nil {
+					continue
+				}
+				key = data.RequestedModel
+				in, out, cache, tools = data.InputTokens, data.OutputTokens, data.CacheReadTokens, data.ToolCalls
+			case TypeHelperLLM:
+				// Helper calls request a role (lightweight/tiny/…); fold by that
+				// role so local models used only for helpers appear per-role.
+				var data HelperLLMData
+				if json.Unmarshal(entry.Data, &data) != nil {
+					continue
+				}
+				key = data.Role
+				in, out, cache = data.InputTokens, data.OutputTokens, data.CacheReadTokens
+			default:
 				continue
 			}
-			s := stats[data.RequestedModel]
+			s := stats[key]
 			if s == nil {
-				s = &RequestedModelStat{RequestedModel: data.RequestedModel}
-				stats[data.RequestedModel] = s
+				s = &RequestedModelStat{RequestedModel: key}
+				stats[key] = s
 			}
 			s.Runs++
-			s.InputTokens += int64(data.InputTokens)
-			s.OutputTokens += int64(data.OutputTokens)
-			s.CacheReadTokens += int64(data.CacheReadTokens)
-			s.ToolCalls += data.ToolCalls
+			s.InputTokens += int64(in)
+			s.OutputTokens += int64(out)
+			s.CacheReadTokens += int64(cache)
+			s.ToolCalls += tools
 		}
 	}
 

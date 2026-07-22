@@ -35,6 +35,11 @@ const (
 	// it tried to do and what the outcome was.
 	TypeProactiveRelay = "proactive.relay" // autonomous delivery decision (relayNative)
 	TypeBackgroundJob  = "background.job"  // a background job cycle (cron, gmail poll, heartbeat)
+	// TypeHelperLLM is a one-shot local/helper LLM call (summarization, extraction,
+	// classification, judgment) made outside the agent run loop — the calls that
+	// carry no run.start/run.end. Emitted under SessionHelper so per-model/per-role
+	// usage aggregation can see local models that never run a full agent turn.
+	TypeHelperLLM = "helper.llm"
 )
 
 // Session keys for the standalone behavioral event streams. Each lands in its
@@ -42,7 +47,23 @@ const (
 const (
 	SessionProactive  = "system:proactive"
 	SessionBackground = "system:background"
+	SessionHelper     = "system:helper"
 )
+
+// HelperLLMData records one one-shot helper LLM call's token usage, keyed by the
+// model that answered and the role that was requested. Self-contained (no
+// run.start correlation): the aggregators credit tokens directly from this
+// event, which is how local models used only for helper work (never a full
+// agent turn) appear in the per-model / per-role usage breakdown.
+type HelperLLMData struct {
+	Model           string `json:"model"`
+	Provider        string `json:"provider,omitempty"`
+	Role            string `json:"role,omitempty"`
+	Purpose         string `json:"purpose,omitempty"`
+	InputTokens     int    `json:"inputTokens,omitempty"`
+	OutputTokens    int    `json:"outputTokens,omitempty"`
+	CacheReadTokens int    `json:"cacheReadTokens,omitempty"`
+}
 
 // RunStartData records agent run initialization.
 type RunStartData struct {

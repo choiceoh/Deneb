@@ -106,6 +106,8 @@ func (a *modelAggregateAccumulator) foldEntry(entry LogEntry, scope *modelRunSco
 		a.foldModelRunError(entry, scope)
 	case TypeTurnTool:
 		a.foldModelTool(entry, scope)
+	case TypeHelperLLM:
+		a.foldModelHelper(entry)
 	}
 }
 
@@ -177,6 +179,26 @@ func (a *modelAggregateAccumulator) foldModelTool(entry LogEntry, scope *modelRu
 	if data.IsError {
 		stat.ToolErrors++
 	}
+}
+
+// foldModelHelper credits a helper.llm event's tokens directly to its model
+// stat (no run.start correlation — the event is self-contained). This is how
+// local models used only for one-shot helper calls appear in per-model usage.
+func (a *modelAggregateAccumulator) foldModelHelper(entry LogEntry) {
+	var data HelperLLMData
+	if json.Unmarshal(entry.Data, &data) != nil || data.Model == "" {
+		return
+	}
+	key := data.Provider + "/" + data.Model
+	stat := a.stats[key]
+	if stat == nil {
+		stat = &ModelStat{Model: data.Model, Provider: data.Provider}
+		a.stats[key] = stat
+	}
+	stat.Runs++
+	stat.InputTokens += int64(data.InputTokens)
+	stat.OutputTokens += int64(data.OutputTokens)
+	stat.CacheReadTokens += int64(data.CacheReadTokens)
 }
 
 func (a *modelAggregateAccumulator) finish() []ModelStat {
