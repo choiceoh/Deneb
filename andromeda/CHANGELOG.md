@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.107](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.106...andromeda-v0.0.107) (2026-07-22)
+
+
+### ✨ Features
+
+* **client-android:** 사용량 화면 — 모델·역할·작업별 토큰 사용량 (1일/7일) ([#4154](https://github.com/choiceoh/Deneb/issues/4154)) ([b6b6372](https://github.com/choiceoh/Deneb/commit/b6b6372b922a1607ec8cf1373bfcc82b5a147497))
+
+
+### 🐛 Bug Fixes
+
+* **security:** pathutil로 세션/파일 경로 가둠 ([#4152](https://github.com/choiceoh/Deneb/issues/4152)) ([03f5ada](https://github.com/choiceoh/Deneb/commit/03f5ada78519a88125a3fec0e06c67ea0dbc8557))
+
 ## [0.0.106](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.105...andromeda-v0.0.106) (2026-07-22)
 
 
