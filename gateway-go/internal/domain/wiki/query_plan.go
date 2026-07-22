@@ -171,7 +171,7 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 		var report SearchReport
 		if clause.Kind == QueryKindVec || clause.Kind == QueryKindHyDE {
 			options.Mode = SearchModeSemantic
-			semantic := s.searchSemanticWithVec(semanticVectors[clauseIndex], max(fetchLimit, semanticBlendK))
+			semantic := s.searchSemanticWithVec(ctx, semanticVectors[clauseIndex], max(fetchLimit, semanticBlendK))
 			report = s.composeSearchReport(ctx, clause.Query, fetchLimit, fetchLimit, nil, semantic, false, options, nil)
 		} else {
 			options.Mode = SearchModeBM25

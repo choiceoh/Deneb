@@ -589,7 +589,7 @@ func (s *Store) SearchBatchWithOptions(ctx context.Context, queries []string, li
 
 		var sem []SearchResult
 		if qvecs != nil && len(qvecs[i]) > 0 {
-			sem = s.searchSemanticWithVec(qvecs[i], max(fetchLimit, semanticBlendK))
+			sem = s.searchSemanticWithVec(ctx, qvecs[i], max(fetchLimit, semanticBlendK))
 		}
 		out[i] = s.composeSearchReport(ctx, query, limit, fetchLimit, bm25, sem, commonOnlyQuery, options, loadIntent)
 	}

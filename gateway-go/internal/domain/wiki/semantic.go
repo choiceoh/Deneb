@@ -670,15 +670,21 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 	if err != nil || len(qvecs) == 0 {
 		return nil
 	}
-	return s.searchSemanticWithVec(qvecs[0], limit)
+	return s.searchSemanticWithVec(ctx, qvecs[0], limit)
 }
 
 // searchSemanticWithVec ranks pages by cosine to a PRE-COMPUTED query vector —
 // the scan half of searchSemantic, split out so SearchBatch can embed every
 // query in one request (fanned across the server's context pool) and reuse each
 // vector here. Returns nil for an empty vector or a disabled index.
-func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
+func (s *Store) searchSemanticWithVec(ctx context.Context, qv []float32, limit int) []SearchResult {
 	if s.sem == nil || len(qv) == 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
 		return nil
 	}
 	s.sem.mu.Lock()
@@ -690,6 +696,19 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 		s.sem.mu.Unlock()
 		return nil
 	}
+	type semanticEntry struct {
+		path string
+		vec  cachedVec
+	}
+	entries := make([]semanticEntry, 0, len(s.sem.vecs))
+	for path, cv := range s.sem.vecs {
+		// cachedVec is immutable after publication: refresh replaces the map
+		// entry wholesale. A shallow snapshot therefore keeps the backing
+		// vectors alive while letting searches scan outside the global mutex.
+		entries = append(entries, semanticEntry{path: path, vec: cv})
+	}
+	s.sem.mu.Unlock()
+
 	type scored struct {
 		path      string
 		score     float64
@@ -697,9 +716,13 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 		startLine int
 		endLine   int
 	}
-	hits := make([]scored, 0, len(s.sem.vecs))
-	for path, cv := range s.sem.vecs {
-		best := scored{path: path, score: -1}
+	hits := make([]scored, 0, len(entries))
+	for _, entry := range entries {
+		if ctx.Err() != nil {
+			return nil
+		}
+		best := scored{path: entry.path, score: -1}
+		cv := entry.vec
 		for _, chunk := range cv.chunks {
 			if score := cosine(qv, chunk.vec); score > best.score {
 				best.score = score
@@ -713,7 +736,9 @@ func (s *Store) searchSemanticWithVec(qv []float32, limit int) []SearchResult {
 		}
 		hits = append(hits, best)
 	}
-	s.sem.mu.Unlock()
+	if ctx.Err() != nil {
+		return nil
+	}
 
 	// Tie-break equal cosines by path: hits is built by ranging s.sem.vecs (a map,
 	// arbitrary order), and RRF turns any tie order into distinct rank scores —
