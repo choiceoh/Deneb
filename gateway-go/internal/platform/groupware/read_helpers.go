@@ -46,7 +46,10 @@ func ReadApprovalByDocIDIn(ctx context.Context, cfg Config, docID, folder string
 		})
 	}
 	if err != nil {
-		return "", err
+		// Keep the reader's stdout/stderr diagnostic on the error (Run stashes it
+		// in out) — the radar otherwise logs a bare "exit status 1" that hides why
+		// a specific approval cannot be read. Mirrors the list paths.
+		return "", wrapGroupwareRunError(out, err)
 	}
 	if out == "" || strings.HasPrefix(out, "그룹웨어 리더:") || strings.HasPrefix(out, "그룹웨어 읽기 실패") {
 		return "", fmt.Errorf("approval %s not found", docID)
@@ -93,7 +96,7 @@ func ReadApprovalAttachment(ctx context.Context, cfg Config, docID, selector str
 		Attachment: selector,
 	})
 	if err != nil {
-		return "", err
+		return "", wrapGroupwareRunError(out, err)
 	}
 	if out == "" || strings.HasPrefix(out, "그룹웨어 리더:") || strings.HasPrefix(out, "그룹웨어 읽기 실패") {
 		return "", fmt.Errorf("attachment %s not found for doc %s", selector, docID)
