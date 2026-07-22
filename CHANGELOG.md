@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.129.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.128.0...deneb-v4.129.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **native:** carry the composer text as an attachment's caption ([#4111](https://github.com/choiceoh/Deneb/issues/4111)) ([e476847](https://github.com/choiceoh/Deneb/commit/e476847ae7eabf873a99fe2e050c31432c96d103))
+* **notebook:** attach a file by picking it, not typing a path ([#4109](https://github.com/choiceoh/Deneb/issues/4109)) ([34f899c](https://github.com/choiceoh/Deneb/commit/34f899c6f68a289e063411c2245bb130c2cda1fa))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 세션 드로어가 게이트웨이 복원 창에 얼어붙던 문제 자가치유 — 연결 후 백오프 재fetch + 창 포커스 갱신 ([#4110](https://github.com/choiceoh/Deneb/issues/4110)) ([881aa13](https://github.com/choiceoh/Deneb/commit/881aa13a6fbeb3b9c58ad9cb77f14027d1e89ee8))
+* **client-android:** keep the feed's 오늘 view on the real today across midnight ([#4105](https://github.com/choiceoh/Deneb/issues/4105)) ([9794cd3](https://github.com/choiceoh/Deneb/commit/9794cd3dd7d7ad3853184d97981424680c7df340))
+* **client-android:** send single file attachments through the pointer path, not inline text ([#4108](https://github.com/choiceoh/Deneb/issues/4108)) ([5fbd578](https://github.com/choiceoh/Deneb/commit/5fbd5787348ca7043ea20d09d1fff51141951cbc))
+* **native:** route HWP/legacy Office/ODF attachments through the gateway converter ([#4107](https://github.com/choiceoh/Deneb/issues/4107)) ([b6d1609](https://github.com/choiceoh/Deneb/commit/b6d16099dca1c46a5c563cf17362caf4d8f601a4))
+
 ## [4.128.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.127.0...deneb-v4.128.0) (2026-07-22)
 
 

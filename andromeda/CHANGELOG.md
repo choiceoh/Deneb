@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.102](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.101...andromeda-v0.0.102) (2026-07-22)
+
+
+### ✨ Features
+
+* **notebook:** attach a file by picking it, not typing a path ([#4109](https://github.com/choiceoh/Deneb/issues/4109)) ([34f899c](https://github.com/choiceoh/Deneb/commit/34f899c6f68a289e063411c2245bb130c2cda1fa))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 세션 드로어가 게이트웨이 복원 창에 얼어붙던 문제 자가치유 — 연결 후 백오프 재fetch + 창 포커스 갱신 ([#4110](https://github.com/choiceoh/Deneb/issues/4110)) ([881aa13](https://github.com/choiceoh/Deneb/commit/881aa13a6fbeb3b9c58ad9cb77f14027d1e89ee8))
+
 ## [0.0.101](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.100...andromeda-v0.0.101) (2026-07-22)
 
 
