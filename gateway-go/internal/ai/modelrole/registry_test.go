@@ -45,6 +45,7 @@ func TestResolveModelReturnsRoleOrPassthrough(t *testing.T) {
 		{"lightweight", "vllm/" + DefaultVllmModel, RoleLightweight, true},
 		{"fallback", "vllm/" + DefaultVllmModel, RoleFallback, true},
 		{"coding", "coding", "", false},
+		{"submain", "submain", "", false},
 		// Actual model names pass through unchanged.
 		{"google/gemini-3.1-pro", "google/gemini-3.1-pro", "", false},
 		{"some-unknown-model", "some-unknown-model", "", false},
@@ -82,6 +83,45 @@ func TestResolveModelResolvesCodingWhenConfigured(t *testing.T) {
 	}
 	if gotRole != RoleCoding {
 		t.Errorf("ResolveModel(coding) role = %q, want %q", gotRole, RoleCoding)
+	}
+}
+
+// Submain is opt-in like coding/main2/vision: it resolves to a model ID only when
+// agents.submainModel is configured; otherwise the literal "submain" passes through
+// so an unconfigured deploy keeps autonomous work on the main role.
+func TestResolveModelResolvesSubmainWhenConfigured(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel:    "zai/test-model",
+		SubmainModel: "zai/glm-5.2",
+	})
+
+	gotID, gotRole, gotOK := reg.ResolveModel("submain")
+	if !gotOK {
+		t.Fatal("ResolveModel(submain) ok = false, want true when submain role is configured")
+	}
+	if gotID != "zai/glm-5.2" {
+		t.Errorf("ResolveModel(submain) id = %q, want zai/glm-5.2", gotID)
+	}
+	if gotRole != RoleSubmain {
+		t.Errorf("ResolveModel(submain) role = %q, want %q", gotRole, RoleSubmain)
+	}
+}
+
+// Unconfigured submain stays absent: "submain" falls through as a raw model name,
+// the role has no config/client, and the fallback walk skips it — autonomous work
+// runs on the main role exactly as before.
+func TestNewRegistryWithOptions_SubmainAbsentByDefault(t *testing.T) {
+	reg := NewRegistryWithOptions(slog.Default(), RegistryOptions{
+		MainModel: "zai/main-model",
+	})
+	if cfg := reg.Config(RoleSubmain); cfg.Model != "" {
+		t.Fatalf("unconfigured submain = %+v, want absent", cfg)
+	}
+	if _, _, ok := reg.ResolveModel("submain"); ok {
+		t.Fatalf("ResolveModel(submain) resolved for unconfigured role")
+	}
+	if c := reg.Client(RoleSubmain); c != nil {
+		t.Fatalf("unconfigured submain has a client")
 	}
 }
 
@@ -272,6 +312,7 @@ func TestFallbackChain(t *testing.T) {
 		{RoleMain, []Role{RoleMain, RoleMain2, RoleCoding, RoleLightweight, RoleFallback}},
 		{RoleMain2, []Role{RoleMain2, RoleMain, RoleCoding, RoleLightweight, RoleFallback}},
 		{RoleCoding, []Role{RoleCoding, RoleMain, RoleFallback}},
+		{RoleSubmain, []Role{RoleSubmain, RoleMain, RoleMain2, RoleFallback}},
 		{RoleLightweight, []Role{RoleLightweight, RoleFallback}},
 		{RoleFallback, []Role{RoleFallback}},
 	}

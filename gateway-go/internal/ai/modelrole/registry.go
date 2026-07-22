@@ -49,6 +49,15 @@ const (
 	// reject it. OPT-IN: absent unless agents.visionModel is configured; when
 	// absent, image turns fall through to the main model exactly as before.
 	RoleVision Role = "vision"
+	// RoleSubmain is the opt-in second-tier lane for AUTONOMOUS BACKGROUND work
+	// (heartbeat, phone-event ingest). Distinct from RoleMain2 (a difficulty-routed
+	// peer of main for simple INTERACTIVE turns): submain deliberately takes the
+	// automation traffic main2 excludes. It moves that volume off the interactive
+	// main subscription (relieving main's rate budget) and, together with session
+	// isolation, keeps autonomous turns from compacting the live client:main
+	// context. Absent unless agents.submainModel is configured; when absent,
+	// callers pass "" and the work stays on the main role exactly as before.
+	RoleSubmain Role = "submain"
 )
 
 // ModelConfig holds the provider and endpoint settings for a single model role.
@@ -123,6 +132,10 @@ type RegistryOptions struct {
 	// VisionModel overrides RoleVision (multimodal/image turns). Empty → the role
 	// is absent and image turns use the main model. Format: "provider/model".
 	VisionModel string
+	// SubmainModel overrides RoleSubmain (autonomous background lane: heartbeat,
+	// phone-event ingest). Empty → the role is absent and those tasks stay on the
+	// main role. Format: "provider/model".
+	SubmainModel string
 	// Providers is the deneb.json provider catalog (providerID → resolved
 	// endpoint/credentials). A role whose provider is present here resolves
 	// from the catalog; otherwise it falls back to the built-in switch.
@@ -280,6 +293,11 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	if opts.VisionModel != "" {
 		models[RoleVision] = resolveModelConfig(opts.VisionModel, opts.Providers)
 	}
+	// Submain is OPT-IN like coding/vision: present only when configured, so an
+	// unconfigured deployment keeps autonomous work on the main role.
+	if opts.SubmainModel != "" {
+		models[RoleSubmain] = resolveModelConfig(opts.SubmainModel, opts.Providers)
+	}
 
 	// Auto-discover the actual model name the local vLLM is serving and
 	// substitute it in when config drifts. reconcileVllmModel is a no-op for
@@ -299,6 +317,9 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 	}
 	if _, ok := models[RoleMain2]; ok {
 		reconcileRoles = append(reconcileRoles, RoleMain2)
+	}
+	if _, ok := models[RoleSubmain]; ok {
+		reconcileRoles = append(reconcileRoles, RoleSubmain)
 	}
 	for _, role := range reconcileRoles {
 		cfg := models[role]
@@ -339,6 +360,7 @@ func NewRegistryWithOptions(logger *slog.Logger, opts RegistryOptions) *Registry
 		"modelrole: registry initialized",
 		"main", logModelAlias(models[RoleMain]),
 		"main2", logModelAlias(models[RoleMain2]),
+		"submain", logModelAlias(models[RoleSubmain]),
 		"tiny", logModelAlias(models[RoleTiny]),
 		"lightweight", logModelAlias(models[RoleLightweight]),
 		"coding", logModelAlias(models[RoleCoding]),
@@ -518,7 +540,7 @@ func (r *Registry) ResolveModel(modelOrRole string) (fullModelID string, role Ro
 	case RoleMain, RoleTiny, RoleLightweight, RoleFallback:
 		role = Role(modelOrRole)
 		return r.FullModelID(role), role, true
-	case RoleCoding, RoleMain2, RoleVision:
+	case RoleCoding, RoleMain2, RoleVision, RoleSubmain:
 		// Opt-in roles resolve only when configured; otherwise the literal
 		// string falls through as a raw model name.
 		role = Role(modelOrRole)
@@ -538,9 +560,10 @@ func (r *Registry) RoleForModel(fullModelID string) (Role, bool) {
 	// lightweight default maps that shared model back to the lightweight role
 	// (preserving prior behavior); an explicitly configured tiny model
 	// still matches its own role.
-	// Main2 scans last so a model shared with a legacy role (e.g. glm serving
-	// both coding and main2) keeps mapping to the role it mapped to before.
-	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2} {
+	// Main2 and submain scan last so a model shared with a legacy role (e.g. glm
+	// serving coding, main2, and submain at once) keeps mapping to the role it
+	// mapped to before rather than being remapped to a newer role.
+	for _, role := range []Role{RoleMain, RoleCoding, RoleLightweight, RoleTiny, RoleFallback, RoleVision, RoleMain2, RoleSubmain} {
 		cfg, ok := r.models[role]
 		if !ok {
 			continue
@@ -580,6 +603,10 @@ func (r *Registry) FallbackChain(role Role) []Role {
 		// coding role fails, degrade to the general main model before the shared
 		// fallback instead of a smaller summarization role.
 		return []Role{RoleCoding, RoleMain, RoleFallback}
+	case RoleSubmain:
+		// Autonomous background lane. On submain failure, degrade to the main
+		// tier (and its mutual pair) so background work still completes.
+		return []Role{RoleSubmain, RoleMain, RoleMain2, RoleFallback}
 	case RoleVision:
 		// On vision-model failure, degrade straight to the shared fallback —
 		// NOT the main model, which has no vision tower and would reject the
