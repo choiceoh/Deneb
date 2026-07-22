@@ -3857,6 +3857,77 @@ class MiniappWireValueContractTest {
             invalidValue = JsonObject(emptyMap()),
         ),
         wireContract(
+            name = "UsageStat",
+            serializer = UsageStat.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "name",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "runs",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "inputTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "outputTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "cacheReadTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+            ),
+            invalidField = "name",
+            invalidValue = JsonObject(emptyMap()),
+        ),
+        wireContract(
+            name = "UsageStatsResult",
+            serializer = UsageStatsResult.serializer(),
+            fields = listOf(
+                fieldValue(
+                    name = "days",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "totalInputTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "totalOutputTokens",
+                    value = JsonPrimitive(Long.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
+                    name = "byModel",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "byRole",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+                fieldValue(
+                    name = "byWorkType",
+                    value = objectList,
+                    expectation = Expectation.ObjectList,
+                ),
+            ),
+            invalidField = "days",
+            invalidValue = JsonPrimitive("not-an-int"),
+        ),
+        wireContract(
             name = "WormholeModelOut",
             serializer = WormholeModelOut.serializer(),
             fields = listOf(

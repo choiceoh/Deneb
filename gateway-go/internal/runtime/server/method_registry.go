@@ -428,6 +428,25 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 			OnMetaProposal: s.handleMetaProposalAction,
 			OnDeadlineDone: s.markDeadlineDone,
 		}),
+		handlerminiapp.UsageMethods(handlerminiapp.UsageDeps{
+			// Lazy: the agent-log writer and model registry are built in the
+			// session phase, after this early registration.
+			AgentLog: func() *agentlog.Writer { return s.agentLogWriter },
+			RoleForRequest: func(requested string) string {
+				if requested == "" {
+					return "main"
+				}
+				if s.modelRegistry != nil {
+					if _, role, ok := s.modelRegistry.ResolveModel(requested); ok {
+						return string(role)
+					}
+					if role, ok := s.modelRegistry.RoleForModel(requested); ok {
+						return string(role)
+					}
+				}
+				return requested
+			},
+		}),
 		// miniapp.models.* is deliberately registered in registerLateMethods:
 		// the picker snapshots the model registry and chat handler at creation.
 		s.earlyFileMethods(),

@@ -1077,6 +1077,27 @@ data class TranscriptMsgOut(
 
 @Immutable
 @Serializable
+data class UsageStat(
+    val name: String = "",
+    val runs: Int = 0,
+    val inputTokens: Long = 0L,
+    val outputTokens: Long = 0L,
+    val cacheReadTokens: Long = 0L,
+)
+
+@Immutable
+@Serializable
+data class UsageStatsResult(
+    val days: Int = 0,
+    val totalInputTokens: Long = 0L,
+    val totalOutputTokens: Long = 0L,
+    val byModel: List<UsageStat> = emptyList(),
+    val byRole: List<UsageStat> = emptyList(),
+    val byWorkType: List<UsageStat> = emptyList(),
+)
+
+@Immutable
+@Serializable
 data class WormholeModelOut(
     val name: String = "",
     val protocol: String = "",
