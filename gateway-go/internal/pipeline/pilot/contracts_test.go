@@ -426,6 +426,41 @@ func TestCallVisionLLMFormatsMultimodalRequestBlocks(t *testing.T) {
 	}
 }
 
+func TestDescribeImagePrefersMainThenVisionThenNone(t *testing.T) {
+	resetPilotHarness()
+	defer func() {
+		pilotHarness.registry.SetRoleModelID(modelrole.RoleMain, "test/main")
+		pilotHarness.registry.SetRoleModelID(modelrole.RoleVision, "test/vision")
+	}()
+
+	// Empty image → no call, no model.
+	if got := DescribeImage(context.Background(), "sys", "", "image/png", "", 100); got != "" {
+		t.Fatalf("empty image = %q", got)
+	}
+	// Main + vision both configured → the main model is tried FIRST.
+	if got := DescribeImage(context.Background(), "sys", "", "image/png", "cG5n", 100); got != "reply:main" {
+		t.Fatalf("describe (main preferred) = %q", got)
+	}
+	// Main absent → the dedicated vision model.
+	pilotHarness.registry.ClearRole(modelrole.RoleMain)
+	if got := DescribeImage(context.Background(), "sys", "", "image/png", "cG5n", 100); got != "reply:vision" {
+		t.Errorf("describe (vision fallback) = %q", got)
+	}
+	// Neither configured → empty (caller then OCRs).
+	pilotHarness.registry.ClearRole(modelrole.RoleVision)
+	if got := DescribeImage(context.Background(), "sys", "", "image/png", "cG5n", 100); got != "" {
+		t.Errorf("describe (no vision model) = %q", got)
+	}
+}
+
+func TestDescribeImageFallsPastFailingRole(t *testing.T) {
+	resetPilotHarness()
+	setPilotMode("main", "stream-error") // main model errors on the image
+	if got := DescribeImage(context.Background(), "sys", "", "image/png", "cG5n", 100); got != "reply:vision" {
+		t.Fatalf("describe should fall past a failing main to vision, got %q", got)
+	}
+}
+
 func TestCallVisionLLMEmptyAndStreamErrors(t *testing.T) {
 	resetPilotHarness()
 	setPilotMode("vision", "empty")
