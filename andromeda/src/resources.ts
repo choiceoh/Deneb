@@ -129,6 +129,9 @@ export const NOTEBOOK_RPC = {
   create: "miniapp.notebook.create",
   delete: "miniapp.notebook.delete",
   addSource: "miniapp.notebook.add_source",
+  // Pin a picked local document — the gateway extracts its text server-side, so no
+  // file path is typed (unlike add_source's ref-only file kind, which never worked).
+  addFile: "miniapp.notebook.add_file",
   removeSource: "miniapp.notebook.remove_source",
 } as const;
 

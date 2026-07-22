@@ -326,9 +326,10 @@ describe("NotebookPane boundary behavior", () => {
       expect(within(dialog).getByRole("button", { name: "추가" })).toBeDisabled();
     });
 
+    // 파일 no longer rides add_source-by-ref — it uses a picker + add_file (covered
+    // in NotebookPane.test.tsx). The remaining kinds still pin by a typed ref.
     it.each([
       ["위키", "위키 경로", "프로젝트/계약.md", "wiki"],
-      ["파일", "파일 경로", "contracts/a.pdf", "file"],
       ["메일", "메일 ID", "message-42", "mail"],
       ["URL", "URL", "https://example.com/source", "url"],
     ])("when adds a %s source by canonical ref", async (tab, field, ref, kind) => {

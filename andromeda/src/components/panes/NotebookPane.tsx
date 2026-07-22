@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
+import { MAX_ATTACH_MB, readFileBase64 } from "@/attachments";
+import { DOCUMENT_MIMES, inferAttachmentMimeType } from "@/attachmentMime";
 import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -8,6 +10,7 @@ import { Icon, type IconName } from "@/components/Icon";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
 import { Markdown } from "@/components/Markdown";
 import { DeleteModal } from "./commonModals";
+import { formatBytes } from "./fileHelpers";
 
 // Notebook (노트북) — a browser over Deneb's deal notebooks (miniapp.notebook.*).
 // Each notebook is a 거래 with cited source materials; opening one feeds its
@@ -145,6 +148,29 @@ export function NotebookPane() {
     setAddingSource(false);
     await openNotebook(active.id); // reload to show the new source
     void loadNotebooks(); // refresh the list's source count
+  }
+
+  // Pin a PICKED local document: read it to base64 client-side, then let the
+  // gateway extract its text (pdf/docx/xlsx/hwp/…) and pin it as a kind=file
+  // source — no path typed. Mirrors addSource's reload once the source lands.
+  async function addFile(file: File, title: string) {
+    if (!active) return;
+    const dataBase64 = await readFileBase64(file);
+    const r = await call(
+      NOTEBOOK_RPC.addFile,
+      {
+        id: active.id,
+        filename: file.name,
+        mimeType: inferAttachmentMimeType(file.name, file.type),
+        dataBase64,
+        title: title.trim(),
+      },
+      "파일 읽는 중…",
+    );
+    if (!r.ok) return;
+    setAddingSource(false);
+    await openNotebook(active.id);
+    void loadNotebooks();
   }
 
   async function removeSource() {
@@ -320,7 +346,12 @@ export function NotebookPane() {
         <CreateNotebookModal onClose={() => setCreating(false)} onCreate={(name, desc) => createNotebook(name, desc)} />
       )}
       {addingSource && active && (
-        <AddSourceModal notebook={active.name} onClose={() => setAddingSource(false)} onAdd={(src) => addSource(src)} />
+        <AddSourceModal
+          notebook={active.name}
+          onClose={() => setAddingSource(false)}
+          onAdd={(src) => addSource(src)}
+          onAddFile={(file, title) => addFile(file, title)}
+        />
       )}
       {deleting && (
         <DeleteModal
@@ -352,7 +383,7 @@ const SOURCE_KIND_OPTIONS = [
     placeholder: "메일 본문·견적·메모 등 인용할 텍스트를 붙여넣으세요.",
   },
   { kind: "wiki", label: "위키", refLabel: "위키 경로", placeholder: "예: 프로젝트/topsolar.md" },
-  { kind: "file", label: "파일", refLabel: "파일 경로", placeholder: "예: 계약서/topsolar.pdf" },
+  { kind: "file", label: "파일", refLabel: "파일", placeholder: "" },
   { kind: "url", label: "URL", refLabel: "URL", placeholder: "https://example.com/article" },
   { kind: "mail", label: "메일", refLabel: "메일 ID", placeholder: "스레드 또는 메시지 ID" },
   { kind: "diary", label: "일기", refLabel: "일기 날짜/ID", placeholder: "예: 2026-06-24" },
@@ -510,31 +541,66 @@ function CreateNotebookModal({
   );
 }
 
-// Pin a citation source via miniapp.notebook.add_source — a pasted note (text) or
-// a wiki page (ref = path); the kind picker switches the input below.
+// The document extensions the gateway's extractor accepts — filters the file
+// dialog for the 파일 kind (server-side extraction dispatches by extension).
+const FILE_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.rtf,.odt,.ods,.odp,.hwp,.hwpx,.csv,.txt,.md";
+const MAX_ATTACH_BYTES = MAX_ATTACH_MB * 1024 * 1024;
+
+// Pin a citation source via miniapp.notebook.add_source (pasted note / wiki ref /
+// url / mail / diary), or a PICKED document via miniapp.notebook.add_file. The
+// kind picker switches the input below; the 파일 kind opens a native file dialog
+// instead of asking the user to type a path — the gateway extracts its text.
 function AddSourceModal({
   notebook,
   onClose,
   onAdd,
+  onAddFile,
 }: {
   notebook: string;
   onClose: () => void;
   onAdd: (src: NewSource) => void | Promise<unknown>;
+  onAddFile: (file: File, title: string) => void | Promise<unknown>;
 }) {
   const [kind, setKind] = useState<SourceKind>("note");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [ref, setRef] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileErr, setFileErr] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
   const kindOption = SOURCE_KIND_OPTIONS.find((option) => option.kind === kind) ?? SOURCE_KIND_OPTIONS[0];
-  const canAdd = kind === "note" ? text.trim().length > 0 : ref.trim().length > 0;
+  const canAdd = kind === "note" ? text.trim().length > 0 : kind === "file" ? file != null : ref.trim().length > 0;
   const [busy, setBusy] = useState(false);
+
+  // Validate a picked file the same way the chat intake does (supported document
+  // type + size ceiling) so a stray huge or unsupported file fails fast, in-dialog.
+  function pickFile(f: File | undefined) {
+    setFileErr("");
+    if (!f) return;
+    const mime = inferAttachmentMimeType(f.name, f.type);
+    if (!DOCUMENT_MIMES.has(mime)) {
+      setFile(null);
+      setFileErr(`${f.name} — 문서 파일만 지원합니다 (pdf·docx·xlsx·hwp 등)`);
+      return;
+    }
+    if (f.size > MAX_ATTACH_BYTES) {
+      setFile(null);
+      setFileErr(`${f.name} — ${MAX_ATTACH_MB}MB 초과라 담을 수 없습니다`);
+      return;
+    }
+    setFile(f);
+  }
+
   const add = () => {
     if (!canAdd || busy) return;
-    const r = onAdd(
-      kind === "note"
-        ? { kind, title: title.trim(), text: text.trim() }
-        : { kind, title: title.trim(), ref: ref.trim() },
-    );
+    const r =
+      kind === "file"
+        ? file && onAddFile(file, title)
+        : onAdd(
+            kind === "note"
+              ? { kind, title: title.trim(), text: text.trim() }
+              : { kind, title: title.trim(), ref: ref.trim() },
+          );
     if (r && typeof r.then === "function") {
       setBusy(true);
       void r.finally(() => setBusy(false));
@@ -580,6 +646,41 @@ function AddSourceModal({
             placeholder={kindOption.placeholder}
             style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
           />
+        </Field>
+      ) : kind === "file" ? (
+        <Field label={kindOption.refLabel}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+              파일 선택
+            </button>
+            <span
+              className="micro"
+              style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              title={file?.name}
+            >
+              {file ? `${file.name} · ${formatBytes(file.size)}` : "선택된 파일 없음"}
+            </span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept={FILE_ACCEPT}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.currentTarget.value = "";
+                pickFile(f);
+              }}
+            />
+          </div>
+          {fileErr ? (
+            <p className="pane-status" style={{ color: "var(--danger)", marginTop: 6 }}>
+              {fileErr}
+            </p>
+          ) : (
+            <p className="micro" style={{ color: "var(--muted)", marginTop: 6 }}>
+              파일을 고르면 게이트웨이가 내용을 읽어 자료로 담습니다 (pdf·docx·xlsx·hwp 등).
+            </p>
+          )}
         </Field>
       ) : (
         <Field label={kindOption.refLabel}>

@@ -8,6 +8,7 @@ package knowledge
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 
@@ -27,6 +28,13 @@ const maxNotebookSourceTextChars = 4000
 // per call instead of crashing at boot).
 type NotebookDeps struct {
 	Store func() (*notebook.Store, error)
+	// ExtractText pulls readable text out of an uploaded document (pdf/docx/
+	// spreadsheet/hwp/…) so the desktop client can pin a file to a notebook by
+	// PICKING it — no manual path entry. This is the "gateway reads server-side"
+	// half that add_source's ref-only file kind was waiting on. Nil when the
+	// extractor isn't wired, in which case miniapp.notebook.add_file is skipped
+	// cleanly (clients fall back to the note/wiki source kinds).
+	ExtractText func(ctx context.Context, data []byte, filename, mimeType string) string
 }
 
 // NotebookMethods returns the miniapp.notebook.* handler map. Returns nil if no
@@ -35,7 +43,7 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Store == nil {
 		return nil
 	}
-	return map[string]rpcutil.HandlerFunc{
+	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.notebook.list":          notebookListRPC(deps),
 		"miniapp.notebook.get":           notebookGetRPC(deps),
 		"miniapp.notebook.create":        notebookCreateRPC(deps),
@@ -44,6 +52,12 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.notebook.remove_source": notebookRemoveSourceRPC(deps),
 		"miniapp.notebook.set_mode":      notebookSetModeRPC(deps),
 	}
+	// File ingestion needs the in-house document extractor wired; skip the method
+	// cleanly when it isn't (the client keeps note/wiki and hides the 파일 picker).
+	if deps.ExtractText != nil {
+		m["miniapp.notebook.add_file"] = notebookAddFileRPC(deps)
+	}
+	return m
 }
 
 // NotebookSummaryOut is one notebook in the list payload. ProjectRefs are the
@@ -203,6 +217,71 @@ func notebookAddSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 				return rpcerr.NotFound("notebook").Response(req.ID)
 			}
 			// Validation errors (bad kind, missing text/ref) are the caller's fault.
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, NotebookSourceOut{
+			Cite:  src.Cite,
+			Kind:  src.Kind,
+			Ref:   src.Ref,
+			Title: src.Title,
+			Text:  truncateNotebookSourceText(src.Text),
+		})
+	})
+}
+
+// notebookAddFileRPC ingests an UPLOADED document into a notebook: the desktop
+// client sends the file bytes (base64) after the user picks a file — no path to
+// type — and the gateway extracts the readable text (pdf/docx/spreadsheet/hwp/…)
+// and pins it as a kind=file source. This is the server-side reader that
+// add_source's ref-only file kind (which validation rejects for lack of text)
+// was always meant to have.
+func notebookAddFileRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID         string `json:"id"`
+		Filename   string `json:"filename"`
+		MimeType   string `json:"mimeType"`
+		DataBase64 string `json:"dataBase64"`
+		Title      string `json:"title"`
+	}
+	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		// Tolerate a `data:...;base64,` prefix the same way the capture handlers do.
+		raw := strings.TrimSpace(p.DataBase64)
+		if strings.HasPrefix(raw, "data:") {
+			if i := strings.IndexByte(raw, ','); i > 0 {
+				raw = raw[i+1:]
+			}
+		}
+		if raw == "" {
+			return rpcerr.MissingParam("dataBase64").Response(req.ID)
+		}
+		data, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil || len(data) == 0 {
+			return rpcerr.InvalidRequest("file is not valid base64").Response(req.ID)
+		}
+		filename := strings.TrimSpace(p.Filename)
+		text := strings.TrimSpace(deps.ExtractText(ctx, data, filename, p.MimeType))
+		if text == "" {
+			return rpcerr.Unavailable("no text could be extracted from the file").Response(req.ID)
+		}
+		// Title defaults to the filename so the chip reads meaningfully; ref keeps the
+		// filename as provenance (the extracted text is the durable grounding copy).
+		title := strings.TrimSpace(p.Title)
+		if title == "" {
+			title = filename
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		src, err := store.AddSource(id, notebook.Source{Kind: notebook.KindFile, Ref: filename, Title: title, Text: text})
+		if err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
 			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, NotebookSourceOut{
