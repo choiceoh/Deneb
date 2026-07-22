@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   TRANSCRIPT_MAX,
@@ -52,17 +52,49 @@ export function useSessions(
   // 20 rows covers a working day; 최근 대화 더 보기 raises to the server cap so
   // older conversations stay reachable without an unbounded first fetch.
   const [sessionsLimit, setSessionsLimit] = useState(20);
+  // A ref so the connect-time refetch backstops below always fetch at the
+  // *current* limit (20, or 100 after "더 보기") without re-running their effect.
+  const limitRef = useRef(sessionsLimit);
+  useEffect(() => {
+    limitRef.current = sessionsLimit;
+  }, [sessionsLimit]);
 
-  // Load recent sessions once connected (best-effort — older gateway / offline test
-  // just leaves the list empty).
+  // Load recent sessions once connected — then a couple more times on a short
+  // backoff, and again whenever the window regains focus.
+  //
+  // Why the extra refetches (not a plain one-shot): the gateway flips `ready`
+  // and starts serving BEFORE its background session restore finishes
+  // (server_lifecycle.go — restoreAndWakeSessions runs in a goroutine after
+  // ready flips). Because it hot-swaps every few minutes, a fetch landing in
+  // that restore window sees a partial list — often just client:main once the
+  // client: filter runs — and, as a one-shot fetch, the drawer stayed frozen on
+  // that mid-restore snapshot until the next send (the "네이티브엔 있는데
+  // 안드로메다 채팅엔 안 보임" bug). The staggered refetches ride out the restore
+  // window; the focus refresh self-heals any later staleness (incl. a session
+  // started on the phone). Best-effort — an older/offline gateway just leaves
+  // the list empty.
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
-    void recentSessions(cfg, sessionsLimit)
-      .then((s) => !cancelled && setSessions(keep(s)))
-      .catch(() => {});
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const load = () => {
+      void recentSessions(cfg, limitRef.current)
+        .then((s) => !cancelled && setSessions(keep(s)))
+        .catch(() => {});
+    };
+    load();
+    timers.push(setTimeout(load, 1500), setTimeout(load, 4000));
+    const refresh = () => {
+      if (cancelled || document.visibilityState === "hidden") return;
+      load();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       cancelled = true;
+      timers.forEach(clearTimeout);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
