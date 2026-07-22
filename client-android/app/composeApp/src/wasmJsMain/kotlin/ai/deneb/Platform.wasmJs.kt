@@ -35,7 +35,7 @@ actual val isEmailSupported: Boolean = false
 
 actual val isSmsSupported: Boolean = false
 
-actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteArray = bytes
+actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String, maxDim: Int): ByteArray = bytes
 
 actual fun getAppFilesDirectory(): String {
     // Web uses localStorage, return empty string as no file path is needed

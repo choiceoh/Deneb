@@ -3,6 +3,7 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.DataRepository
+import ai.deneb.data.MAX_RAW_IMAGE_BYTES
 import ai.deneb.data.ThemeMode
 import ai.deneb.data.documentCaptureMime
 import ai.deneb.data.routeAttachment
@@ -259,7 +260,20 @@ class MainActivity : ComponentActivity() {
     // inline into the turn. Matches andromeda, which sends even one file as a batch.
     private suspend fun sendSingleFileBatch(bytes: ByteArray, filename: String, mime: String, caption: String = "") {
         if (bytes.isEmpty()) return
-        (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(DenebAttachment(bytes, filename, mime)), caption)
+        (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(attachmentFor(bytes, filename, mime)), caption)
+    }
+
+    // Build an upload attachment, downsampling a captured photo first: a full-resolution
+    // camera shot is 10-15MB, and a batch of them base64-encoded would bloat memory and
+    // the turn payload while ~2048px stays readable for the gateway's OCR. An image too
+    // large to decode safely (past MAX_RAW_IMAGE_BYTES) and every non-image are sent as-is.
+    private suspend fun attachmentFor(bytes: ByteArray, filename: String, mime: String): DenebAttachment {
+        val prepared = if (mime.startsWith("image/") && bytes.size <= MAX_RAW_IMAGE_BYTES) {
+            compressImageBytes(bytes, mime)
+        } else {
+            bytes
+        }
+        return DenebAttachment(prepared, filename, mime)
     }
 
     private fun captureFile(bytes: ByteArray, filename: String, mime: String) {
@@ -309,7 +323,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val attachments = files.mapNotNull { file ->
                 val bytes = runCatching { file.readBytes() }.getOrNull()
-                if (bytes == null || bytes.isEmpty()) null else DenebAttachment(bytes, file.name, pickedFileMime(file.name))
+                if (bytes == null || bytes.isEmpty()) null else attachmentFor(bytes, file.name, pickedFileMime(file.name))
             }
             if (attachments.isEmpty()) return@launch
             (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(attachments, caption)
@@ -534,7 +548,7 @@ class MainActivity : ComponentActivity() {
                 if (bytes == null || bytes.isEmpty()) {
                     null
                 } else {
-                    DenebAttachment(bytes, sharedDisplayName(uri) ?: "image-${index + 1}", mime)
+                    attachmentFor(bytes, sharedDisplayName(uri) ?: "image-${index + 1}", mime)
                 }
             }
             if (files.isNotEmpty()) client.captureBatch(files)

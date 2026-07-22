@@ -45,18 +45,18 @@ actual val isEmailSupported: Boolean = true
 actual val isSmsSupported: Boolean = false
 
 @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)
-actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteArray {
+actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String, maxDim: Int): ByteArray {
     if (!mimeType.startsWith("image/")) return bytes
     return try {
         val nsData = bytes.usePinned { pinned ->
             NSData.dataWithBytes(pinned.addressOf(0), bytes.size.toULong())
         }
         val image = platform.UIKit.UIImage(data = nsData)
-        val maxDim = 1024.0
+        val maxDimPx = maxDim.toDouble()
         val imgWidth = image.size.useContents { width }
         val imgHeight = image.size.useContents { height }
-        val scaled = if (imgWidth > maxDim || imgHeight > maxDim) {
-            val scale = maxDim / maxOf(imgWidth, imgHeight)
+        val scaled = if (imgWidth > maxDimPx || imgHeight > maxDimPx) {
+            val scale = maxDimPx / maxOf(imgWidth, imgHeight)
             val newWidth = imgWidth * scale
             val newHeight = imgHeight * scale
             val newSize = kotlinx.cinterop.cValue<platform.CoreGraphics.CGSize> {

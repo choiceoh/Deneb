@@ -56,11 +56,10 @@ actual val isSmsSupported: Boolean by lazy {
     }
 }
 
-actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteArray {
+actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String, maxDim: Int): ByteArray {
     if (!mimeType.startsWith("image/")) return bytes
     return try {
         val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
-        val maxDim = 1024
         val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
             val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
             val newWidth = (bitmap.width * scale).toInt()
