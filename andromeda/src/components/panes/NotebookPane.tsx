@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
-import { MAX_ATTACH_MB, readFileBase64 } from "@/attachments";
-import { DOCUMENT_MIMES, inferAttachmentMimeType } from "@/attachmentMime";
+import { readFileBase64, splitAttachable } from "@/attachments";
+import { inferAttachmentMimeType } from "@/attachmentMime";
 import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -160,26 +160,33 @@ export function NotebookPane() {
     void loadNotebooks(); // refresh the list's source count
   }
 
-  // Pin a PICKED local document: read it to base64 client-side, then let the
-  // gateway extract its text (pdf/docx/xlsx/hwp/…) and pin it as a kind=file
-  // source — no path typed. Mirrors addSource's reload once the source lands.
-  async function addFile(file: File, title: string) {
-    if (!active) return;
-    const dataBase64 = await readFileBase64(file);
-    const r = await call(
-      NOTEBOOK_RPC.addFile,
-      {
-        id: active.id,
-        filename: file.name,
-        mimeType: inferAttachmentMimeType(file.name, file.type),
-        dataBase64,
-        title: title.trim(),
-      },
-      "파일 읽는 중…",
-    );
-    if (!r.ok) return;
+  // Pin PICKED (or dropped) local files: read each to base64 client-side, then let
+  // the gateway extract its text — documents via the doc extractor, images via OCR,
+  // audio/video via ASR — and pin it as a kind=file source, no path typed. Multiple
+  // files pin one source each; a shared title only applies to a single file.
+  async function addFiles(files: File[], title: string) {
+    if (!active || files.length === 0) return;
+    const id = active.id;
+    let anyOk = false;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const dataBase64 = await readFileBase64(file);
+      const r = await call(
+        NOTEBOOK_RPC.addFile,
+        {
+          id,
+          filename: file.name,
+          mimeType: inferAttachmentMimeType(file.name, file.type),
+          dataBase64,
+          title: files.length === 1 ? title.trim() : "",
+        },
+        files.length === 1 ? "파일 읽는 중…" : `파일 읽는 중… (${i + 1}/${files.length})`,
+      );
+      if (r.ok) anyOk = true;
+    }
+    if (!anyOk) return;
     setAddingSource(false);
-    await openNotebook(active.id);
+    await openNotebook(id);
     void loadNotebooks();
   }
 
@@ -360,7 +367,7 @@ export function NotebookPane() {
           notebook={active.name}
           onClose={() => setAddingSource(false)}
           onAdd={(src) => addSource(src)}
-          onAddFile={(file, title) => addFile(file, title)}
+          onAddFiles={(files, title) => addFiles(files, title)}
         />
       )}
       {deleting && (
@@ -551,61 +558,55 @@ function CreateNotebookModal({
   );
 }
 
-// The document extensions the gateway's extractor accepts — filters the file
-// dialog for the 파일 kind (server-side extraction dispatches by extension).
-const FILE_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.rtf,.odt,.ods,.odp,.hwp,.hwpx,.csv,.txt,.md";
-const MAX_ATTACH_BYTES = MAX_ATTACH_MB * 1024 * 1024;
+// Files the gateway can turn into text — documents (doc extractor), images (OCR),
+// and audio/video (ASR). Mirrors the chat composer's accept list so the notebook
+// picker takes the same materials; drops/pastes are re-validated by splitAttachable.
+const FILE_ACCEPT =
+  "image/*,audio/*,video/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.mp4,.mov,.mkv,.avi,.m4v," +
+  ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.rtf,.odt,.ods,.odp,.hwp,.hwpx,.csv,.txt,.md";
 
 // Pin a citation source via miniapp.notebook.add_source (pasted note / wiki ref /
-// url / mail / diary), or a PICKED document via miniapp.notebook.add_file. The
-// kind picker switches the input below; the 파일 kind opens a native file dialog
-// instead of asking the user to type a path — the gateway extracts its text.
+// url / mail / diary), or PICKED/DROPPED files via miniapp.notebook.add_file. The
+// kind picker switches the input below; the 파일 kind opens a native file dialog (or
+// accepts a drop) instead of asking the user to type a path — the gateway extracts
+// each file's text (documents, image OCR, audio/video transcription).
 function AddSourceModal({
   notebook,
   onClose,
   onAdd,
-  onAddFile,
+  onAddFiles,
 }: {
   notebook: string;
   onClose: () => void;
   onAdd: (src: NewSource) => void | Promise<unknown>;
-  onAddFile: (file: File, title: string) => void | Promise<unknown>;
+  onAddFiles: (files: File[], title: string) => void | Promise<unknown>;
 }) {
   const [kind, setKind] = useState<SourceKind>("note");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [ref, setRef] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [fileErr, setFileErr] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const kindOption = SOURCE_KIND_OPTIONS.find((option) => option.kind === kind) ?? SOURCE_KIND_OPTIONS[0];
-  const canAdd = kind === "note" ? text.trim().length > 0 : kind === "file" ? file != null : ref.trim().length > 0;
+  const canAdd = kind === "note" ? text.trim().length > 0 : kind === "file" ? files.length > 0 : ref.trim().length > 0;
   const [busy, setBusy] = useState(false);
 
-  // Validate a picked file the same way the chat intake does (supported document
-  // type + size ceiling) so a stray huge or unsupported file fails fast, in-dialog.
-  function pickFile(f: File | undefined) {
-    setFileErr("");
-    if (!f) return;
-    const mime = inferAttachmentMimeType(f.name, f.type);
-    if (!DOCUMENT_MIMES.has(mime)) {
-      setFile(null);
-      setFileErr(`${f.name} — 문서 파일만 지원합니다 (pdf·docx·xlsx·hwp 등)`);
-      return;
-    }
-    if (f.size > MAX_ATTACH_BYTES) {
-      setFile(null);
-      setFileErr(`${f.name} — ${MAX_ATTACH_MB}MB 초과라 담을 수 없습니다`);
-      return;
-    }
-    setFile(f);
+  // Intake picked/dropped files through the shared chat rules (supported type +
+  // size), appending the accepted ones and surfacing any skip reasons in-dialog.
+  function intakeFiles(list: FileList | File[] | null) {
+    if (!list) return;
+    const { ok, skipped } = splitAttachable(Array.from(list));
+    setFileErr(skipped.join(" · "));
+    if (ok.length) setFiles((prev) => [...prev, ...ok]);
   }
 
   const add = () => {
     if (!canAdd || busy) return;
     const r =
       kind === "file"
-        ? file && onAddFile(file, title)
+        ? onAddFiles(files, title)
         : onAdd(
             kind === "note"
               ? { kind, title: title.trim(), text: text.trim() }
@@ -658,40 +659,91 @@ function AddSourceModal({
           />
         </Field>
       ) : kind === "file" ? (
-        <Field label={kindOption.refLabel}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        // A plain block (not <Field>, whose <label> would fold the picker button's
+        // accessible name into the label text) — the drop zone holds a real button.
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 5 }}>{kindOption.refLabel}</div>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              intakeFiles(e.dataTransfer.files);
+            }}
+            style={{
+              border: `1px dashed ${dragOver ? "var(--accent)" : "var(--line)"}`,
+              borderRadius: 8,
+              padding: 12,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
             <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
               파일 선택
             </button>
-            <span
-              className="micro"
-              style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-              title={file?.name}
-            >
-              {file ? `${file.name} · ${formatBytes(file.size)}` : "선택된 파일 없음"}
+            <span className="micro" style={{ color: "var(--muted)" }}>
+              또는 여기로 끌어다 놓기 (여러 개 가능)
             </span>
             <input
               ref={fileRef}
               type="file"
+              multiple
               accept={FILE_ACCEPT}
               style={{ display: "none" }}
               onChange={(e) => {
-                const f = e.target.files?.[0];
+                const list = e.target.files;
                 e.currentTarget.value = "";
-                pickFile(f);
+                intakeFiles(list);
               }}
             />
           </div>
+          {files.length > 0 && (
+            <ul
+              style={{
+                listStyle: "none",
+                margin: "8px 0 0",
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4,
+              }}
+            >
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                  <span
+                    style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={f.name}
+                  >
+                    {f.name} · {formatBytes(f.size)}
+                  </span>
+                  <button
+                    type="button"
+                    className="row-btn"
+                    aria-label={`${f.name} 제거`}
+                    title="제거"
+                    onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {fileErr ? (
             <p className="pane-status" style={{ color: "var(--danger)", marginTop: 6 }}>
               {fileErr}
             </p>
           ) : (
             <p className="micro" style={{ color: "var(--muted)", marginTop: 6 }}>
-              파일을 고르면 게이트웨이가 내용을 읽어 자료로 담습니다 (pdf·docx·xlsx·hwp 등).
+              문서·이미지·음성/영상을 담을 수 있습니다 (이미지는 OCR, 음성·영상은 자동 전사).
             </p>
           )}
-        </Field>
+        </div>
       ) : (
         <Field label={kindOption.refLabel}>
           <input

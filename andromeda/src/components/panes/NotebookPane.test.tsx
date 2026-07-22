@@ -258,7 +258,7 @@ describe("NotebookPane", () => {
     await userEvent.click(screen.getByRole("button", { name: "파일" }));
     await userEvent.type(screen.getByLabelText("제목 (선택)"), "계약서");
     expect(screen.queryByLabelText("파일 경로")).not.toBeInTheDocument();
-    expect(screen.getByText("선택된 파일 없음")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "파일 선택" })).toBeInTheDocument();
 
     // Pick a document → its name/size shows and 추가 enables (no path to type).
     const file = new File(["계약서 본문 내용"], "topsolar.pdf", { type: "application/pdf" });
@@ -272,6 +272,32 @@ describe("NotebookPane", () => {
     expect(last?.dataBase64.length).toBeGreaterThan(0);
     // The pinned file source shows up after the reload.
     expect((await screen.findAllByText("계약서")).length).toBeGreaterThan(0);
+  });
+
+  it("attaches multiple picked files at once — one add_file per file", async () => {
+    renderWithProviders(<NotebookPane />, { connected: true });
+
+    await userEvent.click(await screen.findByRole("button", { name: "새 노트북" }));
+    await userEvent.type(screen.getByLabelText("이름"), "파일 딜");
+    await userEvent.click(screen.getByRole("button", { name: "생성" }));
+    expect(await screen.findByRole("heading", { name: "파일 딜" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "자료 추가" }));
+    await userEvent.click(screen.getByRole("button", { name: "파일" }));
+
+    // Two files of different classes: a document and an image (routes to OCR server-side).
+    const doc = new File(["견적 본문"], "quote.pdf", { type: "application/pdf" });
+    const img = new File(["사진 바이트"], "scan.png", { type: "image/png" });
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, [doc, img]);
+    expect(await screen.findByText(/quote\.pdf/)).toBeInTheDocument();
+    expect(screen.getByText(/scan\.png/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "추가" }));
+
+    // One add_file call per file; a shared title is dropped when there are several.
+    await waitFor(() => expect(uploaded).toHaveLength(2));
+    expect(uploaded.map((u) => u.filename).sort()).toEqual(["quote.pdf", "scan.png"]);
+    expect(uploaded.every((u) => u.title === "")).toBe(true);
   });
 
   it("rejects an unsupported file with an in-dialog notice and no upload", async () => {
@@ -291,7 +317,7 @@ describe("NotebookPane", () => {
     const bad = new File(["MZ..."], "installer.exe", { type: "application/octet-stream" });
     await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, bad);
 
-    expect(await screen.findByText(/문서 파일만 지원합니다/)).toBeInTheDocument();
+    expect(await screen.findByText(/지원하지 않는 형식/)).toBeInTheDocument();
     // 추가 stays disabled and nothing was uploaded.
     expect(screen.getByRole("button", { name: "추가" })).toBeDisabled();
     expect(uploaded).toHaveLength(0);

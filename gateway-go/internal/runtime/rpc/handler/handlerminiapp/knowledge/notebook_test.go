@@ -38,6 +38,15 @@ func notebookTestMethodsWithExtractor(t *testing.T) map[string]rpcutil.HandlerFu
 			}
 			return string(data)
 		},
+		OcrImage: func(_ context.Context, data []byte) (string, error) {
+			if string(data) == "ocr-fail" {
+				return "", errors.New("ocr sidecar down")
+			}
+			return "OCR: " + string(data), nil
+		},
+		Transcribe: func(_ context.Context, data []byte, mime, _ string) (string, error) {
+			return "ASR(" + mime + "): " + string(data), nil
+		},
 	})
 }
 
@@ -220,6 +229,61 @@ func TestNotebookAddFileExtractsAndPins(t *testing.T) {
 		map[string]any{"id": id, "filename": "견적.xlsx", "title": "1차 견적", "dataBase64": "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString([]byte("견적 표"))}))
 	if src["title"] != "1차 견적" {
 		t.Errorf("add_file title = %v, want the explicit title", src["title"])
+	}
+}
+
+// TestNotebookAddFileDispatchesByMime proves add_file routes an image to OCR and
+// an audio/video file to ASR (not the document extractor), so a photo of a
+// contract or a meeting recording becomes grounding text.
+func TestNotebookAddFileDispatchesByMime(t *testing.T) {
+	m := notebookTestMethodsWithExtractor(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+
+	img := base64.StdEncoding.EncodeToString([]byte("계약서 사진"))
+	imgSrc := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "scan.png", "mimeType": "image/png", "dataBase64": img}))
+	if imgSrc["kind"] != "file" || imgSrc["text"] != "OCR: 계약서 사진" {
+		t.Errorf("image source = %v, want OCR-extracted text", imgSrc)
+	}
+
+	audio := base64.StdEncoding.EncodeToString([]byte("회의 녹음"))
+	audSrc := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "memo.m4a", "mimeType": "audio/mp4", "dataBase64": audio}))
+	if audSrc["text"] != "ASR(audio/mp4): 회의 녹음" {
+		t.Errorf("audio source = %v, want ASR transcript", audSrc["text"])
+	}
+
+	// A video routes to ASR too (ffmpeg pulls the audio track downstream).
+	vid := base64.StdEncoding.EncodeToString([]byte("영상 회의"))
+	vidSrc := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "call.mp4", "mimeType": "video/mp4", "dataBase64": vid}))
+	if vidSrc["text"] != "ASR(video/mp4): 영상 회의" {
+		t.Errorf("video source = %v, want ASR transcript", vidSrc["text"])
+	}
+
+	// An OCR failure is a graceful add failure, not a document-extractor fallback.
+	ocrFail := base64.StdEncoding.EncodeToString([]byte("ocr-fail"))
+	if resp := callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "bad.png", "mimeType": "image/png", "dataBase64": ocrFail}); resp.OK {
+		t.Error("add_file with an OCR failure should fail, not fall back")
+	}
+}
+
+// TestNotebookAddFileRegistersWithOnlyOCR proves the method registers when only a
+// non-document extractor is wired (document sidecar absent, OCR present).
+func TestNotebookAddFileRegistersWithOnlyOCR(t *testing.T) {
+	t.Helper()
+	store, err := notebook.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	m := NotebookMethods(NotebookDeps{
+		Store:    func() (*notebook.Store, error) { return store, nil },
+		OcrImage: func(_ context.Context, _ []byte) (string, error) { return "x", nil },
+	})
+	if _, ok := m["miniapp.notebook.add_file"]; !ok {
+		t.Error("add_file should register when only OCR is wired")
 	}
 }
 
