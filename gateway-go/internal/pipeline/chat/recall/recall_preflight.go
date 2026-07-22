@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -201,6 +200,11 @@ type recallCollection struct {
 	truncated     bool
 }
 
+type indexedRecallSourceResult struct {
+	index  int
+	result recallSourceResult
+}
+
 var recallCuePhrases = []string{
 	"기억", "회상", "전에", "저번", "지난번", "예전에", "아까", "방금", "그때",
 	"말했던", "말한", "했던", "해둔", "정리했던", "논의했던", "이어", "이어서", "계속",
@@ -388,21 +392,62 @@ func buildRecallSources(params Params, deps Deps, queries []string, message stri
 
 // runRecallSources keeps source execution concurrent while collecting results
 // in declaration order. Completion order must not change tie-breaking input.
+// A source that ignores cancellation must not defeat the shared preflight
+// deadline: collect completed slots through a buffered channel and return the
+// partial result when ctx expires. The buffer lets a late source finish without
+// blocking after the caller has moved on.
 func runRecallSources(ctx context.Context, sources []recallSource, deps Deps, logger *slog.Logger) recallCollection {
-	results := make([]recallSourceResult, len(sources))
-	var wg sync.WaitGroup
-	for i, source := range sources {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = runRecallSource(ctx, source, deps, logger)
-		}()
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	wg.Wait()
+	results := make([]recallSourceResult, len(sources))
+	completed := make([]bool, len(sources))
+	resultCh := make(chan indexedRecallSourceResult, len(sources))
+	for i, source := range sources {
+		go func(index int, source recallSource) {
+			resultCh <- indexedRecallSourceResult{
+				index:  index,
+				result: runRecallSource(ctx, source, deps, logger),
+			}
+		}(i, source)
+	}
+
+	remaining := len(sources)
+	deadlineReached := false
+	for remaining > 0 {
+		select {
+		case item := <-resultCh:
+			results[item.index] = item.result
+			completed[item.index] = true
+			remaining--
+		case <-ctx.Done():
+			deadlineReached = true
+			remaining = 0
+		}
+	}
+	// Results already buffered at the deadline completed within the budget;
+	// retain them without waiting for any still-running source.
+	if deadlineReached {
+	drainResults:
+		for {
+			select {
+			case item := <-resultCh:
+				results[item.index] = item.result
+				completed[item.index] = true
+			default:
+				break drainResults
+			}
+		}
+	}
 
 	collection := recallCollection{}
 	sourceStats := make([]string, 0, len(sources))
 	for i, source := range sources {
+		if !completed[i] {
+			collection.truncated = true
+			sourceStats = append(sourceStats, fmt.Sprintf("%s=0(deadline)", source.name))
+			continue
+		}
 		result := results[i]
 		collection.evidence = append(collection.evidence, result.evidence...)
 		collection.truncated = collection.truncated || result.truncated

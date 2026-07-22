@@ -455,6 +455,38 @@ func TestBuildRecallPreflightFlagsDeadlineTruncation(t *testing.T) {
 	}
 }
 
+func TestRunRecallSourcesReturnsAtDeadlineWithCompletedEvidence(t *testing.T) {
+	releaseSlow := make(chan struct{})
+	sources := []recallSource{
+		{name: "fast", run: func(context.Context) []recallEvidence {
+			return []recallEvidence{{Source: "fast", Note: "completed before deadline"}}
+		}},
+		{name: "slow", run: func(context.Context) []recallEvidence {
+			<-releaseSlow // deliberately ignores ctx, like the production regression
+			return []recallEvidence{{Source: "slow", Note: "too late"}}
+		}},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	got := runRecallSources(ctx, sources, Deps{}, nil)
+	close(releaseSlow)
+
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("deadline did not bound recall collection: %v", elapsed)
+	}
+	if !got.truncated {
+		t.Fatal("deadline-limited collection was not marked truncated")
+	}
+	if len(got.evidence) != 1 || got.evidence[0].Source != "fast" {
+		t.Fatalf("completed evidence = %+v, want only fast source", got.evidence)
+	}
+	if !strings.Contains(got.sourceSummary, "fast=1(") || !strings.Contains(got.sourceSummary, "slow=0(deadline)") {
+		t.Fatalf("source summary = %q", got.sourceSummary)
+	}
+}
+
 func TestBuildRecallPreflightRecoversFromPanickingSource(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))

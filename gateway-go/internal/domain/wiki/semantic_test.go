@@ -105,7 +105,7 @@ func TestSemanticStatusAndIdentityMismatchSuppressStaleVectors(t *testing.T) {
 	if mismatch.Healthy || !mismatch.IdentityMismatch || mismatch.Stale != 1 || mismatch.DegradedReason != "embedding_identity_mismatch" {
 		t.Fatalf("mismatched status = %+v", mismatch)
 	}
-	if hits := restarted.searchSemanticWithVec([]float32{1, 0}, 5); len(hits) != 0 {
+	if hits := restarted.searchSemanticWithVec(context.Background(), []float32{1, 0}, 5); len(hits) != 0 {
 		t.Fatalf("identity-mismatched cache served stale vectors: %+v", hits)
 	}
 	if err := restarted.WarmSemanticIndex(context.Background()); err != nil {
@@ -114,6 +114,28 @@ func TestSemanticStatusAndIdentityMismatchSuppressStaleVectors(t *testing.T) {
 	rebuilt := restarted.SemanticStatus()
 	if !rebuilt.Healthy || rebuilt.IdentityMismatch || rebuilt.Indexed != 1 || rebuilt.CacheFingerprint != "model-b:2" {
 		t.Fatalf("rebuilt status = %+v", rebuilt)
+	}
+}
+
+func TestSearchSemanticWithVecHonorsCanceledContext(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	mustWrite(t, store, "프로젝트/risk.md", &Page{
+		Meta: Frontmatter{ID: "risk", Title: "위험 평가", Category: "프로젝트"}, Body: "납기 차질 우려가 있습니다.",
+	})
+	store.SetEmbedder(fakeEmbedder{healthy: true, fingerprint: "model-a:2", dimensions: 2})
+	if err := store.WarmSemanticIndex(context.Background()); err != nil {
+		t.Fatalf("WarmSemanticIndex: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if hits := store.searchSemanticWithVec(ctx, []float32{1, 0}, 5); len(hits) != 0 {
+		t.Fatalf("canceled semantic scan returned hits: %+v", hits)
 	}
 }
 
