@@ -48,7 +48,17 @@ type apcSnapshot struct {
 	systemHash uint64
 	recallHash uint64
 	msgHashes  []uint64
+	// systemChunks hashes the system prompt in fixed-size byte chunks so a
+	// system-changed run can report WHERE the first differing byte sits (head =
+	// a static/context regression; tail = the expected day-only timestamp or an
+	// ephemeral recall→system fallback). One snapshot per bounded session, so
+	// the extra ~len/apcSystemChunkBytes uint64 per session is negligible.
+	systemChunks []uint64
 }
+
+// apcSystemChunkBytes is the granularity of systemChunks — small enough to
+// localize a change to head vs tail, large enough to keep the slice short.
+const apcSystemChunkBytes = 256
 
 // apcSnapshotStore keeps one snapshot per session. Sessions are a small,
 // bounded set in this single-operator deployment (client:main, cron:*, …), so
@@ -64,8 +74,10 @@ var apcSnapshotStore = struct {
 type apcDiagRun struct {
 	logger *slog.Logger
 
+	sessionKey    string
 	class         string
 	divergedAt    int // message index of first differing bytes (-1 when none)
+	sysDivergedAt int // byte offset of first differing system-prompt chunk (-1 = system unchanged)
 	prevMsgs      int
 	curMsgs       int
 	invalidTokens int // est. tokens that must re-prefill beyond pure append
@@ -85,12 +97,13 @@ type apcDiagRun struct {
 // systemPrompt is the finalized system-block JSON (the wire form).
 // Always returns a usable value; callers pair it with a deferred finish().
 func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, apiMode, providerID, model string, systemPrompt []byte, recallMemory string, messages []llm.Message, logger *slog.Logger) *apcDiagRun {
-	d := &apcDiagRun{logger: logger, model: model, divergedAt: -1}
+	d := &apcDiagRun{logger: logger, sessionKey: sessionKey, model: model, divergedAt: -1, sysDivergedAt: -1}
 
 	cur := apcSnapshot{
-		systemHash: apcHashBytes(systemPrompt),
-		recallHash: apcHashBytes([]byte(recallMemory)),
-		msgHashes:  apcHashMessages(messages),
+		systemHash:   apcHashBytes(systemPrompt),
+		recallHash:   apcHashBytes([]byte(recallMemory)),
+		msgHashes:    apcHashMessages(messages),
+		systemChunks: apcHashChunks(systemPrompt, apcSystemChunkBytes),
 	}
 
 	apcSnapshotStore.mu.Lock()
@@ -110,9 +123,13 @@ func beginAPCDiag(ctx context.Context, deps runDeps, sessionKey, apiMode, provid
 		switch {
 		case prev.systemHash != cur.systemHash:
 			// System prompt sits before all history on the wire: any byte
-			// change re-prefills the entire message list.
+			// change re-prefills the entire message list. Localize the first
+			// differing chunk so head (static/context regression) is
+			// distinguishable from tail (expected timestamp / ephemeral
+			// recall→system fallback) without a second log pass.
 			d.class = apcClassSystemChanged
 			d.divergedAt = 0
+			d.sysDivergedAt = commonPrefixLen(prev.systemChunks, cur.systemChunks) * apcSystemChunkBytes
 			d.invalidTokens = compact.EstimateMessagesTokens(messages)
 		case p == len(prev.msgHashes):
 			d.class = apcClassAppendOnly
@@ -149,8 +166,11 @@ func (d *apcDiagRun) finish() {
 	d.done = true
 
 	attrs := []any{
+		"session", d.sessionKey,
+		"model", d.model,
 		"class", d.class,
 		"divergedAt", d.divergedAt,
+		"sysDivergedAt", d.sysDivergedAt,
 		"prevMsgs", d.prevMsgs,
 		"msgs", d.curMsgs,
 		"invalidatedTokensEst", d.invalidTokens,
@@ -186,6 +206,25 @@ func apcHashBytes(b []byte) uint64 {
 	h := fnv.New64a()
 	_, _ = h.Write(b)
 	return h.Sum64()
+}
+
+// apcHashChunks splits b into fixed-size byte chunks and hashes each, so a
+// commonPrefixLen over two chunk lists yields the chunk index of the first
+// differing byte region (× chunk size = an approximate byte offset). Used to
+// localize where a system prompt changed between runs.
+func apcHashChunks(b []byte, chunk int) []uint64 {
+	if chunk <= 0 || len(b) == 0 {
+		return nil
+	}
+	out := make([]uint64, 0, (len(b)+chunk-1)/chunk)
+	for i := 0; i < len(b); i += chunk {
+		end := i + chunk
+		if end > len(b) {
+			end = len(b)
+		}
+		out = append(out, apcHashBytes(b[i:end]))
+	}
+	return out
 }
 
 // apcHashMessages hashes each message's role + raw content bytes. The raw
