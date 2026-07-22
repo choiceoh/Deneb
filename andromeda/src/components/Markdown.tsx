@@ -32,7 +32,9 @@ function safeHref(url: string): string | null {
     const parsed = new URL(u);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
     if (parsed.username || parsed.password) return null;
-    return parsed.href;
+    // Return the caller spelling — URL.href normalizes a trailing slash onto
+    // bare origins (example.com → example.com/) and would churn link text/href.
+    return u;
   } catch {
     return null;
   }

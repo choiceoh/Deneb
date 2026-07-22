@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 )
 
 const (
@@ -30,12 +32,7 @@ func NewWriter(baseDir string) *Writer {
 
 // logPath returns the JSONL file path for a session.
 func (w *Writer) logPath(sessionKey string) string {
-	safe := strings.ReplaceAll(strings.ReplaceAll(sessionKey, "/", ""), "\\", "")
-	safe = strings.ReplaceAll(safe, "\x00", "")
-	if safe == "" {
-		safe = "_invalid_"
-	}
-	return filepath.Join(w.baseDir, safe+".jsonl")
+	return pathutil.MustJoinUnder(w.baseDir, pathutil.SafeFileName(sessionKey)+".jsonl")
 }
 
 // Append writes a log entry to the session's JSONL file.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
@@ -46,9 +47,7 @@ func NewFileTranscriptStore(baseDir string) *FileTranscriptStore {
 }
 
 func (s *FileTranscriptStore) sessionPath(sessionKey string) string {
-	// Sanitize session key for filesystem safety.
-	safe := filepath.Base(sessionKey)
-	return filepath.Join(s.baseDir, safe+".jsonl")
+	return pathutil.MustJoinUnder(s.baseDir, pathutil.SafeFileName(sessionKey)+".jsonl")
 }
 
 // Load reads messages from the JSONL file, returning the most recent `limit`.

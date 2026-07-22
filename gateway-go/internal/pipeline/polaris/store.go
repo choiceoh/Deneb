@@ -17,6 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textsearch"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
@@ -97,11 +98,13 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) messagesPath(sessionKey string) string {
-	return filepath.Join(s.dir, "messages", sessionKey+".jsonl")
+	dir := pathutil.MustJoinUnder(s.dir, "messages")
+	return pathutil.MustJoinUnder(dir, pathutil.SafeFileName(sessionKey)+".jsonl")
 }
 
 func (s *Store) summariesPath(sessionKey string) string {
-	return filepath.Join(s.dir, "summaries", sessionKey+".json")
+	dir := pathutil.MustJoinUnder(s.dir, "summaries")
+	return pathutil.MustJoinUnder(dir, pathutil.SafeFileName(sessionKey)+".json")
 }
 
 // ensureSession lazily loads a session's data into memory.

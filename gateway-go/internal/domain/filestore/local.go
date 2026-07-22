@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 )
 
 // defaultListCap bounds a List/Search result when the caller passes no limit.
@@ -88,12 +90,17 @@ func vpath(p string) string {
 }
 
 // resolve maps a virtual path to an absolute filesystem path inside root and
-// returns both the absolute path and the normalized virtual path. The prefix
-// re-check is defense-in-depth on top of vpath's clamping.
+// returns both the absolute path and the normalized virtual path. JoinUnder
+// (filepath.Rel + ".." rejection) is the CodeQL-recognized containment check;
+// vpath already clamps ".." before the join.
 func (s *LocalStore) resolve(virt string) (abs, clean string, err error) {
 	clean = vpath(virt)
-	abs = filepath.Join(s.root, filepath.FromSlash(clean))
-	if abs != s.root && !strings.HasPrefix(abs, s.root+string(filepath.Separator)) {
+	if clean == "/" {
+		return s.root, clean, nil
+	}
+	rel := strings.TrimPrefix(clean, "/")
+	abs, err = pathutil.JoinUnder(s.root, filepath.FromSlash(rel))
+	if err != nil {
 		return "", "", ErrPathEscape
 	}
 	return abs, clean, nil

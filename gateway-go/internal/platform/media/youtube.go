@@ -13,10 +13,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -64,35 +66,162 @@ type YouTubeChapter struct {
 	Title    string `json:"title"`
 }
 
-// youtubeURLPattern matches YouTube video URLs. Leading \b keeps host
-// matching from succeeding inside an attacker-controlled prefix host.
-var youtubeURLPattern = regexp.MustCompile(
-	`(?i)\b(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|live/)|youtu\.be/)([a-zA-Z0-9_-]{11})\b`,
-)
+// httpURLFindPattern finds absolute http(s) candidates in free text. Host
+// checks use net/url — never a hostname regex — so prefix-host tricks cannot pass.
+var httpURLFindPattern = regexp.MustCompile(`(?i)https?://[^\s<>)"']+`)
+
+var youtubeVideoIDShape = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
+
+func isYouTubeHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
+	case "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be":
+		return true
+	default:
+		return strings.HasSuffix(host, ".youtube.com")
+	}
+}
+
+func youtubeVideoID(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if strings.EqualFold(u.Host, "youtu.be") {
+		id := strings.Trim(strings.TrimPrefix(u.EscapedPath(), "/"), "/")
+		if i := strings.IndexAny(id, "/?#"); i >= 0 {
+			id = id[:i]
+		}
+		if youtubeVideoIDShape.MatchString(id) {
+			return id
+		}
+		return ""
+	}
+	if v := u.Query().Get("v"); youtubeVideoIDShape.MatchString(v) {
+		return v
+	}
+	// /shorts/ID, /live/ID, /embed/ID, /v/ID
+	parts := strings.Split(strings.Trim(u.EscapedPath(), "/"), "/")
+	if len(parts) >= 2 {
+		switch strings.ToLower(parts[0]) {
+		case "shorts", "live", "embed", "v":
+			if youtubeVideoIDShape.MatchString(parts[1]) {
+				return parts[1]
+			}
+		}
+	}
+	return ""
+}
+
+func youtubeVideoURL(raw string) (string, bool) {
+	raw = strings.TrimRight(raw, ".,;:!?)]}'\"")
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || !isYouTubeHost(u.Host) {
+		return "", false
+	}
+	if youtubeVideoID(u) == "" {
+		return "", false
+	}
+	return raw, true
+}
 
 // IsYouTubeURL returns true if the text contains a YouTube video URL.
 func IsYouTubeURL(text string) bool {
-	return youtubeURLPattern.MatchString(text)
+	return len(ExtractYouTubeURLs(text)) > 0
 }
 
 // ExtractYouTubeURLs extracts all YouTube video URLs from text.
 func ExtractYouTubeURLs(text string) []string {
-	// Apply the limit after deduplication. A repeated URL near the start of a
-	// message must not consume one of the five useful result slots.
-	matches := youtubeURLPattern.FindAllString(text, -1)
-	// Deduplicate.
-	seen := make(map[string]struct{}, len(matches))
-	var urls []string
-	for _, u := range matches {
-		if _, ok := seen[u]; !ok {
-			seen[u] = struct{}{}
-			urls = append(urls, u)
-			if len(urls) == 5 {
+	type cand struct {
+		at       int
+		validate string // always absolute http(s) for youtubeVideoURL
+		emit     string // form to return (keeps bare hosts when text had no scheme)
+	}
+	var cands []cand
+	for _, loc := range httpURLFindPattern.FindAllStringIndex(text, -1) {
+		raw := text[loc[0]:loc[1]]
+		cands = append(cands, cand{at: loc[0], validate: raw, emit: raw})
+	}
+	for _, b := range bareYouTubeCandidates(text) {
+		// Skip if this bare span sits inside an already-captured absolute URL.
+		overlap := false
+		for _, c := range cands {
+			if b.at >= c.at && b.at < c.at+len(c.emit) {
+				overlap = true
 				break
 			}
 		}
+		if overlap {
+			continue
+		}
+		cands = append(cands, cand{at: b.at, validate: b.abs, emit: b.bare})
+	}
+	sort.SliceStable(cands, func(i, j int) bool { return cands[i].at < cands[j].at })
+	seen := make(map[string]struct{}, len(cands))
+	var urls []string
+	for _, c := range cands {
+		if _, ok := youtubeVideoURL(c.validate); !ok {
+			continue
+		}
+		if _, dup := seen[c.emit]; dup {
+			continue
+		}
+		seen[c.emit] = struct{}{}
+		urls = append(urls, c.emit)
+		if len(urls) == 5 {
+			break
+		}
 	}
 	return urls
+}
+
+type bareYT struct {
+	at   int
+	abs  string
+	bare string
+}
+
+// bareYouTubeCandidates finds scheme-less youtube.com / youtu.be tokens via
+// plain string search (not a hostname regex) and returns https://-prefixed forms
+// for youtubeVideoURL validation.
+func bareYouTubeCandidates(text string) []bareYT {
+	lower := strings.ToLower(text)
+	var out []bareYT
+	for _, needle := range []string{"youtube.com/", "youtu.be/"} {
+		start := 0
+		for {
+			rel := strings.Index(lower[start:], needle)
+			if rel < 0 {
+				break
+			}
+			i := start + rel
+			from := i
+			if from >= 4 && lower[from-4:from] == "www." {
+				from -= 4
+			}
+			// Skip tokens that already have an http(s) scheme immediately before.
+			if from >= 8 && strings.EqualFold(text[from-8:from], "https://") {
+				start = i + 1
+				continue
+			}
+			if from >= 7 && strings.EqualFold(text[from-7:from], "http://") {
+				start = i + 1
+				continue
+			}
+			end := i + len(needle)
+			for end < len(text) {
+				switch text[end] {
+				case ' ', '\t', '\n', '\r', '<', '>', ')', '"', '\'':
+					goto done
+				}
+				end++
+			}
+		done:
+			bare := text[from:end]
+			out = append(out, bareYT{at: from, abs: "https://" + bare, bare: bare})
+			start = i + 1
+		}
+	}
+	return out
 }
 
 // ExtractYouTubeTranscript extracts subtitles and metadata for a YouTube video.

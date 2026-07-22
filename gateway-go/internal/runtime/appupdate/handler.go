@@ -19,6 +19,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 )
 
 // Handler serves authenticated app update metadata and APK downloads.
@@ -229,8 +230,12 @@ func (s *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 	// A multi-MB APK over a slow mobile link can outlast the global WriteTimeout.
 	disableWriteDeadline(w)
-	full := filepath.Join(denebApkDir(), name)
-	f, err := os.Open(full) //nolint:gosec // name is filepath.Base'd and .apk-suffixed; confined to the serve dir
+	full, joinErr := pathutil.JoinUnder(denebApkDir(), name)
+	if joinErr != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid file"})
+		return
+	}
+	f, err := os.Open(full) //nolint:gosec // JoinUnder confines name under the APK serve dir
 	if err != nil {
 		s.writeJSON(w, http.StatusNotFound, map[string]any{"error": "apk not found"})
 		return

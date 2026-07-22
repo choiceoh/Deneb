@@ -56,26 +56,19 @@ function decodeHtmlEntities(s) {
     .replace(/&amp;/gi, "&");
 }
 
-function stripDangerousBlocks(s) {
-  // Loop until stable — nested/partial replacements like `<scr<script>ipt>` need
-  // more than one pass. Allow whitespace before `>` in end tags (`</script >`).
+function stripHtmlFragment(html, { preserveBreaks = false } = {}) {
+  // Plaintext extraction for Amaranth cells — strip every tag (loop until
+  // stable) rather than script/style-specific regexes that CodeQL flags as
+  // incomplete multi-character sanitizers. Leftover '<' cannot form a tag.
+  let s = String(html || "");
+  s = s.replace(/<(br|hr)\s*\/?>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
+  s = s.replace(/<\/(p|div|li|h[1-6])>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
   let prev;
   do {
     prev = s;
-    s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "");
-    s = s.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, "");
-    // Drop unclosed script/style openings so later tag stripping cannot revive them.
-    s = s.replace(/<script\b[^>]*>[\s\S]*$/gi, "");
-    s = s.replace(/<style\b[^>]*>[\s\S]*$/gi, "");
+    s = s.replace(/<[^>]*>/g, "");
   } while (s !== prev);
-  return s;
-}
-
-function stripHtmlFragment(html, { preserveBreaks = false } = {}) {
-  let s = stripDangerousBlocks(String(html || ""));
-  s = s.replace(/<(br|hr)\s*\/?>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
-  s = s.replace(/<\/(p|div|li|h[1-6])>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
-  s = s.replace(/<[^>]+>/g, "");
+  s = s.replace(/</g, "");
   s = decodeHtmlEntities(s);
   if (!preserveBreaks) return s.replace(/[ \t]+/g, " ").trim();
   return s

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 )
 
 // Categories are the top-level wiki directories — the fixed 6-category taxonomy.
@@ -252,7 +254,10 @@ func ValidateExternalPath(rel string) error {
 // The .md extension is optional; it is appended when absent.
 func (s *Store) ReadPage(relPath string) (*Page, error) {
 	relPath = normalizePagePath(relPath)
-	abs := filepath.Join(s.dir, relPath)
+	abs, err := pathutil.JoinUnder(s.dir, filepath.FromSlash(relPath))
+	if err != nil {
+		return nil, fmt.Errorf("wiki: path escapes root: %w", err)
+	}
 	return ParsePageFile(abs)
 }
 

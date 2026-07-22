@@ -490,7 +490,7 @@ func TestWriterFilesystemContract(t *testing.T) {
 	if filepath.Dir(path) != filepath.Join(dir, "nested", "logs") {
 		t.Fatalf("log escaped base dir: %s", path)
 	}
-	if filepath.Base(path) != "clientmainevil.jsonl" {
+	if filepath.Base(path) != "client_main_evil.jsonl" {
 		t.Fatalf("sanitized basename = %q", filepath.Base(path))
 	}
 	info, err := os.Stat(path)

@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+	"github.com/choiceoh/deneb/gateway-go/pkg/pathutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 )
 
 func (s *FileTranscriptStore) toolResultReceiptPath(sessionKey string) string {
-	safe := filepath.Base(sessionKey)
-	return filepath.Join(s.baseDir, ".tool-results", safe+".jsonl")
+	dir := pathutil.MustJoinUnder(s.baseDir, ".tool-results")
+	return pathutil.MustJoinUnder(dir, pathutil.SafeFileName(sessionKey)+".jsonl")
 }
 
 // AppendToolResultReceipt durably records one completed tool call before the
