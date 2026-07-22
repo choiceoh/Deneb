@@ -270,6 +270,31 @@ describe("NotebookPane boundary behavior", () => {
       expect(chip.closest('[role="listitem"]')).toHaveTextContent("S99");
     });
 
+    it("offers 원본 열기 for a file source whose original was archived (path ref)", async () => {
+      calls = [];
+      installNotebookGateway(calls, {
+        "miniapp.notebook.get": (params) =>
+          reply({
+            ...initialRows.find((row) => row.id === params.id),
+            sources: [
+              { cite: "S1", kind: "file", title: "계약서.pdf", ref: "노트북/최신/계약서.pdf", text: "추출 본문" },
+              { cite: "S2", kind: "file", title: "메모.txt", ref: "메모.txt", text: "본문" },
+            ],
+          }),
+      });
+      renderNotebook();
+
+      // Archived original (ref is a file-store path) → the preview links to it.
+      await userEvent.click(await screen.findByRole("button", { name: /계약서\.pdf/ }));
+      const link = await screen.findByRole("link", { name: "원본 열기" });
+      expect(link).toHaveAttribute("href", expect.stringContaining("/api/v1/files/download"));
+      expect(link).toHaveAttribute("href", expect.stringContaining(encodeURIComponent("노트북/최신/계약서.pdf")));
+
+      // A bare-filename ref (no archived original) shows no 원본 열기.
+      await userEvent.click(screen.getByRole("button", { name: /메모\.txt/ }));
+      expect(screen.queryByRole("link", { name: "원본 열기" })).not.toBeInTheDocument();
+    });
+
     it("toggles the same source closed when its chip is clicked twice", async () => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });

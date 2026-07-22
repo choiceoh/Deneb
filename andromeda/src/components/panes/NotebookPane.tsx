@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { NOTEBOOK_RPC } from "@/resources";
 import { readFileBase64, splitAttachable } from "@/attachments";
 import { inferAttachmentMimeType } from "@/attachmentMime";
+import { filesDownloadUrl } from "@/gateway";
 import { projectList } from "@/aiText";
 import type { Notebook, NotebookSource, NotebookSummary } from "@/types";
 import { useCachedRpc } from "@/useCachedRpc";
@@ -247,6 +248,12 @@ export function NotebookPane() {
   // preview below. A stale key (notebook switch / deletion) simply closes the preview.
   const sources = active?.sources ?? [];
   const preview = previewKey ? sources.find((s) => srcKey(s) === previewKey) : undefined;
+  // A file source whose original was archived carries a file-store path (contains
+  // "/") as its ref → offer "원본 열기". Older/plain refs (bare filename) don't.
+  const previewOriginalHref =
+    preview && preview.kind === "file" && preview.ref && preview.ref.includes("/")
+      ? filesDownloadUrl(cfg, preview.ref)
+      : undefined;
 
   return (
     <div className="notebook-pane">
@@ -353,7 +360,11 @@ export function NotebookPane() {
             )}
             {preview && (
               <div className="notebook-preview" role="group" aria-label="자료 내용">
-                <NotebookSourceDetail source={preview} onClose={() => setPreviewKey("")} />
+                <NotebookSourceDetail
+                  source={preview}
+                  onClose={() => setPreviewKey("")}
+                  originalHref={previewOriginalHref}
+                />
               </div>
             )}
           </>
@@ -479,8 +490,17 @@ function NotebookSourceChip({
 }
 
 // The expanded preview under the chip strip: the chosen source's title/kind +
-// full content (markdown text, or a ref line for gateway-ingested sources).
-function NotebookSourceDetail({ source, onClose }: { source: NotebookSource; onClose: () => void }) {
+// full content (markdown text, or a ref line for gateway-ingested sources). For a
+// file source whose original was archived, originalHref opens the ORIGINAL bytes.
+function NotebookSourceDetail({
+  source,
+  onClose,
+  originalHref,
+}: {
+  source: NotebookSource;
+  onClose: () => void;
+  originalHref?: string;
+}) {
   const kindLabel = source.kind ? (KIND_LABEL[source.kind as SourceKind] ?? source.kind) : "";
   return (
     <>
@@ -488,6 +508,11 @@ function NotebookSourceDetail({ source, onClose }: { source: NotebookSource; onC
         {source.cite && <span className="notebook-cite">{source.cite}</span>}
         <span className="notebook-detail-title">{sourceTitle(source)}</span>
         {kindLabel && <span className="notebook-source-kind">{kindLabel}</span>}
+        {originalHref && (
+          <a className="row-btn" href={originalHref} target="_blank" rel="noreferrer" title="원본 파일 열기">
+            원본 열기
+          </a>
+        )}
         <button
           type="button"
           className="row-btn notebook-preview-close"

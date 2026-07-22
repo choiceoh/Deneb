@@ -42,6 +42,11 @@ type NotebookDeps struct {
 	// not just pdf/docx. Nil disables that file class; add_file dispatches by MIME.
 	OcrImage   func(ctx context.Context, image []byte) (string, error)
 	Transcribe func(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error)
+	// SaveOriginal archives an attached file's raw bytes to the file store and
+	// returns its retrievable path, which add_file pins as the source ref so the
+	// user can re-open the ORIGINAL (the extracted text is only the grounding copy).
+	// Best-effort: nil, or an error, just leaves the ref as the bare filename.
+	SaveOriginal func(ctx context.Context, notebookID, filename string, data []byte) (string, error)
 	// FetchURL/ReadMail/ReadDiary snapshot an external ref (a URL, a mail thread
 	// id, a diary date) to readable text at add time — the same server-side
 	// readers the notebook chat tool uses. Wiring any of them registers
@@ -313,17 +318,25 @@ func notebookAddFileRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 		if text == "" {
 			return rpcerr.Unavailable("no text could be extracted from the file").Response(req.ID)
 		}
-		// Title defaults to the filename so the chip reads meaningfully; ref keeps the
-		// filename as provenance (the extracted text is the durable grounding copy).
+		// Title defaults to the filename so the chip reads meaningfully.
 		title := strings.TrimSpace(p.Title)
 		if title == "" {
 			title = filename
+		}
+		// Archive the ORIGINAL bytes to the file store so the user can re-open it;
+		// the ref becomes that retrievable path. Best-effort — a save failure just
+		// leaves the ref as the bare filename (the extracted text still grounds).
+		ref := filename
+		if deps.SaveOriginal != nil {
+			if p, serr := deps.SaveOriginal(ctx, id, filename, data); serr == nil && strings.TrimSpace(p) != "" {
+				ref = p
+			}
 		}
 		store, err := deps.Store()
 		if err != nil {
 			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
 		}
-		src, err := store.AddSource(id, notebook.Source{Kind: notebook.KindFile, Ref: filename, Title: title, Text: text})
+		src, err := store.AddSource(id, notebook.Source{Kind: notebook.KindFile, Ref: ref, Title: title, Text: text})
 		if err != nil {
 			if errors.Is(err, notebook.ErrNotFound) {
 				return rpcerr.NotFound("notebook").Response(req.ID)

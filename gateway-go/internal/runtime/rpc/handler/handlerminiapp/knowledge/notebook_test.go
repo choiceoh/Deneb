@@ -270,6 +270,61 @@ func TestNotebookAddFileDispatchesByMime(t *testing.T) {
 	}
 }
 
+// TestNotebookAddFilePinsOriginalPathAsRef proves add_file archives the raw bytes
+// via SaveOriginal and pins the returned retrievable path as the source ref (so the
+// client can re-open the original), while the title still reads as the filename.
+func TestNotebookAddFilePinsOriginalPathAsRef(t *testing.T) {
+	store, err := notebook.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	var savedName string
+	m := NotebookMethods(NotebookDeps{
+		Store:       func() (*notebook.Store, error) { return store, nil },
+		ExtractText: func(_ context.Context, data []byte, _, _ string) string { return string(data) },
+		SaveOriginal: func(_ context.Context, id, filename string, _ []byte) (string, error) {
+			savedName = filename
+			return "노트북/" + id + "/" + filename, nil
+		},
+	})
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+	blob := base64.StdEncoding.EncodeToString([]byte("계약 본문"))
+	src := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "계약서.pdf", "dataBase64": blob}))
+	if savedName != "계약서.pdf" {
+		t.Errorf("SaveOriginal got filename %q, want 계약서.pdf", savedName)
+	}
+	if src["ref"] != "노트북/"+id+"/계약서.pdf" {
+		t.Errorf("ref = %v, want the archived file-store path", src["ref"])
+	}
+	if src["title"] != "계약서.pdf" {
+		t.Errorf("title = %v, want the filename (not the path)", src["title"])
+	}
+}
+
+// TestNotebookAddFileFallsBackToFilenameRefWhenArchiveFails proves a SaveOriginal
+// failure is non-fatal: the source still pins with the bare filename as its ref.
+func TestNotebookAddFileFallsBackToFilenameRefWhenArchiveFails(t *testing.T) {
+	store, err := notebook.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	m := NotebookMethods(NotebookDeps{
+		Store:        func() (*notebook.Store, error) { return store, nil },
+		ExtractText:  func(_ context.Context, data []byte, _, _ string) string { return string(data) },
+		SaveOriginal: func(_ context.Context, _, _ string, _ []byte) (string, error) { return "", errors.New("disk full") },
+	})
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+	blob := base64.StdEncoding.EncodeToString([]byte("본문"))
+	src := decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_file",
+		map[string]any{"id": id, "filename": "a.pdf", "dataBase64": blob}))
+	if src["ref"] != "a.pdf" {
+		t.Errorf("ref = %v, want the filename fallback when archiving fails", src["ref"])
+	}
+}
+
 // TestNotebookAddFileRegistersWithOnlyOCR proves the method registers when only a
 // non-document extractor is wired (document sidecar absent, OCR present).
 func TestNotebookAddFileRegistersWithOnlyOCR(t *testing.T) {

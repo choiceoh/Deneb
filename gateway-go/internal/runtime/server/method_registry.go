@@ -582,6 +582,23 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 			// photo of a contract or a meeting recording becomes notebook grounding.
 			OcrImage:   toolbind.OCRImage,
 			Transcribe: toolbind.TranscribeAudio,
+			// Archive the original bytes under 노트북/<id>/ in the file store so the
+			// user can re-open the source (add_file pins the returned path as the ref).
+			SaveOriginal: func(ctx context.Context, id, filename string, data []byte) (string, error) {
+				fs := localFileStoreOrNil(s.logger)
+				if fs == nil {
+					return "", fmt.Errorf("file store unavailable")
+				}
+				name := filepath.Base(strings.TrimSpace(filename))
+				if name == "" || name == "." || name == "/" {
+					name = "file"
+				}
+				entry, err := fs.Put(ctx, "노트북/"+id+"/"+name, data, false)
+				if err != nil {
+					return "", err
+				}
+				return entry.PathDisplay, nil
+			},
 			// Same SSRF-safe readers the notebook chat tool uses for url/mail/diary
 			// sources. FetchURL/ReadMail need no runtime state; ReadDiary reads
 			// s.wikiStore lazily (set during chat init, long before any add_ref call —
