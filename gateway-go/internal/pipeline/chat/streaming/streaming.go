@@ -49,6 +49,14 @@ const (
 	// thinkingSentenceMinRunes is the floor for treating a terminated span as a
 	// real sentence (vs a blip like "음..."); below it latestSentence scans back.
 	thinkingSentenceMinRunes = 6
+	// thinkingSummaryAdvanceRunes is the minimum amount of NEW reasoning (runes)
+	// that must stream in since the last landed summary before the tiny model is
+	// re-run. It keeps a summary lingering (a calmer chip) and stops the model
+	// paraphrasing an essentially unchanged tail every throttle window.
+	thinkingSummaryAdvanceRunes = 32
+	// thinkingRecentToolsMax bounds the ring of recent tool hints fed to the
+	// summarizer so the progress line reflects real actions, not just musing.
+	thinkingRecentToolsMax = 3
 )
 
 // sentenceTerminatorCutset trims trailing sentence punctuation/space so a chip
@@ -71,16 +79,18 @@ type Broadcaster struct {
 	thinkingMu   sync.Mutex
 	thinkingTail []rune
 	// summarize, when set via SetThinkingSummarizer, refines the reasoning chip
-	// into a fast-model Korean progress line (Option A). It runs OFF the
-	// EmitThinking hot path (async, one-in-flight via summaryInFlight) so the
-	// agent loop never blocks on the model. Before the first summary lands (or
-	// with no summarizer wired) the deterministic cleanThinkingPreview chip shows
-	// — exactly the prior behavior; once one lands it is retained in lastSummary
-	// and shown steadily, so a busy/empty later window never flashes the raw
-	// preview back in. Set once after construction, before the run streams, so the
-	// plain field read in EmitThinking is ordered after the write on the run
-	// goroutine.
-	summarize       func(reasoningTail string) (string, bool)
+	// into a fast-model Korean progress line (Option A). It receives the raw
+	// reasoning tail and a hint of the recently-run tools (so the line reflects
+	// real actions, not just musing). It runs OFF the EmitThinking hot path
+	// (async, one-in-flight via summaryInFlight) so the agent loop never blocks on
+	// the model. With a summarizer wired, the chip stays a bare "깊이 생각 중" until
+	// the first Korean summary lands — the raw (often zh/en) reasoning peek is
+	// never shown; only with NO summarizer does the deterministic cleanThinkingPreview
+	// fall back (pre-summary behavior). Once a summary lands it is retained in
+	// lastSummary and shown steadily. Set once after construction, before the run
+	// streams, so the plain field read in EmitThinking is ordered after the write
+	// on the run goroutine.
+	summarize       func(reasoningTail, recentTools string) (string, bool)
 	summaryInFlight atomic.Bool
 	// lastSummary is the most recent fast-model Korean progress line. Once set,
 	// EmitThinking renders it as the steady chip on every throttle window instead
@@ -88,6 +98,17 @@ type Broadcaster struct {
 	// raw reasoning peek flashing back in between refreshes. Guarded by lastSummaryMu.
 	lastSummaryMu sync.Mutex
 	lastSummary   string
+	// thinkingRunesTotal is the monotonic count of all reasoning runes appended;
+	// lastSummaryRunesTotal snapshots it at the last landed summary. Their gap
+	// drives the advance gate (thinkingSummaryAdvanceRunes) so a summary lingers
+	// instead of being recomputed on a barely-changed tail.
+	thinkingRunesTotal    atomic.Int64
+	lastSummaryRunesTotal atomic.Int64
+	// recentTools is a small ring of the latest tool hints (name + optional detail)
+	// handed to the summarizer so the progress line names real actions
+	// ("검색 결과 대조 중"). Guarded by toolsMu.
+	toolsMu     sync.Mutex
+	recentTools []string
 }
 
 // NewBroadcaster creates a new Broadcaster for a given session/run.
@@ -129,36 +150,54 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 	// Steady chip first: instant and subscriber-counted. Once a fast-model summary
 	// has landed we keep showing it — the raw reasoning peek must NOT flash back in
 	// between summaries (that made the summary "지나가서 읽기 힘든" chip). Before the
-	// first summary, or when no summarizer is wired / it is busy or fails below,
-	// this is the deterministic reasoning preview — the unchanged prior behavior.
+	// first summary lands, a wired summarizer shows a bare "깊이 생각 중" (empty
+	// preview) rather than the raw reasoning peek, which is often the model's zh/en
+	// self-talk — leaking it defeats the whole Korean-summary point. Only with NO
+	// summarizer do we fall back to the deterministic reasoning preview (the
+	// pre-summary behavior).
 	payload := map[string]any{}
 	if s := sb.currentSummary(); s != "" {
 		payload["preview"] = s
-	} else if preview := sb.thinkingPreview(); preview != "" {
-		payload["preview"] = preview
+	} else if sb.summarize == nil {
+		if preview := sb.thinkingPreview(); preview != "" {
+			payload["preview"] = preview
+		}
 	}
 	n := sb.emit(EventThinking, payload)
 
-	// Option A: refine the chip into a fast-model Korean progress line, OFF the
-	// hot path. Only when a summarizer is wired, someone is actually listening
-	// (n > 0 — don't spend the local model on an unwatched run), and no summary
-	// is already running (one-in-flight so the tiny model never falls behind the
-	// throttle). A good result emits a second frame that supersedes the chip;
-	// anything else leaves the current chip standing (the steady summary, or the
-	// deterministic preview before the first summary has landed).
+	// Refine the chip into a fast-model Korean progress line, OFF the hot path.
+	// Only when a summarizer is wired, someone is actually listening (n > 0 — don't
+	// spend the local model on an unwatched run), enough NEW reasoning has streamed
+	// in since the last summary (advance gate — so a summary lingers instead of
+	// churning every window), and no summary is already running (one-in-flight so
+	// the tiny model never falls behind the throttle). A good, changed result emits
+	// a second frame that supersedes the chip; anything else leaves the current
+	// chip standing.
 	if sb.summarize == nil || n <= 0 {
+		return
+	}
+	if !sb.advancedSinceLastSummary() {
 		return
 	}
 	if !sb.summaryInFlight.CompareAndSwap(false, true) {
 		return
 	}
 	tail := sb.reasoningTail()
+	tools := sb.recentToolsContext()
+	tailTotal := sb.thinkingRunesTotal.Load() // snapshot: what this summary "covers"
 	go func() {
 		defer sb.summaryInFlight.Store(false)
 		defer func() { _ = recover() }() // a cosmetic chip summary must never crash a run
-		summary, ok := sb.summarize(tail)
+		summary, ok := sb.summarize(tail, tools)
 		if !ok || summary == "" {
 			return
+		}
+		// Mark this reasoning span as summarized even on a no-op result, so the
+		// advance gate waits for genuinely new reasoning instead of retrying next
+		// window.
+		sb.lastSummaryRunesTotal.Store(tailTotal)
+		if summary == sb.currentSummary() {
+			return // identical to what's shown — skip the redundant frame (calmer chip)
 		}
 		sb.storeSummary(summary) // retained so later windows show it as the steady chip
 		sb.emit(EventThinking, map[string]any{"preview": summary})
@@ -171,9 +210,11 @@ func (sb *Broadcaster) appendThinking(delta string) {
 	if delta == "" {
 		return
 	}
+	dr := []rune(delta)
+	sb.thinkingRunesTotal.Add(int64(len(dr))) // monotonic; drives the summary advance gate
 	sb.thinkingMu.Lock()
 	defer sb.thinkingMu.Unlock()
-	sb.thinkingTail = append(sb.thinkingTail, []rune(delta)...)
+	sb.thinkingTail = append(sb.thinkingTail, dr...)
 	if over := len(sb.thinkingTail) - thinkingTailRunes; over > 0 {
 		sb.thinkingTail = sb.thinkingTail[over:]
 	}
@@ -219,10 +260,50 @@ func (sb *Broadcaster) storeSummary(s string) {
 	sb.lastSummaryMu.Unlock()
 }
 
+// advancedSinceLastSummary reports whether enough NEW reasoning has streamed in
+// since the last landed summary to justify re-running the tiny model. The first
+// summary always passes (lastSummaryRunesTotal == 0); afterwards a summary
+// lingers until thinkingSummaryAdvanceRunes more reasoning arrives, so the chip
+// stays calm and the model isn't paraphrasing an unchanged tail.
+func (sb *Broadcaster) advancedSinceLastSummary() bool {
+	return sb.thinkingRunesTotal.Load()-sb.lastSummaryRunesTotal.Load() >= thinkingSummaryAdvanceRunes
+}
+
+// recordRecentTool appends a tool hint (name, plus an optional detail like the
+// query/file) to the bounded ring the summarizer reads, so the progress line can
+// name the real action instead of only the model's internal musing.
+func (sb *Broadcaster) recordRecentTool(name, detail string) {
+	if name == "" {
+		return
+	}
+	hint := name
+	if detail != "" {
+		hint = name + "(" + detail + ")"
+	}
+	sb.toolsMu.Lock()
+	sb.recentTools = append(sb.recentTools, hint)
+	if over := len(sb.recentTools) - thinkingRecentToolsMax; over > 0 {
+		sb.recentTools = sb.recentTools[over:]
+	}
+	sb.toolsMu.Unlock()
+}
+
+// recentToolsContext snapshots the recent tool hints as one compact line for the
+// summarizer, or "" when no tool has run yet (pure-reasoning turns are unchanged).
+func (sb *Broadcaster) recentToolsContext() string {
+	sb.toolsMu.Lock()
+	defer sb.toolsMu.Unlock()
+	if len(sb.recentTools) == 0 {
+		return ""
+	}
+	return strings.Join(sb.recentTools, ", ")
+}
+
 // SetThinkingSummarizer installs the optional model-backed refiner for the live
-// "thinking" chip (Option A). Call once after construction and before the run
-// streams; a nil fn is a no-op that keeps the deterministic preview.
-func (sb *Broadcaster) SetThinkingSummarizer(fn func(reasoningTail string) (string, bool)) {
+// "thinking" chip. Call once after construction and before the run streams; a nil
+// fn is a no-op that keeps the deterministic preview. The fn receives the raw
+// reasoning tail and a hint of recently-run tools.
+func (sb *Broadcaster) SetThinkingSummarizer(fn func(reasoningTail, recentTools string) (string, bool)) {
 	sb.summarize = fn
 }
 
@@ -378,6 +459,7 @@ func stripLeadingFiller(s string) string {
 // optional short human hint extracted from the tool input (query, command,
 // file name) — omitted from the payload when empty.
 func (sb *Broadcaster) EmitToolStart(name, toolUseID, detail string) {
+	sb.recordRecentTool(name, detail) // feed the thinking summarizer's action context
 	payload := map[string]any{
 		"state":     "started",
 		"tool":      name,

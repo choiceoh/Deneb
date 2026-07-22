@@ -37,19 +37,21 @@ const (
 // thinkingSummarySystem instructs the tiny model to name the CURRENT step rather
 // than transcribe the reasoning, in one Korean progress line. The chip renders on
 // up to two lines, so the line should carry the object/condition ("무엇을·어떤 대상")
-// for a readable "what it's doing now", not just a bare verb.
-const thinkingSummarySystem = "너는 AI 비서 화면의 '생각 중' 표시줄을 채운다. 아래 텍스트는 비서가 사용자 요청을 처리하며 지금 진행 중인 내부 추론이다. 지금 무엇을 하는 중인지 한국어로 한 줄로 요약해라. 규칙: '무엇을·어떤 대상까지' 담아 조금 구체적인 진행형으로('발신자 주소와 과거 거래 이력을 대조하는 중', '지난 3개월 거래 내역과 계좌 변경 여부를 확인하는 중'), 40자 이내, 따옴표·마침표·설명·목록 없이 요약만. 추론을 그대로 옮기지 말고 '지금 하는 일'로 압축."
+// for a readable "what it's doing now", not just a bare verb. When a
+// "[방금 실행한 도구]" block is present it grounds the line in the real action;
+// tool names must be rendered as Korean verbs, never echoed verbatim.
+const thinkingSummarySystem = "너는 AI 비서 화면의 '생각 중' 표시줄을 채운다. 아래는 비서가 사용자 요청을 처리하며 지금 진행 중인 내부 추론이고, '[방금 실행한 도구]'가 있으면 방금 사용한 기능이다. 둘을 함께 보고 지금 무엇을 하는 중인지 한국어로 한 줄로 요약해라. 규칙: '무엇을·어떤 대상까지' 담아 조금 구체적인 진행형으로('발신자 주소와 과거 거래 이력을 대조하는 중', '메일 검색 결과와 지난 거래를 대조하는 중'), 도구 이름은 그대로 쓰지 말고 한국어 동작으로 바꿔라(web_search→검색, mail_*→메일 확인, calendar→일정 확인), 40자 이내, 따옴표·마침표·설명·목록 없이 요약만. 추론을 그대로 옮기지 말고 '지금 하는 일'로 압축."
 
 // newThinkingSummarizer builds the Option-A chip refiner. It returns nil when
 // local AI is not wired, so the broadcaster keeps the deterministic preview. The
 // returned fn is invoked off the broadcaster's hot path (async, one-in-flight);
 // it derives a short per-call deadline from ctx so a slow model never outlives
 // the throttle window or the run.
-func newThinkingSummarizer(ctx context.Context) func(reasoningTail string) (string, bool) {
+func newThinkingSummarizer(ctx context.Context) func(reasoningTail, recentTools string) (string, bool) {
 	if pilot.LocalAIHub() == nil {
 		return nil
 	}
-	return func(tail string) (string, bool) {
+	return func(tail, tools string) (string, bool) {
 		tail = strings.TrimSpace(tail)
 		if len([]rune(tail)) < thinkingSummaryMinTailRunes {
 			return "", false
@@ -57,9 +59,15 @@ func newThinkingSummarizer(ctx context.Context) func(reasoningTail string) (stri
 		if pilot.LocalAIRecentlyDown() {
 			return "", false
 		}
+		// Fold the recent-tool hint into the user message so the model can ground
+		// the line in the real action; absent (pure reasoning) it is unchanged.
+		userMsg := tail
+		if tools = strings.TrimSpace(tools); tools != "" {
+			userMsg = tail + "\n\n[방금 실행한 도구] " + tools
+		}
 		cctx, cancel := context.WithTimeout(ctx, thinkingSummaryTimeout)
 		defer cancel()
-		out, err := pilot.CallTinyLLM(cctx, thinkingSummarySystem, tail, thinkingSummaryMaxTokens)
+		out, err := pilot.CallTinyLLM(cctx, thinkingSummarySystem, userMsg, thinkingSummaryMaxTokens)
 		if err != nil {
 			return "", false
 		}
