@@ -3,8 +3,10 @@ package ai.deneb
 import ai.deneb.data.AppSettings
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
+import ai.deneb.deneb.DenebAttachment
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.captureAudio
+import ai.deneb.deneb.captureBatch
 import ai.deneb.deneb.captureDocument
 import ai.deneb.deneb.captureImage
 import ai.deneb.ui.DarkColorScheme
@@ -473,9 +475,10 @@ class MainActivity : ComponentActivity() {
         else -> ".csv"
     }
 
-    // Multiple shared images (several receipt photos / scan pages): each rides the
-    // existing single-image OCR path, sequentially so turns don't interleave.
-    // Capped — a huge gallery share should not queue dozens of agent turns.
+    // Multiple shared images (several receipt photos / scan pages): read them all and
+    // hand the set to ONE batch turn the agent reads and cross-references, instead of
+    // a separate OCR turn per image. Capped — a huge gallery share should not fan out
+    // unbounded (the gateway caps again server-side).
     private fun handleSharedImages(intent: Intent) {
         @Suppress("DEPRECATION")
         val uris: List<Uri> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -487,11 +490,15 @@ class MainActivity : ComponentActivity() {
         val mime = intent.type ?: "image/*"
         val client = get<DataRepository>() as? DenebGatewayClient ?: return
         lifecycleScope.launch {
-            for (uri in uris) {
+            val files = uris.mapIndexedNotNull { index, uri ->
                 val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-                if (bytes == null || bytes.isEmpty()) continue
-                client.captureImage(bytes, mime)
+                if (bytes == null || bytes.isEmpty()) {
+                    null
+                } else {
+                    DenebAttachment(bytes, sharedDisplayName(uri) ?: "image-${index + 1}", mime)
+                }
             }
+            if (files.isNotEmpty()) client.captureBatch(files)
         }
         intent.removeExtra(Intent.EXTRA_STREAM)
     }

@@ -78,6 +78,20 @@ func (s *Store) SaveCaptureAt(kind, context, text string) (rel, abs string, body
 	bodyStartLine = strings.Count(header.String(), "\n") + 1
 
 	abs = filepath.Join(dir, name)
+	// Same-second, same-kind captures collide on the second-resolution timestamp —
+	// a multi-file batch calls SaveCapture per file in a tight loop, so two docs
+	// saved in the same second would map to one path and the second's atomic rename
+	// would silently overwrite the first (the agent then reads one file's content
+	// for both pointers). Bump a numeric suffix until the path is free so every
+	// captured file survives with its own agent-openable path. Bounded so a stat
+	// error (e.g. permission) can't spin — the write below surfaces real failures.
+	for seq := 2; seq < 1000; seq++ {
+		if _, statErr := os.Stat(abs); statErr != nil {
+			break
+		}
+		name = fmt.Sprintf("capture-%s-%d-%s.md", now.Format("20060102-150405"), seq, kind)
+		abs = filepath.Join(dir, name)
+	}
 	tmp := abs + ".tmp"
 	if err := writeFileSync(tmp, []byte(header.String()+text+"\n"), 0o644); err != nil {
 		return "", "", 0, fmt.Errorf("wiki: write capture: %w", err)

@@ -76,19 +76,16 @@ export function useComposerBehavior(
   }, [busy, hidden, composeRef]);
 }
 
-// 첨부 인입(클립 버튼·드롭·붙여넣기 공용): 형식·크기를 거른 뒤(splitAttachable) 한 파일씩
-// 순서대로 capture(이미지 OCR·음성 전사·문서 추출)에 보낸다. 입력창의 텍스트는 첫 비-음성
-// 파일의 캡션으로 동봉한다.
+// 첨부 인입(클립 버튼·드롭·붙여넣기 공용): 형식·크기를 거른 뒤(splitAttachable) 스테이징
+// 칩으로 대기시키고, 전송 시 스테이징된 모든 파일을 base64로 읽어 captureBatch에 **한 번에**
+// 넘긴다 — 게이트웨이가 파일들을 저장하고 포인터 한 턴으로 묶어 에이전트가 교차 분석한다
+// (파일당 개별 턴이 아니라 6개 첨부=1턴). 입력창 텍스트는 캡션으로 배치에 동봉된다(오디오만인
+// 배치는 캡션을 소비하지 않는다 — 기존 계약).
 //
-// 배치는 파일마다 `await capture(...)`로 직렬화된다 — 한 번에 하나만 처리되므로 자기들끼리
-// 겹칠 일이 없다. 배치가 도는 동안 attaching=true라 새 전송·세션 전환·삭제·새 대화가 모두
-// 막힌다(attaching state는 useSessions로 넘어가고, attachingRef는 동기 재진입을 막는다).
-//
-// ⚠️ 과거엔 파일 사이마다 공유 busy(useChat 상태)를 재확인해 "배치 밖 턴이 끼면 남은 파일
-// 건너뛰기"를 시도했으나, 실제 capture가 그 busy를 켰다 끄는 주체다 — 직전 capture의 busy
-// 해제가 다음 파일 검사 시점까지 리렌더로 반영된다는 보장이 없어(Tauri webview 스케줄러),
-// 배치가 자기 자신의 첨부를 "다른 응답 진행 중"으로 오인해 첫 파일만 남기고 전부 드롭했다.
-// 그래서 그 재확인을 없앴다 — 직렬 await + attaching 게이트로 충분하다.
+// 배치는 captureBatch **단일 호출**이라 파일끼리 겹치거나 서로를 드롭할 일이 없다(과거의
+// 파일당-루프 + 공유 busy 재확인이 첫 파일만 남기고 드롭하던 문제를 구조적으로 제거). 배치가
+// 도는 동안 attaching=true라 새 전송·세션 전환·삭제·새 대화가 모두 막힌다(attaching state는
+// useSessions로 넘어가고, attachingRef는 동기 재진입을 막는다).
 // A file waiting in the composer (frontier staging UX: pick/drop/paste collects
 // chips; nothing uploads until 전송). previewUrl is an object URL for images —
 // intentionally NOT revoked on send, because the transcript keeps rendering it
@@ -110,7 +107,7 @@ export function useAttachPipeline({
   setInput,
   setAttaching,
   pin,
-  capture,
+  captureBatch,
   onBatchDone,
 }: {
   connected: boolean;
@@ -119,12 +116,11 @@ export function useAttachPipeline({
   setInput: (v: string) => void;
   setAttaching: (v: boolean) => void;
   pin: () => void;
-  // The surface binds its own sessionKey: (file, caption, previewUrl) =>
-  // capture(file, {sessionKey, caption, previewUrl}).
-  capture: (
-    file: { name: string; mimeType: string; base64: string },
+  // The surface binds its own sessionKey: (files, caption) =>
+  // captureBatch(files, {sessionKey, caption}).
+  captureBatch: (
+    files: { name: string; mimeType: string; base64: string; previewUrl?: string }[],
     caption: string,
-    previewUrl?: string,
   ) => Promise<void>;
   onBatchDone?: () => void; // e.g. refresh the session list once the batch lands
 }) {
@@ -181,30 +177,39 @@ export function useAttachPipeline({
     });
   }
 
-  // Send the staged batch, one capture per file; the composer text rides as the
-  // first non-audio file's caption (existing gateway contract).
+  // Send the staged files as ONE batch turn: read every file's base64, then hand the
+  // whole set to captureBatch (the gateway materializes them and runs a single
+  // pointer turn). The composer text rides as the caption; an audio-only batch keeps
+  // it (existing contract). Per-file read failures are noted and dropped from the
+  // batch, not fatal.
   async function sendStaged(captionOverride?: string) {
     if (busy || attachingRef.current || !connected || staged.length === 0) return;
     const batch = staged;
     setStaged([]);
-    const captionTarget = batch.find((s) => !s.mimeType.startsWith("audio/"));
-    // Audio-only batches never consume the composer text (existing contract).
-    const caption = captionTarget ? (captionOverride ?? input).trim() : "";
+    const hasNonAudio = batch.some((s) => !s.mimeType.startsWith("audio/"));
+    const caption = hasNonAudio ? (captionOverride ?? input).trim() : "";
     if (caption) setInput("");
     attachingRef.current = true;
     setAttaching(true);
     try {
+      const files: { name: string; mimeType: string; base64: string; previewUrl?: string }[] = [];
       for (const item of batch) {
         try {
           const base64 = await readFileBase64(item.file);
-          pin();
-          await capture(
-            { name: item.name, mimeType: item.mimeType, base64 },
-            item === captionTarget ? caption : "",
-            item.previewUrl,
-          );
+          files.push({ name: item.name, mimeType: item.mimeType, base64, previewUrl: item.previewUrl });
         } catch {
           showAttachNote([`${item.name} — 읽기 실패라 건너뜀`]);
+        }
+      }
+      if (files.length > 0) {
+        pin();
+        // captureBatch owns its own error rendering (an error turn); guard anyway so
+        // a rejected batch never escapes as an unhandled rejection from the
+        // fire-and-forget caller, and attaching always resets in the finally.
+        try {
+          await captureBatch(files, caption);
+        } catch {
+          showAttachNote(["첨부 전송에 실패했습니다"]);
         }
       }
     } finally {

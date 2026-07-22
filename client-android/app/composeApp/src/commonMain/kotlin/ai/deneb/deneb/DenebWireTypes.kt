@@ -240,6 +240,11 @@ internal data class CaptureAudioPayload(val text: String = "")
 @Serializable
 internal data class CaptureDocumentPayload(val text: String = "")
 
+// Batch capture: N files materialized on the gateway, analyzed in ONE turn. Only
+// the surfaced analysis text is read here (the files array is the gateway's).
+@Serializable
+internal data class CaptureBatchPayload(val text: String = "")
+
 @Serializable
 internal data class CaptureContactsPayload(val text: String = "")
 

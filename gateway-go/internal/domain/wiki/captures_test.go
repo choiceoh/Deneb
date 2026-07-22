@@ -52,6 +52,39 @@ func TestSaveCapture_FileAndBreadcrumb(t *testing.T) {
 	}
 }
 
+// TestSaveCaptureAtUniquePathsPerBatch locks the multi-file batch contract: two
+// same-kind captures saved back-to-back (same second) must land in distinct files,
+// so the batch turn's per-file pointers each open their own file instead of the
+// second silently overwriting the first.
+func TestSaveCaptureAtUniquePathsPerBatch(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "memory", "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	relA, absA, _, err := store.SaveCaptureAt("document", "계약서 A", "양수도 대금 10억원")
+	if err != nil {
+		t.Fatalf("SaveCaptureAt A: %v", err)
+	}
+	relB, absB, _, err := store.SaveCaptureAt("document", "계약서 B", "양수도 대금 20억원")
+	if err != nil {
+		t.Fatalf("SaveCaptureAt B: %v", err)
+	}
+	if relA == relB || absA == absB {
+		t.Fatalf("same-kind batch captures collided on one path: %q", relA)
+	}
+	dataA, _ := os.ReadFile(absA)
+	dataB, _ := os.ReadFile(absB)
+	if !strings.Contains(string(dataA), "10억원") {
+		t.Errorf("file A was overwritten — missing its own content: %q", string(dataA))
+	}
+	if !strings.Contains(string(dataB), "20억원") {
+		t.Errorf("file B missing its own content: %q", string(dataB))
+	}
+}
+
 // TestSaveCaptureAtBodyLineAlignsWithFile locks the digest-map contract: the
 // returned bodyStartLine must point at the exact file line where the
 // normalized body begins, with and without the optional context header line.

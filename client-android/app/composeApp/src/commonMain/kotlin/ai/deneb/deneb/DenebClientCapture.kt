@@ -140,6 +140,65 @@ suspend fun DenebGatewayClient.captureDocument(
 }
 
 /**
+ * One attachment in a [captureBatch]: raw bytes plus the filename and MIME the
+ * gateway needs to dispatch its extractor. Not a data class — a ByteArray field
+ * would make structural equality meaningless (and trips detekt's ArrayInDataClass).
+ */
+class DenebAttachment(val bytes: ByteArray, val filename: String, val mimeType: String)
+
+/**
+ * Attach N files in ONE turn. The gateway (`miniapp.capture.batch`) materializes
+ * each file to its agent-readable memory store and runs a single agent turn over a
+ * pointer list — the agent reads whichever files it needs and cross-references them.
+ * So six shared files land as one context to analyze together, not six separate
+ * turns. The typed text rides as the batch caption.
+ */
+@OptIn(ExperimentalEncodingApi::class)
+suspend fun DenebGatewayClient.captureBatch(files: List<DenebAttachment>, caption: String = ""): Boolean {
+    if (clientToken.isEmpty()) return false
+    val usable = files.filter { it.bytes.isNotEmpty() }
+    if (usable.isEmpty()) return false
+    val trimmedCaption = caption.trim()
+    val label = buildString {
+        append("📎 첨부 ${usable.size}개")
+        usable.forEach { append("\n• ${it.filename.trim().ifBlank { "첨부" }}") }
+        if (trimmedCaption.isNotBlank()) {
+            append("\n\n")
+            append(trimmedCaption)
+        }
+    }
+    val pending = History(role = History.Role.USER, content = label)
+    _chatHistory.update { it + pending }
+    val reply = try {
+        val payload = callRpc<CaptureBatchPayload>(
+            "miniapp.capture.batch",
+            buildJsonObject {
+                putJsonArray("files") {
+                    usable.forEach { file ->
+                        addJsonObject {
+                            put("data", Base64.encode(file.bytes))
+                            put("mimeType", file.mimeType)
+                            put("filename", file.filename)
+                        }
+                    }
+                }
+                put("sessionKey", sessionKey)
+                if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
+            },
+        )
+        payload?.text?.ifBlank { null } ?: "첨부에서 내용을 추출하지 못했거나 분석에 실패했습니다."
+    } catch (c: CancellationException) {
+        _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
+        throw c
+    } catch (e: Exception) {
+        "⚠️ ${e.message ?: "첨부 캡처 실패"}"
+    }
+    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    syncNativeStateAsync()
+    return true
+}
+
+/**
  * Sync the device address book into the gateway. The gateway enriches ONLY the
  * people already in its wiki (it creates no pages) with phone/email/org — so a
  * sync both sharpens ASR proper-noun bias and powers "whose number is this?"

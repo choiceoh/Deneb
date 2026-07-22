@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ChatView } from "./ChatView";
@@ -64,7 +64,7 @@ describe("ChatView (업무 채팅 탭)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.document"
+              : method === "miniapp.capture.batch"
                 ? { text: "ok" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -80,11 +80,10 @@ describe("ChatView (업무 채팅 탭)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
-    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.document");
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.batch");
     expect(capture?.params).toMatchObject({
-      filename: "contract.pdf",
-      mimeType: "application/pdf",
+      files: [expect.objectContaining({ filename: "contract.pdf", mimeType: "application/pdf" })],
       sessionKey: "client:main",
     });
   });
@@ -105,7 +104,7 @@ describe("ChatView (업무 채팅 탭)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.document"
+              : method === "miniapp.capture.batch"
                 ? { text: "ok" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -129,10 +128,9 @@ describe("ChatView (업무 채팅 탭)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.document")).toBe(true));
-    expect(rpcCalls.find((c) => c.method === "miniapp.capture.document")?.params).toMatchObject({
-      filename: "contract.pdf",
-      mimeType: "application/pdf",
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.batch")?.params).toMatchObject({
+      files: [expect.objectContaining({ filename: "contract.pdf", mimeType: "application/pdf" })],
       sessionKey: "client:main",
     });
   });
@@ -153,7 +151,7 @@ describe("ChatView (업무 채팅 탭)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.image"
+              : method === "miniapp.capture.batch"
                 ? { text: "ok" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -173,9 +171,9 @@ describe("ChatView (업무 채팅 탭)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
-    expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
-      mimeType: "image/png",
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.batch")?.params).toMatchObject({
+      files: [expect.objectContaining({ mimeType: "image/png" })],
       sessionKey: "client:main",
     });
   });
@@ -197,7 +195,7 @@ describe("ChatView (업무 채팅 탭)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.audio"
+              : method === "miniapp.capture.batch"
                 ? { text: "전사 완료" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -216,10 +214,10 @@ describe("ChatView (업무 채팅 탭)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     await user.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.audio")).toBe(true));
-    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.audio");
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.batch");
     expect(capture?.params).toMatchObject({
-      mimeType: "audio/mpeg",
+      files: [expect.objectContaining({ mimeType: "audio/mpeg" })],
       sessionKey: "client:main",
     });
     expect(capture?.params).not.toHaveProperty("caption");
@@ -243,7 +241,7 @@ describe("ChatView (업무 채팅 탭)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.image"
+              : method === "miniapp.capture.batch"
                 ? { text: "분석 완료" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -262,22 +260,19 @@ describe("ChatView (업무 채팅 탭)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     await user.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
-    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.image");
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    const capture = rpcCalls.find((c) => c.method === "miniapp.capture.batch");
     expect(capture?.params).toMatchObject({
-      mimeType: "image/png",
+      files: [expect.objectContaining({ mimeType: "image/png" })],
       sessionKey: "client:main",
       caption: "이 이미지에서 금액만 찾아줘",
     });
-    expect(typeof capture?.params.image).toBe("string");
+    expect(typeof (capture?.params.files as { data: string }[])[0].data).toBe("string");
     expect(composer).toHaveValue("");
-    const result = await screen.findByRole("group", { name: "첨부 분석 결과" });
-    expect(result).toBeInTheDocument();
-    expect(within(result).getByText("이미지 분석")).toBeInTheDocument();
-    expect(within(result).getByText("quote.png")).toBeInTheDocument();
-    expect(within(result).getByText("image/png")).toBeInTheDocument();
-    expect(within(result).getByText("이 이미지에서 금액만 찾아줘")).toBeInTheDocument();
-    expect(within(result).getByText("분석 완료")).toBeInTheDocument();
+    // The batch lands as one turn: the assistant analysis renders, and the user turn
+    // lists the attached file (its name/mime are asserted on the RPC params above).
+    expect(await screen.findByText("분석 완료")).toBeInTheDocument();
+    expect(screen.getByText((t) => t.includes("quote.png"))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "다시 생성" })).not.toBeInTheDocument();
   });
 });

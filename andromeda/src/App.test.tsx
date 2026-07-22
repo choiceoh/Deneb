@@ -238,7 +238,7 @@ describe("Workstation (connected, fixtures)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.image"
+              : method === "miniapp.capture.batch"
                 ? { text: "견적 금액은 1,200만원" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -261,21 +261,22 @@ describe("Workstation (connected, fixtures)", () => {
 
     // 스테이징 칩으로 대기 → 전송 버튼이 배치를 나른다 (즉시 업로드 아님).
     expect(await screen.findByRole("group", { name: "첨부 대기 파일" })).toBeInTheDocument();
-    expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(false);
+    expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(false);
     await user.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
-    const captureCall = rpcCalls.find((c) => c.method === "miniapp.capture.image");
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    const captureCall = rpcCalls.find((c) => c.method === "miniapp.capture.batch");
     // Lands in the panel's own client:main session (not the chat tab's chat:*).
     expect(captureCall?.params).toMatchObject({
-      mimeType: "image/png",
+      files: [expect.objectContaining({ mimeType: "image/png" })],
       sessionKey: "client:main",
       caption: "이 견적서에서 금액만 찾아줘",
     });
     expect(composer).toHaveValue("");
-    const result = await screen.findByRole("group", { name: "첨부 분석 결과" });
-    expect(within(result).getByText("quote.png")).toBeInTheDocument();
-    expect(within(result).getByText("견적 금액은 1,200만원")).toBeInTheDocument();
+    // The batch lands as one turn: the user turn lists the file, the assistant turn
+    // holds the (cross-file) analysis.
+    expect(await screen.findByText("견적 금액은 1,200만원")).toBeInTheDocument();
+    expect(screen.getByText((t) => t.includes("quote.png"))).toBeInTheDocument();
   });
 
   it("shows drop ring when drag enters and attaches via capture when dropped", async () => {
@@ -294,7 +295,7 @@ describe("Workstation (connected, fixtures)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.image"
+              : method === "miniapp.capture.batch"
                 ? { text: "현장 사진 분석" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -326,12 +327,12 @@ describe("Workstation (connected, fixtures)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
-    expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
-      mimeType: "image/png",
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.batch")?.params).toMatchObject({
+      files: [expect.objectContaining({ mimeType: "image/png" })],
       sessionKey: "client:main",
     });
-    expect(await screen.findByRole("group", { name: "첨부 분석 결과" })).toBeInTheDocument();
+    expect(await screen.findByText("현장 사진 분석")).toBeInTheDocument();
   });
 
   it("attaches clipboard image via capture when paste contains files", async () => {
@@ -350,7 +351,7 @@ describe("Workstation (connected, fixtures)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.image"
+              : method === "miniapp.capture.batch"
                 ? { text: "붙여넣기 분석" }
                 : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
@@ -371,9 +372,9 @@ describe("Workstation (connected, fixtures)", () => {
     await screen.findByRole("group", { name: "첨부 대기 파일" });
     fireEvent.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.image")).toBe(true));
-    expect(rpcCalls.find((c) => c.method === "miniapp.capture.image")?.params).toMatchObject({
-      mimeType: "image/png",
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    expect(rpcCalls.find((c) => c.method === "miniapp.capture.batch")?.params).toMatchObject({
+      files: [expect.objectContaining({ mimeType: "image/png" })],
       sessionKey: "client:main",
     });
   });
@@ -394,11 +395,9 @@ describe("Workstation (connected, fixtures)", () => {
             ? { current: "", sections: [] }
             : method === "miniapp.sessions.recent"
               ? { sessions: [], count: 0 }
-              : method === "miniapp.capture.image"
-                ? { text: "이미지 ok" }
-                : method === "miniapp.capture.document"
-                  ? { text: "문서 ok" }
-                  : {};
+              : method === "miniapp.capture.batch"
+                ? { text: "이미지·문서 검토 완료" }
+                : {};
         return new Response(JSON.stringify({ ok: true, payload }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -428,12 +427,15 @@ describe("Workstation (connected, fixtures)", () => {
     expect(within(chips).getByText("contract.pdf")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "전송" }));
 
-    await waitFor(() => expect(rpcCalls.filter((c) => c.method.startsWith("miniapp.capture.")).length).toBe(2));
-    const captures = rpcCalls.filter((c) => c.method.startsWith("miniapp.capture."));
-    expect(captures.map((c) => c.method)).toEqual(["miniapp.capture.image", "miniapp.capture.document"]);
-    // the typed text rides as the caption of the first attachable file only
+    await waitFor(() => expect(rpcCalls.some((c) => c.method === "miniapp.capture.batch")).toBe(true));
+    const captures = rpcCalls.filter((c) => c.method === "miniapp.capture.batch");
+    // Two supported files, ONE batch call — the unsupported clip.mp4 was dropped at
+    // staging and never reaches the gateway.
+    expect(captures).toHaveLength(1);
+    const sent = captures[0].params.files as Array<{ filename: string }>;
+    expect(sent.map((f) => f.filename)).toEqual(["quote.png", "contract.pdf"]);
+    // the typed text rides as the batch caption (once, not per file)
     expect(captures[0].params).toMatchObject({ caption: "둘 다 검토해줘" });
-    expect(captures[1].params).not.toHaveProperty("caption");
     expect(composer).toHaveValue("");
   });
 
@@ -470,7 +472,7 @@ describe("Workstation (connected, fixtures)", () => {
       vi.fn(async (_url: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
         const method = String(body.method ?? "");
-        if (method === "miniapp.capture.image") {
+        if (method === "miniapp.capture.batch") {
           await gate; // hold the turn open until the test moves focus
           return new Response(JSON.stringify({ ok: true, payload: { text: "분석 완료" } }), {
             status: 200,
@@ -508,7 +510,7 @@ describe("Workstation (connected, fixtures)", () => {
 
     // …then the turn finishes: focus must STAY where the user put it.
     release();
-    await screen.findByRole("group", { name: "첨부 분석 결과" });
+    await screen.findByText("분석 완료");
     const composer = screen.getByRole("textbox", { name: "Deneb에게 메시지" });
     await waitFor(() => expect(composer).not.toBeDisabled());
     expect(historyBtn).toHaveFocus();
@@ -571,7 +573,7 @@ describe("Workstation (connected, fixtures)", () => {
       vi.fn(async (_url: string, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body ?? "{}")) as { method?: string };
         const method = String(body.method ?? "");
-        if (method === "miniapp.capture.image") return new Promise<Response>(() => {}); // still in flight
+        if (method === "miniapp.capture.batch") return new Promise<Response>(() => {}); // still in flight
         const payload =
           method === "miniapp.models.list"
             ? { current: "", sections: [] }
