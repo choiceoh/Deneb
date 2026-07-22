@@ -385,6 +385,35 @@ describe("NotebookPane boundary behavior", () => {
       await waitFor(() => expect(screen.getAllByTitle("최근 답변이 인용한 자료")).toHaveLength(2));
     });
 
+    it("offers 딜 페이지 담기 for a deal notebook whose page isn't pinned yet", async () => {
+      calls = [];
+      installNotebookGateway(calls, {
+        "miniapp.notebook.list": () =>
+          reply({ notebooks: [{ id: "d", name: "새 딜", dealRef: "프로젝트/새딜.md", sourceCount: 0, updated: 9 }] }),
+        "miniapp.notebook.get": (params) =>
+          reply({ id: params.id, name: "새 딜", dealRef: "프로젝트/새딜.md", sources: [] }),
+      });
+      renderNotebook();
+      await screen.findByRole("heading", { name: "새 딜" });
+
+      await userEvent.click(screen.getByRole("button", { name: "딜 페이지 담기" }));
+      await waitFor(() => expect(lastCall(calls, "miniapp.notebook.add_source")).toBeDefined());
+      // One click pins the deal's own wiki page as a source.
+      expect(lastCall(calls, "miniapp.notebook.add_source")?.params).toMatchObject({
+        id: "d",
+        kind: "wiki",
+        ref: "프로젝트/새딜.md",
+        title: "딜 페이지",
+      });
+    });
+
+    it("hides 딜 페이지 담기 once the deal page is already a source", async () => {
+      // The default 최신 notebook's S2 IS its deal page (kind=wiki, ref=dealRef).
+      renderNotebook();
+      await screen.findByRole("heading", { name: "최신 노트북" });
+      expect(screen.queryByRole("button", { name: "딜 페이지 담기" })).not.toBeInTheDocument();
+    });
+
     it("toggles the same source closed when its chip is clicked twice", async () => {
       renderNotebook();
       await screen.findByRole("heading", { name: "최신 노트북" });
