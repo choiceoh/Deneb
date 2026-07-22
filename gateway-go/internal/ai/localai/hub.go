@@ -294,23 +294,31 @@ func (h *Hub) Submit(ctx context.Context, req Request) (Response, error) {
 // CallLocalLLM is a backward-compatible wrapper matching pilot.CallLocalLLM's
 // signature. Callers that don't need full Request control use this.
 func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
+	resp, err := h.CallLocalLLMDetailed(ctx, system, userMessage, maxTokens, extraBody...)
+	return resp.Text, err
+}
+
+// CallLocalLLMDetailed is CallLocalLLM but returns the full Response (text +
+// token usage + the model that answered), so callers can record per-call usage
+// for local models that never run a full agent turn.
+func (h *Hub) CallLocalLLMDetailed(ctx context.Context, system, userMessage string, maxTokens int, extraBody ...rawJSON) (Response, error) {
 	req := SimpleRequest(system, userMessage, maxTokens, PriorityCritical, "calllocal")
 	if len(extraBody) > 0 && len(extraBody[0]) > 0 {
 		var fields jsonObject
 		if err := json.Unmarshal(extraBody[0], &fields); err != nil {
-			return "", fmt.Errorf("decode localai extra body: %w", err)
+			return Response{}, fmt.Errorf("decode localai extra body: %w", err)
 		}
 		req.ExtraBody = fields
 	}
 	resp, err := h.Submit(ctx, req)
 	if err == nil {
-		return resp.Text, nil
+		return resp, nil
 	}
 	// Admission/health failures may use another configured model, but shutdown
 	// and caller cancellation are terminal for this work item. Starting a direct
 	// fallback after either would recreate the zombie work the hub just stopped.
 	if h.registry == nil || errors.Is(err, ErrHubShutdown) || ctx.Err() != nil {
-		return "", err
+		return Response{}, err
 	}
 
 	// Fallback chain: try other model roles. Non-reasoning models are tried
@@ -324,34 +332,34 @@ func (h *Hub) CallLocalLLM(ctx context.Context, system, userMessage string, maxT
 			deferredReasoning = append(deferredReasoning, role)
 			continue
 		}
-		if text, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
-			return text, nil
+		if resp, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
+			return resp, nil
 		}
 	}
 	for _, role := range deferredReasoning {
-		if text, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
-			return text, nil
+		if resp, ok := h.callFallbackRole(ctx, role, system, userMessage, maxTokens, extraBody...); ok {
+			return resp, nil
 		}
 	}
-	return "", err
+	return Response{}, err
 }
 
 // callFallbackRole runs callDirect for a single fallback role. It returns
 // (text, true) on success and ("", false) when the role is unconfigured
 // (nil client) or the call failed.
-func (h *Hub) callFallbackRole(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, bool) {
+func (h *Hub) callFallbackRole(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...rawJSON) (Response, bool) {
 	client := h.registry.Client(role)
 	if client == nil {
-		return "", false
+		return Response{}, false
 	}
 	roleCfg := h.registry.Config(role)
-	text, err := h.callDirect(ctx, client, roleCfg.ProviderID, roleCfg.Model, system, userMessage, maxTokens, extraBody...)
+	text, usage, err := h.callDirect(ctx, client, roleCfg.ProviderID, roleCfg.Model, system, userMessage, maxTokens, extraBody...)
 	if err != nil {
 		h.logger.Debug("localai hub: fallback role failed",
 			"role", role, "reasoning", h.registry.RoleIsReasoning(role), "error", err)
-		return "", false
+		return Response{}, false
 	}
-	return text, true
+	return Response{Text: text, Usage: usage, Model: roleCfg.Model}, true
 }
 
 // --- dispatch loop ---
@@ -443,7 +451,7 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 	}
 
 	// Collect response.
-	text, err := collectStream(reqCtx, events)
+	text, usage, err := collectStream(reqCtx, events)
 	if err == nil && reqCtx.Err() != nil {
 		err = reqCtx.Err()
 	}
@@ -458,7 +466,7 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 
 	// Notify RL observer (trajectory collection).
 	if obs := h.observer; obs != nil {
-		obs(*req, Response{Text: text}, nil)
+		obs(*req, Response{Text: text, Usage: usage, Model: chatReq.Model}, nil)
 	}
 
 	// Cache the response.
@@ -472,7 +480,7 @@ func (h *Hub) executeRequest(entry *queueEntry) {
 		}
 	}
 
-	entry.resultCh <- submitResult{resp: Response{Text: text}}
+	entry.resultCh <- submitResult{resp: Response{Text: text, Usage: usage, Model: chatReq.Model}}
 }
 
 // linkedRequestContext keeps the caller context as the parent (preserving its
@@ -506,11 +514,11 @@ func (h *Hub) recordExecutionFailure(err error) {
 }
 
 // callDirect is a raw local AI call for fallback chains (bypasses queue/budget).
-func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, model, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
+func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, model, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, llm.TokenUsage, error) {
 	var callerExtra map[string]any
 	if len(extraBody) > 0 && len(extraBody[0]) > 0 {
 		if err := json.Unmarshal(extraBody[0], &callerExtra); err != nil {
-			return "", fmt.Errorf("decode localai extra body: %w", err)
+			return "", llm.TokenUsage{}, fmt.Errorf("decode localai extra body: %w", err)
 		}
 	}
 	merged := mergeRequestBody(h.registry, providerID, model, callerExtra)
@@ -530,7 +538,7 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, mo
 
 	events, err := client.StreamChat(ctx, req)
 	if err != nil {
-		return "", err
+		return "", llm.TokenUsage{}, err
 	}
 	return collectStream(ctx, events)
 }
@@ -540,24 +548,50 @@ func (h *Hub) callDirect(ctx context.Context, client *llm.Client, providerID, mo
 // thinking_delta blocks (the translated reasoning_content channel) carrying
 // private chain-of-thought, which must never leak into hub output such as
 // compaction summaries.
-func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
+func collectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, llm.TokenUsage, error) {
+	var usage llm.TokenUsage
 	if events == nil {
-		return "", fmt.Errorf("localai: nil event channel")
+		return "", usage, fmt.Errorf("localai: nil event channel")
 	}
 	var sb strings.Builder
 	for {
 		select {
 		case <-ctx.Done():
 			if sb.Len() > 0 {
-				return strings.TrimSpace(sb.String()), nil
+				return strings.TrimSpace(sb.String()), usage, nil
 			}
-			return "", ctx.Err()
+			return "", usage, ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
-				return strings.TrimSpace(sb.String()), nil
+				return strings.TrimSpace(sb.String()), usage, nil
 			}
-			if ev.Type == "content_block_delta" {
+			switch ev.Type {
+			case "content_block_delta":
 				sb.WriteString(extractTextDelta(ev.Payload.Bytes()))
+			case "message_start":
+				var ms llm.MessageStart
+				if json.Unmarshal(ev.Payload.Bytes(), &ms) == nil {
+					usage.InputTokens = ms.Message.Usage.InputTokens
+					if v := ms.Message.Usage.CacheReadInputTokens; v > 0 {
+						usage.CacheReadInputTokens = v
+					}
+					if v := ms.Message.Usage.CacheCreationInputTokens; v > 0 {
+						usage.CacheCreationInputTokens = v
+					}
+				}
+			case "message_delta":
+				var md llm.MessageDelta
+				if json.Unmarshal(ev.Payload.Bytes(), &md) == nil {
+					if v := md.Usage.OutputTokens; v > 0 {
+						usage.OutputTokens = v
+					}
+					if v := md.Usage.CacheReadInputTokens; v > 0 {
+						usage.CacheReadInputTokens = v
+					}
+					if v := md.Usage.CacheCreationInputTokens; v > 0 {
+						usage.CacheCreationInputTokens = v
+					}
+				}
 			}
 		}
 	}

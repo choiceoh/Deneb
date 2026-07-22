@@ -69,6 +69,11 @@ func WorkTypeForKey(sessionKey string) string {
 		return "skill-review"
 	case strings.HasPrefix(sessionKey, "system:groupware"):
 		return "groupware-radar"
+	// Local-model helper calls (session titles, triage, summarizers, mail-analysis
+	// stages) are logged under system:helper via agentlog helper.llm events. Classify
+	// before the bare "system" bucket so local-model usage gets its own slug.
+	case strings.HasPrefix(sessionKey, "system:helper"):
+		return "helper"
 	case sessionKey == "boot":
 		return "boot"
 	// A native subagent runs under client:main:<label>:<ms>; classify it before

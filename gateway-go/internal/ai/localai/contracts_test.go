@@ -642,7 +642,7 @@ func TestCollectStreamContract(t *testing.T) {
 				ch <- event
 			}
 			close(ch)
-			got, err := collectStream(context.Background(), ch)
+			got, _, err := collectStream(context.Background(), ch)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -652,7 +652,7 @@ func TestCollectStreamContract(t *testing.T) {
 		})
 	}
 
-	if _, err := collectStream(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "nil event channel") {
+	if _, _, err := collectStream(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "nil event channel") {
 		t.Fatalf("nil stream error = %v", err)
 	}
 
@@ -660,7 +660,7 @@ func TestCollectStreamContract(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		ch := make(chan llm.StreamEvent)
-		got, err := collectStream(ctx, ch)
+		got, _, err := collectStream(ctx, ch)
 		if got != "" || !errors.Is(err, context.Canceled) {
 			t.Fatalf("result = %q/%v", got, err)
 		}
@@ -675,7 +675,7 @@ func TestCollectStreamContract(t *testing.T) {
 			err  error
 		}, 1)
 		go func() {
-			text, err := collectStream(ctx, ch)
+			text, _, err := collectStream(ctx, ch)
 			gotCh <- struct {
 				text string
 				err  error

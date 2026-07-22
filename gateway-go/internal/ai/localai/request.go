@@ -78,6 +78,14 @@ type Response struct {
 
 	// Duration is the wall-clock time from submission to response.
 	Duration time.Duration
+
+	// Usage is the token usage reported by the upstream model. Zero on a cache
+	// hit (no upstream call) and for providers that do not report usage.
+	Usage llm.TokenUsage
+
+	// Model is the model that actually answered — differs from the requested
+	// lightweight model when the fallback chain fired. Empty on a cache hit.
+	Model string
 }
 
 // SimpleRequest creates a minimal Request with a single user message.
