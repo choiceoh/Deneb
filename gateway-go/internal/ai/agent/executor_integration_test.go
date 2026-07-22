@@ -27,6 +27,11 @@ type fakeLLMStreamer struct {
 	idx              int
 	delay            time.Duration         // optional delay before sending events
 	recordedThinking []*llm.ThinkingConfig // per-turn ChatRequest.Thinking, captured in StreamChat
+	// recordedMsgs snapshots each turn's request messages as role-prefixed
+	// content bytes — copied at send time so a later in-place history mutation
+	// (compaction, image strip) cannot rewrite what a prior turn actually sent.
+	// Used to verify within-run wire-prefix stability for content-prefix caches.
+	recordedMsgs [][][]byte
 }
 
 func (f *fakeLLMStreamer) next() []llm.StreamEvent {
@@ -43,6 +48,11 @@ func (f *fakeLLMStreamer) next() []llm.StreamEvent {
 func (f *fakeLLMStreamer) StreamChat(_ context.Context, req llm.ChatRequest) (<-chan llm.StreamEvent, error) {
 	f.mu.Lock()
 	f.recordedThinking = append(f.recordedThinking, req.Thinking)
+	snap := make([][]byte, len(req.Messages))
+	for i, m := range req.Messages {
+		snap[i] = append([]byte(m.Role+"\x00"), m.Content.Bytes()...)
+	}
+	f.recordedMsgs = append(f.recordedMsgs, snap)
 	f.mu.Unlock()
 	return f.stream(), nil
 }
