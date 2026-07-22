@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.133.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.132.0...deneb-v4.133.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **chat:** 생각 중 요약을 두 줄로 더 길게, 요약 사이 원문 추론 깜빡임 제거 ([#4145](https://github.com/choiceoh/Deneb/issues/4145)) ([1123319](https://github.com/choiceoh/Deneb/commit/1123319e37a256a06a4eb4b254a71fdfd2ed5295))
+* **chat:** 첨부 batch 미리보기를 tiny 모델 1000자 요약으로 ([#4143](https://github.com/choiceoh/Deneb/issues/4143)) ([7ec43fe](https://github.com/choiceoh/Deneb/commit/7ec43feb9ee52e09c0bc43c02b47a6375018369a))
+
 ## [4.132.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.131.0...deneb-v4.132.0) (2026-07-22)
 
 

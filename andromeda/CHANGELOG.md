@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.105](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.104...andromeda-v0.0.105) (2026-07-22)
+
+
+### ✨ Features
+
+* **chat:** 생각 중 요약을 두 줄로 더 길게, 요약 사이 원문 추론 깜빡임 제거 ([#4145](https://github.com/choiceoh/Deneb/issues/4145)) ([1123319](https://github.com/choiceoh/Deneb/commit/1123319e37a256a06a4eb4b254a71fdfd2ed5295))
+
 ## [0.0.104](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.103...andromeda-v0.0.104) (2026-07-22)
 
 
