@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.132.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.131.0...deneb-v4.132.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **chat:** 생각 중 칩을 빠른 로컬 모델의 한국어 진행 요약으로 ([#4141](https://github.com/choiceoh/Deneb/issues/4141)) ([221e676](https://github.com/choiceoh/Deneb/commit/221e67662b17cc04d89f7865237b97188becce11))
+
 ## [4.131.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.130.0...deneb-v4.131.0) (2026-07-22)
 
 
