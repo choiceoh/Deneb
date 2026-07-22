@@ -154,6 +154,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err != nil {
 		return output, err
 	}
+	if readsExternalOrigin(name) {
+		if tc := TurnContextFromContext(ctx); tc != nil {
+			tc.MarkExternalOriginTouched()
+		}
+	}
 
 	output = r.capToolOutput(ctx, def, name, output)
 

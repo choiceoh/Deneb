@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // a promptguard instruction-override signature used to taint a turn in tests.
@@ -60,6 +61,28 @@ func TestUntrustedToolGate_ExternalOriginTaintsEvenWhenClean(t *testing.T) {
 				t.Fatalf("read must stay allowed after %q taints the turn", tool)
 			}
 		})
+	}
+}
+
+func TestUntrustedToolGate_CodeActionTaintsWhenBridgeReadExternalOrigin(t *testing.T) {
+	g := newUntrustedToolGate("client:main", "run1", nil, nil)
+	tc := toolport.NewTurnContext()
+	g.bindTurnContext(tc)
+	tc.MarkExternalOriginTouched()
+
+	g.observeToolResult("code_action", "t1", "printed summary with no injection signature", false)
+	if block, _ := g.beforeToolCall("exec", "c1", []byte(`{"command":"ls"}`)); !block {
+		t.Fatal("code_action that read external-origin content via bridge must taint the turn and block exec")
+	}
+}
+
+func TestUntrustedToolGate_CodeActionWikiOnlyDoesNotTaint(t *testing.T) {
+	g := newUntrustedToolGate("client:main", "run1", nil, nil)
+	g.bindTurnContext(toolport.NewTurnContext())
+
+	g.observeToolResult("code_action", "t1", "joined wiki pages only", false)
+	if block, _ := g.beforeToolCall("exec", "c1", []byte(`{"command":"ls"}`)); block {
+		t.Fatal("code_action with only internal reads must not block exec")
 	}
 }
 

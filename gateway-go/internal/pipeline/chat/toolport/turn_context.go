@@ -18,6 +18,12 @@ type TurnContext struct {
 	results map[string]*TurnResult     // keyed by tool_use_id
 	waiters map[string][]chan struct{} // signals when a result is stored
 	stats   map[string]*toolStat       // per-tool-name timing stats
+	// externalOrigin marks that an external-origin tool (web, mail_archive, …)
+	// succeeded in this turn, including via the code_action bridge. The
+	// untrusted-tool gate reads this when code_action completes so nested
+	// mail/web reads taint the turn even though only the wrapper result is
+	// observed at the hook layer.
+	externalOrigin bool
 }
 
 // toolStat accumulates completion-time samples for a single tool name within a turn.
@@ -47,6 +53,28 @@ type TurnResult struct {
 // NewTurnContext creates an empty turn context.
 func NewTurnContext() *TurnContext {
 	return &TurnContext{}
+}
+
+// MarkExternalOriginTouched records that an external-origin tool read succeeded
+// in this turn (direct call or via code_action bridge).
+func (tc *TurnContext) MarkExternalOriginTouched() {
+	if tc == nil {
+		return
+	}
+	tc.mu.Lock()
+	tc.externalOrigin = true
+	tc.mu.Unlock()
+}
+
+// ExternalOriginTouched reports whether an external-origin read landed in this
+// turn.
+func (tc *TurnContext) ExternalOriginTouched() bool {
+	if tc == nil {
+		return false
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.externalOrigin
 }
 
 // Store records a tool's result, keyed by tool_use_id.
