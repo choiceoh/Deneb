@@ -58,15 +58,18 @@ function decodeHtmlEntities(s) {
 
 function stripDangerousBlocks(s) {
   // Loop until stable — nested/partial replacements like `<scr<script>ipt>` need
-  // more than one pass. Allow whitespace before `>` in end tags (`</script >`).
+  // more than one pass. Closing tags allow arbitrary junk before `>` so filters
+  // match CodeQL bad-tag-filter cases like `</script\t\n bar>`.
   let prev;
   do {
     prev = s;
-    s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "");
-    s = s.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, "");
+    s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "");
+    s = s.replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "");
     // Drop unclosed script/style openings so later tag stripping cannot revive them.
     s = s.replace(/<script\b[^>]*>[\s\S]*$/gi, "");
     s = s.replace(/<style\b[^>]*>[\s\S]*$/gi, "");
+    // Also strip bare openers that never close (attribute-only / truncated).
+    s = s.replace(/<\/?(?:script|style)\b[^>]*>/gi, "");
   } while (s !== prev);
   return s;
 }

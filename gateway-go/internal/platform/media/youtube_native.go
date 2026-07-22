@@ -23,6 +23,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -67,11 +68,23 @@ func innertubeVersion() string {
 }
 
 // extractVideoID pulls the 11-char video ID out of any supported YouTube URL
-// (reusing youtubeURLPattern), or accepts a bare ID. Returns "" when none.
+// (net/url host check via youtubeVideoURL), or accepts a bare ID. Returns "" when none.
 func extractVideoID(input string) string {
 	input = strings.TrimSpace(input)
-	if m := youtubeURLPattern.FindStringSubmatch(input); len(m) > 1 {
-		return m[1]
+	if raw, ok := youtubeVideoURL(input); ok {
+		if u, err := url.Parse(raw); err == nil {
+			if id := youtubeVideoID(u); id != "" {
+				return id
+			}
+		}
+	}
+	// Free-text blob: take the first extracted video URL's ID.
+	for _, raw := range ExtractYouTubeURLs(input) {
+		if u, err := url.Parse(raw); err == nil {
+			if id := youtubeVideoID(u); id != "" {
+				return id
+			}
+		}
 	}
 	if len(input) == 11 && isVideoID(input) {
 		return input

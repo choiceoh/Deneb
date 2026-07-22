@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"os"
@@ -81,13 +82,16 @@ func assembleContext(
 	cfg ContextConfig,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	memBudget := cfg.MemoryTokenBudget
-	if memBudget > uint64(math.MaxInt) {
-		memBudget = uint64(math.MaxInt)
+	if cfg.MemoryTokenBudget > uint64(math.MaxInt) {
+		return nil, fmt.Errorf("chat: memory token budget %d exceeds int range", cfg.MemoryTokenBudget)
+	}
+	// FreshTailCount is uint32; on 32-bit int platforms reject the impossible tail.
+	if uint64(cfg.FreshTailCount) > uint64(math.MaxInt) {
+		return nil, fmt.Errorf("chat: fresh tail count %d exceeds int range", cfg.FreshTailCount)
 	}
 	result, err := bridge.AssembleContext(
 		sessionKey,
-		int(memBudget),
+		int(cfg.MemoryTokenBudget),
 		int(cfg.FreshTailCount),
 		logger,
 	)
