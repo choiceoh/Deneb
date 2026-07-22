@@ -62,6 +62,43 @@ func TestIsAutoTitleSessionReturnsTrueForConversationKeys(t *testing.T) {
 	}
 }
 
+func TestDocumentHintsExtractsSharedFileNames(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{
+			name: "share marker with spaced korean filename",
+			in:   "📲 공유 맥락: 누구 말이 맞아? 📄 공유 문서에서 추출한 텍스트 (230213_양명에너지 주식양수도계약.docx): 계약 내용...",
+			want: []string{"230213_양명에너지 주식양수도계약.docx"},
+		},
+		{
+			name: "caps at two distinct names",
+			in:   "첨부: 견적서.xlsx 그리고 계약서.pdf 그리고 발주서.pdf",
+			want: []string{"견적서.xlsx", "계약서.pdf"},
+		},
+		{
+			name: "no document",
+			in:   "그냥 안부 인사예요",
+			want: nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := documentHints(c.in)
+			if len(got) != len(c.want) {
+				t.Fatalf("documentHints(%q) = %v, want %v", c.in, got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("documentHints[%d] = %q, want %q", i, got[i], c.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestFirstLineReturnsTextBeforeNewline(t *testing.T) {
 	cases := map[string]string{
 		"a\nb":   "a",

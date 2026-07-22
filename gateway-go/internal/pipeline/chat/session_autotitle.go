@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"time"
 
@@ -54,8 +55,58 @@ func isAutoTitleSession(sessionKey string) bool {
 // the same scope this live path uses).
 func IsAutoTitleSessionKey(sessionKey string) bool { return isAutoTitleSession(sessionKey) }
 
-const sessionTitleSystemPrompt = "다음 대화를 보고 주제를 한국어 명사구 제목으로 요약하라. " +
+const sessionTitleSystemPrompt = "다음 대화가 '무엇에 관한 것인지'를 한국어 명사구 제목으로 요약하라. " +
+	"대화에 나오는 구체적 대상(회사·거래처·인물·문서·안건 같은 고유명사)이 있으면 그것을 제목의 핵심으로 삼아라. " +
+	"'~완료'·'~확인'·'~요청' 같은 행위·상태 서술이 아니라 무엇에 관한 대화인지(주제·대상)를 제목으로 하라. " +
 	"3~6단어, 한 줄, 따옴표·마침표·번호 매기기·\"제목:\" 같은 접두어 없이 제목 텍스트만 출력하라."
+
+// A shared-document filename is often the single strongest topic signal of a
+// 공유(share)/첨부 conversation's opening message (e.g. "…양명에너지 주식양수도계약
+// .docx"). The small titler model tends to over-index on the question/answer
+// verbs ("근거 확인 및 판정 기록 완료") and skip it, so we lift document names out
+// and hand them to the model as an explicit title hint rather than trusting it
+// to notice them in the body. Two shapes:
+//   - parenthesized "(NAME.ext)" — the share/attachment markers wrap the name in
+//     parens, so this captures names that contain spaces (Korean filenames do).
+//   - bare "NAME.ext" — a whitespace-delimited token, for names dropped inline.
+var (
+	docExtGroup    = `(?:pdf|docx?|xlsx?|pptx?|hwpx?|odt|ods|odp|txt|csv)`
+	docNameParenRe = regexp.MustCompile(`(?i)\(([^()\n]{1,80}?\.` + docExtGroup + `)\)`)
+	docNameBareRe  = regexp.MustCompile(`(?i)\S+\.` + docExtGroup + `\b`)
+)
+
+// documentHints returns up to two distinct shared-document names found in the
+// message. Parenthesized names win; a bare token that is only the tail of an
+// already-found fuller name is dropped (so a spaced name isn't double-counted).
+func documentHints(msg string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(name string) bool {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return false
+		}
+		for _, ex := range out {
+			if strings.HasSuffix(ex, name) {
+				return false // just the tail of a fuller name already captured
+			}
+		}
+		seen[name] = true
+		out = append(out, name)
+		return len(out) >= 2
+	}
+	for _, m := range docNameParenRe.FindAllStringSubmatch(msg, 8) {
+		if add(m[1]) {
+			return out
+		}
+	}
+	for _, m := range docNameBareRe.FindAllString(msg, 8) {
+		if add(m) {
+			return out
+		}
+	}
+	return out
+}
 
 // autoTitleSessionAsync derives and stores a conversation title for a fresh
 // native chat session, in the background — titling must never delay the reply.
@@ -112,6 +163,11 @@ func GenerateSessionTitle(ctx context.Context, userMsg, reply string) string {
 	prompt := "사용자: " + capRunes(userMsg, sessionTitleInputCap)
 	if r := strings.TrimSpace(reply); r != "" {
 		prompt += "\n어시스턴트: " + capRunes(r, sessionTitleReplyCap)
+	}
+	// Surface any shared-document names as an explicit topic anchor — the titler
+	// otherwise buries the filename under the turn's verbs.
+	if hints := documentHints(userMsg); len(hints) > 0 {
+		prompt += "\n공유 문서(제목의 핵심 후보): " + strings.Join(hints, ", ")
 	}
 	out, err := pilot.CallTinyLLM(ctx, sessionTitleSystemPrompt, prompt, sessionTitleMaxTokens)
 	if title := cleanSessionTitle(out); err == nil && title != "" {
