@@ -21,9 +21,10 @@ func TestWrapGroupwareRunError(t *testing.T) {
 		t.Fatalf("wrapped error must keep the underlying cause for errors.Is")
 	}
 
-	// Empty diagnostic → the bare error, unchanged (no useless wrapping).
-	if got := wrapGroupwareRunError("   ", base); got != base {
-		t.Fatalf("blank out should return the bare error, got %v", got)
+	// Empty diagnostic → the bare error, unchanged (no diagnostic prefix added).
+	// Compare messages, not error values (errorlint: != on errors is unsafe).
+	if got := wrapGroupwareRunError("   ", base); got == nil || got.Error() != base.Error() {
+		t.Fatalf("blank out should return the bare error unchanged, got %v", got)
 	}
 
 	// nil error → nil.
