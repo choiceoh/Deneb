@@ -151,11 +151,11 @@ class MainActivity : ComponentActivity() {
                 },
                 captureActions = CaptureActions(
                     // The chat input owns the single picker now and hands us the
-                    // already-picked file, classified by type — we just read its
-                    // bytes and run the matching gateway capture.
-                    onImageFile = { file -> captureFromPlatformFile(file, audio = false) },
-                    onAudioFile = { file -> captureFromPlatformFile(file, audio = true) },
-                    onDocumentFile = { file -> captureDocumentFromPlatformFile(file) },
+                    // already-picked file (classified by type) plus the composer text
+                    // as the caption — we read the bytes and run the gateway capture.
+                    onImageFile = { file, caption -> captureFromPlatformFile(file, audio = false, caption) },
+                    onAudioFile = { file, caption -> captureFromPlatformFile(file, audio = true, caption) },
+                    onDocumentFile = { file, caption -> captureDocumentFromPlatformFile(file, caption) },
                     onVoiceInput = { launchVoiceCapture() },
                 ),
                 openWorkFeedItemId = pendingWorkFeedItemId,
@@ -254,9 +254,9 @@ class MainActivity : ComponentActivity() {
     // (miniapp.capture.batch): the gateway materializes it and the agent reads it with a
     // tool, instead of the old single-capture RPCs that dumped the whole extracted text
     // inline into the turn. Matches andromeda, which sends even one file as a batch.
-    private suspend fun sendSingleFileBatch(bytes: ByteArray, filename: String, mime: String) {
+    private suspend fun sendSingleFileBatch(bytes: ByteArray, filename: String, mime: String, caption: String = "") {
         if (bytes.isEmpty()) return
-        (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(DenebAttachment(bytes, filename, mime)))
+        (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(DenebAttachment(bytes, filename, mime)), caption)
     }
 
     private fun captureFile(bytes: ByteArray, filename: String, mime: String) {
@@ -275,25 +275,27 @@ class MainActivity : ComponentActivity() {
 
     // captureFromPlatformFile is the attach-picker counterpart of captureFromUri:
     // the chat input already picked the file (FileKit) and classified it by type,
-    // so we read its bytes and route image -> PaddleOCR / audio -> VibeVoice-ASR.
-    private fun captureFromPlatformFile(file: PlatformFile, audio: Boolean) {
+    // so we read its bytes and route image -> PaddleOCR / audio -> VibeVoice-ASR. The
+    // caption is whatever the user typed in the composer alongside the attachment.
+    private fun captureFromPlatformFile(file: PlatformFile, audio: Boolean, caption: String = "") {
         val mime = mimeForFileName(file.name, audio)
         lifecycleScope.launch {
             val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
-            sendSingleFileBatch(bytes, file.name, mime)
+            sendSingleFileBatch(bytes, file.name, mime, caption)
         }
     }
 
     // captureDocumentFromPlatformFile reads a picked document (pdf / text / code /
-    // Office / HWP / ODF) and runs the gateway's document-extraction capture turn.
-    // The MIME is derived by documentCaptureMime: pdf and text/code get an explicit
-    // hint, while OOXML and the host-converted formats (HWP / legacy Office / ODF)
-    // send none so the gateway routes them by filename — a blanket "text/plain"
-    // would make it read a binary HWP as garbage text before its converter runs.
-    private fun captureDocumentFromPlatformFile(file: PlatformFile) {
+    // Office / HWP / ODF) and sends it through the batch/pointer path so the agent
+    // reads it with a tool. The MIME is derived by documentCaptureMime: pdf and
+    // text/code get an explicit hint, while OOXML and the host-converted formats
+    // (HWP / legacy Office / ODF) send none so the gateway routes them by filename —
+    // a blanket "text/plain" would make it read a binary HWP as garbage text before
+    // its converter runs. The caption carries the composer text typed with the file.
+    private fun captureDocumentFromPlatformFile(file: PlatformFile, caption: String = "") {
         lifecycleScope.launch {
             val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
-            sendSingleFileBatch(bytes, file.name, documentCaptureMime(file.name))
+            sendSingleFileBatch(bytes, file.name, documentCaptureMime(file.name), caption)
         }
     }
 
@@ -465,15 +467,26 @@ class MainActivity : ComponentActivity() {
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 
-    // Fallback extension when the share carries no display name — the gateway
-    // dispatcher also matches on mime, so this only affects the shown filename.
+    // Fallback extension when the share carries no display name. The gateway dispatches
+    // by filename whenever the MIME is generic (octet-stream), so a wrong extension —
+    // the old ".csv" catch-all — made it parse an unrelated binary (e.g. an HWP shared
+    // as octet-stream) as CSV. Map every MIME we can; otherwise send NO extension so the
+    // gateway falls back to the MIME or an honest "unsupported" instead of misreading it.
     private fun sharedDocumentExt(mime: String): String = when {
         mime == "application/pdf" -> ".pdf"
         mime == "text/markdown" -> ".md"
+        mime.contains("csv") -> ".csv"
         mime.contains("wordprocessingml") -> ".docx"
         mime.contains("spreadsheetml") -> ".xlsx"
         mime.contains("presentationml") -> ".pptx"
-        else -> ".csv"
+        mime.contains("opendocument.text") -> ".odt"
+        mime.contains("opendocument.spreadsheet") -> ".ods"
+        mime.contains("opendocument.presentation") -> ".odp"
+        mime.contains("hwp") -> ".hwp"
+        mime == "application/msword" -> ".doc"
+        mime == "application/vnd.ms-excel" -> ".xls"
+        mime == "application/vnd.ms-powerpoint" -> ".ppt"
+        else -> ""
     }
 
     // Multiple shared images (several receipt photos / scan pages): read them all and

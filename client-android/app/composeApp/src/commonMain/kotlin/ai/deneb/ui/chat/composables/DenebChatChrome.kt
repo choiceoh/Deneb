@@ -20,13 +20,15 @@ import io.github.vinceglb.filekit.PlatformFile
  * these system launchers — there the attach picker simply attaches the file.
  *
  * [onImageFile]/[onAudioFile]/[onDocumentFile] receive an already-picked file (the
- * input owns the single picker); the entry point reads its bytes and runs the
- * matching gateway capture turn.
+ * input owns the single picker) plus the text the user had typed in the composer,
+ * which rides along as the capture's caption so the turn analyzes the file in the
+ * light of that question; the entry point reads the bytes and runs the gateway
+ * capture turn. The caption is blank when the composer was empty.
  */
 data class CaptureActions(
-    val onImageFile: (PlatformFile) -> Unit,
-    val onAudioFile: (PlatformFile) -> Unit,
-    val onDocumentFile: (PlatformFile) -> Unit,
+    val onImageFile: (PlatformFile, String) -> Unit,
+    val onAudioFile: (PlatformFile, String) -> Unit,
+    val onDocumentFile: (PlatformFile, String) -> Unit,
     val onVoiceInput: () -> Unit,
 )
 
