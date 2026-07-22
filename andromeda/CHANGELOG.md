@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.101](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.100...andromeda-v0.0.101) (2026-07-22)
+
+
+### ✨ Features
+
+* **capture:** convert HWP / legacy Office / ODF / video attachments to readable form ([#4104](https://github.com/choiceoh/Deneb/issues/4104)) ([4e50a60](https://github.com/choiceoh/Deneb/commit/4e50a60aa0c6ac5a37b6cd39e623c7c4d28f0e63))
+
 ## [0.0.100](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.99...andromeda-v0.0.100) (2026-07-22)
 
 
