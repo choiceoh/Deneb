@@ -135,6 +135,8 @@ export const NOTEBOOK_RPC = {
   // Pin an external ref (url/mail/diary) — the gateway fetches/reads it server-side
   // into text, the same fix as add_file for the other kinds add_source can't ingest.
   addRef: "miniapp.notebook.add_ref",
+  // Rename a pinned source (title only; cite stays stable).
+  editSource: "miniapp.notebook.edit_source",
   removeSource: "miniapp.notebook.remove_source",
 } as const;
 

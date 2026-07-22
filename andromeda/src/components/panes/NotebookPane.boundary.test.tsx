@@ -109,6 +109,13 @@ function installNotebookGateway(
           sources[id] = [...(sources[id] ?? []), source];
           return reply(source);
         }
+        case "miniapp.notebook.edit_source": {
+          const id = String(params.id);
+          const cite = String(params.cite);
+          const src = (sources[id] ?? []).find((s) => s.cite === cite);
+          if (src) src.title = String(params.title ?? "");
+          return reply(src ?? {});
+        }
         case "miniapp.notebook.remove_source": {
           const id = String(params.id);
           sources[id] = (sources[id] ?? []).filter((source) => source.cite !== params.cite);
@@ -293,6 +300,43 @@ describe("NotebookPane boundary behavior", () => {
       // A bare-filename ref (no archived original) shows no 원본 열기.
       await userEvent.click(screen.getByRole("button", { name: /메모\.txt/ }));
       expect(screen.queryByRole("link", { name: "원본 열기" })).not.toBeInTheDocument();
+    });
+
+    it("filters the source chips by a title/text query", async () => {
+      renderNotebook();
+      await screen.findByRole("heading", { name: "최신 노트북" });
+      // All four chips present initially (>3 → the search box shows).
+      expect(screen.getByRole("button", { name: /직접 메모/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /협상 메일/ })).toBeInTheDocument();
+
+      await userEvent.type(screen.getByLabelText("자료 검색"), "메일");
+      // Only the 협상 메일 chip survives the filter; 직접 메모 is hidden.
+      expect(screen.getByRole("button", { name: /협상 메일/ })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /직접 메모/ })).not.toBeInTheDocument();
+
+      await userEvent.clear(screen.getByLabelText("자료 검색"));
+      expect(screen.getByRole("button", { name: /직접 메모/ })).toBeInTheDocument();
+    });
+
+    it("renames a source through the preview, keeping its cite", async () => {
+      renderNotebook();
+      await screen.findByRole("heading", { name: "최신 노트북" });
+      await userEvent.click(screen.getByRole("button", { name: /직접 메모/ }));
+      await userEvent.click(screen.getByRole("button", { name: "이름 변경" }));
+
+      const dialog = screen.getByRole("dialog", { name: "자료 이름 변경" });
+      const field = within(dialog).getByLabelText("제목");
+      await userEvent.clear(field);
+      await userEvent.type(field, "마감 일정");
+      await userEvent.click(within(dialog).getByRole("button", { name: "저장" }));
+
+      await waitFor(() => expect(lastCall(calls, "miniapp.notebook.edit_source")).toBeDefined());
+      expect(lastCall(calls, "miniapp.notebook.edit_source")?.params).toMatchObject({
+        id: "latest",
+        cite: "S1",
+        title: "마감 일정",
+      });
+      expect((await screen.findAllByText("마감 일정")).length).toBeGreaterThan(0);
     });
 
     it("toggles the same source closed when its chip is clicked twice", async () => {
