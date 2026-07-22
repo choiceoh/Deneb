@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -129,7 +130,19 @@ internal fun FeedScreen(
             // from items, the empty response would remove the date bar and trap the user
             // on today with no way to request yesterday.
             val tz = remember { TimeZone.currentSystemDefault() }
-            val today = remember { Clock.System.todayIn(tz) }
+            // remember{} runs once; Android keeps the app in memory across midnight, so a
+            // plain `today` would freeze on the day the feed first opened and show
+            // yesterday's cards under "오늘" (desktop/andromeda recomputes, so it doesn't).
+            // Refresh at each local midnight — and immediately if we already crossed one
+            // while backgrounded (the wait goes non-positive → coerced to 1s).
+            var today by remember { mutableStateOf(Clock.System.todayIn(tz)) }
+            LaunchedEffect(tz) {
+                while (true) {
+                    val waitMs = dayStartMs(today.plus(1, DateTimeUnit.DAY), tz) - Clock.System.now().toEpochMilliseconds()
+                    delay(waitMs.coerceAtLeast(1_000L))
+                    today = Clock.System.todayIn(tz)
+                }
+            }
             val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
             val initialDate = remember(initialOpenItemId, initialOpenItemCreatedAtMs, today) {
                 if (initialOpenItemId.isNullOrBlank() || initialOpenItemCreatedAtMs <= 0L) {
@@ -139,6 +152,14 @@ internal fun FeedScreen(
                 }
             }
             var selectedDateIso by rememberSaveable(initialOpenItemId, openRequestKey) { mutableStateOf(initialDate.toString()) }
+            // Follow the midnight rollover: if the user is sitting on what was "오늘" when
+            // the day flips, advance to the new today so 오늘 keeps meaning the real today.
+            // A manual ← / → leaves selectedDate off last-known-today, so it isn't dragged.
+            var lastKnownToday by rememberSaveable { mutableStateOf(today.toString()) }
+            LaunchedEffect(today) {
+                selectedDateIso = rolledOverSelectedDate(selectedDateIso, lastKnownToday, today.toString())
+                lastKnownToday = today.toString()
+            }
             val selectedDate = runCatching { LocalDate.parse(selectedDateIso) }.getOrDefault(today)
             var expandedId by rememberSaveable(initialOpenItemId, openRequestKey) { mutableStateOf<String?>(null) }
             var pendingOpenItemId by rememberSaveable(initialOpenItemId, openRequestKey) {
@@ -379,6 +400,11 @@ internal fun feedDateNavState(
         canGoNext = selectedDate < maxDate,
     )
 }
+
+// On a midnight rollover the feed follows to the new today ONLY if the user was
+// sitting on the previous today (so "오늘" keeps meaning the real today after the app
+// sat in memory past midnight); a manually-picked ← / → date is left untouched.
+internal fun rolledOverSelectedDate(selectedIso: String, lastKnownTodayIso: String, newTodayIso: String): String = if (selectedIso == lastKnownTodayIso) newTodayIso else selectedIso
 
 /** The local calendar day a feed item was created on. */
 private fun localDateOf(epochMs: Long): LocalDate = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.currentSystemDefault()).date

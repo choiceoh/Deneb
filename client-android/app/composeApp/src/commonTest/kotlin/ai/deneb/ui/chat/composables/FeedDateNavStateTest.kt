@@ -5,6 +5,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -104,5 +105,23 @@ class FeedDateNavStateTest {
         assertTrue(feedDateNavState(LocalDate(2024, 2, 29), leapToday, emptyList()).canGoPrev)
         assertFalse(feedDateNavState(fallbackStart, leapToday, emptyList()).canGoPrev)
         assertTrue(feedDateNavState(fallbackStart, leapToday, emptyList()).canGoNext)
+    }
+
+    // Midnight rollover: the "오늘" view must follow the real today when the app sat in
+    // memory past midnight (the reported bug: yesterday's cards under 오늘), but must not
+    // drag a date the user manually navigated to.
+    @Test
+    fun rolloverFollowsWhenSittingOnTheOldToday() {
+        assertEquals("2026-07-22", rolledOverSelectedDate("2026-07-21", "2026-07-21", "2026-07-22"))
+    }
+
+    @Test
+    fun rolloverLeavesAManuallyNavigatedDateAlone() {
+        assertEquals("2026-07-15", rolledOverSelectedDate("2026-07-15", "2026-07-21", "2026-07-22"))
+    }
+
+    @Test
+    fun rolloverIsANoOpWhenTheDayHasNotChanged() {
+        assertEquals("2026-07-22", rolledOverSelectedDate("2026-07-22", "2026-07-22", "2026-07-22"))
     }
 }
