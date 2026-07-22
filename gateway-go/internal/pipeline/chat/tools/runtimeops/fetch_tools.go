@@ -307,8 +307,7 @@ func (r *fetchToolsReport) publishActivation(ctx context.Context, activation *to
 }
 
 func (r *fetchToolsReport) replayEvidence() []string {
-	names := make([]string, 0, len(r.activated)+len(r.alreadyActive))
-	names = append(names, r.activated...)
+	names := append([]string{}, r.activated...)
 	return append(names, r.alreadyActive...)
 }
 

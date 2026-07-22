@@ -475,10 +475,16 @@ def _ts_cases(text: str) -> list[tuple[str, str, int]]:
     result: list[tuple[str, str, int]] = []
     for match in call.finditer(clean):
         original = text[match.start() : min(len(text), match.start() + 500)]
+        # Non-backtracking string literal after `(` — avoid nested backrefs that
+        # ReDoS on inputs like ("\\\\a\\\\a...").
         name_match = re.search(
-            r"\(\s*([\"'`])((?:\\.|(?!\1).)*)\1", original, re.DOTALL
+            r"""\(\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|`((?:\\.|[^`\\])*)`)""",
+            original,
+            re.DOTALL,
         )
-        name = name_match.group(2) if name_match else "anonymous test"
+        name = "anonymous test"
+        if name_match:
+            name = next((g for g in name_match.groups() if g is not None), "anonymous test")
         arrow = clean.find("=>", match.end())
         if arrow < 0 or arrow - match.end() > 1200:
             continue

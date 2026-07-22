@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
 
 # --- Judge Prompts ---
@@ -125,10 +126,10 @@ def _call_judge(system: str, user_msg: str) -> str:
     if not api_key:
         raise RuntimeError("No JUDGE_API_KEY or ANTHROPIC_API_KEY set")
 
-    if "anthropic.com" in api_base:
+    host = (urllib.parse.urlparse(api_base).hostname or "").lower()
+    if host == "anthropic.com" or host.endswith(".anthropic.com"):
         return _call_anthropic(system, user_msg, api_key, model, api_base)
-    else:
-        return _call_openai_compat(system, user_msg, api_key, model, api_base)
+    return _call_openai_compat(system, user_msg, api_key, model, api_base)
 
 
 def _parse_json(raw: str) -> dict:

@@ -116,7 +116,10 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ ok: false, error: "not found" }));
   } catch (e) {
     res.statusCode = 500;
-    res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }));
+    // Do not echo exception strings — Error#stack / engine-specific String(err)
+    // can leak paths into the HTTP response.
+    console.error("browse handler error:", e?.message || e);
+    res.end(JSON.stringify({ ok: false, error: "internal error" }));
   }
 });
 

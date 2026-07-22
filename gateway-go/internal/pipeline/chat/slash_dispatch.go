@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -301,8 +302,12 @@ func sessionModeLine(sess *session.Session) string {
 // sessionTokenLine renders the 📊 토큰 usage line against the memory budget.
 func (h *Handler) sessionTokenLine(sess *session.Session) string {
 	memBudget := h.contextCfg.MemoryTokenBudget
+	if memBudget > uint64(math.MaxInt64) {
+		memBudget = uint64(math.MaxInt64)
+	}
+	budget := int64(memBudget) //nolint:gosec // G115 — clamped to MaxInt64 above
 	if sess.TotalTokens == nil || *sess.TotalTokens <= 0 {
-		return fmt.Sprintf("📊 **토큰:** 0 / %s", formatCompactTokens(int64(memBudget))) //nolint:gosec // G115 — memBudget is a practical token count
+		return fmt.Sprintf("📊 **토큰:** 0 / %s", formatCompactTokens(budget))
 	}
 	in, out := int64(0), int64(0)
 	if sess.InputTokens != nil {
@@ -311,12 +316,12 @@ func (h *Handler) sessionTokenLine(sess *session.Session) string {
 	if sess.OutputTokens != nil {
 		out = *sess.OutputTokens
 	}
-	usagePct := float64(*sess.TotalTokens) / float64(memBudget) * 100
+	usagePct := float64(*sess.TotalTokens) / float64(budget) * 100
 	if usagePct > 100 {
 		usagePct = 100
 	}
 	return fmt.Sprintf("📊 **토큰:** %s / %s (%s %.0f%%) in: %s, out: %s",
-		formatCompactTokens(*sess.TotalTokens), formatCompactTokens(int64(memBudget)), //nolint:gosec // G115 — memBudget is a practical token count, never near int64 overflow
+		formatCompactTokens(*sess.TotalTokens), formatCompactTokens(budget),
 		buildUsageBar(usagePct), usagePct,
 		formatCompactTokens(in), formatCompactTokens(out))
 }

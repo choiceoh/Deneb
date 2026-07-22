@@ -64,9 +64,10 @@ type YouTubeChapter struct {
 	Title    string `json:"title"`
 }
 
-// youtubeURLPattern matches YouTube video URLs.
+// youtubeURLPattern matches YouTube video URLs. Leading \b keeps host
+// matching from succeeding inside an attacker-controlled prefix host.
 var youtubeURLPattern = regexp.MustCompile(
-	`(?i)(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|live/)|youtu\.be/)([a-zA-Z0-9_-]{11})`,
+	`(?i)\b(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/|live/)|youtu\.be/)([a-zA-Z0-9_-]{11})\b`,
 )
 
 // IsYouTubeURL returns true if the text contains a YouTube video URL.

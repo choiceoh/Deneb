@@ -51,7 +51,7 @@ func hasDocumentAttachment(attachments []ChatAttachment) bool {
 // attachments. Images with base64 Data get inline ImageSource blocks;
 // images with URL get URL-referenced blocks.
 func buildAttachmentBlocks(text string, attachments []ChatAttachment) []llm.ContentBlock {
-	blocks := make([]llm.ContentBlock, 0, len(attachments)+1)
+	blocks := make([]llm.ContentBlock, 0, len(attachments))
 	if text != "" {
 		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: text})
 	}

@@ -36,23 +36,43 @@ export function normalizeFolder(raw) {
   return f;
 }
 
-/** Decode the subset of HTML entities Amaranth forms commonly emit. */
+/** Decode the subset of HTML entities Amaranth forms commonly emit.
+ * Decode `&amp;` last so `&amp;lt;` cannot become a raw `<` via double-unescape. */
 function decodeHtmlEntities(s) {
   return String(s)
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)));
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const n = Number.parseInt(hex, 16);
+      return Number.isFinite(n) && n <= 0x10ffff ? String.fromCodePoint(n) : "";
+    })
+    .replace(/&#(\d+);/g, (_, dec) => {
+      const n = Number.parseInt(dec, 10);
+      return Number.isFinite(n) && n <= 0x10ffff ? String.fromCodePoint(n) : "";
+    })
+    .replace(/&amp;/gi, "&");
+}
+
+function stripDangerousBlocks(s) {
+  // Loop until stable — nested/partial replacements like `<scr<script>ipt>` need
+  // more than one pass. Allow whitespace before `>` in end tags (`</script >`).
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "");
+    s = s.replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, "");
+    // Drop unclosed script/style openings so later tag stripping cannot revive them.
+    s = s.replace(/<script\b[^>]*>[\s\S]*$/gi, "");
+    s = s.replace(/<style\b[^>]*>[\s\S]*$/gi, "");
+  } while (s !== prev);
+  return s;
 }
 
 function stripHtmlFragment(html, { preserveBreaks = false } = {}) {
-  let s = String(html || "");
-  s = s.replace(/<script[\s\S]*?<\/script>/gi, "");
-  s = s.replace(/<style[\s\S]*?<\/style>/gi, "");
+  let s = stripDangerousBlocks(String(html || ""));
   s = s.replace(/<(br|hr)\s*\/?>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
   s = s.replace(/<\/(p|div|li|h[1-6])>/gi, preserveBreaks ? " DENEBHTMLBREAK " : "\n");
   s = s.replace(/<[^>]+>/g, "");
@@ -92,7 +112,9 @@ export function htmlTableMatrix(tableHtml) {
       while (row[col] !== undefined) col += 1;
       const colspan = attrInt(cell[1], "colspan");
       const rowspan = attrInt(cell[1], "rowspan");
-      const value = stripHtmlFragment(cell[2], { preserveBreaks: true }).replace(/\|/g, "\\|");
+      const value = stripHtmlFragment(cell[2], { preserveBreaks: true })
+        .replace(/\\/g, "\\\\")
+        .replace(/\|/g, "\\|");
       row[col] = value;
       for (let i = 1; i < colspan; i += 1) row[col + i] = "";
       if (rowspan > 1) {

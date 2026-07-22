@@ -251,7 +251,7 @@ func (c *Client) convertAssistantMessage(parts openAIMessageParts) []openAIMessa
 }
 
 func convertToolResultMessage(role string, parts openAIMessageParts) []openAIMessage {
-	messages := make([]openAIMessage, 0, len(parts.toolResults)+1)
+	messages := make([]openAIMessage, 0, len(parts.toolResults))
 	for _, result := range parts.toolResults {
 		messages = append(messages, openAIMessage{
 			Role:       "tool",

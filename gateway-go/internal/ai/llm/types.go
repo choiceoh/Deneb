@@ -261,7 +261,12 @@ type Message struct {
 // Uses appendJSONString to avoid json.Marshal's reflection path and
 // html-safe escaping, and to pre-size the allocation from string length.
 func NewTextMessage(role, text string) Message {
-	return Message{Role: role, Content: FlexibleFromRaw(appendJSONString(make([]byte, 0, len(text)+2), text))}
+	// Cap hint avoids len(text)+2 overflowing on absurd inputs; append grows if needed.
+	capHint := len(text)
+	if capHint <= int(^uint(0)>>1)-2 {
+		capHint += 2
+	}
+	return Message{Role: role, Content: FlexibleFromRaw(appendJSONString(make([]byte, 0, capHint), text))}
 }
 
 // NewBlockMessage creates a message with structured content blocks.

@@ -146,8 +146,7 @@ func appendTextToMessage(msg llm.Message, additions []string) (llm.Message, bool
 	// Content-block array (multimodal user message): append one text block.
 	var blocks []llm.ContentBlock
 	if err := json.Unmarshal(msg.Content.Bytes(), &blocks); err == nil && len(blocks) > 0 {
-		out := make([]llm.ContentBlock, len(blocks), len(blocks)+1)
-		copy(out, blocks)
+		out := append([]llm.ContentBlock{}, blocks...)
 		out = append(out, llm.ContentBlock{Type: "text", Text: suffix[2:]})
 		return llm.NewBlockMessage(msg.Role, out), true
 	}
