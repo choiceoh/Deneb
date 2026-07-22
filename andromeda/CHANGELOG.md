@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.0.103](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.102...andromeda-v0.0.103) (2026-07-22)
+
+
+### ✨ Features
+
+* **notebook:** archive attached originals so the source can be re-opened ([#4121](https://github.com/choiceoh/Deneb/issues/4121)) ([968b363](https://github.com/choiceoh/Deneb/commit/968b363e06fba420f3fc90c8d2ffbb1a8f85172b))
+* **notebook:** OCR images and transcribe audio-video in file attach, multi-file + drag-drop ([#4117](https://github.com/choiceoh/Deneb/issues/4117)) ([0c26b60](https://github.com/choiceoh/Deneb/commit/0c26b60e476dea57871a5d80ec2c40432a6d96e7))
+* **notebook:** one-tap grounded briefing + highlight the sources an answer cited ([#4129](https://github.com/choiceoh/Deneb/issues/4129)) ([5624c04](https://github.com/choiceoh/Deneb/commit/5624c04a473b06535d62a7b64e568171c356c591))
+* **notebook:** one-tap grounded briefing + highlight the sources an answer cited ([#4135](https://github.com/choiceoh/Deneb/issues/4135)) ([24b90e5](https://github.com/choiceoh/Deneb/commit/24b90e530c78e0322ab56e7153dd588b502251c3))
+* **notebook:** read url/mail/diary refs server-side (add_ref) ([#4113](https://github.com/choiceoh/Deneb/issues/4113)) ([7f062c4](https://github.com/choiceoh/Deneb/commit/7f062c4b19c7df1e3ffd2e938407beb4507ed7f7))
+* **notebook:** rename sources (edit_source) and filter them in the pane ([#4124](https://github.com/choiceoh/Deneb/issues/4124)) ([6934892](https://github.com/choiceoh/Deneb/commit/69348920f87e30fb7bcbf5e08a6fe18ce222c74d))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 답변 액션 버튼(다시 생성·복사·인쇄)을 한 줄에 정렬 ([#4131](https://github.com/choiceoh/Deneb/issues/4131)) ([739be65](https://github.com/choiceoh/Deneb/commit/739be654102bf13ba46833a8822f0902ba76af5f))
+
 ## [0.0.102](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.101...andromeda-v0.0.102) (2026-07-22)
 
 

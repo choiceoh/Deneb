@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.130.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.129.0...deneb-v4.130.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **chat:** attribute apc-diag by session and localize system-prompt divergence ([#4122](https://github.com/choiceoh/Deneb/issues/4122)) ([db43904](https://github.com/choiceoh/Deneb/commit/db439040d086e9f387f66f968d7f2e9d02038212))
+* **chat:** 세션 자동 제목 20턴마다 재생성 + 사용자 rename 잠금(pin, 재시작 생존) ([#4127](https://github.com/choiceoh/Deneb/issues/4127)) ([8684c87](https://github.com/choiceoh/Deneb/commit/8684c874a90814d2ba4c287c5ce78f4e0736fea9))
+* **native:** cap oversize non-image attachments and show sizes on chips ([#4134](https://github.com/choiceoh/Deneb/issues/4134)) ([b266b1a](https://github.com/choiceoh/Deneb/commit/b266b1aa536b2f00bc59aa9f35063512ffbc9906))
+* **native:** pick multiple files at once into one batch turn ([#4116](https://github.com/choiceoh/Deneb/issues/4116)) ([5793879](https://github.com/choiceoh/Deneb/commit/57938792d5fb97e51bed1d489de1dfc6e1694bd8))
+* **native:** stage attachments in the composer, send on submit ([#4123](https://github.com/choiceoh/Deneb/issues/4123)) ([5dd990a](https://github.com/choiceoh/Deneb/commit/5dd990a1d477c9935354b40be76ac488735d84c9))
+* **notebook:** archive attached originals so the source can be re-opened ([#4121](https://github.com/choiceoh/Deneb/issues/4121)) ([968b363](https://github.com/choiceoh/Deneb/commit/968b363e06fba420f3fc90c8d2ffbb1a8f85172b))
+* **notebook:** OCR images and transcribe audio-video in file attach, multi-file + drag-drop ([#4117](https://github.com/choiceoh/Deneb/issues/4117)) ([0c26b60](https://github.com/choiceoh/Deneb/commit/0c26b60e476dea57871a5d80ec2c40432a6d96e7))
+* **notebook:** one-tap grounded briefing + highlight the sources an answer cited ([#4129](https://github.com/choiceoh/Deneb/issues/4129)) ([5624c04](https://github.com/choiceoh/Deneb/commit/5624c04a473b06535d62a7b64e568171c356c591))
+* **notebook:** one-tap grounded briefing + highlight the sources an answer cited ([#4135](https://github.com/choiceoh/Deneb/issues/4135)) ([24b90e5](https://github.com/choiceoh/Deneb/commit/24b90e530c78e0322ab56e7153dd588b502251c3))
+* **notebook:** read url/mail/diary refs server-side (add_ref) ([#4113](https://github.com/choiceoh/Deneb/issues/4113)) ([7f062c4](https://github.com/choiceoh/Deneb/commit/7f062c4b19c7df1e3ffd2e938407beb4507ed7f7))
+* **notebook:** rename sources (edit_source) and filter them in the pane ([#4124](https://github.com/choiceoh/Deneb/issues/4124)) ([6934892](https://github.com/choiceoh/Deneb/commit/69348920f87e30fb7bcbf5e08a6fe18ce222c74d))
+* **web:** add Kagi API providers (search, fastgpt, summarizer, enrichment) ([#4119](https://github.com/choiceoh/Deneb/issues/4119)) ([1ec440e](https://github.com/choiceoh/Deneb/commit/1ec440e48ad825ed4d3018920ea2f2107f863f26))
+* **web:** Serper-default search with Kagi fallback + Kagi extract fetch escalation ([#4133](https://github.com/choiceoh/Deneb/issues/4133)) ([dcb888a](https://github.com/choiceoh/Deneb/commit/dcb888a47a88dbe2e51d1e189c1d143949a2bfda))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 답변 액션 버튼(다시 생성·복사·인쇄)을 한 줄에 정렬 ([#4131](https://github.com/choiceoh/Deneb/issues/4131)) ([739be65](https://github.com/choiceoh/Deneb/commit/739be654102bf13ba46833a8822f0902ba76af5f))
+* **chat:** 세션 자동 제목 — 행위·상태구 대신 주제·고유명사 우선 + 공유 문서명 힌트 ([#4118](https://github.com/choiceoh/Deneb/issues/4118)) ([57eeced](https://github.com/choiceoh/Deneb/commit/57eeced3aef47b1f13c1156e1a8dc27db2aebfba))
+* **native:** restore audio attachment in the staged composer ([#4128](https://github.com/choiceoh/Deneb/issues/4128)) ([0228654](https://github.com/choiceoh/Deneb/commit/0228654823cbb238cb3a23dfa90094eb7877d69b))
+* **recall:** bound semantic preflight latency ([#4112](https://github.com/choiceoh/Deneb/issues/4112)) ([1aa7b15](https://github.com/choiceoh/Deneb/commit/1aa7b1596073f698b9452b4131bf35c15f177cda))
+* **rsi-bench:** exclude live-test sessions from cache/CPM readouts ([#4115](https://github.com/choiceoh/Deneb/issues/4115)) ([f9fc17c](https://github.com/choiceoh/Deneb/commit/f9fc17c354f78dc2d77caabc701d4b53d9577946))
+* **web:** correct Kagi integration to v1 API (Bearer /search + /extract) ([#4125](https://github.com/choiceoh/Deneb/issues/4125)) ([2741a8a](https://github.com/choiceoh/Deneb/commit/2741a8a88f78112359f19621254e4bd817bd8acf))
+
+
+### ⚡ Performance
+
+* **native:** downsample captured photos before upload ([#4120](https://github.com/choiceoh/Deneb/issues/4120)) ([2d182c7](https://github.com/choiceoh/Deneb/commit/2d182c7d62fbeacbc431f78b848db5dba3f0a7f5))
+
 ## [4.129.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.128.0...deneb-v4.129.0) (2026-07-22)
 
 
