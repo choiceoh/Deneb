@@ -529,10 +529,17 @@ func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res mailan
 	if line == "" {
 		return
 	}
+	// Event date: a deal document carries its own date (견적서 일자 등), which is
+	// "when it happened" — distinct from now, when Deneb processed the mail. Pass it
+	// so the bullet leads with the document date instead of the processing day.
+	eventDate := ""
+	if d := res.Deal; d != nil {
+		eventDate = d.Date
+	}
 	ref := "mail:" + msg.ID
 	now := time.Now()
 	for _, r := range directProjectPages(res.RelatedProjects) {
-		if err := s.wikiStore.AppendProjectStatusLine(r, line, ref, now); err != nil {
+		if err := s.wikiStore.AppendProjectStatusLineAt(r, line, eventDate, ref, now); err != nil {
 			s.logger.Warn("mail→project 현재 상태 갱신 실패", "id", msg.ID, "path", r, "error", err)
 		}
 	}
