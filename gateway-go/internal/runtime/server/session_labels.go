@@ -110,6 +110,88 @@ func labelsEqual(a, b map[string]string) bool {
 	return true
 }
 
+// --- Pinned-label registry (sidecar, parallel to the label store) ------------
+//
+// A user rename pins the label (session.LabelPinned) so the periodic auto-title
+// can't overwrite it. The pin must survive the frequent hot-swap restarts, so we
+// persist the set of pinned session keys alongside the labels. Kept in its own
+// file rather than folded into the label store so the proven label format (and
+// its tests) is untouched; the two are written by the same sweep, and a rare
+// cross-file skew only risks one extra re-title, never a lost label.
+
+func sessionPinsStorePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".deneb", "session-pins.json"), nil
+}
+
+// loadSessionPins reads the pinned-key set; a missing or corrupt file degrades to
+// an empty set (a lost pin only means a session becomes re-titleable again).
+func loadSessionPins(path string) map[string]bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return map[string]bool{}
+	}
+	var keys []string
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return map[string]bool{}
+	}
+	out := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		out[k] = true
+	}
+	return out
+}
+
+// saveSessionPins writes the pinned-key set atomically (tmp + rename), sorted for
+// a stable on-disk diff.
+func saveSessionPins(path string, pins map[string]bool) error {
+	keys := make([]string, 0, len(pins))
+	for k := range pins {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	data, err := json.MarshalIndent(keys, "", " ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// snapshotSessionPins collects the keys of restorable sessions whose label is
+// pinned.
+func snapshotSessionPins(sessions []*session.Session) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range sessions {
+		if s == nil || !s.LabelPinned {
+			continue
+		}
+		if _, ok := session.RestorableTranscriptChannel(s.Key); !ok {
+			continue
+		}
+		out[s.Key] = true
+	}
+	return out
+}
+
+func pinsEqual(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
+}
+
 // startSessionLabelPersistence runs the sweep loop until shutdown, with a final
 // flush so a label minted seconds before a hot-swap still survives it.
 func (s *Server) startSessionLabelPersistence() {
@@ -118,11 +200,17 @@ func (s *Server) startSessionLabelPersistence() {
 		s.logger.Warn("session labels: cannot resolve store path", "error", err)
 		return
 	}
+	pinsPath, pinsPathErr := sessionPinsStorePath()
 	safego.GoWithSlog(s.logger, "session-label-persist", func() {
 		ctx := s.ShutdownCtx()
 		last := loadSessionLabels(path)
+		var lastPins map[string]bool
+		if pinsPathErr == nil {
+			lastPins = loadSessionPins(pinsPath)
+		}
 		flush := func() {
-			snap := snapshotSessionLabels(s.sessions.List())
+			live := s.sessions.List()
+			snap := snapshotSessionLabels(live)
 			// Merge over the stored map: a session evicted from memory keeps its
 			// stored title for the next restore instead of being dropped.
 			merged := make(map[string]string, len(last)+len(snap))
@@ -132,14 +220,34 @@ func (s *Server) startSessionLabelPersistence() {
 			for k, v := range snap {
 				merged[k] = v
 			}
-			if labelsEqual(merged, last) {
+			if !labelsEqual(merged, last) {
+				if err := saveSessionLabels(path, merged); err != nil {
+					s.logger.Warn("session labels: persist failed", "error", err)
+				} else {
+					last = merged
+				}
+			}
+			// Pins ride the same sweep. Merge over the stored set so a pin whose
+			// session is evicted from memory survives to the next restore.
+			if pinsPathErr != nil {
 				return
 			}
-			if err := saveSessionLabels(path, merged); err != nil {
-				s.logger.Warn("session labels: persist failed", "error", err)
+			pinSnap := snapshotSessionPins(live)
+			mergedPins := make(map[string]bool, len(lastPins)+len(pinSnap))
+			for k := range lastPins {
+				mergedPins[k] = true
+			}
+			for k := range pinSnap {
+				mergedPins[k] = true
+			}
+			if pinsEqual(mergedPins, lastPins) {
 				return
 			}
-			last = merged
+			if err := saveSessionPins(pinsPath, mergedPins); err != nil {
+				s.logger.Warn("session pins: persist failed", "error", err)
+				return
+			}
+			lastPins = mergedPins
 		}
 		ticker := time.NewTicker(sessionLabelSweepInterval)
 		defer ticker.Stop()

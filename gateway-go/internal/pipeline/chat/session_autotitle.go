@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -27,6 +28,14 @@ const (
 	sessionTitleReplyCap  = 400 // runes of the reply fed for topic context
 	sessionTitleLabelCap  = 40  // runes; the drawer truncates anyway
 	sessionTitleTimeout   = 15 * time.Second
+	// retitleEveryTurns: after the first title, refresh it every Nth user turn so
+	// a long conversation's title tracks its drifting topic instead of freezing on
+	// the opening question. The turn number = the transcript's user-message count.
+	retitleEveryTurns = 20
+	// sessionRetitleMinUserLen: a re-title turn whose user message is shorter than
+	// this (runes) is skipped, so a trivial follow-up ("고마워") can't overwrite a
+	// good title with "감사 인사" — the next boundary turn re-titles instead.
+	sessionRetitleMinUserLen = 10
 )
 
 // nativeChatSessionPrefixes scopes auto-titling to per-conversation native
@@ -108,11 +117,13 @@ func documentHints(msg string) []string {
 	return out
 }
 
-// autoTitleSessionAsync derives and stores a conversation title for a fresh
-// native chat session, in the background — titling must never delay the reply.
-// Set-once: a session that already has a label is skipped, so titles never churn
-// (keeps the drawer and any prefix caching stable). No-op for non-native sessions,
-// the bare client:main home, an empty message, or a missing session manager.
+// autoTitleSessionAsync derives (and periodically refreshes) a conversation
+// title for a native chat session, in the background — titling must never delay
+// the reply. The first turn titles an unlabeled session; thereafter the title is
+// refreshed every retitleEveryTurns turns so it tracks a long conversation's
+// drifting topic. A user rename pins the label (session.LabelPinned) and is never
+// overwritten. No-op for non-native sessions, the bare client:main home, an empty
+// message, or a missing session manager.
 func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *SyncResult) {
 	if h.sessions == nil || result == nil || h.briefcaseMode {
 		return
@@ -125,10 +136,15 @@ func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *Sync
 	if strings.TrimSpace(userMsg) == "" {
 		return
 	}
-	// Set-once: never overwrite an existing label.
-	if s := h.sessions.Get(sessionKey); s == nil || strings.TrimSpace(s.Label) != "" {
+	s := h.sessions.Get(sessionKey)
+	if s == nil {
 		return
 	}
+	// A user-renamed conversation is locked — the auto-titler never touches it.
+	if s.LabelPinned {
+		return
+	}
+	hadLabel := strings.TrimSpace(s.Label) != ""
 	reply := result.BestText()
 
 	safego.GoWithSlog(h.logger, "session-autotitle", func() {
@@ -139,20 +155,87 @@ func (h *Handler) autoTitleSessionAsync(sessionKey, userMsg string, result *Sync
 		ctx, cancel := context.WithTimeout(context.Background(), sessionTitleTimeout)
 		defer cancel()
 
+		if hadLabel {
+			// Already titled → refresh only on a boundary turn, and skip trivial
+			// follow-ups so they can't replace a good title with a filler one.
+			if len([]rune(strings.TrimSpace(userMsg))) < sessionRetitleMinUserLen {
+				return
+			}
+			if !isRetitleBoundary(h.countUserTurns(sessionKey)) {
+				return
+			}
+		}
+
 		title := GenerateSessionTitle(ctx, userMsg, reply)
 		if title == "" {
 			return
 		}
-		// Re-check set-once: a concurrent turn may have raced a label in while the
-		// model was thinking.
-		if s := h.sessions.Get(sessionKey); s == nil || strings.TrimSpace(s.Label) != "" {
+		// Re-check under fresh state: a concurrent rename may have pinned a label
+		// while the model was thinking, and for the first title a concurrent turn
+		// may have raced one in (set-once).
+		cur := h.sessions.Get(sessionKey)
+		if cur == nil || cur.LabelPinned {
+			return
+		}
+		if !hadLabel && strings.TrimSpace(cur.Label) != "" {
 			return
 		}
 		h.sessions.Patch(sessionKey, session.PatchFields{Label: &title})
 		if h.logger != nil {
-			h.logger.Debug("session auto-titled", "sessionKey", sessionKey, "label", title)
+			h.logger.Debug("session auto-titled", "sessionKey", sessionKey, "label", title, "retitle", hadLabel)
 		}
 	})
+}
+
+// isRetitleBoundary reports whether an already-titled session is due for a title
+// refresh at this turn number — every retitleEveryTurns user turns, never at 0.
+func isRetitleBoundary(turns int) bool {
+	return turns > 0 && turns%retitleEveryTurns == 0
+}
+
+// countUserTurns returns the number of genuine user turns in the transcript —
+// the turn number used to space out re-titling. A tool_result is persisted as a
+// user-role message too, so counting raw user roles overcounts wildly in a
+// tool-heavy conversation (7 tool calls → 7 phantom "turns"); isRealUserTurn
+// filters those out. Best-effort: no transcript store or a load error yields 0,
+// which skips the re-title.
+func (h *Handler) countUserTurns(sessionKey string) int {
+	if h.transcript == nil {
+		return 0
+	}
+	msgs, _, err := h.transcript.Load(sessionKey, 0) // 0 = all messages
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for i := range msgs {
+		if msgs[i].Role == "user" && isRealUserTurn(msgs[i].Content) {
+			n++
+		}
+	}
+	return n
+}
+
+// isRealUserTurn reports whether a user-role transcript message is an actual user
+// input rather than a tool_result carrier. Plain-string content (the common text
+// case) fails the block-array unmarshal and counts as a turn; a block array counts
+// only if it holds a non-tool_result block. Same tool_result detection as
+// toolport.StripToolResultBlocksForDisplay.
+func isRealUserTurn(content json.RawMessage) bool {
+	var blocks []json.RawMessage
+	if json.Unmarshal(content, &blocks) != nil {
+		return true // plain-string content = a genuine user message
+	}
+	for _, b := range blocks {
+		var head struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(b, &head) == nil && head.Type == "tool_result" {
+			continue
+		}
+		return true // a non-tool_result block (e.g. text) = genuine turn
+	}
+	return false // only tool_result(s) = a tool-response carrier, not a turn
 }
 
 // GenerateSessionTitle asks the tiny model for a short Korean title, falling

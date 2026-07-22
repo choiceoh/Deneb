@@ -38,6 +38,12 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 	if path, pathErr := sessionLabelStorePath(); pathErr == nil {
 		storedLabels = loadSessionLabels(path)
 	}
+	// Restore user rename-pins too, so the auto-titler keeps its hands off a
+	// user-chosen name across the restart (session_labels.go).
+	storedPins := map[string]bool{}
+	if pinsPath, pinsErr := sessionPinsStorePath(); pinsErr == nil {
+		storedPins = loadSessionPins(pinsPath)
+	}
 	var untitled []string
 
 	var restored int
@@ -72,12 +78,13 @@ func (s *Server) restoreAndWakeSessions(_ context.Context) {
 		}
 
 		if err := s.sessions.Set(&session.Session{
-			Key:       sessionKey,
-			Kind:      session.KindDirect,
-			Status:    session.StatusDone,
-			Channel:   channel,
-			Label:     label,
-			UpdatedAt: updatedAt,
+			Key:         sessionKey,
+			Kind:        session.KindDirect,
+			Status:      session.StatusDone,
+			Channel:     channel,
+			Label:       label,
+			LabelPinned: storedPins[sessionKey],
+			UpdatedAt:   updatedAt,
 		}); err != nil {
 			s.logger.Warn("session restore: failed to restore session",
 				"session", sessionKey, "error", err)
