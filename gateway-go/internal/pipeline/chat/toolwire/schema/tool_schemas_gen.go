@@ -329,12 +329,16 @@ func WebToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query. Serper (Google) → Brave → DuckDuckGo on missing key or provider failure",
+				"description": "Web search query. Kagi → Serper (Google) → Brave → DuckDuckGo on missing key or provider failure",
+			},
+			"summarize": map[string]any{
+				"type":        "string",
+				"description": "URL to summarize with the Kagi Universal Summarizer (needs KAGI_API_KEY). Handles web pages, PDFs, and YouTube/video/audio server-side — returns a prose summary without fetching locally. Standalone mode: ignores query/url/fetch.",
 			},
 			"type": map[string]any{
 				"type":        "string",
-				"description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
-				"enum":        []string{"news", "scholar", "autocomplete"},
+				"description": "Typed search. Serper: news (Google News), scholar (Google Scholar), autocomplete (suggestions). Kagi (needs KAGI_API_KEY): fastgpt (cited LLM answer), enrich_web / enrich_news (Teclis/TinyGem non-commercial index — niche high-quality results Google misses). Not compatible with fetch. Default: regular web search.",
+				"enum":        []string{"news", "scholar", "autocomplete", "fastgpt", "enrich_web", "enrich_news"},
 			},
 			"url": map[string]any{
 				"type":        "string",
