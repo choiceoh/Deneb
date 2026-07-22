@@ -109,6 +109,7 @@ func executeAgentRunWithDelta(
 		return 1
 	})
 	broadcaster := streaming.NewBroadcaster(deltaRaw, params.SessionKey, params.ClientRunID)
+	broadcaster.SetThinkingSummarizer(newThinkingSummarizer(ctx))
 	runLog := agentlog.NewRunLogger(deps.agentLog, params.SessionKey, params.ClientRunID)
 	return executeAgentRun(ctx, params, deps, broadcaster, nil, logger, runLog)
 }

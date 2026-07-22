@@ -232,6 +232,11 @@ func runAgentAsync(ctx context.Context, params RunParams, deps runDeps) {
 	}
 
 	ctx = withRunContextValues(ctx, params, deps)
+	if broadcaster != nil {
+		// Refine the live "thinking" chip into a fast-model Korean progress line
+		// (Option A). Uses the enriched run ctx so summaries stop when the run does.
+		broadcaster.SetThinkingSummarizer(newThinkingSummarizer(ctx))
+	}
 	typingSignaler := startRunTypingSignaler(ctx, params, deps)
 
 	// Create agent detail logger for this run.
