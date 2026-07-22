@@ -35,9 +35,16 @@ var (
 )
 
 // webSearch dispatches to the best available search provider.
-// Priority: Serper → Brave → DuckDuckGo. Missing keys skip a provider; a
+// Priority: Kagi → Serper → Brave → DuckDuckGo. Missing keys skip a provider; a
 // provider error also falls through to the next (sequential, not raced).
 func webSearch(ctx context.Context, query string, count int) (string, error) {
+	if key := kagiAPIKey(); key != "" {
+		results, err := kagiSearchRawFn(ctx, key, query, count)
+		if err == nil {
+			return formatSearchResults(results), nil
+		}
+		slog.Info("web search fallback", "from", "kagi", "to", nextSearchProvider("kagi"), "error", err)
+	}
 	if key := serperAPIKey(); key != "" {
 		results, answerBox, _, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
@@ -57,9 +64,17 @@ func webSearch(ctx context.Context, query string, count int) (string, error) {
 
 // webSearchWithURLs searches and returns formatted output, organic results, and
 // optional Serper answer-box / knowledge-graph links for fetch ranking. Same
-// Serper→Brave→DuckDuckGo fallback as webSearch; DuckDuckGo Instant Answer has
-// no reliable organic URLs, so results may be empty.
+// Kagi→Serper→Brave→DuckDuckGo fallback as webSearch; Kagi and Brave carry no
+// answer-box/knowledge links, and DuckDuckGo Instant Answer has no reliable
+// organic URLs, so results may be empty.
 func webSearchWithURLs(ctx context.Context, query string, count int) (output string, results []searchResult, answerLink, knowledgeLink string, err error) {
+	if key := kagiAPIKey(); key != "" {
+		organic, kerr := kagiSearchRawFn(ctx, key, query, count)
+		if kerr == nil {
+			return formatSearchResults(organic), organic, "", "", nil
+		}
+		slog.Info("web search fallback", "from", "kagi", "to", nextSearchProvider("kagi"), "error", kerr)
+	}
 	if key := serperAPIKey(); key != "" {
 		organic, answerBox, kgLink, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
@@ -79,9 +94,17 @@ func webSearchWithURLs(ctx context.Context, query string, count int) (output str
 }
 
 // nextSearchProvider names the provider webSearch will try after `from` fails,
-// for fallback logs. Brave is skipped when its key is absent.
+// for fallback logs. Providers whose keys are absent are skipped.
 func nextSearchProvider(from string) string {
 	switch from {
+	case "kagi":
+		if serperAPIKey() != "" {
+			return "serper"
+		}
+		if braveAPIKey() != "" {
+			return "brave"
+		}
+		return "duckduckgo"
 	case "serper":
 		if braveAPIKey() != "" {
 			return "brave"
@@ -507,10 +530,13 @@ var serperTypedEndpoints = map[string]string{
 	"autocomplete": "https://google.serper.dev/autocomplete",
 }
 
-// webSearchWithType dispatches to Serper's specialised search endpoints.
-// Supported types: news, scholar, autocomplete.
-// Falls back to regular webSearch for unknown types.
+// webSearchWithType dispatches to a specialised search endpoint.
+// Serper types: news, scholar, autocomplete. Kagi types: fastgpt, enrich_web,
+// enrich_news. Falls back to regular webSearch for unknown types.
 func webSearchWithType(ctx context.Context, searchType, query string, count int) (string, error) {
+	if isKagiSearchType(searchType) {
+		return kagiTypedSearch(ctx, searchType, query, count)
+	}
 	endpoint, ok := serperTypedEndpoints[searchType]
 	if !ok {
 		return webSearch(ctx, query, count)

@@ -8,6 +8,8 @@ import (
 )
 
 func TestWebSearchFallsThroughSerperFailureToBrave(t *testing.T) {
+	t.Setenv("KAGI_API_KEY", "")
+	t.Setenv("KAGI_API_TOKEN", "")
 	t.Setenv("SERPER_API_KEY", "serper-test")
 	t.Setenv("BRAVE_SEARCH_API_KEY", "brave-test")
 	t.Setenv("BRAVE_API_KEY", "")
@@ -42,6 +44,8 @@ func TestWebSearchFallsThroughSerperFailureToBrave(t *testing.T) {
 }
 
 func TestWebSearchWithURLsFallsThroughSerperFailureToBrave(t *testing.T) {
+	t.Setenv("KAGI_API_KEY", "")
+	t.Setenv("KAGI_API_TOKEN", "")
 	t.Setenv("SERPER_API_KEY", "serper-test")
 	t.Setenv("BRAVE_SEARCH_API_KEY", "brave-test")
 
@@ -75,6 +79,8 @@ func TestWebSearchWithURLsFallsThroughSerperFailureToBrave(t *testing.T) {
 }
 
 func TestWebSearchFallsThroughToDuckDuckGoWhenKeyedProvidersFail(t *testing.T) {
+	t.Setenv("KAGI_API_KEY", "")
+	t.Setenv("KAGI_API_TOKEN", "")
 	t.Setenv("SERPER_API_KEY", "serper-test")
 	t.Setenv("BRAVE_SEARCH_API_KEY", "brave-test")
 

@@ -312,7 +312,7 @@
    },
    "query": {
     "type": "string",
-    "description": "Web search query. Serper (Google) → Brave → DuckDuckGo on missing key or provider failure"
+    "description": "Web search query. Kagi → Serper (Google) → Brave → DuckDuckGo on missing key or provider failure"
    },
    "queries": {
     "type": "array",
@@ -335,16 +335,23 @@
    },
    "type": {
     "type": "string",
-    "description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
+    "description": "Typed search. Serper: news (Google News), scholar (Google Scholar), autocomplete (suggestions). Kagi (needs KAGI_API_KEY): fastgpt (cited LLM answer), enrich_web / enrich_news (Teclis/TinyGem non-commercial index — niche high-quality results Google misses). Not compatible with fetch. Default: regular web search.",
     "enum": [
      "news",
      "scholar",
-     "autocomplete"
+     "autocomplete",
+     "fastgpt",
+     "enrich_web",
+     "enrich_news"
     ]
    },
    "academic": {
     "type": "boolean",
     "description": "true = 학술·기술 레인 병행: arXiv·Semantic Scholar·Hacker News(무료 API)를 검색과 병렬 조회해 결과 뒤에 라벨 섹션으로 부착 (초록·HN 포인트/댓글 포함 구조화 결과). 논문·기술 리서치 질의에 켤 것. 쿼리에 arXiv ID·arxiv·논문·paper 토큰이 있으면 자동 발화. query 모드 전용 (url·type과 무관)"
+   },
+   "summarize": {
+    "type": "string",
+    "description": "URL to summarize with the Kagi Universal Summarizer (needs KAGI_API_KEY). Handles web pages, PDFs, and YouTube/video/audio server-side — returns a prose summary without fetching locally. Standalone mode: ignores query/url/fetch."
    }
   }
  },
