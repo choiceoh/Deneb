@@ -69,10 +69,34 @@ func TestAPCDiagClassifiesRunsWhenHistoryChanges(t *testing.T) {
 	if d.invalidTokens == 0 {
 		t.Error("system-changed must estimate the full message list as invalidated")
 	}
+	if d.sysDivergedAt != 0 {
+		t.Errorf("run4 sysDivergedAt = %d, want 0 (system differs from the first chunk)", d.sysDivergedAt)
+	}
 
 	// finish() must not panic without a scrape baseline and must be idempotent.
 	d.finish()
 	d.finish()
+}
+
+// A system prompt that shares a long prefix and differs only in its tail (the
+// day-only timestamp / ephemeral recall→system fallback shape) must localize to
+// a non-zero byte offset, distinguishing it from a head/static regression.
+func TestAPCDiagSystemChangeLocalizesToTail(t *testing.T) {
+	msgs := []llm.Message{llm.NewTextMessage("user", "q")}
+	head := ""
+	for i := 0; i < 400; i++ { // > apcSystemChunkBytes so head spans multiple chunks
+		head += "x"
+	}
+	// Run 1 seeds the snapshot; run 2 changes only the tail after the shared head.
+	_ = apcDiagFor(t, head+"TAIL-A", msgs, "")
+	d := apcDiagFor(t, head+"TAIL-B-longer", msgs, "")
+	if d.class != apcClassSystemChanged {
+		t.Fatalf("class = %q, want %q", d.class, apcClassSystemChanged)
+	}
+	if d.sysDivergedAt < apcSystemChunkBytes {
+		t.Errorf("sysDivergedAt = %d, want >= %d (change is in the tail, not the head)",
+			d.sysDivergedAt, apcSystemChunkBytes)
+	}
 }
 
 func TestAPCDiagCommonPrefixLenReturnsMatchCount(t *testing.T) {
