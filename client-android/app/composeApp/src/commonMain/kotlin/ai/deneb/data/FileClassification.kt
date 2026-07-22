@@ -11,6 +11,11 @@ const val MAX_TEXT_FILE_BYTES = 200_000
 const val MAX_PDF_BYTES = 20_000_000
 const val MAX_IMAGE_BYTES = 15_000_000
 
+// Max files the multi-select attach picker offers in one batch — mirrors the
+// gateway's maxBatchFiles so a huge selection can't fan out past what the batch
+// capture turn accepts (it caps again server-side).
+const val MAX_BATCH_FILES = 20
+
 // Raw image input cap before compression — images typically shrink after compression,
 // so we allow larger raw files than MAX_IMAGE_BYTES while still preventing an OOM
 // from reading a multi-gigabyte file into memory.

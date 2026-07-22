@@ -19,16 +19,18 @@ import io.github.vinceglb.filekit.PlatformFile
  * [LocalCaptureActions]; null (the default) on platforms (desktop/iOS) without
  * these system launchers — there the attach picker simply attaches the file.
  *
- * [onImageFile]/[onAudioFile]/[onDocumentFile] receive an already-picked file (the
- * input owns the single picker) plus the text the user had typed in the composer,
- * which rides along as the capture's caption so the turn analyzes the file in the
- * light of that question; the entry point reads the bytes and runs the gateway
+ * [onImageFile]/[onAudioFile]/[onDocumentFile] receive a single already-picked file
+ * (routed by type) and [onFilesBatch] receives several picked at once (one batch turn
+ * the agent reads and cross-references). All carry the text the user had typed in the
+ * composer, which rides along as the capture's caption so the turn analyzes the files
+ * in the light of that question; the entry point reads the bytes and runs the gateway
  * capture turn. The caption is blank when the composer was empty.
  */
 data class CaptureActions(
     val onImageFile: (PlatformFile, String) -> Unit,
     val onAudioFile: (PlatformFile, String) -> Unit,
     val onDocumentFile: (PlatformFile, String) -> Unit,
+    val onFilesBatch: (List<PlatformFile>, String) -> Unit,
     val onVoiceInput: () -> Unit,
 )
 

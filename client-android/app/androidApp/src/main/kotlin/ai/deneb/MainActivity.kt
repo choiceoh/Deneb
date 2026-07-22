@@ -1,9 +1,11 @@
 package ai.deneb
 
 import ai.deneb.data.AppSettings
+import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.DataRepository
 import ai.deneb.data.ThemeMode
 import ai.deneb.data.documentCaptureMime
+import ai.deneb.data.routeAttachment
 import ai.deneb.deneb.DenebAttachment
 import ai.deneb.deneb.DenebGatewayClient
 import ai.deneb.deneb.captureBatch
@@ -156,6 +158,7 @@ class MainActivity : ComponentActivity() {
                     onImageFile = { file, caption -> captureFromPlatformFile(file, audio = false, caption) },
                     onAudioFile = { file, caption -> captureFromPlatformFile(file, audio = true, caption) },
                     onDocumentFile = { file, caption -> captureDocumentFromPlatformFile(file, caption) },
+                    onFilesBatch = { files, caption -> captureFilesBatch(files, caption) },
                     onVoiceInput = { launchVoiceCapture() },
                 ),
                 openWorkFeedItemId = pendingWorkFeedItemId,
@@ -297,6 +300,28 @@ class MainActivity : ComponentActivity() {
             val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
             sendSingleFileBatch(bytes, file.name, documentCaptureMime(file.name), caption)
         }
+    }
+
+    // Several files picked at once -> ONE batch turn: read each, derive its per-type
+    // MIME (same routing as the single picker), and hand the set to captureBatch so the
+    // agent reads and cross-references them together. The composer text is the caption.
+    private fun captureFilesBatch(files: List<PlatformFile>, caption: String) {
+        lifecycleScope.launch {
+            val attachments = files.mapNotNull { file ->
+                val bytes = runCatching { file.readBytes() }.getOrNull()
+                if (bytes == null || bytes.isEmpty()) null else DenebAttachment(bytes, file.name, pickedFileMime(file.name))
+            }
+            if (attachments.isEmpty()) return@launch
+            (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(attachments, caption)
+        }
+    }
+
+    // MIME for a picked file by its routed type, mirroring the single-file picker paths
+    // so a batch's images still OCR, audio transcribes, and documents extract/convert.
+    private fun pickedFileMime(name: String): String = when (routeAttachment(name.substringAfterLast('.', ""), capturesAvailable = true)) {
+        AttachmentRoute.IMAGE_CAPTURE -> mimeForFileName(name, audio = false)
+        AttachmentRoute.AUDIO_CAPTURE -> mimeForFileName(name, audio = true)
+        AttachmentRoute.FILE_ATTACH -> documentCaptureMime(name)
     }
 
     // mimeForFileName derives a content type from a picked file's extension. The
