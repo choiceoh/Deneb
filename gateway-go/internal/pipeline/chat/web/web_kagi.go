@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -33,6 +34,10 @@ const kagiAPIBase = "https://kagi.com/api/v1"
 // kagiSearchRawFn is a test seam (same pattern as serperSearchRawFn): the
 // provider-chain path swaps it to assert fallback without network.
 var kagiSearchRawFn = kagiSearchRaw
+
+// kagiExtractEscalateFn is the test seam for the fetch-escalation backend, so
+// wiring tests can assert the escalation decision without hitting the network.
+var kagiExtractEscalateFn = kagiExtractEscalate
 
 func kagiAPIKey() string {
 	key := os.Getenv("KAGI_API_KEY")
@@ -248,4 +253,60 @@ func webKagiExtract(ctx context.Context, target string) (string, error) {
 		return "No content extracted.", nil
 	}
 	return md, nil
+}
+
+// --- Fetch escalation ---
+//
+// Kagi Extract doubles as a last-resort fetch backend: when the free chain
+// (stealth ladder / headless render) can't get a page, Kagi's server-side
+// crawlers often can (empirically it beats Serper scrape on bot-walled pages).
+// This path is gated so the paid call fires only where content likely exists but
+// we were blocked — never on default fetches, only on eligible failures / thin
+// SPA shells that the free tiers couldn't recover.
+
+// kagiExtractEscalate renders targetURL into markdown via Kagi and returns
+// (content, true) on success, or ("", false) when the key is absent or the
+// extract fails/empties. Unlike webKagiExtract (the explicit `extract` mode) it
+// stays silent so callers keep their prior result on failure.
+func kagiExtractEscalate(ctx context.Context, targetURL string) (string, bool) {
+	key := kagiAPIKey()
+	if key == "" {
+		return "", false
+	}
+	reqBody := kagiExtractRequest{
+		Pages:  []kagiPageInput{{URL: targetURL}},
+		Format: "json",
+	}
+	var resp kagiExtractResponse
+	if err := kagiPostJSON(ctx, key, kagiAPIBase+"/extract", reqBody, &resp, 30*time.Second); err != nil {
+		slog.Debug("kagi extract escalation failed", "url", targetURL, "error", err)
+		return "", false
+	}
+	if len(resp.Error) > 0 || len(resp.Data) == 0 {
+		return "", false
+	}
+	md := strings.TrimSpace(resp.Data[0].Markdown)
+	if md == "" {
+		return "", false
+	}
+	return md, true
+}
+
+// kagiFetchEscalationEligible reports whether a classified fetch error is one
+// where the content likely exists but the free chain was blocked or hit a
+// transient failure — the cases Kagi's crawlers may still crack. Permanent
+// errors (404, DNS, SSRF, TLS, redirect loop, too-large, auth) are excluded so
+// we don't spend a paid call on a page Kagi also can't return.
+func kagiFetchEscalationEligible(fe webFetchErr) bool {
+	if strings.HasPrefix(fe.Code, "http_5") { // 5xx server errors
+		return true
+	}
+	switch fe.Code {
+	case "http_403", "http_429", // blocked / rate-limited
+		"timeout", "connection_refused", "connection_reset",
+		"fetch_failed": // generic network failure (no specific permanent cause)
+		return true
+	default:
+		return false
+	}
 }

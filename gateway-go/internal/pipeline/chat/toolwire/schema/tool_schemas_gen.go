@@ -333,7 +333,7 @@ func WebToolSchema() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Web search query. Kagi → Serper (Google) → Brave → DuckDuckGo on missing key or provider failure",
+				"description": "Web search query. Serper (Google) → Kagi → Brave → DuckDuckGo on missing key or provider failure",
 			},
 			"type": map[string]any{
 				"type":        "string",

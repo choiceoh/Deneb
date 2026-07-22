@@ -1,6 +1,6 @@
 // web_fetch_search.go — Serper/Brave/DuckDuckGo providers for search + scrape.
 //
-// Search provider priority: Serper (Google) → Brave → DuckDuckGo.
+// Search provider priority: Serper (Google) → Kagi → Brave → DuckDuckGo.
 // Scrape provider: Serper's dedicated `scrape.serper.dev` endpoint (called by
 // web_fetch.go ahead of the raw HTTP fetcher when SERPER_API_KEY is set).
 //
@@ -35,22 +35,24 @@ var (
 )
 
 // webSearch dispatches to the best available search provider.
-// Priority: Kagi → Serper → Brave → DuckDuckGo. Missing keys skip a provider; a
+// Priority: Serper → Kagi → Brave → DuckDuckGo. Missing keys skip a provider; a
 // provider error also falls through to the next (sequential, not raced).
+// Serper is the default (cheap, Google index + answer box); Kagi is the first
+// fallback (premium quality, but pricier).
 func webSearch(ctx context.Context, query string, count int) (string, error) {
-	if key := kagiAPIKey(); key != "" {
-		results, err := kagiSearchRawFn(ctx, key, query, count)
-		if err == nil {
-			return formatSearchResults(results), nil
-		}
-		slog.Info("web search fallback", "from", "kagi", "to", nextSearchProvider("kagi"), "error", err)
-	}
 	if key := serperAPIKey(); key != "" {
 		results, answerBox, _, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
 			return formatSerperResults(results, answerBox), nil
 		}
 		slog.Info("web search fallback", "from", "serper", "to", nextSearchProvider("serper"), "error", err)
+	}
+	if key := kagiAPIKey(); key != "" {
+		results, err := kagiSearchRawFn(ctx, key, query, count)
+		if err == nil {
+			return formatSearchResults(results), nil
+		}
+		slog.Info("web search fallback", "from", "kagi", "to", nextSearchProvider("kagi"), "error", err)
 	}
 	if key := braveAPIKey(); key != "" {
 		results, err := braveSearchRawFn(ctx, key, query, count)
@@ -64,23 +66,23 @@ func webSearch(ctx context.Context, query string, count int) (string, error) {
 
 // webSearchWithURLs searches and returns formatted output, organic results, and
 // optional Serper answer-box / knowledge-graph links for fetch ranking. Same
-// Kagi→Serper→Brave→DuckDuckGo fallback as webSearch; Kagi and Brave carry no
+// Serper→Kagi→Brave→DuckDuckGo fallback as webSearch; Kagi and Brave carry no
 // answer-box/knowledge links, and DuckDuckGo Instant Answer has no reliable
 // organic URLs, so results may be empty.
 func webSearchWithURLs(ctx context.Context, query string, count int) (output string, results []searchResult, answerLink, knowledgeLink string, err error) {
-	if key := kagiAPIKey(); key != "" {
-		organic, kerr := kagiSearchRawFn(ctx, key, query, count)
-		if kerr == nil {
-			return formatSearchResults(organic), organic, "", "", nil
-		}
-		slog.Info("web search fallback", "from", "kagi", "to", nextSearchProvider("kagi"), "error", kerr)
-	}
 	if key := serperAPIKey(); key != "" {
 		organic, answerBox, kgLink, err := serperSearchRawFn(ctx, key, query, count)
 		if err == nil {
 			return formatSerperResults(organic, answerBox), organic, strings.TrimSpace(answerBox.Link), strings.TrimSpace(kgLink), nil
 		}
 		slog.Info("web search fallback", "from", "serper", "to", nextSearchProvider("serper"), "error", err)
+	}
+	if key := kagiAPIKey(); key != "" {
+		organic, kerr := kagiSearchRawFn(ctx, key, query, count)
+		if kerr == nil {
+			return formatSearchResults(organic), organic, "", "", nil
+		}
+		slog.Info("web search fallback", "from", "kagi", "to", nextSearchProvider("kagi"), "error", kerr)
 	}
 	if key := braveAPIKey(); key != "" {
 		organic, err := braveSearchRawFn(ctx, key, query, count)
@@ -97,15 +99,15 @@ func webSearchWithURLs(ctx context.Context, query string, count int) (output str
 // for fallback logs. Providers whose keys are absent are skipped.
 func nextSearchProvider(from string) string {
 	switch from {
-	case "kagi":
-		if serperAPIKey() != "" {
-			return "serper"
+	case "serper":
+		if kagiAPIKey() != "" {
+			return "kagi"
 		}
 		if braveAPIKey() != "" {
 			return "brave"
 		}
 		return "duckduckgo"
-	case "serper":
+	case "kagi":
 		if braveAPIKey() != "" {
 			return "brave"
 		}

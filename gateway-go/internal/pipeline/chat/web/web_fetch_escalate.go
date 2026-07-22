@@ -80,6 +80,16 @@ func escalateThinContent(
 		result, err = jinaFetchFn(ctx, targetURL, maxBytes)
 	}
 	if err != nil || result == nil || len(result.Data) == 0 {
+		// Final resort: Kagi Extract renders server-side and returns markdown
+		// directly (no re-extraction). Accept only if strictly richer.
+		if md, ok := kagiExtractEscalateFn(ctx, targetURL); ok && len(md) > meta.ExtractChars {
+			meta.Signals = appendUnique(meta.Signals, "escalated_kagi")
+			meta.ExtractChars = len(md)
+			meta.WordCount = estimateWordCount(md)
+			slog.Info("thin-content escalation recovered content via kagi extract",
+				"url", targetURL, "chars", meta.ExtractChars)
+			return md, true
+		}
 		slog.Debug("thin-content escalation: headless backend yielded nothing",
 			"url", targetURL, "error", err)
 		return "", false
