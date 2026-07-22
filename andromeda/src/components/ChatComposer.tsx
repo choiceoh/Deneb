@@ -77,7 +77,7 @@ export function ChatComposer({
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,audio/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt"
+          accept="image/*,audio/*,video/*,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.ogg,.webm,.mp4,.mov,.mkv,.avi,.m4v,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.rtf,.odt,.ods,.odp,.hwp,.hwpx,.csv,.txt"
           multiple
           hidden
           onChange={onPick}

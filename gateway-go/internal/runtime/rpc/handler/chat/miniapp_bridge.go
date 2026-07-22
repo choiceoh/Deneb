@@ -386,6 +386,22 @@ func extractBatchFile(ctx context.Context, deps Deps, data []byte, filename, mim
 		}
 		text, err = deps.Transcribe(ctx, data, mime, hotwords)
 		return "녹음", "audio", text, err
+	case strings.HasPrefix(mime, "video/"):
+		// Pull the audio track (ffmpeg) and transcribe it — a meeting recorded as
+		// video rides the same ASR path as a voice memo.
+		if deps.Transcribe == nil {
+			return "동영상", "audio", "", fmt.Errorf("음성 전사 미지원")
+		}
+		audio, aerr := extractVideoAudio(ctx, data)
+		if aerr != nil {
+			return "동영상", "audio", "", aerr
+		}
+		var hotwords string
+		if deps.Hotwords != nil {
+			hotwords = deps.Hotwords()
+		}
+		text, err = deps.Transcribe(ctx, audio, "audio/wav", hotwords)
+		return "동영상", "audio", text, err
 	default:
 		if deps.ExtractDocument == nil {
 			return "문서", "document", "", fmt.Errorf("문서 추출 미지원")

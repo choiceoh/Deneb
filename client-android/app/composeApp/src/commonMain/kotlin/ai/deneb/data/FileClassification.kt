@@ -65,7 +65,18 @@ internal val audioExtensions = setOf(
     "3gp",
 )
 
-val supportedFileExtensions = (imageExtensions + textExtensions).toList()
+// Rich document formats the gateway extracts natively (OOXML/PDF) or converts on
+// the host (hwp5txt for HWP, LibreOffice for legacy Office / ODF). Listed so the
+// in-app attach picker offers them — text/image/pdf were the only pickable types
+// before; Office/HWP arrived only via the share sheet.
+internal val documentExtensions = setOf(
+    "docx", "xlsx", "pptx",
+    "doc", "xls", "ppt",
+    "rtf", "odt", "ods", "odp",
+    "hwp", "hwpx",
+)
+
+val supportedFileExtensions = (imageExtensions + textExtensions + documentExtensions).toList()
 
 /** How the chat input routes a file picked from the single attach (+) picker. */
 enum class AttachmentRoute {

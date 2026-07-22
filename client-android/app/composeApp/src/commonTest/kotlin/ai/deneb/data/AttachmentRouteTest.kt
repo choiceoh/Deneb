@@ -2,6 +2,7 @@ package ai.deneb.data
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AttachmentRouteTest {
 
@@ -22,6 +23,17 @@ class AttachmentRouteTest {
     @Test
     fun documentsAndUnknownAttach() {
         for (ext in listOf("pdf", "docx", "txt", "csv", "xlsx", "")) {
+            assertEquals(AttachmentRoute.FILE_ATTACH, routeAttachment(ext, capturesAvailable = true), ext)
+        }
+    }
+
+    @Test
+    fun richDocumentFormatsArePickableAndAttach() {
+        // Office / HWP / ODF the gateway extracts or converts must be offered by the
+        // in-app picker (before this they were share-sheet only) and route to the
+        // document-capture path.
+        for (ext in listOf("doc", "xls", "ppt", "rtf", "odt", "ods", "odp", "hwp", "hwpx")) {
+            assertTrue(ext in supportedFileExtensions, "picker should offer .$ext")
             assertEquals(AttachmentRoute.FILE_ATTACH, routeAttachment(ext, capturesAvailable = true), ext)
         }
     }

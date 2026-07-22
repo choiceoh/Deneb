@@ -128,7 +128,11 @@ func extractDocument(ctx context.Context, data []byte, filename, mimeType string
 	case strings.HasPrefix(mime, "text/") || isTextFile(lower):
 		return docResult{kind: docText, text: string(data)}
 	default:
-		return docResult{kind: docUnsupported}
+		// Formats the native parsers don't read (HWP / legacy Office / ODF) fall
+		// back to an installed converter (hwp5txt, LibreOffice) — see
+		// document_convert.go. Absent a converter this returns docUnsupported,
+		// preserving the prior behavior.
+		return convertUnsupported(ctx, data, filename)
 	}
 }
 

@@ -414,12 +414,12 @@ describe("Workstation (connected, fixtures)", () => {
     const files = [
       new File(["i"], "quote.png", { type: "image/png" }),
       new File(["p"], "contract.pdf", { type: "application/pdf" }),
-      new File(["v"], "clip.mp4", { type: "video/mp4" }),
+      new File(["z"], "archive.zip", { type: "application/zip" }), // genuinely unsupported
     ];
     fireEvent.drop(panel, { dataTransfer: { files, types: ["Files"] } });
 
     // the unsupported file is skipped with a transient notice at staging time
-    expect(await screen.findByRole("status")).toHaveTextContent("clip.mp4");
+    expect(await screen.findByRole("status")).toHaveTextContent("archive.zip");
 
     // 지원 파일 2개는 칩으로 대기 — 전송 버튼이 배치를 나른다.
     const chips = await screen.findByRole("group", { name: "첨부 대기 파일" });
