@@ -10,7 +10,7 @@ import { useRegisterPane, useWorkspace, type NotebookTop } from "@/workspaceCont
 import { Icon, type IconName } from "@/components/Icon";
 import { Field, Modal, ModalFooter } from "@/components/Modal";
 import { Markdown } from "@/components/Markdown";
-import { DeleteModal } from "./commonModals";
+import { DeleteModal, OneFieldModal } from "./commonModals";
 import { formatBytes } from "./fileHelpers";
 
 // Notebook (노트북) — a browser over Deneb's deal notebooks (miniapp.notebook.*).
@@ -36,6 +36,10 @@ export function NotebookPane() {
   const [addingSource, setAddingSource] = useState(false);
   const [deleting, setDeleting] = useState<Notebook | null>(null);
   const [deletingSource, setDeletingSource] = useState<NotebookSource | null>(null);
+  const [editingSource, setEditingSource] = useState<NotebookSource | null>(null);
+  // Client-side filter over the open notebook's sources (title/text), so a large
+  // notebook stays navigable without a round-trip. "" shows everything.
+  const [sourceQuery, setSourceQuery] = useState("");
   // Which source chip is expanded into the preview below (by its stable key).
   // "" = all chips folded — the default, so the sources read as a light strip and
   // the pane's height stays with the actual work (the chat below). Goes stale
@@ -191,6 +195,16 @@ export function NotebookPane() {
     void loadNotebooks();
   }
 
+  // Rename a source (title only; the gateway keeps its cite so citations hold).
+  async function editSource(cite: string, title: string) {
+    if (!active) return;
+    const r = await call(NOTEBOOK_RPC.editSource, { id: active.id, cite, title: title.trim() }, "이름 변경 중…");
+    if (!r.ok) return;
+    setEditingSource(null);
+    await openNotebook(active.id);
+    void loadNotebooks();
+  }
+
   async function removeSource() {
     if (!active || !deletingSource?.cite) return;
     const id = active.id;
@@ -246,8 +260,13 @@ export function NotebookPane() {
 
   // Sources render as a light chip strip; clicking a chip expands (or folds) its
   // preview below. A stale key (notebook switch / deletion) simply closes the preview.
-  const sources = active?.sources ?? [];
-  const preview = previewKey ? sources.find((s) => srcKey(s) === previewKey) : undefined;
+  const allSources = active?.sources ?? [];
+  // Filter (title/ref/text, case-insensitive) so a big notebook stays navigable.
+  const sourceFilter = sourceQuery.trim().toLowerCase();
+  const sources = sourceFilter
+    ? allSources.filter((s) => [s.title, s.ref, s.text].some((f) => f?.toLowerCase().includes(sourceFilter)))
+    : allSources;
+  const preview = previewKey ? allSources.find((s) => srcKey(s) === previewKey) : undefined;
   // A file source whose original was archived carries a file-store path (contains
   // "/") as its ref → offer "원본 열기". Older/plain refs (bare filename) don't.
   const previewOriginalHref =
@@ -332,6 +351,19 @@ export function NotebookPane() {
           <p className="notebook-empty">위에서 노트북을 선택하세요.</p>
         ) : (
           <>
+            {/* A source filter appears once the strip grows past a glance — typing
+                narrows the chips by title/ref/text without a round-trip. */}
+            {allSources.length > 3 && (
+              <input
+                className="field notebook-source-search"
+                type="search"
+                value={sourceQuery}
+                onChange={(e) => setSourceQuery(e.target.value)}
+                placeholder="자료 검색…"
+                aria-label="자료 검색"
+                style={{ marginBottom: 8 }}
+              />
+            )}
             {/* The sources as a wrapping chip strip: enough to SEE what material is in
               the notebook and add more, without spending the pane on reading it —
               the main work happens in the chat below (ask → answer → 노트에 저장).
@@ -355,15 +387,18 @@ export function NotebookPane() {
                 <Icon name="plus" size={12} /> 자료
               </button>
             </div>
-            {sources.length === 0 && (
+            {allSources.length === 0 ? (
               <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료”로 메일·견적·메모·위키 등을 담으세요.</p>
-            )}
+            ) : sources.length === 0 ? (
+              <p className="notebook-empty">“{sourceQuery.trim()}”에 맞는 자료가 없습니다.</p>
+            ) : null}
             {preview && (
               <div className="notebook-preview" role="group" aria-label="자료 내용">
                 <NotebookSourceDetail
                   source={preview}
                   onClose={() => setPreviewKey("")}
                   originalHref={previewOriginalHref}
+                  onRename={preview.cite ? () => setEditingSource(preview) : undefined}
                 />
               </div>
             )}
@@ -395,6 +430,16 @@ export function NotebookPane() {
           path={sourceLabel(deletingSource)}
           onClose={() => setDeletingSource(null)}
           onDelete={() => void removeSource()}
+        />
+      )}
+      {editingSource?.cite && (
+        <OneFieldModal
+          title="자료 이름 변경"
+          label="제목"
+          initialValue={editingSource.title ?? ""}
+          action="저장"
+          onClose={() => setEditingSource(null)}
+          onSubmit={(v) => void editSource(editingSource.cite as string, v)}
         />
       )}
     </div>
@@ -496,10 +541,12 @@ function NotebookSourceDetail({
   source,
   onClose,
   originalHref,
+  onRename,
 }: {
   source: NotebookSource;
   onClose: () => void;
   originalHref?: string;
+  onRename?: () => void;
 }) {
   const kindLabel = source.kind ? (KIND_LABEL[source.kind as SourceKind] ?? source.kind) : "";
   return (
@@ -508,6 +555,11 @@ function NotebookSourceDetail({
         {source.cite && <span className="notebook-cite">{source.cite}</span>}
         <span className="notebook-detail-title">{sourceTitle(source)}</span>
         {kindLabel && <span className="notebook-source-kind">{kindLabel}</span>}
+        {onRename && (
+          <button type="button" className="row-btn" onClick={onRename} title="자료 이름 변경">
+            이름 변경
+          </button>
+        )}
         {originalHref && (
           <a className="row-btn" href={originalHref} target="_blank" rel="noreferrer" title="원본 파일 열기">
             원본 열기

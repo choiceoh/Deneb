@@ -377,6 +377,52 @@ func TestNotebookAddFileOmittedWithoutExtractor(t *testing.T) {
 	}
 }
 
+// TestNotebookEditSourceRenamesKeepingCite proves edit_source updates a source's
+// title while keeping its cite (citations stay stable) and other fields.
+func TestNotebookEditSourceRenamesKeepingCite(t *testing.T) {
+	m := notebookTestMethods(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+	decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_source",
+		map[string]any{"id": id, "kind": "note", "text": "잔금 5%"}))
+
+	edited := decodePayload(t, callNotebook(t, m, "miniapp.notebook.edit_source",
+		map[string]any{"id": id, "cite": "S1", "title": "잔금 조건"}))
+	if edited["cite"] != "S1" || edited["title"] != "잔금 조건" {
+		t.Errorf("edit_source = %v, want cite=S1 title=잔금 조건", edited)
+	}
+	if edited["text"] != "잔금 5%" {
+		t.Errorf("edit_source dropped the text: %v", edited["text"])
+	}
+
+	// The rename persists in a subsequent get.
+	got := decodePayload(t, callNotebook(t, m, "miniapp.notebook.get", map[string]any{"id": id}))
+	srcs, _ := got["sources"].([]any)
+	if first, _ := srcs[0].(map[string]any); first["title"] != "잔금 조건" {
+		t.Errorf("get after edit = %v, want the new title", srcs[0])
+	}
+}
+
+func TestNotebookEditSourceRejections(t *testing.T) {
+	m := notebookTestMethods(t)
+	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))
+	id, _ := created["id"].(string)
+	decodePayload(t, callNotebook(t, m, "miniapp.notebook.add_source", map[string]any{"id": id, "kind": "note", "text": "x"}))
+
+	if resp := callNotebook(t, m, "miniapp.notebook.edit_source", map[string]any{"cite": "S1", "title": "y"}); resp.OK {
+		t.Error("edit_source without id should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.edit_source", map[string]any{"id": id, "title": "y"}); resp.OK {
+		t.Error("edit_source without cite should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.edit_source", map[string]any{"id": id, "cite": "S9", "title": "y"}); resp.OK {
+		t.Error("edit_source of an unknown cite should fail")
+	}
+	if resp := callNotebook(t, m, "miniapp.notebook.edit_source", map[string]any{"id": "nope", "cite": "S1", "title": "y"}); resp.OK {
+		t.Error("edit_source in an unknown notebook should fail")
+	}
+}
+
 func TestNotebookRemoveSourceDropsCitedEntryAndRejectsUnknownCite(t *testing.T) {
 	m := notebookTestMethods(t)
 	created := decodePayload(t, callNotebook(t, m, "miniapp.notebook.create", map[string]any{"name": "딜"}))

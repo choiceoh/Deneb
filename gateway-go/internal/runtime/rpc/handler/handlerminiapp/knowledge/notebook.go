@@ -69,6 +69,7 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 		"miniapp.notebook.get":           notebookGetRPC(deps),
 		"miniapp.notebook.create":        notebookCreateRPC(deps),
 		"miniapp.notebook.add_source":    notebookAddSourceRPC(deps),
+		"miniapp.notebook.edit_source":   notebookEditSourceRPC(deps),
 		"miniapp.notebook.delete":        notebookDeleteRPC(deps),
 		"miniapp.notebook.remove_source": notebookRemoveSourceRPC(deps),
 		"miniapp.notebook.set_mode":      notebookSetModeRPC(deps),
@@ -243,6 +244,45 @@ func notebookAddSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 				return rpcerr.NotFound("notebook").Response(req.ID)
 			}
 			// Validation errors (bad kind, missing text/ref) are the caller's fault.
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, NotebookSourceOut{
+			Cite:  src.Cite,
+			Kind:  src.Kind,
+			Ref:   src.Ref,
+			Title: src.Title,
+			Text:  truncateNotebookSourceText(src.Text),
+		})
+	})
+}
+
+// notebookEditSourceRPC renames a pinned source (updates its title), keeping its
+// cite so citations stay stable. Title-only by design — see Store.EditSource.
+func notebookEditSourceRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID    string `json:"id"`
+		Cite  string `json:"cite"`
+		Title string `json:"title"`
+	}
+	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		cite := strings.TrimSpace(p.Cite)
+		if cite == "" {
+			return rpcerr.MissingParam("cite").Response(req.ID)
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		src, err := store.EditSource(id, cite, p.Title)
+		if err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
+			// Unknown cite is the caller's fault.
 			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
 		}
 		return rpcutil.RespondOK(req.ID, NotebookSourceOut{

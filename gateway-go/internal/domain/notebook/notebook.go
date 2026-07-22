@@ -444,6 +444,39 @@ func (s *Store) RemoveSource(id, cite string) error {
 	return nil
 }
 
+// EditSource renames a pinned source (updates its Title), keeping its cite, kind,
+// ref, text, and added time. Only the title is mutable: the body is the ingested
+// snapshot (and the get payload truncates it, so a body round-trip could silently
+// shorten it) — a rename is the safe, common edit (naming an unlabeled note).
+func (s *Store) EditSource(id, cite, title string) (*Source, error) {
+	cite = strings.TrimSpace(cite)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	nb, ok := s.nbs[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	idx := -1
+	for i := range nb.Sources {
+		if strings.EqualFold(nb.Sources[i].Cite, cite) {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return nil, fmt.Errorf("notebook: source %q not found", cite)
+	}
+	prev := nb.Sources[idx].Title
+	nb.Sources[idx].Title = strings.TrimSpace(title)
+	nb.Updated = s.stampLocked()
+	if err := s.saveLocked(nb); err != nil {
+		nb.Sources[idx].Title = prev // roll back to keep memory consistent with disk
+		return nil, err
+	}
+	edited := nb.Sources[idx]
+	return &edited, nil
+}
+
 // SetMode sets a notebook's grounding strictness. Accepts "" / "soft" (soft) or
 // "strict"; any other value errors. Soft is the default for new notebooks.
 func (s *Store) SetMode(id, mode string) error {
