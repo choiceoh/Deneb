@@ -318,10 +318,19 @@ def _gap_bucket(gap_ms: int) -> str:
     return RUN_GAP_BUCKETS[-1][1]
 
 
+# Mock-native-client synthetic sessions (agentlog.liveTestSessionPrefix). Each smoke
+# is a fresh session with no run-to-run cache continuity, so counting them craters
+# the blended cache-reuse numbers with traffic that is not real usage — the Go
+# aggregators skip them by this same prefix (aggregate_failed.go); mirror that here.
+LIVE_TEST_SESSION_PREFIX = "client:lt-"
+
+
 def build_report(log_dir: Path, since_days: float, session_prefix: str = "") -> Report:
     since_ms = int((time.time() - since_days * 86_400) * 1000) if since_days > 0 else 0
     report = Report()
     for path in sorted(log_dir.glob("*.jsonl")):
+        if path.name.startswith(LIVE_TEST_SESSION_PREFIX):
+            continue
         if session_prefix and not path.name.startswith(session_prefix):
             continue
         fold_session(path, since_ms, report)

@@ -135,6 +135,12 @@ def load_token_economics(logs: Path | None = None, *, days: int = 7) -> TokenEco
     seen = False
     if root.is_dir():
         for path in sorted(root.glob("*.jsonl")):
+            # Skip mock-native-client live-test sessions (agentlog.liveTestSessionPrefix):
+            # each smoke is a fresh session with no cache continuity, so counting them
+            # craters cacheHit and skews τ/CPM away from real usage (the Go aggregators
+            # skip this same prefix). See aggregate_failed.go.
+            if path.name.startswith("client:lt-"):
+                continue
             try:
                 text = path.read_text(encoding="utf-8")
             except OSError:
