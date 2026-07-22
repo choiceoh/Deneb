@@ -75,6 +75,11 @@ interface WorkspaceCtx {
   // sends a prompt through it (opens the panel first via setAiCollapsed).
   askDeneb: (text: string) => boolean;
   setAskSink: (sink: ((text: string) => void) | null) => void;
+  // The reverse channel: the AI panel publishes each finished answer; a pane may
+  // observe it (the notebook highlights the sources an answer cited). Ref-held in
+  // the provider, so publishing does not re-render the shell.
+  publishAnswer: (text: string) => void;
+  setAnswerSink: (sink: ((text: string) => void) | null) => void;
   paneTarget: PaneTarget | null;
   openPane: (view: View, target?: Omit<PaneTarget, "view">) => void;
   consumePaneTarget: () => void;

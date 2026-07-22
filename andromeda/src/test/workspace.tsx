@@ -35,6 +35,8 @@ export function workspaceValue(overrides: Partial<WorkspaceValue> = {}): Workspa
     setAiCollapsed: vi.fn(),
     askDeneb: vi.fn(() => true),
     setAskSink: vi.fn(),
+    publishAnswer: vi.fn(),
+    setAnswerSink: vi.fn(),
     paneTarget: null,
     openPane: vi.fn(),
     consumePaneTarget: vi.fn(),

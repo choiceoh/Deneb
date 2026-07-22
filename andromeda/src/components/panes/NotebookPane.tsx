@@ -19,6 +19,7 @@ import { formatBytes } from "./fileHelpers";
 // style). You can also create a notebook and pin (add) a citation source.
 // 자료 영역 높이 버튼의 순환 순서(접힘→기본→확대→접힘)와, 각 상태에서 버튼이 할
 // "다음 동작"을 나타내는 아이콘·라벨. 확대 단계는 win-max(확대), 나머지는 셰브런 방향.
+const EMPTY_CITES: ReadonlySet<string> = new Set();
 const NEXT_TOP: Record<NotebookTop, NotebookTop> = { folded: "default", default: "expanded", expanded: "folded" };
 const TOP_ACTION: Record<NotebookTop, { icon: IconName; label: string }> = {
   folded: { icon: "chevron-down", label: "자료 영역 펼치기" },
@@ -27,7 +28,8 @@ const TOP_ACTION: Record<NotebookTop, { icon: IconName; label: string }> = {
 };
 
 export function NotebookPane() {
-  const { connected, cfg, openWiki, setNoteSink, notebookTop, setNotebookTop } = useWorkspace();
+  const { connected, cfg, openWiki, setNoteSink, notebookTop, setNotebookTop, askDeneb, setAnswerSink } =
+    useWorkspace();
   const { call, callCached, readCache, writeCache, status } = useCachedRpc(cfg, NOTEBOOK_RESOURCE);
   const [listSnapshot] = useState(() => readCache<NotebookListResponse>(NOTEBOOK_RPC.list));
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>(listSnapshot?.data.notebooks ?? []);
@@ -40,6 +42,14 @@ export function NotebookPane() {
   // Client-side filter over the open notebook's sources (title/text), so a large
   // notebook stays navigable without a round-trip. "" shows everything.
   const [sourceQuery, setSourceQuery] = useState("");
+  // Cites ([S1]…) the AI's latest answer referenced — their chips light up so you
+  // can see which materials grounded the answer. Tagged with the notebook the
+  // answer belonged to, so a switch drops a stale highlight at render time (no
+  // reset-in-effect needed).
+  const [cited, setCited] = useState<{ id: string; cites: ReadonlySet<string> }>(() => ({
+    id: "",
+    cites: EMPTY_CITES,
+  }));
   // Which source chip is expanded into the preview below (by its stable key).
   // "" = all chips folded — the default, so the sources read as a light strip and
   // the pane's height stays with the actual work (the chat below). Goes stale
@@ -130,6 +140,26 @@ export function NotebookPane() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, active?.id, call]);
 
+  // Grounding attribution: while a notebook is open, observe the AI's answers and
+  // remember the source cites ([S1]…) each one referenced, tagged with this
+  // notebook's id. An answer with no cites leaves the last set alone (chit-chat
+  // doesn't reset). The set is applied at render only when its tag still matches
+  // the open notebook, so a switch drops it without a setState-in-effect.
+  useEffect(() => {
+    if (!connected || !active) {
+      setAnswerSink(null);
+      return;
+    }
+    const nbId = active.id;
+    setAnswerSink((text: string) => {
+      const found = new Set<string>();
+      for (const m of text.matchAll(/\[S(\d+)\]/g)) found.add("S" + m[1]);
+      if (found.size) setCited({ id: nbId, cites: found });
+    });
+    return () => setAnswerSink(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, active?.id, setAnswerSink]);
+
   async function createNotebook(name: string, description: string) {
     const r = await call<NotebookSummary>(
       NOTEBOOK_RPC.create,
@@ -140,6 +170,17 @@ export function NotebookPane() {
     setCreating(false);
     await loadNotebooks();
     void openNotebook(r.data.id); // open the fresh notebook so the user can pin sources
+  }
+
+  // Ask the docked chat (which is grounded in this notebook's sources) for a cited
+  // briefing — the notebook's "read it all for me" shortcut. The answer's [S번호]
+  // citations then light up the cited chips via the observer above.
+  function brief() {
+    if (!active || !connected || (active.sources ?? []).length === 0) return;
+    askDeneb(
+      `노트북 "${active.name}"의 자료들을 근거로 핵심만 간결히 브리핑해줘. ` +
+        `각 요점 끝에 근거가 된 자료의 [S번호]를 인용으로 표기해줘.`,
+    );
   }
 
   async function addSource(src: NewSource) {
@@ -261,6 +302,8 @@ export function NotebookPane() {
   // Sources render as a light chip strip; clicking a chip expands (or folds) its
   // preview below. A stale key (notebook switch / deletion) simply closes the preview.
   const allSources = active?.sources ?? [];
+  // Apply the cited highlight only while its tag matches the open notebook.
+  const citedCites = active && cited.id === active.id ? cited.cites : EMPTY_CITES;
   // Filter (title/ref/text, case-insensitive) so a big notebook stays navigable.
   const sourceFilter = sourceQuery.trim().toLowerCase();
   const sources = sourceFilter
@@ -285,6 +328,16 @@ export function NotebookPane() {
         {active?.dealRef && (
           <button className="row-btn" onClick={() => openWiki(active.dealRef as string)} title="딜 페이지 열기">
             딜 페이지 →
+          </button>
+        )}
+        {active && (active.sources ?? []).length > 0 && (
+          <button
+            className="row-btn"
+            onClick={() => brief()}
+            disabled={!connected}
+            title="이 자료들로 근거 있는 브리핑을 요청합니다"
+          >
+            브리핑
           </button>
         )}
         {active && (
@@ -374,6 +427,7 @@ export function NotebookPane() {
                   key={srcKey(s) || i}
                   source={s}
                   open={srcKey(s) === previewKey}
+                  cited={!!s.cite && citedCites.has(s.cite)}
                   onToggle={() => setPreviewKey((k) => (k === srcKey(s) ? "" : srcKey(s)))}
                   onDelete={s.cite ? () => setDeletingSource(s) : undefined}
                 />
@@ -496,16 +550,25 @@ function sourceTitle(s: NotebookSource): string {
 function NotebookSourceChip({
   source,
   open,
+  cited,
   onToggle,
   onDelete,
 }: {
   source: NotebookSource;
   open: boolean;
+  cited?: boolean;
   onToggle: () => void;
   onDelete?: () => void;
 }) {
   return (
-    <div className={"notebook-chip" + (open ? " active" : "")} role="listitem">
+    <div
+      className={"notebook-chip" + (open ? " active" : "")}
+      role="listitem"
+      // The AI's latest answer cited this source → ring it in the accent so the
+      // grounding is visible at a glance (F: 사용된 출처 하이라이트).
+      style={cited ? { boxShadow: "0 0 0 1.5px var(--accent)" } : undefined}
+      title={cited ? "최근 답변이 인용한 자료" : undefined}
+    >
       <button
         type="button"
         className="notebook-chip-main"
