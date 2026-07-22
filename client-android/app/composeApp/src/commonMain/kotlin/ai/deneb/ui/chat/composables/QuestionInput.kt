@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -168,21 +169,32 @@ fun QuestionInput(
             }
         }
         val allowFileAttachment = pickerExtensions.isNotEmpty()
+        // The picker result fires after the modal system picker returns; read the
+        // composer text through rememberUpdatedState so the remembered launcher sees
+        // the latest value (not a stale closure captured at first composition).
+        val composerText by rememberUpdatedState(textState.text)
         val filePickerLauncher = if (allowFileAttachment) {
             rememberFilePickerLauncher(
                 type = FileKitType.File(extensions = pickerExtensions),
             ) { file ->
                 if (file == null) return@rememberFilePickerLauncher
+                // The text typed alongside the attachment becomes the capture's caption,
+                // so "이 계약서 요약해줘" + a PDF analyzes the PDF in that light.
+                val caption = composerText.trim()
                 when (routeAttachment(file.extension, captures != null)) {
-                    AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(file)
+                    AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(file, caption)
 
-                    AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(file)
+                    AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(file, caption)
 
                     // Documents extract + analyze in one turn (like image/audio).
                     // Without platform captures (desktop/iOS) fall back to attaching.
                     AttachmentRoute.FILE_ATTACH ->
-                        if (captures != null) captures.onDocumentFile(file) else addFile(file)
+                        if (captures != null) captures.onDocumentFile(file, caption) else addFile(file)
                 }
+                // A capture consumed the composer text as its caption — clear it so the
+                // same text isn't also sent as a separate turn. The desktop/iOS addFile
+                // path keeps the text (the staged file rides the next message with it).
+                if (captures != null) onTextStateChange(TextFieldValue(""))
             }
         } else {
             null
