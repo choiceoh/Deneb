@@ -615,6 +615,7 @@ func recordRunCompletion(rec runCompletionRecord, logger *slog.Logger) {
 	}
 	runLog.LogEnd(agentlog.RunEndData{
 		Model:               actualModel,
+		RequestedModel:      model,
 		StopReason:          agentResult.StopReason,
 		Turns:               agentResult.Turns,
 		InputTokens:         agentResult.Usage.InputTokens,

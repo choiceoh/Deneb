@@ -134,6 +134,10 @@ object DenebDashboard
 object DenebRsi
 
 @Serializable
+@SerialName("deneb_usage")
+object DenebUsage
+
+@Serializable
 @SerialName("deneb_project_digests")
 object DenebProjectDigests
 

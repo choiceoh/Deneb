@@ -36,6 +36,7 @@ import ai.deneb.deneb.DenebSearchScreen
 import ai.deneb.deneb.DenebSiteMapScreen
 import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
+import ai.deneb.deneb.DenebUsageScreen
 import ai.deneb.deneb.DenebWikiPageScreen
 import ai.deneb.deneb.markWorkFeedRead
 import ai.deneb.deneb.openWorkFeedItem
@@ -481,6 +482,15 @@ internal fun AppContent(
                                     denebComposable<DenebRsi> {
                                         denebClient?.let { client ->
                                             DenebRsiScreen(
+                                                client = client,
+                                                onBack = { navController.navigateUp() },
+                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                            )
+                                        }
+                                    }
+                                    denebComposable<DenebUsage> {
+                                        denebClient?.let { client ->
+                                            DenebUsageScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,

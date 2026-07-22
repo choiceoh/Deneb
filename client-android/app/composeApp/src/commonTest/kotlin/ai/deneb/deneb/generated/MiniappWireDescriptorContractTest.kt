@@ -601,6 +601,18 @@ class MiniappWireDescriptorContractTest {
             fields = listOf("id", "role", "content", "attachments", "timestampMs"),
         ),
         contract(
+            name = "UsageStat",
+            serializer = UsageStat.serializer(),
+            empty = UsageStat(),
+            fields = listOf("name", "runs", "inputTokens", "outputTokens", "cacheReadTokens"),
+        ),
+        contract(
+            name = "UsageStatsResult",
+            serializer = UsageStatsResult.serializer(),
+            empty = UsageStatsResult(),
+            fields = listOf("days", "totalInputTokens", "totalOutputTokens", "byModel", "byRole", "byWorkType"),
+        ),
+        contract(
             name = "WormholeModelOut",
             serializer = WormholeModelOut.serializer(),
             empty = WormholeModelOut(),

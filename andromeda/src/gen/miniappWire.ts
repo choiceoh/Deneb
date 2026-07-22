@@ -888,6 +888,23 @@ export interface TranscriptMsgOut {
   timestampMs?: number
 }
 
+export interface UsageStat {
+  name?: string
+  runs?: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+}
+
+export interface UsageStatsResult {
+  days?: number
+  totalInputTokens?: number
+  totalOutputTokens?: number
+  byModel?: UsageStat[]
+  byRole?: UsageStat[]
+  byWorkType?: UsageStat[]
+}
+
 export interface WormholeModelOut {
   name?: string
   protocol?: string

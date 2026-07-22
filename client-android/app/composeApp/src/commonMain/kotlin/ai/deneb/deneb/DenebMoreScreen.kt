@@ -14,6 +14,7 @@ import ai.deneb.DenebProjectDigests
 import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch
 import ai.deneb.DenebSiteMap
+import ai.deneb.DenebUsage
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
@@ -76,6 +77,7 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("그룹웨어", DenebGroupware, Icons.Outlined.Business, key = "deneb_groupware"),
         MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard"),
         MoreEntry("재귀적 자가개선", DenebRsi, Icons.Outlined.Autorenew, key = "deneb_rsi"),
+        MoreEntry("사용량", DenebUsage, Icons.Outlined.Insights, key = "deneb_usage"),
         MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Insights, key = "deneb_project_digests"),
         MoreEntry("현장 지도", DenebSiteMap, Icons.Outlined.Place, key = "deneb_site_map"),
         MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org"),

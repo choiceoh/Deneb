@@ -41,3 +41,51 @@ func HeartbeatTargetSession(lastSessionKey string) string {
 	}
 	return NativeWorkSessionKey
 }
+
+// WorkTypeForKey classifies a session key into a coarse work-type slug for usage
+// reporting (heartbeat, phone-event, chat, mail-analysis, …). The session key
+// encodes the work type by prefix; this is the single source of truth for that
+// mapping so callers don't re-implement scattered prefix switches. Returns a
+// stable English slug the UI localizes; unrecognized keys fold into "other".
+func WorkTypeForKey(sessionKey string) string {
+	switch {
+	case sessionKey == HeartbeatWorkSessionKey || strings.HasPrefix(sessionKey, "submain:heartbeat"):
+		return "heartbeat"
+	case strings.HasPrefix(sessionKey, "phone-event"):
+		return "phone-event"
+	case sessionKey == "system:mailpoll":
+		return "mail-analysis"
+	case strings.HasPrefix(sessionKey, "mail-qa"):
+		return "mail-qa"
+	case strings.HasPrefix(sessionKey, "cron:"):
+		return "cron"
+	case strings.HasPrefix(sessionKey, "noti-digest"):
+		return "noti-digest"
+	case strings.HasPrefix(sessionKey, "supernote-digest"):
+		return "supernote-digest"
+	case strings.HasPrefix(sessionKey, "wiki-"):
+		return "wiki-background"
+	case strings.HasPrefix(sessionKey, "system:skill-review"), strings.HasPrefix(sessionKey, "system:skill-workout"):
+		return "skill-review"
+	case strings.HasPrefix(sessionKey, "system:groupware"):
+		return "groupware-radar"
+	case sessionKey == "boot":
+		return "boot"
+	// A native subagent runs under client:main:<label>:<ms>; classify it before
+	// the bare client:main chat bucket so delegated work is not counted as chat.
+	case strings.HasPrefix(sessionKey, NativeWorkSessionKey+":") && sessionKey != DreamWorkSessionKey:
+		return "subagent"
+	case sessionKey == DreamWorkSessionKey:
+		return "dream"
+	case sessionKey == NativeWorkSessionKey ||
+		strings.HasPrefix(sessionKey, "client:") ||
+		strings.HasPrefix(sessionKey, "telegram:") ||
+		strings.HasPrefix(sessionKey, "discord:") ||
+		strings.HasPrefix(sessionKey, "chat:"):
+		return "chat"
+	case strings.HasPrefix(sessionKey, "system"):
+		return "system"
+	default:
+		return "other"
+	}
+}

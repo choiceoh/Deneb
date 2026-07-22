@@ -164,6 +164,13 @@ type RunEndData struct {
 	// counts a FallbackRun when this differs, so per-model stats surface how
 	// often a model needed rescuing.
 	Model string `json:"model,omitempty"`
+	// RequestedModel is the model/role the run ASKED for (params.Model): a role
+	// name like "submain"/"coding", a raw model id, or "" for the default (main).
+	// Distinct from Model (the model that actually answered) — it lets per-role
+	// usage separate roles that share one underlying model (e.g. glm serving both
+	// coding and submain). Absent ("") on runs recorded before this field, and on
+	// interactive turns that request no explicit model (which default to main).
+	RequestedModel string `json:"requestedModel,omitempty"`
 	// CacheReadTokens/CacheCreationTokens are run totals (summed across turns).
 	// High read : low creation == healthy prompt-cache reuse.
 	CacheReadTokens     int `json:"cacheReadTokens,omitempty"`
