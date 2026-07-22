@@ -1774,6 +1774,72 @@ func GroupwareToolSchema() map[string]any {
 	}
 }
 
+func SolarflowToolSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"description": "SolarFlow ERP 분석(읽기 전용). 자연어=search. 구조화: inventory 재고 · margin 마진 · customer 거래처 · outstanding 미수금 · turnover 회전율 · supply_forecast 수급 · lc_maturity LC만기 · lc_limit 한도 · lc_fee 수수료 · landed_cost 수입원가 · exchange_compare 환율 · price_trend 단가추이 · order_risk 수주충당위험 · receipt_match 수금매칭. status=연결확인. Never mutate.",
+				"enum":        []string{"status", "search", "inventory", "margin", "customer", "outstanding", "receipt_match", "turnover", "price_trend", "supply_forecast", "order_risk", "lc_maturity", "lc_limit", "lc_fee", "landed_cost", "exchange_compare"},
+			},
+			"company": map[string]any{
+				"type":        "string",
+				"description": "회사 uuid 오버라이드. 미지정 시 기본 회사(탑솔라, DENEB_SOLARFLOW_COMPANY_ID).",
+			},
+			"cost_basis": map[string]any{
+				"type":        "string",
+				"description": "원가 기준 (margin/customer): cif|landed|fifo. 기본 margin=cif, customer=landed.",
+			},
+			"customer": map[string]any{
+				"type":        "string",
+				"description": "거래처명 (outstanding/receipt_match). customer-analysis로 uuid 자동 해석. 모호하면 후보를 돌려준다. uuid를 알면 customer_id 사용.",
+			},
+			"customer_id": map[string]any{
+				"type":        "string",
+				"description": "거래처 uuid (명시 필터). margin/customer 필터 또는 outstanding/receipt_match 대상.",
+			},
+			"date_from": map[string]any{
+				"type":        "string",
+				"description": "기간 시작 YYYY-MM-DD (margin/customer).",
+			},
+			"date_to": map[string]any{
+				"type":        "string",
+				"description": "기간 끝 YYYY-MM-DD (margin/customer).",
+			},
+			"horizon": map[string]any{
+				"type":        "integer",
+				"description": "기간 정수. lc_maturity=앞으로 N일(기본7) · lc_limit/supply_forecast=N개월(기본6) · turnover=분석창 N일(기본90).",
+			},
+			"limit": map[string]any{
+				"type":        "integer",
+				"description": "표시 행 수 (기본 20, 최대 50). 응답 배열을 상위 N개로 자른다.",
+			},
+			"manufacturer_id": map[string]any{
+				"type":        "string",
+				"description": "제조사 uuid 필터.",
+			},
+			"period": map[string]any{
+				"type":        "string",
+				"description": "price_trend 집계 주기: quarterly|monthly (기본 quarterly).",
+			},
+			"product_id": map[string]any{
+				"type":        "string",
+				"description": "품목 uuid 필터 (inventory/margin/turnover/supply_forecast/price_trend).",
+			},
+			"query": map[string]any{
+				"type":        "string",
+				"description": "action=search 자연어 질의. 예: \"모듈 재고\", \"미수금 많은 거래처\", \"JA 640 재고\", \"이번주 만기 LC\". Required for action=search.",
+			},
+			"receipt_amount": map[string]any{
+				"type":        "number",
+				"description": "입금액 (receipt_match, >0 필수) — 이 금액을 미수 항목에 어떻게 매칭할지 추천.",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
 func PhoneReadToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -2194,6 +2260,7 @@ func ToolMaxOutputs() map[string]int {
 		"groupware":   32000,
 		"notebook":    24000,
 		"office":      32000,
+		"solarflow":   32000,
 		"wiki":        20000,
 	}
 }
