@@ -90,6 +90,14 @@ type Store struct {
 	// never held while holding another Store mutex. See recall_hits.go.
 	recallMu sync.Mutex
 
+	// captureMu serializes SaveCaptureAt's unique-name selection + write in the
+	// captures/ side dir: the second-resolution timestamp collides when captures
+	// land concurrently (a parallel multi-file batch, or two capture requests at
+	// once), so the stat-bump-then-rename must be atomic or one rename silently
+	// overwrites another file's content. Released before the diary breadcrumb —
+	// never held while holding another Store mutex. See captures.go.
+	captureMu sync.Mutex
+
 	mu       sync.RWMutex
 	index    *Index // cached master index
 	fts      *searchDB

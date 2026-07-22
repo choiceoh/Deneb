@@ -2,9 +2,11 @@ package wiki
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -82,6 +84,53 @@ func TestSaveCaptureAtUniquePathsPerBatch(t *testing.T) {
 	}
 	if !strings.Contains(string(dataB), "20억원") {
 		t.Errorf("file B missing its own content: %q", string(dataB))
+	}
+}
+
+// TestSaveCaptureAtUniquePathsConcurrent stresses the concurrency contract that
+// captureMu guards: a parallel multi-file batch saves captures at the same time,
+// and the same-second unique-name selection must stay atomic so no two land on one
+// path (which would silently overwrite one file's content). Run with -race.
+func TestSaveCaptureAtUniquePathsConcurrent(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "memory", "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	const nfiles = 12
+	paths := make([]string, nfiles)
+	contents := make([]string, nfiles)
+	errs := make([]error, nfiles)
+	var wg sync.WaitGroup
+	for i := 0; i < nfiles; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			content := fmt.Sprintf("문서 %d 고유내용 %d억원", i, i)
+			_, abs, _, err := store.SaveCaptureAt("document", "", content)
+			paths[i], contents[i], errs[i] = abs, content, err
+		}(i)
+	}
+	wg.Wait()
+
+	seen := map[string]bool{}
+	for i := 0; i < nfiles; i++ {
+		if errs[i] != nil {
+			t.Fatalf("file %d: SaveCaptureAt: %v", i, errs[i])
+		}
+		if seen[paths[i]] {
+			t.Fatalf("path collision under concurrency: %q", paths[i])
+		}
+		seen[paths[i]] = true
+		data, err := os.ReadFile(paths[i])
+		if err != nil {
+			t.Fatalf("file %d missing: %v", i, err)
+		}
+		if !strings.Contains(string(data), contents[i]) {
+			t.Errorf("file %d was overwritten — missing its own content %q", i, contents[i])
+		}
 	}
 }
 

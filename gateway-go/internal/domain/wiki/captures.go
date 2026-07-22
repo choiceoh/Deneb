@@ -79,12 +79,15 @@ func (s *Store) SaveCaptureAt(kind, context, text string) (rel, abs string, body
 
 	abs = filepath.Join(dir, name)
 	// Same-second, same-kind captures collide on the second-resolution timestamp —
-	// a multi-file batch calls SaveCapture per file in a tight loop, so two docs
+	// a multi-file batch calls SaveCapture per file (now concurrently), so two docs
 	// saved in the same second would map to one path and the second's atomic rename
 	// would silently overwrite the first (the agent then reads one file's content
 	// for both pointers). Bump a numeric suffix until the path is free so every
 	// captured file survives with its own agent-openable path. Bounded so a stat
 	// error (e.g. permission) can't spin — the write below surfaces real failures.
+	// captureMu makes the stat-bump-then-rename atomic across concurrent callers;
+	// without it two goroutines could both stat a free path and both claim it.
+	s.captureMu.Lock()
 	for seq := 2; seq < 1000; seq++ {
 		if _, statErr := os.Stat(abs); statErr != nil {
 			break
@@ -94,12 +97,15 @@ func (s *Store) SaveCaptureAt(kind, context, text string) (rel, abs string, body
 	}
 	tmp := abs + ".tmp"
 	if err := writeFileSync(tmp, []byte(header.String()+text+"\n"), 0o644); err != nil {
+		s.captureMu.Unlock()
 		return "", "", 0, fmt.Errorf("wiki: write capture: %w", err)
 	}
 	if err := os.Rename(tmp, abs); err != nil {
+		s.captureMu.Unlock()
 		os.Remove(tmp)
 		return "", "", 0, fmt.Errorf("wiki: rename capture: %w", err)
 	}
+	s.captureMu.Unlock()
 
 	rel = filepath.Join("captures", name)
 	// Breadcrumb: the preview makes the capture diary-searchable (and feeds
