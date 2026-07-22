@@ -15,7 +15,11 @@ export const MAX_ATTACH_MB = 25;
 const MAX_ATTACH_BYTES = MAX_ATTACH_MB * 1024 * 1024;
 
 export function isAttachableMime(mime: string): boolean {
-  return mime.startsWith("image/") || mime.startsWith("audio/") || DOCUMENT_MIMES.has(mime);
+  // Video rides the ASR path: the gateway pulls its audio track (ffmpeg) and
+  // transcribes it, so a meeting recorded as .mp4 is attachable like a voice memo.
+  return (
+    mime.startsWith("image/") || mime.startsWith("audio/") || mime.startsWith("video/") || DOCUMENT_MIMES.has(mime)
+  );
 }
 
 export interface AttachIntake {

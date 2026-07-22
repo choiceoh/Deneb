@@ -391,15 +391,19 @@ class MainActivity : ComponentActivity() {
 
     // Document mimes the share filter accepts — must stay in lockstep with the
     // manifest SEND filter and the gateway extraction dispatcher
-    // (document_extract.go): PDF/CSV/OOXML(docx·xlsx·pptx)/Markdown. HWP is
-    // deliberately absent — the gateway has no extractor, so accepting it would
-    // only surface an extraction error.
+    // (document_extract.go): PDF/CSV/OOXML/Markdown natively, plus legacy binary
+    // Office / RTF / ODF which the gateway converts (LibreOffice) before
+    // extracting. HWP is not matched here — its share MIME varies by app, so HWP
+    // rides the in-app picker (routed by extension) instead of the share sheet.
     private fun isSharedDocumentMime(mime: String?): Boolean = when {
         mime == null -> false
         mime == "application/pdf" -> true
         mime == "text/csv" || mime == "text/comma-separated-values" -> true
         mime == "text/markdown" -> true
         mime.contains("wordprocessingml") || mime.contains("spreadsheetml") || mime.contains("presentationml") -> true
+        mime == "application/msword" || mime == "application/vnd.ms-excel" || mime == "application/vnd.ms-powerpoint" -> true
+        mime == "application/rtf" || mime == "text/rtf" -> true
+        mime.contains("opendocument") -> true
         else -> false
     }
 

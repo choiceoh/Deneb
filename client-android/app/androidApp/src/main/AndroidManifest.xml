@@ -62,6 +62,17 @@
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <!-- Legacy binary Office + RTF + ODF: the gateway converts these
+                     (LibreOffice) before extracting. (HWP share is unreliable —
+                     its MIME varies by app — so HWP arrives via the in-app picker,
+                     which routes by extension.) -->
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.ms-powerpoint" />
+                <data android:mimeType="application/rtf" />
+                <data android:mimeType="application/vnd.oasis.opendocument.text" />
+                <data android:mimeType="application/vnd.oasis.opendocument.spreadsheet" />
+                <data android:mimeType="application/vnd.oasis.opendocument.presentation" />
             </intent-filter>
             <!-- Multi-image share: several receipt photos / scan pages at once. -->
             <intent-filter>
