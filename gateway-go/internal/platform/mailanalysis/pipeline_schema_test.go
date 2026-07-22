@@ -21,6 +21,7 @@ var extractorSchemas = map[string]json.RawMessage{
 	"wiki_facts":            wikiFactsSchema,
 	"action_items":          actionItemsSchema,
 	"attachment_selections": attachGateSchema,
+	"status_signal":         statusSignalSchema,
 }
 
 // schemaWrapper is the OpenAI structured-output envelope each schema must carry.
@@ -171,6 +172,50 @@ func TestWikiFactTypeSchemaEnumContract(t *testing.T) {
 		return items["properties"].(map[string]any)["type"]
 	})
 	assertSameSet(t, "fact type", got, []string{"person", "org", "project", "deal", "decision", "deadline"})
+}
+
+func TestStatusSignalSchemaEnumContract(t *testing.T) {
+	signalType := leafEnum(t, statusSignalSchema, func(root map[string]any) any {
+		props := root["properties"].(map[string]any)
+		sig := props["signal"].(map[string]any)
+		return sig["properties"].(map[string]any)["signalType"]
+	})
+	assertSameSet(t, "signalType", signalType, []string{"결정", "리스크", "블로커", "의존성", "진행", "없음"})
+
+	decisionStatus := leafEnum(t, statusSignalSchema, func(root map[string]any) any {
+		props := root["properties"].(map[string]any)
+		sig := props["signal"].(map[string]any)
+		return sig["properties"].(map[string]any)["decisionStatus"]
+	})
+	assertSameSet(t, "decisionStatus", decisionStatus, []string{"제안", "승인", "반려", "해당없음"})
+}
+
+// TestStatusSignalTag locks the bullet-tag rendering: decisions carry their
+// state, risk/blocker/dependency get a plain tag, and the unremarkable
+// 진행/없음/unknown produce no tag so ordinary bullets stay clean.
+func TestStatusSignalTag(t *testing.T) {
+	cases := []struct {
+		signalType, decisionStatus, want string
+	}{
+		{"결정", "승인", "[결정·승인]"},
+		{"결정", "제안", "[결정·제안]"},
+		{"결정", "반려", "[결정·반려]"},
+		{"결정", "해당없음", "[결정]"},
+		{"결정", "", "[결정]"},
+		{"리스크", "해당없음", "[리스크]"},
+		{"블로커", "", "[블로커]"},
+		{"의존성", "", "[의존성]"},
+		{"진행", "해당없음", ""},
+		{"없음", "", ""},
+		{"", "", ""},
+		{"뭔가이상", "승인", ""},
+	}
+	for _, c := range cases {
+		got := statusSignalTag(StatusSignal{SignalType: c.signalType, DecisionStatus: c.decisionStatus})
+		if got != c.want {
+			t.Errorf("statusSignalTag(%q,%q) = %q, want %q", c.signalType, c.decisionStatus, got, c.want)
+		}
+	}
 }
 
 func assertSameSet(t *testing.T, label string, got, want []string) {

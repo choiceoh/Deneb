@@ -223,6 +223,11 @@ type AnalysisResult struct {
 	// 세금계산서 등), or nil when the mail carries no recognizable deal
 	// document. The server sink files it onto a 거래 wiki page.
 	Deal *DealInfo
+	// StatusTag is a compact bracket tag ("[결정·승인]", "[리스크]", …) the server
+	// appends to the project status bullet, from the mail's primary status signal
+	// (type + decision state). "" when the mail is not project-linked, local AI is
+	// unavailable, or the signal is the unremarkable 진행/없음 (no tag worth showing).
+	StatusTag string
 }
 
 // ProjectCandidate is one registered project wiki page offered to the

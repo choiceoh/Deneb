@@ -529,6 +529,10 @@ func (s *Server) appendMailStatusToProjects(msg *gmail.MessageDetail, res mailan
 	if line == "" {
 		return
 	}
+	// Signal tag ("[결정·승인]", "[리스크]" …) from the mail's primary status signal.
+	if tag := strings.TrimSpace(res.StatusTag); tag != "" {
+		line = line + " " + tag
+	}
 	// Event date: a deal document carries its own date (견적서 일자 등), which is
 	// "when it happened" — distinct from now, when Deneb processed the mail. Pass it
 	// so the bullet leads with the document date instead of the processing day.

@@ -366,6 +366,16 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// Best-effort; the server sink turns high-priority items into to-dos.
 	actions := extractActionItems(ctx, deps, clean)
 
+	// Primary status signal (type + decision state) → the project status bullet
+	// tag. Gated on project-linked mails (its only consumer is that bullet), so it
+	// adds no local call to non-project mail. Best-effort; "" when nothing notable.
+	statusTag := ""
+	if len(projects) > 0 {
+		if sig := extractStatusSignal(ctx, deps, clean); sig != nil {
+			statusTag = statusSignalTag(*sig)
+		}
+	}
+
 	// NOTE: we deliberately do NOT append a "위키 갱신 제안" facts block here.
 	// It was scaffolding meant for an agent to consume as wiki(action="write")
 	// inputs, but no wired path actually reads it — the agent's gmail tool runs
@@ -411,7 +421,7 @@ func synthesizeAnalysis(ctx context.Context, deps PipelineDeps, msg *gmail.Messa
 	// main-role model may be a Chinese-lineage one (RoleMain can be cloud
 	// GLM). Applied to the final prose only; the structured Deal/ActionItems were
 	// already extracted above from the pre-conversion text.
-	return AnalysisResult{Text: hanja.Transliterate(clean), RelatedProjects: projects, ActionItems: actions, Deal: deal, Importance: importance}, nil
+	return AnalysisResult{Text: hanja.Transliterate(clean), RelatedProjects: projects, ActionItems: actions, Deal: deal, Importance: importance, StatusTag: statusTag}, nil
 }
 
 // --- importance verdict ---
