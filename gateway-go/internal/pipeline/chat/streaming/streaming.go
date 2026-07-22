@@ -70,6 +70,16 @@ type Broadcaster struct {
 	// that throttled EmitThinking frames condense into a chip-sized preview.
 	thinkingMu   sync.Mutex
 	thinkingTail []rune
+	// summarize, when set via SetThinkingSummarizer, refines the reasoning chip
+	// into a fast-model Korean progress line (Option A). It runs OFF the
+	// EmitThinking hot path (async, one-in-flight via summaryInFlight) so the
+	// agent loop never blocks on the model; a nil summarizer, a busy one, or an
+	// empty result leaves the deterministic cleanThinkingPreview chip in place —
+	// so absence of a summarizer is exactly the prior behavior. Set once after
+	// construction, before the run streams, so the plain field read in
+	// EmitThinking is ordered after the write on the run goroutine.
+	summarize       func(reasoningTail string) (string, bool)
+	summaryInFlight atomic.Bool
 }
 
 // NewBroadcaster creates a new Broadcaster for a given session/run.
@@ -108,11 +118,36 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 	if !sb.lastThinkingNs.CompareAndSwap(last, now) {
 		return
 	}
+	// Deterministic chip first: instant, subscriber-counted, and the unchanged
+	// behavior when no summarizer is wired (or it is busy / fails below).
 	payload := map[string]any{}
 	if preview := sb.thinkingPreview(); preview != "" {
 		payload["preview"] = preview
 	}
-	sb.emit(EventThinking, payload)
+	n := sb.emit(EventThinking, payload)
+
+	// Option A: refine the chip into a fast-model Korean progress line, OFF the
+	// hot path. Only when a summarizer is wired, someone is actually listening
+	// (n > 0 — don't spend the local model on an unwatched run), and no summary
+	// is already running (one-in-flight so the tiny model never falls behind the
+	// throttle). A good result emits a second frame that supersedes the chip;
+	// anything else leaves the deterministic preview standing.
+	if sb.summarize == nil || n <= 0 {
+		return
+	}
+	if !sb.summaryInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	tail := sb.reasoningTail()
+	go func() {
+		defer sb.summaryInFlight.Store(false)
+		defer func() { _ = recover() }() // a cosmetic chip summary must never crash a run
+		summary, ok := sb.summarize(tail)
+		if !ok || summary == "" {
+			return
+		}
+		sb.emit(EventThinking, map[string]any{"preview": summary})
+	}()
 }
 
 // appendThinking adds a reasoning chunk to the rolling tail, trimming the
@@ -141,6 +176,22 @@ func (sb *Broadcaster) thinkingPreview() string {
 	tail := string(sb.thinkingTail)
 	sb.thinkingMu.Unlock()
 	return cleanThinkingPreview(tail)
+}
+
+// reasoningTail snapshots the raw rolling reasoning tail for the model
+// summarizer (unlike thinkingPreview it does not condense — the model needs the
+// full recent context to name the current step).
+func (sb *Broadcaster) reasoningTail() string {
+	sb.thinkingMu.Lock()
+	defer sb.thinkingMu.Unlock()
+	return string(sb.thinkingTail)
+}
+
+// SetThinkingSummarizer installs the optional model-backed refiner for the live
+// "thinking" chip (Option A). Call once after construction and before the run
+// streams; a nil fn is a no-op that keeps the deterministic preview.
+func (sb *Broadcaster) SetThinkingSummarizer(fn func(reasoningTail string) (string, bool)) {
+	sb.summarize = fn
 }
 
 // cleanThinkingPreview renders a raw reasoning tail into a chip line:
@@ -354,9 +405,11 @@ func (sb *Broadcaster) EmitAborted(partialText string) {
 
 // emit is the shared broadcast path. It injects common fields (sessionKey,
 // clientRunId, seq) and serializes to JSON. No-ops when broadcastRaw is nil.
-func (sb *Broadcaster) emit(event string, payload map[string]any) {
+// Returns the number of subscribers the frame reached (0 when nil or on a
+// marshal failure) so callers can gate follow-up work on someone listening.
+func (sb *Broadcaster) emit(event string, payload map[string]any) int {
 	if sb.broadcastRaw == nil {
-		return
+		return 0
 	}
 	payload["sessionKey"] = sb.sessionKey
 	payload["clientRunId"] = sb.clientRunID
@@ -366,9 +419,9 @@ func (sb *Broadcaster) emit(event string, payload map[string]any) {
 		"payload": payload,
 	})
 	if err != nil {
-		return
+		return 0
 	}
-	sb.broadcastRaw(event, data)
+	return sb.broadcastRaw(event, data)
 }
 
 // truncateForBroadcast caps a string to at most maxLen bytes to prevent
