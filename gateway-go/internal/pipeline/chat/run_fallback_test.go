@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/httpretry"
 )
 
 func runFallbackForTest(
@@ -312,5 +314,81 @@ func TestRunAgentWithFallback_FailedRoleLogSkipsUnassignedRungs(t *testing.T) {
 	}
 	if !strings.Contains(logs, "failedRole=coding nextRole=lightweight") {
 		t.Errorf("second walk line should advance the blame to coding:\n%s", logs)
+	}
+}
+
+// resultRanSideEffectingTool must treat only the read-only allowlist as
+// replay-safe; any mutating, action-multiplexed, or unknown tool (or a tool
+// count with no histogram) is side-effecting, so a whole-turn replay never
+// silently repeats a mutation.
+func TestResultRanSideEffectingTool(t *testing.T) {
+	cases := []struct {
+		name string
+		res  *agent.AgentResult
+		want bool
+	}{
+		{"nil result", nil, false},
+		{"no tools", &agent.AgentResult{TotalToolCalls: 0}, false},
+		{"read-only only", &agent.AgentResult{TotalToolCalls: 3, ToolCounts: map[string]int{"web": 1, "read": 1, "mail_archive": 1}}, false},
+		{"a mutating tool ran", &agent.AgentResult{TotalToolCalls: 2, ToolCounts: map[string]int{"web": 1, "exec": 1}}, true},
+		{"unknown tool ran", &agent.AgentResult{TotalToolCalls: 1, ToolCounts: map[string]int{"some_new_tool": 1}}, true},
+		{"action-multiplexed tool (wiki)", &agent.AgentResult{TotalToolCalls: 1, ToolCounts: map[string]int{"wiki": 1}}, true},
+		{"count without histogram assumes side-effecting", &agent.AgentResult{TotalToolCalls: 1}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resultRanSideEffectingTool(c.res); got != c.want {
+				t.Errorf("resultRanSideEffectingTool = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// A transient error AFTER a side-effecting tool committed must not trigger the
+// single-shot replay: re-running the turn would execute the mutation again.
+func TestRetryTransientSkipsReplayAfterSideEffectingTool(t *testing.T) {
+	transient := &httpretry.APIError{StatusCode: 503, Message: "overloaded"}
+	if !isTransientLLMError(transient) {
+		t.Fatal("precondition: a 503 must classify as transient, else the guard under test is never reached")
+	}
+	orig := &agent.AgentResult{StopReason: "end_turn", TotalToolCalls: 1, ToolCounts: map[string]int{"exec": 1}}
+	// client left nil on purpose: if the guard failed to fire, the replay's
+	// agent.RunAgent(nil client) would panic — a clean return proves the skip.
+	tr := &fallbackTurn{logger: discardLogger(), runErr: transient, agentResult: orig}
+
+	aborted, err := tr.retryTransient(context.Background())
+	if aborted || err != nil {
+		t.Fatalf("retryTransient = (%v, %v), want (false, nil)", aborted, err)
+	}
+	if tr.agentResult != orig {
+		t.Error("agentResult changed — the turn was replayed despite a committed side-effecting tool")
+	}
+	if !errors.Is(tr.runErr, transient) {
+		t.Error("runErr changed — the turn was replayed")
+	}
+}
+
+// The model fallback chain must also skip when a side-effecting tool committed,
+// so a mutation is never duplicated on another model.
+func TestWalkFallbackChainSkipsAfterSideEffectingTool(t *testing.T) {
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:     "zai/m-main",
+		FallbackModel: "zai/m-fb",
+	})
+	orig := &agent.AgentResult{StopReason: "end_turn", TotalToolCalls: 1, ToolCounts: map[string]int{"exec": 1}}
+	tr := &fallbackTurn{
+		logger:      discardLogger(),
+		deps:        runDeps{registry: reg},
+		cfg:         agent.AgentConfig{Model: "m-main"},
+		runErr:      &httpretry.APIError{StatusCode: 503},
+		agentResult: orig,
+	}
+
+	tr.walkFallbackChain(context.Background())
+	if tr.fellBack {
+		t.Error("fellBack = true — fallback ran despite a committed side-effecting tool")
+	}
+	if tr.agentResult != orig {
+		t.Error("agentResult changed — the fallback chain replayed the turn")
 	}
 }
