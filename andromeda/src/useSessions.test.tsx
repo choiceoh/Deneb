@@ -45,6 +45,28 @@ describe("useSessions", () => {
     expect(recent).toHaveBeenCalledWith(cfg, 20);
   });
 
+  it("refetches on window focus so a mid-restore partial list self-heals", async () => {
+    // First fetch lands while the gateway is still restoring sessions in the
+    // background (server_lifecycle.go) — only client:main is back yet.
+    recent.mockResolvedValueOnce([{ key: "client:main", label: "업무" }]);
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat, { filter: "client:" }));
+    await waitFor(() => expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main"]));
+
+    // Restore has since finished; a focus refresh must pick up the full list
+    // rather than staying frozen on the mid-restore snapshot.
+    recent.mockResolvedValue([
+      { key: "client:main", label: "업무" },
+      { key: "client:main:mrudefc16xpd", label: "근거 확인 및 판정 기록 완료" },
+    ]);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() =>
+      expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main", "client:main:mrudefc16xpd"]),
+    );
+  });
+
   it("when maps a selected transcript into stable chat turns", async () => {
     transcript.mockResolvedValue({
       messages: [
