@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.127.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.126.1...deneb-v4.127.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **andromeda:** move mail detail actions onto the tab row (right-aligned) ([#4099](https://github.com/choiceoh/Deneb/issues/4099)) ([999ba0e](https://github.com/choiceoh/Deneb/commit/999ba0edba094668a343ef1f8fac54e6d532517f))
+* **capture:** attach N files in one agent turn via miniapp.capture.batch ([#4100](https://github.com/choiceoh/Deneb/issues/4100)) ([6f1ca0e](https://github.com/choiceoh/Deneb/commit/6f1ca0eff7faf115f34c3f21f45dfdf8e0733f48))
+* **rsi-bench:** advisory token-economics readout (tau/CPM) to surface loop token-maxing ([#4098](https://github.com/choiceoh/Deneb/issues/4098)) ([8e0367a](https://github.com/choiceoh/Deneb/commit/8e0367a825151ecff408ff35f18bf3f6cd22eed0))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** stop multi-file attach batch from dropping every file after the first ([#4094](https://github.com/choiceoh/Deneb/issues/4094)) ([46df416](https://github.com/choiceoh/Deneb/commit/46df4168e3e9a7e030d904b3de9166a7baa4aa7b))
+* **polaris:** classify safety trim as informational ([#4091](https://github.com/choiceoh/Deneb/issues/4091)) ([bfdf0f8](https://github.com/choiceoh/Deneb/commit/bfdf0f8560506f6dd02626c9f66b8ebb0a5f6ed4))
+* **runtime:** stabilize memory pressure growth signal ([#4093](https://github.com/choiceoh/Deneb/issues/4093)) ([f665028](https://github.com/choiceoh/Deneb/commit/f665028d87752c06825444c313fb4c92330d7e22))
+* **wiki:** skip MEMORY.md disk-cap rewrite on concurrent append ([#4090](https://github.com/choiceoh/Deneb/issues/4090)) ([c215680](https://github.com/choiceoh/Deneb/commit/c2156803a149a11876eff966ef648cece33c3df0))
+
 ## [4.126.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.126.0...deneb-v4.126.1) (2026-07-21)
 
 

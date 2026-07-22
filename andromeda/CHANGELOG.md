@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.100](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.99...andromeda-v0.0.100) (2026-07-22)
+
+
+### ✨ Features
+
+* **andromeda:** move mail detail actions onto the tab row (right-aligned) ([#4099](https://github.com/choiceoh/Deneb/issues/4099)) ([999ba0e](https://github.com/choiceoh/Deneb/commit/999ba0edba094668a343ef1f8fac54e6d532517f))
+* **capture:** attach N files in one agent turn via miniapp.capture.batch ([#4100](https://github.com/choiceoh/Deneb/issues/4100)) ([6f1ca0e](https://github.com/choiceoh/Deneb/commit/6f1ca0eff7faf115f34c3f21f45dfdf8e0733f48))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** stop multi-file attach batch from dropping every file after the first ([#4094](https://github.com/choiceoh/Deneb/issues/4094)) ([46df416](https://github.com/choiceoh/Deneb/commit/46df4168e3e9a7e030d904b3de9166a7baa4aa7b))
+
 ## [0.0.99](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.98...andromeda-v0.0.99) (2026-07-21)
 
 
