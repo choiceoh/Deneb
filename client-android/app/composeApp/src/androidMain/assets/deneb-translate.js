@@ -593,8 +593,22 @@
     return scored;
   }
 
+  // contentRoots is recomputed on every mutation-triggered scan; its candidate sort and
+  // Readability fallback call innerText/getBoundingClientRect (forced layout). Cache the
+  // main document's roots per page and reuse while they stay connected, so a mutating
+  // page (Reddit) does not re-score its body on every scan. Invalidated by URL change
+  // (onLocationChange) or when a cached root detaches.
+  var cachedRoots = null;
   function contentRoots(doc) {
     doc = doc || document;
+    var mainDoc = doc === document;
+    if (mainDoc && cachedRoots && cachedRoots.key === pageCacheKey() && cachedRoots.roots.length) {
+      var stillOk = true;
+      for (var v = 0; v < cachedRoots.roots.length; v++) {
+        if (!cachedRoots.roots[v].isConnected) { stillOk = false; break; }
+      }
+      if (stillOk) return cachedRoots.roots;
+    }
     var roots = [];
     var candidates = [];
     try {
@@ -618,6 +632,7 @@
         pushRootIfFree(roots, scored[s].el);
       }
     }
+    if (mainDoc && roots.length) cachedRoots = { key: pageCacheKey(), roots: roots };
     return roots;
   }
 
@@ -819,6 +834,17 @@
     }
   }
 
+  // A node is "applied" when it already shows its own translation. Applied nodes need
+  // no re-measure and no re-ship, so skipping them keeps steady-state scans and scroll
+  // scans O(untranslated) instead of O(all-nodes). This is what stops a large reactive
+  // page (Reddit) from freezing: without it, every scroll/mutation re-measured every
+  // already-translated node via getBoundingClientRect, forcing thousands of reflows.
+  function isApplied(rec) {
+    if (!rec || !rec.node) return false;
+    var tr = cache[rec.original];
+    return tr != null && rec.node.nodeValue === tr;
+  }
+
   function dispatch(tids) {
     if (!enabled || !tids.length) return;
     if (!window.DenebTranslateBridge) return;
@@ -828,7 +854,7 @@
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      if (inFlight[tids[i]]) continue;
+      if (inFlight[tids[i]] || isApplied(rec)) continue;
       var cached = cachedTranslation(rec.original);
       if (cached != null) { replace(rec, cached); continue; }
       inFlight[tids[i]] = true;
@@ -851,12 +877,20 @@
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
+      // Skip already-translated / in-flight nodes BEFORE isInViewport — isInViewport
+      // calls getBoundingClientRect (forced reflow), so measuring settled nodes on
+      // every scroll/scan is exactly the O(N) reflow storm that freezes big pages.
+      if (inFlight[tids[i]] || isApplied(rec)) continue;
       var near = isInViewport(rec);
       if (rec.primary && near) primaryVisible.push(tids[i]);
       else if (near) visible.push(tids[i]);
       else if (rec.primary) primaryRest.push(tids[i]);
       else rest.push(tids[i]);
     }
+
+    // Nothing left to translate (steady state): return before scheduling empty passes,
+    // so a scroll over a fully translated page costs a cheap filter and no timers.
+    if (!primaryVisible.length && !visible.length && !primaryRest.length && !rest.length) return;
 
     // Main readable text in/near the viewport gets the first translation calls. If no
     // readable-body node is visible yet, visible chrome still translates so the
@@ -933,14 +967,22 @@
     dispatchPrioritized(collect(root || document.body, false));
   }
 
+  var scanDeferredSince = 0;
   function scheduleScan() {
+    var now = Date.now();
+    if (!scanDeferredSince) scanDeferredSince = now;
     if (debounceTimer) clearTimeout(debounceTimer);
+    // Debounce 400ms, but never defer past ~1.5s: a page that mutates faster than the
+    // debounce (Reddit while scrolling) could otherwise reset the timer forever and
+    // never translate freshly loaded content.
+    var delay = (now - scanDeferredSince) >= 1500 ? 0 : 400;
     debounceTimer = setTimeout(function () {
       debounceTimer = null;
+      scanDeferredSince = 0;
       pruneDetached();
       collectPage();
       dispatchPrioritized(knownTids());
-    }, 400);
+    }, delay);
   }
 
   function scheduleViewportScan() {
@@ -988,6 +1030,7 @@
 
   function onLocationChange() {
     pruneDetached();
+    cachedRoots = null; // page changed → re-detect content roots for the new URL
     var key = pageCacheKey();
     if (key !== lastPageKey) lastPageKey = key;
     bindFrameLoads(document);
@@ -1014,7 +1057,30 @@
     } catch (e) {}
   }
 
-  var observer = new MutationObserver(function () { if (enabled) scheduleScan(); });
+  // Ignore mutations that are our OWN applied translations: a characterData change whose
+  // new value already equals that node's known translation. Because we observe
+  // characterData, every batch we apply would otherwise re-fire the observer → a full
+  // rescan → a self-feeding loop that, on a page mutating on its own (Reddit), never
+  // settles. Real content (childList adds, or text swapped to something new) still scans.
+  function recordsWorthScanning(records) {
+    for (var i = 0; i < records.length; i++) {
+      var r = records[i];
+      if (r.type !== 'characterData') return true;
+      var t = r.target;
+      var tid = t && t.__denebTid;
+      var rec = tid ? nodes[tid] : null;
+      if (rec) {
+        var tr = cache[rec.original];
+        if (tr != null && t.nodeValue === tr) continue; // our own write → ignore
+      }
+      return true;
+    }
+    return false;
+  }
+
+  var observer = new MutationObserver(function (records) {
+    if (enabled && recordsWorthScanning(records)) scheduleScan();
+  });
 
   function observeRoot(root) {
     if (!root || root.__denebObserved) return;
