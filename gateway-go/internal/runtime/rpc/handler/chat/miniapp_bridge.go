@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
@@ -334,6 +335,12 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 const (
 	batchPreviewRunes = 500
 	maxBatchFiles     = 20
+	// batchExtractConcurrency bounds how many files are materialized in parallel.
+	// Each file's work is slow and independent — extraction (OCR/ASR/document) plus
+	// a per-file tiny-LLM preview — so a sequential loop serialized a 20-file batch
+	// into minutes. 4 matches document.ExtractAttachments; the OCR/ASR/LLM sidecars
+	// queue internally, and SaveCapture is concurrency-safe (wiki captureMu).
+	batchExtractConcurrency = 4
 )
 
 // batchFile is one prepared attachment in a capture batch: either archived (path +
@@ -410,6 +417,70 @@ func extractBatchFile(ctx context.Context, deps Deps, data []byte, filename, mim
 	}
 }
 
+// batchDisplayName is the file's shown name, or a positional fallback when the
+// client sent no filename.
+func batchDisplayName(filename string, idx int) string {
+	if n := strings.TrimSpace(filename); n != "" {
+		return n
+	}
+	return fmt.Sprintf("attachment-%d", idx)
+}
+
+// processBatchFile materializes one attached file into a batchFile: decode →
+// extract (OCR/ASR/document) → archive → preview/inline. It runs concurrently
+// across a batch's files, so it touches no shared handler state: the extractors
+// and the tiny-LLM preview are already concurrency-safe, and SaveCapture
+// serializes its own unique-name write (wiki captureMu). idx is the 1-based
+// position, used only for the fallback display name.
+func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, caption string, idx int) batchFile {
+	name := batchDisplayName(filename, idx)
+	raw := stripDataURL(data64)
+	if raw == "" {
+		return batchFile{name: name, skip: "빈 파일"}
+	}
+	data, derr := base64.StdEncoding.DecodeString(raw)
+	if derr != nil || len(data) == 0 {
+		return batchFile{name: name, skip: "base64 디코드 실패"}
+	}
+	kindLabel, storeKind, text, xerr := extractBatchFile(ctx, deps, data, name, mime)
+	if xerr != nil || strings.TrimSpace(text) == "" {
+		reason := "내용을 추출하지 못함"
+		if xerr != nil {
+			reason = strings.TrimSpace(xerr.Error())
+		}
+		return batchFile{name: name, kind: kindLabel, skip: reason}
+	}
+	// Archive the extracted text under the memory read-root so the agent can open
+	// it with `read`. If persistence is unavailable, fall back to inlining the
+	// (digested) text so the content is never lost.
+	var abs string
+	if deps.SaveCapture != nil {
+		if _, a, _, serr := deps.SaveCapture(storeKind, caption, text); serr != nil {
+			slog.Error("capture batch: raw persistence failed", "file", name, "error", serr)
+		} else {
+			abs = a
+		}
+	}
+	// Preview: a tiny-model summary (~1000자) is more representative than a raw
+	// front-of-text cut; fall back to the front cut when the local model is
+	// unavailable or the summary fails.
+	preview := previewText(text, batchPreviewRunes)
+	if deps.SummarizePreview != nil {
+		if s := strings.TrimSpace(deps.SummarizePreview(ctx, name, text)); s != "" {
+			preview = s
+		}
+	}
+	item := batchFile{name: name, kind: kindLabel, preview: preview}
+	if abs != "" {
+		item.path = abs
+	} else if deps.DigestOversized != nil {
+		item.inline = strings.TrimSpace(deps.DigestOversized(ctx, name, text, "", 0))
+	} else {
+		item.inline = previewText(text, batchPreviewRunes*4)
+	}
+	return item
+}
+
 // handleMiniappCaptureBatch materializes N attached files and runs ONE agent turn
 // over a POINTER list — the multi-file path, instead of one turn per file. Each
 // file is extracted (OCR / transcript / document text) with the same extractors as
@@ -443,66 +514,36 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 		}
 		sessionKey := DefaultSessionKey(p.SessionKey)
 
-		var files []batchFile
-		var dropped int
-		for i, f := range p.Files {
-			if i >= maxBatchFiles {
-				dropped = len(p.Files) - maxBatchFiles
-				break
-			}
-			name := strings.TrimSpace(f.Filename)
-			if name == "" {
-				name = fmt.Sprintf("attachment-%d", i+1)
-			}
-			raw := stripDataURL(f.Data)
-			if raw == "" {
-				files = append(files, batchFile{name: name, skip: "빈 파일"})
-				continue
-			}
-			data, derr := base64.StdEncoding.DecodeString(raw)
-			if derr != nil || len(data) == 0 {
-				files = append(files, batchFile{name: name, skip: "base64 디코드 실패"})
-				continue
-			}
-			kindLabel, storeKind, text, xerr := extractBatchFile(ctx, deps, data, name, f.MimeType)
-			if xerr != nil || strings.TrimSpace(text) == "" {
-				reason := "내용을 추출하지 못함"
-				if xerr != nil {
-					reason = strings.TrimSpace(xerr.Error())
-				}
-				files = append(files, batchFile{name: name, kind: kindLabel, skip: reason})
-				continue
-			}
-			// Archive the extracted text under the memory read-root so the agent can
-			// open it with `read`. If persistence is unavailable, fall back to
-			// inlining the (digested) text so the content is never lost.
-			var abs string
-			if deps.SaveCapture != nil {
-				if _, a, _, serr := deps.SaveCapture(storeKind, p.Caption, text); serr != nil {
-					slog.Error("capture batch: raw persistence failed", "file", name, "error", serr)
-				} else {
-					abs = a
-				}
-			}
-			// Preview: a tiny-model summary (~1000자) is more representative than a
-			// raw front-of-text cut; fall back to the front cut when the local model
-			// is unavailable or the summary fails.
-			preview := previewText(text, batchPreviewRunes)
-			if deps.SummarizePreview != nil {
-				if s := strings.TrimSpace(deps.SummarizePreview(ctx, name, text)); s != "" {
-					preview = s
-				}
-			}
-			item := batchFile{name: name, kind: kindLabel, preview: preview}
-			if abs != "" {
-				item.path = abs
-			} else if deps.DigestOversized != nil {
-				item.inline = strings.TrimSpace(deps.DigestOversized(ctx, name, text, "", 0))
-			} else {
-				item.inline = previewText(text, batchPreviewRunes*4)
-			}
-			files = append(files, item)
+		n := len(p.Files)
+		dropped := 0
+		if n > maxBatchFiles {
+			dropped = n - maxBatchFiles
+			n = maxBatchFiles
 		}
+		// Materialize the files in parallel — each file's extraction and preview are
+		// slow and independent, so a sequential loop serialized the whole batch into
+		// minutes. Each result lands in its own slot, preserving the caller's order.
+		files := make([]batchFile, n)
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, batchExtractConcurrency)
+		for i := 0; i < n; i++ {
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(i int, data64, mime, filename string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				defer func() {
+					// One file's panic (a codec, a sidecar) must not crash the gateway
+					// or lose the rest of the batch — record it as a skip.
+					if r := recover(); r != nil {
+						slog.Error("capture batch: file processing panicked", "file", filename, "recover", r)
+						files[i] = batchFile{name: batchDisplayName(filename, i+1), skip: "처리 중 오류"}
+					}
+				}()
+				files[i] = processBatchFile(ctx, deps, data64, mime, filename, p.Caption, i+1)
+			}(i, p.Files[i].Data, p.Files[i].MimeType, p.Files[i].Filename)
+		}
+		wg.Wait()
 
 		saved := 0
 		for _, f := range files {

@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -174,6 +175,34 @@ func TestCaptureBatchFallsBackToFrontCutWhenSummaryEmpty(t *testing.T) {
 	}
 	if !strings.Contains(*msg, "문서 추출 텍스트: report.pdf") {
 		t.Errorf("empty summary should fall back to the front-cut preview, got:\n%s", *msg)
+	}
+}
+
+func TestCaptureBatchPreservesFileOrder(t *testing.T) {
+	deps, runs, msg := batchDeps(true)
+	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	// Files are now materialized concurrently; the numbered pointer list must still
+	// follow the caller's input order, not whichever goroutine finished first.
+	names := []string{"a.pdf", "b.pdf", "c.pdf", "d.pdf", "e.pdf"}
+	files := make([]map[string]any, 0, len(names))
+	for _, n := range names {
+		files = append(files, map[string]any{"data": b64("doc"), "mimeType": "application/pdf", "filename": n})
+	}
+
+	resp := handler(context.Background(), batchRequest(t, files, ""))
+	if !resp.OK || *runs != 1 {
+		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	}
+	lastAt := -1
+	for i, n := range names {
+		at := strings.Index(*msg, fmt.Sprintf("%d. %s", i+1, n))
+		if at < 0 {
+			t.Fatalf("file %q missing or misnumbered, message:\n%s", n, *msg)
+		}
+		if at <= lastAt {
+			t.Errorf("file %q out of order (index %d ≤ previous %d):\n%s", n, at, lastAt, *msg)
+		}
+		lastAt = at
 	}
 }
 
