@@ -54,6 +54,12 @@ type Deps struct {
 	// openable ("" / 0 when persistence failed). Optional; nil injects text
 	// unbounded.
 	DigestOversized func(ctx context.Context, name, text, sourcePath string, sourceBodyLine int) string
+	// SummarizePreview condenses one attachment's extracted text into a compact
+	// (~1000자) local tiny-model summary for the batch-capture pointer turn — a
+	// representative preview instead of a raw front-of-text cut. Returns "" when
+	// the local model is unavailable or the summary fails; the batch handler then
+	// falls back to its own front-cut preview. Optional; nil keeps the front-cut.
+	SummarizePreview func(ctx context.Context, name, text string) string
 	// Translate translates web-page text segments for the in-app browser's
 	// in-place translation (en/ru → ko). Returns a same-length, same-order
 	// slice. Optional; nil disables miniapp.web.translate.

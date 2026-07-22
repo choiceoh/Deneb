@@ -484,7 +484,16 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 					abs = a
 				}
 			}
-			item := batchFile{name: name, kind: kindLabel, preview: previewText(text, batchPreviewRunes)}
+			// Preview: a tiny-model summary (~1000자) is more representative than a
+			// raw front-of-text cut; fall back to the front cut when the local model
+			// is unavailable or the summary fails.
+			preview := previewText(text, batchPreviewRunes)
+			if deps.SummarizePreview != nil {
+				if s := strings.TrimSpace(deps.SummarizePreview(ctx, name, text)); s != "" {
+					preview = s
+				}
+			}
+			item := batchFile{name: name, kind: kindLabel, preview: preview}
 			if abs != "" {
 				item.path = abs
 			} else if deps.DigestOversized != nil {

@@ -132,3 +132,88 @@ func TestDigestOversizedDocumentFallsBackWhenAllChunksFail(t *testing.T) {
 		t.Errorf("all-fail digest must degrade to visible truncation, got tail %q", got[len(got)-200:])
 	}
 }
+
+func TestSummarizeAttachmentPreviewShortTextIsVerbatim(t *testing.T) {
+	short := "짧은 문서 본문. 요약할 필요 없음."
+	var calls atomic.Int32
+	fake := func(context.Context, string, string, int) (string, error) {
+		calls.Add(1)
+		return "요약", nil
+	}
+	// Text within the preview budget is returned whole — no model call.
+	if got := summarizeAttachmentPreview(context.Background(), "d.txt", short, fake); got != short {
+		t.Errorf("short text should pass through verbatim, got %q", got)
+	}
+	if calls.Load() != 0 {
+		t.Errorf("summarizer should not be called for short text, calls=%d", calls.Load())
+	}
+}
+
+func TestSummarizeAttachmentPreviewSummarizesLongText(t *testing.T) {
+	big := strings.Repeat("가", previewSummaryRuneCap+500)
+	var gotTokens int
+	fake := func(_ context.Context, system, user string, maxTokens int) (string, error) {
+		gotTokens = maxTokens
+		if system != previewSummaryPrompt {
+			t.Errorf("unexpected system prompt: %q", system)
+		}
+		if !strings.Contains(user, "「보고서.pdf」") {
+			t.Errorf("user message should name the file: %q", user)
+		}
+		return "주제: 보고서 요약\n- 매출 12억", nil
+	}
+	got := summarizeAttachmentPreview(context.Background(), "보고서.pdf", big, fake)
+	if got != "주제: 보고서 요약\n- 매출 12억" {
+		t.Errorf("preview = %q", got)
+	}
+	if gotTokens != previewSummaryTokens {
+		t.Errorf("maxTokens = %d, want %d", gotTokens, previewSummaryTokens)
+	}
+}
+
+func TestSummarizeAttachmentPreviewBoundsHugeInput(t *testing.T) {
+	huge := strings.Repeat("나", previewSummaryInputRunes+5_000)
+	var gotInputRunes int
+	fake := func(_ context.Context, _, user string, _ int) (string, error) {
+		// user = header + "\n\n" + input; the input body is bounded to the head cap.
+		if i := strings.Index(user, "\n\n"); i >= 0 {
+			gotInputRunes = len([]rune(user[i+2:]))
+		}
+		if !strings.Contains(user, "앞부분") {
+			t.Errorf("bounded input should be flagged as a head excerpt: %q", user[:80])
+		}
+		return "주제: 요약", nil
+	}
+	summarizeAttachmentPreview(context.Background(), "big.txt", huge, fake)
+	if gotInputRunes != previewSummaryInputRunes {
+		t.Errorf("model input runes = %d, want %d (bounded head)", gotInputRunes, previewSummaryInputRunes)
+	}
+}
+
+func TestSummarizeAttachmentPreviewCapsOversizedSummary(t *testing.T) {
+	big := strings.Repeat("가", previewSummaryRuneCap+500)
+	fake := func(context.Context, string, string, int) (string, error) {
+		return strings.Repeat("다", previewSummaryRuneCap+300), nil // model overshoots
+	}
+	got := summarizeAttachmentPreview(context.Background(), "d", big, fake)
+	if r := []rune(got); len(r) != previewSummaryRuneCap+1 || !strings.HasSuffix(got, "…") {
+		t.Errorf("oversized summary should be rune-capped with an ellipsis, got %d runes", len([]rune(got)))
+	}
+}
+
+func TestSummarizeAttachmentPreviewFallsBackOnFailure(t *testing.T) {
+	big := strings.Repeat("가", previewSummaryRuneCap+500)
+	cases := map[string]chunkSummarizer{
+		"nil summarizer": nil,
+		"error":          func(context.Context, string, string, int) (string, error) { return "", fmt.Errorf("down") },
+		"empty":          func(context.Context, string, string, int) (string, error) { return "  ", nil },
+		"placeholder": func(context.Context, string, string, int) (string, error) {
+			return "(no response from local model)", nil
+		},
+	}
+	for name, fake := range cases {
+		if got := summarizeAttachmentPreview(context.Background(), "d", big, fake); got != "" {
+			t.Errorf("%s: want empty (caller front-cuts), got %q", name, got)
+		}
+	}
+}

@@ -58,6 +58,10 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 			// Oversized captures are digested by the local lightweight model
 			// (or visibly head-truncated) after raw persistence.
 			DigestOversized: chat.DigestOversizedDocumentText,
+			// Batch attachment previews: a compact tiny-model summary (~1000자)
+			// instead of a raw front-of-text cut, so the pointer turn's preview is
+			// representative (falls back to the front cut when local AI is down).
+			SummarizePreview: chat.SummarizeAttachmentPreview,
 			// In-app browser in-place translation (en/ru → ko) — DeepL-only.
 			Translate: toolbind.TranslateSegments,
 			// Raw capture persistence: full OCR text / diarized transcript →
