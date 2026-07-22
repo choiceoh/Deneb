@@ -143,7 +143,10 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	// primary model's kwargs would send e.g. a vLLM-only template toggle to a
 	// cloud provider (or enable_thinking to an untoggleable reasoning model).
 	shapedExtra := func(providerID, model string) map[string]any {
-		directive := pkgRegistry.ThinkingOffDirectiveFor(providerID, model) // nil-receiver safe
+		// Role-aware: a speed/concurrency-first role (RoleTiny) forces thinking off
+		// even when the per-model policy would leave it on, so the role's latency
+		// stays low regardless of which model it points at.
+		directive := pkgRegistry.ThinkingOffDirectiveForRole(role, providerID, model) // nil-receiver safe
 		merged := make(map[string]any, len(callerExtra)+2)
 		if directive != nil {
 			merged["chat_template_kwargs"] = map[string]any{directive.TemplateKwarg(): false}
