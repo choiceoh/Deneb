@@ -20,19 +20,25 @@ const (
 	// (the deterministic chip already shipped) rather than letting stale summaries
 	// pile up behind the ~2s throttle.
 	thinkingSummaryTimeout = 1500 * time.Millisecond
-	// thinkingSummaryMaxTokens caps the label generation — one short line.
-	thinkingSummaryMaxTokens = 48
+	// thinkingSummaryMaxTokens caps the label generation — one fuller line (the
+	// chip now renders on up to two lines on both clients, so the model has room
+	// to name the object/condition, not just the verb).
+	thinkingSummaryMaxTokens = 96
 	// thinkingSummaryMinTailRunes gates the call until enough reasoning has
 	// accumulated to name a step; below it the deterministic chip is fine and a
 	// model call would just paraphrase a fragment.
 	thinkingSummaryMinTailRunes = 40
-	// thinkingSummaryMaxRunes caps the rendered chip line.
-	thinkingSummaryMaxRunes = 40
+	// thinkingSummaryMaxRunes caps the rendered chip line — a safety net above the
+	// prompt's ~40-char target so a slightly-over line shows in full (two lines)
+	// rather than being hard-cut mid-phrase.
+	thinkingSummaryMaxRunes = 60
 )
 
 // thinkingSummarySystem instructs the tiny model to name the CURRENT step rather
-// than transcribe the reasoning, in one short Korean nominal phrase.
-const thinkingSummarySystem = "너는 AI 비서 화면의 '생각 중' 표시줄을 채운다. 아래 텍스트는 비서가 사용자 요청을 처리하며 지금 진행 중인 내부 추론이다. 지금 무엇을 하는 중인지 한국어로 짧게 한 줄만 써라. 규칙: 명사형 진행 표현('발신자 확인 중', '지난 거래 대조 중', '일정 정리 중'), 20자 이내, 따옴표·마침표·설명·목록 없이 요약만. 추론을 그대로 옮기지 말고 '지금 하는 일'로 압축."
+// than transcribe the reasoning, in one Korean progress line. The chip renders on
+// up to two lines, so the line should carry the object/condition ("무엇을·어떤 대상")
+// for a readable "what it's doing now", not just a bare verb.
+const thinkingSummarySystem = "너는 AI 비서 화면의 '생각 중' 표시줄을 채운다. 아래 텍스트는 비서가 사용자 요청을 처리하며 지금 진행 중인 내부 추론이다. 지금 무엇을 하는 중인지 한국어로 한 줄로 요약해라. 규칙: '무엇을·어떤 대상까지' 담아 조금 구체적인 진행형으로('발신자 주소와 과거 거래 이력을 대조하는 중', '지난 3개월 거래 내역과 계좌 변경 여부를 확인하는 중'), 40자 이내, 따옴표·마침표·설명·목록 없이 요약만. 추론을 그대로 옮기지 말고 '지금 하는 일'로 압축."
 
 // newThinkingSummarizer builds the Option-A chip refiner. It returns nil when
 // local AI is not wired, so the broadcaster keeps the deterministic preview. The

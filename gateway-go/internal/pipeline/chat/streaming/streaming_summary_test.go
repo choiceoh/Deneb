@@ -68,6 +68,46 @@ func TestEmitThinkingSummarizerRefinesChip(t *testing.T) {
 	}
 }
 
+// Once a summary has landed, a later throttle window renders it as the steady
+// chip synchronously — the raw reasoning preview must not flash back in between
+// summaries (the "요약 사이에 추론이 겹쳐 금방 지나감" readability bug).
+func TestEmitThinkingSteadySummaryNoRawFlash(t *testing.T) {
+	var mu sync.Mutex
+	var previews []string
+	hit := make(chan struct{})
+	var once sync.Once
+	const summary = "지난 3개월 거래 내역과 계좌 변경 여부를 대조하는 중"
+
+	sb := NewBroadcaster(thinkingPreviewSink(&previews, &mu, summary, hit, &once, 1), "s1", "r1")
+	sb.SetThinkingSummarizer(func(string) (string, bool) { return summary, true })
+
+	sb.EmitThinking("발신자 주소를 확인하고 과거 거래 이력을 대조해야 한다. 계좌 변경 여부를 본다. ")
+	select {
+	case <-hit:
+	case <-time.After(2 * time.Second):
+		t.Fatal("summary preview was never emitted")
+	}
+
+	mu.Lock()
+	before := len(previews)
+	mu.Unlock()
+
+	// Reopen the throttle window (same package → can poke the unexported gate) and
+	// pulse again; the synchronous frame this produces must carry the stored
+	// summary, not a raw reasoning peek.
+	sb.lastThinkingNs.Store(0)
+	sb.EmitThinking("계좌 변경 여부를 확인하는 중이다. 이어서 첨부 파일을 검토한다. ")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(previews) <= before {
+		t.Fatalf("second pulse emitted no synchronous frame (previews: %v)", previews)
+	}
+	if previews[before] != summary {
+		t.Fatalf("second-window sync frame = %q, want steady summary %q (all: %v)", previews[before], summary, previews)
+	}
+}
+
 // With no subscribers (broadcastRaw returns 0), the model summarizer must not be
 // spent on an unwatched run.
 func TestEmitThinkingSummarizerSkippedWithoutSubscribers(t *testing.T) {

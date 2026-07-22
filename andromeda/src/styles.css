@@ -1523,7 +1523,10 @@ input[type="checkbox"] {
  * them; the fill is Deneb's own blue-white — the one cool note in the warm palette. */
 .deneb-status {
   display: inline-flex;
-  align-items: center;
+  /* flex-start (not center): when the summary wraps to two lines the star + word
+     stay on the first line instead of centering into the gap. Identical to center
+     for the common single-line row. */
+  align-items: flex-start;
   gap: 6px;
   padding: 2px 0;
 }
@@ -1535,10 +1538,15 @@ input[type="checkbox"] {
 .deneb-status-summary {
   font-size: 13px;
   color: var(--muted-2);
-  max-width: 220px;
+  max-width: 260px;
+  /* Up to two lines — the gateway now sends a fuller Korean progress line, so a
+     one-line clamp would ellipsize it to "…". Clamp at two, then ellipsize. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .deneb-star {
   display: inline-flex;

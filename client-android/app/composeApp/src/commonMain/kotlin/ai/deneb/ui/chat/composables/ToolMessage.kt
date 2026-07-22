@@ -138,6 +138,8 @@ internal fun WaitingResponseRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
+                // Stay on the first line when the status summary wraps to two.
+                modifier = Modifier.align(Alignment.Top),
             )
         }
     }
@@ -171,22 +173,28 @@ internal fun PulsingStatusIndicator(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StarIndicator(color = dotColor)
+        StarIndicator(
+            color = dotColor,
+            // A 2-line status wraps below the star; top-align the sparkle so it
+            // stays on the first line instead of centering into the gap between
+            // the two lines.
+            modifier = if (isStatusOnly && toolSummary != null) Modifier.align(Alignment.Top) else Modifier,
+        )
         // 6dp not 8: the glow box carries ~3dp of transparent ring on the text
         // side, so a tighter spacer keeps the visual gap to the text the same.
         Spacer(Modifier.width(6.dp))
         if (isStatusOnly && toolSummary != null) {
-            // One line, start-aligned — exactly like the rotating "생각 중…" and the
-            // " · tool" suffix. This used to be textAlign=Center with maxLines=2: a
-            // long status wrapping to two lines suddenly re-centered the text and
-            // grew the row (the star dropping between the lines) — the reported
-            // "생각 중 vs 긴 상태 정렬이 달라짐". A waiting status is glanceable
-            // transient info; a single ellipsized line loses nothing.
+            // Up to two lines, start-aligned. The gateway now sends a fuller Korean
+            // progress line ("…거래 내역과 계좌 변경 여부를 대조하는 중"), so a second
+            // line lets it read in full instead of ellipsizing to "…". Start-aligned
+            // text + the top-aligned star (above) sidestep the old "생각 중 vs 긴 상태
+            // 정렬이 달라짐" bug: that was center-aligned 2-line text re-centering the
+            // block and dropping the star between the lines.
             Text(
                 text = toolSummary,
                 color = textColor,
                 style = textStyle,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         } else {
