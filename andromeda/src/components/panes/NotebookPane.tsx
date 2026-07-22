@@ -183,6 +183,21 @@ export function NotebookPane() {
     );
   }
 
+  // One-click grounding for a deal notebook: pin its own 딜 페이지 (a wiki source,
+  // read live at brief time) so the curated deal summary joins the raw evidence.
+  // Offered until it's pinned — the natural first source for a fresh deal notebook.
+  async function pinDealPage() {
+    if (!active?.dealRef) return;
+    const r = await call(
+      NOTEBOOK_RPC.addSource,
+      { id: active.id, kind: "wiki", ref: active.dealRef, title: "딜 페이지" },
+      "담는 중…",
+    );
+    if (!r.ok) return;
+    await openNotebook(active.id);
+    void loadNotebooks();
+  }
+
   async function addSource(src: NewSource) {
     if (!active) return;
     // url/mail/diary carry only a ref the user typed — the gateway must READ that
@@ -302,6 +317,9 @@ export function NotebookPane() {
   // Sources render as a light chip strip; clicking a chip expands (or folds) its
   // preview below. A stale key (notebook switch / deletion) simply closes the preview.
   const allSources = active?.sources ?? [];
+  // Offer "딜 페이지 담기" until the deal's own wiki page is among the sources.
+  const dealPagePinned = !!active?.dealRef && allSources.some((s) => s.kind === "wiki" && s.ref === active.dealRef);
+  const offerDealPage = !!active?.dealRef && !dealPagePinned;
   // Apply the cited highlight only while its tag matches the open notebook.
   const citedCites = active && cited.id === active.id ? cited.cites : EMPTY_CITES;
   // Filter (title/ref/text, case-insensitive) so a big notebook stays navigable.
@@ -440,9 +458,25 @@ export function NotebookPane() {
               >
                 <Icon name="plus" size={12} /> 자료
               </button>
+              {/* One-click grounding for a deal notebook: pin its own 딜 페이지 as a
+                  source. Shown until it's pinned — the natural first source. */}
+              {offerDealPage && (
+                <button
+                  className="row-btn notebook-add"
+                  onClick={() => void pinDealPage()}
+                  disabled={!connected}
+                  title="딜 페이지를 자료로 담습니다"
+                  aria-label="딜 페이지 담기"
+                >
+                  <Icon name="plus" size={12} /> 딜 페이지
+                </button>
+              )}
             </div>
             {allSources.length === 0 ? (
-              <p className="notebook-empty">아직 자료가 없습니다. “＋ 자료”로 메일·견적·메모·위키 등을 담으세요.</p>
+              <p className="notebook-empty">
+                아직 자료가 없습니다. “＋ 자료”로 메일·파일·메모·위키를 담으세요
+                {offerDealPage ? "  —  또는 “＋ 딜 페이지”로 이 거래의 페이지부터 담아보세요." : "."}
+              </p>
             ) : sources.length === 0 ? (
               <p className="notebook-empty">“{sourceQuery.trim()}”에 맞는 자료가 없습니다.</p>
             ) : null}
