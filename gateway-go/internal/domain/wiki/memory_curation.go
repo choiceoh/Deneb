@@ -54,6 +54,10 @@ const (
 	memoryDiskMaxBytes = 64_000
 )
 
+// enforceMemoryDiskCapAfterReadHook, when non-nil, runs after ReadFile and
+// before the destructive rewrite. Tests simulate concurrent appends.
+var enforceMemoryDiskCapAfterReadHook func(path string)
+
 // memoryStampRe matches timestamped section headers like
 // "## 2026-04-07 00:39" or "## 2026-04-07". The fixed format makes stamps
 // lexicographically comparable.
@@ -256,6 +260,9 @@ func (wd *WikiDreamer) enforceMemoryDiskCap() (int, error) {
 	if len(data) <= memoryDiskMaxBytes {
 		return 0, nil
 	}
+	if enforceMemoryDiskCapAfterReadHook != nil {
+		enforceMemoryDiskCapAfterReadHook(path)
+	}
 	preamble, sections := parseMemorySections(string(data))
 
 	// Fixed cost: preamble + every non-timestamped (category) section is always
@@ -292,6 +299,16 @@ func (wd *WikiDreamer) enforceMemoryDiskCap() (int, error) {
 		// intact rather than corrupt the curated head; surface it for the operator.
 		slog.Warn("memory-curation: MEMORY.md over disk cap but no droppable sections",
 			"sizeBytes", len(data), "capBytes", memoryDiskMaxBytes, "fixedBytes", fixed)
+		return 0, nil
+	}
+
+	// Optimistic concurrency: memory induction (O_APPEND) or another writer may
+	// have appended after our read. A rewrite from stale bytes would silently
+	// drop that append — skip and retry on a later dream cycle instead.
+	if cur, serr := os.Stat(path); serr != nil {
+		return 0, serr
+	} else if cur.Size() != info.Size() || !cur.ModTime().Equal(info.ModTime()) {
+		slog.Info("memory-curation: MEMORY.md changed during disk-cap pass; rewrite skipped")
 		return 0, nil
 	}
 

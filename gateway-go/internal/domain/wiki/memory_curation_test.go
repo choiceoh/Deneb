@@ -290,6 +290,42 @@ func TestEnforceMemoryDiskCap_NoopWhenUnderCapCreatesNoBackup(t *testing.T) {
 	}
 }
 
+func TestEnforceMemoryDiskCap_SkipsOnConcurrentAppend(t *testing.T) {
+	dir := t.TempDir()
+	path, _, _ := writeOversizedMemory(t, dir)
+	wd := &WikiDreamer{workspaceDir: dir}
+	before := testReadFile(t, path)
+
+	t.Cleanup(func() { enforceMemoryDiskCapAfterReadHook = nil })
+	enforceMemoryDiskCapAfterReadHook = func(p string) {
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString("\n## " + freshStamp() + "\n\n<!-- induction -->\n사이클 중 induction append.\n"); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dropped, err := wd.enforceMemoryDiskCap()
+	if err != nil {
+		t.Fatalf("enforceMemoryDiskCap: %v", err)
+	}
+	if dropped != 0 {
+		t.Errorf("concurrent append must skip the rewrite, dropped=%d", dropped)
+	}
+	after := testReadFile(t, path)
+	if !strings.Contains(after, "사이클 중 induction append") {
+		t.Error("induction append must survive the skipped rewrite")
+	}
+	if len(after) <= len(before) {
+		t.Error("concurrent append must grow MEMORY.md when rewrite is skipped")
+	}
+}
+
 func TestEnforceMemoryDiskCap_DisabledAndMissing(t *testing.T) {
 	// Empty workspace dir disables the cap.
 	if dropped, err := (&WikiDreamer{}).enforceMemoryDiskCap(); err != nil || dropped != 0 {
