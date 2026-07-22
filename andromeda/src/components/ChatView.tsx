@@ -180,23 +180,25 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
                         interactive={turn.id === lastAssistantId}
                       />
                     )}
-                    {turn.role === "user" && turn.id === lastUserId && !busy && !sub && (
-                      <button
-                        className="row-btn ai-edit no-print"
-                        onClick={() => setEditingMsg(turn.text)}
-                        title="이 메시지를 수정해 다시 보내기"
-                      >
-                        <Icon name="pencil" size={12} /> 수정
-                      </button>
-                    )}
-                    <AssistantTurnActions
-                      turn={turn}
-                      lastId={lastId}
-                      busy={busy}
-                      onRegenerate={regenerate}
-                      variants={variants}
-                      onVariant={selectVariant}
-                    />
+                    <div className="ai-turn-actions">
+                      {turn.role === "user" && turn.id === lastUserId && !busy && !sub && (
+                        <button
+                          className="row-btn ai-edit no-print"
+                          onClick={() => setEditingMsg(turn.text)}
+                          title="이 메시지를 수정해 다시 보내기"
+                        >
+                          <Icon name="pencil" size={12} /> 수정
+                        </button>
+                      )}
+                      <AssistantTurnActions
+                        turn={turn}
+                        lastId={lastId}
+                        busy={busy}
+                        onRegenerate={regenerate}
+                        variants={variants}
+                        onVariant={selectVariant}
+                      />
+                    </div>
                   </div>
                 );
               })}

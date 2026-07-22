@@ -321,45 +321,47 @@ export function AIPanel({
                       interactive={turn.id === lastAssistantId}
                     />
                   )}
-                  {turn.role === "user" && turn.id === lastUserId && !busy && !sub && (
-                    <button
-                      className="row-btn ai-edit no-print"
-                      onClick={() => setEditingMsg(turn.text)}
-                      title="이 메시지를 수정해 다시 보내기"
+                  <div className="ai-turn-actions">
+                    {turn.role === "user" && turn.id === lastUserId && !busy && !sub && (
+                      <button
+                        className="row-btn ai-edit no-print"
+                        onClick={() => setEditingMsg(turn.text)}
+                        title="이 메시지를 수정해 다시 보내기"
+                      >
+                        <Icon name="pencil" size={12} /> 수정
+                      </button>
+                    )}
+                    <AssistantTurnActions
+                      turn={turn}
+                      lastId={lastId}
+                      busy={busy}
+                      onRegenerate={regenerate}
+                      variants={variants}
+                      onVariant={selectVariant}
                     >
-                      <Icon name="pencil" size={12} /> 수정
-                    </button>
-                  )}
-                  <AssistantTurnActions
-                    turn={turn}
-                    lastId={lastId}
-                    busy={busy}
-                    onRegenerate={regenerate}
-                    variants={variants}
-                    onVariant={selectVariant}
-                  >
-                    {/* Save this answer into the open notebook as a cited note — shown only
+                      {/* Save this answer into the open notebook as a cited note — shown only
                     while a notebook pane has registered a sink (the notebook's output
                     loop: material made with the AI stays with the deal). 저장됨 only
                     after the sink confirms; a failed pin stays clickable for retry. */}
-                    {noteSink && turn.status === "done" && turn.text.trim() && (
-                      <button
-                        className="row-btn ai-save-note no-print"
-                        disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
-                        onClick={() => void saveNote(turn.id, turn.text)}
-                        title="이 답변을 노트북에 인용자료(노트)로 저장"
-                      >
-                        <Icon name="plus" size={12} />{" "}
-                        {noteSaves.get(turn.id) === "saved"
-                          ? "노트로 저장됨"
-                          : noteSaves.get(turn.id) === "saving"
-                            ? "저장 중…"
-                            : noteSaves.get(turn.id) === "error"
-                              ? "저장 실패 — 다시 시도"
-                              : "노트에 저장"}
-                      </button>
-                    )}
-                  </AssistantTurnActions>
+                      {noteSink && turn.status === "done" && turn.text.trim() && (
+                        <button
+                          className="row-btn ai-save-note no-print"
+                          disabled={noteSaves.get(turn.id) === "saving" || noteSaves.get(turn.id) === "saved"}
+                          onClick={() => void saveNote(turn.id, turn.text)}
+                          title="이 답변을 노트북에 인용자료(노트)로 저장"
+                        >
+                          <Icon name="plus" size={12} />{" "}
+                          {noteSaves.get(turn.id) === "saved"
+                            ? "노트로 저장됨"
+                            : noteSaves.get(turn.id) === "saving"
+                              ? "저장 중…"
+                              : noteSaves.get(turn.id) === "error"
+                                ? "저장 실패 — 다시 시도"
+                                : "노트에 저장"}
+                        </button>
+                      )}
+                    </AssistantTurnActions>
+                  </div>
                 </div>
               );
             })}
