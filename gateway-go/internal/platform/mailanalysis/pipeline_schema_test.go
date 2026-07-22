@@ -180,7 +180,7 @@ func TestStatusSignalSchemaEnumContract(t *testing.T) {
 		sig := props["signal"].(map[string]any)
 		return sig["properties"].(map[string]any)["signalType"]
 	})
-	assertSameSet(t, "signalType", signalType, []string{"결정", "리스크", "블로커", "의존성", "진행", "없음"})
+	assertSameSet(t, "signalType", signalType, []string{"결정", "리스크", "블로커", "진행", "없음"})
 
 	decisionStatus := leafEnum(t, statusSignalSchema, func(root map[string]any) any {
 		props := root["properties"].(map[string]any)
@@ -204,10 +204,10 @@ func TestStatusSignalTag(t *testing.T) {
 		{"결정", "", "[결정]"},
 		{"리스크", "해당없음", "[리스크]"},
 		{"블로커", "", "[블로커]"},
-		{"의존성", "", "[의존성]"},
 		{"진행", "해당없음", ""},
 		{"없음", "", ""},
 		{"", "", ""},
+		{"의존성", "", ""}, // merged into 블로커 — no longer its own tag
 		{"뭔가이상", "승인", ""},
 	}
 	for _, c := range cases {

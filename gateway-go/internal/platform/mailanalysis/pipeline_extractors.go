@@ -145,17 +145,18 @@ var actionItemsSchema = jsonschema.For[actionItemsBundle]("action_items")
 // --- status signal (local AI) ---
 
 const statusSignalSystem = `당신은 프로젝트 메일 분석에서 "이 메일이 프로젝트에 남기는 핵심 신호 한 가지"를 분류하는 분류기입니다.
-signalType 은 다음 중 하나입니다 — 결정(무언가 정해짐)·리스크(위험 신호)·블로커(진행을 막는 장애)·의존성(다른 일·사람에 걸려 있음)·진행(단순 진척)·없음(특별한 신호 없음).
+signalType 은 다음 중 하나입니다 — 결정(무언가 정해짐)·리스크(위험 신호)·블로커(진행이 막혔거나 다른 일·사람·승인·회신에 걸려 대기 중)·진행(단순 진척)·없음(특별한 신호 없음).
 decisionStatus 는 signalType 이 결정일 때만 제안/승인/반려 중 하나이고, 아니면 해당없음 입니다.
 애매하면 진행 또는 없음으로. 리스크·블로커는 실제 위험·장애가 분명할 때만(과다분류 금지). 반드시 JSON으로만 응답하세요.`
 
 const statusSignalPrompt = `다음 이메일 분석에서 이 프로젝트에 남길 핵심 신호 한 가지를 분류해주세요.
 
 JSON 응답 형식:
-{"signal": {"signalType": "결정|리스크|블로커|의존성|진행|없음", "decisionStatus": "제안|승인|반려|해당없음"}}
+{"signal": {"signalType": "결정|리스크|블로커|진행|없음", "decisionStatus": "제안|승인|반려|해당없음"}}
 
 기준:
 - 딱 하나의 가장 중요한 신호만
+- 진행이 막혔거나 다른 것(승인·회신·타 부서·외부 결정 등)에 걸려 대기 중이면 블로커
 - 리스크/블로커는 실제 위험·장애가 분명할 때만 (애매하면 진행)
 - 결정이면 그 결정이 제안 단계인지, 승인됐는지, 반려됐는지
 - 특별할 게 없으면 signalType=없음
@@ -168,7 +169,7 @@ JSON 응답 형식:
 // strict json_schema is safe from the vLLM xgrammar whitespace-explosion that
 // forced the wide deal extractor onto plain json_object (see dealExtract).
 type StatusSignal struct {
-	SignalType     string `json:"signalType" enum:"결정,리스크,블로커,의존성,진행,없음"`
+	SignalType     string `json:"signalType" enum:"결정,리스크,블로커,진행,없음"`
 	DecisionStatus string `json:"decisionStatus" enum:"제안,승인,반려,해당없음"`
 }
 
@@ -217,7 +218,7 @@ func statusSignalTag(sig StatusSignal) string {
 			return "[결정·" + st + "]"
 		}
 		return "[결정]"
-	case "리스크", "블로커", "의존성":
+	case "리스크", "블로커":
 		return "[" + sig.SignalType + "]"
 	default: // 진행 / 없음 / unrecognized → no tag
 		return ""
