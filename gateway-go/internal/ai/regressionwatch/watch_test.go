@@ -1,6 +1,7 @@
 package regressionwatch
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -78,6 +79,49 @@ func TestRunNotifiesOnceThenIdempotentForSameRegression(t *testing.T) {
 	}
 	if len(notified) != 1 {
 		t.Fatalf("unchanged regression set must not re-notify, got %d", len(notified))
+	}
+}
+
+func TestRun_StandingRegressionDowngradesToDebugAfterNotification(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "regression-baseline.json")
+	src := &fakeSource{Signals: []Signal{
+		{Key: "agentlog.error_rate", Scope: "m1", Value: 0.10, Sample: 100, HigherWorse: true, Kind: KindRate},
+	}}
+	var logs bytes.Buffer
+	task := NewTask(Deps{
+		Sources:    []SignalSource{src},
+		StatePath:  statePath,
+		Thresholds: loThresh(),
+		Notify:     func(context.Context, string) error { return nil },
+		Logger: slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})),
+	})
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	logs.Reset()
+	src.Signals = []Signal{
+		{Key: "agentlog.error_rate", Scope: "m1", Value: 0.40, Sample: 100, HigherWorse: true, Kind: KindRate},
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("new regression: %v", err)
+	}
+	if got := logs.String(); !strings.Contains(got, "level=WARN") {
+		t.Fatalf("new regression log = %q, want WARN", got)
+	}
+
+	logs.Reset()
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("standing regression: %v", err)
+	}
+	got := logs.String()
+	if !strings.Contains(got, "level=DEBUG") {
+		t.Fatalf("standing regression log = %q, want DEBUG", got)
+	}
+	if strings.Contains(got, "level=WARN") {
+		t.Fatalf("standing regression must not repeat WARN: %q", got)
 	}
 }
 
