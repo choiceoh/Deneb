@@ -206,6 +206,32 @@ func TestCaptureBatchPreservesFileOrder(t *testing.T) {
 	}
 }
 
+func TestCaptureBatchDedupsIdenticalResend(t *testing.T) {
+	deps, runs, _ := batchDeps(true)
+	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	files := []map[string]any{
+		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
+	}
+
+	r1 := handler(context.Background(), batchRequest(t, files, "요약해줘"))
+	// Identical resend (e.g. a client retry) → replay the first result, no 2nd turn.
+	r2 := handler(context.Background(), batchRequest(t, files, "요약해줘"))
+	if !r1.OK || !r2.OK {
+		t.Fatalf("both should be OK: %v %v", r1.OK, r2.OK)
+	}
+	if *runs != 1 {
+		t.Errorf("identical resend should reuse the first turn, runs=%d want 1", *runs)
+	}
+
+	// A different caption is a genuinely different request → a new turn runs.
+	if r := handler(context.Background(), batchRequest(t, files, "다른 질문")); !r.OK {
+		t.Fatalf("different-caption request failed: %+v", r)
+	}
+	if *runs != 2 {
+		t.Errorf("different caption should run a new turn, runs=%d want 2", *runs)
+	}
+}
+
 func TestCaptureBatchMissingFilesRejected(t *testing.T) {
 	deps, _, _ := batchDeps(true)
 	handler := MiniappMethods(deps)["miniapp.capture.batch"]

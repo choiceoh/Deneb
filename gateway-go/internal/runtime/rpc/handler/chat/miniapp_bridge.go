@@ -513,6 +513,7 @@ func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, ca
 //   - caption    (string, optional): the question the user typed with the batch
 //   - sessionKey (string, optional): defaults to "client:main"
 func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
+	dedup := newBatchDedupCache(batchDedupTTL, batchDedupMax)
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Files []struct {
@@ -530,6 +531,18 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.MissingParam("files").Response(req.ID)
 		}
 		sessionKey := DefaultSessionKey(p.SessionKey)
+
+		// Idempotency: replay the first response for an identical resend (a client
+		// retry or a re-share of the same files) within the TTL, instead of
+		// re-extracting every file and running a second agent turn.
+		fpFiles := make([]captureFileFingerprint, len(p.Files))
+		for i, f := range p.Files {
+			fpFiles[i] = captureFileFingerprint{Filename: f.Filename, MimeType: f.MimeType, Data: f.Data}
+		}
+		dedupKey := batchRequestFingerprint(sessionKey, p.Caption, fpFiles)
+		if cached, ok := dedup.get(dedupKey, time.Now()); ok {
+			return rpcutil.RespondOK(req.ID, cached)
+		}
 
 		n := len(p.Files)
 		dropped := 0
@@ -588,12 +601,14 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 		for _, f := range files {
 			out = append(out, map[string]any{"name": f.name, "kind": f.kind, "skipped": f.skip != ""})
 		}
-		return rpcutil.RespondOK(req.ID, map[string]any{
+		payload := map[string]any{
 			"text":       res.Text,
 			"files":      out,
 			"model":      res.Model,
 			"sessionKey": sessionKey,
-		})
+		}
+		dedup.put(dedupKey, payload, time.Now())
+		return rpcutil.RespondOK(req.ID, payload)
 	}
 }
 
