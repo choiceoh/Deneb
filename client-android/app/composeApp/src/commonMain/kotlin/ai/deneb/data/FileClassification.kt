@@ -7,18 +7,13 @@ enum class FileCategory {
     UNSUPPORTED,
 }
 
-const val MAX_TEXT_FILE_BYTES = 200_000
-const val MAX_PDF_BYTES = 20_000_000
-const val MAX_IMAGE_BYTES = 15_000_000
-
 // Max files the multi-select attach picker offers in one batch — mirrors the
 // gateway's maxBatchFiles so a huge selection can't fan out past what the batch
 // capture turn accepts (it caps again server-side).
 const val MAX_BATCH_FILES = 20
 
-// Raw image input cap before compression — images typically shrink after compression,
-// so we allow larger raw files than MAX_IMAGE_BYTES while still preventing an OOM
-// from reading a multi-gigabyte file into memory.
+// Skip downsampling (and decoding) a picked image larger than this: it is sent
+// as-is, so a pathological multi-gigabyte file can't OOM the device on decode.
 const val MAX_RAW_IMAGE_BYTES = 50_000_000
 
 private val textMimeTypes = setOf(
@@ -82,6 +77,17 @@ internal val documentExtensions = setOf(
 )
 
 val supportedFileExtensions = (imageExtensions + textExtensions + documentExtensions).toList()
+
+/**
+ * Whether the composer should stage a picked file with this extension. It is the
+ * caller's [supported] document/text/image set PLUS audio: the picker offers audio
+ * (for transcription) whenever platform captures are present, so staging must accept
+ * it too — else a picked recording is wrongly rejected as an unsupported type.
+ */
+fun isStageableExtension(extension: String, supported: List<String>): Boolean {
+    val ext = extension.lowercase()
+    return ext.isNotEmpty() && (ext in supported || ext in audioExtensions)
+}
 
 /** How the chat input routes a file picked from the single attach (+) picker. */
 enum class AttachmentRoute {
