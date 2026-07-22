@@ -5,7 +5,9 @@ import ai.deneb.data.AttachmentRoute
 import ai.deneb.data.DataRepository
 import ai.deneb.data.MAX_RAW_IMAGE_BYTES
 import ai.deneb.data.ThemeMode
+import ai.deneb.data.attachmentExtension
 import ai.deneb.data.documentCaptureMime
+import ai.deneb.data.isWithinAttachmentSize
 import ai.deneb.data.routeAttachment
 import ai.deneb.deneb.DenebAttachment
 import ai.deneb.deneb.DenebGatewayClient
@@ -257,6 +259,7 @@ class MainActivity : ComponentActivity() {
     // inline into the turn. Matches andromeda, which sends even one file as a batch.
     private suspend fun sendSingleFileBatch(bytes: ByteArray, filename: String, mime: String, caption: String = "") {
         if (bytes.isEmpty()) return
+        if (!isWithinAttachmentSize(attachmentExtension(filename, mime), bytes.size.toLong())) return
         (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(attachmentFor(bytes, filename, mime)), caption)
     }
 
@@ -281,11 +284,24 @@ class MainActivity : ComponentActivity() {
     // image -> PaddleOCR, audio -> VibeVoice-ASR. Backs the drawer's 이미지 OCR /
     // 녹음 전사 actions, reusing the same capture paths as the share sheet.
     private fun captureFromUri(uri: Uri, fallbackMime: String, audio: Boolean) {
+        val mime = contentResolver.getType(uri) ?: fallbackMime
+        val name = sharedDisplayName(uri) ?: if (audio) "recording" else "image"
+        val ext = attachmentExtension(name, mime)
+        uriContentLength(uri)?.let { len ->
+            if (!isWithinAttachmentSize(ext, len)) return
+        }
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
-        val mime = contentResolver.getType(uri) ?: fallbackMime
-        captureFile(bytes, sharedDisplayName(uri) ?: if (audio) "recording" else "image", mime)
+        if (!isWithinAttachmentSize(ext, bytes.size.toLong())) return
+        captureFile(bytes, name, mime)
     }
+
+    // Best-effort content length before loading a shared URI into memory.
+    private fun uriContentLength(uri: Uri): Long? = runCatching {
+        contentResolver.openFileDescriptor(uri, "r")?.use { fd ->
+            fd.statSize.takeIf { it > 0 }
+        }
+    }.getOrNull()
 
     // Files staged in the composer, sent together on submit -> ONE batch turn: read each,
     // derive its per-type MIME, and hand the set to captureBatch so the agent reads and
@@ -294,7 +310,13 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val attachments = files.mapNotNull { file ->
                 val bytes = runCatching { file.readBytes() }.getOrNull()
-                if (bytes == null || bytes.isEmpty()) null else attachmentFor(bytes, file.name, pickedFileMime(file.name))
+                if (bytes == null || bytes.isEmpty()) {
+                    null
+                } else if (!isWithinAttachmentSize(file.extension, bytes.size.toLong())) {
+                    null
+                } else {
+                    attachmentFor(bytes, file.name, pickedFileMime(file.name))
+                }
             }
             if (attachments.isEmpty()) return@launch
             (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(attachments, caption)

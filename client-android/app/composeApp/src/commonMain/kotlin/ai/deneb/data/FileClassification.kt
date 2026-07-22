@@ -121,8 +121,29 @@ fun documentCaptureMime(fileName: String): String {
 // a huge pick from OOMing the device or bloating the turn payload.
 const val MAX_ATTACHMENT_BYTES = 25_000_000L
 
-/** Whether a staged [sizeBytes] file of this [extension] is within the upload cap. */
-fun isWithinAttachmentSize(extension: String, sizeBytes: Long): Boolean = extension.lowercase() in imageExtensions || sizeBytes <= MAX_ATTACHMENT_BYTES
+/** Extension for attachment size checks when only filename and/or MIME are known. */
+fun attachmentExtension(filename: String, mime: String = ""): String {
+    val fromName = filename.substringAfterLast('.', "").lowercase()
+    if (fromName.isNotEmpty()) return fromName
+    return when {
+        mime.startsWith("image/") -> "jpg"
+        mime.startsWith("audio/") -> "m4a"
+        mime == "application/pdf" -> "pdf"
+        else -> "bin"
+    }
+}
+
+/**
+ * Whether a file of this [extension] at [sizeBytes] is within the upload cap.
+ * Images are always allowed at pick time (downsampled before send). Non-images
+ * require a known positive size — a failed stat/read must not fall through as 0,
+ * which would bypass the cap and OOM the device on a multi‑GB pick.
+ */
+fun isWithinAttachmentSize(extension: String, sizeBytes: Long): Boolean {
+    if (extension.lowercase() in imageExtensions) return true
+    if (sizeBytes <= 0) return false
+    return sizeBytes <= MAX_ATTACHMENT_BYTES
+}
 
 /** Human-readable file size for the attachment chips, e.g. "2.3 MB", "812 KB", "40 B". */
 fun formatFileSize(bytes: Long): String = when {
