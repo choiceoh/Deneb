@@ -89,6 +89,7 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 2. **런 경계 인터랙티브는 건강.** dev 게이트웨이 한 세션 2메시지 실측: run2 `class=append-only`, `sysDivergedAt=−1`(시스템 불변), `recallChanged=true`, **실제 `cacheReadTokens=41984`**(런 경계 42K 히트). **회상이 바뀌어도 append-only** = 회상=user 꼬리 + `tail_register` 재부착이 완벽 작동. 프로덕션의 `system-changed` 다수는 정상 인터랙티브가 아니라 자정 롤오버·ephemeral·배포 재시작(대체로 무해).
 
 **진단 플레이북** (재조사 대신 이 순서로 관측):
+
 - 런 경계 분류: `beginAPCDiag`(`chat/apc_diag.go`)의 `apc diag` 로그 라인 — `session`·`model`·`class`(append-only/history-mutated/system-changed)·`sysDivergedAt`(시스템 변경 시 첫 상이 바이트 오프셋: head=정적 회귀=나쁨, tail=day-only 타임스탬프=예상됨). 저널: `journalctl --user -u deneb-gateway | grep "apc diag"`.
 - within-run 프리픽스 안정성: 위 결정적 테스트 (라이브 불필요, 프로바이더 무관).
 - 라이브 재현: `live-test.sh restart` → mock_native_client 한 연결로 2 chat(같은 세션) → `logs-grep "apc diag"` + `grep cacheReadTokens`. (단발 `live-test.sh chat` 은 매번 새 `client:lt-*` 세션이라 런 경계 비교 불가.)
