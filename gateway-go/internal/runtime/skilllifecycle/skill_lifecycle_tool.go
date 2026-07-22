@@ -415,8 +415,8 @@ func normalizeSkillLifecycleRoute(route string) string {
 }
 
 func appendUniqueStrings(base []string, values ...string) []string {
-	seen := make(map[string]struct{}, len(base)+len(values))
-	out := make([]string, 0, len(base)+len(values))
+	seen := make(map[string]struct{}, len(base))
+	out := make([]string, 0, len(base))
 	add := func(value string) {
 		value = strings.TrimSpace(value)
 		if value == "" {

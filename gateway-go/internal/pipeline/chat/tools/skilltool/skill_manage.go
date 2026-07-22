@@ -591,8 +591,7 @@ func fuzzyLineReplace(content, oldText, newText string) (string, error) {
 
 	// Build result: lines before match + newText + lines after match.
 	newLines := strings.Split(newText, "\n")
-	result := make([]string, 0, len(contentLines)-len(oldLines)+len(newLines))
-	result = append(result, contentLines[:matchStart]...)
+	result := append([]string{}, contentLines[:matchStart]...)
 	result = append(result, newLines...)
 	result = append(result, contentLines[matchStart+len(oldLines):]...)
 	return strings.Join(result, "\n"), nil

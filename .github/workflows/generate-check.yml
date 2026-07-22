@@ -30,6 +30,9 @@ concurrency:
   group: generate-check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 # ── Change detection ───────────────────────────────────────────────────────
 
 jobs:

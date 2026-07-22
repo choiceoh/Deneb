@@ -199,7 +199,12 @@ func filterFetchCandidates(urls []string, limit int) ([]string, candidateFilterS
 	out := make([]string, 0, limit)
 	for _, raw := range urls {
 		raw = strings.TrimSpace(raw)
-		if raw == "" || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+		if raw == "" {
+			continue
+		}
+		if lower := strings.ToLower(raw); strings.HasPrefix(lower, "javascript:") ||
+			strings.HasPrefix(lower, "data:") ||
+			strings.HasPrefix(lower, "vbscript:") {
 			continue
 		}
 		parsed, err := url.Parse(raw)

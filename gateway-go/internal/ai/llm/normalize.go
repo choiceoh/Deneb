@@ -267,8 +267,7 @@ func isContentEmpty(content FlexibleJSON) bool {
 func mergeContent(a, b FlexibleJSON) FlexibleJSON {
 	blocksA := ContentToBlocks(a)
 	blocksB := ContentToBlocks(b)
-	merged := make([]ContentBlock, 0, len(blocksA)+len(blocksB))
-	merged = append(merged, blocksA...)
+	merged := append([]ContentBlock{}, blocksA...)
 	merged = append(merged, blocksB...)
 	// marshalBlocks (not a bare json.Marshal) so a block with a non-JSON
 	// Input fragment can never collapse two real messages into one with

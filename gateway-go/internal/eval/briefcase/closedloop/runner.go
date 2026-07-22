@@ -761,7 +761,7 @@ func visibleTrajectory(pack *casepack.Pack, run *runcontract.RunResult, cycles [
 			feedbackByCycle[cycle.Cycle] = cycle.Feedback
 		}
 	}
-	items := make([]string, 0, len(run.Episodes)*2)
+	items := make([]string, 0, len(run.Episodes))
 	turn := 0
 	for _, episode := range run.Episodes {
 		if episode.Model == "" && episode.Text == "" && episode.AllText == "" {

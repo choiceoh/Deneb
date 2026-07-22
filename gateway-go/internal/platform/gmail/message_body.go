@@ -190,7 +190,11 @@ func replaceAnchors(s string) string {
 		text := strings.TrimSpace(htmlAnyTagRE.ReplaceAllString(inner, ""))
 		href := strings.TrimSpace(extractAttr(htmlHrefRE, attrs))
 		lower := strings.ToLower(href)
-		if href == "" || strings.HasPrefix(lower, "javascript:") || strings.HasPrefix(href, "#") {
+		if href == "" ||
+			strings.HasPrefix(lower, "javascript:") ||
+			strings.HasPrefix(lower, "data:") ||
+			strings.HasPrefix(lower, "vbscript:") ||
+			strings.HasPrefix(href, "#") {
 			return text
 		}
 		if text == "" {

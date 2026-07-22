@@ -126,8 +126,9 @@ hub.httpServer.on('request', async (req, res) => {
 		}
 		sendJSON(res, 404, { error: 'not found' })
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err)
-		sendJSON(res, 500, { error: message })
+		// Keep client responses generic — Error messages can embed stack frames.
+		console.error('[page-agent-bridge] request error:', err instanceof Error ? err.message : err)
+		sendJSON(res, 500, { error: 'internal error' })
 	}
 })
 

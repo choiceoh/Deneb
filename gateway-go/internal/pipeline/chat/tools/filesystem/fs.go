@@ -478,8 +478,7 @@ func editWhitespaceTolerantContext(ctx context.Context, path, displayPath, conte
 		}
 	}
 
-	spliced := make([]string, 0, len(lines)-len(oldLines)+len(newLines))
-	spliced = append(spliced, lines[:start]...)
+	spliced := append([]string{}, lines[:start]...)
 	spliced = append(spliced, newLines...)
 	spliced = append(spliced, lines[start+len(oldLines):]...)
 	if err := atomicfile.WriteFileContext(ctx, path, []byte(strings.Join(spliced, "\n")), nil); err != nil {

@@ -116,7 +116,9 @@ def main() -> int:
         ap.error("--model-a and --model-b are required (or use --mock)")
     api_key = os.environ.get(args.api_key_env, "")
     if not api_key:
-        print(f"warning: ${args.api_key_env} is empty — sending without auth", file=sys.stderr)
+        # Log only that auth is missing — never interpolate key/env names that
+        # CodeQL (and operators) treat as credential material.
+        print("warning: API key env is empty — sending without auth", file=sys.stderr)
     extra_a = json.loads(args.extra_body_a) if args.extra_body_a else None
     extra_b = json.loads(args.extra_body_b) if args.extra_body_b else None
     eval_token = resolve_client_token(args.client_token_env) if args.eval_extract_url else ""

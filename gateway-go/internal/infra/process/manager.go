@@ -297,8 +297,7 @@ func (m *Manager) executeTracked(ctx context.Context, req ExecRequest, tracked *
 	// Use cached sanitized base environment to avoid repeated os.Environ() +
 	// SanitizeEnv overhead on sequential calls.
 	base := m.baseEnv()
-	cmd.Env = make([]string, len(base), len(base)+len(req.Env))
-	copy(cmd.Env, base)
+	cmd.Env = append([]string{}, base...)
 	// Overlay user-specified vars, also filtering blocked keys.
 	for k, v := range req.Env {
 		if isBlockedEnvKey(k) {

@@ -71,7 +71,7 @@ function convertBlock(block: string[]): string[] {
   if (!rows.length) return block;
   const numCols = Math.max(...rows.map((r) => r.length));
   for (const r of rows) while (r.length < numCols) r.push("");
-  const esc = (c: string) => c.replace(/\|/g, "\\|");
+  const esc = (c: string) => c.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
   const md: string[] = [];
   md.push(`| ${rows[0].map(esc).join(" | ")} |`);
   md.push(`| ${Array(numCols).fill("---").join(" | ")} |`);

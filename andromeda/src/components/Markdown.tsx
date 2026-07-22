@@ -22,10 +22,20 @@ import { type Block, type ListItem, parseBlocks } from "@/markdown/parse";
 import { Icon } from "./Icon";
 
 // Only these schemes render as live links/images; anything else stays plain text
-// so a `javascript:`/`data:` URL can never become a clickable or fetchable node.
+// so a `javascript:`/`data:`/`vbscript:` URL can never become a clickable or fetchable node.
 function safeHref(url: string): string | null {
   const u = url.trim();
-  return /^(https?:\/\/|mailto:)/i.test(u) ? u : null;
+  if (/^mailto:/i.test(u)) {
+    return /^mailto:[^\s<>"']+$/i.test(u) ? u : null;
+  }
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (parsed.username || parsed.password) return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
 }
 
 // Earliest-match inline tokenizer. At each step the pattern that OPENS first wins
@@ -76,6 +86,7 @@ function renderInline(text: string, key: string): ReactNode[] {
       out.push(<br key={k} />);
     } else if (kind === "image") {
       const src = safeHref(m[2]);
+      // codeql[js/xss-through-dom]: src gated by safeHref (http/https only); alt is a React text prop
       out.push(src ? <img key={k} className="md-img" src={src} alt={m[1]} loading="lazy" /> : m[1]);
     } else if (kind === "code") {
       out.push(
@@ -105,6 +116,7 @@ function renderInline(text: string, key: string): ReactNode[] {
       const href = safeHref(url);
       out.push(
         href ? (
+          // codeql[js/xss-through-dom]: href gated by safeHref; children are React text nodes
           <a key={k} href={href} target="_blank" rel="noreferrer noopener">
             {url}
           </a>
@@ -117,6 +129,7 @@ function renderInline(text: string, key: string): ReactNode[] {
       const href = safeHref(m[2]);
       out.push(
         href ? (
+          // codeql[js/xss-through-dom]: href gated by safeHref; children are React text nodes
           <a key={k} href={href} target="_blank" rel="noreferrer noopener">
             {renderInline(m[1], k)}
           </a>

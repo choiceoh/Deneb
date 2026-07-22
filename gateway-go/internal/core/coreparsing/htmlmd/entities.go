@@ -100,8 +100,10 @@ func tryDecodeEntity(input string, pos int) (ch rune, consumed int) {
 		semi := strings.IndexByte(after[:limit], ';')
 		if semi > 0 {
 			code, err := strconv.ParseUint(after[:semi], 16, 32)
-			if err == nil {
-				if r := rune(code); r >= 0 && isValidCodePoint(r) { //nolint:gosec // G115 — code is bounded by ParseUint with bitSize 32
+			// Bound before int32/rune conversion — ParseUint(..., 32) still
+			// admits values above unicode.MaxRune / math.MaxInt32.
+			if err == nil && code <= 0x10FFFF {
+				if r := rune(code); isValidCodePoint(r) { //nolint:gosec // G115 — bounded above
 					return r, 3 + semi + 1
 				}
 			}
@@ -119,8 +121,8 @@ func tryDecodeEntity(input string, pos int) (ch rune, consumed int) {
 		semi := strings.IndexByte(after[:limit], ';')
 		if semi > 0 {
 			code, err := strconv.ParseUint(after[:semi], 10, 32)
-			if err == nil {
-				if r := rune(code); r >= 0 && isValidCodePoint(r) { //nolint:gosec // G115 — code is bounded by ParseUint with bitSize 32
+			if err == nil && code <= 0x10FFFF {
+				if r := rune(code); isValidCodePoint(r) { //nolint:gosec // G115 — bounded above
 					return r, 2 + semi + 1
 				}
 			}

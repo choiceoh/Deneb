@@ -2,6 +2,7 @@ package chat
 
 import (
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 
@@ -56,7 +57,9 @@ func DefaultContextConfig() ContextConfig {
 	}
 	if raw := os.Getenv("DENEB_MEMORY_TOKEN_BUDGET"); raw != "" {
 		v, err := strconv.ParseUint(raw, 10, 64)
-		if err != nil || v < cfg.SystemPromptBudget+minMemoryBudgetHeadroom {
+		// Reject values that cannot convert to int (AssembleContext) or int64
+		// (status/token UI) without truncating.
+		if err != nil || v < cfg.SystemPromptBudget+minMemoryBudgetHeadroom || v > uint64(math.MaxInt) {
 			slog.Warn("DENEB_MEMORY_TOKEN_BUDGET ignored",
 				"value", raw, "minimum", cfg.SystemPromptBudget+minMemoryBudgetHeadroom, "error", err)
 		} else {
@@ -78,9 +81,13 @@ func assembleContext(
 	cfg ContextConfig,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
+	memBudget := cfg.MemoryTokenBudget
+	if memBudget > uint64(math.MaxInt) {
+		memBudget = uint64(math.MaxInt)
+	}
 	result, err := bridge.AssembleContext(
 		sessionKey,
-		int(cfg.MemoryTokenBudget),
+		int(memBudget),
 		int(cfg.FreshTailCount),
 		logger,
 	)
