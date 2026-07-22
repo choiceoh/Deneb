@@ -92,21 +92,23 @@ func TestWebSearchWithURLsPrefersKagi(t *testing.T) {
 	}
 }
 
-// kagiItemsToResults drops related-search rows (t==1) and URL-less rows, and
-// caps at count.
-func TestKagiItemsToResultsFiltersAndCaps(t *testing.T) {
-	items := []kagiSearchItem{
-		{T: 0, URL: "https://a.example/", Title: "A", Snippet: "sa"},
-		{T: 1, URL: ""},                  // related searches row — dropped
-		{T: 0, URL: "", Title: "no url"}, // no URL — dropped
-		{T: 0, URL: "https://b.example/", Title: "B", Snippet: "sb"},
-		{T: 0, URL: "https://c.example/", Title: "C", Snippet: "sc"},
+// kagiItemsToResults drops URL-less rows, maps snippet→Description, and caps at
+// count.
+func TestKagiItemsToResultsMapsFiltersAndCaps(t *testing.T) {
+	items := []kagiV1SearchItem{
+		{URL: "https://a.example/", Title: "A", Snippet: "sa"},
+		{URL: "", Title: "no url"}, // no URL — dropped
+		{URL: "https://b.example/", Title: "B", Snippet: "sb"},
+		{URL: "https://c.example/", Title: "C", Snippet: "sc"},
 	}
 	got := kagiItemsToResults(items, 2)
 	if len(got) != 2 {
 		t.Fatalf("want 2 results (capped), got %d: %v", len(got), got)
 	}
-	if got[0].URL != "https://a.example/" || got[1].URL != "https://b.example/" {
+	if got[0].URL != "https://a.example/" || got[0].Description != "sa" {
+		t.Fatalf("mapping wrong: %+v", got[0])
+	}
+	if got[1].URL != "https://b.example/" {
 		t.Fatalf("unexpected results: %v", got)
 	}
 	// count<=0 means no cap.
@@ -115,53 +117,18 @@ func TestKagiItemsToResultsFiltersAndCaps(t *testing.T) {
 	}
 }
 
-func TestFormatKagiFastGPT(t *testing.T) {
-	out := formatKagiFastGPT("The answer [1].", []kagiFastGPTReference{
-		{Title: "Ref One", URL: "https://one.example/", Snippet: "snip"},
-	})
-	for _, want := range []string{"**Answer:**", "The answer [1].", "**References:**", "Ref One", "https://one.example/", "snip"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in:\n%s", want, out)
-		}
-	}
-	if empty := formatKagiFastGPT("", nil); empty != "No answer found." {
-		t.Fatalf("empty case: %q", empty)
-	}
-}
-
-func TestIsKagiSearchType(t *testing.T) {
-	for _, ty := range []string{"fastgpt", "enrich_web", "enrich_news"} {
-		if !isKagiSearchType(ty) {
-			t.Errorf("%q should be a Kagi type", ty)
-		}
-	}
-	for _, ty := range []string{"news", "scholar", "autocomplete", "search", ""} {
-		if isKagiSearchType(ty) {
-			t.Errorf("%q should NOT be a Kagi type", ty)
-		}
-	}
-}
-
-// Kagi typed search and summarize both return a user-facing (non-error) string
-// when the key is missing, rather than failing the tool call.
-func TestKagiModesReportMissingKey(t *testing.T) {
+// Extract returns a user-facing (non-error) string when the key is missing,
+// rather than failing the tool call.
+func TestWebKagiExtractReportsMissingKey(t *testing.T) {
 	t.Setenv("KAGI_API_KEY", "")
 	t.Setenv("KAGI_API_TOKEN", "")
 
-	typed, err := kagiTypedSearch(context.Background(), "fastgpt", "q", 5)
+	out, err := webKagiExtract(context.Background(), "https://example.com/")
 	if err != nil {
-		t.Fatalf("kagiTypedSearch err: %v", err)
+		t.Fatalf("webKagiExtract err: %v", err)
 	}
-	if !strings.Contains(typed, "KAGI_API_KEY") {
-		t.Fatalf("expected missing-key notice, got:\n%s", typed)
-	}
-
-	summ, err := webSummarize(context.Background(), "https://example.com/")
-	if err != nil {
-		t.Fatalf("webSummarize err: %v", err)
-	}
-	if !strings.Contains(summ, "KAGI_API_KEY") {
-		t.Fatalf("expected missing-key notice, got:\n%s", summ)
+	if !strings.Contains(out, "KAGI_API_KEY") {
+		t.Fatalf("expected missing-key notice, got:\n%s", out)
 	}
 }
 

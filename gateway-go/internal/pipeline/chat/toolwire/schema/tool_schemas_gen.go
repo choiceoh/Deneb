@@ -312,6 +312,10 @@ func WebToolSchema() map[string]any {
 				"type":        "number",
 				"description": "Number of search results per query (default: 5)",
 			},
+			"extract": map[string]any{
+				"type":        "string",
+				"description": "HTTPS URL to render into clean markdown via the Kagi Extract API (needs KAGI_API_KEY). Kagi fetches server-side, so it beats raw fetch on bot-protected/JS-heavy pages. Standalone mode: ignores query/url/fetch.",
+			},
 			"fetch": map[string]any{
 				"type":        "number",
 				"description": "Auto-fetch top N results per query (1-3, default: 0)",
@@ -331,14 +335,10 @@ func WebToolSchema() map[string]any {
 				"type":        "string",
 				"description": "Web search query. Kagi → Serper (Google) → Brave → DuckDuckGo on missing key or provider failure",
 			},
-			"summarize": map[string]any{
-				"type":        "string",
-				"description": "URL to summarize with the Kagi Universal Summarizer (needs KAGI_API_KEY). Handles web pages, PDFs, and YouTube/video/audio server-side — returns a prose summary without fetching locally. Standalone mode: ignores query/url/fetch.",
-			},
 			"type": map[string]any{
 				"type":        "string",
-				"description": "Typed search. Serper: news (Google News), scholar (Google Scholar), autocomplete (suggestions). Kagi (needs KAGI_API_KEY): fastgpt (cited LLM answer), enrich_web / enrich_news (Teclis/TinyGem non-commercial index — niche high-quality results Google misses). Not compatible with fetch. Default: regular web search.",
-				"enum":        []string{"news", "scholar", "autocomplete", "fastgpt", "enrich_web", "enrich_news"},
+				"description": "Serper search type: news (Google News), scholar (Google Scholar), autocomplete (search suggestions). Default: regular web search.",
+				"enum":        []string{"news", "scholar", "autocomplete"},
 			},
 			"url": map[string]any{
 				"type":        "string",

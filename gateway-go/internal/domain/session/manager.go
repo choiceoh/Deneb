@@ -113,6 +113,12 @@ type Session struct {
 	CreatedAt      time.Time `json:"-"`
 	SessionID      string    `json:"sessionId,omitempty"`
 	Label          string    `json:"label,omitempty"`
+	// LabelPinned is set when the user renames a conversation from the drawer
+	// (miniapp.sessions.rename). It locks the label: the background auto-titler
+	// (chat.autoTitleSessionAsync) never overwrites a pinned label, so a periodic
+	// re-title can't clobber a name the user chose. Persisted via the label
+	// sidecar so the lock survives the frequent hot-swap restarts.
+	LabelPinned bool `json:"labelPinned,omitempty"`
 
 	// Token accounting (cleared on compaction).
 	InputTokens  *int64 `json:"inputTokens,omitempty"`
