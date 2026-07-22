@@ -62,6 +62,36 @@ func TestThinkingOffDirectiveReturnsPerModelToggle(t *testing.T) {
 	})
 }
 
+// TestThinkingOffDirectiveForRoleForcesTinyOff pins the role-level policy: the
+// tiny role (speed/concurrency over quality) forces thinking off even for a
+// reasoning model the per-model policy leaves on, while other roles keep the
+// per-model decision.
+func TestThinkingOffDirectiveForRoleForcesTinyOff(t *testing.T) {
+	var reg *Registry // nil registry → package heuristics; the role force still applies
+
+	// Reasoning model the per-model policy leaves on (nil): tiny forces it off with
+	// the standard vLLM toggle; a non-forcing role keeps thinking on.
+	if got := ThinkingOffDirectiveFor("wormhole", "qwen3.6-35b-a3b"); got != nil {
+		t.Fatalf("precondition: per-model directive for qwen3.6 = %v, want nil", got)
+	}
+	if d := reg.ThinkingOffDirectiveForRole(RoleTiny, "wormhole", "qwen3.6-35b-a3b"); d == nil || d.TemplateKwarg() != "enable_thinking" {
+		t.Errorf("tiny/qwen3.6 = %v, want enable_thinking", d)
+	}
+	if d := reg.ThinkingOffDirectiveForRole(RoleMain, "wormhole", "qwen3.6-35b-a3b"); d != nil {
+		t.Errorf("main/qwen3.6 = %v, want nil (per-model policy, thinking stays on)", d)
+	}
+
+	// The per-model toggle still wins for tiny — dsv4 keeps its own spelling.
+	if d := reg.ThinkingOffDirectiveForRole(RoleTiny, "wormhole", "deepseek-v4-flash"); d == nil || d.TemplateKwarg() != "thinking" {
+		t.Errorf("tiny/dsv4 = %v, want thinking", d)
+	}
+
+	// Off vLLM-backed providers, chat_template_kwargs is unsupported → nil even for tiny.
+	if d := reg.ThinkingOffDirectiveForRole(RoleTiny, "openrouter", "qwen3.6-35b-a3b"); d != nil {
+		t.Errorf("tiny/openrouter = %v, want nil off vLLM-backed", d)
+	}
+}
+
 func TestThinkingOffDirectivePreservesWireShape(t *testing.T) {
 	for _, test := range []struct {
 		name     string

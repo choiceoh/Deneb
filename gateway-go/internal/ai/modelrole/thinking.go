@@ -75,3 +75,34 @@ func (r *Registry) ThinkingOffDirectiveFor(providerID, model string) *ThinkingOf
 	}
 	return ThinkingOffDirectiveFor(providerID, model)
 }
+
+// roleForcesThinkingOff reports whether a role is defined by speed and
+// concurrency over answer quality, so raw calls made for it must never spend
+// latency or output budget on chain-of-thought. RoleTiny is that role — trivial
+// classification/extraction (session titles, stage-1 extractors, the live
+// "생각 중" chip summary): thinking there is pure overhead, and the role runs at
+// high concurrency where the wasted tokens/latency compound.
+func roleForcesThinkingOff(role Role) bool {
+	return role == RoleTiny
+}
+
+// ThinkingOffDirectiveForRole is the ROLE-aware directive resolver for raw role
+// calls. It first takes the per-model policy; when that would leave thinking on
+// (nil — a reasoning model whose individual off-switch isn't recognized) AND the
+// role forces thinking off, it forces the standard vLLM enable_thinking toggle
+// anyway. This makes "thinking off" a property of the tiny ROLE rather than of
+// each model it happens to point at: a dual-mode model swapped into the role
+// later stays fast with no code change. The force is gated to vLLM-backed
+// providers (chat_template_kwargs is a vLLM serving feature; off them, or for a
+// truly thinking-only template, the caller must budget MaxTokens for thinking
+// instead — but such models are never assigned to the tiny role). Nil-receiver
+// safe.
+func (r *Registry) ThinkingOffDirectiveForRole(role Role, providerID, model string) *ThinkingOffDirective {
+	if d := r.ThinkingOffDirectiveFor(providerID, model); d != nil {
+		return d
+	}
+	if roleForcesThinkingOff(role) && modelcaps.ServesVllmBacked(providerID) {
+		return &ThinkingOffDirective{templateKwarg: "enable_thinking"}
+	}
+	return nil
+}
