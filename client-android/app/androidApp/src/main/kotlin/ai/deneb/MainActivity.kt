@@ -6,10 +6,7 @@ import ai.deneb.data.ThemeMode
 import ai.deneb.data.documentCaptureMime
 import ai.deneb.deneb.DenebAttachment
 import ai.deneb.deneb.DenebGatewayClient
-import ai.deneb.deneb.captureAudio
 import ai.deneb.deneb.captureBatch
-import ai.deneb.deneb.captureDocument
-import ai.deneb.deneb.captureImage
 import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.LightColorScheme
 import ai.deneb.ui.chat.composables.CaptureActions
@@ -253,29 +250,37 @@ class MainActivity : ComponentActivity() {
         runCatching { speechLauncher.launch(recognize) }
     }
 
+    // Send a single picked/shared file through the batch/pointer path
+    // (miniapp.capture.batch): the gateway materializes it and the agent reads it with a
+    // tool, instead of the old single-capture RPCs that dumped the whole extracted text
+    // inline into the turn. Matches andromeda, which sends even one file as a batch.
+    private suspend fun sendSingleFileBatch(bytes: ByteArray, filename: String, mime: String) {
+        if (bytes.isEmpty()) return
+        (get<DataRepository>() as? DenebGatewayClient)?.captureBatch(listOf(DenebAttachment(bytes, filename, mime)))
+    }
+
+    private fun captureFile(bytes: ByteArray, filename: String, mime: String) {
+        lifecycleScope.launch { sendSingleFileBatch(bytes, filename, mime) }
+    }
+
     // captureFromUri reads a picked file's bytes and routes them to the gateway:
     // image -> PaddleOCR, audio -> VibeVoice-ASR. Backs the drawer's 이미지 OCR /
     // 녹음 전사 actions, reusing the same capture paths as the share sheet.
     private fun captureFromUri(uri: Uri, fallbackMime: String, audio: Boolean) {
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
         val mime = contentResolver.getType(uri) ?: fallbackMime
-        lifecycleScope.launch {
-            if (audio) client.captureAudio(bytes, mime) else client.captureImage(bytes, mime)
-        }
+        captureFile(bytes, sharedDisplayName(uri) ?: if (audio) "recording" else "image", mime)
     }
 
     // captureFromPlatformFile is the attach-picker counterpart of captureFromUri:
     // the chat input already picked the file (FileKit) and classified it by type,
     // so we read its bytes and route image -> PaddleOCR / audio -> VibeVoice-ASR.
     private fun captureFromPlatformFile(file: PlatformFile, audio: Boolean) {
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
         val mime = mimeForFileName(file.name, audio)
         lifecycleScope.launch {
-            val bytes = runCatching { file.readBytes() }.getOrNull()
-            if (bytes == null || bytes.isEmpty()) return@launch
-            if (audio) client.captureAudio(bytes, mime) else client.captureImage(bytes, mime)
+            val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
+            sendSingleFileBatch(bytes, file.name, mime)
         }
     }
 
@@ -286,12 +291,9 @@ class MainActivity : ComponentActivity() {
     // send none so the gateway routes them by filename — a blanket "text/plain"
     // would make it read a binary HWP as garbage text before its converter runs.
     private fun captureDocumentFromPlatformFile(file: PlatformFile) {
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        val mime = documentCaptureMime(file.name)
         lifecycleScope.launch {
-            val bytes = runCatching { file.readBytes() }.getOrNull()
-            if (bytes == null || bytes.isEmpty()) return@launch
-            client.captureDocument(bytes, file.name, mime)
+            val bytes = runCatching { file.readBytes() }.getOrNull() ?: return@launch
+            sendSingleFileBatch(bytes, file.name, documentCaptureMime(file.name))
         }
     }
 
@@ -419,8 +421,7 @@ class MainActivity : ComponentActivity() {
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
         val mime = intent.type ?: "image/*"
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        lifecycleScope.launch { client.captureImage(bytes, mime) }
+        captureFile(bytes, sharedDisplayName(uri) ?: "image", mime)
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 
@@ -441,8 +442,7 @@ class MainActivity : ComponentActivity() {
         val bytes = runCatching { contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
         if (bytes == null || bytes.isEmpty()) return
         val mime = intent.type ?: "audio/*"
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        lifecycleScope.launch { client.captureAudio(bytes, mime) }
+        captureFile(bytes, sharedDisplayName(uri) ?: "recording", mime)
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 
@@ -461,8 +461,7 @@ class MainActivity : ComponentActivity() {
         if (bytes == null || bytes.isEmpty()) return
         val mime = intent.type ?: "application/pdf"
         val name = sharedDisplayName(uri) ?: ("shared" + sharedDocumentExt(mime))
-        val client = get<DataRepository>() as? DenebGatewayClient ?: return
-        lifecycleScope.launch { client.captureDocument(bytes, name, mime) }
+        captureFile(bytes, name, mime)
         intent.removeExtra(Intent.EXTRA_STREAM)
     }
 
