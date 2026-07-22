@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.104](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.103...andromeda-v0.0.104) (2026-07-22)
+
+
+### ✨ Features
+
+* **notebook:** one-click 딜 페이지 담기 grounding + deal-notebook onboarding ([#4136](https://github.com/choiceoh/Deneb/issues/4136)) ([77df43b](https://github.com/choiceoh/Deneb/commit/77df43b28d5afd797d98abc4046b1f103659449c))
+
 ## [0.0.103](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.102...andromeda-v0.0.103) (2026-07-22)
 
 
