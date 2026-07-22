@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -96,6 +97,44 @@ func TestDocumentHintsExtractsSharedFileNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestIsRealUserTurnExcludesToolResults(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"plain string", `"5월 세금계산서 정산 확인해줘"`, true},
+		{"text block", `[{"type":"text","text":"안녕"}]`, true},
+		{"tool_result only (user-role carrier)", `[{"type":"tool_result","tool_use_id":"t1","content":"raw output"}]`, false},
+		{"text after tool_result", `[{"type":"tool_result","tool_use_id":"t1"},{"type":"text","text":"뒤"}]`, true},
+		{"empty array", `[]`, false},
+	}
+	for _, c := range cases {
+		if got := isRealUserTurn(json.RawMessage(c.content)); got != c.want {
+			t.Errorf("isRealUserTurn(%s) = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestIsRetitleBoundaryFiresEveryNthTurn(t *testing.T) {
+	// retitleEveryTurns is 20; a fresh conversation (turn 0) never re-titles.
+	cases := map[int]bool{
+		0:  false,
+		1:  false,
+		19: false,
+		20: true,
+		21: false,
+		39: false,
+		40: true,
+		60: true,
+	}
+	for turns, want := range cases {
+		if got := isRetitleBoundary(turns); got != want {
+			t.Errorf("isRetitleBoundary(%d) = %v, want %v", turns, got, want)
+		}
 	}
 }
 

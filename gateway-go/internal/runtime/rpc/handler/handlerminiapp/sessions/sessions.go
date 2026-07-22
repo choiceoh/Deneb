@@ -309,7 +309,10 @@ func sessionsRename(deps SessionsDeps) rpcutil.HandlerFunc {
 		if deps.Manager.Get(key) == nil {
 			return rpcutil.RespondOK(req.ID, map[string]any{"renamed": false})
 		}
-		s := deps.Manager.Patch(key, session.PatchFields{Label: &label})
+		// Pin the label: a user-chosen name must never be overwritten by the
+		// background auto-titler's periodic re-title (session_autotitle.go).
+		pinned := true
+		s := deps.Manager.Patch(key, session.PatchFields{Label: &label, LabelPinned: &pinned})
 		return rpcutil.RespondOK(req.ID, map[string]any{"renamed": s != nil, "label": label})
 	})
 }

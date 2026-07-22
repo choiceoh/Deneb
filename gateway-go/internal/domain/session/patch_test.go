@@ -29,6 +29,21 @@ func TestSessionApplyPatchUpdatesOnlyChangedFields(t *testing.T) {
 		}
 	})
 
+	t.Run("LabelPinned toggles via value-typed patch", func(t *testing.T) {
+		s := &Session{Key: "k1"}
+		pin := true
+		if !s.ApplyPatch(PatchFields{LabelPinned: &pin}) {
+			t.Error("expected true when pinning a previously-unpinned label")
+		}
+		if !s.LabelPinned {
+			t.Error("LabelPinned should be true after patch")
+		}
+		// Idempotent: patching the same value again reports no change.
+		if s.ApplyPatch(PatchFields{LabelPinned: &pin}) {
+			t.Error("expected false when LabelPinned already matches")
+		}
+	})
+
 	t.Run("multiple fields patch", func(t *testing.T) {
 		s := &Session{Key: "k1"}
 		label := "my-session"

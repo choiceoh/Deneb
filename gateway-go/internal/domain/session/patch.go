@@ -6,6 +6,7 @@ import "time"
 // the sessions.patch RPC method. Nil pointer fields are left unchanged.
 type PatchFields struct {
 	Label                *string `json:"label,omitempty"`
+	LabelPinned          *bool   `json:"labelPinned,omitempty"`
 	Model                *string `json:"model,omitempty"`
 	ThinkingLevel        *string `json:"thinkingLevel,omitempty"`
 	InterleavedThinking  *bool   `json:"interleavedThinking,omitempty"`
@@ -27,6 +28,15 @@ type PatchFields struct {
 
 // patchStr sets dst to *src if src is non-nil and differs.
 func patchStr(dst, src *string) bool {
+	if src != nil && *src != *dst {
+		*dst = *src
+		return true
+	}
+	return false
+}
+
+// patchBoolVal sets a value-typed bool field to *src if src is non-nil and differs.
+func patchBoolVal(dst *bool, src *bool) bool {
 	if src != nil && *src != *dst {
 		*dst = *src
 		return true
@@ -65,6 +75,7 @@ func patchInt(dst **int, src *int) bool {
 func (s *Session) ApplyPatch(p PatchFields) bool {
 	changed := false
 	changed = patchStr(&s.Label, p.Label) || changed
+	changed = patchBoolVal(&s.LabelPinned, p.LabelPinned) || changed
 	changed = patchStr(&s.Model, p.Model) || changed
 	changed = patchStr(&s.ThinkingLevel, p.ThinkingLevel) || changed
 	changed = patchBool(&s.InterleavedThinking, p.InterleavedThinking) || changed
