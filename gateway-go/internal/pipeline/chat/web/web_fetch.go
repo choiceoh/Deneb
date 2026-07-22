@@ -46,15 +46,15 @@ var fetchGroup singleflight
 func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.SpilloverStore) toolport.ToolFunc {
 	return func(ctx context.Context, input rawJSON) (string, error) {
 		var p struct {
-			URL       string   `json:"url"`
-			Query     string   `json:"query"`
-			Queries   []string `json:"queries"`
-			Fetch     int      `json:"fetch"`
-			MaxChars  int      `json:"maxChars"`
-			Count     int      `json:"count"`
-			Type      string   `json:"type"`
-			Academic  bool     `json:"academic"`
-			Summarize string   `json:"summarize"`
+			URL      string   `json:"url"`
+			Query    string   `json:"query"`
+			Queries  []string `json:"queries"`
+			Fetch    int      `json:"fetch"`
+			MaxChars int      `json:"maxChars"`
+			Count    int      `json:"count"`
+			Type     string   `json:"type"`
+			Academic bool     `json:"academic"`
+			Extract  string   `json:"extract"`
 		}
 		if err := json.Unmarshal(input, &p); err != nil {
 			//nolint:nilerr // tool returns user-facing error in result string
@@ -65,9 +65,9 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 
 		// Dispatch by mode.
 		switch {
-		case p.Summarize != "":
-			// Summarize mode: Kagi Universal Summarizer on a URL (standalone).
-			return webSummarize(ctx, p.Summarize)
+		case p.Extract != "":
+			// Extract mode: Kagi renders a URL into clean markdown (standalone).
+			return webKagiExtract(ctx, p.Extract)
 
 		case p.URL != "":
 			// Fetch mode: extract content from URL.
@@ -83,7 +83,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 			}
 			if p.Type != "" && p.Type != "search" && p.Fetch > 0 {
 				return formatFetchError(webFetchErr{
-					Code: "invalid_params", Message: "typed search (news/scholar/autocomplete/fastgpt/enrich_web/enrich_news) is not compatible with fetch; use query + type without fetch", Retryable: false,
+					Code: "invalid_params", Message: "type (news/scholar/autocomplete) is not compatible with fetch; use query + type without fetch", Retryable: false,
 				}), nil
 			}
 			if p.Type != "" && p.Type != "search" {
@@ -103,7 +103,7 @@ func Tool(cache *FetchCache, localAI *LocalAIExtractor, spill tooldeps.Spillover
 			if p.Type != "" && p.Type != "search" {
 				if p.Fetch > 0 {
 					return formatFetchError(webFetchErr{
-						Code: "invalid_params", Message: "typed search (news/scholar/autocomplete/fastgpt/enrich_web/enrich_news) is not compatible with fetch; use query + type without fetch", Retryable: false,
+						Code: "invalid_params", Message: "type (news/scholar/autocomplete) is not compatible with fetch; use query + type without fetch", Retryable: false,
 					}), nil
 				}
 				return webSearchWithType(ctx, p.Type, p.Query, p.Count)

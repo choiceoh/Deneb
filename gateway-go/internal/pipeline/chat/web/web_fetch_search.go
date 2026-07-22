@@ -530,13 +530,10 @@ var serperTypedEndpoints = map[string]string{
 	"autocomplete": "https://google.serper.dev/autocomplete",
 }
 
-// webSearchWithType dispatches to a specialised search endpoint.
-// Serper types: news, scholar, autocomplete. Kagi types: fastgpt, enrich_web,
-// enrich_news. Falls back to regular webSearch for unknown types.
+// webSearchWithType dispatches to Serper's specialised search endpoints.
+// Supported types: news, scholar, autocomplete.
+// Falls back to regular webSearch for unknown types.
 func webSearchWithType(ctx context.Context, searchType, query string, count int) (string, error) {
-	if isKagiSearchType(searchType) {
-		return kagiTypedSearch(ctx, searchType, query, count)
-	}
 	endpoint, ok := serperTypedEndpoints[searchType]
 	if !ok {
 		return webSearch(ctx, query, count)
