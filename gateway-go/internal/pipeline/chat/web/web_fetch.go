@@ -209,10 +209,31 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 		result, err := fetchWithRetry(ctx, targetURL, maxBytes)
 		fetchMs := time.Since(fetchStart).Milliseconds()
 		if err != nil {
+			classified := classifyFetchError(err, targetURL)
+			// Escalate to Kagi Extract when the free chain was blocked or hit a
+			// transient failure (403/429/5xx/timeout/reset) — content likely
+			// exists and Kagi's crawlers may still get it. Skips permanent
+			// errors (404/DNS/SSRF/TLS) so no paid call is wasted.
+			if kagiFetchEscalationEligible(classified) {
+				if md, ok := kagiExtractEscalateFn(ctx, targetURL); ok {
+					meta := webFetchMeta{
+						URL: targetURL, FinalURL: targetURL,
+						ContentType: "text/markdown", Provider: "kagi_extract",
+						OrigChars: len(md), ExtractChars: len(md),
+						WordCount: estimateWordCount(md), Retention: "100%",
+						Signals: []string{"escalated_kagi"},
+					}
+					fullResult := formatFetchResult(meta, md)
+					cache.Put(targetURL, fullResult)
+					slog.Info("web fetch escalated to kagi extract",
+						"url", targetURL, "chars", len(md), "prior_error", classified.Code)
+					return fetchOutcome{Content: fullResult, Assess: assessMetaBody(meta.Signals, md)}, nil
+				}
+			}
 			slog.Info("web fetch",
 				"url", targetURL, "provider", "stealth", "cache_hit", false,
 				"fetch_ms", fetchMs, "error", err.Error())
-			envelope := formatFetchError(classifyFetchError(err, targetURL))
+			envelope := formatFetchError(classified)
 			return fetchOutcome{Content: envelope, Assess: fetchUsability{HasError: true}}, nil
 		}
 
