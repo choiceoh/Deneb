@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.134.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.133.0...deneb-v4.134.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **chat:** SolarFlow ERP 분석 조회 툴(solarflow) 추가 ([#4147](https://github.com/choiceoh/Deneb/issues/4147)) ([4d51b5a](https://github.com/choiceoh/Deneb/commit/4d51b5a1df3741f4bc8e5f4400f4482a8b5f2a07))
+* **chat:** 생각 중 요약을 더 차분·정확·완전 한국어로 ([#4149](https://github.com/choiceoh/Deneb/issues/4149)) ([fa488ed](https://github.com/choiceoh/Deneb/commit/fa488edc62533079b28cc446e6a5a36c351b22dc))
+
+
+### 🐛 Bug Fixes
+
+* **security:** clear open CodeQL alerts outside path-injection ([#4150](https://github.com/choiceoh/Deneb/issues/4150)) ([babc8e0](https://github.com/choiceoh/Deneb/commit/babc8e0219e6236692050507dbf5fa855258afc1))
+
 ## [4.133.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.132.0...deneb-v4.133.0) (2026-07-22)
 
 

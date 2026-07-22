@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.106](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.105...andromeda-v0.0.106) (2026-07-22)
+
+
+### 🐛 Bug Fixes
+
+* **security:** clear open CodeQL alerts outside path-injection ([#4150](https://github.com/choiceoh/Deneb/issues/4150)) ([babc8e0](https://github.com/choiceoh/Deneb/commit/babc8e0219e6236692050507dbf5fa855258afc1))
+
 ## [0.0.105](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.104...andromeda-v0.0.105) (2026-07-22)
 
 
