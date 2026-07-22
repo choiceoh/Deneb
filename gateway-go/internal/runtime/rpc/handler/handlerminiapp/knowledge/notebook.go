@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
@@ -35,6 +36,15 @@ type NotebookDeps struct {
 	// extractor isn't wired, in which case miniapp.notebook.add_file is skipped
 	// cleanly (clients fall back to the note/wiki source kinds).
 	ExtractText func(ctx context.Context, data []byte, filename, mimeType string) string
+	// FetchURL/ReadMail/ReadDiary snapshot an external ref (a URL, a mail thread
+	// id, a diary date) to readable text at add time — the same server-side
+	// readers the notebook chat tool uses. Wiring any of them registers
+	// miniapp.notebook.add_ref; each nil reader reports its kind as unavailable.
+	// Without these, add_source's ref-only url/mail/diary kinds are rejected for
+	// lack of ingested text (their text is filled here, not typed by the user).
+	FetchURL  func(ctx context.Context, ref string) (string, error)
+	ReadMail  func(ctx context.Context, ref string) (string, error)
+	ReadDiary func(ctx context.Context, ref string) (string, error)
 }
 
 // NotebookMethods returns the miniapp.notebook.* handler map. Returns nil if no
@@ -56,6 +66,11 @@ func NotebookMethods(deps NotebookDeps) map[string]rpcutil.HandlerFunc {
 	// cleanly when it isn't (the client keeps note/wiki and hides the 파일 picker).
 	if deps.ExtractText != nil {
 		m["miniapp.notebook.add_file"] = notebookAddFileRPC(deps)
+	}
+	// Ref ingestion (url/mail/diary) registers when any reader is wired; the
+	// handler reports individual kinds unavailable when their reader is nil.
+	if deps.FetchURL != nil || deps.ReadMail != nil || deps.ReadDiary != nil {
+		m["miniapp.notebook.add_ref"] = notebookAddRefRPC(deps)
 	}
 	return m
 }
@@ -278,6 +293,79 @@ func notebookAddFileRPC(deps NotebookDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
 		}
 		src, err := store.AddSource(id, notebook.Source{Kind: notebook.KindFile, Ref: filename, Title: title, Text: text})
+		if err != nil {
+			if errors.Is(err, notebook.ErrNotFound) {
+				return rpcerr.NotFound("notebook").Response(req.ID)
+			}
+			return rpcerr.InvalidRequest(err.Error()).Response(req.ID)
+		}
+		return rpcutil.RespondOK(req.ID, NotebookSourceOut{
+			Cite:  src.Cite,
+			Kind:  src.Kind,
+			Ref:   src.Ref,
+			Title: src.Title,
+			Text:  truncateNotebookSourceText(src.Text),
+		})
+	})
+}
+
+// notebookAddRefRPC ingests an external ref (a URL, a Gmail thread id, or a diary
+// date) into a notebook: the gateway fetches/reads it server-side and pins the
+// resulting text as a url/mail/diary source. Like add_file, this is the
+// server-side reader that add_source's ref-only url/mail/diary kinds (rejected by
+// validation for lack of text) were always meant to have. The user still types
+// the ref (a URL / mail id / date) — what changes is the gateway now READS it
+// instead of storing a bare pointer that never grounds anything.
+func notebookAddRefRPC(deps NotebookDeps) rpcutil.HandlerFunc {
+	type params struct {
+		ID    string `json:"id"`
+		Kind  string `json:"kind"`
+		Ref   string `json:"ref"`
+		Title string `json:"title"`
+	}
+	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
+		id := strings.TrimSpace(p.ID)
+		if id == "" {
+			return rpcerr.MissingParam("id").Response(req.ID)
+		}
+		ref := strings.TrimSpace(p.Ref)
+		if ref == "" {
+			return rpcerr.MissingParam("ref").Response(req.ID)
+		}
+		kind := strings.TrimSpace(p.Kind)
+		var read func(context.Context, string) (string, error)
+		switch kind {
+		case notebook.KindURL:
+			read = deps.FetchURL
+		case notebook.KindMail:
+			read = deps.ReadMail
+		case notebook.KindDiary:
+			read = deps.ReadDiary
+		default:
+			return rpcerr.InvalidRequest(fmt.Sprintf("add_ref supports url/mail/diary, got %q", kind)).Response(req.ID)
+		}
+		if read == nil {
+			return rpcerr.Unavailable(fmt.Sprintf("%s source ingestion is not available", kind)).Response(req.ID)
+		}
+		text, err := read(ctx, ref)
+		if err != nil {
+			// Reader errors are graceful, user-facing (bad/unsafe ref, not found,
+			// backend unavailable). Surface the message; the client shows it verbatim.
+			return rpcerr.WrapUnavailable("자료를 가져오지 못했습니다", err).Response(req.ID)
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return rpcerr.Unavailable("no text could be read from the source").Response(req.ID)
+		}
+		title := strings.TrimSpace(p.Title)
+		if title == "" {
+			title = ref
+		}
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.WrapUnavailable("notebook store unavailable", err).Response(req.ID)
+		}
+		src, err := store.AddSource(id, notebook.Source{Kind: kind, Ref: ref, Title: title, Text: text})
 		if err != nil {
 			if errors.Is(err, notebook.ErrNotFound) {
 				return rpcerr.NotFound("notebook").Response(req.ID)

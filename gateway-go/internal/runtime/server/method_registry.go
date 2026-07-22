@@ -45,6 +45,7 @@ import (
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
@@ -576,6 +577,15 @@ func (s *Server) earlyKnowledgeMethods(hub *rpcutil.GatewayHub) []map[string]rpc
 			ExtractText: func(ctx context.Context, data []byte, filename, mimeType string) string {
 				text, _ := toolbind.ExtractDocumentText(ctx, data, filename, mimeType)
 				return text
+			},
+			// Same SSRF-safe readers the notebook chat tool uses for url/mail/diary
+			// sources. FetchURL/ReadMail need no runtime state; ReadDiary reads
+			// s.wikiStore lazily (set during chat init, long before any add_ref call —
+			// reading the field at call time, not registration, avoids a nil snapshot).
+			FetchURL: notebooksource.FetchURL,
+			ReadMail: notebooksource.ReadMail,
+			ReadDiary: func(ctx context.Context, ref string) (string, error) {
+				return notebooksource.ReadDiary(s.wikiStore, ref)
 			},
 		}),
 		minischedule.CronsMethods(minischedule.CronsDeps{
