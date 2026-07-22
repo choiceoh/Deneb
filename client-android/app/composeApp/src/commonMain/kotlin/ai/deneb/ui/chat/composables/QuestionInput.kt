@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.Platform
 import ai.deneb.currentPlatform
 import ai.deneb.data.AttachmentRoute
+import ai.deneb.data.MAX_BATCH_FILES
 import ai.deneb.data.ServiceEntry
 import ai.deneb.data.audioExtensions
 import ai.deneb.data.imageExtensions
@@ -69,6 +70,7 @@ import deneb.composeapp.generated.resources.ic_stop
 import deneb.composeapp.generated.resources.ic_up
 import deneb.composeapp.generated.resources.prompt_ask_question
 import io.github.vinceglb.filekit.PlatformFile
+import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.extension
@@ -176,20 +178,32 @@ fun QuestionInput(
         val filePickerLauncher = if (allowFileAttachment) {
             rememberFilePickerLauncher(
                 type = FileKitType.File(extensions = pickerExtensions),
-            ) { file ->
-                if (file == null) return@rememberFilePickerLauncher
+                // Allow selecting several files at once (capped to the gateway's batch
+                // limit); one still keeps its typed route, many go to one batch turn.
+                mode = FileKitMode.Multiple(maxItems = MAX_BATCH_FILES),
+            ) { files ->
+                if (files.isNullOrEmpty()) return@rememberFilePickerLauncher
                 // The text typed alongside the attachment becomes the capture's caption,
                 // so "이 계약서 요약해줘" + a PDF analyzes the PDF in that light.
                 val caption = composerText.trim()
-                when (routeAttachment(file.extension, captures != null)) {
-                    AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(file, caption)
+                val single = files.singleOrNull()
+                if (single != null) {
+                    // One file keeps its typed route: image -> OCR, audio ->
+                    // transcription, document -> extract. Without platform captures
+                    // (desktop/iOS) fall back to attaching for the next message.
+                    when (routeAttachment(single.extension, captures != null)) {
+                        AttachmentRoute.IMAGE_CAPTURE -> captures?.onImageFile(single, caption)
 
-                    AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(file, caption)
+                        AttachmentRoute.AUDIO_CAPTURE -> captures?.onAudioFile(single, caption)
 
-                    // Documents extract + analyze in one turn (like image/audio).
-                    // Without platform captures (desktop/iOS) fall back to attaching.
-                    AttachmentRoute.FILE_ATTACH ->
-                        if (captures != null) captures.onDocumentFile(file, caption) else addFile(file)
+                        AttachmentRoute.FILE_ATTACH ->
+                            if (captures != null) captures.onDocumentFile(single, caption) else addFile(single)
+                    }
+                } else if (captures != null) {
+                    // Several files -> one batch turn the agent reads and cross-references.
+                    captures.onFilesBatch(files, caption)
+                } else {
+                    files.forEach(addFile)
                 }
                 // A capture consumed the composer text as its caption — clear it so the
                 // same text isn't also sent as a separate turn. The desktop/iOS addFile
