@@ -58,6 +58,7 @@ type RuntimeOpsToolSet struct {
 	Fleet         toolport.ToolFunc
 	Browser       toolport.ToolFunc
 	Groupware     toolport.ToolFunc
+	Solarflow     toolport.ToolFunc
 	SpilloverRead toolport.ToolFunc
 }
 
@@ -122,6 +123,25 @@ func RegisterRuntimeOpsTools(registry toolport.ToolRegistrar, set RuntimeOpsTool
 		InputSchema: schema.GroupwareToolSchema(),
 		Fn:          set.Groupware,
 	})
+
+	// Solarflow: read-only topsolar SolarFlow ERP analytics engine (/api/calc/*).
+	// Complements groupware — derived intelligence (마진·미수금·LC·수급·회전율) +
+	// a Korean natural-language search. Eager: same "재고/매출/미수금" ask surface
+	// as groupware, so a fetch_tools round-trip would just be latency.
+	if set.Solarflow != nil {
+		registry.RegisterTool(toolport.ToolDef{
+			Name: "solarflow",
+			Description: "SolarFlow ERP 분석 조회(읽기 전용) — 아마란스 원장에서 파생된 인텔리전스. " +
+				"자연어는 action=search(query=\"모듈 재고\"·\"미수금 많은 거래처\"). " +
+				"구조화: inventory(재고집계) · margin(마진분석) · customer(거래처분석) · outstanding(미수금, customer=거래처명) · " +
+				"turnover(재고회전율) · supply_forecast(수급전망) · lc_maturity(LC만기, horizon=일수) · lc_limit(한도) · lc_fee · " +
+				"landed_cost(수입원가) · exchange_compare(환율비교) · price_trend(단가추이) · order_risk(수주충당위험) · receipt_match(수금매칭). " +
+				"기간=horizon(정수) · 거래처는 customer(이름) 또는 customer_id(uuid). 기본 회사=탑솔라(DENEB_SOLARFLOW_COMPANY_ID). " +
+				"승인·전표·쓰기 금지. groupware가 원장 원본이면 solarflow는 계산된 분석이다.",
+			InputSchema: schema.SolarflowToolSchema(),
+			Fn:          set.Solarflow,
+		})
+	}
 
 	// Spillover: read full content of a previously spilled large tool result.
 	// Registered eagerly so the trim marker's embedded spill ID can be used
@@ -247,6 +267,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Fleet:     runtimeops.ToolFleet(&deps.Fleet),
 		Browser:   runtimeops.ToolBrowser(&deps.Browser),
 		Groupware: runtimeops.ToolGroupware(deps.Wiki.Store),
+		Solarflow: runtimeops.ToolSolarflow(),
 	}
 	if deps.SpilloverStore != nil {
 		runtimeOps.SpilloverRead = artifact.ToolSpilloverRead(deps.SpilloverStore)

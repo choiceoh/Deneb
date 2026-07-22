@@ -383,6 +383,7 @@ func TestToolMaxOutputsContractAndFreshMap(t *testing.T) {
 		"groupware":   32000,
 		"notebook":    24000,
 		"office":      32000,
+		"solarflow":   32000,
 		"wiki":        20000,
 	}
 	got := ToolMaxOutputs()
