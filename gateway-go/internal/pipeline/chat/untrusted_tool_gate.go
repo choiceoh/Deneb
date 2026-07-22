@@ -138,6 +138,11 @@ func (g *untrustedToolGate) beforeToolCall(name, _ /*toolCallID*/ string, input 
 // markTainted flips the flag and logs once (the first taint of the run).
 func (g *untrustedToolGate) markTainted(source string) {
 	if g.tainted.CompareAndSwap(false, true) && g.logger != nil {
+		if strings.HasPrefix(source, "external-origin:") {
+			g.logger.Debug("untrusted-tool gate: turn tainted by external-origin policy",
+				"source", source, "session", g.sessionKey, "runId", g.runID)
+			return
+		}
 		g.logger.Warn("untrusted-tool gate: turn tainted by promptware signal",
 			"source", source, "session", g.sessionKey, "runId", g.runID)
 	}
