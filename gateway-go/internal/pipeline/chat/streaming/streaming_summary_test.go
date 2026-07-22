@@ -2,7 +2,9 @@ package streaming
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -30,9 +32,11 @@ func thinkingPreviewSink(dst *[]string, mu *sync.Mutex, want string, hit chan<- 
 	}
 }
 
-// A wired summarizer refines the chip: the deterministic preview ships first
-// (unchanged behavior), then an async model-backed Korean line supersedes it.
-func TestEmitThinkingSummarizerRefinesChip(t *testing.T) {
+// With a summarizer wired, the chip never shows the raw reasoning peek: the first
+// frame is a bare "깊이 생각 중" (empty preview) and the async Korean summary
+// supersedes it. The raw reasoning is often the model's zh/en self-talk, so
+// leaking it — even for one window — defeats the Korean summary.
+func TestEmitThinkingSummarizerSuppressesRawPeek(t *testing.T) {
 	var mu sync.Mutex
 	var previews []string
 	hit := make(chan struct{})
@@ -40,7 +44,7 @@ func TestEmitThinkingSummarizerRefinesChip(t *testing.T) {
 	const summary = "지난 거래 대조 중"
 
 	sb := NewBroadcaster(thinkingPreviewSink(&previews, &mu, summary, hit, &once, 1), "s1", "r1")
-	sb.SetThinkingSummarizer(func(tail string) (string, bool) {
+	sb.SetThinkingSummarizer(func(tail, _ string) (string, bool) {
 		if tail == "" {
 			return "", false
 		}
@@ -58,13 +62,18 @@ func TestEmitThinkingSummarizerRefinesChip(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if len(previews) < 2 {
-		t.Fatalf("want at least deterministic + summary frames, got %v", previews)
+		t.Fatalf("want at least a bare frame + summary, got %v", previews)
 	}
-	if previews[0] == summary {
-		t.Fatalf("first frame was the summary; expected the deterministic chip first (%v)", previews)
+	if previews[0] != "" {
+		t.Fatalf("first frame carried preview %q; want a bare chip (no raw reasoning peek)", previews[0])
 	}
-	if previews[len(previews)-1] != summary {
-		t.Fatalf("last preview = %q, want summary %q (all: %v)", previews[len(previews)-1], summary, previews)
+	if last := previews[len(previews)-1]; last != summary {
+		t.Fatalf("last preview = %q, want summary %q (all: %v)", last, summary, previews)
+	}
+	for _, p := range previews {
+		if p != "" && p != summary {
+			t.Fatalf("unexpected preview %q — only a bare chip or the summary is allowed, never raw reasoning (all: %v)", p, previews)
+		}
 	}
 }
 
@@ -79,7 +88,7 @@ func TestEmitThinkingSteadySummaryNoRawFlash(t *testing.T) {
 	const summary = "지난 3개월 거래 내역과 계좌 변경 여부를 대조하는 중"
 
 	sb := NewBroadcaster(thinkingPreviewSink(&previews, &mu, summary, hit, &once, 1), "s1", "r1")
-	sb.SetThinkingSummarizer(func(string) (string, bool) { return summary, true })
+	sb.SetThinkingSummarizer(func(_, _ string) (string, bool) { return summary, true })
 
 	sb.EmitThinking("발신자 주소를 확인하고 과거 거래 이력을 대조해야 한다. 계좌 변경 여부를 본다. ")
 	select {
@@ -108,12 +117,73 @@ func TestEmitThinkingSteadySummaryNoRawFlash(t *testing.T) {
 	}
 }
 
+// The advance gate makes a landed summary linger: a second window with only a
+// sliver of new reasoning must NOT re-run the tiny model (a calmer chip, no
+// paraphrasing an unchanged tail).
+func TestEmitThinkingAdvanceGateLingersSummary(t *testing.T) {
+	var calls atomic.Int64
+	var mu sync.Mutex
+	var previews []string
+	hit := make(chan struct{})
+	var once sync.Once
+	const summary = "지난 거래 대조 중"
+
+	sb := NewBroadcaster(thinkingPreviewSink(&previews, &mu, summary, hit, &once, 1), "s1", "r1")
+	sb.SetThinkingSummarizer(func(_, _ string) (string, bool) {
+		calls.Add(1)
+		return summary, true
+	})
+
+	// First window: plenty of new reasoning → the summarizer runs and lands.
+	sb.EmitThinking("발신자 주소를 확인하고 과거 거래 이력을 대조해야 한다. 계좌 변경 여부를 확인한다. ")
+	select {
+	case <-hit:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first summary never landed")
+	}
+
+	// Reopen the window but add only a sliver of new reasoning (< advance gate).
+	sb.lastThinkingNs.Store(0)
+	sb.EmitThinking("음 ")
+
+	time.Sleep(100 * time.Millisecond) // let any erroneously-spawned summary run
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("summarizer ran %d times; want 1 — a barely-advanced tail must not re-run it", got)
+	}
+}
+
+// EmitToolStart's action context reaches the summarizer, so the progress line can
+// name the real action instead of only the model's internal musing.
+func TestEmitThinkingSummarizerReceivesRecentTools(t *testing.T) {
+	gotTools := make(chan string, 1)
+	sb := NewBroadcaster(func(string, []byte) int { return 1 }, "s1", "r1")
+	sb.SetThinkingSummarizer(func(_, tools string) (string, bool) {
+		select {
+		case gotTools <- tools:
+		default:
+		}
+		return "요약", true
+	})
+
+	sb.EmitToolStart("web_search", "t1", "삼성전자 실적")
+	sb.EmitThinking("검색 결과를 살펴보고 지난 거래와 대조해야 한다. 계좌 변경 여부를 확인한다. ")
+
+	select {
+	case tools := <-gotTools:
+		if !strings.Contains(tools, "web_search") || !strings.Contains(tools, "삼성전자 실적") {
+			t.Fatalf("summarizer tools = %q; want it to include the recent tool name + detail", tools)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("summarizer was never called")
+	}
+}
+
 // With no subscribers (broadcastRaw returns 0), the model summarizer must not be
 // spent on an unwatched run.
 func TestEmitThinkingSummarizerSkippedWithoutSubscribers(t *testing.T) {
 	called := make(chan struct{}, 1)
 	sb := NewBroadcaster(func(string, []byte) int { return 0 }, "s1", "r1")
-	sb.SetThinkingSummarizer(func(string) (string, bool) {
+	sb.SetThinkingSummarizer(func(_, _ string) (string, bool) {
 		select {
 		case called <- struct{}{}:
 		default:
