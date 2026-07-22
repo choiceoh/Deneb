@@ -39,6 +39,36 @@ class AttachmentRouteTest {
     }
 
     @Test
+    fun documentCaptureMimePdfAnnouncesPdf() {
+        assertEquals("application/pdf", documentCaptureMime("contract.pdf"))
+        assertEquals("application/pdf", documentCaptureMime("CONTRACT.PDF"))
+    }
+
+    @Test
+    fun documentCaptureMimeTextAndCodeStayTextPlain() {
+        // The gateway's isTextFile list is narrower than our text set, so code/text
+        // files NEED the hint to be read as text rather than declined as unsupported.
+        for (name in listOf("notes.txt", "README.md", "data.csv", "Main.kt", "app.py", "hooks.ts", "server.go")) {
+            assertEquals("text/plain", documentCaptureMime(name), name)
+        }
+    }
+
+    @Test
+    fun documentCaptureMimeBinaryDocsSendNoHintSoGatewayRoutesByFilename() {
+        // OOXML + the host-converted formats (HWP / legacy Office / ODF) must NOT be
+        // labeled text/plain — that short-circuits the gateway to its plain-text
+        // branch and reads the binary as garbage before the converter runs.
+        for (name in listOf(
+            "report.docx", "sheet.xlsx", "deck.pptx",
+            "old.doc", "old.xls", "old.ppt", "memo.rtf",
+            "doc.odt", "sheet.ods", "deck.odp",
+            "계약서.hwp", "계약서.hwpx",
+        )) {
+            assertEquals("", documentCaptureMime(name), name)
+        }
+    }
+
+    @Test
     fun withoutCapturesEverythingAttaches() {
         // Desktop/iOS (no capture launchers): images and audio attach like any file.
         for (ext in listOf("jpg", "png", "m4a", "mp3", "pdf", "txt")) {
