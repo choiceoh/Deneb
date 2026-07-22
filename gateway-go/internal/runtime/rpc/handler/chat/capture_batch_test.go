@@ -140,6 +140,43 @@ func TestCaptureBatchAllUnreadableIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestCaptureBatchUsesSummaryPreviewWhenWired(t *testing.T) {
+	deps, runs, msg := batchDeps(true)
+	deps.SummarizePreview = func(_ context.Context, name, _ string) string {
+		return "주제: " + name + " 요약\n- 핵심 사실"
+	}
+	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	req := batchRequest(t, []map[string]any{
+		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
+	}, "")
+
+	resp := handler(context.Background(), req)
+	if !resp.OK || *runs != 1 {
+		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	}
+	if !strings.Contains(*msg, "주제: report.pdf 요약") {
+		t.Errorf("preview should be the tiny-model summary, got:\n%s", *msg)
+	}
+}
+
+func TestCaptureBatchFallsBackToFrontCutWhenSummaryEmpty(t *testing.T) {
+	deps, runs, msg := batchDeps(true)
+	// Local model down/gated → SummarizePreview returns "" → front-cut fallback.
+	deps.SummarizePreview = func(context.Context, string, string) string { return "" }
+	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	req := batchRequest(t, []map[string]any{
+		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
+	}, "")
+
+	resp := handler(context.Background(), req)
+	if !resp.OK || *runs != 1 {
+		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	}
+	if !strings.Contains(*msg, "문서 추출 텍스트: report.pdf") {
+		t.Errorf("empty summary should fall back to the front-cut preview, got:\n%s", *msg)
+	}
+}
+
 func TestCaptureBatchMissingFilesRejected(t *testing.T) {
 	deps, _, _ := batchDeps(true)
 	handler := MiniappMethods(deps)["miniapp.capture.batch"]

@@ -283,3 +283,68 @@ func truncateWithNotice(runes []rune, inlineCap int, reason string, src digestSo
 	}
 	return string(runes[:inlineCap]) + notice
 }
+
+// Attachment preview: the batch-capture pointer turn lists each archived file
+// with a short preview so the agent can decide whether to open it. A raw front-
+// of-text cut wastes those runes on a header/boilerplate; a compact tiny-model
+// summary is representative instead. Input to the model is bounded to a proven-
+// safe head (a digest chunk's size) so a huge file can't blow the tiny model's
+// context, and the summary itself is rune-capped near ~1000자.
+const (
+	previewSummaryInputRunes = 20_000
+	previewSummaryTokens     = 800
+	previewSummaryRuneCap    = 1_100
+)
+
+const previewSummaryPrompt = "너는 첨부 파일 미리보기 요약기다. 파일 내용을 한국어로 약 1000자 이내로 요약한다. " +
+	"첫 줄은 반드시 '주제: <이 파일이 무엇인지 한 줄>' 형식으로 쓰고, 그다음 줄부터 핵심 사실만 불릿으로 압축한다. " +
+	"수치·금액·날짜·기간·고유명사·조항 번호는 원문 그대로 보존한다. 해석·추측·서론 없이 내용만 출력한다."
+
+// SummarizeAttachmentPreview returns a compact (~1000자) local tiny-model summary
+// of an attachment's extracted text, for the batch-capture pointer turn — a
+// representative preview in place of a raw front-of-text cut. Returns "" when the
+// local model is unavailable (down/gated) or the summary fails/empties, so the
+// caller falls back to its own front-cut preview.
+func SummarizeAttachmentPreview(ctx context.Context, name, text string) string {
+	if pilot.LocalAIRecentlyDown() {
+		return ""
+	}
+	return summarizeAttachmentPreview(ctx, name, text, defaultChunkSummarizer())
+}
+
+// summarizeAttachmentPreview is the summarizer-injected core (testable without a
+// live local model). Text already within the preview budget is returned verbatim
+// (normalized) — a summary would only lose fidelity; a nil summarizer or a
+// failed/empty call yields "" so the caller front-cuts instead.
+func summarizeAttachmentPreview(ctx context.Context, name, text string, summarize chunkSummarizer) string {
+	text = wiki.NormalizeCaptureText(text)
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= previewSummaryRuneCap {
+		return text // short enough to show whole — verbatim beats a lossy summary
+	}
+	if summarize == nil {
+		return ""
+	}
+	input, extent := text, ""
+	if len(runes) > previewSummaryInputRunes {
+		input = string(runes[:previewSummaryInputRunes])
+		extent = fmt.Sprintf(" (전체 %d자 중 앞부분)", len(runes))
+	}
+	user := fmt.Sprintf("첨부 파일 「%s」의 내용%s:\n\n%s", name, extent, input)
+	out, err := summarize(ctx, previewSummaryPrompt, user, previewSummaryTokens)
+	if err != nil {
+		slog.Warn("attachment preview summary failed", "file", name, "error", err)
+		return ""
+	}
+	summary := strings.TrimSpace(out)
+	if summary == "" || summary == "(no response from local model)" {
+		return ""
+	}
+	if r := []rune(summary); len(r) > previewSummaryRuneCap {
+		summary = string(r[:previewSummaryRuneCap]) + "…"
+	}
+	return summary
+}
