@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.131.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.130.0...deneb-v4.131.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **gateway:** route autonomous work to an isolated submain lane ([#4137](https://github.com/choiceoh/Deneb/issues/4137)) ([6cf4113](https://github.com/choiceoh/Deneb/commit/6cf4113be1f728b5aae6205c6d6c33de6b218722))
+* **notebook:** one-click 딜 페이지 담기 grounding + deal-notebook onboarding ([#4136](https://github.com/choiceoh/Deneb/issues/4136)) ([77df43b](https://github.com/choiceoh/Deneb/commit/77df43b28d5afd797d98abc4046b1f103659449c))
+
+
+### 🐛 Bug Fixes
+
+* **browser:** 대형 SPA(레딧) 번역 시 스크롤 프리즈 제거 ([#4140](https://github.com/choiceoh/Deneb/issues/4140)) ([7fe40ee](https://github.com/choiceoh/Deneb/commit/7fe40eee34b1951c67214b659a2bda50af67d2a6))
+
 ## [4.130.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.129.0...deneb-v4.130.0) (2026-07-22)
 
 
