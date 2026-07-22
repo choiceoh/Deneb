@@ -81,6 +81,19 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 남은 의도적 콜드 (수용): 지연 도구 활성화(위 1), ephemeral 하트비트 트리거 메시지(비영속이라 다음 런 리로드에 없음), polaris 런 경계 압축(§5 공인 예외), 이미지 런의 `StripImagesAfterFirstTurn`.
 
+### 실측 상태 (2026-07-22) — Deneb 조립은 인터랙티브 핫패스에서 무죄
+
+7일 저널상 kimi within-run stall 이 60–87% 로 커 보였으나, **두 실측이 Deneb 조립을 무죄로 확정**했다. "kimi 캐시가 깨진다"는 지표를 다시 만나면 아래를 먼저 읽고 재조사하지 말 것.
+
+1. **within-run 은 프로바이더 측 (게이트웨이 무죄).** 결정적 테스트 `internal/ai/agent/executor_prefix_stability_test.go`: `DisablePriorToolResultCompaction=true`(위 2) 에서 대형 tool_result 멀티턴 루프의 매 요청이 직전 턴의 **엄격한 바이트 프리픽스 확장**(append-only). 대조군(게이트 off)은 in-place 변이를 탐지 → 위음성 아님. **프로덕션 within-run stall = kimi implicit-cache 의 write 전파 지연**(턴 N 쓰기가 초 단위 뒤 턴 N+1 에 아직 안 읽힘) + 느린 런 TTL. Deneb 밖 (kimi 서빙). 이 테스트는 게이트(위 2)의 회귀 가드이기도 하다.
+2. **런 경계 인터랙티브는 건강.** dev 게이트웨이 한 세션 2메시지 실측: run2 `class=append-only`, `sysDivergedAt=−1`(시스템 불변), `recallChanged=true`, **실제 `cacheReadTokens=41984`**(런 경계 42K 히트). **회상이 바뀌어도 append-only** = 회상=user 꼬리 + `tail_register` 재부착이 완벽 작동. 프로덕션의 `system-changed` 다수는 정상 인터랙티브가 아니라 자정 롤오버·ephemeral·배포 재시작(대체로 무해).
+
+**진단 플레이북** (재조사 대신 이 순서로 관측):
+- 런 경계 분류: `beginAPCDiag`(`chat/apc_diag.go`)의 `apc diag` 로그 라인 — `session`·`model`·`class`(append-only/history-mutated/system-changed)·`sysDivergedAt`(시스템 변경 시 첫 상이 바이트 오프셋: head=정적 회귀=나쁨, tail=day-only 타임스탬프=예상됨). 저널: `journalctl --user -u deneb-gateway | grep "apc diag"`.
+- within-run 프리픽스 안정성: 위 결정적 테스트 (라이브 불필요, 프로바이더 무관).
+- 라이브 재현: `live-test.sh restart` → mock_native_client 한 연결로 2 chat(같은 세션) → `logs-grep "apc diag"` + `grep cacheReadTokens`. (단발 `live-test.sh chat` 은 매번 새 `client:lt-*` 세션이라 런 경계 비교 불가.)
+- ⚠️ **`client:lt-*` 세션은 캐시/CPM 지표에서 제외**(라이브테스트 합성, 연속성 0). `cache_cost_audit.py`·`rsi_bench/token_economics.py` 가 스킵(Go `aggregate_failed.go` 미러).
+
 ---
 
 ## 2. 불가침 3원칙
