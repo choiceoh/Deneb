@@ -188,6 +188,22 @@ class ReportFromFixture(unittest.TestCase):
         self.assertEqual(report.files, 1)
         self.assertEqual(report.models["kimi/k3"].runs, 1)
 
+    def test_live_test_sessions_excluded(self) -> None:
+        # client:lt-* are mock-native-client smokes: fresh sessions with no cache
+        # continuity that crater the blended reuse numbers. Skipped unconditionally
+        # (before any session_prefix), mirroring the Go aggregators (aggregate_failed.go).
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "client:main.jsonl").write_text(
+                run_start(1000, "r1") + "\n" + turn_llm(1001, "r1", 1, 100) + "\n"
+            )
+            Path(tmp, "client:lt-999.jsonl").write_text(
+                run_start(1000, "r2") + "\n" + turn_llm(1001, "r2", 1, 9999) + "\n"
+            )
+            report = audit.build_report(Path(tmp), since_days=0)
+        self.assertEqual(report.files, 1)  # lt- file skipped
+        self.assertEqual(report.models["kimi/k3"].runs, 1)  # only the real run
+        self.assertEqual(report.models["kimi/k3"].uncached, 100)  # lt-'s 9999 excluded
+
 
 class CliContract(unittest.TestCase):
     def test_text_and_json_render(self) -> None:

@@ -90,6 +90,30 @@ class TokenEconomicsTests(unittest.TestCase):
         self.assertEqual(te.completed_tasks, 1)  # old run.end excluded
         self.assertEqual(te.work_tokens, 150)  # only the in-window turn
 
+    def test_live_test_sessions_excluded(self) -> None:
+        # Mock-native-client smokes (client:lt-*) are fresh sessions with no cache
+        # continuity; counting them craters cacheHit and skews CPM. The Go aggregators
+        # skip this prefix (aggregate_failed.go) — this readout must too.
+        now = int(time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = Path(tmp)
+            logs.mkdir(parents=True, exist_ok=True)
+            (logs / "client:main-real.jsonl").write_text(
+                json.dumps(_turn("r1", ts=now, inp=100, out=50, cread=900)) + "\n"
+                + json.dumps(_run_end("r1", ts=now)) + "\n",
+                encoding="utf-8",
+            )
+            (logs / "client:lt-999.jsonl").write_text(
+                json.dumps(_turn("r2", ts=now, inp=5000, out=5, cread=0)) + "\n"
+                + json.dumps(_run_end("r2", ts=now)) + "\n",
+                encoding="utf-8",
+            )
+            te = load_token_economics(logs, days=7)
+
+        self.assertEqual(te.completed_tasks, 1)  # only the real session's run.end
+        self.assertEqual(te.input_tokens, 100)  # live-test's 5000 excluded
+        self.assertAlmostEqual(te.cache_hit, 0.9, places=3)  # not dragged down by lt- 0-cache turn
+
     def test_unmeasured_when_no_logs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             te = load_token_economics(Path(tmp) / "missing", days=7)
