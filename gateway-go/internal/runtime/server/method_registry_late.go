@@ -49,8 +49,14 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 		// standalone app drive a turn over the miniapp.* RPC surface via
 		// SendSync, with deneb-ui emission enabled (channel "client").
 		handlerchat.MiniappMethods(handlerchat.Deps{
-			Chat:       s.chatHandler,
-			OcrImage:   toolbind.OCRImage,
+			Chat:     s.chatHandler,
+			OcrImage: toolbind.OCRImage,
+			// Image understanding: the vision-capable model chain (main model →
+			// dedicated vision model) describes the image, falling back to OcrImage
+			// glyph extraction — richer than OCR-only for charts/diagrams/photos.
+			DescribeImage: func(ctx context.Context, img []byte, mime string) string {
+				return chat.DescribeCapturedImage(ctx, img, mime, toolbind.OCRImage)
+			},
 			Transcribe: toolbind.TranscribeAudio,
 			// Document attach (pdf/doc/sheet) → in-house extractor (PDF/Excel/Word/
 			// PowerPoint/CSV/text, with a scanned-PDF / image OCR fallback).

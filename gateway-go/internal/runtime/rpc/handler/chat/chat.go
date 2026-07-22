@@ -37,6 +37,12 @@ type Deps struct {
 	// OcrImage OCRs a directly-shared image (native-client image capture).
 	// Optional; nil disables miniapp.capture.image.
 	OcrImage func(ctx context.Context, img []byte) (string, error)
+	// DescribeImage understands a directly-shared image via the vision-capable
+	// model chain (main model → dedicated vision model), falling back to OcrImage
+	// glyph extraction when no vision model is available or the describe fails — so
+	// a chart/diagram/photo/handwriting is described, not flattened to sparse OCR
+	// text. Optional; nil keeps the OCR-only image path.
+	DescribeImage func(ctx context.Context, img []byte, mime string) string
 	// Transcribe transcribes a directly-shared audio recording (native-client
 	// voice/meeting capture) via the ASR sidecar (MOSS-Transcribe-Diarize). hotwords is an
 	// optional proper-noun bias list. Optional; nil disables miniapp.capture.audio.

@@ -194,12 +194,20 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if err != nil || len(img) == 0 {
 			return rpcerr.InvalidParams(fmt.Errorf("image is not valid base64")).Response(req.ID)
 		}
-		text, err := deps.OcrImage(ctx, img)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("image OCR failed", err).Response(req.ID)
+		// Prefer vision understanding (chart/diagram/photo), which internally falls
+		// back to OCR; only when no describe capability is wired do we OCR directly.
+		var text string
+		if deps.DescribeImage != nil {
+			text = deps.DescribeImage(ctx, img, p.MimeType)
+		} else {
+			ocrText, err := deps.OcrImage(ctx, img)
+			if err != nil {
+				return rpcerr.WrapDependencyFailed("image OCR failed", err).Response(req.ID)
+			}
+			text = ocrText
 		}
 		if strings.TrimSpace(text) == "" {
-			return rpcerr.Unavailable("no text found in image").Response(req.ID)
+			return rpcerr.Unavailable("이미지에서 이해할 내용을 찾지 못했습니다").Response(req.ID)
 		}
 		sessionKey := DefaultSessionKey(p.SessionKey)
 		var savedPath string
@@ -378,6 +386,15 @@ func previewText(text string, n int) string {
 func extractBatchFile(ctx context.Context, deps Deps, data []byte, filename, mime string) (kindLabel, storeKind, text string, err error) {
 	switch {
 	case strings.HasPrefix(mime, "image/"):
+		// Prefer vision understanding (chart/diagram/photo), which internally falls
+		// back to OCR; only when no describe capability is wired do we OCR directly.
+		if deps.DescribeImage != nil {
+			text = deps.DescribeImage(ctx, data, mime)
+			if strings.TrimSpace(text) == "" {
+				return "이미지", "image", "", fmt.Errorf("이미지에서 이해할 내용을 찾지 못함")
+			}
+			return "이미지", "image", text, nil
+		}
 		if deps.OcrImage == nil {
 			return "이미지", "image", "", fmt.Errorf("이미지 OCR 미지원")
 		}

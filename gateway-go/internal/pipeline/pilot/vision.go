@@ -17,6 +17,8 @@ package pilot
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -59,6 +61,21 @@ func CallVisionLLM(ctx context.Context, system, userText string, frames []Vision
 	ctx, cancel := context.WithTimeout(ctx, visionTimeout)
 	defer cancel()
 
+	text, err := streamVision(ctx, client, model, system, userText, frames, maxTokens)
+	if err != nil {
+		return "", err
+	}
+	if text == "" {
+		return "", fmt.Errorf("empty response from vision model")
+	}
+	return text, nil
+}
+
+// streamVision assembles the multimodal request (text prompt + inline base64
+// image blocks) and returns the collected reply. Timeout is the caller's
+// responsibility (it already bounds ctx). Shared by CallVisionLLM and the
+// role-pinned attachment describe path.
+func streamVision(ctx context.Context, client *llm.Client, model, system, userText string, frames []VisionFrame, maxTokens int) (string, error) {
 	blocks := make([]llm.ContentBlock, 0, len(frames)+1)
 	if userText != "" {
 		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: userText})
@@ -90,15 +107,72 @@ func CallVisionLLM(ctx context.Context, system, userText string, frames []Vision
 	if err != nil {
 		return "", fmt.Errorf("vision stream: %w", err)
 	}
+	return CollectStream(ctx, events)
+}
 
-	text, err := CollectStream(ctx, events)
-	if err != nil {
-		return "", err
+// visionDescribeTimeout bounds a single attached-image describe call — one image,
+// so much tighter than the video-frame visionTimeout, but still generous for a
+// slow VLM. In a batch each image describe runs under this bound independently.
+const visionDescribeTimeout = 90 * time.Second
+
+// DescribeImage returns a text understanding of one attached image, trying the
+// vision-capable model chain in order — the MAIN model first (the smartest, and
+// its read integrates with the analysis that follows) when it accepts images,
+// then the dedicated RoleVision model — and returns "" when neither is available
+// or every attempt fails/empties. The caller (attachment capture) then falls back
+// to OCR. system is the describe instruction; imageBase64 is the raw image.
+func DescribeImage(ctx context.Context, system, userText, mimeType, imageBase64 string, maxTokens int) string {
+	if imageBase64 == "" {
+		return ""
 	}
-	if text == "" {
-		return "", fmt.Errorf("empty response from vision model")
+	frames := []VisionFrame{{MimeType: mimeType, Base64: imageBase64}}
+	for _, role := range visionDescribeRoles() {
+		out, err := callVisionRole(ctx, role, system, userText, frames, maxTokens)
+		if err != nil {
+			slog.Warn("image describe: role failed", "role", role, "error", err)
+			continue
+		}
+		if out = strings.TrimSpace(out); out != "" {
+			return out
+		}
 	}
-	return text, nil
+	return ""
+}
+
+// visionDescribeRoles is the ordered role chain for describing an attached image:
+// the main model first (only when it is known to accept images — a model marked
+// vision:false in the catalog is skipped so we don't waste a doomed call), then
+// the dedicated vision role when configured. An unconfigured role is skipped.
+func visionDescribeRoles() []modelrole.Role {
+	if pkgRegistry == nil {
+		return nil
+	}
+	var roles []modelrole.Role
+	if main := pkgRegistry.Config(modelrole.RoleMain); main.Model != "" {
+		if !pkgRegistry.CapabilityForModel(main.ProviderID, main.Model).NoVision {
+			roles = append(roles, modelrole.RoleMain)
+		}
+	}
+	if pkgRegistry.Client(modelrole.RoleVision) != nil {
+		roles = append(roles, modelrole.RoleVision)
+	}
+	return roles
+}
+
+// callVisionRole issues a vision request to a SPECIFIC role's client with no
+// fall-through, so DescribeImage owns the chain order (unlike CallVisionLLM,
+// whose visionClientAndModel picks one role). Errors when the role has no client.
+func callVisionRole(ctx context.Context, role modelrole.Role, system, userText string, frames []VisionFrame, maxTokens int) (string, error) {
+	if pkgRegistry == nil {
+		return "", fmt.Errorf("no model registry")
+	}
+	client := pkgRegistry.Client(role)
+	if client == nil {
+		return "", fmt.Errorf("role %s has no client", role)
+	}
+	ctx, cancel := context.WithTimeout(ctx, visionDescribeTimeout)
+	defer cancel()
+	return streamVision(ctx, client, pkgRegistry.Model(role), system, userText, frames, maxTokens)
 }
 
 // visionClientAndModel returns the configured vision model client and its model
