@@ -48,7 +48,7 @@ export function AIPanel({
   // 셀이 정하므로 width/flex를 지정하지 않고, 넓어진 만큼 대화 폭을 가독성 있게 가운데 정렬한다.
   placement?: "side" | "bottom";
 }) {
-  const { connected, noteSink, setAskSink, followMode } = useWorkspace();
+  const { connected, noteSink, setAskSink, publishAnswer, followMode } = useWorkspace();
   const { aiText, activeResource } = useAiFeed();
   const {
     thinking,
@@ -173,6 +173,16 @@ export function AIPanel({
   // Only the newest answer's cards may talk back to the agent (native parity);
   // older cards stay explorable but their callbacks/inputs lock.
   const lastAssistantId = [...turns].reverse().find((t) => t.role === "assistant")?.id;
+
+  // Publish each finished assistant answer once (by id) so an observing pane — the
+  // notebook — can react, e.g. highlight the source cites [S1]… the answer used.
+  const publishedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (last?.role === "assistant" && last.status === "done" && last.id && last.id !== publishedRef.current) {
+      publishedRef.current = last.id;
+      publishAnswer(last.text);
+    }
+  }, [last?.id, last?.status, last?.role, last?.text, publishAnswer]);
 
   const bottom = placement === "bottom";
   return (

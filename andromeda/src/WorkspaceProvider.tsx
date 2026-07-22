@@ -112,6 +112,16 @@ export function WorkspaceProvider({
     sink(text);
     return true;
   }, []);
+  // Reverse of askDeneb: the AI panel PUBLISHES each finished answer; a pane (the
+  // notebook) OBSERVES to react (highlight the sources the answer cited). Ref-held
+  // so publishing never re-renders the shell.
+  const answerSinkRef = useRef<((text: string) => void) | null>(null);
+  const setAnswerSink = useCallback((sink: ((text: string) => void) | null) => {
+    answerSinkRef.current = sink;
+  }, []);
+  const publishAnswer = useCallback((text: string) => {
+    answerSinkRef.current?.(text);
+  }, []);
 
   const toggleViewHidden = useCallback((v: View) => {
     if (v === "settings") return; // settings stays — it's the way back to this screen
@@ -335,6 +345,8 @@ export function WorkspaceProvider({
       setAiCollapsed,
       askDeneb,
       setAskSink,
+      publishAnswer,
+      setAnswerSink,
       paneTarget,
       openPane,
       consumePaneTarget,
@@ -372,6 +384,8 @@ export function WorkspaceProvider({
       aiCollapsed,
       askDeneb,
       setAskSink,
+      publishAnswer,
+      setAnswerSink,
       paneTarget,
       openPane,
       consumePaneTarget,

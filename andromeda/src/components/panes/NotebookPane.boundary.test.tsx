@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -337,6 +338,51 @@ describe("NotebookPane boundary behavior", () => {
         title: "마감 일정",
       });
       expect((await screen.findAllByText("마감 일정")).length).toBeGreaterThan(0);
+    });
+
+    it("브리핑 asks the docked chat for a grounded briefing over the notebook", async () => {
+      const asked: string[] = [];
+      function AskProbe() {
+        const { setAskSink } = useWorkspace();
+        useEffect(() => {
+          setAskSink((t) => asked.push(t));
+          return () => setAskSink(null);
+        }, [setAskSink]);
+        return null;
+      }
+      renderWithProviders(
+        <>
+          <NotebookPane />
+          <AskProbe />
+        </>,
+        { connected: true, cfg: { url: "http://test", token: "tok" } },
+      );
+      await screen.findByRole("heading", { name: "최신 노트북" });
+      await userEvent.click(screen.getByRole("button", { name: "브리핑" }));
+      expect(asked).toHaveLength(1);
+      expect(asked[0]).toContain("최신");
+      expect(asked[0]).toContain("[S번호]");
+    });
+
+    it("lights up the chips an answer cited ([S1]…)", async () => {
+      function AnswerProbe() {
+        const { publishAnswer } = useWorkspace();
+        return <button onClick={() => publishAnswer("잔금은 [S1]에 있고 계약서는 [S3] 참고.")}>emit</button>;
+      }
+      renderWithProviders(
+        <>
+          <NotebookPane />
+          <AnswerProbe />
+        </>,
+        { connected: true, cfg: { url: "http://test", token: "tok" } },
+      );
+      await screen.findByRole("heading", { name: "최신 노트북" });
+      // No highlight before any answer.
+      expect(screen.queryAllByTitle("최근 답변이 인용한 자료")).toHaveLength(0);
+
+      await userEvent.click(screen.getByRole("button", { name: "emit" }));
+      // S1 (직접 메모) and S3 (계약서) chips light up; S2/S4 stay dim.
+      await waitFor(() => expect(screen.getAllByTitle("최근 답변이 인용한 자료")).toHaveLength(2));
     });
 
     it("toggles the same source closed when its chip is clicked twice", async () => {
