@@ -57,17 +57,26 @@ func DefaultContextConfig() ContextConfig {
 		FreshTailCount:     defaultFreshTailCount,
 	}
 	if raw := os.Getenv("DENEB_MEMORY_TOKEN_BUDGET"); raw != "" {
-		v, err := strconv.ParseUint(raw, 10, 64)
-		// Reject values that cannot convert to int (AssembleContext) or int64
-		// (status/token UI) without truncating.
-		if err != nil || v < cfg.SystemPromptBudget+minMemoryBudgetHeadroom || v > uint64(math.MaxInt) {
+		// ParseInt (not ParseUint) so the value is already bounded to signed
+		// int64 — CodeQL's incorrect-integer-conversion tracks ParseUint→int.
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || v < 0 || uint64(v) < cfg.SystemPromptBudget+minMemoryBudgetHeadroom || v > math.MaxInt {
 			slog.Warn("DENEB_MEMORY_TOKEN_BUDGET ignored",
 				"value", raw, "minimum", cfg.SystemPromptBudget+minMemoryBudgetHeadroom, "error", err)
 		} else {
-			cfg.MemoryTokenBudget = v
+			cfg.MemoryTokenBudget = uint64(v) //nolint:gosec // G115 — v checked against MaxInt above
 		}
 	}
 	return cfg
+}
+
+// uint64ToInt converts v to int only after an explicit MaxInt upper bound check
+// (CodeQL go/incorrect-integer-conversion sanitizer shape).
+func uint64ToInt(v uint64) (int, error) {
+	if v > uint64(math.MaxInt) {
+		return 0, fmt.Errorf("%d exceeds int range", v)
+	}
+	return int(v), nil
 }
 
 // assembleContext builds the LLM context via the Polaris summary DAG.
@@ -82,17 +91,18 @@ func assembleContext(
 	cfg ContextConfig,
 	logger *slog.Logger,
 ) (*AssemblyResult, error) {
-	if cfg.MemoryTokenBudget > uint64(math.MaxInt) {
-		return nil, fmt.Errorf("chat: memory token budget %d exceeds int range", cfg.MemoryTokenBudget)
+	memBudget, err := uint64ToInt(cfg.MemoryTokenBudget)
+	if err != nil {
+		return nil, fmt.Errorf("chat: memory token budget: %w", err)
 	}
-	// FreshTailCount is uint32; on 32-bit int platforms reject the impossible tail.
-	if uint64(cfg.FreshTailCount) > uint64(math.MaxInt) {
-		return nil, fmt.Errorf("chat: fresh tail count %d exceeds int range", cfg.FreshTailCount)
+	freshTail, err := uint64ToInt(uint64(cfg.FreshTailCount))
+	if err != nil {
+		return nil, fmt.Errorf("chat: fresh tail count: %w", err)
 	}
 	result, err := bridge.AssembleContext(
 		sessionKey,
-		int(cfg.MemoryTokenBudget),
-		int(cfg.FreshTailCount),
+		memBudget,
+		freshTail,
 		logger,
 	)
 	if err != nil {
