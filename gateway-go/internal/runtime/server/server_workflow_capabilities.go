@@ -135,7 +135,11 @@ func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
 		SelfImproveEvidence:       s.selfCodingFailureEvidence,
 		IdleSkillReview:           s.idleSkillReviewLaneIfProduction(homeDir),
 		Model:                     s.submainRoleIfConfigured(),
-		Deliver:                   func(text string) (bool, error) { return s.proactiveRelay.RelayNative(text) },
+		Deliver: func(text string) (bool, error) {
+			return s.proactiveRelay.RelayNativeToOptions("", text, proactive.Options{
+				SkipContentlessSuppression: true,
+			})
+		},
 	}))
 }
 

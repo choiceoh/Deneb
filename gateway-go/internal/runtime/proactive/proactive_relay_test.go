@@ -422,6 +422,48 @@ func TestIsContentlessProactiveFlagsEmptyReports(t *testing.T) {
 	}
 }
 
+// Heartbeat delivery (#4137) routes exclusively through the proactive relay.
+// Single-line mixed reports ("메일 알림 없음, 결재 2건 확인 필요") match a
+// contentless fragment but carry actionable content — SkipContentlessSuppression
+// lets heartbeat honor its NO_REPLY contract without dropping these.
+func TestRelayNativeToOptions_SkipContentlessSuppressionDeliversMixedHeartbeatLine(t *testing.T) {
+	mixed := "메일 알림 없음, 결재 2건 확인 필요"
+	if !isContentlessProactive(mixed) {
+		t.Fatal("precondition: mixed single-line report matches contentless fragment")
+	}
+	feed := &recordingWorkFeed{}
+	d := proactiveRelayDeps{transcriptStore: newRecordingTranscriptStore(), workFeed: feed}
+	delivered, err := d.RelayNativeToOptions("", mixed, Options{SkipContentlessSuppression: true})
+	if err != nil {
+		t.Fatalf("RelayNativeToOptions: %v", err)
+	}
+	if !delivered {
+		t.Fatal("delivered=false, want true when SkipContentlessSuppression is set")
+	}
+	if len(feed.items) != 1 {
+		t.Fatalf("work-feed items = %d, want 1", len(feed.items))
+	}
+	if feed.items[0].Body != mixed {
+		t.Errorf("body = %q, want %q", feed.items[0].Body, mixed)
+	}
+}
+
+func TestRelayNativeToOptions_ContentlessMixedLineSuppressedByDefault(t *testing.T) {
+	mixed := "메일 알림 없음, 결재 2건 확인 필요"
+	feed := &recordingWorkFeed{}
+	d := proactiveRelayDeps{transcriptStore: newRecordingTranscriptStore(), workFeed: feed}
+	delivered, err := d.RelayNativeToOptions("", mixed, Options{})
+	if err != nil {
+		t.Fatalf("RelayNativeToOptions: %v", err)
+	}
+	if delivered {
+		t.Fatal("delivered=true, want suppressed by default contentless filter")
+	}
+	if len(feed.items) != 0 {
+		t.Fatalf("work-feed items = %d, want 0", len(feed.items))
+	}
+}
+
 // TestRelay_ParsesTitleAndSummaryFromBody verifies the proactive relay
 // derives a human title + summary from the body (not the fixed "업무 리포트" +
 // first-line slice) and never leaks markdown markers into either field.

@@ -224,16 +224,21 @@ type proactiveRelayOptions struct {
 	refID            string
 	forceQuestion    bool
 	actions          []workfeed.Action
+	// skipContentlessSuppression bypasses the "nothing to report" fragment
+	// filter. Heartbeat delivery uses the NO_REPLY contract instead; mixed
+	// single-line reports must not be dropped because they mention "알림 없음".
+	skipContentlessSuppression bool
 }
 
 // Options carries source and transcript-mirroring metadata for an individual
 // proactive delivery.
 type Options struct {
-	WorkFeedSource   string
-	MirrorTranscript bool
-	RefID            string
-	ForceQuestion    bool
-	Actions          []workfeed.Action
+	WorkFeedSource             string
+	MirrorTranscript           bool
+	RefID                      string
+	ForceQuestion              bool
+	Actions                    []workfeed.Action
+	SkipContentlessSuppression bool
 }
 
 type preparedProactiveDelivery struct {
@@ -243,7 +248,7 @@ type preparedProactiveDelivery struct {
 	originalLength int
 }
 
-func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string) (preparedProactiveDelivery, bool) {
+func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string, opts proactiveRelayOptions) (preparedProactiveDelivery, bool) {
 	target := sessionKey
 	if target == "" {
 		target = nativeWorkSessionKey
@@ -266,7 +271,7 @@ func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string)
 		}
 		content = repairedContent
 	}
-	if isContentlessProactive(content) {
+	if !opts.skipContentlessSuppression && isContentlessProactive(content) {
 		d.logProactive("suppressed", "contentless", originalLength, pushPreview(content))
 		return preparedProactiveDelivery{}, false
 	}
@@ -300,7 +305,7 @@ func (d proactiveRelayDeps) relayNativeToOpts(sessionKey, content string, collap
 // card type even when the user-edited prompt no longer starts with a generic
 // "메일 분석 리포트" heading.
 func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opts proactiveRelayOptions) (bool, error) {
-	delivery, ok := d.prepareProactiveDelivery(sessionKey, content)
+	delivery, ok := d.prepareProactiveDelivery(sessionKey, content, opts)
 	if !ok {
 		return false, nil
 	}
@@ -463,11 +468,12 @@ func (d proactiveRelayDeps) RelayNative(content string) (bool, error) {
 // RelayNativeToOptions delivers content with explicit work-feed metadata.
 func (d proactiveRelayDeps) RelayNativeToOptions(sessionKey, content string, opts Options) (bool, error) {
 	return d.relayNativeToOptions(sessionKey, content, proactiveRelayOptions{
-		workFeedSource:   opts.WorkFeedSource,
-		mirrorTranscript: opts.MirrorTranscript,
-		refID:            opts.RefID,
-		forceQuestion:    opts.ForceQuestion,
-		actions:          opts.Actions,
+		workFeedSource:             opts.WorkFeedSource,
+		mirrorTranscript:           opts.MirrorTranscript,
+		refID:                      opts.RefID,
+		forceQuestion:              opts.ForceQuestion,
+		actions:                    opts.Actions,
+		skipContentlessSuppression: opts.SkipContentlessSuppression,
 	})
 }
 
