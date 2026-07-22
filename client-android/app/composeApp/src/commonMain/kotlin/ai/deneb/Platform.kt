@@ -65,7 +65,11 @@ expect val isEmailSupported: Boolean
  */
 expect val isSmsSupported: Boolean
 
-expect suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteArray
+// Downsample an image to at most maxDim on its longer side and re-encode as JPEG.
+// Default 2048px keeps a photographed document comfortably readable for the gateway's
+// OCR while cutting a 10-15MB camera shot to a few hundred KB. Non-image bytes pass
+// through unchanged.
+expect suspend fun compressImageBytes(bytes: ByteArray, mimeType: String, maxDim: Int = 2048): ByteArray
 
 expect fun openUrl(url: String): Boolean
 

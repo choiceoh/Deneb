@@ -89,12 +89,11 @@ actual val isEmailSupported: Boolean = true
 
 actual val isSmsSupported: Boolean = false
 
-actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String): ByteArray {
+actual suspend fun compressImageBytes(bytes: ByteArray, mimeType: String, maxDim: Int): ByteArray {
     if (!mimeType.startsWith("image/")) return bytes
     return try {
         val inputStream = java.io.ByteArrayInputStream(bytes)
         val image = javax.imageio.ImageIO.read(inputStream) ?: return bytes
-        val maxDim = 1024
         val scaled = if (image.width > maxDim || image.height > maxDim) {
             val scale = maxDim.toDouble() / maxOf(image.width, image.height)
             val newWidth = (image.width * scale).toInt()
