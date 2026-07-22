@@ -73,13 +73,21 @@ type Broadcaster struct {
 	// summarize, when set via SetThinkingSummarizer, refines the reasoning chip
 	// into a fast-model Korean progress line (Option A). It runs OFF the
 	// EmitThinking hot path (async, one-in-flight via summaryInFlight) so the
-	// agent loop never blocks on the model; a nil summarizer, a busy one, or an
-	// empty result leaves the deterministic cleanThinkingPreview chip in place —
-	// so absence of a summarizer is exactly the prior behavior. Set once after
-	// construction, before the run streams, so the plain field read in
-	// EmitThinking is ordered after the write on the run goroutine.
+	// agent loop never blocks on the model. Before the first summary lands (or
+	// with no summarizer wired) the deterministic cleanThinkingPreview chip shows
+	// — exactly the prior behavior; once one lands it is retained in lastSummary
+	// and shown steadily, so a busy/empty later window never flashes the raw
+	// preview back in. Set once after construction, before the run streams, so the
+	// plain field read in EmitThinking is ordered after the write on the run
+	// goroutine.
 	summarize       func(reasoningTail string) (string, bool)
 	summaryInFlight atomic.Bool
+	// lastSummary is the most recent fast-model Korean progress line. Once set,
+	// EmitThinking renders it as the steady chip on every throttle window instead
+	// of the raw reasoning preview, so a readable summary is never cut short by the
+	// raw reasoning peek flashing back in between refreshes. Guarded by lastSummaryMu.
+	lastSummaryMu sync.Mutex
+	lastSummary   string
 }
 
 // NewBroadcaster creates a new Broadcaster for a given session/run.
@@ -118,10 +126,15 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 	if !sb.lastThinkingNs.CompareAndSwap(last, now) {
 		return
 	}
-	// Deterministic chip first: instant, subscriber-counted, and the unchanged
-	// behavior when no summarizer is wired (or it is busy / fails below).
+	// Steady chip first: instant and subscriber-counted. Once a fast-model summary
+	// has landed we keep showing it — the raw reasoning peek must NOT flash back in
+	// between summaries (that made the summary "지나가서 읽기 힘든" chip). Before the
+	// first summary, or when no summarizer is wired / it is busy or fails below,
+	// this is the deterministic reasoning preview — the unchanged prior behavior.
 	payload := map[string]any{}
-	if preview := sb.thinkingPreview(); preview != "" {
+	if s := sb.currentSummary(); s != "" {
+		payload["preview"] = s
+	} else if preview := sb.thinkingPreview(); preview != "" {
 		payload["preview"] = preview
 	}
 	n := sb.emit(EventThinking, payload)
@@ -131,7 +144,8 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 	// (n > 0 — don't spend the local model on an unwatched run), and no summary
 	// is already running (one-in-flight so the tiny model never falls behind the
 	// throttle). A good result emits a second frame that supersedes the chip;
-	// anything else leaves the deterministic preview standing.
+	// anything else leaves the current chip standing (the steady summary, or the
+	// deterministic preview before the first summary has landed).
 	if sb.summarize == nil || n <= 0 {
 		return
 	}
@@ -146,6 +160,7 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 		if !ok || summary == "" {
 			return
 		}
+		sb.storeSummary(summary) // retained so later windows show it as the steady chip
 		sb.emit(EventThinking, map[string]any{"preview": summary})
 	}()
 }
@@ -185,6 +200,23 @@ func (sb *Broadcaster) reasoningTail() string {
 	sb.thinkingMu.Lock()
 	defer sb.thinkingMu.Unlock()
 	return string(sb.thinkingTail)
+}
+
+// currentSummary returns the most recent fast-model progress line, or "" before
+// the first one has landed (in which case EmitThinking falls back to the
+// deterministic reasoning preview).
+func (sb *Broadcaster) currentSummary() string {
+	sb.lastSummaryMu.Lock()
+	defer sb.lastSummaryMu.Unlock()
+	return sb.lastSummary
+}
+
+// storeSummary records the latest fast-model progress line so subsequent
+// throttle windows render it as the steady chip instead of the raw preview.
+func (sb *Broadcaster) storeSummary(s string) {
+	sb.lastSummaryMu.Lock()
+	sb.lastSummary = s
+	sb.lastSummaryMu.Unlock()
 }
 
 // SetThinkingSummarizer installs the optional model-backed refiner for the live
