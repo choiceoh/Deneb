@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.128.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.127.0...deneb-v4.128.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **capture:** convert HWP / legacy Office / ODF / video attachments to readable form ([#4104](https://github.com/choiceoh/Deneb/issues/4104)) ([4e50a60](https://github.com/choiceoh/Deneb/commit/4e50a60aa0c6ac5a37b6cd39e623c7c4d28f0e63))
+
+
+### 🐛 Bug Fixes
+
+* **regressionwatch:** dedupe standing regression warnings ([#4102](https://github.com/choiceoh/Deneb/issues/4102)) ([94825a9](https://github.com/choiceoh/Deneb/commit/94825a96eed79d9f1c76dc5bb495339c5ec5cf0b))
+
 ## [4.127.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.126.1...deneb-v4.127.0) (2026-07-22)
 
 
