@@ -88,6 +88,7 @@ type SyncRequest struct {
 	OnToolResult   func(name, toolUseID, result string, isErr bool)
 	OnToolEvent    func(ToolStreamEvent)
 	OnThinking     func(preview string)
+	OnReasoning    func(full string)
 }
 
 // SyncResult is a transport-neutral snapshot of a completed chat run.

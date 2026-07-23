@@ -105,14 +105,20 @@ export function AssistantBody({
   interactive?: boolean;
 }) {
   const parts = turn.parts;
-  // Reasoning rides above the answer once the turn is done (the live thinking
-  // preview owns the streaming phase).
-  const reasoning =
-    turn.status !== "streaming" && turn.reasoning?.trim() ? <ReasoningBlock text={turn.reasoning} /> : null;
+  // Reasoning block grows live while streaming (fed by the `reasoning` SSE frames)
+  // and settles on the done frame — it rides above the answer/status throughout.
+  const reasoning = turn.reasoning?.trim() ? <ReasoningBlock text={turn.reasoning} /> : null;
   if (!parts || parts.length === 0) {
     // Pre-content stream → Deneb's "응답 중" sparkle, with the gateway's thinking
-    // preview as its inline summary (mirrors the native PulsingStatusIndicator).
-    if (turn.status === "streaming") return <DenebStatus summary={thinking?.trim() ? thinking : undefined} />;
+    // preview as its inline summary; the live reasoning block sits above it.
+    if (turn.status === "streaming") {
+      return (
+        <div className="ai-turn-body">
+          {reasoning}
+          <DenebStatus summary={thinking?.trim() ? thinking : undefined} />
+        </div>
+      );
+    }
     return (
       <div className="ai-turn-body">
         {reasoning}

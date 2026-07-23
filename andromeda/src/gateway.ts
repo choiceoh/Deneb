@@ -476,6 +476,7 @@ export interface ChatHandlers {
   onDelta?: (text: string) => void;
   onTool?: (ev: ChatToolEvent) => void;
   onThinking?: (preview: string) => void;
+  onReasoning?: (reasoning: string) => void;
   onDone?: (final: { text: string; model?: string; fellBack?: boolean; reasoning?: string }) => void;
   onError?: (err: string) => void;
 }
@@ -563,6 +564,11 @@ export async function chatStream(
       case "thinking": {
         const preview = asStr(obj.preview);
         if (preview !== undefined) handlers.onThinking?.(preview);
+        break;
+      }
+      case "reasoning": {
+        const reasoning = asStr(obj.reasoning);
+        if (reasoning) handlers.onReasoning?.(reasoning);
         break;
       }
       case "done":

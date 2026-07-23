@@ -79,6 +79,13 @@ internal suspend fun DenebGatewayClient.askGateway(
                     message = sendText,
                     onTool = progress::onTool,
                     onThinking = progress::onThinking,
+                    onReasoning = { reasoning ->
+                        // Live full reasoning-so-far → grow the answer's expandable
+                        // block during streaming (the done frame settles the final).
+                        _chatHistory.update { list ->
+                            list.map { if (it.id == assistantId) it.copy(reasoningContent = reasoning) else it }
+                        }
+                    },
                 ) { delta ->
                     progress.onDelta()
                     accumulated.append(delta)
