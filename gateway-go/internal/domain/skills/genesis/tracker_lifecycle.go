@@ -6,6 +6,7 @@ import (
 	"time"
 
 	genesiseprocess "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/eprocess"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -169,6 +170,22 @@ type evolveProvenance struct {
 	JudgeSwapConsistent *bool `json:"judgeSwapConsistent,omitempty"`
 }
 
+// fillProcedureRef derives the composite ref from the governing versions that
+// were captured at their actual LLM calls (evolve at generate, skill-judge at
+// the committed verdict). Computed here, right before the record is written, so
+// it is consistent with those stamped versions and never re-read from mutable
+// config. A never-judged path leaves JudgeArtifactVersion empty — the ref still
+// pins the evolve prompt deterministically.
+func (p *evolveProvenance) fillProcedureRef() {
+	if p == nil {
+		return
+	}
+	p.ProcedureRef = generation.ProcedureRefFromVersions(map[string]string{
+		generation.MetaEvolveSystemPrompt:     p.EvolveArtifactVersion,
+		generation.MetaSkillJudgeSystemPrompt: p.JudgeArtifactVersion,
+	})
+}
+
 // rollbackBaselineTest is the baseline-aware test's verdict at the moment a
 // watch resolved (observation mode): Disagreement marks the mislabeling class
 // PACE warns about — on a rollback, the legacy threshold fired while the
@@ -218,6 +235,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 // certificate (RSI P1.5). prov may be nil (legacy callers).
 func (t *Tracker) logEvolveWithProvenance(skillName, newVersion, description string, audit HarnessEditAudit, prov *evolveProvenance) error {
 	audit = withHarnessDimensions(audit)
+	prov.fillProcedureRef()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -379,6 +397,7 @@ func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit Har
 // evaluator-attribution certificate (RSI P1.5). prov may be nil.
 func (t *Tracker) logEvolveRejectedWithProvenance(skillName, reason string, audit HarnessEditAudit, prov *evolveProvenance) error {
 	audit = withHarnessDimensions(audit)
+	prov.fillProcedureRef()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()

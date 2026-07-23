@@ -53,6 +53,16 @@ func (e *Evolver) judgeCandidate(ctx context.Context, skillName string, client *
 	failurePatternSection := formatFailurePatternsForPrompt(stats)
 	covered := len(cases) > 0
 
+	// Stamp the judge identity at the point of judging — captured here, not
+	// re-read after, and last-verdict-wins. On teacher escalation the committed
+	// body is re-judged by the primary model, so this correctly records the
+	// primary as the committed verdict's judge (not the teacher of the first,
+	// rejected verdict), keeping judge != producer honest in the record.
+	if prov != nil {
+		prov.JudgeModel = model
+		prov.JudgeArtifactVersion = e.metaVersion(generation.MetaSkillJudgeSystemPrompt)
+	}
+
 	resp, err := e.judgeVerdictOnce(ctx, client, model, originalContent, candidateBody, stats, failurePatternSection, validationSection)
 	if err != nil {
 		return false, "", err

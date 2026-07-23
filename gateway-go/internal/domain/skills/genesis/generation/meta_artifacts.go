@@ -153,6 +153,14 @@ func ContentSHA256(content string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// ShortContentVersion is the 12-hex artifact-version form (as Version emits) but
+// from content already in hand — so a caller that loaded a prompt for an LLM
+// call can pin the EXACT text it used, instead of re-reading the file later and
+// risking an intervening revision.
+func ShortContentVersion(content string) string {
+	return ContentSHA256(content)[:12]
+}
+
 // writeSidecarIfAbsent backfills provenance for a file that matches the current
 // compiled default but predates the sidecar scheme.
 func (m *MetaArtifacts) writeSidecarIfAbsent(name, sidecarPath, sum string) {
@@ -273,8 +281,7 @@ func DefaultMetaArtifacts() map[string]string {
 // records (RSI P1.5): two decisions carry the same version iff the exact same
 // prompt text produced them, whether it came from disk or the binary.
 func (m *MetaArtifacts) Version(name, fallback string) string {
-	sum := sha256.Sum256([]byte(m.Load(name, fallback)))
-	return hex.EncodeToString(sum[:])[:12]
+	return ShortContentVersion(m.Load(name, fallback))
 }
 
 // ActiveVersions maps every artifact in defaults to its effective version.
@@ -307,15 +314,32 @@ func (m *MetaArtifacts) ActiveVersions(defaults map[string]string) map[string]st
 // unwired), so it is safe to mint on every decision.
 func (m *MetaArtifacts) ProcedureRef(governing ...string) string {
 	defaults := DefaultMetaArtifacts()
-	names := append([]string(nil), governing...)
+	versions := make(map[string]string, len(governing))
+	for _, name := range governing {
+		versions[name] = m.Version(name, defaults[name])
+	}
+	return ProcedureRefFromVersions(versions)
+}
+
+// ProcedureRefFromVersions builds the composite "proc-<hex>" from an explicit
+// {artifact name → version} map — the point-of-use form. A caller that captured
+// each governing prompt's version at the moment of its LLM call assembles the
+// ref from those captured versions, so the ref reflects the procedure that
+// ACTUALLY produced/judged the decision, not whatever is on disk at log time.
+// Same hashing as ProcedureRef (sorted "name=version" lines), so the two agree
+// when fed identical versions.
+func ProcedureRefFromVersions(versions map[string]string) string {
+	names := make([]string, 0, len(versions))
+	for name := range versions {
+		names = append(names, name)
+	}
 	sort.Strings(names)
 	var sb strings.Builder
 	for _, name := range names {
 		sb.WriteString(name)
 		sb.WriteByte('=')
-		sb.WriteString(m.Version(name, defaults[name]))
+		sb.WriteString(versions[name])
 		sb.WriteByte('\n')
 	}
-	sum := sha256.Sum256([]byte(sb.String()))
-	return "proc-" + hex.EncodeToString(sum[:])[:12]
+	return "proc-" + ContentSHA256(sb.String())[:12]
 }

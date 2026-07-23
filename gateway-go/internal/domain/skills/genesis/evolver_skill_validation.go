@@ -92,9 +92,10 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// self-preference bias skews toward accepting it (LLM-judge survey
 	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
 	judgeClient, judgeModel := e.pickCandidateJudge()
-	if prov != nil {
-		prov.JudgeModel = judgeModel
-	}
+	// JudgeModel/JudgeArtifactVersion are stamped inside judgeCandidate at each
+	// verdict (last wins), so the record reflects the model that judged the
+	// COMMITTED body — on escalation that is the primary re-judging the teacher
+	// rewrite, not this first judge.
 	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats, audit, reviewFinding, prov)
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
@@ -130,10 +131,10 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
 	// The committed body is the TEACHER's rewrite, not the primary producer's, so
-	// correct the provenance producer attribution (newProvenance defaulted it to
-	// e.model). Pure record side-effect — the accept/reject decision above is
-	// unchanged. Without this, teacher-authored evolves are miscredited to the
-	// lightweight/coding model in the per-producer credit assignment.
+	// correct the provenance producer attribution (the producer snapshot seeded
+	// EvolveModel to the primary that made the REJECTED candidate). Pure record
+	// side-effect — the accept/reject decision above is unchanged. Without this,
+	// teacher-authored evolves are miscredited to the lightweight/coding model.
 	if prov != nil {
 		prov.EvolveModel = teacherModel
 	}

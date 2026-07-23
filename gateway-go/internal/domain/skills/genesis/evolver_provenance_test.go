@@ -1,36 +1,40 @@
 package genesis
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 )
 
-// TestNewProvenanceStampsProcedureVersionAndModel verifies an evolve decision's
-// provenance certificate now pins the WHOLE procedure state (composite ref +
-// per-prompt breakdown) and the producer model — Go mints it deterministically,
-// so a downstream outcome can be attributed to the exact procedure that made it.
-func TestNewProvenanceStampsProcedureVersionAndModel(t *testing.T) {
-	e := &Evolver{model: "lightweight"} // meta unwired → pure-fallback procedure
-	prov := e.newProvenance()
+// TestProvenanceCapturedAtPointOfUse verifies the certificate is assembled from
+// values captured at each LLM call (producer snapshot + judge stamp) and that
+// ProcedureRef is derived from exactly those captured versions — never re-read
+// from mutable config, so a concurrent SetPrimary / meta-adoption can't make the
+// record claim a model or prompt that did not produce/judge the decision.
+func TestProvenanceCapturedAtPointOfUse(t *testing.T) {
+	// Producer snapshot (captured at the generate call) seeds producer fields.
+	snap := producerSnapshot{model: "lightweight", evolveVersion: "aaaa1111bbbb"}
+	prov := provenanceFromProducer(snap)
+	if prov.EvolveModel != "lightweight" || prov.EvolveArtifactVersion != "aaaa1111bbbb" {
+		t.Fatalf("producer snapshot not seeded onto provenance: %+v", prov)
+	}
+	if prov.ProcedureRef != "" || prov.JudgeModel != "" {
+		t.Fatalf("judge/ref must not be set before the judge call: %+v", prov)
+	}
 
-	if !strings.HasPrefix(prov.ProcedureRef, "proc-") {
-		t.Fatalf("ProcedureRef = %q; want proc- prefix", prov.ProcedureRef)
-	}
-	if prov.EvolveModel != "lightweight" {
-		t.Errorf("EvolveModel = %q; want the producer model role", prov.EvolveModel)
-	}
-	// The two prompts that govern an evolve decision are pinned.
-	if prov.EvolveArtifactVersion == "" || prov.JudgeArtifactVersion == "" {
-		t.Errorf("governing artifact versions incomplete: %+v", prov)
-	}
-	// The composite must equal the resolver's ProcedureRef over exactly the
-	// governing (evolve + skill-judge) prompts — the certificate can't drift from
-	// the artifacts it claims, and it must be lane-specific.
-	want := generation.NewMetaArtifacts("", nil).ProcedureRef(
-		generation.MetaEvolveSystemPrompt, generation.MetaSkillJudgeSystemPrompt)
+	// Judge stamp (captured at the committed verdict) fills judge fields.
+	prov.JudgeModel = "teacher"
+	prov.JudgeArtifactVersion = "cccc2222dddd"
+
+	// ProcedureRef is derived at log time from the captured governing versions,
+	// and must equal the resolver's composite over the same two — the ref can't
+	// drift from the versions it claims.
+	prov.fillProcedureRef()
+	want := generation.ProcedureRefFromVersions(map[string]string{
+		generation.MetaEvolveSystemPrompt:     "aaaa1111bbbb",
+		generation.MetaSkillJudgeSystemPrompt: "cccc2222dddd",
+	})
 	if prov.ProcedureRef != want {
-		t.Errorf("ProcedureRef = %q; want governing-set composite %q", prov.ProcedureRef, want)
+		t.Fatalf("ProcedureRef = %q; want derived composite %q", prov.ProcedureRef, want)
 	}
 }
