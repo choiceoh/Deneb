@@ -51,6 +51,10 @@ class ChatViewModelFileAttachmentTest {
 
     private fun tempPlatformFile(extension: String): PlatformFile {
         val file = File.createTempFile("deneb-test-", ".$extension")
+        // Non-empty: isWithinAttachmentSize rejects a non-image file reporting a
+        // non-positive size (a failed stat must not fall through as 0), so an
+        // empty temp file would be dropped before it reaches the staged list.
+        file.writeBytes(byteArrayOf(0x1))
         file.deleteOnExit()
         return PlatformFile(file)
     }
