@@ -20,9 +20,16 @@ import (
 )
 
 // graphifyNode mirrors the per-node shape produced by the `graphify` CLI.
-// Field names match graphify's JSON output exactly (NetworkX node_link_data
-// + graphify-specific fields), so cluster-only and the query/explain/path
-// commands accept this file without modification.
+// The base field names match graphify's JSON output exactly (NetworkX
+// node_link_data + graphify-specific fields), so cluster-only and the
+// query/explain/path commands accept this file without modification.
+//
+// The trailing provenance/temporal fields are ADDITIVE node attributes (all
+// omitempty): NetworkX node_link_data round-trips arbitrary node attributes, so
+// graphify preserves and ignores keys it doesn't know while consumers that DO
+// care can cite a fact to its source episode and reason about its validity
+// window. This is the "citation needed" answer for the LLM-built graph — the
+// page already carried this provenance; the graph just never projected it.
 type graphifyNode struct {
 	Label          string `json:"label"`
 	FileType       string `json:"file_type"`
@@ -31,6 +38,28 @@ type graphifyNode struct {
 	ID             string `json:"id"`
 	Community      int    `json:"community"`
 	NormLabel      string `json:"norm_label"`
+	// Provenance: episode refs (d<diaryDate>#<hash>) whose raw diary spans
+	// produced/last-touched this node's facts. Empty for pages written before
+	// provenance capture or by non-dreamer paths.
+	Provenance []string `json:"provenance,omitempty"`
+	// Confidence is the page's own evidence-based label (high/medium/low) — the
+	// real thing, unlike the edge Confidence which only records how an edge was
+	// guessed (EXTRACTED/INFERRED).
+	Confidence string `json:"confidence,omitempty"`
+	// Resource is the OKF stable URI of the concept's underlying asset (gmail
+	// thread, deal ref, calendar event, file path) — a jump to the live source.
+	Resource string `json:"resource,omitempty"`
+	// Bi-temporal validity (transaction time — the slice we can derive
+	// deterministically, no LLM event-time extraction): ValidAt = when the page
+	// was created, UpdatedAt = when its facts were last written. InvalidAt is set
+	// (to UpdatedAt) only once the page is superseded, so a consumer can ask
+	// "what did we believe as of date X" and "is this fact still current".
+	ValidAt   string `json:"valid_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	InvalidAt string `json:"invalid_at,omitempty"`
+	// SupersededBy points at the node that replaced this one's facts (resolved
+	// to a node id when the successor is in the graph, else the raw relPath).
+	SupersededBy string `json:"superseded_by,omitempty"`
 }
 
 // graphifyEdge mirrors the per-link shape produced by the `graphify` CLI.
@@ -124,6 +153,7 @@ func BuildGraphSnapshot(ctx context.Context, store *Store, outDir string, runClu
 	builder.addInlineLinkEdges()
 	builder.addSharedTagEdges()
 	builder.addMentionEdges()
+	builder.linkSupersededNodes()
 
 	graphPath := filepath.Join(graphDir, "graph.json")
 	if err := writeGraphSnapshot(graphPath, &builder.graph); err != nil {
@@ -187,14 +217,34 @@ func (b *graphSnapshotBuilder) addPage(relPath string, page *Page) {
 	if title == "" {
 		title = strings.TrimSuffix(filepath.Base(relPath), ".md")
 	}
+	// SourceLocation was a hardcoded "L1" placeholder; anchor it to the newest
+	// episode ref when the page carries provenance, so the field finally points
+	// at a real source instead of a stub (falls back to "L1" for pre-provenance
+	// pages, which graphify still requires to be non-empty).
+	sourceLocation := "L1"
+	if n := len(page.Meta.Sources); n > 0 {
+		sourceLocation = page.Meta.Sources[n-1]
+	}
+	// A superseded page's facts stopped being current at its last write.
+	invalidAt := ""
+	if page.Meta.SupersededBy != "" {
+		invalidAt = page.Meta.Updated
+	}
 	b.graph.Nodes = append(b.graph.Nodes, graphifyNode{
 		Label:          title,
 		FileType:       wikiFileType(page),
 		SourceFile:     filepath.Join(b.wikiDir, relPath),
-		SourceLocation: "L1",
+		SourceLocation: sourceLocation,
 		ID:             id,
 		Community:      0,
 		NormLabel:      strings.ToLower(title),
+		Provenance:     page.Meta.Sources,
+		Confidence:     page.Meta.Confidence,
+		Resource:       page.Meta.Resource,
+		ValidAt:        page.Meta.Created,
+		UpdatedAt:      page.Meta.Updated,
+		InvalidAt:      invalidAt,
+		SupersededBy:   page.Meta.SupersededBy,
 	})
 	b.pathToID[relPath] = id
 	b.pathToID[strings.TrimSuffix(relPath, ".md")] = id
@@ -269,6 +319,22 @@ func (b *graphSnapshotBuilder) addTagPairs(tag string, ids []string) {
 	for left := 0; left < len(ids); left++ {
 		for right := left + 1; right < len(ids); right++ {
 			b.addEdge(ids[left], ids[right], "tag:"+tag, "INFERRED", 0.5, 0.5, "index.md")
+		}
+	}
+}
+
+// linkSupersededNodes resolves each node's superseded_by relPath to the node id
+// of its successor once every node exists, so a consumer can traverse from a
+// stale fact to the page that replaced it. An unresolved target (successor not
+// in the graph) keeps its raw relPath — still useful provenance.
+func (b *graphSnapshotBuilder) linkSupersededNodes() {
+	for i := range b.graph.Nodes {
+		raw := b.graph.Nodes[i].SupersededBy
+		if raw == "" {
+			continue
+		}
+		if id := b.targetID(raw); id != "" {
+			b.graph.Nodes[i].SupersededBy = id
 		}
 	}
 }

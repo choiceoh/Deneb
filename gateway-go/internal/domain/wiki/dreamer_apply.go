@@ -534,7 +534,7 @@ func (wd *WikiDreamer) formatRecalledAnchors(now time.Time) string {
 // identical new page (same fields, same normalization), so this is the single
 // source of truth for "what meta a freshly-created page inherits." It does NOT
 // touch Body — the caller sets that (template vs raw content).
-func newPageFromUpdate(u wikiUpdate, code string) *Page {
+func newPageFromUpdate(u wikiUpdate, code, episodeRef string) *Page {
 	page := NewPage(u.Title, u.Category, u.Tags)
 	if code != "" {
 		page.Meta.Code = code
@@ -575,13 +575,18 @@ func newPageFromUpdate(u wikiUpdate, code string) *Page {
 	if len(u.Kinds) > 0 {
 		page.Meta.Kinds = normalizeKinds(u.Kinds)
 	}
+	// Stamp the episode that synthesized this page — the first link in its
+	// provenance chain back to the raw diary span.
+	if episodeRef != "" {
+		page.Meta.Sources = []string{episodeRef}
+	}
 	return page
 }
 
 // applyUpdates creates or updates wiki pages based on LLM instructions.
 // Returns (created, updated) counts, the 사용자-category subset of those writes
 // (userPages — the user model), and paths of oversized pages.
-func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (created, updated, userPages int, oversized []string, appliedPaths []string) {
+func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate, episodeRef string) (created, updated, userPages int, oversized []string, appliedPaths []string) {
 	maxBytes := wd.config.MaxPageBytes
 	// Snapshot existing codes once so filings inherit their project's frozen code
 	// (and new-project mints stay collision-free across this batch).
@@ -600,7 +605,7 @@ func (wd *WikiDreamer) applyUpdates(_ context.Context, updates []wikiUpdate) (cr
 		// code; a new project mints one from the LLM stem (Go assigns the 순번).
 		code := codeIdx.resolveCode(u)
 
-		outcome := wd.persistDreamUpdate(u, code)
+		outcome := wd.persistDreamUpdate(u, code, episodeRef)
 		if outcome.failed {
 			continue
 		}
@@ -763,16 +768,16 @@ func normalizeDreamAction(action string) string {
 // the historical no-write/non-error outcome so post-write maintenance still
 // observes the target path; actual storage errors stop later side effects for
 // this proposal while the outer batch continues.
-func (wd *WikiDreamer) persistDreamUpdate(u wikiUpdate, code string) dreamWriteOutcome {
+func (wd *WikiDreamer) persistDreamUpdate(u wikiUpdate, code, episodeRef string) dreamWriteOutcome {
 	switch u.Action {
 	case "create":
-		if err := wd.createDreamPage(u, code); err != nil {
+		if err := wd.createDreamPage(u, code, episodeRef); err != nil {
 			wd.logger.Warn("wiki-dream: create page failed", "path", u.Path, "error", err)
 			return dreamWriteOutcome{failed: true}
 		}
 		return dreamWriteOutcome{created: 1, wrote: true}
 	case "update":
-		created, err := wd.updateDreamPage(u, code)
+		created, err := wd.updateDreamPage(u, code, episodeRef)
 		if err != nil {
 			wd.logger.Warn("wiki-dream: update page failed", "path", u.Path, "error", err)
 			return dreamWriteOutcome{failed: true}
@@ -790,8 +795,8 @@ func (wd *WikiDreamer) persistDreamUpdate(u wikiUpdate, code string) dreamWriteO
 	}
 }
 
-func (wd *WikiDreamer) createDreamPage(u wikiUpdate, code string) error {
-	page := newPageFromUpdate(u, code)
+func (wd *WikiDreamer) createDreamPage(u wikiUpdate, code, episodeRef string) error {
+	page := newPageFromUpdate(u, code, episodeRef)
 	if u.Content != "" {
 		page.Body = u.Content
 	} else {
@@ -810,22 +815,22 @@ func (wd *WikiDreamer) createDreamPage(u wikiUpdate, code string) error {
 // updateDreamPage keeps the read-modify-write under Store.UpdatePage. The
 // boolean distinguishes update-on-missing creation from a true append so the
 // original counters remain exact.
-func (wd *WikiDreamer) updateDreamPage(u wikiUpdate, code string) (bool, error) {
+func (wd *WikiDreamer) updateDreamPage(u wikiUpdate, code, episodeRef string) (bool, error) {
 	created := false
 	err := wd.store.UpdatePage(u.Path, func(existing *Page) (*Page, error) {
 		if existing == nil {
-			page := newPageFromUpdate(u, code)
+			page := newPageFromUpdate(u, code, episodeRef)
 			page.Body = u.Content
 			created = true
 			return page, nil
 		}
-		wd.mergeDreamUpdate(existing, u, code)
+		wd.mergeDreamUpdate(existing, u, code, episodeRef)
 		return existing, nil
 	})
 	return created, err
 }
 
-func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code string) {
+func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code, episodeRef string) {
 	if code != "" && existing.Meta.Code == "" {
 		existing.Meta.Code = code
 	}
@@ -881,6 +886,10 @@ func (wd *WikiDreamer) mergeDreamUpdate(existing *Page, u wikiUpdate, code strin
 	if len(u.Kinds) > 0 {
 		existing.Meta.Kinds = normalizeKinds(append(append([]string{}, existing.Meta.Kinds...), u.Kinds...))
 	}
+	// Append this cycle's episode to the provenance chain so a merged fact
+	// stays traceable to every diary span that shaped it (bounded newest-window
+	// at write time).
+	existing.Meta.Sources = appendEpisode(existing.Meta.Sources, episodeRef)
 	existing.Meta.Updated = time.Now().Format("2006-01-02")
 }
 

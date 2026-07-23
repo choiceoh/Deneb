@@ -613,7 +613,11 @@ func (wd *WikiDreamer) clearTransientSynthesisFailures() {
 }
 
 func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle) {
-	created, updated, userPages, oversized, appliedPaths := wd.applyUpdates(ctx, cycle.updates)
+	// The episode ref ties every page this cycle writes back to the exact diary
+	// span synthesis consumed (diary date + content digest) — deterministic, so
+	// no LLM cooperation is needed and provenance can't be hallucinated.
+	episodeRef := newEpisodeRef(cycle.scan.LatestDate, cycle.synthInput)
+	created, updated, userPages, oversized, appliedPaths := wd.applyUpdates(ctx, cycle.updates, episodeRef)
 	cycle.created = created
 	cycle.updated = updated
 	cycle.appliedPaths = appliedPaths

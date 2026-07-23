@@ -40,7 +40,7 @@ func TestWikiDreamer_CreateOnExistingPathConvertsToUpdateNotOverwrite(t *testing
 	}
 
 	// Persisting must MERGE into the existing body, not overwrite it.
-	out := wd.persistDreamUpdate(u, "")
+	out := wd.persistDreamUpdate(u, "", "")
 	if out.failed {
 		t.Fatal("persistDreamUpdate reported failure")
 	}
@@ -76,7 +76,7 @@ func TestWikiDreamer_UpdatePersistsConfirmedSitesAndKinds(t *testing.T) {
 		Sites: flexStringList{"전북 군산시 옥구읍 수산리"},
 		Kinds: flexStringList{"태양광"},
 	}
-	if out := wd.persistDreamUpdate(u, ""); out.failed {
+	if out := wd.persistDreamUpdate(u, "", ""); out.failed {
 		t.Fatal("persistDreamUpdate reported failure")
 	}
 	got := testutil.Must(store.ReadPage(path))

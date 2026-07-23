@@ -113,6 +113,85 @@ func TestBuildGraphSnapshotPreservesDuplicateDeclaredIDsDistinct(t *testing.T) {
 	}
 }
 
+// TestBuildGraphSnapshotProjectsProvenance verifies the graph carries the
+// provenance/temporal attributes the pages hold — the "citation needed" answer:
+// a node cites its source episode (real source_location, not the old "L1"
+// stub), its evidence confidence, its resource, its validity window, and a
+// resolved successor id once superseded.
+func TestBuildGraphSnapshotProjectsProvenance(t *testing.T) {
+	dir := t.TempDir()
+	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), ""))
+	t.Cleanup(func() { _ = store.Close() })
+
+	old := NewPage("Old Price", "업무", nil)
+	old.Meta.ID = "old-price"
+	old.Meta.Sources = []string{"d2026-07-01#aaaa1111"}
+	old.Meta.Confidence = "medium"
+	old.Meta.Resource = "gmail:thread-123"
+	old.Meta.Updated = "2026-07-05"
+	old.Meta.SupersededBy = "업무/new-price.md"
+	old.Body = "Superseded facts."
+	if err := store.WritePage("업무/old-price.md", old); err != nil {
+		t.Fatalf("WritePage(old): %v", err)
+	}
+
+	cur := NewPage("New Price", "업무", nil)
+	cur.Meta.ID = "new-price"
+	cur.Meta.Sources = []string{"d2026-07-08#bbbb2222", "d2026-07-20#cccc3333"}
+	cur.Meta.Confidence = "high"
+	cur.Body = "Current facts."
+	if err := store.WritePage("업무/new-price.md", cur); err != nil {
+		t.Fatalf("WritePage(cur): %v", err)
+	}
+
+	result, err := BuildGraphSnapshot(t.Context(), store, filepath.Join(dir, "snapshot"), false)
+	if err != nil {
+		t.Fatalf("BuildGraphSnapshot: %v", err)
+	}
+	data := testutil.Must(os.ReadFile(result.GraphPath))
+	var graph graphifyGraph
+	if err := json.Unmarshal(data, &graph); err != nil {
+		t.Fatalf("decode graph.json: %v", err)
+	}
+	nodes := map[string]graphifyNode{}
+	for _, n := range graph.Nodes {
+		nodes[n.ID] = n
+	}
+
+	curNode, ok := nodes["new-price"]
+	if !ok {
+		t.Fatalf("current node missing; nodes=%v", nodes)
+	}
+	if len(curNode.Provenance) != 2 || curNode.Provenance[1] != "d2026-07-20#cccc3333" {
+		t.Errorf("provenance not projected: %v", curNode.Provenance)
+	}
+	// source_location must anchor to the newest episode, not the old "L1" stub.
+	if curNode.SourceLocation != "d2026-07-20#cccc3333" {
+		t.Errorf("source_location = %q; want newest episode ref", curNode.SourceLocation)
+	}
+	if curNode.Confidence != "high" {
+		t.Errorf("confidence = %q; want high", curNode.Confidence)
+	}
+	if curNode.ValidAt == "" || curNode.UpdatedAt == "" {
+		t.Errorf("validity window missing: valid_at=%q updated_at=%q", curNode.ValidAt, curNode.UpdatedAt)
+	}
+	if curNode.InvalidAt != "" {
+		t.Errorf("current node should not carry invalid_at, got %q", curNode.InvalidAt)
+	}
+
+	oldNode := nodes["old-price"]
+	if oldNode.Resource != "gmail:thread-123" {
+		t.Errorf("resource not projected: %q", oldNode.Resource)
+	}
+	if oldNode.InvalidAt != "2026-07-05" {
+		t.Errorf("superseded node invalid_at = %q; want its last-write date", oldNode.InvalidAt)
+	}
+	// superseded_by must resolve from the raw relPath to the successor node id.
+	if oldNode.SupersededBy != "new-price" {
+		t.Errorf("superseded_by = %q; want resolved node id new-price", oldNode.SupersededBy)
+	}
+}
+
 func writeGraphFixturePage(t *testing.T, store *Store, path, id, title string, tags, related []string, body string) {
 	t.Helper()
 	page := NewPage(title, "기술", tags)
