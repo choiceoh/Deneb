@@ -105,6 +105,9 @@ class AttachmentRouteTest {
         assertTrue(isWithinAttachmentSize("pdf", 10_000_000L), "small pdf")
         assertEquals(false, isWithinAttachmentSize("pdf", MAX_ATTACHMENT_BYTES + 1), "oversize pdf")
         assertEquals(false, isWithinAttachmentSize("mp4", 50_000_000L), "oversize video")
+        // Unknown size (failed stat) must not bypass the non-image cap.
+        assertEquals(false, isWithinAttachmentSize("pdf", 0L), "unknown pdf size")
+        assertEquals(false, isWithinAttachmentSize("pdf", -1L), "invalid pdf size")
     }
 
     @Test
