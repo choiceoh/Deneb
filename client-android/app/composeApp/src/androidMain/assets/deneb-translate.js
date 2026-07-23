@@ -946,6 +946,40 @@
     if (rec.node && rec.node.nodeValue !== translated) rec.node.nodeValue = translated;
   }
 
+  // A reactive framework (e.g. Reddit's Lit web components) re-renders from its own
+  // data model and REVERTS our translated text back to the original. We already hold
+  // that node's translation in cache, so rather than re-running the whole scan +
+  // translate pipeline on every revert — a translator<->framework fight whose full
+  // DOM walks and forced-layout viewport ranking pinned the main thread and froze
+  // scrolling (measured: a runaway loop) — we re-apply the cached translation in
+  // place. The re-apply is batched onto an animation frame, so even a framework that
+  // reverts on every mutation is throttled to one cheap string write per frame (no
+  // reflow, no gateway round-trip) instead of an unbounded loop — and the text stays
+  // translated instead of being abandoned to the site's own language.
+  var reapplyQueue = {};
+  var reapplyScheduled = false;
+  var requestFrame = (window.requestAnimationFrame && window.requestAnimationFrame.bind(window)) ||
+    function (fn) { return window.setTimeout(fn, 16); };
+  function flushReapply() {
+    reapplyScheduled = false;
+    var q = reapplyQueue;
+    reapplyQueue = {};
+    if (!enabled) return;
+    for (var tid in q) {
+      if (!q.hasOwnProperty(tid)) continue;
+      var rec = nodes[tid];
+      if (rec && rec.node && rec.node.isConnected && rec.node.nodeValue !== q[tid]) {
+        rec.node.nodeValue = q[tid];
+      }
+    }
+  }
+  function queueReapply(tid, translated) {
+    reapplyQueue[tid] = translated;
+    if (reapplyScheduled) return;
+    reapplyScheduled = true;
+    requestFrame(flushReapply);
+  }
+
   // Called by native after the gateway returns. translations is a JSON array the
   // SAME length/order as the shipped units. A unit can be one text node or a
   // grouped block-part payload; any count mismatch no-ops rather than risking
@@ -1074,29 +1108,41 @@
     } catch (e) {}
   }
 
-  // Ignore mutations that are our OWN applied translations: a characterData change whose
-  // new value already equals that node's known translation. Because we observe
-  // characterData, every batch we apply would otherwise re-fire the observer → a full
-  // rescan → a self-feeding loop that, on a page mutating on its own (Reddit), never
-  // settles. Real content (childList adds, or text swapped to something new) still scans.
-  function recordsWorthScanning(records) {
+  // Classify a batch of mutations. For each characterData change on a node we have
+  // already translated there are three cases:
+  //   - value === our translation → our own applied write; ignore (no rescan). We
+  //     observe characterData, so without this every batch we apply would re-fire the
+  //     observer → a self-feeding rescan loop that never settles on a live page.
+  //   - value === the original    → a reactive framework (Reddit's Lit) reverted us.
+  //     Re-apply the cached translation directly (queueReapply — cheap, frame-batched,
+  //     no reflow, no gateway round-trip) so the text stays translated without dragging
+  //     the scan pipeline into a fight. Does NOT trigger a scan.
+  //   - value is something else    → genuinely new text; translate it (scan).
+  // childList adds and never-seen nodes also need a scan. Returns whether to scan.
+  function handleRecords(records) {
+    var needScan = false;
     for (var i = 0; i < records.length; i++) {
       var r = records[i];
-      if (r.type !== 'characterData') return true;
+      if (r.type !== 'characterData') { needScan = true; continue; }
       var t = r.target;
       var tid = t && t.__denebTid;
       var rec = tid ? nodes[tid] : null;
-      if (rec) {
-        var tr = cache[rec.original];
-        if (tr != null && t.nodeValue === tr) continue; // our own write → ignore
+      if (!rec) { needScan = true; continue; }
+      var mine = cache[rec.original];
+      if (mine != null) {
+        if (t.nodeValue === mine) continue;          // our own applied translation
+        if (t.nodeValue === rec.original) {           // framework reverted us → re-apply cached
+          queueReapply(tid, mine);
+          continue;
+        }
       }
-      return true;
+      needScan = true;                                // new / changed content → translate it
     }
-    return false;
+    return needScan;
   }
 
   var observer = new MutationObserver(function (records) {
-    if (enabled && recordsWorthScanning(records)) scheduleScan();
+    if (enabled && handleRecords(records)) scheduleScan();
   });
 
   function observeRoot(root) {
