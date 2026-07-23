@@ -1,6 +1,8 @@
 package wiki
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -66,6 +68,62 @@ func TestAppendEpisodeIgnoresEmpty(t *testing.T) {
 	}
 	if got := appendEpisode(base, "b"); len(got) != 2 || got[1] != "b" {
 		t.Fatalf("appendEpisode did not append: %v", got)
+	}
+}
+
+func TestParseEpisodeRefInvertsNewEpisodeRefAndRejectsMalformed(t *testing.T) {
+	ref := newEpisodeRef("2026-07-23", "원본 내용")
+	date, hash, ok := parseEpisodeRef(ref)
+	if !ok || date != "2026-07-23" || hash == "" {
+		t.Fatalf("parse(%q) = (%q,%q,%v); want date 2026-07-23, ok", ref, date, hash, ok)
+	}
+	// Dateless form.
+	if d, h, ok := parseEpisodeRef("ep-deadbeef"); !ok || d != "" || h != "deadbeef" {
+		t.Fatalf("dateless parse = (%q,%q,%v)", d, h, ok)
+	}
+	// Path-traversal date must NOT parse (it would name a file downstream).
+	if _, _, ok := parseEpisodeRef("d../../etc#00000000"); ok {
+		t.Fatal("traversal date parsed as valid")
+	}
+	for _, bad := range []string{"", "garbage", "d2026-07-23", "d#abc", "d2026-7-3#abc", "ep-"} {
+		if _, _, ok := parseEpisodeRef(bad); ok {
+			t.Errorf("parseEpisodeRef(%q) unexpectedly ok", bad)
+		}
+	}
+}
+
+func TestResolveEpisodeLocatesDiaryAndFlagsMissing(t *testing.T) {
+	dir := t.TempDir()
+	diaryDir := filepath.Join(dir, "diary")
+	if err := os.MkdirAll(diaryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(filepath.Join(dir, "wiki"), diaryDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := os.WriteFile(filepath.Join(diaryDir, "diary-2026-07-20.md"), []byte("일지 원문"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Present diary → resolved + Exists.
+	got := store.ResolveEpisode("d2026-07-20#aabbccdd")
+	if got.Date != "2026-07-20" || got.DiaryFile != "diary-2026-07-20.md" || !got.Exists || got.Malformed {
+		t.Fatalf("present resolve = %+v", got)
+	}
+	// Missing diary (rotated) → resolved but Exists=false.
+	if gone := store.ResolveEpisode("d2026-01-01#00000000"); gone.Exists || gone.Malformed || gone.Date != "2026-01-01" {
+		t.Fatalf("missing resolve = %+v", gone)
+	}
+	// Malformed ref → flagged, no path built.
+	if bad := store.ResolveEpisode("not-a-ref"); !bad.Malformed || bad.DiaryFile != "" {
+		t.Fatalf("malformed resolve = %+v", bad)
+	}
+	// Dateless ref → no diary file, not malformed.
+	if dl := store.ResolveEpisode("ep-deadbeef"); dl.Malformed || dl.Date != "" || dl.DiaryFile != "" {
+		t.Fatalf("dateless resolve = %+v", dl)
 	}
 }
 

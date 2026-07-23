@@ -1027,7 +1027,7 @@ func WikiToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), write-site (현장 페이지 생성/편집 — project=프로젝트 폴더명, title=현장명, address/status/capacity/kinds + 공정 일정 계약일·공사개시일 등을 프로젝트/<project>/현장/<title>.md 에 기록. 미지정 필드는 보존되므로 계약일만 먼저 쓰고 준공검사일은 나중에 채워도 됨), seed-sites (기존 프로젝트 대표페이지의 sites를 현장 페이지 스텁으로 일괄 부트스트랩 — project 미지정이면 활성 프로젝트 전체. 주소·거래처·특성만 채우고 상태·용량·공정 일정은 빈 채로 두니 이후 write-site로 채운다. 멱등), log (append diary entry), daily (recent diary), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)",
+				"description": "Action: search (ripgrep full-text search), read (wiki page(s) — one via query, several at once via paths), index (master/category index), write (create/update page), write-site (현장 페이지 생성/편집 — project=프로젝트 폴더명, title=현장명, address/status/capacity/kinds + 공정 일정 계약일·공사개시일 등을 프로젝트/<project>/현장/<title>.md 에 기록. 미지정 필드는 보존되므로 계약일만 먼저 쓰고 준공검사일은 나중에 채워도 됨), seed-sites (기존 프로젝트 대표페이지의 sites를 현장 페이지 스텁으로 일괄 부트스트랩 — project 미지정이면 활성 프로젝트 전체. 주소·거래처·특성만 채우고 상태·용량·공정 일정은 빈 채로 두니 이후 write-site로 채운다. 멱등), log (append diary entry), daily (recent diary; date=YYYY-MM-DD로 특정 날짜 일지 — read 출처 각주 검증용), status (wiki stats), close (프로젝트 종결 — query=프로젝트명, content=결과·사유 한 줄; 폴더 전체 보관+활성 목록 제외, 삭제 아님), reopen (종결 프로젝트 재개 — query=프로젝트명), ingest (외부 자료 캡처: query=URL — 웹페이지/유튜브를 요약+발췌와 함께 자료 페이지로 영속화. 사용자가 '기억해둬/저장해둬'라며 링크를 주면 web 대신 이걸 쓴다. project=연결 프로젝트명(선택), content=메모(선택); 같은 URL은 멱등, 갱신은 force=true)",
 				"enum":        []string{"search", "read", "index", "write", "write-site", "seed-sites", "log", "daily", "status", "close", "reopen", "ingest"},
 			},
 			"address": map[string]any{
@@ -1074,6 +1074,10 @@ func WikiToolSchema() map[string]any {
 				"items": map[string]any{
 					"type": "string",
 				},
+			},
+			"date": map[string]any{
+				"type":        "string",
+				"description": "daily 전용: 특정 날짜(YYYY-MM-DD)의 일지만 읽는다. read 결과의 출처(provenance) 각주가 사실이 합성된 다이어리 날짜를 알려주므로, 그 날짜로 원문을 확인해 사실을 검증할 때 쓴다. 긴 하루는 from_line/max_lines로 페이징되며 더 있으면 이어보기 힌트가 붙는다. 생략하면 최근 일지(limit개)를 반환.",
 			},
 			"due": map[string]any{
 				"type":        "string",
