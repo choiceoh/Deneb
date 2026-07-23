@@ -392,3 +392,62 @@ func TestWalkFallbackChainSkipsAfterSideEffectingTool(t *testing.T) {
 		t.Error("agentResult changed — the fallback chain replayed the turn")
 	}
 }
+
+// A thinking-signature rejection AFTER a side-effecting tool committed must
+// not trigger the strip-and-replay retry.
+func TestRetryThinkingStripSkipsReplayAfterSideEffectingTool(t *testing.T) {
+	sigErr := &httpretry.APIError{
+		StatusCode: 400,
+		Message:    `{"error":{"message":"messages.1.content.0.thinking.signature: invalid signature for thinking block"}}`,
+	}
+	if !shouldStripThinking(sigErr) {
+		t.Fatal("precondition: thinking signature error must classify for strip retry")
+	}
+	raw, err := json.Marshal([]llm.ContentBlock{
+		{Type: "thinking", Thinking: "reasoning", Signature: "sig"},
+		{Type: "text", Text: "answer"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := &agent.AgentResult{StopReason: "end_turn", TotalToolCalls: 1, ToolCounts: map[string]int{"exec": 1}}
+	tr := &fallbackTurn{
+		logger:      discardLogger(),
+		runErr:      sigErr,
+		agentResult: orig,
+		messages: []llm.Message{
+			llm.NewTextMessage("user", "do it"),
+			{Role: "assistant", Content: llm.FlexibleFromRaw(raw)},
+		},
+	}
+	tr.retryThinkingStrip(context.Background())
+	if tr.agentResult != orig {
+		t.Error("agentResult changed — thinking-strip replay ran despite a committed side-effecting tool")
+	}
+	if !errors.Is(tr.runErr, sigErr) {
+		t.Error("runErr changed — thinking-strip replay ran")
+	}
+}
+
+// Context overflow after a side-effecting tool must not compact-and-replay.
+func TestCompactionRecoverySkipsReplayAfterSideEffectingTool(t *testing.T) {
+	overflow := &httpretry.APIError{
+		StatusCode: 400,
+		Message:    `{"error":{"message":"maximum context length is 200000 tokens","code":"context_length_exceeded"}}`,
+	}
+	if !isContextOverflow(overflow) {
+		t.Fatal("precondition: context_length_exceeded must classify as overflow")
+	}
+	orig := &agent.AgentResult{StopReason: "end_turn", TotalToolCalls: 1, ToolCounts: map[string]int{"exec": 1}}
+	tr := &fallbackTurn{
+		logger:        discardLogger(),
+		runErr:        overflow,
+		agentResult:   orig,
+		contextBudget: 12_000,
+		messages:      []llm.Message{llm.NewTextMessage("user", "long turn")},
+	}
+	retry, stuck := tr.compactionRecovery(context.Background(), 0)
+	if retry || stuck != nil {
+		t.Fatalf("compactionRecovery = (retry=%v, stuck=%v), want (false, nil)", retry, stuck)
+	}
+}
