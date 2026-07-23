@@ -310,6 +310,15 @@ func (t *fallbackTurn) compactionRecovery(ctx context.Context, compactAttempt in
 	if !isContextOverflow(t.runErr) || compactAttempt >= maxCompactionRetries || ctx.Err() != nil {
 		return false, nil
 	}
+	// Don't compact-and-replay a turn that already committed a side-effecting
+	// tool: runInitialAttempt re-runs from the pre-run message slice, which
+	// would execute the mutation again. Fail through to transient/fallback
+	// handling instead — mirroring retryTransient / walkFallbackChain.
+	if resultRanSideEffectingTool(t.agentResult) {
+		t.logger.Warn("context overflow after a side-effecting tool ran; not compacting/retrying to avoid duplicating it",
+			"error", t.runErr)
+		return false, nil
+	}
 
 	// Early-abort guard A: head + tail protected zone already exceeds budget.
 	// Compaction cannot reduce below budget even with a zero-byte middle, so
@@ -471,6 +480,14 @@ func resultRanSideEffectingTool(res *agent.AgentResult) bool {
 // actually removed (n > 0); otherwise the same request would 400 again.
 func (t *fallbackTurn) retryThinkingStrip(ctx context.Context) {
 	if t.runErr == nil || ctx.Err() != nil || !shouldStripThinking(t.runErr) {
+		return
+	}
+	// Same side-effect guard as retryTransient: a thinking-strip retry
+	// re-runs the full turn from the pre-run messages, which would re-execute
+	// any already-committed side-effecting tool.
+	if resultRanSideEffectingTool(t.agentResult) {
+		t.logger.Warn("thinking signature rejected after a side-effecting tool ran; not retrying to avoid duplicating it",
+			"model", t.cfg.Model, "error", t.runErr)
 		return
 	}
 	strippedMsgs, n := compact.StripThinkingBlocks(t.messages)
