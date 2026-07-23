@@ -352,6 +352,7 @@ type l4Tally struct {
 	impactNoEffect  int
 	impactRegressed int
 	strategyBlocked int
+	failureBlocked  int
 	oldestPendingAt int64
 }
 
@@ -423,7 +424,14 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 			}
 			tally.failed++
 			if phase == rsilifecycle.DeliveryRolledBack || !t.DispatchMarkerBlocks(c.ID) {
-				tally.markDispatchCandidate(c, impactPolicies)
+				// A candidate the marker would re-dispatch but which has failed to
+				// land too many times is withheld for operator review, not silently
+				// dropped from the dispatchable count.
+				if selfCorrectionDispatchFailureCapReached(c) {
+					tally.failureBlocked++
+				} else {
+					tally.markDispatchCandidate(c, impactPolicies)
+				}
 			}
 		case rsilifecycle.DeliveryQueued:
 			if !queued {
@@ -449,6 +457,7 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "감시 통과", Value: strconv.Itoa(tally.applied)},
 		{Label: "효과 판정", Value: rsiL4ImpactValue(tally)},
 		{Label: "전략 변경 필요", Value: strconv.Itoa(tally.strategyBlocked)},
+		{Label: "반복 실패 보류", Value: strconv.Itoa(tally.failureBlocked)},
 		{Label: "안전 종료", Value: strconv.Itoa(tally.declined)},
 		{Label: "실패/롤백", Value: strconv.Itoa(tally.failed)},
 		{Label: "검토 대기(비배차)", Value: strconv.Itoa(tally.staged)},
@@ -488,6 +497,8 @@ func rsiL4Verdict(tally l4Tally, total int, runtime codingDispatchRuntime) (stri
 		return rsiStateIdle, fmt.Sprintf("배차 대기 %d건 · 아직 진행 중인 authoritative dispatch 없음 (%s)", tally.dispatchable, rsiDispatchTickValue(runtime))
 	case tally.strategyBlocked > 0:
 		return rsiStateStarved, fmt.Sprintf("효과없음·악화가 반복된 코드 후보 %d건 — 이전과 다른 수정 전략을 명시해야 재배차됩니다", tally.strategyBlocked)
+	case tally.failureBlocked > 0:
+		return rsiStateStarved, fmt.Sprintf("무인 세션이 %d회 이상 완료하지 못해 보류된 코드 후보 %d건 — 운영자 검토가 필요합니다", maxSelfCorrectionDispatchFailures, tally.failureBlocked)
 	case total == 0:
 		return rsiStateIdle, "아직 캡처된 자기교정 후보가 없습니다"
 	case tally.staged > 0:

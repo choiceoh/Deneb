@@ -11,9 +11,12 @@ import (
 // chooses one candidate without sorting or imposing a recency cap. Review-
 // approved work wins, then a source whose latest measured fix regressed or had
 // no effect, then newest work. Two consecutive negative outcomes require a new
-// proposed strategy before that source can consume another unattended session.
-// Local marker/worktree residue remains an executor concern and is supplied as
-// excluded IDs by the RPC client.
+// proposed strategy before that source can consume another unattended session,
+// and a candidate that has failed to land maxSelfCorrectionDispatchFailures
+// times is withheld entirely (SelfCorrectionDispatchEligible) so an impossible
+// fix stops consuming a coding session on every tick. Local marker/worktree
+// residue remains an executor concern and is supplied as excluded IDs by the
+// RPC client.
 func (t *Tracker) NextSelfCorrectionDispatchCandidate(
 	excludedIDs []string,
 ) (SelfCorrectionCandidateRecord, bool, error) {
@@ -46,10 +49,31 @@ func (t *Tracker) NextSelfCorrectionDispatchCandidate(
 	return selected, found, nil
 }
 
+// maxSelfCorrectionDispatchFailures bounds how many times an unattended coding
+// session may fail to land the same candidate before it is withheld from
+// dispatch and left for operator review. rsilifecycle.CanDispatch treats a
+// "failed" delivery phase as re-eligible (transient process failures deserve a
+// retry), but a candidate that keeps failing is almost always impossible for an
+// unattended session — doctrine-conflicting or too large — and every retry burns
+// a coding session. Three attempts is enough signal to stop; the record stays in
+// the ledger (accepted) and reappears in the accepted list for a human decision.
+const maxSelfCorrectionDispatchFailures = 3
+
+// selfCorrectionDispatchFailureCapReached reports whether a candidate has failed
+// to land often enough that it is withheld from dispatch and left for operator
+// review. It is the single source of the cap so eligibility and the RSI status
+// tally agree on which candidates are withheld.
+func selfCorrectionDispatchFailureCapReached(record SelfCorrectionCandidateRecord) bool {
+	return record.DispatchFailures >= maxSelfCorrectionDispatchFailures
+}
+
 // SelfCorrectionDispatchEligible applies review, delivery, source, and surface
 // policy before any unattended coding session receives candidate prose.
 func SelfCorrectionDispatchEligible(record SelfCorrectionCandidateRecord) bool {
 	if strings.TrimSpace(record.ID) == "" || strings.TrimSpace(record.Scope) != "code" {
+		return false
+	}
+	if selfCorrectionDispatchFailureCapReached(record) {
 		return false
 	}
 	if !rsilifecycle.CanDispatch(
