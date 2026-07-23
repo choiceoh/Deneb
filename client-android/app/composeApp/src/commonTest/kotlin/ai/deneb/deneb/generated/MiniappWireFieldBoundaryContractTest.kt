@@ -4917,6 +4917,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "TranscriptMsgOut.reasoning",
+            serializer = TranscriptMsgOut.serializer(),
+            field = "reasoning",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "TranscriptMsgOut.attachments",
             serializer = TranscriptMsgOut.serializer(),
             field = "attachments",

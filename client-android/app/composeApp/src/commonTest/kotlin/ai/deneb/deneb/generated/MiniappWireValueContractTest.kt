@@ -3843,6 +3843,11 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "reasoning",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "attachments",
                     value = objectList,
                     expectation = Expectation.ObjectList,

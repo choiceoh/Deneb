@@ -128,5 +128,6 @@ func syncResultToPort(result *SyncResult) *chatport.SyncResult {
 		OutputTokens:    result.OutputTokens,
 		Turns:           result.Turns,
 		StopReason:      result.StopReason,
+		Thinking:        result.Thinking,
 	}
 }

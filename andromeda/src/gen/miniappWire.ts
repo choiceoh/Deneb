@@ -884,6 +884,7 @@ export interface TranscriptMsgOut {
   id?: string
   role?: string
   content?: string
+  reasoning?: string
   attachments?: TranscriptAttachmentOut[]
   timestampMs?: number
 }

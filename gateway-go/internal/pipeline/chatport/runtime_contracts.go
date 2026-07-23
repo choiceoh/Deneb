@@ -103,6 +103,10 @@ type SyncResult struct {
 	OutputTokens    int
 	Turns           int
 	StopReason      string
+	// Thinking is the accumulated reasoning/chain-of-thought for the turn (empty
+	// when the model produced none). Surfaced to clients as the expandable
+	// reasoning block; never re-fed into the model context.
+	Thinking string
 }
 
 // SyncRunner is the stable runtime-facing chat execution boundary.
