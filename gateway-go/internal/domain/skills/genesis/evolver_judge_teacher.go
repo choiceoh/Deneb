@@ -279,11 +279,17 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 		failurePatternSection,
 		validationSection)
 
+	// Load the evolve prompt once: System message AND the pinned producer
+	// version for this teacher call, so an escalated commit attributes the body
+	// to the teacher's ACTUAL prompt (not the primary's earlier snapshot).
+	evolvePrompt := e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])
+	producer := producerSnapshot{model: teacherModel, evolveVersion: generation.ShortContentVersion(evolvePrompt)}
+
 	// Non-streaming — same glm streaming-JSON unreliability as the producer.
 	raw, err := teacherClient.Complete(ctx, llm.ChatRequest{
 		Model:    teacherModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:   llm.SystemString(e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])),
+		System:   llm.SystemString(evolvePrompt),
 		// Same budget as the producer — the teacher rewrites the same shape.
 		MaxTokens:      12288,
 		Temperature:    evolveTemperature(),
@@ -317,6 +323,7 @@ func (e *Evolver) teacherRewrite(ctx context.Context, teacherClient *llm.Client,
 		Body:        stripEchoedFrontmatter(resp.Changes.Body),
 		Description: strings.TrimSpace(resp.Changes.Description),
 		Audit:       audit,
+		producer:    producer,
 	}, nil
 }
 

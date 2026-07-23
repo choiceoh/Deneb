@@ -77,6 +77,12 @@ type acceptedSkillCandidate struct {
 	Body        string
 	Description string
 	Audit       HarnessEditAudit
+	// producer pins the model + evolve-prompt version that generated this body.
+	// Empty for the lightweight path (the outer producer snapshot already covers
+	// it); populated by teacherRewrite so a teacher-escalated commit re-stamps
+	// BOTH producer fields with the teacher's own snapshot, not the rejected
+	// primary's.
+	producer producerSnapshot
 }
 
 // selfTestAndMaybeEscalate judges a candidate rewrite. On pass it returns the
@@ -130,13 +136,16 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 		return acceptedSkillCandidate{}, false, "teacher: " + treason
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
-	// The committed body is the TEACHER's rewrite, not the primary producer's, so
-	// correct the provenance producer attribution (the producer snapshot seeded
-	// EvolveModel to the primary that made the REJECTED candidate). Pure record
-	// side-effect — the accept/reject decision above is unchanged. Without this,
-	// teacher-authored evolves are miscredited to the lightweight/coding model.
+	// The committed body is the TEACHER's rewrite, produced under the teacher's
+	// own model AND the evolve prompt at ITS call — re-stamp both producer fields
+	// from the teacher's captured snapshot (the seed came from the primary that
+	// made the REJECTED candidate). Pure record side-effect — the accept/reject
+	// decision above is unchanged. Without this, a teacher-escalated commit is
+	// miscredited to the lightweight/coding model and the primary's prompt
+	// version.
 	if prov != nil {
-		prov.EvolveModel = teacherModel
+		prov.EvolveModel = teacherCandidate.producer.model
+		prov.EvolveArtifactVersion = teacherCandidate.producer.evolveVersion
 	}
 	return teacherCandidate, true, treason
 }
