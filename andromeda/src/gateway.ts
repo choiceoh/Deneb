@@ -528,9 +528,7 @@ export async function chatStream(
   // User-turn placement keeps the gateway's vLLM prefix cache (APC) intact —
   // per-turn context belongs in the trailing user message, not the cached system
   // prompt (see Deneb prompt-cache §1.5).
-  const composed = workspaceContext?.trim()
-    ? `[작업 영역 — 현재 내용]\n${workspaceContext}\n\n[요청]\n${message}`
-    : message;
+  const composed = composeChatMessage(message, workspaceContext);
   chatLog.debug(
     `→ stream (session ${sessionKey}, model ${model || "main"}, +context ${Boolean(workspaceContext?.trim())})`,
   );
@@ -578,4 +576,111 @@ export async function chatStream(
         break;
     }
   });
+}
+
+// composeChatMessage builds the user-turn text actually sent to (and stored by)
+// the gateway: the active work-area content is prefixed so the AI can read it,
+// and so transcript recovery can match the exact stored user row after a drop.
+export function composeChatMessage(message: string, workspaceContext?: string): string {
+  return workspaceContext?.trim() ? `[작업 영역 — 현재 내용]\n${workspaceContext}\n\n[요청]\n${message}` : message;
+}
+
+// --- Turn recovery after a mid-turn SSE drop -------------------------------
+// The gateway detaches the agent run from the SSE connection: a dropped socket
+// (sleep, network change) never kills the turn — the server finishes and
+// persists the answer to the transcript. When the stream fails mid-turn we poll
+// the transcript for that answer instead of freezing on the streamed preamble.
+
+export const CHAT_RECOVERY_BUDGET_MS = 90_000; // no-signal give-up window
+export const CHAT_RECOVERY_MAX_MS = 300_000; // extended window once confirmed running (~server turn deadline)
+export const CHAT_RECOVERY_POLL_MS = 3_000;
+
+export type TurnProbe = { kind: "answered"; text: string } | { kind: "running" } | { kind: "notArrived" };
+
+// Locate the sent turn in a fetched transcript and classify it: the LAST user
+// row equal to the sent (composed) text, then the last non-empty assistant row
+// after it, so a tool-looping turn resolves to its final wrap-up text.
+export function probeTranscriptForTurn(messages: TranscriptMsg[], sentText: string): TurnProbe {
+  const sent = sentText.trim();
+  if (!sent) return { kind: "notArrived" };
+  let userIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user" && messages[i].content.trim() === sent) {
+      userIdx = i;
+      break;
+    }
+  }
+  if (userIdx < 0) return { kind: "notArrived" };
+  for (let i = messages.length - 1; i > userIdx; i--) {
+    const m = messages[i];
+    if (m.role === "assistant" && m.content.trim()) return { kind: "answered", text: m.content };
+  }
+  return { kind: "running" };
+}
+
+export interface RecoverTurnOpts {
+  budgetMs?: number;
+  maxMs?: number;
+  pollMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  fetchMessages?: (cfg: GatewayConfig, sessionKey: string) => Promise<TranscriptMsg[]>;
+  onStillRunning?: () => void;
+  signal?: AbortSignal;
+}
+
+// Poll the transcript for the sent turn's answer after a mid-turn stream failure.
+// Extends the poll window to the server turn deadline once the turn is confirmed
+// still running (a tool-heavy turn runs minutes); the short budget bounds the
+// no-signal case so a truly-lost turn can't hang. Returns the answer, or null.
+export async function recoverTurnAnswer(
+  cfg: GatewayConfig,
+  sessionKey: string,
+  sentText: string,
+  opts: RecoverTurnOpts = {},
+): Promise<string | null> {
+  const budgetMs = opts.budgetMs ?? CHAT_RECOVERY_BUDGET_MS;
+  const maxMs = opts.maxMs ?? CHAT_RECOVERY_MAX_MS;
+  const pollMs = opts.pollMs ?? CHAT_RECOVERY_POLL_MS;
+  const now = opts.now ?? (() => Date.now());
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const fetchMessages =
+    opts.fetchMessages ?? ((c: GatewayConfig, s: string) => sessionTranscript(c, s).then((r) => r.messages));
+
+  const started = now();
+  let confirmedRunning = false;
+  let candidateText: string | null = null;
+  let candidateTail: string | null = null;
+  let misses = 0;
+  for (;;) {
+    if (opts.signal?.aborted) return null;
+    const budget = confirmedRunning ? maxMs : budgetMs;
+    if (now() - started >= budget) break;
+    let messages: TranscriptMsg[] | null;
+    try {
+      messages = await fetchMessages(cfg, sessionKey);
+    } catch {
+      messages = null;
+    }
+    if (messages) {
+      const probe = probeTranscriptForTurn(messages, sentText);
+      if (probe.kind === "answered") {
+        const tail = `${messages.length} ${probe.text}`;
+        if (tail === candidateTail) return probe.text; // same tail twice → stable
+        candidateText = probe.text;
+        candidateTail = tail;
+      } else if (probe.kind === "running") {
+        confirmedRunning = true;
+        opts.onStillRunning?.();
+        misses = 0;
+        candidateText = null;
+        candidateTail = null;
+      } else {
+        misses += 1;
+        if (misses >= 2) return null;
+      }
+    }
+    await sleep(pollMs);
+  }
+  return candidateText;
 }
