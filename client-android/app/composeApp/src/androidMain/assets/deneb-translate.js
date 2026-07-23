@@ -656,7 +656,7 @@
     var tid = String(nextId++);
     n.__denebTid = tid;
     var original = n.nodeValue;
-    nodes[tid] = { node: n, original: original, primary: !!primary };
+    nodes[tid] = { node: n, original: original, primary: !!primary, tid: tid };
     if (n.parentElement) {
       try { n.parentElement.setAttribute(ATTR, tid); } catch (e) {}
     }
@@ -858,7 +858,7 @@
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      if (inFlight[tids[i]] || isApplied(rec)) continue;
+      if (inFlight[tids[i]] || contested[tids[i]] || isApplied(rec)) continue;
       var cached = cachedTranslation(rec.original);
       if (cached != null) { replace(rec, cached); continue; }
       inFlight[tids[i]] = true;
@@ -891,7 +891,7 @@
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      if (inFlight[tids[i]] || isApplied(rec)) continue;
+      if (inFlight[tids[i]] || contested[tids[i]] || isApplied(rec)) continue;
       var near;
       if (reflows >= REFLOW_BUDGET) {
         near = false;
@@ -941,9 +941,32 @@
     }, 45000);
   }
 
+  // A reactive framework (e.g. Reddit's Lit web components) re-renders from its own
+  // data model and REVERTS our translated text back to the original. Re-translating
+  // the reverted node forever is a translator<->framework fight that pins the main
+  // thread and freezes scrolling (measured: a runaway revert loop). Give up on a
+  // node after it has been (re)applied GIVE_UP_APPLIES times — leave it in the
+  // page's own text so the fight, and the freeze, ends. The re-applies are cache
+  // hits, so this is separate from the translate round-trip.
+  var GIVE_UP_APPLIES = 4;
+  var applyCount = {};
+  var contested = {};
+  function bumpApply(tid) {
+    if (!tid) return true;
+    applyCount[tid] = (applyCount[tid] || 0) + 1;
+    if (applyCount[tid] > GIVE_UP_APPLIES) {
+      contested[tid] = true;
+      return false;
+    }
+    return true;
+  }
+
   function replace(rec, translated) {
     if (!enabled || translated == null) return;
-    if (rec.node && rec.node.nodeValue !== translated) rec.node.nodeValue = translated;
+    if (rec.node && rec.node.nodeValue !== translated) {
+      if (!bumpApply(rec.tid)) return;
+      rec.node.nodeValue = translated;
+    }
   }
 
   // Called by native after the gateway returns. translations is a JSON array the
