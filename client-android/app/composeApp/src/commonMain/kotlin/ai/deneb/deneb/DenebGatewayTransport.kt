@@ -157,7 +157,12 @@ internal suspend fun streamGatewayChat(
     // terminal frame. Fail so askGateway() reconciles the canonical transcript
     // instead of committing a blank or partial answer as complete.
     val done = terminal ?: throw IllegalStateException("chat stream ended before terminal event")
-    return GatewayReply(text = done.text, model = done.model, fellBack = done.fellBack)
+    return GatewayReply(
+        text = done.text,
+        model = done.model,
+        fellBack = done.fellBack,
+        reasoning = done.reasoning.ifBlank { null },
+    )
 }
 
 /**
@@ -321,6 +326,9 @@ internal data class GatewayReply(
     val model: String = "",
     val fellBack: Boolean = false,
     val ok: Boolean = true,
+    // Accumulated chain-of-thought for the turn, shown as the expandable reasoning
+    // block. Null/blank when the model produced none.
+    val reasoning: String? = null,
 )
 
 @Serializable
@@ -330,7 +338,12 @@ private data class DeltaEvent(val delta: String = "")
 private data class ThinkingEvent(val preview: String = "")
 
 @Serializable
-private data class DoneEvent(val text: String = "", val model: String = "", val fellBack: Boolean = false)
+private data class DoneEvent(
+    val text: String = "",
+    val model: String = "",
+    val fellBack: Boolean = false,
+    val reasoning: String = "",
+)
 
 @Serializable
 private data class ErrorEvent(val error: String = "")

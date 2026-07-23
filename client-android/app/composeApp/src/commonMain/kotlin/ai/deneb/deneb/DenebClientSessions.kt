@@ -310,6 +310,7 @@ internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): Lis
                 content = m.content,
                 attachments = attachments,
                 timestampMs = m.timestampMs,
+                reasoningContent = m.reasoning.ifBlank { null },
             )
         }
     }
