@@ -72,6 +72,39 @@ func TestMetaArtifacts_ProcedureRefDeterministicAndContentAddressed(t *testing.T
 	}
 }
 
+func TestMetaArtifacts_DispatchProcedureRefIsLaneSpecific(t *testing.T) {
+	var nilM *MetaArtifacts
+	ref := nilM.DispatchProcedureRef()
+	if ref != nilM.ProcedureRef(MetaDispatchContractPrompt) {
+		t.Fatalf("DispatchProcedureRef must equal ProcedureRef(dispatch): %q", ref)
+	}
+	if !strings.HasPrefix(ref, "proc-") || len(ref) != len("proc-")+12 {
+		t.Fatalf("dispatch ref = %q; want proc-<12hex>", ref)
+	}
+
+	dir := t.TempDir()
+	m := NewMetaArtifacts(dir, discardLogger())
+	m.MaterializeDefaults(DefaultMetaArtifacts())
+	if got := m.DispatchProcedureRef(); got != ref {
+		t.Fatalf("materialized default moved the dispatch ref: %q != %q", got, ref)
+	}
+	long := strings.Repeat("교체 본문. ", 40)
+	// Revising an UNRELATED prompt (evolve) must not move the dispatch ref.
+	if err := os.WriteFile(filepath.Join(dir, MetaEvolveSystemPrompt), []byte(long), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.DispatchProcedureRef(); got != ref {
+		t.Fatalf("unrelated evolve revision moved the dispatch ref: %q != %q", got, ref)
+	}
+	// Revising the dispatch contract prompt must move it.
+	if err := os.WriteFile(filepath.Join(dir, MetaDispatchContractPrompt), []byte(long), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.DispatchProcedureRef(); got == ref {
+		t.Fatalf("dispatch-contract revision did not move the ref: %q", got)
+	}
+}
+
 func TestMetaArtifacts_LoadAndShortFloor(t *testing.T) {
 	dir := t.TempDir()
 	m := NewMetaArtifacts(dir, discardLogger())

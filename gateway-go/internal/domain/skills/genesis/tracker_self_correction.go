@@ -90,9 +90,17 @@ type SelfCorrectionCandidateRecord struct {
 	// reads it to stop re-dispatching a candidate an unattended coding session
 	// keeps failing to complete (doctrine-conflicting or too large), which would
 	// otherwise burn a coding session on every dispatch tick.
-	DispatchFailures int   `json:"dispatchFailures,omitempty"`
-	CreatedAt        int64 `json:"createdAt"`
-	UpdatedAt        int64 `json:"updatedAt,omitempty"`
+	DispatchFailures int `json:"dispatchFailures,omitempty"`
+	// DispatchProcedureRef is the composite procedure token of the coding-session
+	// contract prompt (generation.MetaDispatchContractPrompt) that governed THIS
+	// dispatch attempt — the dispatch-stage counterpart to ProcedureRef (which is
+	// the candidate's PRODUCTION procedure). Stamped in-process at dispatch time
+	// and adopted first-seen per attempt (cleared by resetSelfCorrectionDelivery
+	// on a new attempt so a retry re-captures the then-current version). Purely
+	// additive attribution — it feeds no gate.
+	DispatchProcedureRef string `json:"dispatchProcedureRef,omitempty"`
+	CreatedAt            int64  `json:"createdAt"`
+	UpdatedAt            int64  `json:"updatedAt,omitempty"`
 }
 
 // RecordSelfCorrectionCandidate appends a deferred self-correction candidate.
@@ -491,6 +499,9 @@ func resetSelfCorrectionDelivery(base SelfCorrectionCandidateRecord) SelfCorrect
 	base.CommitSHA = ""
 	base.DeployHead = ""
 	base.OutcomeNote = ""
+	// A new attempt may run under a revised dispatch contract, so drop the ref
+	// too — the attempt's own started row re-captures the then-current version.
+	base.DispatchProcedureRef = ""
 	return base
 }
 
@@ -511,6 +522,9 @@ func fillSelfCorrectionDelivery(base, rec SelfCorrectionCandidateRecord) SelfCor
 	}
 	if base.DeployHead == "" && rec.DeployHead != "" {
 		base.DeployHead = rec.DeployHead
+	}
+	if base.DispatchProcedureRef == "" && rec.DispatchProcedureRef != "" {
+		base.DispatchProcedureRef = rec.DispatchProcedureRef
 	}
 	return base
 }
