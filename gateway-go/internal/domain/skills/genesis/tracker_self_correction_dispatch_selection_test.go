@@ -205,6 +205,105 @@ func TestLatestVerifiedImpactClearsNegativePriorityAndStrategyGate(t *testing.T)
 	}
 }
 
+func TestSelfCorrectionDispatchWithheldAfterRepeatedFailures(t *testing.T) {
+	tracker := newTestTracker(t)
+	// A candidate an unattended coding session keeps failing to land (a doctrine-
+	// conflicting or too-large fix). CanDispatch treats each "failed" phase as
+	// re-eligible, so without the failure cap it would consume a coding session on
+	// every tick. Once the count reaches the cap it is withheld entirely.
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "unwinnable", Scope: "code", Status: SelfCorrectionStatusAccepted,
+		Source: "health-finding:x", CreatedAt: 200,
+	})
+	appendSelfCorrectionDispatchFailures(t, tracker.selfCorrectionPath, "unwinnable", maxSelfCorrectionDispatchFailures)
+	// A sibling still under the cap stays retryable.
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "retryable", Scope: "code", Status: SelfCorrectionStatusAccepted,
+		Source: "health-finding:y", CreatedAt: 100,
+	})
+	appendSelfCorrectionDispatchFailures(t, tracker.selfCorrectionPath, "retryable", maxSelfCorrectionDispatchFailures-1)
+
+	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
+	if err != nil || !ok || got.ID != "retryable" {
+		t.Fatalf("selected = %+v, ok=%v, err=%v; want retryable (unwinnable withheld)", got, ok, err)
+	}
+	if got.DispatchFailures != maxSelfCorrectionDispatchFailures-1 {
+		t.Fatalf("retryable DispatchFailures = %d, want %d", got.DispatchFailures, maxSelfCorrectionDispatchFailures-1)
+	}
+	// Excluding the retryable sibling leaves nothing dispatchable: the repeatedly
+	// failing candidate is fully withheld, not merely deprioritized, so the L4
+	// loop stops burning coding sessions on it.
+	got, ok, err = tracker.NextSelfCorrectionDispatchCandidate([]string{"retryable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatalf("candidate still dispatchable after %d failures: %+v", maxSelfCorrectionDispatchFailures, got)
+	}
+}
+
+func TestSelfCorrectionDispatchFailureCountIsIdempotentAndRestartSafe(t *testing.T) {
+	tracker := newTestTracker(t)
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		ID: "cand", Scope: "code", Status: SelfCorrectionStatusAccepted,
+		Source: "health-finding:x", CreatedAt: 1,
+	})
+	appendSelfCorrectionDispatchFailures(t, tracker.selfCorrectionPath, "cand", maxSelfCorrectionDispatchFailures)
+	// Replaying the latest attempt's terminal "failed" row (a retried ledger
+	// write) must not double-count: samePhase guards the increment.
+	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
+		Type: selfCorrectionTypeDispatch, ID: "cand",
+		AttemptID:     fmt.Sprintf("cand-attempt-%d", maxSelfCorrectionDispatchFailures-1),
+		DispatchPhase: selfCorrectionDispatchFailed,
+	})
+
+	assertFailures := func(tr *Tracker, label string) {
+		t.Helper()
+		candidates, err := tr.allSelfCorrectionCandidates()
+		if err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		found := false
+		for _, record := range candidates {
+			if record.ID != "cand" {
+				continue
+			}
+			found = true
+			if record.DispatchFailures != maxSelfCorrectionDispatchFailures {
+				t.Fatalf("%s: DispatchFailures = %d, want %d (duplicate terminal row must not double-count)",
+					label, record.DispatchFailures, maxSelfCorrectionDispatchFailures)
+			}
+		}
+		if !found {
+			t.Fatalf("%s: candidate cand not found", label)
+		}
+	}
+	assertFailures(tracker, "in-memory fold")
+
+	// A restart rebuilds the identical count purely from the append-only ledger:
+	// the failure count is fold-derived, never carried in process state.
+	restarted := &Tracker{logger: tracker.logger, selfCorrectionPath: tracker.selfCorrectionPath}
+	assertFailures(restarted, "after restart")
+}
+
+// appendSelfCorrectionDispatchFailures appends failures distinct started→failed
+// dispatch attempts for id, mirroring how coding-dispatch.sh records a candidate
+// that repeatedly fails to land.
+func appendSelfCorrectionDispatchFailures(t *testing.T, path, id string, failures int) {
+	t.Helper()
+	for i := range failures {
+		attempt := fmt.Sprintf("%s-attempt-%d", id, i)
+		appendFunnel(t, path, SelfCorrectionCandidateRecord{
+			Type: selfCorrectionTypeDispatch, ID: id, AttemptID: attempt,
+			DispatchPhase: selfCorrectionDispatchStarted,
+		})
+		appendFunnel(t, path, SelfCorrectionCandidateRecord{
+			Type: selfCorrectionTypeDispatch, ID: id, AttemptID: attempt,
+			DispatchPhase: selfCorrectionDispatchFailed,
+		})
+	}
+}
+
 func dispatchImpactHistory(id, source, status string, checkedAt int64) SelfCorrectionCandidateRecord {
 	return SelfCorrectionCandidateRecord{
 		ID: id, Scope: "code", Status: SelfCorrectionStatusApplied,

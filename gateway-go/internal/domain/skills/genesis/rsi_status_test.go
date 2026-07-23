@@ -525,6 +525,51 @@ func TestRSIStatusL4MetricsReflectDispatchLifecyclePhasesWithoutMarkerCounts(t *
 	}
 }
 
+func TestRSIStatusL4WithholdsCandidateAfterRepeatedDispatchFailures(t *testing.T) {
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		ID: "stuck", Scope: "code", Title: "stuck", Source: "self-harness:test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fail := func(attempt string) {
+		t.Helper()
+		for _, phase := range []string{selfCorrectionDispatchStarted, selfCorrectionDispatchFailed} {
+			if _, err := tr.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
+				ID: "stuck", DispatchPhase: phase, AttemptID: attempt,
+			}); err != nil {
+				t.Fatalf("record %s/%s: %v", attempt, phase, err)
+			}
+		}
+	}
+
+	// Under the cap the candidate stays retryable and dispatchable.
+	for i := range maxSelfCorrectionDispatchFailures - 1 {
+		fail(fmt.Sprintf("attempt-%d", i))
+	}
+	l := tr.rsiAssessL4()
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
+		t.Fatalf("under the cap should stay dispatchable: 배차 가능=%s", got)
+	}
+	if got := rsiMetricValue(l.Metrics, "반복 실패 보류"); got != "0" {
+		t.Fatalf("under the cap should not be withheld: 반복 실패 보류=%s", got)
+	}
+
+	// The cap-reaching failure withholds it: no longer dispatchable, surfaced for
+	// operator review instead of vanishing from the dashboard.
+	fail(fmt.Sprintf("attempt-%d", maxSelfCorrectionDispatchFailures-1))
+	l = tr.rsiAssessL4()
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "0" {
+		t.Fatalf("cap reached must withhold from dispatch: 배차 가능=%s", got)
+	}
+	if got := rsiMetricValue(l.Metrics, "반복 실패 보류"); got != "1" {
+		t.Fatalf("withheld candidate must be surfaced: 반복 실패 보류=%s (%+v)", got, l.Metrics)
+	}
+	if l.State != rsiStateStarved || !strings.Contains(l.Diagnosis, "운영자 검토") {
+		t.Fatalf("withheld-only L4 should be STARVED asking for operator review: %s / %s", l.State, l.Diagnosis)
+	}
+}
+
 func TestRSIStatusL4SeparatesSafetyFromImpactVerdicts(t *testing.T) {
 	tr := newTestTracker(t)
 	candidate := recordImpactCandidate(t, tr)

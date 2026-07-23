@@ -74,8 +74,16 @@ type SelfCorrectionCandidateRecord struct {
 	CommitSHA     string `json:"commitSha,omitempty"`
 	DeployHead    string `json:"deployHead,omitempty"`
 	OutcomeNote   string `json:"outcomeNote,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
-	UpdatedAt     int64  `json:"updatedAt,omitempty"`
+	// DispatchFailures is the fold-derived count of dispatch attempts that
+	// terminated in the "failed" delivery phase (process failure/timeout, never
+	// landed). It is NOT a ledger input: applySelfCorrectionDispatch increments
+	// it while folding the append-only history, and SelfCorrectionDispatchEligible
+	// reads it to stop re-dispatching a candidate an unattended coding session
+	// keeps failing to complete (doctrine-conflicting or too large), which would
+	// otherwise burn a coding session on every dispatch tick.
+	DispatchFailures int   `json:"dispatchFailures,omitempty"`
+	CreatedAt        int64 `json:"createdAt"`
+	UpdatedAt        int64 `json:"updatedAt,omitempty"`
 }
 
 // RecordSelfCorrectionCandidate appends a deferred self-correction candidate.
@@ -433,6 +441,13 @@ func applySelfCorrectionDispatch(base, rec SelfCorrectionCandidateRecord) SelfCo
 		base = resetSelfCorrectionDelivery(base)
 	}
 	samePhase := base.DispatchPhase == phase && base.AttemptID == rec.AttemptID
+	if phase == selfCorrectionDispatchFailed && !samePhase {
+		// Count each distinct attempt that terminates in failure. samePhase means
+		// this is a duplicate "failed" row for the attempt already folded, so it
+		// must not double-count. resetSelfCorrectionDelivery deliberately leaves
+		// DispatchFailures intact so the count accumulates across retries.
+		base.DispatchFailures++
+	}
 	base.DispatchPhase = phase
 	if rec.AttemptID != "" {
 		base.AttemptID = rec.AttemptID
