@@ -65,6 +65,10 @@
   var MAX_GROUP_PARTS = 8;
   var MAX_GROUP_CHARS = 800;
   var VIEWPORT_MARGIN = 900;
+  // Max forced-layout (getBoundingClientRect) measurements per dispatch pass, so a
+  // large still-untranslated page can't reflow-storm on every scroll tick. Covers
+  // a few screens (incl. VIEWPORT_MARGIN prefetch); overflow ships without ranking.
+  var REFLOW_BUDGET = 80;
   var MAX_IFRAMES = 8;
   var MAX_IFRAME_DEPTH = 2;
   var SEGMENT_PAYLOAD_PREFIX = '\uE000deneb_translate_segment:v1:';
@@ -874,14 +878,27 @@
     var primaryRest = [];
     var rest = [];
     tids = unique(tids);
+    // isInViewport forces layout (getBoundingClientRect). Skipping settled nodes
+    // (above) makes the APPLIED page cheap, but while a large page is still being
+    // translated — the first enable, or Reddit loading fresh comments on scroll —
+    // there can be thousands of UNAPPLIED nodes, and measuring them all on every
+    // 140ms scroll tick is an O(untranslated) reflow storm that freezes scrolling
+    // (measured: ~thousands of forced reflows/scroll on a big thread). Cap the
+    // forced-layout budget per pass: once spent, remaining untranslated nodes are
+    // deprioritized to `rest` (shipped WITHOUT a reflow — dispatch() never measures)
+    // so everything still translates, just without viewport ranking this pass.
+    var reflows = 0;
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      // Skip already-translated / in-flight nodes BEFORE isInViewport — isInViewport
-      // calls getBoundingClientRect (forced reflow), so measuring settled nodes on
-      // every scroll/scan is exactly the O(N) reflow storm that freezes big pages.
       if (inFlight[tids[i]] || isApplied(rec)) continue;
-      var near = isInViewport(rec);
+      var near;
+      if (reflows >= REFLOW_BUDGET) {
+        near = false;
+      } else {
+        near = isInViewport(rec);
+        reflows++;
+      }
       if (rec.primary && near) primaryVisible.push(tids[i]);
       else if (near) visible.push(tids[i]);
       else if (rec.primary) primaryRest.push(tids[i]);
