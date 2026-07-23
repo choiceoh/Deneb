@@ -166,6 +166,64 @@ func isNarrationOnlyProactive(content string) bool {
 	return !strings.ContainsAny(stripOrdinalIndices(body), "0123456789") && containsMetaPreambleSignal(s)
 }
 
+// selfImprovementStrongMarkers are literal internal RSI machinery terms — a code
+// identifier or a self-coding queue token that appears ONLY in the agent's own
+// self-improvement bookkeeping, never in a business report. One is conclusive.
+var selfImprovementStrongMarkers = []string{
+	"failureclusters",
+	"pendingselfcorrections",
+	"self_correction",
+	"skill_lifecycle",
+	"자가코딩",
+	"자가개선 후보",
+	"실패 클러스터",
+}
+
+// selfImprovementSoftMarkers are internal self-improvement queue-status phrasings
+// that could, alone, brush a business sentence ("계약안이 제안됨"). Two together
+// are the signature of a self-coding queue dump.
+var selfImprovementSoftMarkers = []string{
+	"제안됨",
+	"미판정",
+	"전담 코딩 세션",
+	"evolve 거절",
+	"held-out",
+}
+
+// isSelfImprovementDiagnostic reports whether a proactive body is internal
+// self-improvement queue bookkeeping (the 자가코딩/자가개선 lane status the
+// heartbeat maintains) rather than a user-facing report. That status is drained
+// by a dedicated coding session and inspected on the native 자가코딩 개선 screen —
+// it carries no business meaning for the 업무 feed, so a body leaning on these
+// markers is internal diagnostics that slipped past the NO_REPLY contract and
+// must not become a feed card + push. Regression target: the 2026-07-23
+// self-perpetuating "큐 상태 재확인 — 변동 없음" loop that posted one such card
+// every 30 minutes.
+//
+// Conservative — fires on ANY strong marker (an internal code identifier cannot
+// appear in a real report) or on TWO soft markers (either alone might brush a
+// business sentence; the pair is the queue-dump signature). Matched against the
+// lowercased body so the Latin identifiers are case-insensitive; the Korean
+// markers are unaffected by folding.
+func isSelfImprovementDiagnostic(content string) bool {
+	s := strings.ToLower(content)
+	for _, m := range selfImprovementStrongMarkers {
+		if strings.Contains(s, m) {
+			return true
+		}
+	}
+	soft := 0
+	for _, m := range selfImprovementSoftMarkers {
+		if strings.Contains(s, m) {
+			soft++
+			if soft >= 2 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // metaPreambleMaxRunes bounds how long a leading paragraph may be and still count
 // as throwaway working-narration. Observed leaks are all under ~50 runes; a real
 // report lede that opens on the subject runs longer. The signal match below is

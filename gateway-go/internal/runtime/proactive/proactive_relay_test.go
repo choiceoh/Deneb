@@ -167,6 +167,70 @@ func TestRelay_IgnoresSilentReplyToken(t *testing.T) {
 	}
 }
 
+// TestRelay_IgnoresSelfImprovementDiagnostic verifies the relay drops internal
+// self-improvement queue bookkeeping (자가코딩/자가개선 lane status) so it never
+// lands in the 업무 feed. Regression guard for the 2026-07-23 self-perpetuating
+// "자가코딩 큐 재확인 — 변동 없음" loop that posted a card every 30 minutes.
+func TestRelay_IgnoresSelfImprovementDiagnostic(t *testing.T) {
+	cases := []string{
+		"자가코딩 큐를 확인하고, 해창만 견학 캘린더 질의 상태를 점검하겠습니다. 변동 없음 — 미판정 신규 '제안됨' 0건, failureClusters 8종 동일, pendingSelfCorrections 5건 전부 accepted(전담 코딩 세션 대기).",
+		"[자가코딩 제안 검토] 자가개선 후보 5건 전부 accepted, 전담 코딩 세션 대기.",
+		"skill_lifecycle(action=status)로 실패 클러스터를 확인했습니다. 신규 제안 없음.",
+	}
+	for _, body := range cases {
+		store := newRecordingTranscriptStore()
+		feed := &recordingWorkFeed{}
+		hub := newClientPushHub()
+		events, unsub := hub.subscribe(kindMobile)
+
+		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
+		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
+		if err != nil {
+			t.Fatalf("relay(%q): %v", body, err)
+		}
+		if delivered {
+			t.Errorf("relay(%q) delivered=true, want suppressed", body)
+		}
+		if n := len(feed.items); n != 0 {
+			t.Errorf("relay(%q) wrote %d work-feed item(s), want 0", body, n)
+		}
+		select {
+		case <-events:
+			t.Errorf("relay(%q) emitted a push, want none", body)
+		default:
+		}
+		unsub()
+	}
+}
+
+// TestIsSelfImprovementDiagnostic guards the predicate: internal queue
+// bookkeeping is caught while a business report that merely reuses one nearby
+// word (single soft marker) is left alone.
+func TestIsSelfImprovementDiagnostic(t *testing.T) {
+	internal := []string{
+		"자가코딩 큐를 확인했습니다. 변동 없음 — 미판정 신규 '제안됨' 0건, failureClusters 8종 동일.",
+		"pendingSelfCorrections 5건 전부 accepted(전담 코딩 세션 대기).",
+		"skill_lifecycle(action=status)로 실패 클러스터를 확인했습니다.",
+		"제안됨 0건 유지, 미판정 신규 없음.", // two soft markers, no strong
+	}
+	for _, s := range internal {
+		if !isSelfImprovementDiagnostic(s) {
+			t.Errorf("isSelfImprovementDiagnostic(%q) = false, want true", s)
+		}
+	}
+
+	business := []string{
+		"📬 메일 분석 보고 — 대한전선 당진 2차 6/5 착수보고회 참석 확인 필요",
+		"오늘 업무 요약\n- 회의 2건\n- 결재 대기 1건",
+		"양명에너지 계약 검토안이 제안됨 상태입니다. 회신 필요.", // single soft marker only
+	}
+	for _, s := range business {
+		if isSelfImprovementDiagnostic(s) {
+			t.Errorf("isSelfImprovementDiagnostic(%q) = true, want false", s)
+		}
+	}
+}
+
 // TestRelay_DeliversWithTrailingSilentTokenStripped verifies a real report
 // that merely ends with a NO_REPLY token is still delivered — with the token
 // stripped — rather than suppressed wholesale.
