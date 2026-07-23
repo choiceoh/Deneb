@@ -77,6 +77,12 @@ type acceptedSkillCandidate struct {
 	Body        string
 	Description string
 	Audit       HarnessEditAudit
+	// producer pins the model + evolve-prompt version that generated this body.
+	// Empty for the lightweight path (the outer producer snapshot already covers
+	// it); populated by teacherRewrite so a teacher-escalated commit re-stamps
+	// BOTH producer fields with the teacher's own snapshot, not the rejected
+	// primary's.
+	producer producerSnapshot
 }
 
 // selfTestAndMaybeEscalate judges a candidate rewrite. On pass it returns the
@@ -92,9 +98,10 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 	// self-preference bias skews toward accepting it (LLM-judge survey
 	// arXiv:2508.02994). pickCandidateJudge routes to the teacher when wired.
 	judgeClient, judgeModel := e.pickCandidateJudge()
-	if prov != nil {
-		prov.JudgeModel = judgeModel
-	}
+	// JudgeModel/JudgeArtifactVersion are stamped inside judgeCandidate at each
+	// verdict (last wins), so the record reflects the model that judged the
+	// COMMITTED body — on escalation that is the primary re-judging the teacher
+	// rewrite, not this first judge.
 	pass, reason, err := e.validateCandidate(ctx, entry.Skill.Name, judgeClient, judgeModel, originalContent, candidateBody, stats, audit, reviewFinding, prov)
 	if err != nil {
 		e.logger.Warn("evolver: self-test errored, keeping original",
@@ -129,6 +136,17 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 		return acceptedSkillCandidate{}, false, "teacher: " + treason
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
+	// The committed body is the TEACHER's rewrite, produced under the teacher's
+	// own model AND the evolve prompt at ITS call — re-stamp both producer fields
+	// from the teacher's captured snapshot (the seed came from the primary that
+	// made the REJECTED candidate). Pure record side-effect — the accept/reject
+	// decision above is unchanged. Without this, a teacher-escalated commit is
+	// miscredited to the lightweight/coding model and the primary's prompt
+	// version.
+	if prov != nil {
+		prov.EvolveModel = teacherCandidate.producer.model
+		prov.EvolveArtifactVersion = teacherCandidate.producer.evolveVersion
+	}
 	return teacherCandidate, true, treason
 }
 

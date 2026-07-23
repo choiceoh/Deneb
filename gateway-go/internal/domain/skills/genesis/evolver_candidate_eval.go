@@ -45,7 +45,7 @@ type evaluatedCandidate struct {
 // the old parseAndApply, split out so the K-candidate selector (#3) can score
 // several candidates before any single one is committed. Behavior for one
 // candidate is identical to the previous inline path.
-func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (evaluatedCandidate, error) {
+func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, snap producerSnapshot, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (evaluatedCandidate, error) {
 	resp, err := jsonutil.UnmarshalLLM[evolveResp](text)
 	if err != nil {
 		return evaluatedCandidate{}, fmt.Errorf("evolver: parse response (len=%d, tail=%q): %w",
@@ -87,7 +87,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, entry 
 	audit = withHarnessDimensions(audit)
 	committedDescription := strings.TrimSpace(resp.Changes.Description)
 	committedAudit := audit
-	prov := e.newProvenance()
+	prov := provenanceFromProducer(snap)
 
 	// Gate order is inviolable: behavioral replay → deterministic selection
 	// preflight (self-test-off mode) → LLM self-test + teacher escalation.

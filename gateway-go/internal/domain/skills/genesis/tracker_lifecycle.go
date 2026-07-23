@@ -6,6 +6,7 @@ import (
 	"time"
 
 	genesiseprocess "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/eprocess"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
 
@@ -146,17 +147,43 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // Additive JSONL — older entries simply lack it; P2/P3 consume it as their
 // label substrate (per-version judge accuracy, false-accept attribution).
 type evolveProvenance struct {
-	EvolveArtifactVersion string   `json:"evolveArtifactVersion,omitempty"`
-	JudgeArtifactVersion  string   `json:"judgeArtifactVersion,omitempty"`
-	JudgeModel            string   `json:"judgeModel,omitempty"`
-	JudgeScoreOriginal    *float64 `json:"judgeScoreOriginal,omitempty"`
-	JudgeScoreCandidate   *float64 `json:"judgeScoreCandidate,omitempty"`
-	HeldOutMargin         *float64 `json:"heldOutMargin,omitempty"`
+	// ProcedureRef is the composite content-addressed token (proc-<hex>) for the
+	// WHOLE active procedure — every meta-artifact prompt version folded together
+	// (generation.MetaArtifacts.ProcedureRef). It is the single credit-assignment
+	// key: group evolve outcomes by it to attribute a quality shift to the exact
+	// procedure state that produced them, rather than to one prompt at a time.
+	ProcedureRef          string `json:"procedureRef,omitempty"`
+	EvolveArtifactVersion string `json:"evolveArtifactVersion,omitempty"`
+	JudgeArtifactVersion  string `json:"judgeArtifactVersion,omitempty"`
+	// EvolveModel is the producer (rewrite) model role — the second axis beside
+	// the procedure text. JudgeModel already records the evaluator; together they
+	// separate "the prompt changed" from "the model changed" in attribution.
+	EvolveModel         string   `json:"evolveModel,omitempty"`
+	JudgeModel          string   `json:"judgeModel,omitempty"`
+	JudgeScoreOriginal  *float64 `json:"judgeScoreOriginal,omitempty"`
+	JudgeScoreCandidate *float64 `json:"judgeScoreCandidate,omitempty"`
+	HeldOutMargin       *float64 `json:"heldOutMargin,omitempty"`
 	// JudgeSwapConsistent records the order-swap consistency probe outcome for
 	// an accepting forward verdict (RSI P3): true = the reversed pair was
 	// rejected as required; false = the judge blessed both orders and the
 	// evolve was refused. Absent when the probe was disabled or never reached.
 	JudgeSwapConsistent *bool `json:"judgeSwapConsistent,omitempty"`
+}
+
+// fillProcedureRef derives the composite ref from the governing versions that
+// were captured at their actual LLM calls (evolve at generate, skill-judge at
+// the committed verdict). Computed here, right before the record is written, so
+// it is consistent with those stamped versions and never re-read from mutable
+// config. A never-judged path leaves JudgeArtifactVersion empty — the ref still
+// pins the evolve prompt deterministically.
+func (p *evolveProvenance) fillProcedureRef() {
+	if p == nil {
+		return
+	}
+	p.ProcedureRef = generation.ProcedureRefFromVersions(map[string]string{
+		generation.MetaEvolveSystemPrompt:     p.EvolveArtifactVersion,
+		generation.MetaSkillJudgeSystemPrompt: p.JudgeArtifactVersion,
+	})
 }
 
 // rollbackBaselineTest is the baseline-aware test's verdict at the moment a
@@ -208,6 +235,7 @@ func (t *Tracker) LogEvolveWithAudit(skillName, newVersion, description string, 
 // certificate (RSI P1.5). prov may be nil (legacy callers).
 func (t *Tracker) logEvolveWithProvenance(skillName, newVersion, description string, audit HarnessEditAudit, prov *evolveProvenance) error {
 	audit = withHarnessDimensions(audit)
+	prov.fillProcedureRef()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
@@ -369,6 +397,7 @@ func (t *Tracker) LogEvolveRejectedWithAudit(skillName, reason string, audit Har
 // evaluator-attribution certificate (RSI P1.5). prov may be nil.
 func (t *Tracker) logEvolveRejectedWithProvenance(skillName, reason string, audit HarnessEditAudit, prov *evolveProvenance) error {
 	audit = withHarnessDimensions(audit)
+	prov.fillProcedureRef()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := time.Now().UnixMilli()
