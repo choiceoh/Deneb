@@ -21,13 +21,16 @@ func TestNewProvenanceStampsProcedureVersionAndModel(t *testing.T) {
 	if prov.EvolveModel != "lightweight" {
 		t.Errorf("EvolveModel = %q; want the producer model role", prov.EvolveModel)
 	}
-	// Complete per-prompt breakdown: evolve + judge + genesis all pinned.
-	if prov.EvolveArtifactVersion == "" || prov.JudgeArtifactVersion == "" || prov.GenesisArtifactVersion == "" {
-		t.Errorf("per-artifact versions incomplete: %+v", prov)
+	// The two prompts that govern an evolve decision are pinned.
+	if prov.EvolveArtifactVersion == "" || prov.JudgeArtifactVersion == "" {
+		t.Errorf("governing artifact versions incomplete: %+v", prov)
 	}
-	// The composite must equal the resolver's ProcedureRef over the same
-	// procedure — the certificate can't drift from the artifacts it claims.
-	if want := generation.NewMetaArtifacts("", nil).ProcedureRef(); prov.ProcedureRef != want {
-		t.Errorf("ProcedureRef = %q; want resolver composite %q", prov.ProcedureRef, want)
+	// The composite must equal the resolver's ProcedureRef over exactly the
+	// governing (evolve + skill-judge) prompts — the certificate can't drift from
+	// the artifacts it claims, and it must be lane-specific.
+	want := generation.NewMetaArtifacts("", nil).ProcedureRef(
+		generation.MetaEvolveSystemPrompt, generation.MetaSkillJudgeSystemPrompt)
+	if prov.ProcedureRef != want {
+		t.Errorf("ProcedureRef = %q; want governing-set composite %q", prov.ProcedureRef, want)
 	}
 }

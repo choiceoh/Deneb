@@ -129,6 +129,14 @@ func (e *Evolver) selfTestAndMaybeEscalate(ctx context.Context, entry *skills.Sk
 		return acceptedSkillCandidate{}, false, "teacher: " + treason
 	}
 	e.logger.Info("evolver: teacher escalation succeeded", "skill", entry.Skill.Name)
+	// The committed body is the TEACHER's rewrite, not the primary producer's, so
+	// correct the provenance producer attribution (newProvenance defaulted it to
+	// e.model). Pure record side-effect — the accept/reject decision above is
+	// unchanged. Without this, teacher-authored evolves are miscredited to the
+	// lightweight/coding model in the per-producer credit assignment.
+	if prov != nil {
+		prov.EvolveModel = teacherModel
+	}
 	return teacherCandidate, true, treason
 }
 

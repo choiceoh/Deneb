@@ -510,6 +510,12 @@ func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
 		entries[0].SelfHarnessAudit.TargetSignature != result.Audit.TargetSignature {
 		t.Fatalf("expected lifecycle log to use teacher metadata, got %+v", entries)
 	}
+	// The committed body is the teacher's rewrite, so producer-model provenance
+	// must credit the teacher — not the lightweight producer that newProvenance
+	// seeded (regression guard for the escalation attribution fix).
+	if entries[0].Provenance == nil || entries[0].Provenance.EvolveModel != "teacher" {
+		t.Fatalf("teacher-escalated evolve must credit the teacher producer, got provenance %+v", entries[0].Provenance)
+	}
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

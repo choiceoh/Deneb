@@ -27,14 +27,20 @@ func TestMetaArtifacts_FallbackModes(t *testing.T) {
 }
 
 func TestMetaArtifacts_ProcedureRefDeterministicAndContentAddressed(t *testing.T) {
+	governing := []string{MetaEvolveSystemPrompt, MetaSkillJudgeSystemPrompt} // an L1 evolve decision's prompts
+
 	// Nil-safe + pure-fallback: a well-formed, stable token.
 	var nilM *MetaArtifacts
-	ref := nilM.ProcedureRef()
+	ref := nilM.ProcedureRef(governing...)
 	if !strings.HasPrefix(ref, "proc-") || len(ref) != len("proc-")+12 {
 		t.Fatalf("ProcedureRef = %q; want proc-<12hex>", ref)
 	}
-	if again := NewMetaArtifacts("", discardLogger()).ProcedureRef(); again != ref {
+	if again := NewMetaArtifacts("", discardLogger()).ProcedureRef(governing...); again != ref {
 		t.Fatalf("ProcedureRef not deterministic across pure-fallback instances: %q vs %q", ref, again)
+	}
+	// Argument ORDER must not matter (sorted internally).
+	if swapped := nilM.ProcedureRef(MetaSkillJudgeSystemPrompt, MetaEvolveSystemPrompt); swapped != ref {
+		t.Fatalf("ProcedureRef is order-sensitive: %q vs %q", swapped, ref)
 	}
 
 	// Materialized defaults are byte-identical to the compiled fallbacks, so the
@@ -42,18 +48,27 @@ func TestMetaArtifacts_ProcedureRefDeterministicAndContentAddressed(t *testing.T
 	dir := t.TempDir()
 	m := NewMetaArtifacts(dir, discardLogger())
 	m.MaterializeDefaults(DefaultMetaArtifacts())
-	if got := m.ProcedureRef(); got != ref {
+	if got := m.ProcedureRef(governing...); got != ref {
 		t.Fatalf("materialized-defaults ref = %q; want unchanged %q", got, ref)
 	}
 
-	// Revising ONE governing prompt must move the composite ref (credit
-	// assignment can tell the procedure state apart).
-	revised := strings.Repeat("개정된 evolve 프롬프트 본문. ", 40) // comfortably above MetaArtifactMinBytes
-	if err := os.WriteFile(filepath.Join(dir, MetaEvolveSystemPrompt), []byte(revised), 0o644); err != nil {
+	// Lane-specificity: revising an UNRELATED prompt (the L4 dispatch contract,
+	// not in the governing set) must NOT move an evolve ref — else credit
+	// assignment fragments on changes that never touched the evolve decision.
+	long := strings.Repeat("교체 본문. ", 40) // comfortably above MetaArtifactMinBytes
+	if err := os.WriteFile(filepath.Join(dir, MetaDispatchContractPrompt), []byte(long), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := m.ProcedureRef(); got == ref {
-		t.Fatalf("ProcedureRef unchanged after revising an artifact: %q", got)
+	if got := m.ProcedureRef(governing...); got != ref {
+		t.Fatalf("evolve ref moved after revising an UNRELATED (dispatch) prompt: %q != %q", got, ref)
+	}
+
+	// But revising a GOVERNING prompt must move it (the procedure state changed).
+	if err := os.WriteFile(filepath.Join(dir, MetaEvolveSystemPrompt), []byte(long), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.ProcedureRef(governing...); got == ref {
+		t.Fatalf("ProcedureRef unchanged after revising a governing artifact: %q", got)
 	}
 }
 

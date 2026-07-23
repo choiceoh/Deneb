@@ -258,12 +258,17 @@ func (e *Evolver) newProvenance() evolveProvenance {
 	model := e.model
 	e.configMu.RUnlock()
 	defaults := generation.DefaultMetaArtifacts()
+	// The governing prompts of an EVOLVE decision are the producer (evolve) and
+	// the skill-judge prompts — NOT genesis (skill creation) or the L4 dispatch
+	// contract. ProcedureRef folds exactly those two so the ref only moves when a
+	// prompt that actually shaped this decision changed. EvolveModel defaults to
+	// the primary producer; the teacher-escalation path corrects it when the
+	// committed body is the teacher's (selfTestAndMaybeEscalate).
 	return evolveProvenance{
-		ProcedureRef:           m.ProcedureRef(),
-		EvolveArtifactVersion:  m.Version(generation.MetaEvolveSystemPrompt, defaults[generation.MetaEvolveSystemPrompt]),
-		JudgeArtifactVersion:   m.Version(generation.MetaSkillJudgeSystemPrompt, defaults[generation.MetaSkillJudgeSystemPrompt]),
-		GenesisArtifactVersion: m.Version(generation.MetaGenesisSystemPrompt, defaults[generation.MetaGenesisSystemPrompt]),
-		EvolveModel:            model,
+		ProcedureRef:          m.ProcedureRef(generation.MetaEvolveSystemPrompt, generation.MetaSkillJudgeSystemPrompt),
+		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, defaults[generation.MetaEvolveSystemPrompt]),
+		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, defaults[generation.MetaSkillJudgeSystemPrompt]),
+		EvolveModel:           model,
 	}
 }
 

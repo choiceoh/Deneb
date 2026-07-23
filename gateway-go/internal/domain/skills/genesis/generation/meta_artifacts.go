@@ -286,32 +286,34 @@ func (m *MetaArtifacts) ActiveVersions(defaults map[string]string) map[string]st
 	return out
 }
 
-// ProcedureRef returns one content-addressed token identifying the WHOLE active
-// procedure — every meta-artifact prompt version folded together — as
-// "proc-<12hex>". The hash is over the sorted "name=version" lines of
-// ActiveVersions, so two decisions carry the same ProcedureRef iff EVERY
+// ProcedureRef returns one content-addressed token — "proc-<12hex>" — folding
+// together the versions of exactly the prompt artifacts NAMED by the caller:
+// the ones that govern the decision being recorded. The hash is over the sorted
+// "name=version" lines, so two decisions carry the same ProcedureRef iff every
 // governing prompt was byte-identical. It is the composite analogue of the
-// per-artifact Version: a downstream outcome can be attributed to the exact
-// procedure state that produced it (credit assignment across the RSI loop),
-// where the individual Version()s only pin one prompt each.
+// per-artifact Version (which pins one prompt each): a downstream outcome can be
+// attributed to the exact procedure state that produced it.
+//
+// It is deliberately LANE-SPECIFIC rather than folding in DefaultMetaArtifacts
+// wholesale — an evolve ref must not shift when an unrelated prompt (e.g. the
+// L4 dispatch-contract prompt, consumed out-of-process) is revised, or the
+// credit-assignment grouping would fragment. Callers pass the governing set
+// (e.g. evolve + skill-judge for an L1 evolve decision).
 //
 // Model role is deliberately NOT folded in — which model executed the procedure
 // is a separate axis, carried alongside on the record (EvolveModel/JudgeModel)
 // so "the procedure text changed" and "the executor changed" stay
 // distinguishable. Deterministic and nil-safe (all-fallback composite when
 // unwired), so it is safe to mint on every decision.
-func (m *MetaArtifacts) ProcedureRef() string {
-	versions := m.ActiveVersions(DefaultMetaArtifacts())
-	names := make([]string, 0, len(versions))
-	for name := range versions {
-		names = append(names, name)
-	}
+func (m *MetaArtifacts) ProcedureRef(governing ...string) string {
+	defaults := DefaultMetaArtifacts()
+	names := append([]string(nil), governing...)
 	sort.Strings(names)
 	var sb strings.Builder
 	for _, name := range names {
 		sb.WriteString(name)
 		sb.WriteByte('=')
-		sb.WriteString(versions[name])
+		sb.WriteString(m.Version(name, defaults[name]))
 		sb.WriteByte('\n')
 	}
 	sum := sha256.Sum256([]byte(sb.String()))

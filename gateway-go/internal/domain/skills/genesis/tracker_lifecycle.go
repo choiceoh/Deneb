@@ -154,10 +154,6 @@ type evolveProvenance struct {
 	ProcedureRef          string `json:"procedureRef,omitempty"`
 	EvolveArtifactVersion string `json:"evolveArtifactVersion,omitempty"`
 	JudgeArtifactVersion  string `json:"judgeArtifactVersion,omitempty"`
-	// GenesisArtifactVersion completes the per-prompt breakdown: the evolve path
-	// also runs under the active genesis-system-prompt, so pinning it lets a
-	// reader see which single prompt changed between two ProcedureRefs.
-	GenesisArtifactVersion string `json:"genesisArtifactVersion,omitempty"`
 	// EvolveModel is the producer (rewrite) model role — the second axis beside
 	// the procedure text. JudgeModel already records the evaluator; together they
 	// separate "the prompt changed" from "the model changed" in attribution.
