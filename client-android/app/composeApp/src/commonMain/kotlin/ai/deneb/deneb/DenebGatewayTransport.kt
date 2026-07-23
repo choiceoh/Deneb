@@ -98,6 +98,7 @@ internal suspend fun streamGatewayChat(
     message: String,
     onTool: (ToolEvent) -> Unit = {},
     onThinking: (String) -> Unit = {},
+    onReasoning: (String) -> Unit = {},
     onDelta: (String) -> Unit,
 ): GatewayReply {
     if (clientToken.isEmpty()) return missingTokenReply()
@@ -131,6 +132,7 @@ internal suspend fun streamGatewayChat(
                 onDelta = onDelta,
                 onTool = onTool,
                 onThinking = onThinking,
+                onReasoning = onReasoning,
                 onDone = { terminal = it },
             )
         }
@@ -274,6 +276,7 @@ private fun dispatchGatewayEvent(
     onDelta: (String) -> Unit,
     onTool: (ToolEvent) -> Unit,
     onThinking: (String) -> Unit,
+    onReasoning: (String) -> Unit,
     onDone: (DoneEvent) -> Unit,
 ) {
     when (event) {
@@ -286,6 +289,10 @@ private fun dispatchGatewayEvent(
             ?.let(onTool)
 
         "thinking" -> onThinking(decodeOrNull<ThinkingEvent>(jsonCodec, data)?.preview.orEmpty())
+
+        "reasoning" -> decodeOrNull<ReasoningEvent>(jsonCodec, data)?.reasoning
+            ?.takeIf(String::isNotEmpty)
+            ?.let(onReasoning)
 
         "done" -> decodeOrNull<DoneEvent>(jsonCodec, data)?.let(onDone)
 
@@ -336,6 +343,9 @@ private data class DeltaEvent(val delta: String = "")
 
 @Serializable
 private data class ThinkingEvent(val preview: String = "")
+
+@Serializable
+private data class ReasoningEvent(val reasoning: String = "")
 
 @Serializable
 private data class DoneEvent(

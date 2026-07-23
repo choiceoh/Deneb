@@ -233,6 +233,9 @@ export function useChat(cfg: GatewayConfig): ChatState {
         msg,
         {
           onThinking: (preview) => setThinking(preview.slice(0, 120)),
+          // Live full reasoning-so-far → grow the answer's expandable block while
+          // streaming (the done frame settles the final value).
+          onReasoning: (reasoning) => patch((turn) => ({ ...turn, reasoning })),
           onDelta: (t) => {
             setThinking("");
             appendText(t);

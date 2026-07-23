@@ -57,6 +57,10 @@ const (
 	// thinkingRecentToolsMax bounds the ring of recent tool hints fed to the
 	// summarizer so the progress line reflects real actions, not just musing.
 	thinkingRecentToolsMax = 3
+	// fullReasoningMaxRunes bounds the live full-reasoning accumulator so a very
+	// long chain-of-thought can't grow the per-frame payload without limit; the
+	// canonical full reasoning still arrives on the done frame regardless.
+	fullReasoningMaxRunes = 60000
 )
 
 // sentenceTerminatorCutset trims trailing sentence punctuation/space so a chip
@@ -78,6 +82,12 @@ type Broadcaster struct {
 	// that throttled EmitThinking frames condense into a chip-sized preview.
 	thinkingMu   sync.Mutex
 	thinkingTail []rune
+	// fullThinking accumulates the entire reasoning stream (bounded by
+	// fullReasoningMaxRunes) so a throttled EmitThinking frame can carry the full
+	// reasoning-so-far as `reasoningFull`, letting the client grow a LIVE
+	// expandable reasoning block (not just the chip-sized tail preview). Guarded
+	// by thinkingMu.
+	fullThinking []rune
 	// summarize, when set via SetThinkingSummarizer, refines the reasoning chip
 	// into a fast-model Korean progress line (Option A). It receives the raw
 	// reasoning tail and a hint of the recently-run tools (so the line reflects
@@ -163,6 +173,11 @@ func (sb *Broadcaster) EmitThinking(delta string) {
 			payload["preview"] = preview
 		}
 	}
+	// Full reasoning-so-far for the client's live expandable block (the chip uses
+	// only `preview`). Sent every throttle window; the client replaces its block.
+	if full := sb.fullReasoning(); full != "" {
+		payload["reasoningFull"] = full
+	}
 	n := sb.emit(EventThinking, payload)
 
 	// Refine the chip into a fast-model Korean progress line, OFF the hot path.
@@ -218,6 +233,19 @@ func (sb *Broadcaster) appendThinking(delta string) {
 	if over := len(sb.thinkingTail) - thinkingTailRunes; over > 0 {
 		sb.thinkingTail = sb.thinkingTail[over:]
 	}
+	sb.fullThinking = append(sb.fullThinking, dr...)
+	if over := len(sb.fullThinking) - fullReasoningMaxRunes; over > 0 {
+		sb.fullThinking = sb.fullThinking[over:]
+	}
+}
+
+// fullReasoning snapshots the entire accumulated reasoning (bounded by
+// fullReasoningMaxRunes) for the live reasoning-block stream — distinct from
+// reasoningTail (512-rune chip tail) and thinkingPreview (condensed chip line).
+func (sb *Broadcaster) fullReasoning() string {
+	sb.thinkingMu.Lock()
+	defer sb.thinkingMu.Unlock()
+	return string(sb.fullThinking)
 }
 
 // thinkingPreview condenses the rolling reasoning tail into one chip-sized,
