@@ -114,7 +114,7 @@ internal suspend fun DenebGatewayClient.askGateway(
                 isStatusMessage = true,
             )
         }
-        val recovered = try {
+        val recovery = try {
             recoverTurnFromTranscript(sessionKeyAtSend, sendText)
         } catch (cancel: CancellationException) {
             settleChatPlaceholder(assistantId, accumulated.toString())
@@ -125,18 +125,26 @@ internal suspend fun DenebGatewayClient.askGateway(
             // server transcript, which already lacks it, so this is then a no-op).
             _chatHistory.update { list -> list.filter { it.id != recoveryRowId } }
         }
-        recovered ?: if (accumulated.isEmpty()) {
-            try {
-                sendGatewayChat(http, gatewayUrl, clientToken, sessionKey, sendText)
-            } catch (cancel: CancellationException) {
-                settleChatPlaceholder(assistantId, accumulated.toString())
-                askActive = false
-                throw cancel
-            } catch (sendError: Exception) {
-                GatewayReply("⚠️ ${sendError.message ?: "gateway request failed"}", ok = false)
+        when (recovery) {
+            is TurnRecoveryResult.Recovered -> recovery.reply
+            TurnRecoveryResult.NotArrived -> if (accumulated.isEmpty()) {
+                try {
+                    sendGatewayChat(http, gatewayUrl, clientToken, sessionKeyAtSend, sendText)
+                } catch (cancel: CancellationException) {
+                    settleChatPlaceholder(assistantId, accumulated.toString())
+                    askActive = false
+                    throw cancel
+                } catch (sendError: Exception) {
+                    GatewayReply("⚠️ ${sendError.message ?: "gateway request failed"}", ok = false)
+                }
+            } else {
+                GatewayReply(text = accumulated.toString(), ok = false)
             }
-        } else {
-            GatewayReply(text = accumulated.toString(), ok = false)
+            TurnRecoveryResult.GiveUp -> if (accumulated.isEmpty()) {
+                GatewayReply("⚠️ 답변을 이어받지 못했습니다", ok = false)
+            } else {
+                GatewayReply(text = accumulated.toString(), ok = false)
+            }
         }
     } finally {
         progress.clear()
