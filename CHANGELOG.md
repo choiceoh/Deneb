@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.137.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.136.0...deneb-v4.137.0) (2026-07-23)
+
+
+### ✨ Features
+
+* **chat:** 추론 실시간 스트리밍 — 답변 중 추론 블록이 자라며 펼쳐지게 ([#4180](https://github.com/choiceoh/Deneb/issues/4180)) ([e253aed](https://github.com/choiceoh/Deneb/commit/e253aedabfc232a86135b18549cda7e3f0365f66))
+* **wiki:** 지식그래프에 에피소드 출처(provenance) 배선 ([#4181](https://github.com/choiceoh/Deneb/issues/4181)) ([585f1ee](https://github.com/choiceoh/Deneb/commit/585f1ee0964ff3f12a4ef75d3601bc1a6eb3c06c))
+* 데스크톱 추론 블록 복구 + 폰 재시작 직후 추론 표시(캐시) ([#4179](https://github.com/choiceoh/Deneb/issues/4179)) ([1908f41](https://github.com/choiceoh/Deneb/commit/1908f41ed2b2f3cbaa6befb2919c9631b49b2591))
+* 추론 펼쳐보기 — 답변 밑 접이식 추론 블록 (폰+데스크톱) ([#4177](https://github.com/choiceoh/Deneb/issues/4177)) ([b476ffb](https://github.com/choiceoh/Deneb/commit/b476ffbfa2bba53414a5cc26853dd9f6af478a69))
+
+
+### 🐛 Bug Fixes
+
+* **browser:** cap forced-layout budget per translate pass (large-page scroll freeze) ([#4182](https://github.com/choiceoh/Deneb/issues/4182)) ([538022a](https://github.com/choiceoh/Deneb/commit/538022aa7a1a203bd34f478f4c13cc72f5821180))
+
 ## [4.136.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.135.0...deneb-v4.136.0) (2026-07-23)
 
 
