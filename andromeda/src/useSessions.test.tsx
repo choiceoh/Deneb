@@ -42,7 +42,17 @@ describe("useSessions", () => {
     const { result } = renderHook(() => useSessions(cfg, true, false, chat, { filter: "client:main:" }));
 
     await waitFor(() => expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main:a", "client:main:b"]));
-    expect(recent).toHaveBeenCalledWith(cfg, 20);
+    expect(recent).toHaveBeenCalledWith(cfg, 20, undefined);
+  });
+
+  it("scopes the recent fetch to a channel server-side when given one", async () => {
+    // Regression: the CHAT tab must ask the gateway for its OWN channel, else the
+    // newest-N window is filled by autonomous sessions (heartbeat/cron/mail) and
+    // the client-side filter leaves the drawer looking empty.
+    recent.mockResolvedValue([{ key: "client:main", label: "업무" }]);
+    const chat = chatDouble();
+    renderHook(() => useSessions(cfg, true, false, chat, { channel: "client", filter: "client:" }));
+    await waitFor(() => expect(recent).toHaveBeenCalledWith(cfg, 20, "client"));
   });
 
   it("refetches on window focus so a mid-restore partial list self-heals", async () => {
