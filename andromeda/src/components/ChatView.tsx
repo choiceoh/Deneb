@@ -72,6 +72,10 @@ export function ChatView({ cfg, hidden = false }: { cfg: GatewayConfig; hidden?:
     { clear, setTurns },
     {
       mainKey: "client:main",
+      // channel scopes the recent list server-side so autonomous sessions
+      // (heartbeat/cron/mail) can't crowd the user's chats out of the newest-N
+      // window; filter stays as the client-side guard.
+      channel: "client",
       filter: "client:",
       // 새 대화 → 홈에서 분기한 고유 client:main:<id> 발급. Date.now/random은 앱 런타임이라 사용 가능.
       newKey: () => `client:main:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
