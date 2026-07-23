@@ -165,9 +165,10 @@ func TestBuildGraphSnapshotProjectsProvenance(t *testing.T) {
 	if len(curNode.Provenance) != 2 || curNode.Provenance[1] != "d2026-07-20#cccc3333" {
 		t.Errorf("provenance not projected: %v", curNode.Provenance)
 	}
-	// source_location must anchor to the newest episode, not the old "L1" stub.
-	if curNode.SourceLocation != "d2026-07-20#cccc3333" {
-		t.Errorf("source_location = %q; want newest episode ref", curNode.SourceLocation)
+	// Episode refs live in Provenance; source_location stays graphify's clickable
+	// line-anchor form so query/explain citations don't break.
+	if curNode.SourceLocation != "L1" {
+		t.Errorf("source_location = %q; want L1 line anchor", curNode.SourceLocation)
 	}
 	if curNode.Confidence != "high" {
 		t.Errorf("confidence = %q; want high", curNode.Confidence)
@@ -189,6 +190,21 @@ func TestBuildGraphSnapshotProjectsProvenance(t *testing.T) {
 	// superseded_by must resolve from the raw relPath to the successor node id.
 	if oldNode.SupersededBy != "new-price" {
 		t.Errorf("superseded_by = %q; want resolved node id new-price", oldNode.SupersededBy)
+	}
+	// A traversable edge must connect the stale page to its replacement — a node
+	// attribute alone is not on any link graphify's query/path walks.
+	edgeFound := false
+	for _, e := range graph.Links {
+		if e.Relation != "superseded_by" {
+			continue
+		}
+		if (e.Source == "old-price" && e.Target == "new-price") ||
+			(e.Source == "new-price" && e.Target == "old-price") {
+			edgeFound = true
+		}
+	}
+	if !edgeFound {
+		t.Errorf("no superseded_by edge between old-price and new-price; links=%+v", graph.Links)
 	}
 }
 

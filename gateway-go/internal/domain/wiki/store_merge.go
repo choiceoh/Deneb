@@ -266,6 +266,10 @@ func mergeFrontmatterInto(dst *Frontmatter, src Frontmatter) {
 	dst.Emails = unionStrings(dst.Emails, src.Emails)
 	dst.Sites = normalizeSites(append(append([]string{}, dst.Sites...), src.Sites...))
 	dst.Kinds = normalizeKinds(append(append([]string{}, dst.Kinds...), src.Kinds...))
+	// Episode provenance must survive the fold: the source page is deleted after
+	// its body merges into the survivor, so dropping its refs would leave the
+	// merged facts uncitable in the graph. Union (bounded newest-window).
+	dst.Sources = normalizeSources(append(append([]string{}, dst.Sources...), src.Sources...))
 	if src.Importance > dst.Importance {
 		dst.Importance = src.Importance
 	}

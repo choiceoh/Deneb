@@ -293,7 +293,7 @@ func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 // setProjectStatus replaces a project page's 현재 상태 section with a fresh
 // roll-up (the dream cycle's compacted lines, most salient first). Creates the
 // page if absent. now stamps Updated (injected for deterministic tests).
-func (s *Store) setProjectStatus(relPath string, lines []string, due string, now time.Time) error {
+func (s *Store) setProjectStatus(relPath string, lines []string, due string, now time.Time, episodeRef string) error {
 	// Dedupe while cleaning: the 2026-07 audit found rep pages whose whole
 	// 현재 상태 was the same no-information bullet twice ("테스트베드 구축
 	// 진행" ×2) — a duplicate line adds zero signal at any position.
@@ -318,6 +318,9 @@ func (s *Store) setProjectStatus(relPath string, lines []string, due string, now
 		if d := strings.TrimSpace(due); d != "" {
 			page.Meta.Due = d
 		}
+		// Append the cycle's episode so the updated project status traces back
+		// to the diary span it was distilled from.
+		page.Meta.Sources = appendEpisode(page.Meta.Sources, episodeRef)
 		return page, nil
 	})
 }

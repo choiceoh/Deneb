@@ -130,7 +130,7 @@ func (wd *WikiDreamer) extractProjectDigests(ctx context.Context, content string
 // (headline first, then bullets). Returns how many pages were updated. now is
 // injected for deterministic tests. Best-effort: a per-page write failure logs
 // and is skipped, never aborting the others.
-func (wd *WikiDreamer) applyProjectDigests(digests []projectDigest, now time.Time) int {
+func (wd *WikiDreamer) applyProjectDigests(digests []projectDigest, now time.Time, episodeRef string) int {
 	wrote := 0
 	for _, d := range digests {
 		if d.Path == "" {
@@ -148,7 +148,7 @@ func (wd *WikiDreamer) applyProjectDigests(digests []projectDigest, now time.Tim
 		if len(lines) == 0 {
 			continue
 		}
-		if err := wd.store.setProjectStatus(d.Path, lines, d.Due, now); err != nil {
+		if err := wd.store.setProjectStatus(d.Path, lines, d.Due, now, episodeRef); err != nil {
 			wd.logger.Warn("wiki-dream: project status write failed", "path", d.Path, "error", err)
 			continue
 		}

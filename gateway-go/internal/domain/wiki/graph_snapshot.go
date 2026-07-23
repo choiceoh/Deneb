@@ -217,14 +217,10 @@ func (b *graphSnapshotBuilder) addPage(relPath string, page *Page) {
 	if title == "" {
 		title = strings.TrimSuffix(filepath.Base(relPath), ".md")
 	}
-	// SourceLocation was a hardcoded "L1" placeholder; anchor it to the newest
-	// episode ref when the page carries provenance, so the field finally points
-	// at a real source instead of a stub (falls back to "L1" for pre-provenance
-	// pages, which graphify still requires to be non-empty).
-	sourceLocation := "L1"
-	if n := len(page.Meta.Sources); n > 0 {
-		sourceLocation = page.Meta.Sources[n-1]
-	}
+	// SourceLocation stays graphify's line-anchor form ("L1") so query/explain
+	// citations render as clickable "page.md:L1" locations. Episode provenance
+	// rides in the dedicated Provenance field instead — putting a "d…#…" token
+	// here would produce a non-clickable pseudo-location.
 	// A superseded page's facts stopped being current at its last write.
 	invalidAt := ""
 	if page.Meta.SupersededBy != "" {
@@ -234,7 +230,7 @@ func (b *graphSnapshotBuilder) addPage(relPath string, page *Page) {
 		Label:          title,
 		FileType:       wikiFileType(page),
 		SourceFile:     filepath.Join(b.wikiDir, relPath),
-		SourceLocation: sourceLocation,
+		SourceLocation: "L1",
 		ID:             id,
 		Community:      0,
 		NormLabel:      strings.ToLower(title),
@@ -323,19 +319,27 @@ func (b *graphSnapshotBuilder) addTagPairs(tag string, ids []string) {
 	}
 }
 
-// linkSupersededNodes resolves each node's superseded_by relPath to the node id
-// of its successor once every node exists, so a consumer can traverse from a
-// stale fact to the page that replaced it. An unresolved target (successor not
-// in the graph) keeps its raw relPath — still useful provenance.
+// linkSupersededNodes wires supersession into the graph once every node exists.
+// b.infos is appended in lockstep with b.graph.Nodes (addPage does both), so
+// index i addresses the same page in each. For every page that names a
+// superseding target present in the graph it (1) resolves the node's
+// superseded_by attribute from the raw relPath to the successor's id, and (2)
+// emits a "superseded_by" edge — graphify's query/path walk LINKS, not node
+// attributes, so without the edge a stale fact and its replacement stay
+// disconnected in the common supersession-only case. An unresolved target
+// (successor not in the graph) keeps its raw relPath attribute and no edge.
 func (b *graphSnapshotBuilder) linkSupersededNodes() {
-	for i := range b.graph.Nodes {
-		raw := b.graph.Nodes[i].SupersededBy
+	for i, info := range b.infos {
+		raw := info.page.Meta.SupersededBy
 		if raw == "" {
 			continue
 		}
-		if id := b.targetID(raw); id != "" {
-			b.graph.Nodes[i].SupersededBy = id
+		targetID := b.targetID(raw)
+		if targetID == "" {
+			continue
 		}
+		b.graph.Nodes[i].SupersededBy = targetID
+		b.addEdge(info.id, targetID, "superseded_by", "EXTRACTED", 1.0, 1.0, info.relPath)
 	}
 }
 

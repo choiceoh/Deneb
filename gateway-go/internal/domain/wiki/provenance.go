@@ -34,11 +34,18 @@ func episodeHash(s string) string {
 	return fmt.Sprintf("%08x", h.Sum32())
 }
 
-// newEpisodeRef mints the provenance token for a dream cycle. diaryDate locates
-// the raw source (the diary is time-indexed); the content digest pins the exact
-// consumed span. Returns "" when there is nothing to attribute (empty span), so
-// callers never stamp a hollow ref. The token carries no comma/space, so it is
-// safe inside the "[a, b, c]" frontmatter flow array (see sanitizeFlowItems).
+// newEpisodeRef mints the provenance token for a dream cycle. The episode is
+// the cycle's whole consumed batch (which may span several diary files and
+// MEMORY.md), not a single file: synthesis emits page updates without telling
+// us which input line produced which fact, so per-file attribution is not
+// available without LLM cooperation we deliberately avoid. Accordingly the
+// DIGEST — taken over the full batch — is the episode's identity (recompute it
+// from the same batch to verify); diaryDate is the batch's latest diary date,
+// a coarse human locator, not a claim that the file is the sole source.
+//
+// Returns "" when there is nothing to attribute (empty span), so callers never
+// stamp a hollow ref. The token carries no comma/space, so it is safe inside
+// the "[a, b, c]" frontmatter flow array (see sanitizeFlowItems).
 func newEpisodeRef(diaryDate, content string) string {
 	content = strings.TrimSpace(content)
 	if content == "" {

@@ -74,7 +74,7 @@ func TestSetProjectStatus_DeduplicatesDuplicateStatusBullets(t *testing.T) {
 	}
 	rel := RepPagePath("영광-bess")
 	now := time.Date(2026, 7, 5, 9, 0, 0, 0, time.UTC)
-	if err := s.setProjectStatus(rel, []string{"BESS 구축 진행", "BESS 구축 진행", "계약금 입금 확인"}, "", now); err != nil {
+	if err := s.setProjectStatus(rel, []string{"BESS 구축 진행", "BESS 구축 진행", "계약금 입금 확인"}, "", now, ""); err != nil {
 		t.Fatalf("setProjectStatus: %v", err)
 	}
 	page, err := s.ReadPage(rel)

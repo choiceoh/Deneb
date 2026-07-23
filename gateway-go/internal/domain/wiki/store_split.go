@@ -92,6 +92,10 @@ func (s *Store) splitPage(relPath string, maxBytes int) ([]string, error) {
 		sub := NewPage(page.Meta.Title+" — "+sp.sections[0].Heading, page.Meta.Category, page.Meta.Tags)
 		sub.Meta.Importance = page.Meta.Importance
 		sub.Meta.Related = []string{relPath}
+		// The actual facts move into these children, so they must inherit the
+		// parent's episode provenance — otherwise the split facts become
+		// uncitable while only the parent TOC keeps the refs.
+		sub.Meta.Sources = page.Meta.Sources
 
 		var body strings.Builder
 		for _, sec := range sp.sections {
