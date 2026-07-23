@@ -279,6 +279,10 @@ func (d proactiveRelayDeps) prepareProactiveDelivery(sessionKey, content string,
 		d.logProactive("suppressed", "narration", originalLength, pushPreview(content))
 		return preparedProactiveDelivery{}, false
 	}
+	if isSelfImprovementDiagnostic(content) {
+		d.logProactive("suppressed", "self_improvement_diagnostic", originalLength, pushPreview(content))
+		return preparedProactiveDelivery{}, false
+	}
 
 	body := content
 	if target == nativeWorkSessionKey && d.workModel != nil {
