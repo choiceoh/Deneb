@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useInvalidate } from "@/crud";
 import { clearCachedResource } from "./cachedList";
-import { type ChatToolEvent, type GatewayConfig, callRpc, chatStream, ping } from "./gateway";
+import {
+  type ChatToolEvent,
+  type GatewayConfig,
+  callRpc,
+  chatStream,
+  composeChatMessage,
+  ping,
+  recoverTurnAnswer,
+} from "./gateway";
 import { type ProactiveEvent, subscribeEvents } from "./events";
 import { errText } from "./format";
 import { relatedResourcesForResource, relatedResourcesForTools } from "./resourceRefresh";
@@ -277,14 +285,44 @@ export function useChat(cfg: GatewayConfig): ChatState {
         stopped = true;
         patch((turn) => ({ ...turn, status: "stopped" }));
       } else {
-        failed = true;
-        const line = `[오류] ${(e as Error).message}`;
-        patch((turn) => ({
-          ...turn,
-          parts: [...(turn.parts ?? []), { kind: "text" as const, text: turn.text ? `\n${line}` : line }],
-          text: turn.text ? `${turn.text}\n${line}` : line,
-          status: "error",
-        }));
+        // The gateway detaches the run from the SSE connection, so a mid-turn
+        // drop (sleep, network change) doesn't kill the turn — the server
+        // finishes and persists the answer. Poll the transcript for it instead
+        // of freezing on the streamed preamble; show "답변 이어받는 중…" so a
+        // reconnect (minutes on a tool-heavy turn) never looks stalled.
+        setThinking("답변 이어받는 중…");
+        let recovered: string | null;
+        try {
+          recovered = await recoverTurnAnswer(
+            cfg,
+            opts.sessionKey ?? "client:main",
+            composeChatMessage(msg, opts.workspaceContext),
+            {
+              signal: controller.signal,
+              onStillRunning: () => setThinking("답변 이어받는 중…"),
+            },
+          );
+        } catch {
+          recovered = null;
+        }
+        if (recovered) {
+          const answer = recovered;
+          patch((turn) => ({
+            ...turn,
+            parts: [{ kind: "text" as const, text: answer }],
+            text: answer,
+            status: "done",
+          }));
+        } else {
+          failed = true;
+          const line = `[오류] ${(e as Error).message}`;
+          patch((turn) => ({
+            ...turn,
+            parts: [...(turn.parts ?? []), { kind: "text" as const, text: turn.text ? `\n${line}` : line }],
+            text: turn.text ? `${turn.text}\n${line}` : line,
+            status: "error",
+          }));
+        }
       }
     } finally {
       setThinking("");
