@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import ai.deneb.data.Attachment
 import ai.deneb.data.Conversation
 import ai.deneb.deneb.generated.SessionRowOut
+import ai.deneb.deneb.generated.TranscriptMsgOut
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.stableTranscriptId
 import kotlinx.collections.immutable.toImmutableList
@@ -230,9 +231,11 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
         }
         if (elapsedMs() >= budget) break
         if (sessionKey != key) return null // switched conversations — abandon
-        val transcript = fetchTranscript(key)
-        if (transcript != null) {
-            when (val probe = probeTranscriptForTurn(transcript, sentText)) {
+        val payload = fetchTranscriptPayload(key)
+        if (payload != null) {
+            val transcript = mapTranscriptMessages(payload.messages)
+            val baseProbe = probeTranscriptForTurn(transcript, sentText)
+            when (val probe = effectiveTurnProbe(baseProbe, payload.turnRunning)) {
                 is TurnProbe.Answered -> {
                     val tail = transcript.size to probe.text
                     if (tail == candidateTail) {
@@ -281,15 +284,20 @@ private suspend fun DenebGatewayClient.installRecoveredTranscript(key: String, t
 // flashing to empty), or the messages — possibly an authoritative empty list —
 // on success. The null-vs-[] distinction is what lets loadTranscriptGuarded
 // evict a stale cache only when the server says the session is really empty.
-internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): List<History>? {
-    val payload = callRpc<TranscriptPayload>(
+internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): List<History>? =
+    fetchTranscriptPayload(sessionKey)?.let { mapTranscriptMessages(it.messages) }
+
+internal suspend fun DenebGatewayClient.fetchTranscriptPayload(sessionKey: String): TranscriptPayload? =
+    callRpc<TranscriptPayload>(
         "miniapp.sessions.transcript",
         buildJsonObject {
             put("sessionKey", sessionKey)
             put("limit", 200)
         },
-    ) ?: return null
-    return payload.messages.mapNotNull { m ->
+    )
+
+private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> =
+    messages.mapNotNull { m ->
         val role = when (m.role.lowercase()) {
             "user" -> History.Role.USER
             "assistant" -> History.Role.ASSISTANT
@@ -314,4 +322,3 @@ internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): Lis
             )
         }
     }
-}

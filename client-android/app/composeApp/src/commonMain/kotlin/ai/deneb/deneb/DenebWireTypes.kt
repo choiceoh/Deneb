@@ -33,7 +33,10 @@ internal inline fun <T, K> Iterable<T>.distinctByLast(crossinline keyOf: (T) -> 
 internal data class RecentPayload(val sessions: List<SessionRowOut> = emptyList())
 
 @Serializable
-internal data class TranscriptPayload(val messages: List<TranscriptMsgOut> = emptyList())
+internal data class TranscriptPayload(
+    val messages: List<TranscriptMsgOut> = emptyList(),
+    val turnRunning: Boolean = false,
+)
 
 @Serializable
 internal data class WorkFeedPayload(val items: List<WorkFeedItem> = emptyList())

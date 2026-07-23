@@ -296,7 +296,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
         // of freezing on the streamed preamble; show "답변 이어받는 중…" so a
         // reconnect (minutes on a tool-heavy turn) never looks stalled.
         setThinking("답변 이어받는 중…");
-        let recovered: string | null;
+        let recovered: Awaited<ReturnType<typeof recoverTurnAnswer>>;
         try {
           recovered = await recoverTurnAnswer(
             cfg,
@@ -311,11 +311,12 @@ export function useChat(cfg: GatewayConfig): ChatState {
           recovered = null;
         }
         if (recovered) {
-          const answer = recovered;
+          const answer = recovered.text;
           patch((turn) => ({
             ...turn,
             parts: [{ kind: "text" as const, text: answer }],
             text: answer,
+            reasoning: recovered.reasoning ?? turn.reasoning,
             status: "done",
           }));
         } else {
