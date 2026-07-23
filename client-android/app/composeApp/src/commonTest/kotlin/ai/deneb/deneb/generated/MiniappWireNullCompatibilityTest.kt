@@ -3682,6 +3682,12 @@ class MiniappWireNullCompatibilityTest {
             field = "content",
         ),
         nullContract(
+            name = "TranscriptMsgOut.reasoning",
+            serializer = TranscriptMsgOut.serializer(),
+            empty = TranscriptMsgOut(),
+            field = "reasoning",
+        ),
+        nullContract(
             name = "TranscriptMsgOut.attachments",
             serializer = TranscriptMsgOut.serializer(),
             empty = TranscriptMsgOut(),

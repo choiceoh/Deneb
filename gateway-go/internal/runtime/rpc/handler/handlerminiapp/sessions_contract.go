@@ -28,9 +28,13 @@ type transcriptAttachmentOut struct {
 
 //deneb:wire
 type transcriptMsgOut struct {
-	ID          string                    `json:"id,omitempty"`
-	Role        string                    `json:"role"`
-	Content     string                    `json:"content"`
+	ID      string `json:"id,omitempty"`
+	Role    string `json:"role"`
+	Content string `json:"content"`
+	// Reasoning is the assistant turn's chain-of-thought, extracted from the
+	// persisted thinking blocks so a reloaded conversation can still show the
+	// expandable reasoning block. Empty for user/tool rows and pre-reasoning history.
+	Reasoning   string                    `json:"reasoning,omitempty"`
 	Attachments []transcriptAttachmentOut `json:"attachments,omitempty"`
 	TimestampMs int64                     `json:"timestampMs,omitempty"`
 }

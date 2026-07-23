@@ -32,6 +32,10 @@ type SyncResult struct {
 	OutputTokens    int
 	Turns           int
 	StopReason      string // "end_turn", "max_tokens", "tool_use", etc.
+	// Thinking is the accumulated chain-of-thought across all turns (empty when
+	// the model produced no reasoning). Surfaced to clients as the expandable
+	// reasoning block; never fed back into the model context.
+	Thinking string
 }
 
 // BestTextRaw returns the answer selected for delivery before surface-specific
@@ -285,6 +289,11 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		return nil, fmt.Errorf("agent run returned nil result")
 	}
 
+	reasoning := ""
+	if result.AgentResult != nil {
+		reasoning = strings.TrimSpace(result.AgentResult.Thinking)
+	}
+
 	// Prefer the model that actually answered (set when the fallback chain fired).
 	if result.ActualModel != "" {
 		resolvedModel = result.ActualModel
@@ -307,6 +316,7 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		OutputTokens:    result.Usage.OutputTokens,
 		Turns:           result.Turns,
 		StopReason:      result.StopReason,
+		Thinking:        reasoning,
 	}
 	res.fillEmptyStopFallback()
 	// Accidental empty completion — end_turn after tool activity with zero

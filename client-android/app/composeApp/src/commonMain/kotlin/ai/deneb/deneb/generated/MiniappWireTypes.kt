@@ -1071,6 +1071,7 @@ data class TranscriptMsgOut(
     val id: String = "",
     val role: String = "",
     val content: String = "",
+    val reasoning: String = "",
     val attachments: List<TranscriptAttachmentOut> = emptyList(),
     val timestampMs: Long = 0L,
 )

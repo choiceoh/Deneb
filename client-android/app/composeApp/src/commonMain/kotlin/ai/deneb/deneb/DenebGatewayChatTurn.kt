@@ -145,6 +145,15 @@ internal suspend fun DenebGatewayClient.askGateway(
         finalText.ifBlank { "⚠️ 빈 응답" },
         if (reply.fellBack && reply.model.isNotBlank()) reply.model else null,
     )
+    // Attach the turn's reasoning (from the done frame) so the answer shows its
+    // expandable reasoning block immediately, without waiting for a transcript
+    // reload. A recovery reply carries none; that path installs the transcript,
+    // whose rows already include reasoning.
+    reply.reasoning?.takeIf { it.isNotBlank() }?.let { reasoning ->
+        _chatHistory.update { list ->
+            list.map { if (it.id == assistantId) it.copy(reasoningContent = reasoning) else it }
+        }
+    }
     progress.footprint()?.let { footprint ->
         _chatHistory.update { list ->
             list.map { if (it.id == assistantId) it.copy(toolFootprint = footprint) else it }

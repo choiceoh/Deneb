@@ -163,6 +163,7 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 				ID:          m.ID,
 				Role:        m.Role,
 				Content:     content,
+				Reasoning:   decodeThinkingContent(m.Content),
 				Attachments: atts,
 				TimestampMs: m.Timestamp,
 			})
@@ -204,11 +205,38 @@ func decodeChatContent(raw json.RawMessage) string {
 				parts = append(parts, txt)
 			}
 		case "tool_use", "tool_result", "thinking", "redacted_thinking":
-			// Internal turn machinery — never bubble content.
+			// Internal turn machinery — never bubble content. Thinking is surfaced
+			// separately via decodeThinkingContent (as the reasoning block), not here.
 		default:
 			// Unknown block type: a content-free tag so the bubble shows
 			// *something* was here without rendering raw JSON.
 			parts = append(parts, "["+t+"]")
+		}
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// decodeThinkingContent extracts the assistant reasoning from a persisted
+// message's content blocks — the "thinking" blocks decodeChatContent drops as
+// turn machinery — so a reloaded conversation can show the expandable reasoning
+// block. Empty for plain-string (user) content and messages with no thinking.
+func decodeThinkingContent(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var blocks []map[string]any
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return ""
+	}
+	var parts []string
+	for _, b := range blocks {
+		if t, _ := b["type"].(string); t != "thinking" {
+			continue
+		}
+		if txt, ok := b["thinking"].(string); ok && txt != "" {
+			parts = append(parts, txt)
+		} else if txt, ok := b["text"].(string); ok && txt != "" {
+			parts = append(parts, txt)
 		}
 	}
 	return strings.Join(parts, "\n\n")

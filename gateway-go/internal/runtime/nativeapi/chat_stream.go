@@ -17,7 +17,7 @@
 //	                          "detail":"..."?, "isError":bool?}
 //	  event: thinking  data: {"preview":"..."?}                     (throttled liveness +
 //	                          chip-sized tail of the live reasoning text)
-//	  event: done      data: {"text":...,"model":...,"fellBack":...}   (success terminal)
+//	  event: done      data: {"text":...,"model":...,"fellBack":...,"reasoning":...}  (success terminal)
 //	  event: error     data: {"error":"..."}                        (failure terminal)
 //
 // The native client renders deltas live, shows tool/thinking progress in its
@@ -68,6 +68,10 @@ type chatStreamResult struct {
 	Text     string
 	Model    string
 	FellBack bool
+	// Reasoning is the turn's accumulated chain-of-thought (empty when none),
+	// carried on the done frame so the client can show an expandable reasoning
+	// block for the just-completed answer without a transcript re-fetch.
+	Reasoning string
 }
 
 // chatStreamSinks carries the per-event callbacks writeChatStreamSSE hands to
@@ -179,7 +183,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		// BestText (not res.Text) so a tool wrap-up final turn — e.g. the agent
 		// writing its answer to the wiki and closing with "위키에 기록했습니다" —
 		// doesn't replace the streamed body in the client's done frame.
-		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack}, nil
+		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack, Reasoning: res.Thinking}, nil
 	}
 	writeChatStreamSSE(runCtx, r.Context(), w, sessionKey, runner, s.logger)
 }
@@ -298,9 +302,10 @@ func writeChatStreamSSE(ctx, connCtx context.Context, w http.ResponseWriter, ses
 		writeEvent("error", map[string]string{"error": "empty result"})
 	default:
 		writeEvent("done", map[string]any{
-			"text":     result.Text,
-			"model":    result.Model,
-			"fellBack": result.FellBack,
+			"text":      result.Text,
+			"model":     result.Model,
+			"fellBack":  result.FellBack,
+			"reasoning": result.Reasoning,
 		})
 	}
 }
