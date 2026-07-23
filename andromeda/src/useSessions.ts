@@ -150,6 +150,7 @@ export function useSessions(
       id: m.id || `tr-${key}-${i}`,
       role: m.role === "user" ? "user" : "assistant",
       text: m.content,
+      reasoning: m.reasoning,
       status: "done" as const,
     }));
 

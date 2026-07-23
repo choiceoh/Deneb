@@ -56,6 +56,7 @@ export interface ChatTurn {
   status: "done" | "streaming" | "error" | "stopped";
   model?: string;
   canRegenerate?: boolean;
+  reasoning?: string; // assistant chain-of-thought → expandable reasoning block
 }
 
 export interface SendOpts {
@@ -251,6 +252,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
                 parts,
                 text: turn.text || final.text,
                 model: final.model ?? turn.model,
+                reasoning: final.reasoning?.trim() ? final.reasoning : turn.reasoning,
                 status: "done",
               };
             });

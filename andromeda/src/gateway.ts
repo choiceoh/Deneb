@@ -236,6 +236,7 @@ export interface TranscriptMsg {
   id?: string;
   role: string; // user | assistant | system | tool
   content: string;
+  reasoning?: string; // assistant chain-of-thought (expandable reasoning block)
   timestampMs?: number;
 }
 
@@ -475,7 +476,7 @@ export interface ChatHandlers {
   onDelta?: (text: string) => void;
   onTool?: (ev: ChatToolEvent) => void;
   onThinking?: (preview: string) => void;
-  onDone?: (final: { text: string; model?: string; fellBack?: boolean }) => void;
+  onDone?: (final: { text: string; model?: string; fellBack?: boolean; reasoning?: string }) => void;
   onError?: (err: string) => void;
 }
 
@@ -569,6 +570,7 @@ export async function chatStream(
           text: asStr(obj.text) ?? "",
           model: asStr(obj.model),
           fellBack: asBool(obj.fellBack),
+          reasoning: asStr(obj.reasoning),
         });
         break;
       case "error":

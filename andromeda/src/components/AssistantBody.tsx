@@ -2,10 +2,39 @@ import { useState, type ReactNode } from "react";
 
 import type { AttachmentPart, ChatTurn, VariantView } from "@/hooks";
 import { printClosest } from "@/print";
+import { color, line } from "@/theme";
 import { DenebStatus } from "./DenebStatus";
 import { AssistantText } from "./DenebUi";
 import { Icon } from "./Icon";
 import { ToolChip } from "./ToolChip";
+
+// Collapsible chain-of-thought shown above a completed answer (frontier-chatbot
+// "추론 보기"). Native <details> so it needs no state and stays accessible; the
+// gateway carries the reasoning on the done frame and in the transcript wire.
+function ReasoningBlock({ text }: { text: string }) {
+  return (
+    <details
+      className="ai-reasoning no-print"
+      style={{ margin: "1px 0 9px", border: line, borderRadius: 8, background: color.field }}
+    >
+      <summary style={{ cursor: "pointer", padding: "5px 10px", fontSize: 12, color: color.muted, userSelect: "none" }}>
+        추론 보기
+      </summary>
+      <div
+        style={{
+          padding: "3px 11px 10px",
+          fontSize: 13,
+          lineHeight: 1.55,
+          color: color.text2,
+          whiteSpace: "pre-wrap",
+          borderTop: line,
+        }}
+      >
+        {text}
+      </div>
+    </details>
+  );
+}
 
 // Assistant-turn rendering shared by the two chat surfaces (chat tab · AI side
 // panel) — previously lived inside AIPanel.tsx with ChatView cross-importing it.
@@ -76,18 +105,24 @@ export function AssistantBody({
   interactive?: boolean;
 }) {
   const parts = turn.parts;
+  // Reasoning rides above the answer once the turn is done (the live thinking
+  // preview owns the streaming phase).
+  const reasoning =
+    turn.status !== "streaming" && turn.reasoning?.trim() ? <ReasoningBlock text={turn.reasoning} /> : null;
   if (!parts || parts.length === 0) {
     // Pre-content stream → Deneb's "응답 중" sparkle, with the gateway's thinking
     // preview as its inline summary (mirrors the native PulsingStatusIndicator).
     if (turn.status === "streaming") return <DenebStatus summary={thinking?.trim() ? thinking : undefined} />;
     return (
       <div className="ai-turn-body">
+        {reasoning}
         <AssistantText text={turn.text || ""} onUiSubmit={onUiSubmit} busy={busy} interactive={interactive} />
       </div>
     );
   }
   return (
     <div className="ai-turn-body">
+      {reasoning}
       {parts.map((p, i) =>
         p.kind === "text" ? (
           <AssistantText key={i} text={p.text} onUiSubmit={onUiSubmit} busy={busy} interactive={interactive} />
