@@ -321,6 +321,17 @@ func (m *MetaArtifacts) ProcedureRef(governing ...string) string {
 	return ProcedureRefFromVersions(versions)
 }
 
+// DispatchProcedureRef is the composite ref governing an L4 dispatch — the
+// coding-session contract prompt (MetaDispatchContractPrompt) that turns an
+// accepted candidate into a landed PR. It is the dispatch-stage analogue of the
+// evolve certificate's ProcedureRef; a landed outcome can be attributed to the
+// dispatch procedure that produced it. The stamp is computed in-process by the
+// gateway (which materializes the same prompt the out-of-process dispatch script
+// consumes), so it is Go-minted, not script- or LLM-supplied.
+func (m *MetaArtifacts) DispatchProcedureRef() string {
+	return m.ProcedureRef(MetaDispatchContractPrompt)
+}
+
 // ProcedureRefFromVersions builds the composite "proc-<hex>" from an explicit
 // {artifact name → version} map — the point-of-use form. A caller that captured
 // each governing prompt's version at the moment of its LLM call assembles the
