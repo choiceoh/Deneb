@@ -690,10 +690,17 @@ class DenebGatewayClient private constructor(
         const val STREAM_SOCKET_TIMEOUT_MS = 120_000L
 
         // Stream-failure recovery (recoverTurnFromTranscript): how long to keep
-        // polling the transcript for the answer of a turn whose SSE died — the
-        // common half-open case resolves in seconds, but a tool-heavy turn can
-        // run minutes — and the poll cadence.
+        // polling the transcript for the answer of a turn whose SSE died. The
+        // short budget bounds the no-signal case (transcript unreachable / turn
+        // never landed) so a truly-lost turn can't hang the resend path.
         const val STREAM_RECOVERY_BUDGET_MS = 90_000L
+
+        // Once the transcript confirms the turn is still running server-side, poll
+        // up to the server's interactive turn deadline (~5m) instead of the short
+        // budget. A tool-heavy turn (multiple wiki/mail lookups) routinely outlives
+        // 90s; giving up early froze the client on the streamed preamble while the
+        // finished answer sat in the transcript unseen.
+        const val STREAM_RECOVERY_MAX_MS = 300_000L
         const val STREAM_RECOVERY_POLL_MS = 3_000L
 
         // Minimum gap between background warms of the calendar + mail caches (see

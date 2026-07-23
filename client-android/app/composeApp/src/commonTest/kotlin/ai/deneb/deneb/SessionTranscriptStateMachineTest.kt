@@ -654,6 +654,34 @@ class SessionTranscriptStateMachineTest {
     }
 
     @Test
+    fun confirmedRunningTurnPollsPastShortBudgetToRecoverLateAnswer() = runTest {
+        val f = gatewayClientFixture()
+        // Poll cadence 3s; the short budget is 90s = 30 polls. Keep the turn "still
+        // running" well past that, then answer — a tool-heavy turn (multiple
+        // wiki/mail lookups) routinely runs minutes. The stubbed clock advances one
+        // poll interval per probe so the real wall-clock budget is exercised
+        // (TimeSource.Monotonic ignores runTest's virtual time). Under the old fixed
+        // 90s budget this recovered nothing and froze on the streamed preamble.
+        val shortBudgetPolls = (
+            DenebGatewayClient.STREAM_RECOVERY_BUDGET_MS /
+                DenebGatewayClient.STREAM_RECOVERY_POLL_MS
+            ).toInt()
+        repeat(shortBudgetPolls + 5) {
+            f.transport.enqueueTranscript(transcriptPayload(message("user", "question")))
+        }
+        f.transport.enqueueTranscript(answered(answer = "late answer"))
+        f.transport.enqueueTranscript(answered(answer = "late answer"))
+
+        var poll = 0
+        val recovered = f.client.recoverTurnFromTranscript("client:main", "question") {
+            poll++ * DenebGatewayClient.STREAM_RECOVERY_POLL_MS
+        }
+
+        assertEquals("late answer", recovered?.text)
+        assertTrue(f.transport.requests.size > shortBudgetPolls)
+    }
+
+    @Test
     fun recoveryAbandonsWhenUserSwitchesConversation() = runTest {
         val f = gatewayClientFixture()
         val gate = CompletableDeferred<Unit>()
