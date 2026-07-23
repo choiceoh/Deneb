@@ -194,6 +194,14 @@ type Frontmatter struct {
 	// search demotes superseded pages so stale facts stop surfacing as
 	// current (see validityFactor).
 	SupersededBy string // relPath of the superseding page; "" = current
+	// Sources is the page's episode provenance: the dream-cycle refs
+	// (d<diaryDate>#<hash>) whose raw diary spans created or last touched this
+	// page's facts. It closes the "citation needed" gap — synthesis used to
+	// drop the link back to the source span — so a fact can be traced to (and
+	// verified against) the raw text it came from. Bounded to the most recent
+	// maxSources episodes (see normalizeSources); newest last. graph_snapshot
+	// projects these into the knowledge graph as real provenance.
+	Sources []string
 }
 
 // parsePage parses a wiki page from raw bytes.
@@ -332,6 +340,9 @@ func (p *Page) Render() []byte {
 	if p.Meta.SupersededBy != "" {
 		buf.WriteString("superseded_by: " + sanitizeScalar(p.Meta.SupersededBy) + "\n")
 	}
+	if len(p.Meta.Sources) > 0 {
+		buf.WriteString("sources: [" + strings.Join(sanitizeFlowItems(p.Meta.Sources), ", ") + "]\n")
+	}
 	buf.WriteString("---\n\n")
 
 	buf.WriteString(p.Body)
@@ -386,6 +397,10 @@ func writePageFile(path string, page *Page) error {
 	// normalizing the pre-redaction list would let those duplicates back in.
 	redactPage(page)
 	page.Meta.Cues = normalizeCues(page.Meta.Cues)
+	// Episode provenance is bounded here for the same reason cues are: every
+	// producer (dreamer create/merge) funnels through this choke point, so the
+	// most-recent-N window holds regardless of which path appended a ref.
+	page.Meta.Sources = normalizeSources(page.Meta.Sources)
 	data := page.Render()
 	tmp := path + ".tmp"
 	if err := writeFileSync(tmp, data, 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
@@ -753,6 +768,8 @@ func parseFrontmatterFields(raw string) Frontmatter {
 			fm.SubjectID = strings.TrimSpace(val)
 		case "superseded_by":
 			fm.SupersededBy = val
+		case "sources":
+			fm.Sources = normalizeSources(parseFlowArray(val))
 		}
 	}
 	return fm

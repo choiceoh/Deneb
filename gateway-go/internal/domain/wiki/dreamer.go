@@ -363,9 +363,13 @@ type dreamCycle struct {
 	scan        *diaryScanResult
 	memoryScan  *memoryScanResult
 	synthInput  string
-	updates     []wikiUpdate
-	partial     bool
-	proposal    dreamProposalReport
+	// episodeRef is this cycle's provenance token (diary date + digest of the
+	// full consumed batch), stamped on every page any write path touches so a
+	// fact can be traced back to the source span that produced it.
+	episodeRef string
+	updates    []wikiUpdate
+	partial    bool
+	proposal   dreamProposalReport
 	// prevProposal is the last cycle's persisted report, loaded before this
 	// cycle's save overwrites it — the self-comparison anchor (rulesEvolve
 	// lane only; nil otherwise).
@@ -503,6 +507,12 @@ func (wd *WikiDreamer) collectDreamSources(ctx context.Context, cycle *dreamCycl
 			"sections", cycle.memoryScan.Sections,
 			"through", cycle.memoryScan.ConsumedThrough)
 	}
+	// One episode ref for the whole cycle, minted once synthInput is assembled,
+	// so every write path this cycle drives (synthesis, person seeds, project
+	// digests) stamps the SAME provenance token. The digest covers the full
+	// consumed batch (diary + MEMORY.md); the date is the latest diary date as
+	// a coarse locator (see newEpisodeRef).
+	cycle.episodeRef = newEpisodeRef(cycle.scan.LatestDate, cycle.synthInput)
 }
 
 func (wd *WikiDreamer) finishDreamWithoutInput(cycle *dreamCycle) *autonomous.DreamReport {
@@ -613,7 +623,10 @@ func (wd *WikiDreamer) clearTransientSynthesisFailures() {
 }
 
 func (wd *WikiDreamer) applyDreamUpdates(ctx context.Context, cycle *dreamCycle) {
-	created, updated, userPages, oversized, appliedPaths := wd.applyUpdates(ctx, cycle.updates)
+	// The cycle's episode ref ties every page this cycle writes back to the
+	// diary span synthesis consumed — deterministic, so no LLM cooperation is
+	// needed and provenance can't be hallucinated.
+	created, updated, userPages, oversized, appliedPaths := wd.applyUpdates(ctx, cycle.updates, cycle.episodeRef)
 	cycle.created = created
 	cycle.updated = updated
 	cycle.appliedPaths = appliedPaths
@@ -663,7 +676,7 @@ func (wd *WikiDreamer) captureDreamOpenLoops(ctx context.Context, cycle *dreamCy
 }
 
 func (wd *WikiDreamer) seedDreamPersonPages(ctx context.Context, cycle *dreamCycle) {
-	created := wd.seedPersonPages(ctx, cycle.synthInput)
+	created := wd.seedPersonPages(ctx, cycle.synthInput, cycle.episodeRef)
 	if created == 0 {
 		return
 	}
@@ -683,7 +696,7 @@ func (wd *WikiDreamer) applyDreamProjectDigests(ctx context.Context, cycle *drea
 	if len(digests) == 0 {
 		return
 	}
-	written := wd.applyProjectDigests(digests, time.Now())
+	written := wd.applyProjectDigests(digests, time.Now(), cycle.episodeRef)
 	if written == 0 {
 		return
 	}

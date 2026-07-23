@@ -45,7 +45,7 @@ func (wd *WikiDreamer) SetPersonDirectory(fn func() []PersonSeed) {
 // seedPersonPages creates stub 인물 pages for contacts mentioned at least
 // personSeedMinMentions times in the cycle input and absent from the wiki.
 // Returns how many pages were created.
-func (wd *WikiDreamer) seedPersonPages(_ context.Context, input string) int {
+func (wd *WikiDreamer) seedPersonPages(_ context.Context, input, episodeRef string) int {
 	if wd.personDirectory == nil || strings.TrimSpace(input) == "" {
 		return 0
 	}
@@ -102,6 +102,11 @@ func (wd *WikiDreamer) seedPersonPages(_ context.Context, input string) int {
 		fmt.Fprintf(&sb, "\n## 변경 이력\n- %s: 드림 사이클 반복 언급으로 자동 생성 (주소록 연동)\n",
 			time.Now().Format("2006-01-02"))
 		page.Body = sb.String()
+		// Stamp the cycle's episode so a seeded person traces back to the diary
+		// span whose repeated mentions triggered the seed.
+		if episodeRef != "" {
+			page.Meta.Sources = []string{episodeRef}
+		}
 
 		relPath := "인물/" + personSlug(name) + ".md"
 		if err := wd.store.WritePage(relPath, page); err != nil {

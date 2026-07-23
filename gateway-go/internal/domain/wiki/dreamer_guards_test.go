@@ -104,7 +104,7 @@ func TestApplyUpdates_Guards(t *testing.T) {
 			Action: "create", Path: "기타/daily mail analysis.md", Title: "2026-07-03 일일 메일 분석",
 			Category: "기타", Content: "다이제스트",
 		},
-	})
+	}, "")
 	if created != 1 || updated != 0 {
 		t.Fatalf("created=%d updated=%d, want 1/0 (digest skipped)", created, updated)
 	}
@@ -149,7 +149,7 @@ func TestApplyUpdates_CountsUserModelPages(t *testing.T) {
 			Action: "create", Path: "업무/구리값-동향.md", Title: "구리값 동향",
 			Category: "업무", Content: "LME 구리값 동향 본문입니다.",
 		},
-	})
+	}, "")
 	if created != 2 || updated != 0 {
 		t.Fatalf("created=%d updated=%d, want 2/0", created, updated)
 	}
@@ -160,7 +160,7 @@ func TestApplyUpdates_CountsUserModelPages(t *testing.T) {
 	created, updated, userPages, _, _ = wd.applyUpdates(context.Background(), []wikiUpdate{{
 		Action: "update", Path: "선호/보고-형식-선호.md", Title: "보고 형식 선호",
 		Category: "선호", Content: "상세 보고 선호로 전환 — 2026-07-09 갱신 근거 줄입니다.",
-	}})
+	}}, "")
 	if created != 0 || updated != 1 {
 		t.Fatalf("legacy-path update: created=%d updated=%d, want 0/1", created, updated)
 	}
@@ -242,7 +242,7 @@ func TestApplyUpdates_UpdateFallbackDedup(t *testing.T) {
 	created, updated, _, _, _ := wd.applyUpdates(context.Background(), []wikiUpdate{{
 		Action: "update", Path: "프로젝트/해밀고흥-솔라팜모듈/대표.md", ID: "haemil-solar",
 		Title: "해밀고흥솔라팜 모듈", Category: "프로젝트", Content: "새 진행 사실이 추가되는 줄입니다.",
-	}})
+	}}, "")
 	if created != 0 || updated != 1 {
 		t.Fatalf("created=%d updated=%d, want 0/1 (retargeted to the existing page)", created, updated)
 	}
@@ -276,7 +276,7 @@ func TestApplyUpdates_LogReroutesAfterDedup(t *testing.T) {
 		Action: "create", Path: "프로젝트/해밀고흥-솔라팜모듈/대표.md", ID: "haemil-solar",
 		Title: "해밀고흥솔라팜 모듈", Category: "프로젝트",
 		Content: "요약 갱신 내용입니다.\n\n## 진행 로그\n- 2026-07-03: 모듈 납기 확정",
-	}})
+	}}, "")
 	if created != 0 || updated != 1 {
 		t.Fatalf("created=%d updated=%d, want 0/1", created, updated)
 	}
@@ -325,7 +325,7 @@ func TestApplyUpdates_PreservesBatchPartialSuccessOrder(t *testing.T) {
 			Action: "create", Path: "업무/후속-성공.md", Title: "후속 성공",
 			Category: "업무", Content: "앞선 실패 뒤에도 저장되는 사실",
 		},
-	})
+	}, "")
 	if created != 1 || updated != 0 || userPages != 0 || len(oversized) != 0 {
 		t.Fatalf("result = created:%d updated:%d user:%d oversized:%v, want 1/0/0/[]",
 			created, updated, userPages, oversized)

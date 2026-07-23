@@ -35,7 +35,7 @@ func TestSeedPersonPages_CreatesForRepeatedMentionsSkipsExistingShortAndSingleMe
 	})
 
 	input := "김민준 부장과 통화. 견적은 김민준 부장이 검토 후 회신. 박서연 차장도 참석. 박서연 차장이 실사 주관. 이도윤 과장 언급."
-	created := wd.seedPersonPages(context.Background(), input)
+	created := wd.seedPersonPages(context.Background(), input, "")
 	if created != 1 {
 		t.Fatalf("want 1 seeded page, got %d", created)
 	}
@@ -52,7 +52,7 @@ func TestSeedPersonPages_CreatesForRepeatedMentionsSkipsExistingShortAndSingleMe
 	}
 
 	// Idempotent: the next cycle must not duplicate.
-	if again := wd.seedPersonPages(context.Background(), input); again != 0 {
+	if again := wd.seedPersonPages(context.Background(), input, ""); again != 0 {
 		t.Errorf("re-run seeded %d duplicate pages", again)
 	}
 }
