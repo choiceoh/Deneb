@@ -1077,7 +1077,7 @@ func WikiToolSchema() map[string]any {
 			},
 			"date": map[string]any{
 				"type":        "string",
-				"description": "daily 전용: 특정 날짜(YYYY-MM-DD)의 일지만 읽는다. read 결과의 출처(provenance) 각주가 사실이 합성된 다이어리 날짜를 알려주므로, 그 날짜로 원문을 확인해 사실을 검증할 때 쓴다. 생략하면 최근 일지(limit개)를 반환.",
+				"description": "daily 전용: 특정 날짜(YYYY-MM-DD)의 일지만 읽는다. read 결과의 출처(provenance) 각주가 사실이 합성된 다이어리 날짜를 알려주므로, 그 날짜로 원문을 확인해 사실을 검증할 때 쓴다. 긴 하루는 from_line/max_lines로 페이징되며 더 있으면 이어보기 힌트가 붙는다. 생략하면 최근 일지(limit개)를 반환.",
 			},
 			"due": map[string]any{
 				"type":        "string",

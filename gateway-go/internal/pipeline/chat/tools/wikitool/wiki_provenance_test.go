@@ -3,6 +3,7 @@ package wikitool
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,6 +57,27 @@ func TestWikiReadShowsResolvedProvenanceFooter(t *testing.T) {
 	if !strings.Contains(out, "2026-01-01 다이어리 (원본 정리됨") {
 		t.Errorf("dangling-source note missing:\n%s", out)
 	}
+
+	// Partial reads (section + line range) must carry the footer too — search
+	// steers the agent to range reads, so the loop has to work there.
+	page.Body = "## 현황\n현물가 상향."
+	if err := store.WritePage("업무/구리-가격.md", page); err != nil {
+		t.Fatal(err)
+	}
+	sec, err := wikiReadRange(context.Background(), store, "업무/구리-가격.md", "현황", 0, 0)
+	if err != nil {
+		t.Fatalf("section read: %v", err)
+	}
+	if !strings.Contains(sec, "wiki action=daily date=2026-07-20") {
+		t.Errorf("section read dropped provenance footer:\n%s", sec)
+	}
+	rng, err := wikiReadRange(context.Background(), store, "업무/구리-가격.md", "", 1, 3)
+	if err != nil {
+		t.Fatalf("range read: %v", err)
+	}
+	if !strings.Contains(rng, "wiki action=daily date=2026-07-20") {
+		t.Errorf("line-range read dropped provenance footer:\n%s", rng)
+	}
 }
 
 // TestWikiDailyDateTargetsOneDiary verifies the date param reads exactly that
@@ -100,5 +122,26 @@ func TestWikiDailyDateTargetsOneDiary(t *testing.T) {
 	// Traversal date → rejected by the guard.
 	if bad := call(map[string]any{"action": "daily", "date": "../../etc/passwd"}); !strings.Contains(bad, "잘못된 날짜 형식") {
 		t.Errorf("traversal date not rejected: %q", bad)
+	}
+
+	// A long day must be fully reachable via paging — no silent prefix cut.
+	var long strings.Builder
+	for i := 1; i <= 500; i++ {
+		fmt.Fprintf(&long, "L%d 항목\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(diaryDir, "diary-2026-08-01.md"), []byte(long.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	page1 := call(map[string]any{"action": "daily", "date": "2026-08-01"})
+	if !strings.Contains(page1, "[계속:") || !strings.Contains(page1, "from_line=") {
+		t.Errorf("long diary missing continuation hint:\n%s", page1[:min(len(page1), 400)])
+	}
+	if strings.Contains(page1, "L500 항목") {
+		t.Errorf("first window should not already contain the tail line")
+	}
+	// The continuation window must reach the tail.
+	tail := call(map[string]any{"action": "daily", "date": "2026-08-01", "from_line": 400})
+	if !strings.Contains(tail, "L500 항목") {
+		t.Errorf("continuation window did not reach the diary tail:\n%s", tail)
 	}
 }

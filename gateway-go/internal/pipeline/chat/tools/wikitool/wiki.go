@@ -101,7 +101,10 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
-			return wikiDaily(d.Store.DiaryDir(), p.Date, p.Limit)
+			if strings.TrimSpace(p.Date) != "" {
+				return wikiDailyByDate(d.Store.DiaryDir(), p.Date, p.FromLine, p.MaxLines)
+			}
+			return wikiDaily(d.Store.DiaryDir(), p.Limit)
 		case "status":
 			return wikiStatusWithDoctor(ctx, d.Store), nil
 		case "close":
@@ -266,7 +269,10 @@ func wikiReadRange(ctx context.Context, store *wiki.Store, path, section string,
 		Session: toolport.SessionKeyFromContext(ctx),
 	}})
 
-	// If section specified, return just that section.
+	// If section specified, return just that section. Partial reads (section and
+	// line-range) still carry the provenance footer — search steers the agent to
+	// range reads, so the cite→locate→fetch loop must work there too, not only on
+	// a whole-page reopen.
 	if section != "" {
 		content := page.Section(section)
 		if content == "" {
@@ -274,10 +280,11 @@ func wikiReadRange(ctx context.Context, store *wiki.Store, path, section string,
 			return fmt.Sprintf("섹션 '%s' 없음. 사용 가능한 섹션: %s",
 				section, strings.Join(sections, ", ")), nil
 		}
-		return fmt.Sprintf("## %s — %s\n\n%s", page.Meta.Title, section, content), nil
+		out := fmt.Sprintf("## %s — %s\n\n%s", page.Meta.Title, section, content)
+		return withProvenanceFooter(out, store, page.Meta.Sources), nil
 	}
 	if fromLine > 0 || maxLines > 0 {
-		return formatWikiLineRange(path, page, fromLine, maxLines), nil
+		return withProvenanceFooter(formatWikiLineRange(path, page, fromLine, maxLines), store, page.Meta.Sources), nil
 	}
 
 	// Return full page, with a compact graph-neighbor footer so the agent sees
@@ -287,10 +294,17 @@ func wikiReadRange(ctx context.Context, store *wiki.Store, path, section string,
 	if conns, err := store.PageConnections(ctx, path, 6); err == nil && conns != "" {
 		out += "\n\n---\n연결된 항목: " + conns
 	}
-	if footer := formatProvenanceFooter(store, page.Meta.Sources); footer != "" {
-		out += "\n\n" + footer
+	return withProvenanceFooter(out, store, page.Meta.Sources), nil
+}
+
+// withProvenanceFooter appends the resolved provenance block to a read output
+// when the page carries episode refs, so section/range/full reads all cite
+// their source the same way. A no-op when there is no provenance.
+func withProvenanceFooter(out string, store *wiki.Store, sources []string) string {
+	if footer := formatProvenanceFooter(store, sources); footer != "" {
+		return out + "\n\n" + footer
 	}
-	return out, nil
+	return out
 }
 
 // formatProvenanceFooter turns a page's raw episode refs into an actionable
@@ -818,13 +832,7 @@ func wikiLog(_ string, store *wiki.Store, content string) (string, error) {
 	return fmt.Sprintf("일지 기록 완료: %s (%s)", path, now.Format("15:04")), nil
 }
 
-func wikiDaily(diaryDir, date string, limit int) (string, error) {
-	// Date-targeted read: the provenance footer cites an episode by diary date,
-	// so the agent can pull that exact day to verify the fact. The date reaches
-	// a file path, so it must pass the strict YYYY-MM-DD guard first.
-	if date = strings.TrimSpace(date); date != "" {
-		return wikiDailyByDate(diaryDir, date)
-	}
+func wikiDaily(diaryDir string, limit int) (string, error) {
 	if limit <= 0 {
 		limit = 3
 	}
@@ -879,7 +887,12 @@ func wikiDaily(diaryDir, date string, limit int) (string, error) {
 // wikiDailyByDate reads one diary day by date — the target of a provenance
 // citation. The date must be a well-formed YYYY-MM-DD (path-traversal guard)
 // since it names a file under the diary dir.
-func wikiDailyByDate(diaryDir, date string) (string, error) {
+//
+// A busy day can exceed one tool output, so it pages by line (from_line/
+// max_lines, same params as a page range read) and emits a continuation hint
+// when more remains — otherwise a fact cited late in a long diary would be
+// unreachable through the very command the provenance footer advertises.
+func wikiDailyByDate(diaryDir, date string, fromLine, maxLines int) (string, error) {
 	if !wiki.IsDiaryDate(date) {
 		return fmt.Sprintf("잘못된 날짜 형식: %q (YYYY-MM-DD 이어야 함)", date), nil
 	}
@@ -891,11 +904,27 @@ func wikiDailyByDate(diaryDir, date string) (string, error) {
 		}
 		return fmt.Sprintf("일지 읽기 실패: %v", err), nil
 	}
-	content := string(data)
-	if len([]rune(content)) > 4000 {
-		content = string([]rune(content)[:4000]) + "\n...(잘림)"
+
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if fromLine <= 0 {
+		fromLine = 1
 	}
-	return fmt.Sprintf("## %s 일지\n%s", date, content), nil
+	if fromLine > len(lines) {
+		return fmt.Sprintf("%s 일지는 %d줄입니다. from_line=%d는 범위를 벗어납니다.", date, len(lines), fromLine), nil
+	}
+	if maxLines <= 0 {
+		maxLines = 300
+	}
+	maxLines = min(maxLines, wikiReadMaxLines)
+	end := min(len(lines), fromLine-1+maxLines)
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "## %s 일지 (L%d-L%d / 총 %d줄)\n%s", date, fromLine, end, len(lines),
+		strings.Join(lines[fromLine-1:end], "\n"))
+	if end < len(lines) {
+		fmt.Fprintf(&sb, "\n\n[계속: wiki action=daily date=%s from_line=%d]", date, end+1)
+	}
+	return sb.String(), nil
 }
 
 func wikiStatus(store *wiki.Store) string {
