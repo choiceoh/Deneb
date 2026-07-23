@@ -55,7 +55,7 @@ func (e *Evolver) evaluateCandidateText(ctx context.Context, text string, snap p
 	if resp.Skip || resp.Changes == nil {
 		// P4 pairing: a skip whose root cause is a named tool defect emits a
 		// paired coding candidate (grounded + deduped inside).
-		e.maybePairToolGap(entry.Skill.Name, resp, stats)
+		e.maybePairToolGap(entry.Skill.Name, resp, stats, snap.evolveVersion)
 		return evaluatedCandidate{result: &EvolveResult{
 			SkillName: entry.Skill.Name,
 			Evolved:   false,

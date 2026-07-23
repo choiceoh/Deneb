@@ -62,7 +62,7 @@ func TestMaybePairToolGapQueuesGroundedDeclarationOnceSkipsHallucinatedOrMalform
 
 	t.Run("grounded gap pairs once", func(t *testing.T) {
 		e := newEvolver(t)
-		e.maybePairToolGap("sk", toolGapResp("wiki_search", "타임아웃 파라미터가 없다", "타임아웃 옵션 추가"), toolGapStats("wiki_search"))
+		e.maybePairToolGap("sk", toolGapResp("wiki_search", "타임아웃 파라미터가 없다", "타임아웃 옵션 추가"), toolGapStats("wiki_search"), "")
 		got := queued(t, e)
 		if len(got) != 1 || got[0].Source != "evolve-tool-gap" || got[0].Scope != "code" {
 			t.Fatalf("paired candidate = %+v", got)
@@ -75,15 +75,33 @@ func TestMaybePairToolGapQueuesGroundedDeclarationOnceSkipsHallucinatedOrMalform
 		}
 
 		// Same declaration again: the open candidate blocks a duplicate.
-		e.maybePairToolGap("sk", toolGapResp("wiki_search", "타임아웃 파라미터가 없다", ""), toolGapStats("wiki_search"))
+		e.maybePairToolGap("sk", toolGapResp("wiki_search", "타임아웃 파라미터가 없다", ""), toolGapStats("wiki_search"), "")
 		if len(queued(t, e)) != 1 {
 			t.Fatal("duplicate pairing queued")
 		}
 	})
 
+	t.Run("carries the spawning evolve procedure ref", func(t *testing.T) {
+		e := newEvolver(t)
+		const ver = "abc123def456" // captured evolve-prompt version from the producer snapshot
+		e.maybePairToolGap("sk", toolGapResp("wiki_search", "타임아웃 파라미터가 없다", "타임아웃 옵션 추가"), toolGapStats("wiki_search"), ver)
+		got := queued(t, e)
+		want := candidateProcedureRef(ver)
+		if len(got) != 1 {
+			t.Fatalf("want 1 candidate, got %d", len(got))
+		}
+		if want == "" || got[0].ProcedureRef != want {
+			t.Fatalf("candidate procedure ref = %q; want %q", got[0].ProcedureRef, want)
+		}
+		// An empty (deterministic / unknown-producer) version yields no ref.
+		if candidateProcedureRef("") != "" {
+			t.Fatal("empty evolve version must yield an empty procedure ref")
+		}
+	})
+
 	t.Run("ungrounded tool is dropped", func(t *testing.T) {
 		e := newEvolver(t)
-		e.maybePairToolGap("sk", toolGapResp("invented_tool", "환각 도구", ""), toolGapStats("wiki_search"))
+		e.maybePairToolGap("sk", toolGapResp("invented_tool", "환각 도구", ""), toolGapStats("wiki_search"), "")
 		if len(queued(t, e)) != 0 {
 			t.Fatal("hallucinated tool gap reached the coding queue")
 		}
@@ -91,10 +109,10 @@ func TestMaybePairToolGapQueuesGroundedDeclarationOnceSkipsHallucinatedOrMalform
 
 	t.Run("malformed and nil declarations are no-ops", func(t *testing.T) {
 		e := newEvolver(t)
-		e.maybePairToolGap("sk", toolGapResp("", "설명", ""), toolGapStats("wiki_search"))
-		e.maybePairToolGap("sk", toolGapResp("wiki_search", "", ""), toolGapStats("wiki_search"))
-		e.maybePairToolGap("sk", evolveResp{Skip: true}, toolGapStats("wiki_search"))
-		e.maybePairToolGap("sk", toolGapResp("wiki_search", "설명", ""), nil)
+		e.maybePairToolGap("sk", toolGapResp("", "설명", ""), toolGapStats("wiki_search"), "")
+		e.maybePairToolGap("sk", toolGapResp("wiki_search", "", ""), toolGapStats("wiki_search"), "")
+		e.maybePairToolGap("sk", evolveResp{Skip: true}, toolGapStats("wiki_search"), "")
+		e.maybePairToolGap("sk", toolGapResp("wiki_search", "설명", ""), nil, "")
 		if len(queued(t, e)) != 0 {
 			t.Fatal("malformed declaration reached the queue")
 		}

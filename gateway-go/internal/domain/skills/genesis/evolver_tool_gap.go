@@ -19,8 +19,24 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/common"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonlstore"
 )
+
+// candidateProcedureRef is the composite procedure token for an L4 candidate an
+// evolve run produced — the evolve PRODUCER prompt that emitted it, captured at
+// the producer LLM call (not re-read from mutable config afterward, per the L1
+// capture-at-use rule). The governing set is the evolve prompt alone: the judge
+// does not shape a tool-gap declaration. Empty version → empty ref (a
+// deterministically-mined or unknown-producer candidate carries no procedure).
+func candidateProcedureRef(evolveVersion string) string {
+	if strings.TrimSpace(evolveVersion) == "" {
+		return ""
+	}
+	return generation.ProcedureRefFromVersions(map[string]string{
+		generation.MetaEvolveSystemPrompt: evolveVersion,
+	})
+}
 
 // evolveToolGapPairedType is the lifecycle entry type recording the pairing.
 const evolveToolGapPairedType = "evolve_tool_gap_paired"
@@ -39,7 +55,7 @@ func (t *Tracker) logEvolveToolGapPaired(skillName, tool, candidateID string) er
 // maybePairToolGap validates a producer-declared tool gap and emits the paired
 // coding candidate. Best-effort and non-blocking: a malformed or ungrounded
 // declaration is dropped with a debug log; the skip result is unaffected.
-func (e *Evolver) maybePairToolGap(skillName string, resp evolveResp, stats *UsageStats) {
+func (e *Evolver) maybePairToolGap(skillName string, resp evolveResp, stats *UsageStats, evolveVersion string) {
 	gap := resp.ToolGap
 	if gap == nil || e.tracker == nil {
 		return
@@ -91,6 +107,7 @@ func (e *Evolver) maybePairToolGap(skillName string, resp evolveResp, stats *Usa
 		Evidence:       fmt.Sprintf("evolve skip paired: failure signature %q names tool %s", evidence, tool),
 		Reason:         strings.TrimSpace(resp.Reason),
 		Source:         "evolve-tool-gap",
+		ProcedureRef:   candidateProcedureRef(evolveVersion),
 	})
 	if err != nil {
 		e.logger.Warn("evolver: tool gap candidate record failed",
