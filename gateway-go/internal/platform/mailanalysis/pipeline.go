@@ -223,6 +223,11 @@ type AnalysisResult struct {
 	// 세금계산서 등), or nil when the mail carries no recognizable deal
 	// document. The server sink files it onto a 거래 wiki page.
 	Deal *DealInfo
+	// StatusTag is a compact bracket tag ("[결정·승인]", "[리스크]", …) the server
+	// appends to the project status bullet, from the mail's primary status signal
+	// (type + decision state). "" when the mail is not project-linked, local AI is
+	// unavailable, or the signal is the unremarkable 진행/없음 (no tag worth showing).
+	StatusTag string
 }
 
 // ProjectCandidate is one registered project wiki page offered to the
@@ -386,8 +391,13 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 		})
 		if err == nil {
 			var raw string
-			raw, err = collectStreamText(ctx, events)
+			var usage llm.TokenUsage
+			raw, usage, err = collectStreamTextCore(ctx, events)
 			if err == nil {
+				// The model produced a full response — record its tokens whether or
+				// not the JSON parses. A parse-then-retry still spent tokens on both
+				// attempts, so emitting per successful stream is the accurate count.
+				emitLocalHelperUsage(model, usage)
 				result, perr := jsonutil.UnmarshalLLM[T](raw)
 				if perr == nil {
 					return result, nil
@@ -408,10 +418,23 @@ func callLocalLLMJSON[T any](ctx context.Context, client *llm.Client, model, sys
 	return zero, fmt.Errorf("unreachable")
 }
 
-// collectStreamText gathers all text deltas from a streaming response.
+// collectStreamText gathers all text deltas from a streaming response. It is a
+// thin wrapper over collectStreamTextCore that discards the token usage — the
+// signature most callers (and the contract tests) rely on.
 func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
+	text, _, err := collectStreamTextCore(ctx, events)
+	return text, err
+}
+
+// collectStreamTextCore gathers all text deltas plus the token usage reported by
+// the stream (message_start carries input, message_delta carries output). Usage
+// fields stay zero for providers that do not report them. Behaves identically to
+// the historical collectStreamText for text and error handling; the usage is
+// purely additive so callers that ignore it are unaffected.
+func collectStreamTextCore(ctx context.Context, events <-chan llm.StreamEvent) (string, llm.TokenUsage, error) {
+	var usage llm.TokenUsage
 	if events == nil {
-		return "", fmt.Errorf("nil event channel")
+		return "", usage, fmt.Errorf("nil event channel")
 	}
 
 	var sb strings.Builder
@@ -419,16 +442,16 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 		select {
 		case <-ctx.Done():
 			if sb.Len() > 0 {
-				return strings.TrimSpace(sb.String()), nil
+				return strings.TrimSpace(sb.String()), usage, nil
 			}
-			return "", ctx.Err()
+			return "", usage, ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
 				result := strings.TrimSpace(sb.String())
 				if result == "" {
-					return "", fmt.Errorf("empty LLM response")
+					return "", usage, fmt.Errorf("empty LLM response")
 				}
-				return result, nil
+				return result, usage, nil
 			}
 			switch ev.Type {
 			case "content_block_delta":
@@ -446,14 +469,38 @@ func collectStreamText(ctx context.Context, events <-chan llm.StreamEvent) (stri
 					delta.Delta.Type != "thinking_delta" && delta.Delta.Text != "" {
 					sb.WriteString(delta.Delta.Text)
 				}
+			case "message_start":
+				var ms llm.MessageStart
+				if json.Unmarshal(ev.Payload.Bytes(), &ms) == nil {
+					usage.InputTokens = ms.Message.Usage.InputTokens
+					if v := ms.Message.Usage.CacheReadInputTokens; v > 0 {
+						usage.CacheReadInputTokens = v
+					}
+					if v := ms.Message.Usage.CacheCreationInputTokens; v > 0 {
+						usage.CacheCreationInputTokens = v
+					}
+				}
+			case "message_delta":
+				var md llm.MessageDelta
+				if json.Unmarshal(ev.Payload.Bytes(), &md) == nil {
+					if v := md.Usage.OutputTokens; v > 0 {
+						usage.OutputTokens = v
+					}
+					if v := md.Usage.CacheReadInputTokens; v > 0 {
+						usage.CacheReadInputTokens = v
+					}
+					if v := md.Usage.CacheCreationInputTokens; v > 0 {
+						usage.CacheCreationInputTokens = v
+					}
+				}
 			case "error":
 				var errBody struct {
 					Message string `json:"message"`
 				}
 				if json.Unmarshal(ev.Payload.Bytes(), &errBody) == nil && errBody.Message != "" {
-					return "", fmt.Errorf("LLM stream error: %s", errBody.Message)
+					return "", usage, fmt.Errorf("LLM stream error: %s", errBody.Message)
 				}
-				return "", fmt.Errorf("LLM stream error: %s", ev.Payload.String())
+				return "", usage, fmt.Errorf("LLM stream error: %s", ev.Payload.String())
 			}
 		}
 	}

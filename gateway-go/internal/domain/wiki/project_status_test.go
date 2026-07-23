@@ -161,3 +161,54 @@ func TestAppendProjectStatusLine_PrependsIdempotentByRefAndCapped(t *testing.T) 
 		t.Fatalf("bullets after bulk = %d, want capped at %d", len(statuses[0].Bullets), maxProjectStatusBullets)
 	}
 }
+
+// TestAppendProjectStatusLineAt_EventDate: an event date (e.g. a deal document's
+// own date) on a different day than capture leads the bullet with the event date
+// and notes the capture day; same-day / empty / invalid event dates render
+// capture-dated as before.
+func TestAppendProjectStatusLineAt_EventDate(t *testing.T) {
+	store := newProjectTestStore(t)
+	defer store.Close()
+	path := "프로젝트/영산고.md"
+	capture := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
+
+	if err := store.AppendProjectStatusLineAt(path, "견적서 · 탑솔라 수신", "2026-08-01", "mail:m1", capture); err != nil {
+		t.Fatalf("append event-dated: %v", err)
+	}
+	if err := store.AppendProjectStatusLineAt(path, "계약서 회신", "2026-08-03", "mail:m2", capture); err != nil {
+		t.Fatalf("append same-day: %v", err)
+	}
+	if err := store.AppendProjectStatusLineAt(path, "전화 통화", "", "mail:m3", capture); err != nil {
+		t.Fatalf("append empty: %v", err)
+	}
+
+	statuses, err := store.ProjectStatuses()
+	if err != nil || len(statuses) != 1 {
+		t.Fatalf("ProjectStatuses: %v (n=%d)", err, len(statuses))
+	}
+	b := statuses[0].Bullets // newest first: m3, m2, m1
+	if b[0] != "8월 3일 전화 통화" {
+		t.Errorf("empty event date bullet = %q, want capture-dated, no note", b[0])
+	}
+	if b[1] != "8월 3일 계약서 회신" {
+		t.Errorf("same-day event bullet = %q, want capture-dated, no note", b[1])
+	}
+	if b[2] != "8월 1일 견적서 · 탑솔라 수신 (8/3 기록)" {
+		t.Errorf("differing event bullet = %q, want event-dated + capture note", b[2])
+	}
+}
+
+func TestStatusBulletDates(t *testing.T) {
+	capture := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC)
+	if lead, note := statusBulletDates("2026-08-01", capture); lead != "8월 1일" || note != " (8/3 기록)" {
+		t.Errorf("differing day: lead=%q note=%q", lead, note)
+	}
+	if lead, note := statusBulletDates("2026-08-03", capture); lead != "8월 3일" || note != "" {
+		t.Errorf("same day: lead=%q note=%q", lead, note)
+	}
+	for _, bad := range []string{"", "not-a-date", "8월 1일", "2026/08/01"} {
+		if lead, note := statusBulletDates(bad, capture); lead != "8월 3일" || note != "" {
+			t.Errorf("invalid %q: lead=%q note=%q (want capture-dated, no note)", bad, lead, note)
+		}
+	}
+}

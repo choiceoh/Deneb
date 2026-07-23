@@ -219,19 +219,22 @@ func TestCollectStream_UnparseableErrorEvent(t *testing.T) {
 func TestCollectStream_ContextCancelledWithPartial(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Buffered channel: one event, then no close — CollectStream will block
-	// on the second receive until the context is cancelled.
-	ch := make(chan llm.StreamEvent, 1)
-	ch <- llm.StreamEvent{
-		Type:    "content_block_delta",
-		Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"partial content"}}`)),
-	}
-
-	// Cancel after the first event has been consumed. We need to cancel
-	// before CollectStream blocks on the empty channel.
+	// Unbuffered channel so the send blocks until collectStreamCore has received
+	// (and buffered) the event; only then do we cancel. This is deterministic:
+	// with a buffered channel + immediate cancel, the first for-select iteration
+	// could have both ctx.Done() and the event ready at once, and Go picks a
+	// ready case at random — if ctx.Done() won, the builder was still empty and
+	// CollectStream returned "" + ctx.Err() (the flaky failure).
+	ch := make(chan llm.StreamEvent)
 	go func() {
-		// Give CollectStream time to read the first event and block on second.
-		// A small spin is fine here because the channel is buffered.
+		ch <- llm.StreamEvent{
+			Type:    "content_block_delta",
+			Payload: llm.FlexibleFromRaw([]byte(`{"delta":{"text":"partial content"}}`)),
+		}
+		// The event has been consumed and its text is in the builder; cancelling
+		// now makes the next receive observe ctx.Done() with the partial content
+		// already present. The events case can never fire again (no more sends),
+		// so the select deterministically takes the ctx.Done() branch.
 		cancel()
 	}()
 

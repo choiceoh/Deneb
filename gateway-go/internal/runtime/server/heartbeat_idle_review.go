@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -105,39 +104,19 @@ func idleReviewableSessionKey(key string) bool {
 
 // recentRealSessionKeys lists the newest reviewable session keys from the
 // on-disk transcript dir — durable across the deploy restarts that empty the
-// in-memory session manager (transcript filenames are the session keys).
+// in-memory session manager (transcript filenames are the session keys). It is
+// the capped, key-only projection of reviewableSessionsByMtime.
 func recentRealSessionKeys(dir string, limit int) ([]string, error) {
-	entries, err := os.ReadDir(dir)
+	sessions, err := reviewableSessionsByMtime(dir)
 	if err != nil {
 		return nil, err
 	}
-	type candidate struct {
-		key string
-		mod time.Time
+	if len(sessions) > limit {
+		sessions = sessions[:limit]
 	}
-	var cands []candidate
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".jsonl") {
-			continue
-		}
-		key := strings.TrimSuffix(name, ".jsonl")
-		if !idleReviewableSessionKey(key) {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		cands = append(cands, candidate{key: key, mod: info.ModTime()})
-	}
-	sort.Slice(cands, func(i, j int) bool { return cands[i].mod.After(cands[j].mod) })
-	if len(cands) > limit {
-		cands = cands[:limit]
-	}
-	keys := make([]string, 0, len(cands))
-	for _, c := range cands {
-		keys = append(keys, c.key)
+	keys := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		keys = append(keys, s.key)
 	}
 	return keys, nil
 }
@@ -180,7 +159,7 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 		if live.LastReviewAt > 0 {
 			staleFor = now.Sub(time.UnixMilli(live.LastReviewAt)).Round(time.Minute).String()
 		}
-		keys, err := recentRealSessionKeys(transcriptBaseDir(), idleReviewCandidates)
+		sessions, err := reviewableSessionsByMtime(transcriptBaseDir())
 		if err != nil {
 			// A missing dir is a fresh install (quiet); anything else is an
 			// operational failure that must not masquerade as "no candidates".
@@ -191,8 +170,23 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 			}
 			return false, ""
 		}
-		for _, key := range keys {
-			sctx, err := skilllifecycle.BuildSessionContext(store, key)
+		// Walk the prospect frontier backward through history so OLDER substantial
+		// sessions get mined too, not just the newest handful re-checked forever.
+		cursorPath := prospectCursorPath()
+		cursor := loadProspectCursor(cursorPath)
+		candidates := sessionsOlderThan(sessions, cursor.FrontierMs)
+		wrapped := false
+		if len(candidates) == 0 {
+			// Reached the bottom of the backlog — restart the sweep from the
+			// newest so new sessions get picked up (repeats echo-dedup away).
+			candidates = sessions
+			wrapped = true
+		}
+		if len(candidates) > prospectBatch {
+			candidates = candidates[:prospectBatch]
+		}
+		for _, cand := range candidates {
+			sctx, err := skilllifecycle.BuildSessionContext(store, cand.key)
 			if err != nil {
 				continue
 			}
@@ -202,18 +196,32 @@ func (s *Server) newIdleSkillReviewLane() func(ctx context.Context) (bool, strin
 			if !nudger.WouldReview(sctx) {
 				continue
 			}
-			fired, err := nudger.RunStaleReview(key, sctx)
+			fired, err := nudger.RunStaleReview(cand.key, sctx)
 			if err != nil {
 				// runReviewOnce already recorded the failure on liveness; the
 				// lane just surfaces it and stops walking candidates this tick.
-				s.logger.Warn("idle skill review: fenced review failed", "session", key, "error", err)
+				s.logger.Warn("idle skill review: fenced review failed", "session", cand.key, "error", err)
 				return false, ""
 			}
 			if fired {
-				return true, fmt.Sprintf("session=%s staleFor=%s", key, staleFor)
+				cursor.FrontierMs = cand.modMs // descend past this session next tick
+				if err := saveProspectCursor(cursorPath, cursor); err != nil {
+					s.logger.Warn("idle skill review: prospect cursor save failed", "error", err)
+				}
+				return true, fmt.Sprintf("session=%s staleFor=%s wrapped=%v", cand.key, staleFor, wrapped)
 			}
 		}
-		s.logger.Debug("idle skill review: no recent session passed the review gate", "staleFor", staleFor)
+		// No substantial session in this batch: step the frontier past it so the
+		// next fire advances to older work (and wraps once the bottom is reached).
+		if n := len(candidates); n > 0 {
+			cursor.FrontierMs = candidates[n-1].modMs
+		} else {
+			cursor.FrontierMs = 0
+		}
+		if err := saveProspectCursor(cursorPath, cursor); err != nil {
+			s.logger.Warn("idle skill review: prospect cursor save failed", "error", err)
+		}
+		s.logger.Debug("idle skill review: no session in batch passed the review gate", "staleFor", staleFor, "wrapped", wrapped)
 		return false, ""
 	}
 }

@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.135.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.134.0...deneb-v4.135.0) (2026-07-22)
+
+
+### ✨ Features
+
+* **chat:** 이미지 첨부를 비전 모델로 이해 (메인→비전→OCR 체인) ([#4155](https://github.com/choiceoh/Deneb/issues/4155)) ([eb96708](https://github.com/choiceoh/Deneb/commit/eb967082c2543ba459fb9cc96a15658f9757fdb3))
+* **chat:** 첨부 배치 재전송 멱등 캐시 (중복 분석·카드 방지) ([#4156](https://github.com/choiceoh/Deneb/issues/4156)) ([069e044](https://github.com/choiceoh/Deneb/commit/069e0449dd911f074014e6d661995b87944c0626))
+* **client-android:** 사용량 화면 — 모델·역할·작업별 토큰 사용량 (1일/7일) ([#4154](https://github.com/choiceoh/Deneb/issues/4154)) ([b6b6372](https://github.com/choiceoh/Deneb/commit/b6b6372b922a1607ec8cf1373bfcc82b5a147497))
+* **dev:** coding-agent session memory hooks (capture + surface) ([#4163](https://github.com/choiceoh/Deneb/issues/4163)) ([215e0cf](https://github.com/choiceoh/Deneb/commit/215e0cfec59d028fad4dbeb18a0010febe7dd8e4))
+* **gateway:** record local-model helper-call token usage ([#4158](https://github.com/choiceoh/Deneb/issues/4158)) ([dbb95dc](https://github.com/choiceoh/Deneb/commit/dbb95dce5046e4c5e0646252f687dd04a37221ac))
+* **genesis:** 유휴 스킬 리뷰에 과거 세션 점진 백필 커서 (수요 생성) ([#4164](https://github.com/choiceoh/Deneb/issues/4164)) ([5beda18](https://github.com/choiceoh/Deneb/commit/5beda18d322c8f87bf7c1c277cbba6a2b11508f0))
+* **mail:** 프로젝트 상태 불릿 강화 — 딜 이벤트일 + 신호/결정상태 태그 ([#4165](https://github.com/choiceoh/Deneb/issues/4165)) ([f9edd74](https://github.com/choiceoh/Deneb/commit/f9edd748af802948503d34e7756adeaf07683bcf))
+
+
+### 🐛 Bug Fixes
+
+* **chat:** quiet expected external-origin taint logs ([#4160](https://github.com/choiceoh/Deneb/issues/4160)) ([a3870cb](https://github.com/choiceoh/Deneb/commit/a3870cbc7c7d8a2df7449c551e775cd0b78b2284))
+* **chat:** 부작용 도구 실행 후 전송 오류 시 턴 재실행 중복 방지 ([#4162](https://github.com/choiceoh/Deneb/issues/4162)) ([48c82cb](https://github.com/choiceoh/Deneb/commit/48c82cb24f5cd4971a5ffe6fb12681056f8e7f71))
+* **ci:** tolerate broken mintlify@latest in Docs check ([#4166](https://github.com/choiceoh/Deneb/issues/4166)) ([20c5fc1](https://github.com/choiceoh/Deneb/commit/20c5fc10d3408164a67d1c4887c413d1f891901f))
+* **groupware:** 결재 읽기 실패 시 stderr 진단 보존 (radar "exit status 1" 은폐 해소) ([#4146](https://github.com/choiceoh/Deneb/issues/4146)) ([105e830](https://github.com/choiceoh/Deneb/commit/105e830bf3f9f5704da48302b5dc56fc33f26932))
+* **security:** pathutil로 세션/파일 경로 가둠 ([#4152](https://github.com/choiceoh/Deneb/issues/4152)) ([03f5ada](https://github.com/choiceoh/Deneb/commit/03f5ada78519a88125a3fec0e06c67ea0dbc8557))
+
+
+### ⚡ Performance
+
+* **chat:** 첨부 배치 파일을 병렬 처리 (+ capture 저장 동시성 안전) ([#4151](https://github.com/choiceoh/Deneb/issues/4151)) ([8805f4b](https://github.com/choiceoh/Deneb/commit/8805f4b653ec8b41c46cd79a8fae0a4847c4630c))
+
 ## [4.134.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.133.0...deneb-v4.134.0) (2026-07-22)
 
 

@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
@@ -35,6 +36,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/cron"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
@@ -461,6 +463,17 @@ func New(addr string, opts ...Option) (*Server, error) {
 	s.registerSessionRPCMethods() // chat pipeline init + handler creation
 	if s.localAIHub != nil {
 		pilot.SetLocalAIHub(s.localAIHub)
+	}
+	// Route helper-LLM usage (local models: session titles, triage, summarizers)
+	// into the agent-log so they surface in the native usage screen. The writer is
+	// created during registerSessionRPCMethods() above, so it is set by this point.
+	pilot.SetAgentLogWriter(s.agentLogWriter)
+	// Mail-analysis stage-1 extractors call the local model directly (not via
+	// pilot), so route their usage into the same helper.llm stream. Attributed to
+	// the tiny role/provider the extractors resolve to (mailAnalysisModels).
+	if s.modelRegistry != nil {
+		tinyCfg := s.modelRegistry.Config(modelrole.RoleTiny)
+		mailanalysis.SetLocalUsageLog(s.agentLogWriter, string(modelrole.RoleTiny), tinyCfg.ProviderID)
 	}
 	hub.AdvancePhase(rpcutil.PhaseSession) // mark chatHandler as available
 	s.initGenesisServices()                // create genesis deps (before late methods for Rule 1)

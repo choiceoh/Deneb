@@ -32,6 +32,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 > ⚠️ **analysis 역할은 2026-07-07 제거됐다.** 과거 `analysis → glm-5.2`(클라우드, main·chatbot·coding과 공유)라 요약류 헬퍼 콜을 얹으면 클라우드로 새던 함정의 근원이었다 — 컴팩션·youtube 요약이 실제로 이렇게 샜다가 #2508/#2509로 lightweight(로컬)로 환원됐다. 이제 **내부/배경 요약은 lightweight(로컬), 사용자가 읽는 품질 종합은 main**으로 이분된다. analysis와 동일 모델(glm-5.2)이라 제거는 동작상 무변화였다.
 >
+> ⚙️ **tiny 역할은 thinking 무조건 off** (2026-07-22, 운영자 지시 — 코드로 강제): tiny 는 품질보다 **속도·동시성** 우선(단순 분류/추출·세션 제목·라이브 '생각 중' 칩 요약)이라 chain-of-thought 는 순수 오버헤드다. thinking-off 를 **모델이 아니라 역할 속성**으로 강제한다 — `modelrole.Registry.ThinkingOffDirectiveForRole` 이 per-model 정책이 thinking 을 켜둔(추론모델) 경우에도 vLLM-backed 프로바이더면 `enable_thinking=false` 를 얹는다(pilot 직접경로 `CallRoleLLM`). 계기: tiny 모델이 `dsv4-nothink`(무-think)→`qwen3.6-35b-a3b`(듀얼모드 추론)로 스왑되며 thinking 이 켜진 채 돌아 요약이 ~2배 느리고(1.5s 타임아웃 근접→부하 시 드롭) 가끔 중복/장황했다(라이브 실측: `enable_thinking=false` 0.44s 깔끔 vs 무토글 ~1s). 역할 강제라 이후 모델 스왑에도 무회귀. 같은 실패 모드 전례=워크피드 카드 각주(thinking-off 미적용→256토큰을 추론이 소진→빈응답).
+>
 > ⚠️ **2026-07 현재는 main도 클라우드다.** 폴백 방향이 뒤집혔다: 클라우드 main(glm)이 죽으면 **로컬 dsv4로 낙하**한다(가용성 관점에선 건강한 배치). 실측(2026-07-04) glm 소비 ≈ 3.2M input tok/일, main 턴 평균 54~73s. vLLM APC(prefix cache) 핫패스는 main이 아니라 **dsv4 경로**(fallback·dsv4-nothink 헬퍼)로 축소됐다 — `docs/agent-rules/prompt-cache.md` §1.5 의 원칙은 그 트래픽과 main 의 로컬 복귀 대비로 그대로 준수한다.
 >
 > ★ **chatbot 역할은 2026-07-08 제거됐다** — 챗봇 워크스페이스(`chat:` 세션) 자체가 제품에서 삭제되면서(단일 업무 워크스페이스로 통합) `RoleChatbot`·`agents.chatbotModel`도 함께 은퇴했다. 레거시 `chat:` 세션은 일반 세션으로 흡수되어 main을 쓴다.

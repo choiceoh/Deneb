@@ -68,6 +68,19 @@ func (w *Writer) AggregateBySession(sinceMs int64) []SessionStat {
 					stats[e.Session] = st
 				}
 				st.Errors++
+			case TypeHelperLLM:
+				if st == nil {
+					st = &SessionStat{Session: e.Session}
+					stats[e.Session] = st
+				}
+				var d HelperLLMData
+				if json.Unmarshal(e.Data, &d) != nil {
+					continue
+				}
+				st.Runs++
+				st.InputTokens += int64(d.InputTokens)
+				st.OutputTokens += int64(d.OutputTokens)
+				st.CacheReadTokens += int64(d.CacheReadTokens)
 			default:
 				continue
 			}

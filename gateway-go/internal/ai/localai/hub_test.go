@@ -234,7 +234,7 @@ func TestCollectStream_DropsThinkingDeltas(t *testing.T) {
 	events <- mkDelta("text_delta", "answer")
 	close(events)
 
-	got, err := collectStream(context.Background(), events)
+	got, _, err := collectStream(context.Background(), events)
 	if err != nil {
 		t.Fatalf("collectStream error: %v", err)
 	}

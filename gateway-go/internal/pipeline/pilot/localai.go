@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/localai"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
 )
 
 // --- Package-level model role registry ---
@@ -24,6 +25,7 @@ var (
 	pkgRegistry     *modelrole.Registry
 	pkgRegistryOnce sync.Once
 	pkgLocalAIHub   atomic.Pointer[localai.Hub]
+	pkgAgentLog     atomic.Pointer[agentlog.Writer]
 )
 
 // SetModelRoleRegistry sets the package-level model role registry.
@@ -41,6 +43,16 @@ func SetModelRoleRegistry(reg *modelrole.Registry) {
 // delegates to the hub instead of making direct calls.
 func SetLocalAIHub(h *localai.Hub) {
 	pkgLocalAIHub.Store(h)
+}
+
+// SetAgentLogWriter installs the agent-log writer so helper LLM calls record a
+// helper.llm usage event — the token accounting that lets local models (used
+// only for one-shot helpers, never a full agent turn) show up in the usage
+// breakdown. nil disables recording; called once during init.
+func SetAgentLogWriter(w *agentlog.Writer) {
+	if w != nil {
+		pkgAgentLog.Store(w)
+	}
 }
 
 // LocalAIHub returns the centralized local AI hub, or nil if not set.
@@ -99,7 +111,24 @@ func LightweightModel() string {
 func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage string, maxTokens int, extraBody ...rawJSON) (string, error) {
 	// Hub path: only the lightweight role is hub-managed today.
 	if hub := pkgLocalAIHub.Load(); role == modelrole.RoleLightweight && hub != nil {
-		return hub.CallLocalLLM(ctx, system, userMessage, maxTokens, extraBody...)
+		resp, err := hub.CallLocalLLMDetailed(ctx, system, userMessage, maxTokens, extraBody...)
+		if err != nil {
+			return "", err
+		}
+		// Record helper usage for the model that answered. Skip cache hits — they
+		// made no upstream call, so their tokens were already counted originally.
+		if !resp.FromCache {
+			provider := ""
+			usedModel := resp.Model
+			if pkgRegistry != nil {
+				provider = pkgRegistry.Config(role).ProviderID
+				if usedModel == "" {
+					usedModel = pkgRegistry.Model(role)
+				}
+			}
+			emitHelperUsage(role, usedModel, provider, resp.Usage)
+		}
+		return resp.Text, nil
 	}
 
 	// Direct path: tiny/main, or lightweight before the hub is wired.
@@ -143,7 +172,10 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 	// primary model's kwargs would send e.g. a vLLM-only template toggle to a
 	// cloud provider (or enable_thinking to an untoggleable reasoning model).
 	shapedExtra := func(providerID, model string) map[string]any {
-		directive := pkgRegistry.ThinkingOffDirectiveFor(providerID, model) // nil-receiver safe
+		// Role-aware: a speed/concurrency-first role (RoleTiny) forces thinking off
+		// even when the per-model policy would leave it on, so the role's latency
+		// stays low regardless of which model it points at.
+		directive := pkgRegistry.ThinkingOffDirectiveForRole(role, providerID, model) // nil-receiver safe
 		merged := make(map[string]any, len(callerExtra)+2)
 		if directive != nil {
 			merged["chat_template_kwargs"] = map[string]any{directive.TemplateKwarg(): false}
@@ -172,6 +204,7 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		ExtraBody: pilotExtraBody(shapedExtra(providerID, model)),
 	}
 
+	usedModel, usedProvider := model, providerID
 	events, err := client.StreamChat(ctx, req)
 	if err != nil {
 		// Role model failed — walk its fallback chain if the registry is available.
@@ -187,6 +220,7 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 				req.ExtraBody = pilotExtraBody(shapedExtra(fbCfg.ProviderID, fbCfg.Model))
 				events, err = fbClient.StreamChat(ctx, req)
 				if err == nil {
+					usedModel, usedProvider = fbCfg.Model, fbCfg.ProviderID
 					break
 				}
 			}
@@ -198,10 +232,11 @@ func CallRoleLLM(ctx context.Context, role modelrole.Role, system, userMessage s
 		}
 	}
 
-	text, err := CollectStream(ctx, events)
+	text, usage, err := collectStreamCore(ctx, events)
 	if err != nil {
 		return "", err
 	}
+	emitHelperUsage(role, usedModel, usedProvider, usage)
 
 	if text == "" {
 		return "(no response from local model)", nil
@@ -230,27 +265,80 @@ func CallTinyLLM(ctx context.Context, system, userMessage string, maxTokens int,
 	return CallRoleLLM(ctx, modelrole.RoleTiny, system, userMessage, maxTokens, extraBody...)
 }
 
-// CollectStream reads all events from a streaming LLM response and returns the text.
+// CollectStream reads all events from a streaming LLM response and returns the
+// text. Usage is discarded; callers that need per-call token accounting use
+// collectStreamCore.
 func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, error) {
+	text, _, err := collectStreamCore(ctx, events)
+	return text, err
+}
+
+// emitHelperUsage records a helper.llm usage event for a one-shot local/helper
+// LLM call, so local models used only for helpers (never a full agent turn)
+// appear in the per-model / per-role usage breakdown. No-op when the writer is
+// unset or nothing was reported.
+func emitHelperUsage(role modelrole.Role, model, provider string, usage llm.TokenUsage) {
+	if model == "" || (usage.InputTokens == 0 && usage.OutputTokens == 0) {
+		return
+	}
+	agentlog.LogTyped(pkgAgentLog.Load(), agentlog.SessionHelper, agentlog.TypeHelperLLM, agentlog.HelperLLMData{
+		Model:           model,
+		Provider:        provider,
+		Role:            string(role),
+		InputTokens:     usage.InputTokens,
+		OutputTokens:    usage.OutputTokens,
+		CacheReadTokens: usage.CacheReadInputTokens,
+	})
+}
+
+// collectStreamCore reads all events from a streaming LLM response and returns
+// the text plus the reported token usage (parsed from message_start /
+// message_delta). Usage fields stay zero for providers that do not report them.
+func collectStreamCore(ctx context.Context, events <-chan llm.StreamEvent) (string, llm.TokenUsage, error) {
+	var usage llm.TokenUsage
 	if events == nil {
-		return "", fmt.Errorf("nil event stream")
+		return "", usage, fmt.Errorf("nil event stream")
 	}
 	var sb strings.Builder
 	for {
 		select {
 		case <-ctx.Done():
 			if sb.Len() > 0 {
-				return sb.String(), nil
+				return sb.String(), usage, nil
 			}
-			return "", ctx.Err()
+			return "", usage, ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
-				return sb.String(), nil
+				return sb.String(), usage, nil
 			}
 			switch ev.Type {
 			case "content_block_delta":
 				if text := ExtractDeltaText(ev.Payload.Bytes()); text != "" {
 					sb.WriteString(text)
+				}
+			case "message_start":
+				var ms llm.MessageStart
+				if json.Unmarshal(ev.Payload.Bytes(), &ms) == nil {
+					usage.InputTokens = ms.Message.Usage.InputTokens
+					if v := ms.Message.Usage.CacheReadInputTokens; v > 0 {
+						usage.CacheReadInputTokens = v
+					}
+					if v := ms.Message.Usage.CacheCreationInputTokens; v > 0 {
+						usage.CacheCreationInputTokens = v
+					}
+				}
+			case "message_delta":
+				var md llm.MessageDelta
+				if json.Unmarshal(ev.Payload.Bytes(), &md) == nil {
+					if v := md.Usage.OutputTokens; v > 0 {
+						usage.OutputTokens = v
+					}
+					if v := md.Usage.CacheReadInputTokens; v > 0 {
+						usage.CacheReadInputTokens = v
+					}
+					if v := md.Usage.CacheCreationInputTokens; v > 0 {
+						usage.CacheCreationInputTokens = v
+					}
 				}
 			case "error":
 				// Error events arrive in three shapes: the upstream raw
@@ -275,7 +363,7 @@ func CollectStream(ctx context.Context, events <-chan llm.StreamEvent) (string, 
 				if msg == "" {
 					msg = ev.Payload.String()
 				}
-				return sb.String(), fmt.Errorf("stream error: %s", msg)
+				return sb.String(), usage, fmt.Errorf("stream error: %s", msg)
 			}
 		}
 	}

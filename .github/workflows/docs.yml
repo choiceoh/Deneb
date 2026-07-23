@@ -100,7 +100,13 @@ jobs:
           node-version: "22"
 
       - name: Install Mintlify CLI
-        run: npm install -g mintlify@latest --quiet
+        # Non-fatal: mintlify@latest intermittently ships a broken transitive
+        # dependency (e.g. @mintlify/editor 404 from the npm registry), which must
+        # not red the Docs check for the whole repo. When the install fails the
+        # validate step below detects the missing CLI and falls back to the
+        # docs.json syntax smoke, so real regressions are still caught when the
+        # upstream registry is healthy.
+        run: npm install -g mintlify@latest --quiet || echo "::warning::mintlify CLI install failed (upstream npm registry); falling back to docs.json smoke"
 
       - name: Validate docs config and internal links
         working-directory: docs

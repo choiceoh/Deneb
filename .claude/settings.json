@@ -10,6 +10,16 @@
             "statusMessage": "codegraph: 워크트리 인덱스 자동 준비"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/session-memory-surface.py\"",
+            "timeout": 10,
+            "statusMessage": "기억: 최근 세션·결정 표면화"
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -62,6 +72,18 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/dev/zcode-codegraph-sync.sh\"",
             "timeout": 5,
             "statusMessage": "codegraph: 편집 후 인덱스 자동동기"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/dev/session-memory-capture.py\"",
+            "timeout": 20,
+            "statusMessage": "기억: 세션 골격 자동 기록"
           }
         ]
       }

@@ -24,13 +24,15 @@ export function useSessions(
   connected: boolean,
   busy: boolean,
   chat: { clear: () => void; setTurns: (turns: ChatTurn[]) => void },
-  opts?: { mainKey?: string; filter?: string; newKey?: () => string },
+  opts?: { mainKey?: string; filter?: string; channel?: string; newKey?: () => string },
 ) {
   // mainKey = the default session; newKey (if given) mints a *fresh* key per "새 대화"
   // so the 채팅 탭이 여러 client:main:* 대화를 가질 수 있다(work panel은 client:main 하나).
-  // filter scopes the recent list to a namespace.
+  // channel scopes the recent list SERVER-side (so `limit` applies to that channel,
+  // not the newest-N across all channels); filter is the client-side namespace guard.
   const mainKey = opts?.mainKey ?? MAIN_SESSION;
   const filter = opts?.filter;
+  const channel = opts?.channel;
   const keep = (s: SessionRow[]) => (filter ? s.filter((r) => r.key.startsWith(filter)) : s);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [sessionKey, setSessionKey] = useState(mainKey);
@@ -78,7 +80,7 @@ export function useSessions(
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const load = () => {
-      void recentSessions(cfg, limitRef.current)
+      void recentSessions(cfg, limitRef.current, channel)
         .then((s) => !cancelled && setSessions(keep(s)))
         .catch(() => {});
     };
@@ -101,7 +103,7 @@ export function useSessions(
 
   async function refreshSessions(limit = sessionsLimit) {
     try {
-      setSessions(keep(await recentSessions(cfg, limit)));
+      setSessions(keep(await recentSessions(cfg, limit, channel)));
       setSessionErr("");
     } catch (e) {
       setSessionErr(errText(e));

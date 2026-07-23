@@ -1,6 +1,9 @@
 package chat
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
@@ -62,6 +65,39 @@ func TestUntrustedToolGate_ExternalOriginTaintsEvenWhenClean(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUntrustedToolGate_TaintLogLevelMatchesSource(t *testing.T) {
+	t.Run("external-origin policy is debug", func(t *testing.T) {
+		var logs bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		g := newUntrustedToolGate("client:main", "run1", nil, logger)
+
+		g.observeToolResult("web", "t1", "signature-clean external content", false)
+
+		got := logs.String()
+		if !strings.Contains(got, "level=DEBUG") ||
+			!strings.Contains(got, "msg=\"untrusted-tool gate: turn tainted by external-origin policy\"") {
+			t.Fatalf("external-origin taint log = %q, want debug policy event", got)
+		}
+		if strings.Contains(got, "promptware signal") {
+			t.Fatalf("external-origin policy must not be logged as a promptware signal: %q", got)
+		}
+	})
+
+	t.Run("detected promptware signal stays warn", func(t *testing.T) {
+		var logs bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		g := newUntrustedToolGate("client:main", "run1", nil, logger)
+
+		g.seed(testInjection, "")
+
+		got := logs.String()
+		if !strings.Contains(got, "level=WARN") ||
+			!strings.Contains(got, "msg=\"untrusted-tool gate: turn tainted by promptware signal\"") {
+			t.Fatalf("promptware taint log = %q, want warning signal event", got)
+		}
+	})
 }
 
 func TestUntrustedToolGate_CodeActionTaintsWhenBridgeReadExternalOrigin(t *testing.T) {

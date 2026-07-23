@@ -409,6 +409,17 @@ func (t *fallbackTurn) retryTransient(ctx context.Context) (aborted bool, err er
 		// caller's finalizeFailure (mirrors the pre-split skip semantics).
 		return false, nil //nolint:nilerr // deliberate — pending t.runErr is surfaced downstream
 	}
+	// Don't replay a turn that already committed a side-effecting tool: re-running
+	// from the original messages would execute it again (e.g. send the same
+	// message twice). A transient error after a mutation is left to fail rather
+	// than risk a duplicate — mirroring the stall / effort-escalation guards
+	// (resultRanTools) and runInitialAttempt's budget-exhaustion guard. Read-only
+	// turns still retry.
+	if resultRanSideEffectingTool(t.agentResult) {
+		t.logger.Warn("transient error after a side-effecting tool ran; not retrying to avoid duplicating it",
+			"error", t.runErr)
+		return false, nil //nolint:nilerr // deliberate — pending t.runErr is surfaced downstream
+	}
 	t.logger.Warn("transient HTTP error, retrying once", "error", t.runErr)
 	select {
 	case <-ctx.Done():
@@ -420,6 +431,31 @@ func (t *fallbackTurn) retryTransient(ctx context.Context) (aborted bool, err er
 		t.logger.Warn("transient retry also failed", "error", t.runErr)
 	}
 	return false, nil
+}
+
+// resultRanSideEffectingTool reports whether the run executed a tool that may
+// have committed an external or workspace side effect — anything NOT on the
+// read-only allowlist (parallelSafeTools). Default-deny: an action-multiplexed
+// tool whose mutating/read-only split lives in an argument (wiki/calendar/todo)
+// or any unrecognized tool counts as side-effecting, so a whole-turn replay can
+// never silently repeat a mutation (e.g. a second message.send). Pure read-only
+// turns (search/read/web/mail_archive/…) return false and stay eligible for a
+// transient retry or model fallback.
+func resultRanSideEffectingTool(res *agent.AgentResult) bool {
+	if res == nil {
+		return false
+	}
+	if len(res.ToolCounts) == 0 {
+		// No per-tool histogram available: fall back to the count. If tools ran
+		// but we cannot tell which, assume side-effecting (the safe default).
+		return res.TotalToolCalls > 0
+	}
+	for name := range res.ToolCounts {
+		if _, readOnly := parallelSafeTools[name]; !readOnly {
+			return true
+		}
+	}
+	return false
 }
 
 // retryThinkingStrip recovers from an Anthropic thinking-signature rejection:
@@ -455,6 +491,17 @@ func (t *fallbackTurn) retryThinkingStrip(ctx context.Context) {
 // (e.g., Main → Lightweight → Fallback) until one produces a successful turn.
 func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 	if t.runErr == nil || t.deps.registry == nil {
+		return
+	}
+	// Same side-effect guard as retryTransient: a fallback re-runs the full turn
+	// on another model from the original messages, which would re-execute any
+	// already-committed side-effecting tool. Skip the chain when one ran so a
+	// mutation is never duplicated; read-only turns (and pre-tool stalls, whose
+	// result carries no tools) still fall back. The turn then fails via
+	// finalizeFailure with the original error.
+	if resultRanSideEffectingTool(t.agentResult) {
+		t.logger.Warn("model failed after a side-effecting tool ran; skipping fallback chain to avoid duplicating it",
+			"model", t.cfg.Model, "error", t.runErr)
 		return
 	}
 
