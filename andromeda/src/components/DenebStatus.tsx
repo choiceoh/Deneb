@@ -12,7 +12,7 @@ const WAITING = ["생각 중…", "작업 중…", "준비 중…"];
 export function DenebStatus({ summary }: { summary?: string }) {
   const [i, setI] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setI((x) => (x + 1) % WAITING.length), 3000);
+    const t = setInterval(() => setI((x) => (x + 1) % WAITING.length), 4000);
     return () => clearInterval(t);
   }, []);
 
