@@ -600,7 +600,7 @@ export function composeChatMessage(message: string, workspaceContext?: string): 
 // the transcript for that answer instead of freezing on the streamed preamble.
 
 export const CHAT_RECOVERY_BUDGET_MS = 90_000; // no-signal give-up window
-export const CHAT_RECOVERY_MAX_MS = 300_000; // extended window once confirmed running (~server turn deadline)
+export const CHAT_RECOVERY_MAX_MS = 363_000; // extended window once confirmed running (server InteractiveTurnDeadline 6m + poll)
 export const CHAT_RECOVERY_POLL_MS = 3_000;
 
 export type TurnProbe = { kind: "answered"; text: string } | { kind: "running" } | { kind: "notArrived" };
