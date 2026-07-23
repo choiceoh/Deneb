@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.136.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.135.0...deneb-v4.136.0) (2026-07-23)
+
+
+### ✨ Features
+
+* **genesis:** cap self-correction dispatch retries and surface withheld candidates ([#4168](https://github.com/choiceoh/Deneb/issues/4168)) ([1431adb](https://github.com/choiceoh/Deneb/commit/1431adbbea7bfbac4646b16aa776becc1fd3e777))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** recover long tool-heavy chat turns after a mid-turn SSE drop ([#4176](https://github.com/choiceoh/Deneb/issues/4176)) ([827859f](https://github.com/choiceoh/Deneb/commit/827859fd5f522d831cc4f4a165fa8aa6d980966d))
+* **andromeda:** 데스크톱 채팅 상태 요약 한 줄 표시, 대기 문구 순환 4초 ([#4171](https://github.com/choiceoh/Deneb/issues/4171)) ([d36c3ac](https://github.com/choiceoh/Deneb/commit/d36c3acc3692df8d90bf4a91e7818207b6cbd460))
+* **andromeda:** 채팅 세션 목록을 서버 채널 스코프로 조회 (자동세션에 밀려 비던 문제) ([#4169](https://github.com/choiceoh/Deneb/issues/4169)) ([0aa0be1](https://github.com/choiceoh/Deneb/commit/0aa0be12f69c0520d907c69f11bd2b9e510874f0))
+* attachment cap bypass + heartbeat mixed-report delivery drop ([#4159](https://github.com/choiceoh/Deneb/issues/4159)) ([75391ec](https://github.com/choiceoh/Deneb/commit/75391ec063ddbbf4ba9117378d33327a9708960e))
+* **chat:** guard thinking-strip and compaction retry after side effects ([#4174](https://github.com/choiceoh/Deneb/issues/4174)) ([5fcfeda](https://github.com/choiceoh/Deneb/commit/5fcfeda6f9e9da777a82375d3dca9b029a62e1f9))
+* **native:** 긴 도구 사용 턴의 SSE 끊김 후 답변 이어받기 ([#4175](https://github.com/choiceoh/Deneb/issues/4175)) ([2a8177b](https://github.com/choiceoh/Deneb/commit/2a8177bf3ba5fde770485406e07c6af3f621d630))
+* **proactive:** 자가개선 큐 내부 상태의 업무 피드 누출 차단 ([#4172](https://github.com/choiceoh/Deneb/issues/4172)) ([1ad8aa6](https://github.com/choiceoh/Deneb/commit/1ad8aa6518551cb14ed09e0cd834e8a5aa9ca5a9))
+
 ## [4.135.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.134.0...deneb-v4.135.0) (2026-07-22)
 
 
