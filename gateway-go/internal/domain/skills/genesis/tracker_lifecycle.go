@@ -146,12 +146,26 @@ func (t *Tracker) LogEvolutionProposal(record EvolutionProposalRecord) error {
 // Additive JSONL — older entries simply lack it; P2/P3 consume it as their
 // label substrate (per-version judge accuracy, false-accept attribution).
 type evolveProvenance struct {
-	EvolveArtifactVersion string   `json:"evolveArtifactVersion,omitempty"`
-	JudgeArtifactVersion  string   `json:"judgeArtifactVersion,omitempty"`
-	JudgeModel            string   `json:"judgeModel,omitempty"`
-	JudgeScoreOriginal    *float64 `json:"judgeScoreOriginal,omitempty"`
-	JudgeScoreCandidate   *float64 `json:"judgeScoreCandidate,omitempty"`
-	HeldOutMargin         *float64 `json:"heldOutMargin,omitempty"`
+	// ProcedureRef is the composite content-addressed token (proc-<hex>) for the
+	// WHOLE active procedure — every meta-artifact prompt version folded together
+	// (generation.MetaArtifacts.ProcedureRef). It is the single credit-assignment
+	// key: group evolve outcomes by it to attribute a quality shift to the exact
+	// procedure state that produced them, rather than to one prompt at a time.
+	ProcedureRef          string `json:"procedureRef,omitempty"`
+	EvolveArtifactVersion string `json:"evolveArtifactVersion,omitempty"`
+	JudgeArtifactVersion  string `json:"judgeArtifactVersion,omitempty"`
+	// GenesisArtifactVersion completes the per-prompt breakdown: the evolve path
+	// also runs under the active genesis-system-prompt, so pinning it lets a
+	// reader see which single prompt changed between two ProcedureRefs.
+	GenesisArtifactVersion string `json:"genesisArtifactVersion,omitempty"`
+	// EvolveModel is the producer (rewrite) model role — the second axis beside
+	// the procedure text. JudgeModel already records the evaluator; together they
+	// separate "the prompt changed" from "the model changed" in attribution.
+	EvolveModel         string   `json:"evolveModel,omitempty"`
+	JudgeModel          string   `json:"judgeModel,omitempty"`
+	JudgeScoreOriginal  *float64 `json:"judgeScoreOriginal,omitempty"`
+	JudgeScoreCandidate *float64 `json:"judgeScoreCandidate,omitempty"`
+	HeldOutMargin       *float64 `json:"heldOutMargin,omitempty"`
 	// JudgeSwapConsistent records the order-swap consistency probe outcome for
 	// an accepting forward verdict (RSI P3): true = the reversed pair was
 	// rejected as required; false = the judge blessed both orders and the

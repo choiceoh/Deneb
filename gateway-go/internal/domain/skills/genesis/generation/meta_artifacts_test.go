@@ -26,6 +26,37 @@ func TestMetaArtifacts_FallbackModes(t *testing.T) {
 	}
 }
 
+func TestMetaArtifacts_ProcedureRefDeterministicAndContentAddressed(t *testing.T) {
+	// Nil-safe + pure-fallback: a well-formed, stable token.
+	var nilM *MetaArtifacts
+	ref := nilM.ProcedureRef()
+	if !strings.HasPrefix(ref, "proc-") || len(ref) != len("proc-")+12 {
+		t.Fatalf("ProcedureRef = %q; want proc-<12hex>", ref)
+	}
+	if again := NewMetaArtifacts("", discardLogger()).ProcedureRef(); again != ref {
+		t.Fatalf("ProcedureRef not deterministic across pure-fallback instances: %q vs %q", ref, again)
+	}
+
+	// Materialized defaults are byte-identical to the compiled fallbacks, so the
+	// ref must be unchanged — "same prompt text ⇒ same procedure".
+	dir := t.TempDir()
+	m := NewMetaArtifacts(dir, discardLogger())
+	m.MaterializeDefaults(DefaultMetaArtifacts())
+	if got := m.ProcedureRef(); got != ref {
+		t.Fatalf("materialized-defaults ref = %q; want unchanged %q", got, ref)
+	}
+
+	// Revising ONE governing prompt must move the composite ref (credit
+	// assignment can tell the procedure state apart).
+	revised := strings.Repeat("개정된 evolve 프롬프트 본문. ", 40) // comfortably above MetaArtifactMinBytes
+	if err := os.WriteFile(filepath.Join(dir, MetaEvolveSystemPrompt), []byte(revised), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.ProcedureRef(); got == ref {
+		t.Fatalf("ProcedureRef unchanged after revising an artifact: %q", got)
+	}
+}
+
 func TestMetaArtifacts_LoadAndShortFloor(t *testing.T) {
 	dir := t.TempDir()
 	m := NewMetaArtifacts(dir, discardLogger())

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -283,4 +284,36 @@ func (m *MetaArtifacts) ActiveVersions(defaults map[string]string) map[string]st
 		out[name] = m.Version(name, fallback)
 	}
 	return out
+}
+
+// ProcedureRef returns one content-addressed token identifying the WHOLE active
+// procedure — every meta-artifact prompt version folded together — as
+// "proc-<12hex>". The hash is over the sorted "name=version" lines of
+// ActiveVersions, so two decisions carry the same ProcedureRef iff EVERY
+// governing prompt was byte-identical. It is the composite analogue of the
+// per-artifact Version: a downstream outcome can be attributed to the exact
+// procedure state that produced it (credit assignment across the RSI loop),
+// where the individual Version()s only pin one prompt each.
+//
+// Model role is deliberately NOT folded in — which model executed the procedure
+// is a separate axis, carried alongside on the record (EvolveModel/JudgeModel)
+// so "the procedure text changed" and "the executor changed" stay
+// distinguishable. Deterministic and nil-safe (all-fallback composite when
+// unwired), so it is safe to mint on every decision.
+func (m *MetaArtifacts) ProcedureRef() string {
+	versions := m.ActiveVersions(DefaultMetaArtifacts())
+	names := make([]string, 0, len(versions))
+	for name := range versions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var sb strings.Builder
+	for _, name := range names {
+		sb.WriteString(name)
+		sb.WriteByte('=')
+		sb.WriteString(versions[name])
+		sb.WriteByte('\n')
+	}
+	sum := sha256.Sum256([]byte(sb.String()))
+	return "proc-" + hex.EncodeToString(sum[:])[:12]
 }

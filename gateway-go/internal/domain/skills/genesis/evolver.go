@@ -255,10 +255,15 @@ func (e *Evolver) catalogEntries() []skills.SkillEntry {
 func (e *Evolver) newProvenance() evolveProvenance {
 	e.configMu.RLock()
 	m := e.meta
+	model := e.model
 	e.configMu.RUnlock()
+	defaults := generation.DefaultMetaArtifacts()
 	return evolveProvenance{
-		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt]),
-		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]),
+		ProcedureRef:           m.ProcedureRef(),
+		EvolveArtifactVersion:  m.Version(generation.MetaEvolveSystemPrompt, defaults[generation.MetaEvolveSystemPrompt]),
+		JudgeArtifactVersion:   m.Version(generation.MetaSkillJudgeSystemPrompt, defaults[generation.MetaSkillJudgeSystemPrompt]),
+		GenesisArtifactVersion: m.Version(generation.MetaGenesisSystemPrompt, defaults[generation.MetaGenesisSystemPrompt]),
+		EvolveModel:            model,
 	}
 }
 
