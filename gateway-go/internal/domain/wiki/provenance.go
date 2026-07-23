@@ -15,8 +15,25 @@ package wiki
 import (
 	"fmt"
 	"hash/fnv"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// diaryDateRe is the strict diary-date shape (YYYY-MM-DD). Episode refs and the
+// resolved diary filename both feed a filesystem path, so a ref extracted from
+// an LLM-written page's frontmatter must be validated against this before it can
+// name a file — otherwise a crafted "sources: [d../../etc#x]" would escape the
+// diary dir. Anchored, digits-and-dashes only, no separators.
+var diaryDateRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+// IsDiaryDate reports whether s is a well-formed YYYY-MM-DD diary date. Callers
+// that turn an agent- or page-supplied date into a diary file path MUST gate on
+// it first (path-traversal guard).
+func IsDiaryDate(s string) bool {
+	return diaryDateRe.MatchString(s)
+}
 
 // maxSources caps the per-page episode list. Pages accrete across many dream
 // cycles; without a cap the provenance list would grow unbounded on hot pages.
@@ -92,4 +109,81 @@ func appendEpisode(existing []string, ref string) []string {
 		return existing
 	}
 	return normalizeSources(append(existing, ref))
+}
+
+// parseEpisodeRef is the inverse of newEpisodeRef: it splits a ref into its
+// diary date and content hash. ok is false for anything that is neither a
+// "d<date>#<hash>" nor a dateless "ep-<hash>" token, OR whose date is not a
+// well-formed YYYY-MM-DD (the date reaches a file path downstream, so a
+// malformed one must not resolve). The date is "" for the dateless form.
+func parseEpisodeRef(ref string) (date, hash string, ok bool) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", "", false
+	}
+	if h, found := strings.CutPrefix(ref, "ep-"); found {
+		if h == "" {
+			return "", "", false
+		}
+		return "", h, true
+	}
+	body, found := strings.CutPrefix(ref, "d")
+	if !found {
+		return "", "", false
+	}
+	date, hash, found = strings.Cut(body, "#")
+	if !found || hash == "" || !IsDiaryDate(date) {
+		return "", "", false
+	}
+	return date, hash, true
+}
+
+// EpisodeSource is a resolved episode ref: which diary the fact came from and
+// whether that diary file is still on disk. It is the coarse-but-honest answer
+// to "이 사실 출처가 뭐야?" — the episode is a whole dream-cycle batch, so this
+// points at the batch's diary date, not an exact line span (see newEpisodeRef).
+type EpisodeSource struct {
+	Ref       string // the original episode ref, verbatim
+	Date      string // YYYY-MM-DD; "" for a dateless ep-<hash> ref
+	DiaryFile string // "diary-<date>.md"; "" when Date is empty
+	Exists    bool   // whether DiaryFile is present under the diary dir
+	Malformed bool   // true when Ref did not parse as an episode token
+}
+
+// ResolveEpisode maps an episode ref back to its diary source. It locates the
+// diary file by date (the diary is date-named) and reports whether it still
+// exists — a dangling ref (diary rotated away) is itself useful to surface. It
+// deliberately does NOT try to re-derive the exact consumed span: the digest is
+// over the whole cycle batch (diary + MEMORY.md) and only verifies a candidate,
+// it does not index back to one. Read-only; never fails.
+func (s *Store) ResolveEpisode(ref string) EpisodeSource {
+	src := EpisodeSource{Ref: strings.TrimSpace(ref)}
+	date, _, ok := parseEpisodeRef(ref)
+	if !ok {
+		src.Malformed = true
+		return src
+	}
+	if date == "" {
+		return src // dateless ep-<hash>: content-addressed only, no diary file
+	}
+	src.Date = date
+	src.DiaryFile = "diary-" + date + ".md"
+	if dir := s.DiaryDir(); dir != "" {
+		if info, err := os.Stat(filepath.Join(dir, src.DiaryFile)); err == nil && !info.IsDir() {
+			src.Exists = true
+		}
+	}
+	return src
+}
+
+// ResolveEpisodes resolves a page's whole provenance list, preserving order.
+func (s *Store) ResolveEpisodes(refs []string) []EpisodeSource {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]EpisodeSource, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, s.ResolveEpisode(ref))
+	}
+	return out
 }

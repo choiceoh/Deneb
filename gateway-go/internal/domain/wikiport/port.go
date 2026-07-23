@@ -20,6 +20,7 @@ type (
 	WikiDreamer             = wiki.WikiDreamer
 	Page                    = wiki.Page
 	Frontmatter             = wiki.Frontmatter
+	EpisodeSource           = wiki.EpisodeSource
 	H2Section               = wiki.H2Section
 	SearchResult            = wiki.SearchResult
 	SearchMode              = wiki.SearchMode
@@ -149,6 +150,14 @@ func NewStoreWithSearchOptions(dir, diaryDir string, options SearchOptions) (*St
 
 func ConfigFromEnv() Config {
 	return wiki.ConfigFromEnv()
+}
+
+// IsDiaryDate forwards the domain guard so callers turning an agent-supplied
+// date into a diary file path can validate it (path-traversal guard) without
+// importing the wiki implementation directly. Store.ResolveEpisode /
+// ResolveEpisodes ride along on the Store alias.
+func IsDiaryDate(s string) bool {
+	return wiki.IsDiaryDate(s)
 }
 
 func NewWikiDreamer(store *Store, client *llm.Client, model string, cfg Config, logger *slog.Logger) *WikiDreamer {

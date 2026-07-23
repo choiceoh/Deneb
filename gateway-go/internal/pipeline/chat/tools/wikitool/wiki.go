@@ -58,6 +58,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 			FromLine             int      `json:"from_line"`
 			MaxLines             int      `json:"max_lines"`
 			Limit                int      `json:"limit"`
+			Date                 string   `json:"date"`
 			Force                bool     `json:"force"`
 			Explain              bool     `json:"explain"`
 			Rerank               bool     `json:"rerank"`
@@ -100,7 +101,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		case "log":
 			return wikiLog(workspaceDir, d.Store, p.Content)
 		case "daily":
-			return wikiDaily(d.Store.DiaryDir(), p.Limit)
+			return wikiDaily(d.Store.DiaryDir(), p.Date, p.Limit)
 		case "status":
 			return wikiStatusWithDoctor(ctx, d.Store), nil
 		case "close":
@@ -286,7 +287,38 @@ func wikiReadRange(ctx context.Context, store *wiki.Store, path, section string,
 	if conns, err := store.PageConnections(ctx, path, 6); err == nil && conns != "" {
 		out += "\n\n---\n연결된 항목: " + conns
 	}
+	if footer := formatProvenanceFooter(store, page.Meta.Sources); footer != "" {
+		out += "\n\n" + footer
+	}
 	return out, nil
+}
+
+// formatProvenanceFooter turns a page's raw episode refs into an actionable
+// citation block: each ref resolved to the diary day it came from, plus how to
+// pull that day (wiki daily date=…) to verify the fact against its source. The
+// refs are already visible in the rendered frontmatter, but as opaque tokens;
+// this labels them and closes the cite→locate→fetch loop. Empty when the page
+// carries no provenance.
+func formatProvenanceFooter(store *wiki.Store, sources []string) string {
+	resolved := store.ResolveEpisodes(sources)
+	if len(resolved) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("---\n출처(provenance) — 이 페이지 사실이 합성된 다이어리 에피소드:")
+	for _, ep := range resolved {
+		switch {
+		case ep.Malformed:
+			fmt.Fprintf(&sb, "\n- %s (형식 불명 — 해석 불가)", ep.Ref)
+		case ep.Date == "":
+			fmt.Fprintf(&sb, "\n- %s (날짜 미상 · 내용 해시로만 식별)", ep.Ref)
+		case ep.Exists:
+			fmt.Fprintf(&sb, "\n- %s 다이어리 — 원문 확인: wiki action=daily date=%s", ep.Date, ep.Date)
+		default:
+			fmt.Fprintf(&sb, "\n- %s 다이어리 (원본 정리됨 — 파일 없음)", ep.Date)
+		}
+	}
+	return sb.String()
 }
 
 const wikiReadMaxLines = 400
@@ -786,7 +818,13 @@ func wikiLog(_ string, store *wiki.Store, content string) (string, error) {
 	return fmt.Sprintf("일지 기록 완료: %s (%s)", path, now.Format("15:04")), nil
 }
 
-func wikiDaily(diaryDir string, limit int) (string, error) {
+func wikiDaily(diaryDir, date string, limit int) (string, error) {
+	// Date-targeted read: the provenance footer cites an episode by diary date,
+	// so the agent can pull that exact day to verify the fact. The date reaches
+	// a file path, so it must pass the strict YYYY-MM-DD guard first.
+	if date = strings.TrimSpace(date); date != "" {
+		return wikiDailyByDate(diaryDir, date)
+	}
 	if limit <= 0 {
 		limit = 3
 	}
@@ -836,6 +874,28 @@ func wikiDaily(diaryDir string, limit int) (string, error) {
 	}
 
 	return sb.String(), nil
+}
+
+// wikiDailyByDate reads one diary day by date — the target of a provenance
+// citation. The date must be a well-formed YYYY-MM-DD (path-traversal guard)
+// since it names a file under the diary dir.
+func wikiDailyByDate(diaryDir, date string) (string, error) {
+	if !wiki.IsDiaryDate(date) {
+		return fmt.Sprintf("잘못된 날짜 형식: %q (YYYY-MM-DD 이어야 함)", date), nil
+	}
+	path := filepath.Join(diaryDir, "diary-"+date+".md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Sprintf("%s 일지 없음 (해당 날짜 일지가 없거나 이미 정리됨)", date), nil
+		}
+		return fmt.Sprintf("일지 읽기 실패: %v", err), nil
+	}
+	content := string(data)
+	if len([]rune(content)) > 4000 {
+		content = string([]rune(content)[:4000]) + "\n...(잘림)"
+	}
+	return fmt.Sprintf("## %s 일지\n%s", date, content), nil
 }
 
 func wikiStatus(store *wiki.Store) string {
