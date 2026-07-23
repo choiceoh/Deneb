@@ -93,13 +93,30 @@ internal suspend fun DenebGatewayClient.askGateway(
         throw cancel
     } catch (_: Exception) {
         // A half-open mobile socket can die after the gateway accepted the turn.
-        // Reconcile the canonical transcript before considering a second send.
+        // The detached server run keeps producing the answer; poll the canonical
+        // transcript for it. Show a status row meanwhile (rendered as the waiting
+        // chip) so a reconnect never looks like a frozen preamble — the reported
+        // "stuck on the opening line" — even though recovery can now run minutes.
+        val recoveryRowId = "recovery-$assistantId"
+        _chatHistory.update { list ->
+            list + History(
+                id = recoveryRowId,
+                role = History.Role.TOOL_EXECUTING,
+                content = "recovery",
+                toolName = ToolStatusLabels.RESUMING,
+                isStatusMessage = true,
+            )
+        }
         val recovered = try {
             recoverTurnFromTranscript(sessionKeyAtSend, sendText)
         } catch (cancel: CancellationException) {
             settleChatPlaceholder(assistantId, accumulated.toString())
             askActive = false
             throw cancel
+        } finally {
+            // Drop the status row on every exit (a successful recovery installs the
+            // server transcript, which already lacks it, so this is then a no-op).
+            _chatHistory.update { list -> list.filter { it.id != recoveryRowId } }
         }
         recovered ?: if (accumulated.isEmpty()) {
             try {

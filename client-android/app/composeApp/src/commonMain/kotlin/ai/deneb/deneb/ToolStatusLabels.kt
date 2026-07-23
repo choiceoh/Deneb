@@ -21,6 +21,13 @@ internal object ToolStatusLabels {
      */
     const val REVIEWING = "결과 검토 중…"
 
+    /**
+     * Waiting-chip label while the client's SSE connection dropped mid-turn and
+     * it is polling the transcript for the answer the (detached) server run is
+     * still producing — so a reconnect never looks like a frozen preamble.
+     */
+    const val RESUMING = "답변 이어받는 중…"
+
     // Noun + "~ 중" forms only: failureLabel swaps the " 중" suffix for
     // " 실패", so verb forms ("보내는 중") would conjugate badly there.
     private val labels = mapOf(

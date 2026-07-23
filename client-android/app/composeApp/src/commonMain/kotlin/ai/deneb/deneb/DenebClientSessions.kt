@@ -202,10 +202,33 @@ internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, repla
  */
 internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, sentText: String): GatewayReply? {
     val started = TimeSource.Monotonic.markNow()
+    return recoverTurnFromTranscript(key, sentText) { started.elapsedNow().inWholeMilliseconds }
+}
+
+// elapsedMs is injected so the wall-clock budget boundary is unit-testable:
+// TimeSource.Monotonic is a real clock (unaffected by runTest's virtual time), so
+// only a stubbed elapsed can exercise the confirmed-running window extension.
+internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
+    key: String,
+    sentText: String,
+    elapsedMs: () -> Long,
+): GatewayReply? {
     var misses = 0
     var candidate: List<History>? = null
     var candidateTail: Pair<Int, String>? = null
-    while (started.elapsedNow().inWholeMilliseconds < DenebGatewayClient.STREAM_RECOVERY_BUDGET_MS) {
+    // Extend the poll window to the server turn deadline once the transcript has
+    // confirmed the turn is still running: a tool-heavy turn outlives the short
+    // budget, and giving up early strands the finished answer in the transcript
+    // while the client freezes on the streamed preamble. The short budget still
+    // caps the no-signal case below.
+    var confirmedRunning = false
+    while (true) {
+        val budget = if (confirmedRunning) {
+            DenebGatewayClient.STREAM_RECOVERY_MAX_MS
+        } else {
+            DenebGatewayClient.STREAM_RECOVERY_BUDGET_MS
+        }
+        if (elapsedMs() >= budget) break
         if (sessionKey != key) return null // switched conversations — abandon
         val transcript = fetchTranscript(key)
         if (transcript != null) {
@@ -221,6 +244,7 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, s
                 }
 
                 TurnProbe.StillRunning -> {
+                    confirmedRunning = true
                     misses = 0
                     candidate = null
                     candidateTail = null
