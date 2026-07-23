@@ -204,13 +204,16 @@ class DenebTranscriptCacheBoundaryTest {
         val encoded = encodeCachedTranscript(listOf(row))!!
         val decoded = decodeCachedTranscript(encoded)!!.single()
 
-        for (forbidden in listOf("BASE64", "original-id", "toolCallId", "search", "private", "attachments")) {
+        for (forbidden in listOf("BASE64", "original-id", "toolCallId", "search", "attachments")) {
             assertFalse(forbidden in encoded, forbidden)
         }
         assertEquals(emptyList(), decoded.attachments)
         assertNull(decoded.toolCallId)
         assertFalse(decoded.isThinking)
         assertFalse(decoded.isStatusMessage)
+        // reasoningContent is deliberately cached now (cold-start reasoning block)
+        // and round-trips — unlike the transient metadata above.
+        assertEquals("private", decoded.reasoningContent)
     }
 
     @Test
