@@ -304,9 +304,9 @@ class GatewayChatTransportContractTest {
             "token",
             "client:main",
             "message",
-            tools::add,
-            thinking::add,
-            deltas::add,
+            onTool = tools::add,
+            onThinking = thinking::add,
+            onDelta = deltas::add,
         )
 
         assertTrue(deltas.isEmpty())

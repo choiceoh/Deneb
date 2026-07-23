@@ -97,6 +97,7 @@ func syncOptionsFromPort(req chatport.SyncRequest) *SyncOptions {
 		BeforeToolCall:      req.BeforeToolCall,
 		OnToolResult:        req.OnToolResult,
 		OnThinking:          req.OnThinking,
+		OnReasoning:         req.OnReasoning,
 	}
 	if req.OnToolEvent != nil {
 		options.OnToolEvent = func(event ToolStreamEvent) {

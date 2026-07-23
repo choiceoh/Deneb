@@ -17,6 +17,8 @@
 //	                          "detail":"..."?, "isError":bool?}
 //	  event: thinking  data: {"preview":"..."?}                     (throttled liveness +
 //	                          chip-sized tail of the live reasoning text)
+//	  event: reasoning data: {"reasoning":"..."}                    (throttled full
+//	                          reasoning-so-far → client's live expandable block)
 //	  event: done      data: {"text":...,"model":...,"fellBack":...,"reasoning":...}  (success terminal)
 //	  event: error     data: {"error":"..."}                        (failure terminal)
 //
@@ -79,9 +81,10 @@ type chatStreamResult struct {
 // All callbacks are safe for the runner to invoke concurrently (writes are
 // serialized by the SSE writer's mutex).
 type chatStreamSinks struct {
-	Delta    func(delta string)
-	Tool     func(ev chatport.ToolStreamEvent)
-	Thinking func(preview string)
+	Delta     func(delta string)
+	Tool      func(ev chatport.ToolStreamEvent)
+	Thinking  func(preview string)
+	Reasoning func(full string)
 }
 
 // toolStreamFrame is the wire payload of one SSE "tool" frame. Detail and
@@ -176,6 +179,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 			// running, and a throttled "thinking" pulse before the first token.
 			OnToolEvent: sinks.Tool,
 			OnThinking:  sinks.Thinking,
+			OnReasoning: sinks.Reasoning,
 		}, sinks.Delta)
 		if err != nil {
 			return nil, err
@@ -284,6 +288,14 @@ func writeChatStreamSSE(ctx, connCtx context.Context, w http.ResponseWriter, ses
 		},
 		Thinking: func(preview string) {
 			writeEvent("thinking", thinkingStreamFrame{Preview: preview})
+		},
+		Reasoning: func(full string) {
+			if full == "" {
+				return
+			}
+			// Full reasoning-so-far: the client replaces its live expandable block
+			// with this on each throttled frame (the chip still uses `thinking`).
+			writeEvent("reasoning", map[string]string{"reasoning": full})
 		},
 	})
 

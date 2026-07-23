@@ -42,6 +42,10 @@ type streamEventSinks struct {
 	// preview is a chip-sized tail of the recent reasoning text ("" when the
 	// broadcaster has nothing readable yet).
 	OnThinking func(preview string)
+	// OnReasoning carries the full reasoning-so-far (throttled with OnThinking) so
+	// the client can grow a live expandable reasoning block. Empty until reasoning
+	// streams; nil when the transport doesn't want it.
+	OnReasoning func(full string)
 }
 
 // executeAgentRunWithDelta is a variant of executeAgentRun that forwards the
@@ -91,18 +95,24 @@ func executeAgentRunWithDelta(
 				})
 			}
 		case streaming.EventThinking:
-			if sinks.OnThinking == nil {
+			if sinks.OnThinking == nil && sinks.OnReasoning == nil {
 				return 0
 			}
 			var envelope struct {
 				Payload struct {
-					Preview string `json:"preview"`
+					Preview       string `json:"preview"`
+					ReasoningFull string `json:"reasoningFull"`
 				} `json:"payload"`
 			}
 			// Best-effort: a parse failure still delivers the liveness pulse,
 			// just without the preview text.
 			_ = json.Unmarshal(data, &envelope)
-			sinks.OnThinking(envelope.Payload.Preview)
+			if sinks.OnThinking != nil {
+				sinks.OnThinking(envelope.Payload.Preview)
+			}
+			if sinks.OnReasoning != nil && envelope.Payload.ReasoningFull != "" {
+				sinks.OnReasoning(envelope.Payload.ReasoningFull)
+			}
 		default:
 			return 0
 		}

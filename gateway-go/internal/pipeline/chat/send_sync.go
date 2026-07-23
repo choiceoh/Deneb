@@ -186,6 +186,10 @@ type SyncOptions struct {
 	// nothing readable accumulated yet).
 	OnThinking func(preview string)
 
+	// OnReasoning fires alongside OnThinking with the full reasoning-so-far so the
+	// transport can grow a LIVE expandable reasoning block during streaming. Nil-safe.
+	OnReasoning func(full string)
+
 	// GateUntrustedTools enables the untrusted-origin tool gate (blocking
 	// irreversible tools when promptware enters the turn). Set by the
 	// interactive native-client transports. Propagated to
@@ -618,6 +622,7 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 	if opts != nil {
 		sinks.OnTool = opts.OnToolEvent
 		sinks.OnThinking = opts.OnThinking
+		sinks.OnReasoning = opts.OnReasoning
 	}
 	return h.withAdmittedSyncRunLifecycle(ctx, sessionKey, params.ClientRunID,
 		isAutomationRun(params),
