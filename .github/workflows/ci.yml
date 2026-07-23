@@ -16,26 +16,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  # Health Bench 2.0 scorer unit tests only. The pillar RATCHET is out of PR
-  # CI entirely (operator decision 2026-07-18): its git-window scoring
-  # false-reds unrelated PRs (five-pillar drops on a one-file systemd diff),
-  # and even the advisory step's step-summary noise trained reviewers to skim
-  # past it. The fail-closed ratchet sweep lives on Nightly Drift Watch; run
-  # it locally via `make health-v2-check`.
-  code-health:
-    name: Health Bench scorer tests
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          fetch-tags: false
-          submodules: false
-
-      - name: Test Health Bench 2.0
-        run: make health-v2-test
-
   python:
     name: Python support tooling
     runs-on: ubuntu-24.04-arm

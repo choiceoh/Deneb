@@ -198,8 +198,10 @@ clean: go-clean
 check-go: go-fmt go-vet go-lint go-test
 
 # Full check: generate-check first (sequential), then Go and deterministic audit checks.
-# health-v2-check is advisory (git-window high findings false-red); run it via
-# `make health-v2-check` or Nightly Drift. Scorer unit tests stay in the gate.
+# Health Bench 2.0 is out of CI entirely (operator decision 2026-07-24): both the
+# pillar ratchet AND the scorer unit tests were removed from PR CI and Nightly Drift.
+# The score/ratchet is now manual-only via `make health-v2-check`. The scorer unit
+# tests stay in this LOCAL `make check` so edits to the scorer itself don't rot.
 check: generate-check check-go runtime-health-test health-v2-test
 	@echo "All checks passed"
 

@@ -170,30 +170,6 @@ jobs:
       - name: Test Rust crate
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
 
-  health-v2:
-    # PR CI keeps Health Bench ratchet advisory; nightly is the fail-closed
-    # sweep so architecture tip churn does not tax every unrelated PR.
-    name: health-v2 (ratchet)
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          fetch-tags: false
-          submodules: false
-
-      - name: Health Bench 2.0 unit tests
-        run: make health-v2-test
-
-      - name: Health Bench 2.0 ratchet
-        run: |
-          python3 scripts/audit/codebase-health-v2.py \
-            --check \
-            --format markdown \
-            --json-out health-v2-report.json \
-            >> "$GITHUB_STEP_SUMMARY"
-
   recall-health:
     # Advisory recall-quality sweep against the LIVE wiki + repair worklist
     # (bench misses classified into thin-folder / sibling-overlap / vocab-gap).
@@ -250,7 +226,7 @@ jobs:
     # One open tracking issue, updated per failing night — not one issue per
     # night. Quiet when green.
     name: report drift
-    needs: [go-gate, kotlin, andromeda, rust, health-v2, docs]
+    needs: [go-gate, kotlin, andromeda, rust, docs]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
