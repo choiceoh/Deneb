@@ -24,7 +24,15 @@ import kotlinx.serialization.builtins.ListSerializer
 internal const val TX_CACHE_MAX_CHARS = 256 * 1024
 
 @Serializable
-private data class CachedTxMsg(val role: String, val content: String, val ts: Long = 0)
+private data class CachedTxMsg(
+    val role: String,
+    val content: String,
+    val ts: Long = 0,
+    // Assistant reasoning so a cold-start reopen shows the expandable block
+    // immediately, before the network transcript revalidation lands. Nullable +
+    // defaulted so older cache payloads (no reasoning) still decode.
+    val reasoning: String? = null,
+)
 
 private val txCacheSerializer = ListSerializer(CachedTxMsg.serializer())
 private const val TX_CACHE_PAYLOAD_KEY = "messages"
@@ -40,6 +48,7 @@ internal fun decodeCachedTranscript(json: String, expectedOwner: String): List<H
             role = role,
             content = it.content,
             timestampMs = it.ts,
+            reasoningContent = it.reasoning,
         )
     }
 }
@@ -52,6 +61,7 @@ internal fun encodeCachedTranscript(transcript: List<History>, owner: String): S
             role = if (h.role == History.Role.USER) "user" else "assistant",
             content = h.content,
             ts = h.timestampMs,
+            reasoning = h.reasoningContent,
         )
     }
     if (msgs.isEmpty()) return null
