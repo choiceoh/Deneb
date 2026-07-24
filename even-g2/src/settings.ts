@@ -65,6 +65,7 @@ export async function resolveSettings(): Promise<GlanceSettings> {
   const fromURL = readURLBootstrap()
   if (fromURL && fromURL.baseUrl && fromURL.token) {
     saveSettings(fromURL)
+    clearBootstrapQuery()
     return fromURL
   }
 
@@ -86,8 +87,28 @@ export async function resolveSettings(): Promise<GlanceSettings> {
   })
   if (merged.baseUrl || merged.token) {
     saveSettings(merged)
+    if (fromURL) clearBootstrapQuery()
   }
   return merged
+}
+
+/** Drop seed/token query params so the bearer is not left in the WebView URL bar. */
+export function clearBootstrapQuery(): void {
+  try {
+    const url = new URL(window.location.href)
+    let changed = false
+    for (const key of ['seed', 'baseUrl', 'token', 'deneb_base', 'deneb_token']) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key)
+        changed = true
+      }
+    }
+    if (changed) {
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+    }
+  } catch {
+    // ignore
+  }
 }
 
 function readURLBootstrap(): GlanceSettings | null {

@@ -64,8 +64,9 @@ type Handler struct {
 	now      func() time.Time
 	sources  GlanceSources
 
-	mu     sync.Mutex
-	dedupe map[string]dedupeEntry
+	mu          sync.Mutex
+	dedupe      map[string]dedupeEntry
+	glanceCache glanceCache
 }
 
 type dedupeEntry struct {
