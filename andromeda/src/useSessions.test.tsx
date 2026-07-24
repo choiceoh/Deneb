@@ -23,7 +23,7 @@ function chatDouble() {
 
 beforeEach(() => {
   recent.mockResolvedValue([]);
-  transcript.mockResolvedValue({ messages: [], total: 0 });
+  transcript.mockResolvedValue({ messages: [], total: 0, turnRunning: false });
   remove.mockResolvedValue(true);
 });
 
@@ -85,6 +85,7 @@ describe("useSessions", () => {
         { id: "sys", role: "system", content: "상태" },
       ],
       total: 3,
+      turnRunning: false,
     });
     const chat = chatDouble();
     const { result } = renderHook(() => useSessions(cfg, true, false, chat));

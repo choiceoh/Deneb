@@ -254,10 +254,18 @@ export const recentSessions = (cfg: GatewayConfig, limit = 20, channel?: string)
 // The gateway caps limit at 200 server-side; total lets the drawer show a
 // "이전 대화 더 불러오기" affordance instead of silently truncating history.
 export const sessionTranscript = (cfg: GatewayConfig, sessionKey: string, limit = 60) =>
-  callRpc<{ sessionKey: string; messages: TranscriptMsg[]; total: number }>(cfg, "miniapp.sessions.transcript", {
-    sessionKey,
-    limit,
-  }).then((r) => ({ messages: r.messages ?? [], total: r.total ?? r.messages?.length ?? 0 }));
+  callRpc<{ sessionKey: string; messages: TranscriptMsg[]; total: number; turnRunning?: boolean }>(
+    cfg,
+    "miniapp.sessions.transcript",
+    {
+      sessionKey,
+      limit,
+    },
+  ).then((r) => ({
+    messages: r.messages ?? [],
+    total: r.total ?? r.messages?.length ?? 0,
+    turnRunning: Boolean(r.turnRunning),
+  }));
 
 // Server-side clamp of miniapp.sessions.transcript (sessions.go maxTranscriptLimit).
 export const TRANSCRIPT_MAX = 200;
@@ -605,6 +613,11 @@ export const CHAT_RECOVERY_POLL_MS = 3_000;
 
 export type TurnProbe = { kind: "answered"; text: string } | { kind: "running" } | { kind: "notArrived" };
 
+/** Persisted assistant rows are not terminal while the gateway run is still active. */
+export function effectiveTurnProbe(probe: TurnProbe, turnRunning: boolean): TurnProbe {
+  return turnRunning && probe.kind === "answered" ? { kind: "running" } : probe;
+}
+
 // Locate the sent turn in a fetched transcript and classify it: the LAST user
 // row equal to the sent (composed) text, then the last non-empty assistant row
 // after it, so a tool-looping turn resolves to its final wrap-up text.
@@ -632,9 +645,17 @@ export interface RecoverTurnOpts {
   pollMs?: number;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
-  fetchMessages?: (cfg: GatewayConfig, sessionKey: string) => Promise<TranscriptMsg[]>;
+  fetchSnapshot?: (
+    cfg: GatewayConfig,
+    sessionKey: string,
+  ) => Promise<{ messages: TranscriptMsg[]; turnRunning: boolean }>;
   onStillRunning?: () => void;
   signal?: AbortSignal;
+}
+
+export interface RecoveredTurn {
+  text: string;
+  reasoning?: string;
 }
 
 // Poll the transcript for the sent turn's answer after a mid-turn stream failure.
@@ -646,42 +667,49 @@ export async function recoverTurnAnswer(
   sessionKey: string,
   sentText: string,
   opts: RecoverTurnOpts = {},
-): Promise<string | null> {
+): Promise<RecoveredTurn | null> {
   const budgetMs = opts.budgetMs ?? CHAT_RECOVERY_BUDGET_MS;
   const maxMs = opts.maxMs ?? CHAT_RECOVERY_MAX_MS;
   const pollMs = opts.pollMs ?? CHAT_RECOVERY_POLL_MS;
   const now = opts.now ?? (() => Date.now());
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const fetchMessages =
-    opts.fetchMessages ?? ((c: GatewayConfig, s: string) => sessionTranscript(c, s).then((r) => r.messages));
+  const fetchSnapshot =
+    opts.fetchSnapshot ??
+    ((c: GatewayConfig, s: string) =>
+      sessionTranscript(c, s).then((r) => ({ messages: r.messages, turnRunning: r.turnRunning })));
 
   const started = now();
   let confirmedRunning = false;
   let candidateText: string | null = null;
+  let candidateReasoning: string | undefined;
   let candidateTail: string | null = null;
   let misses = 0;
   for (;;) {
     if (opts.signal?.aborted) return null;
     const budget = confirmedRunning ? maxMs : budgetMs;
     if (now() - started >= budget) break;
-    let messages: TranscriptMsg[] | null;
+    let snapshot: { messages: TranscriptMsg[]; turnRunning: boolean } | null;
     try {
-      messages = await fetchMessages(cfg, sessionKey);
+      snapshot = await fetchSnapshot(cfg, sessionKey);
     } catch {
-      messages = null;
+      snapshot = null;
     }
-    if (messages) {
-      const probe = probeTranscriptForTurn(messages, sentText);
+    if (snapshot) {
+      const probe = effectiveTurnProbe(probeTranscriptForTurn(snapshot.messages, sentText), snapshot.turnRunning);
       if (probe.kind === "answered") {
-        const tail = `${messages.length} ${probe.text}`;
-        if (tail === candidateTail) return probe.text; // same tail twice → stable
+        const tail = `${snapshot.messages.length} ${probe.text}`;
+        if (tail === candidateTail) {
+          return { text: probe.text, reasoning: candidateReasoning };
+        }
         candidateText = probe.text;
+        candidateReasoning = findRecoveredReasoning(snapshot.messages, sentText);
         candidateTail = tail;
       } else if (probe.kind === "running") {
         confirmedRunning = true;
         opts.onStillRunning?.();
         misses = 0;
         candidateText = null;
+        candidateReasoning = undefined;
         candidateTail = null;
       } else {
         misses += 1;
@@ -690,5 +718,23 @@ export async function recoverTurnAnswer(
     }
     await sleep(pollMs);
   }
-  return candidateText;
+  return candidateText ? { text: candidateText, reasoning: candidateReasoning } : null;
+}
+
+function findRecoveredReasoning(messages: TranscriptMsg[], sentText: string): string | undefined {
+  const sent = sentText.trim();
+  if (!sent) return undefined;
+  let userIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user" && messages[i].content.trim() === sent) {
+      userIdx = i;
+      break;
+    }
+  }
+  if (userIdx < 0) return undefined;
+  for (let i = messages.length - 1; i > userIdx; i--) {
+    const m = messages[i];
+    if (m.role === "assistant" && m.content.trim()) return m.reasoning?.trim() || undefined;
+  }
+  return undefined;
 }

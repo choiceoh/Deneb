@@ -33,6 +33,15 @@ internal sealed interface TurnProbe {
 }
 
 /**
+ * Classify a transcript probe, treating a persisted assistant row as still
+ * in-flight while the gateway reports the session run active. Without this,
+ * a mid-turn SSE drop after a short preamble is accepted as the final answer
+ * once the text stabilizes — the real wrap-up is never adopted.
+ */
+internal fun effectiveTurnProbe(probe: TurnProbe, turnRunning: Boolean): TurnProbe =
+    if (turnRunning && probe is TurnProbe.Answered) TurnProbe.StillRunning else probe
+
+/**
  * Locate [sentText] in a display transcript and classify the turn. Matches the
  * LAST user row equal to the sent text (the gateway display-strips its
  * timestamp prefix, so rows compare against what was actually sent — and an

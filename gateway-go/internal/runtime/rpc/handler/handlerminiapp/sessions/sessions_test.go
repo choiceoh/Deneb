@@ -532,6 +532,57 @@ func TestSessionsTranscriptRejectsUnauthenticatedContext(t *testing.T) {
 	}
 }
 
+func TestSessionsTranscriptReportsTurnRunningFromSessionStatus(t *testing.T) {
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {
+			return []toolport.ChatMessage{
+				{ID: "m1", Role: "user", Content: jsonRaw(`"question"`)},
+				{ID: "m2", Role: "assistant", Content: jsonRaw(`"preamble"`)},
+			}, 2, nil
+		},
+	}
+	running := sample("client:main", 1_000, "")
+	running.Status = session.StatusRunning
+	h := sessionsTranscript(SessionsDeps{
+		Manager:     &fakeSessionsLister{out: []*session.Session{running}},
+		Transcripts: func() (TranscriptLoader, error) { return loader, nil },
+	})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "client:main",
+	}))
+	var got struct {
+		TurnRunning bool `json:"turnRunning"`
+	}
+	decode(t, resp, &got)
+	if !got.TurnRunning {
+		t.Fatalf("turnRunning = false, want true while session is running")
+	}
+}
+
+func TestSessionsTranscriptTurnRunningFalseWhenSessionIdle(t *testing.T) {
+	loader := &fakeTranscriptLoader{
+		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {
+			return nil, 0, nil
+		},
+	}
+	done := sample("client:main", 1_000, "")
+	done.Status = session.StatusDone
+	h := sessionsTranscript(SessionsDeps{
+		Manager:     &fakeSessionsLister{out: []*session.Session{done}},
+		Transcripts: func() (TranscriptLoader, error) { return loader, nil },
+	})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.transcript", map[string]any{
+		"sessionKey": "client:main",
+	}))
+	var got struct {
+		TurnRunning bool `json:"turnRunning"`
+	}
+	decode(t, resp, &got)
+	if got.TurnRunning {
+		t.Fatalf("turnRunning = true, want false when session is done")
+	}
+}
+
 func TestSessionsTranscript_LoaderError(t *testing.T) {
 	loader := &fakeTranscriptLoader{
 		loadFn: func(_ string, _ int) ([]toolport.ChatMessage, int, error) {

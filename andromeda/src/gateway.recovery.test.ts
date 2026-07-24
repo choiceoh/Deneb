@@ -6,6 +6,7 @@ import {
   type GatewayConfig,
   type TranscriptMsg,
   composeChatMessage,
+  effectiveTurnProbe,
   probeTranscriptForTurn,
   recoverTurnAnswer,
 } from "./gateway";
@@ -56,19 +57,19 @@ describe("recoverTurnAnswer", () => {
     // then answer — a tool-heavy turn runs minutes. Under a fixed budget this
     // returned null and froze on the preamble.
     const shortBudgetPolls = CHAT_RECOVERY_BUDGET_MS / CHAT_RECOVERY_POLL_MS;
-    const queue: TranscriptMsg[][] = [
-      ...Array.from({ length: shortBudgetPolls + 5 }, () => [user("question")]),
-      [user("question"), assistant("late answer")],
-      [user("question"), assistant("late answer")],
+    const queue = [
+      ...Array.from({ length: shortBudgetPolls + 5 }, () => ({ messages: [user("question")], turnRunning: false })),
+      { messages: [user("question"), assistant("late answer")], turnRunning: false },
+      { messages: [user("question"), assistant("late answer")], turnRunning: false },
     ];
     let calls = 0;
     const { now, sleep } = virtualClock();
     const recovered = await recoverTurnAnswer(cfg, "client:main", "question", {
       now,
       sleep,
-      fetchMessages: async () => queue[Math.min(calls++, queue.length - 1)],
+      fetchSnapshot: async () => queue[Math.min(calls++, queue.length - 1)],
     });
-    expect(recovered).toBe("late answer");
+    expect(recovered).toEqual({ text: "late answer", reasoning: undefined });
     expect(calls).toBeGreaterThan(shortBudgetPolls);
   });
 
@@ -80,7 +81,7 @@ describe("recoverTurnAnswer", () => {
     const recovered = await recoverTurnAnswer(cfg, "client:main", "question", {
       now,
       sleep,
-      fetchMessages: async () => {
+      fetchSnapshot: async () => {
         calls++;
         throw new Error("unreachable");
       },
@@ -96,9 +97,9 @@ describe("recoverTurnAnswer", () => {
     const recovered = await recoverTurnAnswer(cfg, "client:main", "question", {
       now,
       sleep,
-      fetchMessages: async () => {
+      fetchSnapshot: async () => {
         calls++;
-        return [user("different")];
+        return { messages: [user("different")], turnRunning: false };
       },
     });
     expect(recovered).toBeNull();
@@ -106,20 +107,49 @@ describe("recoverTurnAnswer", () => {
   });
 
   it("requires the same answered tail twice before accepting", async () => {
-    const queue: TranscriptMsg[][] = [
-      [user("question"), assistant("first")],
-      [user("question"), assistant("second")],
-      [user("question"), assistant("second")],
+    const queue = [
+      { messages: [user("question"), assistant("first")], turnRunning: false },
+      { messages: [user("question"), assistant("second")], turnRunning: false },
+      { messages: [user("question"), assistant("second")], turnRunning: false },
     ];
     let calls = 0;
     const { now, sleep } = virtualClock();
     const recovered = await recoverTurnAnswer(cfg, "client:main", "question", {
       now,
       sleep,
-      fetchMessages: async () => queue[Math.min(calls++, queue.length - 1)],
+      fetchSnapshot: async () => queue[Math.min(calls++, queue.length - 1)],
     });
-    expect(recovered).toBe("second");
+    expect(recovered).toEqual({ text: "second", reasoning: undefined });
     expect(calls).toBe(3);
+  });
+
+  it("treats a stable preamble as still running while turnRunning is true", () => {
+    expect(
+      effectiveTurnProbe(
+        probeTranscriptForTurn([user("question"), assistant("확인하고 답할게요")], "question"),
+        true,
+      ),
+    ).toEqual({ kind: "running" });
+  });
+
+  it("polls past a stable preamble once the server run finishes", async () => {
+    const preamble = [user("question"), assistant("확인하고 답할게요")];
+    const finalAnswer = [user("question"), assistant("확인하고 답할게요"), assistant("final answer")];
+    const queue = [
+      { messages: preamble, turnRunning: true },
+      { messages: preamble, turnRunning: true },
+      { messages: finalAnswer, turnRunning: false },
+      { messages: finalAnswer, turnRunning: false },
+    ];
+    let calls = 0;
+    const { now, sleep } = virtualClock();
+    const recovered = await recoverTurnAnswer(cfg, "client:main", "question", {
+      now,
+      sleep,
+      fetchSnapshot: async () => queue[Math.min(calls++, queue.length - 1)],
+    });
+    expect(recovered).toEqual({ text: "final answer", reasoning: undefined });
+    expect(calls).toBe(4);
   });
 
   it("aborts immediately when the signal is already aborted", async () => {
@@ -128,9 +158,9 @@ describe("recoverTurnAnswer", () => {
     let calls = 0;
     const recovered = await recoverTurnAnswer(cfg, "client:main", "question", {
       signal: controller.signal,
-      fetchMessages: async () => {
+      fetchSnapshot: async () => {
         calls++;
-        return [user("question")];
+        return { messages: [user("question")], turnRunning: false };
       },
     });
     expect(recovered).toBeNull();

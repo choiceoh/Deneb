@@ -170,7 +170,7 @@ describe("RPC convenience methods", () => {
 
     await expect(listPrompts(CFG)).resolves.toEqual([]);
     await expect(recentSessions(CFG)).resolves.toEqual([]);
-    await expect(sessionTranscript(CFG, "client:one")).resolves.toEqual({ messages: [], total: 0 });
+    await expect(sessionTranscript(CFG, "client:one")).resolves.toEqual({ messages: [], total: 0, turnRunning: false });
     await expect(deleteSession(CFG, "client:one")).resolves.toBe(true);
     await setModel(CFG, "model-a");
     await syncPull(CFG);

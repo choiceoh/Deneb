@@ -101,9 +101,10 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 		Limit      int    `json:"limit,omitempty"`
 	}
 	type out struct {
-		SessionKey string             `json:"sessionKey"`
-		Messages   []transcriptMsgOut `json:"messages"`
-		Total      int                `json:"total"`
+		SessionKey  string             `json:"sessionKey"`
+		Messages    []transcriptMsgOut `json:"messages"`
+		Total       int                `json:"total"`
+		TurnRunning bool               `json:"turnRunning"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
 		key := strings.TrimSpace(p.SessionKey)
@@ -168,10 +169,15 @@ func sessionsTranscript(deps SessionsDeps) rpcutil.HandlerFunc {
 				TimestampMs: m.Timestamp,
 			})
 		}
+		turnRunning := false
+		if s := deps.Manager.Get(key); s != nil && s.Status == session.StatusRunning {
+			turnRunning = true
+		}
 		return rpcutil.RespondOK(req.ID, out{
-			SessionKey: key,
-			Messages:   rows,
-			Total:      total,
+			SessionKey:  key,
+			Messages:    rows,
+			Total:       total,
+			TurnRunning: turnRunning,
 		})
 	})
 }
