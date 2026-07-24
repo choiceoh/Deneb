@@ -7,9 +7,19 @@ export type GlancePage = {
   empty?: boolean
 }
 
+export type GlanceItem = {
+  id: string
+  title: string
+  preview?: string
+  body?: string
+  priority?: number
+  age?: string
+}
+
 export type GlancePayload = {
   text: string
   pages: GlancePage[]
+  items: GlanceItem[]
   generated?: string
   cached?: boolean
 }
@@ -17,6 +27,7 @@ export type GlancePayload = {
 type GlanceResponse = {
   text?: string
   pages?: GlancePage[]
+  items?: GlanceItem[]
   generated?: string
   cached?: boolean
   error?: { message?: string }
@@ -51,7 +62,8 @@ export async function fetchGlance(
     throw new Error('empty glance')
   }
   const pages = normalizePages(data.pages, text)
-  return { text, pages, generated: data.generated, cached: data.cached }
+  const items = normalizeItems(data.items)
+  return { text, pages, items, generated: data.generated, cached: data.cached }
 }
 
 export function normalizePages(pages: GlancePage[] | undefined, text: string): GlancePage[] {
@@ -66,6 +78,44 @@ export function normalizePages(pages: GlancePage[] | undefined, text: string): G
       }))
   }
   return [{ id: 'home', title: '알림', text }]
+}
+
+export function normalizeItems(items: GlanceItem[] | undefined): GlanceItem[] {
+  if (!Array.isArray(items)) return []
+  return items
+    .filter((it) => it && String(it.title || '').trim())
+    .map((it, i) => {
+      const title = String(it.title).trim()
+      const preview = String(it.preview || '').trim()
+      const body = String(it.body || preview || title).trim()
+      return {
+        id: String(it.id || `alert-${i + 1}`),
+        title: truncate(title, 48),
+        preview: preview ? truncate(preview, 80) : undefined,
+        body: truncate(body, 280),
+        priority: typeof it.priority === 'number' ? it.priority : undefined,
+        age: String(it.age || '').trim() || undefined,
+      }
+    })
+    .slice(0, 12)
+}
+
+export function formatAlertDetail(item: GlanceItem): string {
+  const mark = (item.priority ?? 0) >= 4 ? '! ' : ''
+  const meta = [item.age, (item.priority ?? 0) >= 4 ? '긴급' : ''].filter(Boolean).join(' · ')
+  const lines = [`${mark}${item.title}`]
+  if (meta) lines.push(meta)
+  lines.push('')
+  lines.push(item.body || item.preview || '(내용 없음)')
+  lines.push('')
+  lines.push('탭=목록 · ↓다음페이지')
+  return lines.join('\n')
+}
+
+export function listLabel(item: GlanceItem): string {
+  const mark = (item.priority ?? 0) >= 4 ? '! ' : '· '
+  const age = item.age ? ` · ${item.age}` : ''
+  return truncate(`${mark}${item.title}${age}`, 64)
 }
 
 export function pageTitle(id: string): string {
@@ -108,4 +158,10 @@ export function formatGeneratedLabel(iso?: string, cached?: boolean): string {
   const mins = Math.max(0, Math.round((Date.now() - t) / 60000))
   const age = mins <= 0 ? '방금' : `${mins}분 전`
   return cached ? `${age}·캐시` : age
+}
+
+function truncate(s: string, max: number): string {
+  const chars = Array.from(s)
+  if (chars.length <= max) return s
+  return chars.slice(0, Math.max(0, max - 1)).join('') + '…'
 }

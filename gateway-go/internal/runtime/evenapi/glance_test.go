@@ -21,8 +21,8 @@ func TestBuildGlanceNotificationHome(t *testing.T) {
 		},
 		Urgent: func(time.Time) []GlanceUrgent {
 			return []GlanceUrgent{
-				{Title: "공문 회신 마감", Preview: "오늘 17시", Priority: 4, CreatedAt: now.Add(-12 * time.Minute)},
-				{Title: "결재 미결", Priority: 3, CreatedAt: now.Add(-2 * time.Hour)},
+				{ID: "a1", Title: "공문 회신 마감", Preview: "오늘 17시", Body: "공문 회신 마감입니다. 오늘 17시까지 회신 바랍니다.", Priority: 4, CreatedAt: now.Add(-12 * time.Minute)},
+				{ID: "a2", Title: "결재 미결", Body: "결재 대기 문서가 있습니다.", Priority: 3, CreatedAt: now.Add(-2 * time.Hour)},
 			}
 		},
 		Todos: func(time.Time) []GlanceTodo {
@@ -61,6 +61,15 @@ func TestBuildGlanceNotificationHome(t *testing.T) {
 	}
 	if bundle.Text != byID["home"].Text {
 		t.Fatalf("text should equal home")
+	}
+	if len(bundle.Items) != 2 {
+		t.Fatalf("items=%d want 2", len(bundle.Items))
+	}
+	if bundle.Items[0].ID != "a1" || !strings.Contains(bundle.Items[0].Body, "17시") {
+		t.Fatalf("item0=%+v", bundle.Items[0])
+	}
+	if bundle.Items[0].Age == "" {
+		t.Fatalf("item age empty")
 	}
 }
 
@@ -116,7 +125,7 @@ func TestGlanceHTTPAndCache(t *testing.T) {
 		Sources: GlanceSources{
 			Urgent: func(time.Time) []GlanceUrgent {
 				calls++
-				return []GlanceUrgent{{Title: "새 메일", Priority: 3, CreatedAt: now.Add(-5 * time.Minute)}}
+				return []GlanceUrgent{{ID: "m1", Title: "새 메일", Body: "중요 메일 본문", Priority: 3, CreatedAt: now.Add(-5 * time.Minute)}}
 			},
 		},
 	})
@@ -138,6 +147,10 @@ func TestGlanceHTTPAndCache(t *testing.T) {
 	pages, ok := body["pages"].([]any)
 	if !ok || len(pages) != 4 {
 		t.Fatalf("pages=%v", body["pages"])
+	}
+	items, ok := body["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("items=%v", body["items"])
 	}
 	if body["cached"] != false {
 		t.Fatalf("first response should be uncached: %+v", body)
