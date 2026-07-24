@@ -685,18 +685,33 @@ func looksLikeFrontmatter(meta string) bool {
 }
 
 // parseFrontmatterFields parses simple YAML key-value pairs.
-// Supports: scalar strings, YAML flow arrays [a, b, c], booleans, floats.
+// Supports: scalar strings, YAML flow arrays [a, b, c], BLOCK lists
+// (key:\n  - a\n  - b), booleans, floats.
+//
+// Block lists matter because this package WRITES flow arrays but humans and
+// external scripts write the block form that every YAML tool emits. Reading only
+// flow arrays made such an edit parse as an EMPTY list — valid YAML on disk,
+// silently zero values in the index (found 2026-07-25: a cues backfill written in
+// block form scored byte-identical on recall-bench because every cue was dropped).
 func parseFrontmatterFields(raw string) Frontmatter {
 	var fm Frontmatter
-	scanner := bufio.NewScanner(strings.NewReader(raw))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	lines := strings.Split(raw, "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		key, val, ok := parseKV(line)
 		if !ok {
 			continue
+		}
+		// A key with no inline value may be followed by an indented block list;
+		// fold it into flow-array form so the switch below sees one shape.
+		if strings.TrimSpace(val) == "" {
+			if items, next := collectBlockList(lines, i+1); len(items) > 0 {
+				val = "[" + strings.Join(items, ", ") + "]"
+				i = next - 1
+			}
 		}
 
 		switch key {
@@ -968,6 +983,35 @@ func parseKV(line string) (key, value string, ok bool) {
 }
 
 // parseFlowArray parses "[a, b, c]" into []string{"a", "b", "c"}.
+// collectBlockList reads a YAML block-list body starting at lines[start]
+// ("  - item" entries) and returns the items plus the index of the first line
+// after the block. Items containing a comma are skipped: the folded flow-array
+// form is comma-separated, so keeping them would split one value into two.
+func collectBlockList(lines []string, start int) ([]string, int) {
+	var items []string
+	i := start
+	for ; i < len(lines); i++ {
+		raw := lines[i]
+		if strings.TrimSpace(raw) == "" {
+			break
+		}
+		// Must be indented (a block entry) and start with a dash.
+		if raw == strings.TrimLeft(raw, " \t") {
+			break
+		}
+		item := strings.TrimSpace(raw)
+		if !strings.HasPrefix(item, "-") {
+			break
+		}
+		item = strings.TrimSpace(strings.TrimPrefix(item, "-"))
+		item = strings.Trim(item, `"'`)
+		if item != "" && !strings.Contains(item, ",") {
+			items = append(items, item)
+		}
+	}
+	return items, i
+}
+
 func parseFlowArray(s string) []string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "[")

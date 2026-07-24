@@ -350,3 +350,39 @@ func TestPageDueDoneRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip lost fields: due=%q due_done=%q", parsed.Meta.Due, parsed.Meta.DueDone)
 	}
 }
+
+// Frontmatter written by hand or by an external script uses YAML BLOCK lists;
+// this package writes flow arrays. Reading only the flow form silently dropped
+// every value (valid YAML on disk, empty list in the index) — a 498-page cues
+// backfill scored byte-identical on recall-bench because of it.
+func TestParseFrontmatterAcceptsBlockLists(t *testing.T) {
+	block := parseFrontmatterFields("title: x\ncues:\n  - 계약금\n  - 착수금\ntags:\n  - 거래\n")
+	if len(block.Cues) != 2 || block.Cues[0] != "계약금" || block.Cues[1] != "착수금" {
+		t.Errorf("block-list cues = %v, want [계약금 착수금]", block.Cues)
+	}
+	if len(block.Tags) != 1 || block.Tags[0] != "거래" {
+		t.Errorf("block-list tags = %v, want [거래]", block.Tags)
+	}
+
+	// The flow form this package writes must keep working, unchanged.
+	flow := parseFrontmatterFields("title: x\ncues: [계약금, 착수금]\n")
+	if len(flow.Cues) != 2 {
+		t.Errorf("flow-array cues = %v, want 2 items", flow.Cues)
+	}
+
+	// A block list must not swallow the key that follows it.
+	mixed := parseFrontmatterFields("cues:\n  - 계약금\ncategory: 프로젝트\ntitle: 제목\n")
+	if len(mixed.Cues) != 1 {
+		t.Errorf("cues = %v, want 1", mixed.Cues)
+	}
+	if mixed.Title != "제목" {
+		t.Errorf("title after a block list = %q, want 제목", mixed.Title)
+	}
+
+	// A comma inside an item would split into two values once folded into the
+	// flow form, so such an item is dropped rather than silently mangled.
+	comma := parseFrontmatterFields("cues:\n  - 안전한값\n  - 쉼표, 포함\n")
+	if len(comma.Cues) != 1 || comma.Cues[0] != "안전한값" {
+		t.Errorf("comma item must be skipped, got %v", comma.Cues)
+	}
+}
