@@ -201,6 +201,13 @@ const (
 	// non-empty assembly. It no longer forces a compaction of the user's
 	// client:main session (the prior behavior that lost live-chat detail).
 	heartbeatHistoryBudget = 12_000
+	// Hard cap for an autonomous heartbeat turn's model-emitted tool calls.
+	// The self-coding review contract says "max 2 candidates", but production
+	// 2026-07-24 showed a heartbeat sweep ignoring that soft limit and issuing
+	// 100+ skill_lifecycle review calls against terminal candidates. Keep this
+	// above observed healthy self-coding runs (~23 calls) while bounding a
+	// runaway loop before it floods runtime-health with tool-complete errors.
+	heartbeatMaxToolCallAttempts = 24
 )
 
 // heartbeatTriggerTemplate is injected as a user-role message into the active
@@ -512,10 +519,12 @@ func composeHeartbeatBody(signalSummary, content, selfCodingNudge, sweepNudge, r
 }
 
 func heartbeatSyncRequest() chatport.SyncRequest {
+	maxToolCallAttempts := heartbeatMaxToolCallAttempts
 	return chatport.SyncRequest{
-		MaxHistoryTokens:   heartbeatHistoryBudget,
-		EphemeralUser:      true,
-		EphemeralAssistant: true,
+		MaxHistoryTokens:    heartbeatHistoryBudget,
+		MaxToolCallAttempts: &maxToolCallAttempts,
+		EphemeralUser:       true,
+		EphemeralAssistant:  true,
 		// The report is delivered by the proactive relay after the run (see Run),
 		// so tell the agent NOT to use the in-loop message tool — that path is a
 		// benign no-op under auto-delivery and would otherwise error.
