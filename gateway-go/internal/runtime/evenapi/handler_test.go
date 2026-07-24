@@ -114,6 +114,38 @@ func TestChatCompletionsAckOnDeadline(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsBlocksLongFollowUpDuringActiveTurn(t *testing.T) {
+	chat := &stubChat{ready: true, text: "늦은 답", delay: 200 * time.Millisecond}
+	h := New(Config{
+		Chat:             chat,
+		Token:            "secret",
+		ResponseDeadline: 20 * time.Millisecond,
+	})
+	long := strings.Repeat("가", steerMaxRunes+1)
+	first := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[{"role":"user","content":"`+long+`"}]}`))
+	first.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, first)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first status=%d", rec.Code)
+	}
+	if chat.calls.Load() != 1 {
+		t.Fatalf("first calls=%d want 1", chat.calls.Load())
+	}
+
+	secondLong := long + " 다른"
+	second := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[{"role":"user","content":"`+secondLong+`"}]}`))
+	second.Header.Set("Authorization", "Bearer secret")
+	rec2 := httptest.NewRecorder()
+	h.ChatCompletions(rec2, second)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("second status=%d", rec2.Code)
+	}
+	if chat.calls.Load() != 1 {
+		t.Fatalf("second calls=%d want 1 (long follow-up must not start parallel run)", chat.calls.Load())
+	}
+}
+
 func TestChatCompletionsDedupe(t *testing.T) {
 	chat := &stubChat{ready: true, text: "한번만"}
 	h := New(Config{Chat: chat, Token: "secret"})
