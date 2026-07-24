@@ -9,6 +9,8 @@ import (
 // EnvBridgeToken is the operator-set bearer for Even G2 Custom AI / Glance.
 // Distinct from the native X-Deneb-Client-Token so glasses ingress can be
 // rotated without rotating the phone client secret.
+//
+//nolint:gosec // G101 — env var name, not a credential value
 const EnvBridgeToken = "DENEB_EVEN_G2_BRIDGE_TOKEN"
 
 // LoadBridgeToken returns the trimmed bridge bearer, or "" when unset
