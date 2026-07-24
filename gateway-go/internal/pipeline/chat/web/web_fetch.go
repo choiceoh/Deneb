@@ -155,13 +155,14 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 		maxChars = 20000
 	}
 
-	// YouTube → summarized transcript (full text offloaded to spillover).
+	// YouTube is owned by the dedicated `watch` tool now (transcript by default,
+	// visual analysis via detail=frames), so there is a single YouTube entry
+	// point. Don't fetch here — steer the model to watch. The transcript engine
+	// itself (web.FetchYouTube) is unchanged; watch calls it.
 	if media.IsYouTubeURL(targetURL) {
-		content, err := fetchYouTube(ctx, spill, targetURL)
-		if err != nil {
-			return fetchOutcome{Assess: fetchUsability{HasError: true}}, err
-		}
-		return fetchOutcome{Content: content, Assess: assessFetchResult(content, nil)}, nil
+		hint := "이 URL은 YouTube 영상입니다. web이 아니라 **watch** 툴로 여세요 — " +
+			"기본은 자막 요약(가볍고 빠름), 화면을 직접 봐야 할 때만 detail=\"frames\"."
+		return fetchOutcome{Content: hint, Assess: assessFetchResult(hint, nil)}, nil
 	}
 
 	// Reddit → JSON API (posts+comments, listings, search). The SPA HTML the

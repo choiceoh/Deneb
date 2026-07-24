@@ -8,7 +8,7 @@ func TestNormalizeWatchDetail(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{"", watchDetailFrames, false},
+		{"", watchDetailTranscript, false}, // default is transcript (captions only; frames is opt-in)
 		{"frames", watchDetailFrames, false},
 		{"FRAMES", watchDetailFrames, false},
 		{"transcript", watchDetailTranscript, false},
