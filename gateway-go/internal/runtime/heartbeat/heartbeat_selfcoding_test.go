@@ -35,6 +35,11 @@ func TestDetectSelfCodingNudgeFiresThenExpiresThrottle(t *testing.T) {
 			t.Errorf("nudge missing %q:\n%s", want, nudge)
 		}
 	}
+	for _, want := range []string{"status=proposed", "오래된 id", "최대 1회", "invalid status transition"} {
+		if !strings.Contains(nudge, want) {
+			t.Errorf("nudge missing stale-review guard %q:\n%s", want, nudge)
+		}
+	}
 
 	// Same fingerprint, 30 minutes later: throttled.
 	if got := task.detectSelfCodingNudge(now.Add(30 * time.Minute)); got != "" {

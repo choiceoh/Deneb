@@ -147,9 +147,11 @@ func buildSelfCodingNudge(count, ignoredStreak int) string {
 
 필수 절차 — 턴을 끝내기 전에 실제로 수행할 것:
 1) skill_lifecycle(action=status)로 pending self-corrections를 열고 각 후보의 evidence·targetFiles·risk를 읽으세요.
+   - 이번 status 출력에서 status=proposed인 후보만 리뷰 대상입니다. accepted/rejected/superseded/applied 후보나 과거 로그·스필오버·기억에서 본 오래된 id에는 self_correction_review를 다시 호출하지 마세요.
 2) 스킬/테스트/문서 스코프(SKILL.md 수정, validation_case 추가 등 상태·데이터 파일)는 안전하면 직접 실행한 뒤 skill_lifecycle(action=self_correction_review, status=applied, reviewNote=수행 내용)로 기록하세요.
 3) 코드 스코프(저장소 소스 수정)는 하트비트에서 직접 고치지 말고, 판정만 내려 skill_lifecycle(action=self_correction_review, status=accepted 또는 rejected, reviewNote=근거)로 기록하세요.
 4) 안전하게 처리 못 할 후보도 방치 금지 — accepted(유효, 후속 필요) 또는 rejected(근거)로 판정해 '제안됨'에서 내보내세요.
+5) 같은 후보 id에는 이번 턴에서 self_correction_review를 최대 1회만 호출하세요. invalid status transition 오류가 나오면 그 id는 이미 다른 경로에서 terminal 처리된 것으로 보고 즉시 중단하세요.
 
 ★필수: 최소 1건에 skill_lifecycle(action=self_correction_review) 호출을 남긴 뒤 턴을 종료하세요. 판정을 하나도 기록하지 않고 NO_REPLY로 끝내면 큐가 그대로 남아 재점검만 반복 소모합니다. 사용자 메시지는 임원 판단이 필요한 발견일 때만 작성하고, 그 외에는 리뷰 기록을 마친 뒤 NO_REPLY 하세요.`, count)
 	if ignoredStreak >= selfCodingEscalateAfterIgnored {
