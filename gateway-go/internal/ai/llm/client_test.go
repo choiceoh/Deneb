@@ -442,11 +442,13 @@ func TestBackoffDelay_RetryAfterClamp(t *testing.T) {
 
 func TestDoStream_DefaultMaxRetries(t *testing.T) {
 	calls := 0
-	// Use default client (maxRetries=6) with fast delays for testing.
+	// Use default client (maxRetries=6) with fast delays for testing. A 503 (not
+	// a 429) exercises the general retry path — rate-limit 429s have their own
+	// lower cap (see TestDoStream_RateLimit_GivesUpEarlyForFailover).
 	c, server := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprint(w, "rate limited")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "unavailable")
 	}, WithRetry(6, 1*time.Millisecond, 10*time.Millisecond))
 	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
 	_, err := c.DoStream(context.Background(), req)
@@ -634,5 +636,28 @@ func TestDoStream_429OtherCode_Retries(t *testing.T) {
 	defer body.Close()
 	if calls != 3 {
 		t.Errorf("got %d, want 3 calls for retryable 429 payload", calls)
+	}
+}
+
+// A persistently overloaded provider (429) must be abandoned after
+// rateLimitMaxRetries — well short of the full maxRetries — so the caller's
+// model-fallback chain can switch models before the turn budget is spent.
+func TestDoStream_RateLimit_GivesUpEarlyForFailover(t *testing.T) {
+	calls := 0
+	c, server := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":{"type":"rate_limit_error","message":"The engine is currently overloaded"}}`)
+	}, WithRetry(6, time.Millisecond, 5*time.Millisecond))
+	c.rateLimitMaxRetries = 2 // give up after 2 rate-limit retries (3 calls)
+
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/messages", nil)
+	_, err := c.DoStream(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected the 429 to surface after early giveup")
+	}
+	if calls != c.rateLimitMaxRetries+1 {
+		t.Errorf("got %d calls, want %d (initial + %d rate-limit retries, NOT the full maxRetries=6)",
+			calls, c.rateLimitMaxRetries+1, c.rateLimitMaxRetries)
 	}
 }
