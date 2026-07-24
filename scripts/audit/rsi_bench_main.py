@@ -29,6 +29,7 @@ from rsi_bench.cache import (  # noqa: E402
     refresh_cache,
 )
 from rsi_bench.model import RUBRIC_VERSION, Report  # noqa: E402
+from rsi_bench.procedure_credit import load_procedure_credit  # noqa: E402
 from rsi_bench.process import evaluate_process  # noqa: E402
 from rsi_bench.report import render_human, render_markdown  # noqa: E402
 from rsi_bench.token_economics import load_token_economics  # noqa: E402
@@ -181,6 +182,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         # domain score, the ratchet, confidence, or the baseline check.
         token_economics = load_token_economics()
         payload["token_economics"] = token_economics.to_dict()
+        # Advisory procedure-credit sidecar: group landed/total self-improvement
+        # outcomes BY the procedure ref that governed them (the provenance capture's
+        # consumption half — #4189/#4190/#4196). Same discipline as token_economics:
+        # outside the scored Report — never a domain score, ratchet, confidence, or
+        # baseline check. Makes "which procedure earned its keep" observable.
+        procedure_credit = load_procedure_credit(args.data_dir)
+        payload["procedure_credit"] = procedure_credit.to_dict()
         if args.write_snapshot is not None:
             args.write_snapshot.parent.mkdir(parents=True, exist_ok=True)
             args.write_snapshot.write_text(
@@ -203,6 +211,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             # Next to the score, never inside it: CPM/tau make token-maxing visible.
             text += f"DENEB_RSI_TOKEN_ECONOMICS {token_economics.summary()} [advisory]\n"
+            # Beside it too: which procedure ref earned the landed outcomes.
+            text += f"DENEB_RSI_PROCEDURE_CREDIT {procedure_credit.summary()} [advisory]\n"
 
         if args.json_out:
             args.json_out.write_text(
