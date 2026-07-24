@@ -54,10 +54,19 @@ type SelfCorrectionCandidateRecord struct {
 	// Surface is the declared editable-surface tier summarizing TargetFiles
 	// (editable_surfaces.go): auto-apply | propose-only. Empty on legacy rows
 	// and target-less candidates.
-	Surface        string                       `json:"surface,omitempty"`
-	ProposedChange string                       `json:"proposedChange,omitempty"`
-	Risk           string                       `json:"risk,omitempty"`
-	Source         string                       `json:"source,omitempty"`
+	Surface        string `json:"surface,omitempty"`
+	ProposedChange string `json:"proposedChange,omitempty"`
+	Risk           string `json:"risk,omitempty"`
+	Source         string `json:"source,omitempty"`
+	// ProcedureRef is the composite procedure token (generation.ProcedureRef,
+	// "proc-<hex>") of the LLM procedure that PRODUCED this candidate — the L4
+	// analogue of the L1 evolve certificate. Populated for candidates an evolve
+	// run spawned (the evolve prompt that emitted them); empty for
+	// deterministically-mined candidates (runtime-error signatures, failure
+	// clusters — no LLM procedure), and reserved-empty for the dispatch procedure
+	// (that governs the out-of-process coding session, a separate stage). Purely
+	// additive attribution — it feeds no gate.
+	ProcedureRef   string                       `json:"procedureRef,omitempty"`
 	Reviewer       string                       `json:"reviewer,omitempty"`
 	ReviewNote     string                       `json:"reviewNote,omitempty"`
 	ImpactContract *rsilifecycle.ImpactContract `json:"impactContract,omitempty"`
@@ -81,9 +90,17 @@ type SelfCorrectionCandidateRecord struct {
 	// reads it to stop re-dispatching a candidate an unattended coding session
 	// keeps failing to complete (doctrine-conflicting or too large), which would
 	// otherwise burn a coding session on every dispatch tick.
-	DispatchFailures int   `json:"dispatchFailures,omitempty"`
-	CreatedAt        int64 `json:"createdAt"`
-	UpdatedAt        int64 `json:"updatedAt,omitempty"`
+	DispatchFailures int `json:"dispatchFailures,omitempty"`
+	// DispatchProcedureRef is the composite procedure token of the coding-session
+	// contract prompt (generation.MetaDispatchContractPrompt) that governed THIS
+	// dispatch attempt — the dispatch-stage counterpart to ProcedureRef (which is
+	// the candidate's PRODUCTION procedure). Stamped in-process at dispatch time
+	// and adopted first-seen per attempt (cleared by resetSelfCorrectionDelivery
+	// on a new attempt so a retry re-captures the then-current version). Purely
+	// additive attribution — it feeds no gate.
+	DispatchProcedureRef string `json:"dispatchProcedureRef,omitempty"`
+	CreatedAt            int64  `json:"createdAt"`
+	UpdatedAt            int64  `json:"updatedAt,omitempty"`
 }
 
 // RecordSelfCorrectionCandidate appends a deferred self-correction candidate.
@@ -105,6 +122,7 @@ func (t *Tracker) RecordSelfCorrectionCandidate(record SelfCorrectionCandidateRe
 	record.ProposedChange = strings.TrimSpace(record.ProposedChange)
 	record.Risk = strings.TrimSpace(record.Risk)
 	record.Source = strings.TrimSpace(record.Source)
+	record.ProcedureRef = strings.TrimSpace(record.ProcedureRef)
 	record.SessionKey = strings.TrimSpace(record.SessionKey)
 	record.SkillName = strings.TrimSpace(record.SkillName)
 	record.TargetFiles = cleanSelfCorrectionStrings(record.TargetFiles, 20)
@@ -481,6 +499,9 @@ func resetSelfCorrectionDelivery(base SelfCorrectionCandidateRecord) SelfCorrect
 	base.CommitSHA = ""
 	base.DeployHead = ""
 	base.OutcomeNote = ""
+	// A new attempt may run under a revised dispatch contract, so drop the ref
+	// too — the attempt's own started row re-captures the then-current version.
+	base.DispatchProcedureRef = ""
 	return base
 }
 
@@ -501,6 +522,9 @@ func fillSelfCorrectionDelivery(base, rec SelfCorrectionCandidateRecord) SelfCor
 	}
 	if base.DeployHead == "" && rec.DeployHead != "" {
 		base.DeployHead = rec.DeployHead
+	}
+	if base.DispatchProcedureRef == "" && rec.DispatchProcedureRef != "" {
+		base.DispatchProcedureRef = rec.DispatchProcedureRef
 	}
 	return base
 }

@@ -696,11 +696,13 @@ class DenebGatewayClient private constructor(
         const val STREAM_RECOVERY_BUDGET_MS = 90_000L
 
         // Once the transcript confirms the turn is still running server-side, poll
-        // up to the server's interactive turn deadline (6m) instead of the short
-        // budget. A tool-heavy turn (multiple wiki/mail lookups) routinely outlives
-        // 90s; giving up early froze the client on the streamed preamble while the
+        // through the server's interactive turn deadline (6m) plus one poll interval
+        // so a late answer is not missed while the detached run is still finishing.
+        // A tool-heavy turn (multiple wiki/mail lookups) routinely outlives the short
+        // budget; giving up early froze the client on the streamed preamble while the
         // finished answer sat in the transcript unseen.
-        const val STREAM_RECOVERY_MAX_MS = 360_000L
+        // Must stay >= gateway-go chatport.InteractiveTurnDeadline (6m).
+        const val STREAM_RECOVERY_MAX_MS = 363_000L
         const val STREAM_RECOVERY_POLL_MS = 3_000L
 
         // Minimum gap between background warms of the calendar + mail caches (see

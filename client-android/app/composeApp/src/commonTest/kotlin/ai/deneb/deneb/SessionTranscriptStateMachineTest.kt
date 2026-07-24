@@ -620,13 +620,13 @@ class SessionTranscriptStateMachineTest {
 
         val recovered = f.client.recoverTurnFromTranscript("client:main", "question")
 
-        assertEquals("second", recovered?.text)
+        assertEquals("second", (recovered as TurnRecoveryResult.Recovered).reply.text)
         assertEquals(3, f.transport.requests.size)
         assertEquals(listOf("question", "second"), f.client.chatHistory.value.map { it.content })
     }
 
     @Test
-    fun recoveryReturnsNullAfterTwoConfirmedNotArrivedPolls() = runTest {
+    fun recoveryReturnsNotArrivedAfterTwoConfirmedNotArrivedPolls() = runTest {
         val f = gatewayClientFixture()
         val unrelated = transcriptPayload(message("user", "different"))
         f.transport.enqueueTranscript(unrelated)
@@ -634,7 +634,7 @@ class SessionTranscriptStateMachineTest {
 
         val recovered = f.client.recoverTurnFromTranscript("client:main", "question")
 
-        assertNull(recovered)
+        assertEquals(TurnRecoveryResult.NotArrived, recovered)
         assertEquals(2, f.transport.requests.size)
         assertTrue(f.client.chatHistory.value.isEmpty())
     }
@@ -649,7 +649,7 @@ class SessionTranscriptStateMachineTest {
 
         val recovered = f.client.recoverTurnFromTranscript("client:main", "question")
 
-        assertEquals("final", recovered?.text)
+        assertEquals("final", (recovered as TurnRecoveryResult.Recovered).reply.text)
         assertEquals(4, f.transport.requests.size)
     }
 
@@ -677,8 +677,26 @@ class SessionTranscriptStateMachineTest {
             poll++ * DenebGatewayClient.STREAM_RECOVERY_POLL_MS
         }
 
-        assertEquals("late answer", recovered?.text)
+        assertEquals("late answer", (recovered as TurnRecoveryResult.Recovered).reply.text)
         assertTrue(f.transport.requests.size > shortBudgetPolls)
+    }
+
+    @Test
+    fun recoveryReturnsGiveUpWhenStillRunningPastExtendedBudget() = runTest {
+        val f = gatewayClientFixture()
+        val maxPolls = (
+            DenebGatewayClient.STREAM_RECOVERY_MAX_MS /
+                DenebGatewayClient.STREAM_RECOVERY_POLL_MS
+            ).toInt()
+        repeat(maxPolls + 1) {
+            f.transport.enqueueTranscript(transcriptPayload(message("user", "question")))
+        }
+        var poll = 0
+        val recovered = f.client.recoverTurnFromTranscript("client:main", "question") {
+            poll++ * DenebGatewayClient.STREAM_RECOVERY_POLL_MS
+        }
+
+        assertEquals(TurnRecoveryResult.GiveUp, recovered)
     }
 
     @Test
@@ -692,7 +710,7 @@ class SessionTranscriptStateMachineTest {
         f.client.switchSession("client:main:other")
         gate.complete(Unit)
 
-        assertNull(recovery.await())
+        assertEquals(TurnRecoveryResult.GiveUp, recovery.await())
         assertTrue(f.client.chatHistory.value.isEmpty())
     }
 
@@ -718,7 +736,7 @@ class SessionTranscriptStateMachineTest {
 
         val recovered = f.client.recoverTurnFromTranscript("client:main", "question")
 
-        assertTrue(recovered?.ok == true)
+        assertTrue((recovered as TurnRecoveryResult.Recovered).reply.ok)
         assertEquals(before + 1, f.client.historyEpoch)
         assertEquals("stable", f.client.loadCachedTranscript("client:main")?.last()?.content)
     }

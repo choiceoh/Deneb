@@ -240,9 +240,6 @@ func (e *Evolver) SetMetaArtifacts(m *generation.MetaArtifacts) {
 	e.configMu.Unlock()
 }
 
-// newProvenance seeds the certificate with the evaluator artifact versions in
-// effect for this evolve attempt (RSI P1.5); the judge fields are filled as
-// the validation chain runs.
 // catalogEntries returns the current skill catalog listing ([] when unwired) —
 // the judge-degradation bench builds gold pairs from real skill bodies.
 func (e *Evolver) catalogEntries() []skills.SkillEntry {
@@ -252,14 +249,37 @@ func (e *Evolver) catalogEntries() []skills.SkillEntry {
 	return e.catalog.List()
 }
 
-func (e *Evolver) newProvenance() evolveProvenance {
+// provenanceFromProducer seeds the certificate from the producer snapshot
+// captured at the generate call. The judge fields are stamped later at the judge
+// call (judgeCandidate, last verdict wins), and ProcedureRef is derived from the
+// captured evolve+judge versions at log time (fillProcedureRef) — so every field
+// reflects the LLM call that actually produced/judged the committed decision,
+// not mutable config re-read afterward. The teacher-escalation path overrides
+// EvolveModel when the committed body is the teacher's rewrite.
+func provenanceFromProducer(snap producerSnapshot) evolveProvenance {
+	return evolveProvenance{
+		EvolveModel:           snap.model,
+		EvolveArtifactVersion: snap.evolveVersion,
+	}
+}
+
+// metaVersion pins the active version of one artifact under the config lock —
+// used to capture a prompt version at the moment of its LLM call.
+func (e *Evolver) metaVersion(name string) string {
 	e.configMu.RLock()
 	m := e.meta
 	e.configMu.RUnlock()
-	return evolveProvenance{
-		EvolveArtifactVersion: m.Version(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt]),
-		JudgeArtifactVersion:  m.Version(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt]),
-	}
+	return m.Version(name, generation.DefaultMetaArtifacts()[name])
+}
+
+// producerSnapshotNow captures the CURRENT producer model + evolve-prompt
+// version. Used by the text-in-hand parseAndApply entry (the producer call
+// happened outside this function, so its true snapshot is unavailable) —
+// best-available attribution, and the teacher-escalation path still overrides
+// EvolveModel when the committed body is the teacher's.
+func (e *Evolver) producerSnapshotNow() producerSnapshot {
+	_, model := e.primaryModel()
+	return producerSnapshot{model: model, evolveVersion: e.metaVersion(generation.MetaEvolveSystemPrompt)}
 }
 
 func (e *Evolver) metaLoad(name, fallback string) string {
@@ -553,7 +573,7 @@ func (e *Evolver) generateSelectAndApply(ctx context.Context, userPrompt string,
 		if ctx.Err() != nil {
 			break
 		}
-		text, genErr := e.generateCandidateText(ctx, userPrompt, attempt)
+		text, snap, genErr := e.generateCandidateText(ctx, userPrompt, attempt)
 		if genErr != nil {
 			// A producer call failing on the first attempt is fatal (no candidate
 			// at all); later attempts are best-effort — keep any candidate already
@@ -567,7 +587,7 @@ func (e *Evolver) generateSelectAndApply(ctx context.Context, userPrompt string,
 			continue
 		}
 		generated++
-		eval, err := e.evaluateCandidateText(ctx, text, entry, originalContent, stats, reviewFinding)
+		eval, err := e.evaluateCandidateText(ctx, text, snap, entry, originalContent, stats, reviewFinding)
 		if err != nil {
 			if attempt == 0 {
 				return nil, err
@@ -623,11 +643,24 @@ func (e *Evolver) finishCandidateSelection(entry *skills.SkillEntry, originalCon
 // prompt unchanged (so K=1 is byte-identical to the old path); later attempts
 // append a small variation note so the K candidates differ without changing the
 // rewrite contract.
-func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, attempt int) (string, error) {
+// producerSnapshot pins the model and evolve-prompt version that ACTUALLY
+// generated a candidate, captured at the producer LLM call. Carried into the
+// provenance so a later config refresh (SetPrimary / meta-adoption) can't make
+// the record claim a model or prompt that never produced the committed body.
+type producerSnapshot struct {
+	model         string // primary producer model at call time
+	evolveVersion string // MetaEvolveSystemPrompt version of the text used as System
+}
+
+func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, attempt int) (string, producerSnapshot, error) {
 	primaryClient, primaryModel := e.primaryModel()
 	if primaryClient == nil {
-		return "", fmt.Errorf("evolver: primary client not configured")
+		return "", producerSnapshot{}, fmt.Errorf("evolver: primary client not configured")
 	}
+	// Load the evolve prompt ONCE: the same text becomes the System message and
+	// the pinned version, so the snapshot is exactly what this call ran on.
+	evolvePrompt := e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])
+	snap := producerSnapshot{model: primaryModel, evolveVersion: generation.ShortContentVersion(evolvePrompt)}
 	prompt := userPrompt
 	if attempt > 0 {
 		prompt = userPrompt + candidateVariationNote(attempt)
@@ -641,7 +674,7 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 	text, err := primaryClient.Complete(ctx, llm.ChatRequest{
 		Model:    primaryModel,
 		Messages: []llm.Message{llm.NewTextMessage("user", prompt)},
-		System:   llm.SystemString(e.metaLoad(generation.MetaEvolveSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaEvolveSystemPrompt])),
+		System:   llm.SystemString(evolvePrompt),
 		// 12288, not 4096: GLM bills reasoning INSIDE the completion budget and
 		// the rewrite must carry a full SKILL.md body (cap 15KB ≈ 5.5K tokens)
 		// plus audit fields — at 4096 the live drill (2026-07-04) truncated
@@ -652,9 +685,9 @@ func (e *Evolver) generateCandidateText(ctx context.Context, userPrompt string, 
 		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
 	})
 	if err != nil {
-		return "", fmt.Errorf("evolver LLM call: %w", err)
+		return "", producerSnapshot{}, fmt.Errorf("evolver LLM call: %w", err)
 	}
-	return text, nil
+	return text, snap, nil
 }
 
 // candidateVariationLenses are deterministic orthogonal exploration directives
@@ -811,7 +844,7 @@ func (e *Evolver) runEvolveBurst(ctx context.Context, skillName string, first Ev
 }
 
 func (e *Evolver) parseAndApply(ctx context.Context, text string, entry *skills.SkillEntry, originalContent string, stats *UsageStats, reviewFinding string) (*EvolveResult, error) {
-	eval, err := e.evaluateCandidateText(ctx, text, entry, originalContent, stats, reviewFinding)
+	eval, err := e.evaluateCandidateText(ctx, text, e.producerSnapshotNow(), entry, originalContent, stats, reviewFinding)
 	if err != nil {
 		return nil, err
 	}

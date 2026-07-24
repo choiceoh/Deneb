@@ -510,6 +510,18 @@ func TestParseAndApplyUsesTeacherRewriteAuditWhenEscalated(t *testing.T) {
 		entries[0].SelfHarnessAudit.TargetSignature != result.Audit.TargetSignature {
 		t.Fatalf("expected lifecycle log to use teacher metadata, got %+v", entries)
 	}
+	// Honest per-model attribution on the committed (teacher-escalated) record:
+	// the teacher PRODUCED the committed body, and the primary (lightweight)
+	// re-JUDGED it — judge != producer. Regression guard for both the escalation
+	// producer-credit fix and the point-of-use judge stamp (last verdict wins,
+	// not the first judge that rejected the lightweight candidate).
+	prov := entries[0].Provenance
+	if prov == nil || prov.EvolveModel != "teacher" {
+		t.Fatalf("teacher-escalated evolve must credit the teacher producer, got %+v", prov)
+	}
+	if prov.JudgeModel != "lightweight" {
+		t.Fatalf("committed teacher body was re-judged by the primary; JudgeModel = %q, want lightweight (%+v)", prov.JudgeModel, prov)
+	}
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

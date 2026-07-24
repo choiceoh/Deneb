@@ -9,6 +9,17 @@ package ai.deneb.deneb
 
 import ai.deneb.ui.chat.History
 
+/** Result of polling the transcript after a mid-turn stream failure. */
+internal sealed interface TurnRecoveryResult {
+    data class Recovered(val reply: GatewayReply) : TurnRecoveryResult
+
+    /** The user message never landed — a blocking re-send is safe. */
+    data object NotArrived : TurnRecoveryResult
+
+    /** Recovery timed out, the user switched away, or the turn was still running. */
+    data object GiveUp : TurnRecoveryResult
+}
+
 /** Outcome of probing a fetched transcript for one sent turn. */
 internal sealed interface TurnProbe {
     /** The user message is there and an assistant reply follows it. */

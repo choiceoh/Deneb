@@ -915,6 +915,14 @@ func (s *Server) earlySelfImprovementMethods() map[string]rpcutil.HandlerFunc {
 			if s.genesisTracker == nil {
 				return genesis.SelfCorrectionCandidateRecord{}, errors.New("genesis tracker unavailable")
 			}
+			// Stamp the dispatch procedure (the coding-session contract prompt
+			// version) Go-side at the composition root — the gateway materializes
+			// the same prompt the out-of-process dispatch script reads, so this
+			// captures the active dispatch procedure without touching that script.
+			// Folded first-seen per attempt, so the started row's version wins.
+			if s.genesisMeta != nil {
+				rec.DispatchProcedureRef = s.genesisMeta.DispatchProcedureRef()
+			}
 			return s.genesisTracker.RecordSelfCorrectionDispatch(rec)
 		},
 		RecordImpact: func(rec genesis.SelfCorrectionCandidateRecord) (genesis.SelfCorrectionCandidateRecord, error) {

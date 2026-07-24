@@ -198,10 +198,13 @@ internal suspend fun DenebGatewayClient.loadTranscriptGuarded(key: String, repla
  * consecutive polls — because a multi-step agent turn persists intermediate
  * assistant messages while its tools are still running. On budget expiry a
  * non-quiescent candidate is still installed (a partial real answer beats a
- * dropped turn). Returns null when the caller may use its legacy fallbacks
- * (blocking re-send for a message that never arrived / keep the partial).
+ * dropped turn). Returns [TurnRecoveryResult.NotArrived] only when the user
+ * message never appeared — the sole case where a blocking re-send is safe.
  */
-internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(key: String, sentText: String): GatewayReply? {
+internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
+    key: String,
+    sentText: String,
+): TurnRecoveryResult {
     val started = TimeSource.Monotonic.markNow()
     return recoverTurnFromTranscript(key, sentText) { started.elapsedNow().inWholeMilliseconds }
 }
@@ -213,7 +216,7 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
     key: String,
     sentText: String,
     elapsedMs: () -> Long,
-): GatewayReply? {
+): TurnRecoveryResult {
     var misses = 0
     var candidate: List<History>? = null
     var candidateTail: Pair<Int, String>? = null
@@ -230,7 +233,7 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
             DenebGatewayClient.STREAM_RECOVERY_BUDGET_MS
         }
         if (elapsedMs() >= budget) break
-        if (sessionKey != key) return null // switched conversations — abandon
+        if (sessionKey != key) return TurnRecoveryResult.GiveUp // switched conversations — abandon
         val payload = fetchTranscriptPayload(key)
         if (payload != null) {
             val transcript = mapTranscriptMessages(payload.messages)
@@ -240,7 +243,7 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
                     val tail = transcript.size to probe.text
                     if (tail == candidateTail) {
                         installRecoveredTranscript(key, transcript)
-                        return GatewayReply(text = probe.text, ok = true)
+                        return TurnRecoveryResult.Recovered(GatewayReply(text = probe.text, ok = true))
                     }
                     candidate = transcript
                     candidateTail = tail
@@ -258,16 +261,19 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
                     // probe — declaring "never arrived" too early re-creates
                     // the duplicate-send this path exists to prevent.
                     misses++
-                    if (misses >= 2) return null
+                    if (misses >= 2) return TurnRecoveryResult.NotArrived
                 }
             }
         }
         delay(DenebGatewayClient.STREAM_RECOVERY_POLL_MS)
     }
-    val last = candidate ?: return null
-    val text = candidateTail?.second ?: return null
-    installRecoveredTranscript(key, last)
-    return GatewayReply(text = text, ok = true)
+    val last = candidate
+    val text = candidateTail?.second
+    if (last != null && text != null) {
+        installRecoveredTranscript(key, last)
+        return TurnRecoveryResult.Recovered(GatewayReply(text = text, ok = true))
+    }
+    return TurnRecoveryResult.GiveUp
 }
 
 /** Install a recovered transcript as the visible history (and cache it). */

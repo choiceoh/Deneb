@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -152,6 +153,14 @@ func ContentSHA256(content string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// ShortContentVersion is the 12-hex artifact-version form (as Version emits) but
+// from content already in hand — so a caller that loaded a prompt for an LLM
+// call can pin the EXACT text it used, instead of re-reading the file later and
+// risking an intervening revision.
+func ShortContentVersion(content string) string {
+	return ContentSHA256(content)[:12]
+}
+
 // writeSidecarIfAbsent backfills provenance for a file that matches the current
 // compiled default but predates the sidecar scheme.
 func (m *MetaArtifacts) writeSidecarIfAbsent(name, sidecarPath, sum string) {
@@ -272,8 +281,7 @@ func DefaultMetaArtifacts() map[string]string {
 // records (RSI P1.5): two decisions carry the same version iff the exact same
 // prompt text produced them, whether it came from disk or the binary.
 func (m *MetaArtifacts) Version(name, fallback string) string {
-	sum := sha256.Sum256([]byte(m.Load(name, fallback)))
-	return hex.EncodeToString(sum[:])[:12]
+	return ShortContentVersion(m.Load(name, fallback))
 }
 
 // ActiveVersions maps every artifact in defaults to its effective version.
@@ -283,4 +291,66 @@ func (m *MetaArtifacts) ActiveVersions(defaults map[string]string) map[string]st
 		out[name] = m.Version(name, fallback)
 	}
 	return out
+}
+
+// ProcedureRef returns one content-addressed token — "proc-<12hex>" — folding
+// together the versions of exactly the prompt artifacts NAMED by the caller:
+// the ones that govern the decision being recorded. The hash is over the sorted
+// "name=version" lines, so two decisions carry the same ProcedureRef iff every
+// governing prompt was byte-identical. It is the composite analogue of the
+// per-artifact Version (which pins one prompt each): a downstream outcome can be
+// attributed to the exact procedure state that produced it.
+//
+// It is deliberately LANE-SPECIFIC rather than folding in DefaultMetaArtifacts
+// wholesale — an evolve ref must not shift when an unrelated prompt (e.g. the
+// L4 dispatch-contract prompt, consumed out-of-process) is revised, or the
+// credit-assignment grouping would fragment. Callers pass the governing set
+// (e.g. evolve + skill-judge for an L1 evolve decision).
+//
+// Model role is deliberately NOT folded in — which model executed the procedure
+// is a separate axis, carried alongside on the record (EvolveModel/JudgeModel)
+// so "the procedure text changed" and "the executor changed" stay
+// distinguishable. Deterministic and nil-safe (all-fallback composite when
+// unwired), so it is safe to mint on every decision.
+func (m *MetaArtifacts) ProcedureRef(governing ...string) string {
+	defaults := DefaultMetaArtifacts()
+	versions := make(map[string]string, len(governing))
+	for _, name := range governing {
+		versions[name] = m.Version(name, defaults[name])
+	}
+	return ProcedureRefFromVersions(versions)
+}
+
+// DispatchProcedureRef is the composite ref governing an L4 dispatch — the
+// coding-session contract prompt (MetaDispatchContractPrompt) that turns an
+// accepted candidate into a landed PR. It is the dispatch-stage analogue of the
+// evolve certificate's ProcedureRef; a landed outcome can be attributed to the
+// dispatch procedure that produced it. The stamp is computed in-process by the
+// gateway (which materializes the same prompt the out-of-process dispatch script
+// consumes), so it is Go-minted, not script- or LLM-supplied.
+func (m *MetaArtifacts) DispatchProcedureRef() string {
+	return m.ProcedureRef(MetaDispatchContractPrompt)
+}
+
+// ProcedureRefFromVersions builds the composite "proc-<hex>" from an explicit
+// {artifact name → version} map — the point-of-use form. A caller that captured
+// each governing prompt's version at the moment of its LLM call assembles the
+// ref from those captured versions, so the ref reflects the procedure that
+// ACTUALLY produced/judged the decision, not whatever is on disk at log time.
+// Same hashing as ProcedureRef (sorted "name=version" lines), so the two agree
+// when fed identical versions.
+func ProcedureRefFromVersions(versions map[string]string) string {
+	names := make([]string, 0, len(versions))
+	for name := range versions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var sb strings.Builder
+	for _, name := range names {
+		sb.WriteString(name)
+		sb.WriteByte('=')
+		sb.WriteString(versions[name])
+		sb.WriteByte('\n')
+	}
+	return "proc-" + ContentSHA256(sb.String())[:12]
 }
