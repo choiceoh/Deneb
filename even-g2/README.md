@@ -6,7 +6,7 @@ Thin Even Realities G2 surface for Deneb — not a full client.
 |---|---|
 | Gateway `evenapi` | Custom AI `POST /v1/chat/completions` → `glasses:main` |
 | Gateway glance | `GET /api/even/glance` → 일정/긴급(workfeed)/할 일 2~4줄 |
-| This folder | Even Hub **Glance** plugin |
+| This folder | Even Hub **Glance** plugin (home/cal/urgent/todo pages) |
 
 Research: `docs/research/even-g2-deneb-integration.md`
 
@@ -64,7 +64,7 @@ npx evenhub-simulator http://localhost:5173
 |---|---|
 | 탭 | Glance 새로고침 (`?fresh=1`) |
 | 스와이프 ↓ | `/api/even/status` (브리지/챗 준비 상태) |
-| 스와이프 ↑ / 탭 | 요약으로 복귀 |
+| 스와이프 ↑ | 이전 페이지 |
 | 더블탭 | 종료 확인 |
 
 QR 시드의 `?seed=` 쿼리는 저장 직후 URL에서 제거됩니다 (토큰이 주소창에 남지 않게).
