@@ -129,28 +129,39 @@ func (e *Evolver) judgeVerdictOnce(ctx context.Context, client *llm.Client, mode
 
 	// Non-streaming for the same reason as generateCandidateText: glm-class
 	// models leak reasoning into the content stream / append junk when
-	// streaming JSON; non-streaming is clean.
-	raw, err := client.Complete(ctx, llm.ChatRequest{
-		Model:    model,
-		Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
-		System:   llm.SystemString(e.metaLoad(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])),
-		// 4096: verdict JSON is small, but GLM reasoning shares the budget.
-		MaxTokens:      4096,
-		Temperature:    evolveTemperature(),
-		Thinking:       e.thinkingOff(model),
-		ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
-	})
-	if err != nil {
-		return judgeVerdict{}, fmt.Errorf("judge LLM call: %w", err)
+	// streaming JSON; non-streaming is clean. A provider can still terminate
+	// before message_stop or return empty content. Retry the identical,
+	// temperature-zero verdict once so a transient transport cut does not throw
+	// away a candidate that already passed every deterministic gate. The second
+	// failure is returned unchanged, preserving the fail-closed contract.
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		raw, err := client.Complete(ctx, llm.ChatRequest{
+			Model:    model,
+			Messages: []llm.Message{llm.NewTextMessage("user", userPrompt)},
+			System:   llm.SystemString(e.metaLoad(generation.MetaSkillJudgeSystemPrompt, generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])),
+			// 4096: verdict JSON is small, but GLM reasoning shares the budget.
+			MaxTokens:      4096,
+			Temperature:    evolveTemperature(),
+			Thinking:       e.thinkingOff(model),
+			ResponseFormat: &llm.ResponseFormat{Type: "json_object"},
+		})
+		if err != nil {
+			lastErr = fmt.Errorf("judge LLM call: %w", err)
+			continue
+		}
+		if strings.TrimSpace(raw) == "" {
+			lastErr = fmt.Errorf("judge: empty verdict")
+			continue
+		}
+		resp, err := jsonutil.UnmarshalLLM[judgeVerdict](raw)
+		if err != nil {
+			lastErr = fmt.Errorf("judge: parse verdict: %w", err)
+			continue
+		}
+		return resp, nil
 	}
-	if strings.TrimSpace(raw) == "" {
-		return judgeVerdict{}, fmt.Errorf("judge: empty verdict")
-	}
-	resp, err := jsonutil.UnmarshalLLM[judgeVerdict](raw)
-	if err != nil {
-		return judgeVerdict{}, fmt.Errorf("judge: parse verdict: %w", err)
-	}
-	return resp, nil
+	return judgeVerdict{}, lastErr
 }
 
 // judgeSwapCheckEnabled gates the order-swap consistency probe (default on).
