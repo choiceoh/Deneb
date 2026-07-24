@@ -240,6 +240,9 @@ func publishProactive(hub *clientPushHub, fcm *push.Notifier, ev clientPushEvent
 	if hub == nil {
 		return
 	}
+	// Normalize to G2 HUD-friendly one-line grammar before SSE/FCM fanout.
+	// Even's phone notification mirror shows title+body on the glasses.
+	ev = FormatHUDPush(ev)
 	hub.publish(ev)
 	if fcm != nil && hub.mobileSubscriberCount() == 0 {
 		fcm.DeliverFallback(ev.Title, ev.Body)

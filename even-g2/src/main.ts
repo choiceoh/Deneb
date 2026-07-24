@@ -6,13 +6,13 @@ import {
   OsEventTypeList,
 } from '@evenrealities/even_hub_sdk'
 
-import { loadSettings, type GlanceSettings } from './settings'
+import { resolveSettings, type GlanceSettings } from './settings'
 import { fetchGlance } from './deneb'
 
 const bridge = await waitForEvenAppBridge()
 
-let settings = loadSettings()
-let mode: 'glance' | 'setup' = needsSetup(settings) ? 'setup' : 'glance'
+let settings: GlanceSettings = { baseUrl: '', token: '' }
+let mode: 'glance' | 'setup' = 'setup'
 let busy = false
 
 const mainText = new TextContainerProperty({
@@ -25,7 +25,7 @@ const mainText = new TextContainerProperty({
   paddingLength: 4,
   containerID: 1,
   containerName: 'main',
-  content: initialContent(mode),
+  content: 'Deneb\n\n설정 확인 중…',
   isEventCapture: 1,
 })
 
@@ -37,10 +37,6 @@ const started = await bridge.createStartUpPageContainer(
 )
 if (started !== 0) {
   console.error('createStartUpPageContainer failed', started)
-}
-
-if (mode === 'glance') {
-  void refreshGlance()
 }
 
 bridge.onEvenHubEvent((event) => {
@@ -58,35 +54,45 @@ bridge.onEvenHubEvent((event) => {
   }
 })
 
+void boot()
+
+async function boot(): Promise<void> {
+  settings = await resolveSettings()
+  if (needsSetup(settings)) {
+    mode = 'setup'
+    await show(setupCopy())
+    return
+  }
+  mode = 'glance'
+  await refreshGlance()
+}
+
 function needsSetup(s: GlanceSettings): boolean {
   return !s.baseUrl || !s.token
 }
 
-function initialContent(m: typeof mode): string {
-  if (m === 'setup') {
-    return [
-      'Deneb Glance',
-      '',
-      '설정 필요',
-      'WebView 콘솔에서:',
-      "localStorage.setItem('deneb.even.g2.settings',",
-      " JSON.stringify({baseUrl:'http://…',token:'…'}))",
-      '',
-      '탭=재확인 / 더블탭=종료',
-    ].join('\n')
-  }
-  return 'Deneb\n\n불러오는 중…\n탭=새로고침 / 더블탭=종료'
+function setupCopy(): string {
+  return [
+    'Deneb Glance',
+    '',
+    '설정 필요 (QR 시드)',
+    'evenhub qr --url',
+    '"http://<lan>:5173/?seed=<…>"',
+    '또는 pack 시 runtime-config.json',
+    '',
+    '탭=재확인 / 더블탭=종료',
+  ].join('\n')
 }
 
 async function onTap(): Promise<void> {
   if (mode === 'setup') {
-    settings = loadSettings()
+    settings = await resolveSettings()
     if (!needsSetup(settings)) {
       mode = 'glance'
       await refreshGlance()
       return
     }
-    await show(initialContent('setup'))
+    await show(setupCopy())
     return
   }
   await refreshGlance()
@@ -96,10 +102,10 @@ async function refreshGlance(): Promise<void> {
   if (busy) return
   busy = true
   try {
-    settings = loadSettings()
+    settings = await resolveSettings()
     if (needsSetup(settings)) {
       mode = 'setup'
-      await show(initialContent('setup'))
+      await show(setupCopy())
       return
     }
     await show('Deneb\n\n불러오는 중…')
