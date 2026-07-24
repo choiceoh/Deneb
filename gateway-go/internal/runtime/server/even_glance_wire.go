@@ -24,7 +24,8 @@ func (s *Server) evenGlanceSources() evenapi.GlanceSources {
 }
 
 func (s *Server) evenGlanceEvents(now time.Time) []evenapi.GlanceEvent {
-	from := now
+	// Look back a few hours so in-progress meetings still appear as "지금".
+	from := now.Add(-6 * time.Hour)
 	to := now.Add(48 * time.Hour)
 	seen := map[string]struct{}{}
 	var out []evenapi.GlanceEvent
@@ -42,6 +43,7 @@ func (s *Server) evenGlanceEvents(now time.Time) []evenapi.GlanceEvent {
 			out = append(out, evenapi.GlanceEvent{
 				Summary: ev.Summary,
 				Start:   ev.Start,
+				End:     ev.End,
 				AllDay:  ev.AllDay,
 			})
 		}

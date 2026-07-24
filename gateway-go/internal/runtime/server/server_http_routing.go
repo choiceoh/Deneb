@@ -67,7 +67,10 @@ func (s *Server) buildMux() *http.ServeMux {
 	g2 := evenapi.New(g2Cfg)
 	mux.HandleFunc("POST /v1/chat/completions", g2.ChatCompletions)
 	mux.HandleFunc("POST /api/even/v1/chat/completions", g2.ChatCompletions)
+	// Some Even Custom AI builds POST the agent body to the configured URL root.
+	mux.HandleFunc("POST /{$}", g2.ChatCompletions)
 	mux.HandleFunc("GET /api/even/glance", g2.Glance)
+	mux.HandleFunc("GET /api/even/status", g2.Status)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)
