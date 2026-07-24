@@ -54,8 +54,9 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 //     avoids noise during transient spikes but catches the runaway case.
 //   - /proc/pressure/memory "some" 10s avg >= 1.0 %  — host is stalling on
 //     memory for this process or its peers; OOM killer is a short step away.
-//   - Retained heap (HeapSys - HeapReleased) grew > 2× since the last tick —
-//     detect process-footprint growth before it hits the absolute threshold.
+//   - Retained heap (HeapSys - HeapReleased) grew > 2× since the last tick
+//     AND is already >= 4 GiB — detect process-footprint growth before it hits
+//     the absolute threshold without warning on normal Go heap arena warm-up.
 //     Alloc is intentionally not used for this comparison because its normal
 //     GC sawtooth can more than double between adjacent samples.
 //
@@ -85,8 +86,10 @@ func runMemPressureMonitor(ctx context.Context, logger *slog.Logger) {
 				"alloc", m.Alloc,
 				"numGoroutine", runtime.NumGoroutine(),
 				"psiSome10", psi)
-			if shouldWarnMemPressure(previous, current) {
+			warnReasons := memPressureWarningReasons(previous, current)
+			if len(warnReasons) > 0 {
 				logger.Warn("mem pressure",
+					"reason", strings.Join(warnReasons, ","),
 					"alloc", m.Alloc,
 					"heapAlloc", m.HeapAlloc,
 					"heapInuse", m.HeapInuse,
@@ -109,7 +112,9 @@ const (
 	memPressureHeapWarnBytes    = uint64(6 * 1024 * 1024 * 1024) // 6 GiB
 	memPressurePSIWarnPercent   = 1.0                            // 1 % stall
 	memPressureGrowthFactorWarn = 2.0
-	memPressureGrowthFloorBytes = uint64(512 * 1024 * 1024)
+	// Retained heap is process footprint, not live heap. Production false
+	// positives repeatedly fired below 3 GiB with psi=0 and alloc<3 GiB.
+	memPressureGrowthFloorBytes = uint64(4 * 1024 * 1024 * 1024)
 )
 
 type memPressureSnapshot struct {
@@ -134,11 +139,23 @@ func retainedHeapBytes(heapSys, heapReleased uint64) uint64 {
 }
 
 func shouldWarnMemPressure(previous, current memPressureSnapshot) bool {
-	return current.alloc >= memPressureHeapWarnBytes ||
-		current.psiSome10 >= memPressurePSIWarnPercent ||
-		(previous.retainedHeap > 0 &&
-			float64(current.retainedHeap) >= memPressureGrowthFactorWarn*float64(previous.retainedHeap) &&
-			current.retainedHeap > memPressureGrowthFloorBytes)
+	return len(memPressureWarningReasons(previous, current)) > 0
+}
+
+func memPressureWarningReasons(previous, current memPressureSnapshot) []string {
+	reasons := make([]string, 0, 3)
+	if current.alloc >= memPressureHeapWarnBytes {
+		reasons = append(reasons, "heap_alloc")
+	}
+	if current.psiSome10 >= memPressurePSIWarnPercent {
+		reasons = append(reasons, "host_psi")
+	}
+	if previous.retainedHeap > 0 &&
+		float64(current.retainedHeap) >= memPressureGrowthFactorWarn*float64(previous.retainedHeap) &&
+		current.retainedHeap >= memPressureGrowthFloorBytes {
+		reasons = append(reasons, "retained_heap_growth")
+	}
+	return reasons
 }
 
 // readPSIMemorySome parses /proc/pressure/memory and returns the "some" 10s

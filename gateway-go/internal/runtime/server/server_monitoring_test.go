@@ -18,6 +18,22 @@ func TestShouldWarnMemPressureIgnoresAllocSawtoothWhenRetainedHeapIsStable(t *te
 	}
 }
 
+func TestShouldWarnMemPressureIgnoresRetainedHeapWarmupBelowActionableSize(t *testing.T) {
+	const mib = uint64(1024 * 1024)
+	previous := memPressureSnapshot{
+		alloc:        700 * mib,
+		retainedHeap: 700 * mib,
+	}
+	current := memPressureSnapshot{
+		alloc:        2400 * mib,
+		retainedHeap: 2850 * mib,
+	}
+
+	if shouldWarnMemPressure(previous, current) {
+		t.Fatal("normal retained heap warm-up below the pressure floor must not warn")
+	}
+}
+
 func TestShouldWarnMemPressureSignalsActionableConditions(t *testing.T) {
 	const gib = uint64(1024 * 1024 * 1024)
 	tests := []struct {
@@ -35,8 +51,8 @@ func TestShouldWarnMemPressureSignalsActionableConditions(t *testing.T) {
 		},
 		{
 			name:     "retained heap growth",
-			previous: memPressureSnapshot{retainedHeap: 600 * 1024 * 1024},
-			current:  memPressureSnapshot{retainedHeap: 1300 * 1024 * 1024},
+			previous: memPressureSnapshot{retainedHeap: 2 * gib},
+			current:  memPressureSnapshot{retainedHeap: 5 * gib},
 		},
 	}
 
