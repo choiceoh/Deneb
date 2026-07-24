@@ -132,6 +132,51 @@ func TestChatCompletionsDedupe(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsDedupeUpgradesAckAfterBackgroundTurn(t *testing.T) {
+	// First POST hits the deadline ack; Even retries while the detached turn is
+	// still running or just finished. Dedupe must serve the real answer once the
+	// background RunSync completes — not the stale ack forever.
+	chat := &stubChat{ready: true, text: "실제 답변", delay: 80 * time.Millisecond}
+	h := New(Config{
+		Chat:             chat,
+		Token:            "secret",
+		ResponseDeadline: 20 * time.Millisecond,
+	})
+	body := `{"messages":[{"role":"user","content":"긴 작업"}]}`
+
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req1.Header.Set("Authorization", "Bearer secret")
+	rec1 := httptest.NewRecorder()
+	h.ChatCompletions(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("first status=%d", rec1.Code)
+	}
+	var first chatCompletionResponse
+	_ = json.Unmarshal(rec1.Body.Bytes(), &first)
+	if first.Choices[0].Message.Content != ackLongRunning {
+		t.Fatalf("first want ack, got %q", first.Choices[0].Message.Content)
+	}
+
+	// Wait for the detached turn to finish and upgrade the dedupe cache.
+	time.Sleep(120 * time.Millisecond)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req2.Header.Set("Authorization", "Bearer secret")
+	rec2 := httptest.NewRecorder()
+	h.ChatCompletions(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("retry status=%d", rec2.Code)
+	}
+	var second chatCompletionResponse
+	_ = json.Unmarshal(rec2.Body.Bytes(), &second)
+	if second.Choices[0].Message.Content != "실제 답변" {
+		t.Fatalf("retry want real answer, got %q", second.Choices[0].Message.Content)
+	}
+	if chat.calls.Load() != 1 {
+		t.Fatalf("calls=%d want 1 (dedupe must not re-run chat)", chat.calls.Load())
+	}
+}
+
 func TestParseBearer(t *testing.T) {
 	if got := ParseBearer("Bearer abc"); got != "abc" {
 		t.Fatalf("got %q", got)
