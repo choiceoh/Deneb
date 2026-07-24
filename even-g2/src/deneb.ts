@@ -65,19 +65,21 @@ export function normalizePages(pages: GlancePage[] | undefined, text: string): G
         empty: !!p.empty,
       }))
   }
-  return [{ id: 'home', title: '오늘', text }]
+  return [{ id: 'home', title: '알림', text }]
 }
 
 export function pageTitle(id: string): string {
   switch (id) {
     case 'home':
-      return '오늘'
+      return '알림'
+    case 'alerts':
+      return '알림 전체'
     case 'cal':
       return '일정'
-    case 'urgent':
-      return '긴급'
     case 'todo':
       return '할 일'
+    case 'urgent': // legacy page id
+      return '알림'
     default:
       return id
   }

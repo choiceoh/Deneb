@@ -6,7 +6,7 @@ Thin Even Realities G2 surface for Deneb — not a full client.
 |---|---|
 | Gateway `evenapi` | Custom AI `POST /v1/chat/completions` → `glasses:main` |
 | Gateway glance | `GET /api/even/glance` → 일정/긴급(workfeed)/할 일 2~4줄 |
-| This folder | Even Hub **Glance** plugin (home/cal/urgent/todo pages) |
+| This folder | Even Hub **Glance** plugin (notification-first; cal/todo secondary) |
 
 Research: `docs/research/even-g2-deneb-integration.md`
 

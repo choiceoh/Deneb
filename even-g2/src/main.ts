@@ -20,7 +20,7 @@ const bridge = await waitForEvenAppBridge()
 
 type Screen = 'setup' | 'page' | 'status'
 
-const PAGE_ORDER = ['home', 'cal', 'urgent', 'todo'] as const
+const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
 const AUTO_REFRESH_MS = 45_000
 
 let settings: GlanceSettings = { baseUrl: '', token: '' }

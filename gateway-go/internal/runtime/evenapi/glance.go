@@ -30,9 +30,10 @@ type GlanceTodo struct {
 }
 
 type GlanceUrgent struct {
-	Title    string
-	Preview  string // optional one-line summary snippet
-	Priority int
+	Title     string
+	Preview   string // optional one-line summary snippet
+	Priority  int
+	CreatedAt time.Time // relative age on HUD
 }
 
 type GlanceSources struct {
@@ -123,14 +124,14 @@ func BuildGlance(now time.Time, src GlanceSources) GlanceBundle {
 	}
 
 	homeText, homeEmpty := formatHomePage(now, events, urgent, todos)
+	alertText, alertEmpty := formatAlertsPage(urgent, now)
 	calText, calEmpty := formatCalPage(events, now)
-	urgentText, urgentEmpty := formatUrgentPage(urgent)
 	todoText, todoEmpty := formatTodoPage(todos, now)
 
 	pages := []GlancePage{
-		{ID: "home", Title: "오늘", Text: homeText, Empty: homeEmpty},
+		{ID: "home", Title: "알림", Text: homeText, Empty: homeEmpty},
+		{ID: "alerts", Title: "알림 전체", Text: alertText, Empty: alertEmpty},
 		{ID: "cal", Title: "일정", Text: calText, Empty: calEmpty},
-		{ID: "urgent", Title: "긴급", Text: urgentText, Empty: urgentEmpty},
 		{ID: "todo", Title: "할 일", Text: todoText, Empty: todoEmpty},
 	}
 	return GlanceBundle{Text: homeText, Pages: pages}
@@ -142,34 +143,53 @@ func cleanPage(s string) string {
 }
 
 func formatHomePage(now time.Time, events []GlanceEvent, urgent []GlanceUrgent, todos []GlanceTodo) (string, bool) {
-	current, upcoming := splitEvents(events, now)
-	ranked := rankTodos(todos, now)
-	urgentN := countNonEmptyUrgent(urgent)
-	calN := 0
-	if current != nil {
-		calN++
-	}
-	calN += len(upcoming)
-
+	sorted := sortUrgent(urgent)
+	n := countNonEmptyUrgent(sorted)
 	var lines []string
 	lines = append(lines, formatClockHeader(now))
-	if calN > 0 || urgentN > 0 || len(ranked) > 0 {
-		lines = append(lines, formatCountsLine(calN, urgentN, len(ranked)))
+	if n == 0 {
+		lines = append(lines, "새 알림 없음")
+		current, upcoming := splitEvents(events, now)
+		ranked := rankTodos(todos, now)
+		calN := len(upcoming)
+		if current != nil {
+			calN++
+		}
+		hint := formatCountsLine(calN, 0, len(ranked))
+		if hint != "" {
+			lines = append(lines, hint+" · ↓스와이프")
+		} else {
+			lines = append(lines, "탭=새로고침")
+		}
+		return cleanPage(strings.Join(lines, "\n")), true
 	}
-	if line := formatHomeEventLine(current, upcoming, now); line != "" {
+	lines = append(lines, "알림 "+strconv.Itoa(n)+"건")
+	shown := 0
+	for _, it := range sorted {
+		title := strings.TrimSpace(it.Title)
+		if title == "" {
+			continue
+		}
+		mark := "· "
+		if it.Priority >= 4 {
+			mark = "! "
+		}
+		line := mark + truncateRunes(title, 26)
+		if age := formatAge(it.CreatedAt, now); age != "" {
+			line += " · " + age
+		}
 		lines = append(lines, line)
+		shown++
+		if shown >= 5 {
+			break
+		}
 	}
-	if line := formatHomeUrgentLine(urgent); line != "" {
-		lines = append(lines, line)
+	if n > shown {
+		lines = append(lines, "↓전체 "+strconv.Itoa(n-shown)+"건 더")
+	} else {
+		lines = append(lines, "↓전체 · 탭새로고침")
 	}
-	if line := formatHomeTodoLine(ranked); line != "" {
-		lines = append(lines, line)
-	}
-	empty := len(lines) <= 1
-	if empty {
-		lines = append(lines, "지금 볼 일정·긴급·할 일은 없어요.")
-	}
-	return cleanPage(strings.Join(lines, "\n")), empty
+	return cleanPage(strings.Join(lines, "\n")), false
 }
 
 func formatClockHeader(now time.Time) string {
@@ -184,51 +204,12 @@ func formatCountsLine(calN, urgentN, todoN int) string {
 		parts = append(parts, "일정 "+strconv.Itoa(calN))
 	}
 	if urgentN > 0 {
-		parts = append(parts, "긴급 "+strconv.Itoa(urgentN))
+		parts = append(parts, "알림 "+strconv.Itoa(urgentN))
 	}
 	if todoN > 0 {
 		parts = append(parts, "할 일 "+strconv.Itoa(todoN))
 	}
 	return strings.Join(parts, " · ")
-}
-
-func formatHomeEventLine(current *GlanceEvent, upcoming []GlanceEvent, now time.Time) string {
-	if current != nil {
-		line := "지금 " + truncateRunes(current.Summary, 20)
-		if rem := formatRemaining(current, now); rem != "" {
-			line += " · " + rem
-		}
-		return line
-	}
-	if len(upcoming) == 0 {
-		return ""
-	}
-	first := upcoming[0]
-	when := formatNextRelative(first, now)
-	return "다음 " + when + " " + truncateRunes(first.Summary, 20)
-}
-
-func formatHomeUrgentLine(items []GlanceUrgent) string {
-	sorted := sortUrgent(items)
-	for _, it := range sorted {
-		title := strings.TrimSpace(it.Title)
-		if title == "" {
-			continue
-		}
-		return "긴급 · " + truncateRunes(title, 24)
-	}
-	return ""
-}
-
-func formatHomeTodoLine(ranked []rankedTodo) string {
-	if len(ranked) == 0 {
-		return ""
-	}
-	prefix := "할 일"
-	if ranked[0].rank == 0 {
-		prefix = "지난 할 일"
-	}
-	return prefix + " · " + ranked[0].title
 }
 
 func formatCalPage(events []GlanceEvent, now time.Time) (string, bool) {
@@ -262,7 +243,7 @@ func formatCalPage(events []GlanceEvent, now time.Time) (string, bool) {
 	return cleanPage(header + "\n" + strings.Join(lines, "\n")), false
 }
 
-func formatUrgentPage(items []GlanceUrgent) (string, bool) {
+func formatAlertsPage(items []GlanceUrgent, now time.Time) (string, bool) {
 	sorted := sortUrgent(items)
 	var lines []string
 	for _, it := range sorted {
@@ -275,20 +256,45 @@ func formatUrgentPage(items []GlanceUrgent) (string, bool) {
 			mark = "! "
 		}
 		line := mark + truncateRunes(title, 28)
+		if age := formatAge(it.CreatedAt, now); age != "" {
+			line += " · " + age
+		}
 		if prev := strings.TrimSpace(it.Preview); prev != "" && prev != title {
 			line += "\n  " + truncateRunes(prev, 30)
 		}
 		lines = append(lines, line)
-		if len(lines) >= 6 {
+		if len(lines) >= 8 {
 			break
 		}
 	}
 	if len(lines) == 0 {
-		return cleanPage("긴급 항목이 없어요."), true
+		return cleanPage("새 알림이 없어요."), true
 	}
 	n := countNonEmptyUrgent(sorted)
-	header := "긴급 " + strconv.Itoa(n) + "건"
+	header := "알림 " + strconv.Itoa(n) + "건"
 	return cleanPage(header + "\n" + strings.Join(lines, "\n")), false
+}
+
+func formatAge(created, now time.Time) string {
+	if created.IsZero() || now.Before(created) {
+		return ""
+	}
+	mins := int(now.Sub(created).Minutes())
+	if mins < 1 {
+		return "방금"
+	}
+	if mins < 60 {
+		return strconv.Itoa(mins) + "분 전"
+	}
+	hours := mins / 60
+	if hours < 24 {
+		return strconv.Itoa(hours) + "시간 전"
+	}
+	days := hours / 24
+	if days < 7 {
+		return strconv.Itoa(days) + "일 전"
+	}
+	return created.Format("1/2")
 }
 
 func formatTodoPage(todos []GlanceTodo, now time.Time) (string, bool) {
