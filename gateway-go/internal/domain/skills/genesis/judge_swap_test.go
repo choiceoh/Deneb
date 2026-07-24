@@ -109,6 +109,7 @@ func TestJudgeCandidateSwapProbe(t *testing.T) {
 		srv := newScriptedJudge(t, []string{
 			judgeVerdictPayload(t, true, 70, 90, "forward improvement"),
 			"", // empty completion → judge: empty verdict
+			"", // one bounded retry also fails
 		}, &calls)
 		defer srv.Close()
 
@@ -116,6 +117,28 @@ func TestJudgeCandidateSwapProbe(t *testing.T) {
 		_, _, err := e.judgeCandidate(context.Background(), "foo", llm.NewClient(srv.URL, "test-key"), "judge", "original body", "candidate body", stats, nil)
 		if err == nil || !strings.Contains(err.Error(), "judge swap probe") {
 			t.Fatalf("swap probe failure must surface as an error, got: %v", err)
+		}
+		if calls.Load() != 3 {
+			t.Fatalf("want forward call plus 2 bounded swap attempts, got %d", calls.Load())
+		}
+	})
+
+	t.Run("transient empty verdict is retried", func(t *testing.T) {
+		t.Setenv("DENEB_JUDGE_SWAP_CHECK", "0")
+		var calls atomic.Int32
+		srv := newScriptedJudge(t, []string{
+			"",
+			judgeVerdictPayload(t, true, 70, 90, "retry recovered"),
+		}, &calls)
+		defer srv.Close()
+
+		e := newSwapTestEvolver()
+		pass, reason, err := e.judgeCandidate(context.Background(), "foo", llm.NewClient(srv.URL, "test-key"), "judge", "original body", "candidate body", stats, nil)
+		if err != nil || !pass {
+			t.Fatalf("retry must recover the verdict, got pass=%v reason=%q err=%v", pass, reason, err)
+		}
+		if calls.Load() != 2 {
+			t.Fatalf("want 2 bounded forward attempts, got %d", calls.Load())
 		}
 	})
 
