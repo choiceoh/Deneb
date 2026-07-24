@@ -21,6 +21,7 @@ const bridge = await waitForEvenAppBridge()
 type Screen = 'setup' | 'page' | 'status'
 
 const PAGE_ORDER = ['home', 'cal', 'urgent', 'todo'] as const
+const AUTO_REFRESH_MS = 45_000
 
 let settings: GlanceSettings = { baseUrl: '', token: '' }
 let screen: Screen = 'setup'
@@ -76,6 +77,7 @@ bridge.onEvenHubEvent((event) => {
 })
 
 void boot()
+startAutoRefresh()
 
 async function boot(): Promise<void> {
   settings = await resolveSettings()
@@ -135,8 +137,15 @@ async function onSwipeNext(): Promise<void> {
     await renderCurrentPage()
     return
   }
-  if (pageIndex < pages.length - 1) {
-    pageIndex += 1
+  let found = -1
+  for (let i = pageIndex + 1; i < pages.length; i++) {
+    if (!isPageEmpty(pages[i])) {
+      found = i
+      break
+    }
+  }
+  if (found >= 0) {
+    pageIndex = found
     await renderCurrentPage()
     return
   }
@@ -148,17 +157,23 @@ async function onSwipePrev(): Promise<void> {
   if (screen === 'setup') return
   if (screen === 'status') {
     screen = 'page'
-    pageIndex = Math.max(0, pages.length - 1)
+    const last = [...pages.keys()].reverse().find((i) => !isPageEmpty(pages[i]))
+    pageIndex = last ?? Math.max(0, pages.length - 1)
     await renderCurrentPage()
     return
   }
-  if (pageIndex > 0) {
-    pageIndex -= 1
+  let found = -1
+  for (let i = pageIndex - 1; i >= 0; i--) {
+    if (!isPageEmpty(pages[i])) {
+      found = i
+      break
+    }
+  }
+  if (found >= 0) {
+    pageIndex = found
     await renderCurrentPage()
     return
   }
-  // wrap: first page + swipe up → status (optional) — plan says prev goes previous;
-  // at home, stay on home.
   await renderCurrentPage()
 }
 
@@ -259,7 +274,7 @@ async function renderCurrentPage(): Promise<void> {
   const nav = `${pageIndex + 1}/${Math.max(pages.length, 1)}`
   const footer = stamp
     ? `↓다음 · 탭새로고침 · ${stamp}`
-    : `↓다음 · ↑이전 · ${nav}`
+    : `↓다음(빈칸건너뜀) · ${nav}`
   await show(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
 }
 
@@ -272,3 +287,17 @@ async function show(content: string): Promise<void> {
     }),
   )
 }
+function startAutoRefresh(): void {
+  setInterval(() => {
+    if (busy || screen === 'setup') return
+    if (screen === 'status') return
+    void refreshGlance(false)
+  }, AUTO_REFRESH_MS)
+}
+
+function isPageEmpty(p: GlancePage | undefined): boolean {
+  if (!p) return true
+  if (p.id === 'home') return false
+  return !!p.empty
+}
+

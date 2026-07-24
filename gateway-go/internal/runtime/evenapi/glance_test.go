@@ -204,3 +204,46 @@ func TestStatusHTTP(t *testing.T) {
 		t.Fatalf("body=%+v", body)
 	}
 }
+
+func TestBuildGlanceRicherHomeAndEmptyFlags(t *testing.T) {
+	now := time.Date(2026, 7, 24, 14, 0, 0, 0, time.Local) // Friday
+	bundle := BuildGlance(now, GlanceSources{
+		Events: func(time.Time) []GlanceEvent {
+			return []GlanceEvent{{
+				Summary: "고객 미팅",
+				Start:   now.Add(-30 * time.Minute),
+				End:     now.Add(30 * time.Minute),
+			}}
+		},
+		Urgent: func(time.Time) []GlanceUrgent {
+			return []GlanceUrgent{{Title: "공문 회신", Preview: "오늘 17시까지", Priority: 4}}
+		},
+		Todos: func(time.Time) []GlanceTodo {
+			return []GlanceTodo{{Title: "견적 검토", Due: now.Add(time.Hour)}}
+		},
+	})
+	if !strings.Contains(bundle.Text, "금") || !strings.Contains(bundle.Text, "14:00") {
+		t.Fatalf("clock header: %q", bundle.Text)
+	}
+	if !strings.Contains(bundle.Text, "일정 1") || !strings.Contains(bundle.Text, "긴급 1") {
+		t.Fatalf("counts: %q", bundle.Text)
+	}
+	if !strings.Contains(bundle.Text, "종료 30분") {
+		t.Fatalf("remaining: %q", bundle.Text)
+	}
+	byID := map[string]GlancePage{}
+	for _, p := range bundle.Pages {
+		byID[p.ID] = p
+	}
+	if byID["home"].Empty || byID["cal"].Empty || byID["urgent"].Empty || byID["todo"].Empty {
+		t.Fatalf("unexpected empty flags: %+v", byID)
+	}
+	if !strings.Contains(byID["urgent"].Text, "오늘 17시") {
+		t.Fatalf("urgent preview: %q", byID["urgent"].Text)
+	}
+
+	empty := BuildGlance(now, GlanceSources{})
+	if !empty.Pages[0].Empty || !empty.Pages[1].Empty || !empty.Pages[2].Empty || !empty.Pages[3].Empty {
+		t.Fatalf("want all empty: %+v", empty.Pages)
+	}
+}

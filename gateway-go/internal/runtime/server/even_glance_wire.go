@@ -85,7 +85,7 @@ func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
 	if s == nil || s.workFeedStore == nil {
 		return nil
 	}
-	items, _, err := s.workFeedStore.List(40, false)
+	items, _, err := s.workFeedStore.List(60, false)
 	if err != nil {
 		return nil
 	}
@@ -98,14 +98,20 @@ func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
 			continue
 		}
 		title := strings.TrimSpace(it.Title)
+		summary := strings.TrimSpace(it.Summary)
 		if title == "" {
-			title = strings.TrimSpace(it.Summary)
+			title = summary
+			summary = ""
 		}
 		if title == "" {
 			continue
 		}
-		out = append(out, evenapi.GlanceUrgent{Title: title, Priority: it.Priority})
-		if len(out) >= 5 {
+		preview := summary
+		if preview == title {
+			preview = ""
+		}
+		out = append(out, evenapi.GlanceUrgent{Title: title, Preview: preview, Priority: it.Priority})
+		if len(out) >= 8 {
 			break
 		}
 	}
