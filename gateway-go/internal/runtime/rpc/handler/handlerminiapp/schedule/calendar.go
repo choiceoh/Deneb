@@ -49,12 +49,28 @@ type LocalCalendar interface {
 	Delete(id string) error
 }
 
+// CalendarWriter mirrors local calendar mutations out to an external calendar
+// (Google) when the one-way write sync is enabled. It is best-effort: handlers
+// ignore its errors so an external outage never fails a local write, which is the
+// source of truth. MirroredGoogleIDs lets the read merge drop the external copies
+// of events Deneb itself authored (dedup when read + write are both on).
+// Implemented by *calwrite.Syncer; nil/factory-error means "no external sync".
+type CalendarWriter interface {
+	Push(ctx context.Context, localID string, ev calendar.Event) error
+	Remove(ctx context.Context, localID string) error
+	MirroredGoogleIDs() map[string]struct{}
+}
+
 // CalendarDeps wraps the lazy Google client factory and the local store.
 // Either may be nil; handlers degrade (Google-only, local-only, or UNAVAILABLE).
 type CalendarDeps struct {
 	Client    func() (CalendarClient, error)
 	Local     LocalCalendar
 	Proposals CalProposals // calendar-event proposals (bell); nil = feature off
+	// Writer, when set, mirrors local create/update/delete out to Google (one-way).
+	// A nil field or a factory error means no external sync — the local store still
+	// answers every call. See CalendarWriter.
+	Writer func() (CalendarWriter, error)
 }
 
 const (
@@ -155,7 +171,10 @@ func listMerged(ctx context.Context, deps CalendarDeps, reqID string, from, to t
 			if err != nil {
 				return nil, mapCalendarError(reqID, "calendar list failed", err)
 			}
-			merged = append(merged, events...)
+			// Drop the Google copies of events Deneb authored: with write sync on,
+			// a local event also exists on Google, and the local store below already
+			// contributes it — keeping both would show the event twice.
+			merged = append(merged, dropMirrored(deps, events)...)
 		}
 	}
 	if deps.Local != nil {
@@ -337,6 +356,7 @@ func calendarCreate(deps CalendarDeps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapUnavailable("calendar create failed", err).Response(req.ID)
 		}
+		mirrorPush(ctx, deps, ev)
 		return rpcutil.RespondOK(req.ID, projectEventOut(ev, true))
 	})
 }
@@ -367,6 +387,7 @@ func calendarUpdate(deps CalendarDeps) rpcutil.HandlerFunc {
 			}
 			return rpcerr.WrapUnavailable("calendar update failed", err).Response(req.ID)
 		}
+		mirrorPush(ctx, deps, *ev)
 		return rpcutil.RespondOK(req.ID, projectEventOut(*ev, true))
 	})
 }
@@ -393,8 +414,62 @@ func calendarDelete(deps CalendarDeps) rpcutil.HandlerFunc {
 			}
 			return rpcerr.WrapUnavailable("calendar delete failed", err).Response(req.ID)
 		}
+		mirrorRemove(ctx, deps, p.ID)
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true})
 	})
+}
+
+// --- external write mirror (best-effort) ---------------------------------
+
+// calendarWriter resolves the external-sync writer, or nil when the feature is
+// off / the factory fails (both are the normal degraded case, not an error).
+func calendarWriter(deps CalendarDeps) CalendarWriter {
+	if deps.Writer == nil {
+		return nil
+	}
+	w, err := deps.Writer()
+	if err != nil || w == nil {
+		return nil
+	}
+	return w
+}
+
+// mirrorPush best-effort mirrors a created/updated local event to Google. The
+// local write already succeeded and is authoritative, so any error is swallowed
+// here (the writer itself logs it) — the RPC still reports success.
+func mirrorPush(ctx context.Context, deps CalendarDeps, ev calendar.Event) {
+	if w := calendarWriter(deps); w != nil {
+		_ = w.Push(ctx, ev.ID, ev)
+	}
+}
+
+// mirrorRemove best-effort removes the Google mirror of a deleted local event.
+func mirrorRemove(ctx context.Context, deps CalendarDeps, localID string) {
+	if w := calendarWriter(deps); w != nil {
+		_ = w.Remove(ctx, localID)
+	}
+}
+
+// dropMirrored removes, from a Google read result, the events Deneb authored
+// (their ids are the syncer's mirror values) so they aren't shown twice once the
+// local store contributes the same events. A no-op when write sync is off.
+func dropMirrored(deps CalendarDeps, events []calendar.Event) []calendar.Event {
+	w := calendarWriter(deps)
+	if w == nil {
+		return events
+	}
+	mirrored := w.MirroredGoogleIDs()
+	if len(mirrored) == 0 {
+		return events
+	}
+	out := events[:0]
+	for _, e := range events {
+		if _, isMirror := mirrored[e.ID]; isMirror {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // --- helpers --------------------------------------------------------------

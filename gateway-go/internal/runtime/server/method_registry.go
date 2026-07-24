@@ -35,6 +35,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calwrite"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -490,6 +491,14 @@ func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcut
 			},
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
+			// One-way write mirror (Deneb → Google), off unless
+			// DENEB_CALENDAR_GOOGLE_WRITE=1. Best-effort: the syncer logs push
+			// failures here and handlers ignore them (local write is authoritative).
+			Writer: func() (minischedule.CalendarWriter, error) {
+				return calwrite.DefaultSyncer(func(op string, err error) {
+					s.logger.Warn("calendar google-sync failed", "op", op, "error", err)
+				})
+			},
 		}),
 	}
 }
