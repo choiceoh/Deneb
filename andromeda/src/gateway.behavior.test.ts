@@ -305,4 +305,19 @@ describe("chatStream", () => {
     expect(handlers.onDone).toHaveBeenCalledWith({ text: "", model: undefined, fellBack: false });
     expect(requestAt(fetchMock).body).toEqual({ message: "hello", sessionKey: "client:main" });
   });
+
+  it("rejects a clean SSE EOF before a terminal done frame", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(byteStream(['event: delta\ndata: {"delta":"partial"}\n']), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers = { onDelta: vi.fn(), onDone: vi.fn() };
+
+    await expect(chatStream(CFG, "hello", handlers)).rejects.toThrow(
+      "chat stream ended before terminal event",
+    );
+    expect(handlers.onDelta).toHaveBeenCalledWith("partial");
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
 });
