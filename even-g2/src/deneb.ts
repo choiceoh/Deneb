@@ -4,6 +4,7 @@ export type GlancePage = {
   id: string
   title: string
   text: string
+  empty?: boolean
 }
 
 export type GlancePayload = {
@@ -61,21 +62,24 @@ export function normalizePages(pages: GlancePage[] | undefined, text: string): G
         id: String(p.id),
         title: String(p.title || pageTitle(p.id)),
         text: String(p.text).trim(),
+        empty: !!p.empty,
       }))
   }
-  return [{ id: 'home', title: '오늘', text }]
+  return [{ id: 'home', title: '알림', text }]
 }
 
 export function pageTitle(id: string): string {
   switch (id) {
     case 'home':
-      return '오늘'
+      return '알림'
+    case 'alerts':
+      return '알림 전체'
     case 'cal':
       return '일정'
-    case 'urgent':
-      return '긴급'
     case 'todo':
       return '할 일'
+    case 'urgent': // legacy page id
+      return '알림'
     default:
       return id
   }

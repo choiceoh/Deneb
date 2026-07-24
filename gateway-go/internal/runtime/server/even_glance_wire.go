@@ -82,10 +82,11 @@ func (s *Server) evenGlanceTodos(now time.Time) []evenapi.GlanceTodo {
 }
 
 func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
+	// Notification-first Glance: unacked workfeed cards at PriorityNormal+.
 	if s == nil || s.workFeedStore == nil {
 		return nil
 	}
-	items, _, err := s.workFeedStore.List(40, false)
+	items, _, err := s.workFeedStore.List(80, false)
 	if err != nil {
 		return nil
 	}
@@ -94,21 +95,36 @@ func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
 		if it.Status == workfeed.StatusAcked {
 			continue
 		}
-		if it.Priority < workfeed.PriorityHigh {
+		if it.Priority > 0 && it.Priority < workfeed.PriorityNormal {
 			continue
 		}
 		title := strings.TrimSpace(it.Title)
+		summary := strings.TrimSpace(it.Summary)
 		if title == "" {
-			title = strings.TrimSpace(it.Summary)
+			title = summary
+			summary = ""
 		}
 		if title == "" {
 			continue
 		}
-		out = append(out, evenapi.GlanceUrgent{Title: title, Priority: it.Priority})
-		if len(out) >= 5 {
+		preview := summary
+		if preview == title {
+			preview = ""
+		}
+		created := time.Time{}
+		if it.CreatedAtMs > 0 {
+			created = time.UnixMilli(it.CreatedAtMs).In(now.Location())
+		}
+		prio := it.Priority
+		if prio == 0 {
+			prio = workfeed.PriorityNormal
+		}
+		out = append(out, evenapi.GlanceUrgent{
+			Title: title, Preview: preview, Priority: prio, CreatedAt: created,
+		})
+		if len(out) >= 12 {
 			break
 		}
 	}
-	_ = now
 	return out
 }
