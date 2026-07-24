@@ -84,6 +84,14 @@ type Client struct {
 	maxRetries int
 	baseDelay  time.Duration
 	maxDelay   time.Duration
+	// rateLimitMaxRetries caps retries for 429 rate-limit / "overloaded"
+	// responses specifically. A persistently overloaded provider won't clear
+	// within the retry window, so retrying it 6× (≈128s of backoff) only burns
+	// the turn budget and leaves nothing for the caller's model-fallback chain.
+	// After this many rate-limit retries the error is surfaced so a DIFFERENT
+	// model can be tried while budget remains. Other transient errors (5xx,
+	// timeouts) still use the full maxRetries.
+	rateLimitMaxRetries int
 
 	// minRequestTimeout is the minimum time each individual LLM HTTP request
 	// gets, regardless of how much of the agent-level deadline remains. When
@@ -249,15 +257,16 @@ func (c *Client) applyHeaders(req *http.Request) {
 // agent.consumeStreamInto); this is only the last-resort backstop.
 func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 	c := &Client{
-		httpClient:        &http.Client{Timeout: 30 * time.Minute, Transport: sharedTransport},
-		baseURL:           baseURL,
-		apiKey:            apiKey,
-		logger:            slog.Default(),
-		apiMode:           APIModeOpenAI,
-		maxRetries:        6,
-		baseDelay:         1 * time.Second,
-		maxDelay:          60 * time.Second,
-		minRequestTimeout: 5 * time.Minute,
+		httpClient:          &http.Client{Timeout: 30 * time.Minute, Transport: sharedTransport},
+		baseURL:             baseURL,
+		apiKey:              apiKey,
+		logger:              slog.Default(),
+		apiMode:             APIModeOpenAI,
+		maxRetries:          6,
+		baseDelay:           1 * time.Second,
+		maxDelay:            60 * time.Second,
+		rateLimitMaxRetries: 3,
+		minRequestTimeout:   5 * time.Minute,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -277,6 +286,15 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 			// the deadline won't extend.
 			if ctx.Err() != nil {
 				return nil, fmt.Errorf("agent context expired: %w", lastErr)
+			}
+
+			// A persistently rate-limited / overloaded provider won't clear
+			// within the retry window. Surface the error after a few tries so the
+			// caller's model-fallback chain can switch models while the turn still
+			// has budget — otherwise a 429 storm burns ~128s over 6 retries and
+			// the turn times out with no output (observed with kimi overload).
+			if c.rateLimitMaxRetries > 0 && attempt > c.rateLimitMaxRetries && isRetryableRateLimit(lastErr) {
+				return nil, lastErr
 			}
 
 			delay := c.backoffDelay(attempt, lastErr)
@@ -461,4 +479,14 @@ func isProviderPermanentRateLimit(err error) bool {
 	default:
 		return false
 	}
+}
+
+// isRetryableRateLimit reports whether err is a 429 rate-limit / overload
+// response (the transient, retry-worthy kind — permanent ones are surfaced
+// earlier). Used to cap rate-limit retries short of the full maxRetries so the
+// caller can fail over to another model before the turn budget is spent.
+func isRetryableRateLimit(err error) bool {
+	var apiErr *httpretry.APIError
+	return errors.As(err, &apiErr) &&
+		httpretry.Classify(apiErr.StatusCode) == httpretry.CategoryRateLimit
 }
