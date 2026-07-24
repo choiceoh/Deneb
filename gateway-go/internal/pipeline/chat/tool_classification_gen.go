@@ -33,7 +33,6 @@ var parallelSafeTools = map[string]struct{}{
 	"code_search":    {},
 	"contacts":       {},
 	"grep":           {},
-	"knowledge":      {},
 	"mail_archive":   {},
 	"polaris":        {},
 	"read":           {},
