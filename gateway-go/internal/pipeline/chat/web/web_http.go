@@ -83,6 +83,16 @@ func isRetryableError(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded)
 }
 
+// FetchYouTube is the single public door to the YouTube transcript engine
+// (metadata + a detailed, chapter-sectioned summary; long talks are chunked and
+// summarized in parallel). The `watch` tool is now the sole YouTube entry point
+// and calls this for its default transcript mode; the `web` tool steers YouTube
+// URLs to watch instead of fetching them. spill may be nil (no full-transcript
+// offload — the summary is still returned).
+func FetchYouTube(ctx context.Context, spill tooldeps.SpilloverStore, url string) (string, error) {
+	return fetchYouTube(ctx, spill, url)
+}
+
 // fetchYouTube extracts a YouTube transcript and returns a summarized result.
 // The full transcript is summarized in an isolated local-LLM call and offloaded
 // to spillover (when available) so it never enters the main conversation

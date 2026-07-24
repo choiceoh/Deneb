@@ -457,7 +457,8 @@ func RegisterWebTools(registry toolport.ToolRegistrar, spill tooldeps.SpilloverS
 		Description: "Web access — search and/or fetch pages in one tool. " +
 			"query: keyword search (Serper→Brave→DuckDuckGo). " +
 			"queries: up to 5 parallel searches. " +
-			"url: fetch a page (HTML extract + bot evasion; YouTube → transcript/chapters — use watch only when you need frames). " +
+			"url: fetch a page (HTML extract + bot evasion). " +
+			"**YouTube 링크는 web이 아니라 watch 툴을 쓰세요** (web은 유튜브를 처리하지 않고 watch로 안내한다). " +
 			"fetch=1..3 with query: search then auto-fetch top N pages. " +
 			"type=news|scholar|autocomplete: Serper-only typed search (incompatible with fetch).",
 		InputSchema: schema.WebToolSchema(),
@@ -569,12 +570,14 @@ func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string) {
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name: "watch",
-		Description: "Watch a video: extract frames + subtitles from a YouTube URL or local video file, " +
-			"then analyze with the vision model so you can actually SEE and HEAR the content. " +
-			"Use for analyzing video structure/hooks, diagnosing bugs from screen recordings, or summarizing long videos. " +
-			"Supports start/end to focus on a time window.",
+		Description: "YouTube 영상·로컬 영상 파일을 다루는 단일 도구 (유튜브는 web이 아니라 이 도구로 온다). " +
+			"**기본은 자막 요약** (detail 생략 = transcript: 자막/전사 기반 상세 요약, 영상 다운로드 없이 가볍고 빠름 — '이 영상 리뷰/요약해줘'는 이걸로 충분). " +
+			"화면을 직접 봐야 할 때만 detail=\"frames\" (프레임 추출 + 비전 분석 — 벤치마크 화면·UI·시연·화면녹화·버그 진단 등 시각 정보가 중요할 때). " +
+			"start/end로 구간을 좁힐 수 있다.",
 		InputSchema: schema.WatchToolSchema(),
-		Fn:          artifact.ToolWatch(workspaceDir),
-		Deferred:    true,
+		Fn: artifact.ToolWatch(workspaceDir, func(ctx context.Context, url string) (string, error) {
+			return web.FetchYouTube(ctx, nil, url)
+		}),
+		Deferred: true,
 	})
 }

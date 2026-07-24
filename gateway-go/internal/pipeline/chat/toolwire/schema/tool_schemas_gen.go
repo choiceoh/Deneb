@@ -342,7 +342,7 @@ func WebToolSchema() map[string]any {
 			},
 			"url": map[string]any{
 				"type":        "string",
-				"description": "URL to fetch (HTML extraction + bot evasion). YouTube links return the video's transcript (split into chapter sections with [m:ss] timestamps) plus metadata (title/channel/views/tags/chapters) — use this to summarize or analyze a YouTube video from its captions without watching it. Reach for the watch tool only when you need to SEE the frames.",
+				"description": "URL to fetch (HTML extraction + bot evasion). YouTube links are NOT handled here — use the watch tool for YouTube (it returns the transcript summary by default; detail=frames to also see the screen).",
 			},
 		},
 	}
@@ -1636,7 +1636,7 @@ func WatchToolSchema() map[string]any {
 		"properties": map[string]any{
 			"detail": map[string]any{
 				"type":        "string",
-				"description": "frames (default): scene frames + subtitles with vision analysis. transcript: captions/ASR only — skips video download and frames (faster for summaries; YouTube only).",
+				"description": "transcript (default): caption/ASR summary only — no video download (use for 'review/summarize this video'). frames: scene frames + subtitles with vision analysis — download + SEE the screen (use only when visuals matter).",
 				"enum":        []string{"frames", "transcript"},
 			},
 			"end": map[string]any{
@@ -1645,7 +1645,7 @@ func WatchToolSchema() map[string]any {
 			},
 			"source": map[string]any{
 				"type":        "string",
-				"description": "YouTube URL or local video file path. Extracts representative frames + the subtitle transcript (with chapter sections) and analyzes them with the vision model — the model SEES the screen, not just the captions. Use detail=transcript for caption/ASR-only summaries (skips video download and frames).",
+				"description": "YouTube URL or local video file path. By DEFAULT (detail=transcript) returns a caption/transcript summary — light and fast, no video download. This is the single YouTube entry point (the web tool steers YouTube URLs here). Set detail=frames only when you must SEE the screen (benchmarks, UI, a demo, a screen recording): it downloads the video, extracts frames, and analyzes them with the vision model.",
 			},
 			"start": map[string]any{
 				"type":        "number",

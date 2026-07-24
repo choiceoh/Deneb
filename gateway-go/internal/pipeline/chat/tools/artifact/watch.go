@@ -1,16 +1,21 @@
-// watch.go — the "watch a video" tool: let the agent SEE and HEAR a video.
+// watch.go — the video tool and the single YouTube entry point.
 //
-// The agent's normal YouTube path (web tool) reads only the subtitle transcript,
-// so the model never sees the screen. This tool closes that gap: given a YouTube
-// URL or a local video file, it extracts representative frames + subtitles
-// (media.WatchVideo) and analyzes them with the main multimodal model in an
-// ISOLATED vision call (pilot.CallVisionLLM). Only the resulting analysis text
-// flows back into the conversation — the base64 frames never touch the main
-// transcript, preserving the prompt cache and context budget (the same isolation
-// rationale as the YouTube transcript summarizer in web_youtube.go).
+// This is the ONE tool for YouTube (the web tool steers YouTube URLs here). Two
+// modes, via the `detail` param:
 //
-// Typical uses: analyze a video's structure/hook, diagnose a bug from a screen
-// recording, or summarize a long video faster than watching at 2x.
+//   - detail=transcript (DEFAULT): captions/ASR only — delegates to the shared
+//     YouTube transcript engine (web.FetchYouTube: metadata + a detailed,
+//     chapter-sectioned summary, chunked for long talks). Light and fast: no
+//     video download. This is what "review this video" wants.
+//   - detail=frames (opt-in): also extracts representative frames and analyzes
+//     them with the main multimodal model in an ISOLATED vision call
+//     (pilot.CallVisionLLM) so the agent actually SEES the screen. Only the
+//     analysis text flows back — the base64 frames never touch the main
+//     transcript, preserving the prompt cache and context budget.
+//
+// Reach for frames only when the visuals matter (benchmarks on screen, a UI/demo,
+// a screen recording, diagnosing a bug). For a talking-head review the transcript
+// default is enough. Local video files use the native frames/transcript path.
 package artifact
 
 import (
@@ -47,10 +52,16 @@ const watchSystemPrompt = "당신은 영상을 분석하는 전문가입니다. 
 	"화면에 보이는 것, 진행 흐름, 핵심 장면을 구체적으로 설명하고, 자막이 있으면 내용과 연결하세요. " +
 	"요청된 작업이 있으면 그에 집중하세요. 불필요한 서두 없이 한국어로 분석 결과만 출력하세요."
 
-// ToolWatch returns a ToolFunc that watches (frames + subtitles + vision
-// analysis) a YouTube URL or a local video file. workspaceDir bounds local file
-// access; an empty string disables local-file watching (URL-only).
-func ToolWatch(workspaceDir string) toolport.ToolFunc {
+// YouTubeFetcher fetches + summarizes a YouTube URL's transcript. Injected so
+// the tools layer needn't import the web backend (wiring lives in toolwire); a
+// nil fetcher falls back to the native yt-dlp caption path.
+type YouTubeFetcher func(ctx context.Context, url string) (string, error)
+
+// ToolWatch returns the video/YouTube tool. Default (detail=transcript) returns
+// a caption summary via fetchYouTube for YouTube URLs; detail=frames extracts
+// frames + runs vision. workspaceDir bounds local-file access (empty = URL-only);
+// fetchYouTube may be nil (then YouTube transcript uses the native path).
+func ToolWatch(workspaceDir string, fetchYouTube YouTubeFetcher) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p watchParams
 		if err := jsonutil.UnmarshalInto("watch params", input, &p); err != nil {
@@ -65,6 +76,19 @@ func ToolWatch(workspaceDir string) toolport.ToolFunc {
 			return "", err
 		}
 		p.Detail = detail
+
+		// YouTube + transcript (the default) → the shared transcript engine
+		// (metadata + a detailed, chapter-sectioned summary, chunked for long
+		// talks), injected via fetchYouTube. This is the single YouTube path now
+		// (the web tool steers here). Frames mode, local files, and a nil fetcher
+		// fall through to the native download/caption path below.
+		if fetchYouTube != nil && detail == watchDetailTranscript && media.IsYouTubeURL(p.Source) {
+			out, ferr := fetchYouTube(ctx, p.Source)
+			if ferr != nil {
+				return "", fmt.Errorf("유튜브 자막 처리 실패: %w", ferr)
+			}
+			return out, nil
+		}
 
 		// Local files are jailed to the workspace and screened by the
 		// prompt-injection path guard, mirroring the fs tools.
@@ -122,10 +146,12 @@ const (
 
 func normalizeWatchDetail(detail string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(detail)) {
-	case "", watchDetailFrames:
-		return watchDetailFrames, nil
-	case watchDetailTranscript:
+	case "", watchDetailTranscript:
+		// Default is transcript (light: captions only, no video download).
+		// Seeing/hearing the frames is opt-in via detail=frames.
 		return watchDetailTranscript, nil
+	case watchDetailFrames:
+		return watchDetailFrames, nil
 	default:
 		return "", fmt.Errorf("detail은 frames 또는 transcript 여야 합니다 (got %q)", detail)
 	}
