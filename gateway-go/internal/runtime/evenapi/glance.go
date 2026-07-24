@@ -11,9 +11,11 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/dentime"
 )
 
-const glanceCacheTTL = 8 * time.Second
+const (
+	glanceCacheTTL = 8 * time.Second
+	pageMaxRunes   = 350
+)
 
-// GlanceEvent is one upcoming (or in-progress) calendar row for HUD formatting.
 type GlanceEvent struct {
 	Summary string
 	Start   time.Time
@@ -21,34 +23,40 @@ type GlanceEvent struct {
 	AllDay  bool
 }
 
-// GlanceTodo is one open to-do row for HUD formatting.
 type GlanceTodo struct {
 	Title     string
 	Due       time.Time
 	DueAllDay bool
 }
 
-// GlanceUrgent is one high-priority work-feed / mail brief row.
 type GlanceUrgent struct {
 	Title    string
 	Priority int
 }
 
-// GlanceSources supplies structured data for GET /api/even/glance.
-// Any func may be nil; missing sources are skipped.
 type GlanceSources struct {
 	Events func(now time.Time) []GlanceEvent
 	Todos  func(now time.Time) []GlanceTodo
 	Urgent func(now time.Time) []GlanceUrgent
 }
 
-type glanceCache struct {
-	mu   sync.Mutex
-	text string
-	at   time.Time
+type GlancePage struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Text  string `json:"text"`
 }
 
-// Glance handles GET /api/even/glance — structured HUD text, no agent turn.
+type GlanceBundle struct {
+	Text  string
+	Pages []GlancePage
+}
+
+type glanceCache struct {
+	mu     sync.Mutex
+	bundle GlanceBundle
+	at     time.Time
+}
+
 func (h *Handler) Glance(w http.ResponseWriter, r *http.Request) {
 	if h == nil {
 		http.Error(w, "even g2 bridge unavailable", http.StatusServiceUnavailable)
@@ -70,58 +78,184 @@ func (h *Handler) Glance(w http.ResponseWriter, r *http.Request) {
 
 	now := h.now().In(dentime.Location())
 	if force := r.URL.Query().Get("fresh"); force == "1" || force == "true" {
-		text := FormatGlance(now, h.sources)
-		h.storeGlanceCache(text, now)
-		writeJSON(w, http.StatusOK, map[string]any{
-			"text":      text,
-			"generated": now.Format(time.RFC3339),
-			"cached":    false,
-		})
+		bundle := BuildGlance(now, h.sources)
+		h.storeGlanceCache(bundle, now)
+		writeGlanceJSON(w, bundle, now, false)
 		return
 	}
-	if text, at, ok := h.lookupGlanceCache(now); ok {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"text":      text,
-			"generated": at.Format(time.RFC3339),
-			"cached":    true,
-		})
+	if bundle, at, ok := h.lookupGlanceCache(now); ok {
+		writeGlanceJSON(w, bundle, at, true)
 		return
 	}
-	text := FormatGlance(now, h.sources)
-	h.storeGlanceCache(text, now)
+	bundle := BuildGlance(now, h.sources)
+	h.storeGlanceCache(bundle, now)
+	writeGlanceJSON(w, bundle, now, false)
+}
+
+func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, cached bool) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"text":      text,
-		"generated": now.Format(time.RFC3339),
-		"cached":    false,
+		"text":      bundle.Text,
+		"pages":     bundle.Pages,
+		"generated": at.Format(time.RFC3339),
+		"cached":    cached,
 	})
 }
 
-// FormatGlance builds 2–4 Korean plain-text lines for the G2 HUD.
 func FormatGlance(now time.Time, src GlanceSources) string {
+	return BuildGlance(now, src).Text
+}
+
+func BuildGlance(now time.Time, src GlanceSources) GlanceBundle {
 	now = now.In(dentime.Location())
-	var lines []string
+	var events []GlanceEvent
+	var todos []GlanceTodo
+	var urgent []GlanceUrgent
 	if src.Events != nil {
-		if line := formatEventLine(src.Events(now), now); line != "" {
-			lines = append(lines, line)
-		}
-	}
-	if src.Urgent != nil {
-		if line := formatUrgentLine(src.Urgent(now)); line != "" {
-			lines = append(lines, line)
-		}
+		events = src.Events(now)
 	}
 	if src.Todos != nil {
-		if line := formatTodoLine(src.Todos(now), now); line != "" {
-			lines = append(lines, line)
+		todos = src.Todos(now)
+	}
+	if src.Urgent != nil {
+		urgent = src.Urgent(now)
+	}
+
+	home := formatHomePage(now, events, urgent, todos)
+	pages := []GlancePage{
+		{ID: "home", Title: "오늘", Text: home},
+		{ID: "cal", Title: "일정", Text: formatCalPage(events, now)},
+		{ID: "urgent", Title: "긴급", Text: formatUrgentPage(urgent)},
+		{ID: "todo", Title: "할 일", Text: formatTodoPage(todos, now)},
+	}
+	return GlanceBundle{Text: home, Pages: pages}
+}
+
+func cleanPage(s string) string {
+	s = CleanForG2(s)
+	return truncateRunes(s, pageMaxRunes)
+}
+
+func formatHomePage(now time.Time, events []GlanceEvent, urgent []GlanceUrgent, todos []GlanceTodo) string {
+	var lines []string
+	lines = append(lines, now.Format("15:04"))
+	if line := formatHomeEventLine(events, now); line != "" {
+		lines = append(lines, line)
+	}
+	if line := formatHomeUrgentLine(urgent); line != "" {
+		lines = append(lines, line)
+	}
+	if line := formatHomeTodoLine(todos, now); line != "" {
+		lines = append(lines, line)
+	}
+	if len(lines) == 1 {
+		lines = append(lines, "지금 볼 일정·긴급·할 일은 없어요.")
+	}
+	return cleanPage(strings.Join(lines, "\n"))
+}
+
+func formatHomeEventLine(events []GlanceEvent, now time.Time) string {
+	current, upcoming := splitEvents(events, now)
+	if current != nil {
+		return "지금 " + truncateRunes(current.Summary, 24)
+	}
+	if len(upcoming) == 0 {
+		return ""
+	}
+	first := upcoming[0]
+	when := formatNextRelative(first, now)
+	return "다음 " + when + " " + truncateRunes(first.Summary, 22)
+}
+
+func formatHomeUrgentLine(items []GlanceUrgent) string {
+	sorted := sortUrgent(items)
+	for _, it := range sorted {
+		title := strings.TrimSpace(it.Title)
+		if title == "" {
+			continue
+		}
+		return "긴급 · " + truncateRunes(title, 24)
+	}
+	return ""
+}
+
+func formatHomeTodoLine(todos []GlanceTodo, now time.Time) string {
+	ranked := rankTodos(todos, now)
+	if len(ranked) == 0 {
+		return ""
+	}
+	prefix := "할 일"
+	if ranked[0].rank == 0 {
+		prefix = "지난 할 일"
+	}
+	return prefix + " · " + ranked[0].title
+}
+
+func formatCalPage(events []GlanceEvent, now time.Time) string {
+	current, upcoming := splitEvents(events, now)
+	var lines []string
+	if current != nil {
+		lines = append(lines, "지금 "+truncateRunes(current.Summary, 28))
+	}
+	for _, ev := range upcoming {
+		if len(lines) >= 4 {
+			break
+		}
+		when := formatEventWhen(ev, now)
+		lines = append(lines, when+" "+truncateRunes(ev.Summary, 26))
+	}
+	if len(lines) == 0 {
+		return cleanPage("예정된 일정이 없어요.")
+	}
+	return cleanPage(strings.Join(lines, "\n"))
+}
+
+func formatUrgentPage(items []GlanceUrgent) string {
+	sorted := sortUrgent(items)
+	var lines []string
+	for _, it := range sorted {
+		title := strings.TrimSpace(it.Title)
+		if title == "" {
+			continue
+		}
+		lines = append(lines, "· "+truncateRunes(title, 32))
+		if len(lines) >= 5 {
+			break
 		}
 	}
 	if len(lines) == 0 {
-		return "지금 볼 일정·긴급·할 일은 없어요."
+		return cleanPage("긴급 항목이 없어요.")
 	}
-	return CleanForG2(strings.Join(lines, "\n"))
+	n := countNonEmptyUrgent(sorted)
+	header := "긴급 " + strconv.Itoa(n) + "건"
+	return cleanPage(header + "\n" + strings.Join(lines, "\n"))
 }
 
-func formatEventLine(events []GlanceEvent, now time.Time) string {
+func formatTodoPage(todos []GlanceTodo, now time.Time) string {
+	ranked := rankTodos(todos, now)
+	if len(ranked) == 0 {
+		return cleanPage("오늘 볼 할 일이 없어요.")
+	}
+	var lines []string
+	for _, td := range ranked {
+		if len(lines) >= 5 {
+			break
+		}
+		prefix := "· "
+		switch td.rank {
+		case 0:
+			prefix = "! "
+		case 1:
+			prefix = "오늘 "
+		case 2:
+			prefix = "내일 "
+		}
+		lines = append(lines, prefix+td.title)
+	}
+	header := "할 일 " + strconv.Itoa(len(ranked)) + "건"
+	return cleanPage(header + "\n" + strings.Join(lines, "\n"))
+}
+
+func splitEvents(events []GlanceEvent, now time.Time) (*GlanceEvent, []GlanceEvent) {
 	horizon := now.Add(48 * time.Hour)
 	var current *GlanceEvent
 	var upcoming []GlanceEvent
@@ -149,22 +283,24 @@ func formatEventLine(events []GlanceEvent, now time.Time) string {
 		upcoming = append(upcoming, ev)
 	}
 	sort.Slice(upcoming, func(i, j int) bool { return upcoming[i].Start.Before(upcoming[j].Start) })
+	return current, upcoming
+}
 
-	var parts []string
-	if current != nil {
-		parts = append(parts, "지금 "+truncateRunes(current.Summary, 24))
+func formatNextRelative(ev GlanceEvent, now time.Time) string {
+	if ev.AllDay {
+		return formatEventWhen(ev, now)
 	}
-	if len(upcoming) > 0 {
-		first := upcoming[0]
-		when := formatEventWhen(first, now)
-		title := truncateRunes(first.Summary, 24)
-		line := "다음 " + when + " " + title
-		if len(upcoming) > 1 {
-			line += " 외 " + strconv.Itoa(len(upcoming)-1)
+	if sameDay(ev.Start, now) {
+		mins := int(ev.Start.Sub(now).Minutes())
+		if mins < 1 {
+			return "곧"
 		}
-		parts = append(parts, line)
+		if mins < 120 {
+			return strconv.Itoa(mins) + "분 후"
+		}
+		return ev.Start.Format("15:04")
 	}
-	return strings.Join(parts, "\n")
+	return formatEventWhen(ev, now)
 }
 
 func isCurrentEvent(ev GlanceEvent, now time.Time) bool {
@@ -200,48 +336,38 @@ func formatEventWhen(ev GlanceEvent, now time.Time) string {
 	return ev.Start.Format("1/2 15:04")
 }
 
-func formatUrgentLine(items []GlanceUrgent) string {
+func sortUrgent(items []GlanceUrgent) []GlanceUrgent {
 	sorted := append([]GlanceUrgent(nil), items...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Priority > sorted[j].Priority })
-	var titles []string
-	for _, it := range sorted {
-		title := strings.TrimSpace(it.Title)
-		if title == "" {
-			continue
-		}
-		titles = append(titles, truncateRunes(title, 22))
-		if len(titles) >= 2 {
-			break
-		}
-	}
-	if len(titles) == 0 {
-		return ""
-	}
-	if len(titles) == 1 {
-		return "긴급 · " + titles[0]
-	}
-	total := len(sorted)
-	if total < len(titles) {
-		total = len(titles)
-	}
-	return "긴급 " + strconv.Itoa(total) + "건 · " + titles[0] + ", " + titles[1]
+	return sorted
 }
 
-func formatTodoLine(todos []GlanceTodo, now time.Time) string {
-	type ranked struct {
-		title string
-		rank  int
-		due   time.Time
+func countNonEmptyUrgent(items []GlanceUrgent) int {
+	n := 0
+	for _, it := range items {
+		if strings.TrimSpace(it.Title) != "" {
+			n++
+		}
 	}
+	return n
+}
+
+type rankedTodo struct {
+	title string
+	rank  int
+	due   time.Time
+}
+
+func rankTodos(todos []GlanceTodo, now time.Time) []rankedTodo {
 	endTomorrow := endOfDay(now.Add(24 * time.Hour))
 	startToday := startOfDay(now)
-	var rankedTodos []ranked
+	var rankedTodos []rankedTodo
 	for _, td := range todos {
 		title := strings.TrimSpace(td.Title)
 		if title == "" {
 			continue
 		}
-		rank := 3 // undated
+		rank := 3
 		var due time.Time
 		if !td.Due.IsZero() {
 			due = td.Due.In(now.Location())
@@ -260,7 +386,7 @@ func formatTodoLine(todos []GlanceTodo, now time.Time) string {
 				continue
 			}
 		}
-		rankedTodos = append(rankedTodos, ranked{title: truncateRunes(title, 22), rank: rank, due: due})
+		rankedTodos = append(rankedTodos, rankedTodo{title: truncateRunes(title, 22), rank: rank, due: due})
 	}
 	sort.SliceStable(rankedTodos, func(i, j int) bool {
 		if rankedTodos[i].rank != rankedTodos[j].rank {
@@ -271,21 +397,7 @@ func formatTodoLine(todos []GlanceTodo, now time.Time) string {
 		}
 		return rankedTodos[i].due.Before(rankedTodos[j].due)
 	})
-	if len(rankedTodos) == 0 {
-		return ""
-	}
-	if len(rankedTodos) == 1 {
-		prefix := "할 일"
-		if rankedTodos[0].rank == 0 {
-			prefix = "지난 할 일"
-		}
-		return prefix + " · " + rankedTodos[0].title
-	}
-	prefix := "할 일"
-	if rankedTodos[0].rank == 0 {
-		prefix = "지난 할 일"
-	}
-	return prefix + " " + strconv.Itoa(len(rankedTodos)) + " · " + rankedTodos[0].title + " 외 " + strconv.Itoa(len(rankedTodos)-1)
+	return rankedTodos
 }
 
 func sameDay(a, b time.Time) bool {
@@ -304,24 +416,24 @@ func endOfDay(t time.Time) time.Time {
 	return time.Date(y, m, d, 23, 59, 59, 0, t.Location())
 }
 
-func (h *Handler) lookupGlanceCache(now time.Time) (string, time.Time, bool) {
+func (h *Handler) lookupGlanceCache(now time.Time) (GlanceBundle, time.Time, bool) {
 	if h == nil {
-		return "", time.Time{}, false
+		return GlanceBundle{}, time.Time{}, false
 	}
 	h.glanceCache.mu.Lock()
 	defer h.glanceCache.mu.Unlock()
-	if h.glanceCache.text == "" || now.Sub(h.glanceCache.at) > glanceCacheTTL {
-		return "", time.Time{}, false
+	if h.glanceCache.bundle.Text == "" || now.Sub(h.glanceCache.at) > glanceCacheTTL {
+		return GlanceBundle{}, time.Time{}, false
 	}
-	return h.glanceCache.text, h.glanceCache.at, true
+	return h.glanceCache.bundle, h.glanceCache.at, true
 }
 
-func (h *Handler) storeGlanceCache(text string, at time.Time) {
+func (h *Handler) storeGlanceCache(bundle GlanceBundle, at time.Time) {
 	if h == nil {
 		return
 	}
 	h.glanceCache.mu.Lock()
 	defer h.glanceCache.mu.Unlock()
-	h.glanceCache.text = text
+	h.glanceCache.bundle = bundle
 	h.glanceCache.at = at
 }

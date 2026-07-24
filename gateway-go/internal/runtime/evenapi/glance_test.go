@@ -9,14 +9,18 @@ import (
 	"time"
 )
 
-func TestFormatGlanceComposesLines(t *testing.T) {
+func TestBuildGlancePages(t *testing.T) {
 	now := time.Date(2026, 7, 24, 9, 0, 0, 0, time.Local)
-	text := FormatGlance(now, GlanceSources{
+	bundle := BuildGlance(now, GlanceSources{
 		Events: func(time.Time) []GlanceEvent {
 			return []GlanceEvent{{
 				Summary: "주간회의",
-				Start:   now.Add(5 * time.Hour),
-				End:     now.Add(6 * time.Hour),
+				Start:   now.Add(30 * time.Minute),
+				End:     now.Add(90 * time.Minute),
+			}, {
+				Summary: "저녁 회식",
+				Start:   now.Add(10 * time.Hour),
+				End:     now.Add(12 * time.Hour),
 			}}
 		},
 		Urgent: func(time.Time) []GlanceUrgent {
@@ -32,14 +36,41 @@ func TestFormatGlanceComposesLines(t *testing.T) {
 			}
 		},
 	})
-	if !strings.Contains(text, "다음") || !strings.Contains(text, "주간회의") {
-		t.Fatalf("missing event line: %q", text)
+	if !strings.Contains(bundle.Text, "09:00") {
+		t.Fatalf("home missing clock: %q", bundle.Text)
 	}
-	if !strings.Contains(text, "긴급") || !strings.Contains(text, "공문") {
-		t.Fatalf("missing urgent line: %q", text)
+	if !strings.Contains(bundle.Text, "분 후") || !strings.Contains(bundle.Text, "주간회의") {
+		t.Fatalf("home missing relative event: %q", bundle.Text)
 	}
-	if !strings.Contains(text, "할 일") || !strings.Contains(text, "견적") {
-		t.Fatalf("missing todo line: %q", text)
+	if !strings.Contains(bundle.Text, "긴급") || !strings.Contains(bundle.Text, "공문") {
+		t.Fatalf("home missing urgent: %q", bundle.Text)
+	}
+	if !strings.Contains(bundle.Text, "할 일") || !strings.Contains(bundle.Text, "견적") {
+		t.Fatalf("home missing todo: %q", bundle.Text)
+	}
+	if len(bundle.Pages) != 4 {
+		t.Fatalf("pages=%d want 4", len(bundle.Pages))
+	}
+	byID := map[string]GlancePage{}
+	for _, p := range bundle.Pages {
+		byID[p.ID] = p
+	}
+	for _, id := range []string{"home", "cal", "urgent", "todo"} {
+		if _, ok := byID[id]; !ok {
+			t.Fatalf("missing page %s", id)
+		}
+	}
+	if !strings.Contains(byID["cal"].Text, "저녁 회식") {
+		t.Fatalf("cal page: %q", byID["cal"].Text)
+	}
+	if !strings.Contains(byID["urgent"].Text, "결재") {
+		t.Fatalf("urgent page: %q", byID["urgent"].Text)
+	}
+	if !strings.Contains(byID["todo"].Text, "현장") {
+		t.Fatalf("todo page: %q", byID["todo"].Text)
+	}
+	if bundle.Text != byID["home"].Text {
+		t.Fatalf("text should equal home page")
 	}
 }
 
@@ -67,19 +98,39 @@ func TestFormatGlanceShowsCurrentAndOverdue(t *testing.T) {
 	if !strings.Contains(text, "지금") || !strings.Contains(text, "고객 미팅") {
 		t.Fatalf("missing current event: %q", text)
 	}
-	if !strings.Contains(text, "다음") || !strings.Contains(text, "저녁 회식") {
-		t.Fatalf("missing next event: %q", text)
-	}
 	if !strings.Contains(text, "지난 할 일") || !strings.Contains(text, "어제 미완") {
 		t.Fatalf("missing overdue todo: %q", text)
 	}
 }
 
 func TestFormatGlanceEmpty(t *testing.T) {
-	got := FormatGlance(time.Now(), GlanceSources{})
-	if got != "지금 볼 일정·긴급·할 일은 없어요." {
+	now := time.Date(2026, 7, 24, 10, 15, 0, 0, time.Local)
+	got := FormatGlance(now, GlanceSources{})
+	if !strings.Contains(got, "10:15") {
+		t.Fatalf("missing clock: %q", got)
+	}
+	if !strings.Contains(got, "지금 볼 일정·긴급·할 일은 없어요.") {
 		t.Fatalf("got %q", got)
 	}
+	bundle := BuildGlance(now, GlanceSources{})
+	if !strings.Contains(pageByID(bundle, "cal").Text, "없어요") {
+		t.Fatalf("cal empty: %q", pageByID(bundle, "cal").Text)
+	}
+	if !strings.Contains(pageByID(bundle, "urgent").Text, "없어요") {
+		t.Fatalf("urgent empty: %q", pageByID(bundle, "urgent").Text)
+	}
+	if !strings.Contains(pageByID(bundle, "todo").Text, "없어요") {
+		t.Fatalf("todo empty: %q", pageByID(bundle, "todo").Text)
+	}
+}
+
+func pageByID(b GlanceBundle, id string) GlancePage {
+	for _, p := range b.Pages {
+		if p.ID == id {
+			return p
+		}
+	}
+	return GlancePage{}
 }
 
 func TestGlanceHTTPAndCache(t *testing.T) {
@@ -109,6 +160,10 @@ func TestGlanceHTTPAndCache(t *testing.T) {
 	text, _ := body["text"].(string)
 	if !strings.Contains(text, "미팅") {
 		t.Fatalf("text=%q", text)
+	}
+	pages, ok := body["pages"].([]any)
+	if !ok || len(pages) != 4 {
+		t.Fatalf("pages=%v", body["pages"])
 	}
 	if body["cached"] != false {
 		t.Fatalf("first response should be uncached: %+v", body)

@@ -1,13 +1,21 @@
 import type { GlanceSettings } from './settings'
 
+export type GlancePage = {
+  id: string
+  title: string
+  text: string
+}
+
 export type GlancePayload = {
   text: string
+  pages: GlancePage[]
   generated?: string
   cached?: boolean
 }
 
 type GlanceResponse = {
   text?: string
+  pages?: GlancePage[]
   generated?: string
   cached?: boolean
   error?: { message?: string }
@@ -41,7 +49,36 @@ export async function fetchGlance(
   if (!text) {
     throw new Error('empty glance')
   }
-  return { text, generated: data.generated, cached: data.cached }
+  const pages = normalizePages(data.pages, text)
+  return { text, pages, generated: data.generated, cached: data.cached }
+}
+
+export function normalizePages(pages: GlancePage[] | undefined, text: string): GlancePage[] {
+  if (Array.isArray(pages) && pages.length > 0) {
+    return pages
+      .filter((p) => p && p.id && p.text?.trim())
+      .map((p) => ({
+        id: String(p.id),
+        title: String(p.title || pageTitle(p.id)),
+        text: String(p.text).trim(),
+      }))
+  }
+  return [{ id: 'home', title: '오늘', text }]
+}
+
+export function pageTitle(id: string): string {
+  switch (id) {
+    case 'home':
+      return '오늘'
+    case 'cal':
+      return '일정'
+    case 'urgent':
+      return '긴급'
+    case 'todo':
+      return '할 일'
+    default:
+      return id
+  }
 }
 
 export async function fetchStatus(settings: GlanceSettings): Promise<StatusResponse> {
