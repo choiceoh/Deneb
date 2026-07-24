@@ -9,6 +9,7 @@ description: "프로젝트 구조 및 모듈 아키텍처 참조"
 - `gateway-go/` — Go gateway server (HTTP + SSE server, RPC dispatch, session management, chat/LLM, tools, auth). The primary runtime.
 - `client-android/` — Kotlin Multiplatform native client (Compose). **Mobile surface** (Android daily driver + iOS); the desktop product UI was retired — Andromeda owns desktop. The Compose Desktop target remains as a headless verification harness only (`docs/agent-rules/native-live-app.md`).
 - `andromeda/` — desktop workstation client ("work-command cockpit") for the gateway. Tauri 2 (Rust shell) + React 18 + Refine + Vite (TypeScript). Own gate: `cd andromeda && pnpm verify`; own module guide: `andromeda/CLAUDE.md`.
+- `even-g2/` — Even Realities G2 Glance plugin (Even Hub). Not a full client — HUD companion. Agent ingress is gateway `internal/runtime/evenapi` (Custom AI bridge → `glasses:main`). See `even-g2/README.md` and `docs/research/even-g2-deneb-integration.md`.
 - `skills/` — user-facing skill plugins organized by category (coding/, productivity/, knowledge/, …). Filesystem-discovered; adding a directory is the install.
 - `docs/` — Mintlify documentation site.
 - `scripts/` — build, dev, CI, audit, and release scripts.

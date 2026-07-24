@@ -13,6 +13,7 @@
   - changed-files:
       - any-glob-to-any-file:
           - "andromeda/**"
+          - "even-g2/**"
 
 # Domain labels
 "ai":
