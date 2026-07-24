@@ -6,9 +6,10 @@
 // the source of truth and must not import the Google API; the handler layer
 // orchestrates the mirror by calling this package after a successful local write.
 //
-// Everything here is OPT-IN and OFF by default: DefaultSyncer returns an error
-// (so the handler degrades to local-only, exactly as before) unless
-// DENEB_CALENDAR_GOOGLE_WRITE is truthy AND a write-scoped OAuth token is present
-// at ~/.deneb/credentials/calendar_token.json. Writes are best-effort — a Google
-// outage logs a warning but never fails the local write.
+// The mirror is ON by default (the calendar token carries the full auth/calendar
+// read+write scope): DefaultSyncer builds a syncer whenever calendar credentials
+// are present, and returns an error — so the handler degrades to local-only,
+// exactly as before — only when DENEB_CALENDAR_GOOGLE_WRITE=0 or the credentials
+// are missing. Writes are best-effort: a Google outage logs a warning but never
+// fails the local write.
 package calwrite

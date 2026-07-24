@@ -39,15 +39,18 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// writeEnabled reports whether the Deneb → Google write mirror is on. OPT-IN
-// (default off): set DENEB_CALENDAR_GOOGLE_WRITE=1 (with a write-scoped token
-// present) to enable. Every caller degrades to local-only when this is false.
+// writeEnabled reports whether the Deneb → Google write mirror is on. ON BY
+// DEFAULT: the existing calendar token carries the full read/write scope
+// (auth/calendar), so mirroring is the desired behavior; set
+// DENEB_CALENDAR_GOOGLE_WRITE=0 to turn it off. When the mirror is on but no
+// calendar credentials are present, DefaultSyncer's client init fails and every
+// caller still degrades cleanly to local-only (no error surfaced, no log spam).
 func writeEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("DENEB_CALENDAR_GOOGLE_WRITE"))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
+	case "0", "false", "no", "off":
 		return false
+	default:
+		return true
 	}
 }
 

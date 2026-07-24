@@ -17,14 +17,13 @@
 - `event.go` — `calendar.Event` → Calendar v3 이벤트 본문 변환(종일=date 경계·시간=dateTime),
   `denebLocalId` extended property로 구글 측에 Deneb 저작 이벤트임을 표시.
 
-## 활성화 (기본 OFF · 운영자 수동)
+## 활성화 (기본 ON)
 
-1. **env**: `~/.deneb/.env`에 `DENEB_CALENDAR_GOOGLE_WRITE=1`. 미설정이면 `DefaultSyncer`가
-   에러를 반환해 핸들러가 로컬 전용으로 그대로 degrade(기존 동작과 동일).
-2. **OAuth 쓰기 스코프 재동의**: 현재 `~/.deneb/credentials/calendar_token.json`은 읽기
-   전용(`calendar.readonly`)일 확률이 높다. 쓰기는 `https://www.googleapis.com/auth/calendar.events`
-   스코프로 **브라우저 동의를 다시 받아** 같은 파일을 재발급해야 한다(읽기 클라이언트와 토큰 공유).
-   토큰 발급 플로우는 레포 밖(수동)이며, 재발급 후엔 읽기/쓰기 클라이언트 양쪽이 같은 토큰을 쓴다.
+- **기본 켜짐**: 기존 `~/.deneb/credentials/calendar_token.json`이 이미 전체 읽기+쓰기 스코프
+  (`https://www.googleapis.com/auth/calendar`, `.readonly` 아님 — refresh 후 tokeninfo로 실측
+  확인)를 갖고 있어 별도 OAuth 재동의가 필요 없다. 크리덴셜이 있으면 `DefaultSyncer`가 미러를 구성한다.
+- **끄기**: `DENEB_CALENDAR_GOOGLE_WRITE=0`. 명시적 off이거나 크리덴셜이 없으면 `DefaultSyncer`가
+  에러를 반환해 핸들러가 로컬 전용으로 그대로 degrade(스팸 없음).
 
 ## 불변조건
 
@@ -43,5 +42,5 @@
 
 쓰기 표면(Insert/Patch/Delete)이나 매핑 의미를 바꾸면 `client_test.go`(httptest 요청 계약)와
 `syncer_test.go`(매핑·영속·best-effort)를 함께 갱신하고, 핸들러 오케스트레이션 계약은
-`handlerminiapp/schedule/calendar_writer_test.go`까지 실행한다. 실제 Google 쓰기 라이브
-검증은 운영자 OAuth 쓰기 재동의가 선행돼야 한다.
+`handlerminiapp/schedule/calendar_writer_test.go`까지 실행한다. 실제 Google 왕복은 라이브로
+검증됨(2026-07-24: Deneb create→구글에 이벤트 출현(denebLocalId 태그 포함)→Deneb delete→구글에서 제거).
