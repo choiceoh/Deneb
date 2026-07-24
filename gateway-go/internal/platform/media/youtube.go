@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/cliprobe"
@@ -265,10 +266,47 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Step 1: Fetch metadata as JSON.
-	meta, err := fetchYouTubeMetadata(ctx, ytdlpPath, videoURL)
-	if err != nil {
-		return nil, fmt.Errorf("metadata fetch: %w", err)
+	// Subtitle deadline: when ASR is usable and the caller's deadline is tight
+	// (the web fetch path caps this at 90s), bound the caption probes so they
+	// can't consume the whole budget — leaving a reserve for the ASR fallback.
+	// The ASR call below still uses the original ctx, so it gets that reserved
+	// time. Gate on actual ASR readiness: if the sidecar is down there is no
+	// fallback to reserve for, so captions must get the whole deadline.
+	subCtx := ctx
+	if asrUsable(ctx) {
+		if dl, ok := ctx.Deadline(); ok {
+			subDeadline := dl.Add(-asrReserveBudget)
+			if time.Until(subDeadline) >= minSubtitleBudget {
+				var cancel context.CancelFunc
+				subCtx, cancel = context.WithDeadline(ctx, subDeadline)
+				defer cancel()
+			}
+		}
+	}
+
+	// Metadata (--dump-json) and subtitle download are two independent yt-dlp
+	// subprocesses, so run them concurrently — the metadata spawn overlaps the
+	// (usually longer) caption probes instead of adding its ~2-3s in series.
+	var (
+		meta    *ytMetadata
+		metaErr error
+		wg      sync.WaitGroup
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				metaErr = fmt.Errorf("metadata fetch panic: %v", r)
+			}
+		}()
+		meta, metaErr = fetchYouTubeMetadata(ctx, ytdlpPath, videoURL)
+	}()
+	transcript, lang, err := downloadSubtitles(subCtx, ytdlpPath, videoURL, tmpDir)
+	wg.Wait()
+
+	if metaErr != nil {
+		return nil, fmt.Errorf("metadata fetch: %w", metaErr)
 	}
 
 	result := &YouTubeResult{
@@ -282,24 +320,6 @@ func ExtractYouTubeTranscript(ctx context.Context, videoURL string) (*YouTubeRes
 		URL:         videoURL,
 	}
 
-	// Step 2: Download subtitles. When ASR is usable and the caller's deadline is
-	// tight (the web fetch path caps this at 90s), bound the caption probes so they
-	// can't consume the whole budget — leaving a reserve for the ASR fallback. The
-	// ASR call below still uses the original ctx, so it gets that reserved time.
-	// Gate the reserve on actual ASR readiness: if the sidecar is down there is no
-	// fallback to reserve for, so captions must get the whole deadline.
-	subCtx := ctx
-	if asrUsable(ctx) {
-		if dl, ok := ctx.Deadline(); ok {
-			subDeadline := dl.Add(-asrReserveBudget)
-			if time.Until(subDeadline) >= minSubtitleBudget {
-				var cancel context.CancelFunc
-				subCtx, cancel = context.WithDeadline(ctx, subDeadline)
-				defer cancel()
-			}
-		}
-	}
-	transcript, lang, err := downloadSubtitles(subCtx, ytdlpPath, videoURL, tmpDir)
 	if err != nil {
 		// No captions (or YouTube blocked them) — fall back to transcribing the
 		// audio with the local ASR service when one is wired. This is what makes
