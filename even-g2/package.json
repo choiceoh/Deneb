@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare:config": "node scripts/prepare-config.mjs",
+    "seed": "node scripts/make-seed.mjs",
+    "pack": "npm run prepare:config && npm run build && evenhub pack app.json dist -o deneb-glance.ehpk"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "^0.0.12"

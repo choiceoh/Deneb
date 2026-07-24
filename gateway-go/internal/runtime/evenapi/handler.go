@@ -50,6 +50,8 @@ type Config struct {
 	ResponseDeadline time.Duration
 	// Now, when set, replaces time.Now (tests).
 	Now func() time.Time
+	// Sources feeds GET /api/even/glance (optional; empty → calm empty copy).
+	Sources GlanceSources
 }
 
 // Handler serves OpenAI-shaped Custom AI requests for Even G2.
@@ -60,6 +62,7 @@ type Handler struct {
 	session  string
 	deadline time.Duration
 	now      func() time.Time
+	sources  GlanceSources
 
 	mu     sync.Mutex
 	dedupe map[string]dedupeEntry
@@ -96,6 +99,7 @@ func New(cfg Config) *Handler {
 		session:  sessionKey,
 		deadline: deadline,
 		now:      now,
+		sources:  cfg.Sources,
 		dedupe:   make(map[string]dedupeEntry),
 	}
 }
