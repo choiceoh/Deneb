@@ -1,0 +1,330 @@
+// Package evenapi exposes an Even Realities G2 Custom AI bridge on the
+// gateway: OpenAI-shaped chat completions in, short HUD text out via a
+// dedicated glasses:* sync chat session. Wormhole /v1/chat/completions is a
+// model proxy — do not reuse it for agent ingress.
+package evenapi
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
+)
+
+const (
+	// ResponseDeadline is how long Even Custom AI typically waits before
+	// giving up. Return an ack past this; the turn may continue in-session.
+	ResponseDeadline = 15 * time.Second
+
+	// DedupeWindow collapses Even's identical POST retries.
+	DedupeWindow = 5 * time.Second
+
+	glassesSystemHint = "You are answering via Even Realities G2 smart glasses. " +
+		"Reply in short Korean plain text only. No markdown, code fences, URLs, or emoji. " +
+		"Keep under 400 characters. If the task needs longer work, say one short status line " +
+		"and continue the full result in the phone Deneb session."
+
+	ackLongRunning = "확인. 처리 중 — 결과는 폰 데네브에서 이어서 볼게요."
+)
+
+// Config wires the G2 bridge.
+type Config struct {
+	Chat   chatport.SyncRunner
+	Logger *slog.Logger
+	// Token, when non-empty, overrides env DENEB_EVEN_G2_BRIDGE_TOKEN (tests).
+	Token string
+	// SessionKey defaults to glasses:main.
+	SessionKey string
+	// ResponseDeadline overrides ResponseDeadline (tests).
+	ResponseDeadline time.Duration
+	// Now, when set, replaces time.Now (tests).
+	Now func() time.Time
+}
+
+// Handler serves OpenAI-shaped Custom AI requests for Even G2.
+type Handler struct {
+	chat     chatport.SyncRunner
+	logger   *slog.Logger
+	token    string
+	session  string
+	deadline time.Duration
+	now      func() time.Time
+
+	mu     sync.Mutex
+	dedupe map[string]dedupeEntry
+}
+
+type dedupeEntry struct {
+	body      chatCompletionResponse
+	expiresAt time.Time
+}
+
+// New builds a G2 bridge handler. When neither Config.Token nor the env token
+// is set, ServeHTTP returns 503 (feature off).
+func New(cfg Config) *Handler {
+	sessionKey := strings.TrimSpace(cfg.SessionKey)
+	if sessionKey == "" {
+		sessionKey = session.GlassesWorkSessionKey
+	}
+	deadline := cfg.ResponseDeadline
+	if deadline <= 0 {
+		deadline = ResponseDeadline
+	}
+	now := cfg.Now
+	if now == nil {
+		now = time.Now
+	}
+	token := strings.TrimSpace(cfg.Token)
+	if token == "" {
+		token = LoadBridgeToken()
+	}
+	return &Handler{
+		chat:     cfg.Chat,
+		logger:   cfg.Logger,
+		token:    token,
+		session:  sessionKey,
+		deadline: deadline,
+		now:      now,
+		dedupe:   make(map[string]dedupeEntry),
+	}
+}
+
+// Enabled reports whether a bridge token is configured.
+func (h *Handler) Enabled() bool {
+	return h != nil && strings.TrimSpace(h.token) != ""
+}
+
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type chatCompletionRequest struct {
+	Model    string        `json:"model"`
+	Messages []chatMessage `json:"messages"`
+}
+
+type chatCompletionResponse struct {
+	ID      string                 `json:"id"`
+	Object  string                 `json:"object"`
+	Created int64                  `json:"created"`
+	Model   string                 `json:"model"`
+	Choices []chatCompletionChoice `json:"choices"`
+}
+
+type chatCompletionChoice struct {
+	Index        int         `json:"index"`
+	Message      chatMessage `json:"message"`
+	FinishReason string      `json:"finish_reason"`
+}
+
+// ChatCompletions handles POST /v1/chat/completions and POST /api/even/v1/chat/completions.
+func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
+	if h == nil {
+		http.Error(w, "even g2 bridge unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if !h.Enabled() {
+		writeErr(w, http.StatusServiceUnavailable, "even g2 bridge disabled (set "+EnvBridgeToken+")")
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	presented := ParseBearer(r.Header.Get("Authorization"))
+	if !tokenMatch(h.token, presented) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if h.chat == nil || !h.chat.ChatReady() {
+		writeErr(w, http.StatusServiceUnavailable, "chat not ready")
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "read body failed")
+		return
+	}
+	var req chatCompletionRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	utterance := lastUserContent(req.Messages)
+	if utterance == "" {
+		writeErr(w, http.StatusBadRequest, "missing user message")
+		return
+	}
+
+	if cached, ok := h.lookupDedupe(utterance); ok {
+		writeJSON(w, http.StatusOK, cached)
+		return
+	}
+
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = "deneb"
+	}
+
+	type runOut struct {
+		res *chatport.SyncResult
+		err error
+	}
+	outCh := make(chan runOut, 1)
+	runCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), chatport.InteractiveTurnDeadline)
+	go func() {
+		defer cancel()
+		res, err := h.chat.RunSync(runCtx, chatport.SyncRequest{
+			SessionKey:   h.session,
+			Message:      utterance,
+			SystemPrompt: glassesSystemHint,
+			Delivery: &chatport.DeliveryContext{
+				Channel: "client",
+				To:      h.session,
+			},
+			AutoDeliveredOutput: true,
+			GateUntrustedTools:  true,
+		})
+		outCh <- runOut{res: res, err: err}
+	}()
+
+	timer := time.NewTimer(h.deadline)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		resp := h.completion(model, ackLongRunning)
+		h.storeDedupe(utterance, resp)
+		writeJSON(w, http.StatusOK, resp)
+		go func() {
+			out := <-outCh
+			if out.err != nil && h.logger != nil {
+				h.logger.Warn("even g2 bridge: background turn failed after ack", "error", out.err)
+			}
+		}()
+	case out := <-outCh:
+		if out.err != nil {
+			if h.logger != nil {
+				h.logger.Warn("even g2 bridge: sync failed", "error", out.err)
+			}
+			writeErr(w, http.StatusBadGateway, "chat failed")
+			return
+		}
+		text := ""
+		if out.res != nil {
+			text = out.res.BestText
+			if text == "" {
+				text = out.res.Text
+			}
+			if out.res.Model != "" {
+				model = out.res.Model
+			}
+		}
+		cleaned := CleanForG2(text)
+		if cleaned == "" {
+			cleaned = "응답이 비어 있어요. 폰 데네브에서 확인해 주세요."
+		}
+		resp := h.completion(model, cleaned)
+		h.storeDedupe(utterance, resp)
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func (h *Handler) completion(model, content string) chatCompletionResponse {
+	return chatCompletionResponse{
+		ID:      shortid.New("chatcmpl"),
+		Object:  "chat.completion",
+		Created: h.now().Unix(),
+		Model:   model,
+		Choices: []chatCompletionChoice{{
+			Index: 0,
+			Message: chatMessage{
+				Role:    "assistant",
+				Content: content,
+			},
+			FinishReason: "stop",
+		}},
+	}
+}
+
+func lastUserContent(messages []chatMessage) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if strings.EqualFold(strings.TrimSpace(messages[i].Role), "user") {
+			return strings.TrimSpace(messages[i].Content)
+		}
+	}
+	return ""
+}
+
+func (h *Handler) lookupDedupe(utterance string) (chatCompletionResponse, bool) {
+	key := hashUtterance(utterance)
+	now := h.now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.purgeDedupeLocked(now)
+	ent, ok := h.dedupe[key]
+	if !ok || now.After(ent.expiresAt) {
+		return chatCompletionResponse{}, false
+	}
+	return ent.body, true
+}
+
+func (h *Handler) storeDedupe(utterance string, body chatCompletionResponse) {
+	key := hashUtterance(utterance)
+	now := h.now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.purgeDedupeLocked(now)
+	h.dedupe[key] = dedupeEntry{body: body, expiresAt: now.Add(DedupeWindow)}
+}
+
+func (h *Handler) purgeDedupeLocked(now time.Time) {
+	for k, ent := range h.dedupe {
+		if now.After(ent.expiresAt) {
+			delete(h.dedupe, k)
+		}
+	}
+}
+
+func hashUtterance(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:16])
+}
+
+func tokenMatch(expected, presented string) bool {
+	if expected == "" || presented == "" {
+		return false
+	}
+	if len(expected) != len(presented) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(expected), []byte(presented)) == 1
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeErr(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]any{
+		"error": map[string]any{
+			"message": msg,
+			"type":    "invalid_request_error",
+		},
+	})
+}

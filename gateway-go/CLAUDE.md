@@ -19,6 +19,7 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 |-----------|---------|
 | `cmd/gateway/` | Entry point (`cmd/gateway/main.go`), `--port`/`--bind` flags, graceful shutdown |
 | `internal/runtime/server/` | HTTP server: `/health`, `/api/v1/miniapp/rpc`, OpenAI APIs, hooks |
+| `internal/runtime/evenapi/` | Even Realities G2 Custom AI bridge (`POST /v1/chat/completions` → `glasses:main`) |
 | `internal/runtime/rpc/` | Registry-based RPC dispatcher, 200+ methods |
 | `internal/domain/session/` | Session lifecycle state machine (`IDLE → RUNNING → DONE/FAILED/KILLED/TIMEOUT`) |
 | `internal/pipeline/chat/` | System prompt, tool registration, context files, slash commands |

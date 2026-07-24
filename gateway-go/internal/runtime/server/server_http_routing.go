@@ -7,6 +7,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/evenapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
@@ -53,6 +54,16 @@ func (s *Server) buildMux() *http.ServeMux {
 		clientRoutes.ChatHandler = s.chatHandler
 	}
 	gatewayhttp.RegisterRoutes(mux, clientRoutes)
+	// Even Realities G2 Custom AI bridge (OpenAI-shaped → glasses:main sync chat).
+	// Distinct from wormhole /v1/chat/completions (model proxy). Requires
+	// DENEB_EVEN_G2_BRIDGE_TOKEN; disabled with 503 when unset.
+	g2Cfg := evenapi.Config{Logger: s.logger}
+	if s.ChatManager != nil {
+		g2Cfg.Chat = s.chatHandler
+	}
+	g2 := evenapi.New(g2Cfg)
+	mux.HandleFunc("POST /v1/chat/completions", g2.ChatCompletions)
+	mux.HandleFunc("POST /api/even/v1/chat/completions", g2.ChatCompletions)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)

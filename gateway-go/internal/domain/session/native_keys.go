@@ -16,6 +16,10 @@ const (
 	// heartbeat's user-facing report is delivered separately via the proactive
 	// relay (RelayNative → client:main + push), so isolation costs no visibility.
 	HeartbeatWorkSessionKey = "submain:heartbeat"
+	// GlassesWorkSessionKey is the Even Realities G2 Custom AI bridge session.
+	// Kept separate from client:main so HUD turns do not clutter the phone
+	// drawer; long results still land in this transcript for later review.
+	GlassesWorkSessionKey = "glasses:main"
 )
 
 // RestorableTranscriptChannel classifies transcript keys that should be
@@ -83,6 +87,8 @@ func WorkTypeForKey(sessionKey string) string {
 	case sessionKey == DreamWorkSessionKey:
 		return "dream"
 	case sessionKey == NativeWorkSessionKey ||
+		sessionKey == GlassesWorkSessionKey ||
+		strings.HasPrefix(sessionKey, "glasses:") ||
 		strings.HasPrefix(sessionKey, "client:") ||
 		strings.HasPrefix(sessionKey, "telegram:") ||
 		strings.HasPrefix(sessionKey, "discord:") ||
