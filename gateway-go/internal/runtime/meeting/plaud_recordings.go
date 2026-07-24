@@ -465,7 +465,7 @@ func (s *plaudRecordingsService) processRecording(ctx context.Context, f plaudFi
 func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile, transcript string, cands []mailanalysis.ProjectCandidate) (string, error) {
 	input := transcript
 	if utf8.RuneCountInString(transcript) > plaudDirectRunes && s.gist != nil {
-		reduced, err := s.reduceTranscript(ctx, transcript)
+		reduced, err := s.reduceTranscript(ctx, transcript, s.meetingHeader(f))
 		if err != nil {
 			s.logger.Warn("plaud recordings: chunk reduce failed, truncating instead", "error", err)
 			input = textutil.TruncateRunes(transcript, plaudDirectRunes, "")
@@ -555,9 +555,8 @@ func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile
 
 	system := b.String()
 
-	user := fmt.Sprintf("# 회의 정보\n- 제목: %s\n- 일시: %s (KST)\n- 길이: %d분\n\n# 프로젝트 후보 목록\n%s\n# 전사\n%s",
-		f.Name, f.StartAt.In(s.displayLoc).Format("2006-01-02 15:04"),
-		int(f.Duration.Minutes()), candList.String(), input)
+	user := fmt.Sprintf("%s\n# 프로젝트 후보 목록\n%s\n# 전사\n%s",
+		s.meetingHeader(f), candList.String(), input)
 
 	out, err := s.synthesize(ctx, system, user, plaudSynthesisTokens)
 	if err != nil {
@@ -570,20 +569,34 @@ func (s *plaudRecordingsService) analyzeMeeting(ctx context.Context, f plaudFile
 	return out, nil
 }
 
-// reduceTranscript map-reduces an over-long transcript: fixed-size rune chunks
-// → one gist each (local model) → concatenated gists as the synthesis input.
-func (s *plaudRecordingsService) reduceTranscript(ctx context.Context, transcript string) (string, error) {
-	runes := []rune(transcript)
-	var gists []string
-	for start := 0; start < len(runes); start += plaudChunkRunes {
-		end := start + plaudChunkRunes
-		if end > len(runes) {
-			end = len(runes)
-		}
+// meetingHeader renders the shared "# 회의 정보" block (title/date/length). Used
+// verbatim by the synthesis prompt and prepended to every reduce chunk so an
+// isolated chunk still knows which meeting it belongs to.
+func (s *plaudRecordingsService) meetingHeader(f plaudFile) string {
+	return fmt.Sprintf("# 회의 정보\n- 제목: %s\n- 일시: %s (KST)\n- 길이: %d분\n",
+		f.Name, f.StartAt.In(s.displayLoc).Format("2006-01-02 15:04"), int(f.Duration.Minutes()))
+}
+
+// reduceTranscript map-reduces an over-long transcript: chunks → one gist each
+// (local model) → concatenated gists as the synthesis input.
+//
+// Each chunk carries the meeting header (title/date) and its position, because a
+// chunk from the middle of a 2-hour meeting otherwise reaches the gist model with
+// no idea what meeting it is, who the participants are, or what came before — the
+// model then hedges or mislabels speakers, and those gists are all the synthesis
+// pass gets to see. Chunk boundaries also snap to a line break so an utterance
+// isn't sliced mid-sentence (both are the "prepend the thread topic / keep the
+// unit whole" lesson from Cerebras' knowledge-base write-up).
+func (s *plaudRecordingsService) reduceTranscript(ctx context.Context, transcript, meetingHeader string) (string, error) {
+	chunks := splitTranscriptChunks([]rune(transcript), plaudChunkRunes)
+	gists := make([]string, 0, len(chunks))
+	for i, chunk := range chunks {
 		chunkCtx, cancel := context.WithTimeout(ctx, plaudToolTimeout)
+		user := fmt.Sprintf("%s- 구간: %d/%d\n\n# 전사 구간\n%s", meetingHeader, i+1, len(chunks), chunk)
 		gist, err := s.gist(chunkCtx,
-			"회의 전사 조각을 읽고 진행 내용·결정·액션·수치를 보존한 한국어 요약을 10줄 이내로 써라. 발언자 이름은 유지하라.",
-			string(runes[start:end]), plaudChunkMaxTokens)
+			"회의 전사 조각을 읽고 진행 내용·결정·액션·수치를 보존한 한국어 요약을 10줄 이내로 써라. 발언자 이름은 유지하라. "+
+				"주어진 회의 정보(제목·일시)는 맥락 파악에만 쓰고 요약에 그대로 옮기지 마라.",
+			user, plaudChunkMaxTokens)
 		cancel()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -593,12 +606,44 @@ func (s *plaudRecordingsService) reduceTranscript(ctx context.Context, transcrip
 			// all-or-nothing fallback cut the meeting tail off (2026-07-10,
 			// gist overran max_tokens). Substitute a raw excerpt instead.
 			s.logger.Warn("plaud recordings: chunk gist failed, using raw excerpt",
-				"chunk", start/plaudChunkRunes, "error", err)
-			gist = textutil.TruncateRunes(string(runes[start:end]), plaudChunkFallbackRunes, "")
+				"chunk", i, "error", err)
+			gist = textutil.TruncateRunes(chunk, plaudChunkFallbackRunes, "")
 		}
 		gists = append(gists, strings.TrimSpace(gist))
 	}
 	return "(장시간 회의 — 구간별 요약본)\n\n" + strings.Join(gists, "\n\n---\n\n"), nil
+}
+
+// splitTranscriptChunks slices runes into ~size chunks, snapping each cut back to
+// the last line break in the final 20% of the window so a speaker's utterance
+// stays whole. A chunk with no usable break (one giant unbroken line) falls back
+// to the hard cut so progress is always made.
+func splitTranscriptChunks(runes []rune, size int) []string {
+	if size <= 0 || len(runes) == 0 {
+		return []string{string(runes)}
+	}
+	var out []string
+	for start := 0; start < len(runes); {
+		end := start + size
+		if end >= len(runes) {
+			out = append(out, string(runes[start:]))
+			break
+		}
+		// Look back over the tail of the window for an utterance boundary.
+		cut := -1
+		for i := end - 1; i > end-size/5 && i > start; i-- {
+			if runes[i] == '\n' {
+				cut = i + 1 // keep the newline with the earlier chunk
+				break
+			}
+		}
+		if cut > start {
+			end = cut
+		}
+		out = append(out, string(runes[start:end]))
+		start = end
+	}
+	return out
 }
 
 func (s *plaudRecordingsService) projectCandidates() []mailanalysis.ProjectCandidate {

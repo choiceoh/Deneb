@@ -3,6 +3,7 @@ package meeting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -446,7 +447,7 @@ func TestPlaudReduceTranscriptSurvivesChunkFailure(t *testing.T) {
 	transcript := strings.Repeat("가", plaudChunkRunes) +
 		strings.Repeat("나", plaudChunkRunes) +
 		strings.Repeat("다", plaudChunkRunes/2)
-	out, err := s.reduceTranscript(context.Background(), transcript)
+	out, err := s.reduceTranscript(context.Background(), transcript, "# 회의 정보\n- 제목: 테스트 회의\n")
 	if err != nil {
 		t.Fatalf("reduce: %v", err)
 	}
@@ -532,3 +533,72 @@ func TestPlaudAuthErrorThrottledNotice(t *testing.T) {
 type testError string
 
 func (e testError) Error() string { return string(e) }
+
+// Every reduce chunk must carry the meeting header + its position, so a chunk
+// from the middle of a long meeting still knows which meeting it belongs to
+// (an isolated chunk otherwise makes the gist model hedge or mislabel speakers).
+func TestPlaudReduceTranscriptPrependsMeetingContext(t *testing.T) {
+	s, _ := newTestPlaudService(t, func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		return "", nil
+	})
+	var prompts []string
+	s.gist = func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+		prompts = append(prompts, user)
+		return "요약", nil
+	}
+	transcript := strings.Repeat("가\n", plaudChunkRunes) + strings.Repeat("나\n", plaudChunkRunes)
+	header := "# 회의 정보\n- 제목: 무림 온산 협의\n- 일시: 2026-07-24 14:00 (KST)\n"
+	if _, err := s.reduceTranscript(context.Background(), transcript, header); err != nil {
+		t.Fatalf("reduce: %v", err)
+	}
+	if len(prompts) < 2 {
+		t.Fatalf("want multiple chunks, got %d", len(prompts))
+	}
+	for i, p := range prompts {
+		if !strings.Contains(p, "무림 온산 협의") {
+			t.Errorf("chunk %d lost the meeting title: %.120s", i, p)
+		}
+		if !strings.Contains(p, fmt.Sprintf("구간: %d/%d", i+1, len(prompts))) {
+			t.Errorf("chunk %d lost its position marker: %.120s", i, p)
+		}
+	}
+}
+
+// Chunk cuts snap back to a line break so a speaker's utterance is not sliced
+// mid-sentence; an unbreakable run still falls back to the hard cut.
+func TestSplitTranscriptChunksSnapsToUtteranceBoundary(t *testing.T) {
+	// Utterance lines short relative to the chunk size — the realistic shape
+	// (12k-rune chunks over speaker turns), so a break lands in the lookback tail.
+	line := strings.Repeat("가", 11) + "\n" // 12 runes
+	transcript := strings.Repeat(line, 25) // 300 runes
+	chunks := splitTranscriptChunks([]rune(transcript), 100)
+	if len(chunks) < 2 {
+		t.Fatalf("want a split, got %d chunk(s)", len(chunks))
+	}
+	// No chunk may begin mid-utterance: every chunk after the first starts right
+	// after a line break, which holds iff each prior chunk ends with one.
+	for i, c := range chunks[:len(chunks)-1] {
+		if !strings.HasSuffix(c, "\n") {
+			t.Errorf("chunk %d ends mid-utterance (must snap to a line break): ...%q", i, lastRunes(c, 6))
+		}
+	}
+	// Nothing may be lost or duplicated by the snap.
+	if joined := strings.Join(chunks, ""); joined != transcript {
+		t.Error("chunking must preserve the transcript exactly")
+	}
+
+	// One unbroken line: hard cut so progress is still made.
+	hard := splitTranscriptChunks([]rune(strings.Repeat("나", 250)), 100)
+	if len(hard) != 3 {
+		t.Errorf("unbreakable run: want 3 hard-cut chunks, got %d", len(hard))
+	}
+}
+
+// lastRunes returns the final n runes of s (rune-safe for error messages).
+func lastRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[len(r)-n:])
+}
