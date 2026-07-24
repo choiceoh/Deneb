@@ -46,10 +46,14 @@ const (
 	// longer tail is dropped with an explicit scope note; the full transcript
 	// is always in spillover.
 	youtubeSummaryMaxChunks = 4
-	// youtubeSummaryMaxTokens is the per-call output ceiling. The models stop
-	// naturally well under it on a 24k-char slice; this is headroom for dense
-	// segments, not a padding target.
+	// youtubeSummaryMaxTokens is the per-call output CEILING for very long / dense
+	// slices. The actual budget is scaled to the source length by
+	// summaryTokenBudget — a flat 8000 made the local tiny model spend ~a minute
+	// over-generating a summary longer than a short clip's own transcript.
 	youtubeSummaryMaxTokens = 8000
+	// youtubeSummaryMinTokens floors the scaled budget so even a short clip still
+	// gets a real, structured summary (not a one-liner).
+	youtubeSummaryMinTokens = 1200
 	// youtubeConclusionMaxTokens bounds the cross-chunk 핵심 결론 pass.
 	youtubeConclusionMaxTokens = 700
 	// youtubeFallbackExcerptChars bounds the inline excerpt kept when the local
@@ -140,7 +144,7 @@ func summarizeTranscript(ctx context.Context, r *media.YouTubeResult) (string, e
 	// full chunk plus a stub.
 	if len(runes) <= youtubeSummaryChunkChars+youtubeSummaryChunkChars/4 {
 		prompt := fmt.Sprintf("제목: %s\n채널: %s\n\n자막:\n%s", r.Title, r.Channel, string(runes))
-		return callYoutubeSummarizer(ctx, youtubeSummarySystemPrompt, prompt, youtubeSummaryMaxTokens)
+		return callYoutubeSummarizer(ctx, youtubeSummarySystemPrompt, prompt, summaryTokenBudget(len(runes)))
 	}
 	return summarizeTranscriptChunked(ctx, r, runes)
 }
@@ -148,6 +152,25 @@ func summarizeTranscript(ctx context.Context, r *media.YouTubeResult) (string, e
 // callYoutubeSummarizer is one bounded lightweight-model call. Free-text
 // summary on the non-reasoning model → append the reflective self-check to cut
 // factual errors/omissions (arXiv:2507.02778).
+// summaryTokenBudget scales the summarizer's output ceiling to the source
+// length. A transcript is ~4 chars/token, so runeCount/6 lets the summary run up
+// to ~2/3 of the source's token count — detailed and section-structured, but not
+// the padding a flat 8000-token ceiling invited on the local tiny model (a 6-min
+// clip generated ~a minute of summary longer than its own transcript, ~240% of
+// the source). Clamped to [min, max]; long dense slices still reach 8000 where
+// depth is warranted. Examples: a 17-min talk (~13.5k chars) → ~2.2k tokens
+// (~22s vs ~70s); a 6-min clip (~6.7k chars) → the 1.2k floor (~12s).
+func summaryTokenBudget(runeCount int) int {
+	budget := runeCount / 6
+	if budget < youtubeSummaryMinTokens {
+		return youtubeSummaryMinTokens
+	}
+	if budget > youtubeSummaryMaxTokens {
+		return youtubeSummaryMaxTokens
+	}
+	return budget
+}
+
 func callYoutubeSummarizer(ctx context.Context, system, prompt string, maxTokens int) (string, error) {
 	sctx, cancel := context.WithTimeout(ctx, youtubeSummaryTimeout)
 	defer cancel()
@@ -194,7 +217,7 @@ func summarizeTranscriptChunked(ctx context.Context, r *media.YouTubeResult, run
 			}()
 			prompt := fmt.Sprintf("제목: %s\n채널: %s\n(전체 %d구간 중 %d구간 자막)\n\n자막:\n%s",
 				r.Title, r.Channel, len(chunks), i+1, chunks[i])
-			summaries[i], errs[i] = callYoutubeSummarizer(ctx, youtubeChunkSystemPrompt, prompt, youtubeSummaryMaxTokens)
+			summaries[i], errs[i] = callYoutubeSummarizer(ctx, youtubeChunkSystemPrompt, prompt, summaryTokenBudget(len([]rune(chunks[i]))))
 		}(i)
 	}
 	wg.Wait()

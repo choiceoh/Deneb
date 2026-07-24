@@ -153,3 +153,25 @@ func TestSummarizeYouTubeResultServesCachedSummaryWithoutModel(t *testing.T) {
 		t.Fatalf("cache hit must not fall back to the excerpt path:\n%s", out)
 	}
 }
+
+func TestSummaryTokenBudgetScalesToTranscriptLength(t *testing.T) {
+	cases := []struct {
+		runes int
+		want  int
+	}{
+		{0, youtubeSummaryMinTokens},      // empty → floor
+		{6677, youtubeSummaryMinTokens},   // ~6-min clip → floor 1200 (not 8000)
+		{13459, 13459 / 6},                // ~17-min talk → ~2243, well under 8000
+		{24000, 4000},                     // one chunk → 4000
+		{200000, youtubeSummaryMaxTokens}, // very long/dense → ceiling 8000
+	}
+	for _, c := range cases {
+		if got := summaryTokenBudget(c.runes); got != c.want {
+			t.Errorf("summaryTokenBudget(%d) = %d, want %d", c.runes, got, c.want)
+		}
+	}
+	// The old flat ceiling over-generated: a short clip must now cap far below it.
+	if summaryTokenBudget(6677) >= youtubeSummaryMaxTokens {
+		t.Error("short clips must not use the full 8000-token ceiling")
+	}
+}
