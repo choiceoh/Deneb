@@ -20,8 +20,8 @@ meeting 런타임)가 한다.
   클라이언트에 섞으면 안 된다(경계 유지). 핸들러가 두 소스를 병합한다.
 - **Google 쓰기 미러**(로컬 일정 → 구글, 단방향)는 이 읽기 클라이언트가 아니라
   별도 `internal/platform/calwrite` 소관이다 — 같은 이유로 여기에 POST/PATCH/DELETE를
-  넣지 않는다. 기본 OFF(`DENEB_CALENDAR_GOOGLE_WRITE`), best-effort. 핸들러가 로컬 쓰기
-  성공 후 calwrite를 호출한다.
+  넣지 않는다. 기본 ON(`DENEB_CALENDAR_GOOGLE_WRITE=0`으로 off), best-effort. 핸들러가
+  로컬 쓰기 성공 후 calwrite를 호출한다.
 - API 실패는 반드시 `APIError`로 상태·본문을 보존해 올린다 — 문자열로 눌러
   버리면 상위의 재시도/진단이 불가능해진다.
 

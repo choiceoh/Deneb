@@ -67,6 +67,23 @@ func fixtureClient(t *testing.T, srv *httptest.Server) *Client {
 	return c
 }
 
+func TestWriteEnabled_DefaultsOnAndRespectsDisable(t *testing.T) {
+	t.Setenv("DENEB_CALENDAR_GOOGLE_WRITE", "")
+	if !writeEnabled() {
+		t.Error("mirror should be ON by default (empty/unset env)")
+	}
+	for _, off := range []string{"0", "false", "no", "off", "OFF"} {
+		t.Setenv("DENEB_CALENDAR_GOOGLE_WRITE", off)
+		if writeEnabled() {
+			t.Errorf("%q should disable the mirror", off)
+		}
+	}
+	t.Setenv("DENEB_CALENDAR_GOOGLE_WRITE", "1")
+	if !writeEnabled() {
+		t.Error(`"1" should keep the mirror on`)
+	}
+}
+
 func timedEvent() calendar.Event {
 	return calendar.Event{
 		Summary:  "부산 현장 협의",

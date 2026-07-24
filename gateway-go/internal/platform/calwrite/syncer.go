@@ -125,9 +125,10 @@ var (
 	globalSyncer *Syncer
 )
 
-// errWriteDisabled is returned by DefaultSyncer when the write mirror is off, so
-// the handler degrades to local-only exactly as before the feature existed.
-var errWriteDisabled = fmt.Errorf("Google Calendar 쓰기 동기화가 꺼져 있습니다 — 로컬 저장만 사용 (DENEB_CALENDAR_GOOGLE_WRITE=1 로 활성화)") //nolint:staticcheck // ST1005 — Korean operator-facing message
+// errWriteDisabled is returned by DefaultSyncer when the write mirror is turned
+// off, so the handler degrades to local-only exactly as before the feature
+// existed. The mirror is on by default; this fires only when explicitly disabled.
+var errWriteDisabled = fmt.Errorf("Google Calendar 쓰기 동기화가 꺼져 있습니다 — 로컬 저장만 사용 (DENEB_CALENDAR_GOOGLE_WRITE=0 으로 비활성화됨)") //nolint:staticcheck // ST1005 — Korean operator-facing message
 
 // DefaultSyncer returns the process-wide syncer, initializing on first call.
 // Returns errWriteDisabled (so every caller falls back to local-only) unless the
