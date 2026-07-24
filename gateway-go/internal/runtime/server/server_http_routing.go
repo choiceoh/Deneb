@@ -57,13 +57,17 @@ func (s *Server) buildMux() *http.ServeMux {
 	// Even Realities G2 Custom AI bridge (OpenAI-shaped → glasses:main sync chat).
 	// Distinct from wormhole /v1/chat/completions (model proxy). Requires
 	// DENEB_EVEN_G2_BRIDGE_TOKEN; disabled with 503 when unset.
-	g2Cfg := evenapi.Config{Logger: s.logger}
+	g2Cfg := evenapi.Config{
+		Logger:  s.logger,
+		Sources: s.evenGlanceSources(),
+	}
 	if s.ChatManager != nil {
 		g2Cfg.Chat = s.chatHandler
 	}
 	g2 := evenapi.New(g2Cfg)
 	mux.HandleFunc("POST /v1/chat/completions", g2.ChatCompletions)
 	mux.HandleFunc("POST /api/even/v1/chat/completions", g2.ChatCompletions)
+	mux.HandleFunc("GET /api/even/glance", g2.Glance)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)

@@ -1,6 +1,6 @@
 # Even Realities G2 × Deneb 연동 조사
 
-> **상태**: research snapshot (2026-07-15) · **P1 bridge landed** (`gateway-go/internal/runtime/evenapi`, `even-g2/` Glance scaffold) · 2026-07-24  
+> **상태**: research snapshot (2026-07-15) · **P1+P2/P0 landed** (`evenapi` chat+glance, HUD push, `even-g2/` seed/pack) · 2026-07-24  
 
 > **범위**: Even Realities G2 하드웨어·Even Hub SDK·Custom AI / Add Agent·커뮤니티 브리지 패턴 ↔ Deneb 게이트웨이·네이티브 클라·회의/번역 표면  
 > **방법**: Even Hub 공식 문서(Overview / Architecture / Device APIs / Display / FAQ / Packaging, 2026-06~07), 제품·지원 Specs, OpenClaw·Hermes/Juiz 커뮤니티 연동 글, BLE reverse-engineering 레포, Deneb `gateway-go` OpenAI/miniapp 표면 교차 확인  
@@ -374,3 +374,4 @@ Deneb 알림 제목/본문을 **한 줄 HUD 문법**으로 통일 → Even 알�
 |---|---|
 | 2026-07-15 | 초판 — Hub/SDK/FAQ + Custom AI 커뮤니티 계약 + Deneb 표면 교차 + P0–P4 로드맵 |
 | 2026-07-24 | P1: `evenapi` `POST /v1/chat/completions` (+ `/api/even/…`) → `glasses:main`; `DENEB_EVEN_G2_BRIDGE_TOKEN`; `even-g2/` Glance 플러그인 스캐폴드 |
+| 2026-07-24 | P2/P0: `GET /api/even/glance` (calendar/todo/workfeed); QR `?seed=` + `prepare-config`; proactive `FormatHUDPush` |
