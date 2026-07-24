@@ -30,10 +30,22 @@ type GlanceTodo struct {
 }
 
 type GlanceUrgent struct {
+	ID        string
 	Title     string
 	Preview   string // optional one-line summary snippet
+	Body      string // detail body for tap-through
 	Priority  int
 	CreatedAt time.Time // relative age on HUD
+}
+
+// GlanceItem is the wire shape for selectable HUD alerts (list → detail).
+type GlanceItem struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Preview  string `json:"preview,omitempty"`
+	Body     string `json:"body,omitempty"`
+	Priority int    `json:"priority,omitempty"`
+	Age      string `json:"age,omitempty"`
 }
 
 type GlanceSources struct {
@@ -52,6 +64,7 @@ type GlancePage struct {
 type GlanceBundle struct {
 	Text  string
 	Pages []GlancePage
+	Items []GlanceItem
 }
 
 type glanceCache struct {
@@ -99,6 +112,7 @@ func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, c
 	writeJSON(w, http.StatusOK, map[string]any{
 		"text":      bundle.Text,
 		"pages":     bundle.Pages,
+		"items":     bundle.Items,
 		"generated": at.Format(time.RFC3339),
 		"cached":    cached,
 	})
@@ -134,7 +148,46 @@ func BuildGlance(now time.Time, src GlanceSources) GlanceBundle {
 		{ID: "cal", Title: "일정", Text: calText, Empty: calEmpty},
 		{ID: "todo", Title: "할 일", Text: todoText, Empty: todoEmpty},
 	}
-	return GlanceBundle{Text: homeText, Pages: pages}
+	return GlanceBundle{Text: homeText, Pages: pages, Items: buildGlanceItems(urgent, now)}
+}
+
+func buildGlanceItems(items []GlanceUrgent, now time.Time) []GlanceItem {
+	sorted := sortUrgent(items)
+	out := make([]GlanceItem, 0, len(sorted))
+	for i, it := range sorted {
+		title := strings.TrimSpace(it.Title)
+		if title == "" {
+			continue
+		}
+		id := strings.TrimSpace(it.ID)
+		if id == "" {
+			id = "alert-" + strconv.Itoa(i+1)
+		}
+		preview := strings.TrimSpace(it.Preview)
+		body := strings.TrimSpace(it.Body)
+		if body == "" {
+			body = preview
+		}
+		if body == "" {
+			body = title
+		}
+		// Keep detail readable on G2 (~400 char practical HUD budget).
+		body = CleanForG2(body)
+		body = truncateRunes(body, 280)
+		preview = truncateRunes(CleanForG2(preview), 80)
+		out = append(out, GlanceItem{
+			ID:       id,
+			Title:    truncateRunes(title, 48),
+			Preview:  preview,
+			Body:     body,
+			Priority: it.Priority,
+			Age:      formatAge(it.CreatedAt, now),
+		})
+		if len(out) >= 12 {
+			break
+		}
+	}
+	return out
 }
 
 func cleanPage(s string) string {
@@ -185,9 +238,9 @@ func formatHomePage(now time.Time, events []GlanceEvent, urgent []GlanceUrgent, 
 		}
 	}
 	if n > shown {
-		lines = append(lines, "↓전체 "+strconv.Itoa(n-shown)+"건 더")
+		lines = append(lines, "↓전체 "+strconv.Itoa(n-shown)+"건 더 · 탭상세")
 	} else {
-		lines = append(lines, "↓전체 · 탭새로고침")
+		lines = append(lines, "탭=상세 · ↓전체")
 	}
 	return cleanPage(strings.Join(lines, "\n")), false
 }

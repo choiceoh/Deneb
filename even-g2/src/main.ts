@@ -3,6 +3,9 @@ import {
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
+  RebuildPageContainer,
+  ListContainerProperty,
+  ListItemContainerProperty,
   OsEventTypeList,
 } from '@evenrealities/even_hub_sdk'
 
@@ -10,26 +13,33 @@ import { resolveSettings, type GlanceSettings } from './settings'
 import {
   fetchGlance,
   fetchStatus,
+  formatAlertDetail,
   formatGeneratedLabel,
+  listLabel,
   pageTitle,
+  type GlanceItem,
   type GlancePage,
   type GlancePayload,
 } from './deneb'
 
 const bridge = await waitForEvenAppBridge()
 
-type Screen = 'setup' | 'page' | 'status'
+type Screen = 'setup' | 'page' | 'detail' | 'status'
 
 const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
 const AUTO_REFRESH_MS = 45_000
+const LIST_PAGE_IDS = new Set(['home', 'alerts'])
 
 let settings: GlanceSettings = { baseUrl: '', token: '' }
 let screen: Screen = 'setup'
 let busy = false
 let pages: GlancePage[] = []
+let items: GlanceItem[] = []
 let pageIndex = 0
+let detailIndex = -1
 let lastGenerated = ''
 let lastCached = false
+let uiMode: 'text' | 'list' = 'text'
 
 const mainText = new TextContainerProperty({
   xPosition: 0,
@@ -56,8 +66,30 @@ if (started !== 0) {
 }
 
 bridge.onEvenHubEvent((event) => {
+  if (event.listEvent) {
+    const le = event.listEvent
+    switch (le.eventType) {
+      case OsEventTypeList.CLICK_EVENT:
+      case undefined:
+        void openDetail(le.currentSelectItemIndex ?? 0)
+        break
+      case OsEventTypeList.DOUBLE_CLICK_EVENT:
+        bridge.shutDownPageContainer(1)
+        break
+      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+        void onSwipeNext()
+        break
+      case OsEventTypeList.SCROLL_TOP_EVENT:
+        void onSwipePrev()
+        break
+    }
+    return
+  }
+
   const textEvent = event.textEvent
-  if (!textEvent || textEvent.containerID !== 1) return
+  if (!textEvent) return
+  // Accept either main text (id 1) or header (id 2) when mixed layouts exist.
+  if (textEvent.containerID !== 1 && textEvent.containerID !== 2) return
 
   switch (textEvent.eventType) {
     case OsEventTypeList.CLICK_EVENT:
@@ -83,7 +115,7 @@ async function boot(): Promise<void> {
   settings = await resolveSettings()
   if (needsSetup(settings)) {
     screen = 'setup'
-    await show(setupCopy())
+    await showText(setupCopy())
     return
   }
   screen = 'page'
@@ -117,7 +149,13 @@ async function onTap(): Promise<void> {
       await refreshGlance(true)
       return
     }
-    await show(setupCopy())
+    await showText(setupCopy())
+    return
+  }
+  if (screen === 'detail') {
+    screen = 'page'
+    detailIndex = -1
+    await renderCurrentPage()
     return
   }
   if (screen === 'status') {
@@ -125,12 +163,29 @@ async function onTap(): Promise<void> {
     await renderCurrentPage()
     return
   }
+  // On list pages, CLICK is handled by listEvent. Text tap = refresh.
   await refreshGlance(true)
+}
+
+async function openDetail(index: number): Promise<void> {
+  if (busy) return
+  if (!LIST_PAGE_IDS.has(currentPageId())) return
+  if (!items.length) return
+  const i = Math.max(0, Math.min(items.length - 1, index | 0))
+  detailIndex = i
+  screen = 'detail'
+  await showText(`Deneb · 상세\n\n${formatAlertDetail(items[i])}`)
 }
 
 async function onSwipeNext(): Promise<void> {
   if (busy) return
   if (screen === 'setup') return
+  if (screen === 'detail') {
+    screen = 'page'
+    detailIndex = -1
+    await renderCurrentPage()
+    return
+  }
   if (screen === 'status') {
     screen = 'page'
     pageIndex = 0
@@ -155,6 +210,12 @@ async function onSwipeNext(): Promise<void> {
 async function onSwipePrev(): Promise<void> {
   if (busy) return
   if (screen === 'setup') return
+  if (screen === 'detail') {
+    screen = 'page'
+    detailIndex = -1
+    await renderCurrentPage()
+    return
+  }
   if (screen === 'status') {
     screen = 'page'
     const last = [...pages.keys()].reverse().find((i) => !isPageEmpty(pages[i]))
@@ -181,7 +242,7 @@ async function showStatus(): Promise<void> {
   if (busy) return
   if (needsSetup(settings)) {
     screen = 'setup'
-    await show(setupCopy())
+    await showText(setupCopy())
     return
   }
   busy = true
@@ -189,7 +250,7 @@ async function showStatus(): Promise<void> {
   try {
     const st = await fetchStatus(settings)
     const host = settings.baseUrl.replace(/^https?:\/\//, '')
-    await show(
+    await showText(
       [
         'Deneb · 상태',
         '',
@@ -203,7 +264,7 @@ async function showStatus(): Promise<void> {
     )
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    await show(`Deneb · 상태\n\n오류: ${msg}\n\n탭=페이지로`)
+    await showText(`Deneb · 상태\n\n오류: ${msg}\n\n탭=페이지로`)
   } finally {
     busy = false
   }
@@ -213,21 +274,33 @@ async function refreshGlance(fresh: boolean): Promise<void> {
   if (busy) return
   busy = true
   const keepId = currentPageId()
+  const keepDetailId = screen === 'detail' && detailIndex >= 0 ? items[detailIndex]?.id : ''
   try {
     settings = await resolveSettings()
     if (needsSetup(settings)) {
       screen = 'setup'
-      await show(setupCopy())
+      await showText(setupCopy())
       return
     }
-    screen = 'page'
-    await show('Deneb\n\n불러오는 중…')
+    if (screen !== 'detail') screen = 'page'
+    await showText('Deneb\n\n불러오는 중…')
     const payload = await fetchGlance(settings, { fresh })
     applyPayload(payload, keepId)
+    if (keepDetailId) {
+      const idx = items.findIndex((it) => it.id === keepDetailId)
+      if (idx >= 0) {
+        detailIndex = idx
+        screen = 'detail'
+        await showText(`Deneb · 상세\n\n${formatAlertDetail(items[idx])}`)
+        return
+      }
+    }
+    screen = 'page'
+    detailIndex = -1
     await renderCurrentPage()
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    await show(`Deneb\n\n오류: ${msg}\n\n탭=재시도 / ↓다음`)
+    await showText(`Deneb\n\n오류: ${msg}\n\n탭=재시도 / ↓다음`)
   } finally {
     busy = false
   }
@@ -236,8 +309,9 @@ async function refreshGlance(fresh: boolean): Promise<void> {
 function applyPayload(payload: GlancePayload, keepId: string): void {
   pages = sortPages(payload.pages)
   if (pages.length === 0) {
-    pages = [{ id: 'home', title: '오늘', text: payload.text }]
+    pages = [{ id: 'home', title: '알림', text: payload.text }]
   }
+  items = payload.items || []
   lastGenerated = payload.generated || ''
   lastCached = !!payload.cached
   const idx = pages.findIndex((p) => p.id === keepId)
@@ -266,19 +340,106 @@ function currentPageId(): string {
 async function renderCurrentPage(): Promise<void> {
   const page = pages[pageIndex] || {
     id: 'home',
-    title: '오늘',
-    text: '지금 볼 일정·긴급·할 일은 없어요.',
+    title: '알림',
+    text: '새 알림 없음',
   }
   const title = page.title || pageTitle(page.id)
+  if (LIST_PAGE_IDS.has(page.id) && items.length > 0) {
+    await showAlertList(title)
+    return
+  }
   const stamp = formatGeneratedLabel(lastGenerated, lastCached)
   const nav = `${pageIndex + 1}/${Math.max(pages.length, 1)}`
   const footer = stamp
     ? `↓다음 · 탭새로고침 · ${stamp}`
     : `↓다음(빈칸건너뜀) · ${nav}`
-  await show(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
+  await showText(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
 }
 
-async function show(content: string): Promise<void> {
+async function showAlertList(title: string): Promise<void> {
+  const labels = items.map(listLabel)
+  const stamp = formatGeneratedLabel(lastGenerated, lastCached)
+  const header = [
+    `Deneb · ${title}`,
+    `${items.length}건 · 탭=상세`,
+    stamp ? stamp : '↓다음페이지',
+  ].join('\n')
+
+  const headerText = new TextContainerProperty({
+    xPosition: 0,
+    yPosition: 0,
+    width: 576,
+    height: 72,
+    borderWidth: 0,
+    borderColor: 5,
+    paddingLength: 4,
+    containerID: 2,
+    containerName: 'header',
+    content: header,
+    isEventCapture: 0,
+    zOrderIndex: 0,
+  })
+  const list = new ListContainerProperty({
+    xPosition: 0,
+    yPosition: 72,
+    width: 576,
+    height: 216,
+    borderWidth: 0,
+    borderColor: 5,
+    paddingLength: 2,
+    containerID: 1,
+    containerName: 'alerts',
+    isEventCapture: 1,
+    zOrderIndex: 1,
+    itemContainer: new ListItemContainerProperty({
+      itemCount: labels.length,
+      itemWidth: 560,
+      isItemSelectBorderEn: 1,
+      itemName: labels,
+    }),
+  })
+  uiMode = 'list'
+  const ok = await bridge.rebuildPageContainer(
+    new RebuildPageContainer({
+      containerTotalNum: 2,
+      textObject: [headerText],
+      listObject: [list],
+    }),
+  )
+  if (!ok) {
+    // Fallback: text list if list rebuild fails on host.
+    await showText(
+      `Deneb · ${title}\n\n${labels.join('\n')}\n\n탭=새로고침 · ↓다음`,
+    )
+  }
+}
+
+async function showText(content: string): Promise<void> {
+  if (uiMode === 'list') {
+    uiMode = 'text'
+    await bridge.rebuildPageContainer(
+      new RebuildPageContainer({
+        containerTotalNum: 1,
+        textObject: [
+          new TextContainerProperty({
+            xPosition: 0,
+            yPosition: 0,
+            width: 576,
+            height: 288,
+            borderWidth: 0,
+            borderColor: 5,
+            paddingLength: 4,
+            containerID: 1,
+            containerName: 'main',
+            content,
+            isEventCapture: 1,
+          }),
+        ],
+      }),
+    )
+    return
+  }
+  uiMode = 'text'
   await bridge.textContainerUpgrade(
     new TextContainerUpgrade({
       containerID: 1,
@@ -287,6 +448,7 @@ async function show(content: string): Promise<void> {
     }),
   )
 }
+
 function startAutoRefresh(): void {
   setInterval(() => {
     if (busy || screen === 'setup') return
@@ -300,4 +462,3 @@ function isPageEmpty(p: GlancePage | undefined): boolean {
   if (p.id === 'home') return false
   return !!p.empty
 }
-

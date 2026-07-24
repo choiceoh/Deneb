@@ -82,7 +82,8 @@ func (s *Server) evenGlanceTodos(now time.Time) []evenapi.GlanceTodo {
 }
 
 func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
-	// Notification-first Glance: unacked workfeed cards at PriorityNormal+.
+	// Glance HUD: unread + unacked workfeed cards at PriorityNormal+.
+	// ReadAtMs>0 means the operator already opened the card in the native feed.
 	if s == nil || s.workFeedStore == nil {
 		return nil
 	}
@@ -93,6 +94,9 @@ func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
 	var out []evenapi.GlanceUrgent
 	for _, it := range items {
 		if it.Status == workfeed.StatusAcked {
+			continue
+		}
+		if it.ReadAtMs > 0 {
 			continue
 		}
 		if it.Priority > 0 && it.Priority < workfeed.PriorityNormal {
@@ -119,8 +123,12 @@ func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
 		if prio == 0 {
 			prio = workfeed.PriorityNormal
 		}
+		body := strings.TrimSpace(it.Body)
+		if body == "" {
+			body = preview
+		}
 		out = append(out, evenapi.GlanceUrgent{
-			Title: title, Preview: preview, Priority: prio, CreatedAt: created,
+			ID: it.ID, Title: title, Preview: preview, Body: body, Priority: prio, CreatedAt: created,
 		})
 		if len(out) >= 12 {
 			break
