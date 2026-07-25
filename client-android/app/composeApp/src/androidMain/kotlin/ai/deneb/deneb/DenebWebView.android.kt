@@ -1,21 +1,31 @@
 package ai.deneb.deneb
 
 import android.annotation.SuppressLint
+import android.app.DownloadManager
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +58,17 @@ actual fun DenebWebView(
     // evaluateJavascript back onto it on the main thread.
     val scope = rememberCoroutineScope()
     val holder = remember { WebViewHolder() }
+    val context = LocalContext.current
+
+    // Web forms with <input type="file"> need an activity result; without one the
+    // "파일 선택" button does nothing at all. The callback must be answered even on
+    // cancel, or the page's file input stays wedged for the rest of the session.
+    val fileChooser = remember { FileChooserHolder() }
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        fileChooser.deliver(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
+    }
 
     AndroidView(
         modifier = modifier,
@@ -65,8 +86,45 @@ actual fun DenebWebView(
                 // browserUserAgent — only that token is dropped, so the UA keeps
                 // this device's real Android/Chrome build.
                 web.settings.userAgentString = browserUserAgent(web.settings.userAgentString)
+                // Third-party cookies are off by default in a WebView, which breaks
+                // SSO/social sign-in on sites that hand the session off across hosts.
+                CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
+
+                // Downloads: a WebView with no listener drops the navigation with no
+                // error, so tapping a PDF/xlsx link does nothing at all. Hand it to
+                // DownloadManager with the page's cookies + UA so authenticated
+                // attachments (groupware, mail) actually come down.
+                web.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                    val name = browserDownloadFileName(url, contentDisposition, mimeType)
+                    val started = startBrowserDownload(context, url, userAgent, mimeType, name)
+                    Toast.makeText(
+                        context,
+                        if (started) "다운로드 시작: $name" else "다운로드를 시작할 수 없습니다",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
                 web.addJavascriptInterface(TranslateBridge(scope, translate, holder), BRIDGE_NAME)
                 web.webViewClient = object : WebViewClient() {
+                    // App/deep-link schemes (intent://, market://, kakaotalk://, tel:,
+                    // mailto:, bank cert auth) cannot be rendered by a WebView. With no
+                    // override the navigation just fails and the tap does nothing —
+                    // which is most Korean login/payment flows.
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): Boolean {
+                        val url = request.url?.toString().orEmpty()
+                        if (!isExternalSchemeUrl(url)) return false
+                        if (openExternalUrl(context, url)) return true
+                        // No app installed: intent:// may name a web page to use instead.
+                        intentFallbackUrl(url)?.let {
+                            view.loadUrl(it)
+                            return true
+                        }
+                        Toast.makeText(context, "이 링크를 열 앱이 없습니다", Toast.LENGTH_SHORT).show()
+                        return true
+                    }
+
                     override fun shouldInterceptRequest(
                         view: WebView,
                         request: WebResourceRequest,
@@ -134,6 +192,12 @@ actual fun DenebWebView(
                         state.progress = newProgress
                         state.loading = newProgress < 100
                     }
+
+                    override fun onShowFileChooser(
+                        webView: WebView,
+                        callback: ValueCallback<Array<Uri>>,
+                        params: FileChooserParams,
+                    ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
                 }
                 web.loadUrl(state.url)
             }
@@ -249,3 +313,93 @@ private fun emptyBlockedResponse(url: String): WebResourceResponse = WebResource
     "utf-8",
     ByteArrayInputStream(ByteArray(0)),
 )
+
+/**
+ * Hands an app/deep-link URL to the OS. Returns false when nothing can handle it,
+ * so the caller can fall back to the intent's browser_fallback_url.
+ *
+ * `intent://` URLs are parsed with [Intent.URI_INTENT_SCHEME] and then hardened:
+ * a page-supplied intent must not be able to name an explicit component or ride a
+ * selector into a non-browsable activity — that is how a WebView gets used to
+ * poke at private activities of other apps (and of Deneb itself). Forcing
+ * CATEGORY_BROWSABLE with no component leaves normal deep links working while
+ * limiting the reachable surface to activities that opted into web navigation.
+ */
+private fun openExternalUrl(context: Context, url: String): Boolean {
+    val intent = runCatching {
+        if (urlScheme(url) == "intent") {
+            Intent.parseUri(url, Intent.URI_INTENT_SCHEME).apply {
+                component = null
+                selector = null
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+        } else {
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+            }
+        }
+    }.getOrNull() ?: return false
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    // Any launch failure means "not handled" so the caller can fall back to
+    // browser_fallback_url or tell the user: ActivityNotFoundException (no app
+    // installed) and SecurityException (an activity that is not really exported)
+    // are both dead ends for this navigation.
+    return runCatching {
+        context.startActivity(intent)
+        true
+    }.getOrDefault(false)
+}
+
+/**
+ * Queues a download with the system DownloadManager, carrying the page's cookies
+ * and user-agent so authenticated attachments (groupware, mail) resolve instead
+ * of returning a login page.
+ */
+private fun startBrowserDownload(
+    context: Context,
+    url: String,
+    userAgent: String?,
+    mimeType: String?,
+    fileName: String,
+): Boolean = runCatching {
+    val request = DownloadManager.Request(Uri.parse(url)).apply {
+        setMimeType(mimeType)
+        CookieManager.getInstance().getCookie(url)?.let { addRequestHeader("cookie", it) }
+        userAgent?.takeIf { it.isNotBlank() }?.let { addRequestHeader("User-Agent", it) }
+        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+    }
+    val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    dm.enqueue(request)
+    true
+}.getOrDefault(false)
+
+/**
+ * Holds the pending `<input type="file">` callback across the activity result.
+ * A WebView keeps at most one file request open, and it MUST be answered — a
+ * dropped callback wedges the page's file input until reload, so cancel delivers
+ * null rather than nothing.
+ */
+private class FileChooserHolder {
+    private var pending: ValueCallback<Array<Uri>>? = null
+
+    /** Replaces any stale request (the page reloaded mid-pick) and launches. */
+    fun start(callback: ValueCallback<Array<Uri>>, launch: () -> Unit): Boolean {
+        pending?.onReceiveValue(null)
+        pending = callback
+        return runCatching {
+            launch()
+            true
+        }.getOrElse {
+            pending = null
+            callback.onReceiveValue(null)
+            false
+        }
+    }
+
+    fun deliver(uris: Array<Uri>?) {
+        val cb = pending ?: return
+        pending = null
+        cb.onReceiveValue(uris)
+    }
+}
