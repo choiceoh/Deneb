@@ -7,4 +7,10 @@ Type=oneshot
 # Go toolchain; ~/.local/bin carries the go symlink (same lesson as coding-dispatch).
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/deneb
+# The miner runs the benches LIVE (no --report args here): health-bench-v3 has a
+# 900s budget, runtime-health 300s, and rsi-bench another 600s when an rsi.bench.*
+# contract is pending. systemd's default TimeoutStartSec is 90s, which would
+# SIGTERM the run mid-bench and hand this lane the exact "exists but never
+# completes" failure the timers were installed to end. Sized above the sum.
+TimeoutStartSec=40min
 ExecStart=%h/deneb/scripts/audit/health-finding-miner.py

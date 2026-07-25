@@ -5,4 +5,8 @@ Description=Deneb SOP miner (recurring action n-grams -> composite-tool candidat
 Type=oneshot
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=%h/deneb
+# No bench subprocesses here (agentlog + gateway RPC only, each HTTP call bounded
+# at 30s), but a slow gateway must not hit systemd's 90s default and read as a
+# miner that silently never runs.
+TimeoutStartSec=10min
 ExecStart=%h/deneb/scripts/audit/sop-miner.py
