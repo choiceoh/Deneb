@@ -58,6 +58,13 @@ actual fun DenebWebView(
                 val mainHandler = Handler(Looper.getMainLooper())
                 web.settings.javaScriptEnabled = true
                 web.settings.domStorageEnabled = true
+                // Present as the mobile browser this is, not as an embedded
+                // WebView: Reddit answers the default `; wv` UA with its
+                // open-in-app gate, which pins an interstitial over the page and
+                // locks scrolling (the page draws but will not move). See
+                // browserUserAgent — only that token is dropped, so the UA keeps
+                // this device's real Android/Chrome build.
+                web.settings.userAgentString = browserUserAgent(web.settings.userAgentString)
                 web.addJavascriptInterface(TranslateBridge(scope, translate, holder), BRIDGE_NAME)
                 web.webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(
