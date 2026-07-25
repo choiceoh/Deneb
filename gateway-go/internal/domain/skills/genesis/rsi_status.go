@@ -152,10 +152,20 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		{Label: "신규 스킬", Value: strconv.Itoa(h.Genesis7d)},
 		{Label: "제안", Value: strconv.Itoa(h.Proposals7d)},
 		{Label: "기각", Value: strconv.Itoa(h.EvolveRejected7d)},
-		{Label: "판정자 장애", Value: strconv.Itoa(h.EvolveRejectedInfra7d)},
-		{Label: "확정률", Value: fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
-		{Label: "e-process", Value: rsiEProcessValue(t.eProcessCutoverReadiness())},
-		{Label: "라벨러 사각", Value: strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
+		// "판정자 장애" read as "the judge is broken". It counts rejections that were
+		// OUTAGES (the judge call itself failed) rather than verdicts, which is why
+		// it sits beside 기각 instead of inside it.
+		{Label: "판정 불능", Value: strconv.Itoa(h.EvolveRejectedInfra7d)},
+		// Carry the denominator. 확정률 is confirmed/(confirmed+rolled back) — only
+		// evolutions that SHIPPED and then resolved — so a bare "100%" sitting next
+		// to "기각 10" reads as a contradiction when the two count entirely different
+		// populations (a 기각 never shipped, so it can never be in this rate).
+		{Label: "확정률", Value: rsiConfirmRateValue(h.ConfirmRate, h.EvolveConfirmed7d, h.ResolvedEvolves7d)},
+		// The metric is who fires rollback, not the name of a subsystem.
+		{Label: "롤백 발화", Value: rsiEProcessValue(t.eProcessCutoverReadiness())},
+		// Live-use labels call the skill a success while its own held-out cases
+		// fail — a disagreement between two label sources, not a person's blind spot.
+		{Label: "라벨 불일치", Value: strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
 	}
 	base := newRSILayer(rsilifecycle.LayerL1, metrics)
 	switch {
@@ -817,10 +827,21 @@ func (t *Tracker) rsiDispatchEvidence(terminalLimit int) (rsiDispatchEvidence, e
 // rsiEProcessValue formats the L1 e-process cutover metric: who owns rollback
 // firing, and how the observation-mode label evidence stands against the
 // graduation thresholds (n>=20, agreement>=90%).
+// rsiConfirmRateValue renders 확정률 with the counts it came from. The rate alone
+// invites a false reading beside 기각: "100%" with ten rejections on the same row
+// looks self-contradictory until you can see the denominator is the two evolves
+// that actually shipped and resolved, not the ten that were turned away.
+func rsiConfirmRateValue(rate float64, confirmed, resolved int) string {
+	if resolved <= 0 {
+		return "착지분 없음"
+	}
+	return fmt.Sprintf("%.0f%% (%d/%d)", rate*100, confirmed, resolved)
+}
+
 func rsiEProcessValue(r eProcessCutoverReadiness) string {
 	switch {
 	case r.EProcessOwner:
-		return fmt.Sprintf("발화 소유 (라벨 n=%d)", r.Labels)
+		return fmt.Sprintf("e-process 소유 (관측 n=%d)", r.Labels)
 	case r.Ready:
 		return fmt.Sprintf("컷오버 준비 완료 (n=%d · 합치 %.0f%%)", r.Labels, r.AgreementRate*100)
 	case r.Labels == 0:
