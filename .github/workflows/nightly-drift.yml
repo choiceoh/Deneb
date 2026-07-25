@@ -346,3 +346,128 @@ jobs:
               --label nightly-drift \
               --body "$body"
           fi
+
+  autofix:
+    # Detection without repair is how #3775 sat red for eight straight nights
+    # and #4219 for another: this workflow filed an issue and waited for a
+    # human. But when the failing lane is a deterministic FORMATTER, the repair
+    # is deterministic too — the loop can author it instead of describing it.
+    #
+    # Scope is deliberately narrow. Only the four formatter lanes are in `needs`
+    # (rust runs check/clippy/test, nothing auto-fixable), only the lanes that
+    # actually failed get their fixer run, and the result is a PR — never a push
+    # to main. A non-formatting failure produces an empty diff and this job
+    # exits quietly, costing one no-op run on those nights.
+    #
+    # srv4 because spotlessApply needs the warm Gradle + Android SDK the kotlin
+    # lane already relies on.
+    name: autofix formatter drift
+    needs: [go-gate, kotlin, andromeda, docs]
+    if: failure()
+    runs-on: [self-hosted, srv4]
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      FIX_BRANCH: chore/nightly-format-autofix
+      ANDROID_HOME: /home/choiceoh/android-sdk
+      JAVA_HOME: /usr/lib/jvm/java-21-openjdk-arm64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - name: Apply the failing lanes' formatters
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.go-gate.result }}" = "failure" ]; then
+            make fmt
+          fi
+          if [ "${{ needs.docs.result }}" = "failure" ]; then
+            # Spellcheck failures are NOT auto-fixable (a codespell hit needs a
+            # human to choose the right word), so --fix only settles markdownlint.
+            make docs-lint-fix
+          fi
+          if [ "${{ needs.andromeda.result }}" = "failure" ]; then
+            cd andromeda && pnpm install --frozen-lockfile && pnpm run format
+          fi
+          if [ "${{ needs.kotlin.result }}" = "failure" ]; then
+            cd client-android/app && ./gradlew spotlessApply --console=plain
+          fi
+
+      - name: Open or update the autofix PR
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "no formatter drift — the failing lane was not a formatting problem"
+            exit 0
+          fi
+          # A formatter rewrites tracked files in place. If anything was added,
+          # deleted, renamed, or type-changed, whatever ran was not just
+          # formatting, and this job must not author that change unreviewed.
+          #
+          # Asked of git directly rather than by pattern-matching `git status`
+          # output: this is the safety guard, and the srv4 runner's `grep` is
+          # ugrep, whose -q/-v pairing does not return what GNU grep would — a
+          # guard written that way silently passes everything.
+          untracked=$(git ls-files --others --exclude-standard)
+          structural=$(git diff --name-only --diff-filter=ADRCT)
+          if [ -n "$untracked" ] || [ -n "$structural" ]; then
+            echo "::warning::autofix produced non-modification changes; refusing to open a PR"
+            git status --porcelain
+            exit 0
+          fi
+          files=$(git diff --name-only | sed 's/^/- `/; s/$/`/')
+          git config user.name "deneb-nightly-autofix"
+          git config user.email "noreply@github.com"
+          git checkout -B "$FIX_BRANCH"
+          # Fetch the remote-tracking ref first so --force-with-lease actually
+          # has a lease to check; without it the push either refuses outright or
+          # degrades to a blind force over whatever is there.
+          git fetch origin "+refs/heads/${FIX_BRANCH}:refs/remotes/origin/${FIX_BRANCH}" || true
+          git commit -am "fix(ci): 나이틀리 포맷 드리프트 자동 수리
+
+          Nightly Drift Watch가 main에서 포맷 게이트 실패를 감지해 해당 레인의
+          포맷터를 그대로 돌린 결과. 손으로 쓴 변경 없음.
+
+          실행: ${RUN_URL}"
+          git push --force-with-lease origin "$FIX_BRANCH"
+
+          body="## Summary
+
+          Nightly Drift Watch가 main에서 **포맷 게이트 실패**를 감지했습니다 ([실행](${RUN_URL})). 실패한 레인의 포맷터를 그대로 돌린 결과가 이 PR입니다 — 방치하면 해당 레인을 건드리는 다음 PR이 이 실패를 물려받습니다.
+
+          ## Changes
+
+          포맷터 출력뿐이고 손으로 쓴 변경은 없습니다. 파일 추가·삭제·이름변경이 섞이면 이 잡은 PR을 열지 않고 경고만 남깁니다(포맷터가 할 일이 아니므로).
+
+          ${files}
+
+          ## Verification
+
+          해당 레인의 포맷터(\`make fmt\` / \`make docs-lint-fix\` / \`pnpm run format\` / \`spotlessApply\`)가 자기 출력을 낸 것이므로 같은 레인의 check는 정의상 통과합니다. 랜딩 후 나이틀리가 main 전 레인을 재검증합니다.
+
+          > 체크가 비어 있으면 \`GITHUB_TOKEN\`으로 연 PR이라 \`pull_request\` 워크플로가 트리거되지 않은 것입니다. 브랜치에 빈 커밋을 얹으면 CI가 붙습니다."
+
+          existing=$(gh pr list --head "$FIX_BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr comment "$existing" --body "$body"
+            pr_url=$(gh pr view "$existing" --json url --jq .url)
+          else
+            pr_url=$(gh pr create \
+              --base main --head "$FIX_BRANCH" \
+              --title "fix(ci): 나이틀리 포맷 드리프트 자동 수리" \
+              --body "$body")
+          fi
+
+          # Close the loop for whoever reads the tracking issue: the repair
+          # already exists, so the issue should point at it instead of at a log
+          # to re-diagnose.
+          issue=$(gh issue list --label nightly-drift --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body "포맷 드리프트 부분은 자동 수리 PR이 준비돼 있습니다: ${pr_url}"
+          fi
