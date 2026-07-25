@@ -214,11 +214,33 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		resp := h.completion(model, ackLongRunning)
 		h.storeDedupe(utterance, resp)
 		writeJSON(w, http.StatusOK, resp)
+		// Even retries identical POSTs within DedupeWindow. The ack must not
+		// remain the cached answer once the detached turn finishes — otherwise
+		// retries never see the real reply and the HUD stays on "처리 중".
 		go func() {
 			out := <-outCh
-			if out.err != nil && h.logger != nil {
-				h.logger.Warn("even g2 bridge: background turn failed after ack", "error", out.err)
+			if out.err != nil {
+				if h.logger != nil {
+					h.logger.Warn("even g2 bridge: background turn failed after ack", "error", out.err)
+				}
+				return
 			}
+			text := ""
+			finalModel := model
+			if out.res != nil {
+				text = out.res.BestText
+				if text == "" {
+					text = out.res.Text
+				}
+				if out.res.Model != "" {
+					finalModel = out.res.Model
+				}
+			}
+			cleaned := CleanForG2(text)
+			if cleaned == "" {
+				return
+			}
+			h.storeDedupe(utterance, h.completion(finalModel, cleaned))
 		}()
 	case out := <-outCh:
 		if out.err != nil {
