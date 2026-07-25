@@ -32,4 +32,22 @@ fi
 python3 scripts/audit/rsi-bench.py --deep --refresh-cache \
   --write-snapshot --append-history
 
+# 3) e-process cutover evidence. The ladder's rollback half is structurally
+#    near-unreachable by waiting (no evolve has ever regressed), and this
+#    backtest is the designed substitute: it replays the archived usage history
+#    through BOTH rollback deciders and reports their agreement. It existed as a
+#    manual CLI wired nowhere, so the evidence the cutover decision needs was
+#    never actually produced. Read-only over ~/.deneb/data.
+if [[ -d gateway-go/cmd/rsi-backtest ]]; then
+  out="$HOME/.deneb/data/rsi-backtest-latest.txt"
+  if (cd gateway-go && go run ./cmd/rsi-backtest) > "$out.tmp" 2>&1; then
+    mv "$out.tmp" "$out"
+    echo "e-process backtest written to $out"
+    head -2 "$out"
+  else
+    rm -f "$out.tmp"
+    echo "WARNING: rsi-backtest failed; leaving the previous snapshot in place" >&2
+  fi
+fi
+
 echo "bench snapshots refreshed under $ROOT/scripts/audit/"

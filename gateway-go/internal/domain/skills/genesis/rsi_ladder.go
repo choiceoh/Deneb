@@ -148,6 +148,17 @@ func (t *Tracker) ladderEProcessRow() ladderRow {
 			// waiting on a DIFFERENT input than the count suggests.
 			detail += " · 공정 롤백 0건 (합치율이 확정만으로 계산돼 의미 없음)"
 		}
+		if r.RollbacksEver == 0 {
+			// The eProcessCutoverMinFairRollbacks comment already concedes this
+			// is "structurally near-unreachable" at threshold 3 and that the
+			// flip is meant to stay an operator decision. Saying so here is the
+			// difference between a reader waiting for evidence and a reader
+			// making the call: no evolve has ever regressed, so the rollback
+			// half of Ready has no path by waiting. cmd/rsi-backtest is the
+			// designed substitute — it replays the archive through BOTH
+			// deciders and reports their agreement today.
+			detail += " · 롤백 이력 0건 — 대기로는 충족 불가(설계상), 근거는 rsi-backtest·결정은 DENEB_EPROCESS_OWNS_ROLLBACK"
+		}
 		return ladderRow{"e-process 컷오버", ladderStateGrowing, detail}
 	}
 }
