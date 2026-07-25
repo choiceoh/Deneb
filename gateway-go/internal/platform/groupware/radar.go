@@ -269,7 +269,6 @@ func (r *Radar) scan(ctx context.Context) error {
 	sortApprovalSummaries(done)
 	nowMs := now.UnixMilli()
 	state.LastPollAt = nowMs
-	pendingIDs := make(map[string]struct{}, len(pending))
 	doneByID := make(map[string]ApprovalSummary, len(done))
 	for _, doc := range done {
 		if id := strings.TrimSpace(doc.DocID); id != "" {
@@ -277,6 +276,35 @@ func (r *Radar) scan(ctx context.Context) error {
 		}
 	}
 
+	candidates, pendingIDs := r.trackPending(&state, pending, nowMs)
+
+	var runErrs []error
+	runErrs = append(runErrs, r.notifyPending(ctx, &state, candidates, nowMs)...)
+	runErrs = append(runErrs, r.escalatePending(ctx, &state, pending, nowMs)...)
+	runErrs = append(runErrs, r.reconcileResolved(ctx, &state, pendingIDs, doneByID)...)
+
+	// 수신참조 lane last: a cc hiccup must never starve the action lane, and
+	// the pending/done work above is already reflected in state even when cc
+	// listing fails.
+	if r.onCCNew != nil {
+		runErrs = append(runErrs, r.scanCC(ctx, &state, nowMs)...)
+	}
+
+	if err := saveRadarState(r.statePath, state); err != nil {
+		runErrs = append(runErrs, err)
+	}
+	return errors.Join(runErrs...)
+}
+
+// trackPending folds this cycle's pending listing into durable per-doc state and
+// returns the docs due for an ingest attempt plus the set of still-pending ids
+// (the resolution pass needs it to tell "left the folder" from "never listed").
+func (r *Radar) trackPending(
+	state *radarState,
+	pending []ApprovalSummary,
+	nowMs int64,
+) ([]ApprovalSummary, map[string]struct{}) {
+	pendingIDs := make(map[string]struct{}, len(pending))
 	candidates := make([]ApprovalSummary, 0, len(pending))
 	for _, doc := range pending {
 		id := strings.TrimSpace(doc.DocID)
@@ -310,19 +338,29 @@ func (r *Radar) scan(ctx context.Context) error {
 			candidates = append(candidates, doc)
 		}
 	}
+	return candidates, pendingIDs
+}
 
-	var runErrs []error
+// notifyPending fires the pending callback for up to MaxPerCycle due documents,
+// arming the retry backoff on failure so one unreadable doc cannot own a slot.
+func (r *Radar) notifyPending(
+	ctx context.Context,
+	state *radarState,
+	candidates []ApprovalSummary,
+	nowMs int64,
+) []error {
+	var errs []error
 	for i, doc := range candidates {
 		if i >= r.maxPerCycle {
 			break
 		}
 		if r.onPending == nil {
-			runErrs = append(runErrs, fmt.Errorf("pending approval %s: callback unavailable", doc.DocID))
+			errs = append(errs, fmt.Errorf("pending approval %s: callback unavailable", doc.DocID))
 			continue
 		}
 		if err := r.onPending(ctx, doc); err != nil {
 			delay := r.noteDocFailure(state.Docs, doc.DocID, nowMs)
-			runErrs = append(runErrs, fmt.Errorf(
+			errs = append(errs, fmt.Errorf(
 				"pending approval %s (attempt %d, retry in %s): %w",
 				doc.DocID, state.Docs[doc.DocID].FailCount, delay, err,
 			))
@@ -334,8 +372,18 @@ func (r *Radar) scan(ctx context.Context) error {
 		stored.NextAttemptAt = 0
 		state.Docs[doc.DocID] = stored
 	}
+	return errs
+}
 
-	// Escalate an existing card at most once per threshold without another LLM turn.
+// escalatePending raises an already-notified card at most once per threshold,
+// without spending another LLM turn.
+func (r *Radar) escalatePending(
+	ctx context.Context,
+	state *radarState,
+	pending []ApprovalSummary,
+	nowMs int64,
+) []error {
+	var errs []error
 	escalated := 0
 	for _, doc := range pending {
 		if escalated >= r.maxEscalations {
@@ -351,23 +399,34 @@ func (r *Radar) scan(ctx context.Context) error {
 			continue
 		}
 		if r.onEscalated == nil {
-			runErrs = append(runErrs, fmt.Errorf("escalate approval %s: callback unavailable", doc.DocID))
+			errs = append(errs, fmt.Errorf("escalate approval %s: callback unavailable", doc.DocID))
 			continue
 		}
 		if err := r.onEscalated(ctx, doc, level, age); err != nil {
-			runErrs = append(runErrs, fmt.Errorf("escalate approval %s: %w", doc.DocID, err))
+			errs = append(errs, fmt.Errorf("escalate approval %s: %w", doc.DocID, err))
 			continue
 		}
 		stored.EscalationLevel = level
 		state.Docs[doc.DocID] = stored
 		escalated++
 	}
+	return errs
+}
 
+// reconcileResolved drops tracking only for docs positively observed in the done
+// folder — absence from pending alone is never proof of resolution.
+func (r *Radar) reconcileResolved(
+	ctx context.Context,
+	state *radarState,
+	pendingIDs map[string]struct{},
+	doneByID map[string]ApprovalSummary,
+) []error {
 	trackedIDs := make([]string, 0, len(state.Docs))
 	for id := range state.Docs {
 		trackedIDs = append(trackedIDs, id)
 	}
 	sort.Strings(trackedIDs)
+	var errs []error
 	for _, id := range trackedIDs {
 		if _, stillPending := pendingIDs[id]; stillPending {
 			continue
@@ -377,27 +436,16 @@ func (r *Radar) scan(ctx context.Context) error {
 			continue
 		}
 		if r.onResolved == nil {
-			runErrs = append(runErrs, fmt.Errorf("resolved approval %s: callback unavailable", id))
+			errs = append(errs, fmt.Errorf("resolved approval %s: callback unavailable", id))
 			continue
 		}
 		if err := r.onResolved(ctx, doneDoc); err != nil {
-			runErrs = append(runErrs, fmt.Errorf("resolved approval %s: %w", id, err))
+			errs = append(errs, fmt.Errorf("resolved approval %s: %w", id, err))
 			continue
 		}
 		delete(state.Docs, id)
 	}
-
-	// 수신참조 lane last: a cc hiccup must never starve the action lane, and
-	// the pending/done work above is already reflected in state even when cc
-	// listing fails.
-	if r.onCCNew != nil {
-		runErrs = append(runErrs, r.scanCC(ctx, &state, nowMs)...)
-	}
-
-	if err := saveRadarState(r.statePath, state); err != nil {
-		runErrs = append(runErrs, err)
-	}
-	return errors.Join(runErrs...)
+	return errs
 }
 
 // scanCC diffs the 수신참조 folder and fires OnCCNew once per newly observed
