@@ -278,12 +278,24 @@ jobs:
           베이스라인을 낮춰 통과시키지 마세요 (일방향 래칫)."
           existing=$(gh issue list --label health-bench --state open --json number --jq '.[0].number // empty')
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "$body"
+            # Refresh the body in place instead of appending a comment every
+            # night. A regression that persists is the normal case here (health-v2
+            # ran 8 straight red nights, #3775); an identical daily comment buries
+            # the issue rather than informing anyone. The streak counter is the
+            # part that actually carries new information.
+            prev=$(gh issue view "$existing" --json body --jq .body)
+            days=$(printf '%s' "$prev" | sed -n 's/^연속 회귀: \([0-9]\{1,\}\)일차.*/\1/p' | head -1)
+            days=$(( ${days:-1} + 1 ))
+            gh issue edit "$existing" --body "연속 회귀: ${days}일차
+
+          $body"
           else
             gh issue create \
               --title "health bench: main 래칫 회귀" \
               --label health-bench \
-              --body "$body"
+              --body "연속 회귀: 1일차
+
+          $body"
           fi
 
   docs:
