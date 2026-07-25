@@ -13,8 +13,9 @@
 //
 //   quiet poll   ok    → the framebuffer must stay byte-identical
 //   redraw       alt   → a genuinely changed payload must repaint
-//   detail       —     → list tap opens a detail, a second tap leaves it
-//   navigation   —     → swipes reach text AND list (list PAGING: observed only)
+//   detail       —     → a tap opens a detail, a second tap leaves it
+//   alert cursor —     → a swipe moves it, a tap opens THAT alert
+//   paging       —     → swiping past the last alert reaches further pages
 //   mid-poll tap slow  → a tap during an in-flight poll must not be dropped
 //   deadline     slow  → a hung gateway must not wedge `busy` (🔴 of #4267)
 //   backoff      error → the retry interval must widen past the 45s base
@@ -232,9 +233,6 @@ async function main() {
   })
 
   const failures = []
-  // Things the harness measures but does not gate on — see the list-scroll
-  // block below for why an observation can be more honest than an assertion.
-  const observations = {}
   const check = (ok, msg) => {
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${msg}`)
     if (!ok) failures.push(msg)
@@ -269,98 +267,65 @@ async function main() {
     'unchanged payload left the HUD byte-identical (no loading flash, no rebuild)',
   )
 
-  // ── swipe navigation ────────────────────────────────────────────────────
-  // Runs HERE, on the ok payload, because the list needs more than one item.
-  // The first CI run (30162600973) put this under the 1-item alt payload and
-  // all four down-swipes produced ZERO host events: a list with nowhere to
-  // scroll swallows them and never reaches SCROLL_BOTTOM. That was a defect in
-  // the test, not the app — the console artifact showed the app receiving
-  // nothing at all.
+  // ── alert cursor + paging ───────────────────────────────────────────────
+  // Runs HERE, on the ok payload, because it needs more than one alert.
   //
-  // The two container kinds are asserted SEPARATELY so a failure says which one
-  // is deaf without having to go read the console artifact. Text first: a
-  // detail screen is a plain text container, and a down-swipe there returns to
-  // the list, so one swipe is a complete round trip.
+  // These were OBSERVATIONS until the alerts moved off the host's list
+  // container. The host owned the selection and told the app nothing about it
+  // — no index on the click, no scroll event at the end of the list — so the
+  // two things that matter most about an alert page could only be watched, not
+  // asserted, and the simulator's README disclaims that area's fidelity
+  // anyway. With an app-owned cursor on a text container both are the app's
+  // behaviour, so both are gated here.
   await input('click')
   await sleep(2_500)
-  const detailOfItem0 = await screenshot('03-detail-of-item-0')
+  const detailOfAlert0 = await screenshot('03-detail-of-alert-0')
   await input('down')
   await sleep(2_500)
-  const afterTextSwipe = await screenshot('04-after-swipe-on-text')
+  const alertPage = await screenshot('04-back-on-the-alert-page')
   check(
-    Buffer.compare(detailOfItem0, afterTextSwipe) !== 0,
-    'a swipe reaches a text container (leaves the detail)',
+    Buffer.compare(detailOfAlert0, alertPage) !== 0,
+    'a swipe leaves a detail (scroll reaches a text container)',
   )
 
-  // Now the list. A swipe DOES reach it — the first down visibly moves the
-  // selection border to the next item. That is asserted, because it is the
-  // control that makes the observation below interpretable: it proves inputs
-  // are arriving, so "nothing happens afterwards" is a boundary behaviour and
-  // not a dropped input.
-  //
-  // The earlier "INERT (1 distinct of 4)" reading was a measurement mistake:
-  // the four swipe frames were compared only against EACH OTHER, so the first
-  // swipe's real change fell outside the window. The baseline frame fixes it.
-  const listBeforeSwipes = await screenshot('05-list-before-swipes')
-  const swipeShots = []
-  for (const i of [1, 2, 3, 4]) {
-    await input('down')
-    await sleep(2_500)
-    swipeShots.push(await screenshot(`06-swipe-down-${i}`))
-  }
+  // One swipe moves the cursor to the second alert.
+  await input('down')
+  await sleep(2_500)
+  const cursorMoved = await screenshot('05-cursor-on-alert-1')
   check(
-    Buffer.compare(listBeforeSwipes, swipeShots[0]) !== 0,
-    'a swipe reaches a list container (moves the selection)',
+    Buffer.compare(alertPage, cursorMoved) !== 0,
+    'a swipe moves the alert cursor',
   )
 
-  // OBSERVED, not asserted: what happens once the selection is at the END.
-  // The host keeps the scroll to itself — no SCROLL_BOTTOM ever reaches the
-  // app — so the app can never page away from a list. That would strand the
-  // cal/todo pages whenever there are alerts (a tap opens a detail, a
-  // double-tap exits). But the simulator's own README disclaims this area:
-  //
-  //   "List Behavior — List scrolling behavior, especially focused-item
-  //    positioning on screen, can vary. This happens because the simulator
-  //    re-implements drawing logic instead of sharing embedded source code."
-  //
-  // Gating on it would make the nightly permanently red on something the
-  // vendor says is not reproduced faithfully, so it goes to the artifacts and
-  // to the one instrument that can settle it: the operator's actual G2.
-  const framesSeen = new Set([listBeforeSwipes, ...swipeShots].map((b) => b.toString('base64'))).size
-  const pagedAway = framesSeen > 2
-  console.log(
-    `OBSERVE  list paging: ${pagedAway ? 'reaches another page' : 'STOPS at the end of the list'} ` +
-      `(${framesSeen} distinct frames over ${swipeShots.length} swipes) — simulator fidelity disclaimed, verify on device`,
-  )
-  observations.listPaging = {
-    distinctFrames: framesSeen,
-    swipes: swipeShots.length,
-    pagedAway,
-    note: 'host consumes scroll for its own selection; no boundary event reaches the app',
-  }
-
-  // OBSERVED: does a tap open the SELECTED item, or always the first one?
-  // The selection is now at the last item. Every listEvent seen so far carried
-  // no `currentSelectItemIndex`, so resolveSelectionIndex falls back to item 0
-  // — which would mean the wearer selects one alert and reads a different one.
-  // That is a worse failure than not being able to page, so it is measured
-  // explicitly rather than inferred from the event shape.
+  // …and a tap must open THAT alert, not the first one. This is the check the
+  // host list could never pass: it sent no currentSelectItemIndex, so the
+  // wearer highlighted alert #2 and read alert #1.
   await input('click')
   await sleep(2_500)
-  const detailOfSelected = await screenshot('07-detail-after-selection-moved')
-  const opensSelected = Buffer.compare(detailOfItem0, detailOfSelected) !== 0
-  console.log(
-    `OBSERVE  list tap opens ${opensSelected ? 'the SELECTED item' : 'ITEM 0 REGARDLESS of the selection'} ` +
-      `— simulator fidelity disclaimed, verify on device`,
+  const detailOfAlert1 = await screenshot('06-detail-of-alert-1')
+  check(
+    Buffer.compare(detailOfAlert0, detailOfAlert1) !== 0,
+    'a tap opens the alert the cursor is on (not always the first)',
   )
-  observations.listSelectionHonoured = {
-    opensSelected,
-    note: opensSelected
-      ? 'host reported the selection; tap opens what the wearer highlighted'
-      : 'host sent no currentSelectItemIndex; the wearer would read an alert they did not select',
-  }
-  await input('click') // leave the detail, back to the list
+  await input('click') // back to the alert page, cursor still on alert 1
   await sleep(2_500)
+
+  // With the cursor on the LAST alert, further swipes must leave the page.
+  // The host list stopped dead here, which stranded cal/todo behind the alerts
+  // whenever there were any — a tap opens a detail and a double-tap exits, so
+  // there was no other way out.
+  const beforePaging = await screenshot('07-before-paging-away')
+  const pageShots = []
+  for (const i of [1, 2, 3]) {
+    await input('down')
+    await sleep(2_500)
+    pageShots.push(await screenshot(`08-page-down-${i}`))
+  }
+  const framesSeen = new Set([beforePaging, ...pageShots].map((b) => b.toString('base64'))).size
+  check(
+    framesSeen >= 3,
+    `swiping past the last alert reaches further pages (${framesSeen} distinct frames over ${pageShots.length} swipes)`,
+  )
 
   // Walk back up. Four is enough to bottom out at home from anywhere above,
   // and it leaves the status screen — the background poll deliberately skips
@@ -368,7 +333,7 @@ async function main() {
   for (const i of [1, 2, 3, 4]) {
     await input('up')
     await sleep(2_000)
-    if (i === 4) await screenshot('08-swiped-back-home')
+    if (i === 4) await screenshot('09-swiped-back-home')
   }
 
   // ── the other half of change detection: a REAL change must redraw ───────
@@ -379,11 +344,11 @@ async function main() {
   // Deliberately NOT triggered by a tap: on a list page a tap opens a detail
   // (that is what listEvent means), so a tap-driven version of this check
   // would pass on a screen change that has nothing to do with the payload.
-  const beforeChange = await screenshot('09-before-payload-change')
+  const beforeChange = await screenshot('10-before-payload-change')
   await stub.setMode('alt')
   console.log(`waiting ${Math.round(CYCLE_WAIT_MS / 1000)}s for the changed payload to land…`)
   await sleep(CYCLE_WAIT_MS)
-  const afterChange = await screenshot('10-after-payload-change')
+  const afterChange = await screenshot('11-after-payload-change')
   check(
     Buffer.compare(beforeChange, afterChange) !== 0,
     'a changed payload DID redraw the HUD (change detection is not stuck closed)',
@@ -393,11 +358,11 @@ async function main() {
   const listView = afterChange
   await input('click')
   await sleep(2_500)
-  const detailView = await screenshot('11-detail')
+  const detailView = await screenshot('12-detail')
   check(Buffer.compare(listView, detailView) !== 0, 'a list tap opens a detail screen')
   await input('click')
   await sleep(2_500)
-  const backToList = await screenshot('12-back-to-list')
+  const backToList = await screenshot('13-back-to-list')
   // Byte-equality with listView would be wrong to assert: the list header
   // carries a relative "N분 전" stamp that ticks over.
   check(
@@ -418,10 +383,10 @@ async function main() {
   await stub.setMode('slow')
   const beforeInflight = stub.counts().glance
   await waitFor('a poll to be in flight', async () => stub.counts().glance > beforeInflight, 60_000)
-  const duringPoll = await screenshot('13-during-hung-poll')
+  const duringPoll = await screenshot('14-during-hung-poll')
   await input('click')
   await sleep(3_000)
-  const tappedDuringPoll = await screenshot('14-tapped-during-hung-poll')
+  const tappedDuringPoll = await screenshot('15-tapped-during-hung-poll')
   check(
     Buffer.compare(duringPoll, tappedDuringPoll) !== 0,
     'a tap during an in-flight poll still opens the detail (navigation is not gated on the network)',
@@ -435,10 +400,10 @@ async function main() {
   // early, and runScheduledRefresh stops fetching — the app is dead until the
   // WebView restarts. The count is the proof: it can only keep rising if
   // `busy` was released.
-  const hangFrom = await screenshot('15-before-hung-gateway')
+  const hangFrom = await screenshot('16-before-hung-gateway')
   console.log(`waiting ${Math.round(HANG_WATCH_MS / 1000)}s across a hung poll…`)
   await sleep(HANG_WATCH_MS)
-  const afterHang = await screenshot('16-after-hung-gateway')
+  const afterHang = await screenshot('17-after-hung-gateway')
   check(
     Buffer.compare(hangFrom, afterHang) === 0,
     'a hung background poll stayed off the display (no error flash in the wearer’s view)',
@@ -511,12 +476,11 @@ async function main() {
     countAfterShutdown === countAtShutdown,
     `no gateway traffic after shutdown (${countAtShutdown} → ${countAfterShutdown})`,
   )
-  await screenshot('17-after-shutdown')
+  await screenshot('18-after-shutdown')
 
   const finalLogs = await console_()
   writeFileSync(join(ARTIFACTS, 'console.json'), JSON.stringify(finalLogs, null, 2))
   writeFileSync(join(ARTIFACTS, 'stub-counts.json'), JSON.stringify(stub.counts(), null, 2))
-  writeFileSync(join(ARTIFACTS, 'observations.json'), JSON.stringify(observations, null, 2))
 
   if (failures.length) {
     console.error(`\n${failures.length} check(s) failed:`)

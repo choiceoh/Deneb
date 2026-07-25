@@ -56,6 +56,31 @@ export function payloadSignature(payload: GlancePayload): string {
   return `${pages}${items}`
 }
 
+/** clampCursor keeps an alert cursor inside the current item list. */
+export function clampCursor(cursor: number, count: number): number {
+  if (count <= 0) return 0
+  if (!Number.isFinite(cursor) || cursor < 0) return 0
+  const i = Math.trunc(cursor)
+  return i >= count ? count - 1 : i
+}
+
+/**
+ * advanceCursor decides what a swipe on an alert page means.
+ *
+ * Returns the new cursor position, or `'page'` when the swipe should leave the
+ * alert page entirely. That boundary is the whole point: the host's list
+ * container used to own it and emitted NOTHING at the end of the list, which
+ * stranded every page behind the alerts. Owning it here also makes it testable
+ * without the glasses.
+ */
+export function advanceCursor(cursor: number, count: number, dir: 1 | -1): number | 'page' {
+  if (count <= 0) return 'page'
+  const at = clampCursor(cursor, count)
+  const next = at + dir
+  if (next < 0 || next >= count) return 'page'
+  return next
+}
+
 /**
  * Selection index guard for a list click.
  *

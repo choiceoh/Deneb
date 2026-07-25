@@ -3,13 +3,10 @@ import {
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
-  RebuildPageContainer,
-  ListContainerProperty,
-  ListItemContainerProperty,
 } from '@evenrealities/even_hub_sdk'
 
 import { resolveSettings, type GlanceSettings } from './settings'
-import { nextDelayMs, payloadSignature, resolveSelectionIndex } from './refresh'
+import { advanceCursor, clampCursor as clampCursorTo, nextDelayMs, payloadSignature, resolveSelectionIndex } from './refresh'
 import { dispatchHubEvent } from './events'
 import {
   fetchGlance,
@@ -39,7 +36,18 @@ let pageIndex = 0
 let detailIndex = -1
 let lastGenerated = ''
 let lastCached = false
-let uiMode: 'text' | 'list' = 'text'
+/**
+ * Which alert the cursor is on, on an alert page.
+ *
+ * The app owns this instead of the host's list container. The simulator run
+ * (30176035571) showed why: the host moves a list's own selection on a swipe
+ * and then tells the app NOTHING — no scroll event at the end of the list, and
+ * no `currentSelectItemIndex` on the click. So a host-owned list could neither
+ * page away nor report what the wearer had actually highlighted, and a tap
+ * always opened alert #1. An app-owned cursor on a plain text container makes
+ * both behaviours ours, and therefore testable.
+ */
+let listCursor = 0
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
 let consecutiveFailures = 0
 let lastSignature = ''
@@ -197,7 +205,13 @@ async function onTap(): Promise<void> {
     await renderCurrentPage()
     return
   }
-  // On list pages, CLICK is handled by listEvent. Text tap = refresh.
+  // On an alert page a tap opens what the CURSOR is on — the primary action,
+  // and now unambiguous because the app owns the cursor. Everywhere else a tap
+  // is a manual refresh.
+  if (onAlertPage()) {
+    await openDetail(clampCursor())
+    return
+  }
   await refreshGlance(true)
   // A manual refresh re-anchors the schedule: after a backoff the next poll
   // would otherwise still be minutes away even though the link just worked.
@@ -221,9 +235,10 @@ async function onTap(): Promise<void> {
  */
 async function openDetail(index: unknown): Promise<void> {
   if (!LIST_PAGE_IDS.has(currentPageId())) return
-  // Absent index = the host did not report a selection, which the simulator run
-  // showed is the NORMAL shape; resolveSelectionIndex falls back to the first
-  // (highest-priority) item. Only a present-but-nonsensical index is refused.
+  // Normally called with the app's own cursor. The absent-index fallback still
+  // matters because the host may deliver a `listEvent` (it did while alerts
+  // were a list container, always WITHOUT currentSelectItemIndex) — opening the
+  // top alert beats a dead tap. A present-but-nonsensical index is refused.
   const i = resolveSelectionIndex(index, items.length)
   if (i < 0) return
   detailIndex = i
@@ -246,6 +261,18 @@ async function onSwipeNext(): Promise<void> {
     await renderCurrentPage()
     return
   }
+  // On an alert page the swipe walks the cursor DOWN the alerts first, and
+  // only leaves the page once it is on the last one. That boundary belongs to
+  // the app now: the host list used to keep it and emit nothing, which stranded
+  // every page after the alerts.
+  if (onAlertPage()) {
+    const moved = advanceCursor(listCursor, items.length, 1)
+    if (moved !== 'page') {
+      listCursor = moved
+      await renderCurrentPage()
+      return
+    }
+  }
   let found = -1
   for (let i = pageIndex + 1; i < pages.length; i++) {
     if (!isPageEmpty(pages[i])) {
@@ -255,6 +282,7 @@ async function onSwipeNext(): Promise<void> {
   }
   if (found >= 0) {
     pageIndex = found
+    listCursor = 0
     await renderCurrentPage()
     return
   }
@@ -277,6 +305,15 @@ async function onSwipePrev(): Promise<void> {
     await renderCurrentPage()
     return
   }
+  // Symmetric: walk the cursor back up the alerts before leaving the page.
+  if (onAlertPage()) {
+    const moved = advanceCursor(listCursor, items.length, -1)
+    if (moved !== 'page') {
+      listCursor = moved
+      await renderCurrentPage()
+      return
+    }
+  }
   let found = -1
   for (let i = pageIndex - 1; i >= 0; i--) {
     if (!isPageEmpty(pages[i])) {
@@ -286,6 +323,7 @@ async function onSwipePrev(): Promise<void> {
   }
   if (found >= 0) {
     pageIndex = found
+    listCursor = 0
     await renderCurrentPage()
     return
   }
@@ -405,6 +443,10 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
 }
 
 function applyPayload(payload: GlancePayload, keepId: string): void {
+  // Which alert the cursor was on, by id — a poll must not move it under the
+  // wearer just because the gateway reordered or dropped something above it.
+  const cursorId = items[clampCursor()]?.id
+
   pages = sortPages(payload.pages)
   if (pages.length === 0) {
     pages = [{ id: 'home', title: '알림', text: payload.text }]
@@ -414,6 +456,10 @@ function applyPayload(payload: GlancePayload, keepId: string): void {
   lastCached = !!payload.cached
   const idx = pages.findIndex((p) => p.id === keepId)
   pageIndex = idx >= 0 ? idx : 0
+
+  const movedTo = cursorId ? items.findIndex((it) => it.id === cursorId) : -1
+  // Gone (handled/expired) → back to the top, which is the highest priority.
+  listCursor = movedTo >= 0 ? movedTo : 0
 }
 
 function sortPages(raw: GlancePage[]): GlancePage[] {
@@ -454,90 +500,58 @@ async function renderCurrentPage(): Promise<void> {
   await showText(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
 }
 
+/**
+ * showAlertList draws the alerts on a plain TEXT container with a cursor the
+ * app controls, rather than handing the items to a host list container.
+ *
+ * The host list looked like the obvious fit and was the wrong choice on both
+ * counts it was picked for:
+ *
+ *   - it never told the app which item was highlighted (`listEvent` carried no
+ *     `currentSelectItemIndex`), so a tap always opened alert #1 no matter what
+ *     the wearer had scrolled to — they read something they did not choose;
+ *   - it kept the scroll to itself, emitting nothing at the end of the list, so
+ *     the cal/todo pages could not be reached at all while alerts existed.
+ *
+ * Text containers do deliver scroll (`textEvent{eventType:2}`) and taps, so
+ * moving the cursor into the app fixes both — and makes them assertable in the
+ * smoke harness instead of being host behaviour nobody can verify.
+ */
 async function showAlertList(title: string): Promise<void> {
-  const labels = items.map(listLabel)
   const stamp = formatGeneratedLabel(lastGenerated, lastCached)
-  const header = [
-    `Deneb · ${title}`,
-    `${items.length}건 · 탭=상세`,
-    stamp ? stamp : '↓다음페이지',
-  ].join('\n')
-
-  const headerText = new TextContainerProperty({
-    xPosition: 0,
-    yPosition: 0,
-    width: 576,
-    height: 72,
-    borderWidth: 0,
-    borderColor: 5,
-    paddingLength: 4,
-    containerID: 2,
-    containerName: 'header',
-    content: header,
-    isEventCapture: 0,
-    zOrderIndex: 0,
-  })
-  const list = new ListContainerProperty({
-    xPosition: 0,
-    yPosition: 72,
-    width: 576,
-    height: 216,
-    borderWidth: 0,
-    borderColor: 5,
-    paddingLength: 2,
-    containerID: 1,
-    containerName: 'alerts',
-    isEventCapture: 1,
-    zOrderIndex: 1,
-    itemContainer: new ListItemContainerProperty({
-      itemCount: labels.length,
-      itemWidth: 560,
-      isItemSelectBorderEn: 1,
-      itemName: labels,
-    }),
-  })
-  uiMode = 'list'
-  const ok = await bridge.rebuildPageContainer(
-    new RebuildPageContainer({
-      containerTotalNum: 2,
-      textObject: [headerText],
-      listObject: [list],
-    }),
+  const cursor = clampCursor()
+  const lines = items.map((it, i) => `${i === cursor ? '▸' : ' '}${listLabel(it)}`)
+  const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : ''
+  await showText(
+    [
+      `Deneb · ${title}${position}`,
+      stamp ? `${items.length}건 · ${stamp}` : `${items.length}건`,
+      '',
+      ...lines,
+      '',
+      items.length > 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
+    ].join('\n'),
   )
-  if (!ok) {
-    // Fallback: text list if list rebuild fails on host.
-    await showText(
-      `Deneb · ${title}\n\n${labels.join('\n')}\n\n탭=새로고침 · ↓다음`,
-    )
-  }
 }
 
+/** clampCursor is the app-state view of the pure guard in refresh.ts. */
+function clampCursor(): number {
+  return clampCursorTo(listCursor, items.length)
+}
+
+/** onAlertPage reports whether the current page draws the alert cursor. */
+function onAlertPage(): boolean {
+  return LIST_PAGE_IDS.has(currentPageId()) && items.length > 0
+}
+
+/**
+ * showText updates the single text container the app draws everything into.
+ *
+ * There is exactly one container for the whole app now that alerts are text
+ * too, so this is always an in-place upgrade — no rebuild, which is what keeps
+ * a background poll from flickering the wearer's view.
+ */
 async function showText(content: string): Promise<void> {
-  if (uiMode === 'list') {
-    uiMode = 'text'
-    await bridge.rebuildPageContainer(
-      new RebuildPageContainer({
-        containerTotalNum: 1,
-        textObject: [
-          new TextContainerProperty({
-            xPosition: 0,
-            yPosition: 0,
-            width: 576,
-            height: 288,
-            borderWidth: 0,
-            borderColor: 5,
-            paddingLength: 4,
-            containerID: 1,
-            containerName: 'main',
-            content,
-            isEventCapture: 1,
-          }),
-        ],
-      }),
-    )
-    return
-  }
-  uiMode = 'text'
   await bridge.textContainerUpgrade(
     new TextContainerUpgrade({
       containerID: 1,
