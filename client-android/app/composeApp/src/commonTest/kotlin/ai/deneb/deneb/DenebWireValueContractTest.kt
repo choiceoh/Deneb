@@ -27,6 +27,24 @@ class DenebWireValueContractTest {
         encodeDefaults = true
     }
 
+    /**
+     * Every key present on the wire must survive the round-trip.
+     *
+     * The encoded output may carry ADDITIONAL keys: `encodeDefaults = true` emits
+     * every field, so adding a new field with a default — the backward-compatible
+     * way to extend an envelope, and exactly what this suite exists to protect —
+     * legitimately widens the output. Asserting exact key equality made the suite
+     * fail on its own stated contract the first time that happened
+     * (`TranscriptPayload.turnRunning`, #4188).
+     *
+     * The load-bearing half is kept: with `ignoreUnknownKeys = true` a wire field
+     * the Kotlin type forgot to declare is dropped on decode, and that still fails.
+     */
+    private fun assertKeysPreserved(input: JsonObject, encoded: JsonObject) {
+        val dropped = input.keys - encoded.keys
+        assertTrue(dropped.isEmpty(), "round-trip dropped wire keys: $dropped")
+    }
+
     private fun wireValueContractCases(): List<() -> Unit> = listOf(
         {
             val input = json.parseToJsonElement(
@@ -41,7 +59,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(RecentPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(RecentPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["sessions"] is JsonArray)
             assertEquals(1, (encoded["sessions"] as JsonArray).size)
 
@@ -72,7 +90,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(TranscriptPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(TranscriptPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["messages"] is JsonArray)
             assertEquals(1, (encoded["messages"] as JsonArray).size)
             assertEquals(input["turnRunning"], encoded["turnRunning"])
@@ -103,7 +121,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(WorkFeedPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(WorkFeedPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["items"] is JsonArray)
             assertEquals(1, (encoded["items"] as JsonArray).size)
 
@@ -136,7 +154,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(WorkFeedActionRunPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(WorkFeedActionRunPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["ok"], encoded["ok"])
             assertTrue(encoded["item"] is JsonObject)
             assertEquals(input["sessionKey"], encoded["sessionKey"])
@@ -171,7 +189,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(WorkFeedFeedbackPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(WorkFeedFeedbackPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["ok"], encoded["ok"])
             assertTrue(encoded["item"] is JsonObject)
             assertEquals(input["text"], encoded["text"])
@@ -206,7 +224,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(NativeSyncPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(NativeSyncPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["events"] is JsonArray)
             assertEquals(1, (encoded["events"] as JsonArray).size)
             assertEquals(input["cursor"], encoded["cursor"])
@@ -245,7 +263,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(NativeSyncEvent.serializer(), input)
             val encoded = json.encodeToJsonElement(NativeSyncEvent.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["seq"], encoded["seq"])
             assertEquals(input["type"], encoded["type"])
             assertEquals(input["entityId"], encoded["entityId"])
@@ -279,7 +297,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(NativeSyncActionPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(NativeSyncActionPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["item"] is JsonObject)
             assertEquals(input["removeFromFeed"], encoded["removeFromFeed"])
 
@@ -309,7 +327,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(MemoryListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(MemoryListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["pages"] is JsonArray)
             assertEquals(1, (encoded["pages"] as JsonArray).size)
 
@@ -339,7 +357,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(DiaryRecentPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(DiaryRecentPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["entries"] is JsonArray)
             assertEquals(1, (encoded["entries"] as JsonArray).size)
 
@@ -370,7 +388,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(DiaryRecentRow.serializer(), input)
             val encoded = json.encodeToJsonElement(DiaryRecentRow.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["file"], encoded["file"])
             assertEquals(input["header"], encoded["header"])
             assertEquals(input["content"], encoded["content"])
@@ -401,7 +419,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(DeletePagesPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(DeletePagesPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["ok"], encoded["ok"])
             assertEquals(input["deleted"], encoded["deleted"])
 
@@ -429,7 +447,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(MovePagePayload.serializer(), input)
             val encoded = json.encodeToJsonElement(MovePagePayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["ok"], encoded["ok"])
 
             assertEquals(
@@ -460,7 +478,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CategoriesPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CategoriesPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["categories"] is JsonArray)
             assertEquals(1, (encoded["categories"] as JsonArray).size)
             assertEquals(input["totalPages"], encoded["totalPages"])
@@ -492,7 +510,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CronListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CronListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["jobs"] is JsonArray)
             assertEquals(1, (encoded["jobs"] as JsonArray).size)
 
@@ -530,7 +548,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ModelsPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(ModelsPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["current"], encoded["current"])
             assertTrue(encoded["roles"] is JsonArray)
             assertEquals(1, (encoded["roles"] as JsonArray).size)
@@ -572,7 +590,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ClientHelloPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(ClientHelloPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["version"], encoded["version"])
             assertEquals(input["nativeApiVersion"], encoded["nativeApiVersion"])
             assertEquals(input["model"], encoded["model"])
@@ -607,7 +625,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(MailListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(MailListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["messages"] is JsonArray)
             assertEquals(1, (encoded["messages"] as JsonArray).size)
             assertEquals(input["nextPageToken"], encoded["nextPageToken"])
@@ -636,7 +654,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(OkPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(OkPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["ok"], encoded["ok"])
 
             assertEquals(
@@ -663,7 +681,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(AskPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(AskPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["answer"], encoded["answer"])
 
             assertEquals(
@@ -697,7 +715,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(SenderContextPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(SenderContextPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["sender"], encoded["sender"])
             assertEquals(input["email"], encoded["email"])
             assertEquals(input["displayName"], encoded["displayName"])
@@ -732,7 +750,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CalListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CalListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["events"] is JsonArray)
             assertEquals(1, (encoded["events"] as JsonArray).size)
 
@@ -762,7 +780,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CalProposalsPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CalProposalsPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["proposals"] is JsonArray)
             assertEquals(1, (encoded["proposals"] as JsonArray).size)
 
@@ -792,7 +810,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(TodoListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(TodoListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["todos"] is JsonArray)
             assertEquals(1, (encoded["todos"] as JsonArray).size)
 
@@ -822,7 +840,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(PeopleListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(PeopleListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["people"] is JsonArray)
             assertEquals(1, (encoded["people"] as JsonArray).size)
 
@@ -852,7 +870,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ContactsListPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(ContactsListPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["contacts"] is JsonArray)
             assertEquals(1, (encoded["contacts"] as JsonArray).size)
 
@@ -892,7 +910,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(WikiPagePayload.serializer(), input)
             val encoded = json.encodeToJsonElement(WikiPagePayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["path"], encoded["path"])
             assertEquals(input["title"], encoded["title"])
             assertEquals(input["summary"], encoded["summary"])
@@ -927,7 +945,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CaptureImagePayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CaptureImagePayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["text"], encoded["text"])
 
             assertEquals(
@@ -954,7 +972,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CaptureAudioPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CaptureAudioPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["text"], encoded["text"])
 
             assertEquals(
@@ -981,7 +999,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CaptureDocumentPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CaptureDocumentPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["text"], encoded["text"])
 
             assertEquals(
@@ -1008,7 +1026,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(CaptureContactsPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(CaptureContactsPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["text"], encoded["text"])
 
             assertEquals(
@@ -1043,7 +1061,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ObserveToolStat.serializer(), input)
             val encoded = json.encodeToJsonElement(ObserveToolStat.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["name"], encoded["name"])
             assertEquals(input["calls"], encoded["calls"])
             assertEquals(input["errors"], encoded["errors"])
@@ -1095,7 +1113,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ObserveBehavior.serializer(), input)
             val encoded = json.encodeToJsonElement(ObserveBehavior.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["runs"], encoded["runs"])
             assertEquals(input["proactiveRuns"], encoded["proactiveRuns"])
             assertEquals(input["compactedRuns"], encoded["compactedRuns"])
@@ -1136,7 +1154,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ObserveLogLine.serializer(), input)
             val encoded = json.encodeToJsonElement(ObserveLogLine.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["ts"], encoded["ts"])
             assertEquals(input["level"], encoded["level"])
             assertEquals(input["msg"], encoded["msg"])
@@ -1170,7 +1188,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ObserveLogsPayload.serializer(), input)
             val encoded = json.encodeToJsonElement(ObserveLogsPayload.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertTrue(encoded["lines"] is JsonArray)
             assertEquals(1, (encoded["lines"] as JsonArray).size)
             assertEquals(input["count"], encoded["count"])
@@ -1202,7 +1220,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ObserveVllmPrefixCache.serializer(), input)
             val encoded = json.encodeToJsonElement(ObserveVllmPrefixCache.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["model"], encoded["model"])
             assertEquals(input["queries"], encoded["queries"])
             assertEquals(input["hits"], encoded["hits"])
@@ -1243,7 +1261,7 @@ class DenebWireValueContractTest {
             val decoded = json.decodeFromJsonElement(ObserveHealth.serializer(), input)
             val encoded = json.encodeToJsonElement(ObserveHealth.serializer(), decoded).jsonObject
 
-            assertEquals(input.keys, encoded.keys)
+            assertKeysPreserved(input, encoded)
             assertEquals(input["captureEnabled"], encoded["captureEnabled"])
             assertEquals(input["agentLogEnabled"], encoded["agentLogEnabled"])
             assertEquals(input["ringCapacity"], encoded["ringCapacity"])
