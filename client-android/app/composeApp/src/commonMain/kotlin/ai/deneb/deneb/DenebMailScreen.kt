@@ -14,6 +14,7 @@ import ai.deneb.ui.icons.outlined.FilterList
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -112,6 +114,7 @@ fun DenebMailScreen(
     var activeQuery by remember { mutableStateOf<String?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var filtersVisible by remember { mutableStateOf(false) }
+    var legendVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         // refreshMail() already refreshes native_status on success, so calling it
@@ -177,6 +180,24 @@ fun DenebMailScreen(
         tabBar = navigationTabBar,
         actions = {
             if (!selecting) {
+                // Quiet by design: a hint-toned "?" rather than a filled icon, so it
+                // is findable when a marker puzzles you and recedes when it does not.
+                // A glyph (not a vendored icon) — the icon subset carries no
+                // HelpOutline, and that file is generated.
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        legendVisible = true
+                    },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Text(
+                        "?",
+                        style = DenebType.rowTitle,
+                        color = denebHint(),
+                        modifier = Modifier.semantics { contentDescription = "표시 안내 열기" },
+                    )
+                }
                 IconButton(
                     onClick = {
                         haptics.tap()
@@ -211,6 +232,9 @@ fun DenebMailScreen(
             }
         },
     ) {
+        if (legendVisible) {
+            MailLegendDialog(onDismiss = { legendVisible = false })
+        }
         if (selecting) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp),
@@ -601,13 +625,25 @@ internal fun mailRowNativeMeta(message: MailMessage): String? = buildList {
     mailRowMailboxLabel(message.mailbox)?.let { add(it) }
 }.joinToString(" · ").ifBlank { null }
 
+/**
+ * The badge exists to flag mail whose analysis needs something — it is in flight,
+ * it stalled, or a human has to look. "done" is the EXPECTED terminal state and
+ * carried no information: measured on production, 298 of 418 tracked messages
+ * (71%) were done, so the badge was printed on nearly every row and stopped
+ * separating anything. What the reader actually wants from a finished analysis is
+ * its RESULT, and that already has a home — the meta line below the subject
+ * (일정 N · 할 일 N · 피드 없음). So done is silent and the result speaks.
+ *
+ * Never-analyzed mail (empty status, 102 of 418) also renders no badge; the two
+ * are told apart by the legend behind the header's "?" — a badge means the
+ * analysis wants attention, its absence means it does not.
+ */
 internal fun mailRowAnalysisStatusLabel(state: MailWorkState): String? = when (state.analysisStatus) {
     "failed" -> "실패"
     "analyzing" -> "분석중"
     "queued" -> "대기"
     "stale" -> "재분석"
     "review" -> "검토"
-    "done" -> "분석"
     else -> null
 }
 
@@ -625,8 +661,55 @@ private fun mailRowMetaColor(message: MailMessage): Color = when {
 private fun mailRowAnalysisStatusColor(state: MailWorkState): Color = when (state.analysisStatus) {
     "failed" -> MaterialTheme.colorScheme.error
     "analyzing", "queued", "stale", "review" -> MaterialTheme.colorScheme.tertiary
-    "done" -> MaterialTheme.colorScheme.primary
     else -> denebHint()
+}
+
+/**
+ * Legend for the row markers. The mail list packs four independent signals into
+ * dots and a badge — unread, priority, analysis state, extracted work — and
+ * nothing on screen said what they meant, so they read as decoration. Kept behind
+ * a quiet "?" rather than spent as permanent screen real estate: it is a thing you
+ * read once.
+ */
+@Composable
+private fun MailLegendDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+        title = { Text("표시 안내", style = DenebType.subject) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                MailLegendRow(MaterialTheme.colorScheme.primary, "발신인 앞 점", "아직 안 읽은 메일")
+                MailLegendRow(MaterialTheme.colorScheme.error, "제목 앞 점", "긴급 — 바로 확인이 필요한 메일")
+                MailLegendRow(MaterialTheme.colorScheme.tertiary, "제목 앞 점", "주의 — 챙겨야 할 메일")
+                HorizontalDivider(color = denebHairline())
+                Text(
+                    "오른쪽 배지는 분석이 손을 타야 할 때만 나옵니다 — " +
+                        "분석중·대기(진행 중), 검토(사람 확인 필요), 재분석(내용이 바뀜), 실패. " +
+                        "배지가 없으면 분석이 끝났거나 분석 대상이 아니라는 뜻입니다.",
+                    style = DenebType.body,
+                    color = denebHint(),
+                )
+                Text(
+                    "제목 아래 줄은 그 메일에서 실제로 뽑아낸 것입니다 — 일정·할 일 건수. " +
+                        "'피드 없음'은 분석은 됐는데 업무 카드가 만들어지지 않은 메일입니다.",
+                    style = DenebType.body,
+                    color = denebHint(),
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun MailLegendRow(color: Color, what: String, means: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(10.dp))
+        Text(what, style = DenebType.rowTitle, color = MaterialTheme.colorScheme.onBackground)
+        Spacer(Modifier.width(8.dp))
+        Text(means, style = DenebType.meta, color = denebHint(), modifier = Modifier.weight(1f))
+    }
 }
 
 private fun mailRowMailboxLabel(mailbox: String): String? {
