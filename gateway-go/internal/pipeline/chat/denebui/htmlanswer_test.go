@@ -113,6 +113,48 @@ func TestIssueRecoverable(t *testing.T) {
 	}
 }
 
+// A wrong value for a presentation enum must not cost the operator the whole
+// card: every renderer falls back to a default (Kotlin styleOf → null,
+// andromeda TEXT_STYLE[...] ?? body), so the server must not be stricter than
+// the clients it serves. Live 2026-07: cards were rejected before delivery on
+// `invalid style` / `invalid variant` alone.
+func TestIssueRecoverable_InvalidPresentationEnumsDeliverAsCard(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{
+		`<column><text style="완전히엉뚱">본문</text></column>`,
+		`<column><button variant="ghost" id="b">버튼</button></column>`,
+		`<column><alert severity="아무거나">경고</alert></column>`,
+	} {
+		issues, err := Validate(body)
+		if err != nil || len(issues) == 0 {
+			t.Fatalf("%s: expected an enum issue, got issues=%v err=%v", body, issues, err)
+		}
+		for _, is := range issues {
+			if !is.Recoverable() {
+				t.Fatalf("%s: presentation-enum issue must be recoverable: %v", body, is)
+			}
+		}
+		card := "```deneb-ui\n" + body + "\n```"
+		if got := NormalizeFinalReply(card, "client:main", slog.New(slog.DiscardHandler)); len(ExtractFences(got)) != 1 {
+			t.Fatalf("%s: must still deliver as a card, got %q", body, got)
+		}
+	}
+
+	// A broken ACTION is behavior, not looks — it must still degrade. Only the
+	// legacy JSON body can express one: the HTML action attributes
+	// (event/href/toggle/copy) each map to a valid type by construction.
+	bad := `{"type":"button","label":"버튼","action":{"type":"launch_missiles"}}`
+	issues, err := Validate(bad)
+	if err != nil || len(issues) == 0 {
+		t.Fatalf("expected an action issue, got issues=%v err=%v", issues, err)
+	}
+	for _, is := range issues {
+		if is.Recoverable() {
+			t.Fatalf("unknown action type must NOT be recoverable: %v", is)
+		}
+	}
+}
+
 func TestStripHTMLAnswers(t *testing.T) {
 	t.Parallel()
 	in := "요약 문장.\n```deneb-html\n<!doctype html><div>본문</div>\n```\n마무리."
