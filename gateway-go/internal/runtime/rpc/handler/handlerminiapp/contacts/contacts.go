@@ -37,7 +37,8 @@ func ContactsMethods(deps ContactsDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.contacts.list": contactsList(deps),
+		"miniapp.contacts.list":  contactsList(deps),
+		"miniapp.contacts.dedup": contactsDedup(deps),
 	}
 }
 
@@ -57,5 +58,61 @@ func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
 			rows = append(rows, ContactRow{Name: c.Name, Phones: c.Phones, Emails: c.Emails, Org: c.Org})
 		}
 		return rpcutil.RespondOK(req.ID, out{Contacts: rows, Count: len(rows)})
+	})
+}
+
+// contactsDedup runs the DETERMINISTIC dedup pass over the mirror and returns the
+// safe merge groups (each with the cleanest name + the union of phones/emails) so
+// the client can preview the cleanup. It never mutates and never calls the model:
+// the ambiguous pairs are only counted here — the LLM/operator review is a
+// separate, slower pass — so this stays a fast, synchronous RPC.
+func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
+	type mergeOut struct {
+		Canonical string   `json:"canonical"`
+		Names     []string `json:"names"`
+		Phones    []string `json:"phones"`
+		Emails    []string `json:"emails"`
+	}
+	type out struct {
+		Total     int        `json:"total"`     // address-book entries in
+		Distinct  int        `json:"distinct"`  // people after the safe merges
+		Ambiguous int        `json:"ambiguous"` // pairs left for AI/operator review
+		Merges    []mergeOut `json:"merges"`
+	}
+	return minibind.Authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		store, err := deps.Store()
+		if err != nil {
+			return rpcerr.Unavailable("contacts store unavailable").Response(req.ID)
+		}
+		all := store.All()
+		res := contacts.Dedup(all)
+		merges := make([]mergeOut, 0, len(res.Merges))
+		for _, g := range res.Merges {
+			m := mergeOut{Canonical: g.Canonical}
+			seenP := map[string]bool{}
+			seenE := map[string]bool{}
+			for _, idx := range g.Members {
+				m.Names = append(m.Names, all[idx].Name)
+				for _, p := range all[idx].Phones {
+					if !seenP[p] {
+						seenP[p] = true
+						m.Phones = append(m.Phones, p)
+					}
+				}
+				for _, e := range all[idx].Emails {
+					if !seenE[e] {
+						seenE[e] = true
+						m.Emails = append(m.Emails, e)
+					}
+				}
+			}
+			merges = append(merges, m)
+		}
+		return rpcutil.RespondOK(req.ID, out{
+			Total:     res.Total,
+			Distinct:  res.Distinct,
+			Ambiguous: len(res.Ambiguous),
+			Merges:    merges,
+		})
 	})
 }
