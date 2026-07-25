@@ -15,6 +15,7 @@ import ai.deneb.ui.icons.outlined.BookmarkBorder
 import ai.deneb.ui.icons.outlined.ContentCopy
 import ai.deneb.ui.icons.outlined.History
 import ai.deneb.ui.icons.outlined.Translate
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,8 +55,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -193,6 +197,43 @@ fun DenebBrowserScreen(
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
+    // alert()/confirm()/prompt() from the page. The page's JS thread is blocked
+    // until answered, and BrowserJsDialog.answer is idempotent, so a dismiss that
+    // races a button tap still delivers exactly one result.
+    state.jsDialog?.let { dialog ->
+        var promptValue by remember(dialog) { mutableStateOf(dialog.defaultValue) }
+        val finish: (Boolean, String?) -> Unit = { ok, value ->
+            dialog.answer(ok, value)
+            state.jsDialog = null
+        }
+        AlertDialog(
+            onDismissRequest = { finish(false, null) },
+            title = { Text(state.currentUrl.ifBlank { "페이지" }, style = MaterialTheme.typography.labelMedium) },
+            text = {
+                Column {
+                    Text(dialog.message)
+                    if (dialog.kind == BrowserJsDialog.Kind.PROMPT) {
+                        OutlinedTextField(
+                            value = promptValue,
+                            onValueChange = { promptValue = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    finish(true, if (dialog.kind == BrowserJsDialog.Kind.PROMPT) promptValue else null)
+                }) { Text("확인") }
+            },
+            dismissButton = if (dialog.kind == BrowserJsDialog.Kind.ALERT) {
+                null
+            } else {
+                { TextButton(onClick = { finish(false, null) }) { Text("취소") } }
+            },
+        )
+    }
     if (showBookmarks) {
         BrowserBookmarksSheet(
             bookmarks = bookmarks,
@@ -267,6 +308,19 @@ fun DenebBrowserChrome(
             content()
             if (state.loading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
+            }
+            // A failed load leaves the WebView blank; say why instead of showing
+            // an empty page with no explanation.
+            state.loadError?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
             }
             HorizontalDivider(color = denebHairline())
             // Bottom chrome (Safari-style): close · forward · editable address bar

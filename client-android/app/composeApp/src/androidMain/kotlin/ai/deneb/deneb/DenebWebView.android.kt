@@ -6,13 +6,18 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.net.http.SslError
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
+import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -164,6 +169,7 @@ actual fun DenebWebView(
 
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                         state.currentUrl = url
+                        state.loadError = null
                         state.pageTitle = ""
                         state.loading = true
                         adBlockHits.set(0)
@@ -187,6 +193,25 @@ actual fun DenebWebView(
 
                     // SPA soft-nav often updates history without a full reload. Hint the
                     // injected translator so it re-collects when JS history hooks miss.
+                    // Without this a failed load is a blank screen with no reason.
+                    // Main frame only: every ad-blocked subresource also reports an
+                    // error, and surfacing those would cry wolf on every page.
+                    override fun onReceivedError(
+                        view: WebView,
+                        request: WebResourceRequest,
+                        error: WebResourceError,
+                    ) {
+                        if (!request.isForMainFrame) return
+                        state.loadError = browserPageErrorMessage(error.errorCode, error.description?.toString())
+                    }
+
+                    // Always cancel: no "proceed anyway" on a device holding
+                    // business mail and groupware sessions.
+                    override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                        handler.cancel()
+                        state.loadError = browserSslErrorMessage(error.primaryError)
+                    }
+
                     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                         super.doUpdateVisitedHistory(view, url, isReload)
                         state.currentUrl = url
@@ -211,6 +236,40 @@ actual fun DenebWebView(
                     override fun onProgressChanged(view: WebView, newProgress: Int) {
                         state.progress = newProgress
                         state.loading = newProgress < 100
+                    }
+
+                    // The default WebChromeClient silently CANCELS these, so a page's
+                    // confirm() returns false without ever asking the user — the
+                    // button simply looks broken (same trap Andromeda hit).
+                    override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
+                        state.jsDialog = BrowserJsDialog(BrowserJsDialog.Kind.ALERT, message) { _, _ ->
+                            result.confirm()
+                        }
+                        return true
+                    }
+
+                    override fun onJsConfirm(view: WebView, url: String, message: String, result: JsResult): Boolean {
+                        state.jsDialog = BrowserJsDialog(BrowserJsDialog.Kind.CONFIRM, message) { ok, _ ->
+                            if (ok) result.confirm() else result.cancel()
+                        }
+                        return true
+                    }
+
+                    override fun onJsPrompt(
+                        view: WebView,
+                        url: String,
+                        message: String,
+                        defaultValue: String?,
+                        result: JsPromptResult,
+                    ): Boolean {
+                        state.jsDialog = BrowserJsDialog(
+                            BrowserJsDialog.Kind.PROMPT,
+                            message,
+                            defaultValue.orEmpty(),
+                        ) { ok, value ->
+                            if (ok) result.confirm(value.orEmpty()) else result.cancel()
+                        }
+                        return true
                     }
 
                     override fun onShowFileChooser(

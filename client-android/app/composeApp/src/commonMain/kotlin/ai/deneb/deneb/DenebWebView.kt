@@ -57,6 +57,16 @@ class DenebWebViewState(
     var adBlockedCount by mutableStateOf(0)
         internal set
 
+    /** Main-frame load failure, or null when the page loaded. Cleared on every
+     *  new navigation. Subresource failures (a blocked ad, a dead image) never
+     *  set this — only the page the user asked for. */
+    var loadError by mutableStateOf<String?>(null)
+        internal set
+
+    /** Pending `alert()`/`confirm()`/`prompt()` the chrome must render. The page's
+     *  JS thread is blocked until it is answered. */
+    internal var jsDialog by mutableStateOf<BrowserJsDialog?>(null)
+
     // Monotonic command ticks the actual observes via LaunchedEffect, so a
     // repeated tap (reload twice) still fires.
     internal var goBackTick by mutableStateOf(0)
