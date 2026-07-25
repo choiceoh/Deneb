@@ -1294,12 +1294,29 @@ func mergeSearchResults(bm25, sem []SearchResult, limit int, commonOnlyQuery boo
 // metric that matters for recall evidence injection) actually PEAKS in the mid
 // range: rrfK 15–20 hits R@8 98% vs 97% at both 10 and 60.
 //
-// 20 is chosen deliberately over the current-snapshot optimum (~5–10, P@1 78–79%):
-// it maximizes R@8, keeps P@1 at the 60-baseline, sits BELOW the field default
-// (our structured corpus wants that) yet ABOVE 10 — so as the wiki grows and its
-// optimum drifts back toward the standard, 20 ages well instead of overfitting
-// today's 400 pages. Re-sweep with cmd/recall-bench as the corpus grows; override
-// via DENEB_WIKI_RRF_K (rrfKValue), 60 restores the field default.
+// 20 is chosen deliberately over the then-optimum (~5–10, P@1 78–79%): it sits
+// BELOW the field default (our structured corpus wants that) yet ABOVE 10, so as
+// the wiki grows and its optimum drifts back toward the standard it ages well
+// instead of overfitting today's pages. Override via DENEB_WIKI_RRF_K (rrfKValue);
+// 60 restores the field default.
+//
+// 2026-07-25 re-sweep (repaired gold, production parity) — DON'T re-tune this
+// expecting leverage; it is no longer where the wins are:
+//   - R@8 is FLAT at 92.3% for k ∈ [5,60]. Fusion damping only reorders the
+//     candidate set, it does not change membership, so the metric that drives
+//     recall evidence injection is insensitive to k. (The older note claiming R@8
+//     peaks at 15–20 was measured before the reranker and on gold that had since
+//     rotted — see the wiki-qa gold repair in the same session.)
+//   - P@1 spans just 78.8–81.7% across that range with NO monotonic trend, i.e.
+//     one to three cases out of 104 — noise at this sample size.
+//   - The "lower k is better" trend only exists with the reranker OFF (73.1% at
+//     k=5 decaying to 70.2% at k=60). With xprovence FORCE=on the cross-encoder
+//     owns top-K ordering and absorbs the difference — the reranker itself is
+//     worth ~+9pp P@1 (72.1% → 80.8% at k=20), dwarfing any k choice.
+//
+// Remaining recall headroom is in CANDIDATE GENERATION (BM25/semantic/graph
+// recall) and in query types page retrieval cannot answer at all — of the 8
+// residual R@8 misses, 4 are aggregation/graph/temporal questions.
 const rrfK = 20.0
 
 // rrfKValue honors a DENEB_WIKI_RRF_K override for tuning sweeps (cmd/recall-bench)
