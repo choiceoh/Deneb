@@ -208,6 +208,8 @@ fun QuestionInput(
         TextField(
             value = textState,
             onValueChange = onTextStateChange,
+            // DELIBERATE Material holdout: this is a Material control's own textStyle
+            // (composer input), tuned against Material's line-box behavior below.
             // Caret alignment fix: bodyLarge carries lineHeight 22sp for 15sp text
             // (Type.kt) — generous leading meant for reading message bodies. In the
             // composer that tall line box drops the caret below the glyph on Android

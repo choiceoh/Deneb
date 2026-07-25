@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
 import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.handCursor
@@ -74,7 +75,7 @@ internal fun ChatInputOverlay(
                     Text(
                         text = "답변 후 전송: " + pending.first().text +
                             (if (pending.size > 1) "  외 ${pending.size - 1}건" else ""),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = DenebType.snippet,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -99,7 +100,7 @@ internal fun ChatInputOverlay(
                     ) {
                         Text(
                             text = "취소",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = DenebType.meta,
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }

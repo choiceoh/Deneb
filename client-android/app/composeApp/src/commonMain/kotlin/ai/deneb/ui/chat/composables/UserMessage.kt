@@ -2,6 +2,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.Attachment
 import ai.deneb.shareTextToApps
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
@@ -190,9 +191,11 @@ internal fun UserMessage(
                     }
                 }
                 if (message.isNotEmpty()) {
-                    // Explicit body style (was unstyled => LocalTextStyle default,
-                    // a different size/face than the assistant's bodyLarge). 14sp
-                    // keeps it one step down, matching the chat answer body.
+                    // DELIBERATE Material holdout in an otherwise DenebType file:
+                    // the 14sp here is a chosen RELATIONSHIP, not a default — it sits
+                    // one step under the assistant's bodyLarge so the user's own words
+                    // read as the quieter half of the exchange. DenebType.body is 15sp
+                    // and would flatten that pairing.
                     Text(
                         text = message,
                         style = MaterialTheme.typography.bodyMedium,
@@ -216,7 +219,7 @@ internal fun SelectTextDialog(text: String, onDismiss: () -> Unit) {
             SelectionContainer {
                 Text(
                     text = text,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = DenebType.body,
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
             }
