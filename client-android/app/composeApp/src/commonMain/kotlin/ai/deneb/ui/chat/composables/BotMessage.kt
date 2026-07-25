@@ -73,6 +73,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
+import deneb.composeapp.generated.resources.bot_message_reasoning_label
+import deneb.composeapp.generated.resources.bot_message_reasoning_steps
 import deneb.composeapp.generated.resources.bot_message_regenerate_content_description
 import deneb.composeapp.generated.resources.bot_message_speech_content_description
 import deneb.composeapp.generated.resources.bot_message_thinking_expand_content_description
@@ -206,6 +208,7 @@ internal fun BotMessage(
             if (nonBlankSegments.isNotEmpty()) {
                 ReasoningBlockquote(
                     segments = nonBlankSegments,
+                    isStreaming = isStreaming,
                     modifier = Modifier.fillMaxWidth()
                         .padding(start = 16.dp, top = 12.dp, end = 16.dp),
                 )
@@ -408,21 +411,48 @@ internal fun BotMessage(
     }
 }
 
+/**
+ * The live-progress line for a streaming reasoning block: the first non-empty
+ * line of the MOST RECENT segment, so the row visibly moves each time a new
+ * reasoning phase starts without the user expanding anything.
+ *
+ * Only used while the turn is running. A finished turn shows its step count
+ * instead — see [ReasoningBlockquote].
+ */
+internal fun reasoningPreviewLine(segments: List<String>): String = segments.lastOrNull()
+    ?.lineSequence()
+    ?.map { it.trim() }
+    ?.firstOrNull { it.isNotEmpty() }
+    .orEmpty()
+
 @Composable
 private fun ReasoningBlockquote(
     segments: ImmutableList<String>,
+    isStreaming: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val haptics = rememberHaptics()
-    // Preview always reflects the MOST RECENT thinking segment so the user gets a
-    // visual update each time a new reasoning phase starts, without expanding.
-    val preview = remember(segments) {
-        segments.lastOrNull()
-            ?.lineSequence()
-            ?.map { it.trim() }
-            ?.firstOrNull { it.isNotEmpty() }
-            .orEmpty()
+    // WHILE STREAMING the tail of the current segment is live progress — it tells
+    // the user the turn is moving and roughly where. ONCE THE TURN IS DONE that
+    // same line is a frozen fragment of raw model reasoning: it is written in the
+    // model's own language (English, in a Korean-first product), cut mid-sentence,
+    // and answers nothing the finished answer above does not. So a finished turn
+    // shows the SHAPE of the reasoning (how many phases) and keeps the words
+    // behind the expand toggle.
+    val preview = remember(segments) { reasoningPreviewLine(segments) }
+    // "생각 중" on a turn that finished minutes ago is simply false. The label
+    // tracks the turn: present-progressive while running, a noun once it is a
+    // record.
+    val label = if (isStreaming) {
+        stringResource(Res.string.bot_message_thinking_label)
+    } else {
+        stringResource(Res.string.bot_message_reasoning_label)
+    }
+    val trailing = if (isStreaming) {
+        preview
+    } else {
+        stringResource(Res.string.bot_message_reasoning_steps, segments.size)
     }
 
     Column(modifier = modifier) {
@@ -443,13 +473,13 @@ private fun ReasoningBlockquote(
             )
             Spacer(Modifier.size(6.dp))
             Text(
-                text = stringResource(Res.string.bot_message_thinking_label),
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!expanded && preview.isNotEmpty()) {
+            if (!expanded && trailing.isNotEmpty()) {
                 Text(
-                    text = " · $preview",
+                    text = " · $trailing",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
