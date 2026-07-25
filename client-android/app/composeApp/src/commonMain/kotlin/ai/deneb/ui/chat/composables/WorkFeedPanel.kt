@@ -15,7 +15,9 @@ import ai.deneb.ui.icons.filled.TaskAlt
 import ai.deneb.ui.icons.outlined.Archive
 import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.icons.outlined.QuestionAnswer
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
@@ -55,9 +58,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -123,6 +129,16 @@ internal fun limitApprovalComment(value: String): String {
     }
     return value.substring(0, end)
 }
+
+/**
+ * Urgent = the gateway's top priority band (workfeed.PriorityUrgent = 4), the one
+ * that outranks recency in the feed's sort order. Kept as a named predicate so the
+ * marker and any future urgent-only affordance agree on one threshold instead of
+ * scattering a magic 4.
+ */
+internal fun WorkFeedItem.isUrgent(): Boolean = priority >= WORK_FEED_PRIORITY_URGENT
+
+internal const val WORK_FEED_PRIORITY_URGENT = 4
 
 /**
  * Bottom-sheet content for the work feed (action inbox), in the Deneb idiom:
@@ -227,6 +243,21 @@ internal fun WorkFeedRow(
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The gateway sorts the feed by PRIORITY first and recency second,
+                    // so an urgent card from this morning outranks a routine one from
+                    // ten minutes ago. Without a marker the timestamps read as
+                    // shuffled — the dot is what makes that ordering legible. Same
+                    // vocabulary as the mail row's urgent marker (error red, 7dp).
+                    if (item.isUrgent()) {
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.error)
+                                .semantics { contentDescription = "긴급" },
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
                     Text(
                         text = title,
                         style = titleStyle,
