@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/browserbridge"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 )
@@ -69,7 +69,7 @@ func (s *Server) approvalBrowserEnrich(ctx context.Context, source, text string)
 	if groupwareURL == "" {
 		groupwareURL = "https://tsgw.topsolar.kr" //nolint:gosec // default groupware base URL, not a credential
 	}
-	return runtimeops.ApprovalBrowserEnrich(ctx, base, token, groupwareURL, source, text)
+	return browserbridge.New(base, token).ApprovalEnrich(ctx, groupwareURL, source, text)
 }
 
 // submainRoleIfConfigured returns the "submain" role name when agents.submainModel

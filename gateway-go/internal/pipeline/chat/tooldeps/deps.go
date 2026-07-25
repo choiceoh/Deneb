@@ -3,6 +3,7 @@ package tooldeps
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
@@ -24,6 +25,21 @@ type (
 
 // TranscriptStore is the stable transcript contract owned by chatport.
 type TranscriptStore = chatport.TranscriptStore
+
+// PhoneActionFunc delivers a structured phone action to the native app for
+// in-app Intent execution. The server backs it with the app's live push
+// channel; tools consume only this stable dependency contract.
+//
+// Result contract: a nil error means the app confirmed launch. A returned
+// error wrapping ErrPhoneActionUnconfirmed means the frame was delivered but no
+// execution report arrived in time. Any other error is a real delivery or
+// device-reported failure.
+type PhoneActionFunc func(ctx context.Context, action string, args map[string]string) error
+
+// ErrPhoneActionUnconfirmed marks the fail-open outcome of a phone action
+// dispatch: the frame reached the push channel but the app did not report an
+// execution result within the wait window.
+var ErrPhoneActionUnconfirmed = errors.New("phone action execution not confirmed")
 
 // MarketQuote is one instrument quote for the market tool.
 type MarketQuote struct {
@@ -204,7 +220,7 @@ type CoreToolDeps struct {
 	// PhoneActionSender delivers a validated phone action to the native app for
 	// in-app Intent execution (the phone_write Intent ops). nil = no app channel
 	// wired, so those actions report unavailable instead of dropping silently.
-	PhoneActionSender func(ctx context.Context, action string, args map[string]string) error
+	PhoneActionSender PhoneActionFunc
 	// WorkstationCommandSender delivers a validated workspace command (open/
 	// split/close/focus/layout/wiki) to connected desktop workstations over the
 	// events push channel. nil = no desktop channel wired, so the workstation

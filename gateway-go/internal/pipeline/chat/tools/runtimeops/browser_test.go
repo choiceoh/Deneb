@@ -112,30 +112,3 @@ func TestBrowserTool_Unauthorized(t *testing.T) {
 		t.Errorf("expected auth failure, got %q", out)
 	}
 }
-
-func TestApprovalBrowserEnrich_ReturnsBodyWhenHubReady(t *testing.T) {
-	srv := stubBrowser(t)
-	got := ApprovalBrowserEnrich(context.Background(), srv.URL, "secret", "https://tsgw.topsolar.kr", "아마란스10", "종류: 전자결재\n제목: 출장 신청")
-	if got != "clicked login" {
-		t.Fatalf("enrich = %q, want clicked login body", got)
-	}
-}
-
-func TestApprovalBrowserEnrich_EmptyWhenUnconfiguredOrDown(t *testing.T) {
-	if got := ApprovalBrowserEnrich(context.Background(), "", "", "https://tsgw.topsolar.kr", "아마란스10", "결재"); got != "" {
-		t.Fatalf("empty URL should skip, got %q", got)
-	}
-	if got := ApprovalBrowserEnrich(context.Background(), "http://127.0.0.1:1", "secret", "https://tsgw.topsolar.kr", "아마란스10", "결재"); got != "" {
-		t.Fatalf("unreachable bridge should skip, got %q", got)
-	}
-}
-
-func TestBuildApprovalReadTask_MentionsSiteAndReadOnly(t *testing.T) {
-	task := buildApprovalReadTask("https://tsgw.topsolar.kr", "아마란스10", "종류: 전자결재\n제목: 휴가")
-	if !strings.Contains(task, "https://tsgw.topsolar.kr") {
-		t.Fatalf("task missing groupware URL: %q", task)
-	}
-	if !strings.Contains(task, "읽기만") || !strings.Contains(task, "휴가") {
-		t.Fatalf("task missing read-only / title cues: %q", task)
-	}
-}

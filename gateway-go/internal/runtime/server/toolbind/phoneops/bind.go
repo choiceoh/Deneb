@@ -1,5 +1,5 @@
 package phoneops
 
-import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
+import "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 
-var ErrPhoneActionUnconfirmed = runtimeops.ErrPhoneActionUnconfirmed
+var ErrPhoneActionUnconfirmed = tooldeps.ErrPhoneActionUnconfirmed
