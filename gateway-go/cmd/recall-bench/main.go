@@ -154,6 +154,64 @@ type benchmarkConfig struct {
 // const so tests pin the exact message alongside their own stderr expectations.
 const bm25DegradedWarning = "recall-bench: WARNING — embedding server unreachable; scoring is BM25-degraded, NOT production parity (set DENEB_EMBEDDING_URL, e.g. http://127.0.0.1:8002)\n"
 
+// deadGoldWarning flags gold cases whose gold_paths match no page on disk. Such
+// a case can never be hit no matter how good retrieval is, so it silently caps
+// the ceiling and reads as a retrieval failure. This is not hypothetical: the
+// 2026-07-19 move to code-keyed project folders left 29/105 cases pointing at
+// retired Korean paths, capping r@8 at 71.4% and making a healthy stack score
+// 63.5% — the drop looked like a regression for six days.
+const deadGoldWarning = "recall-bench: WARNING — %d/%d gold cases reference paths that no longer exist; " +
+	"the ceiling is %.1f%%, so these read as retrieval misses. Repoint them at the pages' current " +
+	"locations (project CODE folders survive renames). Dead: %s\n"
+
+// deadGoldCases returns the ids of cases whose gold_paths match no markdown file
+// under wikiDir, plus a short sample for the warning. Matching mirrors
+// findGoldRank: a gold path is a SUBSTRING of the result path.
+func deadGoldCases(wikiDir string, cases []goldCase) (dead []string, sample []string) {
+	var paths []string
+	// A per-entry error (or an unrelatable path) skips that entry and keeps
+	// walking: this guard is advisory, so one unreadable file must not abort the
+	// scan and turn every remaining case into a false "dead gold" report.
+	_ = filepath.Walk(wikiDir, func(p string, fi os.FileInfo, err error) error {
+		if err != nil || fi.IsDir() || !strings.HasSuffix(p, ".md") {
+			return nil //nolint:nilerr // skip this entry, continue the walk (advisory scan)
+		}
+		rel, relErr := filepath.Rel(wikiDir, p)
+		if relErr != nil || strings.HasPrefix(rel, ".") {
+			return nil //nolint:nilerr // same: unrelatable path is skipped, not fatal
+		}
+		paths = append(paths, rel)
+		return nil
+	})
+	if len(paths) == 0 {
+		return nil, nil // cannot judge (no tree walked) — stay silent rather than cry wolf
+	}
+	for _, c := range cases {
+		if len(c.GoldPaths) == 0 {
+			continue
+		}
+		alive := false
+		for _, g := range c.GoldPaths {
+			for _, p := range paths {
+				if strings.Contains(p, g) {
+					alive = true
+					break
+				}
+			}
+			if alive {
+				break
+			}
+		}
+		if !alive {
+			dead = append(dead, c.ID)
+			if len(sample) < 5 {
+				sample = append(sample, c.ID)
+			}
+		}
+	}
+	return dead, sample
+}
+
 type parseOutcome struct {
 	done     bool
 	exitCode int
@@ -313,6 +371,10 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 		total := len(cases)
 		cases = filterSplit(cases, cfg.holdoutPct, cfg.split)
 		fmt.Fprintf(stdout, "== split=%s holdout_pct=%d  %d/%d cases (stable hash of case ID)\n", cfg.split, cfg.holdoutPct, len(cases), total)
+	}
+	if dead, worst := deadGoldCases(cfg.wikiDir, cases); len(dead) > 0 {
+		fmt.Fprintf(stderr, deadGoldWarning, len(dead), len(cases),
+			100*float64(len(cases)-len(dead))/float64(len(cases)), strings.Join(worst, ", "))
 	}
 	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))

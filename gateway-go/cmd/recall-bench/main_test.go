@@ -472,3 +472,43 @@ func TestLifecycleMetricsScoreStaleAndLeakExposureInTopK(t *testing.T) {
 		t.Fatalf("lifecycle line must be suppressed without lifecycle cases, got %q", out.String())
 	}
 }
+
+// A gold case pointing at a path that no longer exists can never be hit, so it
+// silently caps the ceiling and reads as a retrieval miss. The 2026-07-19 move to
+// code-keyed project folders did exactly that to 29/105 cases — a healthy stack
+// scored 63.5% for six days and looked like a regression.
+func TestDeadGoldCasesDetectsRetiredPaths(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite := func(rel string) {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("---\ntitle: x\n---\n\nbody\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite(filepath.Join("프로젝트", "pl1-gsn-dev-001", "대표.md"))
+
+	cases := []goldCase{
+		{ID: "alive", GoldPaths: []string{"프로젝트/pl1-gsn-dev-001"}},
+		{ID: "retired", GoldPaths: []string{"프로젝트/군산-옥구읍-수산리"}},
+		{ID: "no-gold"}, // cases without gold paths are not "dead", just unscored
+	}
+	dead, sample := deadGoldCases(dir, cases)
+	if len(dead) != 1 || dead[0] != "retired" {
+		t.Fatalf("dead = %v, want [retired]", dead)
+	}
+	if len(sample) != 1 || sample[0] != "retired" {
+		t.Errorf("sample = %v, want [retired]", sample)
+	}
+
+	// All-alive gold must stay silent — a guard that always fires is ignored.
+	if d, _ := deadGoldCases(dir, cases[:1]); len(d) != 0 {
+		t.Errorf("healthy gold must not warn, got %v", d)
+	}
+	// An unwalkable tree must not cry wolf either.
+	if d, _ := deadGoldCases(filepath.Join(dir, "nope"), cases); len(d) != 0 {
+		t.Errorf("missing wiki dir must stay silent, got %v", d)
+	}
+}
