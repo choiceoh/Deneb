@@ -290,41 +290,38 @@ private suspend fun DenebGatewayClient.installRecoveredTranscript(key: String, t
 // flashing to empty), or the messages — possibly an authoritative empty list —
 // on success. The null-vs-[] distinction is what lets loadTranscriptGuarded
 // evict a stale cache only when the server says the session is really empty.
-internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): List<History>? =
-    fetchTranscriptPayload(sessionKey)?.let { mapTranscriptMessages(it.messages) }
+internal suspend fun DenebGatewayClient.fetchTranscript(sessionKey: String): List<History>? = fetchTranscriptPayload(sessionKey)?.let { mapTranscriptMessages(it.messages) }
 
-internal suspend fun DenebGatewayClient.fetchTranscriptPayload(sessionKey: String): TranscriptPayload? =
-    callRpc<TranscriptPayload>(
-        "miniapp.sessions.transcript",
-        buildJsonObject {
-            put("sessionKey", sessionKey)
-            put("limit", 200)
-        },
-    )
+internal suspend fun DenebGatewayClient.fetchTranscriptPayload(sessionKey: String): TranscriptPayload? = callRpc<TranscriptPayload>(
+    "miniapp.sessions.transcript",
+    buildJsonObject {
+        put("sessionKey", sessionKey)
+        put("limit", 200)
+    },
+)
 
-private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> =
-    messages.mapNotNull { m ->
-        val role = when (m.role.lowercase()) {
-            "user" -> History.Role.USER
-            "assistant" -> History.Role.ASSISTANT
-            else -> return@mapNotNull null
-        }
-        val attachments = m.attachments
-            .filter { it.data.isNotBlank() && it.mimeType.isNotBlank() }
-            .map { Attachment(data = it.data, mimeType = it.mimeType, fileName = it.name.ifBlank { null }) }
-            .toImmutableList()
-        // Keep image-only proactive messages (e.g. the weekly-report form) even
-        // when the caption is blank — they carry the attachment, not text.
-        if (m.content.isBlank() && attachments.isEmpty()) {
-            null
-        } else {
-            History(
-                id = stableTranscriptId(role, m.content, m.timestampMs),
-                role = role,
-                content = m.content,
-                attachments = attachments,
-                timestampMs = m.timestampMs,
-                reasoningContent = m.reasoning.ifBlank { null },
-            )
-        }
+private fun mapTranscriptMessages(messages: List<TranscriptMsgOut>): List<History> = messages.mapNotNull { m ->
+    val role = when (m.role.lowercase()) {
+        "user" -> History.Role.USER
+        "assistant" -> History.Role.ASSISTANT
+        else -> return@mapNotNull null
     }
+    val attachments = m.attachments
+        .filter { it.data.isNotBlank() && it.mimeType.isNotBlank() }
+        .map { Attachment(data = it.data, mimeType = it.mimeType, fileName = it.name.ifBlank { null }) }
+        .toImmutableList()
+    // Keep image-only proactive messages (e.g. the weekly-report form) even
+    // when the caption is blank — they carry the attachment, not text.
+    if (m.content.isBlank() && attachments.isEmpty()) {
+        null
+    } else {
+        History(
+            id = stableTranscriptId(role, m.content, m.timestampMs),
+            role = role,
+            content = m.content,
+            attachments = attachments,
+            timestampMs = m.timestampMs,
+            reasoningContent = m.reasoning.ifBlank { null },
+        )
+    }
+}
