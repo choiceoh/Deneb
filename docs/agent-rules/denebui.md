@@ -55,6 +55,11 @@ globs: ["gateway-go/internal/pipeline/chat/denebui/**", "gateway-go/cmd/denebui-
   — 비 NO_REPLY 보고는 카드 기본, 결정 요청은 인터랙티브 카드.
 - 채택률 관측: `run_lifecycle.go` `looksStructuredWithoutCard` — 카드 없이
   구조적 형태로 나간 턴을 Info 로그("deneb-ui adoption miss")로 계수.
+  읽는 방법은 **`make card-adoption`** (`scripts/audit/card-adoption.py`,
+  advisory·읽기전용): 저널의 `card authored` vs `adoption miss`를 세션 클래스별로
+  갈라 비율을 낸다. **operator 값만 본다** — 자동 레인이 훨씬 높아 평균에 섞으면
+  정작 중요한 수치가 가려진다 (2026-07-25 실측: mailpoll 80.6% vs client:main 26%).
+  miss는 휴리스틱이라 절대값보다 **클래스 간 격차와 추세**가 신호다.
 
 ## 관찰/검증 사슬
 
