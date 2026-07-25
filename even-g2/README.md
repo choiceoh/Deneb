@@ -129,6 +129,20 @@ Gateway proactive pushes are normalized to one-line HUD grammar before SSE/FCM:
 3. Success signal: `HUD_OK / (HUD_OK + PHONE_OPEN)` rising across a few days.
 4. Optional diary line: `wiki log` — `G2 HUD: OK=N phone=M`.
 
+## Open question — needs the actual glasses
+
+**목록 페이지에서 아래로 스와이프하면 다음 페이지로 넘어가는가?**
+
+시뮬레이터에서는 **안 넘어간다**. 2회 재현([30162600973](https://github.com/choiceoh/Deneb/actions/runs/30162600973) · [30163240946](https://github.com/choiceoh/Deneb/actions/runs/30163240946)): 항목 2건짜리 리스트 컨테이너에서 `down` 4회가 호스트 이벤트를 **0건** 만들고 화면도 그대로였다. 같은 컨테이너의 **클릭은 정상 동작**하고, 텍스트 컨테이너의 `down` 도 `textEvent{eventType:2}` 로 정상 도착한다 — 즉 리스트 컨테이너만 스크롤을 삼킨다.
+
+다만 시뮬레이터 README 가 바로 이 지점의 충실도를 부인한다:
+
+> **List Behavior** — List scrolling behavior, especially focused-item positioning on screen, can vary. This happens because the simulator re-implements drawing logic instead of sharing embedded source code directly.
+
+그래서 스모크는 이걸 **단정하지 않고 관측만** 한다 (`smoke-artifacts/observations.json` 의 `listContainerScroll`).
+
+**실기기에서 확인할 것**: 알림이 있는 상태(홈=목록)에서 아래 스와이프로 일정/할 일 페이지에 도달하는가. **도달하지 못한다면 실제 결함이다** — 목록 페이지에서 탭은 상세를 열고 더블탭은 앱을 종료하므로, 알림이 있는 동안 나머지 페이지가 통째로 닿지 않게 된다.
+
 ## Design constraints
 
 - Canvas 576×288, monochrome green text containers
