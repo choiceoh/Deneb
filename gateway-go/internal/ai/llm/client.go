@@ -280,6 +280,9 @@ func NewClient(baseURL, apiKey string, opts ...ClientOption) *Client {
 // server overload — never on permanent 4xx or 501).
 func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser, error) {
 	var lastErr error
+	// nil when the caller did not opt in (helper calls, tests) — every record
+	// is then a no-op, so this observability can never change control flow.
+	collector := retryCollectorFrom(ctx)
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
 			// Agent-level context expired — retrying won't help since
@@ -330,6 +333,10 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 		if err != nil {
 			reqCancel()
 			lastErr = fmt.Errorf("http request failed: %w", err)
+			// Status-less failure: the provider never answered. Recorded under
+			// its own label so a transport storm cannot be mistaken for a
+			// rate-limit storm when reading the ledger.
+			collector.record(retryAttempt{kind: "transport"})
 			continue
 		}
 
@@ -352,6 +359,10 @@ func (c *Client) DoStream(ctx context.Context, req *http.Request) (io.ReadCloser
 			Message:    string(body),
 			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
 		}
+		// Recorded before the retryability check so a permanent failure still
+		// appears in the turn's failure mix — "one 400" and "no failures" are
+		// very different rows to read.
+		collector.record(retryAttempt{status: resp.StatusCode})
 
 		// Only retry on transient errors (rate limit, timeout, server overload).
 		if !httpretry.IsRetryable(resp.StatusCode) || isProviderPermanentRateLimit(lastErr) {
