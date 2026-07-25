@@ -37,6 +37,10 @@ const (
 	// card (then stay quiet until recovery) so Amaranth/auth outages aren't
 	// only a journal line.
 	RadarListFailAlertAfter = 3
+	// radarRetryBackoffCap bounds the per-document retry backoff. A document
+	// whose callback keeps failing is never tombstoned — it retries at most
+	// once a day, so it self-heals when the upstream recovers.
+	radarRetryBackoffCap    = 24 * time.Hour
 	radarApprovalListLimit  = 50
 	radarIntervalMinutesEnv = "DENEB_GROUPWARE_RADAR_INTERVAL_MINUTES"
 	// RadarListFailRefID is the durable work-feed ref for list-failure alerts.
@@ -118,6 +122,47 @@ type radarDocState struct {
 	FirstSeenAt     int64  `json:"firstSeenAt,omitempty"`
 	LastSeenAt      int64  `json:"lastSeenAt"`
 	EscalationLevel int    `json:"escalationLevel,omitempty"`
+	// FailCount/NextAttemptAt back off a document whose ingest callback keeps
+	// failing. Without them an unreadable doc (deleted upstream, permission
+	// drift) is retried every cycle forever and permanently occupies one of the
+	// MaxPerCycle analysis slots. Both reset on success and on a fingerprint
+	// change — a re-drafted document earns a fresh attempt.
+	FailCount     int   `json:"failCount,omitempty"`
+	NextAttemptAt int64 `json:"nextAttemptAt,omitempty"`
+}
+
+// retryDelay is the backoff before another attempt at a document whose callback
+// has failed failCount times. The first failure retries on the very next cycle
+// (most are transient); after that the delay doubles from the poll interval.
+func (r *Radar) retryDelay(failCount int) time.Duration {
+	if failCount <= 1 {
+		return 0
+	}
+	delay := r.interval
+	for range failCount - 2 {
+		if delay >= radarRetryBackoffCap/2 {
+			return radarRetryBackoffCap
+		}
+		delay *= 2
+	}
+	return min(delay, radarRetryBackoffCap)
+}
+
+// noteDocFailure records a failed ingest and schedules the next attempt.
+func (r *Radar) noteDocFailure(docs map[string]radarDocState, id string, nowMs int64) time.Duration {
+	stored := docs[id]
+	stored.FailCount++
+	delay := r.retryDelay(stored.FailCount)
+	stored.NextAttemptAt = nowMs + delay.Milliseconds()
+	docs[id] = stored
+	return delay
+}
+
+// dueForAttempt reports whether a not-yet-notified document has served its
+// backoff. Documents still backing off are not candidates at all, so they never
+// consume a per-cycle slot.
+func dueForAttempt(stored radarDocState, nowMs int64) bool {
+	return !stored.Notified && nowMs >= stored.NextAttemptAt
 }
 
 // NewRadar constructs a serial periodic approval radar.
@@ -247,6 +292,10 @@ func (r *Radar) scan(ctx context.Context) error {
 		if !exists || stored.Fingerprint != fingerprint {
 			stored.Fingerprint = fingerprint
 			stored.Notified = false
+			// A re-drafted document deserves a clean attempt, not the old
+			// document's backoff.
+			stored.FailCount = 0
+			stored.NextAttemptAt = 0
 		}
 		if stored.FirstSeenAt == 0 {
 			if stored.LastSeenAt > 0 {
@@ -257,7 +306,7 @@ func (r *Radar) scan(ctx context.Context) error {
 		}
 		stored.LastSeenAt = nowMs
 		state.Docs[id] = stored
-		if !stored.Notified {
+		if dueForAttempt(stored, nowMs) {
 			candidates = append(candidates, doc)
 		}
 	}
@@ -272,11 +321,17 @@ func (r *Radar) scan(ctx context.Context) error {
 			continue
 		}
 		if err := r.onPending(ctx, doc); err != nil {
-			runErrs = append(runErrs, fmt.Errorf("pending approval %s: %w", doc.DocID, err))
+			delay := r.noteDocFailure(state.Docs, doc.DocID, nowMs)
+			runErrs = append(runErrs, fmt.Errorf(
+				"pending approval %s (attempt %d, retry in %s): %w",
+				doc.DocID, state.Docs[doc.DocID].FailCount, delay, err,
+			))
 			continue
 		}
 		stored := state.Docs[doc.DocID]
 		stored.Notified = true
+		stored.FailCount = 0
+		stored.NextAttemptAt = 0
 		state.Docs[doc.DocID] = stored
 	}
 
@@ -382,12 +437,20 @@ func (r *Radar) scanCC(ctx context.Context, state *radarState, nowMs int64) []er
 			stored.Notified = seeding
 		}
 		stored.LastSeenAt = nowMs
-		if !stored.Notified && attempted < r.ccMaxPerCycle {
+		if dueForAttempt(stored, nowMs) && attempted < r.ccMaxPerCycle {
 			attempted++
 			if err := r.onCCNew(ctx, doc); err != nil {
-				errs = append(errs, fmt.Errorf("cc approval %s: %w", id, err))
+				state.CCDocs[id] = stored
+				delay := r.noteDocFailure(state.CCDocs, id, nowMs)
+				stored = state.CCDocs[id]
+				errs = append(errs, fmt.Errorf(
+					"cc approval %s (attempt %d, retry in %s): %w",
+					id, stored.FailCount, delay, err,
+				))
 			} else {
 				stored.Notified = true
+				stored.FailCount = 0
+				stored.NextAttemptAt = 0
 			}
 		}
 		state.CCDocs[id] = stored
