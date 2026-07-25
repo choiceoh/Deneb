@@ -34,6 +34,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
+/** Ambiguous pairs sent per adjudicate call — must stay ≤ the gateway's cap
+ *  (maxAdjudicatePairs=32) so one request never runs for minutes. */
+private const val adjudicateChunk = 32
+
 /**
  * 연락처 정리 — the address-book dedup ([miniapp.contacts.dedup]) plus a one-tap
  * apply that LINKS the safe duplicate groups on the device (Android
@@ -65,21 +69,42 @@ fun DenebContactsDedupScreen(
     }
     LaunchedEffect(Unit) { load() }
 
-    // Apply every safe merge group to the device: link each group's raw contacts
-    // into one aggregated contact. Requests WRITE the first time; no-op without it.
-    suspend fun applyAll(merges: List<DedupMergeRow>) {
+    // One-tap autonomous cleanup: first link every deterministic safe group, then
+    // let the AI rule on the ambiguous pairs in bounded chunks and link the ones it
+    // calls the same person. All links are reversible AggregationExceptions (no
+    // deletion). Requests WRITE the first time; no-op without it.
+    suspend fun applyAll(data: ContactsDedupPayload) {
         applying = true
         applyMsg = null
         if (!writer.hasAccess()) perms.requestPermission()
-        applyMsg = if (!writer.hasAccess()) {
-            "연락처 쓰기 권한이 필요합니다 (설정 → 권한 → 연락처)"
-        } else {
-            var merged = 0
-            for (m in merges) {
-                if (writer.linkByIdentity(m.phones, m.emails) >= 2) merged++
-            }
-            "폰 주소록에서 ${merged}개 그룹을 하나로 합쳤습니다"
+        if (!writer.hasAccess()) {
+            applyMsg = "연락처 쓰기 권한이 필요합니다 (설정 → 권한 → 연락처)"
+            applying = false
+            return
         }
+        // 1) deterministic safe merges — the clear duplicates.
+        var ruleMerged = 0
+        for (m in data.merges) {
+            if (writer.linkByIdentity(m.phones, m.emails) >= 2) ruleMerged++
+        }
+        // 2) AI adjudication of the ambiguous pairs, ≤32 per request so no single
+        //    call runs for minutes. SAME → link; diff/unsure left untouched.
+        var aiMerged = 0
+        val pairs = data.ambiguousPairs
+        var done = 0
+        for (chunk in pairs.chunked(adjudicateChunk)) {
+            applyMsg = "AI 검토 중… $done/${pairs.size}"
+            val verdicts = client.fetchContactsAdjudicate(chunk).orEmpty()
+            chunk.forEachIndexed { i, pair ->
+                if (verdicts.getOrNull(i) == "same" &&
+                    writer.linkByIdentity(pair.a.phones + pair.b.phones, pair.a.emails + pair.b.emails) >= 2
+                ) {
+                    aiMerged++
+                }
+            }
+            done += chunk.size
+        }
+        applyMsg = "폰에서 ${ruleMerged + aiMerged}개 합침 (규칙 $ruleMerged · AI $aiMerged)"
         applying = false
     }
 
@@ -97,7 +122,7 @@ fun DenebContactsDedupScreen(
                 canApply = writer.isSupported(),
                 applying = applying,
                 applyMsg = applyMsg,
-                onApply = { scope.launch { applyAll(p.merges) } },
+                onApply = { scope.launch { applyAll(p) } },
             )
         }
     }
@@ -128,7 +153,7 @@ internal fun ContactsDedupContent(
                     style = DenebType.sectionLabel,
                     color = denebHint(),
                 )
-                if (canApply && payload.merges.isNotEmpty()) {
+                if (canApply && (payload.merges.isNotEmpty() || payload.ambiguous > 0)) {
                     Spacer(Modifier.height(16.dp))
                     Button(onClick = onApply, enabled = !applying) {
                         Text(if (applying) "정리 중…" else "폰에 정리 적용", style = DenebType.button)

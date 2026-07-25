@@ -15,6 +15,7 @@ import ai.deneb.deneb.generated.SessionRowOut
 import ai.deneb.deneb.generated.TodoOut
 import ai.deneb.deneb.generated.TranscriptMsgOut
 import ai.deneb.ui.chat.WorkFeedItem
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -187,6 +188,7 @@ internal data class ContactsDedupPayload(
     val total: Int = 0,
     val distinct: Int = 0,
     val ambiguous: Int = 0,
+    @SerialName("ambiguous_pairs") val ambiguousPairs: List<DedupPairRow> = emptyList(),
     val merges: List<DedupMergeRow> = emptyList(),
 )
 
@@ -197,6 +199,26 @@ internal data class DedupMergeRow(
     val phones: List<String> = emptyList(),
     val emails: List<String> = emptyList(),
 )
+
+/** One ambiguous pair (same identifier, different name) for the AI to adjudicate. */
+@Serializable
+internal data class DedupPairRow(
+    val a: DedupPartyRow = DedupPartyRow(),
+    val b: DedupPartyRow = DedupPartyRow(),
+    val shared: String = "",
+)
+
+@Serializable
+internal data class DedupPartyRow(
+    val name: String = "",
+    val org: String = "",
+    val phones: List<String> = emptyList(),
+    val emails: List<String> = emptyList(),
+)
+
+/** miniapp.contacts.adjudicate — one verdict per submitted pair ("same"/"diff"/"unsure"). */
+@Serializable
+internal data class ContactsAdjudicatePayload(val verdicts: List<String> = emptyList())
 
 @Serializable
 internal data class WikiPagePayload(
