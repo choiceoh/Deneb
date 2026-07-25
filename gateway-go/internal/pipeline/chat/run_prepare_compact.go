@@ -151,18 +151,18 @@ func compactTurnMessages(ctx context.Context, params RunParams, deps runDeps, mr
 	}
 
 	// Off-critical-path compaction (defer the STW): when the assembled raw
-	// history is over the LLM threshold but still fits the model's context
-	// window with headroom — large-window local models (e.g. dsv4), whose
-	// decode rate is flat well past the configured budget — run THIS turn on
+	// history is over the LLM threshold but still fits the model's known context
+	// window with headroom — or, for unknown-window providers, still fits the
+	// configured history budget that assembly already trusts — run THIS turn on
 	// the raw context and summarize in the BACKGROUND instead of blocking the
 	// agent loop on a multi-second STW summarization. The next turn assembles
 	// the background-persisted summary. The synchronous path below stays the
 	// backstop for: the first compaction (no summaries yet → AssembleContext
 	// truncated the tail, which CompactAndPersist must recover), models whose
-	// window has no headroom over the budget, and the hard ceiling where the
-	// raw history would not fit the window. Re-prefill behaviour is unchanged
-	// (the summary still lands one turn later); only the STW is removed. See
-	// polaris.Engine.CompactInBackground and prompt-cache.md §1.5.
+	// known window has no headroom over the budget, and the hard ceiling where
+	// the raw history would not fit the window/budget. Re-prefill behaviour is
+	// unchanged (the summary still lands one turn later); only the STW is
+	// removed. See polaris.Engine.CompactInBackground and prompt-cache.md §1.5.
 	if deferredMessages, deferred := deferCompactionToBackground(
 		params, deps, mr, messages, summarizer, contextBudget, logger,
 	); deferred {
@@ -218,9 +218,9 @@ func deferCompactionToBackground(
 	engine := bridge.Engine()
 	currentTokens := compact.EstimateMessagesTokens(messages)
 	softThreshold := int(float64(contextBudget) * compact.DefaultLLMThresholdPct)
-	ceiling := contextWindowCeiling(deps, mr.providerID, mr.model)
+	ceiling, canDefer := compactionDeferralCeiling(deps, mr.providerID, mr.model, contextBudget)
 	eligible := currentTokens > softThreshold &&
-		ceiling > contextBudget &&
+		canDefer &&
 		currentTokens <= ceiling &&
 		engine.HasSummaries(params.SessionKey)
 	if !eligible {
@@ -245,6 +245,20 @@ func deferCompactionToBackground(
 		"budget", contextBudget,
 		"ceiling", ceiling)
 	return balanced, true
+}
+
+func compactionDeferralCeiling(deps runDeps, providerID, model string, contextBudget int) (int, bool) {
+	ceiling := contextWindowCeiling(deps, providerID, model)
+	if contextBudget <= 0 {
+		return ceiling, false
+	}
+	if ceiling > contextBudget {
+		return ceiling, true
+	}
+	if ceiling == 0 {
+		return contextBudget, true
+	}
+	return ceiling, false
 }
 
 func startCompactionStatus(

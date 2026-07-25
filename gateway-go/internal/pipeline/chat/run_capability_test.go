@@ -89,9 +89,9 @@ func TestContextWindowCeilingReturnsWindowBasedThreshold(t *testing.T) {
 		maxTokens:  16_384,
 	}
 
-	t.Run("unknown window returns 0 (defer disabled, conservative)", func(t *testing.T) {
-		// No registry → unknown window. 0 ceiling means deferral never fires and
-		// compaction stays synchronous, which is the safe fallback.
+	t.Run("unknown window returns 0", func(t *testing.T) {
+		// No registry → unknown window. Callers that can safely rely on the
+		// configured budget apply that fallback outside this raw capability helper.
 		if got := contextWindowCeiling(baseDeps, "zai", "glm-5-turbo"); got != 0 {
 			t.Errorf("ceiling = %d, want 0 for unknown window", got)
 		}
@@ -142,6 +142,49 @@ func TestContextWindowCeilingReturnsWindowBasedThreshold(t *testing.T) {
 		// 200_000 - 30_000 - 8192 (default reserve) = 161_808.
 		if got := contextWindowCeiling(deps, "acme", "custom-model"); got != 161_808 {
 			t.Errorf("ceiling = %d, want 161808", got)
+		}
+	})
+}
+
+func TestCompactionDeferralCeiling(t *testing.T) {
+	baseDeps := runDeps{
+		contextCfg: ContextConfig{MemoryTokenBudget: 170_000, SystemPromptBudget: 30_000},
+		maxTokens:  16_384,
+	}
+
+	t.Run("unknown window falls back to configured budget", func(t *testing.T) {
+		ceiling, ok := compactionDeferralCeiling(baseDeps, "zai", "glm-5-turbo", 140_000)
+		if !ok || ceiling != 140_000 {
+			t.Fatalf("ceiling=%d ok=%v, want configured budget and eligible", ceiling, ok)
+		}
+	})
+
+	t.Run("large known window keeps window ceiling", func(t *testing.T) {
+		deps := baseDeps
+		deps.registry = capTestRegistry(t, map[string]modelrole.ProviderResolved{
+			"acme": {BaseURL: "https://acme.example/v1", ContextWindow: 1_000_000},
+		})
+		ceiling, ok := compactionDeferralCeiling(deps, "acme", "custom-model", 140_000)
+		if !ok || ceiling != 953_616 {
+			t.Fatalf("ceiling=%d ok=%v, want known large-window ceiling and eligible", ceiling, ok)
+		}
+	})
+
+	t.Run("known window without headroom stays synchronous", func(t *testing.T) {
+		deps := baseDeps
+		deps.registry = capTestRegistry(t, map[string]modelrole.ProviderResolved{
+			"acme": {BaseURL: "https://acme.example/v1", ContextWindow: 60_000},
+		})
+		ceiling, ok := compactionDeferralCeiling(deps, "acme", "custom-model", 13_616)
+		if ok || ceiling != 13_616 {
+			t.Fatalf("ceiling=%d ok=%v, want known window-limited path synchronous", ceiling, ok)
+		}
+	})
+
+	t.Run("zero budget never defers", func(t *testing.T) {
+		ceiling, ok := compactionDeferralCeiling(baseDeps, "zai", "glm-5-turbo", 0)
+		if ok || ceiling != 0 {
+			t.Fatalf("ceiling=%d ok=%v, want no deferral for legacy zero budget", ceiling, ok)
 		}
 	})
 }

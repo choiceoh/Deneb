@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
@@ -135,12 +136,16 @@ func TestEngineStartEligibilityAndJoinFallbacks(t *testing.T) {
 }
 
 func TestEngineStartCanceledJoinReturnsOriginal(t *testing.T) {
-	block := make(chan struct{})
-	t.Cleanup(func() { close(block) })
+	fetchStarted := make(chan struct{})
+	fetchCanceled := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
 	engine := testEngine(func(ctx context.Context, _ string) ([]byte, string, error) {
+		close(fetchStarted)
 		select {
-		case <-block:
+		case <-release:
 		case <-ctx.Done():
+			close(fetchCanceled)
 		}
 		return nil, "", context.Canceled
 	})
@@ -149,10 +154,20 @@ func TestEngineStartCanceledJoinReturnsOriginal(t *testing.T) {
 	if join == nil {
 		t.Fatal("linked message did not start enrichment")
 	}
+	select {
+	case <-fetchStarted:
+	case <-time.After(time.Second):
+		t.Fatal("fetch did not start")
+	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	if got := join(canceled); got != message {
 		t.Fatalf("canceled join = %q, want original", got)
+	}
+	select {
+	case <-fetchCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("canceled join did not cancel the fetch context")
 	}
 }
 
