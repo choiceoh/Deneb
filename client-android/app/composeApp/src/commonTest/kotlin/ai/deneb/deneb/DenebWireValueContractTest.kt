@@ -45,8 +45,8 @@ class DenebWireValueContractTest {
         assertTrue(dropped.isEmpty(), "round-trip dropped wire keys: $dropped")
     }
 
-    private fun wireValueContractCases(): List<() -> Unit> = listOf(
-        {
+    private fun wireValueContractCases(): List<Pair<String, () -> Unit>> = listOf(
+        "RecentPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "sessions": [
@@ -68,7 +68,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(RecentPayload.serializer(), encoded),
             )
         },
-        {
+        "RecentPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     RecentPayload.serializer(),
@@ -76,7 +76,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "TranscriptPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "messages": [
@@ -100,7 +100,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(TranscriptPayload.serializer(), encoded),
             )
         },
-        {
+        "TranscriptPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     TranscriptPayload.serializer(),
@@ -108,7 +108,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "WorkFeedPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "items": [
@@ -130,7 +130,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(WorkFeedPayload.serializer(), encoded),
             )
         },
-        {
+        "WorkFeedPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     WorkFeedPayload.serializer(),
@@ -138,7 +138,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "WorkFeedActionRunPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "ok": true,
@@ -167,7 +167,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(WorkFeedActionRunPayload.serializer(), encoded),
             )
         },
-        {
+        "WorkFeedActionRunPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     WorkFeedActionRunPayload.serializer(),
@@ -175,7 +175,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "WorkFeedFeedbackPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "ok": true,
@@ -200,7 +200,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(WorkFeedFeedbackPayload.serializer(), encoded),
             )
         },
-        {
+        "WorkFeedFeedbackPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     WorkFeedFeedbackPayload.serializer(),
@@ -208,7 +208,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "NativeSyncPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "events": [
@@ -236,7 +236,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(NativeSyncPayload.serializer(), encoded),
             )
         },
-        {
+        "NativeSyncPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     NativeSyncPayload.serializer(),
@@ -244,7 +244,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "NativeSyncEvent preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "seq": 7000000000,
@@ -277,7 +277,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(NativeSyncEvent.serializer(), encoded),
             )
         },
-        {
+        "NativeSyncEvent rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     NativeSyncEvent.serializer(),
@@ -285,7 +285,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "NativeSyncActionPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "item": {},
@@ -306,7 +306,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(NativeSyncActionPayload.serializer(), encoded),
             )
         },
-        {
+        "NativeSyncActionPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     NativeSyncActionPayload.serializer(),
@@ -314,7 +314,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "MemoryListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "pages": [
@@ -336,7 +336,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(MemoryListPayload.serializer(), encoded),
             )
         },
-        {
+        "MemoryListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     MemoryListPayload.serializer(),
@@ -344,7 +344,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "DiaryRecentPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "entries": [
@@ -366,7 +366,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(DiaryRecentPayload.serializer(), encoded),
             )
         },
-        {
+        "DiaryRecentPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     DiaryRecentPayload.serializer(),
@@ -374,7 +374,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "DiaryRecentRow preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "file": "file-value",
@@ -399,7 +399,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(DiaryRecentRow.serializer(), encoded),
             )
         },
-        {
+        "DiaryRecentRow rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     DiaryRecentRow.serializer(),
@@ -407,7 +407,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "DeletePagesPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "ok": true,
@@ -428,7 +428,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(DeletePagesPayload.serializer(), encoded),
             )
         },
-        {
+        "DeletePagesPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     DeletePagesPayload.serializer(),
@@ -436,7 +436,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "MovePagePayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "ok": true
@@ -455,7 +455,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(MovePagePayload.serializer(), encoded),
             )
         },
-        {
+        "MovePagePayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     MovePagePayload.serializer(),
@@ -463,7 +463,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CategoriesPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "categories": [
@@ -489,7 +489,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CategoriesPayload.serializer(), encoded),
             )
         },
-        {
+        "CategoriesPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CategoriesPayload.serializer(),
@@ -497,7 +497,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CronListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "jobs": [
@@ -519,7 +519,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CronListPayload.serializer(), encoded),
             )
         },
-        {
+        "CronListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CronListPayload.serializer(),
@@ -527,7 +527,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ModelsPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "current": "current-value",
@@ -562,7 +562,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ModelsPayload.serializer(), encoded),
             )
         },
-        {
+        "ModelsPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ModelsPayload.serializer(),
@@ -570,7 +570,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ClientHelloPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "version": "version-value",
@@ -603,7 +603,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ClientHelloPayload.serializer(), encoded),
             )
         },
-        {
+        "ClientHelloPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ClientHelloPayload.serializer(),
@@ -611,7 +611,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "MailListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "messages": [
@@ -635,7 +635,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(MailListPayload.serializer(), encoded),
             )
         },
-        {
+        "MailListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     MailListPayload.serializer(),
@@ -643,7 +643,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "OkPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "ok": true
@@ -662,7 +662,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(OkPayload.serializer(), encoded),
             )
         },
-        {
+        "OkPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     OkPayload.serializer(),
@@ -670,7 +670,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "AskPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "answer": "answer-value"
@@ -689,7 +689,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(AskPayload.serializer(), encoded),
             )
         },
-        {
+        "AskPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     AskPayload.serializer(),
@@ -697,7 +697,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "SenderContextPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "sender": "sender-value",
@@ -729,7 +729,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(SenderContextPayload.serializer(), encoded),
             )
         },
-        {
+        "SenderContextPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     SenderContextPayload.serializer(),
@@ -737,7 +737,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CalListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "events": [
@@ -759,7 +759,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CalListPayload.serializer(), encoded),
             )
         },
-        {
+        "CalListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CalListPayload.serializer(),
@@ -767,7 +767,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CalProposalsPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "proposals": [
@@ -789,7 +789,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CalProposalsPayload.serializer(), encoded),
             )
         },
-        {
+        "CalProposalsPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CalProposalsPayload.serializer(),
@@ -797,7 +797,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "TodoListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "todos": [
@@ -819,7 +819,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(TodoListPayload.serializer(), encoded),
             )
         },
-        {
+        "TodoListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     TodoListPayload.serializer(),
@@ -827,7 +827,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "PeopleListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "people": [
@@ -849,7 +849,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(PeopleListPayload.serializer(), encoded),
             )
         },
-        {
+        "PeopleListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     PeopleListPayload.serializer(),
@@ -857,7 +857,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ContactsListPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "contacts": [
@@ -879,7 +879,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ContactsListPayload.serializer(), encoded),
             )
         },
-        {
+        "ContactsListPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ContactsListPayload.serializer(),
@@ -887,7 +887,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "WikiPagePayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "path": "path-value",
@@ -926,7 +926,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(WikiPagePayload.serializer(), encoded),
             )
         },
-        {
+        "WikiPagePayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     WikiPagePayload.serializer(),
@@ -934,7 +934,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CaptureImagePayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "text": "text-value"
@@ -953,7 +953,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CaptureImagePayload.serializer(), encoded),
             )
         },
-        {
+        "CaptureImagePayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CaptureImagePayload.serializer(),
@@ -961,7 +961,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CaptureAudioPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "text": "text-value"
@@ -980,7 +980,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CaptureAudioPayload.serializer(), encoded),
             )
         },
-        {
+        "CaptureAudioPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CaptureAudioPayload.serializer(),
@@ -988,7 +988,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CaptureDocumentPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "text": "text-value"
@@ -1007,7 +1007,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CaptureDocumentPayload.serializer(), encoded),
             )
         },
-        {
+        "CaptureDocumentPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CaptureDocumentPayload.serializer(),
@@ -1015,7 +1015,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "CaptureContactsPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "text": "text-value"
@@ -1034,7 +1034,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(CaptureContactsPayload.serializer(), encoded),
             )
         },
-        {
+        "CaptureContactsPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     CaptureContactsPayload.serializer(),
@@ -1042,7 +1042,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ObserveToolStat preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "name": "name-value",
@@ -1077,7 +1077,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ObserveToolStat.serializer(), encoded),
             )
         },
-        {
+        "ObserveToolStat rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ObserveToolStat.serializer(),
@@ -1085,7 +1085,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ObserveBehavior preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "runs": 7,
@@ -1131,7 +1131,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ObserveBehavior.serializer(), encoded),
             )
         },
-        {
+        "ObserveBehavior rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ObserveBehavior.serializer(),
@@ -1139,7 +1139,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ObserveLogLine preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "ts": 7000000000,
@@ -1166,7 +1166,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ObserveLogLine.serializer(), encoded),
             )
         },
-        {
+        "ObserveLogLine rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ObserveLogLine.serializer(),
@@ -1174,7 +1174,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ObserveLogsPayload preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "lines": [
@@ -1198,7 +1198,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ObserveLogsPayload.serializer(), encoded),
             )
         },
-        {
+        "ObserveLogsPayload rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ObserveLogsPayload.serializer(),
@@ -1206,7 +1206,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ObserveVllmPrefixCache preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "model": "model-value",
@@ -1231,7 +1231,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ObserveVllmPrefixCache.serializer(), encoded),
             )
         },
-        {
+        "ObserveVllmPrefixCache rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ObserveVllmPrefixCache.serializer(),
@@ -1239,7 +1239,7 @@ class DenebWireValueContractTest {
                 )
             }
         },
-        {
+        "ObserveHealth preserves present fields" to {
             val input = json.parseToJsonElement(
                 """{
                     "captureEnabled": true,
@@ -1279,7 +1279,7 @@ class DenebWireValueContractTest {
                 json.decodeFromJsonElement(ObserveHealth.serializer(), encoded),
             )
         },
-        {
+        "ObserveHealth rejects wrong shape" to {
             assertFailsWith<SerializationException> {
                 json.decodeFromJsonElement(
                     ObserveHealth.serializer(),
@@ -1289,8 +1289,30 @@ class DenebWireValueContractTest {
         },
     )
 
+    /**
+     * Runs every case and reports ALL failures at once.
+     *
+     * A plain `forEach { it() }` aborts on the first throw, so one broken envelope
+     * hid the other 73 behind a bare `1 test completed, 1 failed` — which is how a
+     * gate-drift fix could look complete while other cases were still unexamined.
+     * `Throwable` (not `AssertionError`) is caught so an unexpected decode
+     * exception cannot re-introduce that masking.
+     */
     @Test
     fun wirePayloadsPreserveFieldsAndRejectWrongShapes() {
-        wireValueContractCases().forEach { it() }
+        val cases = wireValueContractCases()
+        val failures = cases.mapNotNull { (name, case) ->
+            try {
+                case()
+                null
+            } catch (failure: Throwable) {
+                "$name — ${failure.message ?: failure::class.simpleName}"
+            }
+        }
+        assertTrue(
+            failures.isEmpty(),
+            "${failures.size}/${cases.size} wire contract cases failed:\n" +
+                failures.joinToString("\n") { "  • $it" },
+        )
     }
 }
