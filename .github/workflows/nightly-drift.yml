@@ -132,9 +132,12 @@ jobs:
     # convenience and nothing in CI ever ran it, so a type error or a broken
     # refresh-policy change would only surface on the wearer's HUD. Cheap lane —
     # the app is ~800 lines with no native toolchain.
-    name: even-g2 (typecheck + test + build)
+    name: even-g2 (typecheck + test + build + simulator smoke)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The smoke drives the REAL 45s poll interval and its 90s/180s backoff
+    # steps, so it takes ~14 minutes by construction. Shrinking those for the
+    # test would mean testing something other than what ships.
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: even-g2
