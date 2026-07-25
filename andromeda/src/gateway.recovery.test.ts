@@ -125,10 +125,7 @@ describe("recoverTurnAnswer", () => {
 
   it("treats a stable preamble as still running while turnRunning is true", () => {
     expect(
-      effectiveTurnProbe(
-        probeTranscriptForTurn([user("question"), assistant("확인하고 답할게요")], "question"),
-        true,
-      ),
+      effectiveTurnProbe(probeTranscriptForTurn([user("question"), assistant("확인하고 답할게요")], "question"), true),
     ).toEqual({ kind: "running" });
   });
 

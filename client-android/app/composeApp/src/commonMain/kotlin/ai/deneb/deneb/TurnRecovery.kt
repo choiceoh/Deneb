@@ -38,8 +38,7 @@ internal sealed interface TurnProbe {
  * a mid-turn SSE drop after a short preamble is accepted as the final answer
  * once the text stabilizes — the real wrap-up is never adopted.
  */
-internal fun effectiveTurnProbe(probe: TurnProbe, turnRunning: Boolean): TurnProbe =
-    if (turnRunning && probe is TurnProbe.Answered) TurnProbe.StillRunning else probe
+internal fun effectiveTurnProbe(probe: TurnProbe, turnRunning: Boolean): TurnProbe = if (turnRunning && probe is TurnProbe.Answered) TurnProbe.StillRunning else probe
 
 /**
  * Locate [sentText] in a display transcript and classify the turn. Matches the

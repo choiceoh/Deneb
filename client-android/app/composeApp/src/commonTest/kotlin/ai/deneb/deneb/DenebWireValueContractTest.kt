@@ -63,7 +63,8 @@ class DenebWireValueContractTest {
                 """{
                     "messages": [
                         {}
-                    ]
+                    ],
+                    "turnRunning": true
                 }
                 """.trimIndent(),
             ).jsonObject
@@ -74,6 +75,7 @@ class DenebWireValueContractTest {
             assertEquals(input.keys, encoded.keys)
             assertTrue(encoded["messages"] is JsonArray)
             assertEquals(1, (encoded["messages"] as JsonArray).size)
+            assertEquals(input["turnRunning"], encoded["turnRunning"])
 
             assertEquals(
                 decoded,

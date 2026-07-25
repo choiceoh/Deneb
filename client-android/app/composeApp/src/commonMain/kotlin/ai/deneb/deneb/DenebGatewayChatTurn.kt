@@ -127,6 +127,7 @@ internal suspend fun DenebGatewayClient.askGateway(
         }
         when (recovery) {
             is TurnRecoveryResult.Recovered -> recovery.reply
+
             TurnRecoveryResult.NotArrived -> if (accumulated.isEmpty()) {
                 try {
                     sendGatewayChat(http, gatewayUrl, clientToken, sessionKeyAtSend, sendText)
@@ -140,6 +141,7 @@ internal suspend fun DenebGatewayClient.askGateway(
             } else {
                 GatewayReply(text = accumulated.toString(), ok = false)
             }
+
             TurnRecoveryResult.GiveUp -> if (accumulated.isEmpty()) {
                 GatewayReply("⚠️ 답변을 이어받지 못했습니다", ok = false)
             } else {
