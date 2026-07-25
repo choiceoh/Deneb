@@ -149,6 +149,15 @@ func fetchReddit(ctx context.Context, rawURL string, maxChars int) (string, erro
 		// statuses (404 deleted, 5xx down) a re-fetch cannot help, so only the
 		// 403/429 block path escalates.
 		if status == 403 || status == 429 {
+			// old.reddit.com first: it is server-rendered HTML, so it needs no
+			// JS challenge, serves lang=en regardless of the fetcher's locale,
+			// and carries the whole comment tree. Measured 2026-07-25 on a live
+			// thread the .json API 403'd: 92K chars extracted with the full
+			// comment tree, versus 1.4K of Korean-localized nav/ads/login-wall
+			// from the browser sidecar on the same thread.
+			if rendered, ok := fetchRedditViaOldHTML(ctx, rawURL, maxChars); ok {
+				return rendered, nil
+			}
 			if rendered, ok := fetchRedditViaBrowser(ctx, rawURL, maxChars); ok {
 				return rendered, nil
 			}
@@ -172,6 +181,53 @@ func fetchReddit(ctx context.Context, rawURL string, maxChars int) (string, erro
 		}), nil
 	}
 	return out, nil
+}
+
+// Seam (browserRenderFn pattern): tests swap this to avoid network and DNS.
+var oldRedditFetchFn = fetchWithRetry
+
+// oldRedditURL rewrites a Reddit URL onto the server-rendered old.reddit.com
+// host, preserving path and query. Returns ("", false) when the host is already
+// old.reddit.com (no point re-fetching) or the URL will not parse.
+func oldRedditURL(rawURL string) (string, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	if strings.EqualFold(u.Host, "old.reddit.com") {
+		return "", false
+	}
+	u.Host = "old.reddit.com"
+	u.Scheme = "https"
+	return u.String(), true
+}
+
+// fetchRedditViaOldHTML reads the thread from old.reddit.com when the .json API
+// blocks the request. The modern site is a JS SPA behind a bot challenge that
+// also localizes its chrome to the fetcher's language, so the browser sidecar
+// comes back with translated navigation instead of the discussion; old.reddit is
+// plain server-rendered HTML in English with the comment tree inline. Returns
+// ("", false) on any failure so the caller can still try the browser sidecar.
+func fetchRedditViaOldHTML(ctx context.Context, rawURL string, maxChars int) (string, bool) {
+	target, ok := oldRedditURL(rawURL)
+	if !ok {
+		return "", false
+	}
+	// Read the whole page: old.reddit thread HTML runs ~750KB for a busy thread
+	// (measured) because the comment tree is inline, and a byte cap derived from
+	// maxChars truncates it into an unextractable fragment. The same
+	// redditMaxBytes ceiling the JSON path uses applies here; the extracted text
+	// is truncated to maxChars below, after parsing.
+	result, err := oldRedditFetchFn(ctx, target, redditMaxBytes)
+	if err != nil || result == nil || len(result.Data) == 0 {
+		return "", false
+	}
+	meta := webFetchMeta{}
+	text := strings.TrimSpace(processHTML(ctx, string(result.Data), target, nil, &meta))
+	if text == "" {
+		return "", false
+	}
+	return applyTruncation(formatFetchResult(meta, text), maxChars), true
 }
 
 // fetchRedditViaBrowser renders the original (HTML) Reddit URL through the
