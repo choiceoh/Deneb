@@ -13,7 +13,8 @@ type (
 )
 
 var (
-	SkillLifecycleToolSchema  = chattools.SkillLifecycleToolSchema
-	ToolSkillLifecycle        = chattools.ToolSkillLifecycle
-	ErrPhoneActionUnconfirmed = runtimeops.ErrPhoneActionUnconfirmed
+	SkillLifecycleToolDescription = chattools.SkillLifecycleToolDescription
+	SkillLifecycleToolSchema      = chattools.SkillLifecycleToolSchema
+	ToolSkillLifecycle            = chattools.ToolSkillLifecycle
+	ErrPhoneActionUnconfirmed     = runtimeops.ErrPhoneActionUnconfirmed
 )
