@@ -135,6 +135,34 @@ func TestRemove_BeforePush_SkipsPendingInsert(t *testing.T) {
 	}
 }
 
+// A pre-delete cancels exactly ONE pending push, not every future one: the
+// cancellation entry is consumed when it fires. Re-creating the same local id
+// later must mirror normally — otherwise a deleted-then-recreated event would
+// be permanently invisible on Google with no error anywhere.
+func TestRemove_BeforePush_CancelIsOneShot(t *testing.T) {
+	r := &fakeRemote{}
+	s, _ := newSyncer(t, r)
+	if err := s.Remove(context.Background(), "local:1"); err != nil {
+		t.Fatalf("Remove before push: %v", err)
+	}
+	if err := s.Push(context.Background(), "local:1", ev("A")); err != nil {
+		t.Fatalf("cancelled push: %v", err)
+	}
+	if len(r.inserts) != 0 {
+		t.Fatalf("first push must be cancelled, inserts=%v", r.inserts)
+	}
+	// Same local id used again = a genuine re-creation.
+	if err := s.Push(context.Background(), "local:1", ev("B")); err != nil {
+		t.Fatalf("re-create push: %v", err)
+	}
+	if len(r.inserts) != 1 {
+		t.Fatalf("re-create must insert exactly once, inserts=%v", r.inserts)
+	}
+	if got := s.MirroredGoogleIDs(); len(got) != 1 {
+		t.Fatalf("re-created event must be mapped, got %v", got)
+	}
+}
+
 func TestPush_PersistFailureRollsBackGoogleInsert(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "calendar-sync.json")
