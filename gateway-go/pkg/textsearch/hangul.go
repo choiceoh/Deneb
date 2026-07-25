@@ -54,7 +54,35 @@ func hangulTokenMatches(indexToken, queryToken string) bool {
 	return false
 }
 
+// maxHangulParticleTrims bounds the stacked-particle peel at TWO — Korean stacks
+// at most a case particle plus a topic/additive one ("…에서-는", "…랑-은",
+// "…까지-도"). A third round starts eating real nouns: "비금도에서는" correctly
+// peels to "비금도" in two, but a third strips the 도 of the place name itself
+// and leaves "비금".
+const maxHangulParticleTrims = 2
+
+// trimHangulParticle strips trailing particles, REPEATEDLY. Korean particles
+// stack ("아르고에너지랑은", "비금도에서는", "계약까지도"), and a single pass left
+// "아르고에너지랑은" at "아르고에너지랑" — LONGER than the indexed "아르고에너지",
+// so neither the exact key nor the prefix/contains fallbacks matched and the
+// query returned ZERO candidates (measured 2026-07-25: the same question without
+// the particle ranked the right page #1, with it scored nothing at all).
+//
+// Over-stripping is bounded by minHangulExpandRunes: a peel that would leave
+// fewer than 2 syllables is refused, which is what keeps ordinary nouns whose
+// tail happens to be a particle syllable ("결과", "지도", "회의") intact.
 func trimHangulParticle(token string) string {
+	for i := 0; i < maxHangulParticleTrims; i++ {
+		next := trimHangulParticleOnce(token)
+		if next == token {
+			break
+		}
+		token = next
+	}
+	return token
+}
+
+func trimHangulParticleOnce(token string) string {
 	for _, suffix := range hangulParticles {
 		if !strings.HasSuffix(token, suffix) {
 			continue
