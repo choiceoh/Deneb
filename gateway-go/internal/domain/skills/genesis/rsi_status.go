@@ -62,11 +62,17 @@ const (
 var rsiSubtleDegradationClasses = map[string]bool{
 	"imperative-drop": true, "safety-drop": true,
 	"imperative-weaken": true, "scope-narrow": true,
+	"exclusivity-drop": true,
 }
 
 // rsiWeakenDegradationClasses is the escalated tier subset — seeing one in
-// the ledger means the lane already probes at its current difficulty ceiling.
-var rsiWeakenDegradationClasses = map[string]bool{"imperative-weaken": true, "scope-narrow": true}
+// the ledger means the lane already probes above the drop tier. It includes
+// tier 4 so the "at the ceiling" diagnosis keeps meaning the CURRENT top rung
+// rather than whichever rung was top when it was written.
+var rsiWeakenDegradationClasses = map[string]bool{
+	"imperative-weaken": true, "scope-narrow": true,
+	"exclusivity-drop": true,
+}
 
 // rsiDispatchSources is the canonical set of accepted candidate sources: a code
 // candidate from any other source is not yet dispatchable until the graduation

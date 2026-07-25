@@ -391,6 +391,12 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	escalated := t.weakenTierUnlocked(rec.JudgeVersion)
 	if escalated {
 		pairs = append(pairs, buildWeakenJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+		// Tier 4 opens only once tier 3 is ALSO outgrown. Same premise one rung
+		// up: the judge sat at 36/36 on tier 3 with zero organic labels, so the
+		// ladder had nothing above it and L3 flatlined DATA-GATED.
+		if t.exclusivityTierUnlocked(rec.JudgeVersion) {
+			pairs = append(pairs, buildExclusivityJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+		}
 	}
 	verdictErrors, consecutiveErrors := 0, 0
 	for _, pair := range pairs {
@@ -469,6 +475,26 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 // drop-tier miss keeps the harder tier locked. Uses ByClass counts, which are
 // complete — the Misses exhibit list is capped and unusable for this.
 func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
+	return t.tierSaturated(judgeVersion, subtleJudgeDegradations)
+}
+
+// exclusivityTierUnlocked is the same rung test one tier up: tier 4 opens only
+// when the incumbent has fully outgrown tier 3. Callers must still gate it
+// behind weakenTierUnlocked — a judge that has not been SHOWN tier 3 cannot
+// have saturated it, and this test would then read "no tier-3 pairs seen" as
+// simply not-yet-saturated (false), which is the correct conservative answer
+// either way.
+func (t *JudgeAccuracyTask) exclusivityTierUnlocked(judgeVersion string) bool {
+	return t.tierSaturated(judgeVersion, weakenJudgeDegradations)
+}
+
+// tierSaturated reports whether the newest judgeEscalationWindow lane runs
+// attributed to judgeVersion each carried at least one pair from `classes` and
+// recorded zero misses across them. Fewer incumbent runs (including right
+// after a judge revision) or any miss keeps the next tier locked. Uses ByClass
+// counts, which are complete — the Misses exhibit list is capped and unusable
+// for this.
+func (t *JudgeAccuracyTask) tierSaturated(judgeVersion string, classes []namedDegradation) bool {
 	records, err := t.Tracker.recentJudgeAccuracy(judgeEscalationWindow * 4)
 	if err != nil || judgeVersion == "" {
 		return false
@@ -485,7 +511,7 @@ func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
 			continue // infra outage rows must not re-lock the soften ladder
 		}
 		pairsSeen, missed := 0, 0
-		for _, cls := range subtleJudgeDegradations {
+		for _, cls := range classes {
 			ct := rec.ByClass[cls.name]
 			pairsSeen += ct[1]
 			missed += ct[1] - ct[0]

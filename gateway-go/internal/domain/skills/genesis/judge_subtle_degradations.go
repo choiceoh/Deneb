@@ -260,6 +260,37 @@ func degradeNarrowScope(body string) (string, bool) {
 	return weakenFirstLineMatching(body, scopeNarrowSwaps)
 }
 
+// --- Tier 4: exclusivity removal ---
+
+// exclusivityDropSwaps delete the marker that made a rule EXCLUSIVE, leaving a
+// sentence that still reads perfectly and still says something true — it just
+// no longer forbids the other cases. "X할 때만 Y해라" → "X할 때 Y해라": the
+// original ruled out Y everywhere else, the mutant permits it. That is the
+// same enforcement loss tier 3 produces, but with nothing swapped IN — the
+// residue is a strictly shorter, entirely natural line, so a diff-shaped read
+// of the pair shows only a deleted syllable.
+//
+// Anchors are multi-character on purpose. Bare "만" is a common syllable
+// (만들다·만약·얼마만) and matching it would mutate unrelated prose — the same
+// substring trap that made the old negation guard false-skip every 정말/얼마
+// line (3rd-review M5). Each anchor here carries its own preceding context
+// (때/경우에/오직) or a trailing space (English), so no shorter word can match.
+var exclusivityDropSwaps = [][2]string{
+	{"경우에만", "경우에"},
+	{"때만", "때"},
+	{"오직 ", ""},
+	{"only when ", "when "},
+	{"only if ", "if "},
+	{"exclusively ", ""},
+}
+
+// degradeDropExclusivity removes one exclusivity marker in place — a rule that
+// applied ONLY in some case now no longer excludes the others. Unambiguous
+// regression, single token, grammatical residue.
+func degradeDropExclusivity(body string) (string, bool) {
+	return weakenFirstLineMatching(body, exclusivityDropSwaps)
+}
+
 // namedDegradation pairs a ByClass label with its body mutator.
 type namedDegradation struct {
 	name  string
@@ -281,6 +312,16 @@ var weakenJudgeDegradations = []namedDegradation{
 	{"scope-narrow", degradeNarrowScope},
 }
 
+// exclusivityJudgeDegradations is the tier-4 class table, deployed only on
+// tier-3 saturation. Added 2026-07-25 because the incumbent judge had reached
+// 36/36 on tier 3 with zero organic labels in 30 days — a fully outgrown
+// corpus produces no misses, so L3 read DATA-GATED with nothing left to learn
+// from. The ladder's premise (CoEvoSkills) is that probe difficulty must keep
+// tracking verifier strength; a ceiling is a measurement failure, not a result.
+var exclusivityJudgeDegradations = []namedDegradation{
+	{"exclusivity-drop", degradeDropExclusivity},
+}
+
 // buildSubtleJudgeDegradationPairs mirrors buildJudgeDegradationPairs but with
 // the subtle single-line drop degradations. Deterministic, catalog order,
 // stops at limit. Shares the judgeBenchPair shape so the lane replays it
@@ -292,6 +333,11 @@ func buildSubtleJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []
 // buildWeakenJudgeDegradationPairs builds the escalated tier-3 pairs.
 func buildWeakenJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
 	return buildDegradationPairsWith(entries, limit, weakenJudgeDegradations)
+}
+
+// buildExclusivityJudgeDegradationPairs builds the escalated tier-4 pairs.
+func buildExclusivityJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
+	return buildDegradationPairsWith(entries, limit, exclusivityJudgeDegradations)
 }
 
 // buildDegradationPairsWith is the shared pair constructor both tiers use:
