@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   BASE_REFRESH_MS,
   MAX_REFRESH_MS,
+  advanceCursor,
+  clampCursor,
   nextDelayMs,
   payloadSignature,
   resolveSelectionIndex,
@@ -98,5 +100,55 @@ describe('resolveSelectionIndex', () => {
 
   it('truncates a fractional index rather than rejecting it', () => {
     expect(resolveSelectionIndex(2.7, 5)).toBe(2)
+  })
+})
+
+describe('clampCursor', () => {
+  it('pins into range', () => {
+    expect(clampCursor(0, 3)).toBe(0)
+    expect(clampCursor(2, 3)).toBe(2)
+    expect(clampCursor(9, 3)).toBe(2)
+    expect(clampCursor(-4, 3)).toBe(0)
+  })
+
+  it('is 0 when there is nothing to point at', () => {
+    expect(clampCursor(5, 0)).toBe(0)
+  })
+
+  it('survives a non-finite cursor', () => {
+    expect(clampCursor(NaN, 3)).toBe(0)
+    expect(clampCursor(Infinity, 3)).toBe(0)
+  })
+})
+
+describe('advanceCursor', () => {
+  it('walks down the alerts before leaving the page', () => {
+    expect(advanceCursor(0, 3, 1)).toBe(1)
+    expect(advanceCursor(1, 3, 1)).toBe(2)
+    // On the last alert, the next swipe is a page turn — the behaviour the
+    // host's list container never delivered, which stranded cal/todo.
+    expect(advanceCursor(2, 3, 1)).toBe('page')
+  })
+
+  it('walks back up symmetrically', () => {
+    expect(advanceCursor(2, 3, -1)).toBe(1)
+    expect(advanceCursor(1, 3, -1)).toBe(0)
+    expect(advanceCursor(0, 3, -1)).toBe('page')
+  })
+
+  it('leaves immediately on a single alert', () => {
+    expect(advanceCursor(0, 1, 1)).toBe('page')
+    expect(advanceCursor(0, 1, -1)).toBe('page')
+  })
+
+  it('leaves immediately when there are no alerts', () => {
+    expect(advanceCursor(0, 0, 1)).toBe('page')
+  })
+
+  it('clamps a stale cursor before deciding', () => {
+    // A poll can shrink the list under the wearer; the swipe after that must
+    // still make sense rather than paging from a position that no longer exists.
+    expect(advanceCursor(9, 3, -1)).toBe(1)
+    expect(advanceCursor(9, 3, 1)).toBe('page')
   })
 })
