@@ -1,6 +1,7 @@
 package evenapi
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strconv"
@@ -48,10 +49,14 @@ type GlanceItem struct {
 	Age      string `json:"age,omitempty"`
 }
 
+// GlanceSources are the live providers behind the HUD. Each takes the REQUEST
+// context: they reach out to network-backed stores (Google Calendar), and this
+// runs inside an HTTP handler, so a hung upstream must be cancellable by the
+// caller going away rather than pinning a request for the client's full timeout.
 type GlanceSources struct {
-	Events func(now time.Time) []GlanceEvent
-	Todos  func(now time.Time) []GlanceTodo
-	Urgent func(now time.Time) []GlanceUrgent
+	Events func(ctx context.Context, now time.Time) []GlanceEvent
+	Todos  func(ctx context.Context, now time.Time) []GlanceTodo
+	Urgent func(ctx context.Context, now time.Time) []GlanceUrgent
 }
 
 type GlancePage struct {
@@ -92,9 +97,10 @@ func (h *Handler) Glance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
 	now := h.now().In(dentime.Location())
 	if force := r.URL.Query().Get("fresh"); force == "1" || force == "true" {
-		bundle := BuildGlance(now, h.sources)
+		bundle := BuildGlance(ctx, now, h.sources)
 		h.storeGlanceCache(bundle, now)
 		writeGlanceJSON(w, bundle, now, false)
 		return
@@ -103,7 +109,7 @@ func (h *Handler) Glance(w http.ResponseWriter, r *http.Request) {
 		writeGlanceJSON(w, bundle, at, true)
 		return
 	}
-	bundle := BuildGlance(now, h.sources)
+	bundle := BuildGlance(ctx, now, h.sources)
 	h.storeGlanceCache(bundle, now)
 	writeGlanceJSON(w, bundle, now, false)
 }
@@ -118,23 +124,23 @@ func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, c
 	})
 }
 
-func FormatGlance(now time.Time, src GlanceSources) string {
-	return BuildGlance(now, src).Text
+func FormatGlance(ctx context.Context, now time.Time, src GlanceSources) string {
+	return BuildGlance(ctx, now, src).Text
 }
 
-func BuildGlance(now time.Time, src GlanceSources) GlanceBundle {
+func BuildGlance(ctx context.Context, now time.Time, src GlanceSources) GlanceBundle {
 	now = now.In(dentime.Location())
 	var events []GlanceEvent
 	var todos []GlanceTodo
 	var urgent []GlanceUrgent
 	if src.Events != nil {
-		events = src.Events(now)
+		events = src.Events(ctx, now)
 	}
 	if src.Todos != nil {
-		todos = src.Todos(now)
+		todos = src.Todos(ctx, now)
 	}
 	if src.Urgent != nil {
-		urgent = src.Urgent(now)
+		urgent = src.Urgent(ctx, now)
 	}
 
 	homeText, homeEmpty := formatHomePage(now, events, urgent, todos)

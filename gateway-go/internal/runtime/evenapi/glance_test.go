@@ -1,6 +1,7 @@
 package evenapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,21 +12,21 @@ import (
 
 func TestBuildGlanceNotificationHome(t *testing.T) {
 	now := time.Date(2026, 7, 24, 9, 0, 0, 0, time.Local)
-	bundle := BuildGlance(now, GlanceSources{
-		Events: func(time.Time) []GlanceEvent {
+	bundle := BuildGlance(context.Background(), now, GlanceSources{
+		Events: func(context.Context, time.Time) []GlanceEvent {
 			return []GlanceEvent{{
 				Summary: "주간회의",
 				Start:   now.Add(30 * time.Minute),
 				End:     now.Add(90 * time.Minute),
 			}}
 		},
-		Urgent: func(time.Time) []GlanceUrgent {
+		Urgent: func(context.Context, time.Time) []GlanceUrgent {
 			return []GlanceUrgent{
 				{ID: "a1", Title: "공문 회신 마감", Preview: "오늘 17시", Body: "공문 회신 마감입니다. 오늘 17시까지 회신 바랍니다.", Priority: 4, CreatedAt: now.Add(-12 * time.Minute)},
 				{ID: "a2", Title: "결재 미결", Body: "결재 대기 문서가 있습니다.", Priority: 3, CreatedAt: now.Add(-2 * time.Hour)},
 			}
 		},
-		Todos: func(time.Time) []GlanceTodo {
+		Todos: func(context.Context, time.Time) []GlanceTodo {
 			return []GlanceTodo{{Title: "견적 검토", Due: now.Add(2 * time.Hour)}}
 		},
 	})
@@ -75,11 +76,11 @@ func TestBuildGlanceNotificationHome(t *testing.T) {
 
 func TestFormatGlanceEmptyIsNoAlerts(t *testing.T) {
 	now := time.Date(2026, 7, 24, 10, 15, 0, 0, time.Local)
-	got := FormatGlance(now, GlanceSources{})
+	got := FormatGlance(context.Background(), now, GlanceSources{})
 	if !strings.Contains(got, "새 알림 없음") {
 		t.Fatalf("got %q", got)
 	}
-	bundle := BuildGlance(now, GlanceSources{})
+	bundle := BuildGlance(context.Background(), now, GlanceSources{})
 	if !bundle.Pages[0].Empty || !pageByID(bundle, "alerts").Empty {
 		t.Fatalf("want home/alerts empty: %+v", bundle.Pages)
 	}
@@ -87,15 +88,15 @@ func TestFormatGlanceEmptyIsNoAlerts(t *testing.T) {
 
 func TestFormatGlanceEmptyHintsCalTodo(t *testing.T) {
 	now := time.Date(2026, 7, 24, 14, 0, 0, 0, time.Local)
-	text := FormatGlance(now, GlanceSources{
-		Events: func(time.Time) []GlanceEvent {
+	text := FormatGlance(context.Background(), now, GlanceSources{
+		Events: func(context.Context, time.Time) []GlanceEvent {
 			return []GlanceEvent{{
 				Summary: "고객 미팅",
 				Start:   now.Add(-30 * time.Minute),
 				End:     now.Add(30 * time.Minute),
 			}}
 		},
-		Todos: func(time.Time) []GlanceTodo {
+		Todos: func(context.Context, time.Time) []GlanceTodo {
 			return []GlanceTodo{{Title: "어제 미완", Due: now.Add(-24 * time.Hour)}}
 		},
 	})
@@ -123,7 +124,7 @@ func TestGlanceHTTPAndCache(t *testing.T) {
 		Token: "secret",
 		Now:   func() time.Time { return now },
 		Sources: GlanceSources{
-			Urgent: func(time.Time) []GlanceUrgent {
+			Urgent: func(context.Context, time.Time) []GlanceUrgent {
 				calls++
 				return []GlanceUrgent{{ID: "m1", Title: "새 메일", Body: "중요 메일 본문", Priority: 3, CreatedAt: now.Add(-5 * time.Minute)}}
 			},

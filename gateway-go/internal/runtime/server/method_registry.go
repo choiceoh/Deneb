@@ -491,9 +491,12 @@ func (s *Server) earlyMailAndCalendarMethods(denebDir string) []map[string]rpcut
 			},
 			Local:     resolveLocalCalendar(s.logger),
 			Proposals: resolveCalendarProposals(s.logger),
-			// One-way write mirror (Deneb → Google), off unless
-			// DENEB_CALENDAR_GOOGLE_WRITE=1. Best-effort: the syncer logs push
-			// failures here and handlers ignore them (local write is authoritative).
+			// One-way write mirror (Deneb → Google), ON BY DEFAULT since #4210
+			// (the existing calendar token already carries the read+write scope);
+			// DENEB_CALENDAR_GOOGLE_WRITE=0 turns it off. Best-effort: the syncer
+			// logs push failures here and handlers ignore them (local write is
+			// authoritative). The chat calendar tool wires the same syncer in
+			// chat_pipeline.go — both surfaces mirror, or neither should.
 			Writer: func() (minischedule.CalendarWriter, error) {
 				return calwrite.DefaultSyncer(func(op string, err error) {
 					s.logger.Warn("calendar google-sync failed", "op", op, "error", err)

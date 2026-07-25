@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calwrite"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localtodo"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/evenapi"
@@ -23,7 +24,7 @@ func (s *Server) evenGlanceSources() evenapi.GlanceSources {
 	}
 }
 
-func (s *Server) evenGlanceEvents(now time.Time) []evenapi.GlanceEvent {
+func (s *Server) evenGlanceEvents(ctx context.Context, now time.Time) []evenapi.GlanceEvent {
 	// Look back a few hours so in-progress meetings still appear as "지금".
 	from := now.Add(-6 * time.Hour)
 	to := now.Add(48 * time.Hour)
@@ -53,15 +54,46 @@ func (s *Server) evenGlanceEvents(now time.Time) []evenapi.GlanceEvent {
 		add(store.ListRange(from, to))
 	}
 	if client, err := calendar.DefaultClient(); err == nil && client != nil {
-		if google, gerr := client.ListUpcoming(context.Background(), from, to, 20); gerr == nil {
-			add(google)
+		if google, gerr := client.ListUpcoming(ctx, from, to, 20); gerr == nil {
+			add(dropMirroredGlanceEvents(google))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Start.Before(out[j].Start) })
 	return out
 }
 
-func (s *Server) evenGlanceTodos(now time.Time) []evenapi.GlanceTodo {
+// dropMirroredGlanceEvents removes the Google copies of events Deneb itself
+// wrote there. The `seen` dedup above cannot catch them: a mirrored pair has a
+// LOCAL id on one side and a GOOGLE id on the other, so both survive and the
+// glasses show one meeting twice. The miniapp calendar list solves this with
+// dropMirrored; the HUD needs the same filter against the same id map.
+// No-op when the write mirror is off (the syncer factory fails) — then no Google
+// event is a mirror of anything.
+func dropMirroredGlanceEvents(events []calendar.Event) []calendar.Event {
+	syncer, err := calwrite.DefaultSyncer(nil)
+	if err != nil || syncer == nil {
+		return events
+	}
+	return filterMirroredEvents(events, syncer.MirroredGoogleIDs())
+}
+
+// filterMirroredEvents is the pure half of dropMirroredGlanceEvents (the id map
+// comes from the process-wide syncer, so the filter is split out to be testable).
+func filterMirroredEvents(events []calendar.Event, mirrored map[string]struct{}) []calendar.Event {
+	if len(mirrored) == 0 {
+		return events
+	}
+	out := make([]calendar.Event, 0, len(events))
+	for _, ev := range events {
+		if _, isMirror := mirrored[ev.ID]; isMirror {
+			continue
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+func (s *Server) evenGlanceTodos(_ context.Context, now time.Time) []evenapi.GlanceTodo {
 	store, err := localtodo.Default()
 	if err != nil || store == nil {
 		return nil
@@ -81,7 +113,7 @@ func (s *Server) evenGlanceTodos(now time.Time) []evenapi.GlanceTodo {
 	return out
 }
 
-func (s *Server) evenGlanceUrgent(now time.Time) []evenapi.GlanceUrgent {
+func (s *Server) evenGlanceUrgent(_ context.Context, now time.Time) []evenapi.GlanceUrgent {
 	// Glance HUD: unread + unacked workfeed cards at PriorityNormal+.
 	// ReadAtMs>0 means the operator already opened the card in the native feed.
 	if s == nil || s.workFeedStore == nil {

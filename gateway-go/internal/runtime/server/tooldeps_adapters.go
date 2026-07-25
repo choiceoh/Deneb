@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calwrite"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
 )
 
@@ -307,6 +308,51 @@ func mapCalendarAttendee(in calendar.Attendee) tooldeps.CalendarAttendee {
 	return tooldeps.CalendarAttendee{
 		Email: in.Email, DisplayName: in.DisplayName, ResponseStatus: in.ResponseStatus,
 		Self: in.Self, Organizer: in.Organizer,
+	}
+}
+
+// adaptCalendarWriterFactory exposes the calwrite syncer to the chat calendar
+// tool through the tooldeps DTO boundary, so a chat-created event reaches Google
+// through the SAME mirror the miniapp RPC uses.
+func adaptCalendarWriterFactory(fn func() (*calwrite.Syncer, error)) func() (tooldeps.CalendarWriter, error) {
+	if fn == nil {
+		return nil
+	}
+	return func() (tooldeps.CalendarWriter, error) {
+		s, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		if s == nil {
+			return nil, nil
+		}
+		return calendarWriterAdapter{inner: s}, nil
+	}
+}
+
+type calendarWriterAdapter struct {
+	inner interface {
+		Push(ctx context.Context, localID string, ev calendar.Event) error
+		Remove(ctx context.Context, localID string) error
+	}
+}
+
+func (a calendarWriterAdapter) Push(ctx context.Context, localID string, ev tooldeps.CalendarEvent) error {
+	return a.inner.Push(ctx, localID, unmapCalendarEvent(ev))
+}
+
+func (a calendarWriterAdapter) Remove(ctx context.Context, localID string) error {
+	return a.inner.Remove(ctx, localID)
+}
+
+// unmapCalendarEvent is the DTO→platform direction of mapCalendarEvent, carrying
+// the fields the Google write body actually uses (calwrite.toGoogleEvent reads
+// summary/description/location/start/end/allDay).
+func unmapCalendarEvent(in tooldeps.CalendarEvent) calendar.Event {
+	return calendar.Event{
+		ID: in.ID, Summary: in.Summary, Description: in.Description, Location: in.Location,
+		Start: in.Start, End: in.End, AllDay: in.AllDay, Status: in.Status,
+		Source: in.Source, SourceLabel: in.SourceLabel, Kind: in.Kind, Docs: in.Docs,
 	}
 }
 
