@@ -10,6 +10,7 @@ import {
 } from '@evenrealities/even_hub_sdk'
 
 import { resolveSettings, type GlanceSettings } from './settings'
+import { nextDelayMs, payloadSignature, resolveSelectionIndex } from './refresh'
 import {
   fetchGlance,
   fetchStatus,
@@ -27,7 +28,6 @@ const bridge = await waitForEvenAppBridge()
 type Screen = 'setup' | 'page' | 'detail' | 'status'
 
 const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
-const AUTO_REFRESH_MS = 45_000
 const LIST_PAGE_IDS = new Set(['home', 'alerts'])
 
 let settings: GlanceSettings = { baseUrl: '', token: '' }
@@ -40,6 +40,10 @@ let detailIndex = -1
 let lastGenerated = ''
 let lastCached = false
 let uiMode: 'text' | 'list' = 'text'
+let refreshTimer: ReturnType<typeof setTimeout> | undefined
+let consecutiveFailures = 0
+let lastSignature = ''
+let stopped = false
 
 const mainText = new TextContainerProperty({
   xPosition: 0,
@@ -71,10 +75,10 @@ bridge.onEvenHubEvent((event) => {
     switch (le.eventType) {
       case OsEventTypeList.CLICK_EVENT:
       case undefined:
-        void openDetail(le.currentSelectItemIndex ?? 0)
+        void openDetail(le.currentSelectItemIndex)
         break
       case OsEventTypeList.DOUBLE_CLICK_EVENT:
-        bridge.shutDownPageContainer(1)
+        shutdown()
         break
       case OsEventTypeList.SCROLL_BOTTOM_EVENT:
         void onSwipeNext()
@@ -97,7 +101,7 @@ bridge.onEvenHubEvent((event) => {
       void onTap()
       break
     case OsEventTypeList.DOUBLE_CLICK_EVENT:
-      bridge.shutDownPageContainer(1)
+      shutdown()
       break
     case OsEventTypeList.SCROLL_BOTTOM_EVENT:
       void onSwipeNext()
@@ -109,18 +113,37 @@ bridge.onEvenHubEvent((event) => {
 })
 
 void boot()
-startAutoRefresh()
 
 async function boot(): Promise<void> {
   settings = await resolveSettings()
   if (needsSetup(settings)) {
     screen = 'setup'
     await showText(setupCopy())
+    // Still schedule: the wearer may seed the app while it is open, and the
+    // setup screen's own poll is what notices.
+    scheduleRefresh()
     return
   }
   screen = 'page'
   pageIndex = 0
   await refreshGlance(false)
+  scheduleRefresh()
+}
+
+/**
+ * shutdown tears the loop down with the container.
+ *
+ * The old code closed the page and left setInterval running, so a
+ * double-tapped app kept hitting the gateway every 45s for as long as the
+ * WebView lived — network and battery spent on a screen nobody is looking at.
+ */
+function shutdown(): void {
+  stopped = true
+  if (refreshTimer !== undefined) {
+    clearTimeout(refreshTimer)
+    refreshTimer = undefined
+  }
+  bridge.shutDownPageContainer(1)
 }
 
 function needsSetup(s: GlanceSettings): boolean {
@@ -147,6 +170,7 @@ async function onTap(): Promise<void> {
       screen = 'page'
       pageIndex = 0
       await refreshGlance(true)
+      scheduleRefresh()
       return
     }
     await showText(setupCopy())
@@ -165,13 +189,19 @@ async function onTap(): Promise<void> {
   }
   // On list pages, CLICK is handled by listEvent. Text tap = refresh.
   await refreshGlance(true)
+  // A manual refresh re-anchors the schedule: after a backoff the next poll
+  // would otherwise still be minutes away even though the link just worked.
+  scheduleRefresh()
 }
 
-async function openDetail(index: number): Promise<void> {
+async function openDetail(index: unknown): Promise<void> {
   if (busy) return
   if (!LIST_PAGE_IDS.has(currentPageId())) return
-  if (!items.length) return
-  const i = Math.max(0, Math.min(items.length - 1, index | 0))
+  // An absent or out-of-range index used to clamp to item 0, so a tap the host
+  // could not attribute opened the WRONG alert. Doing nothing is the honest
+  // response — the wearer taps again.
+  const i = resolveSelectionIndex(index, items.length)
+  if (i < 0) return
   detailIndex = i
   screen = 'detail'
   await showText(`Deneb · 상세\n\n${formatAlertDetail(items[i])}`)
@@ -270,7 +300,16 @@ async function showStatus(): Promise<void> {
   }
 }
 
-async function refreshGlance(fresh: boolean): Promise<void> {
+/**
+ * refreshGlance pulls a new glance and redraws.
+ *
+ * `silent` marks a BACKGROUND poll (the timer). A background poll must be
+ * invisible: no loading text, no redraw when nothing changed, no error screen.
+ * The old loop wrote "불러오는 중…" over the display every 45 seconds — in the
+ * wearer's field of view, and on top of a detail they were reading — then
+ * rebuilt the container even when the payload was byte-identical.
+ */
+async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
   if (busy) return
   busy = true
   const keepId = currentPageId()
@@ -278,14 +317,28 @@ async function refreshGlance(fresh: boolean): Promise<void> {
   try {
     settings = await resolveSettings()
     if (needsSetup(settings)) {
-      screen = 'setup'
-      await showText(setupCopy())
+      if (screen !== 'setup') {
+        screen = 'setup'
+        await showText(setupCopy())
+      }
       return
     }
-    if (screen !== 'detail') screen = 'page'
-    await showText('Deneb\n\n불러오는 중…')
+    if (!silent) {
+      if (screen !== 'detail') screen = 'page'
+      await showText('Deneb\n\n불러오는 중…')
+    }
     const payload = await fetchGlance(settings, { fresh })
+    consecutiveFailures = 0
+
+    const signature = payloadSignature(payload)
+    const unchanged = signature === lastSignature
+    lastSignature = signature
     applyPayload(payload, keepId)
+
+    // Nothing moved and nobody asked — leave the screen exactly as it is.
+    // This is what makes the background poll invisible.
+    if (silent && unchanged) return
+
     if (keepDetailId) {
       const idx = items.findIndex((it) => it.id === keepDetailId)
       if (idx >= 0) {
@@ -294,11 +347,24 @@ async function refreshGlance(fresh: boolean): Promise<void> {
         await showText(`Deneb · 상세\n\n${formatAlertDetail(items[idx])}`)
         return
       }
+      // The alert being read is gone. On a background poll, say so instead of
+      // silently swapping the wearer's screen for a list they did not ask for.
+      if (silent) {
+        await showText('Deneb · 상세\n\n이 알림은 처리됐습니다.\n\n탭=목록으로')
+        screen = 'detail'
+        detailIndex = -1
+        return
+      }
     }
     screen = 'page'
     detailIndex = -1
     await renderCurrentPage()
   } catch (err) {
+    consecutiveFailures++
+    // A background failure stays off the display: the wearer did not ask, and
+    // an unreachable gateway would otherwise flash an error every cycle while
+    // they are simply out of network range.
+    if (silent) return
     const msg = err instanceof Error ? err.message : String(err)
     await showText(`Deneb\n\n오류: ${msg}\n\n탭=재시도 / ↓다음`)
   } finally {
@@ -449,12 +515,39 @@ async function showText(content: string): Promise<void> {
   )
 }
 
-function startAutoRefresh(): void {
-  setInterval(() => {
-    if (busy || screen === 'setup') return
-    if (screen === 'status') return
-    void refreshGlance(false)
-  }, AUTO_REFRESH_MS)
+/**
+ * scheduleRefresh drives the background poll as a self-rescheduling timeout
+ * rather than a fixed interval, so the delay can grow while the gateway is
+ * unreachable and the whole loop can be cancelled with one handle.
+ */
+function scheduleRefresh(): void {
+  if (stopped) return
+  if (refreshTimer !== undefined) clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => {
+    refreshTimer = undefined
+    void runScheduledRefresh()
+  }, nextDelayMs(consecutiveFailures))
+}
+
+async function runScheduledRefresh(): Promise<void> {
+  if (stopped) return
+  // The status screen is a deliberate read; polling under it would swap the
+  // wearer's screen out from under them.
+  if (!busy && screen !== 'status') {
+    if (needsSetup(settings)) {
+      // Setup polling only re-reads local settings (the QR seed lands in
+      // localStorage), so it must not count as a network failure.
+      settings = await resolveSettings()
+      if (!needsSetup(settings)) {
+        screen = 'page'
+        pageIndex = 0
+        await refreshGlance(false)
+      }
+    } else {
+      await refreshGlance(false, true)
+    }
+  }
+  scheduleRefresh()
 }
 
 function isPageEmpty(p: GlancePage | undefined): boolean {

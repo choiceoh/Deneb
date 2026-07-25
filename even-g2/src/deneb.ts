@@ -1,4 +1,5 @@
 import type { GlanceSettings } from './settings'
+import { REQUEST_TIMEOUT_MS } from './refresh'
 
 export type GlancePage = {
   id: string
@@ -40,20 +41,47 @@ type StatusResponse = {
   error?: { message?: string }
 }
 
+/**
+ * getJSON wraps fetch with a hard deadline.
+ *
+ * AbortController + setTimeout rather than AbortSignal.timeout: this runs in
+ * the glasses' embedded WebView, and the explicit controller works on every
+ * host the SDK targets. Without a deadline a stalled private-network request
+ * pins the app's `busy` flag forever and every input stops responding.
+ */
+async function getJSON<T>(url: string, token: string, timeoutMs: number): Promise<{ res: Response; data: T }> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      signal: controller.signal,
+    })
+    const data = (await res.json()) as T
+    return { res, data }
+  } catch (err) {
+    // A caught abort must read as a timeout, not as an opaque DOMException —
+    // this string is what the wearer sees on the HUD.
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`시간 초과 (${Math.round(timeoutMs / 1000)}초)`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function fetchGlance(
   settings: GlanceSettings,
   opts?: { fresh?: boolean },
 ): Promise<GlancePayload> {
   const qs = opts?.fresh ? '?fresh=1' : ''
   const url = `${settings.baseUrl}/api/even/glance${qs}`
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${settings.token}`,
-      Accept: 'application/json',
-    },
-  })
-  const data = (await res.json()) as GlanceResponse
+  const { res, data } = await getJSON<GlanceResponse>(url, settings.token, REQUEST_TIMEOUT_MS)
   if (!res.ok) {
     throw new Error(data.error?.message || `HTTP ${res.status}`)
   }
@@ -137,14 +165,7 @@ export function pageTitle(id: string): string {
 
 export async function fetchStatus(settings: GlanceSettings): Promise<StatusResponse> {
   const url = `${settings.baseUrl}/api/even/status`
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${settings.token}`,
-      Accept: 'application/json',
-    },
-  })
-  const data = (await res.json()) as StatusResponse
+  const { res, data } = await getJSON<StatusResponse>(url, settings.token, REQUEST_TIMEOUT_MS)
   if (!res.ok) {
     throw new Error(data.error?.message || `HTTP ${res.status}`)
   }
