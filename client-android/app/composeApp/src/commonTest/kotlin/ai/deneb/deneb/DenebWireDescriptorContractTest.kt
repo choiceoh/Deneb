@@ -627,6 +627,46 @@ class DenebWireDescriptorContractTest {
             assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
         },
         {
+            val serializer = ContactsDedupPayload.serializer()
+            val descriptor = serializer.descriptor
+
+            assertEquals("ContactsDedupPayload", descriptor.serialName.substringAfterLast('.'))
+            assertTrue(descriptor.elementsCount > 0)
+            assertEquals(descriptor.elementsCount, descriptor.names().distinct().size)
+            assertTrue((0 until descriptor.elementsCount).all(descriptor::isElementOptional))
+
+            val empty = json.decodeFromString(serializer, "{}")
+            assertEquals(ContactsDedupPayload(), empty)
+
+            val future = json.decodeFromString(
+                serializer,
+                """{"futureEnvelopeVersion":99,"future":{"nested":[true,1,null]}}""",
+            )
+            assertEquals(empty, future)
+
+            val encoded = json.encodeToJsonElement(serializer, empty)
+            assertTrue(encoded is JsonObject)
+            assertTrue(encoded.jsonObject.isEmpty())
+            assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
+        },
+        {
+            val serializer = DedupMergeRow.serializer()
+            val descriptor = serializer.descriptor
+
+            assertEquals("DedupMergeRow", descriptor.serialName.substringAfterLast('.'))
+            assertTrue(descriptor.elementsCount > 0)
+            assertEquals(descriptor.elementsCount, descriptor.names().distinct().size)
+            assertTrue((0 until descriptor.elementsCount).all(descriptor::isElementOptional))
+
+            val empty = json.decodeFromString(serializer, "{}")
+            assertEquals(DedupMergeRow(), empty)
+
+            val encoded = json.encodeToJsonElement(serializer, empty)
+            assertTrue(encoded is JsonObject)
+            assertTrue(encoded.jsonObject.isEmpty())
+            assertEquals(empty, json.decodeFromJsonElement(serializer, encoded))
+        },
+        {
             val serializer = WikiPagePayload.serializer()
             val descriptor = serializer.descriptor
 

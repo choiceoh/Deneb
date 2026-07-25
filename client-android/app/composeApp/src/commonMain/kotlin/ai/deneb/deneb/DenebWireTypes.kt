@@ -179,6 +179,25 @@ internal data class PeopleListPayload(val people: List<PersonRow> = emptyList())
 @Serializable
 internal data class ContactsListPayload(val contacts: List<ContactRow> = emptyList())
 
+/** miniapp.contacts.dedup — the deterministic dedup preview: how many address-book
+ *  entries collapse to how many people, plus the safe merge groups. Hand-written
+ *  (the Go response is a plain struct, not a //deneb:wire type). */
+@Serializable
+internal data class ContactsDedupPayload(
+    val total: Int = 0,
+    val distinct: Int = 0,
+    val ambiguous: Int = 0,
+    val merges: List<DedupMergeRow> = emptyList(),
+)
+
+@Serializable
+internal data class DedupMergeRow(
+    val canonical: String = "",
+    val names: List<String> = emptyList(),
+    val phones: List<String> = emptyList(),
+    val emails: List<String> = emptyList(),
+)
+
 @Serializable
 internal data class WikiPagePayload(
     val path: String = "",

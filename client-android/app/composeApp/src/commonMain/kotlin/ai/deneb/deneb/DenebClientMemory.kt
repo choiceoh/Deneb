@@ -281,3 +281,12 @@ suspend fun DenebGatewayClient.fetchContacts(force: Boolean = false): List<Conta
         buildJsonObject {},
     )?.contacts?.filter { it.name.isNotBlank() }
 }
+
+/** miniapp.contacts.dedup — the deterministic dedup preview (how many entries collapse
+ *  to how many people, plus the safe merge groups). Computed fresh each call rather
+ *  than session-cached: it is an action result, and the operator runs it deliberately.
+ *  Null on transport/auth failure or an unconfigured store. */
+internal suspend fun DenebGatewayClient.fetchContactsDedup(): ContactsDedupPayload? = callRpc<ContactsDedupPayload>(
+    "miniapp.contacts.dedup",
+    buildJsonObject {},
+)

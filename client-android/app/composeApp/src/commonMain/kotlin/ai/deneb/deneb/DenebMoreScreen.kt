@@ -5,6 +5,7 @@ import ai.deneb.DenebBrowser
 import ai.deneb.DenebCategories
 import ai.deneb.DenebConfig
 import ai.deneb.DenebContacts
+import ai.deneb.DenebContactsDedup
 import ai.deneb.DenebDashboard
 import ai.deneb.DenebFiles
 import ai.deneb.DenebGroupware
@@ -21,6 +22,7 @@ import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.icons.outlined.AccountTree
 import ai.deneb.ui.icons.outlined.Assignment
+import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.icons.outlined.Autorenew
 import ai.deneb.ui.icons.outlined.Book
 import ai.deneb.ui.icons.outlined.Business
@@ -84,6 +86,7 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search"),
         MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories"),
         MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, key = "deneb_contacts"),
+        MoreEntry("연락처 정리", DenebContactsDedup, Icons.Outlined.AutoAwesome, key = "deneb_contacts_dedup"),
         MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks"),
     ),
     TOOLS_GROUP to listOf(
