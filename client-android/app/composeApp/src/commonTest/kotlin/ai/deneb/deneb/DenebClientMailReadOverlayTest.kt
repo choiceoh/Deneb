@@ -139,7 +139,11 @@ class DenebClientMailReadOverlayTest {
     @Test
     fun mail_row_analysis_status_label_is_compact_for_the_time_column() {
         assertNull(mailRowAnalysisStatusLabel(MailWorkState()))
-        assertEquals("분석", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "done", analysisQuality = "urgent")))
+        // The badge flags analysis that WANTS something — in flight, stalled, or
+        // needing a human. "done" is the expected terminal state and printed on 298
+        // of 418 production messages (71%), so it separated nothing; the result now
+        // speaks through the meta line (일정 N · 할 일 N · 피드 없음) instead.
+        assertNull(mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "done", analysisQuality = "urgent")))
         assertEquals("실패", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "failed")))
         assertEquals("분석중", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "analyzing")))
         assertEquals("대기", mailRowAnalysisStatusLabel(MailWorkState(analysisStatus = "queued")))
