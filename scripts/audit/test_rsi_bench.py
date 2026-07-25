@@ -175,6 +175,87 @@ class LedgerTests(unittest.TestCase):
             self.assertEqual(closure.landed, 1)
 
 
+class ClosureWindowTests(unittest.TestCase):
+    """closure-land must measure delivery, not review acceptance."""
+
+    def _closure(self, rows: list[dict]):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        _write_jsonl(root / "self_correction_candidates.jsonl", rows)
+        return load_closure_window(root)
+
+    def test_accepted_alone_is_not_landed(self) -> None:
+        """A batch-accept sweep must not raise closure without shipping."""
+        closure = self._closure(
+            [
+                {"type": "self_correction_candidate", "id": "a", "status": "proposed", "createdAt": 1},
+                {"type": "self_correction_review", "id": "a", "status": "accepted", "createdAt": 2},
+            ]
+        )
+        self.assertEqual(closure.proposed, 1)
+        self.assertEqual(closure.landed, 0)
+
+    def test_watch_passed_dispatch_counts_as_landed(self) -> None:
+        """The real delivery signal lives on dispatch rows, not review status."""
+        closure = self._closure(
+            [
+                {"type": "self_correction_candidate", "id": "a", "status": "proposed", "createdAt": 1},
+                {"type": "self_correction_review", "id": "a", "status": "accepted", "createdAt": 2},
+                {"type": "self_correction_dispatch", "id": "a", "dispatchPhase": "merged", "createdAt": 3},
+                {"type": "self_correction_dispatch", "id": "a", "dispatchPhase": "watch_passed", "createdAt": 4},
+            ]
+        )
+        self.assertEqual(closure.proposed, 1)
+        self.assertEqual(closure.landed, 1)
+
+    def test_non_terminal_dispatch_is_not_landed(self) -> None:
+        closure = self._closure(
+            [
+                {"type": "self_correction_candidate", "id": "a", "status": "proposed", "createdAt": 1},
+                {"type": "self_correction_dispatch", "id": "a", "dispatchPhase": "merged", "createdAt": 2},
+                {"type": "self_correction_dispatch", "id": "b", "dispatchPhase": "failed", "createdAt": 3},
+            ]
+        )
+        self.assertEqual(closure.landed, 0)
+
+    def test_rows_fold_per_candidate_id(self) -> None:
+        """Review churn on one candidate must not inflate the denominator."""
+        closure = self._closure(
+            [
+                {"type": "self_correction_candidate", "id": "a", "status": "proposed", "createdAt": 1},
+                {"type": "self_correction_review", "id": "a", "status": "accepted", "createdAt": 2},
+                {"type": "self_correction_review", "id": "a", "status": "superseded", "createdAt": 3},
+                {"type": "self_correction_review", "id": "a", "status": "accepted", "createdAt": 4},
+            ]
+        )
+        self.assertEqual(closure.proposed, 1)
+
+    def test_rejected_is_not_a_revert(self) -> None:
+        """Declining a bad candidate is healthy; it must not be double-penalised."""
+        closure = self._closure(
+            [
+                {"type": "self_correction_candidate", "id": "a", "status": "proposed", "createdAt": 1},
+                {"type": "self_correction_review", "id": "a", "status": "rejected", "createdAt": 2},
+                {"type": "self_correction_candidate", "id": "b", "status": "proposed", "createdAt": 3},
+                {"type": "self_correction_review", "id": "b", "status": "reverted", "createdAt": 4},
+            ]
+        )
+        self.assertEqual(closure.proposed, 2)
+        self.assertEqual(closure.reverted, 1)
+
+    def test_latest_review_row_wins(self) -> None:
+        closure = self._closure(
+            [
+                {"type": "self_correction_candidate", "id": "a", "status": "proposed", "createdAt": 1},
+                {"type": "self_correction_review", "id": "a", "status": "applied", "createdAt": 2},
+                {"type": "self_correction_review", "id": "a", "status": "reverted", "createdAt": 3},
+            ]
+        )
+        self.assertEqual(closure.landed, 0)
+        self.assertEqual(closure.reverted, 1)
+
+
 class ProcessUtilityTests(unittest.TestCase):
     def test_rubric_version(self) -> None:
         self.assertEqual(RUBRIC_VERSION, "1.2.0")

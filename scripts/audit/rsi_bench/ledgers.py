@@ -490,27 +490,91 @@ def load_meta_window(data: Path | None = None, *, days: int = 7) -> MetaWindow:
     return out
 
 
+# Terminal delivery phase on self_correction_dispatch rows. The lifecycle runs
+# started → pr_opened → merged → deployed → watch_passed, and only watch_passed
+# means a merged deploy survived the rollback watch — the ledger's own
+# definition of "applied" (genesis/tracker_self_correction.go).
+_DELIVERED_PHASES = {"watch_passed"}
+_REVIEW_LANDED = {"applied", "landed"}
+_REVIEW_LIFECYCLE = {
+    "proposed",
+    "accepted",
+    "applied",
+    "landed",
+    "rejected",
+    "reverted",
+    "superseded",
+}
+
+
 def load_closure_window(data: Path | None = None) -> ClosureWindow:
-    """All-time candidate statuses (L4 supply is sparse — do not 7d-filter to zero)."""
+    """All-time candidate closure, folded per candidate id.
+
+    Counts DELIVERY, not review acceptance — the same rule `dispatch-land`
+    already follows (rsi-bench.md: review `status` can stay accepted, so
+    landing is read from the delivery side). The ledger separates the two
+    deliberately: `accepted` means "approved to try", while delivery lives on
+    self_correction_dispatch rows as `dispatchPhase`.
+
+    Counting `accepted` as landed made this pillar gameable — a batch-accept
+    sweep raised the loop's own closure score without shipping anything — while
+    the real deliveries went uncounted. Measured 2026-07-25: all 16 landed
+    dispatches sat at status=accepted, so 0 of 33 code-scoped candidates read
+    as landed.
+
+    Rows fold per candidate id because the ledger is append-only: one candidate
+    emits a candidate row plus N review rows, so counting rows made a
+    heavily-reviewed candidate outweigh a quiet one. Legacy rows with no id
+    keep per-row identity.
+
+    L4 supply is sparse — deliberately all-time, not 7d-filtered to zero.
+    """
     root = data or data_dir()
-    out = ClosureWindow()
-    for row in iter_jsonl(root / "self_correction_candidates.jsonl"):
+    review: dict[str, tuple[int, str]] = {}
+    delivered: set[str] = set()
+    dispatched: set[str] = set()
+    order: list[str] = []
+
+    for index, row in enumerate(iter_jsonl(root / "self_correction_candidates.jsonl")):
         kind = str(row.get("type") or "")
-        if kind not in {"self_correction_candidate", "self_correction_review", ""}:
-            # Dispatch markers are separate; count candidates/reviews with status.
-            if kind == "self_correction_dispatch":
-                out.dispatched += 1
-                continue
+        # Legacy/id-less rows keep per-row identity so they cannot collapse
+        # together under one empty key.
+        key = str(row.get("id") or "").strip() or f"__row{index}"
+        try:
+            ts = int(row.get("createdAt") or row.get("updatedAt") or 0)
+        except (TypeError, ValueError):
+            ts = 0
+
+        if kind == "self_correction_dispatch":
+            dispatched.add(key)
+            if str(row.get("dispatchPhase") or "").strip().lower() in _DELIVERED_PHASES:
+                delivered.add(key)
             continue
+        if kind not in {"self_correction_candidate", "self_correction_review", ""}:
+            continue
+
         status = str(row.get("status") or "").lower()
         if not status and kind == "self_correction_candidate":
             status = "proposed"
-        if status in {"proposed", "accepted", "applied", "landed", "rejected", "reverted", "superseded"}:
-            out.proposed += 1
+        if status not in _REVIEW_LIFECYCLE:
+            continue
+        if key not in review:
+            order.append(key)
+        prior = review.get(key)
+        # Append-only ledger: the newest review row wins.
+        if prior is None or ts >= prior[0]:
+            review[key] = (ts, status)
         if status in {"dispatched", "accepted", "applied", "landed"}:
-            out.dispatched += 1
-        if status in {"applied", "landed", "accepted"}:
-            out.landed += 1
-        if status in {"reverted", "rejected"}:
-            out.reverted += 1
+            dispatched.add(key)
+
+    out = ClosureWindow()
+    out.proposed = len(order)
+    out.dispatched = len(dispatched)
+    out.landed = len(
+        {key for key in order if review[key][1] in _REVIEW_LANDED} | (delivered & set(order))
+    )
+    # `rejected` is a healthy review outcome, not a revert. Counting it here
+    # penalised the loop twice for correctly declining a bad candidate (once in
+    # land_rate, again in revert_rate).
+    out.reverted = sum(1 for key in order if review[key][1] == "reverted")
     return out
