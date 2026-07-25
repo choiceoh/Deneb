@@ -18,22 +18,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// NativeClientChannel is the channel identity for standalone native-client chat
-// turns — it keys the session, delivery, and the system prompt's runtime line.
-// (deneb-ui blocks still render on the native side; the gateway no longer
-// prompts the model to emit them — see PR removing the deneb-ui instructions.)
-const NativeClientChannel = "client"
-
-// DefaultSessionKey normalizes the native client's optional session key onto the
-// shared default conversation so the blocking and streaming bridges cannot drift.
-func DefaultSessionKey(sessionKey string) string {
-	sessionKey = strings.TrimSpace(sessionKey)
-	if sessionKey == "" {
-		return NativeClientChannel + ":main"
-	}
-	return sessionKey
-}
-
 // Work-feed digest bounds: read at most maxFeedDigestItems rows, keep at most
 // feedDigestLineCap of today's, each trimmed to feedDigestRuneCap runes — so a
 // busy day can't bloat the per-turn 업무 context.
@@ -209,7 +193,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("이미지에서 이해할 내용을 찾지 못했습니다").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
 		var savedPath string
 		if deps.SaveCapture != nil {
 			if rel, _, _, serr := deps.SaveCapture("image", p.Caption, text); serr != nil {
@@ -290,7 +274,7 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(text) == "" {
 			return rpcerr.Unavailable("no text could be extracted from the document").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
 		// Persist the raw extracted text before the turn: the agent only
 		// summarizes, and the original must outlive the chat transcript.
 		var savedPath, savedAbs string
@@ -530,7 +514,7 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 		if len(p.Files) == 0 {
 			return rpcerr.MissingParam("files").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
 
 		// Idempotency: replay the first response for an identical resend (a client
 		// retry or a re-share of the same files) within the TTL, instead of
@@ -741,7 +725,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(transcript) == "" {
 			return rpcerr.Unavailable("no speech found in audio").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
 		// Persist the full diarized transcript before the turn: minutes are a
 		// summary, and the one number the summary dropped lives only here.
 		var savedPath string
@@ -795,7 +779,7 @@ func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message st
 	return runNativeSync(ctx, deps, chatport.SyncRequest{
 		SessionKey:          sessionKey,
 		Message:             message,
-		Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+		Delivery:            &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 		AutoDeliveredOutput: true,
 		GateUntrustedTools:  true,
 	})
@@ -855,7 +839,7 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 				enrich = res
 			}
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
 		text := contactsSummary(saved, enrich)
 		recordWorkFeed(deps, workfeed.Item{
 			Source:     workfeed.SourceCaptureContacts,
@@ -986,7 +970,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 		if strings.TrimSpace(p.Message) == "" {
 			return rpcerr.MissingParam("message").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(p.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
 
 		// Recall-on turns carry today's work feed as wire-only context — this is
 		// what makes a chat aware of the day's proactive reports/captures.
@@ -1003,7 +987,7 @@ func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
 			SessionKey: sessionKey,
 			Message:    p.Message,
 			Model:      strings.TrimSpace(p.Model),
-			Delivery:   &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+			Delivery:   &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 			// The reply text is returned here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          p.SkipRecall,
