@@ -20,6 +20,7 @@ Health Bench 3.0 점수와 비교하거나 산술 변환하지 않는다.
 - `--check`는 confidence < `MIN_CHECK_CONFIDENCE`(60)이면 실패 (증거 얇은 상태의 Utility 래칫 신뢰 금지).
 - Health Fitness의 finding-land / feed-card는 RSI Utility를 **thin re-export**.
 - `swap-consistency` / `ability-transfer`는 전용 코퍼스 전까지 **proxy ceiling** (각각 ≤58, 포화 시 swap ≤52).
+- L4 `closure-land`도 **착지(delivery)** 를 센다 — `accepted`는 "시도 승인"일 뿐 착지가 아니다. 착지 = dispatch 행의 `dispatchPhase=watch_passed`(롤백 감시 통과) ∪ review `status`∈{applied,landed}. accepted를 착지로 세던 시절엔 **배치 수용 스윕만으로 점수가 올랐고**(게이밍 벡터) 진짜 배달 16건은 세지 않았다(2026-07-25 실측: landed 배차 16건 전부 status=accepted). 행이 아니라 **후보 id 단위로 폴딩**한다(append-only 원장이라 리뷰가 많은 후보가 분모를 부풀렸다). `rejected`는 revert가 아니다 — 좋은 기각을 이중 처벌하지 않는다.
 - L4 `dispatch-land`는 마커 **`outcome`**(landed/…)을 착지로 센다 — review `status`는 accepted로 남을 수 있음. 착지는 **RHAE식 효율 가중**(`ledgers.land_efficiency`): 1차 시도 착지=1.0, 재시도는 `(1/attempts)²`로 감쇠, 상한 `LAND_EFFICIENCY_CAP`(1.15). attempts는 attemptId 말미 서수, 파싱 불가=1(무벌점).
 - Snapshot 케이던스: `make bench-refresh` / `scripts/systemd/setup-bench-refresh.sh` (일 04:30).
 - **Token-economics readout는 advisory** (`scripts/audit/rsi_bench/token_economics.py`, arXiv:2607.06906): agent-logs(`~/.deneb/agent-logs/`)에서 τ(완수 태스크당 토큰)·CPM(백만토큰당 완수)·cacheHit를 계산해 payload `token_economics` 사이드카 + `DENEB_RSI_TOKEN_ECONOMICS` 렌더 라인으로만 노출한다 — **Metric/도메인 점수·ratchet·confidence·baseline check 전부 무접촉** (self-improvement이 품질만 보고 token-max하는 걸 *가시화*할 뿐, 게이트 아님). 래칫 항 승격은 신뢰 baseline 확보 후 2단계.
