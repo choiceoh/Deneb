@@ -131,7 +131,24 @@ func (t *Tracker) ladderEProcessRow() ladderRow {
 	case r.Ready:
 		return ladderRow{"e-process 컷오버", ladderStateReady, fmt.Sprintf("n=%d·합치 %.0f%% — DENEB_EPROCESS_OWNS_ROLLBACK=1 결정 가능", r.Labels, r.AgreementRate*100)}
 	default:
-		return ladderRow{"e-process 컷오버", ladderStateGrowing, fmt.Sprintf("라벨 %d/20", r.Labels)}
+		// "라벨 0/20" alone reads as "accumulating, be patient" — but a resolved
+		// watch that could never have rejected produces an UNFAIR label, and
+		// those do not accumulate toward anything. Live 2026-07-25: 2 watches
+		// resolved, BOTH unfair (ep.N=6, under MinRejectObservations), so the
+		// honest reading was "the input is structurally short", not "it is
+		// filling up". This is the DATA-GATED vs STARVED distinction the status
+		// engine calls its whole point, applied to a ladder row.
+		detail := fmt.Sprintf("라벨 %d/%d", r.Labels, eProcessCutoverMinLabels)
+		if r.UnfairLabels > 0 {
+			detail += fmt.Sprintf(" · 관측수 미달로 무효 %d건 (사후 실사용이 e-process 기각 가능선에 못 미침)", r.UnfairLabels)
+		}
+		if r.Labels > 0 && r.FairRollbacks == 0 {
+			// Agreement measured on a pure-confirm population is trivially ~1.0
+			// (C1-D1), so a row sitting here with labels but no rollback is
+			// waiting on a DIFFERENT input than the count suggests.
+			detail += " · 공정 롤백 0건 (합치율이 확정만으로 계산돼 의미 없음)"
+		}
+		return ladderRow{"e-process 컷오버", ladderStateGrowing, detail}
 	}
 }
 
