@@ -78,7 +78,14 @@ type eProcessCutoverReadiness struct {
 	// resolution (a case the legacy threshold and the e-process could actually
 	// disagree on). Ready requires at least one — otherwise agreement is
 	// measured on a pure-confirm population and is trivially ~1.0 (C1-D1).
-	FairRollbacks int  `json:"fairRollbacks,omitempty"`
+	FairRollbacks int `json:"fairRollbacks,omitempty"`
+	// RollbacksEver counts post-evolve rollbacks across the WHOLE ledger,
+	// labeled or not. It is the difference between "the rollback evidence is
+	// still arriving" and "no evolve has ever regressed, so this gate has no
+	// path by waiting" — the constant's own comment calls that outcome
+	// structurally near-unreachable, and a status surface that omits it invites
+	// the reader to wait for something that is not coming.
+	RollbacksEver int  `json:"rollbacksEver,omitempty"`
 	Ready         bool `json:"ready"`
 	// EProcessOwner mirrors the DENEB_EPROCESS_OWNS_ROLLBACK knob so status
 	// surfaces can distinguish "ready, awaiting the flip" from "flipped".
@@ -96,6 +103,9 @@ func (t *Tracker) eProcessCutoverReadiness() eProcessCutoverReadiness {
 		return out
 	}
 	for _, e := range entries {
+		if e.Type == "evolve_rolled_back" {
+			out.RollbacksEver++
+		}
 		if e.BaselineTest == nil {
 			continue
 		}
