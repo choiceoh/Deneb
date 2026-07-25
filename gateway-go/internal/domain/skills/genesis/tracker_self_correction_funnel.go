@@ -26,8 +26,16 @@ type SelfCorrectionFunnelSummary struct {
 	LastCaptureAt int64 `json:"lastCaptureAt,omitempty"`
 	// LastReviewAt is when a review verdict was last recorded (0 = never).
 	LastReviewAt int64 `json:"lastReviewAt,omitempty"`
-	// Rejections7d counts evolve_rejected events inside the health window.
+	// Rejections7d counts evolve_rejected events inside the health window that
+	// were an actual VERDICT on a candidate. Infrastructure failures are
+	// excluded and counted separately below: mixing them in reads as "the
+	// gates are rejecting more" when the truth is "the judge was down", which
+	// points diagnosis at candidate quality instead of at the outage.
 	Rejections7d int `json:"rejections7d,omitempty"`
+	// InfraRejections7d counts the excluded outages (judge call errored, teacher
+	// rewrite produced nothing) so they stay VISIBLE rather than silently
+	// vanishing from the funnel — a spike here is an availability signal.
+	InfraRejections7d int `json:"infraRejections7d,omitempty"`
 	// PromotableRejections7d is the subset whose reason class qualifies for
 	// automatic promotion into a validation-draft candidate.
 	PromotableRejections7d int `json:"promotableRejections7d,omitempty"`
@@ -283,6 +291,10 @@ func (t *Tracker) addSelfCorrectionRejectionMetrics(s *SelfCorrectionFunnelSumma
 			s.LastRejectionAt = entry.CreatedAt
 		}
 		if entry.CreatedAt < cutoff {
+			continue
+		}
+		if isInfrastructureRejection(entry.Reason) {
+			s.InfraRejections7d++
 			continue
 		}
 		s.Rejections7d++
