@@ -152,6 +152,7 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		{Label: "신규 스킬", Value: strconv.Itoa(h.Genesis7d)},
 		{Label: "제안", Value: strconv.Itoa(h.Proposals7d)},
 		{Label: "기각", Value: strconv.Itoa(h.EvolveRejected7d)},
+		{Label: "판정자 장애", Value: strconv.Itoa(h.EvolveRejectedInfra7d)},
 		{Label: "확정률", Value: fmt.Sprintf("%.0f%%", h.ConfirmRate*100)},
 		{Label: "e-process", Value: rsiEProcessValue(t.eProcessCutoverReadiness())},
 		{Label: "라벨러 사각", Value: strconv.Itoa(len(t.labelerBlindSpots(evolutionHealthWindow)))},
@@ -282,7 +283,10 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 				misses++
 			}
 		}
-		falseRejects += len(r.FalseRejects)
+		// Outage-born exhibits are recoverable candidates, not judge
+		// miscalibration — counting them here would make a provider failure
+		// read as "the judge is getting worse" (#4239 lineage).
+		falseRejects += len(judgeMiscalibrationExhibits(r.FalseRejects))
 		for cls := range r.ByClass {
 			if rsiSubtleDegradationClasses[cls] {
 				subtleDeployed = true

@@ -165,6 +165,28 @@ type falseRejectExhibit struct {
 	CurrentScore float64 `json:"currentScore"`
 	RejectScore  float64 `json:"rejectScore"`
 	RejectedAt   int64   `json:"rejectedAt"`
+	// Infrastructure marks an exhibit whose rejection was an OUTAGE, not a
+	// verdict (#4239). Such a candidate is still worth mining — it is a good
+	// body the loop lost to a failed judge call, and recovering it is the whole
+	// point of this lane — but it is NOT evidence the judge is miscalibrated.
+	// Attributing it to the judge would feed verifier co-evolution a mislabeled
+	// example, so the L3 false-reject metric counts only non-infrastructure
+	// exhibits while the recovery path keeps all of them.
+	Infrastructure bool `json:"infrastructure,omitempty"`
+}
+
+// judgeMiscalibrationExhibits filters exhibits down to the ones that actually
+// say something about the JUDGE. Outage-born exhibits stay in the record (they
+// are still recoverable candidates) but must not inflate 오기각.
+func judgeMiscalibrationExhibits(exhibits []falseRejectExhibit) []falseRejectExhibit {
+	out := exhibits[:0:0]
+	for _, e := range exhibits {
+		if e.Infrastructure {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 const (
@@ -582,11 +604,12 @@ func (t *JudgeAccuracyTask) mineFalseRejects() []falseRejectExhibit {
 			}
 			if rjs.percent() >= cur.percent()+falseRejectMargin {
 				out = append(out, falseRejectExhibit{
-					Skill:        skill,
-					RejectReason: common.TruncateRunes(rej.Reason, 160),
-					CurrentScore: cur.percent(),
-					RejectScore:  rjs.percent(),
-					RejectedAt:   rej.CreatedAt,
+					Skill:          skill,
+					RejectReason:   common.TruncateRunes(rej.Reason, 160),
+					CurrentScore:   cur.percent(),
+					RejectScore:    rjs.percent(),
+					RejectedAt:     rej.CreatedAt,
+					Infrastructure: rej.Infrastructure,
 				})
 			}
 		}
