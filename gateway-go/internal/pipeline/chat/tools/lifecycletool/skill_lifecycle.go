@@ -182,6 +182,25 @@ type SkillReplayToolCallRequest struct {
 	FixtureError  bool     `json:"fixtureError,omitempty"`
 }
 
+const skillLifecycleActionRequirements = "Action requirements: " +
+	"status requires only action; " +
+	"propose requires route=no-op|genesis|create|evolve, plus reason or evidence, and candidate unless route=no-op; " +
+	"genesis requires sessionKey or dreamSummary; evolve requires skillName; " +
+	"self_correction requires at least one of title, candidate, or proposedChange and should include evidence, targetFiles, proposedChange, and risk when available; " +
+	"self_correction_review requires id and status=accepted|rejected|superseded|applied; " +
+	"validation_case requires skillName plus at least one concrete assertion; validation_case_from_session requires skillName and sessionKey; " +
+	"validation_backfill requires skillName; heartbeat_shadow_replay requires candidate; pin/unpin/archive/restore require skillName."
+
+// SkillLifecycleToolDescription returns the late-bound ToolDef description for
+// skill_lifecycle. Keep the action requirements here aligned with the schema
+// descriptions below; this text is what fetch_tools shows before a call.
+func SkillLifecycleToolDescription() string {
+	return "Propus control plane for Deneb self-improvement (tool name kept as skill_lifecycle for compatibility). " +
+		"Use only for self-improvement lifecycle decisions, audits, validation cases, deferred correction capture/review, and curator state. " +
+		skillLifecycleActionRequirements + " " +
+		"Use through the evolution-proposal skill after meaningful workflows."
+}
+
 // ToolSkillLifecycle exposes propose/genesis/evolve/status as one agent-facing tool.
 func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -353,20 +372,20 @@ func SkillLifecycleToolSchema() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Propus action: propose (record/route a self-improvement proposal), genesis (generate a skill from sessionKey or dreamSummary), evolve (improve an existing skill), status (inspect Propus overview.nextActions plus lifecycle logs, opportunity backlog, usage stats, validation corpus, curator state, and pending self-corrections), self_correction (record a deferred correction candidate without applying it), self_correction_review (mark a candidate accepted/rejected/superseded/applied after batch review), validation_case (record held-out assertions for a skill), validation_case_from_session (extract a held-out replay trace from sessionKey), validation_backfill (batch-extract held-out replay traces from stored sessions for skillName), heartbeat_shadow_replay (dry-run a candidate HEARTBEAT.md body over harvested heartbeat fixtures — nothing applied; pass candidate=new body), pin/unpin/archive/restore (manual curator state for agent-created skills)",
+				"description": "Propus action. " + skillLifecycleActionRequirements,
 				"enum":        []string{"propose", "genesis", "evolve", "status", "self_correction", "self_correction_review", "validation_case", "validation_case_from_session", "validation_backfill", "heartbeat_shadow_replay", "pin", "unpin", "archive", "restore"},
 			},
 			"candidate": map[string]any{
 				"type":        "string",
-				"description": "Reusable workflow pattern being proposed. Required for propose unless route=no-op (no-op records 'no reusable pattern', so candidate is optional there)",
+				"description": "For propose: reusable workflow pattern; required for route=genesis/create/evolve and optional for route=no-op. For self_correction: optional candidate summary. For heartbeat_shadow_replay: required candidate HEARTBEAT.md body.",
 			},
 			"dreamSummary": map[string]any{
 				"type":        "string",
-				"description": "Compact dream/summary text to turn into a skill (genesis/propose route=genesis)",
+				"description": "For genesis: compact dream/summary text to turn into a skill; supply this or sessionKey. Also usable with propose route=genesis as supporting context.",
 			},
 			"evidence": map[string]any{
 				"type":        "string",
-				"description": "Brief evidence for the proposal: tools used, repeated pitfall, or user request",
+				"description": "For propose/self_correction: brief evidence such as tools used, repeated pitfall, failure signature, user correction, or why the deferred fix is justified.",
 			},
 			"finding": map[string]any{
 				"type":        "string",
@@ -385,62 +404,62 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"reason": map[string]any{
 				"type":        "string",
-				"description": "Why this route was chosen, or why no-op is correct",
+				"description": "For propose: why this route was chosen, or why no-op is correct. For self_correction: optional rationale distinct from evidence.",
 			},
 			"route": map[string]any{
 				"type":        "string",
-				"description": "Proposal route: no-op, genesis, create, or evolve",
+				"description": "Required for action=propose. Proposal route: no-op records that no reusable change is needed; genesis creates a skill from transcript/dream context; create delegates manual skill creation; evolve improves an existing skill.",
 				"enum":        []string{"no-op", "genesis", "create", "evolve"},
 			},
 			"sessionKey": map[string]any{
 				"type":        "string",
-				"description": "Session key to use for genesis from transcript context, validation_case_from_session replay extraction, or a single-session validation_backfill",
+				"description": "For genesis: supply sessionKey or dreamSummary. Required for validation_case_from_session. Optional for propose and single-session validation_backfill; propose/genesis may default from the current context when available.",
 			},
 			"skillName": map[string]any{
 				"type":        "string",
-				"description": "Existing skill name for evolve/status/validation_backfill, or optional target/related skill for propose",
+				"description": "Required for action=evolve, validation_case, validation_case_from_session, validation_backfill, and pin/unpin/archive/restore. For propose route=evolve, this is the existing skill to improve. For status, omit for global status or set to filter one skill.",
 			},
 			"id": map[string]any{
 				"type":        "string",
-				"description": "For validation_case: stable case id. For self_correction: optional candidate id. For self_correction_review: required candidate id",
+				"description": "For validation_case: optional stable case id. For self_correction: optional candidate id. For self_correction_review: required candidate id copied from status.selfCorrectionCandidates.",
 			},
 			"scope": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: candidate scope, such as skill, code, prompt, docs, ops, config, test, or other",
+				"description": "For self_correction: candidate scope, such as skill, code, prompt, docs, ops, config, test, or other.",
 			},
 			"title": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: short human-readable title for the deferred candidate",
+				"description": "For self_correction: short human-readable title. At least one of title, candidate, or proposedChange is required.",
 			},
 			"targetFiles": map[string]any{
 				"type":        "array",
-				"description": "For self_correction: repo-relative files or skill paths a future coding agent should inspect",
+				"description": "For self_correction: repo-relative files or skill paths a future coding agent should inspect. Include concrete target files when the correction needs code, prompt, docs, config, or tests changed.",
 				"items":       map[string]any{"type": "string"},
 			},
 			"proposedChange": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: concrete change idea. Do not apply it in this action",
+				"description": "For self_correction: concrete change idea. At least one of title, candidate, or proposedChange is required. Do not apply it in this action.",
 			},
 			"risk": map[string]any{
 				"type":        "string",
-				"description": "For self_correction: risk, validation need, or rollback concern for the future reviewer",
+				"description": "For self_correction: risk, validation need, or rollback concern for the future reviewer.",
 			},
 			"status": map[string]any{
 				"type":        "string",
-				"description": "For self_correction_review: accepted, rejected, superseded, or applied",
+				"description": "Required for self_correction_review: accepted, rejected, superseded, or applied.",
 				"enum":        []string{"accepted", "rejected", "superseded", "applied"},
 			},
 			"reviewer": map[string]any{
 				"type":        "string",
-				"description": "For self_correction_review: reviewer identity, such as codex or operator",
+				"description": "For self_correction_review: reviewer identity, such as codex or operator.",
 			},
 			"reviewNote": map[string]any{
 				"type":        "string",
-				"description": "For self_correction_review: why this status was chosen, including tests or PR if applied",
+				"description": "For self_correction_review: why this status was chosen, including tests or PR if applied.",
 			},
 			"description": map[string]any{
 				"type":        "string",
-				"description": "For validation_case/validation_case_from_session/validation_backfill: what real failure or invariant this held-out case protects",
+				"description": "For validation_case/validation_case_from_session/validation_backfill: what real failure or invariant this held-out case protects.",
 			},
 			"frontierTier": map[string]any{
 				"type":        "string",
@@ -449,26 +468,26 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"requiredSubstrings": map[string]any{
 				"type":        "array",
-				"description": "For validation_case: substrings candidate skill bodies must contain",
+				"description": "For validation_case: substrings candidate skill bodies must contain; counts as a concrete assertion.",
 				"items":       map[string]any{"type": "string"},
 			},
 			"forbiddenSubstrings": map[string]any{
 				"type":        "array",
-				"description": "For validation_case: substrings candidate skill bodies must not contain",
+				"description": "For validation_case: substrings candidate skill bodies must not contain; counts as a concrete assertion.",
 				"items":       map[string]any{"type": "string"},
 			},
 			"requiredHeadings": map[string]any{
 				"type":        "array",
-				"description": "For validation_case: markdown headings candidate skill bodies must preserve",
+				"description": "For validation_case: markdown headings candidate skill bodies must preserve; counts as a concrete assertion.",
 				"items":       map[string]any{"type": "string"},
 			},
 			"source": map[string]any{
 				"type":        "string",
-				"description": "For validation_case/validation_case_from_session/validation_backfill: source of this held-out case, such as review-finding, session-backfill, or operator",
+				"description": "For validation_case/validation_case_from_session/validation_backfill/self_correction: provenance label such as review-finding, session-backfill, operator, tool-quality, or skill-lifecycle-tool.",
 			},
 			"replay": map[string]any{
 				"type":        "object",
-				"description": "For validation_case: deterministic dry-run replay task and expected/forbidden action/tool choices. For validation_case_from_session/validation_backfill: optional extra assertions merged with the extracted trace; successful extracted tool calls become expectedToolCalls, errored extracted calls with concrete input fragments become forbiddenToolCalls",
+				"description": "For validation_case: deterministic dry-run replay task and expected/forbidden action/tool choices; at least one replay assertion counts as the required concrete assertion. For validation_case_from_session/validation_backfill: optional extra assertions merged with the extracted trace; successful extracted tool calls become expectedToolCalls, errored extracted calls with concrete input fragments become forbiddenToolCalls.",
 				"properties": map[string]any{
 					"input": map[string]any{
 						"type":        "string",

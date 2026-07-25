@@ -155,6 +155,47 @@ func TestToolSkillLifecycleReadsSkillStatus(t *testing.T) {
 	}
 }
 
+func TestSkillLifecycleToolDescriptionDocumentsActionRequirements(t *testing.T) {
+	desc := SkillLifecycleToolDescription()
+	for _, want := range []string{
+		"propose requires route",
+		"candidate unless route=no-op",
+		"self_correction_review requires id",
+		"validation_case requires skillName",
+		"heartbeat_shadow_replay requires candidate",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("SkillLifecycleToolDescription missing %q:\n%s", want, desc)
+		}
+	}
+}
+
+func TestSkillLifecycleToolSchemaDocumentsActionRequirements(t *testing.T) {
+	schema := SkillLifecycleToolSchema()
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties missing: %#v", schema["properties"])
+	}
+
+	for field, want := range map[string]string{
+		"action":    "Action requirements:",
+		"route":     "Required for action=propose",
+		"skillName": "Required for action=evolve",
+		"id":        "self_correction_review: required candidate id",
+		"title":     "At least one of title, candidate, or proposedChange is required",
+		"replay":    "at least one replay assertion",
+	} {
+		prop, ok := properties[field].(map[string]any)
+		if !ok {
+			t.Fatalf("schema property %q missing: %#v", field, properties[field])
+		}
+		desc, ok := prop["description"].(string)
+		if !ok || !strings.Contains(desc, want) {
+			t.Fatalf("schema property %q description missing %q:\n%v", field, want, prop["description"])
+		}
+	}
+}
+
 func TestToolSkillLifecycleCreatesSelfCorrectionCandidate(t *testing.T) {
 	backend := &fakeSkillLifecycleBackend{}
 	fn := ToolSkillLifecycle(backend)

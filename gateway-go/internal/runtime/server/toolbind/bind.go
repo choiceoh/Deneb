@@ -41,8 +41,9 @@ type (
 )
 
 var (
-	SkillLifecycleToolSchema = lifecycle.SkillLifecycleToolSchema
-	ToolSkillLifecycle       = lifecycle.ToolSkillLifecycle
+	SkillLifecycleToolDescription = lifecycle.SkillLifecycleToolDescription
+	SkillLifecycleToolSchema      = lifecycle.SkillLifecycleToolSchema
+	ToolSkillLifecycle            = lifecycle.ToolSkillLifecycle
 )
 
 // Phone ops leaf binding (hosted under lifecycle to keep this package ≤ soft fanout).
