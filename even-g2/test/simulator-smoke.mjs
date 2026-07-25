@@ -13,7 +13,7 @@
 // gateway host. It is a CI lane (ubuntu-latest is x86_64). On an unsupported
 // platform it SKIPS rather than fails, so running it locally is harmless.
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { startStubGateway } from './stub-gateway.mjs'
 
@@ -28,12 +28,52 @@ const ARTIFACTS = join(process.cwd(), 'smoke-artifacts')
 const children = []
 let stub
 
-function sh(cmd, args, opts = {}) {
+const spawnErrors = []
+
+function sh(label, cmd, args, opts = {}) {
   const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts })
   children.push(child)
-  child.stdout.on('data', (d) => process.stdout.write(`[${cmd}] ${d}`))
-  child.stderr.on('data', (d) => process.stderr.write(`[${cmd}] ${d}`))
+  // A spawn failure arrives as an async 'error' EVENT, not a thrown exception:
+  // without this listener Node kills the process with an unhandled error and
+  // the harness's own diagnostics never run. That is exactly how the first CI
+  // run reported an ENOENT with no artifacts (2026-07-25).
+  child.on('error', (err) => {
+    const msg = `${label} failed to start: ${err.code || ''} ${err.message}`
+    spawnErrors.push(msg)
+    process.stderr.write(`${msg}\n`)
+  })
+  // An early exit is a start failure too — the simulator prints its reason and
+  // quits (e.g. "Unsupported platform"). Recording it lets the readiness wait
+  // fail in a second with the real cause instead of timing out in a minute.
+  child.on('exit', (code, signal) => {
+    if (code !== 0 && signal !== 'SIGTERM') {
+      spawnErrors.push(`${label} exited early (code=${code} signal=${signal ?? 'none'})`)
+    }
+  })
+  child.stdout.on('data', (d) => process.stdout.write(`[${label}] ${d}`))
+  child.stderr.on('data', (d) => process.stderr.write(`[${label}] ${d}`))
   return child
+}
+
+/**
+ * simulatorEntry resolves the simulator's real entry FILE rather than trusting
+ * the node_modules/.bin symlink.
+ *
+ * The first CI run died on `spawn node_modules/.bin/evenhub-simulator ENOENT`
+ * even though `npm ci` reported the package installed and the same relative
+ * spawn works locally — so the link is not something this harness should
+ * depend on. Running the entry through process.execPath removes three failure
+ * modes at once: the symlink, the shebang interpreter, and PATH.
+ */
+function simulatorEntry() {
+  const entry = join('node_modules', '@evenrealities', 'evenhub-simulator', 'bin', 'index.js')
+  if (existsSync(entry)) return entry
+  const dir = join('node_modules', '@evenrealities')
+  const installed = existsSync(dir) ? readdirSync(dir).join(', ') : '(no @evenrealities dir)'
+  throw new Error(
+    `simulator entry not found at ${entry}. Installed @evenrealities packages: ${installed}. ` +
+      `Run npm ci in even-g2/.`,
+  )
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -87,16 +127,40 @@ function cleanup() {
 }
 
 async function main() {
-  if (process.platform === 'linux' && process.arch === 'arm64') {
-    console.log('SKIP: the Even Hub simulator has no linux-arm64 build (CI runs this on x86_64).')
+  // SMOKE_FORCE=1 runs the harness anyway. On ARM the simulator itself still
+  // refuses to start, but everything up to that point — stub gateway, vite
+  // preview, preflight, spawn wiring, failure reporting — gets exercised. That
+  // is the only way to validate this plumbing on the ARM gateway host.
+  if (process.platform === 'linux' && process.arch === 'arm64' && process.env.SMOKE_FORCE !== '1') {
+    console.log(
+      'SKIP: the Even Hub simulator has no linux-arm64 build (CI runs this on x86_64). ' +
+        'SMOKE_FORCE=1 to exercise the harness plumbing anyway.',
+    )
     return 0
   }
   mkdirSync(ARTIFACTS, { recursive: true })
 
+  // Preflight, printed before anything can fail: if the next CI run still
+  // cannot start the simulator, this block says why without another round trip.
+  const entry = simulatorEntry()
+  const preflight = {
+    platform: `${process.platform}-${process.arch}`,
+    node: process.version,
+    cwd: process.cwd(),
+    simulatorEntry: entry,
+    evenrealities: readdirSync(join('node_modules', '@evenrealities')),
+    binLinks: existsSync(join('node_modules', '.bin'))
+      ? readdirSync(join('node_modules', '.bin')).filter((f) => f.includes('even'))
+      : [],
+    display: process.env.DISPLAY || '(unset)',
+  }
+  console.log('preflight', JSON.stringify(preflight))
+  writeFileSync(join(ARTIFACTS, 'preflight.json'), JSON.stringify(preflight, null, 2))
+
   stub = await startStubGateway({ token: TOKEN })
   console.log(`stub gateway on :${stub.port}`)
 
-  sh('npx', ['vite', 'preview', '--port', String(PREVIEW_PORT), '--strictPort', '--host', '127.0.0.1'])
+  sh('vite', 'npx', ['vite', 'preview', '--port', String(PREVIEW_PORT), '--strictPort', '--host', '127.0.0.1'])
   await waitFor('vite preview', async () => (await fetch(`http://127.0.0.1:${PREVIEW_PORT}/`)).ok)
 
   // Seed the app through the documented bootstrap query so no localStorage or
@@ -105,9 +169,12 @@ async function main() {
     `http://127.0.0.1:${PREVIEW_PORT}/?baseUrl=${encodeURIComponent(`http://127.0.0.1:${stub.port}`)}` +
     `&token=${encodeURIComponent(TOKEN)}`
 
-  const simBin = join('node_modules', '.bin', 'evenhub-simulator')
-  sh(simBin, [appUrl, '--automation-port', String(AUTOMATION_PORT)])
-  await waitFor('simulator automation API', async () => (await api('/api/ping')).ok)
+  sh('simulator', process.execPath, [entry, appUrl, '--automation-port', String(AUTOMATION_PORT)])
+  await waitFor('simulator automation API', async () => {
+    // Surface a start failure immediately instead of burning the whole timeout.
+    if (spawnErrors.length) throw new Error(spawnErrors.join('; '))
+    return (await api('/api/ping')).ok
+  })
 
   const failures = []
   const check = (ok, msg) => {
