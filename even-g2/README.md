@@ -129,16 +129,27 @@ Gateway proactive pushes are normalized to one-line HUD grammar before SSE/FCM:
 3. Success signal: `HUD_OK / (HUD_OK + PHONE_OPEN)` rising across a few days.
 4. Optional diary line: `wiki log` — `G2 HUD: OK=N phone=M`.
 
+## 조작 (알림 페이지)
+
+| 제스처 | 동작 |
+|---|---|
+| ↓ / ↑ | 알림 커서 이동 → 마지막 알림에서 한 번 더 = 다음 페이지 |
+| 탭 | 커서가 가리키는 알림의 상세 |
+| 상세에서 ↓ / ↑ | **다음/이전 알림 상세** (목록 경유 없이 연속 열람) → 끝에서 목록으로 |
+| 상세에서 탭 | 목록으로 (커서는 읽던 알림에 남는다) |
+| 더블탭 | 종료 (폴링도 함께 멈춘다) |
+
+알림이 화면에 다 안 들어가면 커서 주변 5건만 그리고 `↑ N건 더` / `↓ N건 더` 로 알린다.
+
 ## 알림 페이지는 왜 리스트 컨테이너가 아닌가
 
-호스트의 `ListContainerProperty` 가 알림 목록에 딱 맞아 보이지만, **고른 이유 두 가지 모두에서 틀린 선택**이었다. 시뮬레이터로 재현된 사실:
+호스트의 `ListContainerProperty` 를 쓰지 않는 이유는 **측정된 것 하나**다 — 리스트는 스와이프로 자기 선택을 옮기지만 **끝에서 앱에 아무것도 보내지 않는다**([run 30179426969](https://github.com/choiceoh/Deneb/actions/runs/30179426969): `list paging: STOPS at the end of the list`). 목록에서 탭은 상세, 더블탭은 종료이므로 — 알림이 있는 동안 일정/할 일 페이지가 통째로 닿지 않았다.
 
-- **선택을 앱에 안 알려준다.** 관측된 `listEvent` 에 `currentSelectItemIndex` 가 한 번도 실려오지 않았다. 호스트는 스와이프로 자기 선택 테두리를 옮기지만 그 결과를 통보하지 않으므로, 착용자가 2번 알림을 고르고 탭하면 앱은 **1번을 연다** — 고르지 않은 알림을 읽게 된다.
-- **끝에서 아무것도 안 보낸다.** 선택이 마지막 항목에 닿은 뒤 스와이프해도 `SCROLL_BOTTOM` 이 앱에 오지 않는다. 목록에서 탭은 상세, 더블탭은 종료이므로 — **알림이 있는 동안 일정/할 일 페이지가 통째로 닿지 않았다.**
+**선택을 잘못 보고하지는 않는다.** `listEvent` 에 `currentSelectItemIndex` 가 안 보인다는 이유로 "고르지 않은 알림이 열린다"고 추정했으나 **틀렸다**. proto3 는 0인 스칼라를 직렬화에서 생략하므로 인덱스 부재는 곧 0번을 뜻하고, 같은 run 이 `list tap opens the SELECTED item` 을 측정했다. `resolveSelectionIndex` 의 부재→0 폴백은 이 와이어 포맷에 정확히 맞는 처리다.
 
-텍스트 컨테이너는 스크롤(`textEvent{eventType:2}`)과 탭을 모두 앱에 전달한다. 그래서 알림 페이지는 **텍스트 한 장 + 앱이 소유하는 커서**(`listCursor`)로 그린다. 스와이프는 커서를 알림 사이로 옮기고, 마지막 알림에서 한 번 더 스와이프하면 다음 페이지로 넘어간다. 탭은 **커서가 가리키는** 알림을 연다.
+텍스트 컨테이너는 스크롤(`textEvent{eventType:2}`)과 탭을 모두 앱에 전달한다. 그래서 알림 페이지는 **텍스트 한 장 + 앱이 소유하는 커서**(`listCursor`)로 그린다. 대가는 두 가지이고 둘 다 갚았다: 긴 목록 스크롤은 커서 윈도잉(`windowRange`)으로, 선택 표시는 `▸` 마커로.
 
-부수 효과가 본질에 가깝다: 두 동작이 호스트 소유에서 앱 소유로 넘어오면서 **스모크가 단정으로 검사할 수 있게** 됐다 (`a swipe moves the alert cursor` · `a tap opens the alert the cursor is on` · `swiping past the last alert reaches further pages`). 시뮬레이터 README 가 리스트 동작의 재현 충실도를 부인하는 영역이라, 호스트 리스트로 남겨뒀다면 영영 관측만 가능했다.
+부수 효과가 본질에 가깝다 — 동작이 호스트 소유에서 앱 소유로 넘어오면서 **스모크가 단정으로 검사**할 수 있게 됐다. 시뮬레이터 README 가 리스트 동작의 재현 충실도를 부인하는 영역이라, 호스트 리스트로 남겨뒀다면 영영 관측만 가능했다.
 
 ## Design constraints
 

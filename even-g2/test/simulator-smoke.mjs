@@ -14,7 +14,8 @@
 //   quiet poll   ok    → the framebuffer must stay byte-identical
 //   redraw       alt   → a genuinely changed payload must repaint
 //   detail       —     → a tap opens a detail, a second tap leaves it
-//   alert cursor —     → a swipe moves it, a tap opens THAT alert
+//   detail step  —     → a swipe in a detail steps to the next alert
+//   alert cursor —     → it follows what was read; a tap re-opens THAT one
 //   paging       —     → swiping past the last alert reaches further pages
 //   mid-poll tap slow  → a tap during an in-flight poll must not be dropped
 //   deadline     slow  → a hung gateway must not wedge `busy` (🔴 of #4267)
@@ -280,32 +281,36 @@ async function main() {
   await input('click')
   await sleep(2_500)
   const detailOfAlert0 = await screenshot('03-detail-of-alert-0')
+
+  // A swipe inside a detail steps to the NEXT alert rather than dropping back
+  // to the list. Reading a morning's alerts is one gesture each instead of
+  // three (detail → list → tap).
   await input('down')
   await sleep(2_500)
-  const alertPage = await screenshot('04-back-on-the-alert-page')
-  check(
-    Buffer.compare(detailOfAlert0, alertPage) !== 0,
-    'a swipe leaves a detail (scroll reaches a text container)',
-  )
-
-  // One swipe moves the cursor to the second alert.
-  await input('down')
-  await sleep(2_500)
-  const cursorMoved = await screenshot('05-cursor-on-alert-1')
-  check(
-    Buffer.compare(alertPage, cursorMoved) !== 0,
-    'a swipe moves the alert cursor',
-  )
-
-  // …and a tap must open THAT alert, not the first one. This is the check the
-  // host list could never pass: it sent no currentSelectItemIndex, so the
-  // wearer highlighted alert #2 and read alert #1.
-  await input('click')
-  await sleep(2_500)
-  const detailOfAlert1 = await screenshot('06-detail-of-alert-1')
+  const detailOfAlert1 = await screenshot('04-detail-of-alert-1')
   check(
     Buffer.compare(detailOfAlert0, detailOfAlert1) !== 0,
-    'a tap opens the alert the cursor is on (not always the first)',
+    'a swipe in a detail steps to the next alert',
+  )
+
+  // Past the last alert, the swipe leaves the detail.
+  await input('down')
+  await sleep(2_500)
+  const alertPage = await screenshot('05-back-on-the-alert-page')
+  check(
+    Buffer.compare(detailOfAlert1, alertPage) !== 0,
+    'a swipe past the last alert leaves the detail',
+  )
+
+  // The cursor stayed on the alert that was being read, so a tap re-opens THAT
+  // one — byte-identical to the detail seen a moment ago, which also proves the
+  // tap is not just always opening the first alert.
+  await input('click')
+  await sleep(2_500)
+  const reopened = await screenshot('06-reopened-alert-1')
+  check(
+    Buffer.compare(reopened, detailOfAlert1) === 0,
+    'the cursor followed the alert that was read (a tap re-opens it, not the first)',
   )
   await input('click') // back to the alert page, cursor still on alert 1
   await sleep(2_500)

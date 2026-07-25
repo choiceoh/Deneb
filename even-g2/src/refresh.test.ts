@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ALERT_WINDOW,
   BASE_REFRESH_MS,
   MAX_REFRESH_MS,
   advanceCursor,
   clampCursor,
+  windowRange,
   nextDelayMs,
   payloadSignature,
   resolveSelectionIndex,
@@ -150,5 +152,39 @@ describe('advanceCursor', () => {
     // still make sense rather than paging from a position that no longer exists.
     expect(advanceCursor(9, 3, -1)).toBe(1)
     expect(advanceCursor(9, 3, 1)).toBe('page')
+  })
+})
+
+describe('windowRange', () => {
+  it('shows everything when it fits', () => {
+    expect(windowRange(0, 3)).toEqual({ start: 0, end: 3 })
+    expect(windowRange(2, ALERT_WINDOW)).toEqual({ start: 0, end: ALERT_WINDOW })
+  })
+
+  it('keeps the cursor visible in a long list', () => {
+    for (let cursor = 0; cursor < 12; cursor++) {
+      const { start, end } = windowRange(cursor, 12)
+      expect(end - start).toBe(ALERT_WINDOW)
+      expect(cursor).toBeGreaterThanOrEqual(start)
+      expect(cursor).toBeLessThan(end)
+    }
+  })
+
+  it('pins to the ends instead of running past them', () => {
+    expect(windowRange(0, 12)).toEqual({ start: 0, end: 5 })
+    expect(windowRange(11, 12)).toEqual({ start: 7, end: 12 })
+  })
+
+  it('centres the cursor in the middle of a long list', () => {
+    expect(windowRange(6, 12)).toEqual({ start: 4, end: 9 })
+  })
+
+  it('is empty when there is nothing to draw', () => {
+    expect(windowRange(0, 0)).toEqual({ start: 0, end: 0 })
+  })
+
+  it('survives a stale cursor past the end', () => {
+    const { start, end } = windowRange(99, 12)
+    expect({ start, end }).toEqual({ start: 7, end: 12 })
   })
 })

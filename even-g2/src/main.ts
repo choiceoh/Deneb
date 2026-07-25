@@ -6,7 +6,14 @@ import {
 } from '@evenrealities/even_hub_sdk'
 
 import { resolveSettings, type GlanceSettings } from './settings'
-import { advanceCursor, clampCursor as clampCursorTo, nextDelayMs, payloadSignature, resolveSelectionIndex } from './refresh'
+import {
+  advanceCursor,
+  clampCursor as clampCursorTo,
+  nextDelayMs,
+  payloadSignature,
+  resolveSelectionIndex,
+  windowRange,
+} from './refresh'
 import { dispatchHubEvent } from './events'
 import {
   fetchGlance,
@@ -39,13 +46,18 @@ let lastCached = false
 /**
  * Which alert the cursor is on, on an alert page.
  *
- * The app owns this instead of the host's list container. The simulator run
- * (30176035571) showed why: the host moves a list's own selection on a swipe
- * and then tells the app NOTHING — no scroll event at the end of the list, and
- * no `currentSelectItemIndex` on the click. So a host-owned list could neither
- * page away nor report what the wearer had actually highlighted, and a tap
- * always opened alert #1. An app-owned cursor on a plain text container makes
- * both behaviours ours, and therefore testable.
+ * The app owns this instead of the host's list container, for ONE measured
+ * reason: the host list moves its own selection on a swipe and then emits
+ * nothing at the end of the list, so the app could never page past the alerts
+ * — with a tap opening a detail and a double-tap exiting, cal/todo were
+ * unreachable whenever alerts existed (run 30179426969: "list paging: STOPS at
+ * the end of the list").
+ *
+ * It does NOT report the selection wrongly. That was a wrong guess of mine from
+ * never seeing `currentSelectItemIndex` on a listEvent — proto3 omits zero
+ * scalars, so an absent index simply means item 0, and the same run measured
+ * "list tap opens the SELECTED item". `resolveSelectionIndex`'s absent→0
+ * fallback is exactly right for that wire format.
  */
 let listCursor = 0
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
@@ -242,17 +254,37 @@ async function openDetail(index: unknown): Promise<void> {
   const i = resolveSelectionIndex(index, items.length)
   if (i < 0) return
   detailIndex = i
+  // Keep the cursor on whatever is being read, so leaving the detail lands back
+  // on that alert rather than wherever the cursor happened to be.
+  listCursor = i
   screen = 'detail'
-  await showText(`Deneb · 상세\n\n${formatAlertDetail(items[i])}`)
+  await showText(`Deneb · 상세\n\n${formatAlertDetail(items[i], { index: i, total: items.length })}`)
+}
+
+/**
+ * stepDetail moves between alert details without going back to the list.
+ *
+ * Reading a morning's alerts used to mean detail → list → tap → detail for each
+ * one. On a HUD that is three interactions per alert; a swipe is one. Stepping
+ * past either end leaves the detail, which keeps the list reachable without a
+ * separate gesture.
+ */
+async function stepDetail(dir: 1 | -1): Promise<void> {
+  const moved = advanceCursor(detailIndex, items.length, dir)
+  if (moved !== 'page') {
+    await openDetail(moved)
+    return
+  }
+  screen = 'page'
+  detailIndex = -1
+  await renderCurrentPage()
 }
 
 async function onSwipeNext(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
   if (screen === 'setup') return
   if (screen === 'detail') {
-    screen = 'page'
-    detailIndex = -1
-    await renderCurrentPage()
+    await stepDetail(1)
     return
   }
   if (screen === 'status') {
@@ -293,9 +325,7 @@ async function onSwipePrev(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
   if (screen === 'setup') return
   if (screen === 'detail') {
-    screen = 'page'
-    detailIndex = -1
-    await renderCurrentPage()
+    await stepDetail(-1)
     return
   }
   if (screen === 'status') {
@@ -330,15 +360,26 @@ async function onSwipePrev(): Promise<void> {
   await renderCurrentPage()
 }
 
+/**
+ * showStatus draws the diagnostics screen.
+ *
+ * It used to return early while `busy`, which meant a swipe onto it during a
+ * background poll did nothing at all — the same dropped-input failure as the
+ * tap in openDetail. The navigation now always happens; only the fetch is
+ * skipped when one is already in flight, and the screen says so.
+ */
 async function showStatus(): Promise<void> {
-  if (busy) return
   if (needsSetup(settings)) {
     screen = 'setup'
     await showText(setupCopy())
     return
   }
-  busy = true
   screen = 'status'
+  if (busy) {
+    await showText('Deneb · 상태\n\n확인 중…\n\n탭=페이지로')
+    return
+  }
+  busy = true
   try {
     const st = await fetchStatus(settings)
     const host = settings.baseUrl.replace(/^https?:\/\//, '')
@@ -495,7 +536,7 @@ async function renderCurrentPage(): Promise<void> {
   const stamp = formatGeneratedLabel(lastGenerated, lastCached)
   const nav = `${pageIndex + 1}/${Math.max(pages.length, 1)}`
   const footer = stamp
-    ? `↓다음 · 탭새로고침 · ${stamp}`
+    ? `↓다음 · 탭=새로고침 · ${stamp}`
     : `↓다음(빈칸건너뜀) · ${nav}`
   await showText(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
 }
@@ -520,7 +561,15 @@ async function renderCurrentPage(): Promise<void> {
 async function showAlertList(title: string): Promise<void> {
   const stamp = formatGeneratedLabel(lastGenerated, lastCached)
   const cursor = clampCursor()
-  const lines = items.map((it, i) => `${i === cursor ? '▸' : ' '}${listLabel(it)}`)
+  // Only a window of the alerts fits on the glass. The host list used to scroll
+  // for us; drawing the page ourselves means windowing it ourselves, or a long
+  // morning's alerts simply run off the bottom.
+  const { start, end } = windowRange(cursor, items.length)
+  const lines = items
+    .slice(start, end)
+    .map((it, i) => `${start + i === cursor ? '▸' : ' '}${listLabel(it)}`)
+  if (start > 0) lines.unshift(` ↑ ${start}건 더`)
+  if (end < items.length) lines.push(` ↓ ${items.length - end}건 더`)
   const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : ''
   await showText(
     [
@@ -529,7 +578,7 @@ async function showAlertList(title: string): Promise<void> {
       '',
       ...lines,
       '',
-      items.length > 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
+      cursor < items.length - 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
     ].join('\n'),
   )
 }

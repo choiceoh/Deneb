@@ -128,15 +128,26 @@ export function normalizeItems(items: GlanceItem[] | undefined): GlanceItem[] {
     .slice(0, 12)
 }
 
-export function formatAlertDetail(item: GlanceItem): string {
+/**
+ * formatAlertDetail renders one alert full-screen.
+ *
+ * `pos` drives the footer, which used to promise `↓다음페이지` — a swipe here
+ * has never gone to the next page, and now it steps to the next ALERT so the
+ * wearer can read through a morning's worth without going back to the list
+ * between each one. A HUD footer is the only affordance there is, so it has to
+ * say what the swipe actually does.
+ */
+export function formatAlertDetail(item: GlanceItem, pos?: { index: number; total: number }): string {
   const mark = (item.priority ?? 0) >= 4 ? '! ' : ''
   const meta = [item.age, (item.priority ?? 0) >= 4 ? '긴급' : ''].filter(Boolean).join(' · ')
-  const lines = [`${mark}${item.title}`]
+  const counter = pos && pos.total > 1 ? ` (${pos.index + 1}/${pos.total})` : ''
+  const lines = [`${mark}${item.title}${counter}`]
   if (meta) lines.push(meta)
   lines.push('')
   lines.push(item.body || item.preview || '(내용 없음)')
   lines.push('')
-  lines.push('탭=목록 · ↓다음페이지')
+  const hasNext = !!pos && pos.index < pos.total - 1
+  lines.push(hasNext ? '탭=목록 · ↓다음알림' : '탭=목록 · ↓목록으로')
   return lines.join('\n')
 }
 
