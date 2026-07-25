@@ -472,8 +472,13 @@ const (
 // silent thrash (the loop burning its budget re-evolving one skill) is visible
 // without log spelunking — the failure mode behind every past silent death.
 type EvolutionHealthSummary struct {
-	Evolves7d               int     `json:"evolves7d"`
-	EvolveRejected7d        int     `json:"evolveRejected7d"`
+	Evolves7d        int `json:"evolves7d"`
+	EvolveRejected7d int `json:"evolveRejected7d"`
+	// EvolveRejectedInfra7d counts rejections that were OUTAGES (judge call
+	// errored, teacher rewrite produced nothing) rather than verdicts. Split out
+	// so the L1 headline reads candidate quality; kept visible because a spike
+	// is an availability signal.
+	EvolveRejectedInfra7d   int     `json:"evolveRejectedInfra7d,omitempty"`
 	EvolveRolledBack7d      int     `json:"evolveRolledBack7d"`
 	EvolveConfirmed7d       int     `json:"evolveConfirmed7d"`
 	CrossSkillRegressions7d int     `json:"crossSkillRegressions7d"`
@@ -536,6 +541,14 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 				perSkill[e.SkillName]++
 			}
 		case "evolve_rejected":
+			// An outage is not a verdict on the candidate (#4239). Counting it
+			// as a rejection points the L1 headline at candidate quality when
+			// the truth is "the judge call failed", and it would make the LAST
+			// rejection reason read as a quality signal too.
+			if isInfrastructureRejection(e.Reason) {
+				s.EvolveRejectedInfra7d++
+				break
+			}
 			s.EvolveRejected7d++
 			if s.LastRejectedSkill == "" {
 				s.LastRejectedSkill = e.SkillName
