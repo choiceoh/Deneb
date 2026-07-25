@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,8 +30,45 @@ DEFAULT_CACHE = AUDIT_DIR / "health-v3-runtime-cache.json"
 DEFAULT_TTL_HOURS = 72
 
 
+# Score band reserved for values PAST the hard bar. rh.graded clamps to exactly
+# 0.0 there, and with bars this tight production sits past five of six of them at
+# once — so every pillar reads 0.0 and the domain stops being a measurement.
+# Observed 2026-07-25: runtime 16.2 with error-rate / latency / llm-serving /
+# tool-reliability / turn-reliability ALL exactly 0.0, unchanged across four
+# consecutive nights, so the nightly ratchet could not distinguish "recovering"
+# from "still broken" — the operator's actual question.
+#
+# This does NOT lower a bar: crossing hard still costs 95 of 100 points, every
+# pillar past its bar still emits a `high` finding (the cut is 45), and no baseline
+# is touched. It only keeps the tail informative instead of flat.
+#
+# COST, stated plainly: compressing the ramp into [BAND, 100] makes the same input
+# score up to ~+3.6 higher inside [soft, hard]. Against baselines captured under
+# the old curve the runtime ratchet is that much more lenient there, so a real
+# regression of a few points could hide. Bounded deliberately — 0.05 buys usable
+# sub-bar resolution for the least ramp distortion — and it is why the band is not
+# larger. Runtime baselines should be re-recorded once production climbs back into
+# the ramp region. Structure, the heavily weighted domain, is untouched, and this
+# nightly is advisory (it opens a tracking issue, it does not gate).
+SUB_BAR_BAND = 0.05
+
+
 def _grade(value: float, soft: float, hard: float) -> float:
-    return 100.0 * rh.graded(value, soft, hard)
+    """Graded score that keeps resolution below the hard bar.
+
+    [0, soft] → 100, ramping down to SUB_BAR_BAND at `hard`, then decaying by how
+    many DOUBLINGS past the bar the value sits: hard→8.0, 2×hard→4.0, 4×hard→2.7.
+    Continuous at `hard` and monotonically decreasing throughout, so a worse
+    measurement can never score higher than a better one.
+
+    Deliberately local to health-v3: `rh.graded` stays untouched because
+    runtime_health.py shares it and carries its own (looser) bars and baseline.
+    """
+    ramp = rh.graded(value, soft, hard)
+    if hard <= 0 or value <= hard:
+        return 100.0 * (SUB_BAR_BAND + (1.0 - SUB_BAR_BAND) * ramp)
+    doublings = math.log2(value / hard)
+    return 100.0 * SUB_BAR_BAND / (1.0 + doublings)
 
 
 def score_signals(signals: rh.Signals) -> list[Metric]:

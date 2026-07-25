@@ -17,7 +17,14 @@ from health_v3.model import (
     Report,
     geometric_composite,
 )
-from health_v3.runtime import score_signals, write_cache, load_cache
+from health_v3.runtime import (
+    TOOLERR_FRAC_HARD,
+    TOOLERR_FRAC_SOFT,
+    _grade,
+    load_cache,
+    score_signals,
+    write_cache,
+)
 from health_v3.structure import (
     _AI_EXTRA_TIGHTEN,
     _CHANGE_BLAST_SCALE,
@@ -185,6 +192,53 @@ class ReportShapeTests(unittest.TestCase):
         payload = report.to_dict()
         self.assertEqual(payload["schema_version"], 3)
         self.assertTrue(45.0 <= payload["score"]["overall"] <= 55.0)
+
+
+class SubBarResolutionTests(unittest.TestCase):
+    """The sub-hard-bar band must add resolution WITHOUT softening the verdict.
+
+    Production sat past five of six runtime bars on 2026-07-25, so every one of
+    those pillars scored exactly 0.0 for four consecutive nights and the nightly
+    ratchet could not tell "recovering" from "still broken".
+    """
+
+    BARS = (TOOLERR_FRAC_SOFT, TOOLERR_FRAC_HARD)
+
+    def test_monotonically_decreasing_across_the_whole_range(self) -> None:
+        # A worse measurement must never score higher — the property that makes the
+        # tail a measurement rather than decoration.
+        values = [0.0, 0.005, 0.01, 0.015, 0.0229, 0.023, 0.024, 0.035, 0.046, 0.092, 0.5, 5.0]
+        scores = [_grade(v, *self.BARS) for v in values]
+        for (v0, s0), (v1, s1) in zip(zip(values, scores), zip(values[1:], scores[1:])):
+            self.assertGreaterEqual(s0, s1, f"{v0}->{v1} scored {s0}->{s1}")
+
+    def test_continuous_at_the_hard_bar(self) -> None:
+        soft, hard = self.BARS
+        just_under = _grade(hard - 1e-9, soft, hard)
+        at_bar = _grade(hard, soft, hard)
+        just_over = _grade(hard + 1e-9, soft, hard)
+        self.assertAlmostEqual(just_under, at_bar, places=4)
+        self.assertAlmostEqual(at_bar, just_over, places=4)
+
+    def test_past_the_bar_still_reads_as_failure(self) -> None:
+        # 45 is the `high` finding cut; the band must stay far below it so crossing
+        # a bar is never mistaken for partial credit.
+        soft, hard = self.BARS
+        self.assertLess(_grade(hard, soft, hard), 10.0)
+        self.assertLess(_grade(hard * 4, soft, hard), _grade(hard, soft, hard))
+
+    def test_perfect_input_is_unchanged(self) -> None:
+        # The band must not cost anything at the healthy end, or every green pillar
+        # silently regresses against its baseline.
+        self.assertAlmostEqual(_grade(0.0, *self.BARS), 100.0, places=6)
+        self.assertAlmostEqual(_grade(self.BARS[0], *self.BARS), 100.0, places=6)
+
+    def test_distinguishes_degrees_of_failure(self) -> None:
+        # The whole point: two broken-but-different states must not collapse to one
+        # number. Real 2026-07-25 values were 3.5% tool errors and 8.0% timeouts.
+        soft, hard = self.BARS
+        self.assertGreater(_grade(0.035, soft, hard), _grade(0.070, soft, hard))
+        self.assertGreater(_grade(0.070, soft, hard) - _grade(0.140, soft, hard), 0.3)
 
 
 if __name__ == "__main__":
