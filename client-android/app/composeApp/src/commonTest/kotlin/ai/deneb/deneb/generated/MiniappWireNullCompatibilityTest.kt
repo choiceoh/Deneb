@@ -3052,6 +3052,12 @@ class MiniappWireNullCompatibilityTest {
             field = "rejections7d",
         ),
         nullContract(
+            name = "SelfImprovementCodingFunnel.infraRejections7d",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            empty = SelfImprovementCodingFunnel(),
+            field = "infraRejections7d",
+        ),
+        nullContract(
             name = "SelfImprovementCodingFunnel.promotableRejections7d",
             serializer = SelfImprovementCodingFunnel.serializer(),
             empty = SelfImprovementCodingFunnel(),

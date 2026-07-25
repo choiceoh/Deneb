@@ -3190,6 +3190,11 @@ class MiniappWireValueContractTest {
                     expectation = Expectation.Exact,
                 ),
                 fieldValue(
+                    name = "infraRejections7d",
+                    value = JsonPrimitive(Int.MAX_VALUE),
+                    expectation = Expectation.Exact,
+                ),
+                fieldValue(
                     name = "promotableRejections7d",
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,

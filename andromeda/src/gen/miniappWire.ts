@@ -731,6 +731,7 @@ export interface SelfImprovementCodingFunnel {
   lastCaptureAt?: number
   lastReviewAt?: number
   rejections7d?: number
+  infraRejections7d?: number
   promotableRejections7d?: number
   lastRejectionAt?: number
   lastNudgeAt?: number
