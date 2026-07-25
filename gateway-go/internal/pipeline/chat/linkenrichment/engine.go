@@ -24,6 +24,7 @@ const (
 	maxTotalLinkChars      = 40000
 	linkFetchTimeout       = 10 * time.Second
 	totalEnrichmentTimeout = 30 * time.Second
+	linkJoinBudget         = 4 * time.Second
 	linkFetchMaxBytes      = 2 * 1024 * 1024
 )
 
@@ -98,6 +99,7 @@ func (engine *Engine) Start(ctx context.Context, message string, sanitize Saniti
 
 	message = sanitize(message)
 	start := time.Now()
+	runCtx, cancel := context.WithCancel(ctx)
 	type outcome struct {
 		summary string
 		fetchMs int64
@@ -110,15 +112,26 @@ func (engine *Engine) Start(ctx context.Context, message string, sanitize Saniti
 				result <- outcome{fetchMs: time.Since(start).Milliseconds()}
 			}
 		}()
-		summary := engine.enrichMessage(ctx, message)
+		summary := engine.enrichMessage(runCtx, message)
 		result <- outcome{summary: summary, fetchMs: time.Since(start).Milliseconds()}
 	}()
 
 	return func(joinCtx context.Context) string {
-		grace := time.NewTimer(totalEnrichmentTimeout + 5*time.Second)
+		if joinCtx == nil {
+			joinCtx = context.Background()
+		}
+		remaining := time.Until(start.Add(linkJoinBudget))
+		if remaining <= 0 {
+			cancel()
+			engine.logger.Debug("link enrichment missed prep join budget; sending unenriched",
+				"sinceSendMs", time.Since(start).Milliseconds())
+			return message
+		}
+		grace := time.NewTimer(remaining)
 		defer grace.Stop()
 		select {
 		case enriched := <-result:
+			cancel()
 			if enriched.summary == "" {
 				return message
 			}
@@ -128,10 +141,13 @@ func (engine *Engine) Start(ctx context.Context, message string, sanitize Saniti
 				"sinceSendMs", time.Since(start).Milliseconds())
 			return sanitize(message + "\n\n" + enriched.summary)
 		case <-grace.C:
-			engine.logger.Warn("link enrichment join overran its budget; sending unenriched",
-				"sinceSendMs", time.Since(start).Milliseconds())
+			cancel()
+			engine.logger.Debug("link enrichment missed prep join budget; sending unenriched",
+				"sinceSendMs", time.Since(start).Milliseconds(),
+				"budgetMs", linkJoinBudget.Milliseconds())
 			return message
 		case <-joinCtx.Done():
+			cancel()
 			return message
 		}
 	}

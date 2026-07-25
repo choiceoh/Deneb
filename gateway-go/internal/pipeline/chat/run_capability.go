@@ -145,10 +145,9 @@ func effectiveContextBudget(deps runDeps, providerID, model string, logger *slog
 // model's context window (window - system-prompt budget - output reserve), or 0
 // when the window is unknown. This is the unclamped `avail` from
 // effectiveContextBudget: a turn whose assembled raw history is at or below this
-// can run as-is (it fits the window), which is the precondition for deferring
-// compaction to the background instead of doing it synchronously. Returning 0
-// for an unknown window makes the deferral conservatively fall back to the
-// synchronous path.
+// can run as-is (it fits the window). Callers that can safely rely on the
+// configured history budget for unknown-window providers must apply that
+// fallback explicitly.
 func contextWindowCeiling(deps runDeps, providerID, model string) int {
 	caps := modelCapability(deps, providerID, model)
 	if caps.ContextWindow <= 0 {
