@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.0.110](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.109...andromeda-v0.0.110) (2026-07-25)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** gate SSE recovery on server turnRunning to avoid preamble freeze ([#4188](https://github.com/choiceoh/Deneb/issues/4188)) ([539927e](https://github.com/choiceoh/Deneb/commit/539927ee8a1b637ff5cf3d5b1df807c7ec1c9043))
+* **ci:** main 게이트 드리프트 수리 — 포맷 3파일 + 가려져 있던 wire 계약 실패 ([#4233](https://github.com/choiceoh/Deneb/issues/4233)) ([b161fa8](https://github.com/choiceoh/Deneb/commit/b161fa8e702f8e1c1333a65a2ba64b94e57ac7ed))
+* critical replay guard gap (knowledge) + Andromeda SSE terminal frame ([#4199](https://github.com/choiceoh/Deneb/issues/4199)) ([444e245](https://github.com/choiceoh/Deneb/commit/444e24584a1f6c90dbaf014cee2db7b0efb4aef8))
+* **native:** avoid duplicate chat turn after stream recovery timeout ([#4187](https://github.com/choiceoh/Deneb/issues/4187)) ([8a1d490](https://github.com/choiceoh/Deneb/commit/8a1d490ffc6f031eb39abe31bc11f9b9a19c82e3))
+
 ## [0.0.109](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.108...andromeda-v0.0.109) (2026-07-23)
 
 

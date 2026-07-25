@@ -1,5 +1,85 @@
 # Changelog
 
+## [4.138.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.137.0...deneb-v4.138.0) (2026-07-25)
+
+
+### ✨ Features
+
+* **agentlog:** LLM 재시도·429·폴백을 턴 로그에 계측 — 원장이 답할 수 있게 ([#4251](https://github.com/choiceoh/Deneb/issues/4251)) ([1ac3320](https://github.com/choiceoh/Deneb/commit/1ac3320d2098f70304eb40e04a7d9e9146c72d3c))
+* **audit:** deneb-ui 카드 채택률 감사 — 세션 클래스별 authored vs miss ([#4254](https://github.com/choiceoh/Deneb/issues/4254)) ([68336c6](https://github.com/choiceoh/Deneb/commit/68336c67a2b96ae9ccf5446e57b8ea575ccfc5ab))
+* **calendar:** Deneb→Google 일정 단방향 쓰기 동기화 (기본 OFF) ([#4209](https://github.com/choiceoh/Deneb/issues/4209)) ([19f571a](https://github.com/choiceoh/Deneb/commit/19f571adb632294c8e6a5568106ad28d8984edd5))
+* **calendar:** Google 일정 쓰기 동기화 기본 ON ([#4210](https://github.com/choiceoh/Deneb/issues/4210)) ([cfdd218](https://github.com/choiceoh/Deneb/commit/cfdd2184875b864519fe98512c38eb1f703b112f))
+* **chat:** 유튜브를 watch 단일 툴로 통합 — 기본 자막, 화면분석은 옵트인 ([#4213](https://github.com/choiceoh/Deneb/issues/4213)) ([c470f72](https://github.com/choiceoh/Deneb/commit/c470f72106504c35bf260c196e00845093269bee))
+* **contacts:** LLM 애매쌍 판정 어댑터 (dedup P1c-1) ([#4263](https://github.com/choiceoh/Deneb/issues/4263)) ([4a038fb](https://github.com/choiceoh/Deneb/commit/4a038fb04279f6dae187aaec07a72c63595ba172))
+* **contacts:** 결정적 주소록 dedup 코어 (규칙군집·애매쌍) ([#4258](https://github.com/choiceoh/Deneb/issues/4258)) ([11ab226](https://github.com/choiceoh/Deneb/commit/11ab226943ef6b6ad6903a8ef4ade8139c97c2f1))
+* **contacts:** 애매쌍 LLM 판정 인터페이스 + Resolve (dedup P1b) ([#4261](https://github.com/choiceoh/Deneb/issues/4261)) ([b20059e](https://github.com/choiceoh/Deneb/commit/b20059e6e4700ecc00daca8364eb4293ffddc169))
+* **even-g2:** Custom AI 브리지와 Glance 플러그인 스캐폴드 ([#4201](https://github.com/choiceoh/Deneb/issues/4201)) ([c92a917](https://github.com/choiceoh/Deneb/commit/c92a9178bdd0bcf9e717c913d24a3aaca4a10478))
+* **even-g2:** denser Glance home, skip empty pages, auto-refresh ([#4207](https://github.com/choiceoh/Deneb/issues/4207)) ([b6b821c](https://github.com/choiceoh/Deneb/commit/b6b821c4ecc07a072e8e88c371e9148557753e8b))
+* **even-g2:** Glance API, QR seed, and HUD push grammar ([#4202](https://github.com/choiceoh/Deneb/issues/4202)) ([4540508](https://github.com/choiceoh/Deneb/commit/45405083a75ac953049beb270bafe7018d4fde73))
+* **even-g2:** multipage Glance HUD with structured pages ([#4206](https://github.com/choiceoh/Deneb/issues/4206)) ([e78cbbc](https://github.com/choiceoh/Deneb/commit/e78cbbc24284e4f216b152132bd4d8cdb9f69c34))
+* **even-g2:** polish Glance quality, status, and seed UX ([#4203](https://github.com/choiceoh/Deneb/issues/4203)) ([3bf30fb](https://github.com/choiceoh/Deneb/commit/3bf30fb949948db93424c140dc91dff42d85b352))
+* **even-g2:** tap alert for detail; unread-only Glance list ([#4208](https://github.com/choiceoh/Deneb/issues/4208)) ([7713061](https://github.com/choiceoh/Deneb/commit/771306149d64fd4b98c6908770bacfcc00229858))
+* **genesis:** L3 프로브 사다리에 티어4(배타성 제거) — 천장은 결과가 아니라 계측 실패다 ([#4242](https://github.com/choiceoh/Deneb/issues/4242)) ([f038a5f](https://github.com/choiceoh/Deneb/commit/f038a5f6fd28229e49785bf205620931d9a56d78))
+* **genesis:** procedure provenance on evolve-spawned L4 candidates ([#4190](https://github.com/choiceoh/Deneb/issues/4190)) ([99fb1c9](https://github.com/choiceoh/Deneb/commit/99fb1c9b5f1fad26557950ec78ea8b20fef3bd47))
+* **genesis:** 디스패치 절차 provenance — L4 착지에 귀속 ([#4196](https://github.com/choiceoh/Deneb/issues/4196)) ([bd6609e](https://github.com/choiceoh/Deneb/commit/bd6609eaa2f520508493eb14fb94b92a71827beb))
+* **genesis:** 절차버전 provenance — L1 evolve 인증서에 절차 귀속 ([#4189](https://github.com/choiceoh/Deneb/issues/4189)) ([ed20a83](https://github.com/choiceoh/Deneb/commit/ed20a83a95be206fdd6ca648877ef2b517b86a1a))
+* **recall:** 경로전용 골드에 거래처 정합 가드 — 무가드 450건을 계측 대상으로 ([#4255](https://github.com/choiceoh/Deneb/issues/4255)) ([93426cb](https://github.com/choiceoh/Deneb/commit/93426cba2d638886d34e68ea06133e063680b65e))
+* **recall:** 죽은 골드 경로를 벤치가 크게 경고하도록 ([#4225](https://github.com/choiceoh/Deneb/issues/4225)) ([730cac9](https://github.com/choiceoh/Deneb/commit/730cac9490247fa9ca083790f49ac05d88c66628))
+* **recall:** 후보풀 천장 지표 — 랭킹 미스와 생성 미스를 가른다 ([#4238](https://github.com/choiceoh/Deneb/issues/4238)) ([7693f65](https://github.com/choiceoh/Deneb/commit/7693f656748e6cd6b26720a74adfcd12970775be))
+* **rsi-bench:** 절차 credit 소비 사이드카 — provenance→귀속 가시화 ([#4197](https://github.com/choiceoh/Deneb/issues/4197)) ([84b9bf9](https://github.com/choiceoh/Deneb/commit/84b9bf934485ab80265d025ad8f8c3dcead91cef))
+* **rsi:** 선제 L4 공급 미너 4종에 타이머 배선 — 만들어졌지만 돌지 않던 레인 ([#4237](https://github.com/choiceoh/Deneb/issues/4237)) ([fbf1bc5](https://github.com/choiceoh/Deneb/commit/fbf1bc5b6a43620cce1bd46633a1db8490f4013c))
+* **wiki:** 에피소드 출처를 소비 가능하게 — 인용→위치→원문 ([#4185](https://github.com/choiceoh/Deneb/issues/4185)) ([5560430](https://github.com/choiceoh/Deneb/commit/556043024db4546351f534585c58095accd69167))
+
+
+### 🐛 Bug Fixes
+
+* **audit:** closure-land가 리뷰 수용이 아니라 실제 착지를 세도록 ([#4231](https://github.com/choiceoh/Deneb/issues/4231)) ([aa819cc](https://github.com/choiceoh/Deneb/commit/aa819cc624230eaa08bbef0c66fda38f38ce696d))
+* **calendar:** 챗으로 만든 일정도 Google에 미러 — 배선 안 된 표면 2곳 ([#4246](https://github.com/choiceoh/Deneb/issues/4246)) ([0b55ce7](https://github.com/choiceoh/Deneb/commit/0b55ce796b15761bc419fde8ac6b30ae79de82fe))
+* **calwrite,chat:** cancel orphan Google events on pre-mirror delete; restore watch spillover ([#4223](https://github.com/choiceoh/Deneb/issues/4223)) ([aa8c511](https://github.com/choiceoh/Deneb/commit/aa8c5119c79c1da0d10d822ffbcd8daced8bb46e))
+* **chat:** clarify phone_read contract ([#4240](https://github.com/choiceoh/Deneb/issues/4240)) ([1e480e5](https://github.com/choiceoh/Deneb/commit/1e480e58219dacd541a09e0797f8f7da6cb8c7f1))
+* **chat:** clarify skill lifecycle tool args ([#4253](https://github.com/choiceoh/Deneb/issues/4253)) ([050f5e0](https://github.com/choiceoh/Deneb/commit/050f5e0e8362e36f734cc62b44b97883cb8959b1))
+* **chat:** gate SSE recovery on server turnRunning to avoid preamble freeze ([#4188](https://github.com/choiceoh/Deneb/issues/4188)) ([539927e](https://github.com/choiceoh/Deneb/commit/539927ee8a1b637ff5cf3d5b1df807c7ec1c9043))
+* **ci:** main 게이트 드리프트 수리 — 포맷 3파일 + 가려져 있던 wire 계약 실패 ([#4233](https://github.com/choiceoh/Deneb/issues/4233)) ([b161fa8](https://github.com/choiceoh/Deneb/commit/b161fa8e702f8e1c1333a65a2ba64b94e57ac7ed))
+* **client-android:** 업무 피드에서 '관련 업무 N건' 줄 제거 ([#4257](https://github.com/choiceoh/Deneb/issues/4257)) ([050c1a5](https://github.com/choiceoh/Deneb/commit/050c1a568b5ade71d8c4f195f55adba1dccc8863))
+* **client-android:** 코틀린 레인 레드 해소 — wire 키 계약 교정 + spotless 적용 ([#4234](https://github.com/choiceoh/Deneb/issues/4234)) ([645c7ef](https://github.com/choiceoh/Deneb/commit/645c7ef207c58d01b1947287c6f4d4b7d23a24f5))
+* critical replay guard gap (knowledge) + Andromeda SSE terminal frame ([#4199](https://github.com/choiceoh/Deneb/issues/4199)) ([444e245](https://github.com/choiceoh/Deneb/commit/444e24584a1f6c90dbaf014cee2db7b0efb4aef8))
+* **denebui:** 표현용 enum 오류로 카드 전체를 버리지 않도록 ([#4244](https://github.com/choiceoh/Deneb/issues/4244)) ([81c9157](https://github.com/choiceoh/Deneb/commit/81c9157a68792bd2a79f0d4622d30aa5aea5bf5e))
+* **even-g2:** block parallel glasses turns after HTTP deadline ack ([#4212](https://github.com/choiceoh/Deneb/issues/4212)) ([709f1ad](https://github.com/choiceoh/Deneb/commit/709f1ada584fa5d253d62942e1cbb427e2493b15))
+* **even-g2:** set vite build target to esnext for top-level await ([#4204](https://github.com/choiceoh/Deneb/issues/4204)) ([dc1367a](https://github.com/choiceoh/Deneb/commit/dc1367a8fd9088f96c36b212488dd8720dfc0bd2))
+* **even-g2:** upgrade dedupe cache after background turn completes ([#4211](https://github.com/choiceoh/Deneb/issues/4211)) ([11fa492](https://github.com/choiceoh/Deneb/commit/11fa4924bfc0cc62df9353eca042dd56269e3afc))
+* **genesis:** 판정자 장애 분리를 남은 소비자 2곳까지 — L1 지표와 오기각 귀속 ([#4252](https://github.com/choiceoh/Deneb/issues/4252)) ([4472cd1](https://github.com/choiceoh/Deneb/commit/4472cd1da71c182220b95efc83596ad35e09852c))
+* **genesis:** 판정자 장애를 품질 기각과 분리 — 측정한 적 없는 판정을 세지 않기 ([#4239](https://github.com/choiceoh/Deneb/issues/4239)) ([f13b69b](https://github.com/choiceoh/Deneb/commit/f13b69b160adc75508f6d99b8742ffe4d9a4e0e4))
+* **groupware:** 읽기 실패 결재 문서를 백오프해 분석 슬롯 고갈 수리 ([#4228](https://github.com/choiceoh/Deneb/issues/4228)) ([04695ac](https://github.com/choiceoh/Deneb/commit/04695ace9708cf96a5694f1ae5fef572ec88c6b6))
+* **heartbeat:** bound self-coding tool loops ([#4218](https://github.com/choiceoh/Deneb/issues/4218)) ([8f611c0](https://github.com/choiceoh/Deneb/commit/8f611c0be648e72cd227a3cea2a739cd713053bc))
+* **llm:** 429 과부하는 조기 실패로 폴백 모델에 예산 넘기기 ([#4215](https://github.com/choiceoh/Deneb/issues/4215)) ([7aec79e](https://github.com/choiceoh/Deneb/commit/7aec79eef96631aff0f5356fc31a04356ae15b66))
+* **meeting:** 긴 회의 전사 청크에 회의 맥락 부여 + 발언 경계 청킹 ([#4221](https://github.com/choiceoh/Deneb/issues/4221)) ([3c97b91](https://github.com/choiceoh/Deneb/commit/3c97b9150557fcdcb11726b404991e3c9a122629))
+* **native:** avoid duplicate chat turn after stream recovery timeout ([#4187](https://github.com/choiceoh/Deneb/issues/4187)) ([8a1d490](https://github.com/choiceoh/Deneb/commit/8a1d490ffc6f031eb39abe31bc11f9b9a19c82e3))
+* **prompt:** 표 데이터는 카드 &lt;table&gt;로 — 마크다운 표와 경쟁하던 규칙 정리 ([#4245](https://github.com/choiceoh/Deneb/issues/4245)) ([d8407a2](https://github.com/choiceoh/Deneb/commit/d8407a2fda59a6c1227af2a7d9f73f280711af8a))
+* **recall:** 나이틀리 recall-health를 프로덕션 패리티로 — 설정 드리프트 수리 ([#4224](https://github.com/choiceoh/Deneb/issues/4224)) ([a571382](https://github.com/choiceoh/Deneb/commit/a571382649e28018dfafe2ca9955d8dbc7c618ea))
+* **recall:** 죽은골드 가드가 '엉뚱한 페이지 매칭' 부패도 잡도록 강화 ([#4229](https://github.com/choiceoh/Deneb/issues/4229)) ([579ecc2](https://github.com/choiceoh/Deneb/commit/579ecc2210af3356339fb1eb036e5f419502271d))
+* **rsi:** e-process 사다리 행이 구조적 미달을 '축적 중'으로 보고하던 것 수리 ([#4256](https://github.com/choiceoh/Deneb/issues/4256)) ([4b96d69](https://github.com/choiceoh/Deneb/commit/4b96d69162076bdfa3289479814851c84da50bd6))
+* **rsi:** L4 미너 유닛에 실행 타임아웃 — health-finding이 90초에 잘리던 문제 ([#4249](https://github.com/choiceoh/Deneb/issues/4249)) ([1f87645](https://github.com/choiceoh/Deneb/commit/1f87645b909e52b1363f93280a33ccb3eb8cceb9))
+* **rsi:** 도달 불가 e-process 라벨을 발생 시점에 경고 — 조용한 무효를 끝냄 ([#4259](https://github.com/choiceoh/Deneb/issues/4259)) ([f24aec4](https://github.com/choiceoh/Deneb/commit/f24aec43de0968fce090ff8b67adb11a7410ce1d))
+* **rsi:** 도달 불가 컷오버 게이트를 명시 + 백테스트 근거를 실제로 생산 ([#4260](https://github.com/choiceoh/Deneb/issues/4260)) ([7830269](https://github.com/choiceoh/Deneb/commit/7830269eed6231a44360be4a7148618d94c54fbc))
+* **runtime:** reduce memory pressure false positives ([#4217](https://github.com/choiceoh/Deneb/issues/4217)) ([eada8e4](https://github.com/choiceoh/Deneb/commit/eada8e4739099d83f4109b845d2402b2c04c45b6))
+* **search:** 겹친 한국어 조사를 제거해 질의 0건 실패 수리 ([#4227](https://github.com/choiceoh/Deneb/issues/4227)) ([5e9cefe](https://github.com/choiceoh/Deneb/commit/5e9cefea01b63aa3a7717aaafee02ae3d9176d73))
+* **skills:** retry transient judge failures ([#4200](https://github.com/choiceoh/Deneb/issues/4200)) ([c4c4636](https://github.com/choiceoh/Deneb/commit/c4c4636dd90f7eea74c4d877a9ce81a79a71e532))
+* **wiki:** 블록 리스트 항목의 쉼표가 값을 통째로 버리던 문제 ([#4247](https://github.com/choiceoh/Deneb/issues/4247)) ([5d2caab](https://github.com/choiceoh/Deneb/commit/5d2caab3f32e1926aa162447b7fefa65ac1af915))
+* **wiki:** 중복검증 발견을 결정적으로 — 맵 순서가 같은 쌍을 두 번 보고하던 문제 ([#4248](https://github.com/choiceoh/Deneb/issues/4248)) ([348bf51](https://github.com/choiceoh/Deneb/commit/348bf517470339d0c5bfe6b3c8135e2936b7c1f1))
+* **wiki:** 프론트매터 파서가 YAML 블록 리스트도 읽도록 ([#4222](https://github.com/choiceoh/Deneb/issues/4222)) ([cb2eade](https://github.com/choiceoh/Deneb/commit/cb2eadee27d5c75143f81594e5f5d08961691110))
+
+
+### ⚡ Performance
+
+* **chat:** 유튜브 요약 토큰예산을 자막 길이에 비례 — 과생성 제거 ([#4214](https://github.com/choiceoh/Deneb/issues/4214)) ([e1ee33d](https://github.com/choiceoh/Deneb/commit/e1ee33d3566ca7ad1a952f8123d23205d637ca26))
+* **media:** 유튜브 메타데이터·자막 추출을 동시 실행 ([#4216](https://github.com/choiceoh/Deneb/issues/4216)) ([8bfd79d](https://github.com/choiceoh/Deneb/commit/8bfd79d00d171dde5f22c3eab5a1e6d6c39a555e))
+
+
+### 🔧 Internal
+
+* **calwrite:** 도달 불가능한 취소 재확인 제거 + 취소 1회성 계약 고정 ([#4264](https://github.com/choiceoh/Deneb/issues/4264)) ([82817f8](https://github.com/choiceoh/Deneb/commit/82817f83f708b56fd479007673042b26612105c1))
+* **groupware:** Radar.scan을 명명된 단계로 분해 ([#4232](https://github.com/choiceoh/Deneb/issues/4232)) ([84b0f0a](https://github.com/choiceoh/Deneb/commit/84b0f0afc5df2698ca8dba9f1b77117df8c03ff4))
+
 ## [4.137.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.136.0...deneb-v4.137.0) (2026-07-23)
 
 
