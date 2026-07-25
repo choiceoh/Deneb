@@ -15,7 +15,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/shortid"
@@ -36,6 +38,12 @@ const (
 		"and continue the full result in the phone Deneb session."
 
 	ackLongRunning = "확인. 처리 중 — 결과는 폰 데네브에서 이어서 볼게요."
+
+	// steerMaxRunes matches chat.send_sync's auto-steer bound: short mid-turn
+	// follow-ups fold into the active glasses:main run via SendSync, but longer
+	// utterances would start a second concurrent run once the HTTP deadline ack
+	// has already returned while the first turn is still executing.
+	steerMaxRunes = 400
 )
 
 // Config wires the G2 bridge.
@@ -67,6 +75,7 @@ type Handler struct {
 	mu          sync.Mutex
 	dedupe      map[string]dedupeEntry
 	glanceCache glanceCache
+	activeTurn  atomic.Int32 // in-flight RunSync calls for this bridge
 }
 
 type dedupeEntry struct {
@@ -184,13 +193,30 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		model = "deneb"
 	}
 
+	// Long follow-ups while a glasses turn is still running would bypass
+	// auto-steer and race a second executeAgentRun on the same session once
+	// this handler has already returned the deadline ack for the first turn.
+	if h.activeTurn.Load() > 0 && utf8.RuneCountInString(utterance) > steerMaxRunes {
+		resp := h.completion(model, ackLongRunning)
+		h.storeDedupe(utterance, resp)
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
 	type runOut struct {
 		res *chatport.SyncResult
 		err error
 	}
 	outCh := make(chan runOut, 1)
 	runCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), chatport.InteractiveTurnDeadline)
+	h.activeTurn.Add(1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil && h.logger != nil {
+				h.logger.Error("even g2 bridge: panic in background turn", "panic", r)
+			}
+		}()
+		defer h.activeTurn.Add(-1)
 		defer cancel()
 		res, err := h.chat.RunSync(runCtx, chatport.SyncRequest{
 			SessionKey:   h.session,
