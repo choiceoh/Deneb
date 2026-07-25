@@ -8,6 +8,7 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.Mic
@@ -246,14 +247,19 @@ internal fun WorkFeedRow(
                     // The gateway sorts the feed by PRIORITY first and recency second,
                     // so an urgent card from this morning outranks a routine one from
                     // ten minutes ago. Without a marker the timestamps read as
-                    // shuffled — the dot is what makes that ordering legible. Same
-                    // vocabulary as the mail row's urgent marker (error red, 7dp).
+                    // shuffled — the dot is what makes that ordering legible.
+                    //
+                    // Warm accent, NOT the M3 error red the mail row uses: this marks
+                    // ~29% of live cards (161 of 557 measured), and at that density an
+                    // alarm red repeats into noise and drowns the monochrome base. It
+                    // is also not an error — it is a standing priority band. The
+                    // restrained warm accent is one of the two sanctioned colors.
                     if (item.isUrgent()) {
                         Box(
                             Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.error)
+                                .background(denebInsight())
                                 .semantics { contentDescription = "긴급" },
                         )
                         Spacer(Modifier.width(6.dp))
