@@ -49,6 +49,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
@@ -168,6 +169,197 @@ const bm25DegradedWarning = "recall-bench: WARNING — embedding server unreacha
 const deadGoldWarning = "recall-bench: WARNING — %d/%d gold cases reference paths that no longer exist; " +
 	"the ceiling is %.1f%%, so these read as retrieval misses. Repoint them at the pages' current " +
 	"locations (project CODE folders survive renames). Dead: %s\n"
+
+// counterpartyMismatchWarning flags gold cases whose QUESTION names a known
+// counterparty that the gold project is not, and that appears nowhere in the
+// gold page tree. Such a case is unwinnable by construction and reads as a
+// retrieval miss forever.
+const counterpartyMismatchWarning = "recall-bench: WARNING — %d/%d gold cases name a counterparty the gold project is not " +
+	"(and that appears nowhere under it), so they can never be hit. Re-point them at the project whose " +
+	"client: matches, or drop them. Suspect: %s\n"
+
+// selfCounterparty is the operator's own company. It prefixes most mail
+// subjects ("[탑솔라(주)] …") and is also a client on internal projects, so
+// leaving it in the vocabulary would match every question and make the check
+// fire everywhere.
+const selfCounterparty = "탑솔라"
+
+// normalizeCounterparty folds the legal-form and spelling variants the same
+// company appears under across mail subjects and wiki frontmatter — 무림피앤피
+// / 무림페이퍼 / 무림P&P / 무림피엔피 are one counterparty, and comparing them
+// raw reported 76 mismatches where 9 were real.
+func normalizeCounterparty(s string) string {
+	s = strings.ToLower(s)
+	for _, drop := range []string{"(주)", "㈜", "주식회사", "(유)", "co.,ltd", "co., ltd", "corp", "inc"} {
+		s = strings.ReplaceAll(s, drop, "")
+	}
+	for _, fold := range [][2]string{
+		{"피앤피", "pnp"},
+		{"피엔피", "pnp"},
+		{"p&p", "pnp"},
+		{"에너지", ""},
+		{"건설", ""},
+		{"전자", ""},
+		{"산업", ""},
+		{"페이퍼", ""},
+	} {
+		s = strings.ReplaceAll(s, fold[0], fold[1])
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// projectClients maps a project folder name to its declared `client:` — the
+// AUTHORITATIVE counterparty, read from frontmatter rather than inferred from
+// prose (a wiki page mentions many companies; only one is the client).
+func projectClients(wikiDir string) map[string]string {
+	out := map[string]string{}
+	matches, err := filepath.Glob(filepath.Join(wikiDir, "프로젝트", "*", "대표.md"))
+	if err != nil {
+		return out
+	}
+	for _, p := range matches {
+		raw, readErr := os.ReadFile(p)
+		if readErr != nil {
+			continue
+		}
+		client := frontmatterField(string(raw), "client")
+		if client == "" || normalizeCounterparty(client) == normalizeCounterparty(selfCounterparty) {
+			continue
+		}
+		out[filepath.Base(filepath.Dir(p))] = client
+	}
+	return out
+}
+
+// frontmatterField reads a single scalar frontmatter value. Deliberately not a
+// YAML parse: only the first `key:` line of the header block matters here, and
+// the bench must not gain a dependency to read one field.
+func frontmatterField(body, key string) string {
+	for line := range strings.SplitSeq(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, key+":") {
+			continue
+		}
+		v := strings.TrimSpace(strings.TrimPrefix(trimmed, key+":"))
+		v = strings.Trim(v, "[]")
+		if comma := strings.Index(v, ","); comma >= 0 {
+			v = v[:comma]
+		}
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+// counterpartyMismatchCases is the label-quality guard for PATH-ONLY gold —
+// the cases the other two guards structurally cannot judge. deadGoldCases only
+// asks whether the path exists; mismatchedGoldCases needs must_contain tokens,
+// and the analysis-xl set (450 cases, auto-mined from real mail subjects) has
+// none at all, so 100% of it was unguarded. Live 2026-07-25: an-mail-3 asks
+// about a 금호타이어 mail but is labeled 프로젝트/pl2-kia-epc-002 (client 기아),
+// whose 6 pages mention 금호타이어 zero times — the miner matched on the shared
+// token 광주공장.
+//
+// Two stages, both required, because either alone cries wolf:
+//
+//  1. the question names a known counterparty that is NOT the gold's client —
+//     alone this flags legitimate multi-party mails; and
+//  2. that counterparty appears NOWHERE under the gold path — this is what
+//     separates a mislabel from a mail that genuinely involves both parties
+//     (a ZTT cable mail filed under a JOCA project mentions ZTT four times).
+func counterpartyMismatchCases(wikiDir string, cases []goldCase) (suspect, sample []string) {
+	clients := projectClients(wikiDir)
+	if len(clients) == 0 {
+		return nil, nil // no frontmatter to judge against — stay silent
+	}
+	vocab := make([]string, 0, len(clients))
+	seen := map[string]bool{}
+	for _, c := range clients {
+		if n := normalizeCounterparty(c); n != "" && !seen[n] {
+			seen[n] = true
+			vocab = append(vocab, c)
+		}
+	}
+	subtree := map[string]string{}
+	for _, c := range cases {
+		// must_contain cases belong to mismatchedGoldCases; judging them here
+		// too would double-report the same row.
+		if len(c.GoldPaths) == 0 || len(c.MustContain) > 0 {
+			continue
+		}
+		goldClient := clients[filepath.Base(c.GoldPaths[0])]
+		if goldClient == "" {
+			continue // no declared client — nothing authoritative to compare
+		}
+		question := normalizeCounterparty(c.Question)
+		var named []string
+		for _, cand := range vocab {
+			if n := normalizeCounterparty(cand); n != "" && strings.Contains(question, n) {
+				named = append(named, cand)
+			}
+		}
+		if len(named) == 0 {
+			continue
+		}
+		goldNorm := normalizeCounterparty(goldClient)
+		agrees := false
+		for _, n := range named {
+			if normalizeCounterparty(n) == goldNorm {
+				agrees = true
+				break
+			}
+		}
+		if agrees {
+			continue
+		}
+		text, ok := subtree[c.GoldPaths[0]]
+		if !ok {
+			text = readSubtree(wikiDir, c.GoldPaths[0])
+			subtree[c.GoldPaths[0]] = text
+		}
+		if text == "" {
+			continue // unreadable tree — deadGoldCases owns absent paths
+		}
+		absent := true
+		for _, n := range named {
+			if strings.Contains(text, n) {
+				absent = false
+				break
+			}
+		}
+		if absent {
+			suspect = append(suspect, c.ID)
+			if len(sample) < 5 {
+				sample = append(sample, c.ID)
+			}
+		}
+	}
+	return suspect, sample
+}
+
+// readSubtree concatenates every markdown page under a gold path. Best-effort:
+// an unreadable page is skipped so one bad file cannot turn an advisory scan
+// into a false report.
+func readSubtree(wikiDir, goldPath string) string {
+	var b strings.Builder
+	root := filepath.Join(wikiDir, goldPath)
+	_ = filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err != nil || fi.IsDir() || !strings.HasSuffix(p, ".md") {
+			return nil //nolint:nilerr // skip this entry, keep walking (advisory scan)
+		}
+		if raw, readErr := os.ReadFile(p); readErr == nil {
+			b.Write(raw)
+			b.WriteString("\n")
+		}
+		return nil
+	})
+	return b.String()
+}
 
 // walkPagePaths returns every relative .md path under wikiDir (dotfiles skipped).
 // It is shared by the gold-hygiene guards; a per-entry error (or an unrelatable
@@ -451,6 +643,9 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	}
 	if bad, worst := mismatchedGoldCases(cfg.wikiDir, cases); len(bad) > 0 {
 		fmt.Fprintf(stderr, mismatchedGoldWarning, len(bad), len(cases), strings.Join(worst, ", "))
+	}
+	if suspect, worst := counterpartyMismatchCases(cfg.wikiDir, cases); len(suspect) > 0 {
+		fmt.Fprintf(stderr, counterpartyMismatchWarning, len(suspect), len(cases), strings.Join(worst, ", "))
 	}
 	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
