@@ -6,11 +6,11 @@ import {
   RebuildPageContainer,
   ListContainerProperty,
   ListItemContainerProperty,
-  OsEventTypeList,
 } from '@evenrealities/even_hub_sdk'
 
 import { resolveSettings, type GlanceSettings } from './settings'
 import { nextDelayMs, payloadSignature, resolveSelectionIndex } from './refresh'
+import { dispatchHubEvent } from './events'
 import {
   fetchGlance,
   fetchStatus,
@@ -71,84 +71,36 @@ if (started !== 0) {
 }
 
 bridge.onEvenHubEvent((event) => {
-  if (event.listEvent) {
-    const le = event.listEvent
-    switch (le.eventType) {
-      case OsEventTypeList.CLICK_EVENT:
-      case undefined:
-        void openDetail(le.currentSelectItemIndex)
-        break
-      case OsEventTypeList.DOUBLE_CLICK_EVENT:
-        shutdown()
-        break
-      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
-        void onSwipeNext()
-        break
-      case OsEventTypeList.SCROLL_TOP_EVENT:
-        void onSwipePrev()
-        break
-    }
-    return
-  }
-
-  // The host delivers touchpad and lifecycle events on a THIRD channel the SDK
-  // docs show as `else if (event.sysEvent)` — and this app never read it. The
-  // simulator run (2026-07-25) recorded the exit double-tap arriving as
-  // {"sysEvent":{"eventType":3,"eventSource":1}}, so shutdown never ran and the
-  // refresh loop kept polling the gateway after the wearer closed the app. The
-  // smoke harness caught it as "no gateway traffic after shutdown: FAIL".
-  if (event.sysEvent) {
-    // fromJson is the SDK's own normalizer — the host may send the ordinal (3),
-    // the name ("DOUBLE_CLICK_EVENT"), or the short form ("DOUBLE_CLICK").
-    switch (OsEventTypeList.fromJson(event.sysEvent.eventType)) {
-      case OsEventTypeList.DOUBLE_CLICK_EVENT:
-        shutdown()
-        break
-      case OsEventTypeList.SYSTEM_EXIT_EVENT:
-      case OsEventTypeList.ABNORMAL_EXIT_EVENT:
-        // The host owns the teardown here — stop the loop but do not fight it
-        // for the container.
-        stopLoop()
-        break
-      case OsEventTypeList.FOREGROUND_EXIT_EVENT:
-        // Backgrounded, not gone: polling a display nobody is looking at is
-        // pure battery cost on a wearable.
-        pauseLoop()
-        break
-      case OsEventTypeList.FOREGROUND_ENTER_EVENT:
-        void resumeLoop()
-        break
-      case OsEventTypeList.CLICK_EVENT:
-        void onTap()
-        break
-      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
-        void onSwipeNext()
-        break
-      case OsEventTypeList.SCROLL_TOP_EVENT:
-        void onSwipePrev()
-        break
-    }
-    return
-  }
-
-  const textEvent = event.textEvent
-  if (!textEvent) return
-  // Accept either main text (id 1) or header (id 2) when mixed layouts exist.
-  if (textEvent.containerID !== 1 && textEvent.containerID !== 2) return
-
-  switch (textEvent.eventType) {
-    case OsEventTypeList.CLICK_EVENT:
-    case undefined:
+  // Mapping lives in events.ts as a pure function so every host event shape —
+  // including the lifecycle events the simulator cannot inject — is unit
+  // testable. This block only executes the intent.
+  const intent = dispatchHubEvent(event)
+  switch (intent.kind) {
+    case 'tap':
       void onTap()
       break
-    case OsEventTypeList.DOUBLE_CLICK_EVENT:
-      shutdown()
+    case 'openDetail':
+      void openDetail(intent.index)
       break
-    case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+    case 'nextPage':
       void onSwipeNext()
       break
-    case OsEventTypeList.SCROLL_TOP_EVENT:
+    case 'prevPage':
       void onSwipePrev()
+      break
+    case 'shutdown':
+      shutdown()
+      break
+    case 'stopLoop':
+      stopLoop()
+      break
+    case 'pause':
+      pauseLoop()
+      break
+    case 'resume':
+      void resumeLoop()
+      break
+    case 'ignore':
       break
   }
 })
