@@ -118,6 +118,52 @@ func TestRemove_UnknownLocalIDIsNoop(t *testing.T) {
 	}
 }
 
+func TestRemove_BeforePush_SkipsPendingInsert(t *testing.T) {
+	r := &fakeRemote{}
+	s, _ := newSyncer(t, r)
+	if err := s.Remove(context.Background(), "local:1"); err != nil {
+		t.Fatalf("Remove before push: %v", err)
+	}
+	if err := s.Push(context.Background(), "local:1", ev("A")); err != nil {
+		t.Fatalf("Push after pre-delete: %v", err)
+	}
+	if len(r.inserts) != 0 {
+		t.Errorf("pre-delete should cancel pending insert, inserts=%v", r.inserts)
+	}
+	if got := s.MirroredGoogleIDs(); len(got) != 0 {
+		t.Errorf("pre-delete must leave no mapping, got %v", got)
+	}
+}
+
+func TestPush_PersistFailureRollsBackGoogleInsert(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "calendar-sync.json")
+	r := &fakeRemote{}
+	s, warns := newSyncer(t, r)
+	// Point at a directory so persist fails (cannot write file inside dir path).
+	s.path = dir
+	if err := s.Push(context.Background(), "local:1", ev("A")); err == nil {
+		t.Fatal("expected persist failure")
+	}
+	if len(r.inserts) != 1 {
+		t.Fatalf("insert should run once, got %v", r.inserts)
+	}
+	if len(r.deletes) != 1 || r.deletes[0] != "g1" {
+		t.Errorf("persist failure should roll back Google insert, deletes=%v", r.deletes)
+	}
+	if got := s.MirroredGoogleIDs(); len(got) != 0 {
+		t.Errorf("failed persist must not leave a mapping, got %v", got)
+	}
+	if len(*warns) != 1 {
+		t.Errorf("warn sink should fire once, got %v", *warns)
+	}
+	// Sanity: a real path still persists.
+	s.path = path
+	if err := s.Push(context.Background(), "local:2", ev("B")); err != nil {
+		t.Fatalf("Push with valid path: %v", err)
+	}
+}
+
 func TestPush_InsertFailureReportsAndLeavesNoMapping(t *testing.T) {
 	r := &fakeRemote{failInsert: true}
 	s, warns := newSyncer(t, r)

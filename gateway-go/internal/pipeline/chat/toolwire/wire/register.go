@@ -37,8 +37,8 @@ func RegisterChronoTools(registry toolport.ToolRegistrar) {
 	core.RegisterChronoTools(registry)
 }
 
-func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string) {
-	core.RegisterMediaTools(registry, workspaceDir)
+func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, spill tooldeps.SpilloverStore) {
+	core.RegisterMediaTools(registry, workspaceDir, spill)
 }
 
 func RegisterCalendarTool(registry toolport.ToolRegistrar, calDeps *tooldeps.CalendarDeps) {

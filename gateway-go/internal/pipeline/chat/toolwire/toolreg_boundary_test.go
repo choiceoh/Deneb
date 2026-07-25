@@ -508,7 +508,7 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		{name: "todo", run: func(r *mockRegistrar) { chrono.RegisterTodoTool(r) }, want: []string{"todo"}},
 		{name: "routine", run: func(r *mockRegistrar) { chrono.RegisterRoutineTools(r, &tooldeps.ChronoDeps{}, "", "", nil) }, want: []string{"cron", "evening_letter", "files", "morning_letter"}},
 		{name: "skills", run: func(r *mockRegistrar) { RegisterSkillsTools(r, nil, t.TempDir(), "", nil) }, want: []string{"skills"}},
-		{name: "media", run: func(r *mockRegistrar) { RegisterMediaTools(r, t.TempDir()) }, want: []string{"chart", "diagram", "send_file", "watch"}},
+		{name: "media", run: func(r *mockRegistrar) { RegisterMediaTools(r, t.TempDir(), nil) }, want: []string{"chart", "diagram", "send_file", "watch"}},
 	}
 	all := make(map[string]string)
 	for _, g := range groups {
@@ -573,7 +573,7 @@ func TestCalendarRegistrationRequiresEitherReaderOrLocalStore(t *testing.T) {
 
 func TestRegistrarPreservesIndependentSchemaCopies(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterMediaTools(reg, t.TempDir())
+	RegisterMediaTools(reg, t.TempDir(), nil)
 	if len(reg.tools) < 2 {
 		t.Fatal("media fixture too small")
 	}
@@ -582,7 +582,7 @@ func TestRegistrarPreservesIndependentSchemaCopies(t *testing.T) {
 		t.Fatal("registered tools share schema root maps")
 	}
 	fresh := &mockRegistrar{}
-	RegisterMediaTools(fresh, t.TempDir())
+	RegisterMediaTools(fresh, t.TempDir(), nil)
 	if fresh.tools[0].InputSchema["type"] != "object" {
 		t.Fatal("registration reused schema from prior call")
 	}
@@ -647,7 +647,7 @@ func TestToolDefinitionsCanBeInvokedWithCancelledContextWithoutRegistrationPanic
 	RegisterChronoTools(reg)
 	chrono.RegisterRoutineTools(reg, &tooldeps.ChronoDeps{}, "", "", nil)
 	RegisterSkillsTools(reg, nil, t.TempDir(), "", nil)
-	RegisterMediaTools(reg, t.TempDir())
+	RegisterMediaTools(reg, t.TempDir(), nil)
 	for _, def := range reg.tools {
 		if def.Fn == nil {
 			t.Errorf("cancelled-context registration left %q without Fn", def.Name)
