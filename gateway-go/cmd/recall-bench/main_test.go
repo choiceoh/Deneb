@@ -556,3 +556,88 @@ func TestMismatchedGoldCasesDetectsWrongPage(t *testing.T) {
 		t.Errorf("missing wiki dir must stay silent, got %v", b)
 	}
 }
+
+// The pool probe's whole value is telling a ranking miss apart from a
+// generation miss, so the test pins all three outcomes AND the query economy:
+// a case that already hit at K must not cost a second search.
+func TestPoolCeilingSplitsRankingMissFromGenerationMiss(t *testing.T) {
+	cases := []goldCase{
+		{ID: "hit", Question: "hit", GoldPaths: []string{"프로젝트/a"}},
+		{ID: "buried", Question: "buried", GoldPaths: []string{"프로젝트/b"}},
+		{ID: "absent", Question: "absent", GoldPaths: []string{"프로젝트/c"}},
+	}
+	deep := map[string][]wiki.SearchResult{
+		// Gold sits at rank 2 — outside K=2, inside the depth-5 pool.
+		"buried": {{Path: "업무/x.md"}, {Path: "업무/y.md"}, {Path: "프로젝트/b.md"}},
+		// Gold never appears, even at depth 5.
+		"absent": {{Path: "업무/x.md"}, {Path: "업무/y.md"}},
+	}
+	var deepQueries []string
+	search := func(_ context.Context, query string, limit int) ([]wiki.SearchResult, error) {
+		if limit != 5 {
+			t.Errorf("pool probe must search at the requested depth, got limit=%d", limit)
+		}
+		deepQueries = append(deepQueries, query)
+		return deep[query], nil
+	}
+	ranks := []caseRank{
+		{id: "hit", rank: 0},
+		{id: "buried", rank: -1},
+		{id: "absent", rank: -1},
+	}
+
+	got := evaluatePoolCeiling(context.Background(), cases, ranks, 2, 5, search, nil)
+
+	if got.scored != 3 || got.hitK != 1 || got.rankingMiss != 1 || got.generationMiss != 1 {
+		t.Fatalf("split = %+v, want scored=3 hitK=1 rankingMiss=1 generationMiss=1", got)
+	}
+	if got.inPool != 2 {
+		t.Fatalf("inPool = %d, want 2 (the top-K hit plus the buried case)", got.inPool)
+	}
+	if len(deepQueries) != 2 {
+		t.Fatalf("deep searches = %v, want only the two misses (a top-K hit is in the pool by construction)", deepQueries)
+	}
+
+	var out bytes.Buffer
+	writePoolCeilingResult(&out, 2, 5, got)
+	want := "RECALL_BENCH_POOL depth=5 scored=3 pool_recall=66.7% r@2=33.3% ranking_miss=1 generation_miss=1\n"
+	if !strings.HasPrefix(out.String(), want) {
+		t.Fatalf("pool line = %q, want prefix %q", out.String(), want)
+	}
+}
+
+// A search error during the probe must drop that case from the split rather
+// than silently counting it as a generation miss — the same honesty rule the
+// main pass applies to searchErrs.
+func TestPoolCeilingExcludesSearchErrors(t *testing.T) {
+	cases := []goldCase{{ID: "boom", Question: "boom", GoldPaths: []string{"프로젝트/a"}}}
+	search := func(context.Context, string, int) ([]wiki.SearchResult, error) {
+		return nil, errors.New("embedder down")
+	}
+
+	got := evaluatePoolCeiling(context.Background(), cases, []caseRank{{id: "boom", rank: -1}}, 2, 5, search, nil)
+
+	if got.scored != 0 || got.generationMiss != 0 || got.searchErrs != 1 {
+		t.Fatalf("errored probe = %+v, want scored=0 generationMiss=0 searchErrs=1", got)
+	}
+}
+
+// --pool-depth must be off or genuinely deeper than K; a pool at or below K
+// cannot contain a miss the top-K pass already scanned.
+func TestPoolDepthValidation(t *testing.T) {
+	base := benchmarkConfig{wikiDir: "/tmp/wiki", k: 8, split: "all"}
+	for _, depth := range []int{-1, 1, 8} {
+		cfg := base
+		cfg.poolDepth = depth
+		if err := validateBenchmarkConfig(cfg); err == nil {
+			t.Errorf("--pool-depth=%d must be rejected against k=%d", depth, base.k)
+		}
+	}
+	for _, depth := range []int{0, 9, 200} {
+		cfg := base
+		cfg.poolDepth = depth
+		if err := validateBenchmarkConfig(cfg); err != nil {
+			t.Errorf("--pool-depth=%d must be accepted against k=%d: %v", depth, base.k, err)
+		}
+	}
+}

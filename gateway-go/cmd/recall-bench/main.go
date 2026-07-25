@@ -148,6 +148,11 @@ type benchmarkConfig struct {
 	content     bool
 	holdoutPct  int
 	split       string
+	// poolDepth (>0) enables the candidate-pool ceiling probe. See
+	// evaluatePoolCeiling: it answers whether the remaining r@K misses are a
+	// RANKING problem or a candidate-GENERATION problem, which is otherwise
+	// inferred rather than measured.
+	poolDepth int
 }
 
 // bm25DegradedWarning flags a run whose semantic arm never came up. Kept as a
@@ -361,6 +366,7 @@ func parseBenchmarkConfig(program string, args []string, stderr io.Writer) (benc
 	fs.BoolVar(&cfg.content, "content", false, "content-aware hit: a result also counts when its page body holds every must_contain answer token (| = alternatives), not only when its path matches gold_paths — robust to wiki folder renames that stale path-based gold")
 	fs.IntVar(&cfg.holdoutPct, "holdout-pct", 0, "hold out this %% of cases (stable hash of case ID) as a test split; 0 = use all")
 	fs.StringVar(&cfg.split, "split", "all", "which split to score when --holdout-pct>0: all|train|test")
+	fs.IntVar(&cfg.poolDepth, "pool-depth", 0, "also probe the candidate pool at this depth, splitting every r@K miss into generation-miss (gold never surfaced) vs ranking-miss (gold surfaced but buried); 0 = off, costs one extra search per case")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return cfg, parseOutcome{done: true}
@@ -381,6 +387,11 @@ func validateBenchmarkConfig(cfg benchmarkConfig) error {
 	case "all", "train", "test":
 	default:
 		return fmt.Errorf("--split must be all|train|test")
+	}
+	// A pool shallower than K cannot contain a miss the top-K pass already
+	// scanned, so the split it reports would be arithmetic, not measurement.
+	if cfg.poolDepth < 0 || (cfg.poolDepth > 0 && cfg.poolDepth <= cfg.k) {
+		return fmt.Errorf("--pool-depth must be 0 (off) or greater than --k (%d)", cfg.k)
 	}
 	return nil
 }
@@ -493,6 +504,10 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 			return err
 		}
 		writeBenchmarkResult(stdout, cfg.k, fusion, result)
+		if cfg.poolDepth > 0 {
+			pool := evaluatePoolCeiling(ctx, cases, result.ranks, cfg.k, cfg.poolDepth, store.Search, content)
+			writePoolCeilingResult(stdout, cfg.k, cfg.poolDepth, pool)
+		}
 	}
 
 	if cfg.health || cfg.emitGold {
@@ -605,6 +620,17 @@ type benchmarkResult struct {
 	leakExposed  int // ...whose top-K bodies expose a forbidden token
 	opUpdate     int // op_type=update cases seen
 	opForget     int // op_type=forget cases seen
+	// ranks is the per-case top-K outcome in evaluation order, kept so the
+	// candidate-pool probe can attribute each MISS without re-running the
+	// shallow search. Cases skipped (no gold paths) or erroring are absent.
+	ranks []caseRank
+}
+
+// caseRank pairs a gold case with the rank its gold page reached in the top-K
+// pass (-1 = not in top-K).
+type caseRank struct {
+	id   string
+	rank int
 }
 
 func evaluateCases(
@@ -644,6 +670,7 @@ func evaluateCasesWithSearch(
 		}
 		result.latencies = append(result.latencies, elapsed)
 		rank := findGoldRank(matches, c, k, content)
+		result.ranks = append(result.ranks, caseRank{id: c.ID, rank: rank})
 		result.record(rank, rankingQuality(matches, c, k, content))
 		if holds != nil {
 			result.recordLifecycle(c, matches, k, holds)
@@ -653,6 +680,71 @@ func evaluateCasesWithSearch(
 		}
 	}
 	return result
+}
+
+// poolCeiling separates the two very different causes of an r@K miss: candidate
+// GENERATION never surfaced the gold page at all, or generation surfaced it and
+// RANKING buried it below K. The distinction decides where retrieval work goes
+// — reranking and fusion weights can only ever recover a ranking miss — and
+// until this probe existed it was inferred from the shape of past sweeps rather
+// than measured.
+//
+// Why a deeper limit is a real widening and not just "more of the same":
+// wiki.Store over-fetches as a function of the caller's limit
+// (fetchLimit = max(limit*3, limit+50)) before fusing/demoting/truncating, so
+// searching at depth D genuinely enlarges the BM25/semantic candidate pool.
+// That is what lets "absent even at depth D" read as a generation miss.
+type poolCeiling struct {
+	scored         int // cases probed
+	inPool         int // gold reached the pool at all (ceiling for any reranker)
+	hitK           int // gold was already in top-K, carried from the shallow pass
+	rankingMiss    int // gold in the pool but below K — reachable by better ranking
+	generationMiss int // gold absent from the pool — only generation can fix it
+	searchErrs     int
+}
+
+// evaluatePoolCeiling probes only the cases the top-K pass MISSED: a case that
+// already hit at K is in the pool by construction, so re-searching it would buy
+// a confirmation at the price of a query. At r@8 ≈ 93% that makes the probe
+// cost roughly one search per fourteen cases rather than one per case.
+func evaluatePoolCeiling(
+	ctx context.Context,
+	cases []goldCase,
+	ranks []caseRank,
+	k, poolDepth int,
+	search func(context.Context, string, int) ([]wiki.SearchResult, error),
+	content contentMatcher,
+) poolCeiling {
+	byID := make(map[string]goldCase, len(cases))
+	for _, c := range cases {
+		byID[c.ID] = c
+	}
+	var out poolCeiling
+	for _, r := range ranks {
+		c, ok := byID[r.id]
+		if !ok {
+			continue
+		}
+		if r.rank >= 0 {
+			out.scored++
+			out.inPool++
+			out.hitK++
+			continue
+		}
+		matches, err := search(ctx, c.Question, poolDepth)
+		if err != nil {
+			out.searchErrs++
+			continue
+		}
+		out.scored++
+		if findGoldRank(matches, c, poolDepth, content) >= 0 {
+			out.inPool++
+			out.rankingMiss++
+		} else {
+			out.generationMiss++
+		}
+	}
+	return out
 }
 
 // recordLifecycle scores the memory-lifecycle exposure of one case: whether any
@@ -935,6 +1027,21 @@ func writeBenchmarkResult(out io.Writer, k int, fusion string, result benchmarkR
 		result.hit1, k, result.hitK, result.scored, pct(result.hit1), k, pct(result.hitK), result.mrrSum/float64(result.scored), fusion)
 	writeQualityMetrics(out, "RECALL_BENCH_QUALITY", k, result)
 	writeLifecycleMetrics(out, "RECALL_BENCH_LIFECYCLE", k, result)
+}
+
+func writePoolCeilingResult(out io.Writer, k, depth int, p poolCeiling) {
+	if p.searchErrs > 0 {
+		fmt.Fprintf(out, "recall-bench: pool probe hit %d search error(s), excluded from the split\n", p.searchErrs)
+	}
+	if p.scored == 0 {
+		fmt.Fprintln(out, "RECALL_BENCH_POOL scored=0 — no cases probed")
+		return
+	}
+	pct := func(n int) float64 { return 100 * float64(n) / float64(p.scored) }
+	fmt.Fprintf(out, "RECALL_BENCH_POOL depth=%d scored=%d pool_recall=%.1f%% r@%d=%.1f%% ranking_miss=%d generation_miss=%d\n",
+		depth, p.scored, pct(p.inPool), k, pct(p.hitK), p.rankingMiss, p.generationMiss)
+	fmt.Fprintf(out, "  (pool_recall = the ceiling ANY reranking could reach at depth %d; ranking_miss = gold surfaced but sat below %d, recoverable by ranking work; generation_miss = gold never surfaced at all, only candidate generation can fix it)\n",
+		depth, k)
 }
 
 func writeBenchmarkMatrixResult(out io.Writer, k int, mode wiki.SearchMode, result benchmarkResult) {
