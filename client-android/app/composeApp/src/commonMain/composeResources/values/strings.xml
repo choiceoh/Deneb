@@ -88,6 +88,8 @@
     <string name="tool_reply_sms_description">Draft a reply to an SMS for the user to review and send</string>
     <string name="bot_message_thinking_label">Thinking</string>
     <string name="bot_message_thinking_expand_content_description">Expand or collapse thinking</string>
+    <string name="bot_message_reasoning_label">Reasoning</string>
+    <string name="bot_message_reasoning_steps">%1$d steps</string>
     <string name="sms_draft_banner_to">To %1$s</string>
     <string name="sms_draft_banner_send">Send</string>
     <string name="sms_draft_banner_discard">Discard</string>
