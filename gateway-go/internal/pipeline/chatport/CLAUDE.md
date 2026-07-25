@@ -12,6 +12,8 @@ chat 구현을 임포트하지 않고 대화 턴을 부르도록, 요청/응답�
 - `transcript_contracts.go` — transcript 계약: `ChatMessage`,
   `NewTextChatMessage`, `ChatAttachment`, `SearchResult`, `MatchedMsg`,
   `MarshalJSONString`.
+- `native_contracts.go` — native-client chat delivery/session 계약:
+  `NativeClientChannel`, `DefaultNativeSessionKey`.
 - `skill_contracts.go` — genesis 넛저 계약: `SkillNudger`, `SkillNudgeSnapshot`.
 - `recall_contracts.go` / `runtime_contracts.go` — 회상·런타임 어댑터 계약.
 - `activation_notice.go` — deferred tool 활성화 공지 포맷/파서:

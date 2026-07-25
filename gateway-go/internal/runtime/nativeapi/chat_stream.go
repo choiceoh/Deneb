@@ -43,7 +43,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
-	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
 )
 
 // maxMiniappChatStreamBodyBytes caps the POST /api/v1/miniapp/chat/stream body.
@@ -145,7 +144,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "missing message"})
 		return
 	}
-	sessionKey := handlerchat.DefaultSessionKey(reqBody.SessionKey)
+	sessionKey := chatport.DefaultNativeSessionKey(reqBody.SessionKey)
 	if s.chatHandler == nil || !s.chatHandler.ChatReady() {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "chat handler not ready"})
 		return
@@ -169,7 +168,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 			SessionKey: sessionKey,
 			Message:    reqBody.Message,
 			Model:      strings.TrimSpace(reqBody.Model),
-			Delivery:   &chatport.DeliveryContext{Channel: handlerchat.NativeClientChannel, To: sessionKey},
+			Delivery:   &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 			// The reply text is streamed here, not pushed via the message tool.
 			AutoDeliveredOutput: true,
 			SkipRecall:          reqBody.SkipRecall,

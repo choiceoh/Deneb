@@ -61,13 +61,13 @@ func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
 		if cerr != nil {
 			return rpcerr.WrapDependencyFailed("work feed correct failed", cerr).Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(card.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(card.SessionKey)
 		// 2) One agent turn updates the durable knowledge (wiki) from the correction.
 		message := buildWorkfeedFeedbackMessage(card, feedback)
 		res, serr := deps.Chat.RunSync(ctx, chatport.SyncRequest{
 			SessionKey:          sessionKey,
 			Message:             message,
-			Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+			Delivery:            &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			// A feed correction is a side action, not a chat message — keep it out of
 			// the client:main transcript (the wiki write still persists).
@@ -142,12 +142,12 @@ func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
 		if !found {
 			return rpcerr.NotFound("work feed item").Response(req.ID)
 		}
-		sessionKey := DefaultSessionKey(card.SessionKey)
+		sessionKey := chatport.DefaultNativeSessionKey(card.SessionKey)
 		message := buildWorkfeedRewriteMessage(card)
 		res, serr := deps.Chat.RunSync(ctx, chatport.SyncRequest{
 			SessionKey:          sessionKey,
 			Message:             message,
-			Delivery:            &chatport.DeliveryContext{Channel: NativeClientChannel, To: sessionKey},
+			Delivery:            &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 			AutoDeliveredOutput: true,
 			EphemeralUser:       true,
 			EphemeralAssistant:  true,
