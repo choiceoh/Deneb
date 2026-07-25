@@ -28,16 +28,17 @@ type remote interface {
 // network call, so calendar syncs serialize. The one external callback (warn) is
 // invoked only after the lock is released.
 type Syncer struct {
-	mu     sync.Mutex
-	path   string
-	ids    map[string]string // localID → googleID
-	remote remote
-	warn   func(op string, err error) // best-effort failure sink (nil ok)
+	mu        sync.Mutex
+	path      string
+	ids       map[string]string   // localID → googleID
+	cancelled map[string]struct{} // localIDs deleted before first mirror completed
+	remote    remote
+	warn      func(op string, err error) // best-effort failure sink (nil ok)
 }
 
 // NewSyncer loads the id-map from path (empty if absent) and wires the remote.
 func NewSyncer(path string, r remote, warn func(op string, err error)) (*Syncer, error) {
-	s := &Syncer{path: path, ids: map[string]string{}, remote: r, warn: warn}
+	s := &Syncer{path: path, ids: map[string]string{}, cancelled: map[string]struct{}{}, remote: r, warn: warn}
 	if _, err := jsonutil.LoadFile(path, &s.ids, "calwrite"); err != nil {
 		return nil, err
 	}
@@ -62,6 +63,10 @@ func (s *Syncer) Push(ctx context.Context, localID string, ev calendar.Event) er
 }
 
 func (s *Syncer) pushLocked(ctx context.Context, localID string, ev calendar.Event) error {
+	if _, skip := s.cancelled[localID]; skip {
+		delete(s.cancelled, localID)
+		return nil
+	}
 	if gid, ok := s.ids[localID]; ok {
 		return s.remote.Patch(ctx, gid, localID, ev)
 	}
@@ -69,12 +74,23 @@ func (s *Syncer) pushLocked(ctx context.Context, localID string, ev calendar.Eve
 	if err != nil {
 		return err
 	}
+	if _, skip := s.cancelled[localID]; skip {
+		delete(s.cancelled, localID)
+		_ = s.remote.Delete(ctx, gid)
+		return nil
+	}
 	s.ids[localID] = gid
-	return s.persistLocked()
+	if err := s.persistLocked(); err != nil {
+		delete(s.ids, localID)
+		_ = s.remote.Delete(ctx, gid)
+		return err
+	}
+	return nil
 }
 
-// Remove deletes the Google mirror of a local event and forgets the pairing. A
-// never-mirrored local id is a no-op (nothing to delete on Google).
+// Remove deletes the Google mirror of a local event and forgets the pairing. When
+// the local id was never mirrored, the id is remembered so a concurrent Push skips
+// inserting an orphan Google event.
 func (s *Syncer) Remove(ctx context.Context, localID string) error {
 	s.mu.Lock()
 	err := s.removeLocked(ctx, localID)
@@ -88,6 +104,7 @@ func (s *Syncer) Remove(ctx context.Context, localID string) error {
 func (s *Syncer) removeLocked(ctx context.Context, localID string) error {
 	gid, ok := s.ids[localID]
 	if !ok {
+		s.cancelled[localID] = struct{}{}
 		return nil
 	}
 	if err := s.remote.Delete(ctx, gid); err != nil {

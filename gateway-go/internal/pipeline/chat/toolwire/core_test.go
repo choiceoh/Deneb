@@ -75,7 +75,7 @@ func TestRegisterHeartbeatContract(t *testing.T) {
 
 func TestRegisterMediaToolsCreatesDeferredContracts(t *testing.T) {
 	reg := &mockRegistrar{}
-	RegisterMediaTools(reg, t.TempDir())
+	RegisterMediaTools(reg, t.TempDir(), nil)
 
 	for _, name := range []string{"send_file", "chart", "diagram", "watch"} {
 		def := registeredTool(t, reg, name)

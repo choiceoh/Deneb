@@ -280,7 +280,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	RegisterWebTools(registry, deps.SpilloverStore)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterMediaTools(registry, deps.WorkspaceDir)
+	RegisterMediaTools(registry, deps.WorkspaceDir, deps.SpilloverStore)
 	RegisterPhoneTools(registry, deps.PhoneActionSender)
 	RegisterWorkstationTool(registry, deps.WorkstationCommandSender, deps.WorkstationUsageHint)
 
@@ -540,7 +540,7 @@ func RegisterChronoTools(registry toolport.ToolRegistrar) {
 // RegisterMediaTools registers media tools: file delivery (send_file) and
 // video watching (watch). workspaceDir bounds the watch tool's local-file
 // access; an empty string restricts watch to YouTube URLs only.
-func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string) {
+func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, spill tooldeps.SpilloverStore) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "send_file",
 		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
@@ -576,7 +576,7 @@ func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string) {
 			"start/end로 구간을 좁힐 수 있다.",
 		InputSchema: schema.WatchToolSchema(),
 		Fn: artifact.ToolWatch(workspaceDir, func(ctx context.Context, url string) (string, error) {
-			return web.FetchYouTube(ctx, nil, url)
+			return web.FetchYouTube(ctx, spill, url)
 		}),
 		Deferred: true,
 	})
