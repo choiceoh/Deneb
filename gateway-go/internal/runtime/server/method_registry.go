@@ -42,6 +42,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailanalysis"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailwork"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/contactsdedup"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
@@ -305,6 +306,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 				}
 				return cs, nil
 			},
+			Adjudicator: s.contactsAdjudicator(),
 		},
 		Market: minimodule.MarketDeps{Fetch: marketCache.Summary},
 	})
@@ -318,6 +320,25 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 		observatory:    observatoryDeps,
 		miniapp:        miniappMethods,
 	}, nil
+}
+
+// contactsAdjudicator builds the LLM-backed adjudicator for the address-book
+// dedup, or nil when no model is configured (then miniapp.contacts.adjudicate is
+// simply not registered). Returning an untyped nil is deliberate: a typed-nil
+// *contactsdedup.Adjudicator wrapped in the interface would read as non-nil and
+// the handler would call a nil adjudicator.
+func (s *Server) contactsAdjudicator() contacts.Adjudicator {
+	if s.modelRegistry == nil {
+		return nil
+	}
+	adj := contactsdedup.New(
+		s.modelRegistry.Client(modelrole.RoleSubmain),
+		s.modelRegistry.Model(modelrole.RoleSubmain),
+	)
+	if adj == nil {
+		return nil
+	}
+	return adj
 }
 
 // registerEarlyCapabilityDomains preserves the historical domain order while
