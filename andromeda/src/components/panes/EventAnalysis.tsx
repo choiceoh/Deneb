@@ -9,7 +9,11 @@ import type { CalEvent } from "@/types";
 import { depsEqual } from "@/depsEqual";
 import { chatStream, type GatewayConfig } from "@/gateway";
 import { calSpan, errText, eventDayKeys, eventEndMs, eventTitle } from "@/format";
-import { Markdown } from "@/components/Markdown";
+import { AssistantText } from "@/components/DenebUi";
+
+// A calendar analysis is read-only: a deneb-ui card rendered here has no session
+// to submit an action into, so card callbacks are intentionally dropped.
+const ignoreAnalysisUiSubmit = () => {};
 
 // One-line-per-field summary of the event, used as the AI's workspace context.
 function eventContext(event: CalEvent): string {
@@ -162,7 +166,18 @@ export function EventAnalysis({ event, connected, cfg }: { event: CalEvent; conn
       {span && <div className="calendar-analysis-time">{span}</div>}
       {status && <div className="calendar-analysis-status">{status}</div>}
       <div className={"calendar-analysis-answer" + (busy ? " streaming" : "")}>
-        <Markdown text={answer.trim() ? answer : fallback} />
+        {/* The analysis is a STREAMED agent answer, and the agent is allowed to
+            lead with a ```deneb-ui card. Plain <Markdown> knows nothing about
+            that fence and renders it as a copyable code block — the same defect
+            #4088 fixed on the mail analysis. AssistantText/splitDenebUi is the
+            surface that renders cards; interactive={false} because a calendar
+            analysis has nowhere to submit a card action back to. */}
+        <AssistantText
+          text={answer.trim() ? answer : fallback}
+          onUiSubmit={ignoreAnalysisUiSubmit}
+          interactive={false}
+          busy={busy}
+        />
       </div>
     </>
   );
