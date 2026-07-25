@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Deneb SOP miner weekly
+
+[Timer]
+# Promotion needs REUSE frequency (Metis' rule), so an n-gram has to recur
+# across sessions before it qualifies — weekly lets the evidence accumulate.
+OnCalendar=Sat *-*-* 05:40:00
+Persistent=true
+RandomizedDelaySec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

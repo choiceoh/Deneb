@@ -414,6 +414,22 @@ Five workstreams, in priority order:
    The `deadcode-finding` source stays OUT of the coding-dispatch allowlist
    (staged for review — the graduation flip is separate).
 
+   *Scheduling slice landed 2026-07-25 — the lane was BUILT but not RUNNING.*
+   Four of the five miners (health-finding, deadcode-finding, tool-quality, sop)
+   were `workflow_dispatch`-only; branch-rot alone ever got a timer. So the
+   workstream whose entire purpose is "renovate when nothing is broken" ran only
+   when a human remembered to click it. Measured at install time: `tool-quality`
+   and `sop` had produced ZERO candidates since landing (07-14 / 07-17) while
+   their dry-runs showed 2 and 1 candidates waiting; `deadcode-finding`'s last
+   candidate was 9.6 days old; the live queue read `proposed: 0` with the
+   graduation-ladder staged-source row reporting "스테이징 후보 0건 (마이너
+   대기)". `scripts/systemd/setup-l4-miners.sh` installs the four timers
+   (health daily after the bench refresh; deadcode/tool-quality/sop weekly on
+   separate days). Cadence is the only new knob — propose-only, per-run caps,
+   and RPC-side dedup are unchanged, so scheduling cannot widen the safety
+   surface. Lesson recorded: a miner without a schedule is a capability the
+   audit layer reports as present and the ledger reports as absent.
+
 4. **Recursion-surface widening — externalize more of the generative half
    (P1 pattern, one artifact per window).** L2 can only improve what is an
    artifact; today that is three prompts. Candidates in order:
