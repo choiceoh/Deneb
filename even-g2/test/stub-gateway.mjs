@@ -42,8 +42,20 @@ const ALT_GLANCE = {
   generated: '2026-07-25T09:00:00.000Z',
   cached: false,
   pages: [{ id: 'home', title: '알림', text: '세금계산서 발행 요청' }],
+  // EIGHT alerts, more than the ALERT_WINDOW of 5. The app draws the alert page
+  // itself now, so it has to window the list; before that it rendered every
+  // item and a busy morning simply ran off the bottom of the glass. This makes
+  // CI produce a windowed frame in the artifacts rather than leaving the render
+  // path to unit tests alone.
   items: [
     { id: 'b9', title: '세금계산서 발행 요청', preview: '대한전선', body: '대한전선 세금계산서 발행 요청입니다.', priority: 5, age: '2분' },
+    { id: 'b8', title: '납기 회신 대기', preview: '한화솔루션', body: '한화솔루션 납기 회신이 밀려 있습니다.', priority: 4, age: '12분' },
+    { id: 'b7', title: '도면 승인 요청', preview: '현대건설', body: '현대건설 상세도면 승인 요청.', priority: 3, age: '40분' },
+    { id: 'b6', title: '자재 입고 확인', preview: '곡성 현장', body: '곡성 현장 자재 입고 확인 필요.', priority: 3, age: '1시간' },
+    { id: 'b5', title: '견적 재검토', preview: 'LS일렉트릭', body: 'LS일렉트릭 견적 재검토 요청.', priority: 2, age: '2시간' },
+    { id: 'b4', title: '주간 보고 초안', preview: '내부', body: '주간 보고 초안 검토가 필요합니다.', priority: 2, age: '3시간' },
+    { id: 'b3', title: '출장 정산', preview: '내부', body: '지난주 출장 정산이 미제출입니다.', priority: 1, age: '5시간' },
+    { id: 'b2', title: '계약서 스캔 보관', preview: '기아 광주', body: '기아 광주 계약서 스캔 보관 요청.', priority: 1, age: '어제' },
   ],
 }
 

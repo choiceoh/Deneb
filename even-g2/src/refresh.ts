@@ -56,6 +56,34 @@ export function payloadSignature(payload: GlancePayload): string {
   return `${pages}${items}`
 }
 
+/**
+ * How many alert lines fit on the HUD alongside the header and footer.
+ *
+ * 576×288 holds roughly a dozen lines, and the alert page spends the rest on a
+ * two-line header, two blank separators and a footer. The gateway can return up
+ * to 12 alerts (normalizeItems caps it), so without a window the list simply
+ * ran off the bottom of the glass — the host list container used to scroll and
+ * an app-drawn text page does not.
+ */
+export const ALERT_WINDOW = 5
+
+/**
+ * windowRange picks which slice of the alerts to draw so the cursor is always
+ * visible, keeping it off the edge while there is list on both sides.
+ */
+export function windowRange(
+  cursor: number,
+  count: number,
+  size: number = ALERT_WINDOW,
+): { start: number; end: number } {
+  if (count <= 0 || size <= 0) return { start: 0, end: 0 }
+  if (count <= size) return { start: 0, end: count }
+  const at = clampCursor(cursor, count)
+  const half = Math.floor(size / 2)
+  const start = Math.min(Math.max(at - half, 0), count - size)
+  return { start, end: start + size }
+}
+
 /** clampCursor keeps an alert cursor inside the current item list. */
 export function clampCursor(cursor: number, count: number): number {
   if (count <= 0) return 0

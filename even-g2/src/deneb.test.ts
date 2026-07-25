@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { fetchGlance, normalizeItems, normalizePages, formatGeneratedLabel, listLabel } from './deneb'
+import {
+  fetchGlance,
+  formatAlertDetail,
+  formatGeneratedLabel,
+  listLabel,
+  normalizeItems,
+  normalizePages,
+} from './deneb'
 import { REQUEST_TIMEOUT_MS } from './refresh'
 
 const settings = { baseUrl: 'http://gw.test', token: 't0k' }
@@ -99,5 +106,40 @@ describe('HUD labels', () => {
     expect(formatGeneratedLabel(new Date().toISOString(), false)).toBe('방금')
     expect(formatGeneratedLabel(undefined, true)).toBe('캐시')
     expect(formatGeneratedLabel('not-a-date', false)).toBe('')
+  })
+})
+
+describe('formatAlertDetail', () => {
+  const item = { id: 'a1', title: '견적 회신 필요', body: '금호타이어 곡성', priority: 5, age: '10분' }
+
+  it('promises the next ALERT while one is left', () => {
+    const out = formatAlertDetail(item, { index: 0, total: 3 })
+    expect(out).toContain('(1/3)')
+    expect(out).toContain('↓다음알림')
+  })
+
+  it('promises the list on the last alert', () => {
+    const out = formatAlertDetail(item, { index: 2, total: 3 })
+    expect(out).toContain('(3/3)')
+    expect(out).toContain('↓목록으로')
+    expect(out).not.toContain('↓다음알림')
+  })
+
+  it('drops the counter when there is only one alert', () => {
+    const out = formatAlertDetail(item, { index: 0, total: 1 })
+    expect(out).not.toContain('(1/1)')
+    expect(out).toContain('↓목록으로')
+  })
+
+  it('never claims a next PAGE — a swipe here has never done that', () => {
+    expect(formatAlertDetail(item, { index: 0, total: 3 })).not.toContain('다음페이지')
+    expect(formatAlertDetail(item)).not.toContain('다음페이지')
+  })
+
+  it('marks urgency and keeps the body', () => {
+    const out = formatAlertDetail(item, { index: 0, total: 2 })
+    expect(out).toContain('! 견적 회신 필요')
+    expect(out).toContain('긴급')
+    expect(out).toContain('금호타이어 곡성')
   })
 })
