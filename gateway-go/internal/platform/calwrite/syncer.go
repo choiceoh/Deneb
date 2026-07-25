@@ -74,11 +74,11 @@ func (s *Syncer) pushLocked(ctx context.Context, localID string, ev calendar.Eve
 	if err != nil {
 		return err
 	}
-	if _, skip := s.cancelled[localID]; skip {
-		delete(s.cancelled, localID)
-		_ = s.remote.Delete(ctx, gid)
-		return nil
-	}
+	// No second cancellation check here: Push holds s.mu across this Insert, so
+	// Remove cannot mark the id mid-flight, and the check above already consumed
+	// any pending cancellation. The race this guards against is ORDERING
+	// (Remove runs before Push), not interleaving — and that is what the entry
+	// check at the top of this function handles.
 	s.ids[localID] = gid
 	if err := s.persistLocked(); err != nil {
 		delete(s.ids, localID)
