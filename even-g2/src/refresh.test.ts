@@ -75,16 +75,25 @@ describe('resolveSelectionIndex', () => {
     expect(resolveSelectionIndex(0, 1)).toBe(0)
   })
 
-  // The old code clamped to item 0, so an unattributable tap opened the WRONG
-  // alert. Refusing is the honest response — the wearer taps again.
-  it('refuses an absent, non-numeric, or out-of-range index', () => {
-    for (const raw of [undefined, null, NaN, '1', {}, -1, 5, 99]) {
+  // The simulator run (2026-07-25) showed the host delivering a list click with
+  // NO index at all — the normal shape, not an edge case. #4267 refused those
+  // and made tap-to-detail a dead interaction; the smoke harness caught it.
+  it('falls back to the first item when the host reports no index', () => {
+    expect(resolveSelectionIndex(undefined, 5)).toBe(0)
+    expect(resolveSelectionIndex(null, 5)).toBe(0)
+  })
+
+  // A PRESENT but nonsensical index is a host bug; guessing there would open
+  // the wrong alert, so it stays refused.
+  it('refuses a present but nonsensical index', () => {
+    for (const raw of [NaN, '1', {}, -1, 5, 99]) {
       expect(resolveSelectionIndex(raw, 5)).toBe(-1)
     }
   })
 
   it('refuses any index when the list is empty', () => {
     expect(resolveSelectionIndex(0, 0)).toBe(-1)
+    expect(resolveSelectionIndex(undefined, 0)).toBe(-1)
   })
 
   it('truncates a fractional index rather than rejecting it', () => {

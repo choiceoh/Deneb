@@ -56,11 +56,25 @@ export function payloadSignature(payload: GlancePayload): string {
   return `${pages}${items}`
 }
 
-/** Selection index guard: an out-of-range or absent index must not silently
- * open item 0 — the wearer tapped a specific row, and opening a different one
- * is worse than doing nothing. */
+/**
+ * Selection index guard for a list click.
+ *
+ * ABSENT is the normal case, not an edge case. The simulator's automation run
+ * (2026-07-25) showed the host delivering a list click as bare
+ * `{"listEvent":{"containerID":1,"containerName":"alerts"}}` — no `eventType`,
+ * no `currentSelectItemIndex`. #4267 hardened this to "refuse unless valid",
+ * which turned the plugin's PRIMARY interaction (tap an alert → read it) into a
+ * no-op; the smoke harness caught it as "a tap changes the screen: FAIL".
+ *
+ * So absent falls back to the first item — the gateway orders items by
+ * priority, so item 0 is the best guess available, and opening something the
+ * wearer can dismiss beats a dead tap. A PRESENT but nonsensical index
+ * (non-numeric, negative, past the end) is still refused: that is a host bug,
+ * and guessing there really would open the wrong alert.
+ */
 export function resolveSelectionIndex(raw: unknown, count: number): number {
   if (count <= 0) return -1
+  if (raw === undefined || raw === null) return 0
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return -1
   const i = Math.trunc(raw)
   if (i < 0 || i >= count) return -1
