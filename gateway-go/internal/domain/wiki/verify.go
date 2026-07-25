@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -336,6 +337,16 @@ func detectDuplicates(entries map[string]IndexEntry) []verifyFinding {
 	for path, entry := range entries {
 		pages = append(pages, pageRef{path: path, title: entry.Title, id: entry.ID})
 	}
+	// Deterministic order. entries is a map, and Go randomizes map iteration, so
+	// the same unordered pair used to render with its two members swapped from
+	// one cycle to the next: `유사한 제목: "김유영" ~ "김노영"` on one night and
+	// `… "김노영" ~ "김유영"` on the next. Both are the SAME finding, but as
+	// distinct strings they double the reported count and defeat any text-keyed
+	// dedup downstream. Measured over 14 days of dream reports: 6,632 finding
+	// lines collapsing to 1,779 unique, with the top pairs appearing ~62 times in
+	// EACH direction. Sorting by path fixes the rendering order and makes the
+	// whole verify pass reproducible for a given index snapshot.
+	sort.Slice(pages, func(i, j int) bool { return pages[i].path < pages[j].path })
 
 	var findings []verifyFinding
 	seen := map[string]struct{}{}

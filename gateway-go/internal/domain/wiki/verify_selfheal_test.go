@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,51 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 	// Higher-importance page is the keeper (PageA).
 	if normFix.PageA != "프로젝트/영산고-태양광/대표.md" {
 		t.Errorf("keeper = %s, want the higher-importance page", normFix.PageA)
+	}
+}
+
+// TestDetectDuplicates_IsDeterministicAcrossRuns: the finding text must not
+// depend on Go's randomized map iteration. Live 2026-07: the same similar-title
+// pair rendered as `"김유영" ~ "김노영"` on one dream cycle and `"김노영" ~
+// "김유영"` on the next, so one logical finding was reported as two distinct
+// strings — 6,632 finding lines over 14 days collapsing to 1,779 unique, top
+// pairs appearing ~62 times in EACH direction.
+func TestDetectDuplicates_IsDeterministicAcrossRuns(t *testing.T) {
+	build := func() map[string]IndexEntry {
+		idx := newIndex()
+		// Similar-but-distinct people: the exact false-positive class that
+		// re-reports forever, so its rendering must at least be stable.
+		idx.updateEntry("인물/김유영.md", &Page{Meta: Frontmatter{Title: "김유영"}})
+		idx.updateEntry("인물/김노영.md", &Page{Meta: Frontmatter{Title: "김노영"}})
+		idx.updateEntry("인물/박종원.md", &Page{Meta: Frontmatter{Title: "박종원"}})
+		idx.updateEntry("인물/최종원.md", &Page{Meta: Frontmatter{Title: "최종원"}})
+		return idx.Entries
+	}
+	render := func(fs []verifyFinding) []string {
+		out := make([]string, 0, len(fs))
+		for _, f := range fs {
+			out = append(out, f.Detail)
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	want := render(detectDuplicates(build()))
+	if len(want) == 0 {
+		t.Fatal("expected similar-title findings for the fixture")
+	}
+	// Fresh maps each round: map iteration order is re-randomized per map, so a
+	// handful of rounds reliably catches an order-dependent rendering.
+	for round := range 12 {
+		got := render(detectDuplicates(build()))
+		if len(got) != len(want) {
+			t.Fatalf("round %d: finding count changed: %d vs %d\n%v\n%v", round, len(got), len(want), got, want)
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				t.Fatalf("round %d: finding text is order-dependent:\n got %q\nwant %q", round, got[i], want[i])
+			}
+		}
 	}
 }
 
