@@ -96,6 +96,34 @@ func isSelfHarnessOrReplayRejection(reason string) bool {
 		strings.Contains(reason, "validation")
 }
 
+// infrastructureRejectionReasons are the outcomes where NOTHING was judged: the
+// judge call itself errored, or the teacher rewrite never produced a body. The
+// evolve loop is fail-closed so these correctly keep the original skill — but
+// they are OUTAGES, not verdicts on the candidate, and every consumer that
+// reads a rejection as "this mutation was bad" is being told something the loop
+// never measured.
+//
+// Live 2026-07-25: 4 of the 14 rejections in the trailing week were literally
+// `judge error`. #4200 has since added transient retries, which lowers the rate
+// but not the misclassification — the row shape is the bug, not the frequency.
+// The sibling treatment already exists one layer over: judgeAccuracyProbeUsable
+// drops restart/warmup error storms with the note "not L3 fuel". This is that
+// same rule for the evolve ledger.
+var infrastructureRejectionReasons = []string{
+	"judge error",
+	"teacher escalation failed",
+}
+
+func isInfrastructureRejection(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	for _, marker := range infrastructureRejectionReasons {
+		if strings.Contains(reason, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // Repeated patch-first rejections: the held-out draft above deliberately skips
 // Hermes patch-first gate rejections — they carry no replayable behavior
 // contract to preserve, only "the rewrite was too broad". But when the SAME

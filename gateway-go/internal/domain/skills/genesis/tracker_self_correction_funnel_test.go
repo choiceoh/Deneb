@@ -232,3 +232,46 @@ func appendFunnel[T any](t *testing.T, path string, record T) {
 		t.Fatalf("append %s: %v", path, err)
 	}
 }
+
+// A judge outage is not a verdict on the candidate. Counting it as a rejection
+// points diagnosis at candidate quality when the truth is "the judge was down",
+// and it feeds the sweep lane signal it cannot mine anything from.
+func TestSelfCorrectionFunnelSplitsInfrastructureRejectionsFromVerdicts(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.UnixMilli(1_783_500_000_000)
+	dayMs := int64(24 * time.Hour / time.Millisecond)
+
+	appendFunnel(t, tr.logPath, LifecycleLogEntry{
+		Type: "evolve_rejected", SkillName: "contract-review", CreatedAt: now.UnixMilli() - 3*dayMs,
+		Reason: "held-out selection rejected: candidate did not improve validation score",
+	})
+	// The two shapes observed live: the judge call errored, and the teacher
+	// rewrite never produced a body. Neither judged the candidate.
+	appendFunnel(t, tr.logPath, LifecycleLogEntry{
+		Type: "evolve_rejected", SkillName: "contract-review", CreatedAt: now.UnixMilli() - 2*dayMs,
+		Reason: "judge error",
+	})
+	appendFunnel(t, tr.logPath, LifecycleLogEntry{
+		Type: "evolve_rejected", SkillName: "youtube-summary-cards", CreatedAt: now.UnixMilli() - dayMs,
+		Reason: "teacher escalation failed",
+	})
+
+	tr.mu.Lock()
+	s := tr.computeSelfCorrectionFunnelLocked(now)
+	tr.mu.Unlock()
+
+	if s.Rejections7d != 1 {
+		t.Fatalf("Rejections7d = %d, want 1 (only the held-out verdict)", s.Rejections7d)
+	}
+	if s.InfraRejections7d != 2 {
+		t.Fatalf("InfraRejections7d = %d, want 2 — outages must stay visible, not vanish", s.InfraRejections7d)
+	}
+	if s.PromotableRejections7d != 1 {
+		t.Fatalf("PromotableRejections7d = %d, want 1", s.PromotableRejections7d)
+	}
+	// LastRejectionAt is the "upstream evolve loop is alive" probe, and a failed
+	// judge call still proves the loop tried — it stays untouched by the split.
+	if s.LastRejectionAt != now.UnixMilli()-dayMs {
+		t.Fatalf("LastRejectionAt = %d, want %d (liveness includes outages)", s.LastRejectionAt, now.UnixMilli()-dayMs)
+	}
+}
