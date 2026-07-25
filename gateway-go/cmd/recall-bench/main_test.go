@@ -512,3 +512,47 @@ func TestDeadGoldCasesDetectsRetiredPaths(t *testing.T) {
 		t.Errorf("missing wiki dir must stay silent, got %v", d)
 	}
 }
+
+func TestMismatchedGoldCasesDetectsWrongPage(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite := func(rel, body string) {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("---\ntitle: x\n---\n\n"+body+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The right page holds the answer; an unrelated survivor substring-matches a
+	// stale gold path but lacks the answer token.
+	mustWrite(filepath.Join("프로젝트", "pl2-tha-epc-002", "대표.md"), "선급금 30% 지급 완료")
+	mustWrite(filepath.Join("업무", "비금도-모듈-이슈.md"), "모듈 배치 검토")
+
+	cases := []goldCase{
+		{ID: "good", GoldPaths: []string{"프로젝트/pl2-tha-epc-002"}, MustContain: []string{"선급금"}},
+		{ID: "wrong-page", GoldPaths: []string{"비금도"}, MustContain: []string{"6/30"}},
+		{ID: "path-only", GoldPaths: []string{"비금도"}}, // no must_contain → not judgeable, skipped
+	}
+	bad, sample := mismatchedGoldCases(dir, cases)
+	if len(bad) != 1 || bad[0] != "wrong-page" {
+		t.Fatalf("mismatched = %v, want [wrong-page]", bad)
+	}
+	if len(sample) != 1 || sample[0] != "wrong-page" {
+		t.Errorf("sample = %v, want [wrong-page]", sample)
+	}
+
+	// A case whose gold path matches NO page is dead, not mismatched — that guard
+	// owns it, so this one must stay silent to avoid double-reporting.
+	dead := []goldCase{{ID: "dead", GoldPaths: []string{"프로젝트/사라진-폴더"}, MustContain: []string{"x"}}}
+	if b, _ := mismatchedGoldCases(dir, dead); len(b) != 0 {
+		t.Errorf("dead gold is not mismatched, got %v", b)
+	}
+	// Healthy gold and an unwalkable tree must both stay silent.
+	if b, _ := mismatchedGoldCases(dir, cases[:1]); len(b) != 0 {
+		t.Errorf("healthy gold must not warn, got %v", b)
+	}
+	if b, _ := mismatchedGoldCases(filepath.Join(dir, "nope"), cases); len(b) != 0 {
+		t.Errorf("missing wiki dir must stay silent, got %v", b)
+	}
+}
