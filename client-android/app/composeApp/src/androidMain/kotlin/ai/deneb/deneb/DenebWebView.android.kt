@@ -79,6 +79,20 @@ actual fun DenebWebView(
                 val mainHandler = Handler(Looper.getMainLooper())
                 web.settings.javaScriptEnabled = true
                 web.settings.domStorageEnabled = true
+                // Honour the page's <meta name="viewport">. Off by default in a
+                // WebView, which lays a responsive site out against the raw view
+                // width instead of the width the page asked for — so mobile
+                // breakpoints and device-pixel-ratio images resolve wrong.
+                // loadWithOverviewMode then fits that viewport to the screen on
+                // first paint instead of opening zoomed into the top-left.
+                web.settings.useWideViewPort = true
+                web.settings.loadWithOverviewMode = true
+                // Pinch-zoom: a phone browser needs it for dense tables and
+                // scanned documents. displayZoomControls stays off so the legacy
+                // on-screen +/- buttons never overlay the page.
+                web.settings.setSupportZoom(true)
+                web.settings.builtInZoomControls = true
+                web.settings.displayZoomControls = false
                 // Present as the mobile browser this is, not as an embedded
                 // WebView: Reddit answers the default `; wv` UA with its
                 // open-in-app gate, which pins an interstitial over the page and
