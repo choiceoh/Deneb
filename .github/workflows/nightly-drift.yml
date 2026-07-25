@@ -152,6 +152,28 @@ jobs:
       - run: npm test
       - run: npm run build
 
+      # The simulator renders through WebKitGTK and has no linux-arm64 build,
+      # so this lane is the ONLY place it can run: the gateway host is ARM and
+      # skips the harness. ubuntu-latest is x86_64.
+      - name: Install simulator runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-0 \
+            xvfb
+
+      - name: Simulator smoke (headless automation API)
+        run: xvfb-run -a npm run smoke
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: even-g2-smoke
+          path: even-g2/smoke-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
   rust:
     name: rust (tauri cargo check + clippy)
     runs-on: ubuntu-latest

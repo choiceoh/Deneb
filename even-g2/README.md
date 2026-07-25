@@ -52,11 +52,34 @@ Upload the `.ehpk` through the Even Hub developer portal as a **private** build.
 
 ### Simulator
 
+패키지명은 **스코프가 붙는다** — `npx evenhub-simulator`(스코프 없음)는 npm에 존재하지 않는다.
+
 ```bash
 npm run prepare:config   # optional, for local gateway
 npm run dev
-npx evenhub-simulator http://localhost:5173
+npx @evenrealities/evenhub-simulator http://localhost:5173
 ```
+
+`evenhub pack`/`qr`은 별도 CLI다: `npm i -g @evenrealities/evenhub-cli` (`eh` 별칭 동일).
+
+⚠️ **시뮬레이터는 `linux-arm64` 빌드가 없다** (`darwin-arm64` · `darwin-x64` · `linux-x64` · `win32-x64`만). 게이트웨이 호스트가 ARM이라 거기서는 실행되지 않는다.
+
+### 시뮬레이터 스모크 (행동 검증)
+
+단위 테스트는 순수 정책(백오프·서명·인덱스 가드)만 본다. **HUD가 실제로 얌전한지**는 공식 시뮬레이터의 자동화 API(`--automation-port`, v0.7.0+)로만 관측된다.
+
+```bash
+npm run smoke     # x86_64에서만 실제 실행, ARM에서는 SKIP(exit 0)
+```
+
+하네스가 고정하는 것 — 부팅 렌더 · 콘솔 무예외 · 탭 반응, 그리고 **코드로만 고쳤던 두 가지**:
+
+| 주장 | 관측 방법 |
+|---|---|
+| 배경 갱신이 화면을 흔들지 않는다 | 스텁이 고정 페이로드 → 한 주기 뒤 프레임버퍼 **바이트 동일** |
+| 종료하면 폴링도 멈춘다 | 더블탭 후 한 주기 동안 스텁 요청 수 **불변** |
+
+게이트웨이는 `test/stub-gateway.mjs`(고정 응답 + 요청 카운터)로 세우므로 실 데이터·네트워크가 필요 없다. 실패 시 스크린샷·콘솔이 `smoke-artifacts/`에 남고 CI가 아티팩트로 올린다.
 
 ### In-glass controls
 
