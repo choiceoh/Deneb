@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	runtimeops "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
 func ingestPhoneActionResult(s *Server, eventType, source, text string) {
@@ -136,7 +136,7 @@ func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "failed on the device") {
 		t.Fatalf("reported failure must surface as an error, got %v", err)
 	}
-	if errors.Is(err, runtimeops.ErrPhoneActionUnconfirmed) {
+	if errors.Is(err, toolbind.ErrPhoneActionUnconfirmed) {
 		t.Error("a reported failure is confirmed, not unconfirmed")
 	}
 }
@@ -201,7 +201,7 @@ func TestDispatchPhoneAction_UnconfirmedOnCancel(t *testing.T) {
 	}()
 	<-frames // frame delivered, app never reports
 	cancel()
-	if err := <-done; !errors.Is(err, runtimeops.ErrPhoneActionUnconfirmed) {
+	if err := <-done; !errors.Is(err, toolbind.ErrPhoneActionUnconfirmed) {
 		t.Fatalf("no report + canceled turn must be unconfirmed, got %v", err)
 	}
 }

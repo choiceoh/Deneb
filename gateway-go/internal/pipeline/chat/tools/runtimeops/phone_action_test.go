@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
 func TestBuildPhoneActionReturnsArgsForValidInputs(t *testing.T) {
@@ -124,7 +126,7 @@ func TestDispatchPhoneActionWithVariousSenderOutcomes(t *testing.T) {
 	// Unconfirmed dispatch (no execution report in time) degrades to a
 	// cautionary success — never an error that baits a duplicate retry.
 	unconfirmed := func(context.Context, string, map[string]string) error {
-		return fmt.Errorf("%w: no report", ErrPhoneActionUnconfirmed)
+		return fmt.Errorf("%w: no report", tooldeps.ErrPhoneActionUnconfirmed)
 	}
 	out, err = dispatchPhoneAction(ctx, unconfirmed, phoneWriteParams{To: "timer", Target: "10m"})
 	if err != nil {

@@ -17,6 +17,11 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - `fetch_tools.go`의 `FetchToolsRegistry`, `ToolFetchTools`가 deferred schema
   검색·활성화를 제공한다. Observe (`ToolObserve`) lives in leaf package
   `observeops/` and is wired via `server/toolbind/observebind`.
+- `browser.go`의 `ToolBrowser`는 agent-facing wrapper만 소유한다. Page Agent
+  bridge client와 전자결재 enrichment는 `platform/browserbridge`가 소유한다.
+- `phone_action.go`/`phone.go`는 phone tool 검증·표현을 소유하고, native app
+  dispatch 계약(`PhoneActionFunc`, `ErrPhoneActionUnconfirmed`)은 `tooldeps`가
+  소유한다.
 - `gateway.go`의 `GatewayDeps`, `ToolGateway`, `ToolGatewayWithDeps`가 status,
   config, restart, update approval 흐름을 소유한다.
 

@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
 func TestBoundaryPhoneActionAllowlistNormalization(t *testing.T) {
@@ -101,7 +103,7 @@ func TestBoundaryDispatchPhoneActionOutcomeMatrix(t *testing.T) {
 	tests := []struct {
 		name      string
 		params    phoneWriteParams
-		send      PhoneActionFunc
+		send      tooldeps.PhoneActionFunc
 		wantText  string
 		wantErr   string
 		wantCalls int
@@ -109,7 +111,7 @@ func TestBoundaryDispatchPhoneActionOutcomeMatrix(t *testing.T) {
 		{name: "nil sender", params: phoneWriteParams{To: "photo"}, send: nil, wantErr: "unavailable", wantCalls: 0},
 		{name: "confirmed", params: phoneWriteParams{To: "photo"}, send: func(context.Context, string, map[string]string) error { return nil }, wantText: "launched on device: photo", wantCalls: 1},
 		{name: "unconfirmed", params: phoneWriteParams{To: "timer", Target: "1s"}, send: func(context.Context, string, map[string]string) error {
-			return fmt.Errorf("wait: %w", ErrPhoneActionUnconfirmed)
+			return fmt.Errorf("wait: %w", tooldeps.ErrPhoneActionUnconfirmed)
 		}, wantText: "Do NOT retry", wantCalls: 1},
 		{name: "real failure", params: phoneWriteParams{To: "photo"}, send: func(context.Context, string, map[string]string) error { return wantFailure }, wantErr: "device rejected", wantCalls: 1},
 		{name: "validation before sender", params: phoneWriteParams{To: "timer", Target: "90"}, send: func(context.Context, string, map[string]string) error { return nil }, wantErr: "explicit unit", wantCalls: 0},

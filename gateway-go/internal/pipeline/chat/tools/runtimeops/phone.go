@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
@@ -30,7 +31,7 @@ import (
 // ToolPhoneRead queries the phone via the app-pushed state cache:
 // what = location | battery | usage. send dispatches a sync_state refresh request when
 // the cache is stale; nil means no app channel (report unavailable).
-func ToolPhoneRead(send PhoneActionFunc) toolport.ToolFunc {
+func ToolPhoneRead(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			What string `json:"what"`
@@ -70,7 +71,7 @@ func ToolPhoneRead(send PhoneActionFunc) toolport.ToolFunc {
 // tells the agent how to proceed. Best-effort: a missing channel or failed
 // dispatch degrades to an explanation, never an opaque error — the agent can
 // still answer from conversation context.
-func phoneStateStaleReply(ctx context.Context, send PhoneActionFunc, what string) (string, error) {
+func phoneStateStaleReply(ctx context.Context, send tooldeps.PhoneActionFunc, what string) (string, error) {
 	if send == nil {
 		return fmt.Sprintf("최근 %s 정보가 없습니다 (네이티브 앱 채널 미연결).", what), nil
 	}
@@ -85,7 +86,7 @@ func phoneStateStaleReply(ctx context.Context, send PhoneActionFunc, what string
 // (open_url/open_app/share/message/dial/photo/alarm/timer). Legacy names from
 // the SSH era (notification, tts) are normalized so older transcripts keep
 // working.
-func ToolPhoneWrite(send PhoneActionFunc) toolport.ToolFunc {
+func ToolPhoneWrite(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p phoneWriteParams
 		if err := jsonutil.UnmarshalInto("phone_write params", input, &p); err != nil {

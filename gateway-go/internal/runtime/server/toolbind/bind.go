@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/docmedia"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/observebind"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/phoneops"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind/weekly"
 )
 
@@ -46,8 +47,8 @@ var (
 	ToolSkillLifecycle            = lifecycle.ToolSkillLifecycle
 )
 
-// Phone ops leaf binding (hosted under lifecycle to keep this package ≤ soft fanout).
-var ErrPhoneActionUnconfirmed = lifecycle.ErrPhoneActionUnconfirmed
+// Phone ops leaf binding.
+var ErrPhoneActionUnconfirmed = phoneops.ErrPhoneActionUnconfirmed
 
 // Recurring briefing leaf bindings.
 type (

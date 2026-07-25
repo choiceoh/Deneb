@@ -9,29 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
-
-// PhoneActionFunc delivers a structured phone action to the native app for
-// in-app Intent execution — the SSH/Termux-free path (RFC: phone-action). The
-// server wires this to the app's live SSE push channel (SSE only — the FCM
-// data fallback does not carry phone actions, so a fully backgrounded phone
-// errors instead of executing late); nil means no app channel, so the action
-// is reported unavailable rather than silently dropped.
-//
-// Result contract: a nil error means the app CONFIRMED execution (it reported
-// the intent launched); a returned error wrapping ErrPhoneActionUnconfirmed
-// means the frame was delivered but no execution report arrived in time —
-// dispatched, outcome unknown; any other error is a real failure (no app
-// connected, or the app reported the action failed).
-type PhoneActionFunc func(ctx context.Context, action string, args map[string]string) error
-
-// ErrPhoneActionUnconfirmed marks the fail-open outcome of a phone action
-// dispatch: the frame reached the push channel but the app did not report an
-// execution result within the wait window (backgrounded phone, or an app
-// build that predates result reporting). Not a failure — the action may still
-// execute late — so the tool converts it to a cautionary success message
-// instead of an error that would bait the model into a duplicate retry.
-var ErrPhoneActionUnconfirmed = errors.New("phone action execution not confirmed")
 
 // phoneWriteParams is the phone_write tool input. `to` selects the operation:
 // the app-permission ops (notify/speak/clipboard) run via platform services;
@@ -192,7 +172,7 @@ func parseTimerSeconds(s string) (int, error) {
 // PhoneActionFunc contract: confirmed executed (nil), dispatched-unconfirmed
 // (ErrPhoneActionUnconfirmed → cautionary success, never a retry bait), or a
 // real failure (error).
-func dispatchPhoneAction(ctx context.Context, send PhoneActionFunc, p phoneWriteParams) (string, error) {
+func dispatchPhoneAction(ctx context.Context, send tooldeps.PhoneActionFunc, p phoneWriteParams) (string, error) {
 	action, args, err := buildPhoneAction(p)
 	if err != nil {
 		return "", err
@@ -201,7 +181,7 @@ func dispatchPhoneAction(ctx context.Context, send PhoneActionFunc, p phoneWrite
 		return "", fmt.Errorf("phone action %q unavailable: native app channel not wired", action)
 	}
 	if err := send(ctx, action, args); err != nil {
-		if errors.Is(err, ErrPhoneActionUnconfirmed) {
+		if errors.Is(err, tooldeps.ErrPhoneActionUnconfirmed) {
 			return fmt.Sprintf("phone action %s dispatched to app, but the app did not confirm execution in time — it may still run late. Do NOT retry (risk of duplicates); tell the user to check the phone.", action), nil
 		}
 		// Neutral prefix: err covers both delivery failures (no app connected)
