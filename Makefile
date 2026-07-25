@@ -402,6 +402,15 @@ cache-cost-audit:
 cache-cost-audit-test:
 	@python3 -m unittest discover -s scripts/audit -p 'test_cache_cost_audit.py' -v
 
+# deneb-ui card adoption (advisory) — "card authored" vs "adoption miss" from the
+# gateway journal, split by session class. The operator-facing rate is the one
+# that matters; automated lanes run far higher and hide it when averaged in.
+card-adoption:
+	@python3 scripts/audit/card-adoption.py $(ARGS)
+
+card-adoption-test:
+	@python3 -m unittest discover -s scripts/audit -p 'test_card_adoption.py' -v
+
 # Agent-doc coverage (advisory) — rank gateway-go subsystems by weight and flag
 # heavy ones with no module CLAUDE.md and no agent-rule glob, i.e. the subsystems
 # most worth a narrative doc. Draft one with Deneb's own model (grounded in source
