@@ -333,6 +333,7 @@ func TestResultRanSideEffectingTool(t *testing.T) {
 		{"a mutating tool ran", &agent.AgentResult{TotalToolCalls: 2, ToolCounts: map[string]int{"web": 1, "exec": 1}}, true},
 		{"unknown tool ran", &agent.AgentResult{TotalToolCalls: 1, ToolCounts: map[string]int{"some_new_tool": 1}}, true},
 		{"action-multiplexed tool (wiki)", &agent.AgentResult{TotalToolCalls: 1, ToolCounts: map[string]int{"wiki": 1}}, true},
+		{"action-multiplexed tool (knowledge)", &agent.AgentResult{TotalToolCalls: 1, ToolCounts: map[string]int{"knowledge": 1}}, true},
 		{"count without histogram assumes side-effecting", &agent.AgentResult{TotalToolCalls: 1}, true},
 	}
 	for _, c := range cases {

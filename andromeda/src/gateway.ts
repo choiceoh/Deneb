@@ -549,6 +549,12 @@ export async function chatStream(
     signal,
   });
 
+  // The gateway ends every stream with exactly one terminal frame — `done` on
+  // success or `error` on failure (nativeapi/chat_stream.go). Both count: an
+  // error was already surfaced through onError, so treating it as "no terminal"
+  // would send an answered-with-an-error turn into transcript recovery on top.
+  let sawTerminal = false;
+
   await readJsonSSE(body, (event, obj) => {
     switch (event) {
       case "delta": {
@@ -580,6 +586,7 @@ export async function chatStream(
         break;
       }
       case "done":
+        sawTerminal = true;
         handlers.onDone?.({
           text: asStr(obj.text) ?? "",
           model: asStr(obj.model),
@@ -588,10 +595,18 @@ export async function chatStream(
         });
         break;
       case "error":
+        sawTerminal = true;
         handlers.onError?.(asStr(obj.error) ?? "unknown error");
         break;
     }
   });
+
+  // EOF is not success until the gateway confirms the detached turn with a
+  // terminal frame. Fail so useChat() polls the transcript instead of
+  // committing a blank or partial answer as complete (native parity).
+  if (!sawTerminal) {
+    throw new Error("chat stream ended before terminal event");
+  }
 }
 
 // composeChatMessage builds the user-turn text actually sent to (and stored by)
