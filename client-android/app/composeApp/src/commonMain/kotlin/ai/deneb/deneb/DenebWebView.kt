@@ -67,6 +67,18 @@ class DenebWebViewState(
      *  JS thread is blocked until it is answered. */
     internal var jsDialog by mutableStateOf<BrowserJsDialog?>(null)
 
+    /** Last scroll-diagnostic result, or null when none has been run. The chrome
+     *  copies it out so it can be pasted into a session. */
+    internal var diagnostics by mutableStateOf<String?>(null)
+
+    internal var diagnosticsTick by mutableStateOf(0)
+        private set
+
+    /** Runs the on-device scroll probe against the live page. */
+    internal fun runDiagnostics() {
+        diagnosticsTick++
+    }
+
     // Monotonic command ticks the actual observes via LaunchedEffect, so a
     // repeated tap (reload twice) still fires.
     internal var goBackTick by mutableStateOf(0)
