@@ -11,12 +11,14 @@
     "seed": "node scripts/make-seed.mjs",
     "pack": "npm run prepare:config && npm run build && evenhub pack app.json dist -o deneb-glance.ehpk",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke": "node test/simulator-smoke.mjs"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "^0.0.12"
   },
   "devDependencies": {
+    "@evenrealities/evenhub-simulator": "^0.8.0",
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
     "vitest": "^3.2.7"
