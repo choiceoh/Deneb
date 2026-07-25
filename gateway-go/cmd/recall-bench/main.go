@@ -164,14 +164,12 @@ const deadGoldWarning = "recall-bench: WARNING — %d/%d gold cases reference pa
 	"the ceiling is %.1f%%, so these read as retrieval misses. Repoint them at the pages' current " +
 	"locations (project CODE folders survive renames). Dead: %s\n"
 
-// deadGoldCases returns the ids of cases whose gold_paths match no markdown file
-// under wikiDir, plus a short sample for the warning. Matching mirrors
-// findGoldRank: a gold path is a SUBSTRING of the result path.
-func deadGoldCases(wikiDir string, cases []goldCase) (dead []string, sample []string) {
+// walkPagePaths returns every relative .md path under wikiDir (dotfiles skipped).
+// It is shared by the gold-hygiene guards; a per-entry error (or an unrelatable
+// path) skips that entry and keeps walking, so one unreadable file cannot abort
+// an advisory scan and turn every remaining case into a false report.
+func walkPagePaths(wikiDir string) []string {
 	var paths []string
-	// A per-entry error (or an unrelatable path) skips that entry and keeps
-	// walking: this guard is advisory, so one unreadable file must not abort the
-	// scan and turn every remaining case into a false "dead gold" report.
 	_ = filepath.Walk(wikiDir, func(p string, fi os.FileInfo, err error) error {
 		if err != nil || fi.IsDir() || !strings.HasSuffix(p, ".md") {
 			return nil //nolint:nilerr // skip this entry, continue the walk (advisory scan)
@@ -183,6 +181,14 @@ func deadGoldCases(wikiDir string, cases []goldCase) (dead []string, sample []st
 		paths = append(paths, rel)
 		return nil
 	})
+	return paths
+}
+
+// deadGoldCases returns the ids of cases whose gold_paths match no markdown file
+// under wikiDir, plus a short sample for the warning. Matching mirrors
+// findGoldRank: a gold path is a SUBSTRING of the result path.
+func deadGoldCases(wikiDir string, cases []goldCase) (dead []string, sample []string) {
+	paths := walkPagePaths(wikiDir)
 	if len(paths) == 0 {
 		return nil, nil // cannot judge (no tree walked) — stay silent rather than cry wolf
 	}
@@ -210,6 +216,62 @@ func deadGoldCases(wikiDir string, cases []goldCase) (dead []string, sample []st
 		}
 	}
 	return dead, sample
+}
+
+// mismatchedGoldWarning flags a subtler rot than deadGoldWarning: the gold_path
+// still resolves to a page, but NONE of the pages it resolves to hold any
+// must_contain answer token. deadGoldCases sees "a page matched" and stays
+// silent, yet the case can only ever be a FALSE hit — a stale path that happens
+// to substring-match an unrelated survivor. The 2026-07-19 folder move left
+// several such cases (e.g. "비금도" matching an unrelated module page that lacks
+// the date the case asks for); repointing them at the project CODE folder that
+// actually holds the answer is the fix.
+const mismatchedGoldWarning = "recall-bench: WARNING — %d/%d gold cases resolve to pages that hold NONE of their must_contain answer; " +
+	"gold_path likely substring-matches the wrong page. Repoint at the page that holds the answer. Suspect: %s\n"
+
+// mismatchedGoldCases returns cases whose gold_paths DO match pages on disk but
+// where not one matched page exposes any must_contain token. It complements
+// deadGoldCases (no match at all) by catching gold that points at the wrong
+// surviving page. Cases without must_contain (path-only golds), or with no
+// matched page (already owned by deadGoldCases), are skipped. A page needing
+// only SOME of its tokens elsewhere is tolerated — the flag fires only when the
+// matched set holds not a single answer token, the strongest wrong-page signal.
+func mismatchedGoldCases(wikiDir string, cases []goldCase) (mismatched, sample []string) {
+	paths := walkPagePaths(wikiDir)
+	if len(paths) == 0 {
+		return nil, nil // cannot judge (no tree walked) — stay silent rather than cry wolf
+	}
+	_, holds := newContentScorers(wikiDir)
+	for _, c := range cases {
+		if len(c.GoldPaths) == 0 || len(c.MustContain) == 0 {
+			continue
+		}
+		var matched []string
+		for _, g := range c.GoldPaths {
+			for _, p := range paths {
+				if strings.Contains(p, g) {
+					matched = append(matched, p)
+				}
+			}
+		}
+		if len(matched) == 0 {
+			continue // dead — deadGoldCases owns this one
+		}
+		answerFound := false
+		for _, p := range matched {
+			if holds(p, c.MustContain) {
+				answerFound = true
+				break
+			}
+		}
+		if !answerFound {
+			mismatched = append(mismatched, c.ID)
+			if len(sample) < 5 {
+				sample = append(sample, c.ID)
+			}
+		}
+	}
+	return mismatched, sample
 }
 
 type parseOutcome struct {
@@ -375,6 +437,9 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	if dead, worst := deadGoldCases(cfg.wikiDir, cases); len(dead) > 0 {
 		fmt.Fprintf(stderr, deadGoldWarning, len(dead), len(cases),
 			100*float64(len(cases)-len(dead))/float64(len(cases)), strings.Join(worst, ", "))
+	}
+	if bad, worst := mismatchedGoldCases(cfg.wikiDir, cases); len(bad) > 0 {
+		fmt.Fprintf(stderr, mismatchedGoldWarning, len(bad), len(cases), strings.Join(worst, ", "))
 	}
 	fusion, graphBoost := resolveFusion(deps.getenv, semantic)
 	writeBenchmarkHeader(stdout, cfg, fusion, graphBoost, semantic, len(cases))
