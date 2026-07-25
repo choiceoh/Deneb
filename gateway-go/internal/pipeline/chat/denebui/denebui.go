@@ -33,14 +33,33 @@ type Issue struct {
 // String returns the human-readable representation.
 func (is Issue) String() string { return is.Path + ": " + is.Msg }
 
-// Recoverable reports whether the issue is content-preserving: the HTML parser
-// already unwrapped the offending unknown tag (children hoisted, or a void tag
-// with no content), so the parsed tree still renders faithfully on all three
-// clients — their parsers unwrap unknown tags the same way. NormalizeFinalReply
-// delivers a card whose issues are ALL recoverable instead of downgrading it to
-// plain text; the issue stays logged as drift telemetry. Structural violations
-// (missing interactive id, invalid action, unparseable body) are not recoverable.
-func (is Issue) Recoverable() bool { return strings.HasPrefix(is.Msg, "unknown tag <") }
+// Recoverable reports whether the issue is content-preserving, i.e. the card
+// still renders faithfully on all three clients. NormalizeFinalReply delivers a
+// card whose issues are ALL recoverable instead of downgrading it to plain
+// text; the issue stays logged as drift telemetry.
+//
+// Two classes qualify, both because the three ported parsers degrade the SAME
+// way (the safety criterion in docs/agent-rules/denebui.md):
+//
+//   - "unknown tag <…>" — the HTML parser already unwrapped it (children
+//     hoisted, or a void tag with no content).
+//   - "invalid <field> …" — a bad value for a presentation ENUM attribute
+//     (text style, button variant, alert severity, chart type, keyboard hint).
+//     Every renderer falls back to a default: Kotlin `styleOf`/`parseTextStyle`
+//     return null → default, andromeda does `TEXT_STYLE[n.style] ?? body`.
+//     Failing the whole card made the SERVER stricter than every renderer — the
+//     operator lost an entire card to a plain-text downgrade over one cosmetic
+//     attribute the clients would have defaulted silently. (Known aliases like
+//     "heading"/"subtitle" are folded before validation and never reach here;
+//     this covers values that are simply wrong.)
+//
+// Deliberately NOT recoverable, because these break behavior rather than looks:
+// missing interactive id, action problems ("unknown action type", "action …"),
+// unknown node type, malformed child arrays, and unparseable bodies. "invalid
+// JSON" is returned as an error, never an Issue, so it cannot match this prefix.
+func (is Issue) Recoverable() bool {
+	return strings.HasPrefix(is.Msg, "unknown tag <") || strings.HasPrefix(is.Msg, "invalid ")
+}
 
 // nodeSpec captures the structural rules for one node type.
 type nodeSpec struct {
