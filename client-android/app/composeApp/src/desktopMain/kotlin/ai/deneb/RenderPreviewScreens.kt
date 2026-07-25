@@ -522,6 +522,9 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
     // The three shared data states every content screen composes from (폴리시 기준
     // ★상태 완결성): skeleton loading, empty with action, error with retry — one
     // frame so their vertical rhythm and voice are reviewed together.
+    // Chat transient states — only reachable on a device when something specific
+    // happens, so this fixture is their only visual regression surface.
+    "chat_states" to { scheme -> chatStatesBody(scheme) },
     "states" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
