@@ -260,4 +260,28 @@ describe("EventAnalysis streaming", () => {
 
     expect(capturedSignal?.aborted).toBe(true);
   });
+
+  it("renders a card-leading analysis as a deneb-ui card, not a raw code block", async () => {
+    // Regression: the analysis is a STREAMED agent answer and the agent may lead
+    // with a ```deneb-ui card. Rendering it through plain <Markdown> leaked the
+    // fence as a copyable code block — the same defect #4088 fixed on the mail
+    // analysis, still open on this surface.
+    const card =
+      "```deneb-ui\n" +
+      '<column><card><text style="title">준비 상태</text>' +
+      '<text style="body">계약서 검토 미완</text></card></column>\n' +
+      "```\n\n## 다음 할 일\n\n법무 회신을 기다립니다.";
+    const fetch = vi.fn(async () => sse(["delta", { delta: card }], ["done", { text: card }]));
+    vi.stubGlobal("fetch", fetch);
+
+    const { container } = render(<EventAnalysis event={calendarEvent()} connected cfg={cfg} />);
+
+    // The card renders through the deneb-ui renderer (.dui root) and the prose
+    // tail survives; the literal fence must not reach the user.
+    await waitFor(() => expect(container.querySelector(".dui")).toBeTruthy());
+    expect(screen.getByText("계약서 검토 미완")).toBeInTheDocument();
+    expect(screen.getByText(/다음 할 일/)).toBeInTheDocument();
+    expect(container.querySelector("pre code")).toBeNull();
+    expect(container.textContent).not.toContain("```deneb-ui");
+  });
 });
