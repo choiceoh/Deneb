@@ -15,7 +15,7 @@ v1/v2 점수와 비교하거나 산술 변환하지 않는다.
 - Overall은 도메인 점수의 **가중 기하평균**이다 (Structure 0.55 · Runtime 0.25 ·
   Fitness 0.20). 한 도메인의 개선으로 다른 도메인 퇴행을 가리지 않는다.
 - 필수 증거가 `unavailable`이면 측정 실패다. 모르는 상태를 100으로 채우지 않는다.
-- Fitness는 초기에는 advisory(`ratcheted=false`)이다. CI `--check`는 Structure와
+- Fitness는 초기에는 advisory(`ratcheted=false`)이다. `--check`는 Structure와
   Runtime만 래칫한다.
 - LOC·파일 수·테스트 복제는 점수가 아니다. 파일 분할만으로 점수가 오르면 rubric
   버그다.
@@ -45,6 +45,19 @@ python3 scripts/audit/health-bench-v3.py --refresh-runtime-cache --write-snapsho
 - `scripts/audit/health-v3-runtime-cache.json` — fast 프로필 Runtime 입력 (TTL)
 - Baseline 손편집으로 check를 통과시키지 않는다. 운영자 승인 후에만
   `--update-baseline` / `--write-baseline`을 사용한다.
+
+## 어디서 자동으로 도는가
+
+- **나이틀리** `nightly-drift.yml`의 `health-v3` 잡 (srv4, advisory). PR CI는
+  래칫하지 않는다 — health-v2 웨지(8일 연속 나이틀리 RED)를 반복하지 않으려고
+  래칫은 페이징 경로 밖에 둔다. 회귀하면 `health-bench` 라벨로 추적 이슈
+  하나를 열고 갱신할 뿐, 나이틀리를 레드로 만들지 않는다.
+- **srv4 타이머** `deneb-bench-refresh.timer` (매일 04:33)는 스냅샷만 쓰고
+  래칫을 판정하지 않는다 — 회귀 감지는 위 나이틀리 잡이 담당한다.
+- 체크인된 runtime 캐시는 TTL 72h라 대개 만료 상태다(2026-07-25 기준 235h).
+  나이틀리는 항상 `--refresh-runtime-cache`로 라이브 저널을 다시 읽는다.
+  게이트웨이 저널이 없는 호스트에서 `make health-v3-check`는 Runtime 증거
+  부재로 fail-closed 되는 것이 정상이다.
 
 ## 변경 시 검증
 

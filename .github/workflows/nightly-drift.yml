@@ -194,6 +194,98 @@ jobs:
           RECALL_WORKLIST: "1"
         run: scripts/dev/recall-health.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
+  health-v3:
+    # Health Bench 3.0 ratchet (Structure + Runtime; Fitness advisory).
+    #
+    # Why this exists: the ratchet had NO automatic runner at all. health-v2 was
+    # pulled from PR CI (#4198) and v3 was never wired anywhere, so between
+    # 2026-07-15 and 2026-07-25 the Runtime domain fell 58.3 → 16.2 (every
+    # pillar past its hard bar: 0.69 err/run, p95 300s, 7.9% turn timeouts)
+    # with zero automatic signal. The daily bench-refresh timer on srv4 writes
+    # snapshots but never evaluates the ratchet.
+    #
+    # It does NOT gate: the health-v2 wedge (8 straight red nights, #3775) is
+    # why ratchets stay off the paging path. Instead a regression opens/updates
+    # one tracking issue — durable and visible without turning the nightly red.
+    #
+    # srv4 only: Runtime evidence is the live deneb-gateway journal.
+    name: health-v3 ratchet (advisory)
+    runs-on: [self-hosted, srv4]
+    timeout-minutes: 30
+    continue-on-error: true
+    outputs:
+      regressed: ${{ steps.ratchet.outputs.regressed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+          # Structure pillars (change-blast, co-change, delivery-proof) read
+          # real git history. A shallow clone reports "required evidence
+          # unavailable: git-change-history" and fail-closes the whole domain.
+          fetch-depth: 0
+
+      - name: health-v3 ratchet vs baseline
+        id: ratchet
+        run: |
+          # The checked-in runtime cache is a 72h-TTL artifact and is normally
+          # stale by the time anyone runs this (235h old on 2026-07-25), which
+          # fail-closes Runtime to 0. Always re-read the live journal instead.
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          set +e
+          python3 scripts/audit/health-bench-v3.py --refresh-runtime-cache --check \
+            > /tmp/health-v3-nightly.txt 2>&1
+          status=$?
+          set -e
+          {
+            echo "## Health Bench 3.0 ratchet (advisory)"
+            echo
+            echo '```'
+            cat /tmp/health-v3-nightly.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/health-v3-nightly.txt
+          if [ "$status" -ne 0 ]; then
+            echo "regressed=1" >> "$GITHUB_OUTPUT"
+          fi
+          # Advisory: the job never fails, so it stays out of the drift gate.
+          exit 0
+
+  report-health:
+    # Separate tracking issue from nightly-drift: gate drift is "a lane broke",
+    # this is "production/codebase health regressed against its baseline". They
+    # have different owners and different fixes, so conflating them buries one.
+    name: report health regression
+    needs: [health-v3]
+    if: needs.health-v3.outputs.regressed == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open or update the health-bench issue
+        run: |
+          gh label create health-bench \
+            --description "Health Bench 3.0 ratchet regressions on main" \
+            --color 1D76DB --force
+          body="Health Bench 3.0 래칫이 baseline 대비 회귀했습니다: ${RUN_URL}
+
+          해당 실행의 스텝 요약에 회귀한 도메인·필러·finding 목록이 있습니다. Runtime 도메인은 롤링 저널 창을 읽으므로, 코드가 아니라 **프로덕션 동작**이 나빠졌다는 뜻일 수 있습니다 — 재현은 \`python3 scripts/audit/health-bench-v3.py --refresh-runtime-cache\`.
+
+          베이스라인을 낮춰 통과시키지 마세요 (일방향 래칫)."
+          existing=$(gh issue list --label health-bench --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create \
+              --title "health bench: main 래칫 회귀" \
+              --label health-bench \
+              --body "$body"
+          fi
+
   docs:
     # markdownlint + spellcheck only — the link check hits external URLs and
     # would page on other people's outages, so it stays out of the nightly.
