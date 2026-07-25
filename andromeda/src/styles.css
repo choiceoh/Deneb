@@ -6243,3 +6243,110 @@ button.mail-attachment {
   opacity: 0.5;
   text-decoration: line-through;
 }
+
+/* --- ERP snapshot ------------------------------------------------------
+ * Amaranth snapshots are structured data delivered as text (see erpText.ts).
+ * Markdown rendered the "레이블: 값" lines as one run-on paragraph and each
+ * ranked row as a long "·"-joined string; these give each part its own shape.
+ * Colors come from tokens only — no literals. */
+.erp-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+/* Pair strip: label above value, wrapping instead of scrolling so a narrow
+ * tile keeps every figure visible. */
+.erp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-sunken);
+}
+.erp-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.erp-meta dt {
+  font-size: 11px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+.erp-meta dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.erp-section {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.erp-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.erp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 0;
+}
+.erp-row + .erp-row {
+  border-top: 1px solid var(--line);
+}
+/* Tabular rank so a 1 and a 10 leave the names on the same left edge. */
+.erp-rank {
+  flex: 0 0 auto;
+  min-width: 15px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.erp-row-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* Item codes are long and unspaced — allow a break so they never overflow. */
+.erp-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.erp-row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 3px;
+}
+.erp-field {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--panel-sunken);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.erp-note {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--muted-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
