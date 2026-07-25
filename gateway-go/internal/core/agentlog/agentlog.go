@@ -116,6 +116,23 @@ type TurnLLMData struct {
 	// whether the routed run ultimately succeeded; these say what each step did.
 	ThinkingOff bool `json:"thinkingOff,omitempty"`
 	ObsRunes    int  `json:"obsRunes,omitempty"`
+	// Provider failure mix for THIS turn. Added 2026-07-25 because the ledger
+	// could not answer the question the timeout investigation needed: 6.6% of
+	// real user turns were timing out with k3's p95 pinned at exactly the 300s
+	// ceiling, and turn.llm carried no retry/status field — so "is the provider
+	// rate-limiting us?" was unanswerable from data, and #4215 (surface rate
+	// limits early so the fallback chain can switch models) could not be
+	// verified either way.
+	//
+	// Retries counts failed attempts; RetryMix is a deterministic histogram
+	// ("429x3", "429x2,transportx1"); RateLimited isolates the 429 case, which
+	// is the specific hypothesis on trial. ProviderModel is what actually
+	// answered — when it differs from the run's configured model, the fallback
+	// chain fired.
+	Retries       int    `json:"retries,omitempty"`
+	RetryMix      string `json:"retryMix,omitempty"`
+	RateLimited   bool   `json:"rateLimited,omitempty"`
+	ProviderModel string `json:"providerModel,omitempty"`
 }
 
 // TurnToolData records a single tool execution within a turn.

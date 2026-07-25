@@ -34,6 +34,12 @@ type agentRunner struct {
 	maxToolCallAttempts  int
 	toolCallAttemptsUsed int
 	streamBytesUsed      int
+
+	// turnRetries collects the CURRENT turn's provider failures (429s, transport
+	// errors) so logTurnDetail can stamp them onto turn.llm. Replaced per turn by
+	// streamTurn; a turn runs on one goroutine, and the collector is itself
+	// mutex-guarded for the streaming watchdog.
+	turnRetries *llm.RetryCollector
 }
 
 type preparedAgentTurn struct {
@@ -217,8 +223,12 @@ func (r *agentRunner) remainingStreamBudget() (int, error) {
 }
 
 func (r *agentRunner) streamTurn(prepared preparedAgentTurn) (*turnResult, bool, error) {
+	// Fresh per turn: a collector reused across turns would report the run's
+	// total on every row and make a single bad turn look like a whole bad run.
+	turnCtx, collector := llm.WithRetryCollector(prepared.request.ctx)
+	r.turnRetries = collector
 	outcome, err := runStreamingTurnWithPolicy(
-		prepared.request.ctx,
+		turnCtx,
 		r.client,
 		prepared.request.request,
 		r.hooks,
@@ -376,6 +386,10 @@ func (r *agentRunner) logTurnDetail(prepared preparedAgentTurn, result *turnResu
 		CacheCreationTokens: result.usage.CacheCreationInputTokens,
 		ThinkingOff:         thinking != nil && thinking.Type == "disabled",
 		ObsRunes:            r.state.priorToolOutputRunes,
+		Retries:             r.turnRetries.Count(),
+		RetryMix:            r.turnRetries.Summary(),
+		RateLimited:         r.turnRetries.RateLimited(),
+		ProviderModel:       result.providerModel,
 	})
 }
 
