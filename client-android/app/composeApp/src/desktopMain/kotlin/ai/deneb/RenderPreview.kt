@@ -131,6 +131,8 @@ fun main() {
     System.setProperty("java.awt.headless", "true")
     renderScreen("mail_dark.png", "mail", DarkColorScheme, 840, 1100)
     renderScreen("mail_light.png", "mail", LightColorScheme, 840, 1100)
+    renderScreen("chat_states_dark.png", "chat_states", DarkColorScheme, 824, 2300)
+    renderScreen("chat_states_light.png", "chat_states", LightColorScheme, 824, 2300)
     renderScreen("states_dark.png", "states", DarkColorScheme, 824, 1500)
     renderScreen("states_light.png", "states", LightColorScheme, 824, 1500)
     renderBrowser("browser_dark.png", DarkColorScheme)
