@@ -8,7 +8,6 @@ import ai.deneb.ui.chat.WorkFeedItem
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
-import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebPressable
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.filled.Mic
@@ -125,13 +124,6 @@ internal fun limitApprovalComment(value: String): String {
     return value.substring(0, end)
 }
 
-internal fun WorkFeedItem.relatedWorkFeedCount(): Int = relatedIds
-    .asSequence()
-    .map { it.trim() }
-    .filter { it.isNotEmpty() && it != id }
-    .distinct()
-    .count()
-
 /**
  * Bottom-sheet content for the work feed (action inbox), in the Deneb idiom:
  * typography on a flat surface (no card), [DenebRow] hairlines instead of
@@ -214,7 +206,6 @@ internal fun WorkFeedRow(
     val title = if (item.title.isBlank()) stringResource(Res.string.work_feed_title) else stripLeadingIcon(item.title)
     val haptics = rememberHaptics()
     val titleStyle = if (item.status == "unread") DenebType.rowTitleStrong else DenebType.rowTitle
-    val relatedCount = item.relatedWorkFeedCount()
     DenebRow(
         onClick = {
             haptics.tap()
@@ -264,14 +255,6 @@ internal fun WorkFeedRow(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    )
-                }
-                if (relatedCount > 0) {
-                    Text(
-                        text = "관련 업무 ${relatedCount}건",
-                        style = DenebType.meta,
-                        color = denebInsight(),
-                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
                 // Quick actions appear only while the card is open, so collapsed rows
