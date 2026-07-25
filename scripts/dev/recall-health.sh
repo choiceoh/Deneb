@@ -18,6 +18,27 @@ WIKI_SRC="${DENEB_WIKI_DIR:-$HOME/.deneb/wiki}"
 DIARY_SRC="${DENEB_DIARY_DIR:-$HOME/.deneb/diary}"
 GOLD="${DENEB_WIKI_GOLD:-$HOME/.deneb/wiki-qa-gold.jsonl}"
 
+# Production-parity retrieval defaults, in ONE place. Callers used to hardcode
+# these (the nightly job carried 1:10:3 with no reranker); production moved to
+# 1:3:4 + xprovence FORCE=on on 2026-07-20 and the copies drifted, so the nightly
+# trend line was scoring a configuration that no longer exists — measured 2026-07-25
+# at p@1 41.3% vs 53.8% at true parity, a 12.5pp understatement.
+#
+# Source of truth: the gateway's systemd drop-in (~/.config/systemd/user/
+# deneb-gateway.service.d/nemotron-embed.conf). Keep these in step with it; every
+# value stays overridable from the environment for sweeps.
+export DENEB_EMBEDDING_URL="${DENEB_EMBEDDING_URL:-http://127.0.0.1:8002}"
+export DENEB_WIKI_SEM_FLOOR="${DENEB_WIKI_SEM_FLOOR:-0.44}"
+export DENEB_WIKI_RRF_SEM_WEIGHT="${DENEB_WIKI_RRF_SEM_WEIGHT:-3}"
+export DENEB_WIKI_RRF_GRAPH_WEIGHT="${DENEB_WIKI_RRF_GRAPH_WEIGHT:-4}"
+export DENEB_RERANK_FORCE="${DENEB_RERANK_FORCE:-on}"
+export DENEB_RERANK_URL="${DENEB_RERANK_URL:-http://127.0.0.1:8004}"
+export DENEB_RERANK_MODEL="${DENEB_RERANK_MODEL:-xprovence-bgem3-v2}"
+
+echo "recall-health: fusion 1:${DENEB_WIKI_RRF_SEM_WEIGHT}:${DENEB_WIKI_RRF_GRAPH_WEIGHT}" \
+     "· rerank=${DENEB_RERANK_FORCE} (${DENEB_RERANK_MODEL})" \
+     "· embed=${DENEB_EMBEDDING_URL} · floor=${DENEB_WIKI_SEM_FLOOR}"
+
 if [[ ! -d "$WIKI_SRC" ]]; then
     echo "recall-health: wiki not found at $WIKI_SRC (set DENEB_WIKI_DIR)" >&2
     exit 1
