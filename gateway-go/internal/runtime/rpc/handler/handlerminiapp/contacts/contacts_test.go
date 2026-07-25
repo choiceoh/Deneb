@@ -93,6 +93,61 @@ func TestContactsDedupReturnsSafeMergesAndCounts(t *testing.T) {
 	}
 }
 
+type fakeAdjudicator struct{ verdicts []contacts.Verdict }
+
+func (f fakeAdjudicator) Adjudicate(_ context.Context, _ []contacts.Contact, pairs []contacts.AmbiguousPair) ([]contacts.Verdict, error) {
+	return f.verdicts, nil
+}
+
+func TestContactsAdjudicateRegistersOnlyWithAdjudicatorAndReturnsVerdicts(t *testing.T) {
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	storeFn := func() (*contacts.Store, error) { return store, nil }
+
+	// without an adjudicator, the method is not registered
+	if ContactsMethods(ContactsDeps{Store: storeFn})["miniapp.contacts.adjudicate"] != nil {
+		t.Fatal("adjudicate registered without an adjudicator")
+	}
+
+	h := ContactsMethods(ContactsDeps{
+		Store:       storeFn,
+		Adjudicator: fakeAdjudicator{verdicts: []contacts.Verdict{contacts.VerdictSame, contacts.VerdictDifferent}},
+	})["miniapp.contacts.adjudicate"]
+	if h == nil {
+		t.Fatal("adjudicate not registered with an adjudicator")
+	}
+	params := map[string]any{"pairs": []map[string]any{
+		{"a": map[string]any{"name": "강상민"}, "b": map[string]any{"name": "브라이트강상민"}, "shared": "01099998888"},
+		{"a": map[string]any{"name": "서장원"}, "b": map[string]any{"name": "박태경"}, "shared": "0212345678"},
+	}}
+	resp := h(authenticatedContext(), request(t, "miniapp.contacts.adjudicate", params))
+	var got struct {
+		Verdicts []string `json:"verdicts"`
+	}
+	decodeResponse(t, resp, &got)
+	if len(got.Verdicts) != 2 || got.Verdicts[0] != "same" || got.Verdicts[1] != "diff" {
+		t.Fatalf("verdicts = %+v, want [same diff]", got.Verdicts)
+	}
+}
+
+func TestContactsAdjudicateRejectsOversizeBatch(t *testing.T) {
+	store, _ := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	h := ContactsMethods(ContactsDeps{
+		Store:       func() (*contacts.Store, error) { return store, nil },
+		Adjudicator: fakeAdjudicator{},
+	})["miniapp.contacts.adjudicate"]
+	pairs := make([]map[string]any, maxAdjudicatePairs+1)
+	for i := range pairs {
+		pairs[i] = map[string]any{"a": map[string]any{"name": "A"}, "b": map[string]any{"name": "B"}}
+	}
+	resp := h(authenticatedContext(), request(t, "miniapp.contacts.adjudicate", map[string]any{"pairs": pairs}))
+	if resp.OK || resp.Error.Code != protocol.ErrInvalidRequest {
+		t.Fatalf("oversize batch response = %+v", resp)
+	}
+}
+
 func authenticatedContext() context.Context {
 	return clientauth.WithContext(context.Background(), &clientauth.Identity{User: &clientauth.User{ID: 42}})
 }
