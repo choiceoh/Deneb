@@ -30,7 +30,7 @@ type remote interface {
 type Syncer struct {
 	mu        sync.Mutex
 	path      string
-	ids       map[string]string // localID → googleID
+	ids       map[string]string   // localID → googleID
 	cancelled map[string]struct{} // localIDs deleted before first mirror completed
 	remote    remote
 	warn      func(op string, err error) // best-effort failure sink (nil ok)
