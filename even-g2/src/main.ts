@@ -204,8 +204,22 @@ async function onTap(): Promise<void> {
   scheduleRefresh()
 }
 
+/**
+ * openDetail shows one alert full-screen.
+ *
+ * NO `busy` guard, deliberately. It reads `items` out of memory and touches no
+ * network, so gating it on an in-flight poll only served to DROP the wearer's
+ * tap: the smoke harness caught exactly that (run 30171967100 — the tap was
+ * delivered as a listEvent, the screen never changed, and the next tap 2.5s
+ * later worked). A poll runs every 45s and may take up to the 10s deadline, so
+ * that is a wide window in which the primary interaction silently does nothing.
+ *
+ * What the guard was really protecting against — a poll landing mid-read and
+ * yanking the wearer back to the list — is handled in refreshGlance instead, by
+ * re-reading the live screen after the fetch rather than trusting its entry
+ * snapshot.
+ */
 async function openDetail(index: unknown): Promise<void> {
-  if (busy) return
   if (!LIST_PAGE_IDS.has(currentPageId())) return
   // Absent index = the host did not report a selection, which the simulator run
   // showed is the NORMAL shape; resolveSelectionIndex falls back to the first
@@ -218,7 +232,7 @@ async function openDetail(index: unknown): Promise<void> {
 }
 
 async function onSwipeNext(): Promise<void> {
-  if (busy) return
+  // No `busy` guard: paging between already-loaded pages is local. See openDetail.
   if (screen === 'setup') return
   if (screen === 'detail') {
     screen = 'page'
@@ -248,7 +262,7 @@ async function onSwipeNext(): Promise<void> {
 }
 
 async function onSwipePrev(): Promise<void> {
-  if (busy) return
+  // No `busy` guard: paging between already-loaded pages is local. See openDetail.
   if (screen === 'setup') return
   if (screen === 'detail') {
     screen = 'page'
@@ -340,17 +354,25 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     const payload = await fetchGlance(settings, { fresh })
     consecutiveFailures = 0
 
+    // Re-read the LIVE screen, not the snapshot taken before the request. The
+    // wearer can tap or swipe while a poll is in flight — now that navigation
+    // is no longer blocked by `busy`, that is expected — and a background poll
+    // must land on where they are NOW, not where they were 10 seconds ago.
+    const liveDetailId = screen === 'detail' && detailIndex >= 0 ? items[detailIndex]?.id : ''
+    const anchorId = currentPageId() || keepId
+    const anchorDetailId = liveDetailId || keepDetailId
+
     const signature = payloadSignature(payload)
     const unchanged = signature === lastSignature
     lastSignature = signature
-    applyPayload(payload, keepId)
+    applyPayload(payload, anchorId)
 
     // Nothing moved and nobody asked — leave the screen exactly as it is.
     // This is what makes the background poll invisible.
     if (silent && unchanged) return
 
-    if (keepDetailId) {
-      const idx = items.findIndex((it) => it.id === keepDetailId)
+    if (anchorDetailId) {
+      const idx = items.findIndex((it) => it.id === anchorDetailId)
       if (idx >= 0) {
         detailIndex = idx
         screen = 'detail'
