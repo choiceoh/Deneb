@@ -400,7 +400,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 func RegisterPhoneTools(registry toolport.ToolRegistrar, send runtimeops.PhoneActionFunc) {
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "phone_read",
-		Description: "'지금 어디'·'배터리 몇 %'·'방금 폰에서 뭐에 집중했나' 질문에 사용 — 사용자 스마트폰 위치·배터리·앱 사용 리듬 조회(앱이 밀어주는 상태 캐시 기반, SSH 불필요). what=location(최근 위치) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬). 캐시가 오래됐으면 앱에 갱신을 요청하고 잠시 후 재시도하라고 안내한다. 능동 판단 시 맥락 보강에도 사용하되, 사용 리듬만으로 알림을 만들지 않는다. 주소록은 `contacts` 도구.",
+		Description: "스마트폰 상태 읽기 전용 — '지금 어디야'·'배터리 몇 %'·'방금 폰에서 어떤 앱을 썼나/집중했나' 같은 질문이나 능동 판단 보조 맥락에 사용. 인자는 반드시 what 하나이며 값은 정확히 location(최근 위치) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬) 중 하나. 앱이 밀어주는 캐시만 읽고, 오래됐으면 앱에 갱신을 요청한 뒤 수 초 후 재호출하라고 안내한다. 휴대폰에 알림/음성/클립보드/앱 실행/문자/전화 같은 행동은 phone_write, 주소록 검색은 contacts, 화면·클립보드 읽기와 통화기록 조회는 지원하지 않는다. 사용 리듬만으로 선제 알림을 만들지 않는다.",
 		InputSchema: schema.PhoneReadToolSchema(),
 		Fn:          runtimeops.ToolPhoneRead(send),
 		Deferred:    true,
