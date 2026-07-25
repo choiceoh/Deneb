@@ -305,6 +305,7 @@ func selfImprovementCodingFunnel(deps SelfImprovementCodingDeps) SelfImprovement
 			LastCaptureAt:          f.LastCaptureAt,
 			LastReviewAt:           f.LastReviewAt,
 			Rejections7d:           f.Rejections7d,
+			InfraRejections7d:      f.InfraRejections7d,
 			PromotableRejections7d: f.PromotableRejections7d,
 			LastRejectionAt:        f.LastRejectionAt,
 			Proposed7d:             f.Proposed7d,

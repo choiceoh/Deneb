@@ -886,6 +886,7 @@ data class SelfImprovementCodingFunnel(
     val lastCaptureAt: Long = 0L,
     val lastReviewAt: Long = 0L,
     val rejections7d: Int = 0,
+    val infraRejections7d: Int = 0,
     val promotableRejections7d: Int = 0,
     val lastRejectionAt: Long = 0L,
     val lastNudgeAt: Long = 0L,

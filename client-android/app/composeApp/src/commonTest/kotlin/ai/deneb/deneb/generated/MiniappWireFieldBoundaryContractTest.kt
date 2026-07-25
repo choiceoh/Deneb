@@ -4077,6 +4077,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "SelfImprovementCodingFunnel.infraRejections7d",
+            serializer = SelfImprovementCodingFunnel.serializer(),
+            field = "infraRejections7d",
+            valid = JsonPrimitive(Int.MAX_VALUE),
+            invalid = JsonPrimitive("not-an-int"),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "SelfImprovementCodingFunnel.promotableRejections7d",
             serializer = SelfImprovementCodingFunnel.serializer(),
             field = "promotableRejections7d",

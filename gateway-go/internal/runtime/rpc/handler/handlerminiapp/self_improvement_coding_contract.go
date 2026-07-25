@@ -90,9 +90,15 @@ type SelfImprovementCodingStatusCount struct {
 //
 //deneb:wire
 type SelfImprovementCodingFunnel struct {
-	LastCaptureAt          int64 `json:"lastCaptureAt,omitempty"`
-	LastReviewAt           int64 `json:"lastReviewAt,omitempty"`
-	Rejections7d           int   `json:"rejections7d,omitempty"`
+	LastCaptureAt int64 `json:"lastCaptureAt,omitempty"`
+	LastReviewAt  int64 `json:"lastReviewAt,omitempty"`
+	Rejections7d  int   `json:"rejections7d,omitempty"`
+	// InfraRejections7d counts evolve rejections that were OUTAGES, not verdicts
+	// (judge call errored, teacher rewrite produced nothing). Split out of
+	// Rejections7d so a judge outage cannot read as "the gates are rejecting
+	// more"; exposed rather than merely excluded because a spike here is an
+	// availability signal someone needs to see.
+	InfraRejections7d      int   `json:"infraRejections7d,omitempty"`
 	PromotableRejections7d int   `json:"promotableRejections7d,omitempty"`
 	LastRejectionAt        int64 `json:"lastRejectionAt,omitempty"`
 	LastNudgeAt            int64 `json:"lastNudgeAt,omitempty"`
