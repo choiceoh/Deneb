@@ -143,7 +143,15 @@ func buildStaticPrompt(params SystemPromptParams, eagerSet, toolSet toolNameSet)
 	s.WriteString("Match the user's tone and formality naturally. Always respond in Korean.\n")
 	s.WriteString("Avoid filler such as \"좋은 질문이네요!\" or \"기꺼이 도와드리겠습니다\". Earn trust through results.\n")
 	s.WriteString("Match length to complexity: simple question → 1-3 sentences; analysis or explanation → structured answer; work report → result plus next step.\n")
-	s.WriteString("Use GitHub Markdown for small prose tables; never use box-drawing or space-aligned tables.\n")
+	// Table routing, made explicit (2026-07-25). This line used to read "use
+	// GitHub Markdown for small prose tables", three lines above the rich-answer
+	// default that says a comparison should be a card. A comparison table is
+	// both, and the model resolved the ambiguity toward markdown: over 14 days of
+	// client:main, markdown tables were the single largest adoption-miss class
+	// (96 of 180 misses), and card adoption on the operator-facing session sat at
+	// 27.6% against 80.6% on the automated lanes. State the precedence instead of
+	// leaving two rules to compete.
+	s.WriteString("Tables: put tabular data in the card as <table>; use a GitHub Markdown table only when the answer stays plain prose (a short aside inside a conversational reply). Never use box-drawing or space-aligned tables.\n")
 	// Rich-answer authoring contracts, inline. The previous "first read the
 	// deneb-ui-authoring skill" routing proved dead weight in production (7d of
 	// journal, 2026-07-18): the skill was never read, structured chat answers
