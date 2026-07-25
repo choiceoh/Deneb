@@ -521,7 +521,7 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
         MaterialTheme(colorScheme = scheme) {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
-                    ContactsDedupContent(payload)
+                    ContactsDedupContent(payload, canApply = true)
                 }
             }
         }
