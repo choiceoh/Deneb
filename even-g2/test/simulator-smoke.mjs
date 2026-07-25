@@ -15,6 +15,7 @@
 //   redraw       alt   → a genuinely changed payload must repaint
 //   detail       —     → list tap opens a detail, a second tap leaves it
 //   navigation   —     → swipes reach a text container (list: observed only)
+//   mid-poll tap slow  → a tap during an in-flight poll must not be dropped
 //   deadline     slow  → a hung gateway must not wedge `busy` (🔴 of #4267)
 //   backoff      error → the retry interval must widen past the 45s base
 //   shutdown     ok    → a double-tap must stop the network for good
@@ -369,17 +370,40 @@ async function main() {
     'tapping in a detail leaves it (returns to the list)',
   )
 
+  // ── a tap DURING a poll must still work ─────────────────────────────────
+  // Regression test for a defect this harness found by being flaky: run
+  // 30171967100 delivered a listEvent that changed nothing, and the identical
+  // tap 2.5s later worked. openDetail was gated on `busy`, so any tap that
+  // happened to land while a background poll was in flight was silently
+  // dropped — a 45s-periodic window up to 10s wide, on the app's PRIMARY
+  // interaction.
+  //
+  // `slow` makes that window deterministic: the stub holds the response, so
+  // once a request has arrived the app is provably inside refreshGlance.
+  await stub.setMode('slow')
+  const beforeInflight = stub.counts().glance
+  await waitFor('a poll to be in flight', async () => stub.counts().glance > beforeInflight, 60_000)
+  const duringPoll = await screenshot('11-during-hung-poll')
+  await input('click')
+  await sleep(3_000)
+  const tappedDuringPoll = await screenshot('12-tapped-during-hung-poll')
+  check(
+    Buffer.compare(duringPoll, tappedDuringPoll) !== 0,
+    'a tap during an in-flight poll still opens the detail (navigation is not gated on the network)',
+  )
+  await input('click') // back to the list
+  await sleep(2_500)
+
   // ── the request deadline: a hung gateway must not wedge the app ─────────
   // The 🔴 of #4267 and previously unobserved. Without the deadline
   // refreshGlance holds `busy = true` forever, every input handler returns
   // early, and runScheduledRefresh stops fetching — the app is dead until the
   // WebView restarts. The count is the proof: it can only keep rising if
   // `busy` was released.
-  await stub.setMode('slow')
-  const hangFrom = await screenshot('11-before-hung-gateway')
+  const hangFrom = await screenshot('13-before-hung-gateway')
   console.log(`waiting ${Math.round(HANG_WATCH_MS / 1000)}s across a hung poll…`)
   await sleep(HANG_WATCH_MS)
-  const afterHang = await screenshot('12-after-hung-gateway')
+  const afterHang = await screenshot('14-after-hung-gateway')
   check(
     Buffer.compare(hangFrom, afterHang) === 0,
     'a hung background poll stayed off the display (no error flash in the wearer’s view)',
@@ -452,7 +476,7 @@ async function main() {
     countAfterShutdown === countAtShutdown,
     `no gateway traffic after shutdown (${countAtShutdown} → ${countAfterShutdown})`,
   )
-  await screenshot('13-after-shutdown')
+  await screenshot('15-after-shutdown')
 
   const finalLogs = await console_()
   writeFileSync(join(ARTIFACTS, 'console.json'), JSON.stringify(finalLogs, null, 2))
