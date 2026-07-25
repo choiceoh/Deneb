@@ -172,6 +172,8 @@ func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch) {
 	if t.pendingBaselineTest == nil { // struct-literal construction in tests
 		t.pendingBaselineTest = make(map[string]*rollbackBaselineTest)
 	}
+	minObs := w.ep.MinRejectObservations()
+	reachable := w.ep.N >= minObs
 	t.pendingBaselineTest[skill] = &rollbackBaselineTest{
 		EValue:   w.ep.E,
 		N:        w.ep.N,
@@ -181,8 +183,23 @@ func (t *Tracker) stashBaselineTestLocked(skill string, w *evolveWatch) {
 		// enough observations that rejection was attainable at all; below
 		// that bound "test quiet" is a mathematical certainty, not a verdict
 		// (RSI code eval C1) — cutover readiness must not count those.
-		RejectReachable: w.ep.N >= w.ep.MinRejectObservations(),
+		RejectReachable: reachable,
 		Disagreement:    thresholdFired != reject,
+	}
+	if !reachable && t.logger != nil {
+		// An unreachable label is silently worthless: it is written, counted as
+		// UnfairLabels, and advances the e-process ladder by nothing. The cause
+		// is almost always the watch being force-resolved before enough
+		// post-evolve uses landed, i.e. DENEB_SKILL_WATCH_MAX_AGE_DAYS set too
+		// low for this skill's usage rate. Live 2026-07-25: the calibration
+		// window ran that knob at 5d, every watch resolved at N=6 against bars
+		// of 8 and 10, and the ladder read "라벨 0/20 · 축적 중" for weeks while
+		// structurally producing nothing. Say it at the moment it happens so
+		// the next occurrence is one grep away instead of a ledger audit.
+		t.logger.Warn("genesis: e-process label unusable — watch resolved below reject-reachability",
+			"skill", skill, "observations", w.ep.N, "needed", minObs,
+			"baseline", w.ep.Baseline,
+			"hint", "raise DENEB_SKILL_WATCH_MAX_AGE_DAYS so the watch collects enough post-evolve uses")
 	}
 }
 
