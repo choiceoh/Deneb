@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
@@ -90,6 +91,39 @@ func TestContactsDedupReturnsSafeMergesAndCounts(t *testing.T) {
 	m := got.Merges[0]
 	if m.Canonical != "박한주" || len(m.Names) != 2 || len(m.Phones) != 1 {
 		t.Fatalf("merge group = %+v", m)
+	}
+}
+
+func TestContactsDedupReturnsAmbiguousPairsForAdjudication(t *testing.T) {
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// two people sharing one personal number under incompatible names -> ambiguous
+	if _, err := store.ReplaceAll([]contacts.Contact{
+		{Name: "강상민", Phones: []string{"010-9999-8888"}},
+		{Name: "브라이트강상민", Phones: []string{"010-9999-8888"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := ContactsMethods(ContactsDeps{Store: func() (*contacts.Store, error) { return store, nil }})["miniapp.contacts.dedup"]
+	resp := h(authenticatedContext(), request(t, "miniapp.contacts.dedup", nil))
+	var got struct {
+		Ambiguous      int `json:"ambiguous"`
+		AmbiguousPairs []struct {
+			A      struct{ Name string } `json:"a"`
+			B      struct{ Name string } `json:"b"`
+			Shared string                `json:"shared"`
+		} `json:"ambiguous_pairs"`
+	}
+	decodeResponse(t, resp, &got)
+	if got.Ambiguous != 1 || len(got.AmbiguousPairs) != 1 {
+		t.Fatalf("ambiguous=%d pairs=%d, want 1/1", got.Ambiguous, len(got.AmbiguousPairs))
+	}
+	p := got.AmbiguousPairs[0]
+	names := p.A.Name + "|" + p.B.Name
+	if !strings.Contains(names, "강상민") || !strings.Contains(names, "브라이트강상민") || p.Shared == "" {
+		t.Fatalf("pair = %+v", p)
 	}
 }
 
