@@ -14,7 +14,7 @@
 //   quiet poll   ok    → the framebuffer must stay byte-identical
 //   redraw       alt   → a genuinely changed payload must repaint
 //   detail       —     → list tap opens a detail, a second tap leaves it
-//   navigation   —     → swipes move between screens
+//   navigation   —     → swipes reach text AND list containers
 //   deadline     slow  → a hung gateway must not wedge `busy` (🔴 of #4267)
 //   backoff      error → the retry interval must widen past the 45s base
 //   shutdown     ok    → a double-tap must stop the network for good
@@ -265,6 +265,53 @@ async function main() {
     'unchanged payload left the HUD byte-identical (no loading flash, no rebuild)',
   )
 
+  // ── swipe navigation ────────────────────────────────────────────────────
+  // Runs HERE, on the ok payload, because the list needs more than one item.
+  // The first CI run (30162600973) put this under the 1-item alt payload and
+  // all four down-swipes produced ZERO host events: a list with nowhere to
+  // scroll swallows them and never reaches SCROLL_BOTTOM. That was a defect in
+  // the test, not the app — the console artifact showed the app receiving
+  // nothing at all.
+  //
+  // The two container kinds are asserted SEPARATELY so a failure says which one
+  // is deaf without having to go read the console artifact. Text first: a
+  // detail screen is a plain text container, and a down-swipe there returns to
+  // the list, so one swipe is a complete round trip.
+  await input('click')
+  await sleep(2_500)
+  const detailBeforeSwipe = await screenshot('03-detail-for-swipe')
+  await input('down')
+  await sleep(2_500)
+  const afterTextSwipe = await screenshot('04-after-swipe-on-text')
+  check(
+    Buffer.compare(detailBeforeSwipe, afterTextSwipe) !== 0,
+    'a swipe reaches a text container (leaves the detail)',
+  )
+
+  // Now the list, back on the home page. With two items: down walks the
+  // selection to the end, the next down leaves the list for the cal page, then
+  // todo, then the status screen.
+  const swipeShots = []
+  for (const i of [1, 2, 3, 4]) {
+    await input('down')
+    await sleep(2_500)
+    swipeShots.push(await screenshot(`05-swipe-down-${i}`))
+  }
+  const distinctSwipeScreens = new Set(swipeShots.map((b) => b.toString('base64'))).size
+  check(
+    distinctSwipeScreens >= 2,
+    `a swipe reaches a list container (${distinctSwipeScreens} distinct of ${swipeShots.length})`,
+  )
+
+  // Walk back up. Four is enough to bottom out at home from anywhere above,
+  // and it leaves the status screen — the background poll deliberately skips
+  // while status is up, and every check below reads that poll.
+  for (const i of [1, 2, 3, 4]) {
+    await input('up')
+    await sleep(2_000)
+    if (i === 4) await screenshot('06-swiped-back-home')
+  }
+
   // ── the other half of change detection: a REAL change must redraw ───────
   // The quiet check above only proves "unchanged → no redraw". On its own a
   // detector stuck closed passes it while the HUD goes permanently stale, so
@@ -273,12 +320,13 @@ async function main() {
   // Deliberately NOT triggered by a tap: on a list page a tap opens a detail
   // (that is what listEvent means), so a tap-driven version of this check
   // would pass on a screen change that has nothing to do with the payload.
+  const beforeChange = await screenshot('07-before-payload-change')
   await stub.setMode('alt')
   console.log(`waiting ${Math.round(CYCLE_WAIT_MS / 1000)}s for the changed payload to land…`)
   await sleep(CYCLE_WAIT_MS)
-  const afterChange = await screenshot('03-after-payload-change')
+  const afterChange = await screenshot('08-after-payload-change')
   check(
-    Buffer.compare(afterQuiet, afterChange) !== 0,
+    Buffer.compare(beforeChange, afterChange) !== 0,
     'a changed payload DID redraw the HUD (change detection is not stuck closed)',
   )
 
@@ -286,40 +334,17 @@ async function main() {
   const listView = afterChange
   await input('click')
   await sleep(2_500)
-  const detailView = await screenshot('04-detail')
+  const detailView = await screenshot('09-detail')
   check(Buffer.compare(listView, detailView) !== 0, 'a list tap opens a detail screen')
   await input('click')
   await sleep(2_500)
-  const backToList = await screenshot('05-back-to-list')
+  const backToList = await screenshot('10-back-to-list')
   // Byte-equality with listView would be wrong to assert: the list header
   // carries a relative "N분 전" stamp that ticks over.
   check(
     Buffer.compare(detailView, backToList) !== 0,
     'tapping in a detail leaves it (returns to the list)',
   )
-
-  // ── swipe navigation ────────────────────────────────────────────────────
-  // Under the alt payload cal/todo are empty, so a down-swipe skips them and
-  // lands on the status screen; the next one comes back. Two distinct screens
-  // is the floor. If the host swallows scrolls inside the list widget instead
-  // of forwarding them, this is dead on the device too — worth failing over.
-  const swipeShots = []
-  for (const i of [1, 2, 3, 4]) {
-    await input('down')
-    await sleep(2_500)
-    swipeShots.push(await screenshot(`06-swipe-${i}`))
-  }
-  const distinctSwipeScreens = new Set(swipeShots.map((b) => b.toString('base64'))).size
-  check(
-    distinctSwipeScreens >= 2,
-    `swiping moves between screens (${distinctSwipeScreens} distinct of ${swipeShots.length})`,
-  )
-
-  // Leave the status screen: the background poll deliberately skips while it
-  // is up, and every check below reads that poll. A tap returns to a page from
-  // status, and opens a detail from a list — both are poll-eligible.
-  await input('click')
-  await sleep(2_500)
 
   // ── the request deadline: a hung gateway must not wedge the app ─────────
   // The 🔴 of #4267 and previously unobserved. Without the deadline
@@ -328,10 +353,10 @@ async function main() {
   // WebView restarts. The count is the proof: it can only keep rising if
   // `busy` was released.
   await stub.setMode('slow')
-  const hangFrom = await screenshot('07-before-hung-gateway')
+  const hangFrom = await screenshot('11-before-hung-gateway')
   console.log(`waiting ${Math.round(HANG_WATCH_MS / 1000)}s across a hung poll…`)
   await sleep(HANG_WATCH_MS)
-  const afterHang = await screenshot('08-after-hung-gateway')
+  const afterHang = await screenshot('12-after-hung-gateway')
   check(
     Buffer.compare(hangFrom, afterHang) === 0,
     'a hung background poll stayed off the display (no error flash in the wearer’s view)',
@@ -404,7 +429,7 @@ async function main() {
     countAfterShutdown === countAtShutdown,
     `no gateway traffic after shutdown (${countAtShutdown} → ${countAfterShutdown})`,
   )
-  await screenshot('09-after-shutdown')
+  await screenshot('13-after-shutdown')
 
   const finalLogs = await console_()
   writeFileSync(join(ARTIFACTS, 'console.json'), JSON.stringify(finalLogs, null, 2))

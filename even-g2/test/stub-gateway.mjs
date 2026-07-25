@@ -32,15 +32,16 @@ const OK_GLANCE = {
 
 // Deliberately different in EVERY field the render signature reads, so a failed
 // change-detection cannot pass by accident.
+//
+// ONE page on purpose. applyPayload keeps the page the wearer is on by id, so a
+// multi-page alt would land wherever the previous checks left the app. With a
+// single page the id lookup misses and pageIndex falls back to 0 — the alt
+// payload always arrives on the home list, whatever ran before it.
 const ALT_GLANCE = {
   text: '알림 1건 · 종일 비움',
   generated: '2026-07-25T09:00:00.000Z',
   cached: false,
-  pages: [
-    { id: 'home', title: '알림', text: '세금계산서 발행 요청' },
-    { id: 'cal', title: '일정', text: '일정 없음', empty: true },
-    { id: 'todo', title: '할 일', text: '없음', empty: true },
-  ],
+  pages: [{ id: 'home', title: '알림', text: '세금계산서 발행 요청' }],
   items: [
     { id: 'b9', title: '세금계산서 발행 요청', preview: '대한전선', body: '대한전선 세금계산서 발행 요청입니다.', priority: 5, age: '2분' },
   ],
