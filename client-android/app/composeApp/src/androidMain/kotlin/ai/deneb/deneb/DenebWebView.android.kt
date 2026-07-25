@@ -162,6 +162,7 @@ actual fun DenebWebView(
                         state.currentUrl = url
                         state.canGoBack = view.canGoBack()
                         state.canGoForward = view.canGoForward()
+                        injectSiteQuirk(view, url)
                         injectTranslateScript(view)
                         // Re-apply the toggle: a fresh page starts untranslated.
                         view.evaluateJavascript(
@@ -177,6 +178,11 @@ actual fun DenebWebView(
                         state.currentUrl = url
                         state.canGoBack = view.canGoBack()
                         state.canGoForward = view.canGoForward()
+                        // SPA soft-nav keeps the document, so the quirk's observer
+                        // survives; re-running is a no-op behind its re-entry guard
+                        // and covers the case where the lock lands only after the
+                        // first client-side route change.
+                        injectSiteQuirk(view, url)
                         view.evaluateJavascript(
                             "window.DenebTranslate&&window.DenebTranslate.onLocationChange&&window.DenebTranslate.onLocationChange();",
                             null,
@@ -288,6 +294,16 @@ private class TranslateBridge(
         val ctx = holder.web?.context ?: return
         Handler(Looper.getMainLooper()).post { Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show() }
     }
+}
+
+/**
+ * Runs the per-site compatibility quirk, if this URL has one. Separate from the
+ * translator injection so a quirk still applies with translation switched off —
+ * the modern Reddit scroll lock is present either way.
+ */
+private fun injectSiteQuirk(view: WebView, url: String) {
+    val js = browserSiteQuirkScript(url) ?: return
+    view.evaluateJavascript(js, null)
 }
 
 private fun injectTranslateScript(view: WebView) {
