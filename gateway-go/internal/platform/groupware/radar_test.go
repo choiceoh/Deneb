@@ -196,6 +196,193 @@ func TestRadarPendingFailureStaysRetryable(t *testing.T) {
 	}
 }
 
+// A document whose ingest keeps failing must back off instead of burning a
+// MaxPerCycle slot every cycle forever (live 2026-07: two unreadable docIds
+// retried every 10 minutes for 8 days, 110 journal warnings, 2 of 3 slots).
+func TestRadarPoisonDocBacksOffAndFreesSlot(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	now := radarMonday
+	var attempts []string
+	// Docs drain in DocID order, so "1" is the poison doc that grabs the slot.
+	const poison, healthy = "1", "2"
+	radar := NewRadar(RadarConfig{
+		StatePath:   statePath,
+		Interval:    10 * time.Minute,
+		MaxPerCycle: 1,
+		Now:         func() time.Time { return now },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return []ApprovalSummary{approval(poison, "unreadable"), approval(healthy, "fine")}, nil
+			}
+			return nil, nil
+		},
+		OnPending: func(_ context.Context, doc ApprovalSummary) error {
+			attempts = append(attempts, doc.DocID)
+			if doc.DocID == poison {
+				return errors.New("exit status 1")
+			}
+			return nil
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+
+	// Cycle 1: poison takes the only slot and fails (attempt 1 = no backoff).
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected poison ingest failure")
+	}
+	// Cycle 2: poison retries immediately (transient-failure grace) and fails
+	// again — that second failure arms a 10m backoff.
+	now = now.Add(10 * time.Minute)
+	if err := radar.Run(context.Background()); err == nil {
+		t.Fatal("expected second poison failure")
+	}
+	// Cycle 3, inside the backoff window: the slot goes to the healthy doc.
+	now = now.Add(5 * time.Minute)
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatalf("healthy doc should drain while poison backs off: %v", err)
+	}
+	if want := []string{poison, poison, healthy}; !reflect.DeepEqual(attempts, want) {
+		t.Fatalf("attempts = %v, want %v", attempts, want)
+	}
+
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Docs[poison].FailCount; got != 2 {
+		t.Fatalf("poison failCount = %d, want 2", got)
+	}
+	if !state.Docs[healthy].Notified {
+		t.Fatal("healthy doc never notified — poison still starving the lane")
+	}
+
+	// Backoff is bounded, so the doc self-heals once the upstream recovers
+	// rather than being tombstoned.
+	if got := radar.retryDelay(2); got != 10*time.Minute {
+		t.Fatalf("retryDelay(2) = %s, want 10m", got)
+	}
+	if got := radar.retryDelay(4); got != 40*time.Minute {
+		t.Fatalf("retryDelay(4) = %s, want 40m", got)
+	}
+	if got := radar.retryDelay(50); got != radarRetryBackoffCap {
+		t.Fatalf("retryDelay(50) = %s, want cap %s", got, radarRetryBackoffCap)
+	}
+
+	// After the backoff elapses the doc is attempted again.
+	now = now.Add(radarRetryBackoffCap)
+	_ = radar.Run(context.Background())
+	if attempts[len(attempts)-1] != poison {
+		t.Fatalf("poison never retried after backoff; attempts = %v", attempts)
+	}
+}
+
+// A re-drafted document (new fingerprint) must not inherit the old document's
+// backoff.
+func TestRadarFingerprintChangeClearsBackoff(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	now := radarMonday
+	title := "v1"
+	attempts := 0
+	radar := NewRadar(RadarConfig{
+		StatePath: statePath,
+		Interval:  10 * time.Minute,
+		Now:       func() time.Time { return now },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "pending" {
+				return []ApprovalSummary{approval("5", title)}, nil
+			}
+			return nil, nil
+		},
+		OnPending: func(context.Context, ApprovalSummary) error {
+			attempts++
+			return errors.New("read failed")
+		},
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+	})
+	// Fail 1 (no backoff), then fail 2 at +10m arms a 10m backoff.
+	_ = radar.Run(context.Background())
+	now = now.Add(10 * time.Minute)
+	_ = radar.Run(context.Background())
+	if attempts != 2 {
+		t.Fatalf("attempts before backoff = %d, want 2", attempts)
+	}
+	// Still inside the backoff window: no new attempt.
+	now = now.Add(5 * time.Minute)
+	_ = radar.Run(context.Background())
+	if attempts != 2 {
+		t.Fatalf("attempts during backoff = %d, want 2", attempts)
+	}
+	// Re-draft: fingerprint changes, backoff clears, attempted again.
+	title = "v2"
+	_ = radar.Run(context.Background())
+	if attempts != 3 {
+		t.Fatalf("attempts after re-draft = %d, want 3", attempts)
+	}
+	state, err := loadRadarState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Docs["5"].FailCount; got != 1 {
+		t.Fatalf("failCount after re-draft = %d, want 1 (reset then re-failed)", got)
+	}
+}
+
+// The cc lane shares the pending lane's slot-starvation defect.
+func TestRadarCCPoisonDocBacksOffAndFreesSlot(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "radar.json")
+	now := radarMonday
+	var cc []ApprovalSummary
+	var calls []string
+	// cc docs drain in DocID order, so "1" is the poison doc.
+	const poison, good = "1", "2"
+	radar := NewRadar(RadarConfig{
+		StatePath:     statePath,
+		Interval:      10 * time.Minute,
+		CCMaxPerCycle: 1,
+		Now:           func() time.Time { return now },
+		List: func(_ context.Context, _ Config, folder string, _ int) ([]ApprovalSummary, error) {
+			if folder == "cc" {
+				return append([]ApprovalSummary(nil), cc...), nil
+			}
+			return nil, nil
+		},
+		OnPending:  func(context.Context, ApprovalSummary) error { return nil },
+		OnResolved: func(context.Context, ApprovalSummary) error { return nil },
+		OnCCNew: func(_ context.Context, doc ApprovalSummary) error {
+			calls = append(calls, doc.DocID)
+			if doc.DocID == poison {
+				return errors.New("analysis failed")
+			}
+			return nil
+		},
+	})
+	// Seed silently on an empty folder, then the docs arrive.
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	cc = []ApprovalSummary{approval(poison, "bad"), approval(good, "fine")}
+	// Fail 1 (no backoff), then fail 2 at +10m arms a 10m backoff.
+	now = now.Add(10 * time.Minute)
+	_ = radar.Run(context.Background())
+	now = now.Add(10 * time.Minute)
+	_ = radar.Run(context.Background())
+	// Inside the backoff window: "good" finally gets the slot.
+	now = now.Add(5 * time.Minute)
+	if err := radar.Run(context.Background()); err != nil {
+		t.Fatalf("good cc doc should drain while poison backs off: %v", err)
+	}
+	if want := []string{poison, poison, good}; !reflect.DeepEqual(calls, want) {
+		t.Fatalf("cc calls = %v, want %v", calls, want)
+	}
+	state, _ := loadRadarState(statePath)
+	if !state.CCDocs[good].Notified {
+		t.Fatal("good cc doc never ingested — poison still starving the cc lane")
+	}
+	if got := state.CCDocs[poison].FailCount; got != 2 {
+		t.Fatalf("cc poison failCount = %d, want 2", got)
+	}
+}
+
 func TestRadarRequiresPositiveDoneBeforeResolution(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "radar.json")
 	pending := []ApprovalSummary{approval("7", "resolve safely")}
