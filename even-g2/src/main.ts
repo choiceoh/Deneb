@@ -44,6 +44,7 @@ let refreshTimer: ReturnType<typeof setTimeout> | undefined
 let consecutiveFailures = 0
 let lastSignature = ''
 let stopped = false
+let paused = false
 
 const mainText = new TextContainerProperty({
   xPosition: 0,
@@ -79,6 +80,46 @@ bridge.onEvenHubEvent((event) => {
         break
       case OsEventTypeList.DOUBLE_CLICK_EVENT:
         shutdown()
+        break
+      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+        void onSwipeNext()
+        break
+      case OsEventTypeList.SCROLL_TOP_EVENT:
+        void onSwipePrev()
+        break
+    }
+    return
+  }
+
+  // The host delivers touchpad and lifecycle events on a THIRD channel the SDK
+  // docs show as `else if (event.sysEvent)` — and this app never read it. The
+  // simulator run (2026-07-25) recorded the exit double-tap arriving as
+  // {"sysEvent":{"eventType":3,"eventSource":1}}, so shutdown never ran and the
+  // refresh loop kept polling the gateway after the wearer closed the app. The
+  // smoke harness caught it as "no gateway traffic after shutdown: FAIL".
+  if (event.sysEvent) {
+    // fromJson is the SDK's own normalizer — the host may send the ordinal (3),
+    // the name ("DOUBLE_CLICK_EVENT"), or the short form ("DOUBLE_CLICK").
+    switch (OsEventTypeList.fromJson(event.sysEvent.eventType)) {
+      case OsEventTypeList.DOUBLE_CLICK_EVENT:
+        shutdown()
+        break
+      case OsEventTypeList.SYSTEM_EXIT_EVENT:
+      case OsEventTypeList.ABNORMAL_EXIT_EVENT:
+        // The host owns the teardown here — stop the loop but do not fight it
+        // for the container.
+        stopLoop()
+        break
+      case OsEventTypeList.FOREGROUND_EXIT_EVENT:
+        // Backgrounded, not gone: polling a display nobody is looking at is
+        // pure battery cost on a wearable.
+        pauseLoop()
+        break
+      case OsEventTypeList.FOREGROUND_ENTER_EVENT:
+        void resumeLoop()
+        break
+      case OsEventTypeList.CLICK_EVENT:
+        void onTap()
         break
       case OsEventTypeList.SCROLL_BOTTOM_EVENT:
         void onSwipeNext()
@@ -130,19 +171,36 @@ async function boot(): Promise<void> {
   scheduleRefresh()
 }
 
-/**
- * shutdown tears the loop down with the container.
- *
- * The old code closed the page and left setInterval running, so a
- * double-tapped app kept hitting the gateway every 45s for as long as the
- * WebView lived — network and battery spent on a screen nobody is looking at.
- */
-function shutdown(): void {
+/** stopLoop cancels the background poll for good. */
+function stopLoop(): void {
   stopped = true
+  clearRefreshTimer()
+}
+
+/** pauseLoop cancels the pending poll but leaves the loop resumable. */
+function pauseLoop(): void {
+  paused = true
+  clearRefreshTimer()
+}
+
+async function resumeLoop(): Promise<void> {
+  if (stopped) return
+  paused = false
+  // Coming back to the foreground, the wearer wants current data, not whatever
+  // was on screen when they looked away.
+  await refreshGlance(false, true)
+  scheduleRefresh()
+}
+
+function clearRefreshTimer(): void {
   if (refreshTimer !== undefined) {
     clearTimeout(refreshTimer)
     refreshTimer = undefined
   }
+}
+
+function shutdown(): void {
+  stopLoop()
   bridge.shutDownPageContainer(1)
 }
 
@@ -197,9 +255,9 @@ async function onTap(): Promise<void> {
 async function openDetail(index: unknown): Promise<void> {
   if (busy) return
   if (!LIST_PAGE_IDS.has(currentPageId())) return
-  // An absent or out-of-range index used to clamp to item 0, so a tap the host
-  // could not attribute opened the WRONG alert. Doing nothing is the honest
-  // response — the wearer taps again.
+  // Absent index = the host did not report a selection, which the simulator run
+  // showed is the NORMAL shape; resolveSelectionIndex falls back to the first
+  // (highest-priority) item. Only a present-but-nonsensical index is refused.
   const i = resolveSelectionIndex(index, items.length)
   if (i < 0) return
   detailIndex = i
@@ -521,7 +579,7 @@ async function showText(content: string): Promise<void> {
  * unreachable and the whole loop can be cancelled with one handle.
  */
 function scheduleRefresh(): void {
-  if (stopped) return
+  if (stopped || paused) return
   if (refreshTimer !== undefined) clearTimeout(refreshTimer)
   refreshTimer = setTimeout(() => {
     refreshTimer = undefined
@@ -530,7 +588,7 @@ function scheduleRefresh(): void {
 }
 
 async function runScheduledRefresh(): Promise<void> {
-  if (stopped) return
+  if (stopped || paused) return
   // The status screen is a deliberate read; polling under it would swap the
   // wearer's screen out from under them.
   if (!busy && screen !== 'status') {
