@@ -71,9 +71,10 @@ func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
 
 // contactsDedup runs the DETERMINISTIC dedup pass over the mirror and returns the
 // safe merge groups (each with the cleanest name + the union of phones/emails) so
-// the client can preview the cleanup. It never mutates and never calls the model:
-// the ambiguous pairs are only counted here — the LLM/operator review is a
-// separate, slower pass — so this stays a fast, synchronous RPC.
+// the client can preview the cleanup, PLUS the ambiguous pairs (same identifier,
+// different name) for the client to adjudicate via miniapp.contacts.adjudicate.
+// It never mutates and never calls the model here — the LLM pass is the client's
+// chunked follow-up — so this stays a fast, synchronous RPC.
 func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 	type mergeOut struct {
 		Canonical string   `json:"canonical"`
@@ -81,11 +82,23 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 		Phones    []string `json:"phones"`
 		Emails    []string `json:"emails"`
 	}
+	type partyOut struct {
+		Name   string   `json:"name"`
+		Org    string   `json:"org,omitempty"`
+		Phones []string `json:"phones,omitempty"`
+		Emails []string `json:"emails,omitempty"`
+	}
+	type pairOut struct {
+		A      partyOut `json:"a"`
+		B      partyOut `json:"b"`
+		Shared string   `json:"shared"`
+	}
 	type out struct {
-		Total     int        `json:"total"`     // address-book entries in
-		Distinct  int        `json:"distinct"`  // people after the safe merges
-		Ambiguous int        `json:"ambiguous"` // pairs left for AI/operator review
-		Merges    []mergeOut `json:"merges"`
+		Total          int        `json:"total"`           // address-book entries in
+		Distinct       int        `json:"distinct"`        // people after the safe merges
+		Ambiguous      int        `json:"ambiguous"`       // pair count left for AI review
+		AmbiguousPairs []pairOut  `json:"ambiguous_pairs"` // the pairs, for adjudicate
+		Merges         []mergeOut `json:"merges"`
 	}
 	return minibind.Authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		store, err := deps.Store()
@@ -116,11 +129,20 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 			}
 			merges = append(merges, m)
 		}
+		party := func(i int) partyOut {
+			c := all[i]
+			return partyOut{Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails}
+		}
+		pairs := make([]pairOut, 0, len(res.Ambiguous))
+		for _, p := range res.Ambiguous {
+			pairs = append(pairs, pairOut{A: party(p.A), B: party(p.B), Shared: p.Shared})
+		}
 		return rpcutil.RespondOK(req.ID, out{
-			Total:     res.Total,
-			Distinct:  res.Distinct,
-			Ambiguous: len(res.Ambiguous),
-			Merges:    merges,
+			Total:          res.Total,
+			Distinct:       res.Distinct,
+			Ambiguous:      len(res.Ambiguous),
+			AmbiguousPairs: pairs,
+			Merges:         merges,
 		})
 	})
 }
