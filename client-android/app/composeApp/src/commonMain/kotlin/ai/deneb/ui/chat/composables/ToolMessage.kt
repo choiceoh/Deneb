@@ -1,6 +1,7 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.DenebMotion
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.denebSpatialSpring
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -130,13 +131,13 @@ internal fun WaitingResponseRow(
             isStatusOnly = effectiveStatusOnly,
             dotColor = MaterialTheme.colorScheme.primary, // sky-blue cool accent — a touch of life
             textColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            textStyle = MaterialTheme.typography.bodyMedium,
+            textStyle = DenebType.rowSubtitle,
         )
         if (elapsedLabel != null) {
             Text(
                 text = " · $elapsedLabel",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
+                style = DenebType.rowSubtitle,
                 maxLines = 1,
                 // Stay on the first line when the status summary wraps to two.
                 modifier = Modifier.align(Alignment.Top),

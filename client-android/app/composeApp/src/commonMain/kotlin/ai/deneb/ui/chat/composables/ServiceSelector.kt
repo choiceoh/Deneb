@@ -1,6 +1,7 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.ServiceEntry
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.background
@@ -162,13 +163,13 @@ private fun ServiceMenuItem(
         Column {
             Text(
                 text = entry.serviceName,
-                style = MaterialTheme.typography.bodyMedium,
+                style = DenebType.rowTitle,
                 color = textColor,
             )
             if (entry.modelId.isNotEmpty()) {
                 Text(
                     text = entry.modelId,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.meta,
                     color = subTextColor,
                 )
             }

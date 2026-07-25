@@ -2,6 +2,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.data.SmsDraft
 import ai.deneb.data.SmsDraftStatus
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
@@ -101,7 +102,7 @@ private fun PendingSmsBanner(
             ) {
                 Text(
                     text = stringResource(Res.string.sms_draft_banner_to, draft.address),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = DenebType.meta,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
@@ -130,7 +131,7 @@ private fun PendingSmsBanner(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = draft.body,
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.snippet,
                 color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
@@ -162,7 +163,7 @@ private fun PendingSmsBanner(
                         Spacer(Modifier.size(8.dp))
                         Text(
                             text = stringResource(Res.string.sms_draft_banner_sending),
-                            style = MaterialTheme.typography.labelSmall,
+                            style = DenebType.meta,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -170,13 +171,13 @@ private fun PendingSmsBanner(
 
                 SmsDraftStatus.SENT -> Text(
                     text = stringResource(Res.string.sms_draft_banner_sent),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = DenebType.meta,
                     color = MaterialTheme.colorScheme.primary,
                 )
 
                 SmsDraftStatus.FAILED -> Text(
                     text = stringResource(Res.string.sms_draft_banner_failed, draft.lastError ?: "unknown error"),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = DenebType.meta,
                     color = MaterialTheme.colorScheme.error,
                 )
             }

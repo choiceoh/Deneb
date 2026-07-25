@@ -1,5 +1,6 @@
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
@@ -66,7 +67,7 @@ internal fun HeartbeatBanner(
                 )
                 Text(
                     text = stringResource(Res.string.heartbeat_banner_message),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.snippet,
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -1,6 +1,7 @@
 package ai.deneb.ui.chat.composables
 
 import ai.deneb.network.UiError
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.layout.Column
@@ -50,13 +51,13 @@ internal fun ErrorMessage(
         ) {
             Text(
                 text = "⚠️ 문제가 생겼어요",
-                style = MaterialTheme.typography.titleSmall,
+                style = DenebType.rowTitleStrong,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 text = text,
-                style = MaterialTheme.typography.bodyMedium,
+                style = DenebType.body,
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 textAlign = TextAlign.Center,
             )

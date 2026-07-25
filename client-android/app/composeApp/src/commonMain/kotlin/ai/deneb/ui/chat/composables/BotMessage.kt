@@ -3,6 +3,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.data.Attachment
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.shareTextToApps
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.LocalShowFullScreenImage
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -377,7 +378,7 @@ internal fun BotMessage(
                 }
                 Text(
                     text = "${variantNav.index + 1}/${variantNav.total}",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = DenebType.meta,
                     color = denebHint(),
                     modifier = Modifier.align(Alignment.CenterVertically),
                 )
@@ -474,13 +475,13 @@ private fun ReasoningBlockquote(
             Spacer(Modifier.size(6.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
+                style = DenebType.meta,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (!expanded && trailing.isNotEmpty()) {
                 Text(
                     text = " · $trailing",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = DenebType.snippet,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -508,7 +509,7 @@ private fun ReasoningBlockquote(
                             Text(
                                 text = segment,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = DenebType.snippet,
                             )
                         }
                     }

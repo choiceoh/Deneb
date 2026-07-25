@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.chat.composables
 
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -95,7 +96,7 @@ internal fun ChatTopOverlay(
         uiState.warning?.let { warning ->
             Text(
                 text = stringResource(warning),
-                style = MaterialTheme.typography.bodySmall,
+                style = DenebType.meta,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier
                     .fillMaxWidth()

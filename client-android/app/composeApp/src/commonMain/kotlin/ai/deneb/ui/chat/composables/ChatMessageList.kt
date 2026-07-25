@@ -8,6 +8,7 @@ package ai.deneb.ui.chat.composables
 import ai.deneb.deneb.DenebLoading
 import ai.deneb.getBackgroundDispatcher
 import ai.deneb.onDragAndDropEventDropped
+import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.lastRenderedAssistant
@@ -609,7 +610,7 @@ internal fun ChatMessageList(
                                             // complete (regenerate is on the last one).
                                             androidx.compose.material3.Text(
                                                 text = "중단됨",
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = DenebType.meta,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                                             )
@@ -617,7 +618,7 @@ internal fun ChatMessageList(
                                         if (history.toolFootprint != null) {
                                             androidx.compose.material3.Text(
                                                 text = stringResource(Res.string.tool_footprint, history.toolFootprint),
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = DenebType.meta,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                                             )
@@ -625,7 +626,7 @@ internal fun ChatMessageList(
                                         if (history.fallbackServiceName != null) {
                                             androidx.compose.material3.Text(
                                                 text = stringResource(Res.string.fallback_answered_by, history.fallbackServiceName),
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = DenebType.meta,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                                             )
