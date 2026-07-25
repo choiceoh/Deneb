@@ -10,10 +10,12 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
+import ai.deneb.ui.denebInsight
 import ai.deneb.ui.handCursor
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,6 +49,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.daysUntil
+import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 
 /**
  * 최근 전체 결재 surface (`miniapp.groupware.approvals.list`, folder=total).
@@ -54,6 +61,7 @@ import kotlinx.coroutines.launch
  * appends via afterDocId. Detail act patches the same flow so 미결 moves
  * without a refetch. Row tap → detail.
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DenebApprovalsScreen(
@@ -240,8 +248,73 @@ private fun ApprovalRow(
             doc.date.takeIf { it.isNotBlank() },
             doc.docNo.takeIf { it.isNotBlank() },
         ).joinToString(" · ")
-        if (meta.isNotBlank()) {
-            Text(text = meta, style = DenebType.meta, color = denebHint())
+        val age = remember(doc.date) { approvalAgeDays(doc.date) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (meta.isNotBlank()) {
+                Text(text = meta, style = DenebType.meta, color = denebHint())
+            }
+            // Elapsed time, not just the drafting date. On an approval queue the
+            // delay IS the risk, and an absolute date alone renders a document
+            // that has sat for ten days identically to yesterday's. Every other
+            // list in the app already speaks in elapsed time ("9시간 전"); this
+            // one only spoke in calendar dates.
+            val label = approvalAgeLabel(age)
+            if (label != null) {
+                Text(
+                    text = " · $label",
+                    style = DenebType.meta,
+                    // A document that is BOTH stale and yours to act on is the one
+                    // worth the accent — same warm accent the feed's urgent marker
+                    // uses. Stale-but-not-actionable stays quiet.
+                    color = if (doc.canAct && age != null && age >= APPROVAL_STALE_DAYS) {
+                        denebInsight()
+                    } else {
+                        denebHint()
+                    },
+                )
+            }
         }
     }
+}
+
+/** A document sitting this long is worth calling out when it is yours to act on. */
+internal const val APPROVAL_STALE_DAYS = 7
+
+/**
+ * Days elapsed since the drafting date, or null when the date cannot be read.
+ *
+ * The gateway hands this field through verbatim from Amaranth and the format
+ * DEPENDS ON THE FOLDER — measured 2026-07-26, the same RPC returns
+ * "2026-07-24 (금)" for folder=total and "26.07.24" for folder=pending. Both are
+ * parsed; anything else yields null and the row simply shows no age rather than
+ * a wrong one.
+ */
+internal fun approvalAgeDays(raw: String, today: LocalDate? = null): Int? {
+    val date = parseApprovalDate(raw) ?: return null
+    val now = today ?: Clock.System.todayIn(TimeZone.currentSystemDefault())
+    val days = date.daysUntil(now)
+    return if (days >= 0) days else null
+}
+
+private fun parseApprovalDate(raw: String): LocalDate? {
+    val s = raw.trim()
+    if (s.isEmpty()) return null
+    // "2026-07-24 (금)" / "2026-07-24"
+    Regex("""^(\d{4})-(\d{2})-(\d{2})""").find(s)?.let { m ->
+        val (y, mo, d) = m.destructured
+        return runCatching { LocalDate(y.toInt(), mo.toInt(), d.toInt()) }.getOrNull()
+    }
+    // "26.07.24" — two-digit year, this century.
+    Regex("""^(\d{2})\.(\d{2})\.(\d{2})$""").find(s)?.let { m ->
+        val (y, mo, d) = m.destructured
+        return runCatching { LocalDate(2000 + y.toInt(), mo.toInt(), d.toInt()) }.getOrNull()
+    }
+    return null
+}
+
+/** "오늘" is not worth a word; anything older is. Null = show nothing. */
+internal fun approvalAgeLabel(days: Int?): String? = when {
+    days == null || days <= 0 -> null
+    days == 1 -> "어제"
+    else -> "${days}일 경과"
 }

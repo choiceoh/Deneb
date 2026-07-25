@@ -725,3 +725,25 @@ func TestDispatchMarkerBlocks_parityWithPython(t *testing.T) {
 		}
 	}
 }
+
+// 확정률 is confirmed/(confirmed+rolled back) — evolutions that SHIPPED and then
+// resolved. Rendered bare it sits next to 기각 (proposals turned away before ever
+// shipping) and the two read as one contradictory pair: "기각 10 · 확정률 100%".
+// The counts are what make the different denominators visible.
+func TestRSIConfirmRateValueCarriesItsDenominator(t *testing.T) {
+	cases := map[string]struct {
+		rate                float64
+		confirmed, resolved int
+		want                string
+	}{
+		"all held up":    {1.0, 2, 2, "100% (2/2)"},
+		"one reverted":   {0.5, 1, 2, "50% (1/2)"},
+		"none shipped":   {0.0, 0, 0, "착지분 없음"},
+		"rate without n": {1.0, 0, 0, "착지분 없음"},
+	}
+	for name, c := range cases {
+		if got := rsiConfirmRateValue(c.rate, c.confirmed, c.resolved); got != c.want {
+			t.Errorf("%s: got %q, want %q", name, got, c.want)
+		}
+	}
+}
