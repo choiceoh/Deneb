@@ -49,14 +49,17 @@ actual class ContactsPermissionController actual constructor() {
 @Composable
 actual fun SetupContactsPermissionHandler(controller: ContactsPermissionController) {
     val permissionRequested by controller.permissionRequested.collectAsState()
+    // Request READ and WRITE together: the address-book feature now both syncs
+    // (read) and tidies (연락처 정리, write). hasPermission() still gates on READ so
+    // the read-only sync is never regressed when WRITE is declined.
     val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        controller.onPermissionResult(granted)
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        controller.onPermissionResult(result[Manifest.permission.READ_CONTACTS] == true)
     }
     LaunchedEffect(permissionRequested) {
         if (permissionRequested) {
-            launcher.launch(Manifest.permission.READ_CONTACTS)
+            launcher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS))
         }
     }
 }
