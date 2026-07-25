@@ -5,9 +5,10 @@
 #   scripts/systemd/setup-l4-miners.sh
 #
 # RSI roadmap P5 workstream 3 ("proactive L4 supply — self-renovation, not just
-# self-repair") shipped four miners, but only branch-rot ever got a schedule:
-# the other four were workflow_dispatch-only, so the lane that exists to keep L4
-# renovating when NOTHING is broken ran only when a human remembered to click it.
+# self-repair") shipped FIVE miners, but only branch-rot ever got a schedule:
+# the other four (installed here) were workflow_dispatch-only, so the lane that
+# exists to keep L4 renovating when NOTHING is broken ran only when a human
+# remembered to click it.
 # Live evidence at install time (2026-07-25): tool-quality and sop had produced
 # zero candidates since landing (07-14 / 07-17) while their dry-runs showed
 # signal waiting; deadcode's last candidate was 9.6 days old.
