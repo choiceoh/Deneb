@@ -9,13 +9,16 @@
     "preview": "vite preview",
     "prepare:config": "node scripts/prepare-config.mjs",
     "seed": "node scripts/make-seed.mjs",
-    "pack": "npm run prepare:config && npm run build && evenhub pack app.json dist -o deneb-glance.ehpk"
+    "pack": "npm run prepare:config && npm run build && evenhub pack app.json dist -o deneb-glance.ehpk",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@evenrealities/even_hub_sdk": "^0.0.12"
   },
   "devDependencies": {
     "typescript": "^5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.2.7"
   }
 }

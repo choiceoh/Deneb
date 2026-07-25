@@ -127,6 +127,31 @@ jobs:
       - run: pnpm run test
       - run: pnpm run build
 
+  even-g2:
+    # The glasses Glance plugin had no gate at all: `npm run build` was a local
+    # convenience and nothing in CI ever ran it, so a type error or a broken
+    # refresh-policy change would only surface on the wearer's HUD. Cheap lane —
+    # the app is ~800 lines with no native toolchain.
+    name: even-g2 (typecheck + test + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: even-g2
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   rust:
     name: rust (tauri cargo check + clippy)
     runs-on: ubuntu-latest
@@ -330,7 +355,7 @@ jobs:
     # One open tracking issue, updated per failing night — not one issue per
     # night. Quiet when green.
     name: report drift
-    needs: [go-gate, kotlin, andromeda, rust, docs]
+    needs: [go-gate, kotlin, andromeda, rust, docs, even-g2]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
