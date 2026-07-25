@@ -154,19 +154,7 @@ func Dedup(contacts []Contact) DedupResult {
 		return len(emailNames[e]) >= sharedEmailMinNames || roleLocalParts[emailLocalPart(e)]
 	}
 
-	// union-find
-	parent := make([]int, n)
-	for i := range parent {
-		parent[i] = i
-	}
-	find := func(x int) int { // iterative (path-halving), not recursive
-		for parent[x] != x {
-			parent[x] = parent[parent[x]]
-			x = parent[x]
-		}
-		return x
-	}
-	union := func(a, b int) { parent[find(a)] = find(b) }
+	uf := newUnionFind(n)
 
 	// bucket entries by each personal identifier, then link within the bucket
 	idxByID := map[string][]int{}
@@ -195,11 +183,11 @@ func Dedup(contacts []Contact) DedupResult {
 		for _, j := range idxs[1:] {
 			switch {
 			case namesCompatible(contacts[base].Name, contacts[j].Name):
-				union(base, j)
+				uf.union(base, j)
 			case dedupKey(contacts[base].Name) == "" || dedupKey(contacts[j].Name) == "":
 				// a title-only card ("부장") — leave it apart; never a bridge
 			default:
-				ra, rb := find(base), find(j)
+				ra, rb := uf.find(base), uf.find(j)
 				if ra == rb {
 					continue
 				}
@@ -212,10 +200,41 @@ func Dedup(contacts []Contact) DedupResult {
 		}
 	}
 
-	// collect merge groups
+	merges, distinct := mergeGroupsFromClusters(contacts, uf)
+	res.Merges = merges
+	res.Ambiguous = ambiguous
+	res.Distinct = distinct
+	return res
+}
+
+// unionFind is the disjoint-set forest shared by the deterministic Dedup pass and
+// the adjudicated Resolve.
+type unionFind struct{ parent []int }
+
+func newUnionFind(n int) *unionFind {
+	p := make([]int, n)
+	for i := range p {
+		p[i] = i
+	}
+	return &unionFind{parent: p}
+}
+
+func (u *unionFind) find(x int) int { // iterative (path-halving), not recursive
+	for u.parent[x] != x {
+		u.parent[x] = u.parent[u.parent[x]]
+		x = u.parent[x]
+	}
+	return x
+}
+
+func (u *unionFind) union(a, b int) { u.parent[u.find(a)] = u.find(b) }
+
+// mergeGroupsFromClusters turns the current union-find state into sorted
+// MergeGroups (only clusters of ≥2) plus the distinct-person count over all n.
+func mergeGroupsFromClusters(contacts []Contact, uf *unionFind) ([]MergeGroup, int) {
 	groups := map[int][]int{}
-	for i := 0; i < n; i++ {
-		r := find(i)
+	for i := range contacts {
+		r := uf.find(i)
 		groups[r] = append(groups[r], i)
 	}
 	var merges []MergeGroup
@@ -227,11 +246,7 @@ func Dedup(contacts []Contact) DedupResult {
 		merges = append(merges, MergeGroup{Members: members, Canonical: canonicalName(contacts, members)})
 	}
 	sort.Slice(merges, func(i, j int) bool { return merges[i].Members[0] < merges[j].Members[0] })
-
-	res.Merges = merges
-	res.Ambiguous = ambiguous
-	res.Distinct = len(groups)
-	return res
+	return merges, len(groups)
 }
 
 // canonicalName picks the cleanest label for a merged group: the shortest
