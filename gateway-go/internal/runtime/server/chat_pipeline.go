@@ -26,6 +26,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
+	"github.com/choiceoh/deneb/gateway-go/internal/platform/calwrite"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/mailstore"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/externalmcp"
@@ -262,6 +263,14 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 		Calendar: chat.CalendarDeps{
 			Client: adaptCalendarReaderFactory(calendar.DefaultClient),
 			Local:  resolveToolLocalCalendar(s.logger),
+			// Same one-way Google mirror the miniapp calendar RPC uses — chat is
+			// the primary way events get created here, so it must not be the one
+			// surface that skips the mirror.
+			Writer: adaptCalendarWriterFactory(func() (*calwrite.Syncer, error) {
+				return calwrite.DefaultSyncer(func(op string, err error) {
+					s.logger.Warn("calendar google-sync failed", "op", op, "source", "chat-tool", "error", err)
+				})
+			}),
 		},
 		// Deep-research panel fan-out: one prompt → every healthy wormhole-served
 		// model in parallel (research_panel tool). nil-safe — the tool checks it.

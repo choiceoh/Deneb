@@ -432,6 +432,16 @@ type LocalCalendar interface {
 	Delete(id string) error
 }
 
+// CalendarWriter mirrors local calendar mutations out to an external calendar
+// (Google) when the one-way write sync is enabled. Best-effort by contract: the
+// caller ignores its errors because the local write is already the source of
+// truth. Same shape as the miniapp handler's writer, expressed in tooldeps DTOs
+// so this package does not import platform/calwrite.
+type CalendarWriter interface {
+	Push(ctx context.Context, localID string, ev CalendarEvent) error
+	Remove(ctx context.Context, localID string) error
+}
+
 // CalendarDeps holds dependencies for the calendar agent tool. Either field may
 // be nil: reads merge the read-only Google client (when OAuth is configured) with
 // the local store; writes always land in the local store (so create/edit/delete
@@ -442,4 +452,10 @@ type CalendarDeps struct {
 	// to local-only). Matches the resolver shape in method_registry.go.
 	Client func() (CalendarReader, error)
 	Local  LocalCalendar
+	// Writer, when set, mirrors this tool's create/update/delete out to Google —
+	// the SAME mirror the miniapp calendar RPC uses. It exists because chat is
+	// this agent's primary interface: without it an event created in the app UI
+	// reached Google while the identical event created by saying "내일 3시 미팅
+	// 잡아줘" silently did not. A nil field or a factory error = local-only.
+	Writer func() (CalendarWriter, error)
 }

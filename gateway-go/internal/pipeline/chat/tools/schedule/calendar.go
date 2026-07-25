@@ -98,11 +98,11 @@ func ToolCalendar(d *tooldeps.CalendarDeps) toolport.ToolFunc {
 		case "get":
 			return calActionGet(ctx, d, p), nil
 		case "create":
-			return calActionCreate(d, p), nil
+			return calActionCreate(ctx, d, p), nil
 		case "update":
-			return calActionUpdate(d, p), nil
+			return calActionUpdate(ctx, d, p), nil
 		case "delete":
-			return calActionDelete(d, p), nil
+			return calActionDelete(ctx, d, p), nil
 		case "free_slots":
 			return calActionFreeSlots(ctx, d, p), nil
 		case "brief":
@@ -467,7 +467,7 @@ func calDetail(e tooldeps.CalendarEvent) string {
 
 // --- create / update -----------------------------------------------------
 
-func calActionCreate(d *tooldeps.CalendarDeps, p calParams) string {
+func calActionCreate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	if d.Local == nil {
 		return "로컬 캘린더를 사용할 수 없어 일정을 추가할 수 없습니다."
 	}
@@ -479,10 +479,11 @@ func calActionCreate(d *tooldeps.CalendarDeps, p calParams) string {
 	if err != nil {
 		return "일정 추가 실패: " + err.Error()
 	}
+	calMirrorPush(ctx, d, ev)
 	return "일정을 추가했습니다.\n" + calDetail(ev)
 }
 
-func calActionUpdate(d *tooldeps.CalendarDeps, p calParams) string {
+func calActionUpdate(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	id := strings.TrimSpace(p.ID)
 	if id == "" {
 		return "id는 필수입니다 (수정할 일정의 ID)."
@@ -504,7 +505,39 @@ func calActionUpdate(d *tooldeps.CalendarDeps, p calParams) string {
 		}
 		return "일정 수정 실패: " + err.Error()
 	}
+	calMirrorPush(ctx, d, *ev)
 	return "일정을 수정했습니다.\n" + calDetail(*ev)
+}
+
+// --- external write mirror (best-effort) ---------------------------------
+//
+// The local store is the source of truth and has already been written by the
+// time these run, so a Google failure is swallowed here exactly as it is on the
+// miniapp RPC path (the syncer logs it). What must NOT happen is the mirror
+// being skipped entirely — that was the bug: the app UI mirrored and chat did
+// not, so the same event existed on Google or not depending on how it was made.
+
+func calWriter(d *tooldeps.CalendarDeps) tooldeps.CalendarWriter {
+	if d == nil || d.Writer == nil {
+		return nil
+	}
+	w, err := d.Writer()
+	if err != nil || w == nil {
+		return nil
+	}
+	return w
+}
+
+func calMirrorPush(ctx context.Context, d *tooldeps.CalendarDeps, ev tooldeps.CalendarEvent) {
+	if w := calWriter(d); w != nil {
+		_ = w.Push(ctx, ev.ID, ev)
+	}
+}
+
+func calMirrorRemove(ctx context.Context, d *tooldeps.CalendarDeps, localID string) {
+	if w := calWriter(d); w != nil {
+		_ = w.Remove(ctx, localID)
+	}
 }
 
 // calParseInput validates summary+start (required) and parses start/end into a
@@ -539,7 +572,7 @@ func calParseInput(p calParams) (in tooldeps.CalendarCreateInput, errMsg string)
 
 // --- delete --------------------------------------------------------------
 
-func calActionDelete(d *tooldeps.CalendarDeps, p calParams) string {
+func calActionDelete(ctx context.Context, d *tooldeps.CalendarDeps, p calParams) string {
 	id := strings.TrimSpace(p.ID)
 	if id == "" {
 		return "id는 필수입니다 (삭제할 일정의 ID)."
@@ -556,5 +589,6 @@ func calActionDelete(d *tooldeps.CalendarDeps, p calParams) string {
 		}
 		return "일정 삭제 실패: " + err.Error()
 	}
+	calMirrorRemove(ctx, d, id)
 	return "일정을 삭제했습니다."
 }
