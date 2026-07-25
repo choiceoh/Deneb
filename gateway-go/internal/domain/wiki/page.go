@@ -705,13 +705,25 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		if !ok {
 			continue
 		}
-		// A key with no inline value may be followed by an indented block list;
-		// fold it into flow-array form so the switch below sees one shape.
+		// A key with no inline value may be followed by an indented block list.
+		// Collect it as a real []string — folding it back into "[a, b]" text and
+		// re-splitting on commas would have to DROP any item containing a comma
+		// to avoid splitting one value into two, which is the same silent-loss
+		// class this parser exists to prevent.
+		var blockItems []string
 		if strings.TrimSpace(val) == "" {
 			if items, next := collectBlockList(lines, i+1); len(items) > 0 {
-				val = "[" + strings.Join(items, ", ") + "]"
+				blockItems = items
 				i = next - 1
 			}
+		}
+		// listVal resolves a list-valued key. Only one form can be present: an
+		// inline flow array on the key line, or an indented block beneath it.
+		listVal := func() []string {
+			if blockItems != nil {
+				return blockItems
+			}
+			return parseFlowArray(val)
 		}
 
 		switch key {
@@ -728,21 +740,21 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		case "category":
 			fm.Category = normalizeCategory(val)
 		case "tags":
-			fm.Tags = parseFlowArray(val)
+			fm.Tags = listVal()
 		case "related":
-			fm.Related = parseFlowArray(val)
+			fm.Related = listVal()
 		case "emails":
-			fm.Emails = parseFlowArray(val)
+			fm.Emails = listVal()
 		case "cues":
-			fm.Cues = parseFlowArray(val)
+			fm.Cues = listVal()
 		case "resource":
 			fm.Resource = val
 		case "client":
 			fm.Client = normalizeClientName(val)
 		case "sites":
-			fm.Sites = normalizeSites(parseFlowArray(val))
+			fm.Sites = normalizeSites(listVal())
 		case "kinds":
-			fm.Kinds = normalizeKinds(parseFlowArray(val))
+			fm.Kinds = normalizeKinds(listVal())
 		case "stage":
 			fm.Stage = normalizeStage(val)
 		case "program":
@@ -784,7 +796,7 @@ func parseFrontmatterFields(raw string) Frontmatter {
 		case "superseded_by":
 			fm.SupersededBy = val
 		case "sources":
-			fm.Sources = normalizeSources(parseFlowArray(val))
+			fm.Sources = normalizeSources(listVal())
 		}
 	}
 	return fm
@@ -982,11 +994,11 @@ func parseKV(line string) (key, value string, ok bool) {
 	return key, value, true
 }
 
-// parseFlowArray parses "[a, b, c]" into []string{"a", "b", "c"}.
 // collectBlockList reads a YAML block-list body starting at lines[start]
 // ("  - item" entries) and returns the items plus the index of the first line
-// after the block. Items containing a comma are skipped: the folded flow-array
-// form is comma-separated, so keeping them would split one value into two.
+// after the block. Items are returned verbatim — a comma inside an item is an
+// ordinary character here, because the caller keeps the []string instead of
+// re-encoding it as a comma-joined flow array.
 func collectBlockList(lines []string, start int) ([]string, int) {
 	var items []string
 	i := start
@@ -1005,13 +1017,14 @@ func collectBlockList(lines []string, start int) ([]string, int) {
 		}
 		item = strings.TrimSpace(strings.TrimPrefix(item, "-"))
 		item = strings.Trim(item, `"'`)
-		if item != "" && !strings.Contains(item, ",") {
+		if item != "" {
 			items = append(items, item)
 		}
 	}
 	return items, i
 }
 
+// parseFlowArray parses "[a, b, c]" into []string{"a", "b", "c"}.
 func parseFlowArray(s string) []string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "[")

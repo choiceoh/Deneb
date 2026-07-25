@@ -379,10 +379,29 @@ func TestParseFrontmatterAcceptsBlockLists(t *testing.T) {
 		t.Errorf("title after a block list = %q, want 제목", mixed.Title)
 	}
 
-	// A comma inside an item would split into two values once folded into the
-	// flow form, so such an item is dropped rather than silently mangled.
+	// A comma inside a block item is an ordinary character and must SURVIVE.
+	// The first cut of this parser folded the block back into "[a, b]" text and
+	// re-split on commas, which forced it to DROP such items — reintroducing, for
+	// comma-bearing values, the very silent-loss bug block support fixed. Cues are
+	// natural-language phrases, so commas are routine.
 	comma := parseFrontmatterFields("cues:\n  - 안전한값\n  - 쉼표, 포함\n")
-	if len(comma.Cues) != 1 || comma.Cues[0] != "안전한값" {
-		t.Errorf("comma item must be skipped, got %v", comma.Cues)
+	if len(comma.Cues) != 2 || comma.Cues[0] != "안전한값" || comma.Cues[1] != "쉼표, 포함" {
+		t.Errorf("comma item must survive intact, got %v", comma.Cues)
+	}
+
+	// A block whose items ALL bear commas must still advance past the block, or
+	// the remaining "- item" lines get rescanned as key: value pairs.
+	allCommas := parseFrontmatterFields("cues:\n  - 하나, 둘\n  - 셋, 넷\ntitle: 제목\n")
+	if len(allCommas.Cues) != 2 {
+		t.Errorf("cues = %v, want 2", allCommas.Cues)
+	}
+	if allCommas.Title != "제목" {
+		t.Errorf("title after an all-comma block = %q, want 제목", allCommas.Title)
+	}
+
+	// A bare key with no block beneath it leaves the list empty and does not
+	// consume the next key.
+	if got := parseFrontmatterFields("cues:\ntitle: 제목\n"); len(got.Cues) != 0 || got.Title != "제목" {
+		t.Errorf("bare key with no block: cues=%v title=%q", got.Cues, got.Title)
 	}
 }
