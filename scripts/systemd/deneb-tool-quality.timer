@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Deneb tool-quality miner weekly
+
+[Timer]
+# The miner reads a 14d agentlog window, so a description/schema defect needs
+# days of traffic to separate from noise — weekly matches the signal's cadence.
+OnCalendar=Thu *-*-* 05:40:00
+Persistent=true
+RandomizedDelaySec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Deneb tool-quality miner (per-tool error/repair rates -> L4 candidates)
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/deneb
+ExecStart=%h/deneb/scripts/audit/tool-quality-miner.py

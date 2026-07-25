@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Deneb health-finding miner daily
+
+[Timer]
+# After deneb-bench-refresh (04:30 + up to 10min jitter) so the miner reads the
+# freshly written Health/RSI snapshots rather than yesterday's.
+OnCalendar=*-*-* 05:20:00
+Persistent=true
+RandomizedDelaySec=5min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

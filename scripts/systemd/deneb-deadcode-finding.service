@@ -1,0 +1,13 @@
+[Unit]
+Description=Deneb deadcode-finding miner (new dead code vs baseline -> L4 candidates)
+
+[Service]
+Type=oneshot
+# deadcode-audit.sh runs `go run golang.org/x/tools/cmd/deadcode@latest`; the
+# systemd user manager's minimal PATH lacks the go symlink under ~/.local/bin.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/deneb
+# Whole-program reachability over all gateway binaries: ~1-2 min, plus a cold
+# module fetch on the first run after a toolchain bump.
+TimeoutStartSec=20min
+ExecStart=%h/deneb/scripts/audit/deadcode-finding-miner.py

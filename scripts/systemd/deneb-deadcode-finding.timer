@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Deneb deadcode-finding miner weekly
+
+[Timer]
+# Dead code accumulates at repo cadence, and the audit is the most expensive of
+# the four miners — weekly is plenty (findings are capped and deduped per run).
+OnCalendar=Tue *-*-* 05:40:00
+Persistent=true
+RandomizedDelaySec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

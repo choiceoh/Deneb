@@ -1,0 +1,10 @@
+[Unit]
+Description=Deneb health-finding miner (codebase/runtime health defects -> L4 candidates)
+
+[Service]
+Type=oneshot
+# python3 is system-wide, but the miner shells out to the benches which need the
+# Go toolchain; ~/.local/bin carries the go symlink (same lesson as coding-dispatch).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/deneb
+ExecStart=%h/deneb/scripts/audit/health-finding-miner.py
