@@ -306,17 +306,29 @@ describe("chatStream", () => {
     expect(requestAt(fetchMock).body).toEqual({ message: "hello", sessionKey: "client:main" });
   });
 
+  it("treats a terminal error frame as terminal, not as a dropped stream", async () => {
+    // The gateway ends a failed turn with `event: error` and nothing else
+    // (nativeapi/chat_stream.go). Throwing here too would make hooks.ts render
+    // the error AND then poll the transcript for an answer that never comes.
+    const fetchMock = vi.fn(
+      async () => new Response(byteStream(['event: error\ndata: {"error":"boom"}\n\n']), { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const handlers = { onError: vi.fn(), onDone: vi.fn() };
+
+    await expect(chatStream(CFG, "hello", handlers)).resolves.toBeUndefined();
+    expect(handlers.onError).toHaveBeenCalledWith("boom");
+    expect(handlers.onDone).not.toHaveBeenCalled();
+  });
+
   it("rejects a clean SSE EOF before a terminal done frame", async () => {
     const fetchMock = vi.fn(
-      async () =>
-        new Response(byteStream(['event: delta\ndata: {"delta":"partial"}\n']), { status: 200 }),
+      async () => new Response(byteStream(['event: delta\ndata: {"delta":"partial"}\n']), { status: 200 }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const handlers = { onDelta: vi.fn(), onDone: vi.fn() };
 
-    await expect(chatStream(CFG, "hello", handlers)).rejects.toThrow(
-      "chat stream ended before terminal event",
-    );
+    await expect(chatStream(CFG, "hello", handlers)).rejects.toThrow("chat stream ended before terminal event");
     expect(handlers.onDelta).toHaveBeenCalledWith("partial");
     expect(handlers.onDone).not.toHaveBeenCalled();
   });

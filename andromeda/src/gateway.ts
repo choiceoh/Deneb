@@ -549,7 +549,11 @@ export async function chatStream(
     signal,
   });
 
-  let terminal: { text: string; model?: string; fellBack?: boolean; reasoning?: string } | undefined;
+  // The gateway ends every stream with exactly one terminal frame — `done` on
+  // success or `error` on failure (nativeapi/chat_stream.go). Both count: an
+  // error was already surfaced through onError, so treating it as "no terminal"
+  // would send an answered-with-an-error turn into transcript recovery on top.
+  let sawTerminal = false;
 
   await readJsonSSE(body, (event, obj) => {
     switch (event) {
@@ -582,15 +586,16 @@ export async function chatStream(
         break;
       }
       case "done":
-        terminal = {
+        sawTerminal = true;
+        handlers.onDone?.({
           text: asStr(obj.text) ?? "",
           model: asStr(obj.model),
           fellBack: asBool(obj.fellBack),
           reasoning: asStr(obj.reasoning),
-        };
-        handlers.onDone?.(terminal);
+        });
         break;
       case "error":
+        sawTerminal = true;
         handlers.onError?.(asStr(obj.error) ?? "unknown error");
         break;
     }
@@ -599,7 +604,7 @@ export async function chatStream(
   // EOF is not success until the gateway confirms the detached turn with a
   // terminal frame. Fail so useChat() polls the transcript instead of
   // committing a blank or partial answer as complete (native parity).
-  if (!terminal) {
+  if (!sawTerminal) {
     throw new Error("chat stream ended before terminal event");
   }
 }
