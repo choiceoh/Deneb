@@ -54,6 +54,45 @@ func TestContactsMethodsNilStoreReturnsNilAndListReturnsUnavailableOnStoreError(
 	}
 }
 
+func TestContactsDedupReturnsSafeMergesAndCounts(t *testing.T) {
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceAll([]contacts.Contact{
+		{Name: "박한주", Phones: []string{"010-1111-2222"}},
+		{Name: "#박한주 부장(솔라테크)", Phones: []string{"010-1111-2222"}},
+		{Name: "이영희", Phones: []string{"010-3333-4444"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	methods := ContactsMethods(ContactsDeps{Store: func() (*contacts.Store, error) { return store, nil }})
+	h := methods["miniapp.contacts.dedup"]
+
+	if u := h(context.Background(), request(t, "miniapp.contacts.dedup", nil)); u.OK || u.Error.Code != protocol.ErrUnauthorized {
+		t.Fatalf("unauthorized = %+v", u)
+	}
+	resp := h(authenticatedContext(), request(t, "miniapp.contacts.dedup", nil))
+	var got struct {
+		Total     int `json:"total"`
+		Distinct  int `json:"distinct"`
+		Ambiguous int `json:"ambiguous"`
+		Merges    []struct {
+			Canonical string   `json:"canonical"`
+			Names     []string `json:"names"`
+			Phones    []string `json:"phones"`
+		} `json:"merges"`
+	}
+	decodeResponse(t, resp, &got)
+	if got.Total != 3 || got.Distinct != 2 || got.Ambiguous != 0 || len(got.Merges) != 1 {
+		t.Fatalf("dedup payload = %+v", got)
+	}
+	m := got.Merges[0]
+	if m.Canonical != "박한주" || len(m.Names) != 2 || len(m.Phones) != 1 {
+		t.Fatalf("merge group = %+v", m)
+	}
+}
+
 func authenticatedContext() context.Context {
 	return clientauth.WithContext(context.Background(), &clientauth.Identity{User: &clientauth.User{ID: 42}})
 }
