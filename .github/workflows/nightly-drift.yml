@@ -185,12 +185,12 @@ jobs:
         with:
           submodules: false
 
+      # Retrieval env (fusion weights, rerank, embedder) is NOT set here: the
+      # script carries the production-parity defaults so this file cannot drift
+      # from the gateway again (it held the retired 1:10:3 with no reranker,
+      # scoring a configuration production abandoned on 2026-07-20).
       - name: recall health + repair worklist
         env:
-          DENEB_EMBEDDING_URL: http://127.0.0.1:8002
-          DENEB_WIKI_SEM_FLOOR: "0.44"
-          DENEB_WIKI_RRF_SEM_WEIGHT: "10"
-          DENEB_WIKI_RRF_GRAPH_WEIGHT: "3"
           RECALL_WORKLIST: "1"
         run: scripts/dev/recall-health.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
