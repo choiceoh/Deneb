@@ -129,19 +129,27 @@ Gateway proactive pushes are normalized to one-line HUD grammar before SSE/FCM:
 3. Success signal: `HUD_OK / (HUD_OK + PHONE_OPEN)` rising across a few days.
 4. Optional diary line: `wiki log` — `G2 HUD: OK=N phone=M`.
 
-## Open question — needs the actual glasses
+## Open questions — need the actual glasses
 
-**목록 페이지에서 아래로 스와이프하면 다음 페이지로 넘어가는가?**
-
-시뮬레이터에서는 **안 넘어간다**. 2회 재현([30162600973](https://github.com/choiceoh/Deneb/actions/runs/30162600973) · [30163240946](https://github.com/choiceoh/Deneb/actions/runs/30163240946)): 항목 2건짜리 리스트 컨테이너에서 `down` 4회가 호스트 이벤트를 **0건** 만들고 화면도 그대로였다. 같은 컨테이너의 **클릭은 정상 동작**하고, 텍스트 컨테이너의 `down` 도 `textEvent{eventType:2}` 로 정상 도착한다 — 즉 리스트 컨테이너만 스크롤을 삼킨다.
-
-다만 시뮬레이터 README 가 바로 이 지점의 충실도를 부인한다:
+리스트 컨테이너의 동작 두 가지가 시뮬레이터만으로는 결론이 안 난다. 시뮬레이터 README 가 **바로 이 영역**의 충실도를 명시적으로 부인하기 때문이다:
 
 > **List Behavior** — List scrolling behavior, especially focused-item positioning on screen, can vary. This happens because the simulator re-implements drawing logic instead of sharing embedded source code directly.
 
-그래서 스모크는 이걸 **단정하지 않고 관측만** 한다 (`smoke-artifacts/observations.json` 의 `listContainerScroll`).
+그래서 스모크는 둘 다 **단정하지 않고 관측만** 한다 (`smoke-artifacts/observations.json`).
 
-**실기기에서 확인할 것**: 알림이 있는 상태(홈=목록)에서 아래 스와이프로 일정/할 일 페이지에 도달하는가. **도달하지 못한다면 실제 결함이다** — 목록 페이지에서 탭은 상세를 열고 더블탭은 앱을 종료하므로, 알림이 있는 동안 나머지 페이지가 통째로 닿지 않게 된다.
+시뮬레이터에서 확인된 사실: **스와이프는 리스트에 도달한다**. 첫 `down` 이 선택 테두리를 다음 항목으로 옮긴다(스모크가 이건 단정으로 검사한다). 즉 입력이 유실되는 게 아니라, 호스트가 스크롤을 **자기 선택 이동에만 쓰고** 앱에는 아무것도 넘기지 않는다.
+
+### 1. 목록 페이지에서 다음 페이지로 넘어갈 수 있는가? (`listPaging`)
+
+선택이 마지막 항목에 닿은 뒤 `down` 을 더 눌러도 아무 일도 없다 — `SCROLL_BOTTOM` 이 앱에 오지 않는다. **실기기에서도 그렇다면 실제 결함이다**: 목록에서 탭은 상세를 열고 더블탭은 앱을 종료하므로, 알림이 있는 동안 일정/할 일 페이지가 통째로 닿지 않는다.
+
+### 2. 탭이 '선택된' 항목을 여는가? (`listSelectionHonoured`)
+
+이쪽이 더 위험하다. 지금까지 관측된 `listEvent` 에는 `currentSelectItemIndex` 가 **한 번도 실려오지 않았다** — 그래서 `resolveSelectionIndex` 는 0번 항목으로 폴백한다. 선택을 2번 항목으로 옮긴 뒤 탭하면 **1번 항목이 열린다**는 뜻이다. 착용자가 고른 것과 다른 알림을 읽게 되는, 못 넘어가는 것보다 나쁜 실패다.
+
+**실기기 확인 절차**: 알림 2건 이상인 상태에서 ① 아래 스와이프로 두 번째 알림 선택 → ② 탭 → 열린 상세가 **두 번째** 알림인지 확인. ③ 다시 목록으로 나와 아래 스와이프를 계속했을 때 일정/할 일 페이지로 넘어가는지 확인.
+
+**둘 다 실패라면** 수리 방향은 알림 페이지에서 리스트 컨테이너를 걷어내는 것이다. 선택 인덱스가 안 온다면 리스트는 선택 기능을 주지도 못하면서(항상 0번) 페이지 이동만 빼앗는 셈이라, 텍스트 페이지 대비 순손실이다.
 
 ## Design constraints
 
