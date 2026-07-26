@@ -197,8 +197,13 @@ func SearchPlaces(ctx context.Context, keyword string, near *Coord, limit int) (
 					LowerAddrName  string `json:"lowerAddrName"`
 					RoadName       string `json:"roadName"`
 					FirstBuildNo   string `json:"firstBuildNo"`
-					NoorLat        string `json:"noorLat"`
-					NoorLon        string `json:"noorLon"`
+					// noor* is the POI centroid; front* is its entrance. Both
+					// are sent, and for navigation they are not interchangeable
+					// (see below).
+					NoorLat  string `json:"noorLat"`
+					NoorLon  string `json:"noorLon"`
+					FrontLat string `json:"frontLat"`
+					FrontLon string `json:"frontLon"`
 				} `json:"poi"`
 			} `json:"pois"`
 		} `json:"searchPoiInfo"`
@@ -209,7 +214,16 @@ func SearchPlaces(ctx context.Context, keyword string, near *Coord, limit int) (
 
 	out := make([]Place, 0, len(raw.SearchPoiInfo.Pois.Poi))
 	for _, p := range raw.SearchPoiInfo.Pois.Poi {
-		lat, lon := parseCoord(p.NoorLat), parseCoord(p.NoorLon)
+		// Route to the ENTRANCE, not the centroid. Measured against the live
+		// API on 2026-07-26, the two differ by 0m for a subway exit but 134m
+		// for 코엑스 and 312m for 인천공항 제1여객터미널 — at which point the
+		// HUD announces arrival while the wearer is aimed at the middle of a
+		// building, possibly the wrong side of it. Centroid is the fallback
+		// because front* is blank for POIs that have no mapped door.
+		lat, lon := parseCoord(p.FrontLat), parseCoord(p.FrontLon)
+		if lat == 0 || lon == 0 {
+			lat, lon = parseCoord(p.NoorLat), parseCoord(p.NoorLon)
+		}
 		if lat == 0 || lon == 0 {
 			continue // a POI we cannot route to is noise on a 10-line screen
 		}
