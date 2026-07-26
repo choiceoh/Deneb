@@ -564,7 +564,7 @@ func ToolSessionsSpawn(d *tooldeps.SessionDeps) toolport.ToolFunc {
 			return fmt.Sprintf("Spawn rejected: %d sub-agents are already active (max %d). Wait for some to finish (use the subagents tool to check), or kill ones you no longer need.", active, maxConcurrentSubagents), nil
 		}
 
-		childKey := session.SpawnedChildKey(parentKey, label, time.Now().UnixMilli())
+		childKey := session.SpawnedChildKey(label, time.Now().UnixMilli())
 
 		// Create the child session.
 		childSession := d.Manager.Create(childKey, session.KindDirect)

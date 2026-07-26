@@ -53,7 +53,9 @@ func TestWorkTypeForKeySeparatesConversationsFromSpawnedChildren(t *testing.T) {
 		"client:main:k3x9ab12":                                 "chat", // 데스크톱 새 대화
 		"client:main:wf-abc123":                                "chat", // 카드 곁대화
 		"client:main:dream":                                    "dream",
-		"client:main:subagent:1784342370344":                   "subagent",
+		"client:sub:verify-docs-1784342370344":                 "subagent", // 현행 네임스페이스
+		"client:main:sub-verify-docs-1784342370344":            "subagent", // 레거시 표식
+		"client:main:subagent:1784342370344":                   "subagent", // 레거시 epoch 꼬리
 		"client:main:gmail-large-attachment-fix:1782276675257": "subagent",
 		"cron:email-analysis:1785052800110":                    "cron",
 		"submain:heartbeat":                                    "heartbeat",
@@ -70,7 +72,7 @@ func TestWorkTypeForKeySeparatesConversationsFromSpawnedChildren(t *testing.T) {
 func TestSpawnedChildKeyRoundTripsThroughClassifier(t *testing.T) {
 	t.Parallel()
 	for _, label := range []string{"verify docs", "gmail:large:attachment", "계약서 검토", "", "a-very-long-label-that-exceeds-the-forty-character-budget-by-a-lot"} {
-		key := SpawnedChildKey(NativeWorkSessionKey, label, 1784342370344)
+		key := SpawnedChildKey(label, 1784342370344)
 		if !IsSpawnedChildKey(key) {
 			t.Errorf("SpawnedChildKey(%q) = %q, not classified as a spawned child", label, key)
 		}
@@ -80,8 +82,29 @@ func TestSpawnedChildKeyRoundTripsThroughClassifier(t *testing.T) {
 		if got := WorkTypeForKey(key); got != "subagent" {
 			t.Errorf("WorkTypeForKey(%q) = %q, want subagent", key, got)
 		}
-		if strings.Count(key, ":") != strings.Count(NativeWorkSessionKey, ":")+1 {
+		if strings.Count(key, ":") != strings.Count(SpawnedChildPrefix, ":") {
 			t.Errorf("key %q (label %q) grew extra segments", key, label)
+		}
+		// The prompt-facing channel, auto-resume eligibility and chat-activity
+		// recording all key off the client: prefix — a sub-agent must keep it.
+		if !strings.HasPrefix(key, "client:") {
+			t.Errorf("key %q left the client: namespace (splits the APC prefix family)", key)
+		}
+	}
+}
+
+// The heartbeat continues the user's last conversation — but a delegated run is
+// the agent's own scratch work, not a conversation to wake up inside.
+func TestHeartbeatTargetSessionSkipsSpawnedChildren(t *testing.T) {
+	t.Parallel()
+	for key, want := range map[string]string{
+		"client:main:6c4385b5-6124-4224-afc2-492017824ef2": "client:main:6c4385b5-6124-4224-afc2-492017824ef2",
+		"client:sub:verify-docs-1784342370344":             NativeWorkSessionKey,
+		"client:main:subagent:1784342370344":               NativeWorkSessionKey,
+		"cron:mailpoll":                                    NativeWorkSessionKey,
+	} {
+		if got := HeartbeatTargetSession(key); got != want {
+			t.Errorf("HeartbeatTargetSession(%q) = %q, want %q", key, got, want)
 		}
 	}
 }
