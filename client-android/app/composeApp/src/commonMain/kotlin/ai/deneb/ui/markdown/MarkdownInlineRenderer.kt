@@ -66,15 +66,22 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
         is InlineCode -> withStyle(
             SpanStyle(
                 fontFamily = monoFamily,
-                background = colors.surfaceVariant,
+                color = colors.onSurfaceVariant,
             ),
         ) {
-            // A SpanStyle can't carry padding, so the tinted background hugs the
-            // glyphs. Hair spaces inside the span widen the chip a touch on each
-            // side so inline code (e.g. `₩142,000/장`) doesn't look cramped.
-            append(' ')
+            // NO tinted background. A SpanStyle background is painted PER LINE
+            // FRAGMENT, so a span that wraps splits into two detached pills — a
+            // measured case rendered `tailscale serve --https=443` on one line and
+            // a lone `off` chip on the next, reading as two separate commands.
+            // Spans here are routinely long (`tailscale serve --bg --https=443
+            // http://127.0.0.1:8000`), so wrapping is the NORMAL case, and no
+            // padding trick avoids it: Compose has no contiguous cross-line span
+            // background. The hair-space padding that used to widen the chip is
+            // gone with it.
+            //
+            // The mono face plus the accent colour already say "code", and both
+            // survive a line break intact.
             append(node.code)
-            append(' ')
         }
 
         is Link -> withLink(
