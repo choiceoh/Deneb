@@ -30,13 +30,21 @@ import {
   onImuCapture,
   onInterpretToggle,
   onGlyphProbe,
+  onListenToggle,
   onNavToggle,
   onSettingsSaved,
   renderPhoneUI,
   setPhoneStatus,
 } from "./phone";
 import { loadCachedGlance, saveCachedGlance } from "./cache";
-import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from "./interpret";
+import {
+  CHUNK_MS,
+  PcmBuffer,
+  RECALL_BYTES,
+  RECALL_MS,
+  postAudio,
+  subtitleLines,
+} from "./interpret";
 import {
   advanceNav,
   fetchRoute,
@@ -96,7 +104,8 @@ type Screen =
   | "confirmAck"
   | "notice"
   | "interpret"
-  | "nav";
+  | "nav"
+  | "recall";
 
 const PAGE_ORDER = ["home", "alerts", "cal", "todo"] as const;
 const LIST_PAGE_IDS = new Set(["home", "alerts"]);
@@ -123,6 +132,19 @@ let navRoute: NavRoute | null = null;
 let navState: NavState = initialNavState();
 let navPos: NavCoord | null = null;
 let navDest = "";
+/**
+ * Recall: a rolling window of what was just said, kept while listening.
+ *
+ * Separate buffer from the interpretation one because the two want opposite
+ * things — interpretation drains each window as it sends it, recall must retain
+ * the last half-minute so a tap can look backwards. Deneb can afford to listen
+ * continuously in a way the paid-ASR plugins cannot: MOSS runs on srv4, so the
+ * marginal cost of holding the mic open is electricity.
+ */
+let listening = false;
+const recallPcm = new PcmBuffer(RECALL_BYTES);
+let recallBusy = false;
+
 /** Live interpretation state. Off unless the operator turned it on. */
 let interpreting = false;
 let interpretLang = "ko";
@@ -196,6 +218,10 @@ bridge.onEvenHubEvent((event) => {
   const audio = (event as { audioEvent?: { audioPcm?: Uint8Array } })
     ?.audioEvent;
   if (audio?.audioPcm) {
+    // The recall window fills whenever listening, independent of
+    // interpretation: the wearer may want to look back at a conversation they
+    // were not having translated.
+    if (listening) recallPcm.push(audio.audioPcm);
     if (!interpreting) return;
     pcm.push(audio.audioPcm);
     if (pcm.ready()) void flushAudio();
@@ -222,7 +248,12 @@ bridge.onEvenHubEvent((event) => {
       // Contextual on purpose. There is no fifth gesture, and a detail is the
       // only place where "I am done with this" has a second meaning. Everywhere
       // else — list, pages, status, setup — a double-tap still exits.
-      if (screen === "detail") {
+      if (screen === "recall") {
+        // Listening holds the mic open; a double-tap here means "stop
+        // listening", not "quit the app" — quitting with the mic still open is
+        // the one outcome nobody wants.
+        void stopListening();
+      } else if (screen === "detail") {
         void askAck();
       } else {
         shutdown();
@@ -253,6 +284,10 @@ bridge.onAppLocationChanged((loc) => {
   if (!navRoute) return;
   void onNavFix({ lat: loc.latitude, lon: loc.longitude });
   void pushSpeed(kmhFromMs(loc.speed));
+});
+
+onListenToggle((on) => {
+  void (on ? startListening() : stopListening());
 });
 
 onGlyphProbe(() => {
@@ -407,6 +442,10 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === "recall") {
+    await recallNow();
+    return;
+  }
   if (screen === "nav") {
     await stopNav();
     return;
@@ -1326,6 +1365,78 @@ async function onNavFix(pos: NavCoord): Promise<void> {
   if (changed && next.arrived) {
     // Let the arrival sit on the glass before handing the screen back.
     setPhoneStatus({ line: `도착: ${navDest}`, tone: "ok" });
+  }
+}
+
+/**
+ * startListening opens the glasses mic and keeps a rolling window of what was
+ * said, WITHOUT sending anything anywhere.
+ *
+ * The pattern is G2 Fact Check's and it is the right one: deciding to capture
+ * before the interesting thing is said is exactly what nobody manages. Audio
+ * only leaves the glasses when the wearer taps.
+ */
+async function startListening(): Promise<void> {
+  if (listening) return;
+  const ok = await bridge.audioControl(true, AudioInputSource.Glasses);
+  if (!ok) {
+    setPhoneStatus({ line: "마이크를 열지 못했습니다.", tone: "bad" });
+    return;
+  }
+  listening = true;
+  screen = "recall";
+  pauseLoop();
+  await showText(
+    [
+      "● 청취 중",
+      "",
+      `최근 ${Math.round(RECALL_MS / 1000)}초를 기억합니다.`,
+      "아무것도 전송하지 않습니다.",
+      "",
+      "탭=방금 대화 넘기기",
+      "더블탭=청취 종료",
+    ].join("\n"),
+  );
+}
+
+async function stopListening(): Promise<void> {
+  if (!listening) return;
+  listening = false;
+  await bridge.audioControl(false);
+  recallPcm.take(); // drop the window — it was never asked for
+  screen = "page";
+  setPhoneStatus({ line: "청취를 종료했습니다.", tone: "warn" });
+  await resumeLoop();
+}
+
+/**
+ * recallNow hands the buffered conversation to Deneb as a chat turn.
+ *
+ * Snapshot, not drain: a second tap moments later must still find the audio.
+ * The turn goes through the normal agent, so "기록해둬" or a follow-up question
+ * reaches the wiki and calendar without any of that being re-plumbed here.
+ */
+async function recallNow(): Promise<void> {
+  if (!listening || recallBusy) return;
+  const window = recallPcm.snapshot();
+  if (!window) {
+    await showText("● 청취 중\n\n아직 들은 것이 없습니다.\n\n탭=다시");
+    return;
+  }
+  recallBusy = true;
+  await showText("● 청취 중\n\n방금 대화를 넘기는 중…");
+  try {
+    const res = await postAudio(settings, window, {
+      ask: "방금 들은 대화를 한국어로 짧게 정리해 주세요. 업무 관련 내용이면 위키에 기록하고, 무엇을 기록했는지 한 줄로 알려주세요.",
+    });
+    const body =
+      res.reply || res.askError || res.text || "정리하지 못했습니다.";
+    await showText(`● 청취 중\n\n${body}\n\n탭=다시 / 더블탭=종료`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await showText(`● 청취 중\n\n실패: ${msg}\n\n탭=다시`);
+  } finally {
+    recallBusy = false;
   }
 }
 

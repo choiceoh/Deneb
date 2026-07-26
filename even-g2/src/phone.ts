@@ -32,6 +32,7 @@ let navCb:
   ((on: boolean, destination: string, mode: "walk" | "car") => void) | null =
   null;
 let glyphCb: (() => void) | null = null;
+let listenCb: ((on: boolean) => void) | null = null;
 let imuCb: ((label: string) => void) | null = null;
 
 /** onImuCapture wires the phone's labelled-motion buttons to the glasses. */
@@ -61,6 +62,16 @@ export function onNavToggle(
  */
 export function onGlyphProbe(cb: () => void): void {
   glyphCb = cb;
+}
+
+/**
+ * onListenToggle wires the rolling-recall listener.
+ *
+ * Distinct from interpretation: this one sends nothing until the wearer taps,
+ * so it is safe to leave running through a meeting.
+ */
+export function onListenToggle(cb: (on: boolean) => void): void {
+  listenCb = cb;
 }
 
 /** onInterpretToggle wires the phone's start/stop to the glasses loop. */
@@ -181,6 +192,15 @@ export function renderPhoneUI(): void {
       <button class="primary" id="dn-nav-walk">도보 안내</button>
       <button class="primary" id="dn-nav-car">자동차 안내</button>
       <button class="ghost" id="dn-nav-off">중지</button>
+    </div>
+    <h2 style="font-size:15px;margin:26px 0 8px">회의 청취</h2>
+    <p class="sub" style="margin:0 0 10px">
+      최근 30초를 안경에만 기억합니다. <strong>탭하면</strong> 그 대화를 데네브에 넘겨
+      정리·기록합니다. 탭하기 전에는 아무것도 전송되지 않습니다.
+    </p>
+    <div class="row">
+      <button class="primary" id="dn-listen-on">청취 시작</button>
+      <button class="ghost" id="dn-listen-off">종료</button>
     </div>
     <div class="row" style="margin-top:18px">
       <button class="ghost" id="dn-glyph">화살표 글리프 확인</button>

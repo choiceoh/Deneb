@@ -1,5 +1,5 @@
-import { REQUEST_TIMEOUT_MS } from './refresh'
-import type { GlanceSettings } from './settings'
+import { REQUEST_TIMEOUT_MS } from "./refresh";
+import type { GlanceSettings } from "./settings";
 
 // Live interpretation: glasses microphone → gateway → transcript + translation.
 //
@@ -12,7 +12,7 @@ import type { GlanceSettings } from './settings'
 // the capture is Deneb's: MOSS for speech, the tiny model role for Korean.
 
 /** What the glasses emit and what the ASR sidecar wants. No resampling anywhere. */
-export const SAMPLE_RATE = 16000
+export const SAMPLE_RATE = 16000;
 
 /**
  * How much speech to gather before sending.
@@ -23,12 +23,30 @@ export const SAMPLE_RATE = 16000
  * the wait but cost accuracy — a sentence split across two windows is
  * transcribed twice, badly, with no context either time.
  */
-export const CHUNK_MS = 3_000
+export const CHUNK_MS = 3_000;
+
+/**
+ * RECALL_MS — how much conversation the tap-to-recall buffer keeps.
+ *
+ * 30s matches what G2 Fact Check retains and is about the span a person can
+ * still remember wanting to capture. At 16 kHz mono 16-bit that is ~0.96 MB,
+ * comfortably inside the gateway's 4 MiB clip limit.
+ */
+export const RECALL_MS = 30_000;
+
+/** RECALL_BYTES — the recall buffer's retention in bytes. */
+export const RECALL_BYTES = (SAMPLE_RATE * 2 * RECALL_MS) / 1000;
 
 /** Refuse to buffer past this, whatever the host does with the mic. */
-const MAX_CHUNK_BYTES = (SAMPLE_RATE * 2 * CHUNK_MS * 3) / 1000
+const MAX_CHUNK_BYTES = (SAMPLE_RATE * 2 * CHUNK_MS * 3) / 1000;
 
-export type InterpretResult = { text: string; translation?: string }
+export type InterpretResult = {
+  text: string;
+  translation?: string;
+  /** Deneb's answer, when the request carried `ask`. */
+  reply?: string;
+  askError?: string;
+};
 
 /**
  * PcmBuffer accumulates audio events into send-sized windows.
@@ -37,87 +55,118 @@ export type InterpretResult = { text: string; translation?: string }
  * device delivering PCM at all is only observable on real glasses.
  */
 export class PcmBuffer {
-  private parts: Uint8Array[] = []
-  private bytes = 0
+  private parts: Uint8Array[] = [];
+  private bytes = 0;
+
+  /**
+   * @param cap bytes to retain. The default is one interpretation window's
+   * worth; a recall buffer passes a much larger value because it must hold the
+   * last half-minute of a conversation, not the last sentence.
+   */
+  constructor(private readonly cap: number = MAX_CHUNK_BYTES) {}
 
   /** Bytes that make up one window at the configured chunk length. */
-  static readonly windowBytes = (SAMPLE_RATE * 2 * CHUNK_MS) / 1000
+  static readonly windowBytes = (SAMPLE_RATE * 2 * CHUNK_MS) / 1000;
 
   push(sample: Uint8Array): void {
-    if (!sample?.length) return
-    this.parts.push(sample)
-    this.bytes += sample.length
+    if (!sample?.length) return;
+    this.parts.push(sample);
+    this.bytes += sample.length;
     // A host that never stops sending must not grow this without bound.
-    while (this.bytes > MAX_CHUNK_BYTES && this.parts.length > 1) {
-      this.bytes -= this.parts.shift()!.length
+    while (this.bytes > this.cap && this.parts.length > 1) {
+      this.bytes -= this.parts.shift()!.length;
     }
   }
 
   get length(): number {
-    return this.bytes
+    return this.bytes;
   }
 
   ready(): boolean {
-    return this.bytes >= PcmBuffer.windowBytes
+    return this.bytes >= PcmBuffer.windowBytes;
+  }
+
+  /**
+   * snapshot copies without draining.
+   *
+   * Recall taps must NOT consume the buffer: the wearer taps because something
+   * was just said, and a second thought a few seconds later has to still find
+   * that audio there. `take` is for the interpretation loop, which wants each
+   * window exactly once.
+   */
+  snapshot(): Uint8Array | null {
+    if (this.bytes === 0) return null;
+    const out = new Uint8Array(this.bytes);
+    let at = 0;
+    for (const p of this.parts) {
+      out.set(p, at);
+      at += p.length;
+    }
+    return out;
   }
 
   /** take drains everything buffered so far, or null when there is nothing. */
   take(): Uint8Array | null {
-    if (this.bytes === 0) return null
-    const out = new Uint8Array(this.bytes)
-    let at = 0
+    if (this.bytes === 0) return null;
+    const out = new Uint8Array(this.bytes);
+    let at = 0;
     for (const p of this.parts) {
-      out.set(p, at)
-      at += p.length
+      out.set(p, at);
+      at += p.length;
     }
-    this.parts = []
-    this.bytes = 0
-    return out
+    this.parts = [];
+    this.bytes = 0;
+    return out;
   }
 }
 
 /** base64 without a Buffer polyfill — the WebView has btoa and not much else. */
 export function toBase64(bytes: Uint8Array): string {
-  let s = ''
+  let s = "";
   // Chunked: btoa on a spread of a large array overflows the argument limit.
   for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   }
-  return btoa(s)
+  return btoa(s);
 }
 
 /** postAudio ships one window and returns what came back. */
 export async function postAudio(
   settings: GlanceSettings,
   pcm: Uint8Array,
-  opts?: { translateTo?: string; hotwords?: string },
+  opts?: { translateTo?: string; hotwords?: string; ask?: string },
 ): Promise<InterpretResult> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${settings.baseUrl}/api/even/audio`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${settings.token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+        "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
         pcm: toBase64(pcm),
         sampleRate: SAMPLE_RATE,
-        translateTo: opts?.translateTo ?? '',
-        hotwords: opts?.hotwords ?? '',
+        translateTo: opts?.translateTo ?? "",
+        hotwords: opts?.hotwords ?? "",
+        ask: opts?.ask ?? "",
       }),
       signal: controller.signal,
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = (await res.json()) as { text?: string; translation?: string }
-    return { text: String(data.text ?? '').trim(), translation: data.translation?.trim() || undefined }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as { text?: string; translation?: string };
+    return {
+      text: String(data.text ?? "").trim(),
+      translation: data.translation?.trim() || undefined,
+    };
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') throw new Error('시간 초과')
-    throw err
+    if (err instanceof Error && err.name === "AbortError")
+      throw new Error("시간 초과");
+    throw err;
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer);
   }
 }
 
@@ -128,8 +177,12 @@ export async function postAudio(
  * looks up mid-sentence and the sentence is gone. Keeping a short tail means a
  * glance still catches what was just said.
  */
-export function subtitleLines(history: string[], incoming: string, keep = 3): string[] {
-  const t = incoming.trim()
-  if (!t) return history
-  return [...history, t].slice(-keep)
+export function subtitleLines(
+  history: string[],
+  incoming: string,
+  keep = 3,
+): string[] {
+  const t = incoming.trim();
+  if (!t) return history;
+  return [...history, t].slice(-keep);
 }
