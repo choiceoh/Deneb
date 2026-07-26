@@ -51,6 +51,12 @@ var nativeChatSessionPrefixes = []string{"client:main:", "chat:"}
 // prefix must be non-empty, so the bare 업무 home "client:main" and a bare
 // "chat:" never match — only real conversations do.
 func isAutoTitleSession(sessionKey string) bool {
+	// A delegated sub-agent run lives under client:main:<label>:<ms> — same
+	// prefix, but it is work the agent spawned, not a conversation with a
+	// drawer row to name. Titling one burned an LLM call per spawn.
+	if session.IsSpawnedChildKey(sessionKey) {
+		return false
+	}
 	for _, p := range nativeChatSessionPrefixes {
 		if strings.HasPrefix(sessionKey, p) && len(sessionKey) > len(p) {
 			return true
