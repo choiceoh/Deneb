@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -253,5 +254,37 @@ func TestSearchPlacesFallsBackToCentroid(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Coord.Lat != 36.9 {
 		t.Errorf("got %+v, want the centroid fallback", got)
+	}
+}
+
+func TestSearchPlacesBiasOmitsSearchtypCd(t *testing.T) {
+	t.Setenv("TMAP_APP_KEY", "k")
+	var got *url.URL
+	prev := httpDoFn
+	httpDoFn = func(req *http.Request) (*http.Response, error) {
+		got = req.URL
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"searchPoiInfo":{"pois":{"poi":[]}}}`)),
+		}, nil
+	}
+	t.Cleanup(func() { httpDoFn = prev })
+
+	if _, err := SearchPlaces(context.Background(), "시청", &Coord{Lat: 36.8895, Lon: 126.6459}, 5); err != nil {
+		t.Fatalf("SearchPlaces: %v", err)
+	}
+	q := got.Query()
+	if q.Get("centerLat") == "" || q.Get("centerLon") == "" {
+		t.Errorf("centre bias missing: %v", q)
+	}
+	// The regression this pins: searchtypCd requires a companion `radius`, and
+	// without one TMap answers 400 — which took the entire route feature down
+	// in production. A radius is not the fix either; it would exclude any
+	// destination beyond it.
+	if q.Has("searchtypCd") {
+		t.Errorf("searchtypCd must not be sent (needs a radius, and a radius excludes far destinations): %v", q)
+	}
+	if q.Has("radius") {
+		t.Errorf("radius must not be sent — it would make distant destinations unroutable: %v", q)
 	}
 }
