@@ -2,6 +2,9 @@ package evenapi
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -598,4 +601,78 @@ func (h *Handler) storeGlanceCache(bundle GlanceBundle, at time.Time) {
 	defer h.glanceCache.mu.Unlock()
 	h.glanceCache.bundle = bundle
 	h.glanceCache.at = at
+}
+
+// ErrAckUnavailable means the workfeed store is not up yet, which is a 503 and
+// not a missing alert — the difference matters to the wearer, who should retry
+// rather than assume the card is gone.
+var ErrAckUnavailable = errors.New("workfeed unavailable")
+
+// Ack marks one glance alert handled, from the glasses.
+//
+// The HUD was read-only: an alert could be read on the glass but only cleared
+// from the phone or the desktop, so the same three items kept arriving in the
+// wearer's field of view all morning. This is the smallest write that changes
+// that — it moves a workfeed card to StatusAcked, which evenGlanceUrgent
+// already filters out, so the next poll simply stops showing it.
+func (h *Handler) Ack(w http.ResponseWriter, r *http.Request) {
+	if h == nil {
+		http.Error(w, "even g2 bridge unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if !h.Enabled() {
+		writeErr(w, http.StatusServiceUnavailable, "even g2 bridge disabled (set "+EnvBridgeToken+")")
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	presented := ParseBearer(r.Header.Get("Authorization"))
+	if !tokenMatch(h.token, presented) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if h.ackAlert == nil {
+		writeErr(w, http.StatusServiceUnavailable, "workfeed unavailable")
+		return
+	}
+
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	id := strings.TrimSpace(body.ID)
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, "id required")
+		return
+	}
+	// Synthetic ids are assigned by buildGlanceItems when the source card had
+	// none; they address nothing, so acking one would silently do nothing.
+	if strings.HasPrefix(id, "alert-") {
+		writeErr(w, http.StatusBadRequest, "unaddressable alert id")
+		return
+	}
+	if err := h.ackAlert(id); err != nil {
+		if errors.Is(err, ErrAckUnavailable) {
+			writeErr(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	// The wearer just changed what the glance should say; drop the 8s cache so
+	// the confirming refresh does not hand back the pre-ack list.
+	h.invalidateGlanceCache()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": id})
+}
+
+// invalidateGlanceCache forces the next Glance call to rebuild.
+func (h *Handler) invalidateGlanceCache() {
+	h.glanceCache.mu.Lock()
+	h.glanceCache.at = time.Time{}
+	h.glanceCache.mu.Unlock()
 }

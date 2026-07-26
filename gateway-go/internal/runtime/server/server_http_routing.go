@@ -58,8 +58,9 @@ func (s *Server) buildMux() *http.ServeMux {
 	// Distinct from wormhole /v1/chat/completions (model proxy). Requires
 	// DENEB_EVEN_G2_BRIDGE_TOKEN; disabled with 503 when unset.
 	g2Cfg := evenapi.Config{
-		Logger:  s.logger,
-		Sources: s.evenGlanceSources(),
+		Logger:   s.logger,
+		Sources:  s.evenGlanceSources(),
+		AckAlert: s.evenAckAlert(),
 	}
 	if s.ChatManager != nil {
 		g2Cfg.Chat = s.chatHandler
@@ -71,6 +72,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /{$}", g2.ChatCompletions)
 	mux.HandleFunc("GET /api/even/glance", g2.Glance)
 	mux.HandleFunc("GET /api/even/status", g2.Status)
+	mux.HandleFunc("POST /api/even/ack", g2.Ack)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)

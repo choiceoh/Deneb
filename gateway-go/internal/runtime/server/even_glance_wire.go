@@ -168,3 +168,24 @@ func (s *Server) evenGlanceUrgent(_ context.Context, now time.Time) []evenapi.Gl
 	}
 	return out
 }
+
+// evenAckAlert lets the glasses clear one workfeed card.
+//
+// The store is resolved when the ACK ARRIVES, never when the route is
+// registered. workFeedStore is populated during registerEarlyMethods, so a
+// closure that captured it at buildMux time would capture nil — permanently,
+// and silently, long after the store came up. (It did worse than that here: it
+// panicked, because the field is not even reachable that early.)
+//
+// Reporting unavailability as an error rather than a nil hook keeps the HUD
+// honest — a glass that says "확인함" while the alert stays is worse than one
+// that says it could not.
+func (s *Server) evenAckAlert() func(id string) error {
+	return func(id string) error {
+		if s == nil || s.workFeedStore == nil {
+			return evenapi.ErrAckUnavailable
+		}
+		_, err := s.workFeedStore.Ack(id)
+		return err
+	}
+}
