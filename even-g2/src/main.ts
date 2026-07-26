@@ -42,6 +42,7 @@ import {
   fetchRoute,
   glyphProbeLines,
   initialNavState,
+  initialNavStateAt,
   navLines,
   type NavCoord,
   type NavRoute,
@@ -1135,8 +1136,16 @@ async function startNav(
   }
 
   navRoute = result.route;
-  navState = initialNavState();
   navPos = from;
+  // Fold the starting fix through the advance rule immediately.
+  //
+  // Without this the HUD opens pointed at step 0 — which is 출발, the place the
+  // wearer is already standing. That step has no direction by design, so the
+  // arrow stayed blank until a later fix happened to arrive, and the first
+  // thing shown was a maneuver that had already been completed. Standing at
+  // 출발 is within ARRIVE_RADIUS_M of it, so one pass advances to the first
+  // real turn.
+  navState = initialNavStateAt(result.route, from);
   navDest = result.destination.name || dest;
 
   // Continuous fixes, not one-shot polling: distanceFilter means the host only

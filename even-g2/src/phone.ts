@@ -140,7 +140,7 @@ export function renderPhoneUI(): void {
   root.id = "deneb-phone";
   root.innerHTML = `
     <h1>Deneb Glance</h1>
-    <p class="sub">안경 HUD가 읽어올 게이트웨이 설정</p>
+    <p class="sub">안경 HUD가 읽어올 게이트웨이 설정 · v${__APP_VERSION__}</p>
     <div class="status" id="dn-status" data-tone="warn">상태 확인 중…</div>
     <div class="field">
       <label for="dn-base">게이트웨이 주소</label>
