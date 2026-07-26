@@ -13,8 +13,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
 )
 
@@ -27,6 +30,14 @@ const sidecarProbeTimeout = 3 * time.Second
 //   - embedding: the embedding client's existing background health prober
 //     (30s cadence) — no extra traffic, just surfaced. Watches whatever
 //     DENEB_EMBEDDING_URL points at (Nemotron adapter since 2026-07-18).
+//   - the ASR and OCR sidecars, wherever they are configured to live. These
+//     are watched even when REMOTE, which is the one place this file departs
+//     from the loopback-only rule below — and the reason is that they have no
+//     fallback chain. A model provider that dies falls through to the next one;
+//     a dead ASR sidecar just makes transcription fail. On 2026-07-26 the ASR
+//     container was found to have restarted 18,325 times, silently, because
+//     nothing watched it: it was remote, so the rule excluded it, and it had no
+//     fallback, so nothing else complained either.
 //   - every DISTINCT loopback model-provider endpoint (in practice the
 //     wormhole router on 127.0.0.1:18800): a liveness GET where ANY HTTP
 //     response — auth errors included — means the process is alive, and only
@@ -49,6 +60,20 @@ func (s *Server) registerSidecarHealthWatch() {
 				}
 				return errors.New("embedding server unhealthy")
 			},
+		})
+	}
+
+	// No fallback ⇒ must be watched, local or not.
+	for _, sc := range []struct{ name, base string }{
+		{"asr", artifact.ASRBaseURL()},
+		{"ocr", document.OCRBaseURL()},
+	} {
+		if strings.TrimSpace(sc.base) == "" {
+			continue
+		}
+		checks = append(checks, runtimenotify.DepCheck{
+			Name:  sc.name,
+			Check: livenessCheck(sc.base),
 		})
 	}
 

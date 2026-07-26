@@ -11,3 +11,11 @@ import "context"
 func TranscribeAudio(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error) {
 	return transcribeAudioText(ctx, audio, mimeType, hotwords)
 }
+
+// ASRBaseURL exposes the configured ASR sidecar base so the gateway can watch
+// its liveness. Unlike a model provider, this sidecar has NO fallback chain —
+// if it is down, transcription simply fails — which is why it has to be probed
+// rather than left to a retry path that does not exist.
+func ASRBaseURL() string {
+	return asrBaseURL()
+}
