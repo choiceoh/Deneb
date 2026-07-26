@@ -187,3 +187,51 @@ export async function arrowPng(
   });
   return new Uint8Array(await blob.arrayBuffer());
 }
+
+/** SPEED_W/H — the current-speed bitmap, right of the maneuver box. */
+export const SPEED_W = 200;
+export const SPEED_H = 120;
+
+/**
+ * kmhFromMs converts the SDK's speed to km/h.
+ *
+ * `AppLocation.speed` is undocumented in the SDK, but every platform location
+ * API underneath it (Android `Location.getSpeed`, iOS `CLLocation.speed`)
+ * reports metres per second, so that is the assumption. Negative means "no
+ * fix" on both platforms and must not render as 0 — a confident zero while
+ * moving is worse than showing nothing.
+ */
+export function kmhFromMs(speed: number | undefined): number | null {
+  if (speed == null || !Number.isFinite(speed) || speed < 0) return null;
+  return Math.round(speed * 3.6);
+}
+
+/**
+ * speedPng draws the current speed big, the way both shipping G2 navigation
+ * plugins do. Separate from the maneuver bitmap on purpose: speed changes on
+ * every position fix while the maneuver changes every few minutes, and
+ * redrawing the arrow at fix rate would spend BLE bandwidth for nothing.
+ */
+export async function speedPng(kmh: number): Promise<Uint8Array> {
+  const canvas = document.createElement("canvas");
+  canvas.width = SPEED_W;
+  canvas.height = SPEED_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2d canvas context unavailable");
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, SPEED_W, SPEED_H);
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 82px sans-serif";
+  ctx.fillText(String(kmh), SPEED_W / 2, SPEED_H / 2 - 8);
+  ctx.font = "bold 26px sans-serif";
+  ctx.fillText("km/h", SPEED_W / 2, SPEED_H - 20);
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      "image/png",
+    );
+  });
+  return new Uint8Array(await blob.arrayBuffer());
+}

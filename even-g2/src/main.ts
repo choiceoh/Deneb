@@ -50,7 +50,16 @@ import {
   type NavRoute,
   type NavState,
 } from "./nav";
-import { ARROW_H, ARROW_W, arrowPng, maneuverArrow } from "./arrow";
+import {
+  ARROW_H,
+  ARROW_W,
+  SPEED_H,
+  SPEED_W,
+  arrowPng,
+  kmhFromMs,
+  maneuverArrow,
+  speedPng,
+} from "./arrow";
 import {
   CAPTURE_MS,
   IMU_PACE_MS,
@@ -243,6 +252,7 @@ bridge.onAppLocationChanged((loc) => {
   // otherwise — the stream is opened by startNav and closed by stopNav.
   if (!navRoute) return;
   void onNavFix({ lat: loc.latitude, lon: loc.longitude });
+  void pushSpeed(kmhFromMs(loc.speed));
 });
 
 onGlyphProbe(() => {
@@ -1021,12 +1031,13 @@ function clockLabel(): string {
  * carry it.
  */
 const NAV_ARROW_ID = 3;
+const NAV_SPEED_ID = 4;
 
 /** enterNavPage rebuilds the glasses page with an arrow slot on the right. */
 async function enterNavPage(): Promise<boolean> {
   const ok = await bridge.rebuildPageContainer(
     new RebuildPageContainer({
-      containerTotalNum: 3,
+      containerTotalNum: 4,
       textObject: [
         // Full-screen capture layer, kept blank: image containers cannot set
         // isEventCapture, so taps need a text layer and this one must not also
@@ -1072,6 +1083,15 @@ async function enterNavPage(): Promise<boolean> {
           containerID: NAV_ARROW_ID,
           containerName: "arrow",
           zOrderIndex: 2,
+        }),
+        new ImageContainerProperty({
+          xPosition: 576 - SPEED_W - 8,
+          yPosition: 8,
+          width: SPEED_W,
+          height: SPEED_H,
+          containerID: NAV_SPEED_ID,
+          containerName: "speed",
+          zOrderIndex: 3,
         }),
       ],
     }),
@@ -1224,6 +1244,7 @@ async function stopNav(): Promise<void> {
   navState = initialNavState();
   await bridge.stopAppLocationUpdates();
   shownArrow = "";
+  shownSpeed = "";
   await leaveNavPage();
   screen = "page";
   setPhoneStatus({ line: "길안내를 중지했습니다.", tone: "warn" });
@@ -1242,6 +1263,38 @@ async function renderNav(): Promise<void> {
   // both shipping plugins make it). The text container carries the words.
   await showNavText(navTextLines(navRoute, navState).join("\n"));
   if (step) await pushArrow(step.short, formatMetres(left));
+}
+
+let shownSpeed = "";
+/**
+ * pushSpeed draws the current speed. Shares the arrow's chain because
+ * updateImageRawData must be serial across ALL image containers, not per
+ * container.
+ */
+async function pushSpeed(kmh: number | null): Promise<void> {
+  const key = kmh == null ? "" : String(kmh);
+  if (key === shownSpeed) return;
+  shownSpeed = key;
+  if (kmh == null) return;
+  arrowChain = arrowChain.then(async () => {
+    try {
+      const res = await bridge.updateImageRawData(
+        new ImageRawDataUpdate({
+          containerID: NAV_SPEED_ID,
+          containerName: "speed",
+          imageData: await speedPng(kmh),
+        }),
+      );
+      if (res !== "success") {
+        console.error("updateImageRawData(speed):", res);
+        shownSpeed = "";
+      }
+    } catch (err) {
+      console.error("speed render failed", err);
+      shownSpeed = "";
+    }
+  });
+  await arrowChain;
 }
 
 /** showNavText writes the nav page's sentence container (not the capture layer). */
