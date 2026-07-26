@@ -233,7 +233,9 @@ func (s *Server) evenRecordImu() func(rec evenapi.ImuRecording) error {
 // not of adding a model.
 func (s *Server) evenTranscribe() func(ctx context.Context, wav []byte, hotwords string) (string, error) {
 	return func(ctx context.Context, wav []byte, hotwords string) (string, error) {
-		return artifact.TranscribeAudio(ctx, wav, "audio/wav", hotwords)
+		// Plain, not diarized: "[00:05 S01] …" is a meeting-record format, and a
+		// live caption sends 3-second windows whose clocks all restart at zero.
+		return artifact.TranscribeAudioPlain(ctx, wav, "audio/wav", hotwords)
 	}
 }
 
@@ -254,6 +256,10 @@ func (s *Server) evenTranslate() func(ctx context.Context, text, targetLang stri
 		if err != nil {
 			return "", err
 		}
-		return strings.TrimSpace(out), nil
+		// One line, always. A window holding several sentences comes back with a
+		// newline per sentence, and the caption budget on a ten-line display is
+		// three — so the caller would silently lose the tail. Collapsing here
+		// lets the plugin's own windowing be the only thing that trims.
+		return strings.Join(strings.Fields(out), " "), nil
 	}
 }
