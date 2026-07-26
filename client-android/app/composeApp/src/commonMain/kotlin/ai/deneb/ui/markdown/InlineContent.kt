@@ -5,6 +5,7 @@ import ai.deneb.ui.markdown.math.MathFormula
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +19,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -42,6 +45,9 @@ internal fun InlineContent(
 ) {
     val colors = MaterialTheme.colorScheme
     val monoFamily = JetBrainsMonoFamily()
+    // Identity, not equality: the caret belongs to ONE run — the document's frontier —
+    // and two paragraphs with the same words must not both light up.
+    val showCaret = LocalStreamCaretTail.current === inlines
     if (!containsMath(inlines)) {
         // Cache the AnnotatedString. The remember() avoids a rebuild per streaming token;
         // cachedAnnotatedString additionally survives LazyColumn item disposal, so scrolling
@@ -55,11 +61,15 @@ internal fun InlineContent(
             style = style,
             textAlign = textAlign,
             modifier = modifier,
+            showCaret = showCaret,
         )
         return
     }
 
     val segments = remember(inlines) { splitAroundMath(inlines) }
+    // A formula is atomic — a caret hanging off its right edge would read as part of
+    // the notation — so the cursor rides the last TEXT run of the row.
+    val caretSegment = if (showCaret) segments.indexOfLast { it is InlineSegment.TextRun } else -1
     FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.Start,
@@ -68,7 +78,7 @@ internal fun InlineContent(
         // which in turn keeps list-bullets aligned with their first line of content.
         itemVerticalAlignment = Alignment.Top,
     ) {
-        for (seg in segments) {
+        segments.forEachIndexed { index, seg ->
             when (seg) {
                 is InlineSegment.TextRun -> InlineText(
                     annotated = remember(seg, colors, monoFamily) {
@@ -76,6 +86,7 @@ internal fun InlineContent(
                     },
                     style = style,
                     textAlign = textAlign,
+                    showCaret = index == caretSegment,
                 )
 
                 is InlineSegment.Math -> MathFormula(latex = seg.latex, display = false)
@@ -97,6 +108,9 @@ internal fun InlineContent(
  * range covers, each clipped to that line's own start/end. A wrapped span reads
  * as one command continued, and every inline surface — paragraph, list item,
  * heading, table cell, quote — gets it from this single funnel.
+ *
+ * The same layout answers "where does the text end", so [showCaret] draws the
+ * streaming cursor here too rather than injecting a glyph into the markdown.
  */
 @Composable
 private fun InlineText(
@@ -104,18 +118,20 @@ private fun InlineText(
     style: TextStyle,
     textAlign: TextAlign,
     modifier: Modifier = Modifier,
+    showCaret: Boolean = false,
 ) {
     val codeRanges = remember(annotated) {
         annotated.getStringAnnotations(CODE_SPAN_TAG, 0, annotated.length)
             .map { it.start to it.end }
     }
-    if (codeRanges.isEmpty()) {
+    if (codeRanges.isEmpty() && !showCaret) {
         Text(text = annotated, style = style, textAlign = textAlign, modifier = modifier)
         return
     }
 
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val chip = MaterialTheme.colorScheme.surfaceVariant
+    val caretColor = LocalContentColor.current
     Text(
         text = annotated,
         style = style,
@@ -148,7 +164,41 @@ private fun InlineText(
                     )
                 }
             }
+            if (showCaret) drawStreamCaret(result, caretColor)
         },
+    )
+}
+
+/**
+ * A slim bar just past the final glyph — the "still writing" cue, at the exact spot
+ * the next character will appear. Drawn, not appended: nothing enters the parse source.
+ */
+private fun DrawScope.drawStreamCaret(result: TextLayoutResult, color: Color) {
+    val end = result.layoutInput.text.length
+    // getLineForOffset rejects an offset equal to the length (unlike
+    // getHorizontalPosition, which accepts it), so probe with the last real glyph.
+    if (end == 0) return
+    val line = result.getLineForOffset(end - 1)
+    val top = result.getLineTop(line)
+    val bottom = result.getLineBottom(line)
+    val width = 2.dp.toPx()
+    // Hangul glyphs carry almost no right side bearing, so a bar at the exact advance
+    // position butts against the final letter and reads as part of it — hence the gap.
+    //
+    // The gap deliberately spills past `size.width`. A Text measures to its CONTENT
+    // width whenever the line fits, so on a short closing line the composable ends at
+    // the final glyph and clamping inside it would pin every caret back onto that
+    // glyph — the very overlap the gap exists to avoid. Nothing here clips (the code
+    // chips already bleed a few px on the left), and the caret only ever lands on a
+    // paragraph/heading/list/quote — never in a table cell, where a clip would bite.
+    val gap = 2.dp.toPx()
+    val x = (result.getHorizontalPosition(end, usePrimaryDirection = true) + gap).coerceAtLeast(0f)
+    val insetY = (bottom - top) * 0.16f
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(x, top + insetY),
+        size = Size(width, bottom - top - insetY * 2),
+        cornerRadius = CornerRadius(width / 2),
     )
 }
 
