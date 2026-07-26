@@ -393,6 +393,19 @@ internal fun ChatMessageList(
                 byAnswerId to suppressed
             }
 
+            // One action row per RESPONSE, not per fragment. A single answer arrives
+            // as several assistant messages (text, tool call, more text, …), and every
+            // fragment was drawing its own 복사/⋯ row — a turn showed the same two
+            // icons three or four times down the thread. Same grouping the reasoning
+            // block above already does for the very same reason.
+            //
+            // The row lands on the LAST answer-bearing message of the response, and it
+            // carries the WHOLE response's text: copy on the tail fragment alone would
+            // silently hand over a fraction of the answer.
+            val (actionRowIds, responseTextById) = remember(uiState.history) {
+                responseActionRows(uiState.history)
+            }
+
             val showScrollToBottom by remember {
                 derivedStateOf {
                     // While the list is actively scrolling, fade the jump button out
@@ -576,6 +589,10 @@ internal fun ChatMessageList(
                                                 actions.setIsSpeaking(it, history.id)
                                             },
                                             onRegenerate = if (isLastAssistant) actions.regenerate else null,
+                                            // Intermediate fragments of the same answer carry no row;
+                                            // the tail carries one for the whole response.
+                                            showActions = history.id in actionRowIds,
+                                            copyText = responseTextById[history.id],
                                             isInteractive = isLastAssistant && !uiState.isLoading && frozen == null,
                                             onUiCallback = { event, data ->
                                                 if (event == "choice") {
@@ -821,4 +838,46 @@ private suspend fun LazyListState.scrollToTrueBottom(
         if (contentPaddingBottomPx > 0) scrollBy(contentPaddingBottomPx.toFloat())
         withFrameNanos { }
     }
+}
+
+/**
+ * Which assistant messages carry the 복사/⋯ row, and what 복사 should copy.
+ *
+ * One answer arrives as SEVERAL assistant messages (text → tool call → more
+ * text), and drawing the row under each fragment repeated the same two icons
+ * three or four times in a single turn. The row belongs to the RESPONSE, which
+ * is the grouping the reasoning block in this file already applies for the very
+ * same reason.
+ *
+ * Returns the id of each response's LAST answer-bearing message, mapped to the
+ * whole response's text — copying from the tail fragment alone would silently
+ * hand over only the closing paragraph.
+ */
+internal fun responseActionRows(history: List<History>): Pair<Set<String>, Map<String, String>> {
+    val rowIds = mutableSetOf<String>()
+    val textById = mutableMapOf<String, String>()
+    val parts = mutableListOf<String>()
+    var lastAnswerId: String? = null
+
+    fun closeResponse() {
+        val id = lastAnswerId ?: return
+        rowIds.add(id)
+        textById[id] = parts.joinToString("\n\n")
+        parts.clear()
+        lastAnswerId = null
+    }
+
+    for (entry in history) {
+        if (entry.role == History.Role.USER) {
+            closeResponse()
+            continue
+        }
+        // Thinking-only turns and empty tool-call turns are not answer text.
+        if (entry.role == History.Role.ASSISTANT && !entry.isThinking && entry.content.isNotEmpty()) {
+            parts.add(entry.content)
+            lastAnswerId = entry.id
+        }
+    }
+    closeResponse()
+    return rowIds to textById
 }

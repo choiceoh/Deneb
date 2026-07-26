@@ -176,6 +176,19 @@ internal fun BotMessage(
     isSpeaking: Boolean,
     setIsSpeaking: (Boolean) -> Unit,
     onRegenerate: (() -> Unit)? = null,
+    /**
+     * False for the intermediate fragments of one answer. A response arrives as
+     * several assistant messages (text → tool call → more text), and drawing the
+     * 복사/⋯ row under each one repeated the same controls three or four times in
+     * a single turn. Only the response's last fragment shows the row.
+     */
+    showActions: Boolean = true,
+    /**
+     * What 복사 puts on the clipboard. Null = this message alone; the list passes
+     * the WHOLE response so copying from the tail fragment does not silently hand
+     * over just the last paragraph.
+     */
+    copyText: String? = null,
     isInteractive: Boolean = false,
     onUiCallback: ((event: String, data: Map<String, String>) -> Unit)? = null,
     frozen: FrozenSubmission? = null,
@@ -323,13 +336,13 @@ internal fun BotMessage(
     // half-written reply invites acting on incomplete content. History rows
     // compose with visible=true, so only the live streaming→done transition
     // animates.
-    AnimatedVisibility(visible = !isStreaming, enter = denebFadeEnter, exit = denebFadeExit) {
+    AnimatedVisibility(visible = showActions && !isStreaming, enter = denebFadeEnter, exit = denebFadeExit) {
         Row(Modifier.padding(horizontal = 8.dp)) {
             SmallIconButton(
                 imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
                 contentDescription = if (copied) "복사됨" else "복사",
                 onClick = {
-                    clipboard.setText(AnnotatedString(message))
+                    clipboard.setText(AnnotatedString(copyText ?: message))
                     copied = true
                 },
             )
