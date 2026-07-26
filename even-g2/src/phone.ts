@@ -21,6 +21,12 @@ type Status = {
 
 let statusEl: HTMLElement | null = null
 let settingsSavedCb: ((next: GlanceSettings) => void) | null = null
+let interpretCb: ((on: boolean, lang: string) => void) | null = null
+
+/** onInterpretToggle wires the phone's start/stop to the glasses loop. */
+export function onInterpretToggle(cb: (on: boolean, lang: string) => void): void {
+  interpretCb = cb
+}
 
 /** onSettingsSaved lets the glasses loop pick up an edit without a restart. */
 export function onSettingsSaved(cb: (next: GlanceSettings) => void): void {
@@ -108,6 +114,18 @@ export function renderPhoneUI(): void {
       <button class="ghost" id="dn-test">연결 테스트</button>
     </div>
     <div class="result" id="dn-result"></div>
+    <h2 style="font-size:15px;margin:26px 0 8px">통역</h2>
+    <p class="sub" style="margin:0 0 10px">
+      안경 마이크를 열어 상대 말을 자막으로 띄웁니다. 제스처 예산이 없어 시작·중지는 여기에 둡니다.
+    </p>
+    <div class="field">
+      <label for="dn-lang">번역 대상 언어</label>
+      <input id="dn-lang" value="ko" autocapitalize="off" spellcheck="false" />
+    </div>
+    <div class="row">
+      <button class="primary" id="dn-interp-on">통역 시작</button>
+      <button class="ghost" id="dn-interp-off">중지</button>
+    </div>
     <p class="hint">
       QR 시드(<code>?seed=</code>)로 처음 넣은 값이 여기 그대로 보입니다.
       게이트웨이 주소가 바뀌면 QR을 다시 만들지 말고 여기서 고치세요 — 저장하면 안경이 바로 새 주소로 다시 읽습니다.
@@ -145,6 +163,18 @@ export function renderPhoneUI(): void {
     result.className = 'result ok'
     result.textContent = '저장했습니다. 안경이 새 설정으로 다시 읽습니다.'
     settingsSavedCb?.(next)
+  })
+
+  const langInput = root.querySelector<HTMLInputElement>('#dn-lang')!
+  root.querySelector<HTMLButtonElement>('#dn-interp-on')!.addEventListener('click', () => {
+    interpretCb?.(true, langInput.value.trim() || 'ko')
+    result.className = 'result ok'
+    result.textContent = '통역을 시작했습니다. 안경에서 탭하면 중지됩니다.'
+  })
+  root.querySelector<HTMLButtonElement>('#dn-interp-off')!.addEventListener('click', () => {
+    interpretCb?.(false, langInput.value.trim() || 'ko')
+    result.className = 'result'
+    result.textContent = '통역을 중지했습니다.'
   })
 
   testBtn.addEventListener('click', () => {
