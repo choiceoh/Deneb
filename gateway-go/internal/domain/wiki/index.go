@@ -367,9 +367,20 @@ func parseTSVLine(line, category string) indexRenderEntry {
 	return indexRenderEntry{path: path, entry: e}
 }
 
+// isValidPageType gates the type column when the index is restored from
+// index.md, so a numeric backlinks count from a pre-type file is not mistaken
+// for a type. It must therefore list every value this package actually WRITES —
+// otherwise the restore silently blanks the field and the next Save persists
+// the loss.
+//
+// The domain writers drifted ahead of this list: deals.go writes "deal",
+// sites.go "site", and project_status.go/restructure.go "project". Measured on
+// the live wiki 2026-07-26, that was 87 of 626 pages losing their type on every
+// restart. The guard still rejects free-form values (an LLM once wrote
+// "preference"), which is what keeps the old-format numeric column out.
 func isValidPageType(s string) bool {
 	switch s {
-	case "concept", "entity", "source", "comparison", "log":
+	case "concept", "entity", "source", "comparison", "log", "deal", "site", "project":
 		return true
 	}
 	return false
