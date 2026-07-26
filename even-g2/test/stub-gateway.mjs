@@ -15,6 +15,9 @@ import { createServer } from 'node:http'
 
 const OK_GLANCE = {
   text: '알림 2건 · 14:00 회의',
+  // The briefing line. Without it CI renders the alert page in its no-counts
+  // layout and the feature that added the line is never drawn at all.
+  counts: '일정 1 · 할 일 2',
   // Fixed: the app excludes `generated` from its render signature on purpose,
   // and pinning it keeps the payload byte-identical across polls anyway.
   generated: '2026-07-25T09:00:00.000Z',
@@ -39,6 +42,7 @@ const OK_GLANCE = {
 // payload always arrives on the home list, whatever ran before it.
 const ALT_GLANCE = {
   text: '알림 1건 · 종일 비움',
+  counts: '할 일 4',
   generated: '2026-07-25T09:00:00.000Z',
   cached: false,
   pages: [{ id: 'home', title: '알림', text: '세금계산서 발행 요청' }],
