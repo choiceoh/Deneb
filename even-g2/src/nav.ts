@@ -373,16 +373,19 @@ export function remainingSummary(route: NavRoute, state: NavState): string {
  */
 export function navTextLines(route: NavRoute, state: NavState): string[] {
   if (route.steps.length === 0) return ["경로 없음"];
-  if (state.arrived) return ["도착했습니다", "", "탭=종료"];
+  if (state.arrived) return ["도착", "", "탭=종료"];
   const idx = Math.min(state.stepIndex, route.steps.length - 1);
-  const step = route.steps[idx];
+  // Numbers and symbols, no prose (operator's call, 2026-07-26).
+  //
+  // The arrow and the distance are already the two largest things on the panel,
+  // drawn into the bitmap. TMap's sentence was a third element competing for the
+  // same glance and it is the one a wearer at speed reads last, so it is gone.
+  // What stays is countable: how far is left, how long, where in the route.
   const lines: string[] = [];
-  const sentence = stripTrailingDistance(step.full);
-  if (sentence && sentence !== step.short) lines.push(sentence);
-  const next = route.steps[idx + 1];
-  if (next) lines.push(`다음: ${next.short}`);
   const summary = remainingSummary(route, state);
-  if (summary) lines.push(`${summary} · ${idx + 1}/${route.steps.length}`);
+  if (summary) lines.push(summary);
+  lines.push(`${idx + 1}/${route.steps.length}`);
+  lines.push("");
   lines.push("탭=중지");
   return lines.slice(0, HUD_LINES);
 }

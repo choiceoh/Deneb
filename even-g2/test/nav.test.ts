@@ -347,12 +347,15 @@ describe("remainingSummary / navTextLines", () => {
     );
   });
 
-  it("omits the distance from the text — the bitmap already shows it", () => {
-    // The two-numbers problem, one line lower: the panel's largest element is
-    // the distance drawn into the image, so repeating it here competes with it.
+  it("carries numbers only — no prose (operator's call)", () => {
+    // The arrow and distance are already the two biggest things on the panel;
+    // TMap's sentence was a third element competing for the same glance, and it
+    // is the one read last at speed.
     const lines = navTextLines(route, { stepIndex: 1, arrived: false });
-    expect(lines[0]).not.toMatch(/^\d+m/);
-    expect(lines.join("\n")).toContain("소공로");
+    expect(lines.join("\n")).not.toContain("소공로");
+    expect(lines.join("\n")).not.toContain("따라");
+    expect(lines[0]).toMatch(/^\d/);
+    expect(lines).toContain("2/3");
   });
 
   it("keeps the tap hint and stays within the line budget", () => {

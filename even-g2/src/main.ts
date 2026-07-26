@@ -3,7 +3,6 @@ import {
   AudioInputSource,
   ImageContainerProperty,
   ImageRawDataUpdate,
-  RebuildPageContainer,
   waitForEvenAppBridge,
   TextContainerProperty,
   TextContainerUpgrade,
@@ -195,10 +194,56 @@ const mainText = new TextContainerProperty({
   isEventCapture: 1,
 });
 
+// Every container the app will ever use is declared HERE, at startup.
+//
+// The nav screen used to add its image containers through rebuildPageContainer
+// and the arrow never appeared on the device. Even's own image template creates
+// image containers in the startup page, so that is what this does — switching
+// modes now only changes CONTENT, never the page structure, which removes a
+// whole class of "did the host accept the rebuild" failure.
+//
+// An image container with no data drawn into it renders nothing, so these are
+// invisible until navigation pushes a frame.
+const navText = new TextContainerProperty({
+  xPosition: 0,
+  yPosition: ARROW_H + 10,
+  width: 576,
+  height: 288 - ARROW_H - 10,
+  borderWidth: 0,
+  borderColor: 0,
+  paddingLength: 4,
+  containerID: 2,
+  containerName: "navText",
+  content: " ",
+  isEventCapture: 0,
+  zOrderIndex: 1,
+});
+
+const arrowImage = new ImageContainerProperty({
+  xPosition: 8,
+  yPosition: 8,
+  width: ARROW_W,
+  height: ARROW_H,
+  containerID: 3,
+  containerName: "arrow",
+  zOrderIndex: 2,
+});
+
+const speedImage = new ImageContainerProperty({
+  xPosition: 576 - SPEED_W - 8,
+  yPosition: 8,
+  width: SPEED_W,
+  height: SPEED_H,
+  containerID: 4,
+  containerName: "speed",
+  zOrderIndex: 3,
+});
+
 const started = await bridge.createStartUpPageContainer(
   new CreateStartUpPageContainer({
-    containerTotalNum: 1,
-    textObject: [mainText],
+    containerTotalNum: 4,
+    textObject: [mainText, navText],
+    imageObject: [arrowImage, speedImage],
   }),
 );
 if (started !== 0) {
@@ -1061,106 +1106,26 @@ function clockLabel(): string {
   return `${now.getMonth() + 1}/${now.getDate()} ${wd} ${hh}:${mm}`;
 }
 
-/**
- * NAV_ARROW_ID — the image container the maneuver arrow lives in.
- *
- * Image containers cannot set `isEventCapture` (documented in Even's own image
- * template), so the full-screen text container stays behind it to catch taps.
- * With zOrderIndex set on one container it must be set on ALL of them, so both
- * carry it.
- */
 const NAV_ARROW_ID = 3;
 const NAV_SPEED_ID = 4;
 
-/** enterNavPage rebuilds the glasses page with an arrow slot on the right. */
+/**
+ * enterNavPage switches to the navigation layout by CHANGING CONTENT ONLY.
+ *
+ * No rebuildPageContainer: the containers are declared at startup. The device
+ * showed no arrow at all while this went through a rebuild, and Even's own image
+ * template only ever creates image containers in the startup page — so the page
+ * structure is now fixed for the app's lifetime and modes just fill it.
+ */
 async function enterNavPage(): Promise<boolean> {
-  const ok = await bridge.rebuildPageContainer(
-    new RebuildPageContainer({
-      containerTotalNum: 4,
-      textObject: [
-        // Full-screen capture layer, kept blank: image containers cannot set
-        // isEventCapture, so taps need a text layer and this one must not also
-        // carry content that would sit under the bitmap.
-        new TextContainerProperty({
-          xPosition: 0,
-          yPosition: 0,
-          width: 576,
-          height: 288,
-          borderWidth: 0,
-          borderColor: 0,
-          paddingLength: 0,
-          containerID: 1,
-          containerName: "main",
-          content: " ",
-          isEventCapture: 1,
-          zOrderIndex: 0,
-        }),
-        // The sentence sits BELOW the bitmap, not beside it: text position is
-        // per-container, so a separate container is the only way to keep the
-        // maneuver text clear of the arrow.
-        new TextContainerProperty({
-          xPosition: 0,
-          yPosition: ARROW_H + 12,
-          width: 576,
-          height: 288 - ARROW_H - 12,
-          borderWidth: 0,
-          borderColor: 0,
-          paddingLength: 4,
-          containerID: 2,
-          containerName: "navText",
-          content: "경로 계산 중…",
-          isEventCapture: 0,
-          zOrderIndex: 1,
-        }),
-      ],
-      imageObject: [
-        new ImageContainerProperty({
-          xPosition: 8,
-          yPosition: 8,
-          width: ARROW_W,
-          height: ARROW_H,
-          containerID: NAV_ARROW_ID,
-          containerName: "arrow",
-          zOrderIndex: 2,
-        }),
-        new ImageContainerProperty({
-          xPosition: 576 - SPEED_W - 8,
-          yPosition: 8,
-          width: SPEED_W,
-          height: SPEED_H,
-          containerID: NAV_SPEED_ID,
-          containerName: "speed",
-          zOrderIndex: 3,
-        }),
-      ],
-    }),
-  );
-  if (!ok) console.error("rebuildPageContainer(nav) failed");
-  return ok;
+  await showText(" ");
+  await showNavText("경로 계산 중…");
+  return true;
 }
 
-/** leaveNavPage restores the single full-screen text page. */
+/** leaveNavPage clears the nav containers and hands the screen back. */
 async function leaveNavPage(): Promise<void> {
-  await bridge.rebuildPageContainer(
-    new RebuildPageContainer({
-      containerTotalNum: 1,
-      textObject: [
-        new TextContainerProperty({
-          xPosition: 0,
-          yPosition: 0,
-          width: 576,
-          height: 288,
-          borderWidth: 0,
-          borderColor: 5,
-          paddingLength: 4,
-          containerID: 1,
-          containerName: "main",
-          content: " ",
-          isEventCapture: 1,
-        }),
-      ],
-    }),
-  );
+  await showNavText(" ");
 }
 
 /**
@@ -1190,13 +1155,17 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
         }),
       );
       if (res !== "success") {
-        // Never fatal: the text still names the maneuver, so a failed arrow
-        // degrades the display rather than stopping navigation.
+        // Surfaced to the PHONE, not just the console: the console is
+        // unreachable from a device report, and "화살표가 안 나온다" carries no
+        // diagnosis on its own. The result code names the cause.
         console.error("updateImageRawData:", res);
+        setPhoneStatus({ line: `화살표 렌더 실패: ${res}`, tone: "bad" });
         shownArrow = "";
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("arrow render failed", err);
+      setPhoneStatus({ line: `화살표 생성 실패: ${msg}`, tone: "bad" });
       shownArrow = "";
     }
   });
