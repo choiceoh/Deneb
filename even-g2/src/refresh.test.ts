@@ -5,6 +5,7 @@ import {
   MAX_REFRESH_MS,
   advanceCursor,
   clampCursor,
+  connectionLabel,
   windowRange,
   nextDelayMs,
   payloadSignature,
@@ -186,5 +187,19 @@ describe('windowRange', () => {
   it('survives a stale cursor past the end', () => {
     const { start, end } = windowRange(99, 12)
     expect({ start, end }).toEqual({ start: 7, end: 12 })
+  })
+})
+
+describe('connectionLabel', () => {
+  it('stays quiet through a single missed poll', () => {
+    // One miss is routine on a phone-relayed private network; blinking a marker
+    // on and off for it is the flicker this whole policy exists to avoid.
+    expect(connectionLabel(0)).toBe('')
+    expect(connectionLabel(1)).toBe('')
+  })
+
+  it('speaks up once the link is properly down', () => {
+    expect(connectionLabel(2)).toBe('연결 끊김')
+    expect(connectionLabel(8)).toBe('연결 끊김')
   })
 })

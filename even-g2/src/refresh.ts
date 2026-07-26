@@ -57,6 +57,23 @@ export function payloadSignature(payload: GlancePayload): string {
 }
 
 /**
+ * connectionLabel is the quiet counterpart to the silent-failure policy.
+ *
+ * A background failure deliberately never reaches the display — flashing
+ * "오류" into someone's field of view every time they walk out of Tailscale
+ * range is worse than saying nothing. But saying nothing turns a stale screen
+ * into a confident lie: with the backoff running out to 12 minutes, the wearer
+ * glances at alerts from a quarter of an hour ago and reads them as current.
+ *
+ * So: no flash, but one word in the header once the link is properly down. Two
+ * failures, not one, because a single missed poll is normal on a phone-relayed
+ * private network and would otherwise blink the marker on and off.
+ */
+export function connectionLabel(consecutiveFailures: number): string {
+  return consecutiveFailures >= 2 ? '연결 끊김' : ''
+}
+
+/**
  * How many alert lines fit on the HUD alongside the header and footer.
  *
  * 576×288 holds roughly a dozen lines, and the alert page spends the rest on a
