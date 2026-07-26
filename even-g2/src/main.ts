@@ -26,6 +26,7 @@ import { dispatchHubEvent } from "./events";
 import {
   onImuCapture,
   onInterpretToggle,
+  onGlyphProbe,
   onNavToggle,
   onSettingsSaved,
   renderPhoneUI,
@@ -36,6 +37,7 @@ import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from "./interpret";
 import {
   advanceNav,
   fetchRoute,
+  glyphProbeLines,
   initialNavState,
   navLines,
   type NavCoord,
@@ -231,6 +233,13 @@ bridge.onAppLocationChanged((loc) => {
   // otherwise — the stream is opened by startNav and closed by stopNav.
   if (!navRoute) return;
   void onNavFix({ lat: loc.latitude, lon: loc.longitude });
+});
+
+onGlyphProbe(() => {
+  void (async () => {
+    pauseLoop();
+    await showText(glyphProbeLines().join("\n") + "\n\n탭=목록");
+  })();
 });
 
 onNavToggle((on, destination, mode) => {

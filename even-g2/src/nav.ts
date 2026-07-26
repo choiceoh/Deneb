@@ -268,3 +268,29 @@ export async function fetchRoute(
     clearTimeout(timer);
   }
 }
+
+/**
+ * GLYPH_PROBE — candidate arrow glyphs, grouped one row per family.
+ *
+ * The G2 font does NOT cover everything: `▸` renders as literally nothing,
+ * which is why the list cursor is a plain `>`. Guessing a second time is not
+ * worth it — one look at the real glasses settles which families exist, and a
+ * blank row in this probe is the answer for that whole family.
+ *
+ * ASCII is last on purpose: it is the known-good baseline, so if row 6 is also
+ * blank the probe itself is broken rather than the font.
+ */
+export const GLYPH_PROBE: Array<{ label: string; glyphs: string }> = [
+  { label: "1 기본", glyphs: "\u2190 \u2192 \u2191 \u2193" },
+  { label: "2 회전", glyphs: "\u21b0 \u21b1 \u2934 \u2935" },
+  { label: "3 삼각", glyphs: "\u25c0 \u25b6 \u25b2 \u25bc" },
+  { label: "4 굵은", glyphs: "\u2b05 \u27a1 \u2b06 \u2b07" },
+  { label: "5 유턴", glyphs: "\u2936 \u2937 \u21a9 \u21aa" },
+  { label: "6 아스키", glyphs: "< > ^ v" },
+];
+
+/** glyphProbeLines renders the probe within the HUD line budget. */
+export function glyphProbeLines(): string[] {
+  const rows = GLYPH_PROBE.map((r) => `${r.label}  ${r.glyphs}`);
+  return ["글리프 확인 — 빈 줄=미지원", ...rows].slice(0, HUD_LINES);
+}
