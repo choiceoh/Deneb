@@ -165,6 +165,21 @@ func recordPhoneUsage(logger *slog.Logger, payload string) {
 	}
 }
 
+// phoneCallLogPath is the native client's latest recent-call digest. Cache-only
+// context for phone_read("calllog"), like the usage digest: knowing who the
+// operator spoke to and for how long is 인물/미팅 context worth having on hand,
+// but a finished call is not by itself worth interrupting them over.
+func phoneCallLogPath() string {
+	return filepath.Join(config.ResolveStateDir(), "phone-calllog.txt")
+}
+
+func recordPhoneCallLog(logger *slog.Logger, payload string) {
+	p := phoneCallLogPath()
+	if err := os.WriteFile(p, []byte(strings.TrimSpace(payload)), 0o600); err != nil && logger != nil {
+		logger.Warn("phone calllog: cache write failed", "path", p, "error", err)
+	}
+}
+
 // phoneCrashPath is the on-disk log of native-client crash reports — uncaught
 // exceptions the phone captured at crash time and forwarded on its next launch.
 // The observe plane / logs-errors surface the one-line summary; this file holds
@@ -393,6 +408,13 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 	// create proactive alerts by itself.
 	if strings.EqualFold(strings.TrimSpace(eventType), "usage_update") {
 		recordPhoneUsage(s.logger, text)
+		return
+	}
+	// calllog_update: recent-call digest from the native client. Cache only, for
+	// the same reason as usage_update — a call that already ended is context for
+	// the next question, not a reason to speak up.
+	if strings.EqualFold(strings.TrimSpace(eventType), "calllog_update") {
+		recordPhoneCallLog(s.logger, text)
 		return
 	}
 	// client_crash: an uncaught exception the native app captured at crash time and

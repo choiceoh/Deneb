@@ -14,6 +14,17 @@
     <uses-permission android:name="android.permission.SEND_SMS"/>
 
     <!--
+      Call log is FOSS-only for the same reason as SMS: Play policy restricts
+      READ_CALL_LOG to default-dialer apps. It feeds one coarse digest (other
+      party, direction, rounded duration, time — 24h window, capped) that the
+      gateway caches for phone_read("calllog"); who the operator spoke to and
+      for how long is 인물/미팅 context, and the synced address book is what
+      turns a number into a person. The sensor no-ops when the permission is
+      not granted, so the Play variant simply never reports calls.
+    -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+
+    <!--
       Contacts read is FOSS-only for the same privacy reason as SMS. It enriches
       people already in the wiki (phone/email/org) and feeds the ASR proper-noun
       bias; it never uploads the whole address book as new entries. The feature

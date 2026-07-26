@@ -3,6 +3,8 @@ package runtimeops
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -44,7 +46,6 @@ func TestPhoneRead_RetiredWhatsReturnGuidance(t *testing.T) {
 	read := ToolPhoneRead(nil)
 	for what, want := range map[string]string{
 		"clipboard": "지원이 종료",
-		"calllog":   "지원이 종료",
 		"contacts":  "contacts",
 	} {
 		out, err := read(context.Background(), json.RawMessage(`{"what":"`+what+`"}`))
@@ -96,5 +97,40 @@ func TestPhoneWrite_TextRequiredForAppOps(t *testing.T) {
 		if _, err := write(context.Background(), json.RawMessage(`{"to":"`+to+`"}`)); err == nil {
 			t.Errorf("%s without text must error", to)
 		}
+	}
+}
+
+// Call log was retired with Termux and revived on the push-and-cache path
+// (2026-07-26). Its contract is the same as usage/location: serve the cache when
+// fresh, otherwise ask the app for a push rather than erroring.
+func TestPhoneRead_CallLogServesCacheThenAsksForSync(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DENEB_STATE_DIR", dir)
+
+	rec := &actionRecorder{}
+	read := ToolPhoneRead(rec.send)
+
+	out, err := read(context.Background(), json.RawMessage(`{"what":"calllog"}`))
+	if err != nil {
+		t.Fatalf("empty cache must not error: %v", err)
+	}
+	if !strings.Contains(out, "갱신을 요청") {
+		t.Errorf("stale call log should request a sync_state push, got %q", out)
+	}
+
+	digest := "김성훈(010-0000-0000) 수신 4분 · 14:02"
+	if err := os.WriteFile(filepath.Join(dir, "phone-calllog.txt"), []byte(digest), 0o600); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+	out, err = read(context.Background(), json.RawMessage(`{"what":"calllog"}`))
+	if err != nil {
+		t.Fatalf("cached read: %v", err)
+	}
+	if !strings.Contains(out, digest) {
+		t.Errorf("cached digest missing from %q", out)
+	}
+	// "calls" is the documented alias and must reach the same cache.
+	if out2, _ := read(context.Background(), json.RawMessage(`{"what":"calls"}`)); !strings.Contains(out2, digest) {
+		t.Errorf("alias \"calls\" did not serve the cache: %q", out2)
 	}
 }
