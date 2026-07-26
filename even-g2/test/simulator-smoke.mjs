@@ -527,11 +527,33 @@ async function main() {
   // This needs a genuine second launch: there is no reload in the automation
   // API, and the whole point is what happens at boot.
   simulator.kill('SIGTERM')
-  await sleep(3_000)
+  // Wait for the port to be RELEASED, not for a fixed sleep. A three-second
+  // guess lost the race once (run 30182119272): /api/ping answered from the
+  // dying process, so the readiness check passed, the relaunch never got to
+  // bind, and the harness sat waiting on an app that had never started.
+  await waitFor('the old simulator to release the automation port', async () => {
+    try {
+      await api('/api/ping')
+      return false
+    } catch {
+      return true
+    }
+  }, 30_000)
   await stub.setMode('error')
   const glanceBeforeColdOpen = stub.counts().glance
+  const spawnErrorsBefore = spawnErrors.length
   await startSimulator('simulator-cold')
-  await waitFor('the cold-open app to reach the gateway', async () => stub.counts().glance > glanceBeforeColdOpen, 30_000)
+  await waitFor(
+    'the cold-open app to reach the gateway',
+    async () => {
+      // A relaunch that dies must report its own reason instead of timing out.
+      if (spawnErrors.length > spawnErrorsBefore) {
+        throw new Error(spawnErrors.slice(spawnErrorsBefore).join('; '))
+      }
+      return stub.counts().glance > glanceBeforeColdOpen
+    },
+    45_000,
+  )
   await sleep(6_000)
   const coldOpen = await screenshot('20-cold-open-offline')
   await stub.setMode('ok')
