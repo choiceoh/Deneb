@@ -7,6 +7,7 @@ import {
   listLabel,
   normalizeItems,
   normalizePages,
+  readNotice,
 } from './deneb'
 import { REQUEST_TIMEOUT_MS } from './refresh'
 
@@ -169,5 +170,31 @@ describe('httpMessage', () => {
   it('keeps the gateway wording otherwise', () => {
     expect(httpMessage(500, 'stub: induced failure')).toBe('stub: induced failure')
     expect(httpMessage(418)).toBe('HTTP 418')
+  })
+})
+
+describe('readNotice', () => {
+  it('keeps a usable notice', () => {
+    expect(readNotice({ id: '17', text: ' 견적 회신 보냈어요 ' })).toEqual({
+      id: '17',
+      text: '견적 회신 보냈어요',
+    })
+  })
+
+  it('refuses a notice with no id — it would re-show on every poll', () => {
+    // The gateway keeps offering the same notice for a while so a dropped poll
+    // cannot lose it; without an id the plugin cannot tell repeats apart.
+    expect(readNotice({ text: '답변' })).toBeUndefined()
+  })
+
+  it('refuses a notice with nothing to say', () => {
+    expect(readNotice({ id: '17', text: '   ' })).toBeUndefined()
+    expect(readNotice(undefined)).toBeUndefined()
+  })
+
+  it('bounds the text to what a HUD can hold', () => {
+    const out = readNotice({ id: '1', text: 'ㄱ'.repeat(400) })!
+    expect(Array.from(out.text).length).toBeLessThanOrEqual(220)
+    expect(out.text.endsWith('…')).toBe(true)
   })
 })

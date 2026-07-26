@@ -41,7 +41,7 @@ renderPhoneUI()
 
 const bridge = await waitForEvenAppBridge()
 
-type Screen = 'setup' | 'page' | 'detail' | 'status' | 'confirmAck'
+type Screen = 'setup' | 'page' | 'detail' | 'status' | 'confirmAck' | 'notice'
 
 const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
 const LIST_PAGE_IDS = new Set(['home', 'alerts'])
@@ -59,6 +59,8 @@ let lastCached = false
 let lastCounts = ''
 /** "지금 금호타이어 · 종료 20분" — the lead line, straight from the gateway. */
 let lastNow = ''
+/** Notice ids already put on the glass, so a re-offered one is not shown twice. */
+let shownNoticeId = ''
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -229,6 +231,11 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === 'notice') {
+    screen = 'page'
+    await renderCurrentPage()
+    return
+  }
   if (screen === 'confirmAck') {
     await doAck()
     return
@@ -298,6 +305,28 @@ async function openDetail(index: unknown): Promise<void> {
   listCursor = i
   screen = 'detail'
   await showText(formatAlertDetail(items[i], { index: i, total: items.length }))
+}
+
+/**
+ * showNoticeIfNew puts one line from Deneb on the glass.
+ *
+ * This is the one place a poll is ALLOWED to take the screen, and the reason is
+ * that the wearer asked for it: a spoken turn that ran past the 15s bridge
+ * deadline gets "결과는 폰 데네브에서 이어서 볼게요" and the real answer used to
+ * be stranded there. It rides back on the next poll instead.
+ *
+ * Keyed by id and shown once — the gateway keeps offering it for a while so a
+ * dropped poll cannot lose the answer, which means the plugin must be the one
+ * that remembers.
+ */
+async function showNoticeIfNew(notice: GlancePayload['notice']): Promise<void> {
+  if (!notice || notice.id === shownNoticeId) return
+  shownNoticeId = notice.id
+  // Not over a confirm prompt: that screen is waiting on a destructive answer,
+  // and replacing it would leave the wearer's next tap pointing at nothing.
+  if (screen === 'confirmAck') return
+  screen = 'notice'
+  await showText(`${notice.text}\n\n탭=닫기`)
 }
 
 /**
@@ -377,6 +406,7 @@ async function doAck(): Promise<void> {
 
 async function onSwipeNext(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
+  if (screen === 'notice') return void (await onTap())
   if (screen === 'confirmAck') return void (await cancelAck())
   if (screen === 'setup') return
   if (screen === 'detail') {
@@ -419,6 +449,7 @@ async function onSwipeNext(): Promise<void> {
 
 async function onSwipePrev(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
+  if (screen === 'notice') return void (await onTap())
   if (screen === 'confirmAck') return void (await cancelAck())
   if (screen === 'setup') return
   if (screen === 'detail') {
@@ -561,7 +592,7 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
 
     // Nothing moved and nobody asked — leave the screen exactly as it is.
     // This is what makes the background poll invisible.
-    if (silent && unchanged) return
+    if (silent && unchanged) return void (await showNoticeIfNew(payload.notice))
 
     if (anchorDetailId) {
       const idx = items.findIndex((it) => it.id === anchorDetailId)
@@ -585,6 +616,7 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     screen = 'page'
     detailIndex = -1
     await renderCurrentPage()
+    await showNoticeIfNew(payload.notice)
   } catch (err) {
     consecutiveFailures++
     setPhoneStatus({

@@ -114,20 +114,35 @@ func (h *Handler) Glance(w http.ResponseWriter, r *http.Request) {
 	if force := r.URL.Query().Get("fresh"); force == "1" || force == "true" {
 		bundle := BuildGlance(ctx, now, h.sources)
 		h.storeGlanceCache(bundle, now)
-		writeGlanceJSON(w, bundle, now, false)
+		h.writeGlanceWithNotice(w, bundle, now, false)
 		return
 	}
 	if bundle, at, ok := h.lookupGlanceCache(now); ok {
-		writeGlanceJSON(w, bundle, at, true)
+		h.writeGlanceWithNotice(w, bundle, at, true)
 		return
 	}
 	bundle := BuildGlance(ctx, now, h.sources)
 	h.storeGlanceCache(bundle, now)
-	writeGlanceJSON(w, bundle, now, false)
+	h.writeGlanceWithNotice(w, bundle, now, false)
+}
+
+func (h *Handler) writeGlanceWithNotice(w http.ResponseWriter, bundle GlanceBundle, at time.Time, cached bool) {
+	body := glanceBody(bundle, at, cached)
+	// A late answer rides along on the poll the plugin was making anyway — no
+	// second endpoint, no push channel, and it survives the glasses being
+	// backgrounded when the turn finished.
+	if n, ok := h.takeNotice(); ok {
+		body["notice"] = map[string]any{"id": n.ID, "text": n.Text}
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, cached bool) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	writeJSON(w, http.StatusOK, glanceBody(bundle, at, cached))
+}
+
+func glanceBody(bundle GlanceBundle, at time.Time, cached bool) map[string]any {
+	return map[string]any{
 		"text":      bundle.Text,
 		"pages":     bundle.Pages,
 		"items":     bundle.Items,
@@ -135,7 +150,7 @@ func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, c
 		"counts":    bundle.Counts,
 		"generated": at.Format(time.RFC3339),
 		"cached":    cached,
-	})
+	}
 }
 
 func FormatGlance(ctx context.Context, now time.Time, src GlanceSources) string {
