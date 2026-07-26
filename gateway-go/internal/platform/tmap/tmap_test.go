@@ -55,7 +55,8 @@ func TestSearchPlacesDecodes(t *testing.T) {
 	t.Setenv("TMAP_APP_KEY", "k")
 	body := `{"searchPoiInfo":{"pois":{"poi":[
 	  {"name":"강남역","upperAddrName":"서울","middleAddrName":"강남구","lowerAddrName":"역삼동",
-	   "roadName":"강남대로","firstBuildNo":"396","noorLat":"37.4979","noorLon":"127.0276"},
+	   "roadName":"강남대로","firstBuildNo":"396","noorLat":"37.4979","noorLon":"127.0276",
+	   "frontLat":"37.4980","frontLon":"127.0280"},
 	  {"name":"좌표없는곳","noorLat":"","noorLon":""}
 	]}}}`
 	stubHTTP(t, http.StatusOK, body)
@@ -69,8 +70,11 @@ func TestSearchPlacesDecodes(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d places, want 1 (coordless dropped)", len(got))
 	}
-	if got[0].Name != "강남역" || got[0].Coord.Lat != 37.4979 {
-		t.Errorf("place = %+v", got[0])
+	// The entrance wins over the centroid — they differ by hundreds of metres
+	// at large venues, which is the difference between arriving and standing
+	// in the middle of a building.
+	if got[0].Name != "강남역" || got[0].Coord.Lat != 37.4980 || got[0].Coord.Lon != 127.0280 {
+		t.Errorf("place = %+v, want the frontLat/frontLon entrance", got[0])
 	}
 	if got[0].Address != "서울 강남구 역삼동 강남대로 396" {
 		t.Errorf("address = %q", got[0].Address)
@@ -233,5 +237,21 @@ func TestDirectionsTruncatesLongRoute(t *testing.T) {
 	}
 	if len(r.Steps) != MaxSteps || !r.Truncated {
 		t.Errorf("steps=%d truncated=%v, want %d and true", len(r.Steps), r.Truncated, MaxSteps)
+	}
+}
+
+func TestSearchPlacesFallsBackToCentroid(t *testing.T) {
+	t.Setenv("TMAP_APP_KEY", "k")
+	// Rural POIs come back with no mapped entrance. Dropping them would lose
+	// exactly the destinations that are hardest to find by eye.
+	stubHTTP(t, http.StatusOK, `{"searchPoiInfo":{"pois":{"poi":[
+	  {"name":"석문호","noorLat":"36.9","noorLon":"126.6","frontLat":"","frontLon":""}
+	]}}}`)
+	got, err := SearchPlaces(context.Background(), "석문호", nil, 5)
+	if err != nil {
+		t.Fatalf("SearchPlaces: %v", err)
+	}
+	if len(got) != 1 || got[0].Coord.Lat != 36.9 {
+		t.Errorf("got %+v, want the centroid fallback", got)
 	}
 }
