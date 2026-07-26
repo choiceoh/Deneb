@@ -34,7 +34,8 @@ func entry(ts, source, text string) string {
 func TestPhoneMessages_GroupsKakaoRoomsAndKeepsEachMessage(t *testing.T) {
 	now := time.Now()
 	stamp := now.Format("2006-01-02") + "T13:32:49+09:00"
-	seedLedger(t, now,
+	seedLedger(
+		t, now,
 		entry(stamp, "카카오톡", "대화방: 선향란 과장\n메시지:\n- 선향란 과장: 네. 진행하겠습니다.\n- 선향란 과장: 자료는 내일 드리겠습니다."),
 	)
 	threads := readPhoneMessageThreads(now, 1)
@@ -53,7 +54,8 @@ func TestPhoneMessages_CumulativeSmsStaysOneEntry(t *testing.T) {
 	// A card-approval SMS re-carries the whole thread on every update. Splitting
 	// it by newline turned one alert into six "messages" and crowded a real
 	// conversation out of the digest.
-	seedLedger(t, now,
+	seedLedger(
+		t, now,
 		entry(stamp, "메시지", "1588-8900\n1588-8900: [Web발신]\n삼성6483승인 오*택\n1,400원 일시불\n07/26 14:58 전남대학교소\n누적11,328,099원"),
 	)
 	threads := readPhoneMessageThreads(now, 1)
