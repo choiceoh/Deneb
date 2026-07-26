@@ -83,6 +83,11 @@ type runDeps struct {
 	// work-feed card — the server-side auto safety net for the deliverable → 작업
 	// 피드 contract. Optional; nil disables (older wiring/tests).
 	deliverablePublisher func(text string) (bool, error)
+	// translateThinking renders the turn's extended-thinking text into Korean
+	// for the 🧠 blockquote. Optional; nil leaves thinking in whatever language
+	// the model produced. Display-only — the streamed `reasoningFull` payload
+	// is untouched.
+	translateThinking    func(ctx context.Context, text string) (string, bool)
 	agentLog             *agentlog.Writer    // optional; enables agent detail logging
 	registry             *modelrole.Registry // centralized model role registry
 	contextCfg           ContextConfig

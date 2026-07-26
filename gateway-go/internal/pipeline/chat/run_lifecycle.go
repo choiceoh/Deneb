@@ -356,7 +356,8 @@ func formatRunReplyText(params RunParams, deps runDeps, result *agent.AgentResul
 	if !showThinkingInChat(deps, params.SessionKey) || result.Thinking == "" {
 		return replyText
 	}
-	formatted := formatThinkingForChannel(params.Delivery.Channel, result.Thinking)
+	formatted := formatThinkingForChannel(params.Delivery.Channel,
+		translateThinkingForDisplay(deps, result.Thinking))
 	if formatted == "" {
 		return replyText
 	}

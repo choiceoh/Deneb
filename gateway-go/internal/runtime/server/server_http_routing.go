@@ -11,6 +11,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
 // buildMux configures HTTP routing for health, native-client HTTP (SSE via gatewayhttp/nativeapi), hooks, and introspection routes.
@@ -44,6 +45,14 @@ func (s *Server) buildMux() *http.ServeMux {
 		},
 		Fleet:   s.fleet,
 		Version: s.version,
+	}
+	// Korean-first surface: the system prompt is overwhelmingly English, so
+	// the model reasons in English even on Korean turns (measured 2026-07-26:
+	// 82% of stored reasoning blocks are English-dominant). Left nil when
+	// DeepL is unconfigured, which disables the feature rather than failing
+	// once per turn.
+	if toolbind.ThinkingTranslatorEnabled() {
+		clientRoutes.TranslateThinking = toolbind.TranslateThinking
 	}
 	// Keep route discovery available to lightweight tests and diagnostics that
 	// construct a zero-value Server without the full RPC/chat bootstrap.

@@ -188,7 +188,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		// doesn't replace the streamed body in the client's done frame.
 		return &chatStreamResult{Text: res.BestText, Model: res.Model, FellBack: res.FellBack, Reasoning: res.Thinking}, nil
 	}
-	writeChatStreamSSE(runCtx, r.Context(), w, sessionKey, runner, s.logger)
+	writeChatStreamSSE(runCtx, r.Context(), w, sessionKey, runner, s.logger, s.translateThinking)
 }
 
 // writeChatStreamSSE drives one chat turn and serializes its output as SSE.
@@ -200,7 +200,14 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 // disconnect doesn't kill it); connCtx tracks the live client connection so the
 // keepalive stops the moment the client drops. Writes after a disconnect fail
 // harmlessly (best-effort) while the detached run finishes and persists.
-func writeChatStreamSSE(ctx, connCtx context.Context, w http.ResponseWriter, sessionKey string, run chatStreamRunner, logger *slog.Logger) {
+func writeChatStreamSSE(
+	ctx, connCtx context.Context,
+	w http.ResponseWriter,
+	sessionKey string,
+	run chatStreamRunner,
+	logger *slog.Logger,
+	translateThinking func(ctx context.Context, text string) (string, bool),
+) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		// net/http's ResponseWriter is always a Flusher; this only trips with a
@@ -312,11 +319,20 @@ func writeChatStreamSSE(ctx, connCtx context.Context, w http.ResponseWriter, ses
 	case result == nil:
 		writeEvent("error", map[string]string{"error": "empty result"})
 	default:
+		// The client overwrites its expandable reasoning block with this frame,
+		// so translating here is what turns the live English stream into Korean
+		// once the turn settles. Fail-open: the original ships on any refusal.
+		reasoning := result.Reasoning
+		if translateThinking != nil && strings.TrimSpace(reasoning) != "" {
+			if translated, ok := translateThinking(ctx, reasoning); ok && strings.TrimSpace(translated) != "" {
+				reasoning = translated
+			}
+		}
 		writeEvent("done", map[string]any{
 			"text":      result.Text,
 			"model":     result.Model,
 			"fellBack":  result.FellBack,
-			"reasoning": result.Reasoning,
+			"reasoning": reasoning,
 		})
 	}
 }

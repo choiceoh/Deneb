@@ -70,6 +70,11 @@ type Config struct {
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)
 	GroupwareAttachmentDownload GroupwareAttachmentDownload
+	// TranslateThinking renders the turn's reasoning into Korean for the done
+	// frame the native client renders as its expandable reasoning block. The
+	// live `reasoning` deltas stay in the model's own language — the block
+	// settles to Korean when the turn completes. Optional; nil disables.
+	TranslateThinking func(ctx context.Context, text string) (string, bool)
 }
 
 // Handler serves the authenticated native-client HTTP surface.
@@ -81,6 +86,7 @@ type Handler struct {
 	logger                      *slog.Logger
 	attachmentFactory           func() (MailAttachmentClient, error)
 	groupwareAttachmentDownload GroupwareAttachmentDownload
+	translateThinking           func(ctx context.Context, text string) (string, bool)
 }
 
 // New creates a native-client HTTP handler set.
@@ -97,6 +103,7 @@ func New(cfg Config) *Handler {
 		logger:                      cfg.Logger,
 		attachmentFactory:           cfg.AttachmentFactory,
 		groupwareAttachmentDownload: cfg.GroupwareAttachmentDownload,
+		translateThinking:           cfg.TranslateThinking,
 	}
 }
 
