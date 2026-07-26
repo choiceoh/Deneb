@@ -31,6 +31,7 @@ let interpretCb: ((on: boolean, lang: string) => void) | null = null;
 let navCb:
   ((on: boolean, destination: string, mode: "walk" | "car") => void) | null =
   null;
+let glyphCb: (() => void) | null = null;
 let imuCb: ((label: string) => void) | null = null;
 
 /** onImuCapture wires the phone's labelled-motion buttons to the glasses. */
@@ -49,6 +50,17 @@ export function onNavToggle(
   cb: (on: boolean, destination: string, mode: "walk" | "car") => void,
 ): void {
   navCb = cb;
+}
+
+/**
+ * onGlyphProbe wires the arrow-glyph probe.
+ *
+ * Which glyphs the G2 font actually covers is not documented and `▸` renders as
+ * nothing, so the only reliable answer comes from putting candidates on the
+ * real glasses and looking.
+ */
+export function onGlyphProbe(cb: () => void): void {
+  glyphCb = cb;
 }
 
 /** onInterpretToggle wires the phone's start/stop to the glasses loop. */
@@ -169,6 +181,9 @@ export function renderPhoneUI(): void {
       <button class="primary" id="dn-nav-walk">도보 안내</button>
       <button class="primary" id="dn-nav-car">자동차 안내</button>
       <button class="ghost" id="dn-nav-off">중지</button>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button class="ghost" id="dn-glyph">화살표 글리프 확인</button>
     </div>
     <details style="margin-top:26px">
       <summary style="color:#8b97a6;font-size:13px;cursor:pointer">IMU 기록 (헤드 제스처 개발용)</summary>

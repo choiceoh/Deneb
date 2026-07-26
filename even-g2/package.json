@@ -1,7 +1,7 @@
 {
   "name": "deneb-even-g2-glance",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "prepare:config": "node scripts/prepare-config.mjs",
     "seed": "node scripts/make-seed.mjs",
-    "pack": "npm run prepare:config && npm run build && evenhub pack app.json dist -o deneb-glance.ehpk",
+    "pack": "npm run prepare:config && npm run build && evenhub pack app.json dist -o deneb-glance-$(sed -n 's/.*\"version\": *\"\\([^\"]*\\)\".*/\\1/p' app.json | head -1)-$(git rev-parse --short HEAD).ehpk",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "smoke": "node test/simulator-smoke.mjs"

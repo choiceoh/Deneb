@@ -82,10 +82,12 @@ func (h *Handler) Route(w http.ResponseWriter, r *http.Request) {
 		}
 		places, err := routeSearchFn(r.Context(), keyword, &body.From, 5)
 		if err != nil {
+			h.logRoute("poi search failed", "keyword", keyword, "error", err)
 			writeRouteErr(w, err)
 			return
 		}
 		if len(places) == 0 {
+			h.logRoute("destination not found", "keyword", keyword)
 			writeErr(w, http.StatusNotFound, "목적지를 찾지 못했습니다")
 			return
 		}
@@ -98,9 +100,18 @@ func (h *Handler) Route(w http.ResponseWriter, r *http.Request) {
 
 	route, err := routeDirectionsFn(r.Context(), body.From, *dest, mode)
 	if err != nil {
+		h.logRoute("routing failed", "dest", destName, "mode", string(mode), "error", err)
 		writeRouteErr(w, err)
 		return
 	}
+	// Logged on success too: when the wearer reports the HUD looked wrong, this
+	// line is the only server-side record of what was actually sent. Without it
+	// the whole feature is diagnosable only by re-running it by hand, which is
+	// how the last three wire defects had to be found.
+	h.logRoute("route served",
+		"dest", destName, "mode", string(mode),
+		"steps", len(route.Steps), "totalM", route.TotalM,
+		"truncated", route.Truncated)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"route": route,
@@ -121,4 +132,13 @@ func writeRouteErr(w http.ResponseWriter, err error) {
 		return
 	}
 	writeErr(w, http.StatusBadGateway, err.Error())
+}
+
+// logRoute emits one structured line per route attempt, or nothing when the
+// handler was built without a logger (tests).
+func (h *Handler) logRoute(msg string, args ...any) {
+	if h == nil || h.logger == nil {
+		return
+	}
+	h.logger.Info("even g2 route: "+msg, args...)
 }

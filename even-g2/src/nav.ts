@@ -174,6 +174,7 @@ export function navLines(
   route: NavRoute,
   state: NavState,
   pos: NavCoord,
+  opts?: { arrow?: boolean },
 ): string[] {
   if (route.steps.length === 0) return ["경로 없음"];
   if (state.arrived) return ["도착했습니다"];
@@ -182,16 +183,25 @@ export function navLines(
   const step = route.steps[idx];
   const left = distanceM(pos, step.coord);
 
-  const lines = [liveInstruction(step, left)];
+  // With an arrow on screen the direction is already shown, so the text drops
+  // to the distance alone. This also removes a real hazard: the instruction and
+  // TMap's sentence carry DIFFERENT distances (metres to the maneuver vs metres
+  // travelled after it), and two competing numbers three centimetres from the
+  // eye is a misread waiting to happen.
+  const lines = opts?.arrow
+    ? [formatMetres(left) || liveInstruction(step, left)]
+    : [liveInstruction(step, left)];
 
   // The sentence only earns a line when it says more than the fitted form —
-  // TMap often repeats "목적지" or "출발" verbatim.
+  // TMap often repeats "목적지" or "출발" verbatim. Its trailing travel clause
+  // is dropped with an arrow present, for the same two-numbers reason.
+  const sentence = opts?.arrow ? stripTrailingDistance(step.full) : step.full;
   if (
-    step.full &&
-    step.full !== step.short &&
-    step.full !== liveInstruction(step, left)
+    sentence &&
+    sentence !== step.short &&
+    sentence !== liveInstruction(step, left)
   ) {
-    lines.push(step.full);
+    lines.push(sentence);
   }
 
   const next = route.steps[idx + 1];
@@ -267,4 +277,45 @@ export async function fetchRoute(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * GLYPH_PROBE — candidate arrow glyphs, grouped one row per family.
+ *
+ * The G2 font does NOT cover everything: `▸` renders as literally nothing,
+ * which is why the list cursor is a plain `>`. Guessing a second time is not
+ * worth it — one look at the real glasses settles which families exist, and a
+ * blank row in this probe is the answer for that whole family.
+ *
+ * ASCII is last on purpose: it is the known-good baseline, so if row 6 is also
+ * blank the probe itself is broken rather than the font.
+ */
+export const GLYPH_PROBE: Array<{ label: string; glyphs: string }> = [
+  { label: "1 기본", glyphs: "\u2190 \u2192 \u2191 \u2193" },
+  { label: "2 회전", glyphs: "\u21b0 \u21b1 \u2934 \u2935" },
+  { label: "3 삼각", glyphs: "\u25c0 \u25b6 \u25b2 \u25bc" },
+  { label: "4 굵은", glyphs: "\u2b05 \u27a1 \u2b06 \u2b07" },
+  { label: "5 유턴", glyphs: "\u2936 \u2937 \u21a9 \u21aa" },
+  { label: "6 아스키", glyphs: "< > ^ v" },
+];
+
+/** glyphProbeLines renders the probe within the HUD line budget. */
+export function glyphProbeLines(): string[] {
+  const rows = GLYPH_PROBE.map((r) => `${r.label}  ${r.glyphs}`);
+  return ["글리프 확인 — 빈 줄=미지원", ...rows].slice(0, HUD_LINES);
+}
+
+/**
+ * stripTrailingDistance removes TMap's "…N m 이동" travel clause.
+ *
+ * That clause measures distance AFTER the maneuver, while the headline shows
+ * distance TO it. Both are true and they are different numbers; with an arrow
+ * carrying the direction, the sentence is only there for the street and
+ * landmark, so the number is noise.
+ */
+export function stripTrailingDistance(full: string): string {
+  return full
+    .replace(/\s*[0-9.]+\s*(?:m|km)\s*이동\s*$/, "")
+    .replace(/\s*(?:을|를)?\s*따라\s*$/, "")
+    .trim();
 }
