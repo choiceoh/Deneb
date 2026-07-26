@@ -17,9 +17,11 @@ package ai.deneb.deneb
  *    on html/body, plus which element is actually `document.scrollingElement`.
  *  - `size` — content height vs viewport height. If content fits, "won't scroll"
  *    is not a bug at all; if it does not, the page is scrollable in principle.
- *  - `overlays` — fixed/sticky nodes covering most of the viewport, with their
+ *  - `overlays` — positioned nodes covering most of the viewport, with their
  *    `pointer-events`, because an overlay that swallows touches produces exactly
- *    the "no movement whatsoever" symptom.
+ *    the "no movement whatsoever" symptom. Any non-`static` position counts: the
+ *    element that actually caused this bug was `absolute`, and an earlier
+ *    fixed/sticky filter reported an empty list twice while it sat in plain sight.
  *  - `move` — the decisive test: script sets scrollTop and reads it back. If the
  *    document moves programmatically but not by finger, the document is fine and
  *    the touch pipeline is the problem (WebView/Compose), which is a completely
@@ -67,49 +69,58 @@ internal const val BROWSER_SCROLL_DIAGNOSTIC_JS: String = """
     out.size = { contentH: de.scrollHeight, viewportH: de.clientHeight, innerH: window.innerHeight,
                  bodyH: b ? b.scrollHeight : 0, scrollable: de.scrollHeight > de.clientHeight + 4 };
 
-    var vw = innerWidth, vh = innerHeight, ov = [];
-    var all = document.querySelectorAll('*');
-    for (var i = 0; i < all.length && ov.length < 8; i++) {
-      var e = all[i], s = cs(e);
-      if (s.position !== 'fixed' && s.position !== 'sticky') continue;
-      var r = e.getBoundingClientRect();
-      var w = Math.min(r.right, vw) - Math.max(r.left, 0);
-      var h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
-      if (w <= 0 || h <= 0) continue;
-      var cover = (w * h) / (vw * vh);
-      if (cover < 0.4) continue;
-      ov.push({ tag: e.tagName.toLowerCase(), cls: String(e.className || '').slice(0, 40),
-                pos: s.position, z: s.zIndex, pe: s.pointerEvents, cover: Math.round(cover * 100) / 100 });
+    function name(e) { return e ? (e.tagName.toLowerCase() + '.' + String(e.className || '').slice(0, 40)) : null; }
+
+    // One pass for both scans: each calls getComputedStyle on every node, and on
+    // a 20,000px thread that is the expensive part of the whole probe.
+    //
+    // `position` is deliberately NOT restricted to fixed/sticky. The element that
+    // actually caused this bug — Reddit's app-install sheet covering the entire
+    // viewport — is absolutely positioned, so a fixed/sticky filter reported an
+    // empty overlay list twice while the culprit sat in plain sight.
+    var vw = innerWidth, vh = innerHeight, ov = [], clips = [];
+    var all = document.querySelectorAll('*'), CAP = 25000;
+    var i = 0;
+    for (; i < all.length && i < CAP; i++) {
+      var e = all[i], s = cs(e), r = null;
+      if (ov.length < 8 && s.position !== 'static') {
+        r = e.getBoundingClientRect();
+        var w = Math.min(r.right, vw) - Math.max(r.left, 0);
+        var h = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+        if (w > 0 && h > 0) {
+          var cover = (w * h) / (vw * vh);
+          if (cover >= 0.4) {
+            ov.push({ tag: e.tagName.toLowerCase(), cls: String(e.className || '').slice(0, 40),
+                      pos: s.position, z: s.zIndex, pe: s.pointerEvents,
+                      cover: Math.round(cover * 100) / 100 });
+          }
+        }
+      }
+      if (clips.length >= 6) continue;
+      var mask = s.maskImage && s.maskImage !== 'none' ? s.maskImage
+               : (s.webkitMaskImage && s.webkitMaskImage !== 'none' ? s.webkitMaskImage : '');
+      var cut = (s.overflowY === 'hidden' || s.overflowY === 'clip') && e.scrollHeight > e.clientHeight + 8;
+      if (!mask && !cut) continue;
+      if (!r) r = e.getBoundingClientRect();
+      // A gate spans the column and swallows a lot; a cookie badge clipping its
+      // own 22px is noise that would bury the finding.
+      if (r.width < vw * 0.6) continue;
+      if (!mask && e.scrollHeight - e.clientHeight < 32) continue;
+      clips.push({ tag: e.tagName.toLowerCase(), cls: String(e.className || '').slice(0, 50),
+                   maxH: s.maxHeight, mask: String(mask).slice(0, 60),
+                   shown: e.clientHeight, hidden: e.scrollHeight - e.clientHeight });
     }
     out.overlays = ov;
+    out.clips = clips;
+    // A truncated scan that found nothing reads exactly like a clean page, so it
+    // has to say when it gave up.
+    out.scanCapped = i >= CAP;
+    out.nodes = all.length;
 
     // What is under the finger in the middle of the screen? If this is not page
     // content, something invisible is on top.
-    function name(e) { return e ? (e.tagName.toLowerCase() + '.' + String(e.className || '').slice(0, 40)) : null; }
     var mid = document.elementFromPoint(vw / 2, vh / 2);
     out.centerEl = name(mid);
-
-    // Content gating hides content *inside* a normal container, so it never
-    // shows up as an overlay: a gradient mask, or max-height + overflow hidden.
-    var clips = [], scanned = 0, CAP = 6000;
-    for (var j = 0; j < all.length && clips.length < 6; j++) {
-      if (++scanned > CAP) break;
-      var ce = all[j], ms = cs(ce);
-      var mask = ms.maskImage && ms.maskImage !== 'none' ? ms.maskImage
-               : (ms.webkitMaskImage && ms.webkitMaskImage !== 'none' ? ms.webkitMaskImage : '');
-      var cut = (ms.overflowY === 'hidden' || ms.overflowY === 'clip') && ce.scrollHeight > ce.clientHeight + 8;
-      if (!mask && !cut) continue;
-      var cr = ce.getBoundingClientRect();
-      // A gate spans the column and swallows a lot; a cookie badge clipping its
-      // own 22px is noise that would bury the finding.
-      if (cr.width < vw * 0.6) continue;
-      if (!mask && ce.scrollHeight - ce.clientHeight < 32) continue;
-      clips.push({ tag: ce.tagName.toLowerCase(), cls: String(ce.className || '').slice(0, 50),
-                   maxH: ms.maxHeight, mask: String(mask).slice(0, 60),
-                   shown: ce.clientHeight, hidden: ce.scrollHeight - ce.clientHeight });
-    }
-    out.clips = clips;
-    out.clipScanCapped = scanned > CAP;
 
     // Where does content stop? A vertical line of probes says what replaced it.
     var col = [];

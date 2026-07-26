@@ -19,7 +19,7 @@ class BrowserDiagnosticsTest {
         // bug were already lost.
         for (key in listOf(
             "doc", "size", "overlays", "centerEl", "move", "listeners",
-            "clips", "column", "cta", "atEnd", "quirk",
+            "clips", "column", "cta", "atEnd", "quirk", "scanCapped", "nodes",
         )) {
             assertTrue(js.contains("out.$key ="), "diagnostic must report `$key`: missing")
         }
@@ -57,9 +57,21 @@ class BrowserDiagnosticsTest {
         // A translated Reddit thread is tens of thousands of nodes and every
         // probe calls getComputedStyle. An unbounded scan would hang the page
         // we are trying to diagnose — and a truncated scan that reported
-        // nothing would read as "no gate found", the wrong conclusion.
-        assertTrue(js.contains("scanned > CAP"), "clip scan must be capped")
-        assertTrue(js.contains("out.clipScanCapped"), "a capped scan must say so")
+        // nothing would read as "no gate found", the wrong conclusion. A real
+        // capture hit the first cap (6,000) on a 20,127px thread and returned an
+        // empty `clips`, which is precisely the misreading this flag prevents.
+        assertTrue(js.contains("i < CAP"), "the element scan must be capped")
+        assertTrue(js.contains("out.scanCapped"), "a capped scan must say so")
+        assertTrue(js.contains("out.nodes"), "report the DOM size the cap is judged against")
+    }
+
+    @Test
+    fun doesNotRestrictOverlaysToFixedPositioning() {
+        // The sheet that covered the whole viewport was `position: absolute`, so
+        // a fixed/sticky filter reported `overlays: []` on two captures while the
+        // culprit was topmost at every probe point.
+        assertTrue(js.contains("s.position !== 'static'"), "any positioned node can overlay: $js")
+        assertFalse(js.contains("'sticky'"), "the fixed/sticky filter is what missed it: $js")
     }
 
     @Test
