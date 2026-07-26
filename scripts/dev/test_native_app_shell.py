@@ -85,6 +85,15 @@ class NativeAppShellTests(unittest.TestCase):
         write_executable(self.app / "gradlew", "#!/usr/bin/env bash\nexit 0\n")
 
     def fake_binary(self, name: str) -> str:
+        if name == "setsid":
+            # The app JVM's flags ride JAVA_TOOL_OPTIONS, not argv, so record them on
+            # their own line — otherwise the window/density contract is untestable.
+            return """
+                #!/usr/bin/env bash
+                printf 'setsid %s\n' "$*" >> "$FAKE_LOG"
+                printf 'setsid JAVA_TOOL_OPTIONS=%s\n' "${JAVA_TOOL_OPTIONS:-}" >> "$FAKE_LOG"
+                exit 0
+            """
         if name == "scrot":
             return """
                 #!/usr/bin/env bash
@@ -173,7 +182,7 @@ class NativeAppShellTests(unittest.TestCase):
                 proc = self.invoke(*args)
                 self.assertEqual(proc.returncode, 1)
                 self.assertIn("run the real native client headlessly", proc.stderr)
-                self.assertIn("start [phone|desktop]", proc.stderr)
+                self.assertIn("start [phone|phone2x|desktop]", proc.stderr)
                 self.assertEqual(self.calls(), [])
 
     def test_status_reports_instance_display_gateway_profile_and_artifact_paths(self) -> None:
@@ -191,7 +200,7 @@ class NativeAppShellTests(unittest.TestCase):
     def test_unknown_profile_fails_before_dependency_or_token_checks(self) -> None:
         proc = self.invoke("start", "tablet")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("unknown profile 'tablet' (use: phone | desktop)", proc.stderr)
+        self.assertIn("unknown profile 'tablet' (use: phone | phone2x | desktop)", proc.stderr)
         self.assertEqual(self.calls(), [])
 
     def test_start_reports_first_missing_display_dependency(self) -> None:
@@ -227,9 +236,34 @@ class NativeAppShellTests(unittest.TestCase):
         calls = "\n".join(self.calls())
         self.assertIn("Xvfb :199 -screen 0 412x915x24 -nolisten tcp -ac", calls)
         self.assertIn("setsid ./gradlew :composeApp:run --console=plain", calls)
+        # 1x: the window opens at the dp box itself and the app is told density 1.
+        self.assertIn("-Ddeneb.window.width=412 -Ddeneb.window.height=915 -Ddeneb.ui.scale=1", calls)
         self.assertIn("app window ready (wid=777)", proc.stderr)
         self.assertTrue((self.state / "app.pid").exists())
         self.assertEqual((self.state / "app_jvm.pid").read_text().strip(), str(os.getpid()))
+
+    def test_hidpi_profile_opens_a_scaled_window_and_hands_the_app_its_density(self) -> None:
+        # phone2x keeps the DP box (412x915) and scales only the pixel grid, so the
+        # X screen, the window geometry and the app's own density must all agree on
+        # 2x. If they drift apart the app either lays out at half size in a big
+        # window or renders a phone-width sliver on a 2x screen.
+        self.write_token()
+        proc = self.invoke(
+            "start", "phone2x",
+            env=self.env(XVFB_PID="", SEARCH_AFTER="1"),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(
+            (self.state / "profile").read_text().split(),
+            ["phone2x", "412", "915", "2", "824", "1830"],
+        )
+        calls = "\n".join(self.calls())
+        self.assertIn("Xvfb :199 -screen 0 824x1830x24 -nolisten tcp -ac", calls)
+        # The window opens at PHYSICAL px and the app is told the matching density;
+        # dp = 824/2 = 412, so the layout is byte-identical to the phone profile.
+        self.assertIn("-Ddeneb.window.width=824 -Ddeneb.window.height=1830 -Ddeneb.ui.scale=2", calls)
+        # phone2x is still the mobile branch (bottom bar, modal drawers).
+        self.assertIn("-Ddeneb.platform=phone", calls)
 
     def test_when_seed_requires_token_file_but_explicit_token_bypasses_it(self) -> None:
         missing = self.invoke("seed", "http://custom")

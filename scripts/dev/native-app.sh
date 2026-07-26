@@ -27,9 +27,11 @@
 #   scripts/dev/native-app.sh view            # also expose noVNC for a human to watch
 #   scripts/dev/native-app.sh stop            # tear everything down
 #
-# Coordinates are pixels as they appear in the screenshot (top-left origin). The
-# phone profile is 412x915 — a real Galaxy S26's dp size. Linux Compose renders at
-# density 1, so screenshot px == dp == xdotool coords: click the pixel you see.
+# Coordinates are pixels as they appear in the screenshot (top-left origin) — always,
+# on every profile. The phone profile is 412x915 — a real Galaxy S26's dp size — at
+# density 1, so there px == dp too. Use `start phone2x` for a 2x pixel grid when the
+# thing under review is sub-dp (hairlines, 1dp borders, a 2dp caret); coords still
+# mean screenshot pixels, they just no longer equal dp.
 #
 # Nothing here modifies the app source: the gateway URL + client token are
 # seeded into the desktop app's own encrypted settings (~/.deneb-client/settings.aes),
@@ -78,13 +80,19 @@ GW_URL="${DENEB_GATEWAY_URL:-http://100.111.114.20:18789}"
 # See docs/agent-rules/native-live-app.md ("dev 게이트웨이 연결").
 SKIKO_RENDER="${NATIVE_SKIKO:-SOFTWARE}"   # SOFTWARE is safe on headless Xvfb (no GL)
 
-# Profiles: NAME -> dpW dpH scale.  On Linux, Compose/Skiko ignores
-# sun.java2d.uiScale, so density is fixed at 1 → physical px == dp. We render at
-# true phone dp (a Galaxy S26 is ~412x915 dp); screenshot pixels map 1:1 to both
-# dp and xdotool input coords, so "click the pixel you see" just works.
+# Profiles: NAME -> dpW dpH scale.  Skiko on Xvfb reports no scale factor, so the
+# app is told its density explicitly (-Ddeneb.ui.scale) and the window is opened at
+# dp x scale PHYSICAL px. Screenshot pixels are always physical pixels, so xdotool
+# coords keep mapping 1:1 to what you see -- only the dp<->px ratio changes.
+#
+#   phone   412x915 @1x  -- dp == px. Cheapest; use for navigation and flow checks.
+#   phone2x 412x915 @2x  -- a real handset's pixel grid. Hairlines, 1dp borders and
+#                           a 2dp caret only become judgeable here; at 1x they are a
+#                           single half-lit row. Costs 4x the pixels per screenshot.
 profile_geometry() {
   case "$1" in
     phone)   echo "412 915 1" ;;
+    phone2x) echo "412 915 2" ;;
     desktop) echo "1280 800 1" ;;
     *)       echo "" ;;
   esac
@@ -213,7 +221,7 @@ record_app_jvm_pid() {
 cmd_start() {
   local profile="${1:-phone}"
   local geo; geo="$(profile_geometry "$profile")"
-  [[ -n "$geo" ]] || die "unknown profile '$profile' (use: phone | desktop)"
+  [[ -n "$geo" ]] || die "unknown profile '$profile' (use: phone | phone2x | desktop)"
   read -r dpw dph scale <<<"$geo"
   # Optional explicit override (e.g. NATIVE_W=480 NATIVE_H=1040 for a roomier frame).
   dpw="${NATIVE_W:-$dpw}"; dph="${NATIVE_H:-$dph}"
@@ -248,11 +256,11 @@ cmd_start() {
   # -Ddeneb.platform). Desktop profile stays Platform.Desktop (persistent sidebar).
   # Real Android insets/keyboard/edge-gestures still need a device — this verifies the
   # mobile composition + navigation (e.g. the bottom bar docking, tab switching).
-  [[ "$profile" == "phone" ]] && jvmopts="$jvmopts -Ddeneb.platform=phone"
+  [[ "$profile" == phone* ]] && jvmopts="$jvmopts -Ddeneb.platform=phone"
   # Open the window at the profile size (dp == px at density 1) so Compose's WindowState
   # matches the Xvfb screen instead of the 1280x800 default — otherwise a phone-width
   # window is re-expanded by Compose and the mobile layout clips off-screen.
-  jvmopts="$jvmopts -Ddeneb.window.width=$dpw -Ddeneb.window.height=$dph"
+  jvmopts="$jvmopts -Ddeneb.window.width=$pxw -Ddeneb.window.height=$pxh -Ddeneb.ui.scale=$scale"
   # setsid fully detaches gradle into its own session, so the live app survives
   # even if THIS start invocation is interrupted (e.g. a caller's timeout). The
   # gradle `run` task kills the forked app JVM when its client dies — without
@@ -515,7 +523,8 @@ usage() {
   cat >&2 <<EOF
 native-app.sh — run the real native client headlessly for agent verification
 
-  start [phone|desktop]   boot Xvfb + seed gateway + launch the live app (default: phone)
+  start [phone|phone2x|desktop]
+                          boot Xvfb + seed gateway + launch the live app (default: phone)
   shot [name]             screenshot the app window  → $SHOTS_DIR/<name>.png
   tap X Y                 click at physical px (X,Y) as seen in the screenshot
   dbltap X Y              double-click
@@ -532,7 +541,8 @@ native-app.sh — run the real native client headlessly for agent verification
   status | logs [n]       inspect
   restart [profile] | stop
 
-Coords are screenshot pixels (phone profile = 412x915, 1px = 1dp). Connected to
+Coords are screenshot pixels (phone = 412x915 @1x so 1px = 1dp; phone2x = 824x1830
+  @2x for sub-dp detail — coords stay screenshot pixels). Connected to
 the REAL gateway ($GW_URL) — actions hit real data (sending chat runs the agent).
 EOF
   exit 1
