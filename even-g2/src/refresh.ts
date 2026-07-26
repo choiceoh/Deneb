@@ -120,6 +120,22 @@ export function windowRange(
   return { start, end: start + size }
 }
 
+/**
+ * skipPage decides whether a swipe should pass straight over a page.
+ *
+ * `alerts` ("알림 전체") exists because the gateway's home page used to print
+ * only the top few alerts as text — the second page was the "see all". The app
+ * now draws EVERY alert on one page with a cursor and a window, so both pages
+ * render the same list from the same items and differ only in their title. On a
+ * device with four gestures, one of them going to a screen the wearer has just
+ * left is not free.
+ */
+export function skipPage(page: { id: string; empty?: boolean }, itemCount: number): boolean {
+  if (page.id === 'home') return false
+  if (page.id === 'alerts' && itemCount > 0) return true
+  return !!page.empty
+}
+
 /** clampCursor keeps an alert cursor inside the current item list. */
 export function clampCursor(cursor: number, count: number): number {
   if (count <= 0) return 0

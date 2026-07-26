@@ -12,6 +12,7 @@ import {
   nextDelayMs,
   payloadSignature,
   resolveSelectionIndex,
+  skipPage,
 } from './refresh'
 import type { GlancePayload } from './deneb'
 
@@ -237,5 +238,31 @@ describe('alertSlots', () => {
       const furniture = (hasCounts ? 1 : 0) + 1 + 1 + 1
       expect(alertSlots(hasCounts) + furniture).toBeLessThanOrEqual(HUD_LINES)
     }
+  })
+})
+
+describe('skipPage', () => {
+  it('never skips home', () => {
+    expect(skipPage({ id: 'home' }, 3)).toBe(false)
+    expect(skipPage({ id: 'home', empty: true }, 0)).toBe(false)
+  })
+
+  it('skips the duplicate alerts page while there are alerts', () => {
+    // home and alerts render the same items and differ only by title, so a
+    // swipe onto 'alerts' spends a gesture going nowhere.
+    expect(skipPage({ id: 'alerts' }, 3)).toBe(true)
+  })
+
+  it('keeps the alerts page when there is nothing on home to duplicate', () => {
+    // With no items the app falls back to the page TEXT, and the two pages are
+    // no longer the same screen.
+    expect(skipPage({ id: 'alerts' }, 0)).toBe(false)
+    expect(skipPage({ id: 'alerts', empty: true }, 0)).toBe(true)
+  })
+
+  it('honours the gateway on every other page', () => {
+    expect(skipPage({ id: 'cal' }, 3)).toBe(false)
+    expect(skipPage({ id: 'cal', empty: true }, 3)).toBe(true)
+    expect(skipPage({ id: 'todo', empty: true }, 0)).toBe(true)
   })
 })

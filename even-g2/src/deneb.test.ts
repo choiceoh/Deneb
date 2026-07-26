@@ -3,6 +3,7 @@ import {
   fetchGlance,
   formatAlertDetail,
   formatGeneratedLabel,
+  httpMessage,
   listLabel,
   normalizeItems,
   normalizePages,
@@ -47,10 +48,20 @@ describe('fetchGlance deadline', () => {
   })
 
   it('surfaces the gateway error message on a non-2xx', async () => {
+    // 500 and not 401: an auth failure is now deliberately REPLACED with a
+    // message that says where to fix it, because the gateway's own 401 body is
+    // "unauthorized" — English, and useless on a 576x288 display.
     vi.stubGlobal('fetch', async () =>
-      new Response(JSON.stringify({ error: { message: '토큰 불일치' } }), { status: 401 }),
+      new Response(JSON.stringify({ error: { message: '워크피드 없음' } }), { status: 500 }),
     )
-    await expect(fetchGlance(settings)).rejects.toThrow('토큰 불일치')
+    await expect(fetchGlance(settings)).rejects.toThrow('워크피드 없음')
+  })
+
+  it('replaces an auth failure with somewhere to go', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ error: { message: 'unauthorized' } }), { status: 401 }),
+    )
+    await expect(fetchGlance(settings)).rejects.toThrow('폰에서 토큰')
   })
 })
 
@@ -141,5 +152,22 @@ describe('formatAlertDetail', () => {
     expect(out).toContain('! 견적 회신 필요')
     expect(out).toContain('긴급')
     expect(out).toContain('금호타이어 곡성')
+  })
+})
+
+describe('httpMessage', () => {
+  it('turns an auth failure into somewhere to go', () => {
+    // "HTTP 401" on a 576x288 display is not actionable; the phone has a form.
+    expect(httpMessage(401)).toContain('폰에서 토큰')
+    expect(httpMessage(403)).toContain('폰에서 토큰')
+  })
+
+  it('does not let a server message override the auth hint', () => {
+    expect(httpMessage(401, 'unauthorized')).toContain('폰에서 토큰')
+  })
+
+  it('keeps the gateway wording otherwise', () => {
+    expect(httpMessage(500, 'stub: induced failure')).toBe('stub: induced failure')
+    expect(httpMessage(418)).toBe('HTTP 418')
   })
 })
