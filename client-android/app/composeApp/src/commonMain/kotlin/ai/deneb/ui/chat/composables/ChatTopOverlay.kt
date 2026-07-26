@@ -4,6 +4,7 @@ package ai.deneb.ui.chat.composables
 
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,7 +14,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -26,12 +26,6 @@ import org.jetbrains.compose.resources.stringResource
  * scrolls full-height behind them, under the transparent status bar). Split out
  * of ChatModeScreen.kt.
  */
-// How far a floating chat bar's scrim takes to dissolve into the conversation.
-// Shared by the top bar and the input bar so both edges read as the same material.
-// Absolute, not a fraction of the bar: the top overlay grows when a banner shows,
-// and a proportional tail would drag the controls back over transparent ground.
-internal val ChatBarScrimFade = 20.dp
-
 @Composable
 internal fun ChatTopOverlay(
     uiState: ChatUiState,
@@ -46,27 +40,16 @@ internal fun ChatTopOverlay(
     // bar). The vertical scrim keeps the bar's controls legible over
     // scrolling messages; statusBarsPadding clears the OS status bar; the
     // measured height drives the message list's top contentPadding above.
-    val scrim = MaterialTheme.colorScheme.background
     Column(
         modifier = modifier
             .fillMaxWidth()
             .onSizeChanged { onHeightChange(it.height) }
-            .drawBehind {
-                // Solid under the controls, fading out only over the last
-                // [ChatBarScrimFade]. A linear ramp across the whole overlay was
-                // already half transparent by the row where the hamburger and +
-                // actually sit, so live message text read straight through the
-                // glyphs. The tail is an absolute length, not a fraction, so a
-                // banner appearing (which grows this Column) can't slide the
-                // controls back into the transparent part.
-                drawRect(
-                    Brush.verticalGradient(
-                        listOf(scrim, Color.Transparent),
-                        startY = size.height - ChatBarScrimFade.toPx(),
-                        endY = size.height,
-                    ),
-                )
-            }
+            .background(
+                Brush.verticalGradient(
+                    0f to MaterialTheme.colorScheme.background,
+                    1f to Color.Transparent,
+                ),
+            )
             .statusBarsPadding(),
     ) {
         TopBar(

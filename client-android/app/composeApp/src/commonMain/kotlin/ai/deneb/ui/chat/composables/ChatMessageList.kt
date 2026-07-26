@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.fallback_answered_by
@@ -510,18 +511,15 @@ internal fun ChatMessageList(
                 LazyColumn(
                     // Soft fade at the top/bottom edges so a message dissolves into
                     // the bars as it scrolls past, instead of reading as hard-cut /
-                    // covered. The chat still fills the full height — it just flows
-                    // under the bars, uncovered.
+                    // covered. The chat still fills the full height (small padding,
+                    // not a wide gap) — it just flows under the bars, uncovered.
                     //
-                    // The bands are the bars' OWN measured heights. They used to be
-                    // 10dp/22dp against a ~56dp bar and a ~80dp composer, so text was
-                    // back to full ink a tenth of the way under them — the dissolve
-                    // was a sliver, and what you actually saw was live text through
-                    // the hamburger and half a line surviving below the composer.
-                    modifier = Modifier.fillMaxSize().verticalEdgeFade(
-                        topPx = topOverlayHeightPx.toFloat(),
-                        bottomPx = bottomOverlayHeightPx.toFloat(),
-                    ),
+                    // Deliberately a SLIVER, not the bar's full height. Widening these
+                    // to the measured overlay heights (56dp / 80dp) was tried and
+                    // reverted: a whole line of text then sits at ~50% alpha, and a
+                    // crisp → ghost → crisp stack reads as a rendering fault rather
+                    // than a dissolve. A short band only ever catches a glyph's edge.
+                    modifier = Modifier.fillMaxSize().verticalEdgeFade(top = 10.dp, bottom = 22.dp),
                     state = listState,
                     horizontalAlignment = CenterHorizontally,
                     // Top inset = the floating overlay's measured height (status
@@ -747,23 +745,22 @@ internal fun ChatMessageList(
     }
 }
 
-// verticalEdgeFade fades the composable's own content to transparent over
-// [topPx] at the top and [bottomPx] at the bottom, so a scrolling list dissolves
-// into the surrounding bars instead of cutting hard against them. Offscreen layer
-// + a DstIn alpha mask: only the gradient's alpha matters, not its colour.
-//
-// Pixels, not Dp: the callers' bands are the overlays' measured heights, which
-// arrive in px — converting to Dp and back would round twice for nothing.
-private fun Modifier.verticalEdgeFade(topPx: Float, bottomPx: Float): Modifier = this
+// verticalEdgeFade fades the composable's own content to transparent over [top]
+// at the top and [bottom] at the bottom, so a scrolling list dissolves into the
+// surrounding bars instead of cutting hard against them. Offscreen layer + a
+// DstIn alpha mask: only the gradient's alpha matters, not its colour.
+private fun Modifier.verticalEdgeFade(top: Dp, bottom: Dp): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
+        val topPx = top.toPx()
         if (topPx > 0f) {
             drawRect(
                 brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = topPx),
                 blendMode = BlendMode.DstIn,
             )
         }
+        val bottomPx = bottom.toPx()
         if (bottomPx > 0f) {
             drawRect(
                 brush = Brush.verticalGradient(

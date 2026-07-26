@@ -6,6 +6,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
 import ai.deneb.ui.denebContentWidthModifier
 import ai.deneb.ui.handCursor
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Alignment.Companion.TopCenter
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -49,25 +49,16 @@ internal fun ChatInputOverlay(
     // come from the root Box, so the input still sits above the gesture bar
     // and rises with the keyboard. Same width cap as the message rows so it
     // lines up with the conversation column on desktop.
-    val scrim = MaterialTheme.colorScheme.background
     Box(
         modifier = modifier
             .fillMaxWidth()
             .onSizeChanged { onHeightChange(it.height) }
-            .drawBehind {
-                // Mirror of the top bar: the fade is the first [ChatBarScrimFade]
-                // and everything below it is solid. The old full-height ramp was
-                // still ~7% short of opaque at the very bottom edge, which left
-                // half a line of transcript ghosting through the strip between
-                // the input field and the tab bar.
-                drawRect(
-                    Brush.verticalGradient(
-                        listOf(Color.Transparent, scrim),
-                        startY = 0f,
-                        endY = ChatBarScrimFade.toPx(),
-                    ),
-                )
-            },
+            .background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    1f to MaterialTheme.colorScheme.background,
+                ),
+            ),
         contentAlignment = TopCenter,
     ) {
         Column(denebContentWidthModifier()) {
