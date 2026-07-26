@@ -301,7 +301,12 @@ bridge.onEvenHubEvent((event) => {
         // the one outcome nobody wants.
         void stopListening();
       } else if (screen === "detail") {
-        void askAck();
+        // Straight to the ack, no confirmation screen (operator's call,
+        // 2026-07-26). The guard was there because a double-tap exits the app
+        // everywhere else, so a stray one here would write — but an ack only
+        // marks a card read, it is undoable in the native feed, and paying two
+        // gestures for it on a four-gesture device is the worse trade.
+        void doAck();
       } else {
         shutdown();
       }
