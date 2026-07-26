@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { errText } from "@/format";
 import { listGroupwareERP } from "@/gateway";
-import { erpTextToMarkdown } from "@/erpText";
 import { useAsyncOnOpen } from "@/useAsyncOnOpen";
 import { useRegisterPane, useWorkspace } from "@/workspaceContext";
-import { Markdown } from "@/components/Markdown";
+import { ErpSnapshot } from "./ErpSnapshot";
 
 const AREAS: { id: string; label: string; queryable?: boolean; hint?: string }[] = [
   { id: "stock", label: "재고", queryable: true, hint: "품목·코드" },
@@ -182,7 +181,7 @@ export function GroupwareERPPane() {
               <p className="groupware-status">이름이나 부서로 검색하세요</p>
             ) : (
               <div className="mail-body groupware-body">
-                <Markdown text={erpTextToMarkdown(text)} />
+                <ErpSnapshot text={text} />
               </div>
             )
           ) : null}
