@@ -38,12 +38,9 @@ actual class ContactsWriter actual constructor() {
     }
 }
 
-// Trailing digits so "+82 10-1234-5678" and "010-1234-5678" match the same key.
-private fun normPhone(s: String): String {
-    val d = s.filter { it.isDigit() }
-    val national = if (d.startsWith("82") && d.length > 2) "0" + d.substring(2) else d
-    return if (national.length > 8) national.takeLast(8) else national
-}
+// Full normalized key — mirrors gateway dedup (not trailing digits, which can
+// falsely match unrelated numbers like 010-1234-5678 vs 02-1234-5678).
+private fun normPhone(s: String): String = normalizePhoneForIdentityMatch(s)
 
 // Every raw-contact id that carries one of the target phones/emails. Two fixed
 // queries (not N+1), matched in-code since stored number formats vary.
@@ -56,7 +53,7 @@ private fun rawContactIdsForIdentity(context: Context, phones: Set<String>, emai
             val numCol = c.getColumnIndexOrThrow(Phone.NUMBER)
             while (c.moveToNext()) {
                 val n = c.getString(numCol)?.let(::normPhone).orEmpty()
-                if (n.isNotEmpty() && n in phones) ids += c.getLong(idCol)
+                if (isPersonalPhoneKey(n) && n in phones) ids += c.getLong(idCol)
             }
         }
     }
@@ -76,7 +73,7 @@ private fun rawContactIdsForIdentity(context: Context, phones: Set<String>, emai
 // KEEP_TOGETHER is pairwise, so linking each subsequent raw contact to the first
 // aggregates the whole set into one contact. Reversible: a KEEP_SEPARATE unlinks.
 private fun linkRawContacts(context: Context, phones: List<String>, emails: List<String>): Int {
-    val phoneKeys = phones.map(::normPhone).filter { it.isNotEmpty() }.toSet()
+    val phoneKeys = phones.map(::normPhone).filter(::isPersonalPhoneKey).toSet()
     val emailKeys = emails.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
     if (phoneKeys.isEmpty() && emailKeys.isEmpty()) return 0
     val rawIds = rawContactIdsForIdentity(context, phoneKeys, emailKeys).toList()
