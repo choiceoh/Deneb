@@ -38,7 +38,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -65,7 +65,7 @@ func Authenticator(logger *slog.Logger) func(http.ResponseWriter, *http.Request)
 type Config struct {
 	Dispatcher                  *rpc.Dispatcher
 	ChatHandler                 chatport.SyncStreamRunner
-	PushHub                     *proactive.Hub
+	PushHub                     *nativepush.Hub
 	ShutdownContext             context.Context
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)
@@ -76,7 +76,7 @@ type Config struct {
 type Handler struct {
 	dispatcher                  *rpc.Dispatcher
 	chatHandler                 chatport.SyncStreamRunner
-	pushHub                     *proactive.Hub
+	pushHub                     *nativepush.Hub
 	shutdownContext             context.Context
 	logger                      *slog.Logger
 	attachmentFactory           func() (MailAttachmentClient, error)

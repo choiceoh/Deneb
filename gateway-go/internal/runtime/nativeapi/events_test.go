@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 )
 
 // syncBuffer is a concurrency-safe io.Writer + http.Flusher for streaming
@@ -45,8 +45,8 @@ func (b *syncBuffer) String() string {
 // the SSE response as a "push" frame and that closing the client context stops
 // the stream.
 func TestStreamPushEvents_PublishReachesSSE(t *testing.T) {
-	hub := proactive.NewHub()
-	events, unsub := hub.Subscribe(proactive.KindMobile)
+	hub := nativepush.NewHub()
+	events, unsub := hub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	out := &syncBuffer{}
@@ -58,7 +58,7 @@ func TestStreamPushEvents_PublishReachesSSE(t *testing.T) {
 		streamPushEvents(clientCtx, context.Background(), out, out, events)
 	}()
 
-	hub.Publish(proactive.Event{Title: "Deneb", Body: "morning letter"})
+	hub.Publish(nativepush.Event{Title: "Deneb", Body: "morning letter"})
 
 	// Give the goroutine a moment to write the frame, then stop the stream.
 	deadline := time.Now().Add(2 * time.Second)
@@ -83,8 +83,8 @@ func TestStreamPushEvents_PublishReachesSSE(t *testing.T) {
 // TestStreamPushEvents_ShutdownStops verifies the stream returns when the
 // shutdown context fires even with no client activity.
 func TestStreamPushEvents_ShutdownStops(t *testing.T) {
-	hub := proactive.NewHub()
-	events, unsub := hub.Subscribe(proactive.KindMobile)
+	hub := nativepush.NewHub()
+	events, unsub := hub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	rec := httptest.NewRecorder()

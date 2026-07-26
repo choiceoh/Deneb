@@ -13,8 +13,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
@@ -208,8 +208,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	data["action"] = action
 
 	if action == "sync_state" {
-		s.pushHub.Publish(proactive.Event{
-			Kind:  proactive.PushKindPhoneAction,
+		s.pushHub.Publish(nativepush.Event{
+			Kind:  nativepush.PushKindPhoneAction,
 			Title: "phone action",
 			Body:  action,
 			Data:  data,
@@ -222,8 +222,8 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 	result := s.phoneActions.register(id, fanout)
 	defer s.phoneActions.drop(id)
 
-	s.pushHub.Publish(proactive.Event{
-		Kind:  proactive.PushKindPhoneAction,
+	s.pushHub.Publish(nativepush.Event{
+		Kind:  nativepush.PushKindPhoneAction,
 		Title: "phone action",
 		Body:  action,
 		Ref:   id,

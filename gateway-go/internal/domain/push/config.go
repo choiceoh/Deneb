@@ -2,7 +2,7 @@
 // Firebase Cloud Messaging (FCM HTTP v1). It is the fallback path used when no
 // native client holds a live SSE connection to GET /api/v1/miniapp/events — i.e.
 // the app is fully closed or the device is in Android Doze, so the in-memory
-// live push (see runtime/proactive/client_push.go) reaches nobody.
+// live push (see runtime/nativepush) reaches nobody.
 //
 // The send path is DORMANT unless a Google service-account credentials file is
 // configured (DENEB_FCM_CREDENTIALS_FILE). With no credentials:

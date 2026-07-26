@@ -1,4 +1,4 @@
-package proactive
+package nativepush
 
 import (
 	"strings"
@@ -29,5 +29,20 @@ func TestFormatHUDPushSkipsCommandFrames(t *testing.T) {
 	out := FormatHUDPush(in)
 	if out.Title != "cmd" || out.Body != "x" {
 		t.Fatalf("command frame mutated: %+v", out)
+	}
+}
+
+func TestFormatHUDPushKeepsFleetTitle(t *testing.T) {
+	ev := FormatHUDPush(Event{
+		Title: "🔴 플릿 · node down: srv3",
+		Body:  "ssh unreachable",
+		Kind:  PushKindFleet,
+	})
+	t.Logf("title=%q body=%q", ev.Title, ev.Body)
+	if ev.Title != "🔴 플릿 · node down: srv3" {
+		t.Fatalf("title mutated/truncated: %q", ev.Title)
+	}
+	if ev.Body != "ssh unreachable" {
+		t.Fatalf("body=%q", ev.Body)
 	}
 }

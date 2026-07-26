@@ -44,6 +44,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	runtimemanifest "github.com/choiceoh/deneb/gateway-go/internal/runtime/manifest"
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
@@ -141,7 +142,7 @@ type Server struct {
 	// pushHub fans proactive 업무-topic reports out to connected native clients
 	// over their long-lived SSE connection (GET /api/v1/miniapp/events). Created
 	// in New so it's non-nil before any handler or relay touches it.
-	pushHub *proactive.Hub
+	pushHub *nativepush.Hub
 
 	// phoneActions correlates dispatched phone_write actions with the app's
 	// execution reports (phone_action_result events) so the tool can return
@@ -351,7 +352,7 @@ func New(addr string, opts ...Option) (*Server, error) {
 		GenesisSubsystem:    &GenesisSubsystem{},
 		version:             "0.1.0-go",
 		logger:              slog.Default(),
-		pushHub:             proactive.NewHub(),
+		pushHub:             nativepush.NewHub(),
 		phoneActions:        newPhoneActionAwaiter(),
 		alertGate:           proactive.NewAlertGate(),
 		SessionManager: &SessionManager{

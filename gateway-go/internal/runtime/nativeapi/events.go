@@ -10,8 +10,8 @@
 //	(: keepalive comments during silent stretches)
 //
 // Auth mirrors the other miniapp endpoints. The stream lives until the client
-// disconnects or the server shuts down. See client_push.go for the hub and
-// proactive_relay.go for where frames originate.
+// disconnects or the server shuts down. See runtime/nativepush for the hub and
+// proactive_relay.go for one major producer.
 package nativeapi
 
 import (
@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 )
 
 // clientEventsKeepaliveInterval keeps intermediaries (cloudflared/nginx) and the
@@ -57,7 +57,7 @@ func (s *Handler) Events(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	kind := proactive.ClientKindFromHeader(r.Header.Get(ClientKindHeader))
+	kind := nativepush.ClientKindFromHeader(r.Header.Get(ClientKindHeader))
 	events, unsubscribe := s.pushHub.Subscribe(kind)
 	defer unsubscribe()
 	if s.logger != nil {
@@ -76,7 +76,7 @@ func streamPushEvents(
 	clientCtx, shutdownCtx context.Context,
 	w io.Writer,
 	flusher http.Flusher,
-	events <-chan proactive.Event,
+	events <-chan nativepush.Event,
 ) {
 	writeFrame := func(event string, payload any) bool {
 		if _, err := io.WriteString(w, "event: "+event+"\n"); err != nil {

@@ -1,5 +1,5 @@
-// Package proactive owns native-client push delivery and the shared policies
-// that keep operational alerts useful without over-notifying the user.
+// Package proactive owns proactive relay policy and the shared alert gate that
+// keeps operational alerts useful without over-notifying the user.
 package proactive
 
 import (

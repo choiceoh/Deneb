@@ -65,10 +65,10 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
 `server/method_registry.go`와 `server/*_subsystem.go`가 아래 runtime 포트를
 소비하고, 하위 패키지가 server를 역으로 import하지 않는 구조를 유지한다.
 
-- `proactive/client_push.go`의 `NewHub`, `PublishWithFallback`와
-  `proactive/alert_gate.go`의 `AlertGate`가 클라이언트 push·중복 relay 경계를
-  소유한다. push 실패는 notifier/fallback 경로에 남기고 server 상태를 직접
-  조회하지 않는다.
+- `nativepush/client_push.go`의 `NewHub`, `PublishWithFallback`가 native-client
+  SSE fan-out·FCM fallback 경계를 소유하고, `proactive/alert_gate.go`의
+  `AlertGate`가 중복 relay 경계를 소유한다. push 실패는 notifier/fallback
+  경로에 남기고 server 상태를 직접 조회하지 않는다.
 - `meeting/meeting_harvest.go`의 `NewHarvestService`,
   `meeting/calendar_briefing.go`의 `NewCalendarBriefingService`,
   `meeting/plaud_recordings.go`의 `NewPlaudService`가 회의 수집 작업의 시작점이다.

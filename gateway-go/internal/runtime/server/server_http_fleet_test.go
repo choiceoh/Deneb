@@ -10,6 +10,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
@@ -139,9 +140,9 @@ func TestFleetPathAllowedJobCancel(t *testing.T) {
 // The fleet webhook relays SparkFleet's generic alerts to connected clients,
 // loopback-only.
 func TestFleetHookRouteRejectsNonLoopbackAndSuppressesDuplicateAlerts(t *testing.T) {
-	s := &Server{logger: slog.Default(), pushHub: proactive.NewHub(), alertGate: proactive.NewAlertGate()}
+	s := &Server{logger: slog.Default(), pushHub: nativepush.NewHub(), alertGate: proactive.NewAlertGate()}
 	mux := s.buildMux()
-	ch, unsub := s.pushHub.Subscribe(proactive.KindMobile)
+	ch, unsub := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/hooks/fleet",
@@ -157,8 +158,8 @@ func TestFleetHookRouteRejectsNonLoopbackAndSuppressesDuplicateAlerts(t *testing
 		if !strings.Contains(ev.Title, "플릿") || !strings.Contains(ev.Title, "node down: srv3") || ev.Body != "ssh unreachable" {
 			t.Errorf("unexpected push frame: %+v", ev)
 		}
-		if ev.Kind != proactive.PushKindFleet {
-			t.Errorf("fleet push Kind = %q, want %q", ev.Kind, proactive.PushKindFleet)
+		if ev.Kind != nativepush.PushKindFleet {
+			t.Errorf("fleet push Kind = %q, want %q", ev.Kind, nativepush.PushKindFleet)
 		}
 	default:
 		t.Fatal("no push frame published")

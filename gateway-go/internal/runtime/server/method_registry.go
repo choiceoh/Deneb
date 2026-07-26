@@ -47,9 +47,9 @@ import (
 	runtimeheartbeat "github.com/choiceoh/deneb/gateway-go/internal/runtime/heartbeat"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mailflow"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/notebooksource"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlercheckpoint "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/checkpoint"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
@@ -246,7 +246,7 @@ func (s *Server) initializeEarlyMethodCapabilities(hub *rpcutil.GatewayHub, dene
 
 	// Monitoring notify service (error mirrors + status snapshots → native push).
 	s.notify = runtimenotify.NewService(hub.Sessions(), hub.Logger(), func(title, body string) {
-		proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{Title: title, Body: body})
+		nativepush.PublishWithFallback(s.pushHub, s.pushNotifier, nativepush.Event{Title: title, Body: body})
 	}, s.BoundAddr)
 	if s.notify != nil {
 		s.broadcaster.RegisterTap(s.notify.Tap)
