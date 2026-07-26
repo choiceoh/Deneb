@@ -21,6 +21,8 @@ export type GlancePayload = {
   text: string
   pages: GlancePage[]
   items: GlanceItem[]
+  /** "지금 금호타이어 · 종료 20분" — what a face-worn display is for. */
+  now?: string
   /** "일정 2 · 할 일 3" — what is behind the alert page. */
   counts?: string
   generated?: string
@@ -31,6 +33,7 @@ type GlanceResponse = {
   text?: string
   pages?: GlancePage[]
   items?: GlanceItem[]
+  now?: string
   counts?: string
   generated?: string
   cached?: boolean
@@ -98,6 +101,7 @@ export async function fetchGlance(
     text,
     pages,
     items,
+    now: typeof data.now === 'string' ? data.now.trim() : undefined,
     counts: typeof data.counts === 'string' ? data.counts.trim() : undefined,
     generated: data.generated,
     cached: data.cached,
@@ -154,10 +158,10 @@ export function formatAlertDetail(item: GlanceItem, pos?: { index: number; total
   const lines = [`${mark}${item.title}${counter}`]
   if (meta) lines.push(meta)
   lines.push('')
-  // The detail spends five lines on furniture, so the body gets about four —
-  // roughly 120 runes. normalizeItems keeps 280 for the wire; anything past
-  // what fits was being drawn off the bottom edge where nobody could read it.
-  lines.push(truncate(item.body || item.preview || '(내용 없음)', 120))
+  // The detail is where reading actually happens, so it spends its lines on the
+  // alert: dropping the "Deneb · 상세" banner and its blank line gave the body
+  // two more. normalizeItems keeps 280 for the wire; this is what fits.
+  lines.push(truncate(item.body || item.preview || '(내용 없음)', 170))
   lines.push('')
   const hasNext = !!pos && pos.index < pos.total - 1
   // A gesture nobody is told about does not exist on a HUD — the footer is the

@@ -49,6 +49,8 @@ let lastGenerated = ''
 let lastCached = false
 /** "일정 2 · 할 일 3" — what is behind the alert page, straight from the gateway. */
 let lastCounts = ''
+/** "지금 금호타이어 · 종료 20분" — the lead line, straight from the gateway. */
+let lastNow = ''
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -279,7 +281,7 @@ async function openDetail(index: unknown): Promise<void> {
   // on that alert rather than wherever the cursor happened to be.
   listCursor = i
   screen = 'detail'
-  await showText(`Deneb · 상세\n\n${formatAlertDetail(items[i], { index: i, total: items.length })}`)
+  await showText(formatAlertDetail(items[i], { index: i, total: items.length }))
 }
 
 /**
@@ -548,13 +550,15 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
       if (idx >= 0) {
         detailIndex = idx
         screen = 'detail'
-        await showText(`Deneb · 상세\n\n${formatAlertDetail(items[idx])}`)
+        // Same shape openDetail draws, counter included — a background poll must
+        // not silently swap the wearer's screen for a differently-formatted one.
+        await showText(formatAlertDetail(items[idx], { index: idx, total: items.length }))
         return
       }
       // The alert being read is gone. On a background poll, say so instead of
       // silently swapping the wearer's screen for a list they did not ask for.
       if (silent) {
-        await showText('Deneb · 상세\n\n이 알림은 처리됐습니다.\n\n탭=목록으로')
+        await showText('이 알림은 처리됐습니다.\n\n탭=목록으로')
         screen = 'detail'
         detailIndex = -1
         return
@@ -614,6 +618,7 @@ function applyPayload(payload: GlancePayload, keepId: string): void {
   lastGenerated = payload.generated || ''
   lastCached = !!payload.cached
   lastCounts = payload.counts || ''
+  lastNow = payload.now || ''
   const idx = pages.findIndex((p) => p.id === keepId)
   pageIndex = idx >= 0 ? idx : 0
 
@@ -662,7 +667,7 @@ async function renderCurrentPage(): Promise<void> {
   ]
     .filter(Boolean)
     .join(' · ')
-  await showText(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
+  await showText(`${title}\n\n${page.text}\n\n${footer}`)
 }
 
 /**
@@ -689,12 +694,15 @@ async function showAlertList(title: string): Promise<void> {
   // The counts line is the briefing the wearer used to lose: the gateway builds
   // a home page that opens with a clock and "일정 2 · 할 일 3", and this page
   // draws itself from `items` and never renders that text at all.
-  const counts = lastCounts.trim()
+  // The lead line is the top of the glass — the part peripheral vision actually
+  // reads. What is happening now beats a count of what is behind this page,
+  // which in turn beats the app's own name (which used to own this line).
+  const lead = lastNow.trim() || lastCounts.trim()
 
   // Only a window of the alerts fits, and how many is a budget, not a constant
   // — see HUD_LINES. The window carries no "N건 더" lines of its own; the
-  // (3/8) counter in the title already says there is more, for free.
-  const { start, end } = windowRange(cursor, items.length, alertSlots(!!counts))
+  // (3/8) counter in the meta line already says there is more, for free.
+  const { start, end } = windowRange(cursor, items.length, alertSlots(!!lead))
   const lines = items
     .slice(start, end)
     // '>' and not '▸': a CI frame showed the nicer glyph rendering as NOTHING on
@@ -704,11 +712,10 @@ async function showAlertList(title: string): Promise<void> {
 
   await showText(
     [
-      `Deneb · ${title}${position}`,
-      [clockLabel(), stamp, connectionLabel(consecutiveFailures, servingCache)]
+      ...(lead ? [lead] : []),
+      [`${title} ${items.length}${position}`, clockLabel(), stamp, connectionLabel(consecutiveFailures, servingCache)]
         .filter(Boolean)
         .join(' · '),
-      ...(counts ? [counts] : []),
       '',
       ...lines,
       [
