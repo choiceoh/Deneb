@@ -2173,7 +2173,7 @@
   "properties": {
    "to": {
     "type": "string",
-    "description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | reply(대화 알림에 답장 — target=대화방 이름(phone_read messages가 보여주는 그대로), text=보낼 내용. 트레이에 살아 있는 알림에만 가능하고, 사라졌으면 실패로 회신됨) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS 미지원은 실패로 회신됨) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
+    "description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | reply(★카카오톡 등 메신저 답장은 반드시 이것 — 그 대화 알림에 직접 답장해 진짜 대화방으로 전송된다. target=대화방 이름(phone_read messages가 보여주는 그대로), text=보낼 내용. 트레이에 살아 있는 알림에만 가능하고, 사라졌으면 실패로 회신되니 그때 사용자에게 알린다) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(★문자(SMS) 전용 — 문자 작성창을 연다. 카카오톡·메신저에는 절대 쓰지 말 것(reply 사용). target=수신자 전화번호, text=내용) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS 미지원은 실패로 회신됨) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
     "enum": [
      "notify",
      "speak",
@@ -2191,7 +2191,7 @@
    },
    "target": {
     "type": "string",
-    "description": "액션 대상: open_url=URL, open_app=패키지/앱명, reply=대화방 이름, message=수신자, dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)"
+    "description": "액션 대상: open_url=URL, open_app=패키지/앱명, reply=대화방 이름(카톡 등 메신저), message=수신자 전화번호(문자 전용), dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)"
    },
    "text": {
     "type": "string",
