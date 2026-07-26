@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -34,7 +35,7 @@ import (
 )
 
 // ToolPhoneRead queries the phone via the app-pushed state cache:
-// what = location | battery | usage | calllog. send dispatches a sync_state refresh request when
+// what = location | battery | usage | calllog | messages. send dispatches a sync_state refresh request when
 // the cache is stale; nil means no app channel (report unavailable).
 func ToolPhoneRead(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
@@ -67,10 +68,12 @@ func ToolPhoneRead(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 				return calls, nil
 			}
 			return phoneStateStaleReply(ctx, send, "통화기록")
+		case "messages", "talk":
+			return formatPhoneMessageThreads(readPhoneMessageThreads(time.Now(), phoneMessagesDays)), nil
 		case "contacts", "addressbook":
 			return "폰 주소록 라이브 조회는 지원이 종료되었습니다 — 동기화된 주소록인 `contacts` 도구를 사용하세요 (이름/회사/전화 검색 지원).", nil
 		default:
-			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery|usage|calllog)", p.What)
+			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery|usage|calllog|messages)", p.What)
 		}
 	}
 }
