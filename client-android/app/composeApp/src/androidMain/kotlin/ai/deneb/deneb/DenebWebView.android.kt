@@ -289,6 +289,16 @@ actual fun DenebWebView(
         },
     )
 
+    LaunchedEffect(state.diagnosticsTick) {
+        if (state.diagnosticsTick == 0) return@LaunchedEffect
+        holder.web?.evaluateJavascript(BROWSER_SCROLL_DIAGNOSTIC_JS) { raw ->
+            // evaluateJavascript hands back a JSON-encoded string; unwrap one level.
+            state.diagnostics = runCatching {
+                webViewJson.decodeFromString(String.serializer(), raw)
+            }.getOrDefault(raw)
+        }
+    }
+
     LaunchedEffect(state.url) {
         holder.web?.let { if (it.url != state.url && state.url.isNotBlank()) it.loadUrl(state.url) }
     }

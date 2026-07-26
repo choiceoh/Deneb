@@ -197,6 +197,26 @@ fun DenebBrowserScreen(
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
+    var diagnosticsCopied by remember { mutableStateOf(false) }
+    val screenClipboard = LocalClipboardManager.current
+    // The probe result lands asynchronously from the WebView; copy it out and say
+    // so, since the whole point is to paste it somewhere it can be read.
+    LaunchedEffect(state.diagnostics) {
+        state.diagnostics?.let {
+            screenClipboard.setText(AnnotatedString(it))
+            state.diagnostics = null
+            diagnosticsCopied = true
+        }
+    }
+    if (diagnosticsCopied) {
+        AlertDialog(
+            onDismissRequest = { diagnosticsCopied = false },
+            title = { Text("스크롤 진단") },
+            text = { Text("결과를 클립보드에 복사했습니다. 데네브 대화에 붙여넣어 주세요.") },
+            confirmButton = { TextButton(onClick = { diagnosticsCopied = false }) { Text("확인") } },
+        )
+    }
+
     // alert()/confirm()/prompt() from the page. The page's JS thread is blocked
     // until answered, and BrowserJsDialog.answer is idempotent, so a dismiss that
     // races a button tap still delivers exactly one result.
@@ -604,6 +624,15 @@ fun DenebBrowserChrome(
                             onClick = {
                                 haptics.tap()
                                 clipboard.setText(AnnotatedString(state.currentUrl))
+                                menuOpen = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("스크롤 진단 복사") },
+                            leadingIcon = { Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = denebHint()) },
+                            onClick = {
+                                haptics.tap()
+                                state.runDiagnostics()
                                 menuOpen = false
                             },
                         )
