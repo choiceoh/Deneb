@@ -104,32 +104,11 @@ import org.jetbrains.compose.resources.stringResource
 // byte-identical to having parsed every token.
 private const val STREAM_PARSE_INTERVAL_MS = 96L
 
-// Streaming caret: appended to the PARSE SOURCE, so it renders inline at the
-// exact end of the flowing text (inside the current paragraph/list item) — the
-// frontier-app cursor cue. Free: the streaming body is re-parsed each sample
-// tick anyway, and the glyph vanishes with the final (exact) parse on settle.
-private const val STREAM_CARET = "▍"
-
-// Appends the caret only where it cannot corrupt the markdown:
-//  - inside an UNCLOSED code fence (``` / ~~~, any length ≥3) → no caret; a ▍
-//    there reads as code content, not a cursor.
-//  - when the text ends ON a fence line → caret goes on its OWN line: "```" +
-//    "▍" would scan as a NEW opener with info-string "▍", unclosing the block
-//    that just closed. (Line-toggle fence tracking is an approximation of
-//    CommonMark — good enough for a transient glyph that lives for one sample
-//    tick and never reaches the settled parse.)
-internal fun appendStreamCaret(text: String): String {
-    var openFence = false
-    for (rawLine in text.lineSequence()) {
-        val line = rawLine.trimStart()
-        if (line.startsWith("```") || line.startsWith("~~~")) openFence = !openFence
-    }
-    if (openFence) return text
-    val lastLine = text.substringAfterLast('\n').trimStart()
-    val endsOnFenceLine = lastLine.startsWith("```") || lastLine.startsWith("~~~")
-    return if (endsOnFenceLine) text + "\n" + STREAM_CARET else text + STREAM_CARET
-}
-
+// The streaming caret is NOT in this string. It used to be — a "▍" appended to the
+// parse source — which put a glyph of ours through the markdown parser and needed
+// fence-tracking to keep it from re-opening a just-closed code block. It is now drawn
+// from the text layout at the document's frontier (MarkdownContent(streamingCaret),
+// StreamCaret.kt), so the parse source is exactly what the model sent.
 @Composable
 private fun rememberStreamingParseSource(message: String, isStreaming: Boolean): String {
     val latest = rememberUpdatedState(message)
@@ -147,7 +126,7 @@ private fun rememberStreamingParseSource(message: String, isStreaming: Boolean):
         }
     }
     if (!isStreaming) return message
-    return appendStreamCaret(sampled)
+    return sampled
 }
 
 // rememberMessageDocument turns a (possibly streaming) body into its parsed document while
@@ -240,6 +219,7 @@ internal fun BotMessage(
                             isInteractive = effectiveInteractive,
                             onUiCallback = denebUiCallback,
                             frozen = effectiveFrozen,
+                            streamingCaret = isStreaming,
                             modifier = Modifier.fillMaxWidth()
                                 // While streaming, glide the height between sampled
                                 // reflows instead of jumping a chunk at a time — the

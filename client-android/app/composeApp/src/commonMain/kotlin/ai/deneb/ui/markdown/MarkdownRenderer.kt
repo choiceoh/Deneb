@@ -87,10 +87,16 @@ fun MarkdownContent(
     onUiCallback: (event: String, data: Map<String, String>) -> Unit = { _, _ -> },
     frozen: FrozenSubmission? = null,
     baseStyle: TextStyle? = null,
+    // Draw a cursor at the very end of the flowing text while this body streams. The
+    // glyph is never put IN the text (see StreamCaret.kt) — the tail inline run is
+    // published here and drawn from the layout by the inline funnel.
+    streamingCaret: Boolean = false,
 ) {
+    val caretTail = if (streamingCaret) remember(document) { document.streamCaretTail() } else null
     CompositionLocalProvider(
         LocalContentColor provides MaterialTheme.colorScheme.onSurface,
         LocalMarkdownBaseStyle provides baseStyle,
+        LocalStreamCaretTail provides caretTail,
     ) {
         Column(modifier) {
             // Document-level rhythm context: the FIRST block sheds its own top
