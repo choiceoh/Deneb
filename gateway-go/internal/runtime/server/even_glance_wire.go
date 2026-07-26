@@ -233,6 +233,11 @@ func (s *Server) evenRecordImu() func(rec evenapi.ImuRecording) error {
 // not of adding a model.
 func (s *Server) evenTranscribe() func(ctx context.Context, wav []byte, hotwords string) (string, error) {
 	return func(ctx context.Context, wav []byte, hotwords string) (string, error) {
+		// The wiki's proper nouns, which is the whole reason a local pipeline
+		// can beat a cloud one here: 곡성 vs 고성, 금호타이어 vs 금오타이어. Two of
+		// the three services benchmarked on 2026-07-26 got the site name wrong
+		// and neither offers any way to tell them otherwise.
+		hotwords = mergeHotwordLists(hotwords, s.evenWikiHotwords())
 		// Plain, not diarized: "[00:05 S01] …" is a meeting-record format, and a
 		// live caption sends 3-second windows whose clocks all restart at zero.
 		return artifact.TranscribeAudioPlain(ctx, wav, "audio/wav", hotwords)
@@ -262,4 +267,48 @@ func (s *Server) evenTranslate() func(ctx context.Context, text, targetLang stri
 		// lets the plugin's own windowing be the only thing that trims.
 		return strings.Join(strings.Fields(out), " "), nil
 	}
+}
+
+// evenWikiHotwordTTL bounds how stale the bias list may get.
+//
+// The list rides on EVERY transcription, and a live caption sends one every
+// three seconds — walking and sorting the whole wiki index at that rate would
+// cost more than the transcription. Names do not churn by the minute.
+const evenWikiHotwordTTL = 10 * time.Minute
+
+// evenWikiHotwords returns the cached wiki bias list.
+//
+// Note this facility already existed (wiki.Store.HotwordHints, complete with
+// tests) and was wired to nothing — found 2026-07-26 while looking for a way to
+// build it.
+func (s *Server) evenWikiHotwords() string {
+	if s == nil || s.wikiStore == nil {
+		return ""
+	}
+	s.evenHotwordMu.Lock()
+	defer s.evenHotwordMu.Unlock()
+	if !s.evenHotwordAt.IsZero() && time.Since(s.evenHotwordAt) < evenWikiHotwordTTL {
+		return s.evenHotwordCache
+	}
+	s.evenHotwordCache = s.wikiStore.HotwordHints(200)
+	s.evenHotwordAt = time.Now()
+	return s.evenHotwordCache
+}
+
+// mergeHotwordLists joins two comma lists, dropping blanks and duplicates.
+// Caller hints come first so a per-request bias outranks the wiki-wide one.
+func mergeHotwordLists(first, second string) string {
+	seen := map[string]bool{}
+	var out []string
+	for _, chunk := range []string{first, second} {
+		for _, term := range strings.Split(chunk, ",") {
+			term = strings.TrimSpace(term)
+			if term == "" || seen[strings.ToLower(term)] {
+				continue
+			}
+			seen[strings.ToLower(term)] = true
+			out = append(out, term)
+		}
+	}
+	return strings.Join(out, ", ")
 }
