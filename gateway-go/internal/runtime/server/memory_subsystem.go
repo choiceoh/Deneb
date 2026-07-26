@@ -1,6 +1,9 @@
 package server
 
 import (
+	"sync"
+	"time"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/contacts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/notebook"
@@ -15,11 +18,17 @@ import (
 // it is available when the contacts tool is wired during chat init.
 // Embedded in Server so fields are promoted and existing access patterns are unchanged.
 type MemorySubsystem struct {
-	wikiStore       *wiki.Store       // set during initMemorySubsystem()
-	notebookStore   *notebook.Store   // set during initToolsAndDeps(); deal-anchored source collections
-	contactsStore   *contacts.Store   // set during registerEarlyMethods()
-	workFeedStore   *workfeed.Store   // set during registerEarlyMethods()
-	nativeSyncStore *nativesync.Store // set during registerEarlyMethods()
+	wikiStore     *wiki.Store     // set during initMemorySubsystem()
+	notebookStore *notebook.Store // set during initToolsAndDeps(); deal-anchored source collections
+	contactsStore *contacts.Store // set during registerEarlyMethods()
+	workFeedStore *workfeed.Store // set during registerEarlyMethods()
+	// Cached wiki proper-noun bias list for the glasses ASR path (see
+	// evenWikiHotwords): rebuilt on a TTL because a live caption asks for it
+	// every three seconds.
+	evenHotwordMu    sync.Mutex
+	evenHotwordCache string
+	evenHotwordAt    time.Time
+	nativeSyncStore  *nativesync.Store // set during registerEarlyMethods()
 
 	// cpProjects caches the wiki-derived counterparty→projects map for the
 	// mail-analysis party anchor (mail_counterparty.go). Zero value ready;
