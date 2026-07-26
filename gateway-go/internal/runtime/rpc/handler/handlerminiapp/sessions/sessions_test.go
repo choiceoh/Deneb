@@ -193,6 +193,35 @@ func TestSessionsRecentIncludesLiveConversationsWithoutStoredChannel(t *testing.
 	}
 }
 
+// Regression: delegated sub-agent runs share client:main:<label>:<ms> but are
+// not user conversations (#4355). Leaving them in recent made the drawer show
+// scratch work as "내 대화 · <epoch>" and dismissing one deleted its transcript.
+func TestSessionsRecentOmitsSpawnedSubagentRuns(t *testing.T) {
+	mgr := &fakeSessionsLister{
+		out: []*session.Session{
+			sample("client:main:k3x9", 300, "client"),
+			sample("client:main:research:1784342370344", 250, "client"),
+			sample("cron:mailpoll", 200, ""),
+		},
+	}
+	h := sessionsRecent(SessionsDeps{Manager: mgr})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", nil))
+
+	var got struct {
+		Sessions []map[string]any `json:"sessions"`
+	}
+	decode(t, resp, &got)
+	keys := make([]string, 0, len(got.Sessions))
+	for _, s := range got.Sessions {
+		key, _ := s["key"].(string)
+		keys = append(keys, key)
+	}
+	want := []string{"client:main:k3x9", "cron:mailpoll"}
+	if strings.Join(keys, ",") != strings.Join(want, ",") {
+		t.Errorf("keys = %v, want %v", keys, want)
+	}
+}
+
 func TestSessionsRecentRejectsUnauthenticatedContext(t *testing.T) {
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.recent", nil))
