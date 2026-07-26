@@ -19,7 +19,7 @@ class BrowserDiagnosticsTest {
         // bug were already lost.
         for (key in listOf(
             "doc", "size", "overlays", "centerEl", "move", "listeners",
-            "clips", "column", "cta", "atEnd", "quirk", "scanCapped", "nodes",
+            "clips", "column", "cta", "atEnd", "quirk", "scanCapped", "nodes", "deadControls",
         )) {
             assertTrue(js.contains("out.$key ="), "diagnostic must report `$key`: missing")
         }
@@ -63,6 +63,16 @@ class BrowserDiagnosticsTest {
         assertTrue(js.contains("i < CAP"), "the element scan must be capped")
         assertTrue(js.contains("out.scanCapped"), "a capped scan must say so")
         assertTrue(js.contains("out.nodes"), "report the DOM size the cap is judged against")
+    }
+
+    @Test
+    fun findsUnpressableControlsWithoutKnowingTheirNames() {
+        // The keyword `cta` probe only covers buttons we thought to list, and the
+        // operator's next report was a sort control it did not match. The generic
+        // sweep asks the question that actually matters — which visible control
+        // loses its own hit test — and names what blocked it.
+        assertTrue(js.contains("out.deadControls ="), "must sweep for unpressable controls")
+        assertTrue(js.contains("blockedBy:"), "must name what wins instead: $js")
     }
 
     @Test
