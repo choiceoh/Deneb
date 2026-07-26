@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALERT_WINDOW,
+  HUD_LINES,
+  alertSlots,
   BASE_REFRESH_MS,
   MAX_REFRESH_MS,
   advanceCursor,
@@ -210,5 +212,29 @@ describe('connectionLabel', () => {
     expect(connectionLabel(0, true)).toBe('오프라인 · 저장본')
     expect(connectionLabel(1, true)).toBe('오프라인 · 저장본')
     expect(connectionLabel(5, true)).toBe('오프라인 · 저장본')
+  })
+})
+
+describe('alertSlots', () => {
+  it('leaves room for every fixed line', () => {
+    // title + meta + blank + footer = 4, so six alerts fit on a ten-line glass.
+    expect(alertSlots(false)).toBe(HUD_LINES - 4)
+    // …and the counts line costs exactly one of them.
+    expect(alertSlots(true)).toBe(HUD_LINES - 5)
+  })
+
+  it('never budgets the whole screen away', () => {
+    // A future header that ate the screen must still leave a line to read.
+    expect(alertSlots(true, 3)).toBe(1)
+    expect(alertSlots(true, 0)).toBe(1)
+  })
+
+  it('keeps the rendered page inside the measured budget', () => {
+    // The failure this guards is silent: eleven lines put the footer off the
+    // bottom edge of a real frame, where nobody can see that it is missing.
+    for (const hasCounts of [false, true]) {
+      const furniture = 2 + (hasCounts ? 1 : 0) + 1 + 1
+      expect(alertSlots(hasCounts) + furniture).toBeLessThanOrEqual(HUD_LINES)
+    }
   })
 })
