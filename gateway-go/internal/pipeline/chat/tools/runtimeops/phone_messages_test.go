@@ -158,3 +158,48 @@ func TestPhoneMessages_ShowsDenebsOwnReply(t *testing.T) {
 		t.Errorf("outgoing reply missing from thread: %q", joined)
 	}
 }
+
+// The gateway can only be as right as the description the model reads. On the
+// first live test the agent asked to send a KakaoTalk message and got the SMS
+// composer, because `message` was documented as "message(target=수신자,text)" —
+// nothing said SMS, and nothing pointed messenger traffic at `reply`. The
+// dispatch code was correct; the schema was the bug.
+func TestPhoneWriteSchema_SeparatesSmsFromMessengerReply(t *testing.T) {
+	desc := phoneWriteToDescription(t)
+	for _, want := range []string{"문자(SMS) 전용", "메신저에는 절대 쓰지 말 것"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("message must be unmistakably SMS — missing %q", want)
+		}
+	}
+	for _, want := range []string{"카카오톡 등 메신저 답장은 반드시 이것", "진짜 대화방"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("reply must claim messenger traffic — missing %q", want)
+		}
+	}
+}
+
+// phoneWriteToDescription reads the shipped tool schema so the assertion covers
+// what the model actually sees, not a copy that can drift.
+func phoneWriteToDescription(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "toolwire", "schema", "tool_schemas.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var tools []struct {
+		Name       string `json:"name"`
+		Properties map[string]struct {
+			Description string `json:"description"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(raw, &tools); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	for _, tool := range tools {
+		if tool.Name == "phone_write" {
+			return tool.Properties["to"].Description
+		}
+	}
+	t.Fatal("phone_write missing from the tool schema")
+	return ""
+}
