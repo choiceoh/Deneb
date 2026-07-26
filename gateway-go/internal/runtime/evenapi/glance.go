@@ -723,3 +723,72 @@ func formatNowLine(events []GlanceEvent, now time.Time) string {
 	}
 	return when + " " + truncateRunes(next.Summary, 20)
 }
+
+// ImuSample is one reading as the glasses report it: three doubles, no units.
+type ImuSample struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
+}
+
+// ImuRecording is a labelled window of motion, captured on the operator's head.
+//
+// It exists because the IMU is undocumented: `IMU_Report_Data` is x/y/z doubles
+// with no stated units, no axis convention and no per-sample timestamp, capped
+// at 10 Hz. A head-gesture detector written against that would be a detector
+// written against a GUESS, and its unit tests would pin the guess rather than
+// the device. So the instrument comes first — record real "끄덕임 / 도리도리 /
+// 걷기 / 정지" windows, then build the detector against those as fixtures.
+type ImuRecording struct {
+	At      string      `json:"at"`
+	Label   string      `json:"label"`
+	PaceMs  int         `json:"paceMs"`
+	Samples []ImuSample `json:"samples"`
+}
+
+// ImuSample records one labelled motion window from the glasses.
+func (h *Handler) ImuSample(w http.ResponseWriter, r *http.Request) {
+	if h == nil {
+		http.Error(w, "even g2 bridge unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if !h.Enabled() {
+		writeErr(w, http.StatusServiceUnavailable, "even g2 bridge disabled (set "+EnvBridgeToken+")")
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !tokenMatch(h.token, ParseBearer(r.Header.Get("Authorization"))) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if h.recordImu == nil {
+		writeErr(w, http.StatusServiceUnavailable, "imu recording unavailable")
+		return
+	}
+
+	var body ImuRecording
+	// 10 Hz for a few seconds is a few KB; the cap is only there so a wedged
+	// client cannot stream into the file forever.
+	if err := json.NewDecoder(io.LimitReader(r.Body, 512<<10)).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	body.Label = strings.TrimSpace(body.Label)
+	if body.Label == "" {
+		writeErr(w, http.StatusBadRequest, "label required")
+		return
+	}
+	if len(body.Samples) == 0 {
+		writeErr(w, http.StatusBadRequest, "no samples")
+		return
+	}
+	body.At = h.now().Format(time.RFC3339)
+	if err := h.recordImu(body); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "label": body.Label, "samples": len(body.Samples)})
+}

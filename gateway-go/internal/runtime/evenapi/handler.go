@@ -61,6 +61,13 @@ type Config struct {
 	Now func() time.Time
 	// Sources feeds GET /api/even/glance (optional; empty → calm empty copy).
 	Sources GlanceSources
+	// Transcribe turns a WAV clip into text (optional; nil → 503). Injected so
+	// evenapi does not reach into the chat pipeline directly.
+	Transcribe func(ctx context.Context, wav []byte, hotwords string) (string, error)
+	// Translate renders a transcript into targetLang for the HUD (optional).
+	Translate func(ctx context.Context, text, targetLang string) (string, error)
+	// RecordImu appends one labelled motion window (optional; nil → 503).
+	RecordImu func(rec ImuRecording) error
 	// AckAlert marks one glance alert handled (optional; nil → 503 on POST
 	// /api/even/ack, which is how a build without a workfeed store behaves).
 	AckAlert func(id string) error
@@ -68,14 +75,17 @@ type Config struct {
 
 // Handler serves OpenAI-shaped Custom AI requests for Even G2.
 type Handler struct {
-	chat     chatport.SyncRunner
-	logger   *slog.Logger
-	token    string
-	session  string
-	deadline time.Duration
-	now      func() time.Time
-	sources  GlanceSources
-	ackAlert func(id string) error
+	chat       chatport.SyncRunner
+	logger     *slog.Logger
+	token      string
+	session    string
+	deadline   time.Duration
+	now        func() time.Time
+	sources    GlanceSources
+	ackAlert   func(id string) error
+	recordImu  func(rec ImuRecording) error
+	transcribe func(ctx context.Context, wav []byte, hotwords string) (string, error)
+	translate  func(ctx context.Context, text, targetLang string) (string, error)
 
 	mu          sync.Mutex
 	dedupe      map[string]dedupeEntry
@@ -122,15 +132,18 @@ func New(cfg Config) *Handler {
 		token = LoadBridgeToken()
 	}
 	return &Handler{
-		chat:     cfg.Chat,
-		logger:   cfg.Logger,
-		token:    token,
-		session:  sessionKey,
-		deadline: deadline,
-		now:      now,
-		sources:  cfg.Sources,
-		ackAlert: cfg.AckAlert,
-		dedupe:   make(map[string]dedupeEntry),
+		chat:       cfg.Chat,
+		logger:     cfg.Logger,
+		token:      token,
+		session:    sessionKey,
+		deadline:   deadline,
+		now:        now,
+		sources:    cfg.Sources,
+		ackAlert:   cfg.AckAlert,
+		recordImu:  cfg.RecordImu,
+		transcribe: cfg.Transcribe,
+		translate:  cfg.Translate,
+		dedupe:     make(map[string]dedupeEntry),
 	}
 }
 
