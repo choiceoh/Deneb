@@ -43,9 +43,21 @@ export function maneuverArrow(instruction: string): ArrowKind | null {
   return null;
 }
 
-/** ARROW_W/H — the image container's box, inside the 576×288 panel. */
-export const ARROW_W = 160;
-export const ARROW_H = 120;
+// ARROW_W/H — the image container's box. 288×144 is the SDK's maximum for an
+// image container, and the whole box is used: the arrow takes the left third and
+// the distance the rest.
+//
+// The distance lives in the BITMAP, not in a text container, because
+// TextContainerProperty has no font-size field — the panel renders text at one
+// size. Both shipping G2 navigation plugins (Navigaze #1, G2 Maps #11) make the
+// distance the largest thing on screen, which is only reachable this way. That
+// is the single biggest readability difference between their HUD and a text-only
+// one.
+export const ARROW_W = 288;
+export const ARROW_H = 144;
+
+/** Where the arrow half ends and the distance half begins. */
+const ARROW_COL = 104;
 
 /**
  * arrowPng draws one maneuver arrow and returns PNG bytes.
@@ -54,7 +66,10 @@ export const ARROW_H = 120;
  * shades and is read in sunlight at a glance, so a thin elegant arrow is a grey
  * smudge. White on black matches the panel's native rendering (green on black).
  */
-export async function arrowPng(kind: ArrowKind): Promise<Uint8Array> {
+export async function arrowPng(
+  kind: ArrowKind,
+  distance?: string,
+): Promise<Uint8Array> {
   const canvas = document.createElement("canvas");
   canvas.width = ARROW_W;
   canvas.height = ARROW_H;
@@ -65,11 +80,13 @@ export async function arrowPng(kind: ArrowKind): Promise<Uint8Array> {
   ctx.fillRect(0, 0, ARROW_W, ARROW_H);
   ctx.strokeStyle = "#ffffff";
   ctx.fillStyle = "#ffffff";
-  ctx.lineWidth = 16;
+  ctx.lineWidth = 14;
   ctx.lineCap = "butt";
   ctx.lineJoin = "miter";
 
-  const cx = ARROW_W / 2;
+  // Arrow on the LEFT, distance to its right — the layout both shipping plugins
+  // use. Reads in the same order as the sentence below it.
+  const cx = ARROW_COL / 2;
   const head = (x: number, y: number, dir: ArrowKind) => {
     const s = 34;
     ctx.beginPath();
@@ -145,6 +162,71 @@ export async function arrowPng(kind: ArrowKind): Promise<Uint8Array> {
     }
   }
 
+  const d = (distance ?? "").trim();
+  if (d) {
+    // Sized to fill the remaining width; shrink only when it would overflow, so
+    // "80m" is as large as the box allows and "1.5km" still fits.
+    const boxW = ARROW_W - ARROW_COL - 8;
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    let size = 76;
+    do {
+      ctx.font = `bold ${size}px sans-serif`;
+      if (ctx.measureText(d).width <= boxW) break;
+      size -= 4;
+    } while (size > 28);
+    ctx.fillText(d, ARROW_COL + 4, ARROW_H / 2);
+  }
+
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      "image/png",
+    );
+  });
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** SPEED_W/H — the current-speed bitmap, right of the maneuver box. */
+export const SPEED_W = 200;
+export const SPEED_H = 120;
+
+/**
+ * kmhFromMs converts the SDK's speed to km/h.
+ *
+ * `AppLocation.speed` is undocumented in the SDK, but every platform location
+ * API underneath it (Android `Location.getSpeed`, iOS `CLLocation.speed`)
+ * reports metres per second, so that is the assumption. Negative means "no
+ * fix" on both platforms and must not render as 0 — a confident zero while
+ * moving is worse than showing nothing.
+ */
+export function kmhFromMs(speed: number | undefined): number | null {
+  if (speed == null || !Number.isFinite(speed) || speed < 0) return null;
+  return Math.round(speed * 3.6);
+}
+
+/**
+ * speedPng draws the current speed big, the way both shipping G2 navigation
+ * plugins do. Separate from the maneuver bitmap on purpose: speed changes on
+ * every position fix while the maneuver changes every few minutes, and
+ * redrawing the arrow at fix rate would spend BLE bandwidth for nothing.
+ */
+export async function speedPng(kmh: number): Promise<Uint8Array> {
+  const canvas = document.createElement("canvas");
+  canvas.width = SPEED_W;
+  canvas.height = SPEED_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2d canvas context unavailable");
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, SPEED_W, SPEED_H);
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 82px sans-serif";
+  ctx.fillText(String(kmh), SPEED_W / 2, SPEED_H / 2 - 8);
+  ctx.font = "bold 26px sans-serif";
+  ctx.fillText("km/h", SPEED_W / 2, SPEED_H - 20);
   const blob: Blob = await new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),

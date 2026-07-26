@@ -30,25 +30,44 @@ import {
   onImuCapture,
   onInterpretToggle,
   onGlyphProbe,
+  onListenToggle,
   onNavToggle,
   onSettingsSaved,
   renderPhoneUI,
   setPhoneStatus,
 } from "./phone";
 import { loadCachedGlance, saveCachedGlance } from "./cache";
-import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from "./interpret";
+import {
+  CHUNK_MS,
+  PcmBuffer,
+  RECALL_BYTES,
+  RECALL_MS,
+  postAudio,
+  subtitleLines,
+} from "./interpret";
 import {
   advanceNav,
   fetchRoute,
   glyphProbeLines,
   initialNavState,
   initialNavStateAt,
-  navLines,
+  formatMetres,
+  navTextLines,
+  remainingM,
   type NavCoord,
   type NavRoute,
   type NavState,
 } from "./nav";
-import { ARROW_H, ARROW_W, arrowPng, maneuverArrow } from "./arrow";
+import {
+  ARROW_H,
+  ARROW_W,
+  SPEED_H,
+  SPEED_W,
+  arrowPng,
+  kmhFromMs,
+  maneuverArrow,
+  speedPng,
+} from "./arrow";
 import {
   CAPTURE_MS,
   IMU_PACE_MS,
@@ -85,7 +104,8 @@ type Screen =
   | "confirmAck"
   | "notice"
   | "interpret"
-  | "nav";
+  | "nav"
+  | "recall";
 
 const PAGE_ORDER = ["home", "alerts", "cal", "todo"] as const;
 const LIST_PAGE_IDS = new Set(["home", "alerts"]);
@@ -112,6 +132,19 @@ let navRoute: NavRoute | null = null;
 let navState: NavState = initialNavState();
 let navPos: NavCoord | null = null;
 let navDest = "";
+/**
+ * Recall: a rolling window of what was just said, kept while listening.
+ *
+ * Separate buffer from the interpretation one because the two want opposite
+ * things — interpretation drains each window as it sends it, recall must retain
+ * the last half-minute so a tap can look backwards. Deneb can afford to listen
+ * continuously in a way the paid-ASR plugins cannot: MOSS runs on srv4, so the
+ * marginal cost of holding the mic open is electricity.
+ */
+let listening = false;
+const recallPcm = new PcmBuffer(RECALL_BYTES);
+let recallBusy = false;
+
 /** Live interpretation state. Off unless the operator turned it on. */
 let interpreting = false;
 let interpretLang = "ko";
@@ -185,6 +218,10 @@ bridge.onEvenHubEvent((event) => {
   const audio = (event as { audioEvent?: { audioPcm?: Uint8Array } })
     ?.audioEvent;
   if (audio?.audioPcm) {
+    // The recall window fills whenever listening, independent of
+    // interpretation: the wearer may want to look back at a conversation they
+    // were not having translated.
+    if (listening) recallPcm.push(audio.audioPcm);
     if (!interpreting) return;
     pcm.push(audio.audioPcm);
     if (pcm.ready()) void flushAudio();
@@ -211,14 +248,22 @@ bridge.onEvenHubEvent((event) => {
       // Contextual on purpose. There is no fifth gesture, and a detail is the
       // only place where "I am done with this" has a second meaning. Everywhere
       // else — list, pages, status, setup — a double-tap still exits.
-      if (screen === "detail") {
+      if (screen === "recall") {
+        // Listening holds the mic open; a double-tap here means "stop
+        // listening", not "quit the app" — quitting with the mic still open is
+        // the one outcome nobody wants.
+        void stopListening();
+      } else if (screen === "detail") {
         void askAck();
       } else {
         shutdown();
       }
       break;
     case "stopLoop":
-      stopLoop();
+      // SYSTEM_EXIT (the wearer confirmed the exit dialog) or ABNORMAL_EXIT.
+      // This is the ONLY place teardown belongs: the double-tap itself must not
+      // tear anything down, because mode 1 lets the wearer cancel.
+      void teardown();
       break;
     case "pause":
       pauseLoop();
@@ -238,6 +283,11 @@ bridge.onAppLocationChanged((loc) => {
   // otherwise — the stream is opened by startNav and closed by stopNav.
   if (!navRoute) return;
   void onNavFix({ lat: loc.latitude, lon: loc.longitude });
+  void pushSpeed(kmhFromMs(loc.speed));
+});
+
+onListenToggle((on) => {
+  void (on ? startListening() : stopListening());
 });
 
 onGlyphProbe(() => {
@@ -330,21 +380,48 @@ function clearRefreshTimer(): void {
 }
 
 /**
- * shutdown closes the glasses page because the wearer asked to.
+ * shutdown asks the system to close the glasses page.
  *
- * exitMode 0, not 1. The SDK README documents `shutDownPageContainer(0)` as
- * "Close the glasses page" and `(1)` as "ask foreground layer to decide" — this
- * call site is a deliberate double-tap on OUR page, so there is nothing to
- * defer. It had been 1 since the app was written, which is a coin flip on
- * whether the exit gesture exits.
+ * Mode 1, and NOTHING else in this function. Both halves matter:
  *
- * The polling stop is ours either way (stopLoop), which is why the smoke's
- * "no gateway traffic after shutdown" passed regardless — that check never
- * spoke to whether the page actually closed.
+ * Mode 1 is the system exit-confirmation dialog, which the platform requires on
+ * a root page — "Mode `0` (immediate exit) is not acceptable on the root page",
+ * and a QA reviewer rejects mode 0 outright (docs/ship/app-submission,
+ * docs/build/page-lifecycle, reference/glossary all say so). Mode 0 is for
+ * internal pages, where the user has already confirmed. This call site briefly
+ * used mode 0 on the strength of the SDK README's example, which contradicts
+ * all three doc pages; the README is wrong and nothing acknowledges it.
+ *
+ * And no teardown here, deliberately. Mode 1 means the wearer can still cancel;
+ * stopping the poll (or the mic, or the location stream) before the dialog
+ * leaves a live page that has quietly gone deaf when they tap "cancel".
+ * Teardown belongs in the SYSTEM_EXIT / ABNORMAL_EXIT handlers, which fire only
+ * once the exit is real.
  */
 function shutdown(): void {
+  void bridge.shutDownPageContainer(1);
+}
+
+/**
+ * teardown releases everything the app holds, on a confirmed exit.
+ *
+ * The hardware matters more than the timer: interpretation holds the glasses
+ * microphone and navigation holds a location stream, and neither is closed by
+ * the page going away. Leaving them open costs battery and, for the location
+ * feed, keeps a sensor running that the wearer believes they turned off.
+ */
+async function teardown(): Promise<void> {
   stopLoop();
-  void bridge.shutDownPageContainer(0);
+  const wasInterpreting = interpreting;
+  const wasNavigating = navRoute !== null;
+  interpreting = false;
+  navRoute = null;
+  try {
+    if (wasInterpreting) await bridge.audioControl(false);
+    if (wasNavigating) await bridge.stopAppLocationUpdates();
+  } catch {
+    // Exiting anyway — a failed release must not stall the exit path.
+  }
 }
 
 function needsSetup(s: GlanceSettings): boolean {
@@ -365,6 +442,10 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === "recall") {
+    await recallNow();
+    return;
+  }
   if (screen === "nav") {
     await stopNav();
     return;
@@ -989,37 +1070,67 @@ function clockLabel(): string {
  * carry it.
  */
 const NAV_ARROW_ID = 3;
+const NAV_SPEED_ID = 4;
 
 /** enterNavPage rebuilds the glasses page with an arrow slot on the right. */
 async function enterNavPage(): Promise<boolean> {
   const ok = await bridge.rebuildPageContainer(
     new RebuildPageContainer({
-      containerTotalNum: 2,
+      containerTotalNum: 4,
       textObject: [
+        // Full-screen capture layer, kept blank: image containers cannot set
+        // isEventCapture, so taps need a text layer and this one must not also
+        // carry content that would sit under the bitmap.
         new TextContainerProperty({
           xPosition: 0,
           yPosition: 0,
           width: 576,
           height: 288,
           borderWidth: 0,
-          borderColor: 5,
-          paddingLength: 4,
+          borderColor: 0,
+          paddingLength: 0,
           containerID: 1,
           containerName: "main",
-          content: "길찾기\n\n경로 계산 중…",
+          content: " ",
           isEventCapture: 1,
           zOrderIndex: 0,
+        }),
+        // The sentence sits BELOW the bitmap, not beside it: text position is
+        // per-container, so a separate container is the only way to keep the
+        // maneuver text clear of the arrow.
+        new TextContainerProperty({
+          xPosition: 0,
+          yPosition: ARROW_H + 12,
+          width: 576,
+          height: 288 - ARROW_H - 12,
+          borderWidth: 0,
+          borderColor: 0,
+          paddingLength: 4,
+          containerID: 2,
+          containerName: "navText",
+          content: "경로 계산 중…",
+          isEventCapture: 0,
+          zOrderIndex: 1,
         }),
       ],
       imageObject: [
         new ImageContainerProperty({
-          xPosition: 576 - ARROW_W - 8,
+          xPosition: 8,
           yPosition: 8,
           width: ARROW_W,
           height: ARROW_H,
           containerID: NAV_ARROW_ID,
           containerName: "arrow",
-          zOrderIndex: 1,
+          zOrderIndex: 2,
+        }),
+        new ImageContainerProperty({
+          xPosition: 576 - SPEED_W - 8,
+          yPosition: 8,
+          width: SPEED_W,
+          height: SPEED_H,
+          containerID: NAV_SPEED_ID,
+          containerName: "speed",
+          zOrderIndex: 3,
         }),
       ],
     }),
@@ -1059,13 +1170,18 @@ async function leaveNavPage(): Promise<void> {
  */
 let arrowChain: Promise<unknown> = Promise.resolve();
 let shownArrow = "";
-async function pushArrow(instruction: string): Promise<void> {
+async function pushArrow(instruction: string, distance: string): Promise<void> {
   const kind = maneuverArrow(instruction);
-  if (!kind || kind === shownArrow) return;
-  shownArrow = kind;
+  if (!kind) return;
+  // Keyed on kind AND distance: the distance is inside the bitmap now, so it
+  // has to be redrawn as the number counts down — but only when the rendered
+  // text actually changes, which is far less often than a position fix.
+  const key = `${kind}:${distance}`;
+  if (key === shownArrow) return;
+  shownArrow = key;
   arrowChain = arrowChain.then(async () => {
     try {
-      const bytes = await arrowPng(kind);
+      const bytes = await arrowPng(kind, distance);
       const res = await bridge.updateImageRawData(
         new ImageRawDataUpdate({
           containerID: NAV_ARROW_ID,
@@ -1167,6 +1283,7 @@ async function stopNav(): Promise<void> {
   navState = initialNavState();
   await bridge.stopAppLocationUpdates();
   shownArrow = "";
+  shownSpeed = "";
   await leaveNavPage();
   screen = "page";
   setPhoneStatus({ line: "길안내를 중지했습니다.", tone: "warn" });
@@ -1176,16 +1293,58 @@ async function stopNav(): Promise<void> {
 /** renderNav draws the current maneuver. */
 async function renderNav(): Promise<void> {
   if (!navRoute || !navPos) return;
-  const step =
-    navRoute.steps[Math.min(navState.stepIndex, navRoute.steps.length - 1)];
-  const kind = step ? maneuverArrow(step.short) : null;
-  // Text drops the direction word only when an arrow will actually be drawn —
-  // if the maneuver has no arrow (출발, 경유지) the words are all the wearer has.
-  const lines = navLines(navRoute, navState, navPos, { arrow: Boolean(kind) });
-  await showText(
-    [`길찾기 · ${navDest}`, "", ...lines, "", "탭=중지"].join("\n"),
+  const idx = Math.min(navState.stepIndex, navRoute.steps.length - 1);
+  const step = navRoute.steps[idx];
+  const left = remainingM(navRoute, navState, navPos);
+
+  // The bitmap carries the arrow AND the distance (text containers have no font
+  // size, so this is the only way the distance can dominate the panel the way
+  // both shipping plugins make it). The text container carries the words.
+  await showNavText(navTextLines(navRoute, navState).join("\n"));
+  if (step) await pushArrow(step.short, formatMetres(left));
+}
+
+let shownSpeed = "";
+/**
+ * pushSpeed draws the current speed. Shares the arrow's chain because
+ * updateImageRawData must be serial across ALL image containers, not per
+ * container.
+ */
+async function pushSpeed(kmh: number | null): Promise<void> {
+  const key = kmh == null ? "" : String(kmh);
+  if (key === shownSpeed) return;
+  shownSpeed = key;
+  if (kmh == null) return;
+  arrowChain = arrowChain.then(async () => {
+    try {
+      const res = await bridge.updateImageRawData(
+        new ImageRawDataUpdate({
+          containerID: NAV_SPEED_ID,
+          containerName: "speed",
+          imageData: await speedPng(kmh),
+        }),
+      );
+      if (res !== "success") {
+        console.error("updateImageRawData(speed):", res);
+        shownSpeed = "";
+      }
+    } catch (err) {
+      console.error("speed render failed", err);
+      shownSpeed = "";
+    }
+  });
+  await arrowChain;
+}
+
+/** showNavText writes the nav page's sentence container (not the capture layer). */
+async function showNavText(content: string): Promise<void> {
+  await bridge.textContainerUpgrade(
+    new TextContainerUpgrade({
+      containerID: 2,
+      containerName: "navText",
+      content,
+    }),
   );
-  if (step) await pushArrow(step.short);
 }
 
 /**
@@ -1206,6 +1365,78 @@ async function onNavFix(pos: NavCoord): Promise<void> {
   if (changed && next.arrived) {
     // Let the arrival sit on the glass before handing the screen back.
     setPhoneStatus({ line: `도착: ${navDest}`, tone: "ok" });
+  }
+}
+
+/**
+ * startListening opens the glasses mic and keeps a rolling window of what was
+ * said, WITHOUT sending anything anywhere.
+ *
+ * The pattern is G2 Fact Check's and it is the right one: deciding to capture
+ * before the interesting thing is said is exactly what nobody manages. Audio
+ * only leaves the glasses when the wearer taps.
+ */
+async function startListening(): Promise<void> {
+  if (listening) return;
+  const ok = await bridge.audioControl(true, AudioInputSource.Glasses);
+  if (!ok) {
+    setPhoneStatus({ line: "마이크를 열지 못했습니다.", tone: "bad" });
+    return;
+  }
+  listening = true;
+  screen = "recall";
+  pauseLoop();
+  await showText(
+    [
+      "● 청취 중",
+      "",
+      `최근 ${Math.round(RECALL_MS / 1000)}초를 기억합니다.`,
+      "아무것도 전송하지 않습니다.",
+      "",
+      "탭=방금 대화 넘기기",
+      "더블탭=청취 종료",
+    ].join("\n"),
+  );
+}
+
+async function stopListening(): Promise<void> {
+  if (!listening) return;
+  listening = false;
+  await bridge.audioControl(false);
+  recallPcm.take(); // drop the window — it was never asked for
+  screen = "page";
+  setPhoneStatus({ line: "청취를 종료했습니다.", tone: "warn" });
+  await resumeLoop();
+}
+
+/**
+ * recallNow hands the buffered conversation to Deneb as a chat turn.
+ *
+ * Snapshot, not drain: a second tap moments later must still find the audio.
+ * The turn goes through the normal agent, so "기록해둬" or a follow-up question
+ * reaches the wiki and calendar without any of that being re-plumbed here.
+ */
+async function recallNow(): Promise<void> {
+  if (!listening || recallBusy) return;
+  const window = recallPcm.snapshot();
+  if (!window) {
+    await showText("● 청취 중\n\n아직 들은 것이 없습니다.\n\n탭=다시");
+    return;
+  }
+  recallBusy = true;
+  await showText("● 청취 중\n\n방금 대화를 넘기는 중…");
+  try {
+    const res = await postAudio(settings, window, {
+      ask: "방금 들은 대화를 한국어로 짧게 정리해 주세요. 업무 관련 내용이면 위키에 기록하고, 무엇을 기록했는지 한 줄로 알려주세요.",
+    });
+    const body =
+      res.reply || res.askError || res.text || "정리하지 못했습니다.";
+    await showText(`● 청취 중\n\n${body}\n\n탭=다시 / 더블탭=종료`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await showText(`● 청취 중\n\n실패: ${msg}\n\n탭=다시`);
+  } finally {
+    recallBusy = false;
   }
 }
 

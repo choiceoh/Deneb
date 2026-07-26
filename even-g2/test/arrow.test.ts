@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { maneuverArrow } from "../src/arrow";
+import { kmhFromMs, maneuverArrow } from "../src/arrow";
 
 // The classifier is the whole safety-relevant decision: a wrong arrow points a
 // wearer the wrong way at a junction. The cases below are the ACTUAL strings the
@@ -39,5 +39,22 @@ describe("maneuverArrow", () => {
 
   it("prefers the destination over any direction in the same line", () => {
     expect(maneuverArrow("우회전 후 목적지")).toBe("goal");
+  });
+});
+
+describe("kmhFromMs", () => {
+  it("converts metres per second", () => {
+    expect(kmhFromMs(10)).toBe(36);
+    expect(kmhFromMs(0)).toBe(0);
+    expect(kmhFromMs(13.9)).toBe(50);
+  });
+
+  it("returns null for 'no fix' rather than a confident zero", () => {
+    // Android and iOS both report a negative speed when there is no fix.
+    // Rendering that as 0 km/h while the wearer is moving is worse than showing
+    // nothing at all.
+    expect(kmhFromMs(-1)).toBeNull();
+    expect(kmhFromMs(undefined)).toBeNull();
+    expect(kmhFromMs(Number.NaN)).toBeNull();
   });
 });
