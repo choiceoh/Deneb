@@ -180,11 +180,20 @@ func SearchPlaces(ctx context.Context, keyword string, near *Coord, limit int) (
 	q.Set("searchKeyword", keyword)
 	q.Set("count", fmt.Sprint(limit))
 	if near != nil {
-		// Biasing by current position is what makes "역" or "주민센터" resolve
+		// Biasing by current position is what makes "시청" or "주민센터" resolve
 		// to the one you are standing near instead of the one in Seoul.
+		// Verified live 2026-07-26: from 당진 these return 당진시청 and
+		// 당진1동행정복지센터; from 서울 the same words return 서울특별시청.
+		//
+		// centerLat/centerLon ONLY. This first also sent searchtypCd=R, which
+		// TMap rejects with a hard 400 ("필수 파라메터가 없습니다", code 9401)
+		// unless a `radius` accompanies it — that single parameter took the
+		// whole feature down. Adding a radius would be worse than dropping it:
+		// a radius EXCLUDES anything outside it, so a wearer in Seoul could not
+		// route to 인천공항 at all. Unbounded, centre-ranked search is what
+		// navigation wants.
 		q.Set("centerLat", fmt.Sprintf("%.6f", near.Lat))
 		q.Set("centerLon", fmt.Sprintf("%.6f", near.Lon))
-		q.Set("searchtypCd", "R")
 	}
 
 	var raw struct {
