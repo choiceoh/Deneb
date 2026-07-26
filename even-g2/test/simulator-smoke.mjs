@@ -20,6 +20,8 @@
 //   mid-poll tap slow  → a tap during an in-flight poll must not be dropped
 //   deadline     slow  → a hung gateway must not wedge `busy` (🔴 of #4267)
 //   backoff      error → the retry interval must widen past the 45s base
+//   pull refresh —     → an up-swipe at the top must hit the gateway
+//   outage mark  error → a sustained outage must mark the header, then clear
 //   shutdown     ok    → a double-tap must stop the network for good
 //
 // It is slow BY CONSTRUCTION (~14 min): the poll interval is 45s and the
@@ -341,6 +343,17 @@ async function main() {
     if (i === 4) await screenshot('09-swiped-back-home')
   }
 
+  // Swiping up past the top is the alert page's only manual refresh: a tap
+  // there opens a detail, so without this the page the wearer actually lives on
+  // could not be refreshed at all. The gateway hit is the proof.
+  const beforePullRefresh = stub.counts().glance
+  await input('up')
+  await sleep(4_000)
+  check(
+    stub.counts().glance > beforePullRefresh,
+    `an up-swipe at the top forces a refresh (${beforePullRefresh} → ${stub.counts().glance})`,
+  )
+
   // ── the other half of change detection: a REAL change must redraw ───────
   // The quiet check above only proves "unchanged → no redraw". On its own a
   // detector stuck closed passes it while the HUD goes permanently stale, so
@@ -405,10 +418,10 @@ async function main() {
   // early, and runScheduledRefresh stops fetching — the app is dead until the
   // WebView restarts. The count is the proof: it can only keep rising if
   // `busy` was released.
-  const hangFrom = await screenshot('16-before-hung-gateway')
+  const hangFrom = await screenshot('14b-before-hung-gateway')
   console.log(`waiting ${Math.round(HANG_WATCH_MS / 1000)}s across a hung poll…`)
   await sleep(HANG_WATCH_MS)
-  const afterHang = await screenshot('17-after-hung-gateway')
+  const afterHang = await screenshot('15b-after-hung-gateway')
   check(
     Buffer.compare(hangFrom, afterHang) === 0,
     'a hung background poll stayed off the display (no error flash in the wearer’s view)',
@@ -427,6 +440,7 @@ async function main() {
 
   // ── failure backoff: retries must spread out ────────────────────────────
   await stub.setMode('error')
+  const beforeOutage = await screenshot('16-before-outage')
   const gapsBefore = stub.glanceGaps().length
   console.log(`waiting ${Math.round(BACKOFF_WATCH_MS / 1000)}s to watch the retry interval widen…`)
   await sleep(BACKOFF_WATCH_MS)
@@ -442,6 +456,15 @@ async function main() {
   check(
     !JSON.stringify(await console_()).toLowerCase().includes('uncaught'),
     'the induced failures produced no uncaught error',
+  )
+
+  // A silent failure must not become a silent LIE. Errors stay off the display,
+  // but once the link is properly down the header says so — otherwise a glance
+  // reads alerts from a quarter of an hour ago as current.
+  const duringOutage = await screenshot('17-during-outage')
+  check(
+    Buffer.compare(beforeOutage, duringOutage) !== 0,
+    'a sustained outage marks the header (stale data does not pose as current)',
   )
 
   // ── shutdown must stop the network ──────────────────────────────────────
@@ -464,6 +487,11 @@ async function main() {
   } catch {
     rebounded = false
   }
+  const afterOutage = await screenshot('18-after-outage')
+  check(
+    Buffer.compare(duringOutage, afterOutage) !== 0,
+    'the outage marker clears once the link is back',
+  )
   const preShutdownGaps = stub.glanceGaps()
   const preShutdownGap = preShutdownGaps[preShutdownGaps.length - 1]
   check(
@@ -481,7 +509,7 @@ async function main() {
     countAfterShutdown === countAtShutdown,
     `no gateway traffic after shutdown (${countAtShutdown} → ${countAfterShutdown})`,
   )
-  await screenshot('18-after-shutdown')
+  await screenshot('19-after-shutdown')
 
   const finalLogs = await console_()
   writeFileSync(join(ARTIFACTS, 'console.json'), JSON.stringify(finalLogs, null, 2))

@@ -9,6 +9,7 @@ import { resolveSettings, type GlanceSettings } from './settings'
 import {
   advanceCursor,
   clampCursor as clampCursorTo,
+  connectionLabel,
   nextDelayMs,
   payloadSignature,
   resolveSelectionIndex,
@@ -63,6 +64,8 @@ let listCursor = 0
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
 let consecutiveFailures = 0
 let lastSignature = ''
+/** Connection marker currently ON SCREEN, so it is only redrawn when it flips. */
+let shownConnection = ''
 let stopped = false
 let paused = false
 
@@ -357,7 +360,13 @@ async function onSwipePrev(): Promise<void> {
     await renderCurrentPage()
     return
   }
-  await renderCurrentPage()
+  // Past the top of the first page — the one gesture that had no meaning, and
+  // the alerts page needs it: a tap there opens a detail, so there was no way
+  // left to force a refresh from the page the wearer is actually on. Pulling up
+  // past the top is the familiar idiom, and it re-anchors the schedule, which
+  // matters after a backoff has pushed the next poll minutes out.
+  await refreshGlance(true)
+  scheduleRefresh()
 }
 
 /**
@@ -418,7 +427,11 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
   const keepId = currentPageId()
   const keepDetailId = screen === 'detail' && detailIndex >= 0 ? items[detailIndex]?.id : ''
   try {
-    settings = await resolveSettings()
+    // Only while unseeded: resolveSettings re-parses the URL, re-reads
+    // localStorage and can re-fetch runtime-config.json, and it ran on EVERY
+    // 45s poll for the life of the app. Once the settings are complete they
+    // cannot change without reloading the WebView, which restarts boot anyway.
+    if (needsSetup(settings)) settings = await resolveSettings()
     if (needsSetup(settings)) {
       if (screen !== 'setup') {
         screen = 'setup'
@@ -442,7 +455,9 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     const anchorDetailId = liveDetailId || keepDetailId
 
     const signature = payloadSignature(payload)
-    const unchanged = signature === lastSignature
+    // A recovery is a change even when the payload is not: the header is
+    // showing "연결 끊김" and has to stop.
+    const unchanged = signature === lastSignature && connectionLabel(0) === shownConnection
     lastSignature = signature
     applyPayload(payload, anchorId)
 
@@ -475,7 +490,18 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     // A background failure stays off the display: the wearer did not ask, and
     // an unreachable gateway would otherwise flash an error every cycle while
     // they are simply out of network range.
-    if (silent) return
+    //
+    // Exactly ONE exception, and only once per outage: when the link goes
+    // properly down the header has to say so, or a glance reads quarter-hour-old
+    // alerts as current. Not from a detail — that would yank someone out of
+    // what they are reading — and not from the status screen, which is its own
+    // deliberate view.
+    if (silent) {
+      if (screen === 'page' && connectionLabel(consecutiveFailures) !== shownConnection) {
+        await renderCurrentPage()
+      }
+      return
+    }
     const msg = err instanceof Error ? err.message : String(err)
     await showText(`Deneb\n\n오류: ${msg}\n\n탭=재시도 / ↓다음`)
   } finally {
@@ -523,6 +549,7 @@ function currentPageId(): string {
 }
 
 async function renderCurrentPage(): Promise<void> {
+  shownConnection = connectionLabel(consecutiveFailures)
   const page = pages[pageIndex] || {
     id: 'home',
     title: '알림',
@@ -535,9 +562,13 @@ async function renderCurrentPage(): Promise<void> {
   }
   const stamp = formatGeneratedLabel(lastGenerated, lastCached)
   const nav = `${pageIndex + 1}/${Math.max(pages.length, 1)}`
-  const footer = stamp
-    ? `↓다음 · 탭=새로고침 · ${stamp}`
-    : `↓다음(빈칸건너뜀) · ${nav}`
+  const footer = [
+    '↓다음 · 탭=새로고침',
+    stamp || nav,
+    connectionLabel(consecutiveFailures),
+  ]
+    .filter(Boolean)
+    .join(' · ')
   await showText(`Deneb · ${title}\n\n${page.text}\n\n${footer}`)
 }
 
@@ -574,11 +605,16 @@ async function showAlertList(title: string): Promise<void> {
   await showText(
     [
       `Deneb · ${title}${position}`,
-      stamp ? `${items.length}건 · ${stamp}` : `${items.length}건`,
+      [`${items.length}건`, stamp, connectionLabel(consecutiveFailures)].filter(Boolean).join(' · '),
       '',
       ...lines,
       '',
-      cursor < items.length - 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
+      [
+        cursor < items.length - 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
+        atTop() ? '↑새로고침' : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
     ].join('\n'),
   )
 }
@@ -586,6 +622,15 @@ async function showAlertList(title: string): Promise<void> {
 /** clampCursor is the app-state view of the pure guard in refresh.ts. */
 function clampCursor(): number {
   return clampCursorTo(listCursor, items.length)
+}
+
+/** atTop reports whether an up-swipe would fall off the front of everything. */
+function atTop(): boolean {
+  if (clampCursor() > 0) return false
+  for (let i = pageIndex - 1; i >= 0; i--) {
+    if (!isPageEmpty(pages[i])) return false
+  }
+  return true
 }
 
 /** onAlertPage reports whether the current page draws the alert cursor. */
