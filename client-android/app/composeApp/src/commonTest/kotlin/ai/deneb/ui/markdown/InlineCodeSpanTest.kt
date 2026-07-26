@@ -55,4 +55,26 @@ class InlineCodeSpanTest {
         val rendered = listOf<InlineNode>(InlineCode(code)).toAnnotatedString(colors, mono)
         assertEquals(code, rendered.text)
     }
+
+    @Test
+    fun inlineCodeRangeIsTaggedSoTheChipCanBeDrawnPerLine() {
+        // The chip is drawn from the LAYOUT (one rounded rect per line the range
+        // covers), which needs the range to survive into the AnnotatedString. This
+        // tag is that contract — drop it and the chip silently disappears.
+        val rendered = listOf<InlineNode>(
+            Text("run "),
+            InlineCode("tailscale serve --https=443 off"),
+            Text(" now"),
+        ).toAnnotatedString(colors, mono)
+
+        val ranges = rendered.getStringAnnotations(CODE_SPAN_TAG, 0, rendered.length)
+        assertEquals(1, ranges.size)
+        assertEquals("tailscale serve --https=443 off", rendered.text.substring(ranges[0].start, ranges[0].end))
+    }
+
+    @Test
+    fun proseCarriesNoCodeTag() {
+        val rendered = listOf<InlineNode>(Text("그냥 문장")).toAnnotatedString(colors, mono)
+        assertTrue(rendered.getStringAnnotations(CODE_SPAN_TAG, 0, rendered.length).isEmpty())
+    }
 }
