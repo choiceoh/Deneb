@@ -38,11 +38,12 @@ actual class ContactsWriter actual constructor() {
     }
 }
 
-// Trailing digits so "+82 10-1234-5678" and "010-1234-5678" match the same key.
+// Full national digits so apply-time matching stays aligned with the gateway
+// contacts mirror (normalizePhone). Last-8 suffix matching would link unrelated
+// contacts that merely share a trailing digit run.
 private fun normPhone(s: String): String {
     val d = s.filter { it.isDigit() }
-    val national = if (d.startsWith("82") && d.length > 2) "0" + d.substring(2) else d
-    return if (national.length > 8) national.takeLast(8) else national
+    return if (d.startsWith("82") && d.length > 2) "0" + d.substring(2) else d
 }
 
 // Every raw-contact id that carries one of the target phones/emails. Two fixed

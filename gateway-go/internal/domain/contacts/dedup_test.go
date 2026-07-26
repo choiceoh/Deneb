@@ -145,3 +145,33 @@ func TestDedupDeterministicOrder(t *testing.T) {
 		t.Errorf("이수 copies should merge (0,2), 이수민 stay out; got %v", mem)
 	}
 }
+
+func TestDedupSubstringNamesWithSharedPhoneStayAmbiguous(t *testing.T) {
+	// Prefix bridging must not merge distinct people who share one line.
+	in := []Contact{
+		{Name: "이수", Phones: []string{"010-5555-5555"}},
+		{Name: "이수민", Phones: []string{"010-5555-5555"}},
+	}
+	res := Dedup(in)
+	if res.Distinct != 2 {
+		t.Fatalf("distinct = %d, want 2", res.Distinct)
+	}
+	if len(res.Merges) != 0 {
+		t.Fatalf("merges = %d, want 0", len(res.Merges))
+	}
+	if len(res.Ambiguous) != 1 {
+		t.Fatalf("ambiguous = %d, want 1", len(res.Ambiguous))
+	}
+}
+
+func TestDedupSingleRuneNameWithSharedPhoneStaysAmbiguous(t *testing.T) {
+	in := []Contact{
+		{Name: "박", Phones: []string{"010-1111-2222"}},
+		{Name: "박한주", Phones: []string{"010-1111-2222"}},
+	}
+	res := Dedup(in)
+	if res.Distinct != 2 || len(res.Merges) != 0 || len(res.Ambiguous) != 1 {
+		t.Fatalf("single-rune stub must stay ambiguous: distinct=%d merges=%d ambiguous=%d",
+			res.Distinct, len(res.Merges), len(res.Ambiguous))
+	}
+}

@@ -75,12 +75,15 @@ func dedouble(k string) string {
 }
 
 // namesCompatible reports whether two names can be the same person by the
-// conservative deterministic bridges: equal / prefix (company or title tail) /
-// first-syllable-doubling. A title-only entry (empty key) is NOT compatible with
-// anything — letting it bridge would transitively fuse two different people who
-// each merely share a number with the same "부장"/"기업지원과장" card. Cross name
-// matches (nicknames, romanization, English↔Korean) are deliberately NOT bridged
-// here — those are the ambiguous cases adjudication handles.
+// conservative deterministic bridges: equal keys and first-syllable-doubling
+// only. Prefix bridging is intentionally excluded — it conflates distinct
+// people such as "이수" and "이수민" when they share a line, which violates the
+// exact-key contract in NormalizePersonName. A title-only entry (empty key) is
+// NOT compatible with anything — letting it bridge would transitively fuse two
+// different people who each merely share a number with the same "부장"/
+// "기업지원과장" card. Cross name matches (nicknames, romanization,
+// English↔Korean) are deliberately NOT bridged here — those are the ambiguous
+// cases adjudication handles.
 func namesCompatible(a, b string) bool {
 	ka, kb := dedupKey(a), dedupKey(b)
 	if ka == "" || kb == "" {
@@ -88,7 +91,7 @@ func namesCompatible(a, b string) bool {
 	}
 	for _, x := range []string{ka, dedouble(ka)} {
 		for _, y := range []string{kb, dedouble(kb)} {
-			if x == y || strings.HasPrefix(x, y) || strings.HasPrefix(y, x) {
+			if x == y {
 				return true
 			}
 		}
