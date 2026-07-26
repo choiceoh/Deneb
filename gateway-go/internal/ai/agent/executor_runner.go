@@ -243,6 +243,10 @@ func (r *agentRunner) streamTurn(prepared preparedAgentTurn) (*turnResult, bool,
 	if err == nil {
 		return outcome.result, false, nil
 	}
+	if outcome.preOutputIdle() {
+		r.result.StopReason = "timeout"
+		return nil, true, nil
+	}
 	if prepared.request.ctx.Err() != nil {
 		r.result.Stream.TerminationReason = string(streamTerminationContextDone)
 		r.result.StopReason = stopReasonFromCtx(prepared.request.ctx)

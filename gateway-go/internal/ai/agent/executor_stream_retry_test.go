@@ -63,7 +63,7 @@ func TestRunStreamingTurnWithPolicyCancelsEachAttempt(t *testing.T) {
 	streamer := &scriptedRetryStreamer{
 		requirePreviousCanceled: true,
 		attempts: []scriptedStreamAttempt{
-			{holdOpen: true},
+			{events: partialTextEvents("partial"), holdOpen: true},
 			{events: buildTextTurnEvents("recovered", 10, 5)},
 		},
 	}
@@ -132,9 +132,21 @@ func TestRunStreamingTurnWithPolicyRetryBehavior(t *testing.T) {
 			wantCalls:       1,
 		},
 		{
-			name: "idle stream retries once and succeeds",
+			name: "pre-output idle stream fails fast for model fallback",
 			attempts: []scriptedStreamAttempt{
 				{holdOpen: true},
+			},
+			idleTimeout:     10 * time.Millisecond,
+			wantAttempts:    1,
+			wantTermination: streamTerminationPreOutputIdle,
+			wantRetryReason: streamRetryIdle,
+			wantErr:         ErrStreamIdle,
+			wantCalls:       1,
+		},
+		{
+			name: "idle stream after partial output retries once and succeeds",
+			attempts: []scriptedStreamAttempt{
+				{events: partialTextEvents("partial"), holdOpen: true},
 				{events: buildTextTurnEvents("recovered", 10, 5)},
 			},
 			idleTimeout:     10 * time.Millisecond,
@@ -218,6 +230,14 @@ func TestRunStreamingTurnWithPolicyRetryBehavior(t *testing.T) {
 				t.Errorf("StreamChat calls = %d, want %d", streamer.calls, tt.wantCalls)
 			}
 		})
+	}
+}
+
+func partialTextEvents(text string) []llm.StreamEvent {
+	return []llm.StreamEvent{
+		messageStartEvent(10),
+		contentBlockStartEvent(0, "text", ""),
+		textDeltaEvent(0, text),
 	}
 }
 
@@ -317,6 +337,35 @@ func TestRunAgentExposesStreamStats(t *testing.T) {
 			t.Errorf("StreamChat calls = %d, want 1", streamer.calls)
 		}
 	})
+}
+
+func TestRunAgentPreOutputIdleReturnsTimeoutWithoutSameModelRetry(t *testing.T) {
+	streamer := &scriptedRetryStreamer{attempts: []scriptedStreamAttempt{
+		{holdOpen: true},
+		{events: buildTextTurnEvents("must not retry", 1, 1)},
+	}}
+
+	result := testutil.Must(RunAgent(
+		context.Background(),
+		AgentConfig{MaxTurns: 1, Timeout: time.Second, MaxTokens: 128, StreamIdleTimeout: 10 * time.Millisecond},
+		[]llm.Message{llm.NewTextMessage("user", "hi")},
+		streamer,
+		nil,
+		StreamHooks{},
+		nil,
+		nil,
+	))
+
+	if result.StopReason != "timeout" {
+		t.Errorf("StopReason = %q, want timeout", result.StopReason)
+	}
+	want := StreamStats{Attempts: 1, LastRetryReason: "idle_timeout", TerminationReason: "pre_output_idle"}
+	if result.Stream != want {
+		t.Errorf("Stream = %+v, want %+v", result.Stream, want)
+	}
+	if streamer.calls != 1 {
+		t.Errorf("StreamChat calls = %d, want 1", streamer.calls)
+	}
 }
 
 func TestRunAgentInitialConnectionFailureKeepsErrorStage(t *testing.T) {
