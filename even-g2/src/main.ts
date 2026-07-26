@@ -1,4 +1,5 @@
 import {
+  AudioInputSource,
   waitForEvenAppBridge,
   TextContainerProperty,
   TextContainerUpgrade,
@@ -21,8 +22,9 @@ import {
   windowRange,
 } from './refresh'
 import { dispatchHubEvent } from './events'
-import { onSettingsSaved, renderPhoneUI, setPhoneStatus } from './phone'
+import { onInterpretToggle, onSettingsSaved, renderPhoneUI, setPhoneStatus } from './phone'
 import { loadCachedGlance, saveCachedGlance } from './cache'
+import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from './interpret'
 import {
   fetchGlance,
   fetchStatus,
@@ -44,7 +46,7 @@ renderPhoneUI()
 
 const bridge = await waitForEvenAppBridge()
 
-type Screen = 'setup' | 'page' | 'detail' | 'status' | 'confirmAck' | 'notice'
+type Screen = 'setup' | 'page' | 'detail' | 'status' | 'confirmAck' | 'notice' | 'interpret'
 
 const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
 const LIST_PAGE_IDS = new Set(['home', 'alerts'])
@@ -66,6 +68,12 @@ let lastNow = ''
 let shownNoticeId = ''
 /** Last thing the glasses said about themselves; undefined until they say it. */
 let wearStatus: WearStatus | undefined
+/** Live interpretation state. Off unless the operator turned it on. */
+let interpreting = false
+let interpretLang = 'ko'
+const pcm = new PcmBuffer()
+let subtitles: string[] = []
+let sending = false
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -118,6 +126,15 @@ if (started !== 0) {
 }
 
 bridge.onEvenHubEvent((event) => {
+  // Audio rides the same callback. It is high-rate, so it is handled before
+  // the intent mapping rather than through it.
+  const audio = (event as { audioEvent?: { audioPcm?: Uint8Array } })?.audioEvent
+  if (audio?.audioPcm) {
+    if (!interpreting) return
+    pcm.push(audio.audioPcm)
+    if (pcm.ready()) void flushAudio()
+    return
+  }
   // Mapping lives in events.ts as a pure function so every host event shape —
   // including the lifecycle events the simulator cannot inject — is unit
   // testable. This block only executes the intent.
@@ -157,6 +174,10 @@ bridge.onEvenHubEvent((event) => {
     case 'ignore':
       break
   }
+})
+
+onInterpretToggle((on, lang) => {
+  void (on ? startInterpreting(lang) : stopInterpreting())
 })
 
 onSettingsSaved((next) => {
@@ -269,6 +290,10 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === 'interpret') {
+    await stopInterpreting()
+    return
+  }
   if (screen === 'notice') {
     screen = 'page'
     await renderCurrentPage()
@@ -444,6 +469,7 @@ async function doAck(): Promise<void> {
 
 async function onSwipeNext(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
+  if (screen === 'interpret') return
   if (screen === 'notice') return void (await onTap())
   if (screen === 'confirmAck') return void (await cancelAck())
   if (screen === 'setup') return
@@ -487,6 +513,7 @@ async function onSwipeNext(): Promise<void> {
 
 async function onSwipePrev(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
+  if (screen === 'interpret') return
   if (screen === 'notice') return void (await onTap())
   if (screen === 'confirmAck') return void (await cancelAck())
   if (screen === 'setup') return
@@ -834,6 +861,74 @@ function clockLabel(): string {
   const hh = String(now.getHours()).padStart(2, '0')
   const mm = String(now.getMinutes()).padStart(2, '0')
   return `${now.getMonth() + 1}/${now.getDate()} ${wd} ${hh}:${mm}`
+}
+
+/**
+ * startInterpreting opens the glasses microphone and streams it to Deneb.
+ *
+ * The polling loop is paused for the duration: a glance redraw would wipe the
+ * subtitle mid-sentence, and the wearer is not reading alerts while someone is
+ * talking to them.
+ */
+async function startInterpreting(lang: string): Promise<void> {
+  if (interpreting) return
+  interpretLang = lang || 'ko'
+  interpreting = true
+  subtitles = []
+  pauseLoop()
+  screen = 'interpret'
+  await showText(`통역 중 (${interpretLang})\n\n듣는 중…\n\n탭=중지`)
+  // Glasses mic, not the phone's: the wearer's own device is pointed at the
+  // person speaking. The startup container already exists, which the SDK
+  // requires before this returns true.
+  const ok = await bridge.audioControl(true, AudioInputSource.Glasses)
+  if (!ok) {
+    interpreting = false
+    screen = 'page'
+    await showText('통역을 시작하지 못했습니다.\n\n탭=목록')
+  }
+}
+
+async function stopInterpreting(): Promise<void> {
+  if (!interpreting) return
+  interpreting = false
+  await bridge.audioControl(false)
+  pcm.take()
+  screen = 'page'
+  await resumeLoop()
+}
+
+/** renderSubtitles keeps the last few lines so a glance catches the sentence. */
+async function renderSubtitles(): Promise<void> {
+  const body = subtitles.length ? subtitles.join('\n') : '듣는 중…'
+  await showText(`통역 · ${interpretLang}\n\n${body}\n\n탭=중지`)
+}
+
+/**
+ * flushAudio sends one window and draws what comes back.
+ *
+ * `sending` is a plain in-flight guard, not a queue: if the network is slower
+ * than speech, dropping a window keeps the subtitle current, while a backlog
+ * would put the wearer further behind with every sentence.
+ */
+async function flushAudio(): Promise<void> {
+  if (sending || !interpreting) return
+  const window = pcm.take()
+  if (!window) return
+  sending = true
+  try {
+    const res = await postAudio(settings, window, { translateTo: interpretLang })
+    const line = res.translation || res.text
+    if (line && interpreting) {
+      subtitles = subtitleLines(subtitles, line)
+      await renderSubtitles()
+    }
+  } catch {
+    // Silent on purpose: a dropped window during a conversation is not worth
+    // taking the subtitle off the glass to announce.
+  } finally {
+    sending = false
+  }
 }
 
 /** wearLine reports what the glasses said about themselves, if anything. */
