@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.executePhoneAction
 import ai.deneb.sensing.readCurrentLocation
+import ai.deneb.sensing.readRecentCallDigest
 import ai.deneb.sensing.readWorkUsageDigest
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -152,6 +153,14 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                                                         // forward, same as without the re-arm).
                                                         lastUsageForward = TimeSource.Monotonic.markNow()
                                                         ingestEvent("usage_update", "앱 사용 리듬", digest)
+                                                    }
+                                                }
+                                                // Recent calls ride the same burst. No throttle of its
+                                                // own: the digest is only built when the gateway asks,
+                                                // and a no-op without READ_CALL_LOG.
+                                                runCatching {
+                                                    readRecentCallDigest()?.let { digest ->
+                                                        ingestEvent("calllog_update", "최근 통화", digest)
                                                     }
                                                 }
                                             }
