@@ -60,7 +60,7 @@ export const ARRIVE_RADIUS_M = 25;
  */
 export const DESTINATION_RADIUS_M = 40;
 
-/** Fresh state for a newly fetched route. */
+/** Fresh state for a newly fetched route, before any position is known. */
 export function initialNavState(): NavState {
   return { stepIndex: 0, arrived: false };
 }
@@ -318,4 +318,19 @@ export function stripTrailingDistance(full: string): string {
     .replace(/\s*[0-9.]+\s*(?:m|km)\s*이동\s*$/, "")
     .replace(/\s*(?:을|를)?\s*따라\s*$/, "")
     .trim();
+}
+
+/**
+ * initialNavStateAt is the state a fresh route should OPEN in, given where the
+ * wearer is standing right now.
+ *
+ * Not the same as initialNavState(): step 0 is 출발, the place they are already
+ * at. Opening there points the HUD at a completed maneuver and — since 출발 has
+ * no direction — leaves the arrow blank until some later fix happens to arrive.
+ * This exists as a named function because the bug was not in the advance rule
+ * (that was correct) but in a caller forgetting to apply it, which a test of
+ * advanceNav alone cannot catch.
+ */
+export function initialNavStateAt(route: NavRoute, pos: NavCoord): NavState {
+  return advanceNav(route, initialNavState(), pos);
 }

@@ -5,6 +5,7 @@ import {
   distanceM,
   formatMetres,
   initialNavState,
+  initialNavStateAt,
   liveInstruction,
   navLines,
   fetchRoute,
@@ -304,5 +305,23 @@ describe("fetchRoute", () => {
     await expect(fetchRoute(settings, P0, "강남역", "walk")).rejects.toThrow(
       /경로/,
     );
+  });
+});
+
+describe("initialNavStateAt", () => {
+  it("opens on the first real maneuver, not on 출발", () => {
+    // The defect this pins: opening at step 0 points the HUD at 출발 — where
+    // the wearer already stands — and because 출발 carries no direction the
+    // arrow stayed blank until a later fix arrived. Reported from the device as
+    // "화살표가 안떠".
+    const state = initialNavStateAt(route, P0);
+    expect(state.stepIndex).toBe(1);
+    expect(state.arrived).toBe(false);
+    expect(route.steps[state.stepIndex].short).toContain("좌회전");
+  });
+
+  it("still arrives when the route starts at the destination", () => {
+    const state = initialNavStateAt(route, P2);
+    expect(state.arrived).toBe(true);
   });
 });
