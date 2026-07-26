@@ -12,6 +12,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/chrono"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/core"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/domain"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/webtools"
 )
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
@@ -38,7 +40,11 @@ func RegisterChronoTools(registry toolport.ToolRegistrar) {
 }
 
 func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, spill tooldeps.SpilloverStore) {
-	core.RegisterMediaTools(registry, workspaceDir, spill)
+	media.RegisterMediaTools(registry, workspaceDir, spill)
+}
+
+func RegisterWebTools(registry toolport.ToolRegistrar, spill tooldeps.SpilloverStore) {
+	webtools.Register(registry, spill)
 }
 
 func RegisterCalendarTool(registry toolport.ToolRegistrar, calDeps *tooldeps.CalendarDeps) {

@@ -52,3 +52,7 @@ func RegisterChronoTools(registry wire.ToolRegistrar) {
 func RegisterMediaTools(registry wire.ToolRegistrar, workspaceDir string, spill wire.SpilloverStore) {
 	wire.RegisterMediaTools(registry, workspaceDir, spill)
 }
+
+func RegisterWebTools(registry wire.ToolRegistrar, spill wire.SpilloverStore) {
+	wire.RegisterWebTools(registry, spill)
+}

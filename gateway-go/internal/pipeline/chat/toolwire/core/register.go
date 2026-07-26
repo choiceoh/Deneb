@@ -6,13 +6,12 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/webtools"
 )
 
 // RegisterFileTools registers the workspace file read/write/edit/grep surface.
@@ -270,17 +269,17 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Solarflow: runtimeops.ToolSolarflow(),
 	}
 	if deps.SpilloverStore != nil {
-		runtimeOps.SpilloverRead = artifact.ToolSpilloverRead(deps.SpilloverStore)
+		runtimeOps.SpilloverRead = media.SpilloverReadTool(deps.SpilloverStore)
 	}
 	RegisterRuntimeOpsTools(registry, runtimeOps)
 	RegisterGraphTool(registry, deps.WorkspaceDir)
 	RegisterCodeSearchTool(registry, deps.WorkspaceDir)
 	RegisterOfficeTool(registry, deps.WorkspaceDir)
 	RegisterProcessTools(registry, &deps.Process)
-	RegisterWebTools(registry, deps.SpilloverStore)
+	webtools.Register(registry, deps.SpilloverStore)
 	RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	RegisterMediaTools(registry, deps.WorkspaceDir, deps.SpilloverStore)
+	media.RegisterMediaTools(registry, deps.WorkspaceDir, deps.SpilloverStore)
 	RegisterPhoneTools(registry, deps.PhoneActionSender)
 	RegisterWorkstationTool(registry, deps.WorkstationCommandSender, deps.WorkstationUsageHint)
 
@@ -333,26 +332,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		})
 	}
 
-	// Audio transcription: resident MOSS-Transcribe-Diarize ASR sidecar over a file on disk.
-	// Deferred — capture RPCs cover app-shared audio; this is for files the
-	// agent encounters itself (downloads, exec artifacts, file store).
-	registry.RegisterTool(toolport.ToolDef{
-		Name:        "transcribe",
-		Description: "디스크의 오디오 파일(회의 녹음·음성 메모, m4a/mp3/oga/wav 등 최대 60분)을 화자분리+타임스탬프로 전사한다 — '이 녹음 정리해줘'에 사용. hotwords로 거래처·인명 교정 힌트 추가 가능(주소록/위키 힌트 자동 병합). 앱에서 공유된 오디오는 이미 자동 전사되므로 이 도구는 경로로 받은 파일용.",
-		InputSchema: schema.TranscribeToolSchema(),
-		Fn:          artifact.ToolTranscribe(deps.AsrHotwords),
-		Deferred:    true,
-	})
-
-	// Document/image text extraction over a file on disk (PaddleOCR-VL +
-	// tesseract fallback; born-digital PDFs via pdftotext). Deferred.
-	registry.RegisterTool(toolport.ToolDef{
-		Name:        "ocr",
-		Description: "디스크의 이미지·스캔 PDF·오피스 문서에서 텍스트를 추출한다(OCR) — 영수증 사진·스캔 계약서·팩스 PDF를 읽어야 할 때 사용. read 도구는 바이너리를 그대로 덤프하므로 이미지/스캔물은 반드시 이 도구로. 파일스토어 파일은 files action=analyze로도 가능.",
-		InputSchema: schema.OcrToolSchema(),
-		Fn:          artifact.ToolOCR(),
-		Deferred:    true,
-	})
+	media.RegisterExtractionTools(registry, deps.AsrHotwords)
 
 	// Market quotes: same cache as the miniapp 오늘 dashboard (원/달러·코스피·
 	// WTI·구리, 10m TTL). Deferred; nil = dashboard cache not wired.
@@ -446,36 +426,6 @@ func RegisterProcessTools(registry toolport.ToolRegistrar, d *tooldeps.ProcessDe
 	})
 }
 
-// RegisterWebTools registers the unified web tool (search, fetch, search+fetch).
-// spill (optional) lets the YouTube path offload full transcripts to disk.
-func RegisterWebTools(registry toolport.ToolRegistrar, spill tooldeps.SpilloverStore) {
-	webCache := web.NewFetchCache()
-	localAI := web.NewLocalAIExtractor()
-
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "web",
-		Description: "Web access — search and/or fetch pages in one tool. " +
-			"query: keyword search (Serper→Brave→DuckDuckGo). " +
-			"queries: up to 5 parallel searches. " +
-			"url: fetch a page (HTML extract + bot evasion). " +
-			"**YouTube 링크는 web이 아니라 watch 툴을 쓰세요** (web은 유튜브를 처리하지 않고 watch로 안내한다). " +
-			"fetch=1..3 with query: search then auto-fetch top N pages. " +
-			"type=news|scholar|autocomplete: Serper-only typed search (incompatible with fetch).",
-		InputSchema: schema.WebToolSchema(),
-		Fn:          web.MergedTool(webCache, localAI, spill),
-	})
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "browse",
-		Description: "상주 실브라우저(서버의 headful Chromium, 운영자가 noVNC로 로그인해 둔 세션 보유)로 페이지를 열어 본문 텍스트를 읽는다. " +
-			"web 도구가 막히는 곳에 쓴다: 로그인 필요 페이지(그룹웨어 웹·포털·카페·멤버십), JS 렌더가 무거운 SPA, 봇 감지에 걸리는 사이트. " +
-			"공개 정적 페이지는 web이 더 빠르니 web 먼저. 읽기 전용(클릭·입력 없음)·http(s)만. " +
-			"로그인이 풀려 있으면 운영자에게 noVNC 재로그인(scripts/browser/start-browser-sidecar.sh view)을 안내하라.",
-		InputSchema: schema.BrowseToolSchema(),
-		Fn:          tools.ToolBrowse(),
-		Deferred:    true,
-	})
-}
-
 // RegisterSessionTools registers session management tools.
 func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDeps) {
 	registry.RegisterTool(toolport.ToolDef{
@@ -534,50 +484,5 @@ func RegisterChronoTools(registry toolport.ToolRegistrar) {
 			"(deferring it would force a fetch_tools round-trip and add a fragile turn).",
 		InputSchema: schema.HeartbeatUpdateToolSchema(),
 		Fn:          runtimeops.ToolHeartbeatUpdate(),
-	})
-}
-
-// RegisterMediaTools registers media tools: file delivery (send_file) and
-// video watching (watch). workspaceDir bounds the watch tool's local-file
-// access; an empty string restricts watch to YouTube URLs only.
-func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, spill tooldeps.SpilloverStore) {
-	registry.RegisterTool(toolport.ToolDef{
-		Name:        "send_file",
-		Description: "Send a file to the user (auto-detects: photo/video/audio/document). Max 50 MB",
-		InputSchema: schema.SendFileToolSchema(),
-		Fn:          artifact.ToolSendFile(),
-		Deferred:    true,
-	})
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "chart",
-		Description: "숫자 데이터를 보기 좋은 차트 이미지(PNG)로 그린다 — 추이(line)·누적(area)·비교(bar)·구성비(doughnut). " +
-			"표로 나열하기보다 한눈에 들어오는 게 나을 때(월별 추이, 거래처별 비교, 단계별 비율 등) 사용하라. " +
-			"막대 위에 추세선을 얹는 콤보도 가능(한 시리즈에 type:line). " +
-			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
-		InputSchema: schema.ChartToolSchema(),
-		Fn:          artifact.ToolChart(),
-		Deferred:    true,
-	})
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "diagram",
-		Description: "구조·흐름·일정을 다이어그램 이미지(PNG)로 그린다 — 절차/관계/상태도는 flowchart(노드+화살표), 일정은 gantt(작업별 기간 막대), 연혁/이력/로드맵은 timeline(시점별 사건). " +
-			"인허가 절차, 결재 흐름, 프로젝트 일정, 회사 연혁처럼 말이나 표보다 그림이 나은 걸 설명할 때 쓴다. " +
-			"숫자 비교·추이는 diagram이 아니라 chart를 써라. " +
-			"렌더된 PNG 경로를 돌려주므로, 그 경로를 send_file(type:\"photo\")로 사용자에게 전송해야 실제로 보인다.",
-		InputSchema: schema.DiagramToolSchema(),
-		Fn:          artifact.ToolDiagram(),
-		Deferred:    true,
-	})
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "watch",
-		Description: "YouTube 영상·로컬 영상 파일을 다루는 단일 도구 (유튜브는 web이 아니라 이 도구로 온다). " +
-			"**기본은 자막 요약** (detail 생략 = transcript: 자막/전사 기반 상세 요약, 영상 다운로드 없이 가볍고 빠름 — '이 영상 리뷰/요약해줘'는 이걸로 충분). " +
-			"화면을 직접 봐야 할 때만 detail=\"frames\" (프레임 추출 + 비전 분석 — 벤치마크 화면·UI·시연·화면녹화·버그 진단 등 시각 정보가 중요할 때). " +
-			"start/end로 구간을 좁힐 수 있다.",
-		InputSchema: schema.WatchToolSchema(),
-		Fn: artifact.ToolWatch(workspaceDir, func(ctx context.Context, url string) (string, error) {
-			return web.FetchYouTube(ctx, spill, url)
-		}),
-		Deferred: true,
 	})
 }
