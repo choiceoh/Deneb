@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -481,10 +482,7 @@ internal fun MailRow(
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (message.unread) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                    Spacer(Modifier.width(8.dp))
-                }
+                MailRowDot(color = MaterialTheme.colorScheme.primary.takeIf { message.unread })
                 Text(
                     senderName(message.from).ifBlank { "(발신자 없음)" },
                     style = if (message.unread) DenebType.rowTitleStrong else DenebType.rowTitle,
@@ -519,18 +517,12 @@ internal fun MailRow(
                     "attention" -> MaterialTheme.colorScheme.tertiary
                     else -> null
                 }
-                if (priorityColor != null) {
-                    val label = if (message.priority == "urgent") "긴급" else "주의"
-                    val hint = message.priorityHint.ifBlank { label }
-                    Box(
-                        Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(priorityColor)
-                            .semantics { contentDescription = "$label: $hint" },
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
+                val priorityLabel = if (message.priority == "urgent") "긴급" else "주의"
+                MailRowDot(
+                    color = priorityColor,
+                    size = 7.dp,
+                    contentDescription = priorityColor?.let { "$priorityLabel: ${message.priorityHint.ifBlank { priorityLabel }}" },
+                )
                 Text(
                     message.subject.ifBlank { "(제목 없음)" },
                     style = DenebType.rowSubtitle,
@@ -662,6 +654,29 @@ private fun mailRowAnalysisStatusColor(state: MailWorkState): Color = when (stat
     "failed" -> MaterialTheme.colorScheme.error
     "analyzing", "queued", "stale", "review" -> MaterialTheme.colorScheme.tertiary
     else -> denebHint()
+}
+
+// Leading gutter shared by the mail row's two status dots. The SLOT is always
+// occupied and only the disc inside it comes and goes, so the sender and the
+// subject sit on one column no matter which markers a mail happens to carry.
+// Drawing the dots inline used to give the list five different left edges
+// (24.0 / 24.5 / 25.0 / 38.0 / 40.5dp, measured at 2x).
+private val MailDotSlot = 8.dp
+private val MailDotGap = 8.dp
+
+@Composable
+private fun MailRowDot(color: Color?, size: Dp = MailDotSlot, contentDescription: String? = null) {
+    Box(Modifier.width(MailDotSlot + MailDotGap), contentAlignment = Alignment.CenterStart) {
+        if (color == null) return@Box
+        val label = contentDescription
+        Box(
+            Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(color)
+                .then(if (label != null) Modifier.semantics { this.contentDescription = label } else Modifier),
+        )
+    }
 }
 
 /**

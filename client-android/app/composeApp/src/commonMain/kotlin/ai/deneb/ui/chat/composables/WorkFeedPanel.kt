@@ -16,9 +16,7 @@ import ai.deneb.ui.icons.filled.TaskAlt
 import ai.deneb.ui.icons.outlined.Archive
 import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.icons.outlined.QuestionAnswer
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -33,7 +31,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
@@ -59,12 +56,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -235,10 +230,16 @@ internal fun WorkFeedRow(
     ) {
         Row(verticalAlignment = Alignment.Top) {
             val source = workFeedSourcePresentation(item.source)
+            // Urgency rides the SOURCE ICON's tint rather than a dot on the title
+            // line. The dot used to sit in the text flow, so an urgent card's title
+            // started 12.5dp right of its own summary while a routine card's sat
+            // flush — the feed's left edge alternated card by card. The icon column
+            // is already a fixed gutter, so marking it there costs no width and
+            // keeps the signal leading, where it gets scanned first.
             Icon(
                 painter = sourcePainter(source.icon),
-                contentDescription = source.label,
-                tint = denebHint(),
+                contentDescription = if (item.isUrgent()) "긴급 · ${source.label}" else source.label,
+                tint = if (item.isUrgent()) denebInsight() else denebHint(),
                 modifier = Modifier.padding(top = 1.dp).size(18.dp),
             )
             Spacer(Modifier.width(12.dp))
@@ -254,16 +255,6 @@ internal fun WorkFeedRow(
                     // alarm red repeats into noise and drowns the monochrome base. It
                     // is also not an error — it is a standing priority band. The
                     // restrained warm accent is one of the two sanctioned colors.
-                    if (item.isUrgent()) {
-                        Box(
-                            Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(denebInsight())
-                                .semantics { contentDescription = "긴급" },
-                        )
-                        Spacer(Modifier.width(6.dp))
-                    }
                     Text(
                         text = title,
                         style = titleStyle,
