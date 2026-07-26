@@ -84,16 +84,25 @@ func TestSearchPlacesRejectsEmptyKeyword(t *testing.T) {
 	}
 }
 
+// routeBody mirrors the LIVE pedestrian response shape observed 2026-07-26:
+// Point features carry the maneuver and NO distance field, and the metres sit
+// on the LineString(s) that follow — sometimes more than one per leg. An
+// earlier version of this fixture invented a `distance` on the Points, which
+// is why the code shipped reading a field the API never sends.
 const routeBody = `{"features":[
   {"type":"Feature","geometry":{"type":"Point","coordinates":[126.978,37.566]},
-   "properties":{"index":0,"description":"출발","turnType":200,"distance":0,
+   "properties":{"index":0,"description":"보행자도로를 따라 310m 이동","turnType":200,
                  "totalDistance":820,"totalTime":610}},
   {"type":"Feature","geometry":{"type":"LineString","coordinates":[[126.978,37.566],[126.979,37.567]]},
-   "properties":{"index":1,"description":"소공로","distance":310}},
+   "properties":{"index":1,"description":"소공로, 310m","distance":310}},
   {"type":"Feature","geometry":{"type":"Point","coordinates":[126.979,37.567]},
-   "properties":{"index":2,"description":"소공로 을 따라 190m 이동","turnType":12,"distance":190}},
+   "properties":{"index":2,"description":"좌회전 후 소공로 을 따라 190m 이동","turnType":12}},
+  {"type":"Feature","geometry":{"type":"LineString","coordinates":[[126.979,37.567],[126.9795,37.5675]]},
+   "properties":{"index":3,"description":"소공로, 190m","distance":190}},
+  {"type":"Feature","geometry":{"type":"LineString","coordinates":[[126.9795,37.5675],[126.980,37.568]]},
+   "properties":{"index":4,"description":"무교로, 320m","distance":320}},
   {"type":"Feature","geometry":{"type":"Point","coordinates":[126.980,37.568]},
-   "properties":{"index":3,"description":"목적지","turnType":201,"distance":0}}
+   "properties":{"index":5,"description":"목적지","turnType":201}}
 ]}`
 
 func TestDirectionsNormalizes(t *testing.T) {
@@ -114,13 +123,21 @@ func TestDirectionsNormalizes(t *testing.T) {
 	if r.Steps[0].Short != "출발" || r.Steps[2].Short != "목적지" {
 		t.Errorf("endpoints = %q … %q", r.Steps[0].Short, r.Steps[2].Short)
 	}
-	// The fitted form is synthesized, and the long sentence survives cleaned
-	// alongside it — the renderer needs both.
-	if r.Steps[1].Short != "190m 앞 좌회전" {
-		t.Errorf("short = %q, want 190m 앞 좌회전", r.Steps[1].Short)
+	// The distance comes from the LineString BEFORE the maneuver — the metres
+	// needed to reach it, which is how the HUD phrases it. The Point itself
+	// carries no distance at all.
+	if r.Steps[1].Short != "310m 앞 좌회전" {
+		t.Errorf("short = %q, want 310m 앞 좌회전 (from the preceding LineString)", r.Steps[1].Short)
 	}
-	if r.Steps[1].Full != "소공로을 따라 190m 이동" {
+	if r.Steps[1].DistanceM != 310 {
+		t.Errorf("distanceM = %d, want 310", r.Steps[1].DistanceM)
+	}
+	if r.Steps[1].Full != "좌회전 후 소공로을 따라 190m 이동" {
 		t.Errorf("full = %q (particle should be re-attached)", r.Steps[1].Full)
+	}
+	// Two LineStrings separate the turn from the destination; both count.
+	if r.Steps[2].DistanceM != 510 {
+		t.Errorf("destination distance = %d, want 510 (190+320 summed)", r.Steps[2].DistanceM)
 	}
 	if r.Steps[1].Coord.Lat != 37.567 || r.Steps[1].Coord.Lon != 126.979 {
 		t.Errorf("coord = %+v, want lat 37.567 lon 126.979", r.Steps[1].Coord)
