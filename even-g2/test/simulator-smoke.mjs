@@ -11,6 +11,7 @@
 // Every #4267 fix is now driven end to end, using the stub gateway's runtime
 // modes to induce the conditions the fixes exist for:
 //
+//   phone screen —     → the WebView draws settings, not an empty page
 //   quiet poll   ok    → the framebuffer must stay byte-identical
 //   redraw       alt   → a genuinely changed payload must repaint
 //   detail       —     → a tap opens a detail, a second tap leaves it
@@ -155,6 +156,21 @@ async function screenshot(name) {
   return buf
 }
 
+/**
+ * screenshotWebview captures the PHONE surface, not the glasses.
+ *
+ * An Even Hub plugin is a WebView the phone app hosts, so its DOM is the phone
+ * screen. Ours shipped an empty <body> for a long time and nobody noticed,
+ * because every check in this file looked at the glasses framebuffer.
+ */
+async function screenshotWebview(name) {
+  const res = await api('/api/screenshot/webview')
+  if (!res.ok) throw new Error(`webview screenshot ${name}: HTTP ${res.status}`)
+  const buf = Buffer.from(await res.arrayBuffer())
+  writeFileSync(join(ARTIFACTS, `${name}.png`), buf)
+  return buf
+}
+
 async function console_(sinceId) {
   const res = await api(`/api/console${sinceId ? `?since_id=${sinceId}` : ''}`)
   if (!res.ok) throw new Error(`console: HTTP ${res.status}`)
@@ -254,6 +270,12 @@ async function main() {
   await sleep(1_500)
   const booted = await screenshot('01-boot')
   check(booted.length > 1_000, `boot renders a non-empty framebuffer (${booted.length}B)`)
+
+  // The phone screen renders before the bridge is awaited, so it is up as soon
+  // as the app is. A blank page compresses to almost nothing; a settings form
+  // on a dark background does not.
+  const phone = await screenshotWebview('01b-phone-settings')
+  check(phone.length > 8_000, `the phone screen draws the settings page (${phone.length}B)`)
 
   const bootLogs = await console_()
   const bootErrors = JSON.stringify(bootLogs).toLowerCase()
