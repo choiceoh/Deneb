@@ -14,7 +14,7 @@ import (
 )
 
 // phoneWriteParams is the phone_write tool input. `to` selects the operation:
-// the app-permission ops (notify/speak/clipboard) run via platform services;
+// the app-permission ops (notify/speak/clipboard/reply) run via platform services;
 // the Intent-backed actions (open_url/open_app/share/message/dial/photo/
 // alarm/timer) route through PhoneActionFunc to the app.
 type phoneWriteParams struct {
@@ -40,6 +40,10 @@ var phoneActions = map[string]bool{
 	"speak":      true,
 	"clipboard":  true,
 	"sync_state": true,
+	// reply fires the live notification's OWN reply action, so the message
+	// lands in the real conversation (KakaoTalk et al.). Needs no new
+	// permission — NotificationListener access already carries it.
+	"reply": true,
 	// alarm/timer ride the clock app's public intents (ACTION_SET_ALARM /
 	// ACTION_SET_TIMER — normal-level permission, auto-granted).
 	"alarm": true,
@@ -103,6 +107,17 @@ func buildPhoneAction(p phoneWriteParams) (string, map[string]string, error) {
 		if text == "" {
 			return "", nil, fmt.Errorf("%s needs text", action)
 		}
+		args["text"] = text
+	case "reply":
+		// target = the room exactly as phone_read("messages") shows it; the app
+		// matches it against the live notification list.
+		if target == "" {
+			return "", nil, fmt.Errorf("reply needs target (대화방 이름)")
+		}
+		if text == "" {
+			return "", nil, fmt.Errorf("reply needs text")
+		}
+		args["room"] = target
 		args["text"] = text
 	case "sync_state":
 		// No args — the app pushes fresh location+battery+usage state.

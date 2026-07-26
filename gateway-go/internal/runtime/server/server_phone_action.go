@@ -243,6 +243,7 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 			return fmt.Errorf("phone action %q failed on the device: %s", action, msg)
 		}
 		s.logger.Info("phone action confirmed by app", "action", action, "id", id)
+		s.recordOutgoingReply(action, args)
 		return nil
 	}
 
@@ -267,4 +268,27 @@ func (s *Server) dispatchPhoneAction(ctx context.Context, action string, args ma
 			"wait", phoneActionConfirmWait)
 		return toolbind.ErrPhoneActionUnconfirmed
 	}
+}
+
+// recordOutgoingReply appends a confirmed reply to the phone-event ledger in the
+// same shape the notification listener uses, so phone_read("messages") shows the
+// conversation with both sides.
+//
+// Outgoing messages are otherwise invisible: an app posts no notification for
+// what the user sends, so the ledger only ever saw the incoming half. A reply
+// Deneb itself sent is the one outgoing message it can know for certain — it
+// wrote it — and recording only confirmed sends keeps the thread honest rather
+// than showing an intent that never landed.
+func (s *Server) recordOutgoingReply(action string, args map[string]string) {
+	ledger := s.phoneEventLedgerInstance()
+	if action != "reply" || ledger == nil {
+		return
+	}
+	room := strings.TrimSpace(args["room"])
+	text := strings.TrimSpace(args["text"])
+	if room == "" || text == "" {
+		return
+	}
+	ledger.Append("notification", "카카오톡",
+		"대화방: "+room+"\n메시지:\n- 나(데네브): "+text)
 }

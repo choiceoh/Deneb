@@ -6,6 +6,8 @@ import ai.deneb.deneb.ingestEvent
 import ai.deneb.network.httpTeardownTolerantHandler
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.RemoteInput
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
@@ -117,9 +119,77 @@ class DenebNotificationListenerService : NotificationListenerService() {
         }
     }
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        NotificationReplyBridge.replier = ::replyToRoom
+    }
+
+    override fun onListenerDisconnected() {
+        NotificationReplyBridge.replier = null
+        super.onListenerDisconnected()
+    }
+
     override fun onDestroy() {
+        NotificationReplyBridge.replier = null
         scope.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Sends [text] into the live conversation named [room] by firing that
+     * notification's own reply action.
+     *
+     * Looked up against `activeNotifications` at call time rather than from a
+     * stored handle: a reply PendingIntent dies with its notification, so a
+     * cached one would fail silently once the user reads or dismisses the chat.
+     * Asking the live list means "not found" is an honest answer the agent can
+     * relay ("그 대화 알림이 이미 사라졌습니다") instead of a false success.
+     *
+     * Requires the same NotificationListener access already granted for reading —
+     * no new permission. Returns false when no live notification matches or it
+     * carries no reply input (many apps post read-only notifications).
+     */
+    fun replyToRoom(room: String, text: String): Boolean = runCatching {
+        val wanted = room.trim()
+        if (wanted.isEmpty() || text.isBlank()) return false
+        val live = activeNotifications ?: return false
+        for (sbn in live) {
+            val notification = sbn?.notification ?: continue
+            if (!roomMatches(notification, wanted)) continue
+            if (sendReply(notification, text)) return true
+        }
+        false
+    }.onFailure { Log.w(TAG, "notification reply failed", it) }.getOrDefault(false)
+
+    /** Matches the same room name the digest shows: conversation title, else title. */
+    private fun roomMatches(notification: Notification, wanted: String): Boolean {
+        val extras = notification.extras ?: return false
+        val convo = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim().orEmpty()
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+        val room = convo.ifBlank { title }
+        return room.isNotEmpty() && room.equals(wanted, ignoreCase = true)
+    }
+
+    /** Fires the notification's reply action with [text]. */
+    private fun sendReply(notification: Notification, text: String): Boolean {
+        val actions = notification.actions ?: return false
+        for (action in actions) {
+            val inputs = action?.remoteInputs?.filter { !it.resultKey.isNullOrEmpty() }.orEmpty()
+            if (inputs.isEmpty() || action?.actionIntent == null) continue
+            val results = Bundle().apply { inputs.forEach { putCharSequence(it.resultKey, text) } }
+            val intent = Intent()
+            RemoteInput.addResultsToIntent(inputs.toTypedArray(), intent, results)
+            // Chat apps mark their reply action; sending to a non-reply action
+            // (e.g. "mark as read") would silently do the wrong thing.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                action.semanticAction != Notification.Action.SEMANTIC_ACTION_REPLY
+            ) {
+                continue
+            }
+            action.actionIntent.send(this, 0, intent)
+            return true
+        }
+        return false
     }
 
     // On-device dedup/throttle: apps re-post the same notification on every update

@@ -115,3 +115,46 @@ func TestPhoneMessages_EmptyLedgerIsNotAnError(t *testing.T) {
 		t.Errorf("expected an empty-state message, got %q", out)
 	}
 }
+
+func TestBuildPhoneAction_ReplyNeedsRoomAndText(t *testing.T) {
+	// The room is how the app finds the live notification; without it the reply
+	// would have nowhere to land, and a silent no-op is the worst outcome for a
+	// message the user believes was sent.
+	for _, bad := range []phoneWriteParams{
+		{To: "reply", Text: "확인했습니다"},               // no room
+		{To: "reply", Target: "선향란 과장"},             // no text
+		{To: "reply", Target: "  ", Text: "확인했습니다"}, // blank room
+	} {
+		if _, _, err := buildPhoneAction(bad); err == nil {
+			t.Errorf("expected rejection for %+v", bad)
+		}
+	}
+
+	action, args, err := buildPhoneAction(phoneWriteParams{To: "reply", Target: "선향란 과장", Text: "확인했습니다"})
+	if err != nil {
+		t.Fatalf("valid reply rejected: %v", err)
+	}
+	if action != "reply" || args["room"] != "선향란 과장" || args["text"] != "확인했습니다" {
+		t.Fatalf("unexpected command: %s %v", action, args)
+	}
+}
+
+func TestPhoneMessages_ShowsDenebsOwnReply(t *testing.T) {
+	// A confirmed reply is appended in the listener's own shape, so the thread
+	// reads as a conversation instead of a one-sided feed.
+	now := time.Now()
+	day := now.Format("2006-01-02")
+	seedLedger(
+		t, now,
+		entry(day+"T09:00:00+09:00", "카카오톡", "대화방: 고건 주임\n메시지:\n- 고건 주임: 모듈 입고 일정 확인 부탁드립니다."),
+		entry(day+"T09:02:00+09:00", "카카오톡", "대화방: 고건 주임\n메시지:\n- 나(데네브): 8월 1일 입고 예정입니다."),
+	)
+	threads := readPhoneMessageThreads(now, 1)
+	if len(threads) != 1 {
+		t.Fatalf("want one room, got %d", len(threads))
+	}
+	joined := strings.Join(threads[0].lines, "\n")
+	if !strings.Contains(joined, "나(데네브)") {
+		t.Errorf("outgoing reply missing from thread: %q", joined)
+	}
+}
