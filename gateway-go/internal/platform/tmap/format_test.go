@@ -10,24 +10,25 @@ func TestShortInstruction(t *testing.T) {
 		name     string
 		turnType int
 		distance int
+		desc     string
 		want     string
 	}{
-		{"좌회전에 거리", turnLeft, 190, "190m 앞 좌회전"},
-		{"우회전에 거리", turnRight, 45, "45m 앞 우회전"},
-		{"유턴", turnUTurn, 300, "300m 앞 유턴"},
-		{"직진은 앞이 아니라 그대로", turnStraight, 310, "310m 직진"},
-		{"출발은 거리 없음", turnStart, 0, "출발"},
-		{"목적지는 거리 무시", turnGoal, 120, "목적지"},
-		{"경유지", 185, 500, "경유지"},
-		{"고속도로 구간", 103, 2400, "2.4km 고속도로"},
-		{"거리 0인 회전은 방향만", turnLeft, 0, "좌회전"},
-		{"모르는 코드는 지어내지 않는다", 77, 250, "250m 이동"},
-		{"모르는 코드에 거리도 없으면", 77, 0, "이동"},
+		{"좌회전에 거리", turnLeft, 190, "", "190m 앞 좌회전"},
+		{"우회전에 거리", turnRight, 45, "", "45m 앞 우회전"},
+		{"유턴", turnUTurn, 300, "", "300m 앞 유턴"},
+		{"직진은 앞이 아니라 그대로", turnStraight, 310, "", "310m 직진"},
+		{"출발은 거리 없음", turnStart, 0, "", "출발"},
+		{"목적지는 거리 무시", turnGoal, 120, "", "목적지"},
+		{"경유지", 185, 500, "", "경유지"},
+		{"고속도로 구간", 103, 2400, "", "2.4km 고속도로"},
+		{"거리 0인 회전은 방향만", turnLeft, 0, "", "좌회전"},
+		{"모르는 코드는 지어내지 않는다", 77, 250, "", "250m 이동"},
+		{"모르는 코드에 거리도 없으면", 77, 0, "", "이동"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := shortInstruction(tc.turnType, tc.distance); got != tc.want {
-				t.Errorf("shortInstruction(%d, %d) = %q, want %q", tc.turnType, tc.distance, got, tc.want)
+			if got := shortInstruction(tc.turnType, tc.distance, tc.desc); got != tc.want {
+				t.Errorf("shortInstruction(%d, %d, %q) = %q, want %q", tc.turnType, tc.distance, tc.desc, got, tc.want)
 			}
 		})
 	}
@@ -135,5 +136,47 @@ func TestJoinAddr(t *testing.T) {
 	}
 	if got := joinAddr("", "  ", ""); got != "" {
 		t.Errorf("joinAddr(blanks) = %q, want empty", got)
+	}
+}
+
+// TestShortInstructionUsesDescriptionForUnmappedCodes covers the pedestrian
+// reality found on the live API: crossings come back as turnType codes that are
+// not in the published mapping, and a bare "이동" is useless at a crossing.
+func TestShortInstructionUsesDescriptionForUnmappedCodes(t *testing.T) {
+	cases := []struct {
+		name     string
+		turnType int
+		distance int
+		desc     string
+		want     string
+	}{
+		{
+			"횡단보도(212)는 TMap 문장에서 조작을 가져온다",
+			212, 34, "좌측 횡단보도 후 보행자도로를 따라 34m 이동",
+			"34m 앞 좌측 횡단보도",
+		},
+		{
+			"조작 없는 이동 문장에서는 지어내지 않는다",
+			99, 37, "보행자도로를 따라 37m 이동",
+			"37m 이동",
+		},
+		{
+			"머리절이 너무 길면 버린다 (HUD 한 줄을 넘긴다)",
+			99, 13,
+			"아주아주 긴 지하철역 몇 번 출구 앞 광장에서 우회전 후 세종대로를 따라 13m 이동",
+			"13m 이동",
+		},
+		{
+			"매핑된 코드는 문장을 무시하고 짧은 형태를 쓴다",
+			turnLeft, 190, "좌회전 후 소공로를 따라 190m 이동",
+			"190m 앞 좌회전",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := shortInstruction(tc.turnType, tc.distance, tc.desc); got != tc.want {
+				t.Errorf("= %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

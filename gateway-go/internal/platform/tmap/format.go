@@ -29,7 +29,7 @@ const (
 // This exists because TMap's own description is a full sentence with road names
 // and 방면 hints — excellent on a phone, unreadable on 576px of monochrome. The
 // renderer shows this first and demotes the sentence to a secondary line.
-func shortInstruction(turnType, distanceM int) string {
+func shortInstruction(turnType, distanceM int, description string) string {
 	d := formatDistance(distanceM)
 	switch {
 	case turnType == turnStart:
@@ -55,11 +55,44 @@ func shortInstruction(turnType, distanceM int) string {
 	case turnType == turnUTurn:
 		return withDistance(d, "유턴")
 	default:
+		// Unmapped code. Pedestrian routes are full of them — a single live
+		// walk through central Seoul returned turnType 212 (좌측 횡단보도)
+		// repeatedly, and "이동" tells a wearer at a crossing nothing.
+		//
+		// Rather than guess at codes that cannot be verified, take the maneuver
+		// from TMap's OWN sentence: its head clause before "후" is the action
+		// ("좌측 횡단보도 후 보행자도로를 따라 34m 이동"). That is not a guess,
+		// it is the provider's wording, shortened.
+		if m := maneuverPhrase(description); m != "" {
+			return withDistance(d, m)
+		}
 		if d == "" {
 			return "이동"
 		}
 		return d + " 이동"
 	}
+}
+
+// maneuverPhrase extracts the action from a TMap instruction sentence.
+//
+// "" when the sentence is only a travel leg ("보행자도로를 따라 37m 이동") —
+// there is no maneuver in it to name, and inventing one would be worse than
+// falling back to a distance.
+func maneuverPhrase(description string) string {
+	s := strings.TrimSpace(description)
+	if s == "" {
+		return ""
+	}
+	idx := strings.Index(s, " 후 ")
+	if idx <= 0 {
+		return ""
+	}
+	head := strings.TrimSpace(s[:idx])
+	// A head clause long enough to wrap defeats the purpose of the fitted form.
+	if head == "" || len([]rune(head)) > 20 {
+		return ""
+	}
+	return head
 }
 
 // withDistance renders "190m 앞 좌회전", or the bare maneuver when the distance

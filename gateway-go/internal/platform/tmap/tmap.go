@@ -265,14 +265,24 @@ func Directions(ctx context.Context, from, to Coord, mode Mode) (*Route, error) 
 	}
 
 	route := &Route{Mode: mode}
+	// Measured against the live API on 2026-07-26: a Point feature carries the
+	// maneuver but NO distance field — the metres live on the LineString(s)
+	// that follow it, and there can be several per leg. Reading Distance off
+	// the Point (as this did first) silently produced "우회전" with no distance
+	// at all, which is most of what the fitted form exists to say.
+	//
+	// The accumulator holds the distance travelled since the last maneuver, so
+	// a Point receives the distance needed to REACH it. That is the direction
+	// the HUD phrases it in ("190m 앞 좌회전"); TMap's own sentence measures the
+	// other way, from the maneuver onward.
+	segment := 0
 	for _, f := range raw.Features {
 		p := f.Properties
 		if p.TotalDistance > 0 {
 			route.TotalM, route.TotalSec = p.TotalDistance, p.TotalTime
 		}
-		// Only Point features are maneuvers; LineStrings are the geometry
-		// between them and carry no instruction worth a line on the HUD.
 		if f.Geometry.Type != "Point" {
+			segment += p.Distance
 			continue
 		}
 		full := cleanDescription(p.Description)
@@ -286,12 +296,13 @@ func Directions(ctx context.Context, from, to Coord, mode Mode) (*Route, error) 
 		}
 		lat, lon := parsePoint(f.Geometry.Coordinates)
 		route.Steps = append(route.Steps, Step{
-			Short:     shortInstruction(p.TurnType, p.Distance),
+			Short:     shortInstruction(p.TurnType, segment, full),
 			Full:      full,
-			DistanceM: p.Distance,
+			DistanceM: segment,
 			TurnType:  p.TurnType,
 			Coord:     Coord{Lat: lat, Lon: lon},
 		})
+		segment = 0
 	}
 	if len(route.Steps) == 0 {
 		return nil, errors.New("tmap: route had no maneuvers")
