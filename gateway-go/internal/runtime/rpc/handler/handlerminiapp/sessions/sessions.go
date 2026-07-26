@@ -248,6 +248,22 @@ func decodeThinkingContent(raw json.RawMessage) string {
 	return strings.Join(parts, "\n\n")
 }
 
+// effectiveChannel classifies a conversation for the drawer's channel scoping.
+// A row created by a live run carries no Channel (Manager.Create takes only key
+// and kind), while the SAME conversation carries the key-derived one once a
+// restart restores it from its transcript (server/session_restore.go). A
+// channel-scoped fetch therefore saw a conversation only after a restart — the
+// desktop chat list, which scopes to "client", came up completely empty for
+// everything started since boot. Fall back to restore's own classifier so both
+// spellings of one conversation agree.
+func effectiveChannel(s *session.Session) string {
+	if s.Channel != "" {
+		return s.Channel
+	}
+	channel, _ := session.RestorableTranscriptChannel(s.Key)
+	return channel
+}
+
 func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 	type params struct {
 		Limit   int    `json:"limit,omitempty"`
@@ -268,7 +284,7 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		if p.Channel != "" {
 			filtered := sessions[:0]
 			for _, s := range sessions {
-				if s.Channel == p.Channel {
+				if effectiveChannel(s) == p.Channel {
 					filtered = append(filtered, s)
 				}
 			}
@@ -291,7 +307,7 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 				Key:         s.Key,
 				Kind:        string(s.Kind),
 				Status:      string(s.Status),
-				Channel:     s.Channel,
+				Channel:     effectiveChannel(s),
 				Model:       s.Model,
 				Label:       s.Label,
 				UpdatedAtMs: s.UpdatedAt,

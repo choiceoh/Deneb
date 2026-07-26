@@ -264,6 +264,36 @@ func TestZeroValueManagerWorksWithoutExplicitInit(t *testing.T) {
 	}
 }
 
+// Regression: the GC used to evict restored conversations along with runtime
+// sessions, so within one sweep of every gateway restart the chat drawer lost
+// every conversation older than gcMaxAge while its transcript stayed on disk.
+func TestEvictStale_KeepsConversationsEvictsRuntimeSessions(t *testing.T) {
+	m := NewManager()
+	stale := time.Now().Add(-48 * time.Hour).UnixMilli()
+
+	keep := []string{"client:main", "client:main:k3x9", "chat:legacy-1"}
+	for _, key := range keep {
+		m.Set(&Session{Key: key, Kind: KindDirect, Status: StatusDone, Channel: "client", UpdatedAt: stale})
+	}
+	// Runtime state that shares the conversation key shape (subagent) or is plain
+	// automation must still be collected.
+	m.Set(&Session{Key: "client:main:agent:171", Kind: KindSubagent, Status: StatusDone, UpdatedAt: stale})
+	m.Set(&Session{Key: "system:mailpoll", Kind: KindDirect, Status: StatusDone, UpdatedAt: stale})
+
+	m.evictStale()
+
+	for _, key := range keep {
+		if m.Get(key) == nil {
+			t.Errorf("conversation %q was evicted; it is the drawer's history row", key)
+		}
+	}
+	for _, key := range []string{"client:main:agent:171", "system:mailpoll"} {
+		if m.Get(key) != nil {
+			t.Errorf("runtime session %q survived the sweep", key)
+		}
+	}
+}
+
 func TestEvictStale_TimeoutEnforcement(t *testing.T) {
 	m := NewManager()
 
