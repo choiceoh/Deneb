@@ -52,7 +52,7 @@ func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
 		sinks.Delta("하세요")
 		return &chatStreamResult{Text: "안녕하세요", Model: "step3p7", FellBack: true}, nil
 	}
-	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil, nil)
 
 	if ct := rec.Header().Get("Content-Type"); ct != "text/event-stream" {
 		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
@@ -108,7 +108,7 @@ func TestWriteChatStreamSSE_RunSurvivesClientDisconnect(t *testing.T) {
 		return &chatStreamResult{Text: "완성된 응답", Model: "step3p7"}, nil
 	}
 	// runCtx = Background (live); connCtx = cancelled (client gone).
-	writeChatStreamSSE(context.Background(), connCtx, rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), connCtx, rec, "client:test", run, nil, nil)
 
 	if !ran {
 		t.Fatal("detached run did not execute after client disconnect")
@@ -133,7 +133,7 @@ func TestWriteChatStreamSSE_ErrorFrame(t *testing.T) {
 	run := func(_ context.Context, _ chatStreamSinks) (*chatStreamResult, error) {
 		return nil, errors.New("boom")
 	}
-	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil, nil)
 
 	events := parseSSEEvents(t, rec.Body.String())
 	if len(events) != 1 || events[0].Event != "error" {
@@ -162,7 +162,7 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 		sinks.Tool(chatport.ToolStreamEvent{}) // empty tool name must be dropped, not framed
 		return &chatStreamResult{Text: "메일 3통이 도착했습니다", Model: "step3p7"}, nil
 	}
-	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil)
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil, nil)
 
 	events := parseSSEEvents(t, rec.Body.String())
 	wantOrder := []string{"thinking", "thinking", "tool", "tool", "delta", "done"}
@@ -242,5 +242,57 @@ func TestHandleMiniappChatStream_GuardPaths(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "chat handler not ready") {
 		t.Errorf("nil chat handler: body = %q, want 'chat handler not ready'", rec.Body.String())
+	}
+}
+
+func TestChatStreamDoneFrameCarriesTranslatedReasoning(t *testing.T) {
+	// The native client overwrites its expandable reasoning block with the done
+	// frame, so this is the surface where English reasoning actually becomes
+	// Korean. The live `reasoning` deltas stay in the model's own language.
+	run := func(_ context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Reasoning("thinking in english")
+		return &chatStreamResult{Text: "답", Model: "k3", Reasoning: "thinking in english"}, nil
+	}
+	rec := httptest.NewRecorder()
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil,
+		func(_ context.Context, text string) (string, bool) {
+			if text != "thinking in english" {
+				t.Fatalf("translator got %q", text)
+			}
+			return "영어로 사고함", true
+		})
+
+	var doneReasoning, liveReasoning string
+	for _, ev := range parseSSEEvents(t, rec.Body.String()) {
+		var payload struct {
+			Reasoning string `json:"reasoning"`
+		}
+		if json.Unmarshal([]byte(ev.Data), &payload) != nil {
+			continue
+		}
+		switch ev.Event {
+		case "done":
+			doneReasoning = payload.Reasoning
+		case "reasoning":
+			liveReasoning = payload.Reasoning
+		}
+	}
+	if doneReasoning != "영어로 사고함" {
+		t.Fatalf("done frame reasoning = %q, want the translation", doneReasoning)
+	}
+	if liveReasoning != "thinking in english" {
+		t.Fatalf("live reasoning was rewritten (%q) — the stream must stay untouched", liveReasoning)
+	}
+}
+
+func TestChatStreamDoneFrameFailsOpenOnTranslatorRefusal(t *testing.T) {
+	run := func(_ context.Context, _ chatStreamSinks) (*chatStreamResult, error) {
+		return &chatStreamResult{Text: "답", Reasoning: "thinking in english"}, nil
+	}
+	rec := httptest.NewRecorder()
+	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil,
+		func(context.Context, string) (string, bool) { return "", false })
+	if !strings.Contains(rec.Body.String(), "thinking in english") {
+		t.Fatal("a refused translation must ship the original reasoning, not drop it")
 	}
 }

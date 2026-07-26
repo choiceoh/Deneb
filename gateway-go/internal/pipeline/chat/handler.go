@@ -41,12 +41,13 @@ type Handler struct {
 	providerConfigs   map[string]ProviderConfig
 	// memory groups the memory/knowledge backends. See MemoryDeps.
 	memory               MemoryDeps
-	dreamTurnFn          func(ctx context.Context)         // optional; increments dream turn via autonomous
-	preferenceSignalFn   func()                            // optional; notes a 선호-tagged diary capsule for accelerated dreaming
-	deliverablePublisher func(text string) (bool, error)   // optional; auto-publishes a document-analysis deliverable to the work feed
-	agentLog             *agentlog.Writer                  // optional; agent detail logging
-	registry             *modelrole.Registry               // centralized model role registry
-	providerRuntime      *provider.ProviderRuntimeResolver // optional; runtime auth, missing-auth messages
+	dreamTurnFn          func(ctx context.Context)                             // optional; increments dream turn via autonomous
+	preferenceSignalFn   func()                                                // optional; notes a 선호-tagged diary capsule for accelerated dreaming
+	deliverablePublisher func(text string) (bool, error)                       // optional; auto-publishes a document-analysis deliverable to the work feed
+	translateThinking    func(ctx context.Context, text string) (string, bool) // optional; renders the 🧠 blockquote into Korean
+	agentLog             *agentlog.Writer                                      // optional; agent detail logging
+	registry             *modelrole.Registry                                   // centralized model role registry
+	providerRuntime      *provider.ProviderRuntimeResolver                     // optional; runtime auth, missing-auth messages
 
 	// Agent run configuration.
 	contextCfg           ContextConfig
@@ -196,6 +197,10 @@ type HandlerConfig struct {
 	// DeliverablePublisher files a document-analysis turn's final response as a
 	// doc_analysis work-feed card (server-side auto safety net). Optional; nil disables.
 	DeliverablePublisher func(text string) (bool, error)
+	// TranslateThinking renders the turn's extended-thinking text into Korean
+	// for the 🧠 blockquote. Display only — the streamed reasoning payload is
+	// untouched. Optional; nil leaves thinking in the model's own language.
+	TranslateThinking    func(ctx context.Context, text string) (string, bool)
 	AgentLog             *agentlog.Writer    // optional; agent detail logging
 	Registry             *modelrole.Registry // centralized model role registry
 	ContextCfg           ContextConfig
@@ -324,6 +329,7 @@ func NewHandler(sessions *session.Manager, broadcast BroadcastFunc, logger *slog
 		dreamTurnFn:          cfg.DreamTurnFn,
 		preferenceSignalFn:   cfg.PreferenceSignalFn,
 		deliverablePublisher: cfg.DeliverablePublisher,
+		translateThinking:    cfg.TranslateThinking,
 		agentLog:             cfg.AgentLog,
 		registry:             cfg.Registry,
 		contextCfg:           cfg.ContextCfg,

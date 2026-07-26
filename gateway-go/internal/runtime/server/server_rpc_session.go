@@ -25,6 +25,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/insights"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	handlersession "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
@@ -347,6 +348,13 @@ func (s *Server) configureSessionChatCallbacks(chatCfg *chat.HandlerConfig) {
 	}
 	chatCfg.DeliverablePublisher = func(text string) (bool, error) {
 		return s.proactiveRelay.PublishDeliverable(text)
+	}
+	// Korean-first surface: the system prompt is overwhelmingly English, so the
+	// model reasons in English even on Korean turns (measured 2026-07-26: 82% of
+	// stored reasoning blocks are English-dominant). Left nil when DeepL is not
+	// configured, which disables the feature instead of failing once per turn.
+	if toolbind.ThinkingTranslatorEnabled() {
+		chatCfg.TranslateThinking = toolbind.TranslateThinking
 	}
 	chatCfg.RecordActivity = s.recordChatActivity
 }

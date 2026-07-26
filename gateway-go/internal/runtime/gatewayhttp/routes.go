@@ -37,8 +37,11 @@ type Config struct {
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)
 	GroupwareAttachmentDownload nativeapi.GroupwareAttachmentDownload
-	Fleet                       *sparkfleet.Client
-	Version                     string
+	// TranslateThinking renders a finished turn's reasoning into Korean for the
+	// SSE done frame. Optional; nil leaves it in the model's own language.
+	TranslateThinking func(ctx context.Context, text string) (string, bool)
+	Fleet             *sparkfleet.Client
+	Version           string
 }
 
 // FleetAlertConfig is the narrow composition contract for SparkFleet's
@@ -63,6 +66,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 			Logger:                      cfg.Logger,
 			AttachmentFactory:           adaptAttachmentFactory(cfg.AttachmentFactory),
 			GroupwareAttachmentDownload: cfg.GroupwareAttachmentDownload,
+			TranslateThinking:           cfg.TranslateThinking,
 		})
 	}
 
