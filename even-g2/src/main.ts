@@ -233,9 +233,22 @@ function clearRefreshTimer(): void {
   }
 }
 
+/**
+ * shutdown closes the glasses page because the wearer asked to.
+ *
+ * exitMode 0, not 1. The SDK README documents `shutDownPageContainer(0)` as
+ * "Close the glasses page" and `(1)` as "ask foreground layer to decide" — this
+ * call site is a deliberate double-tap on OUR page, so there is nothing to
+ * defer. It had been 1 since the app was written, which is a coin flip on
+ * whether the exit gesture exits.
+ *
+ * The polling stop is ours either way (stopLoop), which is why the smoke's
+ * "no gateway traffic after shutdown" passed regardless — that check never
+ * spoke to whether the page actually closed.
+ */
 function shutdown(): void {
   stopLoop()
-  bridge.shutDownPageContainer(1)
+  void bridge.shutDownPageContainer(0)
 }
 
 function needsSetup(s: GlanceSettings): boolean {
