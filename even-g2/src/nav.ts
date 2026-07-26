@@ -1,4 +1,5 @@
 import { HUD_LINES } from "./refresh";
+import type { GlanceSettings } from "./settings";
 
 // Turn-by-turn policy for the glasses — pure, so it is fully testable without
 // a TMap key, a GPS fix, or hardware.
@@ -200,4 +201,70 @@ export function navLines(
     `${idx + 1}/${route.steps.length} · 총 ${formatMetres(route.totalM)}`,
   );
   return lines.slice(0, HUD_LINES);
+}
+
+/** How long a route request may take before the wearer is told it failed. */
+const ROUTE_TIMEOUT_MS = 12_000;
+
+export interface RouteResult {
+  route: NavRoute;
+  destination: { name: string; address: string };
+}
+
+/**
+ * fetchRoute asks the gateway to resolve a destination and plan a route.
+ *
+ * One call per navigation, not per fix: everything after this happens on the
+ * glasses, so losing the network mid-route costs nothing.
+ */
+export async function fetchRoute(
+  settings: GlanceSettings,
+  from: NavCoord,
+  to: string,
+  mode: "walk" | "car",
+): Promise<RouteResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ROUTE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${settings.baseUrl}/api/even/route`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${settings.token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ from, to, mode }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      // The gateway distinguishes "no key configured" (503) from a routing
+      // failure, and so must the glass — one of them the wearer can do
+      // nothing about.
+      const detail = (await res.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      throw new Error(detail?.error?.message || `HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as {
+      route?: NavRoute;
+      destination?: { name?: string; address?: string };
+    };
+    if (!data.route || !Array.isArray(data.route.steps)) {
+      throw new Error("경로를 받지 못했습니다");
+    }
+    return {
+      route: data.route,
+      destination: {
+        name: data.destination?.name ?? "",
+        address: data.destination?.address ?? "",
+      },
+    };
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("시간 초과");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }

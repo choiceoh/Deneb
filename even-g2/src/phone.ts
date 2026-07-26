@@ -1,5 +1,11 @@
-import { fetchStatus } from './deneb'
-import { loadStoredSettings, normalizeSettings, resolveSettings, saveSettings, type GlanceSettings } from './settings'
+import { fetchStatus } from "./deneb";
+import {
+  loadStoredSettings,
+  normalizeSettings,
+  resolveSettings,
+  saveSettings,
+  type GlanceSettings,
+} from "./settings";
 
 // The phone half of the plugin.
 //
@@ -15,35 +21,53 @@ import { loadStoredSettings, normalizeSettings, resolveSettings, saveSettings, t
 
 type Status = {
   /** What the glasses loop is doing, in the operator's words. */
-  line: string
-  tone: 'ok' | 'warn' | 'bad'
-}
+  line: string;
+  tone: "ok" | "warn" | "bad";
+};
 
-let statusEl: HTMLElement | null = null
-let settingsSavedCb: ((next: GlanceSettings) => void) | null = null
-let interpretCb: ((on: boolean, lang: string) => void) | null = null
-let imuCb: ((label: string) => void) | null = null
+let statusEl: HTMLElement | null = null;
+let settingsSavedCb: ((next: GlanceSettings) => void) | null = null;
+let interpretCb: ((on: boolean, lang: string) => void) | null = null;
+let navCb:
+  ((on: boolean, destination: string, mode: "walk" | "car") => void) | null =
+  null;
+let imuCb: ((label: string) => void) | null = null;
 
 /** onImuCapture wires the phone's labelled-motion buttons to the glasses. */
 export function onImuCapture(cb: (label: string) => void): void {
-  imuCb = cb
+  imuCb = cb;
+}
+
+/**
+ * onNavToggle wires the phone's destination box to the glasses.
+ *
+ * Destination entry has to live here for the same reason the settings do: the
+ * glasses have four gestures and no keyboard, so there is nowhere on the HUD
+ * to type a place name.
+ */
+export function onNavToggle(
+  cb: (on: boolean, destination: string, mode: "walk" | "car") => void,
+): void {
+  navCb = cb;
 }
 
 /** onInterpretToggle wires the phone's start/stop to the glasses loop. */
-export function onInterpretToggle(cb: (on: boolean, lang: string) => void): void {
-  interpretCb = cb
+export function onInterpretToggle(
+  cb: (on: boolean, lang: string) => void,
+): void {
+  interpretCb = cb;
 }
 
 /** onSettingsSaved lets the glasses loop pick up an edit without a restart. */
 export function onSettingsSaved(cb: (next: GlanceSettings) => void): void {
-  settingsSavedCb = cb
+  settingsSavedCb = cb;
 }
 
 /** setPhoneStatus mirrors the glasses loop's state onto the phone. */
 export function setPhoneStatus(status: Status): void {
-  if (!statusEl) return
-  statusEl.textContent = status.line
-  statusEl.dataset.tone = status.tone
+  if (!statusEl) return;
+  statusEl.textContent = status.line;
+  statusEl.dataset.tone = status.tone;
 }
 
 const CSS = `
@@ -82,7 +106,7 @@ const CSS = `
   .ok { color: #2ecc71; } .bad { color: #e05263; }
   .hint { margin-top: 26px; color: #6f7c8c; font-size: 12px; line-height: 1.7; }
   code { background: #16202b; padding: 1px 5px; border-radius: 4px; }
-`
+`;
 
 /**
  * renderPhoneUI draws the phone screen.
@@ -93,14 +117,15 @@ const CSS = `
  * is exactly useless at the moment the operator needs to fix the connection.
  */
 export function renderPhoneUI(): void {
-  if (typeof document === 'undefined' || document.getElementById('deneb-phone')) return
+  if (typeof document === "undefined" || document.getElementById("deneb-phone"))
+    return;
 
-  const style = document.createElement('style')
-  style.textContent = CSS
-  document.head.appendChild(style)
+  const style = document.createElement("style");
+  style.textContent = CSS;
+  document.head.appendChild(style);
 
-  const root = document.createElement('div')
-  root.id = 'deneb-phone'
+  const root = document.createElement("div");
+  root.id = "deneb-phone";
   root.innerHTML = `
     <h1>Deneb Glance</h1>
     <p class="sub">안경 HUD가 읽어올 게이트웨이 설정</p>
@@ -132,6 +157,19 @@ export function renderPhoneUI(): void {
       <button class="primary" id="dn-interp-on">통역 시작</button>
       <button class="ghost" id="dn-interp-off">중지</button>
     </div>
+    <h2 style="font-size:15px;margin:26px 0 8px">길찾기</h2>
+    <p class="sub" style="margin:0 0 10px">
+      한국 지도(TMap) 기준 턴바이턴을 HUD에 띄웁니다. 목적지 입력은 키보드가 있는 여기서만 됩니다.
+    </p>
+    <div class="field">
+      <label for="dn-dest">목적지</label>
+      <input id="dn-dest" placeholder="강남역" autocapitalize="off" spellcheck="false" />
+    </div>
+    <div class="row">
+      <button class="primary" id="dn-nav-walk">도보 안내</button>
+      <button class="primary" id="dn-nav-car">자동차 안내</button>
+      <button class="ghost" id="dn-nav-off">중지</button>
+    </div>
     <details style="margin-top:26px">
       <summary style="color:#8b97a6;font-size:13px;cursor:pointer">IMU 기록 (헤드 제스처 개발용)</summary>
       <p class="sub" style="margin:10px 0">
@@ -144,93 +182,123 @@ export function renderPhoneUI(): void {
       QR 시드(<code>?seed=</code>)로 처음 넣은 값이 여기 그대로 보입니다.
       게이트웨이 주소가 바뀌면 QR을 다시 만들지 말고 여기서 고치세요 — 저장하면 안경이 바로 새 주소로 다시 읽습니다.
     </p>
-  `
-  document.body.appendChild(root)
+  `;
+  document.body.appendChild(root);
 
-  statusEl = root.querySelector<HTMLElement>('#dn-status')
-  const baseInput = root.querySelector<HTMLInputElement>('#dn-base')!
-  const tokenInput = root.querySelector<HTMLInputElement>('#dn-token')!
-  const saveBtn = root.querySelector<HTMLButtonElement>('#dn-save')!
-  const testBtn = root.querySelector<HTMLButtonElement>('#dn-test')!
-  const result = root.querySelector<HTMLElement>('#dn-result')!
+  statusEl = root.querySelector<HTMLElement>("#dn-status");
+  const baseInput = root.querySelector<HTMLInputElement>("#dn-base")!;
+  const tokenInput = root.querySelector<HTMLInputElement>("#dn-token")!;
+  const saveBtn = root.querySelector<HTMLButtonElement>("#dn-save")!;
+  const testBtn = root.querySelector<HTMLButtonElement>("#dn-test")!;
+  const result = root.querySelector<HTMLElement>("#dn-result")!;
 
   // Whatever the QR seed already stored is what the operator should see and be
   // able to correct — an empty form would look like nothing was ever set.
   void resolveSettings().then((s) => {
-    const current = s.baseUrl || s.token ? s : loadStoredSettings()
-    baseInput.value = current.baseUrl
-    tokenInput.value = current.token
-  })
+    const current = s.baseUrl || s.token ? s : loadStoredSettings();
+    baseInput.value = current.baseUrl;
+    tokenInput.value = current.token;
+  });
 
   const readForm = (): GlanceSettings =>
-    normalizeSettings({ baseUrl: baseInput.value, token: tokenInput.value })
+    normalizeSettings({ baseUrl: baseInput.value, token: tokenInput.value });
 
-  saveBtn.addEventListener('click', () => {
-    const next = readForm()
+  saveBtn.addEventListener("click", () => {
+    const next = readForm();
     if (!next.baseUrl || !next.token) {
-      result.className = 'result bad'
-      result.textContent = '주소와 토큰을 모두 입력하세요.'
-      return
+      result.className = "result bad";
+      result.textContent = "주소와 토큰을 모두 입력하세요.";
+      return;
     }
-    saveSettings(next)
-    baseInput.value = next.baseUrl
-    result.className = 'result ok'
-    result.textContent = '저장했습니다. 안경이 새 설정으로 다시 읽습니다.'
-    settingsSavedCb?.(next)
-  })
+    saveSettings(next);
+    baseInput.value = next.baseUrl;
+    result.className = "result ok";
+    result.textContent = "저장했습니다. 안경이 새 설정으로 다시 읽습니다.";
+    settingsSavedCb?.(next);
+  });
 
-  const langInput = root.querySelector<HTMLInputElement>('#dn-lang')!
-  root.querySelector<HTMLButtonElement>('#dn-interp-on')!.addEventListener('click', () => {
-    interpretCb?.(true, langInput.value.trim() || 'ko')
-    result.className = 'result ok'
-    result.textContent = '통역을 시작했습니다. 안경에서 탭하면 중지됩니다.'
-  })
-  root.querySelector<HTMLButtonElement>('#dn-interp-off')!.addEventListener('click', () => {
-    interpretCb?.(false, langInput.value.trim() || 'ko')
-    result.className = 'result'
-    result.textContent = '통역을 중지했습니다.'
-  })
+  const langInput = root.querySelector<HTMLInputElement>("#dn-lang")!;
+  root
+    .querySelector<HTMLButtonElement>("#dn-interp-on")!
+    .addEventListener("click", () => {
+      interpretCb?.(true, langInput.value.trim() || "ko");
+      result.className = "result ok";
+      result.textContent = "통역을 시작했습니다. 안경에서 탭하면 중지됩니다.";
+    });
+  root
+    .querySelector<HTMLButtonElement>("#dn-interp-off")!
+    .addEventListener("click", () => {
+      interpretCb?.(false, langInput.value.trim() || "ko");
+      result.className = "result";
+      result.textContent = "통역을 중지했습니다.";
+    });
 
-  const imuRow = root.querySelector<HTMLElement>('#dn-imu')!
-  for (const label of ['정지', '끄덕임', '도리도리', '걷기']) {
-    const b = document.createElement('button')
-    b.className = 'ghost'
-    b.textContent = label
-    b.addEventListener('click', () => {
-      imuCb?.(label)
-      result.className = 'result'
-      result.textContent = `"${label}" 3초 기록 중…`
-    })
-    imuRow.appendChild(b)
+  const destInput = root.querySelector<HTMLInputElement>("#dn-dest")!;
+  const startNav = (mode: "walk" | "car") => {
+    const dest = destInput.value.trim();
+    if (!dest) {
+      result.className = "result bad";
+      result.textContent = "목적지를 입력하세요.";
+      return;
+    }
+    navCb?.(true, dest, mode);
+    result.className = "result";
+    result.textContent = `${dest} 경로를 계산합니다…`;
+  };
+  root
+    .querySelector<HTMLButtonElement>("#dn-nav-walk")!
+    .addEventListener("click", () => startNav("walk"));
+  root
+    .querySelector<HTMLButtonElement>("#dn-nav-car")!
+    .addEventListener("click", () => startNav("car"));
+  root
+    .querySelector<HTMLButtonElement>("#dn-nav-off")!
+    .addEventListener("click", () => {
+      navCb?.(false, "", "walk");
+      result.className = "result";
+      result.textContent = "길안내를 중지했습니다.";
+    });
+
+  const imuRow = root.querySelector<HTMLElement>("#dn-imu")!;
+  for (const label of ["정지", "끄덕임", "도리도리", "걷기"]) {
+    const b = document.createElement("button");
+    b.className = "ghost";
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      imuCb?.(label);
+      result.className = "result";
+      result.textContent = `"${label}" 3초 기록 중…`;
+    });
+    imuRow.appendChild(b);
   }
 
-  testBtn.addEventListener('click', () => {
-    const probe = readForm()
+  testBtn.addEventListener("click", () => {
+    const probe = readForm();
     if (!probe.baseUrl || !probe.token) {
-      result.className = 'result bad'
-      result.textContent = '주소와 토큰을 모두 입력하세요.'
-      return
+      result.className = "result bad";
+      result.textContent = "주소와 토큰을 모두 입력하세요.";
+      return;
     }
-    testBtn.disabled = true
-    result.className = 'result'
-    result.textContent = '확인 중…'
+    testBtn.disabled = true;
+    result.className = "result";
+    result.textContent = "확인 중…";
     // Deliberately tests the values IN THE FORM, not the saved ones, so a wrong
     // address can be checked before it is committed.
     void fetchStatus(probe)
       .then((st) => {
-        result.className = 'result ok'
+        result.className = "result ok";
         result.textContent = [
-          st.ok ? '브리지 OK' : '브리지 이상',
-          st.chatReady ? '챗 준비됨' : '챗 미준비',
-          `세션 ${st.session || 'glasses:main'}`,
-        ].join(' · ')
+          st.ok ? "브리지 OK" : "브리지 이상",
+          st.chatReady ? "챗 준비됨" : "챗 미준비",
+          `세션 ${st.session || "glasses:main"}`,
+        ].join(" · ");
       })
       .catch((err: unknown) => {
-        result.className = 'result bad'
-        result.textContent = `실패: ${err instanceof Error ? err.message : String(err)}`
+        result.className = "result bad";
+        result.textContent = `실패: ${err instanceof Error ? err.message : String(err)}`;
       })
       .finally(() => {
-        testBtn.disabled = false
-      })
-  })
+        testBtn.disabled = false;
+      });
+  });
 }
