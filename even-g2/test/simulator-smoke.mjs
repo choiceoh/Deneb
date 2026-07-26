@@ -23,6 +23,7 @@
 //   pull refresh —     → an up-swipe at the top must hit the gateway
 //   outage mark  error → a sustained outage must mark the header, then clear
 //   shutdown     ok    → a double-tap must stop the network for good
+//   cold open    error → relaunched with no gateway, the saved glance shows
 //
 // It is slow BY CONSTRUCTION (~14 min): the poll interval is 45s and the
 // backoff steps are 90s/180s, and shortening them for the test would mean
@@ -228,12 +229,18 @@ async function main() {
     `http://127.0.0.1:${PREVIEW_PORT}/?baseUrl=${encodeURIComponent(stub.base)}` +
     `&token=${encodeURIComponent(TOKEN)}`
 
-  sh('simulator', process.execPath, [entry, appUrl, '--automation-port', String(AUTOMATION_PORT)])
-  await waitFor('simulator automation API', async () => {
-    // Surface a start failure immediately instead of burning the whole timeout.
-    if (spawnErrors.length) throw new Error(spawnErrors.join('; '))
-    return (await api('/api/ping')).ok
-  })
+  // Relaunchable: the cold-open check at the end needs a second run of the app
+  // against a dead gateway, and the automation API has no reload.
+  const startSimulator = async (label = 'simulator') => {
+    const child = sh(label, process.execPath, [entry, appUrl, '--automation-port', String(AUTOMATION_PORT)])
+    await waitFor(`${label} automation API`, async () => {
+      // Surface a start failure immediately instead of burning the whole timeout.
+      if (spawnErrors.length) throw new Error(spawnErrors.join('; '))
+      return (await api('/api/ping')).ok
+    })
+    return child
+  }
+  const simulator = await startSimulator()
 
   const failures = []
   const check = (ok, msg) => {
@@ -510,6 +517,32 @@ async function main() {
     `no gateway traffic after shutdown (${countAtShutdown} → ${countAfterShutdown})`,
   )
   await screenshot('19-after-shutdown')
+
+  // ── cold open with no gateway ───────────────────────────────────────────
+  // Out of Tailscale range, opening the app used to give an error screen and
+  // nothing else — the moment the wearer most wants to see what is on their
+  // plate. The last good glance is kept on the glasses and shown WITH an
+  // "오프라인 · 저장본" marker.
+  //
+  // This needs a genuine second launch: there is no reload in the automation
+  // API, and the whole point is what happens at boot.
+  simulator.kill('SIGTERM')
+  await sleep(3_000)
+  await stub.setMode('error')
+  const glanceBeforeColdOpen = stub.counts().glance
+  await startSimulator('simulator-cold')
+  await waitFor('the cold-open app to reach the gateway', async () => stub.counts().glance > glanceBeforeColdOpen, 30_000)
+  await sleep(6_000)
+  const coldOpen = await screenshot('20-cold-open-offline')
+  await stub.setMode('ok')
+  // Discriminating by frame WEIGHT: the cached alert list is the same payload
+  // that produced the boot frame, so it lands close to it, while the error
+  // screen it replaces is three short lines and a fraction of the size.
+  check(
+    coldOpen.length > booted.length * 0.6,
+    `a cold open with no gateway shows the saved glance, not an error screen ` +
+      `(${coldOpen.length}B vs ${booted.length}B at boot)`,
+  )
 
   const finalLogs = await console_()
   writeFileSync(join(ARTIFACTS, 'console.json'), JSON.stringify(finalLogs, null, 2))

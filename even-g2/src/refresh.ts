@@ -69,7 +69,10 @@ export function payloadSignature(payload: GlancePayload): string {
  * failures, not one, because a single missed poll is normal on a phone-relayed
  * private network and would otherwise blink the marker on and off.
  */
-export function connectionLabel(consecutiveFailures: number): string {
+export function connectionLabel(consecutiveFailures: number, servingCache = false): string {
+  // A saved copy says so from the FIRST frame — the two-failure grace period is
+  // about not blinking a marker over live data, and this is not live data.
+  if (servingCache) return '오프라인 · 저장본'
   return consecutiveFailures >= 2 ? '연결 끊김' : ''
 }
 
