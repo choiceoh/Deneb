@@ -22,9 +22,10 @@ import {
   windowRange,
 } from './refresh'
 import { dispatchHubEvent } from './events'
-import { onInterpretToggle, onSettingsSaved, renderPhoneUI, setPhoneStatus } from './phone'
+import { onImuCapture, onInterpretToggle, onSettingsSaved, renderPhoneUI, setPhoneStatus } from './phone'
 import { loadCachedGlance, saveCachedGlance } from './cache'
 import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from './interpret'
+import { CAPTURE_MS, IMU_PACE_MS, postImuRecording, readImuSample, type ImuSample } from './imu'
 import {
   fetchGlance,
   fetchStatus,
@@ -74,6 +75,9 @@ let interpretLang = 'ko'
 const pcm = new PcmBuffer()
 let subtitles: string[] = []
 let sending = false
+/** Non-empty while a labelled IMU window is being recorded. */
+let imuLabel = ''
+let imuSamples: ImuSample[] = []
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -128,6 +132,13 @@ if (started !== 0) {
 bridge.onEvenHubEvent((event) => {
   // Audio rides the same callback. It is high-rate, so it is handled before
   // the intent mapping rather than through it.
+  if (imuLabel) {
+    const s = readImuSample(event)
+    if (s) {
+      imuSamples.push(s)
+      return
+    }
+  }
   const audio = (event as { audioEvent?: { audioPcm?: Uint8Array } })?.audioEvent
   if (audio?.audioPcm) {
     if (!interpreting) return
@@ -175,6 +186,8 @@ bridge.onEvenHubEvent((event) => {
       break
   }
 })
+
+onImuCapture((label) => void captureImu(label))
 
 onInterpretToggle((on, lang) => {
   void (on ? startInterpreting(lang) : stopInterpreting())
@@ -928,6 +941,52 @@ async function flushAudio(): Promise<void> {
     // taking the subtitle off the glass to announce.
   } finally {
     sending = false
+  }
+}
+
+/**
+ * captureImu records one labelled motion window.
+ *
+ * The instrument that has to come before a head-gesture detector: the SDK
+ * documents neither the axis convention nor the units of `imuData`, so a
+ * detector written now would encode a guess and its unit tests would pin the
+ * guess rather than the device. Bounded to one window at a time, and the IMU is
+ * switched back off afterwards — it is a battery cost with no other consumer.
+ */
+async function captureImu(label: string): Promise<void> {
+  if (imuLabel) return
+  imuLabel = label
+  imuSamples = []
+  const ok = await bridge.imuControl(true, IMU_PACE_MS)
+  if (!ok) {
+    imuLabel = ''
+    setPhoneStatus({ line: 'IMU 를 열지 못했습니다.', tone: 'bad' })
+    return
+  }
+  setTimeout(() => void finishImu(), CAPTURE_MS)
+}
+
+async function finishImu(): Promise<void> {
+  const label = imuLabel
+  const samples = imuSamples
+  imuLabel = ''
+  imuSamples = []
+  await bridge.imuControl(false)
+  if (!label) return
+  if (samples.length === 0) {
+    // Worth saying out loud: it means the host never sent imuData, which is the
+    // one thing about this path that cannot be checked without the glasses.
+    setPhoneStatus({ line: `"${label}" 샘플 0개 — 기기가 IMU 를 보내지 않았습니다.`, tone: 'bad' })
+    return
+  }
+  try {
+    await postImuRecording(settings, label, samples)
+    setPhoneStatus({ line: `"${label}" ${samples.length}개 기록 완료`, tone: 'ok' })
+  } catch (err) {
+    setPhoneStatus({
+      line: `기록 전송 실패: ${err instanceof Error ? err.message : String(err)}`,
+      tone: 'bad',
+    })
   }
 }
 
