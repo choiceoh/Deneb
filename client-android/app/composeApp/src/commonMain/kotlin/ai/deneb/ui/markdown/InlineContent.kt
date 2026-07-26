@@ -8,12 +8,21 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 
 /**
@@ -41,8 +50,8 @@ internal fun InlineContent(
         val annotated = remember(inlines, colors, monoFamily) {
             cachedAnnotatedString(inlines, colors) { inlines.toAnnotatedString(colors, monoFamily) }
         }
-        Text(
-            text = annotated,
+        InlineText(
+            annotated = annotated,
             style = style,
             textAlign = textAlign,
             modifier = modifier,
@@ -61,8 +70,8 @@ internal fun InlineContent(
     ) {
         for (seg in segments) {
             when (seg) {
-                is InlineSegment.TextRun -> Text(
-                    text = remember(seg, colors, monoFamily) {
+                is InlineSegment.TextRun -> InlineText(
+                    annotated = remember(seg, colors, monoFamily) {
                         seg.nodes.toAnnotatedString(colors, monoFamily).flattenNewlines()
                     },
                     style = style,
@@ -73,6 +82,74 @@ internal fun InlineContent(
             }
         }
     }
+}
+
+/**
+ * A [Text] that draws inline-code chips itself.
+ *
+ * A SpanStyle background is painted per LINE FRAGMENT, so a code span that wraps
+ * became two detached pills — `tailscale serve --https=443` on one line and a
+ * lone `off` chip on the next, reading as two commands. Spans here are routinely
+ * long (`tailscale serve --bg --https=443 http://127.0.0.1:8000`), so wrapping is
+ * the normal case, not an edge case.
+ *
+ * So the chip is drawn from the LAYOUT instead: one rounded rect per line the
+ * range covers, each clipped to that line's own start/end. A wrapped span reads
+ * as one command continued, and every inline surface — paragraph, list item,
+ * heading, table cell, quote — gets it from this single funnel.
+ */
+@Composable
+private fun InlineText(
+    annotated: AnnotatedString,
+    style: TextStyle,
+    textAlign: TextAlign,
+    modifier: Modifier = Modifier,
+) {
+    val codeRanges = remember(annotated) {
+        annotated.getStringAnnotations(CODE_SPAN_TAG, 0, annotated.length)
+            .map { it.start to it.end }
+    }
+    if (codeRanges.isEmpty()) {
+        Text(text = annotated, style = style, textAlign = textAlign, modifier = modifier)
+        return
+    }
+
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val chip = MaterialTheme.colorScheme.surfaceVariant
+    Text(
+        text = annotated,
+        style = style,
+        textAlign = textAlign,
+        onTextLayout = { layout = it },
+        modifier = modifier.drawBehind {
+            val result = layout ?: return@drawBehind
+            for ((start, end) in codeRanges) {
+                if (start >= end || end > result.layoutInput.text.length) continue
+                val firstLine = result.getLineForOffset(start)
+                val lastLine = result.getLineForOffset(end - 1)
+                for (line in firstLine..lastLine) {
+                    // Clip each line's chip to the span, not the whole line: the
+                    // first line starts mid-sentence and the last one ends there.
+                    val left = if (line == firstLine) result.getHorizontalPosition(start, usePrimaryDirection = true) else result.getLineLeft(line)
+                    val right = if (line == lastLine) result.getHorizontalPosition(end, usePrimaryDirection = true) else result.getLineRight(line)
+                    if (right <= left) continue
+                    val top = result.getLineTop(line)
+                    val bottom = result.getLineBottom(line)
+                    // Inset vertically so consecutive lines' chips don't fuse into
+                    // one slab, and bleed horizontally for the padding a SpanStyle
+                    // could never carry.
+                    val padX = 3.dp.toPx()
+                    val insetY = (bottom - top) * 0.12f
+                    drawRoundRect(
+                        color = chip,
+                        topLeft = Offset(left - padX, top + insetY),
+                        size = Size(right - left + padX * 2, bottom - top - insetY * 2),
+                        cornerRadius = CornerRadius(4.dp.toPx()),
+                    )
+                }
+            }
+        },
+    )
 }
 
 /** `\n` inside a FlowRow TextRun forces a hard break that breaks flow around math; flatten to spaces. */

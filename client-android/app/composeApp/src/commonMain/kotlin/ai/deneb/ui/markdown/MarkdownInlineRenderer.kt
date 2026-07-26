@@ -18,6 +18,14 @@ import androidx.compose.ui.unit.em
 // Not @Composable: takes the resolved ColorScheme so callers can cache the result
 // with remember(inlines, colors). Building the AnnotatedString on every streaming
 // token (it was rebuilt per recomposition) was a measurable hot-path cost.
+/**
+ * Annotation tag marking an inline-code range. [InlineContent] reads these back
+ * off the laid-out text and draws one rounded chip per LINE the range covers —
+ * the continuity a SpanStyle background cannot give, because Compose paints span
+ * backgrounds per line fragment and a wrapping span becomes two detached pills.
+ */
+internal const val CODE_SPAN_TAG = "deneb.code"
+
 internal fun List<InlineNode>.toAnnotatedString(colors: ColorScheme, monoFamily: FontFamily): AnnotatedString = buildAnnotatedString { appendInlines(this@toAnnotatedString, colors, monoFamily) }
 
 private fun AnnotatedString.Builder.appendInlines(nodes: List<InlineNode>, colors: ColorScheme, monoFamily: FontFamily) {
@@ -63,25 +71,26 @@ private fun AnnotatedString.Builder.appendInline(node: InlineNode, colors: Color
             appendInlines(node.children, colors, monoFamily)
         }
 
-        is InlineCode -> withStyle(
-            SpanStyle(
-                fontFamily = monoFamily,
-                color = colors.onSurfaceVariant,
-            ),
-        ) {
-            // NO tinted background. A SpanStyle background is painted PER LINE
-            // FRAGMENT, so a span that wraps splits into two detached pills — a
-            // measured case rendered `tailscale serve --https=443` on one line and
-            // a lone `off` chip on the next, reading as two separate commands.
-            // Spans here are routinely long (`tailscale serve --bg --https=443
-            // http://127.0.0.1:8000`), so wrapping is the NORMAL case, and no
-            // padding trick avoids it: Compose has no contiguous cross-line span
-            // background. The hair-space padding that used to widen the chip is
-            // gone with it.
-            //
-            // The mono face plus the accent colour already say "code", and both
-            // survive a line break intact.
-            append(node.code)
+        // The chip is NOT a SpanStyle background: Compose paints those per line
+        // FRAGMENT, so a wrapping span split into two detached pills (a measured
+        // case rendered `tailscale serve --https=443` on one line and a lone `off`
+        // chip on the next, reading as two commands). Spans here are routinely
+        // long, so wrapping is the normal case.
+        //
+        // Instead the range is TAGGED here and InlineContent draws a rounded chip
+        // per line from the text layout — the cross-line continuity Compose has no
+        // span style for.
+        is InlineCode -> {
+            pushStringAnnotation(tag = CODE_SPAN_TAG, annotation = "")
+            withStyle(
+                SpanStyle(
+                    fontFamily = monoFamily,
+                    color = colors.onSurfaceVariant,
+                ),
+            ) {
+                append(node.code)
+            }
+            pop()
         }
 
         is Link -> withLink(
