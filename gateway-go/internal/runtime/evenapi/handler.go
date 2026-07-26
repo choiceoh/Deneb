@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -78,8 +79,22 @@ type Handler struct {
 
 	mu          sync.Mutex
 	dedupe      map[string]dedupeEntry
+	notice      pendingNotice
 	glanceCache glanceCache
 	activeTurn  atomic.Int32 // in-flight RunSync calls for this bridge
+}
+
+// pendingNotice is one short line Deneb wants on the glass without being asked.
+//
+// It exists for the answer that arrives too late: a turn past ResponseDeadline
+// gets "결과는 폰 데네브에서 이어서 볼게요" and the real reply then only reaches
+// the wearer if Even happens to retry the POST. Otherwise the thing they asked
+// for is stranded on the phone. The Glance plugin polls this handler anyway, so
+// the answer can simply ride along and land on the HUD.
+type pendingNotice struct {
+	ID   string
+	Text string
+	At   time.Time
 }
 
 type dedupeEntry struct {
@@ -272,6 +287,8 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.storeDedupe(utterance, h.completion(finalModel, cleaned))
+			// …and hand it to the glasses, which is where the wearer asked from.
+			h.setNotice(cleaned)
 		}()
 	case out := <-outCh:
 		if out.err != nil {
@@ -385,4 +402,45 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 			"type":    "invalid_request_error",
 		},
 	})
+}
+
+// NoticeTTL bounds how long an unclaimed notice keeps being offered.
+//
+// The plugin only polls every 45s and may be backgrounded, so the notice cannot
+// be cleared the moment it is read out — a dropped poll would lose the answer.
+// It is idempotent instead: the plugin remembers the last id it showed, and the
+// gateway simply stops offering this one after a while.
+const NoticeTTL = 10 * time.Minute
+
+func (h *Handler) setNotice(text string) {
+	if h == nil || strings.TrimSpace(text) == "" {
+		return
+	}
+	at := h.now()
+	h.mu.Lock()
+	h.notice = pendingNotice{
+		// Monotonic within a process and stable across re-reads, which is all
+		// the plugin needs to tell "same answer" from "a new one".
+		ID:   strconv.FormatInt(at.UnixMilli(), 10),
+		Text: text,
+		At:   at,
+	}
+	h.mu.Unlock()
+}
+
+// takeNotice returns the notice still worth showing, if any.
+func (h *Handler) takeNotice() (pendingNotice, bool) {
+	if h == nil {
+		return pendingNotice{}, false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.notice.Text == "" {
+		return pendingNotice{}, false
+	}
+	if h.now().Sub(h.notice.At) > NoticeTTL {
+		h.notice = pendingNotice{}
+		return pendingNotice{}, false
+	}
+	return h.notice, true
 }

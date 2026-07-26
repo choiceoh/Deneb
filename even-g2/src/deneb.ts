@@ -21,6 +21,8 @@ export type GlancePayload = {
   text: string
   pages: GlancePage[]
   items: GlanceItem[]
+  /** One short line Deneb wants on the glass; shown once, keyed by id. */
+  notice?: { id: string; text: string }
   /** "지금 금호타이어 · 종료 20분" — what a face-worn display is for. */
   now?: string
   /** "일정 2 · 할 일 3" — what is behind the alert page. */
@@ -33,6 +35,7 @@ type GlanceResponse = {
   text?: string
   pages?: GlancePage[]
   items?: GlanceItem[]
+  notice?: { id?: string; text?: string }
   now?: string
   counts?: string
   generated?: string
@@ -101,11 +104,22 @@ export async function fetchGlance(
     text,
     pages,
     items,
+    notice: readNotice(data.notice),
     now: typeof data.now === 'string' ? data.now.trim() : undefined,
     counts: typeof data.counts === 'string' ? data.counts.trim() : undefined,
     generated: data.generated,
     cached: data.cached,
   }
+}
+
+/** readNotice keeps only a notice that can actually be shown and de-duplicated. */
+export function readNotice(raw: { id?: string; text?: string } | undefined): { id: string; text: string } | undefined {
+  const id = String(raw?.id ?? '').trim()
+  const text = String(raw?.text ?? '').trim()
+  // Both or neither: without an id it would re-show on every poll, and without
+  // text there is nothing to show.
+  if (!id || !text) return undefined
+  return { id, text: text.length > 220 ? `${text.slice(0, 219)}…` : text }
 }
 
 export function normalizePages(pages: GlancePage[] | undefined, text: string): GlancePage[] {

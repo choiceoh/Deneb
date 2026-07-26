@@ -24,6 +24,7 @@
 //   pull refresh —     → an up-swipe at the top must hit the gateway
 //   outage mark  error → a sustained outage must mark the header, then clear
 //   shutdown     ok    → a double-tap must stop the network for good
+//   late answer  ok    → a turn that outran the bridge deadline lands on the HUD
 //   ack          ok    → a double-tap in a detail asks, then clears the alert
 //   cold open    error → relaunched with no gateway, the saved glance shows
 //
@@ -536,6 +537,34 @@ async function main() {
     `a success reset the backoff to base before shutdown (last gap ${preShutdownGap ?? 'none'}ms)`,
   )
 
+  // ── a late answer finds its way to the glass ────────────────────────────
+  // A spoken turn that runs past the bridge's 15s deadline gets "결과는 폰
+  // 데네브에서 이어서 볼게요" and the real answer used to stay on the phone.
+  // The gateway now hands it to the plugin on the poll it was making anyway.
+  const beforeNotice = await screenshot('20-before-notice')
+  await stub.setNotice('n1', '금호타이어 견적 회신 보냈습니다.')
+  console.log(`waiting ${Math.round(CYCLE_WAIT_MS / 1000)}s for the notice to ride a poll…`)
+  await sleep(CYCLE_WAIT_MS)
+  const withNotice = await screenshot('21-notice-shown')
+  check(
+    Buffer.compare(beforeNotice, withNotice) !== 0,
+    'a late answer from Deneb reaches the glass on the next poll',
+  )
+
+  // The gateway keeps offering it (a dropped poll must not lose the answer), so
+  // the PLUGIN is what has to remember. Dismiss, wait a full cycle, stay gone.
+  await input('click')
+  await sleep(2_500)
+  const dismissed = await screenshot('22-notice-dismissed')
+  console.log(`waiting ${Math.round(CYCLE_WAIT_MS / 1000)}s to prove it is not re-shown…`)
+  await sleep(CYCLE_WAIT_MS)
+  const afterDismiss = await screenshot('23-notice-not-repeated')
+  check(
+    Buffer.compare(dismissed, afterDismiss) === 0,
+    'a dismissed notice is not shown again while the gateway still offers it',
+  )
+  await stub.setNotice(null)
+
   // ── confirm-then-ack ────────────────────────────────────────────────────
   // The HUD's only write, and the only gesture that is contextual: a
   // double-tap exits everywhere except inside a detail, where it offers to
@@ -543,10 +572,10 @@ async function main() {
   // deliberate gesture, so the cancel path is asserted as hard as the commit.
   await input('click') // open the cursor's alert
   await sleep(2_500)
-  const detailBeforeAck = await screenshot('20-detail-before-ack')
+  const detailBeforeAck = await screenshot('24-detail-before-ack')
   await input('double_click')
   await sleep(2_500)
-  const confirmScreen = await screenshot('21-ack-confirm')
+  const confirmScreen = await screenshot('25-ack-confirm')
   check(
     Buffer.compare(detailBeforeAck, confirmScreen) !== 0,
     'a double-tap in a detail asks before clearing the alert (it does not exit)',
@@ -555,7 +584,7 @@ async function main() {
   const ackCountBeforeCancel = stub.counts().ack
   await input('down') // cancel
   await sleep(2_500)
-  const afterCancel = await screenshot('22-ack-cancelled')
+  const afterCancel = await screenshot('26-ack-cancelled')
   check(
     stub.counts().ack === ackCountBeforeCancel && Buffer.compare(afterCancel, detailBeforeAck) === 0,
     'cancelling writes nothing and returns to the same alert',
@@ -566,7 +595,7 @@ async function main() {
   await input('click') // confirm
   await waitFor('the ack to reach the gateway', async () => stub.counts().ack > ackCountBeforeCancel, 20_000)
   await sleep(4_000)
-  const afterAck = await screenshot('23-after-ack')
+  const afterAck = await screenshot('27-after-ack')
   check(stub.acked().length === 1, `the ack named exactly one alert (${JSON.stringify(stub.acked())})`)
   check(
     Buffer.compare(afterAck, detailBeforeAck) !== 0,
@@ -612,7 +641,7 @@ async function main() {
     45_000,
   )
   await sleep(6_000)
-  const coldOpen = await screenshot('20-cold-open-offline')
+  const coldOpen = await screenshot('28-cold-open-offline')
   await stub.setMode('ok')
   // Discriminating by frame WEIGHT: the cached alert list is the same payload
   // that produced the boot frame, so it lands close to it, while the error

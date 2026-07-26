@@ -81,12 +81,19 @@ export async function startStubGateway({ token }) {
   /** Request arrival times per path, for interval (backoff) assertions. */
   const stamps = { glance: [] }
   let mode = 'ok'
+  /** A pending Deneb notice, offered until the harness clears it (like the real TTL). */
+  let notice = null
   /** Pending slow responses, so close() cannot hang on them. */
   const openTimers = new Set()
 
   /** The real gateway filters StatusAcked out of the glance; so does this. */
-  const withoutAcked = (glance) =>
-    acked.size === 0 ? glance : { ...glance, items: glance.items.filter((it) => !acked.has(it.id)) }
+  const withoutAcked = (glance) => {
+    const base =
+      acked.size === 0 ? glance : { ...glance, items: glance.items.filter((it) => !acked.has(it.id)) }
+    // The real gateway keeps offering a notice until its TTL, so the plugin —
+    // not the server — is what must avoid showing it twice.
+    return notice ? { ...base, notice } : base
+  }
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://stub.local')
@@ -115,6 +122,14 @@ export async function startStubGateway({ token }) {
     if (url.pathname === '/__mode') {
       mode = url.searchParams.get('to') || 'ok'
       send(200, { mode })
+      return
+    }
+
+    // Stand-in for a spoken turn finishing after the bridge deadline.
+    if (url.pathname === '/__notice') {
+      const id = url.searchParams.get('id')
+      notice = id ? { id, text: url.searchParams.get('text') || '늦게 도착한 답변입니다.' } : null
+      send(200, { notice })
       return
     }
 
@@ -192,6 +207,11 @@ export async function startStubGateway({ token }) {
     /** Arrival gaps between consecutive glance requests, in ms. */
     glanceGaps: () =>
       stamps.glance.slice(1).map((t, i) => t - stamps.glance[i]),
+    setNotice: async (id, text) => {
+      const qs = id ? `?id=${encodeURIComponent(id)}&text=${encodeURIComponent(text || '')}` : '?'
+      const res = await fetch(`${base}/__notice${qs}`)
+      if (!res.ok) throw new Error(`stub setNotice: HTTP ${res.status}`)
+    },
     setMode: async (to) => {
       const res = await fetch(`${base}/__mode?to=${to}`)
       if (!res.ok) throw new Error(`stub setMode ${to}: HTTP ${res.status}`)
