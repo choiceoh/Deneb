@@ -1,54 +1,54 @@
-import type { GlanceSettings } from './settings'
-import { REQUEST_TIMEOUT_MS } from './refresh'
+import type { GlanceSettings } from "./settings";
+import { REQUEST_TIMEOUT_MS } from "./refresh";
 
 export type GlancePage = {
-  id: string
-  title: string
-  text: string
-  empty?: boolean
-}
+  id: string;
+  title: string;
+  text: string;
+  empty?: boolean;
+};
 
 export type GlanceItem = {
-  id: string
-  title: string
-  preview?: string
-  body?: string
-  priority?: number
-  age?: string
-}
+  id: string;
+  title: string;
+  preview?: string;
+  body?: string;
+  priority?: number;
+  age?: string;
+};
 
 export type GlancePayload = {
-  text: string
-  pages: GlancePage[]
-  items: GlanceItem[]
+  text: string;
+  pages: GlancePage[];
+  items: GlanceItem[];
   /** One short line Deneb wants on the glass; shown once, keyed by id. */
-  notice?: { id: string; text: string }
+  notice?: { id: string; text: string };
   /** "지금 금호타이어 · 종료 20분" — what a face-worn display is for. */
-  now?: string
+  now?: string;
   /** "일정 2 · 할 일 3" — what is behind the alert page. */
-  counts?: string
-  generated?: string
-  cached?: boolean
-}
+  counts?: string;
+  generated?: string;
+  cached?: boolean;
+};
 
 type GlanceResponse = {
-  text?: string
-  pages?: GlancePage[]
-  items?: GlanceItem[]
-  notice?: { id?: string; text?: string }
-  now?: string
-  counts?: string
-  generated?: string
-  cached?: boolean
-  error?: { message?: string }
-}
+  text?: string;
+  pages?: GlancePage[];
+  items?: GlanceItem[];
+  notice?: { id?: string; text?: string };
+  now?: string;
+  counts?: string;
+  generated?: string;
+  cached?: boolean;
+  error?: { message?: string };
+};
 
 type StatusResponse = {
-  ok?: boolean
-  chatReady?: boolean
-  session?: string
-  error?: { message?: string }
-}
+  ok?: boolean;
+  chatReady?: boolean;
+  session?: string;
+  error?: { message?: string };
+};
 
 /**
  * getJSON wraps fetch with a hard deadline.
@@ -58,29 +58,33 @@ type StatusResponse = {
  * host the SDK targets. Without a deadline a stalled private-network request
  * pins the app's `busy` flag forever and every input stops responding.
  */
-async function getJSON<T>(url: string, token: string, timeoutMs: number): Promise<{ res: Response; data: T }> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+async function getJSON<T>(
+  url: string,
+  token: string,
+  timeoutMs: number,
+): Promise<{ res: Response; data: T }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
+        Accept: "application/json",
       },
       signal: controller.signal,
-    })
-    const data = (await res.json()) as T
-    return { res, data }
+    });
+    const data = (await res.json()) as T;
+    return { res, data };
   } catch (err) {
     // A caught abort must read as a timeout, not as an opaque DOMException —
     // this string is what the wearer sees on the HUD.
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`시간 초과 (${Math.round(timeoutMs / 1000)}초)`)
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`시간 초과 (${Math.round(timeoutMs / 1000)}초)`);
     }
-    throw err
+    throw err;
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer);
   }
 }
 
@@ -88,41 +92,50 @@ export async function fetchGlance(
   settings: GlanceSettings,
   opts?: { fresh?: boolean },
 ): Promise<GlancePayload> {
-  const qs = opts?.fresh ? '?fresh=1' : ''
-  const url = `${settings.baseUrl}/api/even/glance${qs}`
-  const { res, data } = await getJSON<GlanceResponse>(url, settings.token, REQUEST_TIMEOUT_MS)
+  const qs = opts?.fresh ? "?fresh=1" : "";
+  const url = `${settings.baseUrl}/api/even/glance${qs}`;
+  const { res, data } = await getJSON<GlanceResponse>(
+    url,
+    settings.token,
+    REQUEST_TIMEOUT_MS,
+  );
   if (!res.ok) {
-    throw new Error(httpMessage(res.status, data.error?.message))
+    throw new Error(httpMessage(res.status, data.error?.message));
   }
-  const text = data.text?.trim()
+  const text = data.text?.trim();
   if (!text) {
-    throw new Error('empty glance')
+    throw new Error("empty glance");
   }
-  const pages = normalizePages(data.pages, text)
-  const items = normalizeItems(data.items)
+  const pages = normalizePages(data.pages, text);
+  const items = normalizeItems(data.items);
   return {
     text,
     pages,
     items,
     notice: readNotice(data.notice),
-    now: typeof data.now === 'string' ? data.now.trim() : undefined,
-    counts: typeof data.counts === 'string' ? data.counts.trim() : undefined,
+    now: typeof data.now === "string" ? data.now.trim() : undefined,
+    counts: typeof data.counts === "string" ? data.counts.trim() : undefined,
     generated: data.generated,
     cached: data.cached,
-  }
+  };
 }
 
 /** readNotice keeps only a notice that can actually be shown and de-duplicated. */
-export function readNotice(raw: { id?: string; text?: string } | undefined): { id: string; text: string } | undefined {
-  const id = String(raw?.id ?? '').trim()
-  const text = String(raw?.text ?? '').trim()
+export function readNotice(
+  raw: { id?: string; text?: string } | undefined,
+): { id: string; text: string } | undefined {
+  const id = String(raw?.id ?? "").trim();
+  const text = String(raw?.text ?? "").trim();
   // Both or neither: without an id it would re-show on every poll, and without
   // text there is nothing to show.
-  if (!id || !text) return undefined
-  return { id, text: text.length > 220 ? `${text.slice(0, 219)}…` : text }
+  if (!id || !text) return undefined;
+  return { id, text: text.length > 220 ? `${text.slice(0, 219)}…` : text };
 }
 
-export function normalizePages(pages: GlancePage[] | undefined, text: string): GlancePage[] {
+export function normalizePages(
+  pages: GlancePage[] | undefined,
+  text: string,
+): GlancePage[] {
   if (Array.isArray(pages) && pages.length > 0) {
     return pages
       .filter((p) => p && p.id && p.text?.trim())
@@ -131,29 +144,29 @@ export function normalizePages(pages: GlancePage[] | undefined, text: string): G
         title: String(p.title || pageTitle(p.id)),
         text: String(p.text).trim(),
         empty: !!p.empty,
-      }))
+      }));
   }
-  return [{ id: 'home', title: '알림', text }]
+  return [{ id: "home", title: "알림", text }];
 }
 
 export function normalizeItems(items: GlanceItem[] | undefined): GlanceItem[] {
-  if (!Array.isArray(items)) return []
+  if (!Array.isArray(items)) return [];
   return items
-    .filter((it) => it && String(it.title || '').trim())
+    .filter((it) => it && String(it.title || "").trim())
     .map((it, i) => {
-      const title = String(it.title).trim()
-      const preview = String(it.preview || '').trim()
-      const body = String(it.body || preview || title).trim()
+      const title = String(it.title).trim();
+      const preview = String(it.preview || "").trim();
+      const body = String(it.body || preview || title).trim();
       return {
         id: String(it.id || `alert-${i + 1}`),
         title: truncate(title, 48),
         preview: preview ? truncate(preview, 80) : undefined,
         body: truncate(body, 280),
-        priority: typeof it.priority === 'number' ? it.priority : undefined,
-        age: String(it.age || '').trim() || undefined,
-      }
+        priority: typeof it.priority === "number" ? it.priority : undefined,
+        age: String(it.age || "").trim() || undefined,
+      };
     })
-    .slice(0, 12)
+    .slice(0, 12);
 }
 
 /**
@@ -165,23 +178,31 @@ export function normalizeItems(items: GlanceItem[] | undefined): GlanceItem[] {
  * between each one. A HUD footer is the only affordance there is, so it has to
  * say what the swipe actually does.
  */
-export function formatAlertDetail(item: GlanceItem, pos?: { index: number; total: number }): string {
-  const mark = (item.priority ?? 0) >= 4 ? '! ' : ''
-  const meta = [item.age, (item.priority ?? 0) >= 4 ? '긴급' : ''].filter(Boolean).join(' · ')
-  const counter = pos && pos.total > 1 ? ` (${pos.index + 1}/${pos.total})` : ''
-  const lines = [`${mark}${item.title}${counter}`]
-  if (meta) lines.push(meta)
-  lines.push('')
+export function formatAlertDetail(
+  item: GlanceItem,
+  pos?: { index: number; total: number },
+): string {
+  const mark = (item.priority ?? 0) >= 4 ? "! " : "";
+  const meta = [item.age, (item.priority ?? 0) >= 4 ? "긴급" : ""]
+    .filter(Boolean)
+    .join(" · ");
+  const counter =
+    pos && pos.total > 1 ? ` (${pos.index + 1}/${pos.total})` : "";
+  const lines = [`${mark}${item.title}${counter}`];
+  if (meta) lines.push(meta);
+  lines.push("");
   // The detail is where reading actually happens, so it spends its lines on the
   // alert: dropping the "Deneb · 상세" banner and its blank line gave the body
   // two more. normalizeItems keeps 280 for the wire; this is what fits.
-  lines.push(truncate(item.body || item.preview || '(내용 없음)', 170))
-  lines.push('')
-  const hasNext = !!pos && pos.index < pos.total - 1
+  lines.push(truncate(item.body || item.preview || "(내용 없음)", 170));
+  lines.push("");
+  const hasNext = !!pos && pos.index < pos.total - 1;
   // A gesture nobody is told about does not exist on a HUD — the footer is the
   // only affordance there is.
-  lines.push(`${hasNext ? '탭=목록 · ↓다음알림' : '탭=목록 · ↓목록으로'} · 더블탭=확인`)
-  return lines.join('\n')
+  lines.push(
+    `${hasNext ? "탭=목록 · ↓다음알림" : "탭=목록 · ↓목록으로"} · 더블탭=확인`,
+  );
+  return lines.join("\n");
 }
 
 /**
@@ -192,9 +213,9 @@ export function formatAlertDetail(item: GlanceItem, pos?: { index: number; total
  * budget — which is how the footer ended up off the bottom of the glass.
  */
 export function listLabel(item: GlanceItem): string {
-  const mark = (item.priority ?? 0) >= 4 ? '! ' : '· '
-  const age = item.age ? ` · ${item.age}` : ''
-  return truncate(`${mark}${item.title}${age}`, 30)
+  const mark = (item.priority ?? 0) >= 4 ? "! " : "· ";
+  const age = item.age ? ` · ${item.age}` : "";
+  return truncate(`${mark}${item.title}${age}`, 30);
 }
 
 /**
@@ -204,58 +225,69 @@ export function listLabel(item: GlanceItem): string {
  * a hung ack must not leave the wearer staring at a confirm screen, and the
  * failure has to be visible because the alert stays otherwise.
  */
-export async function ackAlert(settings: GlanceSettings, id: string): Promise<void> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+export async function ackAlert(
+  settings: GlanceSettings,
+  id: string,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(`${settings.baseUrl}/api/even/ack`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${settings.token}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
+        "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({ id }),
       signal: controller.signal,
-    })
+    });
     if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
-      throw new Error(data.error?.message || `HTTP ${res.status}`)
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      throw new Error(data.error?.message || `HTTP ${res.status}`);
     }
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(`시간 초과 (${Math.round(REQUEST_TIMEOUT_MS / 1000)}초)`)
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`시간 초과 (${Math.round(REQUEST_TIMEOUT_MS / 1000)}초)`);
     }
-    throw err
+    throw err;
   } finally {
-    clearTimeout(timer)
+    clearTimeout(timer);
   }
 }
 
 export function pageTitle(id: string): string {
   switch (id) {
-    case 'home':
-      return '알림'
-    case 'alerts':
-      return '알림 전체'
-    case 'cal':
-      return '일정'
-    case 'todo':
-      return '할 일'
-    case 'urgent': // legacy page id
-      return '알림'
+    case "home":
+      return "알림";
+    case "alerts":
+      return "알림 전체";
+    case "cal":
+      return "일정";
+    case "todo":
+      return "할 일";
+    case "urgent": // legacy page id
+      return "알림";
     default:
-      return id
+      return id;
   }
 }
 
-export async function fetchStatus(settings: GlanceSettings): Promise<StatusResponse> {
-  const url = `${settings.baseUrl}/api/even/status`
-  const { res, data } = await getJSON<StatusResponse>(url, settings.token, REQUEST_TIMEOUT_MS)
+export async function fetchStatus(
+  settings: GlanceSettings,
+): Promise<StatusResponse> {
+  const url = `${settings.baseUrl}/api/even/status`;
+  const { res, data } = await getJSON<StatusResponse>(
+    url,
+    settings.token,
+    REQUEST_TIMEOUT_MS,
+  );
   if (!res.ok) {
-    throw new Error(httpMessage(res.status, data.error?.message))
+    throw new Error(httpMessage(res.status, data.error?.message));
   }
-  return data
+  return data;
 }
 
 /**
@@ -266,22 +298,61 @@ export async function fetchStatus(settings: GlanceSettings): Promise<StatusRespo
  * message can say where to go. Everything else keeps the gateway's own wording.
  */
 export function httpMessage(status: number, serverMessage?: string): string {
-  if (status === 401 || status === 403) return '인증 실패 — 폰에서 토큰을 확인하세요'
-  if (status === 503) return '게이트웨이 준비 안 됨'
-  return serverMessage || `HTTP ${status}`
+  if (status === 401 || status === 403)
+    return "인증 실패 — 폰에서 토큰을 확인하세요";
+  if (status === 503) return "게이트웨이 준비 안 됨";
+  return serverMessage || `HTTP ${status}`;
 }
 
 export function formatGeneratedLabel(iso?: string, cached?: boolean): string {
-  if (!iso) return cached ? '캐시' : ''
-  const t = Date.parse(iso)
-  if (Number.isNaN(t)) return ''
-  const mins = Math.max(0, Math.round((Date.now() - t) / 60000))
-  const age = mins <= 0 ? '방금' : `${mins}분 전`
-  return cached ? `${age}·캐시` : age
+  if (!iso) return cached ? "캐시" : "";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  const age = mins <= 0 ? "방금" : `${mins}분 전`;
+  return cached ? `${age}·캐시` : age;
 }
 
 function truncate(s: string, max: number): string {
-  const chars = Array.from(s)
-  if (chars.length <= max) return s
-  return chars.slice(0, Math.max(0, max - 1)).join('') + '…'
+  const chars = Array.from(s);
+  if (chars.length <= max) return s;
+  return chars.slice(0, Math.max(0, max - 1)).join("") + "…";
+}
+
+/**
+ * mirrorHud posts what the glasses are showing to the gateway.
+ *
+ * Diagnosing this plugin from a device report was guesswork: the only record of
+ * what the panel displayed lived in a WebView console nobody could read, and
+ * three separate reports this session each cost a round trip because of it. With
+ * the frame mirrored, the rendered state is readable from srv4.
+ *
+ * Deliberately fire-and-forget and never awaited by a render path — a mirror
+ * that can break the thing it mirrors is worse than no mirror.
+ */
+export function mirrorHud(
+  settings: GlanceSettings,
+  frame: {
+    screen: string;
+    text: string;
+    images?: Array<{ name: string; bytes: number; result: string }>;
+    note?: string;
+  },
+): void {
+  if (!settings.baseUrl || !settings.token) return;
+  void fetch(`${settings.baseUrl}/api/even/hud`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${settings.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      screen: frame.screen,
+      text: frame.text,
+      images: frame.images ?? [],
+      note: frame.note ?? "",
+    }),
+  }).catch(() => {
+    // Silent: the wearer must not see a diagnostic failing.
+  });
 }

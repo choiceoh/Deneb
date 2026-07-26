@@ -16,6 +16,7 @@ import {
   clampCursor as clampCursorTo,
   connectionLabel,
   pollInterval,
+  mergeWearStatus,
   shouldPoll,
   type WearStatus,
   nextDelayMs,
@@ -85,6 +86,7 @@ import {
   type GlanceItem,
   type GlancePage,
   type GlancePayload,
+  mirrorHud,
 } from "./deneb";
 
 // The phone screen is drawn FIRST, before the glasses bridge is awaited. That
@@ -363,12 +365,15 @@ onSettingsSaved((next) => {
 // shouldPoll for why guessing at foreground events was the wrong instrument.
 bridge.onDeviceStatusChanged((status) => {
   const before = shouldPoll(wearStatus);
-  wearStatus = {
+  // Merged, not assigned: the SDK defaults absent fields to "not worn, 0%", so
+  // a connection-only event would otherwise wipe a perfectly good reading and
+  // tell the wearer their glasses are off and flat while they are wearing them.
+  wearStatus = mergeWearStatus(wearStatus, {
     isWearing: status?.isWearing,
     isInCase: status?.isInCase,
     isCharging: status?.isCharging,
     batteryLevel: status?.batteryLevel,
-  };
+  });
   if (shouldPoll(wearStatus) === before) return;
   if (before) {
     pauseLoop();
@@ -1147,6 +1152,7 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
   arrowChain = arrowChain.then(async () => {
     try {
       const bytes = await arrowPng(kind, distance);
+      let pushed = "";
       const res = await bridge.updateImageRawData(
         new ImageRawDataUpdate({
           containerID: NAV_ARROW_ID,
@@ -1154,6 +1160,8 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
           imageData: bytes,
         }),
       );
+      pushed = String(res);
+      noteImagePush("arrow", bytes.length, pushed);
       if (res !== "success") {
         // Surfaced to the PHONE, not just the console: the console is
         // unreachable from a device report, and "화살표가 안 나온다" carries no
@@ -1286,13 +1294,15 @@ async function pushSpeed(kmh: number | null): Promise<void> {
   if (kmh == null) return;
   arrowChain = arrowChain.then(async () => {
     try {
+      const bytes = await speedPng(kmh);
       const res = await bridge.updateImageRawData(
         new ImageRawDataUpdate({
           containerID: NAV_SPEED_ID,
           containerName: "speed",
-          imageData: await speedPng(kmh),
+          imageData: bytes,
         }),
       );
+      noteImagePush("speed", bytes.length, String(res));
       if (res !== "success") {
         console.error("updateImageRawData(speed):", res);
         shownSpeed = "";
@@ -1307,6 +1317,12 @@ async function pushSpeed(kmh: number | null): Promise<void> {
 
 /** showNavText writes the nav page's sentence container (not the capture layer). */
 async function showNavText(content: string): Promise<void> {
+  mirrorHud(settings, {
+    screen,
+    text: content,
+    images: lastImagePushes,
+    note: "navText",
+  });
   await bridge.textContainerUpgrade(
     new TextContainerUpgrade({
       containerID: 2,
@@ -1576,7 +1592,18 @@ function onAlertPage(): boolean {
  * too, so this is always an in-place upgrade — no rebuild, which is what keeps
  * a background poll from flickering the wearer's view.
  */
+/** Last image-push results, reported alongside the next mirrored frame. */
+const lastImagePushes: Array<{ name: string; bytes: number; result: string }> =
+  [];
+function noteImagePush(name: string, bytes: number, result: string): void {
+  const at = lastImagePushes.findIndex((i) => i.name === name);
+  const entry = { name, bytes, result };
+  if (at >= 0) lastImagePushes[at] = entry;
+  else lastImagePushes.push(entry);
+}
+
 async function showText(content: string): Promise<void> {
+  mirrorHud(settings, { screen, text: content, images: lastImagePushes });
   await bridge.textContainerUpgrade(
     new TextContainerUpgrade({
       containerID: 1,
