@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -103,6 +104,11 @@ import org.jetbrains.compose.resources.stringResource
 // (non-streaming) string is always parsed exactly, so the completed message is
 // byte-identical to having parsed every token.
 private const val STREAM_PARSE_INTERVAL_MS = 96L
+
+// Ink inset a Material chevron carries inside its own 16dp box. Measured, not
+// guessed: at a 2x density the header's leftmost ink sat at 20.0dp against the
+// reasoning text's 17.0dp.
+private val ChevronOpticalInset = 3.dp
 
 // The streaming caret is NOT in this string. It used to be — a "▍" appended to the
 // parse source — which put a glyph of ours through the markdown parser and needed
@@ -317,7 +323,11 @@ internal fun BotMessage(
     // compose with visible=true, so only the live streaming→done transition
     // animates.
     AnimatedVisibility(visible = showActions && !isStreaming, enter = denebFadeEnter, exit = denebFadeExit) {
-        Row(Modifier.padding(horizontal = 8.dp)) {
+        // Optically flush with the answer's text column, not mathematically: the
+        // answer starts at 16dp, and SmallIconButton centres a 14dp glyph in a 36dp
+        // hit box, so its ink already sits 11dp in. 8dp here put the icons 3.5dp
+        // inside the prose — invisible at 1x, a clear step at a phone's real density.
+        Row(Modifier.padding(start = 5.dp, end = 8.dp)) {
             SmallIconButton(
                 imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
                 contentDescription = if (copied) "복사됨" else "복사",
@@ -451,7 +461,13 @@ private fun ReasoningBlockquote(
 
     Column(modifier = modifier) {
         Row(
+            // Same optical-alignment story as the action row: the Material chevron
+            // carries its own padding inside a 16dp box, so at the column's
+            // 16dp the header read as indented from the reasoning text below it.
+            // Shifting the whole row keeps the chevron-to-label gap intact, and
+            // fillMaxWidth means it ends 4dp early rather than overhanging.
             modifier = Modifier.fillMaxWidth()
+                .offset(x = -ChevronOpticalInset)
                 .clickable {
                     haptics.toggle(!expanded)
                     expanded = !expanded
