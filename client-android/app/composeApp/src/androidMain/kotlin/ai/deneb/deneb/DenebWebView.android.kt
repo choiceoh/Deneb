@@ -293,9 +293,17 @@ actual fun DenebWebView(
         if (state.diagnosticsTick == 0) return@LaunchedEffect
         holder.web?.evaluateJavascript(BROWSER_SCROLL_DIAGNOSTIC_JS) { raw ->
             // evaluateJavascript hands back a JSON-encoded string; unwrap one level.
-            state.diagnostics = runCatching {
+            val page = runCatching {
                 webViewJson.decodeFromString(String.serializer(), raw)
             }.getOrDefault(raw)
+            // Stamp the build. Reading a capture without knowing whether the fix
+            // under test was even installed has already cost a round of
+            // diagnosis; the version has to travel with the measurement.
+            state.diagnostics = if (page.trimStart().startsWith("{")) {
+                """{"app":{"versionCode":$DENEB_VERSION_CODE},"page":$page}"""
+            } else {
+                page
+            }
         }
     }
 

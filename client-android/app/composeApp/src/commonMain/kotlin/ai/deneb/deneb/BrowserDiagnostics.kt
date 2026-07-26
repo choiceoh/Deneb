@@ -164,6 +164,28 @@ internal const val BROWSER_SCROLL_DIAGNOSTIC_JS: String = """
     }
     out.cta = onCta.concat(offCta);
 
+    // The generic form of the same question, because the operator's button is
+    // rarely the one a keyword list guessed: every visible control that fails
+    // its OWN hit test, and what wins instead. "정렬 버튼이 안 눌림" needs no new
+    // pattern here — the control names itself.
+    //
+    // A hit on an ancestor counts as reachable: for `<a><span>` the tap lands on
+    // the anchor either way, and reporting it would bury real failures in noise.
+    var dead = [];
+    var ctrls = document.querySelectorAll('button, a, input, select, summary, [role=button], [onclick]');
+    for (var q = 0; q < ctrls.length && q < 3000 && dead.length < 8; q++) {
+      var c = ctrls[q], qr = c.getBoundingClientRect();
+      if (qr.width < 8 || qr.height < 8) continue;
+      if (qr.bottom <= 0 || qr.top >= vh || qr.right <= 0 || qr.left >= vw) continue;
+      var qx = Math.round(Math.max(0, Math.min(vw - 1, qr.left + qr.width / 2)));
+      var qy = Math.round(Math.max(0, Math.min(vh - 1, qr.top + qr.height / 2)));
+      var won = document.elementFromPoint(qx, qy);
+      if (won && (won === c || c.contains(won) || won.contains(c))) continue;
+      dead.push({ el: name(c), t: (c.textContent || '').trim().slice(0, 24),
+                  top: Math.round(qr.top), pe: cs(c).pointerEvents, blockedBy: name(won) });
+    }
+    out.deadControls = dead;
+
     // Blank space below the fade: end of the document, or content that is there
     // but not being shown?
     var st = (se || de).scrollTop;
