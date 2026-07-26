@@ -17,6 +17,9 @@ sealed interface ErpBlock {
 
 private val erpRowRegex = Regex("""^\s*(\d+)\.\s+(.+)$""")
 
+/** "레이블: 값" — the shape every ERP summary line uses (기간·건수·원본행 …). */
+private val erpPairRegex = Regex("""^[^:]{1,20}:\s+\S.*$""")
+
 fun parseErpSnapshot(raw: String): List<ErpBlock> {
     val text = raw.replace("\r\n", "\n").trim()
     if (text.isEmpty()) return emptyList()
@@ -55,5 +58,24 @@ fun parseErpSnapshot(raw: String): List<ErpBlock> {
         summary += t
     }
     flushSummary()
-    return if (blocks.any { it is ErpBlock.Row }) blocks else emptyList()
+    return if (looksLikeSnapshot(blocks)) blocks else emptyList()
+}
+
+/**
+ * Requiring a Row threw away perfectly good parses: 매출 is a title plus three
+ * "레이블: 값" lines and NOTHING else, so it fell to the markdown fallback —
+ * which joins consecutive lines into one paragraph, costing the screen its
+ * summary card entirely (measured on the live app 2026-07-26: 재고 rendered a
+ * card, 매출 rendered four bare lines).
+ *
+ * A snapshot is recognized when anything ERP-shaped came out: a row, a section
+ * header, or summary lines in "레이블: 값" form. Genuinely unfamiliar text still
+ * yields nothing and still falls back, which is what the guard was for.
+ */
+private fun looksLikeSnapshot(blocks: List<ErpBlock>): Boolean {
+    if (blocks.any { it is ErpBlock.Row || it is ErpBlock.Section }) return true
+    return blocks.filterIsInstance<ErpBlock.Summary>().any { summary ->
+        // Skip the title: it is a heading, not a labelled figure.
+        summary.lines.drop(1).any(erpPairRegex::matches)
+    }
 }
