@@ -14,6 +14,7 @@ import {
   nextDelayMs,
   payloadSignature,
   resolveSelectionIndex,
+  skipPage,
   windowRange,
 } from './refresh'
 import { dispatchHubEvent } from './events'
@@ -837,6 +838,5 @@ async function runScheduledRefresh(): Promise<void> {
 
 function isPageEmpty(p: GlancePage | undefined): boolean {
   if (!p) return true
-  if (p.id === 'home') return false
-  return !!p.empty
+  return skipPage(p, items.length)
 }

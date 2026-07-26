@@ -42,6 +42,12 @@ import { startStubGateway } from './stub-gateway.mjs'
 
 const TOKEN = 'smoke-token'
 const AUTOMATION_PORT = Number(process.env.SMOKE_AUTOMATION_PORT || 9898)
+// The cold-open relaunch gets its OWN port. Waiting for the first simulator to
+// release 9898 does not work — it holds the listener well past SIGTERM (run
+// 30182906171 timed out after 30s waiting) — and a second port sidesteps the
+// question entirely instead of guessing how long a Flutter app takes to die.
+const AUTOMATION_PORT_COLD = AUTOMATION_PORT + 1
+let automationPort = AUTOMATION_PORT
 const PREVIEW_PORT = Number(process.env.SMOKE_PREVIEW_PORT || 4319)
 // One background cycle plus slack. BASE_REFRESH_MS is 45s in src/refresh.ts;
 // the quiet-poll assertion is only meaningful once a cycle has actually fired.
@@ -146,7 +152,7 @@ async function waitFor(label, probe, timeoutMs = 60_000) {
   throw new Error(`timed out waiting for ${label}${lastErr ? `: ${lastErr.message}` : ''}`)
 }
 
-const api = (path, init) => fetch(`http://127.0.0.1:${AUTOMATION_PORT}${path}`, init)
+const api = (path, init) => fetch(`http://127.0.0.1:${automationPort}${path}`, init)
 
 async function screenshot(name) {
   const res = await api('/api/screenshot/glasses')
@@ -248,8 +254,9 @@ async function main() {
 
   // Relaunchable: the cold-open check at the end needs a second run of the app
   // against a dead gateway, and the automation API has no reload.
-  const startSimulator = async (label = 'simulator') => {
-    const child = sh(label, process.execPath, [entry, appUrl, '--automation-port', String(AUTOMATION_PORT)])
+  const startSimulator = async (label = 'simulator', port = AUTOMATION_PORT) => {
+    automationPort = port
+    const child = sh(label, process.execPath, [entry, appUrl, '--automation-port', String(port)])
     await waitFor(`${label} automation API`, async () => {
       // Surface a start failure immediately instead of burning the whole timeout.
       if (spawnErrors.length) throw new Error(spawnErrors.join('; '))
@@ -587,22 +594,12 @@ async function main() {
   // This needs a genuine second launch: there is no reload in the automation
   // API, and the whole point is what happens at boot.
   simulator.kill('SIGTERM')
-  // Wait for the port to be RELEASED, not for a fixed sleep. A three-second
-  // guess lost the race once (run 30182119272): /api/ping answered from the
-  // dying process, so the readiness check passed, the relaunch never got to
-  // bind, and the harness sat waiting on an app that had never started.
-  await waitFor('the old simulator to release the automation port', async () => {
-    try {
-      await api('/api/ping')
-      return false
-    } catch {
-      return true
-    }
-  }, 30_000)
+  await sleep(3_000)
+  simulator.kill('SIGKILL') // it does not always go on SIGTERM; do not wait on it
   await stub.setMode('error')
   const glanceBeforeColdOpen = stub.counts().glance
   const spawnErrorsBefore = spawnErrors.length
-  await startSimulator('simulator-cold')
+  await startSimulator('simulator-cold', AUTOMATION_PORT_COLD)
   await waitFor(
     'the cold-open app to reach the gateway',
     async () => {

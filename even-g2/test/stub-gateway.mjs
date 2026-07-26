@@ -25,6 +25,9 @@ const OK_GLANCE = {
   cached: false,
   pages: [
     { id: 'home', title: '알림', text: '견적 회신 필요\n계약서 검토 요청' },
+    // The real gateway emits this second alert page. Leaving it out of the stub
+    // hid a duplicate screen from CI for the whole life of this harness.
+    { id: 'alerts', title: '알림 전체', text: '견적 회신 필요\n계약서 검토 요청' },
     { id: 'cal', title: '일정', text: '14:00 금호타이어 회의' },
     { id: 'todo', title: '할 일', text: '주간 보고 정리' },
   ],

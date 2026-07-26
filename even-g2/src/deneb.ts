@@ -89,7 +89,7 @@ export async function fetchGlance(
   const url = `${settings.baseUrl}/api/even/glance${qs}`
   const { res, data } = await getJSON<GlanceResponse>(url, settings.token, REQUEST_TIMEOUT_MS)
   if (!res.ok) {
-    throw new Error(data.error?.message || `HTTP ${res.status}`)
+    throw new Error(httpMessage(res.status, data.error?.message))
   }
   const text = data.text?.trim()
   if (!text) {
@@ -239,9 +239,22 @@ export async function fetchStatus(settings: GlanceSettings): Promise<StatusRespo
   const url = `${settings.baseUrl}/api/even/status`
   const { res, data } = await getJSON<StatusResponse>(url, settings.token, REQUEST_TIMEOUT_MS)
   if (!res.ok) {
-    throw new Error(data.error?.message || `HTTP ${res.status}`)
+    throw new Error(httpMessage(res.status, data.error?.message))
   }
   return data
+}
+
+/**
+ * httpMessage turns a status code into something the wearer can act on.
+ *
+ * `HTTP 401` on a 576×288 display tells them nothing. It has one cause — the
+ * bridge token — and since the phone now has a form for exactly that, the
+ * message can say where to go. Everything else keeps the gateway's own wording.
+ */
+export function httpMessage(status: number, serverMessage?: string): string {
+  if (status === 401 || status === 403) return '인증 실패 — 폰에서 토큰을 확인하세요'
+  if (status === 503) return '게이트웨이 준비 안 됨'
+  return serverMessage || `HTTP ${status}`
 }
 
 export function formatGeneratedLabel(iso?: string, cached?: boolean): string {
