@@ -2,11 +2,16 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calendar"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/calwrite"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/localcal"
@@ -187,5 +192,68 @@ func (s *Server) evenAckAlert() func(id string) error {
 		}
 		_, err := s.workFeedStore.Ack(id)
 		return err
+	}
+}
+
+// evenRecordImu appends one labelled IMU window to a plain JSONL file.
+//
+// Deliberately a file and not a store: this is an INSTRUMENT, used to collect a
+// few dozen labelled windows so a head-gesture detector can be written against
+// real motion instead of an assumed axis convention. When the detector exists
+// and the fixtures are checked in, this can go away.
+func (s *Server) evenRecordImu() func(rec evenapi.ImuRecording) error {
+	return func(rec evenapi.ImuRecording) error {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		dir := filepath.Join(home, ".deneb")
+		if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+			return mkErr
+		}
+		line, err := json.Marshal(rec)
+		if err != nil {
+			return err
+		}
+		f, err := os.OpenFile(filepath.Join(dir, "even-imu-samples.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = f.Write(append(line, '\n'))
+		return err
+	}
+}
+
+// evenTranscribe hands a glasses clip to the ASR sidecar Deneb already runs.
+//
+// Injected rather than imported so evenapi (runtime) stays clear of the chat
+// tool packages. The sidecar is the same one the phone's voice-memo capture
+// uses — absorbing Conversate and Translate is a matter of getting bytes to it,
+// not of adding a model.
+func (s *Server) evenTranscribe() func(ctx context.Context, wav []byte, hotwords string) (string, error) {
+	return func(ctx context.Context, wav []byte, hotwords string) (string, error) {
+		return artifact.TranscribeAudio(ctx, wav, "audio/wav", hotwords)
+	}
+}
+
+// evenTranslate renders a glasses transcript into the wearer's language.
+//
+// The tiny model role, not a dedicated MT model. Measured on 2026-07-26 against
+// DeepL and Gemini 3.6 Flash on Korean business sentences: quality was on par,
+// latency was ~0.7s versus 1.05s and 4.93s, and only an LLM can do the two
+// things this call actually needs — take the proper nouns as context, and
+// compress to a line the 576×288 display can hold. A translation-specialist
+// model can do neither.
+func (s *Server) evenTranslate() func(ctx context.Context, text, targetLang string) (string, error) {
+	return func(ctx context.Context, text, targetLang string) (string, error) {
+		system := "너는 스마트안경 HUD용 번역기다. 입력을 " + targetLang +
+			" 로 번역해 번역문만 출력한다. 설명·원문·따옴표를 붙이지 마라. " +
+			"화면이 좁으니 한 줄 40자 안팎으로 간결하게, 뜻은 빠뜨리지 마라."
+		out, err := pilot.CallTinyLLM(ctx, system, text, 400)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(out), nil
 	}
 }
