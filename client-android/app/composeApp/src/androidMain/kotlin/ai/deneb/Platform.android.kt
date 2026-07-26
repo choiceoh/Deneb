@@ -178,8 +178,11 @@ actual fun executePhoneAction(action: String, args: Map<String, String>): Boolea
     // platform services rather than Intents, so they short-circuit here.
     when (action) {
         "notify" -> return postAgentNotification(context, args["title"].orEmpty(), args["text"].orEmpty())
+
         "speak" -> return speakText(context, args["text"].orEmpty())
+
         "clipboard" -> return setClipboardText(context, args["text"].orEmpty())
+
         // Replies through the *notification's own* reply action, so the message
         // lands in the real conversation (KakaoTalk et al.) — not a Deneb copy.
         "reply" -> return NotificationReplyBridge.reply(args["room"].orEmpty(), args["text"].orEmpty())
