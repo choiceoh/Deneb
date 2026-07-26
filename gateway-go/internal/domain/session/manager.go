@@ -331,6 +331,17 @@ func (m *Manager) evictStale() {
 		for key, s := range m.sessions {
 			switch {
 			case isTerminal(s.Status):
+				// A finished conversation is not runtime state — it is the drawer's
+				// history row for a transcript that still exists on disk, and startup
+				// restore (server/session_restore.go) rebuilds it every boot. Evicting
+				// it made the visible history depend on how long ago the gateway last
+				// restarted: one sweep after a hot-swap, every conversation older than
+				// gcMaxAge vanished from the drawer while its transcript stayed. Keep it
+				// (bounded by the transcript count; sessions.delete drops the row and
+				// the transcript together) and GC everything else.
+				if isConversationRow(key, s.Kind) {
+					continue
+				}
 				maxAge := gcMaxAgeForKind(s.Kind)
 				if s.UpdatedAt < now.Add(-maxAge).UnixMilli() {
 					delete(m.sessions, key)
@@ -360,6 +371,18 @@ func (m *Manager) evictStale() {
 		m.mu.Unlock()
 		return events
 	})
+}
+
+// isConversationRow reports whether a session row is a user conversation the
+// startup restore rebuilds from a transcript file (client:main…, chat:…) rather
+// than runtime state the GC owns. Subagent runs share the client:main:* key
+// shape but are runtime state, so the kind check excludes them.
+func isConversationRow(key string, kind Kind) bool {
+	if kind != KindDirect {
+		return false
+	}
+	_, ok := RestorableTranscriptChannel(key)
+	return ok
 }
 
 // isTerminal returns true for session statuses that represent completed runs.

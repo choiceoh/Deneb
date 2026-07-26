@@ -78,12 +78,45 @@ export function useSessions(
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
+    let landed = false; // a fetch has succeeded at least once
+    let loadFailed = false; // this loader owns the visible error
+    let retryMs = 8000;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const load = () => {
+    // Failures used to be swallowed outright: if the gateway was down or
+    // mid-hot-swap for the whole 0/1.5/4s window (app launched during an
+    // auto-deploy), the list stayed empty and silent forever — the 채팅 탭 has no
+    // drawer-open refresh to retry from, so only a window focus healed it. Keep
+    // retrying on a widening backoff until the first fetch lands, and say so
+    // meanwhile: "불러오지 못함" must not look like "대화가 없음".
+    function armRetry() {
+      if (cancelled || landed || retry) return;
+      retry = setTimeout(() => {
+        retry = undefined;
+        load();
+      }, retryMs);
+      retryMs = Math.min(retryMs * 2, 60000);
+    }
+    function load() {
       void recentSessions(cfg, limitRef.current, channel)
-        .then((s) => !cancelled && setSessions(keep(s)))
-        .catch(() => {});
-    };
+        .then((s) => {
+          if (cancelled) return;
+          landed = true;
+          setSessions(keep(s));
+          // Only clear what this loader put up — a transcript/delete error the
+          // user has not seen yet must not be wiped by a background refresh.
+          if (loadFailed) {
+            loadFailed = false;
+            setSessionErr("");
+          }
+        })
+        .catch((e) => {
+          if (cancelled || landed) return;
+          loadFailed = true;
+          setSessionErr(errText(e));
+          armRetry();
+        });
+    }
     load();
     timers.push(setTimeout(load, 1500), setTimeout(load, 4000));
     const refresh = () => {
@@ -95,6 +128,7 @@ export function useSessions(
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
+      if (retry) clearTimeout(retry);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };

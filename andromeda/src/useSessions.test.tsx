@@ -136,6 +136,32 @@ describe("useSessions", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it("keeps retrying (and says so) when the cold fetch fails", async () => {
+    // The gateway was down or hot-swapping through the whole staggered window
+    // (app launched during an auto-deploy). The 채팅 탭 has no drawer-open
+    // refresh, so a silently-swallowed failure left the list empty forever.
+    vi.useFakeTimers();
+    try {
+      recent.mockRejectedValue(new Error("HTTP 502"));
+      const chat = chatDouble();
+      const { result } = renderHook(() => useSessions(cfg, true, false, chat, { channel: "client" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      // An unreachable gateway must not read as "최근 대화가 없습니다."
+      expect(result.current.sessionErr).not.toBe("");
+
+      recent.mockResolvedValue([{ key: "client:main", label: "업무" }]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10000);
+      });
+      expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main"]);
+      expect(result.current.sessionErr).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clears stale session rows immediately on disconnect", async () => {
     recent.mockResolvedValue([{ key: "client:main", label: "업무" }]);
     const chat = chatDouble();

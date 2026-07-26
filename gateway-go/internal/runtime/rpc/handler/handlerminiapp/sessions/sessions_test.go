@@ -158,6 +158,41 @@ func TestSessionsRecentReturnsOnlyMatchingChannel(t *testing.T) {
 	}
 }
 
+// Regression: a conversation created since the last restart carries no Channel
+// (Manager.Create takes only key+kind) — only the restored copy does. Scoping to
+// "client" therefore hid every conversation started since boot, and the desktop
+// chat list (which always scopes) came up completely empty.
+func TestSessionsRecentIncludesLiveConversationsWithoutStoredChannel(t *testing.T) {
+	mgr := &fakeSessionsLister{
+		out: []*session.Session{
+			sample("client:main", 300, ""),           // live row, channel not stamped
+			sample("client:main:k3x9", 200, ""),      // 새 대화 from the desktop
+			sample("client:main:old", 100, "client"), // restored row
+			sample("cron:mailpoll", 400, ""),         // automation — must stay out
+		},
+	}
+	h := sessionsRecent(SessionsDeps{Manager: mgr})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", map[string]any{"channel": "client"}))
+
+	var got struct {
+		Sessions []map[string]any `json:"sessions"`
+		Count    int              `json:"count"`
+	}
+	decode(t, resp, &got)
+	keys := make([]string, 0, len(got.Sessions))
+	for _, s := range got.Sessions {
+		key, _ := s["key"].(string)
+		keys = append(keys, key)
+		if s["channel"] != "client" {
+			t.Errorf("row %q reports channel %v, want client", key, s["channel"])
+		}
+	}
+	want := []string{"client:main", "client:main:k3x9", "client:main:old"}
+	if strings.Join(keys, ",") != strings.Join(want, ",") {
+		t.Errorf("keys = %v, want %v", keys, want)
+	}
+}
+
 func TestSessionsRecentRejectsUnauthenticatedContext(t *testing.T) {
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.recent", nil))
