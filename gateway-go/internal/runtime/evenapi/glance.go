@@ -73,6 +73,10 @@ type GlanceBundle struct {
 	Text  string
 	Pages []GlancePage
 	Items []GlanceItem
+	// Now is what a face-worn display is actually for: "지금 금호타이어 · 종료
+	// 20분" or "15:00 기아 광주". It is the one thing the wearer cannot get by
+	// reading the alert list underneath it.
+	Now string
 	// Counts is the one-line "일정 2 · 할 일 3" summary of what is behind the
 	// alert page. The plugin draws the alert list itself from Items, so it never
 	// renders the home page's Text — this line is how that briefing still
@@ -127,6 +131,7 @@ func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, c
 		"text":      bundle.Text,
 		"pages":     bundle.Pages,
 		"items":     bundle.Items,
+		"now":       bundle.Now,
 		"counts":    bundle.Counts,
 		"generated": at.Format(time.RFC3339),
 		"cached":    cached,
@@ -168,6 +173,7 @@ func BuildGlance(ctx context.Context, now time.Time, src GlanceSources) GlanceBu
 	calN := len(events)
 	todoN := len(rankTodos(todos, now))
 	return GlanceBundle{
+		Now:    formatNowLine(events, now),
 		Text:   homeText,
 		Pages:  pages,
 		Items:  buildGlanceItems(urgent, now),
@@ -675,4 +681,30 @@ func (h *Handler) invalidateGlanceCache() {
 	h.glanceCache.mu.Lock()
 	h.glanceCache.at = time.Time{}
 	h.glanceCache.mu.Unlock()
+}
+
+// formatNowLine condenses the calendar to the single line worth putting at the
+// top of a HUD: what is happening now, or what is next.
+//
+// The same facts already exist inside the home page's text, but the plugin
+// draws the alert page from Items and never renders that text — so on the glass
+// this had simply gone missing.
+func formatNowLine(events []GlanceEvent, now time.Time) string {
+	current, upcoming := splitEvents(events, now)
+	if current != nil {
+		line := "지금 " + truncateRunes(current.Summary, 20)
+		if rem := formatRemaining(current, now); rem != "" {
+			line += " · " + rem
+		}
+		return line
+	}
+	if len(upcoming) == 0 {
+		return ""
+	}
+	next := upcoming[0]
+	when := formatNextRelative(next, now)
+	if !strings.Contains(when, "분") && !strings.Contains(when, "곧") {
+		when = formatEventWhen(next, now)
+	}
+	return when + " " + truncateRunes(next.Summary, 20)
 }

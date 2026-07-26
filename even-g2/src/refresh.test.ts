@@ -217,10 +217,11 @@ describe('connectionLabel', () => {
 
 describe('alertSlots', () => {
   it('leaves room for every fixed line', () => {
-    // title + meta + blank + footer = 4, so six alerts fit on a ten-line glass.
-    expect(alertSlots(false)).toBe(HUD_LINES - 4)
-    // …and the counts line costs exactly one of them.
-    expect(alertSlots(true)).toBe(HUD_LINES - 5)
+    // meta + blank + footer = 3, so seven alerts fit on a ten-line glass once
+    // the header stopped spending its first line on the app's own name.
+    expect(alertSlots(false)).toBe(HUD_LINES - 3)
+    // …and the lead line ("지금 …" / "일정 2 · 할 일 3") costs exactly one.
+    expect(alertSlots(true)).toBe(HUD_LINES - 4)
   })
 
   it('never budgets the whole screen away', () => {
@@ -233,7 +234,7 @@ describe('alertSlots', () => {
     // The failure this guards is silent: eleven lines put the footer off the
     // bottom edge of a real frame, where nobody can see that it is missing.
     for (const hasCounts of [false, true]) {
-      const furniture = 2 + (hasCounts ? 1 : 0) + 1 + 1
+      const furniture = (hasCounts ? 1 : 0) + 1 + 1 + 1
       expect(alertSlots(hasCounts) + furniture).toBeLessThanOrEqual(HUD_LINES)
     }
   })

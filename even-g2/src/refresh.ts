@@ -91,10 +91,15 @@ export const ALERT_WINDOW = 5
 
 /**
  * alertSlots is how many alert lines are left once the fixed furniture is paid
- * for: title, meta, an optional counts line, one blank separator and a footer.
+ * for: an optional lead line, the meta line, one blank separator and a footer.
+ *
+ * The header used to cost one more than this, because its first line was the
+ * app's own name. Peripheral vision reliably reads the top line or two of a HUD
+ * and the wearer already knows which app they opened, so that line now carries
+ * "지금 금호타이어 · 종료 20분" instead.
  */
-export function alertSlots(hasCounts: boolean, lines: number = HUD_LINES): number {
-  const furniture = 2 + (hasCounts ? 1 : 0) + 1 + 1
+export function alertSlots(hasLead: boolean, lines: number = HUD_LINES): number {
+  const furniture = (hasLead ? 1 : 0) + 1 + 1 + 1
   return Math.max(1, lines - furniture)
 }
 
