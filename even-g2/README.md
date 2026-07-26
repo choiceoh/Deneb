@@ -240,6 +240,23 @@ CI 가 이걸 못 잡은 이유도 같이 적어 둔다: **스텁이 `alerts` �
 
 부수 효과가 본질에 가깝다 — 동작이 호스트 소유에서 앱 소유로 넘어오면서 **스모크가 단정으로 검사**할 수 있게 됐다. 시뮬레이터 README 가 리스트 동작의 재현 충실도를 부인하는 영역이라, 호스트 리스트로 남겨뒀다면 영영 관측만 가능했다.
 
+## SDK 문서에서 배운 것 (뒤늦게)
+
+이 플러그인은 오래 `dist/index.d.ts` 를 역공학해서 만들어졌다. 패키지에 **453줄짜리 README 가 함께 온다**(`node_modules/@evenrealities/even_hub_sdk/README.md`). 타입만으로는 알 수 없고 문서에만 있는 것들:
+
+| 사실 | 왜 중요한가 |
+|---|---|
+| IMU 는 `sysEvent.eventType === IMU_DATA_REPORT`(8) + `sysEvent.imuData` | 타입만 보면 채널을 틀리게 잡아 **아무것도 수신 못 한다** |
+| `shutDownPageContainer(0)` = 닫기, `(1)` = 포그라운드 레이어가 결정 | 우리는 `1` 이었다 — 종료 제스처가 종료하는지 동전던지기 |
+| 글래스 MIC 는 **시작 페이지를 먼저 만들어야** `true` | 순서가 틀리면 조용히 실패 |
+| `isEventCapture: 1` 은 **정확히 하나**여야 한다 | |
+| `zOrderIndex` 는 페이지 내 전부 넣거나 전부 빼거나, 값은 유일 | 위반 시 `createStartUpPageContainer` 가 `invalid` |
+| `onLaunchSource` 는 **일찍 등록** — 로드 후 1회만 푸시 | 늦게 붙으면 영영 못 받는다 |
+| 호스트가 `setLocalStorage`/`getLocalStorage` 를 제공 | 우리는 WebView `localStorage` 를 직접 쓴다 |
+| `captureImageFromCamera()` · `pickImageFromAlbum()` · `getAppLocation()` | 미사용 — 현장 사진·위치가 가능하다 |
+
+문서에도 **없는** 것: IMU 의 축 규약과 단위(`x/y/z` double 뿐). 그래서 헤드 제스처 검출기는 여전히 **실제 기록을 먼저 모아야** 쓸 수 있다.
+
 ## Design constraints
 
 - Canvas 576×288, monochrome green text containers
