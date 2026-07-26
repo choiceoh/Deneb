@@ -70,6 +70,11 @@ type GlanceBundle struct {
 	Text  string
 	Pages []GlancePage
 	Items []GlanceItem
+	// Counts is the one-line "일정 2 · 할 일 3" summary of what is behind the
+	// alert page. The plugin draws the alert list itself from Items, so it never
+	// renders the home page's Text — this line is how that briefing still
+	// reaches the glass, on the page the wearer actually lands on.
+	Counts string
 }
 
 type glanceCache struct {
@@ -119,6 +124,7 @@ func writeGlanceJSON(w http.ResponseWriter, bundle GlanceBundle, at time.Time, c
 		"text":      bundle.Text,
 		"pages":     bundle.Pages,
 		"items":     bundle.Items,
+		"counts":    bundle.Counts,
 		"generated": at.Format(time.RFC3339),
 		"cached":    cached,
 	})
@@ -154,7 +160,16 @@ func BuildGlance(ctx context.Context, now time.Time, src GlanceSources) GlanceBu
 		{ID: "cal", Title: "일정", Text: calText, Empty: calEmpty},
 		{ID: "todo", Title: "할 일", Text: todoText, Empty: todoEmpty},
 	}
-	return GlanceBundle{Text: homeText, Pages: pages, Items: buildGlanceItems(urgent, now)}
+	// Alerts are excluded: the alert page shows its own count, and repeating it
+	// would spend one of about ten usable lines saying the same thing twice.
+	calN := len(events)
+	todoN := len(rankTodos(todos, now))
+	return GlanceBundle{
+		Text:   homeText,
+		Pages:  pages,
+		Items:  buildGlanceItems(urgent, now),
+		Counts: formatCountsLine(calN, 0, todoN),
+	}
 }
 
 func buildGlanceItems(items []GlanceUrgent, now time.Time) []GlanceItem {

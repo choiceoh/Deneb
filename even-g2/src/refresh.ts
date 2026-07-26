@@ -77,15 +77,26 @@ export function connectionLabel(consecutiveFailures: number, servingCache = fals
 }
 
 /**
- * How many alert lines fit on the HUD alongside the header and footer.
+ * Usable text lines on the glass, measured — not guessed.
  *
- * 576×288 holds roughly a dozen lines, and the alert page spends the rest on a
- * two-line header, two blank separators and a footer. The gateway can return up
- * to 12 alerts (normalizeItems caps it), so without a window the list simply
- * ran off the bottom of the glass — the host list container used to scroll and
- * an app-drawn text page does not.
+ * A CI frame with eight alerts (run 30180528557, `11-after-payload-change.png`)
+ * put the footer half off the bottom edge at eleven lines, so ten is what there
+ * is. Everything the alert page draws has to be budgeted against this: the
+ * gateway can return twelve alerts and an app-drawn text page does not scroll.
  */
+export const HUD_LINES = 10
+
+/** Fallback window when the caller has no budget to hand (tests, defaults). */
 export const ALERT_WINDOW = 5
+
+/**
+ * alertSlots is how many alert lines are left once the fixed furniture is paid
+ * for: title, meta, an optional counts line, one blank separator and a footer.
+ */
+export function alertSlots(hasCounts: boolean, lines: number = HUD_LINES): number {
+  const furniture = 2 + (hasCounts ? 1 : 0) + 1 + 1
+  return Math.max(1, lines - furniture)
+}
 
 /**
  * windowRange picks which slice of the alerts to draw so the cursor is always

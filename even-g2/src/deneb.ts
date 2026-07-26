@@ -21,6 +21,8 @@ export type GlancePayload = {
   text: string
   pages: GlancePage[]
   items: GlanceItem[]
+  /** "일정 2 · 할 일 3" — what is behind the alert page. */
+  counts?: string
   generated?: string
   cached?: boolean
 }
@@ -29,6 +31,7 @@ type GlanceResponse = {
   text?: string
   pages?: GlancePage[]
   items?: GlanceItem[]
+  counts?: string
   generated?: string
   cached?: boolean
   error?: { message?: string }
@@ -91,7 +94,14 @@ export async function fetchGlance(
   }
   const pages = normalizePages(data.pages, text)
   const items = normalizeItems(data.items)
-  return { text, pages, items, generated: data.generated, cached: data.cached }
+  return {
+    text,
+    pages,
+    items,
+    counts: typeof data.counts === 'string' ? data.counts.trim() : undefined,
+    generated: data.generated,
+    cached: data.cached,
+  }
 }
 
 export function normalizePages(pages: GlancePage[] | undefined, text: string): GlancePage[] {
@@ -144,17 +154,27 @@ export function formatAlertDetail(item: GlanceItem, pos?: { index: number; total
   const lines = [`${mark}${item.title}${counter}`]
   if (meta) lines.push(meta)
   lines.push('')
-  lines.push(item.body || item.preview || '(내용 없음)')
+  // The detail spends five lines on furniture, so the body gets about four —
+  // roughly 120 runes. normalizeItems keeps 280 for the wire; anything past
+  // what fits was being drawn off the bottom edge where nobody could read it.
+  lines.push(truncate(item.body || item.preview || '(내용 없음)', 120))
   lines.push('')
   const hasNext = !!pos && pos.index < pos.total - 1
   lines.push(hasNext ? '탭=목록 · ↓다음알림' : '탭=목록 · ↓목록으로')
   return lines.join('\n')
 }
 
+/**
+ * listLabel renders one alert as a single line.
+ *
+ * 30 runes, not 64: a rendered frame fits roughly forty Korean characters on a
+ * line, and a label that wraps silently costs a second line out of a ten-line
+ * budget — which is how the footer ended up off the bottom of the glass.
+ */
 export function listLabel(item: GlanceItem): string {
   const mark = (item.priority ?? 0) >= 4 ? '! ' : '· '
   const age = item.age ? ` · ${item.age}` : ''
-  return truncate(`${mark}${item.title}${age}`, 64)
+  return truncate(`${mark}${item.title}${age}`, 30)
 }
 
 export function pageTitle(id: string): string {

@@ -8,6 +8,7 @@ import {
 import { resolveSettings, type GlanceSettings } from './settings'
 import {
   advanceCursor,
+  alertSlots,
   clampCursor as clampCursorTo,
   connectionLabel,
   nextDelayMs,
@@ -45,6 +46,8 @@ let pageIndex = 0
 let detailIndex = -1
 let lastGenerated = ''
 let lastCached = false
+/** "일정 2 · 할 일 3" — what is behind the alert page, straight from the gateway. */
+let lastCounts = ''
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -540,6 +543,7 @@ function applyPayload(payload: GlancePayload, keepId: string): void {
   items = payload.items || []
   lastGenerated = payload.generated || ''
   lastCached = !!payload.cached
+  lastCounts = payload.counts || ''
   const idx = pages.findIndex((p) => p.id === keepId)
   pageIndex = idx >= 0 ? idx : 0
 
@@ -611,25 +615,32 @@ async function renderCurrentPage(): Promise<void> {
 async function showAlertList(title: string): Promise<void> {
   const stamp = formatGeneratedLabel(lastGenerated, lastCached)
   const cursor = clampCursor()
-  // Only a window of the alerts fits on the glass. The host list used to scroll
-  // for us; drawing the page ourselves means windowing it ourselves, or a long
-  // morning's alerts simply run off the bottom.
-  const { start, end } = windowRange(cursor, items.length)
+  const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : ''
+  // The counts line is the briefing the wearer used to lose: the gateway builds
+  // a home page that opens with a clock and "일정 2 · 할 일 3", and this page
+  // draws itself from `items` and never renders that text at all.
+  const counts = lastCounts.trim()
+
+  // Only a window of the alerts fits, and how many is a budget, not a constant
+  // — see HUD_LINES. The window carries no "N건 더" lines of its own; the
+  // (3/8) counter in the title already says there is more, for free.
+  const { start, end } = windowRange(cursor, items.length, alertSlots(!!counts))
   const lines = items
     .slice(start, end)
-    .map((it, i) => `${start + i === cursor ? '▸' : ' '}${listLabel(it)}`)
-  if (start > 0) lines.unshift(` ↑ ${start}건 더`)
-  if (end < items.length) lines.push(` ↓ ${items.length - end}건 더`)
-  const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : ''
+    // '>' and not '▸': a CI frame showed the nicer glyph rendering as NOTHING on
+    // this font, which left the cursor invisible and a tap unpredictable
+    // whenever there was more than one alert.
+    .map((it, i) => `${start + i === cursor ? '>' : ' '}${listLabel(it)}`)
+
   await showText(
     [
       `Deneb · ${title}${position}`,
-      [`${items.length}건`, stamp, connectionLabel(consecutiveFailures, servingCache)]
+      [clockLabel(), stamp, connectionLabel(consecutiveFailures, servingCache)]
         .filter(Boolean)
         .join(' · '),
+      ...(counts ? [counts] : []),
       '',
       ...lines,
-      '',
       [
         cursor < items.length - 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
         atTop() ? '↑새로고침' : '',
@@ -638,6 +649,21 @@ async function showAlertList(title: string): Promise<void> {
         .join(' · '),
     ].join('\n'),
   )
+}
+
+/**
+ * clockLabel is drawn from the DEVICE clock, not the payload.
+ *
+ * The gateway stamps its own time into the home page text, but that text is up
+ * to a poll interval old by the time it is on the glass — a clock that lags 45
+ * seconds reads as broken. The wearer's own clock is right, and free.
+ */
+function clockLabel(): string {
+  const now = new Date()
+  const wd = ['일', '월', '화', '수', '목', '금', '토'][now.getDay()]
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return `${now.getMonth() + 1}/${now.getDate()} ${wd} ${hh}:${mm}`
 }
 
 /** clampCursor is the app-state view of the pure guard in refresh.ts. */
