@@ -56,6 +56,30 @@ internal fun browserSiteQuirkScript(url: String): String? = if (isRedditHost(url
  * unscrollable — the finger does nothing while `scrollTop` still moves the
  * document programmatically, exactly what the probe recorded.
  *
+ * A second capture (2026-07-26, ⋮ → 스크롤 진단 on a 20,127px thread) named the
+ * thing doing the pinning, after the first fix left a residue the operator
+ * described as "화면이 어두워지고 댓글 더보기 누르기가 안되네":
+ *
+ *     column: y=34 … y=649  ->  div.rpl-bottom-sheet configured-xpromo
+ *                               text "424만 평점"
+ *     overlays: []          quirk: applied TRUE, bodyInline ""
+ *     body: overflow-y HIDDEN
+ *
+ * Every probe point down the screen hits the same element, so Reddit's
+ * app-install interstitial covers the entire viewport and swallows every tap —
+ * that is the darkening, the dead button, and the dead scroll, all one cause.
+ * It is not `position:fixed`, which is why an overlay scan reported nothing.
+ *
+ * The capture also convicted the first fix: our unlock was applied and body was
+ * STILL computed `overflow-y: hidden`. Our `<style>` is appended last, so an
+ * equal-specificity rule would lose to it; something with a higher specificity
+ * and `!important` is winning. Hence `:root:root:root` — repeating a pseudo
+ * class raises specificity without changing what is matched, so the unlock
+ * outranks the interstitial's class-based lock.
+ *
+ * Suppression is scoped to `.configured-xpromo`: Reddit uses `rpl-bottom-sheet`
+ * for legitimate sheets (share, sort) that must keep working.
+ *
  * Injected as an `!important` author stylesheet rather than inline styles,
  * because the first attempt (inline style + MutationObserver) lost twice:
  * its re-entry guard skipped re-application on SPA soft-nav, and the observer
@@ -70,7 +94,8 @@ private const val REDDIT_SCROLL_UNLOCK = """
 (function () {
   var ID = '__deneb-scroll-unlock';
   if (document.getElementById(ID)) return;
-  var css = 'html,body{overflow:visible !important;overflow-y:visible !important}';
+  var css = ':root:root:root,:root:root:root body{overflow:visible !important;overflow-y:visible !important}'
+          + '.rpl-bottom-sheet.configured-xpromo{display:none !important}';
   var st = document.createElement('style');
   st.id = ID;
   st.appendChild(document.createTextNode(css));

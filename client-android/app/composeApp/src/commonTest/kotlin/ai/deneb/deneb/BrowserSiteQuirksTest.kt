@@ -52,10 +52,35 @@ class BrowserSiteQuirksTest {
         // The measured lock is `body { overflow-y: hidden }`, which propagates to
         // the viewport because the root element's overflow is `visible`. Both
         // elements must be covered, and the rule must outrank the page's own.
-        assertTrue(js.contains("html,body"), "must target both html and body: $js")
+        assertTrue(js.contains(":root:root:root body"), "must target the body element: $js")
         assertTrue(js.contains("overflow-y:visible !important"), "needs !important: $js")
         // Inline styles lost this fight before; a stylesheet is what survives.
         assertTrue(js.contains("createElement('style')"), "must inject a stylesheet: $js")
+    }
+
+    @Test
+    fun outranksAClassBasedImportantLock() {
+        val js = browserSiteQuirkScript("https://www.reddit.com/")!!
+        // A bare `html,body` selector is specificity (0,0,1) and loses to the
+        // measured `body.<class> { overflow:hidden !important }` even though our
+        // sheet is appended last — which is exactly how the first fix left the
+        // page still locked. Repeating `:root` buys specificity for free.
+        assertFalse(js.contains("'html,body{"), "bare element selector loses the cascade: $js")
+        assertTrue(js.contains(":root:root:root"), "unlock must outrank a class rule: $js")
+    }
+
+    @Test
+    fun suppressesTheAppInstallInterstitialOnly() {
+        val js = browserSiteQuirkScript("https://www.reddit.com/")!!
+        // Measured: this element is topmost at every probe point down the screen,
+        // so it eats every tap. Hiding it is the whole fix for the dead button.
+        assertTrue(js.contains("configured-xpromo"), "must suppress the app-install sheet: $js")
+        // Scoped: `rpl-bottom-sheet` alone also carries share/sort sheets the
+        // reader still needs.
+        assertFalse(
+            js.contains(".rpl-bottom-sheet{"),
+            "must not blanket-hide every bottom sheet: $js",
+        )
     }
 
     @Test
