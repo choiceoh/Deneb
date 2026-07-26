@@ -17,6 +17,7 @@ import {
   windowRange,
 } from './refresh'
 import { dispatchHubEvent } from './events'
+import { onSettingsSaved, renderPhoneUI, setPhoneStatus } from './phone'
 import { loadCachedGlance, saveCachedGlance } from './cache'
 import {
   fetchGlance,
@@ -30,6 +31,12 @@ import {
   type GlancePage,
   type GlancePayload,
 } from './deneb'
+
+// The phone screen is drawn FIRST, before the glasses bridge is awaited. That
+// await is top-level: everything below it is dead until the glasses connect, so
+// rendering afterwards would leave the phone blank at exactly the moment the
+// operator needs it — when the connection is what is broken.
+renderPhoneUI()
 
 const bridge = await waitForEvenAppBridge()
 
@@ -142,6 +149,14 @@ bridge.onEvenHubEvent((event) => {
     case 'ignore':
       break
   }
+})
+
+onSettingsSaved((next) => {
+  settings = next
+  consecutiveFailures = 0
+  servingCache = false
+  void refreshGlance(true)
+  scheduleRefresh()
 })
 
 void boot()
@@ -511,6 +526,7 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     // cannot change without reloading the WebView, which restarts boot anyway.
     if (needsSetup(settings)) settings = await resolveSettings()
     if (needsSetup(settings)) {
+      setPhoneStatus({ line: '설정 필요 — 아래에 주소와 토큰을 넣으세요.', tone: 'warn' })
       if (screen !== 'setup') {
         screen = 'setup'
         await showText(setupCopy())
@@ -524,6 +540,7 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     const payload = await fetchGlance(settings, { fresh })
     consecutiveFailures = 0
     servingCache = false
+    setPhoneStatus({ line: `연결됨 · 알림 ${payload.items.length}건`, tone: 'ok' })
     saveCachedGlance(payload)
 
     // Re-read the LIVE screen, not the snapshot taken before the request. The
@@ -569,6 +586,10 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     await renderCurrentPage()
   } catch (err) {
     consecutiveFailures++
+    setPhoneStatus({
+      line: `연결 실패 (${consecutiveFailures}회) · ${err instanceof Error ? err.message : String(err)}`,
+      tone: consecutiveFailures >= 2 ? 'bad' : 'warn',
+    })
     // A background failure stays off the display: the wearer did not ask, and
     // an unreachable gateway would otherwise flash an error every cycle while
     // they are simply out of network range.
