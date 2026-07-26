@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/nativesync"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
@@ -274,10 +275,10 @@ func (s *Server) publishApprovalAnalysisFeed(_ context.Context, doc groupware.Ap
 	if preview == "" {
 		preview = out.Title
 	}
-	proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+	nativepush.PublishWithFallback(s.pushHub, s.pushNotifier, nativepush.Event{
 		Title: "Deneb",
 		Body:  preview,
-		Kind:  proactive.PushKindWorkfeed,
+		Kind:  nativepush.PushKindWorkfeed,
 		Ref:   out.ID,
 	})
 	return nil
@@ -363,10 +364,10 @@ func (s *Server) notifyGroupwareRadarListFailed(_ context.Context, folder string
 	if preview == "" {
 		preview = out.Title
 	}
-	proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+	nativepush.PublishWithFallback(s.pushHub, s.pushNotifier, nativepush.Event{
 		Title: "Deneb",
 		Body:  preview,
-		Kind:  proactive.PushKindWorkfeed,
+		Kind:  nativepush.PushKindWorkfeed,
 		Ref:   out.ID,
 	})
 	return nil

@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
@@ -37,8 +37,8 @@ func (s *Server) dispatchWorkstationCommand(_ context.Context, action string, ar
 		data[k] = v
 	}
 	data["action"] = action
-	s.pushHub.Publish(proactive.Event{
-		Kind:  proactive.PushKindWorkspace,
+	s.pushHub.Publish(nativepush.Event{
+		Kind:  nativepush.PushKindWorkspace,
 		Title: "화면 조정",
 		Body:  action,
 		Data:  data,

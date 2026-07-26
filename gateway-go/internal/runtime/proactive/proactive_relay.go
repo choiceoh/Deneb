@@ -12,6 +12,7 @@ import (
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/relaylog"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive/textprep"
 )
@@ -62,7 +63,7 @@ type proactiveRelayDeps struct {
 	// report arrives, so the app raises a notification live instead of waiting
 	// for its next heartbeat poll. nil in older wiring/tests; the push is then
 	// skipped (the report still lands in the transcript).
-	pushHub *clientPushHub
+	pushHub *nativepush.Hub
 
 	// pushFCM delivers the same {title, body} to registered device tokens via
 	// FCM when no client holds a live SSE connection (app fully closed / Doze) —
@@ -124,7 +125,7 @@ type Deps struct {
 		Error(string, ...any)
 	}
 	BehaviorLog *relaylog.Writer
-	PushHub     *Hub
+	PushHub     *nativepush.Hub
 	PushFCM     *push.Notifier
 	WorkFeed    interface {
 		Append(workfeed.Item) (workfeed.Item, error)
@@ -373,7 +374,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 	}
 	pushKind, pushRef := d.appendProactiveWorkFeed(target, content, deliverBody, opts)
 	if d.pushHub != nil {
-		d.pushHub.publish(clientPushEvent{
+		d.pushHub.Publish(nativepush.Event{
 			Title: "Deneb",
 			Body:  pushPreview(content),
 			Kind:  pushKind,
@@ -385,7 +386,7 @@ func (d proactiveRelayDeps) relayNativeToOptions(sessionKey, content string, opt
 		// credentials are configured) and skipped while a client is connected —
 		// the live frame already delivered. Fire-and-forget; the report is in the
 		// 업무 feed (or, for feed-less sessions, the transcript) regardless.
-		if d.pushFCM != nil && d.pushHub.mobileSubscriberCount() == 0 {
+		if d.pushFCM != nil && d.pushHub.MobileSubscriberCount() == 0 {
 			d.pushFCM.DeliverFallback("Deneb", pushPreview(content))
 		}
 	}
@@ -451,7 +452,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 		}
 		return "", ""
 	}
-	return pushKindWorkfeed, appended.ID
+	return nativepush.PushKindWorkfeed, appended.ID
 }
 
 // Relay delivers content to the native work session.
@@ -624,7 +625,7 @@ func (d proactiveRelayDeps) deliverNativeImage(caption string, pngBytes []byte) 
 	d.markSessionVisible(nativeWorkSessionKey, msg.Timestamp)
 	// Live-push + FCM fallback so a backgrounded/closed phone still gets the
 	// weekly-report image notification (the image itself is in the 업무 chat).
-	publishProactive(d.pushHub, d.pushFCM, clientPushEvent{Title: "Deneb", Body: caption})
+	nativepush.PublishWithFallback(d.pushHub, d.pushFCM, nativepush.Event{Title: "Deneb", Body: caption})
 	return true, nil
 }
 

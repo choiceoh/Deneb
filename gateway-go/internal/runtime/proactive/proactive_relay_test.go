@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/denebui"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 )
 
 // recordingWorkFeed is a work-feed fake that records Append calls.
@@ -47,8 +48,8 @@ func (s *recordingTranscriptStore) CloneRecent(string, string, int) error { retu
 // regardless of the session key argument.
 func TestRelayWritesNativeSessionAndEmitsPush(t *testing.T) {
 	store := newRecordingTranscriptStore()
-	hub := newClientPushHub()
-	events, unsub := hub.subscribe(kindMobile)
+	hub := nativepush.NewHub()
+	events, unsub := hub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	d := proactiveRelayDeps{
@@ -105,8 +106,8 @@ func TestRelay_IgnoresContentlessBodies(t *testing.T) {
 	for _, body := range cases {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
-		hub := newClientPushHub()
-		events, unsub := hub.subscribe(kindMobile)
+		hub := nativepush.NewHub()
+		events, unsub := hub.Subscribe(nativepush.KindMobile)
 
 		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
@@ -141,8 +142,8 @@ func TestRelay_IgnoresSilentReplyToken(t *testing.T) {
 	for _, body := range []string{"NO_REPLY", "NO_REPLY 🐾", "  NO_REPLY  ", "**NO_REPLY**"} {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
-		hub := newClientPushHub()
-		events, unsub := hub.subscribe(kindMobile)
+		hub := nativepush.NewHub()
+		events, unsub := hub.Subscribe(nativepush.KindMobile)
 
 		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
@@ -180,8 +181,8 @@ func TestRelay_IgnoresSelfImprovementDiagnostic(t *testing.T) {
 	for _, body := range cases {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
-		hub := newClientPushHub()
-		events, unsub := hub.subscribe(kindMobile)
+		hub := nativepush.NewHub()
+		events, unsub := hub.Subscribe(nativepush.KindMobile)
 
 		d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 		delivered, err := d.relay(context.Background(), "ignored-session-key", body)
@@ -237,7 +238,7 @@ func TestIsSelfImprovementDiagnostic(t *testing.T) {
 func TestRelay_DeliversWithTrailingSilentTokenStripped(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
-	hub := newClientPushHub()
+	hub := nativepush.NewHub()
 
 	d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 	delivered, err := d.relay(context.Background(), "ignored-session-key", "긴급: 계약서 서명 필요\nNO_REPLY")
@@ -351,7 +352,7 @@ func TestStripProactiveMetaPreambleClearsNarrationKeepsReports(t *testing.T) {
 func TestRelay_ClearsMetaPreambleFromFeedCardBody(t *testing.T) {
 	store := newRecordingTranscriptStore()
 	feed := &recordingWorkFeed{}
-	hub := newClientPushHub()
+	hub := nativepush.NewHub()
 
 	d := proactiveRelayDeps{transcriptStore: store, pushHub: hub, workFeed: feed}
 	body := "전체 맥락 파악됐습니다. 분석 결과 정리합니다.\n\n---\n\n## 📨 2026-06-08 수신 메일 종합 분석\n\n총 2건 수신 — 대한전선 당진 2차 관련 건입니다."
@@ -617,8 +618,8 @@ func TestRelayCollapsedPreservesProseAndAppliesSuppressionGates(t *testing.T) {
 	t.Run("feed-backed main session: feed keeps prose, transcript untouched", func(t *testing.T) {
 		store := newRecordingTranscriptStore()
 		feed := &recordingWorkFeed{}
-		hub := newClientPushHub()
-		events, unsub := hub.subscribe(kindMobile)
+		hub := nativepush.NewHub()
+		events, unsub := hub.Subscribe(nativepush.KindMobile)
 		defer unsub()
 		d := proactiveRelayDeps{transcriptStore: store, workFeed: feed, pushHub: hub}
 

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 )
 
@@ -91,7 +91,7 @@ func TestPhoneActionAwaiterAggregationPreservesSuccessOverPartialFailure(t *test
 // the phone_action_result ingest branch touch: push hub + awaiter + logger.
 func phoneActionTestServer() *Server {
 	return &Server{
-		pushHub:      proactive.NewHub(),
+		pushHub:      nativepush.NewHub(),
 		phoneActions: newPhoneActionAwaiter(),
 		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
@@ -99,7 +99,7 @@ func phoneActionTestServer() *Server {
 
 func TestDispatchPhoneAction_ConfirmedRoundTrip(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
+	frames, unsub := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	done := make(chan error, 1)
@@ -108,7 +108,7 @@ func TestDispatchPhoneAction_ConfirmedRoundTrip(t *testing.T) {
 	}()
 
 	frame := <-frames
-	if frame.Kind != proactive.PushKindPhoneAction || frame.Data["action"] != "timer" {
+	if frame.Kind != nativepush.PushKindPhoneAction || frame.Data["action"] != "timer" {
 		t.Fatalf("unexpected frame: %+v", frame)
 	}
 	if frame.Ref == "" {
@@ -123,7 +123,7 @@ func TestDispatchPhoneAction_ConfirmedRoundTrip(t *testing.T) {
 
 func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
+	frames, unsub := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	done := make(chan error, 1)
@@ -147,9 +147,9 @@ func TestDispatchPhoneAction_ReportedFailure(t *testing.T) {
 // phone's success.
 func TestDispatchPhoneAction_HarnessFailureDoesNotMaskPhoneSuccess(t *testing.T) {
 	s := phoneActionTestServer()
-	phone, unsubPhone := s.pushHub.Subscribe(proactive.KindMobile)
+	phone, unsubPhone := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsubPhone()
-	harness, unsubHarness := s.pushHub.Subscribe(proactive.KindMobile)
+	harness, unsubHarness := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsubHarness()
 
 	done := make(chan error, 1)
@@ -169,9 +169,9 @@ func TestDispatchPhoneAction_HarnessFailureDoesNotMaskPhoneSuccess(t *testing.T)
 
 func TestDispatchPhoneAction_AllSubscribersFailed(t *testing.T) {
 	s := phoneActionTestServer()
-	phone, unsubPhone := s.pushHub.Subscribe(proactive.KindMobile)
+	phone, unsubPhone := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsubPhone()
-	harness, unsubHarness := s.pushHub.Subscribe(proactive.KindMobile)
+	harness, unsubHarness := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsubHarness()
 
 	done := make(chan error, 1)
@@ -191,7 +191,7 @@ func TestDispatchPhoneAction_AllSubscribersFailed(t *testing.T) {
 
 func TestDispatchPhoneAction_UnconfirmedOnCancel(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
+	frames, unsub := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -208,7 +208,7 @@ func TestDispatchPhoneAction_UnconfirmedOnCancel(t *testing.T) {
 
 func TestDispatchPhoneActionSyncStateReturnsNilWithoutCorrelationID(t *testing.T) {
 	s := phoneActionTestServer()
-	frames, unsub := s.pushHub.Subscribe(proactive.KindMobile)
+	frames, unsub := s.pushHub.Subscribe(nativepush.KindMobile)
 	defer unsub()
 
 	// Returns nil immediately — no waiting, no correlation id.
@@ -224,7 +224,7 @@ func TestDispatchPhoneActionSyncStateReturnsNilWithoutCorrelationID(t *testing.T
 func TestDispatchPhoneActionReturnsErrorWithoutMobileSubscriber(t *testing.T) {
 	s := phoneActionTestServer()
 	// Desktop-only connection must not read as dispatchable.
-	_, unsub := s.pushHub.Subscribe(proactive.KindDesktop)
+	_, unsub := s.pushHub.Subscribe(nativepush.KindDesktop)
 	defer unsub()
 	if err := s.dispatchPhoneAction(context.Background(), "timer", map[string]string{"seconds": "60"}); err == nil {
 		t.Fatal("dispatch without a mobile subscriber must error")

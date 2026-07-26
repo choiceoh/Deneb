@@ -17,7 +17,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 )
 
@@ -32,7 +32,7 @@ type MailAttachmentClient interface {
 type Config struct {
 	Dispatcher                  *rpc.Dispatcher
 	ChatHandler                 chatport.SyncStreamRunner
-	PushHub                     *proactive.Hub
+	PushHub                     *nativepush.Hub
 	ShutdownContext             context.Context
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)

@@ -9,8 +9,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/groupware"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/evenapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/gatewayhttp"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 )
 
 // buildMux configures HTTP routing for health, native-client HTTP (SSE via gatewayhttp/nativeapi), hooks, and introspection routes.
@@ -78,10 +78,10 @@ func (s *Server) buildMux() *http.ServeMux {
 	gatewayhttp.RegisterFleetAlertRoute(mux, gatewayhttp.FleetAlertConfig{
 		Gate: s.alertGate,
 		Publish: func(title, body string) {
-			proactive.PublishWithFallback(s.pushHub, s.pushNotifier, proactive.Event{
+			nativepush.PublishWithFallback(s.pushHub, s.pushNotifier, nativepush.Event{
 				Title: title,
 				Body:  body,
-				Kind:  proactive.PushKindFleet,
+				Kind:  nativepush.PushKindFleet,
 			})
 		},
 		Logger: s.logger,

@@ -1,7 +1,7 @@
 // notify_relay.go — Secondary monitoring: status snapshots, error mirror, self-health heartbeat.
 //
 // The gateway watches itself and surfaces two kinds of monitoring signal to
-// connected native clients (via clientPushHub) plus the operator log:
+// connected native clients (via nativepush.Hub) plus the operator log:
 //
 //  1. Error mirrors — automatic. The notifier registers a Broadcaster.Tap
 //     and forwards user-impacting events (chat.delivery_failed,
@@ -62,7 +62,7 @@ var mirroredEvents = map[string]struct{}{
 
 // Service composes the error-mirror, in-flight activity tracking, and
 // self-health probing behaviors. Critical events (delivery failures, compaction
-// stuck) are pushed to connected native clients via clientPushHub and logged at
+// stuck) are pushed to connected native clients via nativepush.Hub and logged at
 // Error. The Telegram secondary-chat monitoring was retired with the bot.
 //
 // Lock hierarchy (acquire in this order; never reverse):
