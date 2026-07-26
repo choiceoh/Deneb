@@ -1,6 +1,9 @@
 package session
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRestorableTranscriptChannelParsesValidAndInvalidKeys(t *testing.T) {
 	t.Parallel()
@@ -16,8 +19,11 @@ func TestRestorableTranscriptChannelParsesValidAndInvalidKeys(t *testing.T) {
 		{key: "client:main:k3x9ab12", ok: true},
 		{key: "client:main:wf-abc123", ok: true},
 		{key: "client:main:dream", ok: true},
-		// …while delegated sub-agent runs (label + epoch tail) do not: they are
-		// work the agent spawned, not a conversation to restore into the drawer.
+		// …while delegated sub-agent runs do not: they are work the agent
+		// spawned, not a conversation to restore into the drawer. Marked shape
+		// first, then the pre-marker keys still sitting in the transcript dir.
+		{key: "client:main:sub-verify-docs-1784342370344", ok: false},
+		{key: "client:main:sub-a-1784342370344:sub-b-1784342999999", ok: false},
 		{key: "client:main:subagent:1784342370344", ok: false},
 		{key: "client:main:gmail-large-attachment-fix:1782276675257", ok: false},
 		{key: "client:topic:old", ok: false},
@@ -54,6 +60,28 @@ func TestWorkTypeForKeySeparatesConversationsFromSpawnedChildren(t *testing.T) {
 	} {
 		if got := WorkTypeForKey(key); got != want {
 			t.Errorf("WorkTypeForKey(%q) = %q, want %q", key, got, want)
+		}
+	}
+}
+
+// The minter and the classifier must never drift: every key SpawnedChildKey
+// produces has to read back as a spawned child, including labels that carry
+// characters a raw key would have split into extra segments.
+func TestSpawnedChildKeyRoundTripsThroughClassifier(t *testing.T) {
+	t.Parallel()
+	for _, label := range []string{"verify docs", "gmail:large:attachment", "계약서 검토", "", "a-very-long-label-that-exceeds-the-forty-character-budget-by-a-lot"} {
+		key := SpawnedChildKey(NativeWorkSessionKey, label, 1784342370344)
+		if !IsSpawnedChildKey(key) {
+			t.Errorf("SpawnedChildKey(%q) = %q, not classified as a spawned child", label, key)
+		}
+		if _, ok := RestorableTranscriptChannel(key); ok {
+			t.Errorf("key %q (label %q) is restorable into the conversation drawer", key, label)
+		}
+		if got := WorkTypeForKey(key); got != "subagent" {
+			t.Errorf("WorkTypeForKey(%q) = %q, want subagent", key, got)
+		}
+		if strings.Count(key, ":") != strings.Count(NativeWorkSessionKey, ":")+1 {
+			t.Errorf("key %q (label %q) grew extra segments", key, label)
 		}
 	}
 }
