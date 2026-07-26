@@ -6,8 +6,8 @@ import ai.deneb.deneb.ingestEvent
 import ai.deneb.network.httpTeardownTolerantHandler
 import android.app.Notification
 import android.app.NotificationManager
-import android.content.Intent
 import android.app.RemoteInput
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
