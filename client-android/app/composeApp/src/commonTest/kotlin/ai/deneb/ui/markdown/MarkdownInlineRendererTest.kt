@@ -1,6 +1,7 @@
 package ai.deneb.ui.markdown
 
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -100,13 +101,20 @@ class MarkdownInlineRendererTest {
     }
 
     @Test
-    fun inlineCodeAddsHairSpaceAndMonospaceBackgroundSpan() {
+    fun inlineCodeIsMonospaceAndMutedWithNoBackgroundOrPadding() {
         val rendered = listOf(Text("run "), InlineCode("git status"), Text(" now")).toAnnotatedString(colors, FontFamily.Monospace)
 
-        assertEquals("run  git status  now", rendered.text)
+        // The tinted chip is gone: Compose paints a span background per LINE
+        // FRAGMENT, so a wrapping code span split into two detached pills
+        // (`tailscale serve --https=443` plus a lone `off`). The hair-space
+        // padding that widened that chip went with it — the code text is verbatim.
+        assertEquals("run git status now", rendered.text)
         val code = rendered.spanStyles.single { it.item.fontFamily == FontFamily.Monospace }
-        assertEquals(colors.surfaceVariant, code.item.background)
-        assertEquals(" git status ", rendered.text.substring(code.start, code.end))
+        assertEquals(Color.Unspecified, code.item.background)
+        // Muted, not primary — links own primary, and sharing it would make a
+        // command and a URL read alike.
+        assertEquals(colors.onSurfaceVariant, code.item.color)
+        assertEquals("git status", rendered.text.substring(code.start, code.end))
     }
 
     @Test
@@ -172,7 +180,7 @@ class MarkdownInlineRendererTest {
             ),
         ).toAnnotatedString(colors, FontFamily.Monospace)
 
-        assertEquals("bold under code ", rendered.text)
+        assertEquals("bold undercode", rendered.text)
         assertTrue(rendered.spanStyles.any { it.item.fontWeight == FontWeight.Bold && it.start == 0 && it.end == rendered.length })
         assertTrue(rendered.spanStyles.any { it.item.textDecoration == TextDecoration.Underline })
         assertTrue(rendered.spanStyles.any { it.item.fontFamily == FontFamily.Monospace })
