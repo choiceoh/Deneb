@@ -180,6 +180,9 @@ actual fun executePhoneAction(action: String, args: Map<String, String>): Boolea
         "notify" -> return postAgentNotification(context, args["title"].orEmpty(), args["text"].orEmpty())
         "speak" -> return speakText(context, args["text"].orEmpty())
         "clipboard" -> return setClipboardText(context, args["text"].orEmpty())
+        // Replies through the *notification's own* reply action, so the message
+        // lands in the real conversation (KakaoTalk et al.) — not a Deneb copy.
+        "reply" -> return NotificationReplyBridge.reply(args["room"].orEmpty(), args["text"].orEmpty())
     }
     val intent: Intent = when (action) {
         "open_url" -> Intent(Intent.ACTION_VIEW, args["url"].orEmpty().toUri())

@@ -1864,7 +1864,7 @@ func PhoneWriteToolSchema() map[string]any {
 		"properties": map[string]any{
 			"target": map[string]any{
 				"type":        "string",
-				"description": "액션 대상: open_url=URL, open_app=패키지/앱명, message=수신자, dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)",
+				"description": "액션 대상: open_url=URL, open_app=패키지/앱명, reply=대화방 이름, message=수신자, dial=전화번호, alarm=\"HH:MM\"(24h), timer=단위 포함 길이(\"10m\"/\"90s\"/\"1h30m\" — 단위 없는 숫자는 모호해서 거부)",
 			},
 			"text": map[string]any{
 				"type":        "string",
@@ -1876,8 +1876,8 @@ func PhoneWriteToolSchema() map[string]any {
 			},
 			"to": map[string]any{
 				"type":        "string",
-				"description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS 미지원은 실패로 회신됨) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
-				"enum":        []string{"notify", "speak", "clipboard", "open_url", "open_app", "share", "message", "dial", "photo", "alarm", "timer"},
+				"description": "작업(전부 인앱 실행): notify(알림, text 필수·title 선택) | speak(음성, text) | clipboard(클립보드에 넣기, text) | reply(대화 알림에 답장 — target=대화방 이름(phone_read messages가 보여주는 그대로), text=보낼 내용. 트레이에 살아 있는 알림에만 가능하고, 사라졌으면 실패로 회신됨) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(target=\"HH:MM\" 24h, text=라벨 — 일회성, 반복/매일 알람 미지원이니 사용자에게 안내; \"30분 뒤\"류 상대시간은 timer 사용 또는 현재 시각 기준 HH:MM 계산; Android 전용 — iOS 미지원은 실패로 회신됨) | timer(target=단위 포함 길이 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자는 거부됨)",
+				"enum":        []string{"notify", "speak", "clipboard", "reply", "open_url", "open_app", "share", "message", "dial", "photo", "alarm", "timer"},
 			},
 		},
 		"required": []string{"to"},

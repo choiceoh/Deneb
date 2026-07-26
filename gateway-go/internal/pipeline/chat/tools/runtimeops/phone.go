@@ -105,7 +105,7 @@ func ToolPhoneWrite(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 		}
 		p.To = normalizePhoneWriteTo(p.To)
 		if !isPhoneAction(p.To) {
-			return "", fmt.Errorf("phone_write: unknown to=%q (notify|speak|clipboard | open_url|open_app|share|message|dial|photo|alarm|timer)", p.To)
+			return "", fmt.Errorf("phone_write: unknown to=%q (notify|speak|clipboard|reply | open_url|open_app|share|message|dial|photo|alarm|timer)", p.To)
 		}
 		return dispatchPhoneAction(ctx, send, p)
 	}

@@ -169,7 +169,10 @@ func formatPhoneMessageThreads(threads []phoneRoomThread) string {
 		return "최근 알림에서 모은 대화가 없습니다."
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "최근 %d일 알림 기준 대화 %d개 (수신만 — 내가 보낸 메시지는 알림이 없어 보이지 않습니다):\n",
+	// The one-sidedness is stated up front: an app posts no notification for what
+	// the user sends, so the only outgoing messages here are the ones Deneb sent
+	// itself. Reading this feed as a full conversation would misjudge it.
+	fmt.Fprintf(&b, "최근 %d일 알림 기준 대화 %d개 (수신 + 데네브가 보낸 답장만 — 사용자가 앱에서 직접 보낸 메시지는 알림이 없어 보이지 않습니다):\n",
 		phoneMessagesDays, len(threads))
 	for _, t := range threads {
 		fmt.Fprintf(&b, "\n[%s] 마지막 %s\n", t.room, t.last.Format("01-02 15:04"))
