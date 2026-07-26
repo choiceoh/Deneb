@@ -64,7 +64,7 @@ def main():
         if fm is None:
             must.append(f"프론트매터 파싱 불가 (§11.1): {rel}")
             continue
-        types = [m.group(1) for l in fm if (m := re.match(r"^type:\s*(\S+)", l))]
+        types = [m.group(1) for line in fm if (m := re.match(r"^type:\s*(\S+)", line))]
         if not types:
             must.append(f"type 없음 (§11.2): {rel}")
         elif len(types) > 1:
