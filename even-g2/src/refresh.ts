@@ -136,6 +136,52 @@ export function skipPage(page: { id: string; empty?: boolean }, itemCount: numbe
   return !!page.empty
 }
 
+/** What the device says about itself; every field is optional on the wire. */
+export type WearStatus = {
+  isWearing?: boolean
+  isInCase?: boolean
+  isCharging?: boolean
+  batteryLevel?: number
+}
+
+/**
+ * shouldPoll decides whether the background loop is worth running.
+ *
+ * This is the question that could not be answered by guessing: the loop pauses
+ * on FOREGROUND_EXIT, but that event has never been observed — the simulator
+ * cannot inject it — so "45s is too slow because we only run while visible" and
+ * "45s burns radio for a screen nobody is looking at" were both plausible and
+ * implied opposite tuning. The device answers it directly: it knows whether it
+ * is on someone's face.
+ *
+ * FAIL-OPEN is the whole safety story. `isWearing` is optional on the wire, so
+ * a host that never reports it must leave the app working exactly as before —
+ * never silently stop refreshing forever.
+ */
+export function shouldPoll(status: WearStatus | undefined): boolean {
+  if (!status) return true
+  if (status.isInCase === true) return false
+  if (status.isWearing === false) return false
+  return true
+}
+
+/** Battery below this, off charge, is when a wearable should stop being eager. */
+export const LOW_BATTERY_PCT = 15
+
+/**
+ * pollInterval stretches the base interval when the glasses are nearly flat.
+ *
+ * A HUD that dies at 4pm is worse than one that is a minute stale, and the
+ * proactive path (the phone's notification HUD) is unaffected either way — so
+ * the glance is exactly the thing that can afford to slow down.
+ */
+export function pollInterval(base: number, status: WearStatus | undefined): number {
+  if (!status || status.isCharging === true) return base
+  const pct = status.batteryLevel
+  if (typeof pct !== 'number' || !Number.isFinite(pct)) return base
+  return pct <= LOW_BATTERY_PCT ? base * 4 : base
+}
+
 /** clampCursor keeps an alert cursor inside the current item list. */
 export function clampCursor(cursor: number, count: number): number {
   if (count <= 0) return 0

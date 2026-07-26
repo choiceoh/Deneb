@@ -11,6 +11,9 @@ import {
   alertSlots,
   clampCursor as clampCursorTo,
   connectionLabel,
+  pollInterval,
+  shouldPoll,
+  type WearStatus,
   nextDelayMs,
   payloadSignature,
   resolveSelectionIndex,
@@ -61,6 +64,8 @@ let lastCounts = ''
 let lastNow = ''
 /** Notice ids already put on the glass, so a re-offered one is not shown twice. */
 let shownNoticeId = ''
+/** Last thing the glasses said about themselves; undefined until they say it. */
+let wearStatus: WearStatus | undefined
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -160,6 +165,26 @@ onSettingsSaved((next) => {
   servingCache = false
   void refreshGlance(true)
   scheduleRefresh()
+})
+
+// The glasses report whether they are on a face, in the case, or nearly flat.
+// This is what the polling loop should have been keyed on all along — see
+// shouldPoll for why guessing at foreground events was the wrong instrument.
+bridge.onDeviceStatusChanged((status) => {
+  const before = shouldPoll(wearStatus)
+  wearStatus = {
+    isWearing: status?.isWearing,
+    isInCase: status?.isInCase,
+    isCharging: status?.isCharging,
+    batteryLevel: status?.batteryLevel,
+  }
+  if (shouldPoll(wearStatus) === before) return
+  if (before) {
+    pauseLoop()
+    return
+  }
+  // Back on the face: they are looking NOW, so do not make them wait a cycle.
+  void resumeLoop()
 })
 
 void boot()
@@ -524,6 +549,7 @@ async function showStatus(): Promise<void> {
         st.ok ? '브리지 OK' : '브리지 이상',
         st.chatReady ? '챗 준비됨' : '챗 미준비',
         `세션 ${st.session || 'glasses:main'}`,
+        wearLine(),
         host,
         '',
         '↓홈 · ↑이전 · 탭=페이지',
@@ -797,6 +823,17 @@ function clockLabel(): string {
   return `${now.getMonth() + 1}/${now.getDate()} ${wd} ${hh}:${mm}`
 }
 
+/** wearLine reports what the glasses said about themselves, if anything. */
+function wearLine(): string {
+  if (!wearStatus) return '착용 상태 미보고'
+  const parts: string[] = []
+  parts.push(wearStatus.isInCase ? '충전함' : wearStatus.isWearing === false ? '벗음' : '착용')
+  if (typeof wearStatus.batteryLevel === 'number') {
+    parts.push(`배터리 ${Math.round(wearStatus.batteryLevel)}%${wearStatus.isCharging ? ' 충전중' : ''}`)
+  }
+  return parts.join(' · ')
+}
+
 /** clampCursor is the app-state view of the pure guard in refresh.ts. */
 function clampCursor(): number {
   return clampCursorTo(listCursor, items.length)
@@ -844,7 +881,7 @@ function scheduleRefresh(): void {
   refreshTimer = setTimeout(() => {
     refreshTimer = undefined
     void runScheduledRefresh()
-  }, nextDelayMs(consecutiveFailures))
+  }, pollInterval(nextDelayMs(consecutiveFailures), wearStatus))
 }
 
 async function runScheduledRefresh(): Promise<void> {

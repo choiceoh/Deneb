@@ -7,7 +7,10 @@ import {
   MAX_REFRESH_MS,
   advanceCursor,
   clampCursor,
+  LOW_BATTERY_PCT,
   connectionLabel,
+  pollInterval,
+  shouldPoll,
   windowRange,
   nextDelayMs,
   payloadSignature,
@@ -264,5 +267,52 @@ describe('skipPage', () => {
     expect(skipPage({ id: 'cal' }, 3)).toBe(false)
     expect(skipPage({ id: 'cal', empty: true }, 3)).toBe(true)
     expect(skipPage({ id: 'todo', empty: true }, 0)).toBe(true)
+  })
+})
+
+describe('shouldPoll', () => {
+  it('FAILS OPEN when the glasses say nothing', () => {
+    // This is the safety property. isWearing is optional on the wire; a host
+    // that never reports it must leave the app exactly as it was, not silently
+    // stop refreshing forever.
+    expect(shouldPoll(undefined)).toBe(true)
+    expect(shouldPoll({})).toBe(true)
+    expect(shouldPoll({ batteryLevel: 80 })).toBe(true)
+  })
+
+  it('stops for a screen nobody is looking at', () => {
+    expect(shouldPoll({ isWearing: false })).toBe(false)
+    expect(shouldPoll({ isInCase: true })).toBe(false)
+    // In the case wins even if wearing is somehow still reported true.
+    expect(shouldPoll({ isWearing: true, isInCase: true })).toBe(false)
+  })
+
+  it('runs while worn', () => {
+    expect(shouldPoll({ isWearing: true })).toBe(true)
+    expect(shouldPoll({ isWearing: true, isInCase: false, batteryLevel: 5 })).toBe(true)
+  })
+})
+
+describe('pollInterval', () => {
+  const base = 45_000
+
+  it('leaves the interval alone without a battery reading', () => {
+    expect(pollInterval(base, undefined)).toBe(base)
+    expect(pollInterval(base, {})).toBe(base)
+    expect(pollInterval(base, { batteryLevel: Number.NaN })).toBe(base)
+  })
+
+  it('slows down when nearly flat', () => {
+    // A HUD that dies at 4pm is worse than one that is a minute stale.
+    expect(pollInterval(base, { batteryLevel: LOW_BATTERY_PCT })).toBe(base * 4)
+    expect(pollInterval(base, { batteryLevel: 3 })).toBe(base * 4)
+  })
+
+  it('stays eager on charge, however low', () => {
+    expect(pollInterval(base, { batteryLevel: 2, isCharging: true })).toBe(base)
+  })
+
+  it('does not slow a healthy battery', () => {
+    expect(pollInterval(base, { batteryLevel: LOW_BATTERY_PCT + 1 })).toBe(base)
   })
 })
