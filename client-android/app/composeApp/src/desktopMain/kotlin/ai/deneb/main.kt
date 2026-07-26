@@ -5,6 +5,7 @@ package ai.deneb
 
 import ai.deneb.ui.chat.composables.denebSectionDestinations
 import ai.deneb.ui.chat.composables.navigateToDenebSection
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,8 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -51,6 +54,13 @@ fun main() {
         val winW = System.getProperty("deneb.window.width")?.toFloatOrNull() ?: 1280f
         val winH = System.getProperty("deneb.window.height")?.toFloatOrNull() ?: 800f
         val windowState = rememberWindowState(size = DpSize(winW.dp, winH.dp))
+        // Render density. Skiko on a headless X server reports no scale factor, so the
+        // harness app draws at 1 px per dp — a phone's own ~3x is where hairlines, 1dp
+        // borders and a 2dp caret actually live, and at 1x they are unjudgeable (a
+        // half-lit pixel row is all you get). -Ddeneb.ui.scale lets the harness ask for
+        // a real device density; the window is opened at dp × scale PHYSICAL px to
+        // match, so screenshot pixels still map 1:1 to xdotool input coords.
+        val uiScale = System.getProperty("deneb.ui.scale")?.toFloatOrNull()?.takeIf { it > 0f } ?: 1f
         // Hoisted above the Window so the window-level shortcut handler can navigate.
         val navController = rememberNavController()
         Window(
@@ -71,10 +81,14 @@ fun main() {
                 null
             }
 
-            App(
-                navController = navController,
-                textToSpeech = textToSpeech,
-            )
+            // fontScale stays 1: this emulates a denser SCREEN, not a user who enlarged
+            // their text, so glyphs must land on more pixels at the same dp size.
+            CompositionLocalProvider(LocalDensity provides Density(uiScale, fontScale = 1f)) {
+                App(
+                    navController = navController,
+                    textToSpeech = textToSpeech,
+                )
+            }
         }
     }
 }

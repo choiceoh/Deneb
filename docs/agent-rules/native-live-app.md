@@ -35,7 +35,7 @@ scripts/dev/native-app.sh stop
 
 | 명령 | 동작 |
 |---|---|
-| `start [phone\|desktop]` | Xvfb + WM + 게이트웨이 시드 + 앱 기동. idempotent(이미 떠 있으면 지오메트리만 재적용). |
+| `start [phone\|phone2x\|desktop]` | Xvfb + WM + 게이트웨이 시드 + 앱 기동. idempotent(이미 떠 있으면 지오메트리만 재적용). |
 | `shot [name]` | 앱 창 스크린샷 → `~/.cache/deneb-native/shots/<name>.png`. 경로를 stdout으로 출력 → Read. |
 | `tap X Y` / `dbltap X Y` | 클릭 / 더블클릭 (좌표 = 스크린샷 픽셀). |
 | `type "텍스트"` | 포커스된 필드에 입력. **먼저 필드를 `tap` 해야 한다.** |
@@ -66,13 +66,13 @@ scripts/dev/native-app.sh shot typed          # 입력 반영 확인
 scripts/dev/native-app.sh stop
 ```
 
-> **좌표 = 스크린샷 픽셀 그대로.** phone = **412×915**(갤럭시 S26 dp). Linux Compose는 density 1이라 px == dp == xdotool 좌표. 매 단계 `shot` → Read로 다음 좌표를 잡는다(앱은 매번 같은 자리에 그려진다).
+> **좌표 = 스크린샷 픽셀 그대로** (모든 프로파일에서). phone = **412×915**(갤럭시 S26 dp) @1x라 거기선 px == dp 이기도 하다. 매 단계 `shot` → Read로 다음 좌표를 잡는다(앱은 매번 같은 자리에 그려진다).
 
 ## 환경 / 프로파일
 
 | 변수 | 기본 | 용도 |
 |---|---|---|
-| profile 인자 | `phone`(412×915) | `desktop`(1280×800)도 가능. ★**phone=모바일 UI 분기(하단 탭바)·desktop=데스크톱 분기(좌측 레일)** — 창 크기뿐 아니라 실제 플랫폼 분기를 렌더 |
+| profile 인자 | `phone`(412×915 @1x) | `phone2x`(같은 dp, 2배 픽셀 그리드)·`desktop`(1280×800)도 가능. ★**phone=모바일 UI 분기(하단 탭바)·desktop=데스크톱 분기(좌측 레일)** — 창 크기뿐 아니라 실제 플랫폼 분기를 렌더 |
 | `NATIVE_W` / `NATIVE_H` | 프로파일값 | 더 큰 프레임(예: `NATIVE_W=480 NATIVE_H=1040`) |
 | `DENEB_GATEWAY_URL` | `http://100.111.114.20:18789` (srv4 — 2026-06-20 프로덕션 이사) | 다른 게이트웨이로 시드 (dev 게이트웨이 연결은 ↓ 전용 섹션 참조) |
 | `DENEB_INSTANCE` | worktree 이름 | **인스턴스 격리 키** — 디스플레이/상태디렉토리/VNC포트가 이 값의 해시 오프셋으로 분리되어, 동시에 도는 다른 에이전트 worktree의 앱을 서로 죽이거나 잘못된 화면을 캡처하지 않는다 |
@@ -81,6 +81,7 @@ scripts/dev/native-app.sh stop
 | `NATIVE_APP_XMX` | `1024m` | 앱 JVM 힙 캡 |
 
 - **프로덕션 연결**(실데이터). 메일/일정/세션이 진짜로 보이고, **채팅을 보내면 실제 에이전트 턴이 돈다** — 입력 메커니즘만 볼 땐 Enter/전송 누르지 말 것.
+- ★**`phone2x` = 서브-dp 디테일 판정용**(2026-07-26 추가): Skiko는 Xvfb에서 스케일 팩터를 못 읽어 하네스 앱이 **1 px per dp**로 그렸다. 실기기는 ~3x라, 헤어라인·1dp 보더·2dp 캐럿 같은 것들은 1x 스크린샷에서 **반쯤 켜진 픽셀 한 줄**로 뭉개져 판정 자체가 불가능하다(실제로 인라인 코드 칩이 그려졌는지를 눈으로 못 가려 PIL 픽셀 샘플링으로 확인해야 했다). `phone2x`는 dp는 그대로 412×915, 창을 824×1830 **물리 픽셀**로 열고 앱에 `-Ddeneb.ui.scale=2`로 밀도를 알려준다(`main.kt`가 `LocalDensity`를 덮어씀; `fontScale`은 1 유지 — 큰 글씨 설정이 아니라 촘촘한 화면을 흉내내는 것이라). **좌표는 여전히 스크린샷 픽셀** — 스크린샷 px == 물리 px == xdotool 좌표는 어느 프로파일에서나 참이고, 달라지는 건 px↔dp 비율뿐이다. 대신 픽셀이 4배라 스크린샷 토큰도 4배 — **기본은 `phone`을 쓰고, 심미/정밀 검수할 때만 `phone2x`**.
 - ★**phone 프로파일 = 실제 모바일 UI**(2026-06-14 추가): 예전엔 항상 `Platform.Desktop`(phone 은 창 크기만)이라 폰 전용 분기를 못 봤는데, 이제 phone 프로파일이 `-Ddeneb.platform=phone` 으로 `currentPlatform=Mobile.Android` 를 강제하고 창을 프로파일 크기로 연다(`-Ddeneb.window.{width,height}` — Compose 가 1280 기본을 재적용해 좁은 레이아웃을 잘라먹던 클립 제거). 그래서 **하단 탭바·모달 드로어 등 폰 전용 분기를 헤드리스로 검증**할 수 있다. desktop 프로파일은 `currentPlatform=Platform.Desktop` 을 세팅하지만, 데스크탑 제품 UI 가 제거돼(모바일 전용, Andromeda 가 데스크탑 소유) **이제 모바일 UI 를 넓은 1280 창에 렌더**한다 — 즉 phone 프로파일이 실제 검증용이고 desktop 은 잔존 빌드 타깃이다. 구현: `Platform.jvm.kt` 가 `deneb.platform` 시스템 프로퍼티를, `desktopMain/kotlin/ai/deneb/main.kt` 가 `deneb.window.*` 를 인식(프로덕션 런치는 미설정). **단 실제 Android 인셋·소프트 키보드·엣지 제스처는 여전히 실기기 필요** — 이건 레이아웃·네비게이션 검증이지 OS 런타임 동작 검증이 아니다.
 
 ## dev 게이트웨이 연결 (수정 빌드를 prod 배포 없이 검증)
