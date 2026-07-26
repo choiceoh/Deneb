@@ -8,11 +8,14 @@ import (
 // Circuit-breaker thresholds. A model that fails unhealthyStreak times in a
 // row is considered unhealthy for unhealthyCooldown after its last failure;
 // the chat pipeline then skips it and goes straight to the fallback chain
-// (saving the user the dead model's stall timeout). The cooldown auto-closes
-// the breaker so a recovered model is retried without operator action.
+// (saving the user the dead model's stall timeout). The cooldown must be longer
+// than one or two stall waits; a 2-minute window half-opened before the next
+// production run and made every request pay k3's 180s idle stall again.
+// The cooldown auto-closes the breaker so a recovered model is retried without
+// operator action.
 const (
 	unhealthyStreak   = 3
-	unhealthyCooldown = 2 * time.Minute
+	unhealthyCooldown = 15 * time.Minute
 )
 
 // modelHealth tracks consecutive failures for one model.

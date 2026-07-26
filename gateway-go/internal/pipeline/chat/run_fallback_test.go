@@ -10,10 +10,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -86,6 +88,85 @@ func TestRunAgentWithFallback_StallDegradesToEmptyTimeoutResult(t *testing.T) {
 	}
 	if strings.TrimSpace(result.AllText) != "" {
 		t.Errorf("AllText = %q, want empty (stall produced no output)", result.AllText)
+	}
+}
+
+func TestRunAgentWithFallback_PreOutputIdleFallsBackWithoutSameModelRetry(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		models []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		models = append(models, req.Model)
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		if req.Model == "m-main" {
+			w.WriteHeader(http.StatusOK)
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			select {
+			case <-r.Context().Done():
+			case <-time.After(time.Second):
+				t.Error("main stall request was not canceled promptly")
+			}
+			return
+		}
+		fmt.Fprint(w, sseResponse("fallback reply", "end_turn"))
+	}))
+	defer server.Close()
+
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:   "test/m-main",
+		CodingModel: "test/m-fb",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {BaseURL: server.URL, APIKey: "k"},
+		},
+	})
+	cfg := agent.AgentConfig{
+		Model:             "m-main",
+		MaxTurns:          2,
+		Timeout:           5 * time.Second,
+		MaxTokens:         128,
+		StreamIdleTimeout: 20 * time.Millisecond,
+	}
+	messages := []llm.Message{llm.NewTextMessage("user", "hello")}
+	client := llm.NewClient(server.URL, "test-key")
+
+	start := time.Now()
+	result, actualModel, fellBack, err := runAgentWithFallback(
+		context.Background(), cfg, messages, client,
+		runDeps{registry: reg, logger: discardLogger()},
+		"test", modelrole.RoleMain, nil, agent.StreamHooks{}, discardLogger(), agentlog.NewRunLogger(nil, "test-session", "test-run"),
+	)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("err = %v, want fallback success", err)
+	}
+	if result == nil || result.Text != "fallback reply" {
+		t.Fatalf("result = %+v, want fallback reply", result)
+	}
+	if actualModel != "m-fb" || !fellBack {
+		t.Fatalf("actualModel=%q fellBack=%v, want m-fb true", actualModel, fellBack)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("fallback took %s, want pre-output idle to skip the same-model retry", elapsed)
+	}
+	mu.Lock()
+	gotModels := append([]string(nil), models...)
+	mu.Unlock()
+	if strings.Join(gotModels, ",") != "m-main,m-fb" {
+		t.Fatalf("models called = %v, want exactly main then fallback", gotModels)
 	}
 }
 

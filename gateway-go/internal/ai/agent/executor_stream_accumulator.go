@@ -101,6 +101,7 @@ func (a *streamAccumulator) startContentBlock(payload json.RawMessage) {
 		return
 	}
 
+	a.result.contentStarted = true
 	a.blockIndex = blockStart.Index
 	a.currentBlock = &streamBlockBuilder{block: blockStart.ContentBlock}
 }

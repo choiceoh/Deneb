@@ -26,6 +26,7 @@ type turnResult struct {
 	providerModel  string
 	maxStreamBytes int
 	streamBytes    int
+	contentStarted bool
 }
 
 // defaultStreamIdleTimeout is the default maximum wait for the next SSE event

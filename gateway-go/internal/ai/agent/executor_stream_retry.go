@@ -27,6 +27,7 @@ const (
 	streamTerminationRetryConnectErr   streamTerminationReason = "retry_connection_error"
 	streamTerminationConsumeErr        streamTerminationReason = "stream_error"
 	streamTerminationRetryBudgetSpent  streamTerminationReason = "retry_exhausted"
+	streamTerminationPreOutputIdle     streamTerminationReason = "pre_output_idle"
 )
 
 // streamingTurnOutcome carries both the retried turn's usable result and the
@@ -45,6 +46,14 @@ type streamingTurnOutcome struct {
 
 func (o streamingTurnOutcome) initialConnectionFailed() bool {
 	return o.terminationReason == streamTerminationInitialConnectErr
+}
+
+func (o streamingTurnOutcome) preOutputIdle() bool {
+	return o.terminationReason == streamTerminationPreOutputIdle
+}
+
+func (r *turnResult) assistantOutputStarted() bool {
+	return r != nil && (r.contentStarted || r.text != "" || len(r.toolCalls) > 0 || len(r.contentBlocks) > 0)
 }
 
 func (s *StreamStats) record(outcome streamingTurnOutcome) {
@@ -102,6 +111,10 @@ func runStreamingTurnWithPolicy(
 	outcome.retryReason = retryReasonForStreamError(err)
 	if outcome.retryReason == streamRetryNone {
 		outcome.terminationReason = streamTerminationConsumeErr
+		return outcome, err
+	}
+	if outcome.retryReason == streamRetryIdle && !result.assistantOutputStarted() {
+		outcome.terminationReason = streamTerminationPreOutputIdle
 		return outcome, err
 	}
 	if disableRetry {
