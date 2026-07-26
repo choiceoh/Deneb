@@ -59,6 +59,12 @@ import {
   type NavState,
 } from "./nav";
 import {
+  ASSIST_PERIOD_MS,
+  ASSIST_PROMPT,
+  assistLine,
+  shouldAssistNow,
+} from "./assist";
+import {
   ARROW_H,
   ARROW_W,
   SPEED_H,
@@ -145,6 +151,10 @@ let navDest = "";
 let listening = false;
 const recallPcm = new PcmBuffer(RECALL_BYTES);
 let recallBusy = false;
+/** Assist pacing: last analysis start, and the line currently on the glass. */
+let assistAt = 0;
+let assistBusy = false;
+let assistShown = "";
 
 /** Live interpretation state. Off unless the operator turned it on. */
 let interpreting = false;
@@ -268,7 +278,10 @@ bridge.onEvenHubEvent((event) => {
     // The recall window fills whenever listening, independent of
     // interpretation: the wearer may want to look back at a conversation they
     // were not having translated.
-    if (listening) recallPcm.push(audio.audioPcm);
+    if (listening) {
+      recallPcm.push(audio.audioPcm);
+      void assistTick();
+    }
     if (!interpreting) return;
     pcm.push(audio.audioPcm);
     if (pcm.ready()) void flushAudio();
@@ -1359,6 +1372,40 @@ async function onNavFix(pos: NavCoord): Promise<void> {
 }
 
 /**
+ * assistTick surfaces a wiki-grounded fact about what is being discussed.
+ *
+ * Runs off the same rolling window the tap uses, so listening buys both: a tap
+ * asks "what was that", assist answers "here is what you know about it" without
+ * being asked. Silence is the normal outcome and costs nothing on screen.
+ */
+async function assistTick(): Promise<void> {
+  if (!listening || recallBusy) return;
+  const now = Date.now();
+  if (!shouldAssistNow(now, assistAt, assistBusy, ASSIST_PERIOD_MS)) return;
+  const window = recallPcm.snapshot();
+  if (!window) return;
+  assistBusy = true;
+  assistAt = now;
+  try {
+    const res = await postAudio(settings, window, { ask: ASSIST_PROMPT });
+    const line = assistLine(res.reply);
+    // Only redraw on a NEW line. Repainting the same fact every cycle pulls the
+    // eye during a conversation for no new information, which is the failure
+    // this whole feature has to avoid.
+    if (line && line !== assistShown) {
+      assistShown = line;
+      await showText(
+        ["● 청취 중", "", line, "", "탭=방금 대화 / 더블탭=종료"].join("\n"),
+      );
+    }
+  } catch {
+    // A failed window is not worth telling the wearer about mid-meeting.
+  } finally {
+    assistBusy = false;
+  }
+}
+
+/**
  * startListening opens the glasses mic and keeps a rolling window of what was
  * said, WITHOUT sending anything anywhere.
  *
@@ -1392,6 +1439,8 @@ async function startListening(): Promise<void> {
 async function stopListening(): Promise<void> {
   if (!listening) return;
   listening = false;
+  assistAt = 0;
+  assistShown = "";
   await bridge.audioControl(false);
   recallPcm.take(); // drop the window — it was never asked for
   screen = "page";
