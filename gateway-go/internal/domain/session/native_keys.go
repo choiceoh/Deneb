@@ -25,8 +25,13 @@ const (
 // RestorableTranscriptChannel classifies transcript keys that should be
 // restored into the native session drawer after a gateway restart. It accepts
 // the current client:main hierarchy and readable legacy chat conversations,
-// while rejecting retired client:topic and bare client identifiers.
+// while rejecting retired client:topic and bare client identifiers. Delegated
+// sub-agent runs share the client:main hierarchy but are not conversations —
+// see IsSpawnedChildKey.
 func RestorableTranscriptChannel(sessionKey string) (channel string, ok bool) {
+	if IsSpawnedChildKey(sessionKey) {
+		return "", false
+	}
 	isNative := sessionKey == NativeWorkSessionKey ||
 		strings.HasPrefix(sessionKey, NativeWorkSessionKey+":")
 	isLegacyChat := strings.HasPrefix(sessionKey, "chat:") &&
@@ -35,6 +40,40 @@ func RestorableTranscriptChannel(sessionKey string) (channel string, ok bool) {
 		return "client", true
 	}
 	return "", false
+}
+
+// IsSpawnedChildKey reports whether a key belongs to a delegated sub-agent run
+// rather than a conversation the user opened. The sub-agent spawner mints
+// `<parent>:<label>:<unix-ms>` (chat/tools/runtimeops/sessions_tool.go) under the
+// SAME client:main hierarchy the user's conversations use, and creates it as
+// KindDirect — so neither the kind nor the prefix separates the two, and the
+// trailing epoch segment is the only discriminator that survives a restart
+// (SpawnedBy is in-memory only). Conversation keys never carry it: the desktop
+// mints `client:main:<base36>`, the phone `client:main:<uuid>`, work-feed
+// side-chats `client:main:wf-<id>` — one segment, no epoch tail.
+func IsSpawnedChildKey(sessionKey string) bool {
+	rest, found := strings.CutPrefix(sessionKey, NativeWorkSessionKey+":")
+	if !found {
+		return false
+	}
+	label, stamp, split := strings.Cut(rest, ":")
+	if !split || label == "" {
+		return false
+	}
+	// The stamp is the last segment; a deeper chain (A→B→C) keeps nesting, so
+	// classify on the tail rather than the first split.
+	if idx := strings.LastIndex(stamp, ":"); idx >= 0 {
+		stamp = stamp[idx+1:]
+	}
+	if len(stamp) < 10 { // unix millis are 13 digits; stay tolerant, not narrow
+		return false
+	}
+	for _, c := range stamp {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // HeartbeatTargetSession keeps an active native conversation as the target and
@@ -82,7 +121,12 @@ func WorkTypeForKey(sessionKey string) string {
 		return "boot"
 	// A native subagent runs under client:main:<label>:<ms>; classify it before
 	// the bare client:main chat bucket so delegated work is not counted as chat.
-	case strings.HasPrefix(sessionKey, NativeWorkSessionKey+":") && sessionKey != DreamWorkSessionKey:
+	// Match the epoch-tailed spawn shape only — every per-conversation key the
+	// clients mint (client:main:<uuid> on the phone, <base36> on the desktop,
+	// wf-<id> for work-feed side chats) also lives under client:main:, and a
+	// bare prefix test filed the user's own chats under "subagent" in the usage
+	// report while the chat bucket saw only the client:main home session.
+	case IsSpawnedChildKey(sessionKey):
 		return "subagent"
 	case sessionKey == DreamWorkSessionKey:
 		return "dream"

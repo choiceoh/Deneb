@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/skilllifecycle"
 )
 
@@ -94,6 +95,11 @@ func idleReviewableSessionKey(key string) bool {
 		return false
 	}
 	if strings.HasPrefix(key, "client:puppet") {
+		return false
+	}
+	// Delegated sub-agent runs share the client:main hierarchy; re-reviewing one
+	// spends a heartbeat turn on the agent's own scratch work.
+	if runtimesession.IsSpawnedChildKey(key) {
 		return false
 	}
 	if strings.HasSuffix(key, ":dream") {
