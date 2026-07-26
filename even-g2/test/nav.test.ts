@@ -8,6 +8,8 @@ import {
   initialNavStateAt,
   liveInstruction,
   navLines,
+  navTextLines,
+  remainingSummary,
   fetchRoute,
   remainingM,
   type NavRoute,
@@ -323,5 +325,39 @@ describe("initialNavStateAt", () => {
   it("still arrives when the route starts at the destination", () => {
     const state = initialNavStateAt(route, P2);
     expect(state.arrived).toBe(true);
+  });
+});
+
+describe("remainingSummary / navTextLines", () => {
+  it("sums the maneuvers still ahead and scales the time", () => {
+    // route: 출발(0) → 좌회전(100) → 목적지(100), total 200m/150s
+    const s = remainingSummary(route, { stepIndex: 1, arrived: false });
+    expect(s).toMatch(/^200m · \d+분$/);
+  });
+
+  it("shrinks as the route is consumed", () => {
+    const early = remainingSummary(route, { stepIndex: 1, arrived: false });
+    const late = remainingSummary(route, { stepIndex: 2, arrived: false });
+    expect(early).not.toBe(late);
+  });
+
+  it("reports 도착 once arrived", () => {
+    expect(remainingSummary(route, { stepIndex: 2, arrived: true })).toBe(
+      "도착",
+    );
+  });
+
+  it("omits the distance from the text — the bitmap already shows it", () => {
+    // The two-numbers problem, one line lower: the panel's largest element is
+    // the distance drawn into the image, so repeating it here competes with it.
+    const lines = navTextLines(route, { stepIndex: 1, arrived: false });
+    expect(lines[0]).not.toMatch(/^\d+m/);
+    expect(lines.join("\n")).toContain("소공로");
+  });
+
+  it("keeps the tap hint and stays within the line budget", () => {
+    const lines = navTextLines(route, { stepIndex: 1, arrived: false });
+    expect(lines).toContain("탭=중지");
+    expect(lines.length).toBeLessThanOrEqual(10);
   });
 });
