@@ -7,6 +7,7 @@ import {
   initialNavState,
   liveInstruction,
   navLines,
+  fetchRoute,
   remainingM,
   type NavRoute,
 } from "../src/nav";
@@ -240,6 +241,68 @@ describe("remainingM", () => {
   it("clamps a stale index instead of throwing", () => {
     expect(remainingM(route, { stepIndex: 99, arrived: false }, P0)).toBe(
       distanceM(P0, P2),
+    );
+  });
+});
+
+describe("fetchRoute", () => {
+  const settings = { baseUrl: "http://gw", token: "tok" };
+  const okBody = {
+    route: { steps: route.steps, totalM: 200, totalSec: 150, mode: "walk" },
+    destination: { name: "강남역", address: "서울 강남구" },
+  };
+
+  function stubFetch(status: number, body: unknown) {
+    globalThis.fetch = (async () =>
+      ({
+        ok: status === 200,
+        status,
+        json: async () => body,
+      }) as unknown as Response) as typeof fetch;
+  }
+
+  it("sends the bearer and returns the route", async () => {
+    let seen: RequestInit | undefined;
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      seen = init;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => okBody,
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const got = await fetchRoute(settings, P0, "강남역", "walk");
+    expect(got.destination.name).toBe("강남역");
+    expect(got.route.steps).toHaveLength(3);
+    expect((seen?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer tok",
+    );
+  });
+
+  it("surfaces the gateway's message so 'no key' stays distinguishable", async () => {
+    // 503 with a named key is the operator's problem; a generic failure is not.
+    // Collapsing them into one message would send the wearer looking for a
+    // different destination when the fix is a config line.
+    stubFetch(503, {
+      error: { message: "길안내가 설정되지 않았습니다 (TMAP_APP_KEY)" },
+    });
+    await expect(fetchRoute(settings, P0, "강남역", "walk")).rejects.toThrow(
+      /TMAP_APP_KEY/,
+    );
+  });
+
+  it("falls back to the status code when there is no message", async () => {
+    stubFetch(502, null);
+    await expect(fetchRoute(settings, P0, "강남역", "walk")).rejects.toThrow(
+      /502/,
+    );
+  });
+
+  it("rejects a malformed body rather than rendering a blank route", async () => {
+    stubFetch(200, { destination: { name: "x" } });
+    await expect(fetchRoute(settings, P0, "강남역", "walk")).rejects.toThrow(
+      /경로/,
     );
   });
 });

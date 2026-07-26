@@ -1,12 +1,13 @@
 import {
+  AppLocationAccuracy,
   AudioInputSource,
   waitForEvenAppBridge,
   TextContainerProperty,
   TextContainerUpgrade,
   CreateStartUpPageContainer,
-} from '@evenrealities/even_hub_sdk'
+} from "@evenrealities/even_hub_sdk";
 
-import { resolveSettings, type GlanceSettings } from './settings'
+import { resolveSettings, type GlanceSettings } from "./settings";
 import {
   advanceCursor,
   alertSlots,
@@ -20,12 +21,34 @@ import {
   resolveSelectionIndex,
   skipPage,
   windowRange,
-} from './refresh'
-import { dispatchHubEvent } from './events'
-import { onImuCapture, onInterpretToggle, onSettingsSaved, renderPhoneUI, setPhoneStatus } from './phone'
-import { loadCachedGlance, saveCachedGlance } from './cache'
-import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from './interpret'
-import { CAPTURE_MS, IMU_PACE_MS, postImuRecording, readImuSample, type ImuSample } from './imu'
+} from "./refresh";
+import { dispatchHubEvent } from "./events";
+import {
+  onImuCapture,
+  onInterpretToggle,
+  onNavToggle,
+  onSettingsSaved,
+  renderPhoneUI,
+  setPhoneStatus,
+} from "./phone";
+import { loadCachedGlance, saveCachedGlance } from "./cache";
+import { CHUNK_MS, PcmBuffer, postAudio, subtitleLines } from "./interpret";
+import {
+  advanceNav,
+  fetchRoute,
+  initialNavState,
+  navLines,
+  type NavCoord,
+  type NavRoute,
+  type NavState,
+} from "./nav";
+import {
+  CAPTURE_MS,
+  IMU_PACE_MS,
+  postImuRecording,
+  readImuSample,
+  type ImuSample,
+} from "./imu";
 import {
   fetchGlance,
   fetchStatus,
@@ -37,47 +60,60 @@ import {
   type GlanceItem,
   type GlancePage,
   type GlancePayload,
-} from './deneb'
+} from "./deneb";
 
 // The phone screen is drawn FIRST, before the glasses bridge is awaited. That
 // await is top-level: everything below it is dead until the glasses connect, so
 // rendering afterwards would leave the phone blank at exactly the moment the
 // operator needs it — when the connection is what is broken.
-renderPhoneUI()
+renderPhoneUI();
 
-const bridge = await waitForEvenAppBridge()
+const bridge = await waitForEvenAppBridge();
 
-type Screen = 'setup' | 'page' | 'detail' | 'status' | 'confirmAck' | 'notice' | 'interpret'
+type Screen =
+  | "setup"
+  | "page"
+  | "detail"
+  | "status"
+  | "confirmAck"
+  | "notice"
+  | "interpret"
+  | "nav";
 
-const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
-const LIST_PAGE_IDS = new Set(['home', 'alerts'])
+const PAGE_ORDER = ["home", "alerts", "cal", "todo"] as const;
+const LIST_PAGE_IDS = new Set(["home", "alerts"]);
 
-let settings: GlanceSettings = { baseUrl: '', token: '' }
-let screen: Screen = 'setup'
-let busy = false
-let pages: GlancePage[] = []
-let items: GlanceItem[] = []
-let pageIndex = 0
-let detailIndex = -1
-let lastGenerated = ''
-let lastCached = false
+let settings: GlanceSettings = { baseUrl: "", token: "" };
+let screen: Screen = "setup";
+let busy = false;
+let pages: GlancePage[] = [];
+let items: GlanceItem[] = [];
+let pageIndex = 0;
+let detailIndex = -1;
+let lastGenerated = "";
+let lastCached = false;
 /** "일정 2 · 할 일 3" — what is behind the alert page, straight from the gateway. */
-let lastCounts = ''
+let lastCounts = "";
 /** "지금 금호타이어 · 종료 20분" — the lead line, straight from the gateway. */
-let lastNow = ''
+let lastNow = "";
 /** Notice ids already put on the glass, so a re-offered one is not shown twice. */
-let shownNoticeId = ''
+let shownNoticeId = "";
 /** Last thing the glasses said about themselves; undefined until they say it. */
-let wearStatus: WearStatus | undefined
+let wearStatus: WearStatus | undefined;
+/** Live navigation state. navRoute is null unless a route is loaded. */
+let navRoute: NavRoute | null = null;
+let navState: NavState = initialNavState();
+let navPos: NavCoord | null = null;
+let navDest = "";
 /** Live interpretation state. Off unless the operator turned it on. */
-let interpreting = false
-let interpretLang = 'ko'
-const pcm = new PcmBuffer()
-let subtitles: string[] = []
-let sending = false
+let interpreting = false;
+let interpretLang = "ko";
+const pcm = new PcmBuffer();
+let subtitles: string[] = [];
+let sending = false;
 /** Non-empty while a labelled IMU window is being recorded. */
-let imuLabel = ''
-let imuSamples: ImuSample[] = []
+let imuLabel = "";
+let imuSamples: ImuSample[] = [];
 /**
  * Which alert the cursor is on, on an alert page.
  *
@@ -94,16 +130,16 @@ let imuSamples: ImuSample[] = []
  * "list tap opens the SELECTED item". `resolveSelectionIndex`'s absent→0
  * fallback is exactly right for that wire format.
  */
-let listCursor = 0
-let refreshTimer: ReturnType<typeof setTimeout> | undefined
-let consecutiveFailures = 0
-let lastSignature = ''
+let listCursor = 0;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let consecutiveFailures = 0;
+let lastSignature = "";
 /** Connection marker currently ON SCREEN, so it is only redrawn when it flips. */
-let shownConnection = ''
+let shownConnection = "";
 /** True while the screen is showing a saved glance rather than a live one. */
-let servingCache = false
-let stopped = false
-let paused = false
+let servingCache = false;
+let stopped = false;
+let paused = false;
 
 const mainText = new TextContainerProperty({
   xPosition: 0,
@@ -114,156 +150,168 @@ const mainText = new TextContainerProperty({
   borderColor: 5,
   paddingLength: 4,
   containerID: 1,
-  containerName: 'main',
-  content: 'Deneb\n\n설정 확인 중…',
+  containerName: "main",
+  content: "Deneb\n\n설정 확인 중…",
   isEventCapture: 1,
-})
+});
 
 const started = await bridge.createStartUpPageContainer(
   new CreateStartUpPageContainer({
     containerTotalNum: 1,
     textObject: [mainText],
   }),
-)
+);
 if (started !== 0) {
-  console.error('createStartUpPageContainer failed', started)
+  console.error("createStartUpPageContainer failed", started);
 }
 
 bridge.onEvenHubEvent((event) => {
   // Audio rides the same callback. It is high-rate, so it is handled before
   // the intent mapping rather than through it.
   if (imuLabel) {
-    const s = readImuSample(event)
+    const s = readImuSample(event);
     if (s) {
-      imuSamples.push(s)
-      return
+      imuSamples.push(s);
+      return;
     }
   }
-  const audio = (event as { audioEvent?: { audioPcm?: Uint8Array } })?.audioEvent
+  const audio = (event as { audioEvent?: { audioPcm?: Uint8Array } })
+    ?.audioEvent;
   if (audio?.audioPcm) {
-    if (!interpreting) return
-    pcm.push(audio.audioPcm)
-    if (pcm.ready()) void flushAudio()
-    return
+    if (!interpreting) return;
+    pcm.push(audio.audioPcm);
+    if (pcm.ready()) void flushAudio();
+    return;
   }
   // Mapping lives in events.ts as a pure function so every host event shape —
   // including the lifecycle events the simulator cannot inject — is unit
   // testable. This block only executes the intent.
-  const intent = dispatchHubEvent(event)
+  const intent = dispatchHubEvent(event);
   switch (intent.kind) {
-    case 'tap':
-      void onTap()
-      break
-    case 'openDetail':
-      void openDetail(intent.index)
-      break
-    case 'nextPage':
-      void onSwipeNext()
-      break
-    case 'prevPage':
-      void onSwipePrev()
-      break
-    case 'shutdown':
+    case "tap":
+      void onTap();
+      break;
+    case "openDetail":
+      void openDetail(intent.index);
+      break;
+    case "nextPage":
+      void onSwipeNext();
+      break;
+    case "prevPage":
+      void onSwipePrev();
+      break;
+    case "shutdown":
       // Contextual on purpose. There is no fifth gesture, and a detail is the
       // only place where "I am done with this" has a second meaning. Everywhere
       // else — list, pages, status, setup — a double-tap still exits.
-      if (screen === 'detail') {
-        void askAck()
+      if (screen === "detail") {
+        void askAck();
       } else {
-        shutdown()
+        shutdown();
       }
-      break
-    case 'stopLoop':
-      stopLoop()
-      break
-    case 'pause':
-      pauseLoop()
-      break
-    case 'resume':
-      void resumeLoop()
-      break
-    case 'ignore':
-      break
+      break;
+    case "stopLoop":
+      stopLoop();
+      break;
+    case "pause":
+      pauseLoop();
+      break;
+    case "resume":
+      void resumeLoop();
+      break;
+    case "ignore":
+      break;
   }
-})
+});
 
-onImuCapture((label) => void captureImu(label))
+onImuCapture((label) => void captureImu(label));
+
+bridge.onAppLocationChanged((loc) => {
+  // Only while navigating. Deneb never records where the wearer is
+  // otherwise — the stream is opened by startNav and closed by stopNav.
+  if (!navRoute) return;
+  void onNavFix({ lat: loc.latitude, lon: loc.longitude });
+});
+
+onNavToggle((on, destination, mode) => {
+  void (on ? startNav(destination, mode) : stopNav());
+});
 
 onInterpretToggle((on, lang) => {
-  void (on ? startInterpreting(lang) : stopInterpreting())
-})
+  void (on ? startInterpreting(lang) : stopInterpreting());
+});
 
 onSettingsSaved((next) => {
-  settings = next
-  consecutiveFailures = 0
-  servingCache = false
-  void refreshGlance(true)
-  scheduleRefresh()
-})
+  settings = next;
+  consecutiveFailures = 0;
+  servingCache = false;
+  void refreshGlance(true);
+  scheduleRefresh();
+});
 
 // The glasses report whether they are on a face, in the case, or nearly flat.
 // This is what the polling loop should have been keyed on all along — see
 // shouldPoll for why guessing at foreground events was the wrong instrument.
 bridge.onDeviceStatusChanged((status) => {
-  const before = shouldPoll(wearStatus)
+  const before = shouldPoll(wearStatus);
   wearStatus = {
     isWearing: status?.isWearing,
     isInCase: status?.isInCase,
     isCharging: status?.isCharging,
     batteryLevel: status?.batteryLevel,
-  }
-  if (shouldPoll(wearStatus) === before) return
+  };
+  if (shouldPoll(wearStatus) === before) return;
   if (before) {
-    pauseLoop()
-    return
+    pauseLoop();
+    return;
   }
   // Back on the face: they are looking NOW, so do not make them wait a cycle.
-  void resumeLoop()
-})
+  void resumeLoop();
+});
 
-void boot()
+void boot();
 
 async function boot(): Promise<void> {
-  settings = await resolveSettings()
+  settings = await resolveSettings();
   if (needsSetup(settings)) {
-    screen = 'setup'
-    await showText(setupCopy())
+    screen = "setup";
+    await showText(setupCopy());
     // Still schedule: the wearer may seed the app while it is open, and the
     // setup screen's own poll is what notices.
-    scheduleRefresh()
-    return
+    scheduleRefresh();
+    return;
   }
-  screen = 'page'
-  pageIndex = 0
-  await refreshGlance(false)
-  scheduleRefresh()
+  screen = "page";
+  pageIndex = 0;
+  await refreshGlance(false);
+  scheduleRefresh();
 }
 
 /** stopLoop cancels the background poll for good. */
 function stopLoop(): void {
-  stopped = true
-  clearRefreshTimer()
+  stopped = true;
+  clearRefreshTimer();
 }
 
 /** pauseLoop cancels the pending poll but leaves the loop resumable. */
 function pauseLoop(): void {
-  paused = true
-  clearRefreshTimer()
+  paused = true;
+  clearRefreshTimer();
 }
 
 async function resumeLoop(): Promise<void> {
-  if (stopped) return
-  paused = false
+  if (stopped) return;
+  paused = false;
   // Coming back to the foreground, the wearer wants current data, not whatever
   // was on screen when they looked away.
-  await refreshGlance(false, true)
-  scheduleRefresh()
+  await refreshGlance(false, true);
+  scheduleRefresh();
 }
 
 function clearRefreshTimer(): void {
   if (refreshTimer !== undefined) {
-    clearTimeout(refreshTimer)
-    refreshTimer = undefined
+    clearTimeout(refreshTimer);
+    refreshTimer = undefined;
   }
 }
 
@@ -281,75 +329,79 @@ function clearRefreshTimer(): void {
  * spoke to whether the page actually closed.
  */
 function shutdown(): void {
-  stopLoop()
-  void bridge.shutDownPageContainer(0)
+  stopLoop();
+  void bridge.shutDownPageContainer(0);
 }
 
 function needsSetup(s: GlanceSettings): boolean {
-  return !s.baseUrl || !s.token
+  return !s.baseUrl || !s.token;
 }
 
 function setupCopy(): string {
   return [
-    'Deneb Glance',
-    '',
-    '설정 필요 (QR 시드)',
-    'evenhub qr --url',
+    "Deneb Glance",
+    "",
+    "설정 필요 (QR 시드)",
+    "evenhub qr --url",
     '"http://<lan>:5173/?seed=<…>"',
-    '또는 pack 시 runtime-config.json',
-    '',
-    '탭=재확인 / 더블탭=종료',
-  ].join('\n')
+    "또는 pack 시 runtime-config.json",
+    "",
+    "탭=재확인 / 더블탭=종료",
+  ].join("\n");
 }
 
 async function onTap(): Promise<void> {
-  if (screen === 'interpret') {
-    await stopInterpreting()
-    return
+  if (screen === "nav") {
+    await stopNav();
+    return;
   }
-  if (screen === 'notice') {
-    screen = 'page'
-    await renderCurrentPage()
-    return
+  if (screen === "interpret") {
+    await stopInterpreting();
+    return;
   }
-  if (screen === 'confirmAck') {
-    await doAck()
-    return
+  if (screen === "notice") {
+    screen = "page";
+    await renderCurrentPage();
+    return;
   }
-  if (screen === 'setup') {
-    settings = await resolveSettings()
+  if (screen === "confirmAck") {
+    await doAck();
+    return;
+  }
+  if (screen === "setup") {
+    settings = await resolveSettings();
     if (!needsSetup(settings)) {
-      screen = 'page'
-      pageIndex = 0
-      await refreshGlance(true)
-      scheduleRefresh()
-      return
+      screen = "page";
+      pageIndex = 0;
+      await refreshGlance(true);
+      scheduleRefresh();
+      return;
     }
-    await showText(setupCopy())
-    return
+    await showText(setupCopy());
+    return;
   }
-  if (screen === 'detail') {
-    screen = 'page'
-    detailIndex = -1
-    await renderCurrentPage()
-    return
+  if (screen === "detail") {
+    screen = "page";
+    detailIndex = -1;
+    await renderCurrentPage();
+    return;
   }
-  if (screen === 'status') {
-    screen = 'page'
-    await renderCurrentPage()
-    return
+  if (screen === "status") {
+    screen = "page";
+    await renderCurrentPage();
+    return;
   }
   // On an alert page a tap opens what the CURSOR is on — the primary action,
   // and now unambiguous because the app owns the cursor. Everywhere else a tap
   // is a manual refresh.
   if (onAlertPage()) {
-    await openDetail(clampCursor())
-    return
+    await openDetail(clampCursor());
+    return;
   }
-  await refreshGlance(true)
+  await refreshGlance(true);
   // A manual refresh re-anchors the schedule: after a backoff the next poll
   // would otherwise still be minutes away even though the link just worked.
-  scheduleRefresh()
+  scheduleRefresh();
 }
 
 /**
@@ -368,19 +420,21 @@ async function onTap(): Promise<void> {
  * snapshot.
  */
 async function openDetail(index: unknown): Promise<void> {
-  if (!LIST_PAGE_IDS.has(currentPageId())) return
+  if (!LIST_PAGE_IDS.has(currentPageId())) return;
   // Normally called with the app's own cursor. The absent-index fallback still
   // matters because the host may deliver a `listEvent` (it did while alerts
   // were a list container, always WITHOUT currentSelectItemIndex) — opening the
   // top alert beats a dead tap. A present-but-nonsensical index is refused.
-  const i = resolveSelectionIndex(index, items.length)
-  if (i < 0) return
-  detailIndex = i
+  const i = resolveSelectionIndex(index, items.length);
+  if (i < 0) return;
+  detailIndex = i;
   // Keep the cursor on whatever is being read, so leaving the detail lands back
   // on that alert rather than wherever the cursor happened to be.
-  listCursor = i
-  screen = 'detail'
-  await showText(formatAlertDetail(items[i], { index: i, total: items.length }))
+  listCursor = i;
+  screen = "detail";
+  await showText(
+    formatAlertDetail(items[i], { index: i, total: items.length }),
+  );
 }
 
 /**
@@ -395,14 +449,14 @@ async function openDetail(index: unknown): Promise<void> {
  * dropped poll cannot lose the answer, which means the plugin must be the one
  * that remembers.
  */
-async function showNoticeIfNew(notice: GlancePayload['notice']): Promise<void> {
-  if (!notice || notice.id === shownNoticeId) return
-  shownNoticeId = notice.id
+async function showNoticeIfNew(notice: GlancePayload["notice"]): Promise<void> {
+  if (!notice || notice.id === shownNoticeId) return;
+  shownNoticeId = notice.id;
   // Not over a confirm prompt: that screen is waiting on a destructive answer,
   // and replacing it would leave the wearer's next tap pointing at nothing.
-  if (screen === 'confirmAck') return
-  screen = 'notice'
-  await showText(`${notice.text}\n\n탭=닫기`)
+  if (screen === "confirmAck") return;
+  screen = "notice";
+  await showText(`${notice.text}\n\n탭=닫기`);
 }
 
 /**
@@ -414,14 +468,14 @@ async function showNoticeIfNew(notice: GlancePayload['notice']): Promise<void> {
  * separate gesture.
  */
 async function stepDetail(dir: 1 | -1): Promise<void> {
-  const moved = advanceCursor(detailIndex, items.length, dir)
-  if (moved !== 'page') {
-    await openDetail(moved)
-    return
+  const moved = advanceCursor(detailIndex, items.length, dir);
+  if (moved !== "page") {
+    await openDetail(moved);
+    return;
   }
-  screen = 'page'
-  detailIndex = -1
-  await renderCurrentPage()
+  screen = "page";
+  detailIndex = -1;
+  await renderCurrentPage();
 }
 
 /**
@@ -433,143 +487,157 @@ async function stepDetail(dir: 1 | -1): Promise<void> {
  * write needs a second, deliberate gesture.
  */
 async function askAck(): Promise<void> {
-  const item = items[detailIndex]
-  if (!item) return
-  screen = 'confirmAck'
+  const item = items[detailIndex];
+  if (!item) return;
+  screen = "confirmAck";
   await showText(
-    ['Deneb · 확인 처리', '', item.title, '', '이 알림을 확인함으로 할까요?', '', '탭=예 · ↓취소'].join('\n'),
-  )
+    [
+      "Deneb · 확인 처리",
+      "",
+      item.title,
+      "",
+      "이 알림을 확인함으로 할까요?",
+      "",
+      "탭=예 · ↓취소",
+    ].join("\n"),
+  );
 }
 
 /** cancelAck returns to what was being read, unchanged. */
 async function cancelAck(): Promise<void> {
   if (detailIndex >= 0 && items[detailIndex]) {
-    await openDetail(detailIndex)
-    return
+    await openDetail(detailIndex);
+    return;
   }
-  screen = 'page'
-  await renderCurrentPage()
+  screen = "page";
+  await renderCurrentPage();
 }
 
 async function doAck(): Promise<void> {
-  const item = items[detailIndex]
+  const item = items[detailIndex];
   if (!item) {
-    screen = 'page'
-    await renderCurrentPage()
-    return
+    screen = "page";
+    await renderCurrentPage();
+    return;
   }
-  await showText('Deneb · 확인 처리\n\n처리 중…')
+  await showText("Deneb · 확인 처리\n\n처리 중…");
   try {
-    await ackAlert(settings, item.id)
+    await ackAlert(settings, item.id);
   } catch (err) {
     // Loud on purpose: unlike a background poll, the wearer asked for this and
     // the alert is still there. Silence would read as success.
-    const msg = err instanceof Error ? err.message : String(err)
-    screen = 'detail'
-    await showText(`Deneb · 확인 처리\n\n실패: ${msg}\n\n탭=목록 · 더블탭=재시도`)
-    return
+    const msg = err instanceof Error ? err.message : String(err);
+    screen = "detail";
+    await showText(
+      `Deneb · 확인 처리\n\n실패: ${msg}\n\n탭=목록 · 더블탭=재시도`,
+    );
+    return;
   }
   // Drop it locally rather than waiting for the next poll: the wearer acted and
   // the screen has to agree with them now. The refresh below reconciles.
-  items = items.filter((it) => it.id !== item.id)
-  detailIndex = -1
-  listCursor = clampCursor()
-  screen = 'page'
-  await renderCurrentPage()
-  await refreshGlance(true)
-  scheduleRefresh()
+  items = items.filter((it) => it.id !== item.id);
+  detailIndex = -1;
+  listCursor = clampCursor();
+  screen = "page";
+  await renderCurrentPage();
+  await refreshGlance(true);
+  scheduleRefresh();
 }
 
 async function onSwipeNext(): Promise<void> {
+  if (screen === "nav") return;
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
-  if (screen === 'interpret') return
-  if (screen === 'notice') return void (await onTap())
-  if (screen === 'confirmAck') return void (await cancelAck())
-  if (screen === 'setup') return
-  if (screen === 'detail') {
-    await stepDetail(1)
-    return
+  if (screen === "interpret") return;
+  if (screen === "notice") return void (await onTap());
+  if (screen === "confirmAck") return void (await cancelAck());
+  if (screen === "setup") return;
+  if (screen === "detail") {
+    await stepDetail(1);
+    return;
   }
-  if (screen === 'status') {
-    screen = 'page'
-    pageIndex = 0
-    await renderCurrentPage()
-    return
+  if (screen === "status") {
+    screen = "page";
+    pageIndex = 0;
+    await renderCurrentPage();
+    return;
   }
   // On an alert page the swipe walks the cursor DOWN the alerts first, and
   // only leaves the page once it is on the last one. That boundary belongs to
   // the app now: the host list used to keep it and emit nothing, which stranded
   // every page after the alerts.
   if (onAlertPage()) {
-    const moved = advanceCursor(listCursor, items.length, 1)
-    if (moved !== 'page') {
-      listCursor = moved
-      await renderCurrentPage()
-      return
+    const moved = advanceCursor(listCursor, items.length, 1);
+    if (moved !== "page") {
+      listCursor = moved;
+      await renderCurrentPage();
+      return;
     }
   }
-  let found = -1
+  let found = -1;
   for (let i = pageIndex + 1; i < pages.length; i++) {
     if (!isPageEmpty(pages[i])) {
-      found = i
-      break
+      found = i;
+      break;
     }
   }
   if (found >= 0) {
-    pageIndex = found
-    listCursor = 0
-    await renderCurrentPage()
-    return
+    pageIndex = found;
+    listCursor = 0;
+    await renderCurrentPage();
+    return;
   }
-  await showStatus()
+  await showStatus();
 }
 
 async function onSwipePrev(): Promise<void> {
+  if (screen === "nav") return;
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
-  if (screen === 'interpret') return
-  if (screen === 'notice') return void (await onTap())
-  if (screen === 'confirmAck') return void (await cancelAck())
-  if (screen === 'setup') return
-  if (screen === 'detail') {
-    await stepDetail(-1)
-    return
+  if (screen === "interpret") return;
+  if (screen === "notice") return void (await onTap());
+  if (screen === "confirmAck") return void (await cancelAck());
+  if (screen === "setup") return;
+  if (screen === "detail") {
+    await stepDetail(-1);
+    return;
   }
-  if (screen === 'status') {
-    screen = 'page'
-    const last = [...pages.keys()].reverse().find((i) => !isPageEmpty(pages[i]))
-    pageIndex = last ?? Math.max(0, pages.length - 1)
-    await renderCurrentPage()
-    return
+  if (screen === "status") {
+    screen = "page";
+    const last = [...pages.keys()]
+      .reverse()
+      .find((i) => !isPageEmpty(pages[i]));
+    pageIndex = last ?? Math.max(0, pages.length - 1);
+    await renderCurrentPage();
+    return;
   }
   // Symmetric: walk the cursor back up the alerts before leaving the page.
   if (onAlertPage()) {
-    const moved = advanceCursor(listCursor, items.length, -1)
-    if (moved !== 'page') {
-      listCursor = moved
-      await renderCurrentPage()
-      return
+    const moved = advanceCursor(listCursor, items.length, -1);
+    if (moved !== "page") {
+      listCursor = moved;
+      await renderCurrentPage();
+      return;
     }
   }
-  let found = -1
+  let found = -1;
   for (let i = pageIndex - 1; i >= 0; i--) {
     if (!isPageEmpty(pages[i])) {
-      found = i
-      break
+      found = i;
+      break;
     }
   }
   if (found >= 0) {
-    pageIndex = found
-    listCursor = 0
-    await renderCurrentPage()
-    return
+    pageIndex = found;
+    listCursor = 0;
+    await renderCurrentPage();
+    return;
   }
   // Past the top of the first page — the one gesture that had no meaning, and
   // the alerts page needs it: a tap there opens a detail, so there was no way
   // left to force a refresh from the page the wearer is actually on. Pulling up
   // past the top is the familiar idiom, and it re-anchors the schedule, which
   // matters after a backoff has pushed the next poll minutes out.
-  await refreshGlance(true)
-  scheduleRefresh()
+  await refreshGlance(true);
+  scheduleRefresh();
 }
 
 /**
@@ -582,37 +650,37 @@ async function onSwipePrev(): Promise<void> {
  */
 async function showStatus(): Promise<void> {
   if (needsSetup(settings)) {
-    screen = 'setup'
-    await showText(setupCopy())
-    return
+    screen = "setup";
+    await showText(setupCopy());
+    return;
   }
-  screen = 'status'
+  screen = "status";
   if (busy) {
-    await showText('Deneb · 상태\n\n확인 중…\n\n탭=페이지로')
-    return
+    await showText("Deneb · 상태\n\n확인 중…\n\n탭=페이지로");
+    return;
   }
-  busy = true
+  busy = true;
   try {
-    const st = await fetchStatus(settings)
-    const host = settings.baseUrl.replace(/^https?:\/\//, '')
+    const st = await fetchStatus(settings);
+    const host = settings.baseUrl.replace(/^https?:\/\//, "");
     await showText(
       [
-        'Deneb · 상태',
-        '',
-        st.ok ? '브리지 OK' : '브리지 이상',
-        st.chatReady ? '챗 준비됨' : '챗 미준비',
-        `세션 ${st.session || 'glasses:main'}`,
+        "Deneb · 상태",
+        "",
+        st.ok ? "브리지 OK" : "브리지 이상",
+        st.chatReady ? "챗 준비됨" : "챗 미준비",
+        `세션 ${st.session || "glasses:main"}`,
         wearLine(),
         host,
-        '',
-        '↓홈 · ↑이전 · 탭=페이지',
-      ].join('\n'),
-    )
+        "",
+        "↓홈 · ↑이전 · 탭=페이지",
+      ].join("\n"),
+    );
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    await showText(`Deneb · 상태\n\n오류: ${msg}\n\n탭=페이지로`)
+    const msg = err instanceof Error ? err.message : String(err);
+    await showText(`Deneb · 상태\n\n오류: ${msg}\n\n탭=페이지로`);
   } finally {
-    busy = false
+    busy = false;
   }
 }
 
@@ -626,82 +694,94 @@ async function showStatus(): Promise<void> {
  * rebuilt the container even when the payload was byte-identical.
  */
 async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
-  if (busy) return
-  busy = true
-  const keepId = currentPageId()
-  const keepDetailId = screen === 'detail' && detailIndex >= 0 ? items[detailIndex]?.id : ''
+  if (busy) return;
+  busy = true;
+  const keepId = currentPageId();
+  const keepDetailId =
+    screen === "detail" && detailIndex >= 0 ? items[detailIndex]?.id : "";
   try {
     // Only while unseeded: resolveSettings re-parses the URL, re-reads
     // localStorage and can re-fetch runtime-config.json, and it ran on EVERY
     // 45s poll for the life of the app. Once the settings are complete they
     // cannot change without reloading the WebView, which restarts boot anyway.
-    if (needsSetup(settings)) settings = await resolveSettings()
+    if (needsSetup(settings)) settings = await resolveSettings();
     if (needsSetup(settings)) {
-      setPhoneStatus({ line: '설정 필요 — 아래에 주소와 토큰을 넣으세요.', tone: 'warn' })
-      if (screen !== 'setup') {
-        screen = 'setup'
-        await showText(setupCopy())
+      setPhoneStatus({
+        line: "설정 필요 — 아래에 주소와 토큰을 넣으세요.",
+        tone: "warn",
+      });
+      if (screen !== "setup") {
+        screen = "setup";
+        await showText(setupCopy());
       }
-      return
+      return;
     }
     if (!silent) {
-      if (screen !== 'detail') screen = 'page'
-      await showText('Deneb\n\n불러오는 중…')
+      if (screen !== "detail") screen = "page";
+      await showText("Deneb\n\n불러오는 중…");
     }
-    const payload = await fetchGlance(settings, { fresh })
-    consecutiveFailures = 0
-    servingCache = false
-    setPhoneStatus({ line: `연결됨 · 알림 ${payload.items.length}건`, tone: 'ok' })
-    saveCachedGlance(payload)
+    const payload = await fetchGlance(settings, { fresh });
+    consecutiveFailures = 0;
+    servingCache = false;
+    setPhoneStatus({
+      line: `연결됨 · 알림 ${payload.items.length}건`,
+      tone: "ok",
+    });
+    saveCachedGlance(payload);
 
     // Re-read the LIVE screen, not the snapshot taken before the request. The
     // wearer can tap or swipe while a poll is in flight — now that navigation
     // is no longer blocked by `busy`, that is expected — and a background poll
     // must land on where they are NOW, not where they were 10 seconds ago.
-    const liveDetailId = screen === 'detail' && detailIndex >= 0 ? items[detailIndex]?.id : ''
-    const anchorId = currentPageId() || keepId
-    const anchorDetailId = liveDetailId || keepDetailId
+    const liveDetailId =
+      screen === "detail" && detailIndex >= 0 ? items[detailIndex]?.id : "";
+    const anchorId = currentPageId() || keepId;
+    const anchorDetailId = liveDetailId || keepDetailId;
 
-    const signature = payloadSignature(payload)
+    const signature = payloadSignature(payload);
     // A recovery is a change even when the payload is not: the header is
     // showing "연결 끊김" and has to stop.
-    const unchanged = signature === lastSignature && connectionLabel(0) === shownConnection
-    lastSignature = signature
-    applyPayload(payload, anchorId)
+    const unchanged =
+      signature === lastSignature && connectionLabel(0) === shownConnection;
+    lastSignature = signature;
+    applyPayload(payload, anchorId);
 
     // Nothing moved and nobody asked — leave the screen exactly as it is.
     // This is what makes the background poll invisible.
-    if (silent && unchanged) return void (await showNoticeIfNew(payload.notice))
+    if (silent && unchanged)
+      return void (await showNoticeIfNew(payload.notice));
 
     if (anchorDetailId) {
-      const idx = items.findIndex((it) => it.id === anchorDetailId)
+      const idx = items.findIndex((it) => it.id === anchorDetailId);
       if (idx >= 0) {
-        detailIndex = idx
-        screen = 'detail'
+        detailIndex = idx;
+        screen = "detail";
         // Same shape openDetail draws, counter included — a background poll must
         // not silently swap the wearer's screen for a differently-formatted one.
-        await showText(formatAlertDetail(items[idx], { index: idx, total: items.length }))
-        return
+        await showText(
+          formatAlertDetail(items[idx], { index: idx, total: items.length }),
+        );
+        return;
       }
       // The alert being read is gone. On a background poll, say so instead of
       // silently swapping the wearer's screen for a list they did not ask for.
       if (silent) {
-        await showText('이 알림은 처리됐습니다.\n\n탭=목록으로')
-        screen = 'detail'
-        detailIndex = -1
-        return
+        await showText("이 알림은 처리됐습니다.\n\n탭=목록으로");
+        screen = "detail";
+        detailIndex = -1;
+        return;
       }
     }
-    screen = 'page'
-    detailIndex = -1
-    await renderCurrentPage()
-    await showNoticeIfNew(payload.notice)
+    screen = "page";
+    detailIndex = -1;
+    await renderCurrentPage();
+    await showNoticeIfNew(payload.notice);
   } catch (err) {
-    consecutiveFailures++
+    consecutiveFailures++;
     setPhoneStatus({
       line: `연결 실패 (${consecutiveFailures}회) · ${err instanceof Error ? err.message : String(err)}`,
-      tone: consecutiveFailures >= 2 ? 'bad' : 'warn',
-    })
+      tone: consecutiveFailures >= 2 ? "bad" : "warn",
+    });
     // A background failure stays off the display: the wearer did not ask, and
     // an unreachable gateway would otherwise flash an error every cycle while
     // they are simply out of network range.
@@ -715,92 +795,95 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     // glance is what the wearer actually wants there, and it is honest as long
     // as it is labelled: renderCurrentPage puts "오프라인 · 저장본" in the header.
     if (pages.length === 0 && !servingCache) {
-      const cached = loadCachedGlance()
+      const cached = loadCachedGlance();
       if (cached) {
-        servingCache = true
-        lastSignature = payloadSignature(cached)
-        applyPayload(cached, '')
-        screen = 'page'
-        await renderCurrentPage()
-        return
+        servingCache = true;
+        lastSignature = payloadSignature(cached);
+        applyPayload(cached, "");
+        screen = "page";
+        await renderCurrentPage();
+        return;
       }
     }
     if (silent) {
-      if (screen === 'page' && connectionLabel(consecutiveFailures, servingCache) !== shownConnection) {
-        await renderCurrentPage()
+      if (
+        screen === "page" &&
+        connectionLabel(consecutiveFailures, servingCache) !== shownConnection
+      ) {
+        await renderCurrentPage();
       }
-      return
+      return;
     }
-    const msg = err instanceof Error ? err.message : String(err)
-    await showText(`Deneb\n\n오류: ${msg}\n\n탭=재시도 / ↓다음`)
+    const msg = err instanceof Error ? err.message : String(err);
+    await showText(`Deneb\n\n오류: ${msg}\n\n탭=재시도 / ↓다음`);
   } finally {
-    busy = false
+    busy = false;
   }
 }
 
 function applyPayload(payload: GlancePayload, keepId: string): void {
   // Which alert the cursor was on, by id — a poll must not move it under the
   // wearer just because the gateway reordered or dropped something above it.
-  const cursorId = items[clampCursor()]?.id
+  const cursorId = items[clampCursor()]?.id;
 
-  pages = sortPages(payload.pages)
+  pages = sortPages(payload.pages);
   if (pages.length === 0) {
-    pages = [{ id: 'home', title: '알림', text: payload.text }]
+    pages = [{ id: "home", title: "알림", text: payload.text }];
   }
-  items = payload.items || []
-  lastGenerated = payload.generated || ''
-  lastCached = !!payload.cached
-  lastCounts = payload.counts || ''
-  lastNow = payload.now || ''
-  const idx = pages.findIndex((p) => p.id === keepId)
-  pageIndex = idx >= 0 ? idx : 0
+  items = payload.items || [];
+  lastGenerated = payload.generated || "";
+  lastCached = !!payload.cached;
+  lastCounts = payload.counts || "";
+  lastNow = payload.now || "";
+  const idx = pages.findIndex((p) => p.id === keepId);
+  pageIndex = idx >= 0 ? idx : 0;
 
-  const movedTo = cursorId ? items.findIndex((it) => it.id === cursorId) : -1
+  const movedTo = cursorId ? items.findIndex((it) => it.id === cursorId) : -1;
   // Gone (handled/expired) → back to the top, which is the highest priority.
-  listCursor = movedTo >= 0 ? movedTo : 0
+  listCursor = movedTo >= 0 ? movedTo : 0;
 }
 
 function sortPages(raw: GlancePage[]): GlancePage[] {
-  const byId = new Map(raw.map((p) => [p.id, p]))
-  const ordered: GlancePage[] = []
+  const byId = new Map(raw.map((p) => [p.id, p]));
+  const ordered: GlancePage[] = [];
   for (const id of PAGE_ORDER) {
-    const p = byId.get(id)
-    if (p) ordered.push(p)
+    const p = byId.get(id);
+    if (p) ordered.push(p);
   }
   for (const p of raw) {
     if (!PAGE_ORDER.includes(p.id as (typeof PAGE_ORDER)[number])) {
-      ordered.push(p)
+      ordered.push(p);
     }
   }
-  return ordered
+  return ordered;
 }
 
 function currentPageId(): string {
-  return pages[pageIndex]?.id || 'home'
+  return pages[pageIndex]?.id || "home";
 }
 
 async function renderCurrentPage(): Promise<void> {
-  shownConnection = connectionLabel(consecutiveFailures, servingCache)
+  shownConnection = connectionLabel(consecutiveFailures, servingCache);
   const page = pages[pageIndex] || {
-    id: 'home',
-    title: '알림',
-    text: '새 알림 없음',
-  }
-  const title = page.title || pageTitle(page.id)
+    id: "home",
+    title: "알림",
+    text: "새 알림 없음",
+  };
+  const title = page.title || pageTitle(page.id);
   if (LIST_PAGE_IDS.has(page.id) && items.length > 0) {
-    await showAlertList(title)
-    return
+    await showAlertList(title);
+    return;
   }
-  const stamp = formatGeneratedLabel(lastGenerated, lastCached)
-  const nav = `${pageIndex + 1}/${Math.max(pages.length, 1)}`
+  const stamp = formatGeneratedLabel(lastGenerated, lastCached);
+  const nav = `${pageIndex + 1}/${Math.max(pages.length, 1)}`;
   const footer = [
-    '↓다음 · 탭=새로고침',
+    "↓다음 · 탭=새로고침",
     stamp || nav,
     connectionLabel(consecutiveFailures, servingCache),
   ]
     .filter(Boolean)
-    .join(' · ')
-  await showText(`${title}\n\n${page.text}\n\n${footer}`)
+    .join(" · ");
+  await showText(`${title}\n\n${page.text}\n\n${footer}`);
 }
 
 /**
@@ -821,44 +904,51 @@ async function renderCurrentPage(): Promise<void> {
  * smoke harness instead of being host behaviour nobody can verify.
  */
 async function showAlertList(title: string): Promise<void> {
-  const stamp = formatGeneratedLabel(lastGenerated, lastCached)
-  const cursor = clampCursor()
-  const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : ''
+  const stamp = formatGeneratedLabel(lastGenerated, lastCached);
+  const cursor = clampCursor();
+  const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : "";
   // The counts line is the briefing the wearer used to lose: the gateway builds
   // a home page that opens with a clock and "일정 2 · 할 일 3", and this page
   // draws itself from `items` and never renders that text at all.
   // The lead line is the top of the glass — the part peripheral vision actually
   // reads. What is happening now beats a count of what is behind this page,
   // which in turn beats the app's own name (which used to own this line).
-  const lead = lastNow.trim() || lastCounts.trim()
+  const lead = lastNow.trim() || lastCounts.trim();
 
   // Only a window of the alerts fits, and how many is a budget, not a constant
   // — see HUD_LINES. The window carries no "N건 더" lines of its own; the
   // (3/8) counter in the meta line already says there is more, for free.
-  const { start, end } = windowRange(cursor, items.length, alertSlots(!!lead))
+  const { start, end } = windowRange(cursor, items.length, alertSlots(!!lead));
   const lines = items
     .slice(start, end)
     // '>' and not '▸': a CI frame showed the nicer glyph rendering as NOTHING on
     // this font, which left the cursor invisible and a tap unpredictable
     // whenever there was more than one alert.
-    .map((it, i) => `${start + i === cursor ? '>' : ' '}${listLabel(it)}`)
+    .map((it, i) => `${start + i === cursor ? ">" : " "}${listLabel(it)}`);
 
   await showText(
     [
       ...(lead ? [lead] : []),
-      [`${title} ${items.length}${position}`, clockLabel(), stamp, connectionLabel(consecutiveFailures, servingCache)]
-        .filter(Boolean)
-        .join(' · '),
-      '',
-      ...lines,
       [
-        cursor < items.length - 1 ? '탭=상세 · ↓다음알림' : '탭=상세 · ↓다음페이지',
-        atTop() ? '↑새로고침' : '',
+        `${title} ${items.length}${position}`,
+        clockLabel(),
+        stamp,
+        connectionLabel(consecutiveFailures, servingCache),
       ]
         .filter(Boolean)
-        .join(' · '),
-    ].join('\n'),
-  )
+        .join(" · "),
+      "",
+      ...lines,
+      [
+        cursor < items.length - 1
+          ? "탭=상세 · ↓다음알림"
+          : "탭=상세 · ↓다음페이지",
+        atTop() ? "↑새로고침" : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    ].join("\n"),
+  );
 }
 
 /**
@@ -869,11 +959,115 @@ async function showAlertList(title: string): Promise<void> {
  * seconds reads as broken. The wearer's own clock is right, and free.
  */
 function clockLabel(): string {
-  const now = new Date()
-  const wd = ['일', '월', '화', '수', '목', '금', '토'][now.getDay()]
-  const hh = String(now.getHours()).padStart(2, '0')
-  const mm = String(now.getMinutes()).padStart(2, '0')
-  return `${now.getMonth() + 1}/${now.getDate()} ${wd} ${hh}:${mm}`
+  const now = new Date();
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][now.getDay()];
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  return `${now.getMonth() + 1}/${now.getDate()} ${wd} ${hh}:${mm}`;
+}
+
+/**
+ * startNav plans a route and puts the glasses into turn-by-turn.
+ *
+ * The G2's own Navigate is not backed by Korean map data — export law keeps the
+ * global providers from serving driving directions here at all — so this exists
+ * to replace it rather than supplement it. Deneb routes through TMap.
+ *
+ * The polling loop is paused for the duration, for the same reason interpreting
+ * pauses it: a glance redraw over a maneuver is worse than a stale alert count,
+ * and nobody reads their todo list while crossing an intersection.
+ */
+async function startNav(
+  destination: string,
+  mode: "walk" | "car",
+): Promise<void> {
+  const dest = destination.trim();
+  if (!dest || navRoute) return;
+
+  const fix = await bridge.getAppLocation({
+    accuracy: AppLocationAccuracy.High,
+    timeoutMs: 8000,
+  });
+  if (!fix) {
+    setPhoneStatus({ line: "현재 위치를 얻지 못했습니다.", tone: "bad" });
+    return;
+  }
+  const from: NavCoord = { lat: fix.latitude, lon: fix.longitude };
+
+  pauseLoop();
+  screen = "nav";
+  navDest = dest;
+  await showText(`길찾기\n\n${dest}\n경로 계산 중…`);
+
+  let result;
+  try {
+    result = await fetchRoute(settings, from, dest, mode);
+  } catch (err) {
+    navRoute = null;
+    screen = "page";
+    const msg = err instanceof Error ? err.message : String(err);
+    setPhoneStatus({ line: `길찾기 실패: ${msg}`, tone: "bad" });
+    await showText(`길찾기 실패\n\n${msg}\n\n탭=목록`);
+    await resumeLoop();
+    return;
+  }
+
+  navRoute = result.route;
+  navState = initialNavState();
+  navPos = from;
+  navDest = result.destination.name || dest;
+
+  // Continuous fixes, not one-shot polling: distanceFilter means the host only
+  // wakes us when the wearer actually moved, which is the difference between a
+  // day of battery and an afternoon.
+  await bridge.startAppLocationUpdates({
+    accuracy: AppLocationAccuracy.High,
+    intervalMs: 2000,
+    distanceFilter: 5,
+  });
+  setPhoneStatus({ line: `길안내 중 · ${navDest}`, tone: "ok" });
+  await renderNav();
+}
+
+async function stopNav(): Promise<void> {
+  if (!navRoute) return;
+  navRoute = null;
+  navPos = null;
+  navState = initialNavState();
+  await bridge.stopAppLocationUpdates();
+  screen = "page";
+  setPhoneStatus({ line: "길안내를 중지했습니다.", tone: "warn" });
+  await resumeLoop();
+}
+
+/** renderNav draws the current maneuver. */
+async function renderNav(): Promise<void> {
+  if (!navRoute || !navPos) return;
+  const lines = navLines(navRoute, navState, navPos);
+  await showText(
+    [`길찾기 · ${navDest}`, "", ...lines, "", "탭=중지"].join("\n"),
+  );
+}
+
+/**
+ * onNavFix folds a new position into the route.
+ *
+ * Redraws only when the maneuver actually changed. A HUD that repaints on every
+ * fix flickers in the wearer's eye for no new information, and the instruction
+ * text is identical between fixes for most of a leg.
+ */
+async function onNavFix(pos: NavCoord): Promise<void> {
+  if (!navRoute) return;
+  navPos = pos;
+  const next = advanceNav(navRoute, navState, pos);
+  const changed =
+    next.stepIndex !== navState.stepIndex || next.arrived !== navState.arrived;
+  navState = next;
+  await renderNav();
+  if (changed && next.arrived) {
+    // Let the arrival sit on the glass before handing the screen back.
+    setPhoneStatus({ line: `도착: ${navDest}`, tone: "ok" });
+  }
 }
 
 /**
@@ -884,37 +1078,37 @@ function clockLabel(): string {
  * talking to them.
  */
 async function startInterpreting(lang: string): Promise<void> {
-  if (interpreting) return
-  interpretLang = lang || 'ko'
-  interpreting = true
-  subtitles = []
-  pauseLoop()
-  screen = 'interpret'
-  await showText(`통역 중 (${interpretLang})\n\n듣는 중…\n\n탭=중지`)
+  if (interpreting) return;
+  interpretLang = lang || "ko";
+  interpreting = true;
+  subtitles = [];
+  pauseLoop();
+  screen = "interpret";
+  await showText(`통역 중 (${interpretLang})\n\n듣는 중…\n\n탭=중지`);
   // Glasses mic, not the phone's: the wearer's own device is pointed at the
   // person speaking. The startup container already exists, which the SDK
   // requires before this returns true.
-  const ok = await bridge.audioControl(true, AudioInputSource.Glasses)
+  const ok = await bridge.audioControl(true, AudioInputSource.Glasses);
   if (!ok) {
-    interpreting = false
-    screen = 'page'
-    await showText('통역을 시작하지 못했습니다.\n\n탭=목록')
+    interpreting = false;
+    screen = "page";
+    await showText("통역을 시작하지 못했습니다.\n\n탭=목록");
   }
 }
 
 async function stopInterpreting(): Promise<void> {
-  if (!interpreting) return
-  interpreting = false
-  await bridge.audioControl(false)
-  pcm.take()
-  screen = 'page'
-  await resumeLoop()
+  if (!interpreting) return;
+  interpreting = false;
+  await bridge.audioControl(false);
+  pcm.take();
+  screen = "page";
+  await resumeLoop();
 }
 
 /** renderSubtitles keeps the last few lines so a glance catches the sentence. */
 async function renderSubtitles(): Promise<void> {
-  const body = subtitles.length ? subtitles.join('\n') : '듣는 중…'
-  await showText(`통역 · ${interpretLang}\n\n${body}\n\n탭=중지`)
+  const body = subtitles.length ? subtitles.join("\n") : "듣는 중…";
+  await showText(`통역 · ${interpretLang}\n\n${body}\n\n탭=중지`);
 }
 
 /**
@@ -925,22 +1119,24 @@ async function renderSubtitles(): Promise<void> {
  * would put the wearer further behind with every sentence.
  */
 async function flushAudio(): Promise<void> {
-  if (sending || !interpreting) return
-  const window = pcm.take()
-  if (!window) return
-  sending = true
+  if (sending || !interpreting) return;
+  const window = pcm.take();
+  if (!window) return;
+  sending = true;
   try {
-    const res = await postAudio(settings, window, { translateTo: interpretLang })
-    const line = res.translation || res.text
+    const res = await postAudio(settings, window, {
+      translateTo: interpretLang,
+    });
+    const line = res.translation || res.text;
     if (line && interpreting) {
-      subtitles = subtitleLines(subtitles, line)
-      await renderSubtitles()
+      subtitles = subtitleLines(subtitles, line);
+      await renderSubtitles();
     }
   } catch {
     // Silent on purpose: a dropped window during a conversation is not worth
     // taking the subtitle off the glass to announce.
   } finally {
-    sending = false
+    sending = false;
   }
 }
 
@@ -954,70 +1150,84 @@ async function flushAudio(): Promise<void> {
  * switched back off afterwards — it is a battery cost with no other consumer.
  */
 async function captureImu(label: string): Promise<void> {
-  if (imuLabel) return
-  imuLabel = label
-  imuSamples = []
-  const ok = await bridge.imuControl(true, IMU_PACE_MS)
+  if (imuLabel) return;
+  imuLabel = label;
+  imuSamples = [];
+  const ok = await bridge.imuControl(true, IMU_PACE_MS);
   if (!ok) {
-    imuLabel = ''
-    setPhoneStatus({ line: 'IMU 를 열지 못했습니다.', tone: 'bad' })
-    return
+    imuLabel = "";
+    setPhoneStatus({ line: "IMU 를 열지 못했습니다.", tone: "bad" });
+    return;
   }
-  setTimeout(() => void finishImu(), CAPTURE_MS)
+  setTimeout(() => void finishImu(), CAPTURE_MS);
 }
 
 async function finishImu(): Promise<void> {
-  const label = imuLabel
-  const samples = imuSamples
-  imuLabel = ''
-  imuSamples = []
-  await bridge.imuControl(false)
-  if (!label) return
+  const label = imuLabel;
+  const samples = imuSamples;
+  imuLabel = "";
+  imuSamples = [];
+  await bridge.imuControl(false);
+  if (!label) return;
   if (samples.length === 0) {
     // Worth saying out loud: it means the host never sent imuData, which is the
     // one thing about this path that cannot be checked without the glasses.
-    setPhoneStatus({ line: `"${label}" 샘플 0개 — 기기가 IMU 를 보내지 않았습니다.`, tone: 'bad' })
-    return
+    setPhoneStatus({
+      line: `"${label}" 샘플 0개 — 기기가 IMU 를 보내지 않았습니다.`,
+      tone: "bad",
+    });
+    return;
   }
   try {
-    await postImuRecording(settings, label, samples)
-    setPhoneStatus({ line: `"${label}" ${samples.length}개 기록 완료`, tone: 'ok' })
+    await postImuRecording(settings, label, samples);
+    setPhoneStatus({
+      line: `"${label}" ${samples.length}개 기록 완료`,
+      tone: "ok",
+    });
   } catch (err) {
     setPhoneStatus({
       line: `기록 전송 실패: ${err instanceof Error ? err.message : String(err)}`,
-      tone: 'bad',
-    })
+      tone: "bad",
+    });
   }
 }
 
 /** wearLine reports what the glasses said about themselves, if anything. */
 function wearLine(): string {
-  if (!wearStatus) return '착용 상태 미보고'
-  const parts: string[] = []
-  parts.push(wearStatus.isInCase ? '충전함' : wearStatus.isWearing === false ? '벗음' : '착용')
-  if (typeof wearStatus.batteryLevel === 'number') {
-    parts.push(`배터리 ${Math.round(wearStatus.batteryLevel)}%${wearStatus.isCharging ? ' 충전중' : ''}`)
+  if (!wearStatus) return "착용 상태 미보고";
+  const parts: string[] = [];
+  parts.push(
+    wearStatus.isInCase
+      ? "충전함"
+      : wearStatus.isWearing === false
+        ? "벗음"
+        : "착용",
+  );
+  if (typeof wearStatus.batteryLevel === "number") {
+    parts.push(
+      `배터리 ${Math.round(wearStatus.batteryLevel)}%${wearStatus.isCharging ? " 충전중" : ""}`,
+    );
   }
-  return parts.join(' · ')
+  return parts.join(" · ");
 }
 
 /** clampCursor is the app-state view of the pure guard in refresh.ts. */
 function clampCursor(): number {
-  return clampCursorTo(listCursor, items.length)
+  return clampCursorTo(listCursor, items.length);
 }
 
 /** atTop reports whether an up-swipe would fall off the front of everything. */
 function atTop(): boolean {
-  if (clampCursor() > 0) return false
+  if (clampCursor() > 0) return false;
   for (let i = pageIndex - 1; i >= 0; i--) {
-    if (!isPageEmpty(pages[i])) return false
+    if (!isPageEmpty(pages[i])) return false;
   }
-  return true
+  return true;
 }
 
 /** onAlertPage reports whether the current page draws the alert cursor. */
 function onAlertPage(): boolean {
-  return LIST_PAGE_IDS.has(currentPageId()) && items.length > 0
+  return LIST_PAGE_IDS.has(currentPageId()) && items.length > 0;
 }
 
 /**
@@ -1031,10 +1241,10 @@ async function showText(content: string): Promise<void> {
   await bridge.textContainerUpgrade(
     new TextContainerUpgrade({
       containerID: 1,
-      containerName: 'main',
+      containerName: "main",
       content,
     }),
-  )
+  );
 }
 
 /**
@@ -1043,36 +1253,39 @@ async function showText(content: string): Promise<void> {
  * unreachable and the whole loop can be cancelled with one handle.
  */
 function scheduleRefresh(): void {
-  if (stopped || paused) return
-  if (refreshTimer !== undefined) clearTimeout(refreshTimer)
-  refreshTimer = setTimeout(() => {
-    refreshTimer = undefined
-    void runScheduledRefresh()
-  }, pollInterval(nextDelayMs(consecutiveFailures), wearStatus))
+  if (stopped || paused) return;
+  if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(
+    () => {
+      refreshTimer = undefined;
+      void runScheduledRefresh();
+    },
+    pollInterval(nextDelayMs(consecutiveFailures), wearStatus),
+  );
 }
 
 async function runScheduledRefresh(): Promise<void> {
-  if (stopped || paused) return
+  if (stopped || paused) return;
   // The status screen is a deliberate read; polling under it would swap the
   // wearer's screen out from under them.
-  if (!busy && screen !== 'status') {
+  if (!busy && screen !== "status") {
     if (needsSetup(settings)) {
       // Setup polling only re-reads local settings (the QR seed lands in
       // localStorage), so it must not count as a network failure.
-      settings = await resolveSettings()
+      settings = await resolveSettings();
       if (!needsSetup(settings)) {
-        screen = 'page'
-        pageIndex = 0
-        await refreshGlance(false)
+        screen = "page";
+        pageIndex = 0;
+        await refreshGlance(false);
       }
     } else {
-      await refreshGlance(false, true)
+      await refreshGlance(false, true);
     }
   }
-  scheduleRefresh()
+  scheduleRefresh();
 }
 
 function isPageEmpty(p: GlancePage | undefined): boolean {
-  if (!p) return true
-  return skipPage(p, items.length)
+  if (!p) return true;
+  return skipPage(p, items.length);
 }
