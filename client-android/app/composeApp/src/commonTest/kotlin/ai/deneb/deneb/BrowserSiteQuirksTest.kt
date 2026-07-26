@@ -47,13 +47,23 @@ class BrowserSiteQuirksTest {
     }
 
     @Test
-    fun scriptIsIdempotentAndScopedToDocumentElements() {
+    fun unlocksTheViewportViaAnImportantStylesheet() {
         val js = browserSiteQuirkScript("https://www.reddit.com/")!!
-        // Re-injection on SPA soft-nav must not stack observers.
-        assertTrue(js.contains("__denebScrollUnlock"), "needs a re-entry guard")
-        // It unlocks the document, it does not remove page elements.
-        assertTrue(js.contains("documentElement"))
-        assertTrue(js.contains("document.body"))
+        // The measured lock is `body { overflow-y: hidden }`, which propagates to
+        // the viewport because the root element's overflow is `visible`. Both
+        // elements must be covered, and the rule must outrank the page's own.
+        assertTrue(js.contains("html,body"), "must target both html and body: $js")
+        assertTrue(js.contains("overflow-y:visible !important"), "needs !important: $js")
+        // Inline styles lost this fight before; a stylesheet is what survives.
+        assertTrue(js.contains("createElement('style')"), "must inject a stylesheet: $js")
+    }
+
+    @Test
+    fun reinjectionIsIdempotentAndNonDestructive() {
+        val js = browserSiteQuirkScript("https://www.reddit.com/")!!
+        // Injected again on every SPA soft-nav; it must no-op rather than pile up
+        // duplicate <style> nodes.
+        assertTrue(js.contains("getElementById"), "needs an existing-node guard: $js")
         assertFalse(js.contains(".remove()"), "must not delete site markup")
         assertFalse(js.contains(".click()"), "must not synthesize clicks")
     }

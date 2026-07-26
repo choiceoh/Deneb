@@ -40,50 +40,40 @@ internal fun isRedditHost(url: String): Boolean = urlHost(url) in REDDIT_HOSTS
 internal fun browserSiteQuirkScript(url: String): String? = if (isRedditHost(url)) REDDIT_SCROLL_UNLOCK else null
 
 /**
- * Undoes the document-level scroll lock. Re-applied on DOM mutation because the
- * SPA re-imposes it on navigation and when its interstitial reopens; the
- * observer is cheap (it only touches two elements) and installs once per page.
+ * Restores viewport scrolling.
  *
- * Deliberately narrow: it clears the lock on `html`/`body` only. It does not
- * remove overlays or click anything — an automated "dismiss" would fight the
- * site's own UI and break as soon as their markup changes.
+ * Measured on-device 2026-07-26 (⋮ → 스크롤 진단), on a thread that would not
+ * scroll:
+ *
+ *     html: overflow visible            body: overflow-y HIDDEN
+ *     scrollingElement: html            contentH 4675 / viewportH 683
+ *     overlays: []                      touchmove/wheel handlers: none
+ *     move: scrollTop 407 -> 607        moved: TRUE
+ *
+ * That is viewport overflow propagation: when the root element's computed
+ * overflow is `visible`, the UA takes the viewport's overflow from `body`
+ * instead. Reddit sets `body { overflow-y: hidden }`, so the VIEWPORT becomes
+ * unscrollable — the finger does nothing while `scrollTop` still moves the
+ * document programmatically, exactly what the probe recorded.
+ *
+ * Injected as an `!important` author stylesheet rather than inline styles,
+ * because the first attempt (inline style + MutationObserver) lost twice:
+ * its re-entry guard skipped re-application on SPA soft-nav, and the observer
+ * watched only `style`/`class` attributes, so a lock re-imposed through a
+ * stylesheet was invisible to it. An `!important` author rule outranks the
+ * page's normal declarations, survives re-renders, and needs no observer.
+ *
+ * `visible` (not `auto`) is deliberate: it restores the default so the viewport
+ * scrolls, without turning `body` into its own scroll container.
  */
 private const val REDDIT_SCROLL_UNLOCK = """
 (function () {
-  if (window.__denebScrollUnlock) return;
-  window.__denebScrollUnlock = true;
-  var LOCKED = { overflow: 'hidden', overflowY: 'hidden', position: 'fixed' };
-  function unlock(el) {
-    if (!el || !el.style) return;
-    var s = window.getComputedStyle(el);
-    if (s.overflow === LOCKED.overflow || s.overflowY === LOCKED.overflowY) {
-      el.style.setProperty('overflow', 'auto', 'important');
-      el.style.setProperty('overflow-y', 'auto', 'important');
-    }
-    if (s.position === LOCKED.position) {
-      el.style.setProperty('position', 'static', 'important');
-      el.style.setProperty('top', 'auto', 'important');
-    }
-    if (s.height === '100%' && s.overflow === LOCKED.overflow) {
-      el.style.setProperty('height', 'auto', 'important');
-    }
-  }
-  function pass() {
-    unlock(document.documentElement);
-    unlock(document.body);
-  }
-  pass();
-  try {
-    var pending = false;
-    new MutationObserver(function () {
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(function () { pending = false; pass(); });
-    }).observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['style', 'class'],
-      subtree: true,
-    });
-  } catch (e) { /* observer is best-effort */ }
+  var ID = '__deneb-scroll-unlock';
+  if (document.getElementById(ID)) return;
+  var css = 'html,body{overflow:visible !important;overflow-y:visible !important}';
+  var st = document.createElement('style');
+  st.id = ID;
+  st.appendChild(document.createTextNode(css));
+  (document.head || document.documentElement).appendChild(st);
 })();
 """
