@@ -9,6 +9,7 @@ import ai.deneb.deneb.CalendarEmptyDay
 import ai.deneb.deneb.CalendarEvent
 import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarMonthGrid
+import ai.deneb.deneb.ContactsApplyState
 import ai.deneb.deneb.ContactsDedupContent
 import ai.deneb.deneb.ContactsDedupPayload
 import ai.deneb.deneb.ContactsList
@@ -522,6 +523,34 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
                     ContactsDedupContent(payload, canApply = true)
+                }
+            }
+        }
+    },
+    "contacts_dedup_review" to { scheme ->
+        val payload = ContactsDedupPayload(total = 2819, distinct = 1695, ambiguous = 286)
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    ContactsDedupContent(
+                        payload,
+                        canApply = true,
+                        applyState = ContactsApplyState.AiReviewing(done = 128, total = 286, same = 47),
+                    )
+                }
+            }
+        }
+    },
+    "contacts_dedup_done" to { scheme ->
+        val payload = ContactsDedupPayload(total = 2819, distinct = 1695, ambiguous = 286)
+        MaterialTheme(colorScheme = scheme) {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.width(412.dp)) {
+                    ContactsDedupContent(
+                        payload,
+                        canApply = true,
+                        applyState = ContactsApplyState.Done(ruleMerged = 799, aiMerged = 47, synced = true),
+                    )
                 }
             }
         }
