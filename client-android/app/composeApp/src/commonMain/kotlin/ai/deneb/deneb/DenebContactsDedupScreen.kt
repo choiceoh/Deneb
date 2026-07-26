@@ -1,5 +1,6 @@
 package ai.deneb.deneb
 
+import ai.deneb.contacts.ContactsReader
 import ai.deneb.contacts.ContactsWriter
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.SetupContactsPermissionHandler
@@ -57,6 +58,7 @@ fun DenebContactsDedupScreen(
     val scope = rememberCoroutineScope()
 
     val writer = remember { ContactsWriter() }
+    val reader = remember { ContactsReader() }
     val perms = remember { ContactsPermissionController() }
     SetupContactsPermissionHandler(perms)
     var applying by remember { mutableStateOf(false) }
@@ -104,7 +106,21 @@ fun DenebContactsDedupScreen(
             }
             done += chunk.size
         }
-        applyMsg = "폰에서 ${ruleMerged + aiMerged}개 합침 (규칙 $ruleMerged · AI $aiMerged)"
+        // 3) Close the loop back to the knowledge source: re-sync the now-merged
+        //    book so the gateway mirror (ReplaceAll) — and the 인물 위키 generated
+        //    from it — heal. The reader keys by aggregated CONTACT_ID, so a pair we
+        //    just linked now reads as one person. Only worth it if we merged anything.
+        var synced = false
+        if (ruleMerged + aiMerged > 0) {
+            applyMsg = "지식 미러 동기화 중…"
+            val merged = reader.readAll()
+            if (merged.isNotEmpty()) {
+                client.captureContacts(merged)
+                synced = true
+            }
+        }
+        val tail = if (synced) " · 지식 미러 갱신됨" else ""
+        applyMsg = "폰에서 ${ruleMerged + aiMerged}개 합침 (규칙 $ruleMerged · AI $aiMerged)$tail"
         applying = false
     }
 
