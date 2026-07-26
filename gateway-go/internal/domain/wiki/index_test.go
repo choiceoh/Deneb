@@ -303,3 +303,31 @@ func TestParseIndexLine(t *testing.T) {
 		})
 	}
 }
+
+func TestParseTSVLine_KeepsEveryTypeTheDomainWrites(t *testing.T) {
+	// The restore guard drifted behind the writers: deals.go writes "deal",
+	// sites.go "site", project_status.go/restructure.go "project". A rejected
+	// value is silently blanked here and the next Save persists the loss, so
+	// every value the package writes must survive the round trip.
+	for _, want := range []string{"concept", "entity", "source", "comparison", "log", "deal", "site", "project"} {
+		line := "p1	프로젝트/x.md	제목	요약	태그	0.50	2026-07-01	" + want + "	high	3"
+		if got := parseTSVLine(line, "프로젝트").entry.Type; got != want {
+			t.Errorf("type %q was dropped on restore (got %q)", want, got)
+		}
+	}
+}
+
+func TestParseTSVLine_StillRejectsTheOldNumericColumn(t *testing.T) {
+	// Field 7 held the backlinks COUNT before the type column existed. The
+	// guard is what keeps that number from being read as a type — widening the
+	// vocabulary must not cost that.
+	line := "p1	프로젝트/x.md	제목	요약	태그	0.50	2026-07-01	7"
+	if got := parseTSVLine(line, "프로젝트").entry.Type; got != "" {
+		t.Errorf("old-format backlinks count %q was read as a type", got)
+	}
+	// Free-form values (an LLM once wrote "preference") stay rejected too.
+	line = "p1	프로젝트/x.md	제목	요약	태그	0.50	2026-07-01	preference	high	3"
+	if got := parseTSVLine(line, "프로젝트").entry.Type; got != "" {
+		t.Errorf("free-form type %q was accepted", got)
+	}
+}
