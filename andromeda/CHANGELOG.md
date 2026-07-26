@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.111](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.110...andromeda-v0.0.111) (2026-07-26)
+
+
+### ✨ Features
+
+* **andromeda:** 그룹웨어 ERP 결과를 구조대로 렌더 — 줄글에서 정돈된 레이아웃으로 ([#4301](https://github.com/choiceoh/Deneb/issues/4301)) ([9e87d1f](https://github.com/choiceoh/Deneb/commit/9e87d1fbe28672fa788e2bd889da28401d196acd))
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 일정 AI 분석의 deneb-ui 카드가 코드블록으로 새던 문제 ([#4296](https://github.com/choiceoh/Deneb/issues/4296)) ([5dbdad0](https://github.com/choiceoh/Deneb/commit/5dbdad0081a63fbef1767fbd412f3a23872407b1))
+* **sessions:** 재시작 뒤 채팅 목록이 비던 두 결함 — GC의 대화 수거·라이브 세션 채널 미기록 ([#4353](https://github.com/choiceoh/Deneb/issues/4353)) ([3bf34d5](https://github.com/choiceoh/Deneb/commit/3bf34d5d88da889ea18813f5fc380d4087b06afc))
+
 ## [0.0.110](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.109...andromeda-v0.0.110) (2026-07-25)
 
 
