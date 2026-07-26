@@ -152,6 +152,8 @@ fun main() {
     renderScreen("contacts_light.png", "contacts", LightColorScheme, 824, 1100)
     renderScreen("contacts_dedup_dark.png", "contacts_dedup", DarkColorScheme, 824, 1100)
     renderScreen("contacts_dedup_light.png", "contacts_dedup", LightColorScheme, 824, 1100)
+    renderScreen("contacts_dedup_review_dark.png", "contacts_dedup_review", DarkColorScheme, 824, 1100)
+    renderScreen("contacts_dedup_done_dark.png", "contacts_dedup_done", DarkColorScheme, 824, 1100)
     renderAnalysis("analysis_clip.png", DarkColorScheme)
     renderCollapsedReport("mail_collapsed_dark.png", DarkColorScheme, expanded = false)
     renderCollapsedReport("mail_collapsed_light.png", LightColorScheme, expanded = false)
