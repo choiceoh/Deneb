@@ -21,6 +21,7 @@ import { loadCachedGlance, saveCachedGlance } from './cache'
 import {
   fetchGlance,
   fetchStatus,
+  ackAlert,
   formatAlertDetail,
   formatGeneratedLabel,
   listLabel,
@@ -32,7 +33,7 @@ import {
 
 const bridge = await waitForEvenAppBridge()
 
-type Screen = 'setup' | 'page' | 'detail' | 'status'
+type Screen = 'setup' | 'page' | 'detail' | 'status' | 'confirmAck'
 
 const PAGE_ORDER = ['home', 'alerts', 'cal', 'todo'] as const
 const LIST_PAGE_IDS = new Set(['home', 'alerts'])
@@ -118,7 +119,14 @@ bridge.onEvenHubEvent((event) => {
       void onSwipePrev()
       break
     case 'shutdown':
-      shutdown()
+      // Contextual on purpose. There is no fifth gesture, and a detail is the
+      // only place where "I am done with this" has a second meaning. Everywhere
+      // else — list, pages, status, setup — a double-tap still exits.
+      if (screen === 'detail') {
+        void askAck()
+      } else {
+        shutdown()
+      }
       break
     case 'stopLoop':
       stopLoop()
@@ -203,6 +211,10 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === 'confirmAck') {
+    await doAck()
+    return
+  }
   if (screen === 'setup') {
     settings = await resolveSettings()
     if (!needsSetup(settings)) {
@@ -289,8 +301,65 @@ async function stepDetail(dir: 1 | -1): Promise<void> {
   await renderCurrentPage()
 }
 
+/**
+ * askAck puts a confirmation between the wearer and an irreversible write.
+ *
+ * Acking removes the alert from the glance for good, and the gesture that
+ * reaches it — a double-tap — is the same one that exits the app everywhere
+ * else. One stray double-tap must not clear something unread, so the actual
+ * write needs a second, deliberate gesture.
+ */
+async function askAck(): Promise<void> {
+  const item = items[detailIndex]
+  if (!item) return
+  screen = 'confirmAck'
+  await showText(
+    ['Deneb · 확인 처리', '', item.title, '', '이 알림을 확인함으로 할까요?', '', '탭=예 · ↓취소'].join('\n'),
+  )
+}
+
+/** cancelAck returns to what was being read, unchanged. */
+async function cancelAck(): Promise<void> {
+  if (detailIndex >= 0 && items[detailIndex]) {
+    await openDetail(detailIndex)
+    return
+  }
+  screen = 'page'
+  await renderCurrentPage()
+}
+
+async function doAck(): Promise<void> {
+  const item = items[detailIndex]
+  if (!item) {
+    screen = 'page'
+    await renderCurrentPage()
+    return
+  }
+  await showText('Deneb · 확인 처리\n\n처리 중…')
+  try {
+    await ackAlert(settings, item.id)
+  } catch (err) {
+    // Loud on purpose: unlike a background poll, the wearer asked for this and
+    // the alert is still there. Silence would read as success.
+    const msg = err instanceof Error ? err.message : String(err)
+    screen = 'detail'
+    await showText(`Deneb · 확인 처리\n\n실패: ${msg}\n\n탭=목록 · 더블탭=재시도`)
+    return
+  }
+  // Drop it locally rather than waiting for the next poll: the wearer acted and
+  // the screen has to agree with them now. The refresh below reconciles.
+  items = items.filter((it) => it.id !== item.id)
+  detailIndex = -1
+  listCursor = clampCursor()
+  screen = 'page'
+  await renderCurrentPage()
+  await refreshGlance(true)
+  scheduleRefresh()
+}
+
 async function onSwipeNext(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
+  if (screen === 'confirmAck') return void (await cancelAck())
   if (screen === 'setup') return
   if (screen === 'detail') {
     await stepDetail(1)
@@ -332,6 +401,7 @@ async function onSwipeNext(): Promise<void> {
 
 async function onSwipePrev(): Promise<void> {
   // No `busy` guard: paging between already-loaded pages is local. See openDetail.
+  if (screen === 'confirmAck') return void (await cancelAck())
   if (screen === 'setup') return
   if (screen === 'detail') {
     await stepDetail(-1)

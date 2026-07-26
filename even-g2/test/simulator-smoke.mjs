@@ -23,6 +23,7 @@
 //   pull refresh —     → an up-swipe at the top must hit the gateway
 //   outage mark  error → a sustained outage must mark the header, then clear
 //   shutdown     ok    → a double-tap must stop the network for good
+//   ack          ok    → a double-tap in a detail asks, then clears the alert
 //   cold open    error → relaunched with no gateway, the saved glance shows
 //
 // It is slow BY CONSTRUCTION (~14 min): the poll interval is 45s and the
@@ -504,6 +505,43 @@ async function main() {
   check(
     rebounded && preShutdownGap !== undefined && preShutdownGap < 60_000,
     `a success reset the backoff to base before shutdown (last gap ${preShutdownGap ?? 'none'}ms)`,
+  )
+
+  // ── confirm-then-ack ────────────────────────────────────────────────────
+  // The HUD's only write, and the only gesture that is contextual: a
+  // double-tap exits everywhere except inside a detail, where it offers to
+  // clear the alert. That overload is only safe if the write needs a second
+  // deliberate gesture, so the cancel path is asserted as hard as the commit.
+  await input('click') // open the cursor's alert
+  await sleep(2_500)
+  const detailBeforeAck = await screenshot('20-detail-before-ack')
+  await input('double_click')
+  await sleep(2_500)
+  const confirmScreen = await screenshot('21-ack-confirm')
+  check(
+    Buffer.compare(detailBeforeAck, confirmScreen) !== 0,
+    'a double-tap in a detail asks before clearing the alert (it does not exit)',
+  )
+
+  const ackCountBeforeCancel = stub.counts().ack
+  await input('down') // cancel
+  await sleep(2_500)
+  const afterCancel = await screenshot('22-ack-cancelled')
+  check(
+    stub.counts().ack === ackCountBeforeCancel && Buffer.compare(afterCancel, detailBeforeAck) === 0,
+    'cancelling writes nothing and returns to the same alert',
+  )
+
+  await input('double_click')
+  await sleep(2_500)
+  await input('click') // confirm
+  await waitFor('the ack to reach the gateway', async () => stub.counts().ack > ackCountBeforeCancel, 20_000)
+  await sleep(4_000)
+  const afterAck = await screenshot('23-after-ack')
+  check(stub.acked().length === 1, `the ack named exactly one alert (${JSON.stringify(stub.acked())})`)
+  check(
+    Buffer.compare(afterAck, detailBeforeAck) !== 0,
+    'a confirmed ack leaves the detail and the alert is gone from the list',
   )
 
   await input('double_click')

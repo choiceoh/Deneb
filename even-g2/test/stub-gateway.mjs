@@ -70,12 +70,18 @@ const ALT_GLANCE = {
  * @param {{ token: string }} opts
  */
 export async function startStubGateway({ token }) {
-  const counts = { glance: 0, status: 0, unauthorized: 0 }
+  const counts = { glance: 0, status: 0, unauthorized: 0, ack: 0 }
+  /** Ids the glasses have acked; the glance stops serving them, like the real one. */
+  const acked = new Set()
   /** Request arrival times per path, for interval (backoff) assertions. */
   const stamps = { glance: [] }
   let mode = 'ok'
   /** Pending slow responses, so close() cannot hang on them. */
   const openTimers = new Set()
+
+  /** The real gateway filters StatusAcked out of the glance; so does this. */
+  const withoutAcked = (glance) =>
+    acked.size === 0 ? glance : { ...glance, items: glance.items.filter((it) => !acked.has(it.id)) }
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://stub.local')
@@ -84,7 +90,7 @@ export async function startStubGateway({ token }) {
         'Content-Type': 'application/json; charset=utf-8',
         // The app runs from the vite origin, so every call is cross-origin.
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Authorization, Accept',
+        'Access-Control-Allow-Headers': 'Authorization, Accept, Content-Type',
       })
       res.end(JSON.stringify(body))
     }
@@ -92,8 +98,8 @@ export async function startStubGateway({ token }) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Authorization, Accept',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Accept, Content-Type',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       })
       res.end()
       return
@@ -119,6 +125,28 @@ export async function startStubGateway({ token }) {
       return
     }
 
+    if (url.pathname === '/api/even/ack' && req.method === 'POST') {
+      let raw = ''
+      req.on('data', (c) => (raw += c))
+      req.on('end', () => {
+        let id = ''
+        try {
+          id = String(JSON.parse(raw || '{}').id || '')
+        } catch {
+          send(400, { error: { message: 'stub: bad json' } })
+          return
+        }
+        if (!id) {
+          send(400, { error: { message: 'stub: id required' } })
+          return
+        }
+        counts.ack++
+        acked.add(id)
+        send(200, { ok: true, id })
+      })
+      return
+    }
+
     if (url.pathname === '/api/even/glance') {
       counts.glance++
       stamps.glance.push(Date.now())
@@ -137,10 +165,10 @@ export async function startStubGateway({ token }) {
           send(500, { error: { message: 'stub: induced failure' } })
           return
         case 'alt':
-          send(200, ALT_GLANCE)
+          send(200, withoutAcked(ALT_GLANCE))
           return
         default:
-          send(200, OK_GLANCE)
+          send(200, withoutAcked(OK_GLANCE))
           return
       }
     }
@@ -155,6 +183,7 @@ export async function startStubGateway({ token }) {
     port,
     base,
     counts: () => ({ ...counts }),
+    acked: () => [...acked],
     /** Arrival gaps between consecutive glance requests, in ms. */
     glanceGaps: () =>
       stamps.glance.slice(1).map((t, i) => t - stamps.glance[i]),

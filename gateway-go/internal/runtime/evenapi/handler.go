@@ -60,6 +60,9 @@ type Config struct {
 	Now func() time.Time
 	// Sources feeds GET /api/even/glance (optional; empty → calm empty copy).
 	Sources GlanceSources
+	// AckAlert marks one glance alert handled (optional; nil → 503 on POST
+	// /api/even/ack, which is how a build without a workfeed store behaves).
+	AckAlert func(id string) error
 }
 
 // Handler serves OpenAI-shaped Custom AI requests for Even G2.
@@ -71,6 +74,7 @@ type Handler struct {
 	deadline time.Duration
 	now      func() time.Time
 	sources  GlanceSources
+	ackAlert func(id string) error
 
 	mu          sync.Mutex
 	dedupe      map[string]dedupeEntry
@@ -110,6 +114,7 @@ func New(cfg Config) *Handler {
 		deadline: deadline,
 		now:      now,
 		sources:  cfg.Sources,
+		ackAlert: cfg.AckAlert,
 		dedupe:   make(map[string]dedupeEntry),
 	}
 }

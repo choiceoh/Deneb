@@ -160,7 +160,9 @@ export function formatAlertDetail(item: GlanceItem, pos?: { index: number; total
   lines.push(truncate(item.body || item.preview || '(내용 없음)', 120))
   lines.push('')
   const hasNext = !!pos && pos.index < pos.total - 1
-  lines.push(hasNext ? '탭=목록 · ↓다음알림' : '탭=목록 · ↓목록으로')
+  // A gesture nobody is told about does not exist on a HUD — the footer is the
+  // only affordance there is.
+  lines.push(`${hasNext ? '탭=목록 · ↓다음알림' : '탭=목록 · ↓목록으로'} · 더블탭=확인`)
   return lines.join('\n')
 }
 
@@ -175,6 +177,41 @@ export function listLabel(item: GlanceItem): string {
   const mark = (item.priority ?? 0) >= 4 ? '! ' : '· '
   const age = item.age ? ` · ${item.age}` : ''
   return truncate(`${mark}${item.title}${age}`, 30)
+}
+
+/**
+ * ackAlert marks one alert handled on the gateway.
+ *
+ * The only write this plugin makes. It carries the same deadline as the reads:
+ * a hung ack must not leave the wearer staring at a confirm screen, and the
+ * failure has to be visible because the alert stays otherwise.
+ */
+export async function ackAlert(settings: GlanceSettings, id: string): Promise<void> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const res = await fetch(`${settings.baseUrl}/api/even/ack`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${settings.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ id }),
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } }
+      throw new Error(data.error?.message || `HTTP ${res.status}`)
+    }
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`시간 초과 (${Math.round(REQUEST_TIMEOUT_MS / 1000)}초)`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export function pageTitle(id: string): string {
