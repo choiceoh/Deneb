@@ -202,4 +202,13 @@ describe('connectionLabel', () => {
     expect(connectionLabel(2)).toBe('연결 끊김')
     expect(connectionLabel(8)).toBe('연결 끊김')
   })
+
+  it('labels a saved copy from the very first frame', () => {
+    // The grace period exists so a marker does not blink over LIVE data. A
+    // cached glance is not live, and showing it unmarked is the exact failure
+    // the marker exists to prevent.
+    expect(connectionLabel(0, true)).toBe('오프라인 · 저장본')
+    expect(connectionLabel(1, true)).toBe('오프라인 · 저장본')
+    expect(connectionLabel(5, true)).toBe('오프라인 · 저장본')
+  })
 })

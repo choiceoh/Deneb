@@ -16,6 +16,7 @@ import {
   windowRange,
 } from './refresh'
 import { dispatchHubEvent } from './events'
+import { loadCachedGlance, saveCachedGlance } from './cache'
 import {
   fetchGlance,
   fetchStatus,
@@ -66,6 +67,8 @@ let consecutiveFailures = 0
 let lastSignature = ''
 /** Connection marker currently ON SCREEN, so it is only redrawn when it flips. */
 let shownConnection = ''
+/** True while the screen is showing a saved glance rather than a live one. */
+let servingCache = false
 let stopped = false
 let paused = false
 
@@ -445,6 +448,8 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     }
     const payload = await fetchGlance(settings, { fresh })
     consecutiveFailures = 0
+    servingCache = false
+    saveCachedGlance(payload)
 
     // Re-read the LIVE screen, not the snapshot taken before the request. The
     // wearer can tap or swipe while a poll is in flight — now that navigation
@@ -496,8 +501,22 @@ async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
     // alerts as current. Not from a detail — that would yank someone out of
     // what they are reading — and not from the status screen, which is its own
     // deliberate view.
+    // Nothing has ever rendered — this is the cold open, out of range. A saved
+    // glance is what the wearer actually wants there, and it is honest as long
+    // as it is labelled: renderCurrentPage puts "오프라인 · 저장본" in the header.
+    if (pages.length === 0 && !servingCache) {
+      const cached = loadCachedGlance()
+      if (cached) {
+        servingCache = true
+        lastSignature = payloadSignature(cached)
+        applyPayload(cached, '')
+        screen = 'page'
+        await renderCurrentPage()
+        return
+      }
+    }
     if (silent) {
-      if (screen === 'page' && connectionLabel(consecutiveFailures) !== shownConnection) {
+      if (screen === 'page' && connectionLabel(consecutiveFailures, servingCache) !== shownConnection) {
         await renderCurrentPage()
       }
       return
@@ -549,7 +568,7 @@ function currentPageId(): string {
 }
 
 async function renderCurrentPage(): Promise<void> {
-  shownConnection = connectionLabel(consecutiveFailures)
+  shownConnection = connectionLabel(consecutiveFailures, servingCache)
   const page = pages[pageIndex] || {
     id: 'home',
     title: '알림',
@@ -565,7 +584,7 @@ async function renderCurrentPage(): Promise<void> {
   const footer = [
     '↓다음 · 탭=새로고침',
     stamp || nav,
-    connectionLabel(consecutiveFailures),
+    connectionLabel(consecutiveFailures, servingCache),
   ]
     .filter(Boolean)
     .join(' · ')
@@ -605,7 +624,9 @@ async function showAlertList(title: string): Promise<void> {
   await showText(
     [
       `Deneb · ${title}${position}`,
-      [`${items.length}건`, stamp, connectionLabel(consecutiveFailures)].filter(Boolean).join(' · '),
+      [`${items.length}건`, stamp, connectionLabel(consecutiveFailures, servingCache)]
+        .filter(Boolean)
+        .join(' · '),
       '',
       ...lines,
       '',
