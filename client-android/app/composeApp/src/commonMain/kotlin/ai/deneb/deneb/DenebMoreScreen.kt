@@ -21,6 +21,7 @@ import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.icons.outlined.AccountTree
+import ai.deneb.ui.icons.outlined.Article
 import ai.deneb.ui.icons.outlined.Assignment
 import ai.deneb.ui.icons.outlined.AutoAwesome
 import ai.deneb.ui.icons.outlined.Autorenew
@@ -28,7 +29,7 @@ import ai.deneb.ui.icons.outlined.Book
 import ai.deneb.ui.icons.outlined.Business
 import ai.deneb.ui.icons.outlined.Contacts
 import ai.deneb.ui.icons.outlined.Dashboard
-import ai.deneb.ui.icons.outlined.GridView
+import ai.deneb.ui.icons.outlined.Folder
 import ai.deneb.ui.icons.outlined.Insights
 import ai.deneb.ui.icons.outlined.KeyboardVoice
 import ai.deneb.ui.icons.outlined.Public
@@ -80,11 +81,11 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard"),
         MoreEntry("재귀적 자가개선", DenebRsi, Icons.Outlined.Autorenew, key = "deneb_rsi"),
         MoreEntry("사용량", DenebUsage, Icons.Outlined.Insights, key = "deneb_usage"),
-        MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Insights, key = "deneb_project_digests"),
+        MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Article, key = "deneb_project_digests"),
         MoreEntry("현장 지도", DenebSiteMap, Icons.Outlined.Place, key = "deneb_site_map"),
         MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org"),
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search"),
-        MoreEntry("카테고리", DenebCategories, Icons.Outlined.GridView, key = "deneb_categories"),
+        MoreEntry("카테고리", DenebCategories, Icons.Outlined.Folder, key = "deneb_categories"),
         MoreEntry("전체 연락처", DenebContacts, Icons.Outlined.Contacts, key = "deneb_contacts"),
         MoreEntry("연락처 정리", DenebContactsDedup, Icons.Outlined.AutoAwesome, key = "deneb_contacts_dedup"),
         MoreEntry("노트북", DenebNotebooks(), Icons.Outlined.Book, key = "deneb_notebooks"),
