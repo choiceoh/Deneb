@@ -221,7 +221,7 @@ record_app_jvm_pid() {
 cmd_start() {
   local profile="${1:-phone}"
   local geo; geo="$(profile_geometry "$profile")"
-  [[ -n "$geo" ]] || die "unknown profile '$profile' (use: phone | desktop)"
+  [[ -n "$geo" ]] || die "unknown profile '$profile' (use: phone | phone2x | desktop)"
   read -r dpw dph scale <<<"$geo"
   # Optional explicit override (e.g. NATIVE_W=480 NATIVE_H=1040 for a roomier frame).
   dpw="${NATIVE_W:-$dpw}"; dph="${NATIVE_H:-$dph}"
