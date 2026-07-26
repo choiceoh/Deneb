@@ -1,6 +1,9 @@
 import {
   AppLocationAccuracy,
   AudioInputSource,
+  ImageContainerProperty,
+  ImageRawDataUpdate,
+  RebuildPageContainer,
   waitForEvenAppBridge,
   TextContainerProperty,
   TextContainerUpgrade,
@@ -44,6 +47,7 @@ import {
   type NavRoute,
   type NavState,
 } from "./nav";
+import { ARROW_H, ARROW_W, arrowPng, maneuverArrow } from "./arrow";
 import {
   CAPTURE_MS,
   IMU_PACE_MS,
@@ -976,6 +980,113 @@ function clockLabel(): string {
 }
 
 /**
+ * NAV_ARROW_ID — the image container the maneuver arrow lives in.
+ *
+ * Image containers cannot set `isEventCapture` (documented in Even's own image
+ * template), so the full-screen text container stays behind it to catch taps.
+ * With zOrderIndex set on one container it must be set on ALL of them, so both
+ * carry it.
+ */
+const NAV_ARROW_ID = 3;
+
+/** enterNavPage rebuilds the glasses page with an arrow slot on the right. */
+async function enterNavPage(): Promise<boolean> {
+  const ok = await bridge.rebuildPageContainer(
+    new RebuildPageContainer({
+      containerTotalNum: 2,
+      textObject: [
+        new TextContainerProperty({
+          xPosition: 0,
+          yPosition: 0,
+          width: 576,
+          height: 288,
+          borderWidth: 0,
+          borderColor: 5,
+          paddingLength: 4,
+          containerID: 1,
+          containerName: "main",
+          content: "길찾기\n\n경로 계산 중…",
+          isEventCapture: 1,
+          zOrderIndex: 0,
+        }),
+      ],
+      imageObject: [
+        new ImageContainerProperty({
+          xPosition: 576 - ARROW_W - 8,
+          yPosition: 8,
+          width: ARROW_W,
+          height: ARROW_H,
+          containerID: NAV_ARROW_ID,
+          containerName: "arrow",
+          zOrderIndex: 1,
+        }),
+      ],
+    }),
+  );
+  if (!ok) console.error("rebuildPageContainer(nav) failed");
+  return ok;
+}
+
+/** leaveNavPage restores the single full-screen text page. */
+async function leaveNavPage(): Promise<void> {
+  await bridge.rebuildPageContainer(
+    new RebuildPageContainer({
+      containerTotalNum: 1,
+      textObject: [
+        new TextContainerProperty({
+          xPosition: 0,
+          yPosition: 0,
+          width: 576,
+          height: 288,
+          borderWidth: 0,
+          borderColor: 5,
+          paddingLength: 4,
+          containerID: 1,
+          containerName: "main",
+          content: " ",
+          isEventCapture: 1,
+        }),
+      ],
+    }),
+  );
+}
+
+/**
+ * pushArrow sends one arrow frame. Serial by construction — the SDK requires
+ * one updateImageRawData in flight at a time, and a nav route fires these on
+ * every maneuver change.
+ */
+let arrowChain: Promise<unknown> = Promise.resolve();
+let shownArrow = "";
+async function pushArrow(instruction: string): Promise<void> {
+  const kind = maneuverArrow(instruction);
+  if (!kind || kind === shownArrow) return;
+  shownArrow = kind;
+  arrowChain = arrowChain.then(async () => {
+    try {
+      const bytes = await arrowPng(kind);
+      const res = await bridge.updateImageRawData(
+        new ImageRawDataUpdate({
+          containerID: NAV_ARROW_ID,
+          containerName: "arrow",
+          imageData: bytes,
+        }),
+      );
+      if (res !== "success") {
+        // Never fatal: the text still names the maneuver, so a failed arrow
+        // degrades the display rather than stopping navigation.
+        console.error("updateImageRawData:", res);
+        shownArrow = "";
+      }
+    } catch (err) {
+      console.error("arrow render failed", err);
+      shownArrow = "";
+    }
+  });
+  await arrowChain;
+}
+
+/**
  * startNav plans a route and puts the glasses into turn-by-turn.
  *
  * The G2's own Navigate is not backed by Korean map data — export law keeps the
@@ -1006,6 +1117,8 @@ async function startNav(
   pauseLoop();
   screen = "nav";
   navDest = dest;
+  shownArrow = "";
+  await enterNavPage();
   await showText(`길찾기\n\n${dest}\n경로 계산 중…`);
 
   let result;
@@ -1044,6 +1157,8 @@ async function stopNav(): Promise<void> {
   navPos = null;
   navState = initialNavState();
   await bridge.stopAppLocationUpdates();
+  shownArrow = "";
+  await leaveNavPage();
   screen = "page";
   setPhoneStatus({ line: "길안내를 중지했습니다.", tone: "warn" });
   await resumeLoop();
@@ -1052,10 +1167,16 @@ async function stopNav(): Promise<void> {
 /** renderNav draws the current maneuver. */
 async function renderNav(): Promise<void> {
   if (!navRoute || !navPos) return;
-  const lines = navLines(navRoute, navState, navPos);
+  const step =
+    navRoute.steps[Math.min(navState.stepIndex, navRoute.steps.length - 1)];
+  const kind = step ? maneuverArrow(step.short) : null;
+  // Text drops the direction word only when an arrow will actually be drawn —
+  // if the maneuver has no arrow (출발, 경유지) the words are all the wearer has.
+  const lines = navLines(navRoute, navState, navPos, { arrow: Boolean(kind) });
   await showText(
     [`길찾기 · ${navDest}`, "", ...lines, "", "탭=중지"].join("\n"),
   );
+  if (step) await pushArrow(step.short);
 }
 
 /**
