@@ -262,7 +262,14 @@ func TestRSIDispatchMetricsCountRetryHistoryNotMarkerFiles(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now()
+	// Anchor to MIDDAY, not time.Now(): the fixture places two attempts at
+	// now-1m / now-2m and expects both to land in "today". Run within two
+	// minutes of local midnight — CI hit 00:00:02 UTC on 2026-07-26 — and they
+	// fall into yesterday, so today drops to 0 and this test fails for reasons
+	// that have nothing to do with the code under test. codingDispatchCountsAt
+	// takes `now` as a parameter precisely so the clock can be pinned here.
+	wall := time.Now()
+	now := time.Date(wall.Year(), wall.Month(), wall.Day(), 12, 0, 0, 0, wall.Location())
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	marker := fmt.Sprintf(`{
 		"id":"retry",
