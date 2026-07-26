@@ -43,7 +43,9 @@ import {
   glyphProbeLines,
   initialNavState,
   initialNavStateAt,
-  navLines,
+  formatMetres,
+  navTextLines,
+  remainingM,
   type NavCoord,
   type NavRoute,
   type NavState,
@@ -218,7 +220,10 @@ bridge.onEvenHubEvent((event) => {
       }
       break;
     case "stopLoop":
-      stopLoop();
+      // SYSTEM_EXIT (the wearer confirmed the exit dialog) or ABNORMAL_EXIT.
+      // This is the ONLY place teardown belongs: the double-tap itself must not
+      // tear anything down, because mode 1 lets the wearer cancel.
+      void teardown();
       break;
     case "pause":
       pauseLoop();
@@ -330,21 +335,48 @@ function clearRefreshTimer(): void {
 }
 
 /**
- * shutdown closes the glasses page because the wearer asked to.
+ * shutdown asks the system to close the glasses page.
  *
- * exitMode 0, not 1. The SDK README documents `shutDownPageContainer(0)` as
- * "Close the glasses page" and `(1)` as "ask foreground layer to decide" — this
- * call site is a deliberate double-tap on OUR page, so there is nothing to
- * defer. It had been 1 since the app was written, which is a coin flip on
- * whether the exit gesture exits.
+ * Mode 1, and NOTHING else in this function. Both halves matter:
  *
- * The polling stop is ours either way (stopLoop), which is why the smoke's
- * "no gateway traffic after shutdown" passed regardless — that check never
- * spoke to whether the page actually closed.
+ * Mode 1 is the system exit-confirmation dialog, which the platform requires on
+ * a root page — "Mode `0` (immediate exit) is not acceptable on the root page",
+ * and a QA reviewer rejects mode 0 outright (docs/ship/app-submission,
+ * docs/build/page-lifecycle, reference/glossary all say so). Mode 0 is for
+ * internal pages, where the user has already confirmed. This call site briefly
+ * used mode 0 on the strength of the SDK README's example, which contradicts
+ * all three doc pages; the README is wrong and nothing acknowledges it.
+ *
+ * And no teardown here, deliberately. Mode 1 means the wearer can still cancel;
+ * stopping the poll (or the mic, or the location stream) before the dialog
+ * leaves a live page that has quietly gone deaf when they tap "cancel".
+ * Teardown belongs in the SYSTEM_EXIT / ABNORMAL_EXIT handlers, which fire only
+ * once the exit is real.
  */
 function shutdown(): void {
+  void bridge.shutDownPageContainer(1);
+}
+
+/**
+ * teardown releases everything the app holds, on a confirmed exit.
+ *
+ * The hardware matters more than the timer: interpretation holds the glasses
+ * microphone and navigation holds a location stream, and neither is closed by
+ * the page going away. Leaving them open costs battery and, for the location
+ * feed, keeps a sensor running that the wearer believes they turned off.
+ */
+async function teardown(): Promise<void> {
   stopLoop();
-  void bridge.shutDownPageContainer(0);
+  const wasInterpreting = interpreting;
+  const wasNavigating = navRoute !== null;
+  interpreting = false;
+  navRoute = null;
+  try {
+    if (wasInterpreting) await bridge.audioControl(false);
+    if (wasNavigating) await bridge.stopAppLocationUpdates();
+  } catch {
+    // Exiting anyway — a failed release must not stall the exit path.
+  }
 }
 
 function needsSetup(s: GlanceSettings): boolean {
@@ -994,32 +1026,52 @@ const NAV_ARROW_ID = 3;
 async function enterNavPage(): Promise<boolean> {
   const ok = await bridge.rebuildPageContainer(
     new RebuildPageContainer({
-      containerTotalNum: 2,
+      containerTotalNum: 3,
       textObject: [
+        // Full-screen capture layer, kept blank: image containers cannot set
+        // isEventCapture, so taps need a text layer and this one must not also
+        // carry content that would sit under the bitmap.
         new TextContainerProperty({
           xPosition: 0,
           yPosition: 0,
           width: 576,
           height: 288,
           borderWidth: 0,
-          borderColor: 5,
-          paddingLength: 4,
+          borderColor: 0,
+          paddingLength: 0,
           containerID: 1,
           containerName: "main",
-          content: "길찾기\n\n경로 계산 중…",
+          content: " ",
           isEventCapture: 1,
           zOrderIndex: 0,
+        }),
+        // The sentence sits BELOW the bitmap, not beside it: text position is
+        // per-container, so a separate container is the only way to keep the
+        // maneuver text clear of the arrow.
+        new TextContainerProperty({
+          xPosition: 0,
+          yPosition: ARROW_H + 12,
+          width: 576,
+          height: 288 - ARROW_H - 12,
+          borderWidth: 0,
+          borderColor: 0,
+          paddingLength: 4,
+          containerID: 2,
+          containerName: "navText",
+          content: "경로 계산 중…",
+          isEventCapture: 0,
+          zOrderIndex: 1,
         }),
       ],
       imageObject: [
         new ImageContainerProperty({
-          xPosition: 576 - ARROW_W - 8,
+          xPosition: 8,
           yPosition: 8,
           width: ARROW_W,
           height: ARROW_H,
           containerID: NAV_ARROW_ID,
           containerName: "arrow",
-          zOrderIndex: 1,
+          zOrderIndex: 2,
         }),
       ],
     }),
@@ -1059,13 +1111,18 @@ async function leaveNavPage(): Promise<void> {
  */
 let arrowChain: Promise<unknown> = Promise.resolve();
 let shownArrow = "";
-async function pushArrow(instruction: string): Promise<void> {
+async function pushArrow(instruction: string, distance: string): Promise<void> {
   const kind = maneuverArrow(instruction);
-  if (!kind || kind === shownArrow) return;
-  shownArrow = kind;
+  if (!kind) return;
+  // Keyed on kind AND distance: the distance is inside the bitmap now, so it
+  // has to be redrawn as the number counts down — but only when the rendered
+  // text actually changes, which is far less often than a position fix.
+  const key = `${kind}:${distance}`;
+  if (key === shownArrow) return;
+  shownArrow = key;
   arrowChain = arrowChain.then(async () => {
     try {
-      const bytes = await arrowPng(kind);
+      const bytes = await arrowPng(kind, distance);
       const res = await bridge.updateImageRawData(
         new ImageRawDataUpdate({
           containerID: NAV_ARROW_ID,
@@ -1176,16 +1233,26 @@ async function stopNav(): Promise<void> {
 /** renderNav draws the current maneuver. */
 async function renderNav(): Promise<void> {
   if (!navRoute || !navPos) return;
-  const step =
-    navRoute.steps[Math.min(navState.stepIndex, navRoute.steps.length - 1)];
-  const kind = step ? maneuverArrow(step.short) : null;
-  // Text drops the direction word only when an arrow will actually be drawn —
-  // if the maneuver has no arrow (출발, 경유지) the words are all the wearer has.
-  const lines = navLines(navRoute, navState, navPos, { arrow: Boolean(kind) });
-  await showText(
-    [`길찾기 · ${navDest}`, "", ...lines, "", "탭=중지"].join("\n"),
+  const idx = Math.min(navState.stepIndex, navRoute.steps.length - 1);
+  const step = navRoute.steps[idx];
+  const left = remainingM(navRoute, navState, navPos);
+
+  // The bitmap carries the arrow AND the distance (text containers have no font
+  // size, so this is the only way the distance can dominate the panel the way
+  // both shipping plugins make it). The text container carries the words.
+  await showNavText(navTextLines(navRoute, navState).join("\n"));
+  if (step) await pushArrow(step.short, formatMetres(left));
+}
+
+/** showNavText writes the nav page's sentence container (not the capture layer). */
+async function showNavText(content: string): Promise<void> {
+  await bridge.textContainerUpgrade(
+    new TextContainerUpgrade({
+      containerID: 2,
+      containerName: "navText",
+      content,
+    }),
   );
-  if (step) await pushArrow(step.short);
 }
 
 /**

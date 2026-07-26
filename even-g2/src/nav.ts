@@ -334,3 +334,55 @@ export function stripTrailingDistance(full: string): string {
 export function initialNavStateAt(route: NavRoute, pos: NavCoord): NavState {
   return advanceNav(route, initialNavState(), pos);
 }
+
+/**
+ * remainingSummary — "4.2km · 8분", the trip-level line both shipping G2
+ * navigation plugins carry along the bottom.
+ *
+ * Sums the planned distance of every maneuver still ahead and scales the route's
+ * total time by the fraction left, rather than asking the server again: the
+ * glasses hold the route and must keep working with no network.
+ */
+export function remainingSummary(route: NavRoute, state: NavState): string {
+  if (route.steps.length === 0) return "";
+  if (state.arrived) return "도착";
+  let metres = 0;
+  for (let i = state.stepIndex; i < route.steps.length; i += 1) {
+    metres += route.steps[i].distanceM;
+  }
+  const parts = [formatMetres(metres) || formatMetres(route.totalM)];
+  if (route.totalSec > 0 && route.totalM > 0) {
+    const secs = Math.round(
+      route.totalSec * Math.min(1, metres / route.totalM),
+    );
+    const mins = Math.max(1, Math.round(secs / 60));
+    parts.push(
+      mins >= 60 ? `${Math.floor(mins / 60)}시간 ${mins % 60}분` : `${mins}분`,
+    );
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * navTextLines — what belongs in the TEXT container when the bitmap is carrying
+ * the arrow and the distance.
+ *
+ * The distance is deliberately absent: it is already the largest thing on the
+ * panel, drawn into the image. Repeating it here is the two-numbers problem
+ * again, one line lower.
+ */
+export function navTextLines(route: NavRoute, state: NavState): string[] {
+  if (route.steps.length === 0) return ["경로 없음"];
+  if (state.arrived) return ["도착했습니다", "", "탭=종료"];
+  const idx = Math.min(state.stepIndex, route.steps.length - 1);
+  const step = route.steps[idx];
+  const lines: string[] = [];
+  const sentence = stripTrailingDistance(step.full);
+  if (sentence && sentence !== step.short) lines.push(sentence);
+  const next = route.steps[idx + 1];
+  if (next) lines.push(`다음: ${next.short}`);
+  const summary = remainingSummary(route, state);
+  if (summary) lines.push(`${summary} · ${idx + 1}/${route.steps.length}`);
+  lines.push("탭=중지");
+  return lines.slice(0, HUD_LINES);
+}
