@@ -875,19 +875,25 @@ async function showStatus(): Promise<void> {
   busy = true;
   try {
     const st = await fetchStatus(settings);
-    const host = settings.baseUrl.replace(/^https?:\/\//, "");
+    // Plumbing (bridge state, session key, gateway address) is phone-screen
+    // material — the wearer cannot act on any of it from the glasses, and a
+    // healthy line is noise. Only PROBLEMS earn a line here; the one always-on
+    // fact is the battery, which the glasses alone know.
+    const problems = [
+      st.ok ? "" : "브리지 이상",
+      st.chatReady ? "" : "챗 미준비",
+    ].filter(Boolean);
     await showText(
       [
         "Deneb · 상태",
         "",
-        st.ok ? "브리지 OK" : "브리지 이상",
-        st.chatReady ? "챗 준비됨" : "챗 미준비",
-        `세션 ${st.session || "glasses:main"}`,
+        ...(problems.length ? problems : ["정상"]),
         wearLine(),
-        host,
         "",
         "↓홈 · ↑이전 · 탭=페이지",
-      ].join("\n"),
+      ]
+        .filter((l, i, a) => l !== "" || a[i - 1] !== "")
+        .join("\n"),
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -1120,7 +1126,9 @@ async function renderCurrentPage(): Promise<void> {
 async function showAlertList(title: string): Promise<void> {
   const stamp = formatGeneratedLabel(lastGenerated, lastCached);
   const cursor = clampCursor();
-  const position = items.length > 1 ? ` (${cursor + 1}/${items.length})` : "";
+  // No (1/7) marker: the > cursor already shows where you are, and the count
+  // sits right before it — the parenthetical said the same thing twice.
+  const position = "";
   // The counts line is the briefing the wearer used to lose: the gateway builds
   // a home page that opens with a clock and "일정 2 · 할 일 3", and this page
   // draws itself from `items` and never renders that text at all.
