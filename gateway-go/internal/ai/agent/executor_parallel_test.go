@@ -88,11 +88,11 @@ func TestSegmentToolCalls_SplitsAtEachVetBoundary(t *testing.T) {
 	}
 }
 
-// TestExecuteToolsParallel_OverlapsButPreservesCallOrder: three 120ms calls must
+// TestExecuteToolsParallelTracked_OverlapsButPreservesCallOrder: three 120ms calls must
 // finish in well under serial time (360ms), and the result blocks, result-hook
 // emissions, and ToolUseIDs must all follow the CALL order even though the
 // executions complete in a different order.
-func TestExecuteToolsParallel_OverlapsButPreservesCallOrder(t *testing.T) {
+func TestExecuteToolsParallelTracked_OverlapsButPreservesCallOrder(t *testing.T) {
 	sleeps := map[string]time.Duration{"tu_0": 120 * time.Millisecond, "tu_1": 60 * time.Millisecond, "tu_2": 10 * time.Millisecond}
 	exec := toolExecFunc(func(ctx context.Context, name string, input json.RawMessage) (string, error) {
 		var p struct {
@@ -122,7 +122,7 @@ func TestExecuteToolsParallel_OverlapsButPreservesCallOrder(t *testing.T) {
 	}
 
 	start := time.Now()
-	results := executeToolsParallel(context.Background(), calls, exec, hooks, "", 0, slog.Default(), nil, nil)
+	results := executeToolsParallelTracked(context.Background(), calls, exec, hooks, "", 0, slog.Default(), nil, nil).results
 	elapsed := time.Since(start)
 
 	if elapsed >= 300*time.Millisecond {
@@ -171,7 +171,7 @@ func TestToolResultMetadata_PresentOrMissingAcrossPaths(t *testing.T) {
 	}
 
 	t.Run("parallel", func(t *testing.T) {
-		check(t, executeToolsParallel(context.Background(), calls, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil))
+		check(t, executeToolsParallelTracked(context.Background(), calls, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil).results)
 	})
 	t.Run("sequential", func(t *testing.T) {
 		results := make([]llm.ContentBlock, len(calls))
@@ -182,9 +182,9 @@ func TestToolResultMetadata_PresentOrMissingAcrossPaths(t *testing.T) {
 	})
 }
 
-// TestExecuteToolsParallel_ErrorIsolation: one failing call yields an IsError
+// TestExecuteToolsParallelTracked_ErrorIsolation: one failing call yields an IsError
 // block at its own index without disturbing its siblings.
-func TestExecuteToolsParallel_ErrorIsolation(t *testing.T) {
+func TestExecuteToolsParallelTracked_ErrorIsolation(t *testing.T) {
 	exec := toolExecFunc(func(_ context.Context, _ string, input json.RawMessage) (string, error) {
 		if strings.Contains(string(input), "boom") {
 			return "", fmt.Errorf("kaput")
@@ -195,7 +195,7 @@ func TestExecuteToolsParallel_ErrorIsolation(t *testing.T) {
 		{Type: "tool_use", ID: "a", Name: "web", Input: llm.FlexibleFromRaw([]byte(`{}`))},
 		{Type: "tool_use", ID: "b", Name: "web", Input: llm.FlexibleFromRaw([]byte(`{"boom":1}`))},
 	}
-	results := executeToolsParallel(context.Background(), calls, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil)
+	results := executeToolsParallelTracked(context.Background(), calls, exec, StreamHooks{}, "", 0, slog.Default(), nil, nil).results
 	if results[0].IsError || results[0].Content != "fine" {
 		t.Errorf("healthy sibling disturbed: %+v", results[0])
 	}
