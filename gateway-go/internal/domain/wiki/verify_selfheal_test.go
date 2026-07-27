@@ -40,20 +40,22 @@ func TestDetectDuplicates_NormalizedTitle(t *testing.T) {
 }
 
 // TestDetectDuplicates_IsDeterministicAcrossRuns: the finding text must not
-// depend on Go's randomized map iteration. Live 2026-07: the same similar-title
-// pair rendered as `"김유영" ~ "김노영"` on one dream cycle and `"김노영" ~
-// "김유영"` on the next, so one logical finding was reported as two distinct
-// strings — 6,632 finding lines over 14 days collapsing to 1,779 unique, top
-// pairs appearing ~62 times in EACH direction.
+// depend on Go's randomized map iteration. Live 2026-07: the same pair rendered
+// with its two members swapped from one dream cycle to the next, so one logical
+// finding was reported as two distinct strings — 6,632 finding lines over 14
+// days collapsing to 1,779 unique, top pairs appearing ~62 times in EACH
+// direction. (The Korean near-name pairs that used to drive those counts are no
+// longer reported at all — see the CJK test below — so this fixture uses the
+// two finding kinds that remain.)
 func TestDetectDuplicates_IsDeterministicAcrossRuns(t *testing.T) {
 	build := func() map[string]IndexEntry {
 		idx := newIndex()
-		// Similar-but-distinct people: the exact false-positive class that
-		// re-reports forever, so its rendering must at least be stable.
-		idx.updateEntry("인물/김유영.md", &Page{Meta: Frontmatter{Title: "김유영"}})
-		idx.updateEntry("인물/김노영.md", &Page{Meta: Frontmatter{Title: "김노영"}})
-		idx.updateEntry("인물/박종원.md", &Page{Meta: Frontmatter{Title: "박종원"}})
-		idx.updateEntry("인물/최종원.md", &Page{Meta: Frontmatter{Title: "최종원"}})
+		// Spelling variants that normalize equal (the auto-mergeable kind)…
+		idx.updateEntry("프로젝트/영산고 태양광.md", &Page{Meta: Frontmatter{Title: "영산고 태양광"}})
+		idx.updateEntry("프로젝트/영산고-태양광.md", &Page{Meta: Frontmatter{Title: "영산고-태양광"}})
+		// …and latin titles a letter apart (the advisory kind).
+		idx.updateEntry("프로젝트/solar-farm-a.md", &Page{Meta: Frontmatter{Title: "solar-farm-a"}})
+		idx.updateEntry("프로젝트/solar-farm-b.md", &Page{Meta: Frontmatter{Title: "solar-farm-b"}})
 		return idx.Entries
 	}
 	render := func(fs []verifyFinding) []string {
@@ -226,4 +228,38 @@ func testMustRead(t *testing.T, s *Store, path string) *Page {
 		t.Fatalf("ReadPage(%s): %v", path, err)
 	}
 	return p
+}
+
+// Regression: the Levenshtein rule treated a one-syllable difference in a short
+// Korean name or place as a near-duplicate. On the live wiki that produced 106
+// similar-title warnings per dream cycle with essentially no true positive —
+// 94 of them pairs of plainly different people — re-reported every night.
+func TestDetectDuplicates_KoreanNamesOneSyllableApartAreNotDuplicates(t *testing.T) {
+	t.Parallel()
+	for _, pair := range [][2]string{
+		{"김노영", "김유영"}, // 서로 다른 인물
+		{"강동민", "강동화"},
+		{"김갑수", "김덕수"},
+		{"진도군", "완도군"}, // 서로 다른 지명
+		{"서산시", "아산시"},
+		{"울산", "부산"},
+		{"기아-광주 진행 로그", "기아-광명 진행 로그"}, // 서로 다른 현장
+	} {
+		if isSimilar(pair[0], pair[1]) {
+			t.Errorf("isSimilar(%q, %q) = true; a syllable apart in CJK is a different word", pair[0], pair[1])
+		}
+	}
+	// The signal that DOES survive: spelling variants that normalize equal. That
+	// path (normalizeTitleKey) is the one allowed to auto-merge.
+	if normalizeTitleKey("영산고 태양광") != normalizeTitleKey("영산고-태양광") {
+		t.Error("punctuation/spacing variants must still fold to one key")
+	}
+	// Latin text keeps the distance rule — one letter of a short word there is
+	// ordinary spelling variance.
+	if !isSimilar("Smith", "Smyth") {
+		t.Error("isSimilar(Smith, Smyth) = false; the alphabet rule must stay")
+	}
+	if !isSimilar("solar-farm-a", "solar-farm-b") {
+		t.Error("isSimilar on long latin ids regressed")
+	}
 }
