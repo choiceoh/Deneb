@@ -205,14 +205,17 @@ const mainText = new TextContainerProperty({
   containerName: "main",
   content: "Deneb\n\n설정 확인 중…",
   isEventCapture: 1,
-  // Required, not optional: the SDK rejects the WHOLE page when some containers
-  // carry zOrderIndex and others do not, and a rejected startup page means the
-  // app draws nothing at all. Shipping without this looked exactly like "안경에서
-  // 아예 안 켜진다".
-  zOrderIndex: 0,
 });
 
-// Every container the app will ever use is declared HERE, at startup.
+// Every container the app will ever use is declared HERE, at startup, and NONE
+// of them sets zOrderIndex.
+//
+// Even's own image template — the reference that demonstrably renders bitmaps on
+// this hardware — uses no zOrderIndex at all. This code set it on all four
+// containers and every image push came back sendFailed, for a single 2.4KB PNG,
+// paced and retried. Matching the working reference is worth more than the
+// stacking control, which nothing here actually needs: the containers do not
+// overlap.
 //
 // The nav screen used to add its image containers through rebuildPageContainer
 // and the arrow never appeared on the device. Even's own image template creates
@@ -234,7 +237,6 @@ const navText = new TextContainerProperty({
   containerName: "navText",
   content: " ",
   isEventCapture: 0,
-  zOrderIndex: 1,
 });
 
 const arrowImage = new ImageContainerProperty({
@@ -244,7 +246,6 @@ const arrowImage = new ImageContainerProperty({
   height: ARROW_H,
   containerID: 3,
   containerName: "arrow",
-  zOrderIndex: 2,
 });
 
 const speedImage = new ImageContainerProperty({
@@ -254,7 +255,6 @@ const speedImage = new ImageContainerProperty({
   height: SPEED_H,
   containerID: 4,
   containerName: "speed",
-  zOrderIndex: 3,
 });
 
 const started = await bridge.createStartUpPageContainer(
