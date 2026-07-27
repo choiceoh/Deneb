@@ -555,6 +555,29 @@ def pending_impact_observations(
     Only contracts owned by this miner are interpreted. Unknown metrics remain
     pending for their own evaluator rather than being guessed here.
     """
+    return pending_impact_observations_for(
+        existing,
+        lambda metric: resolve_impact_metric(
+            metric, structural_report, runtime_report, rsi_report
+        ),
+        now_ms,
+    )
+
+
+def pending_impact_observations_for(
+    existing: list[dict[str, Any]],
+    resolver,
+    now_ms: int,
+) -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
+    """Shared attempt-gating/window walk over pending contracts (miner-agnostic).
+
+    ``resolver(metric)`` returns ``(observed, samples, note)``, ``None`` when
+    the metric belongs to another evaluator, or raises ImpactMetricUnavailable
+    when its evidence is missing right now. Sibling miners (deadcode-finding,
+    tool-quality) import THIS function so the lifecycle semantics — pending
+    only, dispatch-attempt required, observation window honored — cannot drift
+    from the health miner's (the same principle as the shared RPC edge).
+    """
     observations: list[dict[str, Any]] = []
     skipped: list[tuple[str, str]] = []
     for candidate in existing:
@@ -580,9 +603,7 @@ def pending_impact_observations(
             continue
 
         try:
-            resolved = resolve_impact_metric(
-                metric, structural_report, runtime_report, rsi_report
-            )
+            resolved = resolver(metric)
         except ImpactMetricUnavailable as exc:
             skipped.append((cid, str(exc)))
             continue

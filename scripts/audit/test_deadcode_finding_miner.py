@@ -177,3 +177,40 @@ class RuntimeCorroborationTest(unittest.TestCase):
         out = "  [rpc] miniapp.people.list\n        → peopleList (x.go:92)\n  [tool] wiki\n"
         self.assertEqual(miner.parse_entry_points(out),
                          [("rpc", "miniapp.people.list"), ("tool", "wiki")])
+
+
+class ImpactContractTests(unittest.TestCase):
+    """Every deadcode candidate must carry the finding-present contract, and the
+    miner must close its own contracts from a fresh audit (the ledger showed 3
+    applied deadcode candidates with no usefulness verdict — landed deletions
+    nobody could distinguish from no-ops)."""
+
+    def test_candidates_carry_finding_present_contract(self):
+        cands = deadcode_candidates([("internal/a.go", "OldFunc")])
+        contract = cands[0].get("impactContract")
+        self.assertIsNotNone(contract)
+        fid = cands[0]["source"].split(":", 1)[1]
+        self.assertEqual(contract["metric"], f"deadcode.finding_present:{fid}")
+        self.assertEqual(contract["direction"], "decrease")
+        self.assertEqual((contract["baseline"], contract["target"]), (1, 0))
+
+    def test_resolver_closes_from_fresh_audit(self):
+        from deadcode_finding_miner import deadcode_impact_resolver, finding_ids
+
+        gone = [("internal/a.go", "DeletedFunc")]
+        still = [("internal/b.go", "StillDeadFunc")]
+        current = finding_ids(still)
+        resolve = deadcode_impact_resolver(current)
+
+        gone_fid = deadcode_candidates(gone)[0]["source"].split(":", 1)[1]
+        observed, samples, note = resolve(f"deadcode.finding_present:{gone_fid}")
+        self.assertEqual((observed, samples), (0.0, 1))
+        self.assertIn("absent", note)
+
+        still_fid = deadcode_candidates(still)[0]["source"].split(":", 1)[1]
+        observed, _, note = resolve(f"deadcode.finding_present:{still_fid}")
+        self.assertEqual(observed, 1.0)
+        self.assertIn("still reported", note)
+
+        # Another evaluator's namespace is not ours to guess.
+        self.assertIsNone(resolve("health.finding_present:abc"))

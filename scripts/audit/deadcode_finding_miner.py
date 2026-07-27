@@ -54,7 +54,9 @@ from health_finding_miner import (
     DEFAULT_GATEWAY_URL,
     GatewayError,
     fetch_existing,
+    pending_impact_observations_for,
     record_candidate,
+    record_impact,
     select_candidates,
 )
 from tool_quality_miner import fetch_behavior
@@ -234,8 +236,48 @@ def deadcode_candidates(findings: list[tuple[str, str]],
             ),
             "risk": _RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{fid}",
+            # Deterministic usefulness oracle: the exact finding disappears from
+            # the next audit run (deleted — or baselined, which is an operator-
+            # approved resolution of the same finding). This miner closes its
+            # own contracts on later runs (deadcode_impact_resolver), mirroring
+            # how the health miner closes health.finding_present.
+            "impactContract": {
+                "metric": f"deadcode.finding_present:{fid}",
+                "direction": "decrease",
+                "baseline": 1,
+                "target": 0,
+                "minSamples": 1,
+            },
         })
     return out
+
+
+def finding_ids(findings: list[tuple[str, str]]) -> set[str]:
+    """Stable ids for the CURRENT audit findings (same hash as the source id)."""
+    return {
+        hashlib.sha256(f"{file} :: {symbol}".encode()).hexdigest()[:12]
+        for file, symbol in findings
+    }
+
+
+def deadcode_impact_resolver(current_ids: set[str]):
+    """Resolver for pending deadcode contracts against a fresh audit run.
+
+    Presence is checked against the RAW parsed findings (pre-phantom-filter):
+    the oracle is "does the audit still report it", not "would we file it".
+    Metrics outside this miner's namespace return None for their own evaluator.
+    """
+    prefix = "deadcode.finding_present:"
+
+    def resolve(metric: str):
+        if not metric.startswith(prefix):
+            return None
+        fid = metric.removeprefix(prefix)
+        present = fid in current_ids
+        state = "still reported" if present else "absent"
+        return float(present), 1, f"fresh deadcode-audit: finding {fid} {state}"
+
+    return resolve
 
 
 # --- bench runner (thin subprocess edge) ---------------------------------------
@@ -312,6 +354,9 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         return 1
 
     findings = parse_new_findings(audit_output)
+    # Presence oracle for contract closure — captured BEFORE the phantom filter
+    # prunes the filing list (observation asks the audit, not the filing policy).
+    current_ids = finding_ids(findings)
     base_url = args.url.rstrip("/")
     now_ms = int(time.time() * 1000)
     try:
@@ -322,6 +367,29 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
             return 1
         print(f"gateway unreachable — DRY-RUN continues WITHOUT dedup: {exc}", file=err)
         existing = []
+
+    impact_observations, impact_skipped = pending_impact_observations_for(
+        existing, deadcode_impact_resolver(current_ids), now_ms
+    )
+    impact_evaluated: list[dict[str, str]] = []
+    impact_errors: list[str] = []
+    for observation in impact_observations:
+        if args.dry_run:
+            print(
+                f"DRY-RUN would evaluate impact: {observation['id']} "
+                f"observed={observation['observed']}",
+                file=out,
+            )
+            continue
+        try:
+            status = record_impact(base_url, token, observation)
+            impact_evaluated.append({"id": observation["id"], "status": status})
+            print(f"impact {status}  {observation['id']}", file=out)
+        except GatewayError as exc:
+            impact_errors.append(f"{observation['id']}: {exc}")
+            print(f"impact rejected  {observation['id']}: {exc}", file=err)
+    for cid, reason in impact_skipped:
+        print(f"impact skip {cid}: {reason}", file=out)
 
     notes: dict[tuple[str, str], str] = {}
     phantoms: list[tuple[str, str, str]] = []
@@ -375,6 +443,11 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         "rejected": len(errors),
         "dry_run": bool(args.dry_run),
         "candidates": filed,
+        "impactPlanned": len(impact_observations),
+        "impactEvaluated": len(impact_evaluated),
+        "impactPending": len(impact_skipped),
+        "impactRejected": len(impact_errors),
+        "impacts": impact_evaluated,
     }
     if args.json:
         print(json.dumps(summary, ensure_ascii=False), file=out)
@@ -382,7 +455,9 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         print(
             f"deadcode-finding-miner: findings={summary['findings']} "
             f"planned={summary['planned']} filed={summary['filed']} "
-            f"skipped={summary['skipped']} rejected={summary['rejected']}"
+            f"skipped={summary['skipped']} rejected={summary['rejected']} "
+            f"impact-evaluated={summary['impactEvaluated']} "
+            f"impact-pending={summary['impactPending']}"
             + (" (dry-run)" if args.dry_run else ""),
             file=out,
         )

@@ -196,9 +196,18 @@ acceptance machinery stays forbidden at record time.
   `health.metric.score:<domain>/<metric>`, and the matching RSI Bench forms
   `rsi.bench.score:overall`, `rsi.bench.domain.score:<domain>`, and
   `rsi.bench.metric.score:<domain>/<metric>` (a globally unique metric id may
-  omit the domain). Unknown or unavailable metrics stay pending; ad-hoc
-  evaluators use `self_correction_dispatch.py impact` rather than editing the
-  append-only ledger.
+  omit the domain). Sibling miners close their own namespaces the same way
+  (2026-07-27 — the ledger had 5 landed deadcode/tool-quality fixes nobody
+  could distinguish from no-ops): `deadcode.finding_present:<id>` (deadcode
+  miner, fresh audit run) and `tool.quality.finding_present:<tool>:<kind>`
+  (tool-quality miner, fresh 7d recent window after a 7d observation window;
+  below MIN_CALLS the verdict stays pending — silence is not success). All
+  three share `pending_impact_observations_for` from the health miner so the
+  lifecycle gating cannot drift. Unknown or unavailable metrics stay pending;
+  ad-hoc evaluators use `self_correction_dispatch.py impact` rather than
+  editing the append-only ledger. NOT contracted by design: the health miner's
+  INCREMENTAL_KINDS (a bounded step leaves the finding correctly present) and
+  branch-rot (the landing itself is the effect).
 - **Impact drives retry policy**: within the same review state, dispatch ranks a
   source whose latest verdict is `regressed` before `no_effect`, then ordinary
   newest-first work. A latest `verified` verdict clears older negative priority.
