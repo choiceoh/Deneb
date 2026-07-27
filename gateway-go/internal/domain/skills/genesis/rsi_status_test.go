@@ -804,15 +804,23 @@ func TestRSIStatus_L4SurfacesMinerBenchFallback(t *testing.T) {
 func TestRSIDeclineReasonsNewestFirstWithRationaleExtraction(t *testing.T) {
 	longReason := strings.Repeat("가", 120)
 	cands := []SelfCorrectionCandidateRecord{
-		{ID: "a", Scope: "code", Title: "recurring rpc warn", Source: "runtime-error:x", DispatchPhase: selfCorrectionDispatchDeclined,
-			OutcomeNote: "dispatch session rc=0 elapsed=420s; prState=unknown; decline: 시그니처의 유일한 발생 경로는 정상 동작", UpdatedAt: 300},
-		{ID: "b", Scope: "code", Source: "health-finding:y", DispatchPhase: selfCorrectionDispatchDeclined,
-			OutcomeNote: "dispatch session rc=0 elapsed=109s; prState=unknown", UpdatedAt: 200},
-		{ID: "c", Scope: "code", Source: "tool-quality:z", DispatchPhase: selfCorrectionDispatchDeclined,
-			OutcomeNote: "decline: " + longReason, UpdatedAt: 100},
+		{
+			ID: "a", Scope: "code", Title: "recurring rpc warn", Source: "runtime-error:x", DispatchPhase: selfCorrectionDispatchDeclined,
+			OutcomeNote: "dispatch session rc=0 elapsed=420s; prState=unknown; decline: 시그니처의 유일한 발생 경로는 정상 동작", UpdatedAt: 300,
+		},
+		{
+			ID: "b", Scope: "code", Source: "health-finding:y", DispatchPhase: selfCorrectionDispatchDeclined,
+			OutcomeNote: "dispatch session rc=0 elapsed=109s; prState=unknown", UpdatedAt: 200,
+		},
+		{
+			ID: "c", Scope: "code", Source: "tool-quality:z", DispatchPhase: selfCorrectionDispatchDeclined,
+			OutcomeNote: "decline: " + longReason, UpdatedAt: 100,
+		},
 		// Non-declined phases stay out regardless of note content.
-		{ID: "d", Scope: "code", Source: "deadcode-finding:w", DispatchPhase: selfCorrectionDispatchWatchPassed,
-			OutcomeNote: "decline: red herring", UpdatedAt: 400},
+		{
+			ID: "d", Scope: "code", Source: "deadcode-finding:w", DispatchPhase: selfCorrectionDispatchWatchPassed,
+			OutcomeNote: "decline: red herring", UpdatedAt: 400,
+		},
 	}
 
 	got := rsiDeclineReasons(cands, 3)
