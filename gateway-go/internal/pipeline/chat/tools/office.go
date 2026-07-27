@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -70,6 +71,13 @@ func ToolOffice(workspaceDir string) ToolFunc {
 			// through so the agent can operate on the operator's own documents.
 			if !filepath.IsAbs(file) {
 				file = filepath.Join(workspaceDir, file)
+			}
+			// Prompt-injection safeguard: the agent may touch documents anywhere,
+			// but never credential / control-plane files (~/.ssh, ~/.deneb/*.env,
+			// id_rsa, …) — officecli's set/import/raw-set can overwrite arbitrary
+			// paths. Same hard-deny the fs read/write/edit tools apply.
+			if err := artifact.CheckProtectedPath(file, "access"); err != nil {
+				return "", err
 			}
 			argv = append(argv, file)
 		}
