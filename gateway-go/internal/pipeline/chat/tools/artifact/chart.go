@@ -213,7 +213,9 @@ func buildChartHTML(p chartParams, canvasW, canvasH int) (string, error) {
 // cannot express (callbacks, canvas drawing):
 //   - value-axis tick suffix for y_unit ("20" → "20만원") — replaces the old
 //     "단위: X" axis-title workaround. Y_NUMFMT carries the value_kind's decimal
-//     policy (Intl.NumberFormat options; empty object = locale default);
+//     policy (Intl.NumberFormat options; empty object = no policy, defer to
+//     Chart.js). With neither a unit nor a kind the callback is not installed at
+//     all — see the note in the script;
 //   - doughnut segment % labels + value-annotated legend entries: a static PNG
 //     has no hover tooltips, so without these a 구성비 chart shows no numbers
 //     at all (the audit's worst chart finding).
@@ -222,10 +224,25 @@ func buildChartHTML(p chartParams, canvasW, canvasH int) (string, error) {
 // template literals need no escaping.
 const chartRuntimeJS = `
   const fmtVal = v => Number(v).toLocaleString('ko-KR', Y_NUMFMT);
-  if (cfg.options && cfg.options.scales) {
+  // Tick numbers: only a value_kind pins the decimals. Without one we hand the
+  // number back to Chart.js's own numeric formatter, which derives precision
+  // (and scientific notation) from the tick SPACING — a flat locale default
+  // caps at 3 fraction digits and would collapse a 0.0001~0.0005 axis into a
+  // column of "0". With neither a unit nor a kind there is nothing to add, so
+  // the callback is not installed at all and Chart.js formats end to end.
+  const HAS_NUMFMT = Object.keys(Y_NUMFMT).length > 0;
+  const chartNumericTick = (globalThis.Chart && Chart.Ticks && Chart.Ticks.formatters)
+    ? Chart.Ticks.formatters.numeric : null;
+  if ((Y_UNIT || HAS_NUMFMT) && cfg.options && cfg.options.scales) {
     const axis = (cfg.options.indexAxis === 'y') ? 'x' : 'y';
     const sc = cfg.options.scales[axis];
-    if (sc) { sc.ticks = sc.ticks || {}; sc.ticks.callback = v => fmtVal(v) + Y_UNIT; }
+    if (sc) {
+      sc.ticks = sc.ticks || {};
+      sc.ticks.callback = function (v, i, ticks) {
+        if (!HAS_NUMFMT && chartNumericTick) return chartNumericTick.call(this, v, i, ticks) + Y_UNIT;
+        return fmtVal(v) + Y_UNIT;
+      };
+    }
   }
   const segLabels = { id: 'segLabels', afterDatasetsDraw(chart) {
     if (chart.config.type !== 'doughnut') return;

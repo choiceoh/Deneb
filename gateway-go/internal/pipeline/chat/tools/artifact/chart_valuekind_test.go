@@ -116,3 +116,30 @@ func TestBuildChartHTMLCarriesNumberFormat(t *testing.T) {
 		}
 	}
 }
+
+// With no unit and no kind there is nothing to add to a tick, so the override
+// must not be installed: Chart.js derives tick precision from the tick spacing,
+// and a flat locale default (max 3 fraction digits) would render a
+// 0.0001~0.0005 axis as a column of "0".
+func TestBuildChartHTMLLeavesTickFormattingToChartJSWithoutAHint(t *testing.T) {
+	p := chartParams{
+		ChartType: "line",
+		Labels:    []string{"a", "b", "c"},
+		Series:    []chartSeries{{Data: []float64{0.0001, 0.0003, 0.0005}}},
+	}
+	w, h := chartCanvas(p)
+	html, err := buildChartHTML(p, w, h)
+	if err != nil {
+		t.Fatalf("buildChartHTML: %v", err)
+	}
+	if !strings.Contains(html, `const Y_UNIT = ""`) || !strings.Contains(html, `const Y_NUMFMT = {}`) {
+		t.Fatalf("expected an empty unit and no number-format policy in the page")
+	}
+	// The guard that keeps Chart.js in charge, and the fallback that keeps its
+	// adaptive precision even when a unit suffix has to be appended.
+	for _, want := range []string{"if ((Y_UNIT || HAS_NUMFMT)", "chartNumericTick.call(this, v, i, ticks)"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("chart html missing %q", want)
+		}
+	}
+}

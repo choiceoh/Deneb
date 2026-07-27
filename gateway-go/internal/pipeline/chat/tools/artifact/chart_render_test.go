@@ -80,6 +80,20 @@ func TestChartRender_Sample(t *testing.T) {
 			Labels:    []string{"월", "화", "수", "목", "금", "토", "일"},
 			Series:    []chartSeries{{Name: "기온", Data: []float64{24.1, 25.3, 26.0, 25.4, 23.8, 22.9, 24.6}}},
 		}},
+		// No unit and no kind: Chart.js must keep deriving tick precision from the
+		// tick spacing. If the ticks all read "0" the override leaked back in.
+		{"tiny-values-no-hint", chartParams{
+			ChartType: "line", Title: "미세 변화", Subtitle: "눈금이 0으로 뭉개지면 안 된다",
+			Labels: []string{"a", "b", "c", "d"},
+			Series: []chartSeries{{Name: "값", Data: []float64{0.0001, 0.0003, 0.0002, 0.0005}}},
+		}},
+		// Same tiny values WITH a unit: the suffix is appended but the adaptive
+		// precision must survive.
+		{"tiny-values-with-unit", chartParams{
+			ChartType: "line", Title: "미세 변화 (단위 있음)", YUnit: "mm",
+			Labels: []string{"a", "b", "c", "d"},
+			Series: []chartSeries{{Name: "값", Data: []float64{0.0001, 0.0003, 0.0002, 0.0005}}},
+		}},
 	}
 	for _, c := range cases {
 		w, h := chartCanvas(c.p)
