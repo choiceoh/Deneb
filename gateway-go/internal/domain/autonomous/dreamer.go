@@ -32,12 +32,16 @@ type DreamReport struct {
 	// WikiProjectDigests counts project 대표페이지 "## 현재 상태" sections the
 	// cycle refreshed (Phase 3d) — page mutations outside the created/updated
 	// apply counters, so digest-only cycles still register as page-changing.
-	WikiProjectDigests int      `json:"wikiProjectDigests,omitempty"`
-	WikiProposalPath   string   `json:"wikiProposalPath,omitempty"`
-	VerifyFindings     []string `json:"verifyFindings,omitempty"`
-	WikiGraphNodes     int      `json:"wikiGraphNodes,omitempty"`
-	WikiGraphEdges     int      `json:"wikiGraphEdges,omitempty"`
-	WikiGraphClustered bool     `json:"wikiGraphClustered,omitempty"`
+	WikiProjectDigests int    `json:"wikiProjectDigests,omitempty"`
+	WikiProposalPath   string `json:"wikiProposalPath,omitempty"`
+	// VerifyFindings carries only FIRST-TIME advisory findings; ones already
+	// announced in an earlier cycle fold into VerifyFindingsRepeat (the verify
+	// ledger, wiki/verify_ledger.go, remembers what was shown).
+	VerifyFindings       []string `json:"verifyFindings,omitempty"`
+	VerifyFindingsRepeat int      `json:"verifyFindingsRepeat,omitempty"`
+	WikiGraphNodes       int      `json:"wikiGraphNodes,omitempty"`
+	WikiGraphEdges       int      `json:"wikiGraphEdges,omitempty"`
+	WikiGraphClustered   bool     `json:"wikiGraphClustered,omitempty"`
 	// WikiChangeSummary is a preformatted, human-readable block describing
 	// what this cycle changed (paths, git snapshot hash, diffstat, rollback
 	// hint). Appended verbatim to the dream notification.

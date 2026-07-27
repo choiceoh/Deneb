@@ -733,19 +733,31 @@ func (wd *WikiDreamer) rebuildAndVerifyDreamWiki(ctx context.Context, cycle *dre
 	}
 
 	findings := wd.verifyPages(ctx)
+	// Reconcile even on zero findings: entries for issues that no longer
+	// re-appear are how the ledger records "resolved" (a recurrence later
+	// counts as new again).
+	ledger, fresh, repeats := reconcileVerifyFindings(wd.loadVerifyLedger(), findings, time.Now())
+	if err := wd.saveVerifyLedger(ledger); err != nil {
+		cycle.addPhaseError("verify-ledger: %v", err)
+	}
 	if len(findings) == 0 {
 		return
 	}
 	applied := wd.applyVerifyFixes(findings)
+	// Only FIRST-TIME advisory findings are reported verbatim; ones the
+	// operator has already been shown fold into a single count so the dream
+	// notification announces news, not the standing backlog.
+	for _, finding := range fresh {
+		cycle.report.VerifyFindings = append(cycle.report.VerifyFindings, finding.Detail)
+	}
+	cycle.report.VerifyFindingsRepeat = repeats
 	for _, finding := range findings {
-		if finding.Fix == nil {
-			cycle.report.VerifyFindings = append(cycle.report.VerifyFindings, finding.Detail)
-		}
 		if finding.Type == "unrecalled" {
 			cycle.report.UnrecalledFindings++
 		}
 	}
-	wd.logger.Info("wiki-dream: verification", "findings", len(findings), "autoApplied", applied)
+	wd.logger.Info("wiki-dream: verification",
+		"findings", len(findings), "new", len(fresh), "repeat", repeats, "autoApplied", applied)
 	if applied > 0 {
 		if err := wd.rebuildIndex(); err != nil {
 			cycle.addPhaseError("index-rebuild after auto-fix: %v", err)

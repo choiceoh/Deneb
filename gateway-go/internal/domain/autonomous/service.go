@@ -538,10 +538,13 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 				report.UserModelUpdated, report.MutualUpdated, dur)
 		}
 		if len(report.VerifyFindings) > 0 {
-			msg += fmt.Sprintf("\n🔍 검증 발견 %d건:", len(report.VerifyFindings))
+			msg += fmt.Sprintf("\n🔍 새 검증 발견 %d건:", len(report.VerifyFindings))
 			for _, f := range report.VerifyFindings {
 				msg += "\n  - " + truncateOutput(f, 80)
 			}
+		}
+		if report.VerifyFindingsRepeat > 0 {
+			msg += fmt.Sprintf("\n🔍 기존 발견 %d건 유지 (미해결)", report.VerifyFindingsRepeat)
 		}
 		// What exactly changed + how to roll it back (wiki git snapshot).
 		if report.WikiChangeSummary != "" {
