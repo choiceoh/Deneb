@@ -140,77 +140,11 @@ export function remainingM(
   return distanceM(pos, step.coord);
 }
 
-/**
- * liveInstruction rewrites the maneuver with the distance actually left.
- *
- * The gateway's Short carries the PLANNED distance ("190m 앞 좌회전"), which is
- * right when the step begins and a lie thirty seconds later. On a HUD the
- * number is the part the wearer acts on, so it has to track reality.
- */
-export function liveInstruction(step: NavStep, metresLeft: number): string {
-  const bare = step.short.replace(/^[0-9.]+(?:m|km)\s*(?:앞\s*)?/, "");
-  if (bare === "출발" || bare === "목적지" || bare === "경유지") return bare;
-  const d = formatMetres(metresLeft);
-  if (!d) return bare;
-  return bare === "직진" ? `${d} 직진` : `${d} 앞 ${bare}`;
-}
-
 /** formatMetres mirrors the gateway's own distance wording. */
 export function formatMetres(m: number): string {
   if (m <= 0) return "";
   if (m < 1000) return `${m}m`;
   return `${(m / 1000).toFixed(1).replace(/\.0$/, "")}km`;
-}
-
-/**
- * navLines renders the HUD for the current fix.
- *
- * Deliberately sparse. Ten lines are available but a navigating wearer is
- * looking at the road, so the instruction gets the top line alone and
- * everything else is subordinate — a dense screen here is not more information,
- * it is a longer glance away from traffic.
- */
-export function navLines(
-  route: NavRoute,
-  state: NavState,
-  pos: NavCoord,
-  opts?: { arrow?: boolean },
-): string[] {
-  if (route.steps.length === 0) return ["경로 없음"];
-  if (state.arrived) return ["도착했습니다"];
-
-  const idx = Math.min(state.stepIndex, route.steps.length - 1);
-  const step = route.steps[idx];
-  const left = distanceM(pos, step.coord);
-
-  // With an arrow on screen the direction is already shown, so the text drops
-  // to the distance alone. This also removes a real hazard: the instruction and
-  // TMap's sentence carry DIFFERENT distances (metres to the maneuver vs metres
-  // travelled after it), and two competing numbers three centimetres from the
-  // eye is a misread waiting to happen.
-  const lines = opts?.arrow
-    ? [formatMetres(left) || liveInstruction(step, left)]
-    : [liveInstruction(step, left)];
-
-  // The sentence only earns a line when it says more than the fitted form —
-  // TMap often repeats "목적지" or "출발" verbatim. Its trailing travel clause
-  // is dropped with an arrow present, for the same two-numbers reason.
-  const sentence = opts?.arrow ? stripTrailingDistance(step.full) : step.full;
-  if (
-    sentence &&
-    sentence !== step.short &&
-    sentence !== liveInstruction(step, left)
-  ) {
-    lines.push(sentence);
-  }
-
-  const next = route.steps[idx + 1];
-  if (next) lines.push(`다음: ${next.short}`);
-
-  lines.push(
-    `${idx + 1}/${route.steps.length} · 총 ${formatMetres(route.totalM)}`,
-  );
-  return lines.slice(0, HUD_LINES);
 }
 
 /** How long a route request may take before the wearer is told it failed. */
@@ -303,21 +237,6 @@ export const GLYPH_PROBE: Array<{ label: string; glyphs: string }> = [
 export function glyphProbeLines(): string[] {
   const rows = GLYPH_PROBE.map((r) => `${r.label}  ${r.glyphs}`);
   return ["글리프 확인 — 빈 줄=미지원", ...rows].slice(0, HUD_LINES);
-}
-
-/**
- * stripTrailingDistance removes TMap's "…N m 이동" travel clause.
- *
- * That clause measures distance AFTER the maneuver, while the headline shows
- * distance TO it. Both are true and they are different numbers; with an arrow
- * carrying the direction, the sentence is only there for the street and
- * landmark, so the number is noise.
- */
-export function stripTrailingDistance(full: string): string {
-  return full
-    .replace(/\s*[0-9.]+\s*(?:m|km)\s*이동\s*$/, "")
-    .replace(/\s*(?:을|를)?\s*따라\s*$/, "")
-    .trim();
 }
 
 /**

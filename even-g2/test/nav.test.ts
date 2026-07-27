@@ -6,8 +6,6 @@ import {
   formatMetres,
   initialNavState,
   initialNavStateAt,
-  liveInstruction,
-  navLines,
   navTextLines,
   remainingSummary,
   fetchRoute,
@@ -151,86 +149,12 @@ describe("advanceNav", () => {
   });
 });
 
-describe("liveInstruction", () => {
-  it("replaces the planned distance with the real one", () => {
-    // The gateway's text says 100m because that is what the plan said; thirty
-    // seconds later the wearer needs the distance that is actually left.
-    expect(liveInstruction(route.steps[1], 40)).toBe("40m 앞 좌회전");
-  });
-
-  it("keeps 직진 without the 앞 particle", () => {
-    const step = { ...route.steps[1], short: "310m 직진" };
-    expect(liveInstruction(step, 120)).toBe("120m 직진");
-  });
-
-  it("leaves endpoints alone", () => {
-    expect(liveInstruction(route.steps[0], 500)).toBe("출발");
-    expect(liveInstruction(route.steps[2], 500)).toBe("목적지");
-  });
-
-  it("drops the distance when there is none left", () => {
-    expect(liveInstruction(route.steps[1], 0)).toBe("좌회전");
-  });
-
-  it("handles a km-scale planned distance", () => {
-    const step = { ...route.steps[1], short: "2.4km 앞 우회전" };
-    expect(liveInstruction(step, 1500)).toBe("1.5km 앞 우회전");
-  });
-});
-
 describe("formatMetres", () => {
   it("formats the way the gateway does", () => {
     expect(formatMetres(0)).toBe("");
     expect(formatMetres(999)).toBe("999m");
     expect(formatMetres(1000)).toBe("1km");
     expect(formatMetres(1500)).toBe("1.5km");
-  });
-});
-
-describe("navLines", () => {
-  it("leads with the live instruction", () => {
-    const lines = navLines(route, { stepIndex: 1, arrived: false }, P0);
-    expect(lines[0]).toMatch(/앞 좌회전$/);
-  });
-
-  it("shows the next maneuver and progress", () => {
-    const lines = navLines(route, { stepIndex: 1, arrived: false }, P0);
-    expect(lines).toContain("다음: 목적지");
-    expect(lines.some((l) => l.includes("2/3"))).toBe(true);
-  });
-
-  it("does not repeat the sentence when it adds nothing", () => {
-    // TMap echoes "목적지" as both the short and the full form; printing it
-    // twice wastes a line on a ten-line screen.
-    const lines = navLines(route, { stepIndex: 2, arrived: false }, P0);
-    expect(lines.filter((l) => l === "목적지")).toHaveLength(1);
-  });
-
-  it("reports arrival", () => {
-    expect(navLines(route, { stepIndex: 2, arrived: true }, P2)).toEqual([
-      "도착했습니다",
-    ]);
-  });
-
-  it("handles an empty route rather than rendering blank", () => {
-    const empty: NavRoute = { steps: [], totalM: 0, totalSec: 0, mode: "walk" };
-    expect(navLines(empty, initialNavState(), P0)).toEqual(["경로 없음"]);
-  });
-
-  it("never exceeds the HUD line budget", () => {
-    const long: NavRoute = {
-      ...route,
-      steps: Array.from({ length: 40 }, (_, i) => ({
-        short: `${i}00m 앞 좌회전`,
-        full: `아주 긴 안내 문장 ${i}`,
-        distanceM: 100,
-        turnType: 12,
-        coord: P0,
-      })),
-    };
-    expect(
-      navLines(long, { stepIndex: 0, arrived: false }, P2).length,
-    ).toBeLessThanOrEqual(10);
   });
 });
 
