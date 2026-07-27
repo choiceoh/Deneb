@@ -394,6 +394,33 @@ onSettingsSaved((next) => {
 // The glasses report whether they are on a face, in the case, or nearly flat.
 // This is what the polling loop should have been keyed on all along — see
 // shouldPoll for why guessing at foreground events was the wrong instrument.
+/**
+ * pollDeviceStatus asks the host outright instead of waiting to be told.
+ *
+ * onDeviceStatusChanged never fired on the device — the status screen stayed at
+ * "착용 상태 미보고" through a whole session and the HUD mirror carried no wear
+ * data at all. getDeviceInfo() returns the same DeviceStatus as a QUERY, which
+ * does not depend on the host choosing to push.
+ */
+async function pollDeviceStatus(): Promise<void> {
+  try {
+    const info = await bridge.getDeviceInfo();
+    const st = info?.status;
+    if (!st) return;
+    wearStatus = mergeWearStatus(wearStatus, {
+      isWearing: st.isWearing,
+      isInCase: st.isInCase,
+      isCharging: st.isCharging,
+      batteryLevel: st.batteryLevel,
+    });
+  } catch {
+    // Never fatal: shouldPoll fails open, so an unknown wear state costs a
+    // slightly eager refresh and nothing else.
+  }
+}
+
+void pollDeviceStatus();
+
 bridge.onDeviceStatusChanged((status) => {
   const before = shouldPoll(wearStatus);
   // Merged, not assigned: the SDK defaults absent fields to "not worn, 0%", so
@@ -870,6 +897,7 @@ async function showStatus(): Promise<void> {
  * rebuilt the container even when the payload was byte-identical.
  */
 async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
+  void pollDeviceStatus();
   if (busy) return;
   busy = true;
   const keepId = currentPageId();

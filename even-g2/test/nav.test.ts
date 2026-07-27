@@ -235,6 +235,14 @@ describe("fetchRoute", () => {
 });
 
 describe("initialNavStateAt", () => {
+  it("opens past 출발 even when the route origin is far from the fix", () => {
+    // Observed on the device as image:arrow=skipped:출발 with the text stuck at
+    // 1/7: TMap snaps the origin to the road, so the start point is routinely
+    // outside ARRIVE_RADIUS_M and a distance-based advance never fires.
+    const farFromStart = { lat: 37.56, lon: 126.97 };
+    expect(initialNavStateAt(route, farFromStart).stepIndex).toBeGreaterThan(0);
+  });
+
   it("opens on the first real maneuver, not on 출발", () => {
     // The defect this pins: opening at step 0 points the HUD at 출발 — where
     // the wearer already stands — and because 출발 carries no direction the
