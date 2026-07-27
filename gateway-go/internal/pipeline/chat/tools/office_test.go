@@ -48,6 +48,28 @@ func TestToolOfficeRequiresFileExceptHelp(t *testing.T) {
 	}
 }
 
+// Prompt-injection safeguard: credential / control-plane paths are hard-refused
+// before any exec, so this is deterministic without the officecli binary.
+func TestToolOfficeRefusesProtectedPaths(t *testing.T) {
+	for _, f := range []string{
+		"/home/deneb/.ssh/id_rsa",
+		"/home/deneb/.deneb/auth.json",
+		"/tmp/x/.env",
+		"/home/deneb/.aws/credentials",
+	} {
+		out, err := runOffice(t, map[string]any{
+			"command": "get", "file": f, "args": []string{"/Sheet1/A1"},
+		})
+		if err == nil {
+			t.Errorf("protected path %q: expected refusal, got output %q", f, out)
+			continue
+		}
+		if !strings.Contains(err.Error(), "access denied") {
+			t.Errorf("protected path %q: expected access-denied error, got %v", f, err)
+		}
+	}
+}
+
 // End-to-end round-trip when the binary is installed (srv4 + CI runner have it).
 func TestToolOfficeLiveRoundTrip(t *testing.T) {
 	if _, err := exec.LookPath("officecli"); err != nil {
