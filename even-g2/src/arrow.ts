@@ -57,11 +57,11 @@ export function maneuverArrow(instruction: string): ArrowKind | null {
 // as a range and an inclusive-vs-exclusive edge is exactly the kind of thing a
 // host rejects silently. Backing off two pixels costs nothing and removes the
 // question.
-export const ARROW_W = 280;
-export const ARROW_H = 140;
+export const ARROW_W = 176;
+export const ARROW_H = 96;
 
 /** Where the arrow half ends and the distance half begins. */
-const ARROW_COL = 100;
+const ARROW_COL = 72;
 
 /**
  * arrowPng draws one maneuver arrow and returns PNG bytes.
