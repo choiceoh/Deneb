@@ -361,7 +361,11 @@ bridge.onAppLocationChanged((loc) => {
   // otherwise — the stream is opened by startNav and closed by stopNav.
   if (!navRoute) return;
   void onNavFix({ lat: loc.latitude, lon: loc.longitude });
-  void pushSpeed(kmhFromMs(loc.speed));
+  // Speed bitmap disabled: both images came back sendFailed even after pacing
+  // and a retry, and speed is the cheaper of the two to lose. One image at a
+  // time is the honest experiment — if the arrow lands alone, the link simply
+  // cannot carry two.
+  // void pushSpeed(kmhFromMs(loc.speed));
 });
 
 onListenToggle((on) => {
@@ -1354,6 +1358,11 @@ async function startNav(
     intervalMs: 2000,
     distanceFilter: 5,
   });
+  // Clear the full-screen container: startNav wrote "경로 계산 중…" into it and
+  // nothing else ever touches it, so that line sat above the live numbers for
+  // the whole route. Observed on the device as "또 경로 계산중만 떠" while the
+  // mirror showed navText correctly counting down.
+  await showText(" ");
   setPhoneStatus({ line: `길안내 중 · ${navDest}`, tone: "ok" });
   await renderNav();
 }
@@ -1686,21 +1695,18 @@ async function finishImu(): Promise<void> {
 
 /** wearLine reports what the glasses said about themselves, if anything. */
 function wearLine(): string {
-  if (!wearStatus) return "착용 상태 미보고";
-  const parts: string[] = [];
-  parts.push(
-    wearStatus.isInCase
-      ? "충전함"
-      : wearStatus.isWearing === false
-        ? "벗음"
-        : "착용",
-  );
-  if (typeof wearStatus.batteryLevel === "number") {
-    parts.push(
-      `배터리 ${Math.round(wearStatus.batteryLevel)}%${wearStatus.isCharging ? " 충전중" : ""}`,
-    );
+  if (!wearStatus) return "";
+  // The wear verdict is deliberately absent: the device reports "벗음" while
+  // worn (battery from the same query is right, so it is the field and not the
+  // link). Showing a value known to be wrong is worse than showing none.
+  if (
+    typeof wearStatus.batteryLevel === "number" &&
+    wearStatus.batteryLevel > 0
+  ) {
+    const chg = wearStatus.isCharging === true ? " · 충전 중" : "";
+    return `배터리 ${wearStatus.batteryLevel}%${chg}`;
   }
-  return parts.join(" · ");
+  return "";
 }
 
 /** clampCursor is the app-state view of the pure guard in refresh.ts. */
