@@ -1211,7 +1211,12 @@ async function sendImage(
         new ImageRawDataUpdate({
           containerID,
           containerName: name,
-          imageData: bytes,
+          // number[], not Uint8Array. The SDK says it converts either way
+          // ("imageData 建议传 number[]（宿主 List<int> 最好接）"), but Visionote —
+          // a working image-only G2 app — passes a plain array, and every push
+          // from here has come back sendFailed. Following the code that works
+          // beats following the doc that says it should not matter.
+          imageData: Array.from(bytes),
         }),
       ),
     );
