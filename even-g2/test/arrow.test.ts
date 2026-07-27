@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kmhFromMs, maneuverArrow } from "../src/arrow";
+import { arrowText, kmhFromMs, maneuverArrow } from "../src/arrow";
 
 // The classifier is the whole safety-relevant decision: a wrong arrow points a
 // wearer the wrong way at a junction. The cases below are the ACTUAL strings the
@@ -56,5 +56,29 @@ describe("kmhFromMs", () => {
     expect(kmhFromMs(-1)).toBeNull();
     expect(kmhFromMs(undefined)).toBeNull();
     expect(kmhFromMs(Number.NaN)).toBeNull();
+  });
+});
+
+describe("arrowText", () => {
+  it("is ASCII only — the font's coverage is partial and unverified", () => {
+    // `▸` renders as nothing on this display, so anything outside ASCII risks a
+    // blank where the direction belongs. This is the fallback for a transport
+    // that returns sendFailed for even a single small PNG.
+    for (const k of ["left", "right", "straight", "uturn", "goal"] as const) {
+      expect(arrowText(k)).toMatch(/^[\x20-\x7E]+$/);
+      expect(arrowText(k).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("distinguishes every direction", () => {
+    const all = (["left", "right", "straight", "uturn", "goal"] as const).map(
+      arrowText,
+    );
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("points left and right the way the characters read", () => {
+    expect(arrowText("left")).toContain("<");
+    expect(arrowText("right")).toContain(">");
   });
 });
