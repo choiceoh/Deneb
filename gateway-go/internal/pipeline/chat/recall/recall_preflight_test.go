@@ -633,3 +633,29 @@ func TestTopiclessDiaryFallbackRequiresExplicitCueAndNoQueries(t *testing.T) {
 		t.Fatalf("topical recall received fallback: %+v", got)
 	}
 }
+
+// Regression (measured 2026-07-27): the utility ledger recorded only
+// Kind=="wiki" rows, but an 인물 page pulled in through the org chart arrives as
+// Kind "org" carrying the page relPath. The org source fired on 12% of
+// preflights over 7 days and contributed ZERO ledger lines, so the dreamer's
+// utility report read 인물 as 2% used across 255 pages — coverage, not usage.
+func TestIsLedgerPage_CountsOrgSourcedPersonPages(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		ev   recallEvidence
+		want bool
+	}{
+		{"wiki row", recallEvidence{Kind: "wiki", Source: "프로젝트/a/대표.md"}, true},
+		{"org row with a person page", recallEvidence{Kind: "org", Source: "인물/김성훈.md"}, true},
+		{"org row without a page", recallEvidence{Kind: "org", Source: "조직도: 김성훈"}, false},
+		{"org department row", recallEvidence{Kind: "org", Source: "조직도: 기획조정실"}, false},
+		{"diary row", recallEvidence{Kind: "diary", Source: "diary-2026-07-01.md"}, false},
+		{"transcript row", recallEvidence{Kind: "transcript", Source: "client:main"}, false},
+		{"empty source", recallEvidence{Kind: "wiki", Source: ""}, false},
+	} {
+		if got := isLedgerPage(tc.ev); got != tc.want {
+			t.Errorf("%s: isLedgerPage(%+v) = %v, want %v", tc.name, tc.ev, got, tc.want)
+		}
+	}
+}

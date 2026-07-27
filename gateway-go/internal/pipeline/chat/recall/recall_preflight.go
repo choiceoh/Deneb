@@ -117,19 +117,33 @@ func recallContentKey(note string) string {
 	return b.String()
 }
 
-// recordRecallUtility tees the injected wiki-page evidence into the store's
-// recall-utility ledger (효용 접지) as inject events, each carrying the
-// retrieval context (query label, injection rank, preflight score — so
-// real-traffic (query → page) pairs can be mined as gold-set candidates) and
-// the session, so downstream usage events (read/cite) can be attributed
-// against the exposure. Only Kind=="wiki" rows carry a real page relPath as
-// Source (org rows may hold "조직도: 이름"); other kinds are diary/transcript/
-// file, not dreamer-managed pages, so they are not scored. Rank is the row's
-// 1-based position in the FULL ranked evidence list (all kinds) — i.e. its
-// position in the recall block the model actually saw. Returns the recorded
-// paths so the caller can arm the end-of-turn citation pass. Best-effort: a
-// nil store or a write error is swallowed after a single Warn — losing this
-// derived telemetry is not user-observable and self-heals next turn.
+// isLedgerPage reports whether an evidence row points at a real wiki page the
+// utility ledger should score.
+//
+// Kind is the SOURCE that produced the row, not the artifact it points at: an
+// 인물 page pulled in through the org chart arrives as Kind "org" carrying the
+// page's relPath in Source (recall_org.go: resolveOrgPersonPaths). Recording
+// only Kind=="wiki" therefore made person pages structurally invisible to the
+// ledger — measured 2026-07-27: the org source fired on 12% of preflights over
+// 7 days and contributed ZERO ledger lines, so the utility report read 인물 as
+// 2% used (255 pages) when that number was really coverage, not usage. Judge by
+// what Source points at: a page path, not an "조직도: 이름" placeholder for a
+// member with no page yet.
+func isLedgerPage(ev recallEvidence) bool {
+	if ev.Source == "" {
+		return false
+	}
+	switch ev.Kind {
+	case "wiki":
+		return true
+	case "org":
+		// Org rows carry either a page relPath or a "조직도: <이름>" label for a
+		// member the wiki has no page for; only the former is a page.
+		return strings.HasSuffix(ev.Source, ".md")
+	}
+	return false
+}
+
 // recordRecallMiss tees an unanswered CUE turn into the demand ledger (wiki/
 // recall_misses.go) — the supply side (recordRecallUtility) records which pages
 // got used, this records which questions had no page at all. Best-effort: a nil
@@ -143,6 +157,19 @@ func recordRecallMiss(store *wiki.Store, sessionKey, message string, logger *slo
 	}
 }
 
+// recordRecallUtility tees the injected wiki-page evidence into the store's
+// recall-utility ledger (효용 접지) as inject events, each carrying the
+// retrieval context (query label, injection rank, preflight score — so
+// real-traffic (query → page) pairs can be mined as gold-set candidates) and
+// the session, so downstream usage events (read/cite) can be attributed
+// against the exposure. Which rows count as pages is isLedgerPage's call;
+// diary/transcript/file rows are not dreamer-managed pages, so they are not
+// scored. Rank is the row's 1-based position in the FULL ranked evidence list
+// (all kinds) — i.e. its position in the recall block the model actually saw.
+// Returns the recorded paths so the caller can arm the end-of-turn citation
+// pass. Best-effort: a nil store or a write error is swallowed after a single
+// Warn — losing this derived telemetry is not user-observable and self-heals
+// next turn.
 func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKey string, cue bool, logger *slog.Logger) []string {
 	if store == nil || len(evidence) == 0 {
 		return nil
@@ -162,7 +189,7 @@ func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKe
 	events := make([]wiki.RecallEvent, 0, len(evidence))
 	paths := make([]string, 0, len(evidence))
 	for i, ev := range evidence {
-		if ev.Kind == "wiki" && ev.Source != "" {
+		if isLedgerPage(ev) {
 			events = append(events, wiki.RecallEvent{
 				Path:    ev.Source,
 				Event:   wiki.RecallEventInject,
