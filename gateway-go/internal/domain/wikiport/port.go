@@ -16,6 +16,7 @@ type (
 	Config                  = wiki.Config
 	SearchOptions           = wiki.SearchOptions
 	RecallEvent             = wiki.RecallEvent
+	RecallMiss              = wiki.RecallMiss
 	RecallUsage             = wiki.RecallUsage
 	WikiDreamer             = wiki.WikiDreamer
 	Page                    = wiki.Page

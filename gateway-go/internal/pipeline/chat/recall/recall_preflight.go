@@ -130,6 +130,19 @@ func recallContentKey(note string) string {
 // paths so the caller can arm the end-of-turn citation pass. Best-effort: a
 // nil store or a write error is swallowed after a single Warn — losing this
 // derived telemetry is not user-observable and self-heals next turn.
+// recordRecallMiss tees an unanswered CUE turn into the demand ledger (wiki/
+// recall_misses.go) — the supply side (recordRecallUtility) records which pages
+// got used, this records which questions had no page at all. Best-effort: a nil
+// store or a write error is swallowed after a single Warn.
+func recordRecallMiss(store *wiki.Store, sessionKey, message string, logger *slog.Logger) {
+	if store == nil || strings.TrimSpace(message) == "" {
+		return
+	}
+	if err := store.RecordRecallMiss(wiki.RecallMiss{Query: message, Session: sessionKey}); err != nil && logger != nil {
+		logger.Warn("recall preflight: demand ledger write failed", "error", err)
+	}
+}
+
 func recordRecallUtility(store *wiki.Store, evidence []recallEvidence, sessionKey string, cue bool, logger *slog.Logger) []string {
 	if store == nil || len(evidence) == 0 {
 		return nil
@@ -319,6 +332,11 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 		// Explicit recall tells the user nothing was found; silent auto-recall on a
 		// non-cue turn stays invisible so every-turn search adds no noise.
 		if cue {
+			// A cue turn that found nothing is a measured hole in the curated
+			// memory — the demand signal the research lane consumes (wiki/
+			// recall_misses.go). Cue-only: silent auto-recall legitimately finds
+			// nothing on smalltalk, and recording that would bury real demand.
+			recordRecallMiss(deps.Wiki, params.SessionKey, message, logger)
 			return formatRecallNoEvidence(), truncated
 		}
 		return "", truncated

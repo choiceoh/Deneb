@@ -460,6 +460,17 @@ func (wd *WikiDreamer) scoreDreamCycle(cycle *dreamCycle) {
 	} else if dropped > 0 {
 		wd.logger.Info("wiki-dream: recall-hit ledger compacted", "dropped", dropped)
 	}
+	// The demand ledger (unanswered cue turns) rides the same maintenance step.
+	if dropped, err := wd.store.compactRecallMisses(now); err != nil {
+		cycle.addPhaseError("recall-misses-compact: %v", err)
+	} else if dropped > 0 {
+		wd.logger.Info("wiki-dream: demand ledger compacted", "dropped", dropped)
+	}
+	// Surface standing demand so the operator sees what the wiki keeps failing
+	// to answer — the research lane consumes the same terms for targeting.
+	if terms := wd.store.RecallDemandTerms(now, 5); len(terms) > 0 {
+		cycle.report.RecallDemandTerms = terms
+	}
 
 	var priorCapsules []processedDiaryCapsule
 	if cycle.scan != nil {

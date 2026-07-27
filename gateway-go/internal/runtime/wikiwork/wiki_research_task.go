@@ -57,6 +57,10 @@ const (
 	// pages (deals, decisions, milestones) are exactly the ones whose internal
 	// signal — new mail, new conversations — keeps accumulating between cycles.
 	wikiResearchCategory = "프로젝트"
+	// wikiResearchDemandTerms caps how many demanded terms steer selection —
+	// enough to cover a working week's unanswered questions without letting one
+	// noisy day match every page.
+	wikiResearchDemandTerms = 20
 	// wikiResearchInterval is the cadence. One page per cycle bounds cost.
 	wikiResearchInterval = 6 * time.Hour
 	// wikiResearchTurnTimeout caps a single research turn. The chat pipeline's
@@ -291,6 +295,7 @@ type wikiResearchCandidate struct {
 	skeleton   bool  // layout-migration mint (wiki.RepSkeletonMarker) awaiting backfill
 	noStatus   bool  // 현재 상태 section empty — the 2026-07 audit's top gap (57%)
 	activity   int   // raw-data pages (메일분석/자료/회의록) newer than the rep's updated: date
+	demanded   bool  // the user asked about this subject and recall came back empty
 }
 
 // selectTarget picks the project page most overdue for a refresh: never-refreshed
@@ -302,6 +307,11 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 		t.logger.Warn("wiki-research: failed to list project pages", "error", err)
 		return nil
 	}
+
+	// Demand from the recall-miss ledger (wiki/recall_misses.go): questions the
+	// user actually asked that the wiki could not answer. Round-robin staleness
+	// is a proxy for "might be worth refreshing"; this is the real thing.
+	demand := t.wikiStore.RecallDemandTerms(time.Now(), wikiResearchDemandTerms)
 
 	var cands []wikiResearchCandidate
 	for _, p := range paths {
@@ -331,6 +341,7 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			skeleton:   strings.Contains(page.Body, wiki.RepSkeletonMarker),
 			noStatus:   strings.TrimSpace(page.Section("현재 상태")) == "",
 			activity:   t.rawDataActivity(p, page.Meta.Updated),
+			demanded:   pageMatchesDemand(page.Meta.Title, page.Meta.Summary, demand),
 		})
 	}
 	if len(cands) == 0 {
@@ -347,6 +358,13 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 			// nothing — filling these first is the fastest quality win
 			// (2026-07-05 audit: 57% of live projects had none).
 			return cands[i].noStatus
+		}
+		// Demand next: a page the user asked about and got nothing for is a
+		// measured hole, which beats every staleness proxy below. It sits after
+		// the two structural gaps (skeleton / no 현재 상태) because those pages
+		// answer nothing at all yet.
+		if cands[i].demanded != cands[j].demanded {
+			return cands[i].demanded
 		}
 		// Freshness SLO (2026-07-19): a rep page whose folder keeps receiving
 		// raw data (new 메일분석/자료/회의록 since its updated: date) is rotting
@@ -366,6 +384,24 @@ func (t *wikiResearchTask) selectTarget(state *wikiResearchState) *wikiResearchC
 		return cands[i].importance > cands[j].importance // most important first
 	})
 	return &cands[0]
+}
+
+// pageMatchesDemand reports whether any demanded term appears in the page's
+// title or summary. Substring matching on purpose: there is no Korean
+// morphological analyzer here, so "완도군의" must still match a 완도 page.
+// The PATH is deliberately excluded — it carries the category segment
+// ("프로젝트/…"), which would make a category word match every candidate.
+func pageMatchesDemand(title, summary string, demand []string) bool {
+	if len(demand) == 0 {
+		return false
+	}
+	hay := strings.ToLower(title + " " + summary)
+	for _, term := range demand {
+		if term != "" && strings.Contains(hay, term) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildPrompt instructs an internal-only deep-research refresh of one page.
