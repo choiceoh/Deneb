@@ -16,13 +16,20 @@ import (
 // POST /api/event/ingest — both doors must behave identically.
 func (s *Server) phoneEventHandlerConfig() phoneevents.Config {
 	return phoneevents.Config{
-		ChatHandler:         s.chatHandler,
-		JudgmentModel:       s.submainRoleIfConfigured(),
-		Relay:               &s.proactiveRelay,
-		ShutdownContext:     s.ShutdownCtx(),
-		Logger:              s.logger,
-		Ledger:              s.phoneEventLedgerInstance(),
-		OnLocationPlace:     s.siteVisitOnLocation(),
+		ChatHandler:     s.chatHandler,
+		JudgmentModel:   s.submainRoleIfConfigured(),
+		Relay:           &s.proactiveRelay,
+		ShutdownContext: s.ShutdownCtx(),
+		Logger:          s.logger,
+		Ledger:          s.phoneEventLedgerInstance(),
+		OnLocationPlace: s.siteVisitOnLocation(),
+		GlassNotice: func(text string) {
+			// Nil until buildMux has run; the glasses simply miss notices that
+			// fire before the HTTP surface exists, which is the right loss.
+			if g2 := s.evenG2.Load(); g2 != nil {
+				g2.Notify(text)
+			}
+		},
 		BrowserEnrich:       s.approvalBrowserEnrich,
 		TriggerApprovalScan: s.triggerGroupwareRadarScan,
 		ResolvePhoneAction: func(res phoneevents.ActionResult) bool {

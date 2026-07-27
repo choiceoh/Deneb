@@ -78,6 +78,10 @@ func (s *Server) buildMux() *http.ServeMux {
 		g2Cfg.Chat = s.chatHandler
 	}
 	g2 := evenapi.New(g2Cfg)
+	// Kept on the server so the phone-event pipeline can put a delivered
+	// judgment on the glasses too (GlassNotice) — buildMux is the only place
+	// the bridge handler is constructed.
+	s.evenG2.Store(g2)
 	mux.HandleFunc("POST /v1/chat/completions", g2.ChatCompletions)
 	mux.HandleFunc("POST /api/even/v1/chat/completions", g2.ChatCompletions)
 	// Some Even Custom AI builds POST the agent body to the configured URL root.

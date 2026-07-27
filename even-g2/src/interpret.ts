@@ -46,6 +46,9 @@ export type InterpretResult = {
   /** Deneb's answer, when the request carried `ask`. */
   reply?: string;
   askError?: string;
+  /** Which model answered and how long the turn took — the HUD's debug panel. */
+  model?: string;
+  ms?: number;
 };
 
 /**
@@ -165,6 +168,48 @@ export async function postAudio(
     if (err instanceof Error && err.name === "AbortError")
       throw new Error("시간 초과");
     throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * postTextAsk hands words Deneb already has (an interpretation session's
+ * accumulated subtitles) to a chat turn, without re-sending audio to get the
+ * same words back.
+ */
+export async function postTextAsk(
+  settings: GlanceSettings,
+  text: string,
+  ask: string,
+): Promise<InterpretResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${settings.baseUrl}/api/even/audio`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${settings.token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ text, ask }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as {
+      reply?: string;
+      askError?: string;
+      model?: string;
+      ms?: number;
+    };
+    return {
+      text,
+      reply: data.reply?.trim() || undefined,
+      askError: data.askError?.trim() || undefined,
+      model: data.model?.trim() || undefined,
+      ms: typeof data.ms === "number" ? data.ms : undefined,
+    };
   } finally {
     clearTimeout(timer);
   }

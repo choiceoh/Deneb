@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -123,9 +124,28 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 		// transcript is data for the turn, not an instruction — it is quoted so
 		// a passer-by cannot steer the agent by talking near the glasses.
 		Ask string `json:"ask"`
+		// Text, when set with no pcm, skips transcription entirely — the caller
+		// already has words (an interpretation session's accumulated subtitles)
+		// and re-sending audio to get them back would be waste.
+		Text string `json:"text"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, MaxAudioBytes*2)).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if txt := strings.TrimSpace(body.Text); txt != "" && strings.TrimSpace(body.Pcm) == "" {
+		out := map[string]any{"text": txt, "bytes": 0}
+		if ask := strings.TrimSpace(body.Ask); ask != "" {
+			reply, meta, aerr := h.askAboutAudio(r.Context(), ask, txt)
+			if aerr != nil {
+				out["askError"] = aerr.Error()
+			} else {
+				out["reply"] = reply
+				out["model"] = meta.Model
+				out["ms"] = meta.Ms
+			}
+		}
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	pcm, err := base64.StdEncoding.DecodeString(strings.TrimSpace(body.Pcm))
@@ -155,11 +175,13 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 
 	out := map[string]any{"text": text, "bytes": len(pcm)}
 	if ask := strings.TrimSpace(body.Ask); ask != "" && text != "" {
-		reply, aerr := h.askAboutAudio(r.Context(), ask, text)
+		reply, meta, aerr := h.askAboutAudio(r.Context(), ask, text)
 		if aerr != nil {
 			out["askError"] = aerr.Error()
 		} else {
 			out["reply"] = reply
+			out["model"] = meta.Model
+			out["ms"] = meta.Ms
 		}
 	}
 	if lang := strings.TrimSpace(body.TranslateTo); lang != "" && text != "" && h.translate != nil {
@@ -179,10 +201,19 @@ func (h *Handler) Audio(w http.ResponseWriter, r *http.Request) {
 // Synchronous and short-deadline: the wearer is standing there with a HUD that
 // says "생각 중". A turn that outlives that is worse than no answer, so the
 // caller gets a timeout string it can show rather than a spinner forever.
-func (h *Handler) askAboutAudio(ctx context.Context, ask, transcript string) (string, error) {
+// askMeta names which model answered and how long it took. Deneb assigns
+// different models per role, so "which one said this" is real information, and
+// the wearer cannot open a debug panel to find out — the footer is the panel.
+type askMeta struct {
+	Model string
+	Ms    int64
+}
+
+func (h *Handler) askAboutAudio(ctx context.Context, ask, transcript string) (string, askMeta, error) {
 	if h.chat == nil || !h.chat.ChatReady() {
-		return "", errors.New("chat not ready")
+		return "", askMeta{}, errors.New("chat not ready")
 	}
+	started := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, h.deadline)
 	defer cancel()
 	// The transcript is fenced so the agent treats it as material, not as
@@ -197,7 +228,7 @@ func (h *Handler) askAboutAudio(ctx context.Context, ask, transcript string) (st
 		GateUntrustedTools:  true,
 	})
 	if err != nil {
-		return "", err
+		return "", askMeta{}, err
 	}
-	return strings.TrimSpace(res.Text), nil
+	return strings.TrimSpace(res.Text), askMeta{Model: res.Model, Ms: time.Since(started).Milliseconds()}, nil
 }

@@ -43,6 +43,7 @@ import {
   RECALL_BYTES,
   RECALL_MS,
   postAudio,
+  postTextAsk,
   subtitleLines,
 } from "./interpret";
 import {
@@ -71,6 +72,7 @@ import {
   SPEED_W,
   arrowPng,
   kmhFromMs,
+  arrowText,
   maneuverArrow,
   speedPng,
 } from "./arrow";
@@ -112,7 +114,8 @@ type Screen =
   | "notice"
   | "interpret"
   | "nav"
-  | "recall";
+  | "recall"
+  | "interpretSave";
 
 const PAGE_ORDER = ["home", "alerts", "cal", "todo"] as const;
 const LIST_PAGE_IDS = new Set(["home", "alerts"]);
@@ -161,6 +164,12 @@ let interpreting = false;
 let interpretLang = "ko";
 const pcm = new PcmBuffer();
 let subtitles: string[] = [];
+/**
+ * Whole-session transcript, kept separately from the 3-line subtitle tail so
+ * ending a session can offer "위키에 기록할까요" over everything that was said —
+ * the subtitles the wearer read and forgot are exactly what is worth keeping.
+ */
+let sessionLines: string[] = [];
 let sending = false;
 /** Non-empty while a labelled IMU window is being recorded. */
 let imuLabel = "";
@@ -204,14 +213,17 @@ const mainText = new TextContainerProperty({
   containerName: "main",
   content: "Deneb\n\n설정 확인 중…",
   isEventCapture: 1,
-  // Required, not optional: the SDK rejects the WHOLE page when some containers
-  // carry zOrderIndex and others do not, and a rejected startup page means the
-  // app draws nothing at all. Shipping without this looked exactly like "안경에서
-  // 아예 안 켜진다".
-  zOrderIndex: 0,
 });
 
-// Every container the app will ever use is declared HERE, at startup.
+// Every container the app will ever use is declared HERE, at startup, and NONE
+// of them sets zOrderIndex.
+//
+// Even's own image template — the reference that demonstrably renders bitmaps on
+// this hardware — uses no zOrderIndex at all. This code set it on all four
+// containers and every image push came back sendFailed, for a single 2.4KB PNG,
+// paced and retried. Matching the working reference is worth more than the
+// stacking control, which nothing here actually needs: the containers do not
+// overlap.
 //
 // The nav screen used to add its image containers through rebuildPageContainer
 // and the arrow never appeared on the device. Even's own image template creates
@@ -233,7 +245,6 @@ const navText = new TextContainerProperty({
   containerName: "navText",
   content: " ",
   isEventCapture: 0,
-  zOrderIndex: 1,
 });
 
 const arrowImage = new ImageContainerProperty({
@@ -243,24 +254,13 @@ const arrowImage = new ImageContainerProperty({
   height: ARROW_H,
   containerID: 3,
   containerName: "arrow",
-  zOrderIndex: 2,
-});
-
-const speedImage = new ImageContainerProperty({
-  xPosition: 576 - SPEED_W - 8,
-  yPosition: 8,
-  width: SPEED_W,
-  height: SPEED_H,
-  containerID: 4,
-  containerName: "speed",
-  zOrderIndex: 3,
 });
 
 const started = await bridge.createStartUpPageContainer(
   new CreateStartUpPageContainer({
-    containerTotalNum: 4,
+    containerTotalNum: 3,
     textObject: [mainText, navText],
-    imageObject: [arrowImage, speedImage],
+    imageObject: [arrowImage],
   }),
 );
 if (started !== 0) {
@@ -321,7 +321,9 @@ bridge.onEvenHubEvent((event) => {
       // Contextual on purpose. There is no fifth gesture, and a detail is the
       // only place where "I am done with this" has a second meaning. Everywhere
       // else — list, pages, status, setup — a double-tap still exits.
-      if (screen === "recall") {
+      if (screen === "interpretSave") {
+        void discardInterpretSession();
+      } else if (screen === "recall") {
         // Listening holds the mic open; a double-tap here means "stop
         // listening", not "quit the app" — quitting with the mic still open is
         // the one outcome nobody wants.
@@ -361,7 +363,11 @@ bridge.onAppLocationChanged((loc) => {
   // otherwise — the stream is opened by startNav and closed by stopNav.
   if (!navRoute) return;
   void onNavFix({ lat: loc.latitude, lon: loc.longitude });
-  void pushSpeed(kmhFromMs(loc.speed));
+  // Speed bitmap disabled: both images came back sendFailed even after pacing
+  // and a retry, and speed is the cheaper of the two to lose. One image at a
+  // time is the honest experiment — if the arrow lands alone, the link simply
+  // cannot carry two.
+  // void pushSpeed(kmhFromMs(loc.speed));
 });
 
 onListenToggle((on) => {
@@ -394,6 +400,33 @@ onSettingsSaved((next) => {
 // The glasses report whether they are on a face, in the case, or nearly flat.
 // This is what the polling loop should have been keyed on all along — see
 // shouldPoll for why guessing at foreground events was the wrong instrument.
+/**
+ * pollDeviceStatus asks the host outright instead of waiting to be told.
+ *
+ * onDeviceStatusChanged never fired on the device — the status screen stayed at
+ * "착용 상태 미보고" through a whole session and the HUD mirror carried no wear
+ * data at all. getDeviceInfo() returns the same DeviceStatus as a QUERY, which
+ * does not depend on the host choosing to push.
+ */
+async function pollDeviceStatus(): Promise<void> {
+  try {
+    const info = await bridge.getDeviceInfo();
+    const st = info?.status;
+    if (!st) return;
+    wearStatus = mergeWearStatus(wearStatus, {
+      isWearing: st.isWearing,
+      isInCase: st.isInCase,
+      isCharging: st.isCharging,
+      batteryLevel: st.batteryLevel,
+    });
+  } catch {
+    // Never fatal: shouldPoll fails open, so an unknown wear state costs a
+    // slightly eager refresh and nothing else.
+  }
+}
+
+void pollDeviceStatus();
+
 bridge.onDeviceStatusChanged((status) => {
   const before = shouldPoll(wearStatus);
   // Merged, not assigned: the SDK defaults absent fields to "not worn, 0%", so
@@ -523,6 +556,10 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === "interpretSave") {
+    await saveInterpretSession();
+    return;
+  }
   if (screen === "recall") {
     await recallNow();
     return;
@@ -870,6 +907,7 @@ async function showStatus(): Promise<void> {
  * rebuilt the container even when the payload was byte-identical.
  */
 async function refreshGlance(fresh: boolean, silent = false): Promise<void> {
+  void pollDeviceStatus();
   if (busy) return;
   busy = true;
   const keepId = currentPageId();
@@ -1146,6 +1184,64 @@ const NAV_ARROW_ID = 3;
 const NAV_SPEED_ID = 4;
 
 /**
+ * IMAGE_MIN_GAP_MS — floor between BLE image transfers.
+ *
+ * Measured from the device through the HUD mirror: pushes came back
+ * `sendFailed`. The PNG was fine — a bad one returns imageException or
+ * imageToGray4Failed — and text updates kept working throughout, so the link was
+ * alive and it is images specifically that could not keep up. They go out
+ * fragmented and LZ4-compressed while the speed bitmap was being pushed on
+ * every position fix.
+ */
+// The open-source even-img-benchmark pushes frames back to back with no gap at
+// all and measures them succeeding, so rate was never the problem — the 4s floor
+// here was a wrong guess. Kept small only to avoid piling transfers behind a
+// stalled one.
+const IMAGE_MIN_GAP_MS = 300;
+let lastImageAt = 0;
+
+/**
+ * sendImage serializes, paces and retries one image transfer.
+ *
+ * Serial because updateImageRawData is global rather than per container, paced
+ * because the link drops transfers that arrive too close together, and retried
+ * once because a dropped frame is transient — the alternative is a blank arrow
+ * for the rest of the leg.
+ */
+async function sendImage(
+  name: string,
+  containerID: number,
+  bytes: Uint8Array,
+): Promise<string> {
+  const gap = Date.now() - lastImageAt;
+  if (gap < IMAGE_MIN_GAP_MS) {
+    await new Promise((r) => setTimeout(r, IMAGE_MIN_GAP_MS - gap));
+  }
+  let res = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    lastImageAt = Date.now();
+    res = String(
+      await bridge.updateImageRawData(
+        new ImageRawDataUpdate({
+          containerID,
+          containerName: name,
+          // number[], not Uint8Array. The SDK says it converts either way
+          // ("imageData 建议传 number[]（宿主 List<int> 最好接）"), but Visionote —
+          // a working image-only G2 app — passes a plain array, and every push
+          // from here has come back sendFailed. Following the code that works
+          // beats following the doc that says it should not matter.
+          imageData: Array.from(bytes),
+        }),
+      ),
+    );
+    if (res === "success") break;
+    await new Promise((r) => setTimeout(r, IMAGE_MIN_GAP_MS));
+  }
+  noteImagePush(name, bytes.length, res);
+  return res;
+}
+
+/**
  * enterNavPage switches to the navigation layout by CHANGING CONTENT ONLY.
  *
  * No rebuildPageContainer: the containers are declared at startup. The device
@@ -1171,9 +1267,17 @@ async function leaveNavPage(): Promise<void> {
  */
 let arrowChain: Promise<unknown> = Promise.resolve();
 let shownArrow = "";
+/** Set once an image push fails, so the text carries the direction instead. */
+let imageBroken = false;
 async function pushArrow(instruction: string, distance: string): Promise<void> {
   const kind = maneuverArrow(instruction);
-  if (!kind) return;
+  if (!kind) {
+    // Recorded, not silently dropped: "no arrow drawn" and "no arrow ever
+    // attempted" look identical on the glass, and the mirror is the only place
+    // that distinction can be made.
+    noteImagePush("arrow", 0, `skipped:${instruction.slice(0, 12)}`);
+    return;
+  }
   // Keyed on kind AND distance: the distance is inside the bitmap now, so it
   // has to be redrawn as the number counts down — but only when the rendered
   // text actually changes, which is far less often than a position fix.
@@ -1183,16 +1287,8 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
   arrowChain = arrowChain.then(async () => {
     try {
       const bytes = await arrowPng(kind, distance);
-      let pushed = "";
-      const res = await bridge.updateImageRawData(
-        new ImageRawDataUpdate({
-          containerID: NAV_ARROW_ID,
-          containerName: "arrow",
-          imageData: bytes,
-        }),
-      );
-      pushed = String(res);
-      noteImagePush("arrow", bytes.length, pushed);
+      const res = await sendImage("arrow", NAV_ARROW_ID, bytes);
+      if (res !== "success") imageBroken = true;
       if (res !== "success") {
         // Surfaced to the PHONE, not just the console: the console is
         // unreachable from a device report, and "화살표가 안 나온다" carries no
@@ -1280,6 +1376,11 @@ async function startNav(
     intervalMs: 2000,
     distanceFilter: 5,
   });
+  // Clear the full-screen container: startNav wrote "경로 계산 중…" into it and
+  // nothing else ever touches it, so that line sat above the live numbers for
+  // the whole route. Observed on the device as "또 경로 계산중만 떠" while the
+  // mirror showed navText correctly counting down.
+  await showText(" ");
   setPhoneStatus({ line: `길안내 중 · ${navDest}`, tone: "ok" });
   await renderNav();
 }
@@ -1308,7 +1409,19 @@ async function renderNav(): Promise<void> {
   // The bitmap carries the arrow AND the distance (text containers have no font
   // size, so this is the only way the distance can dominate the panel the way
   // both shipping plugins make it). The text container carries the words.
-  await showNavText(navTextLines(navRoute, navState).join("\n"));
+  const lines = navTextLines(navRoute, navState);
+  const kind = step ? maneuverArrow(step.short) : null;
+  // Always, not only when the bitmap fails.
+  //
+  // g2-drive-nav — a working open-source G2 navigation plugin — renders its
+  // maneuver in a TEXT container 576×148 and uses images only for a small map
+  // inset. On this display the maneuver being text is the normal design, not a
+  // consolation prize, and it is the one thing that has actually reached the
+  // wearer's eye across six attempts at the bitmap.
+  if (kind) {
+    lines.unshift(`${arrowText(kind)}  ${formatMetres(left)}`, "");
+  }
+  await showNavText(lines.join("\n"));
   if (step) await pushArrow(step.short, formatMetres(left));
 }
 
@@ -1319,21 +1432,17 @@ let shownSpeed = "";
  * container.
  */
 async function pushSpeed(kmh: number | null): Promise<void> {
-  const key = kmh == null ? "" : String(kmh);
+  // Bucketed to 5 km/h: at 1 km/h granularity the number changes almost every
+  // fix, and each change is a fragmented BLE transfer the link cannot absorb.
+  // Nobody reads a HUD speed to the digit.
+  const key = kmh == null ? "" : String(Math.round(kmh / 5) * 5);
   if (key === shownSpeed) return;
   shownSpeed = key;
   if (kmh == null) return;
   arrowChain = arrowChain.then(async () => {
     try {
       const bytes = await speedPng(kmh);
-      const res = await bridge.updateImageRawData(
-        new ImageRawDataUpdate({
-          containerID: NAV_SPEED_ID,
-          containerName: "speed",
-          imageData: bytes,
-        }),
-      );
-      noteImagePush("speed", bytes.length, String(res));
+      const res = await sendImage("speed", NAV_SPEED_ID, bytes);
       if (res !== "success") {
         console.error("updateImageRawData(speed):", res);
         shownSpeed = "";
@@ -1476,7 +1585,17 @@ async function recallNow(): Promise<void> {
     return;
   }
   recallBusy = true;
-  await showText("● 청취 중\n\n방금 대화를 넘기는 중…");
+  // Elapsed counter, the OcuClaw pattern: a chat turn runs ten-plus seconds and
+  // a frozen screen reads as a dead app. Text-only, so it costs one small BLE
+  // update every two seconds.
+  const startedAt = Date.now();
+  await showText("● 청취 중\n\n생각 중…\n\n(방금 대화를 데네브가 읽는 중)");
+  const ticker = setInterval(() => {
+    const secs = Math.round((Date.now() - startedAt) / 1000);
+    void showText(
+      `● 청취 중\n\n생각 중 · ${secs}초\n\n(방금 대화를 데네브가 읽는 중)`,
+    );
+  }, 2000);
   try {
     const res = await postAudio(settings, window, {
       ask: "방금 들은 대화를 한국어로 짧게 정리해 주세요. 업무 관련 내용이면 위키에 기록하고, 무엇을 기록했는지 한 줄로 알려주세요.",
@@ -1485,6 +1604,7 @@ async function recallNow(): Promise<void> {
       res.reply || res.askError || res.text || "정리하지 못했습니다.";
     await showText(`● 청취 중\n\n${body}\n\n탭=다시 / 더블탭=종료`);
   } catch (err) {
+    clearInterval(ticker);
     const msg = err instanceof Error ? err.message : String(err);
     await showText(`● 청취 중\n\n실패: ${msg}\n\n탭=다시`);
   } finally {
@@ -1504,6 +1624,7 @@ async function startInterpreting(lang: string): Promise<void> {
   interpretLang = lang || "ko";
   interpreting = true;
   subtitles = [];
+  sessionLines = [];
   pauseLoop();
   screen = "interpret";
   await showText(`통역 중 (${interpretLang})\n\n듣는 중…\n\n탭=중지`);
@@ -1523,6 +1644,49 @@ async function stopInterpreting(): Promise<void> {
   interpreting = false;
   await bridge.audioControl(false);
   pcm.take();
+  // Offer to keep the session. Only when something was actually said — an
+  // empty prompt after a mis-tap is noise.
+  if (sessionLines.length > 0) {
+    screen = "interpretSave";
+    await showText(
+      [
+        "통역 종료",
+        "",
+        `${sessionLines.length}문장 들었습니다.`,
+        "위키에 기록할까요?",
+        "",
+        "탭=기록 / 더블탭=버리기",
+      ].join("\n"),
+    );
+    return;
+  }
+  screen = "page";
+  await resumeLoop();
+}
+
+/** saveInterpretSession hands the transcript to a chat turn for the wiki. */
+async function saveInterpretSession(): Promise<void> {
+  const text = sessionLines.join("\n");
+  sessionLines = [];
+  screen = "page";
+  await showText("통역 기록\n\n정리해서 기록하는 중…");
+  try {
+    const res = await postTextAsk(
+      settings,
+      text,
+      "아래는 방금 끝난 통역 세션의 자막 전체입니다. 핵심을 정리해 위키에 기록하고, 무엇을 기록했는지 한 줄로 알려주세요.",
+    );
+    const body = res.reply || res.askError || "기록하지 못했습니다.";
+    await showText(`통역 기록\n\n${body}\n\n탭=목록`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await showText(`통역 기록\n\n실패: ${msg}\n\n탭=목록`);
+  }
+}
+
+/** discardInterpretSession drops the transcript and returns to the glance. */
+async function discardInterpretSession(): Promise<void> {
+  sessionLines = [];
   screen = "page";
   await resumeLoop();
 }
@@ -1552,6 +1716,7 @@ async function flushAudio(): Promise<void> {
     const line = res.translation || res.text;
     if (line && interpreting) {
       subtitles = subtitleLines(subtitles, line);
+      if (line.trim()) sessionLines.push(line.trim());
       await renderSubtitles();
     }
   } catch {
@@ -1616,21 +1781,18 @@ async function finishImu(): Promise<void> {
 
 /** wearLine reports what the glasses said about themselves, if anything. */
 function wearLine(): string {
-  if (!wearStatus) return "착용 상태 미보고";
-  const parts: string[] = [];
-  parts.push(
-    wearStatus.isInCase
-      ? "충전함"
-      : wearStatus.isWearing === false
-        ? "벗음"
-        : "착용",
-  );
-  if (typeof wearStatus.batteryLevel === "number") {
-    parts.push(
-      `배터리 ${Math.round(wearStatus.batteryLevel)}%${wearStatus.isCharging ? " 충전중" : ""}`,
-    );
+  if (!wearStatus) return "";
+  // The wear verdict is deliberately absent: the device reports "벗음" while
+  // worn (battery from the same query is right, so it is the field and not the
+  // link). Showing a value known to be wrong is worse than showing none.
+  if (
+    typeof wearStatus.batteryLevel === "number" &&
+    wearStatus.batteryLevel > 0
+  ) {
+    const chg = wearStatus.isCharging === true ? " · 충전 중" : "";
+    return `배터리 ${wearStatus.batteryLevel}%${chg}`;
   }
-  return parts.join(" · ");
+  return "";
 }
 
 /** clampCursor is the app-state view of the pure guard in refresh.ts. */
