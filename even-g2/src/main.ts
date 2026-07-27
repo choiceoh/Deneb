@@ -71,6 +71,7 @@ import {
   SPEED_W,
   arrowPng,
   kmhFromMs,
+  arrowText,
   maneuverArrow,
   speedPng,
 } from "./arrow";
@@ -1252,6 +1253,8 @@ async function leaveNavPage(): Promise<void> {
  */
 let arrowChain: Promise<unknown> = Promise.resolve();
 let shownArrow = "";
+/** Set once an image push fails, so the text carries the direction instead. */
+let imageBroken = false;
 async function pushArrow(instruction: string, distance: string): Promise<void> {
   const kind = maneuverArrow(instruction);
   if (!kind) {
@@ -1271,6 +1274,7 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
     try {
       const bytes = await arrowPng(kind, distance);
       const res = await sendImage("arrow", NAV_ARROW_ID, bytes);
+      if (res !== "success") imageBroken = true;
       if (res !== "success") {
         // Surfaced to the PHONE, not just the console: the console is
         // unreachable from a device report, and "화살표가 안 나온다" carries no
@@ -1391,7 +1395,14 @@ async function renderNav(): Promise<void> {
   // The bitmap carries the arrow AND the distance (text containers have no font
   // size, so this is the only way the distance can dominate the panel the way
   // both shipping plugins make it). The text container carries the words.
-  await showNavText(navTextLines(navRoute, navState).join("\n"));
+  const lines = navTextLines(navRoute, navState);
+  const kind = step ? maneuverArrow(step.short) : null;
+  // Only once the transport has actually failed: while the bitmap works it is
+  // far more legible than characters, and showing both would compete.
+  if (imageBroken && kind) {
+    lines.unshift(`${arrowText(kind)}  ${formatMetres(left)}`, "");
+  }
+  await showNavText(lines.join("\n"));
   if (step) await pushArrow(step.short, formatMetres(left));
 }
 

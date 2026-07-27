@@ -239,3 +239,32 @@ export async function speedPng(kmh: number): Promise<Uint8Array> {
   });
   return new Uint8Array(await blob.arrayBuffer());
 }
+
+/**
+ * arrowText — the direction as characters, for when the bitmap cannot be sent.
+ *
+ * Measured on the device: `updateImageRawData` returns `sendFailed` for a single
+ * 2.4 KB PNG, paced four seconds apart and retried. Halving the image did not
+ * help and neither did dropping the second one, so it is the image transport
+ * itself and not the size, the rate, or the encoding. Navigation needs a
+ * direction indicator today.
+ *
+ * Deliberately ASCII. The G2 font's coverage is unknown and demonstrably partial
+ * (`▸` renders as nothing), so a Unicode arrow risks a blank where the most
+ * safety-relevant element belongs. `<` and `>` are already proven on this
+ * display — the list cursor uses one.
+ */
+export function arrowText(kind: ArrowKind): string {
+  switch (kind) {
+    case "left":
+      return "<<<";
+    case "right":
+      return ">>>";
+    case "straight":
+      return "^^^";
+    case "uturn":
+      return "U-turn";
+    case "goal":
+      return "[O]";
+  }
+}
