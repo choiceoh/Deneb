@@ -15,6 +15,14 @@ expect class ContactsWriter() {
     fun hasAccess(): Boolean
 
     /**
+     * Link device raw contacts that match each [members] card's own name and
+     * identifiers. Unlike [linkByIdentity], this does not OR-link every holder
+     * of a secondary number that only one member carries — the path that falsely
+     * merged unrelated people during dedup apply.
+     */
+    suspend fun linkMergeMembers(members: List<ContactParty>): Int
+
+    /**
      * Link every device raw-contact that carries any of [phones] or [emails] into
      * one aggregated contact. Reversible (aggregation, not deletion). Returns the
      * number of raw contacts linked; 0 or 1 means there was nothing to merge.

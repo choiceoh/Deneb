@@ -1,6 +1,7 @@
 package ai.deneb.deneb
 
 import ai.deneb.contacts.ContactsReader
+import ai.deneb.contacts.ContactParty
 import ai.deneb.contacts.ContactsWriter
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.SetupContactsPermissionHandler
@@ -113,7 +114,8 @@ fun DenebContactsDedupScreen(
         var ruleMerged = 0
         applyState = ContactsApplyState.RuleMerging(done = 0, total = data.merges.size)
         data.merges.forEachIndexed { i, m ->
-            if (writer.linkByIdentity(m.phones, m.emails) >= 2) ruleMerged++
+            val members = mergeMembers(m)
+            if (members.size >= 2 && writer.linkMergeMembers(members) >= 2) ruleMerged++
             applyState = ContactsApplyState.RuleMerging(done = i + 1, total = data.merges.size)
         }
         // 2) AI adjudication of the ambiguous pairs. SAME → link; diff/unsure left be.
@@ -125,7 +127,12 @@ fun DenebContactsDedupScreen(
             val verdicts = client.fetchContactsAdjudicate(chunk).orEmpty()
             chunk.forEachIndexed { i, pair ->
                 if (verdicts.getOrNull(i) == "same" &&
-                    writer.linkByIdentity(pair.a.phones + pair.b.phones, pair.a.emails + pair.b.emails) >= 2
+                    writer.linkMergeMembers(
+                        listOf(
+                            ContactParty(pair.a.name, pair.a.phones, pair.a.emails),
+                            ContactParty(pair.b.name, pair.b.phones, pair.b.emails),
+                        ),
+                    ) >= 2
                 ) {
                     aiMerged++
                 }
@@ -435,3 +442,10 @@ private fun DedupMergeRowItem(merge: DedupMergeRow) {
 
 /** 2,819 not 2819 — grouped thousands so the headline counts read at a glance. */
 private fun Int.grouped(): String = toString().reversed().chunked(3).joinToString(",").reversed()
+
+private fun mergeMembers(row: DedupMergeRow): List<ContactParty> =
+    if (row.members.isNotEmpty()) {
+        row.members.map { ContactParty(it.name, it.phones, it.emails) }
+    } else {
+        row.names.map { ContactParty(it, row.phones, row.emails) }
+    }
