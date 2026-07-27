@@ -197,7 +197,7 @@ func abbreviateSession(key string) string {
 // System sessions must not write to the shared Aurora store because their messages
 // (diary prompts, heartbeat responses) would contaminate the user's conversation context.
 func isSystemSession(key string) bool {
-	return strings.HasPrefix(key, "system:")
+	return session.IsSystemSession(key)
 }
 
 // isMainSession reports whether key is a top-level direct session (e.g. "client:main").

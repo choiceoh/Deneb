@@ -37,6 +37,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 )
 
 // envFlagEnabled reports whether an opt-in env flag is truthy. Shared by the
@@ -93,7 +94,7 @@ type effortRoute struct {
 // semantics and is set on the interactive native client path too.
 func isAutomationRun(params RunParams) bool {
 	return params.EphemeralUser ||
-		strings.HasPrefix(params.SessionKey, "cron:") ||
+		session.IsCronSession(params.SessionKey) ||
 		strings.HasPrefix(params.SessionKey, "acp:")
 }
 

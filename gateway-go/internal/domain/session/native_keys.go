@@ -133,6 +133,34 @@ func isLegacyEpochTailedKey(rest string) bool {
 	return true
 }
 
+// The session key encodes who a run belongs to, and a dozen call sites across
+// the gateway used to re-answer that with their own inline prefix test. When two
+// of them disagreed the same conversation was classified differently depending
+// on which code looked (#4353, #4355, #4360: conversations vanishing from the
+// drawer, chats filed as sub-agent work in the usage report). These predicates
+// are the single source of truth — classify here, not at the call site.
+// `native_keys_classifier_test.go` fails the build when a new inline test appears.
+
+// IsClientSession reports whether a run belongs to a user-facing client surface
+// (the phone, the desktop, and the sub-agent runs they spawn) rather than
+// automation. This prefix also selects the prompt-facing channel, auto-resume
+// eligibility and chat-activity recording, so it is deliberately broad.
+func IsClientSession(sessionKey string) bool {
+	return strings.HasPrefix(sessionKey, "client:") && strings.TrimPrefix(sessionKey, "client:") != ""
+}
+
+// IsSystemSession reports whether a run is system-internal (diary, heartbeat
+// forks, skill review). Their messages are machinery, not the user speaking, so
+// they stay out of shared stores and user-facing surfaces.
+func IsSystemSession(sessionKey string) bool {
+	return strings.HasPrefix(sessionKey, "system:")
+}
+
+// IsCronSession reports whether a run is a scheduled job.
+func IsCronSession(sessionKey string) bool {
+	return strings.HasPrefix(sessionKey, "cron:")
+}
+
 // HeartbeatTargetSession keeps an active native conversation as the target and
 // otherwise falls back to the primary work session.
 func HeartbeatTargetSession(lastSessionKey string) string {
@@ -141,7 +169,7 @@ func HeartbeatTargetSession(lastSessionKey string) string {
 	if IsSpawnedChildKey(lastSessionKey) {
 		return NativeWorkSessionKey
 	}
-	if strings.HasPrefix(lastSessionKey, "client:") && strings.TrimPrefix(lastSessionKey, "client:") != "" {
+	if IsClientSession(lastSessionKey) {
 		return lastSessionKey
 	}
 	return NativeWorkSessionKey

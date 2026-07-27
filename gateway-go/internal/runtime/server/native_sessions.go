@@ -9,8 +9,7 @@ import (
 const nativeClientSessionPrefix = "client:"
 
 func isNativeClientSessionKey(sessionKey string) bool {
-	return strings.HasPrefix(sessionKey, nativeClientSessionPrefix) &&
-		strings.TrimPrefix(sessionKey, nativeClientSessionPrefix) != ""
+	return runtimesession.IsClientSession(sessionKey)
 }
 
 // isRestorableNativeSessionKey reports whether sessionKey is a currently-valid
