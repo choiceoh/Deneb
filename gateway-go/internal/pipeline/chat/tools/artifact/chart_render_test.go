@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,9 +55,35 @@ func TestChartRender_Sample(t *testing.T) {
 			Labels: []string{"현대차", "탑솔라", "남도에코", "한빛전력"},
 			Series: []chartSeries{{Name: "발주액", Data: []float64{4200, 3100, 1800, 950}}},
 		}},
+		// High-cardinality cases: these are what the fixed canvas used to drop
+		// labels on. Eyeball that every 거래처 / 일자 / 공정 name is present.
+		{"horizontal-bar-24", chartParams{
+			ChartType: "bar", Title: "거래처별 발주액 순위 (24개사)", ValueKind: "amount", YUnit: "만원",
+			Horizontal: true,
+			Labels:     seriesLabels("거래처", 24),
+			Series:     []chartSeries{{Name: "발주액", Data: descendingData(24, 4800, 170)}},
+		}},
+		{"bar-26-rotated", chartParams{
+			ChartType: "bar", Title: "일자별 발주 건수", Subtitle: "라벨이 눕는지 확인",
+			ValueKind: "count",
+			Labels:    seriesLabels("2026-06-", 26),
+			Series:    []chartSeries{{Name: "발주", Data: descendingData(26, 30, 1)}},
+		}},
+		{"doughnut-14", chartParams{
+			ChartType: "doughnut", Title: "공정별 구성비 (14개)", ValueKind: "count",
+			Labels: seriesLabels("공정", 14),
+			Series: []chartSeries{{Name: "비율", Data: descendingData(14, 40, 2)}},
+		}},
+		{"temperature", chartParams{
+			ChartType: "line", Title: "일평균 기온", Subtitle: "0부터 그리지 않는다",
+			ValueKind: "temperature",
+			Labels:    []string{"월", "화", "수", "목", "금", "토", "일"},
+			Series:    []chartSeries{{Name: "기온", Data: []float64{24.1, 25.3, 26.0, 25.4, 23.8, 22.9, 24.6}}},
+		}},
 	}
 	for _, c := range cases {
-		html, err := buildChartHTML(c.p)
+		w, h := chartCanvas(c.p)
+		html, err := buildChartHTML(c.p, w, h)
 		if err != nil {
 			t.Fatalf("%s: build html: %v", c.name, err)
 		}
@@ -65,11 +92,27 @@ func TestChartRender_Sample(t *testing.T) {
 		if err := os.WriteFile(htmlPath, []byte(html), 0o644); err != nil {
 			t.Fatalf("%s: write html: %v", c.name, err)
 		}
-		if err := chartRenderImage(context.Background(), htmlPath, pngPath); err != nil {
+		if err := chartRenderImage(context.Background(), htmlPath, pngPath, w, h); err != nil {
 			t.Fatalf("%s: render: %v", c.name, err)
 		}
-		t.Logf("%s -> %s", c.name, pngPath)
+		t.Logf("%s (%dx%d) -> %s", c.name, w, h, pngPath)
 	}
+}
+
+func seriesLabels(prefix string, n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("%s%d", prefix, i+1)
+	}
+	return out
+}
+
+func descendingData(n int, top, step float64) []float64 {
+	out := make([]float64, n)
+	for i := range out {
+		out[i] = top - float64(i)*step
+	}
+	return out
 }
 
 // Stacked/horizontal flow into the Chart.js config: stacked marks both scales,
@@ -85,7 +128,8 @@ func TestChartConfigRendersStackedAndHorizontalAxes(t *testing.T) {
 		Stacked:    true,
 		Horizontal: true,
 	}
-	cfg, err := chartConfig(p)
+	w, h := chartCanvas(p)
+	cfg, err := chartConfig(p, w, h)
 	if err != nil {
 		t.Fatalf("chartConfig: %v", err)
 	}
@@ -117,7 +161,8 @@ func TestBuildChartHTMLRendersRuntimeWiring(t *testing.T) {
 		YUnit:     "건",
 		Series:    []chartSeries{{Data: []float64{3, 7}}},
 	}
-	html, err := buildChartHTML(p)
+	w, h := chartCanvas(p)
+	html, err := buildChartHTML(p, w, h)
 	if err != nil {
 		t.Fatalf("buildChartHTML: %v", err)
 	}

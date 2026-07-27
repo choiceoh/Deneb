@@ -38,9 +38,11 @@ import (
 //go:embed chartassets/chart.umd.min.js
 var chartJS string
 
-// Chart canvas geometry in CSS pixels. Rendered at 2x device scale (see
+// Base chart canvas geometry in CSS pixels. Rendered at 2x device scale (see
 // chartRenderImage), so the PNG is 1800x1120 — crisp when the native client
-// downscales it into a chat bubble. Fixed size means no whitespace trim is needed.
+// downscales it into a chat bubble. The height is a base, not a constant: charts
+// whose categories stack vertically grow it (chartCanvas in chart_layout.go).
+// Either way the size is known before the render, so no whitespace trim is needed.
 const (
 	chartCanvasW = 900
 	chartCanvasH = 560
@@ -84,6 +86,10 @@ type chartParams struct {
 	Labels    []string      `json:"labels"`
 	Series    []chartSeries `json:"series"`
 	YUnit     string        `json:"y_unit"` // e.g. "건", "만원", "%"
+	// ValueKind is a semantic hint about what the numbers ARE (amount | count |
+	// ratio | temperature | score). It fills in y_unit and decides the tick
+	// format and whether the axis may start above zero — see chart_valuekind.go.
+	ValueKind string `json:"value_kind"`
 	// Stacked stacks bar/area series (구성비 추이). Horizontal flips a bar
 	// chart to horizontal orientation (항목별 순위).
 	Stacked    bool `json:"stacked"`
@@ -124,7 +130,8 @@ func ToolChart() toolport.ToolFunc {
 			return "", fmt.Errorf("chart render skipped: insufficient memory/disk headroom on host")
 		}
 
-		html, err := buildChartHTML(p)
+		canvasW, canvasH := chartCanvas(p)
+		html, err := buildChartHTML(p, canvasW, canvasH)
 		if err != nil {
 			return "", err
 		}
@@ -137,7 +144,7 @@ func ToolChart() toolport.ToolFunc {
 		}
 		defer os.Remove(htmlPath) //nolint:errcheck // best-effort cleanup of the intermediate
 
-		if err := chartRenderImage(ctx, htmlPath, pngPath); err != nil {
+		if err := chartRenderImage(ctx, htmlPath, pngPath, canvasW, canvasH); err != nil {
 			return "", fmt.Errorf("chart render failed: %w", err)
 		}
 
@@ -145,9 +152,13 @@ func ToolChart() toolport.ToolFunc {
 	}
 }
 
-// buildChartHTML assembles the self-contained dark-themed Chart.js page.
-func buildChartHTML(p chartParams) (string, error) {
-	cfg, err := chartConfig(p)
+// buildChartHTML assembles the self-contained dark-themed Chart.js page at the
+// given canvas size (chartCanvas picks it from the chart's cardinality).
+func buildChartHTML(p chartParams, canvasW, canvasH int) (string, error) {
+	// Resolve the unit once, here, so the value-axis ticks and the doughnut
+	// legend both see the kind-derived default.
+	p.YUnit = resolveYUnit(p)
+	cfg, err := chartConfig(p, canvasW, canvasH)
 	if err != nil {
 		return "", err
 	}
@@ -167,6 +178,10 @@ func buildChartHTML(p chartParams) (string, error) {
 	}
 
 	yUnitJSON, _ := json.Marshal(strings.TrimSpace(p.YUnit))
+	numFmtJSON, err := json.Marshal(numberFormatOptions(resolveValueKind(p)))
+	if err != nil {
+		return "", fmt.Errorf("marshal number format: %w", err)
+	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
@@ -185,18 +200,20 @@ func buildChartHTML(p chartParams) (string, error) {
 <script>
   const cfg = %s;
   const Y_UNIT = %s;
+  const Y_NUMFMT = %s;
 %s
 </script>
 </body></html>`,
-		chartCanvasW, chartCanvasH, chartBg, chartFg, chartMuted,
-		titleBlock, chartJS, cfgJSON, yUnitJSON, chartRuntimeJS)
+		canvasW, canvasH, chartBg, chartFg, chartMuted,
+		titleBlock, chartJS, cfgJSON, yUnitJSON, numFmtJSON, chartRuntimeJS)
 	return b.String(), nil
 }
 
 // chartRuntimeJS is the config post-processing that a JSON-only Chart.js config
 // cannot express (callbacks, canvas drawing):
 //   - value-axis tick suffix for y_unit ("20" → "20만원") — replaces the old
-//     "단위: X" axis-title workaround;
+//     "단위: X" axis-title workaround. Y_NUMFMT carries the value_kind's decimal
+//     policy (Intl.NumberFormat options; empty object = locale default);
 //   - doughnut segment % labels + value-annotated legend entries: a static PNG
 //     has no hover tooltips, so without these a 구성비 chart shows no numbers
 //     at all (the audit's worst chart finding).
@@ -204,10 +221,11 @@ func buildChartHTML(p chartParams) (string, error) {
 // Kept as a raw const (not inside the Fprintf format string) so its % and
 // template literals need no escaping.
 const chartRuntimeJS = `
-  if (Y_UNIT && cfg.options && cfg.options.scales) {
+  const fmtVal = v => Number(v).toLocaleString('ko-KR', Y_NUMFMT);
+  if (cfg.options && cfg.options.scales) {
     const axis = (cfg.options.indexAxis === 'y') ? 'x' : 'y';
     const sc = cfg.options.scales[axis];
-    if (sc) { sc.ticks = sc.ticks || {}; sc.ticks.callback = v => v.toLocaleString('ko-KR') + Y_UNIT; }
+    if (sc) { sc.ticks = sc.ticks || {}; sc.ticks.callback = v => fmtVal(v) + Y_UNIT; }
   }
   const segLabels = { id: 'segLabels', afterDatasetsDraw(chart) {
     if (chart.config.type !== 'doughnut') return;
@@ -231,7 +249,7 @@ const chartRuntimeJS = `
     const total = data.reduce((a, b) => a + (b || 0), 0) || 1;
     cfg.data.labels = cfg.data.labels.map((l, i) => {
       const v = data[i] || 0;
-      return l + ' · ' + v.toLocaleString('ko-KR') + Y_UNIT + ' (' + Math.round(v / total * 100) + '%)';
+      return l + ' · ' + fmtVal(v) + Y_UNIT + ' (' + Math.round(v / total * 100) + '%)';
     });
   }
   cfg.plugins = [segLabels];
@@ -240,7 +258,7 @@ const chartRuntimeJS = `
 
 // chartConfig builds the Chart.js config object (marshaled to JSON, no JS
 // callbacks) for the given params.
-func chartConfig(p chartParams) (map[string]any, error) {
+func chartConfig(p chartParams, canvasW, canvasH int) (map[string]any, error) {
 	base := p.ChartType
 	fill := false
 	if base == "area" {
@@ -254,13 +272,13 @@ func chartConfig(p chartParams) (map[string]any, error) {
 	}
 
 	if base == "doughnut" {
-		return doughnutConfig(p), nil
+		return doughnutConfig(p, canvasH), nil
 	}
-	return xyConfig(p, base, fill), nil
+	return xyConfig(p, base, fill, canvasW, canvasH), nil
 }
 
 // xyConfig builds line/area/bar (and line+bar combos) with x/y axes.
-func xyConfig(p chartParams, base string, fill bool) map[string]any {
+func xyConfig(p chartParams, base string, fill bool, canvasW, canvasH int) map[string]any {
 	datasets := make([]map[string]any, 0, len(p.Series))
 	for i, s := range p.Series {
 		color := chartPalette[i%len(chartPalette)]
@@ -299,15 +317,21 @@ func xyConfig(p chartParams, base string, fill bool) map[string]any {
 	// Category axis (labels) vs value axis (numbers) — horizontal bars swap
 	// them. The y_unit tick suffix is attached in JS (chartRuntimeJS) since a
 	// JSON-marshaled config cannot carry a callback.
+	categoryTickCfg := map[string]any{"color": chartMuted, "font": tickFont()}
+	// Cardinality adaptation: keep every category label (rotating or shrinking
+	// it) instead of letting the Chart.js autoSkip default drop labels silently.
+	for k, v := range categoryTicks(p, canvasW) {
+		categoryTickCfg[k] = v
+	}
 	categoryScale := map[string]any{
 		"grid":  map[string]any{"display": false, "drawBorder": false},
-		"ticks": map[string]any{"color": chartMuted, "font": tickFont()},
+		"ticks": categoryTickCfg,
 	}
 	valueScale := map[string]any{
-		"beginAtZero": true,
-		"grid":        map[string]any{"color": chartGrid, "drawBorder": false},
-		"ticks":       map[string]any{"color": chartMuted, "font": tickFont(), "padding": 6},
+		"grid":  map[string]any{"color": chartGrid, "drawBorder": false},
+		"ticks": map[string]any{"color": chartMuted, "font": tickFont(), "padding": 6},
 	}
+	applyValueKind(valueScale, resolveValueKind(p))
 	if p.Stacked {
 		categoryScale["stacked"] = true
 		valueScale["stacked"] = true
@@ -339,8 +363,9 @@ func xyConfig(p chartParams, base string, fill bool) map[string]any {
 	}
 }
 
-// doughnutConfig builds a doughnut (구성비) from the first series.
-func doughnutConfig(p chartParams) map[string]any {
+// doughnutConfig builds a doughnut (구성비) from the first series. canvasH decides
+// how tightly the right-hand legend has to pack its per-slice entries.
+func doughnutConfig(p chartParams, canvasH int) map[string]any {
 	s := p.Series[0]
 	colors := make([]string, len(s.Data))
 	for i := range s.Data {
@@ -368,10 +393,7 @@ func doughnutConfig(p chartParams) map[string]any {
 				"legend": map[string]any{
 					"display":  true,
 					"position": "right",
-					"labels": map[string]any{
-						"color": chartFg, "font": legendFont(),
-						"padding": 14, "boxWidth": 14, "boxHeight": 14, "usePointStyle": true,
-					},
+					"labels":   doughnutLegendLabels(len(p.Labels), canvasH),
 				},
 			},
 		},
@@ -421,10 +443,11 @@ func htmlEscape(s string) string {
 	return r.Replace(s)
 }
 
-// chartRenderImage screenshots the chart HTML to a fixed-size PNG via the shared
-// headless-Chromium renderer. Fixed canvas (the chart fills it) so no trim is
-// needed; charts render synchronously, so a 4s virtual-time budget is plenty.
-func chartRenderImage(ctx context.Context, htmlPath, pngPath string) error {
-	window := fmt.Sprintf("%d,%d", chartCanvasW, chartCanvasH)
+// chartRenderImage screenshots the chart HTML to a PNG via the shared
+// headless-Chromium renderer. The canvas size is known up front (the chart fills
+// it) so no trim is needed; charts render synchronously, so a 4s virtual-time
+// budget is plenty.
+func chartRenderImage(ctx context.Context, htmlPath, pngPath string, canvasW, canvasH int) error {
+	window := fmt.Sprintf("%d,%d", canvasW, canvasH)
 	return renderHTMLToPNG(ctx, htmlPath, pngPath, window, 4000)
 }
