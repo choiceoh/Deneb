@@ -23,6 +23,9 @@ class FakeDataRepository : DataRepository {
     override val currentConversationId: MutableStateFlow<String?> = MutableStateFlow(null)
     override val fallbackStatus: MutableStateFlow<FallbackStatus?> = MutableStateFlow(null)
     override val savedConversations: MutableStateFlow<List<Conversation>> = MutableStateFlow(emptyList())
+    override val hasMoreConversations: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    var loadMoreCalls: Int = 0
+        private set
 
     val askCalls = mutableListOf<Pair<String?, List<PlatformFile>>>()
     var clearHistoryCalls = 0
@@ -67,6 +70,10 @@ class FakeDataRepository : DataRepository {
     override fun supportedFileExtensions(): List<String> = if (fileAttachmentSupported) listOf("txt", "pdf", "png") else emptyList()
 
     // Conversation management
+    override fun loadMoreConversations() {
+        loadMoreCalls++
+    }
+
     override fun loadConversations() {
         // No-op in tests
     }

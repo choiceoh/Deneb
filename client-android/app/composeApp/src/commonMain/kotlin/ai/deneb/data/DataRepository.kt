@@ -37,7 +37,18 @@ interface DataRepository {
 
     // Conversation management
     val savedConversations: StateFlow<List<Conversation>>
+
+    /**
+     * Whether the gateway holds conversations the drawer has not pulled in yet.
+     * Conversations are no longer garbage-collected server-side, so the list
+     * outgrows one page — without paging the older ones would be unreachable
+     * even though their transcripts are intact.
+     */
+    val hasMoreConversations: StateFlow<Boolean>
     fun loadConversations()
+
+    /** Appends the next page to [savedConversations]. */
+    fun loadMoreConversations()
     fun loadConversation(id: String)
     suspend fun deleteConversation(id: String)
     fun startNewChat()

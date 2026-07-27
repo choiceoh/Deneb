@@ -32,6 +32,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import deneb.composeapp.generated.resources.Res
 import deneb.composeapp.generated.resources.chat_history_empty
 import deneb.composeapp.generated.resources.chat_history_heartbeat_label
+import deneb.composeapp.generated.resources.chat_history_more
 import deneb.composeapp.generated.resources.chat_history_title
 import deneb.composeapp.generated.resources.snackbar_conversation_deleted
 import deneb.composeapp.generated.resources.snackbar_undo
@@ -79,6 +81,7 @@ private val dateFormat = Format {
 @Composable
 fun DenebSessionDrawerSheet(
     conversations: ImmutableList<ConversationSummary>,
+    hasMoreConversations: Boolean,
     currentConversationId: String?,
     pendingConversationDeletion: String?,
     actions: ChatActions,
@@ -166,6 +169,23 @@ fun DenebSessionDrawerSheet(
                                             onClose()
                                         },
                                         onDelete = { actions.deleteConversation(conversation.id) },
+                                    )
+                                }
+                            }
+                        }
+                        // Older conversations live on the gateway beyond this page.
+                        // Without this the drawer just ended, and everything past the
+                        // first page was unreachable although its transcript is intact.
+                        if (hasMoreConversations) {
+                            item {
+                                TextButton(
+                                    onClick = actions.loadMoreConversations,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                ) {
+                                    Text(
+                                        text = stringResource(Res.string.chat_history_more),
+                                        style = DenebType.button,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }

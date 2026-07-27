@@ -106,6 +106,7 @@ class ChatViewModel(
         sendSmsDraft = ::sendSmsDraft,
         discardSmsDraft = ::discardSmsDraft,
         refreshConversations = { dataRepository.loadConversations() },
+        loadMoreConversations = { dataRepository.loadMoreConversations() },
     )
 
     // In the context of every job that can be cancel()ed while a gateway request
@@ -206,10 +207,15 @@ class ChatViewModel(
         dataRepository.chatHistory.sample(STREAM_HISTORY_SAMPLE_MS),
         dataRepository.savedConversations,
         dataRepository.currentConversationId,
-        // Two unread flags folded into a Pair to stay within combine's 5-arg overload.
-        combine(dataRepository.hasUnreadHeartbeat, dataRepository.hasUnreadWorkReport) { hb, wr -> hb to wr },
-    ) { state, history, conversations, conversationId, unread ->
-        val (hasUnreadHeartbeat, hasUnreadWorkReport) = unread
+        // Two unread flags + the drawer's has-more flag folded into a Triple to
+        // stay within combine's 5-arg overload.
+        combine(
+            dataRepository.hasUnreadHeartbeat,
+            dataRepository.hasUnreadWorkReport,
+            dataRepository.hasMoreConversations,
+        ) { hb, wr, more -> Triple(hb, wr, more) },
+    ) { state, history, conversations, conversationId, flags ->
+        val (hasUnreadHeartbeat, hasUnreadWorkReport, hasMoreConversations) = flags
         if (conversations !== cachedConversationsRef) {
             cachedConversationsRef = conversations
             cachedSummaries = conversations
@@ -229,6 +235,7 @@ class ChatViewModel(
             history = history.toImmutableList(),
             supportedFileExtensions = dataRepository.supportedFileExtensions().toImmutableList(),
             savedConversations = cachedSummaries,
+            hasMoreConversations = hasMoreConversations,
             currentConversationId = conversationId,
             hasUnreadHeartbeat = hasUnreadHeartbeat,
             hasUnreadWorkReport = hasUnreadWorkReport,

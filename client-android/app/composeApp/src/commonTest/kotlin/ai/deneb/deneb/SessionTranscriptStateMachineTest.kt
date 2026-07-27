@@ -27,13 +27,14 @@ class SessionTranscriptStateMachineTest {
 
     private val json = Json { encodeDefaults = true }
 
-    private fun sessionsPayload(vararg sessions: SessionRowOut): String = buildJsonObject {
+    private fun sessionsPayload(vararg sessions: SessionRowOut, total: Int? = null): String = buildJsonObject {
         put(
             "sessions",
             buildJsonArray {
                 sessions.forEach { add(json.encodeToJsonElement(SessionRowOut.serializer(), it)) }
             },
         )
+        if (total != null) put("total", total)
     }.toString()
 
     private fun transcriptPayload(vararg messages: String): String = """{"messages":[${messages.joinToString(",")}] }"""
@@ -77,7 +78,7 @@ class SessionTranscriptStateMachineTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(sessionsPayload())
 
-        val result = f.client.fetchRecentSessions().orEmpty()
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty()
 
         assertEquals(1, result.size)
         assertEquals("client:main", result.single().id)
@@ -92,7 +93,7 @@ class SessionTranscriptStateMachineTest {
             sessionsPayload(SessionRowOut(key = "client:main", updatedAtMs = 9)),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty()
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty()
 
         assertEquals(listOf("client:main"), result.map { it.id })
         assertEquals(9, result.single().updatedAt)
@@ -108,7 +109,7 @@ class SessionTranscriptStateMachineTest {
             ),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty()
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty()
 
         assertEquals(listOf("client:main", "client:main:valid"), result.map { it.id })
         assertFalse(result.any { it.title == "secret" })
@@ -125,7 +126,7 @@ class SessionTranscriptStateMachineTest {
             ),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty()
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty()
 
         assertEquals(
             listOf("client:main", "client:main:first", "system:heartbeat"),
@@ -143,7 +144,7 @@ class SessionTranscriptStateMachineTest {
             ),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty().associateBy { it.id }
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty().associateBy { it.id }
 
         assertEquals("Custom cron", result["cron:morning:1"]?.title)
         assertEquals("Custom chat", result["chat:abc"]?.title)
@@ -154,7 +155,7 @@ class SessionTranscriptStateMachineTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = "client:main", updatedAtMs = 1)))
 
-        val result = f.client.fetchRecentSessions().orEmpty()
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty()
 
         assertEquals("업무", result.single().title)
     }
@@ -166,7 +167,7 @@ class SessionTranscriptStateMachineTest {
             sessionsPayload(SessionRowOut(key = "chat:123456789abcdef", updatedAtMs = 1)),
         )
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("대화 · 12345678", title)
     }
@@ -176,7 +177,7 @@ class SessionTranscriptStateMachineTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = "cron:email-analysis-full:1")))
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("예약 · 메일 분석", title)
     }
@@ -194,7 +195,7 @@ class SessionTranscriptStateMachineTest {
             sessionsPayload(*cases.keys.map { SessionRowOut(key = it) }.toTypedArray()),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty().associateBy { it.id }
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty().associateBy { it.id }
 
         cases.forEach { (key, title) -> assertEquals(title, result[key]?.title) }
     }
@@ -204,7 +205,7 @@ class SessionTranscriptStateMachineTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = "cron:deal-watch-daily:178")))
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("예약 · deal watch daily", title)
     }
@@ -219,7 +220,7 @@ class SessionTranscriptStateMachineTest {
             ),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty().associateBy { it.id }
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty().associateBy { it.id }
 
         assertEquals("시스템 · 하트비트", result["system:heartbeat"]?.title)
         assertEquals("시스템 부팅", result["boot:178"]?.title)
@@ -232,7 +233,7 @@ class SessionTranscriptStateMachineTest {
             sessionsPayload(SessionRowOut(key = "client:main:abcdefghijk", updatedAtMs = 1)),
         )
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("내 대화 · abcdefgh", title)
     }
@@ -244,7 +245,7 @@ class SessionTranscriptStateMachineTest {
             sessionsPayload(SessionRowOut(key = "client:main:one", startedAtMs = 10, updatedAtMs = 20)),
         )
 
-        val conversation = f.client.fetchRecentSessions().orEmpty().last()
+        val conversation = f.client.fetchRecentSessions()?.conversations.orEmpty().last()
 
         assertEquals(10, conversation.createdAt)
         assertEquals(20, conversation.updatedAt)
@@ -260,7 +261,7 @@ class SessionTranscriptStateMachineTest {
             ),
         )
 
-        val result = f.client.fetchRecentSessions().orEmpty().associateBy { it.id }
+        val result = f.client.fetchRecentSessions()?.conversations.orEmpty().associateBy { it.id }
 
         assertEquals(20, result["client:main:zero"]?.createdAt)
         assertEquals(30, result["client:main:negative"]?.createdAt)
@@ -274,7 +275,7 @@ class SessionTranscriptStateMachineTest {
         val key = f.client.workItemSessionKey(item.id)
         f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = key)))
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("업무 · 계약 검토", title)
     }
@@ -284,7 +285,7 @@ class SessionTranscriptStateMachineTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = "client:main:wf-gone")))
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("업무 메모", title)
     }
@@ -297,7 +298,7 @@ class SessionTranscriptStateMachineTest {
         f.client._denebWorkFeed.value = listOf(item)
         f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = f.client.workItemSessionKey(item.id))))
 
-        val title = f.client.fetchRecentSessions().orEmpty().last().title
+        val title = f.client.fetchRecentSessions()?.conversations.orEmpty().last().title
 
         assertEquals("업무 · ${"가".repeat(40)}", title)
     }
@@ -771,5 +772,52 @@ class SessionTranscriptStateMachineTest {
 
         assertEquals(2, result.size)
         assertNotEquals(result[0].id, result[1].id)
+    }
+
+    // Conversations are no longer garbage-collected server-side (#4353), so the
+    // drawer list outgrows one page. Without `total` + offset the phone stopped at
+    // the first page and every older conversation was unreachable.
+    @Test
+    fun recentSessionsReportsWhetherMorePagesRemain() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(
+            sessionsPayload(SessionRowOut(key = "client:main", updatedAtMs = 9), total = 12),
+        )
+
+        val first = f.client.fetchRecentSessions()
+
+        assertEquals(12, first?.total)
+        assertEquals(1, first?.serverRows)
+        // serverRows, not the rendered list, is the next offset: the 업무 home row is
+        // synthesized locally when a page lacks it.
+        assertEquals(listOf("client:main"), first?.conversations?.map { it.id })
+    }
+
+    @Test
+    fun laterPagesAppendVerbatimWithoutRepeatingTheHomeRow() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(
+            sessionsPayload(SessionRowOut(key = "client:main:older", updatedAtMs = 3), total = 12),
+        )
+
+        val page = f.client.fetchRecentSessions(offset = 1)
+
+        // No synthesized home on a later page — that would duplicate the row the
+        // first page already showed and shift every subsequent offset.
+        assertEquals(listOf("client:main:older"), page?.conversations?.map { it.id })
+        assertEquals(1, page?.serverRows)
+    }
+
+    // An older gateway has no `total`; the drawer must stop rather than page into
+    // nothing.
+    @Test
+    fun missingTotalFallsBackToTheRowsReceived() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = "client:main", updatedAtMs = 9)))
+
+        val page = f.client.fetchRecentSessions()
+
+        assertEquals(1, page?.total)
+        assertEquals(1, page?.serverRows)
     }
 }
