@@ -53,11 +53,15 @@ export function maneuverArrow(instruction: string): ArrowKind | null {
 // distance the largest thing on screen, which is only reachable this way. That
 // is the single biggest readability difference between their HUD and a text-only
 // one.
-export const ARROW_W = 288;
-export const ARROW_H = 144;
+// 280×140, not the documented maximum of 288×144: the spec's bounds are stated
+// as a range and an inclusive-vs-exclusive edge is exactly the kind of thing a
+// host rejects silently. Backing off two pixels costs nothing and removes the
+// question.
+export const ARROW_W = 280;
+export const ARROW_H = 140;
 
 /** Where the arrow half ends and the distance half begins. */
-const ARROW_COL = 104;
+const ARROW_COL = 100;
 
 /**
  * arrowPng draws one maneuver arrow and returns PNG bytes.

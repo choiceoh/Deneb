@@ -91,6 +91,7 @@ type Handler struct {
 	dedupe      map[string]dedupeEntry
 	notice      pendingNotice
 	glanceCache glanceCache
+	lastHud     hudFrame
 	activeTurn  atomic.Int32 // in-flight RunSync calls for this bridge
 }
 

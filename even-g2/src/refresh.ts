@@ -1,4 +1,4 @@
-import type { GlancePayload } from './deneb'
+import type { GlancePayload } from "./deneb";
 
 // Refresh-loop policy, kept pure so it is testable without the glasses bridge.
 //
@@ -9,10 +9,10 @@ import type { GlancePayload } from './deneb'
 // retrying every 45s forever.
 
 /** Base interval between background polls when the gateway is answering. */
-export const BASE_REFRESH_MS = 45_000
+export const BASE_REFRESH_MS = 45_000;
 
 /** Ceiling for the failure backoff — roughly 12 minutes between retries. */
-export const MAX_REFRESH_MS = 720_000
+export const MAX_REFRESH_MS = 720_000;
 
 /**
  * How long a single glance/status request may take before it is aborted.
@@ -23,7 +23,7 @@ export const MAX_REFRESH_MS = 720_000
  * restarted. The device's own Custom AI deadline is 15s, so a glance that has
  * not answered in 10 is already useless to the wearer.
  */
-export const REQUEST_TIMEOUT_MS = 10_000
+export const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * nextDelayMs backs off exponentially while the gateway is unreachable.
@@ -33,9 +33,9 @@ export const REQUEST_TIMEOUT_MS = 10_000
  * into a handful of retries that fade out, and any success resets it.
  */
 export function nextDelayMs(consecutiveFailures: number): number {
-  if (consecutiveFailures <= 0) return BASE_REFRESH_MS
-  const grown = BASE_REFRESH_MS * 2 ** Math.min(consecutiveFailures, 8)
-  return Math.min(grown, MAX_REFRESH_MS)
+  if (consecutiveFailures <= 0) return BASE_REFRESH_MS;
+  const grown = BASE_REFRESH_MS * 2 ** Math.min(consecutiveFailures, 8);
+  return Math.min(grown, MAX_REFRESH_MS);
 }
 
 /**
@@ -49,11 +49,14 @@ export function nextDelayMs(consecutiveFailures: number): number {
 export function payloadSignature(payload: GlancePayload): string {
   const pages = payload.pages
     .map((p) => `${p.id}${p.title}${p.text}${p.empty ? 1 : 0}`)
-    .join('')
+    .join("");
   const items = payload.items
-    .map((it) => `${it.id}${it.title}${it.preview ?? ''}${it.body ?? ''}${it.priority ?? ''}`)
-    .join('')
-  return `${pages}${items}`
+    .map(
+      (it) =>
+        `${it.id}${it.title}${it.preview ?? ""}${it.body ?? ""}${it.priority ?? ""}`,
+    )
+    .join("");
+  return `${pages}${items}`;
 }
 
 /**
@@ -69,11 +72,14 @@ export function payloadSignature(payload: GlancePayload): string {
  * failures, not one, because a single missed poll is normal on a phone-relayed
  * private network and would otherwise blink the marker on and off.
  */
-export function connectionLabel(consecutiveFailures: number, servingCache = false): string {
+export function connectionLabel(
+  consecutiveFailures: number,
+  servingCache = false,
+): string {
   // A saved copy says so from the FIRST frame — the two-failure grace period is
   // about not blinking a marker over live data, and this is not live data.
-  if (servingCache) return '오프라인 · 저장본'
-  return consecutiveFailures >= 2 ? '연결 끊김' : ''
+  if (servingCache) return "오프라인 · 저장본";
+  return consecutiveFailures >= 2 ? "연결 끊김" : "";
 }
 
 /**
@@ -84,10 +90,10 @@ export function connectionLabel(consecutiveFailures: number, servingCache = fals
  * is. Everything the alert page draws has to be budgeted against this: the
  * gateway can return twelve alerts and an app-drawn text page does not scroll.
  */
-export const HUD_LINES = 10
+export const HUD_LINES = 10;
 
 /** Fallback window when the caller has no budget to hand (tests, defaults). */
-export const ALERT_WINDOW = 5
+export const ALERT_WINDOW = 5;
 
 /**
  * alertSlots is how many alert lines are left once the fixed furniture is paid
@@ -98,9 +104,12 @@ export const ALERT_WINDOW = 5
  * and the wearer already knows which app they opened, so that line now carries
  * "지금 금호타이어 · 종료 20분" instead.
  */
-export function alertSlots(hasLead: boolean, lines: number = HUD_LINES): number {
-  const furniture = (hasLead ? 1 : 0) + 1 + 1 + 1
-  return Math.max(1, lines - furniture)
+export function alertSlots(
+  hasLead: boolean,
+  lines: number = HUD_LINES,
+): number {
+  const furniture = (hasLead ? 1 : 0) + 1 + 1 + 1;
+  return Math.max(1, lines - furniture);
 }
 
 /**
@@ -112,12 +121,12 @@ export function windowRange(
   count: number,
   size: number = ALERT_WINDOW,
 ): { start: number; end: number } {
-  if (count <= 0 || size <= 0) return { start: 0, end: 0 }
-  if (count <= size) return { start: 0, end: count }
-  const at = clampCursor(cursor, count)
-  const half = Math.floor(size / 2)
-  const start = Math.min(Math.max(at - half, 0), count - size)
-  return { start, end: start + size }
+  if (count <= 0 || size <= 0) return { start: 0, end: 0 };
+  if (count <= size) return { start: 0, end: count };
+  const at = clampCursor(cursor, count);
+  const half = Math.floor(size / 2);
+  const start = Math.min(Math.max(at - half, 0), count - size);
+  return { start, end: start + size };
 }
 
 /**
@@ -130,19 +139,22 @@ export function windowRange(
  * device with four gestures, one of them going to a screen the wearer has just
  * left is not free.
  */
-export function skipPage(page: { id: string; empty?: boolean }, itemCount: number): boolean {
-  if (page.id === 'home') return false
-  if (page.id === 'alerts' && itemCount > 0) return true
-  return !!page.empty
+export function skipPage(
+  page: { id: string; empty?: boolean },
+  itemCount: number,
+): boolean {
+  if (page.id === "home") return false;
+  if (page.id === "alerts" && itemCount > 0) return true;
+  return !!page.empty;
 }
 
 /** What the device says about itself; every field is optional on the wire. */
 export type WearStatus = {
-  isWearing?: boolean
-  isInCase?: boolean
-  isCharging?: boolean
-  batteryLevel?: number
-}
+  isWearing?: boolean;
+  isInCase?: boolean;
+  isCharging?: boolean;
+  batteryLevel?: number;
+};
 
 /**
  * shouldPoll decides whether the background loop is worth running.
@@ -159,14 +171,50 @@ export type WearStatus = {
  * never silently stop refreshing forever.
  */
 export function shouldPoll(status: WearStatus | undefined): boolean {
-  if (!status) return true
-  if (status.isInCase === true) return false
-  if (status.isWearing === false) return false
-  return true
+  if (!status) return true;
+  if (status.isInCase === true) return false;
+  if (status.isWearing === false) return false;
+  return true;
+}
+
+/**
+ * mergeWearStatus folds a device-status event into what is already known,
+ * discarding events that are really just SDK defaults.
+ *
+ * The G2 SDK's `DeviceStatus.fromJson` fills absent fields in — `isWearing`
+ * becomes `false` and `batteryLevel` becomes `0` (verified in the shipped
+ * bundle: `'isWearing':![]`, `'batteryLevel':0x0`). So a status event about
+ * something else entirely — a connection change — arrives looking exactly like
+ * "not worn, flat battery", and reporting that to the wearer while the glasses
+ * are on their face is what the device actually did.
+ *
+ * The tell is batteryLevel 0: a G2 at 0% is powered off and cannot report
+ * anything, so 0 is never a reading. When it appears, the whole payload is
+ * defaults and the previously known state stands.
+ */
+export function mergeWearStatus(
+  known: WearStatus | undefined,
+  incoming: WearStatus | undefined,
+): WearStatus | undefined {
+  if (!incoming) return known;
+  const battery = incoming.batteryLevel;
+  const looksDefaulted = battery === 0;
+  if (looksDefaulted) return known;
+  return {
+    isWearing: incoming.isWearing,
+    isInCase: incoming.isInCase,
+    isCharging: incoming.isCharging,
+    // Keep a battery figure only when it is a real one; an absent field is
+    // "unknown", which the status screen renders differently from a number.
+    batteryLevel:
+      typeof battery === "number" && Number.isFinite(battery) && battery > 0
+        ? battery
+        : known?.batteryLevel,
+  };
 }
 
 /** Battery below this, off charge, is when a wearable should stop being eager. */
-export const LOW_BATTERY_PCT = 15
+export const LOW_BATTERY_PCT = 15;
 
 /**
  * pollInterval stretches the base interval when the glasses are nearly flat.
@@ -175,19 +223,22 @@ export const LOW_BATTERY_PCT = 15
  * proactive path (the phone's notification HUD) is unaffected either way — so
  * the glance is exactly the thing that can afford to slow down.
  */
-export function pollInterval(base: number, status: WearStatus | undefined): number {
-  if (!status || status.isCharging === true) return base
-  const pct = status.batteryLevel
-  if (typeof pct !== 'number' || !Number.isFinite(pct)) return base
-  return pct <= LOW_BATTERY_PCT ? base * 4 : base
+export function pollInterval(
+  base: number,
+  status: WearStatus | undefined,
+): number {
+  if (!status || status.isCharging === true) return base;
+  const pct = status.batteryLevel;
+  if (typeof pct !== "number" || !Number.isFinite(pct)) return base;
+  return pct <= LOW_BATTERY_PCT ? base * 4 : base;
 }
 
 /** clampCursor keeps an alert cursor inside the current item list. */
 export function clampCursor(cursor: number, count: number): number {
-  if (count <= 0) return 0
-  if (!Number.isFinite(cursor) || cursor < 0) return 0
-  const i = Math.trunc(cursor)
-  return i >= count ? count - 1 : i
+  if (count <= 0) return 0;
+  if (!Number.isFinite(cursor) || cursor < 0) return 0;
+  const i = Math.trunc(cursor);
+  return i >= count ? count - 1 : i;
 }
 
 /**
@@ -199,12 +250,16 @@ export function clampCursor(cursor: number, count: number): number {
  * stranded every page behind the alerts. Owning it here also makes it testable
  * without the glasses.
  */
-export function advanceCursor(cursor: number, count: number, dir: 1 | -1): number | 'page' {
-  if (count <= 0) return 'page'
-  const at = clampCursor(cursor, count)
-  const next = at + dir
-  if (next < 0 || next >= count) return 'page'
-  return next
+export function advanceCursor(
+  cursor: number,
+  count: number,
+  dir: 1 | -1,
+): number | "page" {
+  if (count <= 0) return "page";
+  const at = clampCursor(cursor, count);
+  const next = at + dir;
+  if (next < 0 || next >= count) return "page";
+  return next;
 }
 
 /**
@@ -224,10 +279,10 @@ export function advanceCursor(cursor: number, count: number, dir: 1 | -1): numbe
  * and guessing there really would open the wrong alert.
  */
 export function resolveSelectionIndex(raw: unknown, count: number): number {
-  if (count <= 0) return -1
-  if (raw === undefined || raw === null) return 0
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return -1
-  const i = Math.trunc(raw)
-  if (i < 0 || i >= count) return -1
-  return i
+  if (count <= 0) return -1;
+  if (raw === undefined || raw === null) return 0;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return -1;
+  const i = Math.trunc(raw);
+  if (i < 0 || i >= count) return -1;
+  return i;
 }
