@@ -245,11 +245,30 @@ export interface TranscriptMsg {
 // (heartbeat/cron/mail/helper) can crowd out the user's chat sessions before a
 // client-side filter ever runs — the "채팅 목록이 비어 보임" bug. Passing the
 // channel makes the server apply `limit` to that channel only.
-export const recentSessions = (cfg: GatewayConfig, limit = 20, channel?: string) =>
-  callRpc<{ sessions: SessionRow[]; count: number }>(cfg, "miniapp.sessions.recent", {
+// `total` is the size of the whole scoped set, so the drawer can page instead of
+// stopping at the server cap (100). Conversations are no longer GC'd, so a
+// limit-only fetch would silently hide everything past that cap as history grows.
+export interface RecentSessionsPage {
+  sessions: SessionRow[];
+  total: number;
+}
+
+export const recentSessions = (
+  cfg: GatewayConfig,
+  limit = 20,
+  channel?: string,
+  offset = 0,
+): Promise<RecentSessionsPage> =>
+  callRpc<{ sessions: SessionRow[]; count: number; total?: number }>(cfg, "miniapp.sessions.recent", {
     limit,
+    ...(offset > 0 ? { offset } : {}),
     ...(channel ? { channel } : {}),
-  }).then((r) => r.sessions ?? []);
+  }).then((r) => ({
+    sessions: r.sessions ?? [],
+    // An older gateway has no `total` — fall back to what it returned so the
+    // drawer just stops offering more instead of paging into nothing.
+    total: r.total ?? (r.sessions ?? []).length,
+  }));
 
 // The gateway caps limit at 200 server-side; total lets the drawer show a
 // "이전 대화 더 불러오기" affordance instead of silently truncating history.

@@ -169,7 +169,9 @@ describe("RPC convenience methods", () => {
     );
 
     await expect(listPrompts(CFG)).resolves.toEqual([]);
-    await expect(recentSessions(CFG)).resolves.toEqual([]);
+    // A payload with no rows and no `total` (an older gateway) must page to a
+    // stop rather than offering a next page into nothing.
+    await expect(recentSessions(CFG)).resolves.toEqual({ sessions: [], total: 0 });
     await expect(sessionTranscript(CFG, "client:one")).resolves.toEqual({ messages: [], total: 0, turnRunning: false });
     await expect(deleteSession(CFG, "client:one")).resolves.toBe(true);
     await setModel(CFG, "model-a");

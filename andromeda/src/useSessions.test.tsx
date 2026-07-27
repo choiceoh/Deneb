@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type GatewayConfig, deleteSession, recentSessions, sessionTranscript } from "@/gateway";
+import { type GatewayConfig, type SessionRow, deleteSession, recentSessions, sessionTranscript } from "@/gateway";
 import { useSessions } from "./useSessions";
 
 vi.mock("@/gateway", () => ({
@@ -14,6 +14,9 @@ vi.mock("@/gateway", () => ({
 
 const cfg: GatewayConfig = { url: "http://test", token: "token" };
 const recent = vi.mocked(recentSessions);
+// The RPC returns a page (rows + the size of the whole scoped set) so the
+// drawer can page past the gateway's per-response cap.
+const page = (sessions: SessionRow[], total = sessions.length) => ({ sessions, total });
 const transcript = vi.mocked(sessionTranscript);
 const remove = vi.mocked(deleteSession);
 
@@ -22,7 +25,7 @@ function chatDouble() {
 }
 
 beforeEach(() => {
-  recent.mockResolvedValue([]);
+  recent.mockResolvedValue(page([]));
   transcript.mockResolvedValue({ messages: [], total: 0, turnRunning: false });
   remove.mockResolvedValue(true);
 });
@@ -33,42 +36,46 @@ afterEach(() => {
 
 describe("useSessions", () => {
   it("returns namespace-filtered sessions when gateway lists recent", async () => {
-    recent.mockResolvedValue([
-      { key: "client:main:a", label: "A" },
-      { key: "client:main:b", label: "B" },
-      { key: "system:heartbeat", label: "system" },
-    ]);
+    recent.mockResolvedValue(
+      page([
+        { key: "client:main:a", label: "A" },
+        { key: "client:main:b", label: "B" },
+        { key: "system:heartbeat", label: "system" },
+      ]),
+    );
     const chat = chatDouble();
     const { result } = renderHook(() => useSessions(cfg, true, false, chat, { filter: "client:main:" }));
 
     await waitFor(() => expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main:a", "client:main:b"]));
-    expect(recent).toHaveBeenCalledWith(cfg, 20, undefined);
+    expect(recent).toHaveBeenCalledWith(cfg, 20, undefined, 0);
   });
 
   it("scopes the recent fetch to a channel server-side when given one", async () => {
     // Regression: the CHAT tab must ask the gateway for its OWN channel, else the
     // newest-N window is filled by autonomous sessions (heartbeat/cron/mail) and
     // the client-side filter leaves the drawer looking empty.
-    recent.mockResolvedValue([{ key: "client:main", label: "업무" }]);
+    recent.mockResolvedValue(page([{ key: "client:main", label: "업무" }]));
     const chat = chatDouble();
     renderHook(() => useSessions(cfg, true, false, chat, { channel: "client", filter: "client:" }));
-    await waitFor(() => expect(recent).toHaveBeenCalledWith(cfg, 20, "client"));
+    await waitFor(() => expect(recent).toHaveBeenCalledWith(cfg, 20, "client", 0));
   });
 
   it("refetches on window focus so a mid-restore partial list self-heals", async () => {
     // First fetch lands while the gateway is still restoring sessions in the
     // background (server_lifecycle.go) — only client:main is back yet.
-    recent.mockResolvedValueOnce([{ key: "client:main", label: "업무" }]);
+    recent.mockResolvedValueOnce(page([{ key: "client:main", label: "업무" }]));
     const chat = chatDouble();
     const { result } = renderHook(() => useSessions(cfg, true, false, chat, { filter: "client:" }));
     await waitFor(() => expect(result.current.sessions.map((s) => s.key)).toEqual(["client:main"]));
 
     // Restore has since finished; a focus refresh must pick up the full list
     // rather than staying frozen on the mid-restore snapshot.
-    recent.mockResolvedValue([
-      { key: "client:main", label: "업무" },
-      { key: "client:main:mrudefc16xpd", label: "근거 확인 및 판정 기록 완료" },
-    ]);
+    recent.mockResolvedValue(
+      page([
+        { key: "client:main", label: "업무" },
+        { key: "client:main:mrudefc16xpd", label: "근거 확인 및 판정 기록 완료" },
+      ]),
+    );
     await act(async () => {
       window.dispatchEvent(new Event("focus"));
     });
@@ -102,10 +109,12 @@ describe("useSessions", () => {
   });
 
   it("when deleting the active session removes it and mints a fresh conversation", async () => {
-    recent.mockResolvedValue([
-      { key: "client:main", label: "업무" },
-      { key: "client:main:old", label: "Old" },
-    ]);
+    recent.mockResolvedValue(
+      page([
+        { key: "client:main", label: "업무" },
+        { key: "client:main:old", label: "Old" },
+      ]),
+    );
     const chat = chatDouble();
     const newKey = vi.fn(() => "client:main:new");
     const { result } = renderHook(() => useSessions(cfg, true, false, chat, { newKey }));
@@ -151,7 +160,7 @@ describe("useSessions", () => {
       // An unreachable gateway must not read as "최근 대화가 없습니다."
       expect(result.current.sessionErr).not.toBe("");
 
-      recent.mockResolvedValue([{ key: "client:main", label: "업무" }]);
+      recent.mockResolvedValue(page([{ key: "client:main", label: "업무" }]));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10000);
       });
@@ -162,8 +171,33 @@ describe("useSessions", () => {
     }
   });
 
+  it("pages past the gateway's per-response cap instead of stopping at it", async () => {
+    // Conversations are no longer GC'd, so history grows past the 100-row cap of
+    // one response. A limit-only drawer would silently hide everything beyond it.
+    const rows = (from: number, n: number) =>
+      Array.from({ length: n }, (_, i) => ({ key: `client:main:c${from + i}`, label: `대화 ${from + i}` }));
+    // Faithful server: never returns more than `total - offset` rows.
+    recent.mockImplementation(async (_cfg, limit = 20, _channel, offset = 0) =>
+      page(rows(offset, Math.max(0, Math.min(limit, 130 - offset))), 130),
+    );
+    const chat = chatDouble();
+    const { result } = renderHook(() => useSessions(cfg, true, false, chat, { channel: "client" }));
+    await waitFor(() => expect(result.current.sessions).toHaveLength(20));
+    expect(result.current.canLoadMoreSessions).toBe(true);
+
+    // Six pages in, the window is wider than one response — the hook must
+    // assemble it from offset fetches rather than truncating at the cap.
+    for (let i = 0; i < 6; i++) await act(async () => result.current.loadMoreSessions());
+
+    expect(result.current.sessions).toHaveLength(130);
+    expect(result.current.sessions.at(-1)?.key).toBe("client:main:c129");
+    // The window past the cap was assembled from a second, offset fetch.
+    expect(recent.mock.calls.some((c) => c[3] === 100)).toBe(true);
+    expect(result.current.canLoadMoreSessions).toBe(false);
+  });
+
   it("clears stale session rows immediately on disconnect", async () => {
-    recent.mockResolvedValue([{ key: "client:main", label: "업무" }]);
+    recent.mockResolvedValue(page([{ key: "client:main", label: "업무" }]));
     const chat = chatDouble();
     const { result, rerender } = renderHook(({ connected }) => useSessions(cfg, connected, false, chat), {
       initialProps: { connected: true },
