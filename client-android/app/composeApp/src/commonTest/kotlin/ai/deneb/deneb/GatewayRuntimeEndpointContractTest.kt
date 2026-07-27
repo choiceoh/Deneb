@@ -507,7 +507,8 @@ class GatewayRuntimeEndpointContractTest {
         assertEquals("POST", request.method.value)
         assertEquals(ContentType.Application.Json, request.bodyContentType?.withoutParameters())
         assertEquals("runtime-token", request.header(DenebGatewayClient.CLIENT_TOKEN_HEADER))
-        assertEquals(setOf("limit"), params.keys)
+        assertEquals(setOf("channel", "limit"), params.keys)
+        assertEquals("client", params["channel"]?.jsonPrimitive?.content)
         assertEquals(50, params["limit"]?.jsonPrimitive?.content?.toInt())
     }
 
