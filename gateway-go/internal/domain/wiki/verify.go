@@ -441,11 +441,43 @@ func isSimilar(a, b string) bool {
 	if dist == 0 {
 		return true
 	}
+	// Edit distance is calibrated for alphabets, where one character of a short
+	// word is plausible spelling variance ("Smith"/"Smyth"). Korean is syllabic:
+	// one syllable of a three-syllable name or a two-syllable place name is a
+	// THIRD to a HALF of the whole token — a different word, not a typo. Measured
+	// over the live wiki (834 active pages): the distance rule produced 106
+	// similar-title warnings per dream cycle, 94 of them 인물↔인물 pairs that are
+	// plainly different people (강동민~강동화, 김노영~김유영, 김갑수~김덕수) and
+	// most of the rest different places (진도군~완도군, 서산시~아산시, 울산~부산),
+	// with essentially no true positive in the set — re-reported every cycle
+	// because nothing remembers a dismissal. Same-name-different-spelling in CJK
+	// is punctuation and spacing, which normalizeTitleKey already folds exactly
+	// (and that is the path allowed to auto-merge). So for CJK text, equality
+	// after normalization is the only duplicate signal we trust.
+	if containsCJK(a) || containsCJK(b) {
+		return false
+	}
 	maxLen := max(utf8.RuneCountInString(a), utf8.RuneCountInString(b))
 	if maxLen <= 5 {
 		return dist <= 1
 	}
 	return dist <= 2 && float64(dist)/float64(maxLen) < 0.3
+}
+
+// containsCJK reports whether s carries Hangul, CJK ideographs or Kana — the
+// scripts whose unit of meaning is a syllable/character rather than a letter.
+func containsCJK(s string) bool {
+	for _, r := range s {
+		switch {
+		case r >= 0xAC00 && r <= 0xD7A3, // Hangul syllables
+			r >= 0x1100 && r <= 0x11FF, // Hangul Jamo
+			r >= 0x3130 && r <= 0x318F, // Hangul compatibility Jamo
+			r >= 0x4E00 && r <= 0x9FFF, // CJK unified ideographs
+			r >= 0x3040 && r <= 0x30FF: // Hiragana + Katakana
+			return true
+		}
+	}
+	return false
 }
 
 // misclassificationResult is the LLM response format for category errors.
