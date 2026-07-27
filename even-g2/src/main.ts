@@ -1146,6 +1146,55 @@ const NAV_ARROW_ID = 3;
 const NAV_SPEED_ID = 4;
 
 /**
+ * IMAGE_MIN_GAP_MS — floor between BLE image transfers.
+ *
+ * Measured from the device through the HUD mirror: pushes came back
+ * `sendFailed`. The PNG was fine — a bad one returns imageException or
+ * imageToGray4Failed — and text updates kept working throughout, so the link was
+ * alive and it is images specifically that could not keep up. They go out
+ * fragmented and LZ4-compressed while the speed bitmap was being pushed on
+ * every position fix.
+ */
+const IMAGE_MIN_GAP_MS = 4_000;
+let lastImageAt = 0;
+
+/**
+ * sendImage serializes, paces and retries one image transfer.
+ *
+ * Serial because updateImageRawData is global rather than per container, paced
+ * because the link drops transfers that arrive too close together, and retried
+ * once because a dropped frame is transient — the alternative is a blank arrow
+ * for the rest of the leg.
+ */
+async function sendImage(
+  name: string,
+  containerID: number,
+  bytes: Uint8Array,
+): Promise<string> {
+  const gap = Date.now() - lastImageAt;
+  if (gap < IMAGE_MIN_GAP_MS) {
+    await new Promise((r) => setTimeout(r, IMAGE_MIN_GAP_MS - gap));
+  }
+  let res = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    lastImageAt = Date.now();
+    res = String(
+      await bridge.updateImageRawData(
+        new ImageRawDataUpdate({
+          containerID,
+          containerName: name,
+          imageData: bytes,
+        }),
+      ),
+    );
+    if (res === "success") break;
+    await new Promise((r) => setTimeout(r, IMAGE_MIN_GAP_MS));
+  }
+  noteImagePush(name, bytes.length, res);
+  return res;
+}
+
+/**
  * enterNavPage switches to the navigation layout by CHANGING CONTENT ONLY.
  *
  * No rebuildPageContainer: the containers are declared at startup. The device
@@ -1173,7 +1222,13 @@ let arrowChain: Promise<unknown> = Promise.resolve();
 let shownArrow = "";
 async function pushArrow(instruction: string, distance: string): Promise<void> {
   const kind = maneuverArrow(instruction);
-  if (!kind) return;
+  if (!kind) {
+    // Recorded, not silently dropped: "no arrow drawn" and "no arrow ever
+    // attempted" look identical on the glass, and the mirror is the only place
+    // that distinction can be made.
+    noteImagePush("arrow", 0, `skipped:${instruction.slice(0, 12)}`);
+    return;
+  }
   // Keyed on kind AND distance: the distance is inside the bitmap now, so it
   // has to be redrawn as the number counts down — but only when the rendered
   // text actually changes, which is far less often than a position fix.
@@ -1183,16 +1238,7 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
   arrowChain = arrowChain.then(async () => {
     try {
       const bytes = await arrowPng(kind, distance);
-      let pushed = "";
-      const res = await bridge.updateImageRawData(
-        new ImageRawDataUpdate({
-          containerID: NAV_ARROW_ID,
-          containerName: "arrow",
-          imageData: bytes,
-        }),
-      );
-      pushed = String(res);
-      noteImagePush("arrow", bytes.length, pushed);
+      const res = await sendImage("arrow", NAV_ARROW_ID, bytes);
       if (res !== "success") {
         // Surfaced to the PHONE, not just the console: the console is
         // unreachable from a device report, and "화살표가 안 나온다" carries no
@@ -1319,21 +1365,17 @@ let shownSpeed = "";
  * container.
  */
 async function pushSpeed(kmh: number | null): Promise<void> {
-  const key = kmh == null ? "" : String(kmh);
+  // Bucketed to 5 km/h: at 1 km/h granularity the number changes almost every
+  // fix, and each change is a fragmented BLE transfer the link cannot absorb.
+  // Nobody reads a HUD speed to the digit.
+  const key = kmh == null ? "" : String(Math.round(kmh / 5) * 5);
   if (key === shownSpeed) return;
   shownSpeed = key;
   if (kmh == null) return;
   arrowChain = arrowChain.then(async () => {
     try {
       const bytes = await speedPng(kmh);
-      const res = await bridge.updateImageRawData(
-        new ImageRawDataUpdate({
-          containerID: NAV_SPEED_ID,
-          containerName: "speed",
-          imageData: bytes,
-        }),
-      );
-      noteImagePush("speed", bytes.length, String(res));
+      const res = await sendImage("speed", NAV_SPEED_ID, bytes);
       if (res !== "success") {
         console.error("updateImageRawData(speed):", res);
         shownSpeed = "";
