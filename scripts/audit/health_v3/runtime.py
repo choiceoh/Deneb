@@ -30,6 +30,25 @@ DEFAULT_CACHE = AUDIT_DIR / "health-v3-runtime-cache.json"
 DEFAULT_TTL_HOURS = 72
 
 
+def state_cache_path() -> Path:
+    """Live runtime-cache location — FIXED under ~/.deneb/data.
+
+    Same convention (and the same gotcha) as the Tracker ledgers and
+    graduation_state.json: DENEB_STATE_DIR does not move it, so the Go paths,
+    the shell executors, and every bench CLI read one file.
+
+    Why not the checked-in AUDIT_DIR copy: that file is tracked, so the daily
+    deep refresh could not persist to it — refresh-bench-snapshots.sh reverted
+    it right after writing to keep the auto-deploy tree clean. Result: every
+    fast-profile consumer read the last COMMITTED cache, which ran past the
+    72h TTL three days after its commit and failed the whole v3 CLI fail-closed
+    (live 2026-07-18 → 07-27: the health-finding miner silently fell back to
+    the v2 structural bench for nine days). The tracked copy stays as a seed
+    for hosts that have never run a refresh; the live cache lives here.
+    """
+    return Path.home() / ".deneb" / "data" / "health-v3-runtime-cache.json"
+
+
 # Score band reserved for values PAST the hard bar. rh.graded clamps to exactly
 # 0.0 there, and with bars this tight production sits past five of six of them at
 # once — so every pillar reads 0.0 and the domain stops being a measurement.
@@ -270,23 +289,37 @@ def evaluate_runtime(
     cache_path: Path | None = None,
     refresh_cache: bool = False,
 ) -> Domain:
-    cache = cache_path or (root / "scripts" / "audit" / "health-v3-runtime-cache.json")
+    # Explicit cache_path pins BOTH read and write to one file (tests, ad-hoc
+    # runs). The default is the state-dir live cache, with the checked-in copy
+    # as a read-only seed fallback — see state_cache_path() for why.
+    write_target = cache_path or state_cache_path()
+    read_candidates = (
+        [cache_path]
+        if cache_path
+        else [state_cache_path(), root / "scripts" / "audit" / "health-v3-runtime-cache.json"]
+    )
     evidence: list[Evidence] = []
     signals: rh.Signals | None = None
 
     if profile == "deep" or refresh_cache:
         try:
             signals = collect_live_signals()
-            write_cache(cache, signals)
+            write_cache(write_target, signals)
             evidence.append(Evidence("runtime-live", "measured", "journald collected and cache refreshed", required=True))
         except Exception as exc:  # noqa: BLE001 — surface as unavailable evidence
             evidence.append(Evidence("runtime-live", "unavailable", str(exc), required=profile == "deep"))
 
     if signals is None:
-        try:
-            signals, cache_evidence = load_cache(cache)
-            evidence.extend(cache_evidence)
-        except Exception as exc:  # noqa: BLE001
+        last_exc: Exception | None = None
+        for candidate in read_candidates:
+            try:
+                signals, cache_evidence = load_cache(candidate)
+                evidence.extend(cache_evidence)
+                break
+            except Exception as exc:  # noqa: BLE001 — try the next candidate
+                last_exc = exc
+        if signals is None:
+            exc = last_exc if last_exc is not None else FileNotFoundError("no runtime cache candidate")
             evidence.append(Evidence("runtime-cache", "unavailable", str(exc), required=True))
             # Fail-closed placeholder metrics at 0 so composite does not invent health.
             metrics = [

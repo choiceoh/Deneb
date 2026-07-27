@@ -21,8 +21,10 @@ from health_v3.runtime import (
     TOOLERR_FRAC_HARD,
     TOOLERR_FRAC_SOFT,
     _grade,
+    evaluate_runtime,
     load_cache,
     score_signals,
+    state_cache_path,
     write_cache,
 )
 from health_v3.structure import (
@@ -164,6 +166,52 @@ class RuntimeBarTests(unittest.TestCase):
             stale_now = datetime.now(timezone.utc) + timedelta(hours=3)
             with self.assertRaises(TimeoutError):
                 load_cache(path, now=stale_now)
+
+    def test_state_cache_lives_outside_the_repo(self) -> None:
+        # The tracked seed cannot be the live cache: the daily deep refresh must
+        # revert tracked writes to keep the auto-deploy tree clean, which is
+        # exactly how the on-disk cache went permanently stale (07-18 → 07-27,
+        # miner silently on the v2 fallback). The live cache must therefore
+        # resolve under the state dir, never under the checkout.
+        self.assertNotIn("scripts", state_cache_path().parts)
+        self.assertEqual(state_cache_path().parts[-3:], (".deneb", "data", "health-v3-runtime-cache.json"))
+
+    def test_evaluate_runtime_reads_state_cache_before_repo_seed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            seed = root / "scripts" / "audit" / "health-v3-runtime-cache.json"
+            seed.parent.mkdir(parents=True)
+            state = Path(tmp) / "state" / "health-v3-runtime-cache.json"
+            state.parent.mkdir(parents=True)
+            # Distinguishable signal shapes: state=fresh 20 runs, seed=fresh 10 runs.
+            write_cache(state, rh.Signals(runs=20, agent_ms=[1000] * 20, tool_call_reports=20, days=1.0))
+            write_cache(seed, rh.Signals(runs=10, agent_ms=[9000] * 10, tool_call_reports=10, days=1.0))
+
+            real_state_path = state_cache_path
+            try:
+                import health_v3.runtime as runtime_mod
+
+                runtime_mod.state_cache_path = lambda: state
+                domain = evaluate_runtime(root, profile="fast")
+                self.assertTrue(any("runtime-cache" == e.name and e.status == "measured" for e in domain.evidence))
+                # State cache won: latency metric reflects the 1000ms shape, not 9000ms.
+                latency = next(m for m in domain.metrics if m.id == "latency")
+                self.assertGreater(latency.score, 90.0)
+
+                # State cache gone → seed is the fallback (9000ms shape).
+                state.unlink()
+                domain = evaluate_runtime(root, profile="fast")
+                latency = next(m for m in domain.metrics if m.id == "latency")
+                self.assertGreater(latency.score, 90.0)  # 9s p95 still under the 40s soft bar
+                self.assertTrue(any(e.name == "runtime-cache" and e.status == "measured" for e in domain.evidence))
+
+                # Both gone → fail-closed placeholder domain, metrics at 0.
+                seed.unlink()
+                domain = evaluate_runtime(root, profile="fast")
+                self.assertTrue(all(m.score == 0.0 for m in domain.metrics))
+                self.assertTrue(any(e.name == "runtime-cache" and e.status == "unavailable" for e in domain.evidence))
+            finally:
+                runtime_mod.state_cache_path = real_state_path
 
 
 class BaselineRatchetTests(unittest.TestCase):
