@@ -88,6 +88,8 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/even/imu-sample", g2.ImuSample)
 	mux.HandleFunc("POST /api/even/audio", g2.Audio)
 	mux.HandleFunc("POST /api/even/route", g2.Route)
+	mux.HandleFunc("POST /api/even/hud", g2.Hud)
+	mux.HandleFunc("GET /api/even/hud", g2.HudLast)
 	// Production-fidelity extraction benchmark: run a real extractor against a named
 	// wormhole model. Client-token guarded. See server_http_eval.go.
 	mux.HandleFunc("POST /api/eval/extract", s.handleEvalExtract)

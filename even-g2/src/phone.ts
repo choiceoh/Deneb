@@ -195,8 +195,9 @@ export function renderPhoneUI(): void {
     </div>
     <h2 style="font-size:15px;margin:26px 0 8px">회의 청취</h2>
     <p class="sub" style="margin:0 0 10px">
-      최근 30초를 안경에만 기억합니다. <strong>탭하면</strong> 그 대화를 데네브에 넘겨
-      정리·기록합니다. 탭하기 전에는 아무것도 전송되지 않습니다.
+      최근 30초를 안경에 기억합니다. <strong>탭하면</strong> 그 대화를 정리·기록하고,
+      그 사이 데네브가 거래처·현장 이름을 알아들으면 위키에서 확인한 사실을 한 줄로 띄웁니다
+      (알릴 것이 없으면 아무것도 띄우지 않습니다).
     </p>
     <div class="row">
       <button class="primary" id="dn-listen-on">청취 시작</button>

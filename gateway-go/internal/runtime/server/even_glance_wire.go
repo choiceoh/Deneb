@@ -136,6 +136,20 @@ func (s *Server) evenGlanceUrgent(_ context.Context, now time.Time) []evenapi.Gl
 		if it.ReadAtMs > 0 {
 			continue
 		}
+		// Today only (operator's call, 2026-07-26).
+		//
+		// Unread is not the same as recent, and the HUD was showing the
+		// difference: every card the operator had opened in the native feed was
+		// filtered out, so what reached the glasses was the OLDEST unread
+		// items — a ten-day backlog presented as urgent, newest entry four days
+		// stale. A glance surface is for what is happening now; the backlog
+		// belongs in the app where it can be worked through.
+		//
+		// An empty alert page is therefore a real and useful answer ("nothing
+		// new today"), not a failure.
+		if !sameDay(it.CreatedAtMs, now) {
+			continue
+		}
 		if it.Priority > 0 && it.Priority < workfeed.PriorityNormal {
 			continue
 		}
@@ -311,4 +325,21 @@ func mergeHotwordLists(first, second string) string {
 		}
 	}
 	return strings.Join(out, ", ")
+}
+
+// sameDay reports whether an epoch-millis timestamp falls on now's calendar day.
+//
+// Calendar day, not a rolling 24 hours: "오늘" on a HUD read at 9am must not
+// include yesterday evening, which a rolling window would.
+func sameDay(atMs int64, now time.Time) bool {
+	if atMs <= 0 {
+		// No timestamp is not evidence of freshness. Cards without one are
+		// dropped rather than shown, because the failure this filter exists to
+		// fix was exactly stale items reaching the glass.
+		return false
+	}
+	t := time.UnixMilli(atMs).In(now.Location())
+	ny, nm, nd := now.Date()
+	ty, tm, td := t.Date()
+	return ny == ty && nm == tm && nd == td
 }

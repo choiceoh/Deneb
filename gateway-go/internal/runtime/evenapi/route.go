@@ -142,3 +142,77 @@ func (h *Handler) logRoute(msg string, args ...any) {
 	}
 	h.logger.Info("even g2 route: "+msg, args...)
 }
+
+// ── HUD mirror ───────────────────────────────────────────────────────────────
+
+// hudFrame is what the glasses are showing right now, as the plugin sees it.
+//
+// This exists because remote diagnosis was impossible without it. Three separate
+// device reports this session ("화살표가 안떠", "배터리 0%", "경로계산중만 나온다")
+// each cost a round trip of guessing, because the only record of what the panel
+// actually displayed was a WebView console nobody could read. The plugin now
+// posts each frame it draws and the gateway logs it, so the rendered state is
+// visible from srv4.
+type hudFrame struct {
+	// Screen is the plugin's mode ("page", "nav", "recall", …).
+	Screen string `json:"screen"`
+	// Text is the literal content handed to the text container.
+	Text string `json:"text"`
+	// Images reports each image container's last push and its result, which is
+	// the part that was invisible: a failed bitmap looks identical to one that
+	// was never attempted.
+	Images []hudImage `json:"images"`
+	// Note carries anything the plugin wants to say about this frame.
+	Note string `json:"note"`
+}
+
+type hudImage struct {
+	Name   string `json:"name"`
+	Bytes  int    `json:"bytes"`
+	Result string `json:"result"`
+}
+
+// Hud records one rendered frame. Fire-and-forget: a mirror that can fail the
+// render it is mirroring would be worse than no mirror.
+func (h *Handler) Hud(w http.ResponseWriter, r *http.Request) {
+	if !h.Enabled() {
+		writeErr(w, http.StatusServiceUnavailable, "even g2 bridge disabled")
+		return
+	}
+	if !tokenMatch(h.token, ParseBearer(r.Header.Get("Authorization"))) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var f hudFrame
+	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	args := []any{"screen", f.Screen, "text", f.Text}
+	if f.Note != "" {
+		args = append(args, "note", f.Note)
+	}
+	for _, im := range f.Images {
+		args = append(args, "image:"+im.Name, im.Result, "image:"+im.Name+":bytes", im.Bytes)
+	}
+	if h.logger != nil {
+		h.logger.Info("even g2 hud", args...)
+	}
+	h.mu.Lock()
+	h.lastHud = f
+	h.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// HudLast returns the most recent frame, so the current glasses display can be
+// read from a shell on srv4 rather than inferred from a description.
+func (h *Handler) HudLast(w http.ResponseWriter, r *http.Request) {
+	if !tokenMatch(h.token, ParseBearer(r.Header.Get("Authorization"))) {
+		writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	h.mu.Lock()
+	f := h.lastHud
+	h.mu.Unlock()
+	writeJSON(w, http.StatusOK, f)
+}
