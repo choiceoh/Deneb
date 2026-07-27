@@ -52,6 +52,7 @@ func TestIsSecretEnvKeyWithholdsCredentialsKeepsTooling(t *testing.T) {
 		"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
 		"OPENAI_API_KEY", "KAGI_API_KEY", "ZAI_API_KEY", "GEMINI_API_KEY",
 		"GOOGLE_APPLICATION_CREDENTIALS", "OPENROUTER_API_KEY",
+		"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
 		// suffix rules catch unknown/future providers and generic secrets
 		"SOMENEWPROVIDER_API_KEY", "STRIPE_SECRET", "DB_PASSWORD",
 		"FOO_ACCESS_TOKEN", "SVC_AUTH_TOKEN", "TLS_PRIVATE_KEY", "X_CREDENTIALS",
@@ -83,6 +84,8 @@ func TestSanitizeEnvWithholdsProviderSecrets(t *testing.T) {
 		"GH_TOKEN=ghp_operational",
 		"ANTHROPIC_API_KEY=sk-ant-secret",
 		"KAGI_API_KEY=kagi-secret",
+		"AWS_ACCESS_KEY_ID=AKIAEXAMPLE",
+		"AWS_SECRET_ACCESS_KEY=secret",
 		"DENEB_GATEWAY_URL=http://localhost:8080",
 	}
 	result := SanitizeEnv(env, nil)
@@ -96,7 +99,12 @@ func TestSanitizeEnvWithholdsProviderSecrets(t *testing.T) {
 			t.Errorf("expected %q to survive", want)
 		}
 	}
-	for _, gone := range []string{"ANTHROPIC_API_KEY=sk-ant-secret", "KAGI_API_KEY=kagi-secret"} {
+	for _, gone := range []string{
+		"ANTHROPIC_API_KEY=sk-ant-secret",
+		"KAGI_API_KEY=kagi-secret",
+		"AWS_ACCESS_KEY_ID=AKIAEXAMPLE",
+		"AWS_SECRET_ACCESS_KEY=secret",
+	} {
 		if _, ok := got[gone]; ok {
 			t.Errorf("expected secret %q to be withheld", gone)
 		}

@@ -34,6 +34,12 @@ var secretEnvExact = map[string]struct{}{
 	"OPENROUTER_API_KEY":             {},
 	"DEEPSEEK_API_KEY":               {},
 	"KAGI_API_KEY":                   {},
+	// AWS-shaped credentials use _ID/_KEY suffixes the generic rules deliberately
+	// skip (GH_TOKEN, SSH_*). Withhold explicitly — common on hosts with S3/SES.
+	"AWS_ACCESS_KEY_ID":     {},
+	"AWS_SECRET_ACCESS_KEY": {},
+	"AWS_SESSION_TOKEN":     {},
+	"AWS_SECURITY_TOKEN":    {}, // legacy alias for session token
 }
 
 // secretEnvSuffixes match any variable whose name unambiguously denotes a
