@@ -125,7 +125,7 @@ fun DenebContactsDedupScreen(
             val verdicts = client.fetchContactsAdjudicate(chunk).orEmpty()
             chunk.forEachIndexed { i, pair ->
                 if (verdicts.getOrNull(i) == "same" &&
-                    writer.linkByIdentity(pair.a.phones + pair.b.phones, pair.a.emails + pair.b.emails) >= 2
+                    linkAmbiguousPair(writer, pair) >= 2
                 ) {
                     aiMerged++
                 }
@@ -435,3 +435,17 @@ private fun DedupMergeRowItem(merge: DedupMergeRow) {
 
 /** 2,819 not 2819 — grouped thousands so the headline counts read at a glance. */
 private fun Int.grouped(): String = toString().reversed().chunked(3).joinToString(",").reversed()
+
+/** Link an AI-approved ambiguous pair using only the shared identifier that tied
+ *  them — not the union of both parties' phones, which can pull in a third
+ *  contact who merely shares one party's other number. */
+private suspend fun linkAmbiguousPair(writer: ContactsWriter, pair: DedupPairRow): Int {
+    val shared = pair.shared.trim()
+    if (shared.isEmpty()) return 0
+    val (phones, emails) = if ('@' in shared) {
+        emptyList<String>() to listOf(shared)
+    } else {
+        listOf(shared) to emptyList()
+    }
+    return writer.linkByIdentity(phones, emails)
+}

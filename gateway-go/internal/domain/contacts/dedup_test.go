@@ -175,3 +175,43 @@ func TestDedupSingleRuneNameWithSharedPhoneStaysAmbiguous(t *testing.T) {
 			res.Distinct, len(res.Merges), len(res.Ambiguous))
 	}
 }
+
+func TestMergeJoinKeysOmitsMemberOnlyPhones(t *testing.T) {
+	// Kim carries two lines; another Kim card shares one. Lee shares Kim's other
+	// line but stays ambiguous — apply must not OR-match on that member-only phone.
+	in := []Contact{
+		{Name: "김철수", Phones: []string{"010-1111-2222", "010-3333-4444"}},
+		{Name: "김철수", Phones: []string{"010-1111-2222"}},
+		{Name: "이영희", Phones: []string{"010-3333-4444"}},
+	}
+	res := Dedup(in)
+	if len(res.Merges) != 1 || len(res.Ambiguous) != 1 {
+		t.Fatalf("merges=%d ambiguous=%d, want 1/1", len(res.Merges), len(res.Ambiguous))
+	}
+	phones, emails := MergeJoinKeys(in, res.Merges[0].Members)
+	if len(emails) != 0 {
+		t.Fatalf("emails = %v, want none", emails)
+	}
+	if len(phones) != 1 || phones[0] != "01011112222" {
+		t.Fatalf("join phones = %v, want only the shared 01011112222", phones)
+	}
+}
+
+func TestMergeJoinKeysIncludesTransitiveLinks(t *testing.T) {
+	in := []Contact{
+		{Name: "김대희", Phones: []string{"010-2222-3333"}},
+		{Name: "김대희 과장", Phones: []string{"010-2222-3333"}, Emails: []string{"kdh@topsolar.kr"}},
+		{Name: "김대희", Emails: []string{"kdh@topsolar.kr"}},
+	}
+	res := Dedup(in)
+	if len(res.Merges) != 1 || len(res.Merges[0].Members) != 3 {
+		t.Fatalf("want one 3-member merge, got %+v", res.Merges)
+	}
+	phones, emails := MergeJoinKeys(in, res.Merges[0].Members)
+	if len(phones) != 1 || phones[0] != "01022223333" {
+		t.Fatalf("phones = %v, want shared mobile", phones)
+	}
+	if len(emails) != 1 || emails[0] != "kdh@topsolar.kr" {
+		t.Fatalf("emails = %v, want shared inbox", emails)
+	}
+}
