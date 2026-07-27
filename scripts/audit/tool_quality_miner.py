@@ -58,9 +58,12 @@ from typing import Any, TextIO
 from health_finding_miner import (
     DEFAULT_GATEWAY_URL,
     GatewayError,
+    ImpactMetricUnavailable,
     call_rpc,
     fetch_existing,
+    pending_impact_observations_for,
     record_candidate,
+    record_impact,
     select_candidates,
 )
 
@@ -79,6 +82,12 @@ REPAIR_RATE = 0.10
 MAX_PER_RUN = 2
 WINDOW_DAYS = 30
 RECENT_DAYS = 7
+
+# Impact contracts close against the RECENT (7d) window so a fix's observation
+# is not diluted by pre-fix calls still inside the 30d filing window. The
+# observation window matches: only after 7 post-watch days is the recent window
+# fully post-fix.
+IMPACT_WINDOW_MS = RECENT_DAYS * 24 * 60 * 60 * 1000
 
 # Latency ("too slow") is a PERFORMANCE signal, judged two ways so an inherently
 # heavy tool (web/asr) is not mistaken for a regression:
@@ -175,6 +184,18 @@ def tool_quality_candidates(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
             # :desc suffix so a description candidate and a :latency candidate for
             # the same tool never prefix-collide under startswith dedup matching.
             "source": f"{SOURCE_PREFIX}:{name}:desc",
+            # Binary usefulness oracle (same shape as health.finding_present):
+            # after the observation window, does the tool still trip the desc
+            # filing predicate on a FRESH recent window? Closed by this miner
+            # (tool_quality_impact_resolver) on later runs.
+            "impactContract": {
+                "metric": f"tool.quality.finding_present:{name}:desc",
+                "direction": "decrease",
+                "baseline": 1,
+                "target": 0,
+                "minSamples": 1,
+                "observationWindowMs": IMPACT_WINDOW_MS,
+            },
         }))
     scored.sort(key=lambda s: (-s[0], str(s[1]["source"])))
     return [c for _, c in scored]
@@ -241,9 +262,74 @@ def latency_candidates(recent: list[dict[str, Any]],
             ),
             "risk": _PERF_RISK_NOTE,
             "source": f"{SOURCE_PREFIX}:{name}:latency",
+            "impactContract": {
+                "metric": f"tool.quality.finding_present:{name}:latency",
+                "direction": "decrease",
+                "baseline": 1,
+                "target": 0,
+                "minSamples": 1,
+                "observationWindowMs": IMPACT_WINDOW_MS,
+            },
         }))
     scored.sort(key=lambda s: (-s[0], str(s[1]["source"])))
     return [c for _, c in scored]
+
+
+# --- impact closure (this miner's own contracts) --------------------------------
+
+
+def _trips_desc(tool: dict[str, Any]) -> bool:
+    calls = int(tool.get("calls") or 0)
+    return (
+        _rate(int(tool.get("errors") or 0), calls) >= ERROR_RATE
+        or _rate(int(tool.get("repaired") or 0), calls) >= REPAIR_RATE
+    )
+
+
+def _trips_latency(tool: dict[str, Any], baseline: dict[str, dict[str, Any]]) -> bool:
+    name = str(tool.get("name") or "")
+    avg = int(tool.get("avgMs") or 0)
+    if avg <= 0:
+        return False
+    base_avg = int((baseline.get(name) or {}).get("avgMs") or 0)
+    return avg > EXPECTED_MS.get(name, DEFAULT_EXPECTED_MS) or (
+        base_avg > 0 and avg > LATENCY_REGRESSION_FACTOR * base_avg
+    )
+
+
+def tool_quality_impact_resolver(recent: list[dict[str, Any]],
+                                 baseline: dict[str, dict[str, Any]]):
+    """Resolver for pending tool-quality contracts against fresh behavior stats.
+
+    The oracle recomputes the exact FILING predicate on the recent window (the
+    contract's observation window guarantees it is post-fix). A tool below
+    MIN_CALLS cannot be judged either way — insufficient evidence keeps the
+    verdict pending rather than minting a false verified from silence.
+    """
+    prefix = "tool.quality.finding_present:"
+    recent_index = {str(t.get("name") or ""): t for t in recent}
+
+    def resolve(metric: str):
+        if not metric.startswith(prefix):
+            return None
+        rest = metric.removeprefix(prefix)
+        name, _, kind = rest.rpartition(":")
+        if not name or kind not in ("desc", "latency"):
+            raise ImpactMetricUnavailable(f"malformed tool-quality metric: {metric}")
+        tool = recent_index.get(name)
+        calls = int((tool or {}).get("calls") or 0)
+        if tool is None or calls < MIN_CALLS:
+            raise ImpactMetricUnavailable(
+                f"insufficient recent calls for {name} ({calls} < {MIN_CALLS})"
+            )
+        present = _trips_desc(tool) if kind == "desc" else _trips_latency(tool, baseline)
+        state = "still trips" if present else "recovered"
+        return float(present), calls, (
+            f"fresh observe.behavior ({RECENT_DAYS}d): {name}:{kind} {state} "
+            f"(calls={calls})"
+        )
+
+    return resolve
 
 
 # --- behavior source (thin RPC edge) -------------------------------------------
@@ -329,6 +415,29 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         print(f"gateway unreachable — DRY-RUN continues WITHOUT dedup: {exc}", file=err)
         existing = []
 
+    impact_observations, impact_skipped = pending_impact_observations_for(
+        existing, tool_quality_impact_resolver(recent, baseline_index), now_ms
+    )
+    impact_evaluated: list[dict[str, str]] = []
+    impact_errors: list[str] = []
+    for observation in impact_observations:
+        if args.dry_run:
+            print(
+                f"DRY-RUN would evaluate impact: {observation['id']} "
+                f"observed={observation['observed']}",
+                file=out,
+            )
+            continue
+        try:
+            status = record_impact(base_url, token, observation)
+            impact_evaluated.append({"id": observation["id"], "status": status})
+            print(f"impact {status}  {observation['id']}", file=out)
+        except GatewayError as exc:
+            impact_errors.append(f"{observation['id']}: {exc}")
+            print(f"impact rejected  {observation['id']}: {exc}", file=err)
+    for cid, reason in impact_skipped:
+        print(f"impact skip {cid}: {reason}", file=out)
+
     candidates = tool_quality_candidates(baseline) + latency_candidates(recent, baseline_index)
     to_file, skipped = select_candidates(candidates, existing, now_ms, max(args.max, 0))
 
@@ -359,13 +468,20 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         "rejected": len(errors),
         "dry_run": bool(args.dry_run),
         "candidates": filed,
+        "impactPlanned": len(impact_observations),
+        "impactEvaluated": len(impact_evaluated),
+        "impactPending": len(impact_skipped),
+        "impactRejected": len(impact_errors),
+        "impacts": impact_evaluated,
     }
     if args.json:
         print(json.dumps(summary, ensure_ascii=False), file=out)
     else:
         print(
             f"tool-quality-miner: tools={summary['tools']} planned={summary['planned']} "
-            f"filed={summary['filed']} skipped={summary['skipped']} rejected={summary['rejected']}"
+            f"filed={summary['filed']} skipped={summary['skipped']} rejected={summary['rejected']} "
+            f"impact-evaluated={summary['impactEvaluated']} "
+            f"impact-pending={summary['impactPending']}"
             + (" (dry-run)" if args.dry_run else ""),
             file=out,
         )

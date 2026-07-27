@@ -148,3 +148,61 @@ class CliDryRunTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImpactContractTests(unittest.TestCase):
+    """Both candidate kinds carry a finding-present contract closed by this
+    miner from a fresh recent window — a landed description fix must earn a
+    verified/no_effect verdict instead of staying unlabeled forever."""
+
+    def _desc_tool(self, name="badtool", calls=40, errors=10, repaired=0, avg=100):
+        return {"name": name, "calls": calls, "errors": errors,
+                "repaired": repaired, "unknown": 0, "blocked": 0, "avgMs": avg}
+
+    def test_candidates_carry_contracts(self):
+        from tool_quality_miner import (
+            IMPACT_WINDOW_MS, latency_candidates, tool_quality_candidates,
+        )
+
+        desc = tool_quality_candidates([self._desc_tool()])
+        self.assertEqual(
+            desc[0]["impactContract"]["metric"],
+            "tool.quality.finding_present:badtool:desc",
+        )
+        self.assertEqual(desc[0]["impactContract"]["observationWindowMs"], IMPACT_WINDOW_MS)
+
+        slow = latency_candidates(
+            [{"name": "read", "calls": 40, "avgMs": 5000}], {})
+        self.assertEqual(
+            slow[0]["impactContract"]["metric"],
+            "tool.quality.finding_present:read:latency",
+        )
+
+    def test_resolver_judges_fresh_recent_window(self):
+        from health_finding_miner import ImpactMetricUnavailable
+        from tool_quality_miner import tool_quality_impact_resolver
+
+        recent = [
+            self._desc_tool("recovered", calls=40, errors=1),      # 2.5% < bar
+            self._desc_tool("stillbad", calls=40, errors=10),      # 25% >= bar
+            {"name": "slowtool", "calls": 40, "avgMs": 9000},      # > default 3000
+        ]
+        resolve = tool_quality_impact_resolver(recent, {})
+
+        observed, samples, note = resolve("tool.quality.finding_present:recovered:desc")
+        self.assertEqual(observed, 0.0)
+        self.assertEqual(samples, 40)
+        self.assertIn("recovered", note)
+
+        observed, _, _ = resolve("tool.quality.finding_present:stillbad:desc")
+        self.assertEqual(observed, 1.0)
+
+        observed, _, _ = resolve("tool.quality.finding_present:slowtool:latency")
+        self.assertEqual(observed, 1.0)
+
+        # Insufficient evidence keeps the verdict pending — silence is not success.
+        with self.assertRaises(ImpactMetricUnavailable):
+            resolve("tool.quality.finding_present:neverused:desc")
+
+        # Other namespaces belong to their own evaluator.
+        self.assertIsNone(resolve("deadcode.finding_present:abc"))
