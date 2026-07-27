@@ -14,6 +14,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sparkfleet"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/appupdate"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fileapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
@@ -85,8 +86,9 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 	mux.HandleFunc("GET /api/v1/miniapp/groupware/approval/attachment", func(w http.ResponseWriter, r *http.Request) {
 		nativeHandler().GroupwareApprovalAttachment(w, r)
 	})
+	fileHandler := fileapi.New(cfg.Logger)
 	mux.HandleFunc("GET /api/v1/files/download", func(w http.ResponseWriter, r *http.Request) {
-		nativeHandler().FilesDownload(w, r)
+		fileHandler.Download(w, r)
 	})
 
 	if os.Getenv("DENEB_MCP_DISABLE") != "1" {
