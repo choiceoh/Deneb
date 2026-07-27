@@ -248,20 +248,11 @@ const arrowImage = new ImageContainerProperty({
   containerName: "arrow",
 });
 
-const speedImage = new ImageContainerProperty({
-  xPosition: 576 - SPEED_W - 8,
-  yPosition: 8,
-  width: SPEED_W,
-  height: SPEED_H,
-  containerID: 4,
-  containerName: "speed",
-});
-
 const started = await bridge.createStartUpPageContainer(
   new CreateStartUpPageContainer({
-    containerTotalNum: 4,
+    containerTotalNum: 3,
     textObject: [mainText, navText],
-    imageObject: [arrowImage, speedImage],
+    imageObject: [arrowImage],
   }),
 );
 if (started !== 0) {
@@ -1188,7 +1179,11 @@ const NAV_SPEED_ID = 4;
  * fragmented and LZ4-compressed while the speed bitmap was being pushed on
  * every position fix.
  */
-const IMAGE_MIN_GAP_MS = 4_000;
+// The open-source even-img-benchmark pushes frames back to back with no gap at
+// all and measures them succeeding, so rate was never the problem — the 4s floor
+// here was a wrong guess. Kept small only to avoid piling transfers behind a
+// stalled one.
+const IMAGE_MIN_GAP_MS = 300;
 let lastImageAt = 0;
 
 /**
@@ -1397,9 +1392,14 @@ async function renderNav(): Promise<void> {
   // both shipping plugins make it). The text container carries the words.
   const lines = navTextLines(navRoute, navState);
   const kind = step ? maneuverArrow(step.short) : null;
-  // Only once the transport has actually failed: while the bitmap works it is
-  // far more legible than characters, and showing both would compete.
-  if (imageBroken && kind) {
+  // Always, not only when the bitmap fails.
+  //
+  // g2-drive-nav — a working open-source G2 navigation plugin — renders its
+  // maneuver in a TEXT container 576×148 and uses images only for a small map
+  // inset. On this display the maneuver being text is the normal design, not a
+  // consolation prize, and it is the one thing that has actually reached the
+  // wearer's eye across six attempts at the bitmap.
+  if (kind) {
     lines.unshift(`${arrowText(kind)}  ${formatMetres(left)}`, "");
   }
   await showNavText(lines.join("\n"));
