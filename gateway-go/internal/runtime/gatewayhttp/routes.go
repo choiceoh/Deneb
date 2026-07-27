@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/appupdate"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fileapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/fleetapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/groupwareapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
@@ -37,7 +38,7 @@ type Config struct {
 	ShutdownContext             context.Context
 	Logger                      *slog.Logger
 	AttachmentFactory           func() (MailAttachmentClient, error)
-	GroupwareAttachmentDownload nativeapi.GroupwareAttachmentDownload
+	GroupwareAttachmentDownload groupwareapi.AttachmentDownload
 	// TranslateThinking renders a finished turn's reasoning into Korean for the
 	// SSE done frame. Optional; nil leaves it in the model's own language.
 	TranslateThinking func(ctx context.Context, text string) (string, bool)
@@ -60,16 +61,19 @@ type FleetAlertConfig struct {
 func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 	nativeHandler := func() *nativeapi.Handler {
 		return nativeapi.New(nativeapi.Config{
-			Dispatcher:                  cfg.Dispatcher,
-			ChatHandler:                 cfg.ChatHandler,
-			PushHub:                     cfg.PushHub,
-			ShutdownContext:             cfg.ShutdownContext,
-			Logger:                      cfg.Logger,
-			AttachmentFactory:           adaptAttachmentFactory(cfg.AttachmentFactory),
-			GroupwareAttachmentDownload: cfg.GroupwareAttachmentDownload,
-			TranslateThinking:           cfg.TranslateThinking,
+			Dispatcher:        cfg.Dispatcher,
+			ChatHandler:       cfg.ChatHandler,
+			PushHub:           cfg.PushHub,
+			ShutdownContext:   cfg.ShutdownContext,
+			Logger:            cfg.Logger,
+			AttachmentFactory: adaptAttachmentFactory(cfg.AttachmentFactory),
+			TranslateThinking: cfg.TranslateThinking,
 		})
 	}
+	groupwareHandler := groupwareapi.New(groupwareapi.Config{
+		Download: cfg.GroupwareAttachmentDownload,
+		Logger:   cfg.Logger,
+	})
 
 	mux.HandleFunc("POST /api/v1/miniapp/rpc", func(w http.ResponseWriter, r *http.Request) {
 		nativeHandler().RPC(w, r)
@@ -84,7 +88,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		nativeHandler().GmailAttachment(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/miniapp/groupware/approval/attachment", func(w http.ResponseWriter, r *http.Request) {
-		nativeHandler().GroupwareApprovalAttachment(w, r)
+		groupwareHandler.ApprovalAttachment(w, r)
 	})
 	fileHandler := fileapi.New(cfg.Logger)
 	mux.HandleFunc("GET /api/v1/files/download", func(w http.ResponseWriter, r *http.Request) {

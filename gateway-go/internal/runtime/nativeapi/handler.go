@@ -63,13 +63,12 @@ func Authenticator(logger *slog.Logger) func(http.ResponseWriter, *http.Request)
 
 // Config supplies the gateway-owned dependencies used by native HTTP handlers.
 type Config struct {
-	Dispatcher                  *rpc.Dispatcher
-	ChatHandler                 chatport.SyncStreamRunner
-	PushHub                     *nativepush.Hub
-	ShutdownContext             context.Context
-	Logger                      *slog.Logger
-	AttachmentFactory           func() (MailAttachmentClient, error)
-	GroupwareAttachmentDownload GroupwareAttachmentDownload
+	Dispatcher        *rpc.Dispatcher
+	ChatHandler       chatport.SyncStreamRunner
+	PushHub           *nativepush.Hub
+	ShutdownContext   context.Context
+	Logger            *slog.Logger
+	AttachmentFactory func() (MailAttachmentClient, error)
 	// TranslateThinking renders the turn's reasoning into Korean for the done
 	// frame the native client renders as its expandable reasoning block. The
 	// live `reasoning` deltas stay in the model's own language — the block
@@ -79,14 +78,13 @@ type Config struct {
 
 // Handler serves the authenticated native-client HTTP surface.
 type Handler struct {
-	dispatcher                  *rpc.Dispatcher
-	chatHandler                 chatport.SyncStreamRunner
-	pushHub                     *nativepush.Hub
-	shutdownContext             context.Context
-	logger                      *slog.Logger
-	attachmentFactory           func() (MailAttachmentClient, error)
-	groupwareAttachmentDownload GroupwareAttachmentDownload
-	translateThinking           func(ctx context.Context, text string) (string, bool)
+	dispatcher        *rpc.Dispatcher
+	chatHandler       chatport.SyncStreamRunner
+	pushHub           *nativepush.Hub
+	shutdownContext   context.Context
+	logger            *slog.Logger
+	attachmentFactory func() (MailAttachmentClient, error)
+	translateThinking func(ctx context.Context, text string) (string, bool)
 }
 
 // New creates a native-client HTTP handler set.
@@ -96,14 +94,13 @@ func New(cfg Config) *Handler {
 		shutdownContext = context.Background()
 	}
 	return &Handler{
-		dispatcher:                  cfg.Dispatcher,
-		chatHandler:                 cfg.ChatHandler,
-		pushHub:                     cfg.PushHub,
-		shutdownContext:             shutdownContext,
-		logger:                      cfg.Logger,
-		attachmentFactory:           cfg.AttachmentFactory,
-		groupwareAttachmentDownload: cfg.GroupwareAttachmentDownload,
-		translateThinking:           cfg.TranslateThinking,
+		dispatcher:        cfg.Dispatcher,
+		chatHandler:       cfg.ChatHandler,
+		pushHub:           cfg.PushHub,
+		shutdownContext:   shutdownContext,
+		logger:            cfg.Logger,
+		attachmentFactory: cfg.AttachmentFactory,
+		translateThinking: cfg.TranslateThinking,
 	}
 }
 
