@@ -204,6 +204,11 @@ const mainText = new TextContainerProperty({
   containerName: "main",
   content: "Deneb\n\n설정 확인 중…",
   isEventCapture: 1,
+  // Required, not optional: the SDK rejects the WHOLE page when some containers
+  // carry zOrderIndex and others do not, and a rejected startup page means the
+  // app draws nothing at all. Shipping without this looked exactly like "안경에서
+  // 아예 안 켜진다".
+  zOrderIndex: 0,
 });
 
 // Every container the app will ever use is declared HERE, at startup.
@@ -259,7 +264,15 @@ const started = await bridge.createStartUpPageContainer(
   }),
 );
 if (started !== 0) {
+  // Loud everywhere it can be: a failed startup page is indistinguishable from
+  // a dead app on the glass, and the console is unreachable from a device
+  // report. The phone screen renders before the bridge is awaited, so it is
+  // still up to carry this.
   console.error("createStartUpPageContainer failed", started);
+  setPhoneStatus({
+    line: `안경 화면 생성 실패 (${started}) — 컨테이너 선언을 확인하세요.`,
+    tone: "bad",
+  });
 }
 
 bridge.onEvenHubEvent((event) => {
