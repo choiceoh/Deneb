@@ -561,8 +561,12 @@ operator-tunable):
 > execution, every unlock/relock is lifecycle-ledgered, and the feed card is
 > a notification with a 재잠금 veto. Auto-executable rows and their compiled
 > evidence: e-process cutover (n≥20 ∧ agreement≥90%; env knob overrides both
-> ways), dispatch cap 2→4 (decided≥5 ∧ land rate≥50% ∧ 0 ledgered
-> deploy-watch rollbacks — `deploy-watch.sh` now appends a rollback ledger),
+> ways), dispatch cap 2→4→8 (decided≥5 ∧ land rate≥50% ∧ 0 ledgered
+> deploy-watch rollbacks — `deploy-watch.sh` now appends a rollback ledger —
+> per rung, on a cohort dispatched AFTER the current rung's unlock, so one
+> cohort can never buy two rungs; 2026-07-27 fix: the ladder was a single
+> compiled `4` and reported 완료 once executed, so no evidence could ever raise
+> it again),
 > staged-source admission (review-lane endorsements: accepted≥2 ∧ rejected=0
 > per source — a rejection is a standing veto). The calibration-window and
 > manual-drill rows stay notify-only (their flips live outside the process).
@@ -572,7 +576,7 @@ operator-tunable):
 | ~~runtime-error source not dispatchable~~ **GRADUATED 2026-07-15** (allowlisted in `rsiDispatchSources`; roadmap row was stale until 2026-07-19) | first-batch human review dropped 2026-07-15; the real bottleneck turned out to be SUPPLY — the 12h fold cadence lost hot-swap-wiped ring bursts (live 2026-07-19: a ~120-line embed-failure burst left zero trace), fixed by splitting fold (1h) from mining (12h) cadence | done; supply watch = `runtime_error_signature_state.json` signature counts vs candidate emissions |
 | ~~health-finding source not dispatchable~~ **GRADUATED 2026-07-12** | first batch (7) reviewed clean: finding IDs deterministic + independently reproduced at HEAD, no hallucinated signatures, remediation directions actionable with the safety contract embedded; wiki pair ([1] volatile-contract / [6] volatile-hub) dedups via the reproduce-at-HEAD precheck; two doctrine-tension candidates (runtime/server fan-out = composition root, toolport co-change = designed leaf) rely on the dispatch bail-out clause | flipped: coding-dispatch.sh + rsi_status (py & Go) |
 | e-process observation mode (#3439) | disagreement labels n≥20, legacy-agreement ≥90% — readiness now computed live (`EProcessCutoverReadiness`, rsi_status L1) | cutover mechanism landed 2026-07-12: set `DENEB_EPROCESS_OWNS_ROLLBACK=1` when readiness reads ready |
-| L4 daily dispatch cap = 2 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate — *land rate is now MEASURED (2026-07-13): each dispatch marker records its session outcome (landed/declined/failed/timeout/attempted; `dispatch_outcome.py` decision table from PR-state + worktree facts, attempted reprobed on later ticks), aggregated on `rsi_status` L4 both sides* | raise DENEB_DISPATCH_DAILY_CAP |
+| ~~L4 daily dispatch cap = 2~~ **GRADUATED 2026-07-14 (cap 4)**; next rung 8 pending a cohort dispatched at cap 4 | N dispatches with 0 deploy-watch rollbacks and ≥50% land rate — *land rate is now MEASURED (2026-07-13): each dispatch marker records its session outcome (landed/declined/failed/timeout/attempted; `dispatch_outcome.py` decision table from PR-state + worktree facts, attempted reprobed on later ticks), aggregated on `rsi_status` L4 both sides* | raise DENEB_DISPATCH_DAILY_CAP |
 | deploy-watch = binary rollback only | one rollback exercised end-to-end (real or fire-drill) | open the source auto-apply tier per the L4 note |
 | ~~calibration knobs at defaults~~ **WINDOW OPEN 2026-07-12 → close by 2026-08-23** | operator opened the P5-2 window (meta=2d→1d on 07-18, judge-accuracy=4h, watch-max-age=5d, bench-scale=2, curriculum=24h) | drop-in `~/.config/systemd/user/deneb-gateway.service.d/rsi-calibration.conf`; **close is automated (2026-07-19): `deneb-calibration-harvest.timer` fires 08-23 → `scripts/audit/calibration_harvest.py --revert` harvests per-epoch bench evidence into a report+wiki page, deletes the drop-in, reloads the gateway** — the campaign can no longer end silently. Bench-supply fix (2026-07-19): skip cycles previously left NO bench sample (live: 5 benched cycles in week 1 vs target 30); `DENEB_META_BENCH_ON_SKIP=1` (set in the drop-in, dies with the window) benches the incumbent alone on skip — a pure bench-noise sample, never a gate input |
 

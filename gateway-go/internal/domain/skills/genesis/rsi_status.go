@@ -757,6 +757,16 @@ type rsiDispatchEvidenceEvent struct {
 // the denominator. When terminalLimit is positive, graduation uses only the
 // latest terminal cohort so an old rollback cannot poison the loop forever.
 func (t *Tracker) rsiDispatchEvidence(terminalLimit int) (rsiDispatchEvidence, error) {
+	return t.rsiDispatchEvidenceSince(terminalLimit, 0)
+}
+
+// rsiDispatchEvidenceSince is rsiDispatchEvidence with an evidence floor: when
+// since is positive, only attempts dispatched at or after that instant count.
+// The graduation ladder passes the current rung's unlock timestamp so a rung is
+// earned by evidence gathered AT that rung — the cohort that bought the last
+// raise can never also buy the next one. Attempts with no dispatch timestamp
+// cannot prove freshness and are excluded rather than assumed recent.
+func (t *Tracker) rsiDispatchEvidenceSince(terminalLimit int, since int64) (rsiDispatchEvidence, error) {
 	phases := map[string]string{}
 	err := t.scanSelfCorrectionRecords(func(entry SelfCorrectionCandidateRecord) {
 		if entry.Type != selfCorrectionTypeDispatch || strings.TrimSpace(entry.AttemptID) == "" {
@@ -778,6 +788,9 @@ func (t *Tracker) rsiDispatchEvidence(terminalLimit int) (rsiDispatchEvidence, e
 		for _, attempt := range rsiDispatchAttempts(p, info.ModTime().UnixMilli()) {
 			rawOutcome := strings.TrimSpace(attempt.Outcome)
 			if rawOutcome == "" {
+				continue
+			}
+			if since > 0 && attempt.DispatchedAt < since {
 				continue
 			}
 			event := rsiDispatchEvidenceEvent{outcome: rawOutcome, dispatchedAt: attempt.DispatchedAt}

@@ -168,19 +168,30 @@ func (t *Tracker) ladderEProcessRow() ladderRow {
 // counts as landed and a rollback blocks the same cohort. The row reads 완료
 // once the unlock executes.
 func (t *Tracker) ladderDispatchCapRow() ladderRow {
-	if row := loadGraduationState().Rows[graduationDispatchCap]; row.Unlocked {
-		return ladderRow{"배차 캡 상향", ladderStateDone, fmt.Sprintf("실행됨 — 일일 캡 %d (자동 졸업)", row.Value)}
+	row := loadGraduationState().Rows[graduationDispatchCap]
+	// 완료 belongs to the TOP of the ladder only. Reporting it at every executed
+	// unlock is what hid the stuck cap: the card read "finished" while the lane
+	// was refusing work every day at the first rung.
+	if _, next := graduationDispatchCapRung(row); next == 0 {
+		return ladderRow{"배차 캡 상향", ladderStateDone, fmt.Sprintf("사다리 상단 — 일일 캡 %d (자동 졸업)", row.Value)}
 	}
-	evidence, err := t.rsiDispatchEvidence(ladderDispatchMinDecided)
+	_, next := graduationDispatchCapRung(row)
+	// Evidence for the next rung must come from dispatches run AT the current one.
+	floor := int64(0)
+	step := fmt.Sprintf("→ 일일 캡 %d", next)
+	if row.Unlocked {
+		floor, step = row.UnlockedAt, fmt.Sprintf("현재 캡 %d → %d", row.Value, next)
+	}
+	evidence, err := t.rsiDispatchEvidenceSince(ladderDispatchMinDecided, floor)
 	if err != nil {
 		return ladderRow{"배차 캡 상향", ladderStateGrowing, "배차 결과 원장을 읽을 수 없음"}
 	}
 	outcomes, decided, landed := evidence.CohortOutcomes, evidence.Decided, evidence.Landed
 	if decided == 0 {
-		return ladderRow{"배차 캡 상향", ladderStateGrowing, "판정된 배차 0건"}
+		return ladderRow{"배차 캡 상향", ladderStateGrowing, step + " · 현재 캡에서 판정된 배차 0건"}
 	}
 	rate := float64(landed) / float64(decided)
-	detail := fmt.Sprintf("판정 %d건·랜딩률 %.0f%% (%s)", decided, rate*100, rsiOutcomeSummary(outcomes))
+	detail := fmt.Sprintf("%s · 판정 %d건·랜딩률 %.0f%% (%s)", step, decided, rate*100, rsiOutcomeSummary(outcomes))
 	if decided >= ladderDispatchMinDecided && rate >= ladderDispatchMinLandRate && evidence.RolledBack == 0 {
 		return ladderRow{"배차 캡 상향", ladderStateReady, detail + " · 감시 롤백 0건"}
 	}
