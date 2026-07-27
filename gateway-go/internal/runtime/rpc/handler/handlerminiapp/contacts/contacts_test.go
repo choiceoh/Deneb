@@ -82,6 +82,10 @@ func TestContactsDedupReturnsSafeMergesAndCounts(t *testing.T) {
 			Canonical string   `json:"canonical"`
 			Names     []string `json:"names"`
 			Phones    []string `json:"phones"`
+			Members   []struct {
+				Name   string   `json:"name"`
+				Phones []string `json:"phones"`
+			} `json:"members"`
 		} `json:"merges"`
 	}
 	decodeResponse(t, resp, &got)
@@ -91,6 +95,9 @@ func TestContactsDedupReturnsSafeMergesAndCounts(t *testing.T) {
 	m := got.Merges[0]
 	if m.Canonical != "박한주" || len(m.Names) != 2 || len(m.Phones) != 1 {
 		t.Fatalf("merge group = %+v", m)
+	}
+	if len(m.Members) != 2 {
+		t.Fatalf("members = %d, want 2 per-card identities for scoped apply", len(m.Members))
 	}
 }
 

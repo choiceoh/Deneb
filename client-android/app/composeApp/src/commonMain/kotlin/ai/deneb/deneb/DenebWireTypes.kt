@@ -198,6 +198,7 @@ internal data class DedupMergeRow(
     val names: List<String> = emptyList(),
     val phones: List<String> = emptyList(),
     val emails: List<String> = emptyList(),
+    val members: List<DedupPartyRow> = emptyList(),
 )
 
 /** One ambiguous pair (same identifier, different name) for the AI to adjudicate. */

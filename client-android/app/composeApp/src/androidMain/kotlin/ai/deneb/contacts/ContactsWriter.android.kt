@@ -32,6 +32,11 @@ actual class ContactsWriter actual constructor() {
         ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) ==
         PackageManager.PERMISSION_GRANTED
 
+    actual suspend fun linkMergeMembers(members: List<ContactParty>): Int {
+        if (!hasAccess()) return 0
+        return withContext(Dispatchers.IO) { linkRawContactsForMembers(context, members) }
+    }
+
     actual suspend fun linkByIdentity(phones: List<String>, emails: List<String>): Int {
         if (!hasAccess()) return 0
         return withContext(Dispatchers.IO) { linkRawContacts(context, phones, emails) }
@@ -44,6 +49,53 @@ actual class ContactsWriter actual constructor() {
 private fun normPhone(s: String): String {
     val d = s.filter { it.isDigit() }
     return if (d.startsWith("82") && d.length > 2) "0" + d.substring(2) else d
+}
+
+private fun rawContactIdsForMember(context: Context, member: ContactParty): Set<Long> {
+    val targetName = normalizePersonName(member.name)
+    if (targetName.isEmpty()) return emptySet()
+    val phoneKeys = member.phones.map(::normPhone).filter { it.isNotEmpty() }.toSet()
+    val emailKeys = member.emails.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+    if (phoneKeys.isEmpty() && emailKeys.isEmpty()) return emptySet()
+    val ids = LinkedHashSet<Long>()
+    val cr = context.contentResolver
+    if (phoneKeys.isNotEmpty()) {
+        cr.query(Phone.CONTENT_URI, arrayOf(ContactsContract.Data.RAW_CONTACT_ID, Phone.NUMBER, Phone.DISPLAY_NAME), null, null, null)?.use { c ->
+            val idCol = c.getColumnIndexOrThrow(ContactsContract.Data.RAW_CONTACT_ID)
+            val numCol = c.getColumnIndexOrThrow(Phone.NUMBER)
+            val nameCol = c.getColumnIndexOrThrow(Phone.DISPLAY_NAME)
+            while (c.moveToNext()) {
+                val n = c.getString(numCol)?.let(::normPhone).orEmpty()
+                if (n.isEmpty() || n !in phoneKeys) continue
+                if (normalizePersonName(c.getString(nameCol).orEmpty()) != targetName) continue
+                ids += c.getLong(idCol)
+            }
+        }
+    }
+    if (emailKeys.isNotEmpty()) {
+        cr.query(Email.CONTENT_URI, arrayOf(ContactsContract.Data.RAW_CONTACT_ID, Email.ADDRESS, Email.DISPLAY_NAME), null, null, null)?.use { c ->
+            val idCol = c.getColumnIndexOrThrow(ContactsContract.Data.RAW_CONTACT_ID)
+            val addrCol = c.getColumnIndexOrThrow(Email.ADDRESS)
+            val nameCol = c.getColumnIndexOrThrow(Email.DISPLAY_NAME)
+            while (c.moveToNext()) {
+                val e = c.getString(addrCol)?.trim()?.lowercase().orEmpty()
+                if (e.isEmpty() || e !in emailKeys) continue
+                if (normalizePersonName(c.getString(nameCol).orEmpty()) != targetName) continue
+                ids += c.getLong(idCol)
+            }
+        }
+    }
+    return ids
+}
+
+// Link only raw contacts that match each member card's own name+identifiers.
+private fun linkRawContactsForMembers(context: Context, members: List<ContactParty>): Int {
+    if (members.size < 2) return 0
+    val rawIds = LinkedHashSet<Long>()
+    for (member in members) {
+        rawIds += rawContactIdsForMember(context, member)
+    }
+    return linkRawContactIds(context, rawIds.toList())
 }
 
 // Every raw-contact id that carries one of the target phones/emails. Two fixed
@@ -81,6 +133,10 @@ private fun linkRawContacts(context: Context, phones: List<String>, emails: List
     val emailKeys = emails.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
     if (phoneKeys.isEmpty() && emailKeys.isEmpty()) return 0
     val rawIds = rawContactIdsForIdentity(context, phoneKeys, emailKeys).toList()
+    return linkRawContactIds(context, rawIds)
+}
+
+private fun linkRawContactIds(context: Context, rawIds: List<Long>): Int {
     if (rawIds.size < 2) return 0
     val ops = ArrayList<ContentProviderOperation>()
     for (i in 1 until rawIds.size) {

@@ -280,6 +280,20 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 
 		sessions := deps.Manager.List()
 
+		// Sub-agent runs stay under client: for APC/resume, but they are not user
+		// conversations. Restore/GC already exempt them; the live list must too —
+		// otherwise Android (which calls recent without channel scoping) surfaces
+		// client:sub:* rows as chats and user sends land in the delegated scratch
+		// transcript.
+		filtered := sessions[:0]
+		for _, s := range sessions {
+			if session.IsSpawnedChildKey(s.Key) {
+				continue
+			}
+			filtered = append(filtered, s)
+		}
+		sessions = filtered
+
 		// Filter by channel if requested.
 		if p.Channel != "" {
 			filtered := sessions[:0]

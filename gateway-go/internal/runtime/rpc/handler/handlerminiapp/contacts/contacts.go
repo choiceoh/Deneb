@@ -76,17 +76,18 @@ func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
 // It never mutates and never calls the model here — the LLM pass is the client's
 // chunked follow-up — so this stays a fast, synchronous RPC.
 func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
-	type mergeOut struct {
-		Canonical string   `json:"canonical"`
-		Names     []string `json:"names"`
-		Phones    []string `json:"phones"`
-		Emails    []string `json:"emails"`
-	}
 	type partyOut struct {
 		Name   string   `json:"name"`
 		Org    string   `json:"org,omitempty"`
 		Phones []string `json:"phones,omitempty"`
 		Emails []string `json:"emails,omitempty"`
+	}
+	type mergeOut struct {
+		Canonical string     `json:"canonical"`
+		Names     []string   `json:"names"`
+		Phones    []string   `json:"phones"`
+		Emails    []string   `json:"emails"`
+		Members   []partyOut `json:"members"` // per-card identity for scoped apply
 	}
 	type pairOut struct {
 		A      partyOut `json:"a"`
@@ -107,6 +108,10 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 		}
 		all := store.All()
 		res := contacts.Dedup(all)
+		party := func(i int) partyOut {
+			c := all[i]
+			return partyOut{Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails}
+		}
 		merges := make([]mergeOut, 0, len(res.Merges))
 		for _, g := range res.Merges {
 			m := mergeOut{Canonical: g.Canonical}
@@ -114,6 +119,7 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 			seenE := map[string]bool{}
 			for _, idx := range g.Members {
 				m.Names = append(m.Names, all[idx].Name)
+				m.Members = append(m.Members, party(idx))
 				for _, p := range all[idx].Phones {
 					if !seenP[p] {
 						seenP[p] = true
@@ -128,10 +134,6 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 				}
 			}
 			merges = append(merges, m)
-		}
-		party := func(i int) partyOut {
-			c := all[i]
-			return partyOut{Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails}
 		}
 		pairs := make([]pairOut, 0, len(res.Ambiguous))
 		for _, p := range res.Ambiguous {

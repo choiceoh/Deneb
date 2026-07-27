@@ -193,6 +193,33 @@ func TestSessionsRecentIncludesLiveConversationsWithoutStoredChannel(t *testing.
 	}
 }
 
+func TestSessionsRecentExcludesSpawnedSubAgentKeys(t *testing.T) {
+	mgr := &fakeSessionsLister{
+		out: []*session.Session{
+			sample("client:main", 300, "client"),
+			sample("client:sub:research-1710000000000", 250, ""),
+			sample("client:main:abc", 200, "client"),
+		},
+	}
+	h := sessionsRecent(SessionsDeps{Manager: mgr})
+	resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", nil))
+
+	var got struct {
+		Sessions []map[string]any `json:"sessions"`
+		Count    int              `json:"count"`
+	}
+	decode(t, resp, &got)
+	if got.Count != 2 {
+		t.Fatalf("count = %d, want 2 (spawned sub-agent excluded)", got.Count)
+	}
+	for _, s := range got.Sessions {
+		key, _ := s["key"].(string)
+		if session.IsSpawnedChildKey(key) {
+			t.Fatalf("spawned sub-agent leaked into recent list: %q", key)
+		}
+	}
+}
+
 func TestSessionsRecentRejectsUnauthenticatedContext(t *testing.T) {
 	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{}})
 	resp := h(context.Background(), reqWith(t, "miniapp.sessions.recent", nil))
