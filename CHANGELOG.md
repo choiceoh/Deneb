@@ -1,5 +1,41 @@
 # Changelog
 
+## [4.140.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.139.0...deneb-v4.140.0) (2026-07-27)
+
+
+### ✨ Features
+
+* **contacts:** 연락처 정리 UX를 단계별 라이브 진행으로 재설계 ([#4361](https://github.com/choiceoh/Deneb/issues/4361)) ([b4ccfdd](https://github.com/choiceoh/Deneb/commit/b4ccfdd5fd207f53336e5d4c472f057a73c877ca))
+* **contacts:** 정리 적용 후 주소록 재싱크로 미러·인물위키까지 치유 ([#4358](https://github.com/choiceoh/Deneb/issues/4358)) ([5a6ae1b](https://github.com/choiceoh/Deneb/commit/5a6ae1b16fd4d12a53371776936479cb139affe0))
+* **even-g2:** 상담 보조 · 회의 청취 · 기기 보고 수리 4건 · HUD 미러 ([#4367](https://github.com/choiceoh/Deneb/issues/4367)) ([d7140c2](https://github.com/choiceoh/Deneb/commit/d7140c25830709cfaf4e0f219bfb4030fd2eee08))
+* **even-g2:** 알림 컨텍스트·통역 저장·작업중 표시·모델 푸터 + 기기 디버그 수리 일괄 ([#4381](https://github.com/choiceoh/Deneb/issues/4381)) ([ad74414](https://github.com/choiceoh/Deneb/commit/ad7441461c8e32fe3ec0970c903e4f68e92847f4))
+* **process:** 모델 조종 셸 서브프로세스에서 프로바이더 시크릿 차단 ([#4365](https://github.com/choiceoh/Deneb/issues/4365)) ([a3ea88d](https://github.com/choiceoh/Deneb/commit/a3ea88dcfb340413a8ca5d51ac55ecda9c04385c))
+* **sessions:** 대화 목록 페이지네이션 — 서버 offset/total + 데스크톱 페이징 (100건 넘으면 못 열던 문제) ([#4371](https://github.com/choiceoh/Deneb/issues/4371)) ([42ab143](https://github.com/choiceoh/Deneb/commit/42ab1436bee8eea03fd0d97b53d4d896c19798d9))
+* **sessions:** 폰 대화 목록에 '이전 대화 더 보기' — 50건에서 잘리던 목록 페이징 ([#4372](https://github.com/choiceoh/Deneb/issues/4372)) ([2346171](https://github.com/choiceoh/Deneb/commit/2346171b7cc7504c58a30a077252db99668cb141))
+* **wiki:** 검증 발견에 기각 기억 — 원장으로 신규만 보고, 재보고는 건수로 접기 ([#4382](https://github.com/choiceoh/Deneb/issues/4382)) ([43aaf16](https://github.com/choiceoh/Deneb/commit/43aaf1676f1bad6b97ff261282d1bfa2708a8055))
+
+
+### 🐛 Bug Fixes
+
+* **audit:** health-v3 런타임 캐시를 state-dir 로 — 체크인 캐시 영구 stale 사고 해소 ([#4378](https://github.com/choiceoh/Deneb/issues/4378)) ([d43cdde](https://github.com/choiceoh/Deneb/commit/d43cddead47cec646f379dec5ca460e5f9a55e15))
+* **chat:** fail over pre-output stream stalls ([#4362](https://github.com/choiceoh/Deneb/issues/4362)) ([79cd8b7](https://github.com/choiceoh/Deneb/commit/79cd8b74c434595f5bf7a06e6751befb940b24d3))
+* **even-g2:** HUD 소음 제거 — 정상 상태는 말하지 않는다 ([#4383](https://github.com/choiceoh/Deneb/issues/4383)) ([f1279a4](https://github.com/choiceoh/Deneb/commit/f1279a4d669a1d8f869efb9ac2b8b23b33addaff))
+* **even-g2:** 안경에서 아예 안 켜지던 원인 — 컨테이너 하나에 zOrderIndex 누락 ([#4370](https://github.com/choiceoh/Deneb/issues/4370)) ([a02affb](https://github.com/choiceoh/Deneb/commit/a02affbc6e62f1385417a7d2ef9b92ccb9de13ed))
+* **genesis:** 배차 캡 사다리가 첫 단에서 종료되던 문제 — 단계별 재평가 + 단별 증거 ([#4377](https://github.com/choiceoh/Deneb/issues/4377)) ([df10132](https://github.com/choiceoh/Deneb/commit/df10132812628cccfa2c8b0a5e83ebced0afb7e8))
+* **office:** officecli 경로에 credential/control-plane 가드 적용 ([#4369](https://github.com/choiceoh/Deneb/issues/4369)) ([6e7eb41](https://github.com/choiceoh/Deneb/commit/6e7eb4181ffdad3f054c42d9b86818faaf30f778))
+* **wiki:** 드리머 중복탐지가 한글 이름·지명을 오탐하던 편집거리 규칙 — CJK는 정규화-동일만 ([#4376](https://github.com/choiceoh/Deneb/issues/4376)) ([c3880b4](https://github.com/choiceoh/Deneb/commit/c3880b4ebfa52023f0d889666e15a076c70d4e11))
+* **wiki:** 드림 품질점수 정직화 — 유휴 사이클 무채점 + utility 표본 30일 창으로 확장 ([#4379](https://github.com/choiceoh/Deneb/issues/4379)) ([4253d2b](https://github.com/choiceoh/Deneb/commit/4253d2b14026013538705871db6eb25e53359858))
+
+
+### 🔧 Internal
+
+* **runtime:** split file downloads from native api ([#4368](https://github.com/choiceoh/Deneb/issues/4368)) ([8ed5556](https://github.com/choiceoh/Deneb/commit/8ed55566ef5799086397e46bcfe235af6a67a8f4))
+* **runtime:** split groupware downloads from native api ([#4374](https://github.com/choiceoh/Deneb/issues/4374)) ([9655c4d](https://github.com/choiceoh/Deneb/commit/9655c4d7a197eb4ffa83226de58df17b68710696))
+* **sessions:** 서브에이전트 키에 sub- 표식 — 자릿수 추론 대신 네임스페이스로 판별 ([#4357](https://github.com/choiceoh/Deneb/issues/4357)) ([63b0102](https://github.com/choiceoh/Deneb/commit/63b010233bdebeea1c10bec1e579f1cb82a43648))
+* **sessions:** 서브에이전트를 client:sub: 네임스페이스로 — client: 접두는 유지, client:main 계층에서만 분리 ([#4360](https://github.com/choiceoh/Deneb/issues/4360)) ([7fc01f0](https://github.com/choiceoh/Deneb/commit/7fc01f032ed6f1b5ab9f78854e2225064adbf76f))
+* **sessions:** 세션 키 분류를 도메인 한 곳으로 + 재발 방지 가드 테스트 ([#4373](https://github.com/choiceoh/Deneb/issues/4373)) ([d277849](https://github.com/choiceoh/Deneb/commit/d277849ec6b6b50070986f14eccf0a19919d51a5))
+* **toolwire:** isolate media and web registrations ([#4363](https://github.com/choiceoh/Deneb/issues/4363)) ([4daeb7b](https://github.com/choiceoh/Deneb/commit/4daeb7b0a150c3cf7dd72a2f9ed3cf1893afcbf2))
+
 ## [4.139.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.138.0...deneb-v4.139.0) (2026-07-26)
 
 

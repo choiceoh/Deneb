@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.112](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.111...andromeda-v0.0.112) (2026-07-27)
+
+
+### ✨ Features
+
+* **sessions:** 대화 목록 페이지네이션 — 서버 offset/total + 데스크톱 페이징 (100건 넘으면 못 열던 문제) ([#4371](https://github.com/choiceoh/Deneb/issues/4371)) ([42ab143](https://github.com/choiceoh/Deneb/commit/42ab1436bee8eea03fd0d97b53d4d896c19798d9))
+
 ## [0.0.111](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.110...andromeda-v0.0.111) (2026-07-26)
 
 
