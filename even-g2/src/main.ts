@@ -1192,6 +1192,51 @@ const NAV_ARROW_ID = 3;
 const NAV_SPEED_ID = 4;
 
 /**
+ * ONE queue for everything that crosses the BLE bridge — text upgrades and
+ * image transfers alike.
+ *
+ * This is the last structural difference against the plugins that do render
+ * images. Visionote shows its loading text, THEN pushes every image, THEN
+ * clears the text — the link is quiet for the whole transfer. This plugin was
+ * updating the nav distance text every 2–3 seconds over the same link while a
+ * fragmented, LZ4-framed image transfer was in flight; a text upgrade landing
+ * mid-transfer aborts it, which is exactly a `sendFailed` with text working
+ * fine throughout. One chain means nothing interleaves, ever.
+ */
+let bleChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Latest pending content per text container. Coalesced: while an image
+ * transfer holds the queue, three distance ticks must flush as ONE write of
+ * the newest text, not three stale ones replayed in order.
+ */
+const pendingText = new Map<number, { name: string; content: string }>();
+
+function enqueueText(
+  containerID: number,
+  containerName: string,
+  content: string,
+): Promise<void> {
+  const queued = pendingText.has(containerID);
+  pendingText.set(containerID, { name: containerName, content });
+  if (!queued) {
+    bleChain = bleChain.then(async () => {
+      const entry = pendingText.get(containerID);
+      pendingText.delete(containerID);
+      if (!entry) return;
+      await bridge.textContainerUpgrade(
+        new TextContainerUpgrade({
+          containerID,
+          containerName: entry.name,
+          content: entry.content,
+        }),
+      );
+    });
+  }
+  return bleChain.then(() => undefined);
+}
+
+/**
  * IMAGE_MIN_GAP_MS — floor between BLE image transfers.
  *
  * Measured from the device through the HUD mirror: pushes came back
@@ -1273,7 +1318,6 @@ async function leaveNavPage(): Promise<void> {
  * one updateImageRawData in flight at a time, and a nav route fires these on
  * every maneuver change.
  */
-let arrowChain: Promise<unknown> = Promise.resolve();
 let shownArrow = "";
 /** Set once an image push fails, so the text carries the direction instead. */
 let imageBroken = false;
@@ -1286,15 +1330,19 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
     noteImagePush("arrow", 0, `skipped:${instruction.slice(0, 12)}`);
     return;
   }
-  // Keyed on kind AND distance: the distance is inside the bitmap now, so it
-  // has to be redrawn as the number counts down — but only when the rendered
-  // text actually changes, which is far less often than a position fix.
-  const key = `${kind}:${distance}`;
-  if (key === shownArrow) return;
-  shownArrow = key;
-  arrowChain = arrowChain.then(async () => {
+  // Keyed on the MANEUVER ALONE, not the distance.
+  //
+  // The distance used to be drawn into the bitmap, so a new PNG went out every
+  // few seconds as the number counted down — the mirror shows the byte length
+  // changing on every push (2752 → 3187 → 2700) and every one of them
+  // sendFailed. The working references push an image and leave it there. The
+  // number already lives in the text line beside the arrow, so the bitmap has
+  // no reason to change until the turn does — roughly once a minute.
+  if (kind === shownArrow) return;
+  shownArrow = kind;
+  bleChain = bleChain.then(async () => {
     try {
-      const bytes = await arrowPng(kind, distance);
+      const bytes = await arrowPng(kind);
       const res = await sendImage("arrow", NAV_ARROW_ID, bytes);
       if (res !== "success") imageBroken = true;
       if (res !== "success") {
@@ -1312,7 +1360,7 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
       shownArrow = "";
     }
   });
-  await arrowChain;
+  await bleChain;
 }
 
 /**
@@ -1447,7 +1495,7 @@ async function pushSpeed(kmh: number | null): Promise<void> {
   if (key === shownSpeed) return;
   shownSpeed = key;
   if (kmh == null) return;
-  arrowChain = arrowChain.then(async () => {
+  bleChain = bleChain.then(async () => {
     try {
       const bytes = await speedPng(kmh);
       const res = await sendImage("speed", NAV_SPEED_ID, bytes);
@@ -1460,7 +1508,7 @@ async function pushSpeed(kmh: number | null): Promise<void> {
       shownSpeed = "";
     }
   });
-  await arrowChain;
+  await bleChain;
 }
 
 /** showNavText writes the nav page's sentence container (not the capture layer). */
@@ -1471,13 +1519,7 @@ async function showNavText(content: string): Promise<void> {
     images: lastImagePushes,
     note: "navText",
   });
-  await bridge.textContainerUpgrade(
-    new TextContainerUpgrade({
-      containerID: 2,
-      containerName: "navText",
-      content,
-    }),
-  );
+  await enqueueText(2, "navText", content);
 }
 
 /**
@@ -1841,13 +1883,7 @@ function noteImagePush(name: string, bytes: number, result: string): void {
 
 async function showText(content: string): Promise<void> {
   mirrorHud(settings, { screen, text: content, images: lastImagePushes });
-  await bridge.textContainerUpgrade(
-    new TextContainerUpgrade({
-      containerID: 1,
-      containerName: "main",
-      content,
-    }),
-  );
+  await enqueueText(1, "main", content);
 }
 
 /**
