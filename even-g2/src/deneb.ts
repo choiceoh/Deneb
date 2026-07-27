@@ -309,6 +309,11 @@ export function formatGeneratedLabel(iso?: string, cached?: boolean): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return "";
   const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  // Fresh is the normal state and says nothing (operator's call, 2026-07-27):
+  // "방금" after the clock was dead weight. Age earns a line only once it is
+  // old enough to change how the wearer reads the screen, and cache always
+  // does — stale-and-cached is exactly the state worth flagging.
+  if (!cached && mins < 5) return "";
   const age = mins <= 0 ? "방금" : `${mins}분 전`;
   return cached ? `${age}·캐시` : age;
 }
