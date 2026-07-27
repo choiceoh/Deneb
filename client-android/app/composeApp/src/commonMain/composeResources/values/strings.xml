@@ -14,6 +14,7 @@
     <string name="new_chat_content_description">New chat</string>
     <string name="chat_history_title">Chat History</string>
     <string name="chat_history_empty">No saved conversations</string>
+    <string name="chat_history_more">Load older conversations</string>
     <string name="chat_history_heartbeat_label">Heartbeat</string>
     <string name="heartbeat_banner_message">Heartbeat has something to report</string>
     <string name="heartbeat_banner_dismiss">Dismiss</string>

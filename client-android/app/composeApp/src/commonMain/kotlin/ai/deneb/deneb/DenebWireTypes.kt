@@ -31,7 +31,12 @@ internal inline fun <T, K> Iterable<T>.distinctByLast(crossinline keyOf: (T) -> 
 // them across files in this package.
 
 @Serializable
-internal data class RecentPayload(val sessions: List<SessionRowOut> = emptyList())
+internal data class RecentPayload(
+    val sessions: List<SessionRowOut> = emptyList(),
+    // Size of the whole scoped set, not this page. Null on a gateway older than
+    // the paging change — callers fall back to the page they received.
+    val total: Int? = null,
+)
 
 @Serializable
 internal data class TranscriptPayload(

@@ -185,6 +185,7 @@ internal fun ChatModeScreen(
                     drawerContent = {
                         DenebSessionDrawerSheet(
                             conversations = filteredConversations,
+                            hasMoreConversations = uiState.hasMoreConversations,
                             currentConversationId = uiState.currentConversationId,
                             pendingConversationDeletion = uiState.pendingConversationDeletion,
                             actions = uiState.actions,

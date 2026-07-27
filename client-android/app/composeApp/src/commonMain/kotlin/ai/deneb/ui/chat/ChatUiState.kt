@@ -104,6 +104,8 @@ data class ChatUiState(
     val files: ImmutableList<PlatformFile> = persistentListOf(),
     val availableServices: ImmutableList<ServiceEntry> = persistentListOf(),
     val savedConversations: ImmutableList<ConversationSummary> = persistentListOf(),
+    // The gateway holds conversations this drawer has not pulled in yet.
+    val hasMoreConversations: Boolean = false,
     val currentConversationId: String? = null,
     val hasUnreadHeartbeat: Boolean = false,
     val hasUnreadWorkReport: Boolean = false,

@@ -156,6 +156,13 @@ class DenebGatewayClient private constructor(
     private val _savedConversations = MutableStateFlow<List<Conversation>>(emptyList())
     override val savedConversations: StateFlow<List<Conversation>> = _savedConversations
 
+    // Drawer paging: `total` from the gateway minus what it has handed over so
+    // far. Conversations are no longer GC'd server-side (#4353), so the list
+    // outgrows one page and a page-only drawer would hide the rest for good.
+    private val _hasMoreConversations = MutableStateFlow(false)
+    override val hasMoreConversations: StateFlow<Boolean> = _hasMoreConversations
+    private var serverRowsLoaded = 0
+
     // Deneb wiki pages. getMemories() returns this snapshot and also kicks a refresh;
     // observers rebuild their state once the RPC lands.
     internal val _denebMemories = MutableStateFlow<List<MemoryEntry>>(emptyList())
@@ -521,7 +528,25 @@ class DenebGatewayClient private constructor(
             // Credentials switched mid-fetch — don't repopulate the drawer with the
             // old account's private session titles under the new gateway.
             if (epoch != credEpoch) return@launch
-            _savedConversations.value = fresh
+            _savedConversations.value = fresh.conversations
+            serverRowsLoaded = fresh.serverRows
+            _hasMoreConversations.value = fresh.serverRows < fresh.total
+        }
+    }
+
+    override fun loadMoreConversations() {
+        scope.launch {
+            val epoch = credEpoch
+            val loaded = _savedConversations.value
+            // Offset by what the SERVER has handed over so far. The 업무 home row is
+            // synthesized locally when the first page lacks it, so counting the
+            // rendered list would skip a real conversation at the page boundary.
+            val next = fetchRecentSessions(offset = serverRowsLoaded) ?: return@launch
+            if (epoch != credEpoch) return@launch
+            serverRowsLoaded += next.serverRows
+            val known = loaded.mapTo(mutableSetOf()) { it.id }
+            _savedConversations.value = loaded + next.conversations.filterNot { it.id in known }
+            _hasMoreConversations.value = serverRowsLoaded < next.total && next.serverRows > 0
         }
     }
 

@@ -58,4 +58,6 @@ data class ChatActions(
     // Reload the session list from the gateway — fired when the drawer opens so it
     // never shows a stale list (the list is otherwise only loaded once at startup).
     val refreshConversations: () -> Unit,
+    // Appends the next page of older conversations to the drawer list.
+    val loadMoreConversations: () -> Unit,
 )

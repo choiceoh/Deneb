@@ -30,12 +30,32 @@ import kotlin.time.TimeSource
  *  conversations persist and stay listed/openable as ordinary sessions. */
 internal fun isChatWorkspaceKey(key: String): Boolean = key.startsWith("chat:")
 
-internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation>? {
+/** One drawer page. The gateway caps a single response at 100 rows. */
+internal const val SESSION_PAGE = 50
+
+/**
+ * One page of the drawer list plus the size of the whole set, so the caller can
+ * tell "that is all of them" from "the page ended". Conversations are no longer
+ * garbage-collected server-side (#4353), so a page-only fetch would silently hide
+ * every conversation past the first page as history grows.
+ */
+internal data class RecentSessionsPage(
+    val conversations: List<Conversation>,
+    val total: Int,
+    // Rows the SERVER returned, before the locally-synthesized 업무 home row is
+    // prepended — this, not the rendered size, is what the next offset counts.
+    val serverRows: Int,
+)
+
+internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): RecentSessionsPage? {
     // null return = RPC failed (timeout/transient/load). The caller keeps the
     // existing drawer list instead of collapsing to just the home row.
     val payload = callRpc<RecentPayload>(
         "miniapp.sessions.recent",
-        buildJsonObject { put("limit", 50) },
+        buildJsonObject {
+            put("limit", SESSION_PAGE)
+            if (offset > 0) put("offset", offset)
+        },
     ) ?: return null
     val recent = payload.sessions
         .filter { it.key.isNotBlank() }
@@ -48,6 +68,12 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
                 title = conversationTitle(s),
             )
         }
+    // An older gateway sends no `total` — fall back to what this page held so the
+    // drawer stops offering more instead of paging into nothing.
+    val total = payload.total ?: (offset + recent.size)
+    // The 업무 home is pinned to the top of the FIRST page only; later pages append
+    // verbatim (the server never repeats a row across offsets).
+    if (offset > 0) return RecentSessionsPage(recent, total, recent.size)
     val home = recent.find { it.id == "client:main" }
         ?: Conversation(
             id = "client:main",
@@ -56,7 +82,7 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(): List<Conversation
             updatedAt = kotlin.time.Clock.System.now().toEpochMilliseconds(),
             title = "업무",
         )
-    return listOf(home) + recent.filterNot { it.id == "client:main" }
+    return RecentSessionsPage(listOf(home) + recent.filterNot { it.id == "client:main" }, total, recent.size)
 }
 
 private fun DenebGatewayClient.conversationTitle(s: SessionRowOut): String {

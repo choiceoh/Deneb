@@ -74,6 +74,7 @@
     <string name="waiting_content_description">응답 대기 중</string>
     <string name="chat_history_title">대화 기록</string>
     <string name="chat_history_empty">저장된 대화 없음</string>
+    <string name="chat_history_more">이전 대화 더 보기</string>
     <string name="chat_history_heartbeat_label">하트비트</string>
     <string name="heartbeat_banner_message">하트비트에 보고할 내용이 있습니다</string>
     <string name="heartbeat_banner_dismiss">닫기</string>

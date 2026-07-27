@@ -76,6 +76,7 @@ internal fun previewChatActions(): ChatActions = ChatActions(
     sendSmsDraft = {},
     discardSmsDraft = {},
     refreshConversations = {},
+    loadMoreConversations = {},
 )
 
 private fun previewSmsDraft(id: String, status: SmsDraftStatus, error: String? = null) = SmsDraft(
