@@ -543,6 +543,9 @@ func (s *Service) notifyDreaming(report *DreamReport, err error) {
 				msg += "\n  - " + truncateOutput(f, 80)
 			}
 		}
+		if len(report.RecallDemandTerms) > 0 {
+			msg += "\n❓ 답 못한 질문 주제: " + strings.Join(report.RecallDemandTerms, ", ")
+		}
 		if report.VerifyFindingsRepeat > 0 {
 			msg += fmt.Sprintf("\n🔍 기존 발견 %d건 유지 (미해결)", report.VerifyFindingsRepeat)
 		}

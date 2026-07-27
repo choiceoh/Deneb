@@ -56,6 +56,10 @@ type DreamReport struct {
 	// recalled into a chat turn inside the score window — the raw utility signal
 	// behind QualityScore's utility axis.
 	RecallHitPages int `json:"recallHitPages,omitempty"`
+	// RecallDemandTerms are the topics of recent CUE turns the wiki could not
+	// answer (wiki/recall_misses.go) — measured holes in the curated memory,
+	// most-asked first. The research lane targets the same signal.
+	RecallDemandTerms []string `json:"recallDemandTerms,omitempty"`
 	// UnrecalledFindings counts cold pages (old + never recalled + low
 	// importance) verify flagged as archive candidates this cycle. Advisory.
 	UnrecalledFindings int `json:"unrecalledFindings,omitempty"`
