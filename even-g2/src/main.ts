@@ -1289,12 +1289,19 @@ async function pushArrow(instruction: string, distance: string): Promise<void> {
   // Keyed on kind AND distance: the distance is inside the bitmap now, so it
   // has to be redrawn as the number counts down — but only when the rendered
   // text actually changes, which is far less often than a position fix.
-  const key = `${kind}:${distance}`;
-  if (key === shownArrow) return;
-  shownArrow = key;
+  // Keyed on the MANEUVER ALONE, not the distance.
+  //
+  // The distance used to be drawn into the bitmap, so a new PNG went out every
+  // few seconds as the number counted down — the mirror shows the byte length
+  // changing on every push (2752 → 3187 → 2700) and every one of them
+  // sendFailed. The working references push an image and leave it there. The
+  // number already lives in the text line beside the arrow, so the bitmap has
+  // no reason to change until the turn does — roughly once a minute.
+  if (kind === shownArrow) return;
+  shownArrow = kind;
   arrowChain = arrowChain.then(async () => {
     try {
-      const bytes = await arrowPng(kind, distance);
+      const bytes = await arrowPng(kind);
       const res = await sendImage("arrow", NAV_ARROW_ID, bytes);
       if (res !== "success") imageBroken = true;
       if (res !== "success") {
