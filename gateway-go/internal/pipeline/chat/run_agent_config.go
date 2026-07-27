@@ -542,10 +542,10 @@ func shouldEnableSkillNudger(nudger SkillNudger, params RunParams, sessionToolPr
 	// genesis-worthy patterns actually appear (interactive work) were barely
 	// reviewed. Skill improvement for cron-used skills still happens via the
 	// usage-stats-driven Evolver — this gate only redirects the nudger.
-	if strings.HasPrefix(params.SessionKey, "cron:") {
+	if session.IsCronSession(params.SessionKey) {
 		return false
 	}
-	return !strings.HasPrefix(params.SessionKey, "system:")
+	return !session.IsSystemSession(params.SessionKey)
 }
 
 func resolveThinkingConfig(level string) *llm.ThinkingConfig {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/chatportwire"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
@@ -223,7 +224,7 @@ func deliveryChannel(d *DeliveryContext) string {
 // prefix instead of two. Only client sessions map; automation sessions
 // (cron:, system:) keep "" so their prompts are unchanged.
 func sessionFallbackChannel(sessionKey string) string {
-	if strings.HasPrefix(sessionKey, "client:") {
+	if session.IsClientSession(sessionKey) {
 		return "client"
 	}
 	return ""

@@ -91,7 +91,7 @@ func idleReviewDue(now time.Time, lastReviewAtMs int64, lastReviewOK bool, stale
 // qualify; cron/system/review forks (non-client prefixes), the dream session,
 // and puppet-seat test sessions never do.
 func idleReviewableSessionKey(key string) bool {
-	if !strings.HasPrefix(key, "client:") {
+	if !runtimesession.IsClientSession(key) {
 		return false
 	}
 	if strings.HasPrefix(key, "client:puppet") {

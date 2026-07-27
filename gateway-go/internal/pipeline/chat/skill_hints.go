@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
 )
@@ -60,7 +61,7 @@ func buildSkillHints(params RunParams, sessionToolPreset string, resolved []skil
 	if params.EphemeralUser || params.SkipRecall {
 		return "", nil, nil
 	}
-	if strings.HasPrefix(params.SessionKey, "system:") {
+	if session.IsSystemSession(params.SessionKey) {
 		return "", nil, nil
 	}
 	if !presetAllowsSkillsTool(sessionToolPreset) {

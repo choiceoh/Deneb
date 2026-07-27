@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 )
 
@@ -78,7 +79,7 @@ func shouldRecordRunDiary(params RunParams) bool {
 	// prompt, not the user speaking — diarying them would double-feed dreams.
 	// (This exclusion is inert on the async lifecycle path: cron: turns only
 	// ever run through the sync entry points.)
-	if strings.HasPrefix(params.SessionKey, "cron:") {
+	if session.IsCronSession(params.SessionKey) {
 		return false
 	}
 	return true
