@@ -35,10 +35,41 @@ const (
 	graduationDispatchCap = "dispatch-cap"
 )
 
-// graduationDispatchCapStep is the value an auto-unlock raises the daily
-// dispatch cap to (default 2 → 4). One step per graduation — a further raise
-// needs fresh evidence at the new cap, never a runaway ramp.
-const graduationDispatchCapStep = 4
+// graduationDispatchCapSteps is the pre-declared daily-dispatch-cap ladder
+// (compiled policy — the loop EXECUTES it, it can never rewrite it). One step
+// per graduation, and each rung must be earned by its OWN evidence cohort
+// gathered AT the rung below: ladder_watch.go passes the current unlock's
+// timestamp as the evidence floor, so the cohort that opened 2→4 can never also
+// buy 4→8. Bounded ladder + per-rung evidence = no runaway ramp.
+//
+// 2026-07-27: this was a single const 4. Once the 2→4 unlock executed,
+// ladderDispatchCapRow returned 완료 forever and the watch's
+// !graduationUnlocked guard closed — no code path could ever grant the "further
+// raise on fresh evidence at the new cap" the policy already promised, so the
+// cap was stuck at the first rung by construction rather than by judgment.
+var graduationDispatchCapSteps = []int{4, 8}
+
+// nextGraduationDispatchCap returns the rung above current, or 0 at the top of
+// the ladder (no further auto-raise available).
+func nextGraduationDispatchCap(current int) int {
+	for _, step := range graduationDispatchCapSteps {
+		if step > current {
+			return step
+		}
+	}
+	return 0
+}
+
+// graduationDispatchCapRung reports the rung the executor is actually running
+// and the next one to earn. A re-locked row drops the executor back to its
+// compiled default, so the ladder re-offers the first rung rather than skipping
+// ahead to a step the veto never let run.
+func graduationDispatchCapRung(row graduationRow) (current, next int) {
+	if !row.Unlocked {
+		return 0, nextGraduationDispatchCap(0)
+	}
+	return row.Value, nextGraduationDispatchCap(row.Value)
+}
 
 // graduationRow is one executed unlock (or its later re-lock).
 type graduationRow struct {
@@ -114,12 +145,15 @@ func saveGraduationState(st graduationState) error {
 }
 
 // unlockGraduation executes one ladder unlock: state write + lifecycle ledger
-// (type "graduation", Propus-auditable). Idempotent — an already-unlocked row
-// is a no-op so watch re-runs never double-ledger.
+// (type "graduation", Propus-auditable). Idempotent for the same rung — a watch
+// re-run never double-ledgers.
 func (t *Tracker) unlockGraduation(key, evidence string, value int, auto bool) (bool, error) {
 	st := loadGraduationState()
 	row := st.Rows[key]
-	if row.Unlocked {
+	// A strictly higher payload is a ladder STEP (dispatch-cap 4 → 8), not a
+	// repeat of the same unlock. Rows that carry no payload are unaffected:
+	// their value is 0 on both sides, so they stay strictly idempotent.
+	if row.Unlocked && value <= row.Value {
 		return false, nil
 	}
 	// A prior re-lock is a standing operator veto (재잠금 — post-hoc control). The

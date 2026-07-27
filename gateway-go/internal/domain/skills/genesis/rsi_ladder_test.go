@@ -212,3 +212,108 @@ func TestLadderCalibrationCountsAutoAdoptedCycles(t *testing.T) {
 		t.Fatalf("auto_adopted cycles with benches must count toward calibration: %+v", row)
 	}
 }
+
+// The dispatch-cap ladder must not terminate at its first rung. Before this,
+// an executed 2→4 unlock made the row report 완료 forever and closed the
+// watch's guard — the cap could never rise again no matter how good the
+// evidence got, which is how the live lane ended up refusing work three days
+// running at cap 4 with a 72% land rate.
+func TestLadderDispatchCapOffersNextRungAfterUnlock(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr := newTestTracker(t)
+	dir := tr.dispatchMarkerDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, outcome string, at int64, phase string) {
+		t.Helper()
+		body := fmt.Sprintf(`{"attemptId":"%s","outcome":"%s","dispatchedAt":%d}`, name, outcome, at)
+		if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		appendFunnel(t, tr.selfCorrectionPath, SelfCorrectionCandidateRecord{
+			Type: selfCorrectionTypeDispatch, AttemptID: name, DispatchPhase: phase,
+		})
+	}
+	// Cohort that buys the first rung (2 → 4).
+	for i := 0; i < 5; i++ {
+		write(fmt.Sprintf("first-%d", i), "landed", int64(100+i), selfCorrectionDispatchWatchPassed)
+	}
+	if row := tr.ladderDispatchCapRow(); row.State != ladderStateReady {
+		t.Fatalf("first rung should be READY: %+v", row)
+	}
+	if fresh, err := tr.unlockGraduation(graduationDispatchCap, "first cohort", 4, true); err != nil || !fresh {
+		t.Fatalf("first rung unlock fresh=%v err=%v, want true/nil", fresh, err)
+	}
+
+	// The very cohort that bought rung 4 must not also buy rung 8 — the ladder
+	// floors evidence at the unlock instant, so it reads as no evidence yet.
+	row := tr.ladderDispatchCapRow()
+	if row.State == ladderStateDone {
+		t.Fatalf("an executed rung is not the top of the ladder: %+v", row)
+	}
+	if row.State != ladderStateGrowing || !strings.Contains(row.Detail, "현재 캡 4 → 8") {
+		t.Fatalf("row should track the next rung on fresh evidence: %+v", row)
+	}
+	for _, graduation := range tr.autoGraduations() {
+		if graduation.Key == graduationDispatchCap {
+			t.Fatalf("stale cohort re-bought the next rung: %+v", graduation)
+		}
+	}
+
+	// Fresh dispatches AT cap 4 earn the next rung.
+	now := loadGraduationState().Rows[graduationDispatchCap].UnlockedAt
+	for i := 0; i < 5; i++ {
+		write(fmt.Sprintf("second-%d", i), "landed", now+int64(1+i), selfCorrectionDispatchWatchPassed)
+	}
+	if row := tr.ladderDispatchCapRow(); row.State != ladderStateReady {
+		t.Fatalf("fresh cohort at the current rung should be READY: %+v", row)
+	}
+	next := 0
+	for _, graduation := range tr.autoGraduations() {
+		if graduation.Key == graduationDispatchCap {
+			next = graduation.Value
+		}
+	}
+	if next != 8 {
+		t.Fatalf("auto-graduation value = %d, want the next rung 8", next)
+	}
+	if fresh, err := tr.unlockGraduation(graduationDispatchCap, "second cohort", next, true); err != nil || !fresh {
+		t.Fatalf("second rung unlock fresh=%v err=%v, want true/nil", fresh, err)
+	}
+
+	// Top of the ladder: 완료 belongs here and nowhere earlier.
+	if row := tr.ladderDispatchCapRow(); row.State != ladderStateDone {
+		t.Fatalf("top rung should read done: %+v", row)
+	}
+	for _, graduation := range tr.autoGraduations() {
+		if graduation.Key == graduationDispatchCap {
+			t.Fatalf("ladder ramped past its top rung: %+v", graduation)
+		}
+	}
+}
+
+// A re-lock drops the executor back to its compiled default, so the ladder must
+// re-offer the FIRST rung — not the step the veto never let run.
+func TestLadderDispatchCapReoffersFirstRungAfterRelock(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr := newTestTracker(t)
+	if _, err := tr.unlockGraduation(graduationDispatchCap, "cohort", 4, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.RelockGraduation(graduationDispatchCap, "operator veto"); err != nil {
+		t.Fatal(err)
+	}
+	row := loadGraduationState().Rows[graduationDispatchCap]
+	if current, next := graduationDispatchCapRung(row); current != 0 || next != 4 {
+		t.Fatalf("relocked rung = (%d → %d), want (0 → 4)", current, next)
+	}
+}
+
+func TestNextGraduationDispatchCap(t *testing.T) {
+	for _, tc := range []struct{ current, want int }{{0, 4}, {2, 4}, {4, 8}, {8, 0}, {99, 0}} {
+		if got := nextGraduationDispatchCap(tc.current); got != tc.want {
+			t.Errorf("nextGraduationDispatchCap(%d) = %d, want %d", tc.current, got, tc.want)
+		}
+	}
+}

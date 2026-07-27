@@ -178,17 +178,25 @@ func (t *Tracker) autoGraduations() []autoGraduation {
 	// Dispatch cap: latest terminal cohort, with marker outcomes joined to the
 	// authoritative attempt lifecycle. Only watch_passed is a landed success;
 	// any rollback in the cohort blocks graduation.
-	if !graduationUnlocked(graduationDispatchCap) {
-		evidence, err := t.rsiDispatchEvidence(ladderDispatchMinDecided)
+	// One rung per graduation, each earned at the rung below: the evidence floor
+	// is the current unlock's timestamp, so the cohort that bought this cap can
+	// never also buy the next. At the top of the ladder there is nothing to emit.
+	capRow := loadGraduationState().Rows[graduationDispatchCap]
+	if _, next := graduationDispatchCapRung(capRow); next > 0 {
+		floor := int64(0)
+		if capRow.Unlocked {
+			floor = capRow.UnlockedAt
+		}
+		evidence, err := t.rsiDispatchEvidenceSince(ladderDispatchMinDecided, floor)
 		if err == nil && evidence.Decided >= ladderDispatchMinDecided {
 			outcomes, decided, landed := evidence.CohortOutcomes, evidence.Decided, evidence.Landed
 			rate := float64(landed) / float64(decided)
 			if rate >= ladderDispatchMinLandRate && evidence.RolledBack == 0 {
 				out = append(out, autoGraduation{
 					Key: graduationDispatchCap, Title: "배차 캡 상향",
-					Value: graduationDispatchCapStep,
+					Value: next,
 					Evidence: fmt.Sprintf("최근 판정 %d건·랜딩률 %.0f%% (%s)·감시 롤백 0건 → 일일 캡 %d",
-						decided, rate*100, rsiOutcomeSummary(outcomes), graduationDispatchCapStep),
+						decided, rate*100, rsiOutcomeSummary(outcomes), next),
 				})
 			}
 		}
