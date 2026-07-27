@@ -57,8 +57,10 @@ export function maneuverArrow(instruction: string): ArrowKind | null {
 // as a range and an inclusive-vs-exclusive edge is exactly the kind of thing a
 // host rejects silently. Backing off two pixels costs nothing and removes the
 // question.
-export const ARROW_W = 176;
-export const ARROW_H = 96;
+// Square, and the image matches its container exactly — a non-square container
+// squashes the glyph when the SDK resizes into it.
+export const ARROW_W = 120;
+export const ARROW_H = 120;
 
 /** Where the arrow half ends and the distance half begins. */
 const ARROW_COL = 72;
@@ -66,121 +68,133 @@ const ARROW_COL = 72;
 /**
  * arrowPng draws one maneuver arrow and returns PNG bytes.
  *
- * Deliberately fat strokes and no anti-aliasing niceties: the panel has 16
- * shades and is read in sunlight at a glance, so a thin elegant arrow is a grey
- * smudge. White on black matches the panel's native rendering (green on black).
+ * Built to the MUTCD's Type C construction (Section 2D.08): the shaft BENDS at
+ * 90°, it does not sweep. Earlier revisions curved the whole path, which is why
+ * they read as hand-drawn next to the shipping G2 navigation plugins — both
+ * Navigaze and G2 Maps use the bent form, and so does every road sign. The head
+ * is 2.7× the shaft width, inside the standard's 1.5–1.75× cap-height guidance
+ * for the legend it sits beside.
+ *
+ * Each shape is ONE explicit polygon with hand-placed vertices. Two earlier
+ * attempts generated the outline by offsetting a centreline and both
+ * self-intersected near the head, erasing the arrowhead entirely on the device;
+ * a nine-point polygon cannot do that.
  */
-export async function arrowPng(
-  kind: ArrowKind,
-  distance?: string,
-): Promise<Uint8Array> {
+export async function arrowPng(kind: ArrowKind): Promise<Uint8Array> {
   const canvas = document.createElement("canvas");
   canvas.width = ARROW_W;
   canvas.height = ARROW_H;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2d canvas context unavailable");
 
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, ARROW_W, ARROW_H);
-  ctx.strokeStyle = "#ffffff";
-  ctx.fillStyle = "#ffffff";
-  ctx.lineWidth = 14;
-  ctx.lineCap = "butt";
-  ctx.lineJoin = "miter";
+  const W = ARROW_W;
+  const H = ARROW_H;
+  const cx = W / 2;
+  const w = W * 0.115; // shaft width, constant (the standard's form)
+  const hh = w * 1.35; // half the head width
+  const hl = hh * 1.3; // head length
+  const bot = H * 0.94;
 
-  // Arrow on the LEFT, distance to its right — the layout both shipping plugins
-  // use. Reads in the same order as the sentence below it.
-  const cx = ARROW_COL / 2;
-  const head = (x: number, y: number, dir: ArrowKind) => {
-    const s = 34;
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#ffffff";
+
+  const poly = (pts: Array<[number, number]>) => {
     ctx.beginPath();
-    if (dir === "left") {
-      ctx.moveTo(x - s, y);
-      ctx.lineTo(x + s * 0.2, y - s * 0.8);
-      ctx.lineTo(x + s * 0.2, y + s * 0.8);
-    } else if (dir === "right") {
-      ctx.moveTo(x + s, y);
-      ctx.lineTo(x - s * 0.2, y - s * 0.8);
-      ctx.lineTo(x - s * 0.2, y + s * 0.8);
-    } else {
-      ctx.moveTo(x, y - s);
-      ctx.lineTo(x - s * 0.8, y + s * 0.2);
-      ctx.lineTo(x + s * 0.8, y + s * 0.2);
-    }
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
     ctx.fill();
   };
 
   switch (kind) {
     case "straight": {
-      ctx.beginPath();
-      ctx.moveTo(cx, ARROW_H - 12);
-      ctx.lineTo(cx, 44);
-      ctx.stroke();
-      head(cx, 34, "straight");
+      const tipY = H * 0.06;
+      const base = tipY + hl;
+      poly([
+        [cx - w / 2, bot],
+        [cx - w / 2, base],
+        [cx - hh, base],
+        [cx, tipY],
+        [cx + hh, base],
+        [cx + w / 2, base],
+        [cx + w / 2, bot],
+      ]);
       break;
     }
     case "left":
     case "right": {
-      // An L, not a diagonal: the stem shows you are travelling forward and the
-      // bend shows where the turn happens, which reads faster than a slash.
-      const bendY = 44;
-      const tipX = kind === "left" ? 30 : ARROW_W - 30;
-      ctx.beginPath();
-      ctx.moveTo(cx, ARROW_H - 12);
-      ctx.lineTo(cx, bendY);
-      ctx.lineTo(tipX, bendY);
-      ctx.stroke();
-      head(tipX, bendY, kind);
+      const s = kind === "left" ? -1 : 1;
+      const by = H * 0.4; // bend height, shaft centre
+      const tipX = cx + s * (W * 0.44);
+      const hbx = tipX - s * hl; // head base
+      poly([
+        [cx - (s * w) / 2, bot],
+        [cx - (s * w) / 2, by - w / 2],
+        [hbx, by - w / 2],
+        [hbx, by - hh],
+        [tipX, by],
+        [hbx, by + hh],
+        [hbx, by + w / 2],
+        [cx + (s * w) / 2, by + w / 2],
+        [cx + (s * w) / 2, bot],
+      ]);
       break;
     }
     case "uturn": {
-      ctx.beginPath();
-      ctx.moveTo(cx + 34, ARROW_H - 12);
-      ctx.lineTo(cx + 34, 60);
-      ctx.arc(cx, 60, 34, 0, Math.PI, true);
-      ctx.lineTo(cx - 34, ARROW_H - 46);
-      ctx.stroke();
-      // Head points DOWN — you come back toward yourself. Drawn directly
-      // rather than drawn-then-erased: clearRect punches transparency, not
-      // black, and the SDK's greyscale conversion has no defined behaviour for
-      // an alpha hole.
-      ctx.beginPath();
-      ctx.moveTo(cx - 34, ARROW_H - 8);
-      ctx.lineTo(cx - 34 - 27, ARROW_H - 46);
-      ctx.lineTo(cx - 34 + 27, ARROW_H - 46);
-      ctx.closePath();
-      ctx.fill();
+      // Outer and inner arcs walked in opposite directions close into one ring;
+      // the head hangs off the left leg pointing DOWN, because a u-turn brings
+      // you back toward yourself.
+      const r = W * 0.2;
+      const top = H * 0.3;
+      const rx = cx + r;
+      const lx = cx - r;
+      const headBase = H * 0.7;
+      const pts: Array<[number, number]> = [
+        [rx + w / 2, bot],
+        [rx + w / 2, top],
+      ];
+      for (let a = 0; a <= 180; a += 3) {
+        const t = (a * Math.PI) / 180;
+        pts.push([
+          cx + Math.cos(t) * (r + w / 2),
+          top - Math.sin(t) * (r + w / 2),
+        ]);
+      }
+      pts.push(
+        [lx - w / 2, top],
+        [lx - w / 2, headBase],
+        [lx - hh, headBase],
+        [lx, H * 0.94],
+        [lx + hh, headBase],
+        [lx + w / 2, headBase],
+        [lx + w / 2, top],
+      );
+      for (let a = 180; a >= 0; a -= 3) {
+        const t = (a * Math.PI) / 180;
+        pts.push([
+          cx + Math.cos(t) * (r - w / 2),
+          top - Math.sin(t) * (r - w / 2),
+        ]);
+      }
+      pts.push([rx - w / 2, top], [rx - w / 2, bot]);
+      poly(pts);
       break;
     }
     case "goal": {
-      // A filled ring reads as "here" without implying a direction.
+      // A ring reads as "here" without implying a direction. Stroke matched to
+      // the shaft width so it carries the same weight as the arrows.
+      const o = W * 0.3;
+      ctx.lineWidth = w;
       ctx.beginPath();
-      ctx.arc(cx, ARROW_H / 2, 40, 0, Math.PI * 2);
-      ctx.lineWidth = 18;
+      ctx.arc(cx, H / 2, o, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(cx, ARROW_H / 2, 12, 0, Math.PI * 2);
+      ctx.arc(cx, H / 2, o * 0.34, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
-  }
-
-  const d = (distance ?? "").trim();
-  if (d) {
-    // Sized to fill the remaining width; shrink only when it would overflow, so
-    // "80m" is as large as the box allows and "1.5km" still fits.
-    const boxW = ARROW_W - ARROW_COL - 8;
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    let size = 76;
-    do {
-      ctx.font = `bold ${size}px sans-serif`;
-      if (ctx.measureText(d).width <= boxW) break;
-      size -= 4;
-    } while (size > 28);
-    ctx.fillText(d, ARROW_COL + 4, ARROW_H / 2);
   }
 
   const blob: Blob = await new Promise((resolve, reject) => {
@@ -267,4 +281,48 @@ export function arrowText(kind: ArrowKind): string {
     case "goal":
       return "[O]";
   }
+}
+
+/** DIST_W/H — the distance bitmap, right of the arrow. */
+export const DIST_W = 280;
+export const DIST_H = 140;
+
+/**
+ * distancePng draws the remaining distance as large as the box allows.
+ *
+ * A bitmap because TextContainerProperty has no font-size field: on this panel
+ * every text container renders at one size, so the number that the wearer
+ * actually acts on could never be made to dominate. Both shipping G2 navigation
+ * plugins make it the largest element, and this is the only way to match that.
+ *
+ * The size is searched rather than fixed so "80m" fills the box and "1.2km"
+ * still fits without wrapping.
+ */
+export async function distancePng(text: string): Promise<Uint8Array> {
+  const canvas = document.createElement("canvas");
+  canvas.width = DIST_W;
+  canvas.height = DIST_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2d canvas context unavailable");
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, DIST_W, DIST_H);
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+
+  let size = DIST_H;
+  for (; size > 24; size -= 2) {
+    ctx.font = `bold ${size}px sans-serif`;
+    if (ctx.measureText(text).width <= DIST_W - 8) break;
+  }
+  ctx.font = `bold ${size}px sans-serif`;
+  ctx.fillText(text, 4, DIST_H / 2);
+
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      "image/png",
+    );
+  });
+  return new Uint8Array(await blob.arrayBuffer());
 }

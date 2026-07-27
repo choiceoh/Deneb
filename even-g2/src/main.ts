@@ -71,6 +71,7 @@ import {
   SPEED_H,
   SPEED_W,
   arrowPng,
+  distancePng,
   kmhFromMs,
   arrowText,
   maneuverArrow,
@@ -235,9 +236,9 @@ const mainText = new TextContainerProperty({
 // invisible until navigation pushes a frame.
 const navText = new TextContainerProperty({
   xPosition: 0,
-  yPosition: ARROW_H + 10,
+  yPosition: 160,
   width: 576,
-  height: 288 - ARROW_H - 10,
+  height: 288 - 160,
   borderWidth: 0,
   borderColor: 0,
   paddingLength: 4,
@@ -247,20 +248,46 @@ const navText = new TextContainerProperty({
   isEventCapture: 0,
 });
 
+/**
+ * Arrow left, distance right — the layout both shipping G2 navigation plugins
+ * use, and the one the operator picked from the mock. The arrow box is bigger
+ * than the drawn glyph (168 vs 120) because the SDK scales into the container,
+ * and a maneuver arrow is the thing a wearer must read without looking twice.
+ */
 const arrowImage = new ImageContainerProperty({
-  xPosition: 8,
+  xPosition: 10,
   yPosition: 8,
-  width: ARROW_W,
-  height: ARROW_H,
+  // 140, not 168: the SDK caps image containers at 144 tall and the structural
+  // guard caught the overflow before it shipped. Two pixels short of the cap on
+  // purpose — a boundary the host may treat as exclusive is not worth the risk.
+  width: 140,
+  height: 140,
   containerID: 3,
   containerName: "arrow",
 });
 
+/**
+ * The distance, as a BITMAP.
+ *
+ * Text containers have no font-size field — the panel draws text at one size —
+ * so the only way the distance can dominate the panel the way it does on
+ * Navigaze and G2 Maps is to draw it. It updates on its own container so a
+ * counting-down number never forces the arrow to be re-sent.
+ */
+const distImage = new ImageContainerProperty({
+  xPosition: 168,
+  yPosition: 12,
+  width: 280,
+  height: 140,
+  containerID: 4,
+  containerName: "dist",
+});
+
 const started = await bridge.createStartUpPageContainer(
   new CreateStartUpPageContainer({
-    containerTotalNum: 3,
+    containerTotalNum: 4,
     textObject: [mainText, navText],
-    imageObject: [arrowImage],
+    imageObject: [arrowImage, distImage],
   }),
 );
 if (started !== 0) {
@@ -1189,6 +1216,7 @@ function clockLabel(): string {
 }
 
 const NAV_ARROW_ID = 3;
+const NAV_DIST_ID = 4;
 const NAV_SPEED_ID = 4;
 
 /**
@@ -1319,6 +1347,7 @@ async function leaveNavPage(): Promise<void> {
  * every maneuver change.
  */
 let shownArrow = "";
+let shownDist = "";
 /** Set once an image push fails, so the text carries the direction instead. */
 let imageBroken = false;
 async function pushArrow(instruction: string, distance: string): Promise<void> {
@@ -1467,16 +1496,11 @@ async function renderNav(): Promise<void> {
   // both shipping plugins make it). The text container carries the words.
   const lines = navTextLines(navRoute, navState);
   const kind = step ? maneuverArrow(step.short) : null;
-  // Always, not only when the bitmap fails.
-  //
-  // g2-drive-nav — a working open-source G2 navigation plugin — renders its
-  // maneuver in a TEXT container 576×148 and uses images only for a small map
-  // inset. On this display the maneuver being text is the normal design, not a
-  // consolation prize, and it is the one thing that has actually reached the
-  // wearer's eye across six attempts at the bitmap.
-  if (kind) {
-    lines.unshift(`${arrowText(kind)}  ${formatMetres(left)}`, "");
-  }
+  void pushDistance(formatMetres(left));
+  // The ASCII direction (`<<<`) is gone: the bitmap carries the arrow and the
+  // distance now, and printing the same fact twice competes for the one glance
+  // the wearer can spare. It stays in arrow.ts as arrowText for any surface
+  // that cannot draw.
   await showNavText(lines.join("\n"));
   if (step) await pushArrow(step.short, formatMetres(left));
 }
@@ -1506,6 +1530,27 @@ async function pushSpeed(kmh: number | null): Promise<void> {
     } catch (err) {
       console.error("speed render failed", err);
       shownSpeed = "";
+    }
+  });
+  await bleChain;
+}
+
+/**
+ * pushDistance redraws the big number only when the rendered text changes.
+ *
+ * Separate container from the arrow so a counting-down distance never forces
+ * the arrow to be re-sent — image transfers are the scarce resource on this
+ * link, and the arrow changes once a maneuver while this changes constantly.
+ */
+async function pushDistance(text: string): Promise<void> {
+  if (!text || text === shownDist) return;
+  shownDist = text;
+  bleChain = bleChain.then(async () => {
+    try {
+      const res = await sendImage("dist", NAV_DIST_ID, await distancePng(text));
+      if (res !== "success") shownDist = "";
+    } catch {
+      shownDist = "";
     }
   });
   await bleChain;
