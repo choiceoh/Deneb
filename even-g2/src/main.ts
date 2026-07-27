@@ -43,6 +43,7 @@ import {
   RECALL_BYTES,
   RECALL_MS,
   postAudio,
+  postTextAsk,
   subtitleLines,
 } from "./interpret";
 import {
@@ -113,7 +114,8 @@ type Screen =
   | "notice"
   | "interpret"
   | "nav"
-  | "recall";
+  | "recall"
+  | "interpretSave";
 
 const PAGE_ORDER = ["home", "alerts", "cal", "todo"] as const;
 const LIST_PAGE_IDS = new Set(["home", "alerts"]);
@@ -162,6 +164,12 @@ let interpreting = false;
 let interpretLang = "ko";
 const pcm = new PcmBuffer();
 let subtitles: string[] = [];
+/**
+ * Whole-session transcript, kept separately from the 3-line subtitle tail so
+ * ending a session can offer "위키에 기록할까요" over everything that was said —
+ * the subtitles the wearer read and forgot are exactly what is worth keeping.
+ */
+let sessionLines: string[] = [];
 let sending = false;
 /** Non-empty while a labelled IMU window is being recorded. */
 let imuLabel = "";
@@ -313,7 +321,9 @@ bridge.onEvenHubEvent((event) => {
       // Contextual on purpose. There is no fifth gesture, and a detail is the
       // only place where "I am done with this" has a second meaning. Everywhere
       // else — list, pages, status, setup — a double-tap still exits.
-      if (screen === "recall") {
+      if (screen === "interpretSave") {
+        void discardInterpretSession();
+      } else if (screen === "recall") {
         // Listening holds the mic open; a double-tap here means "stop
         // listening", not "quit the app" — quitting with the mic still open is
         // the one outcome nobody wants.
@@ -546,6 +556,10 @@ function setupCopy(): string {
 }
 
 async function onTap(): Promise<void> {
+  if (screen === "interpretSave") {
+    await saveInterpretSession();
+    return;
+  }
   if (screen === "recall") {
     await recallNow();
     return;
@@ -1571,7 +1585,17 @@ async function recallNow(): Promise<void> {
     return;
   }
   recallBusy = true;
-  await showText("● 청취 중\n\n방금 대화를 넘기는 중…");
+  // Elapsed counter, the OcuClaw pattern: a chat turn runs ten-plus seconds and
+  // a frozen screen reads as a dead app. Text-only, so it costs one small BLE
+  // update every two seconds.
+  const startedAt = Date.now();
+  await showText("● 청취 중\n\n생각 중…\n\n(방금 대화를 데네브가 읽는 중)");
+  const ticker = setInterval(() => {
+    const secs = Math.round((Date.now() - startedAt) / 1000);
+    void showText(
+      `● 청취 중\n\n생각 중 · ${secs}초\n\n(방금 대화를 데네브가 읽는 중)`,
+    );
+  }, 2000);
   try {
     const res = await postAudio(settings, window, {
       ask: "방금 들은 대화를 한국어로 짧게 정리해 주세요. 업무 관련 내용이면 위키에 기록하고, 무엇을 기록했는지 한 줄로 알려주세요.",
@@ -1580,6 +1604,7 @@ async function recallNow(): Promise<void> {
       res.reply || res.askError || res.text || "정리하지 못했습니다.";
     await showText(`● 청취 중\n\n${body}\n\n탭=다시 / 더블탭=종료`);
   } catch (err) {
+    clearInterval(ticker);
     const msg = err instanceof Error ? err.message : String(err);
     await showText(`● 청취 중\n\n실패: ${msg}\n\n탭=다시`);
   } finally {
@@ -1599,6 +1624,7 @@ async function startInterpreting(lang: string): Promise<void> {
   interpretLang = lang || "ko";
   interpreting = true;
   subtitles = [];
+  sessionLines = [];
   pauseLoop();
   screen = "interpret";
   await showText(`통역 중 (${interpretLang})\n\n듣는 중…\n\n탭=중지`);
@@ -1618,6 +1644,49 @@ async function stopInterpreting(): Promise<void> {
   interpreting = false;
   await bridge.audioControl(false);
   pcm.take();
+  // Offer to keep the session. Only when something was actually said — an
+  // empty prompt after a mis-tap is noise.
+  if (sessionLines.length > 0) {
+    screen = "interpretSave";
+    await showText(
+      [
+        "통역 종료",
+        "",
+        `${sessionLines.length}문장 들었습니다.`,
+        "위키에 기록할까요?",
+        "",
+        "탭=기록 / 더블탭=버리기",
+      ].join("\n"),
+    );
+    return;
+  }
+  screen = "page";
+  await resumeLoop();
+}
+
+/** saveInterpretSession hands the transcript to a chat turn for the wiki. */
+async function saveInterpretSession(): Promise<void> {
+  const text = sessionLines.join("\n");
+  sessionLines = [];
+  screen = "page";
+  await showText("통역 기록\n\n정리해서 기록하는 중…");
+  try {
+    const res = await postTextAsk(
+      settings,
+      text,
+      "아래는 방금 끝난 통역 세션의 자막 전체입니다. 핵심을 정리해 위키에 기록하고, 무엇을 기록했는지 한 줄로 알려주세요.",
+    );
+    const body = res.reply || res.askError || "기록하지 못했습니다.";
+    await showText(`통역 기록\n\n${body}\n\n탭=목록`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await showText(`통역 기록\n\n실패: ${msg}\n\n탭=목록`);
+  }
+}
+
+/** discardInterpretSession drops the transcript and returns to the glance. */
+async function discardInterpretSession(): Promise<void> {
+  sessionLines = [];
   screen = "page";
   await resumeLoop();
 }
@@ -1647,6 +1716,7 @@ async function flushAudio(): Promise<void> {
     const line = res.translation || res.text;
     if (line && interpreting) {
       subtitles = subtitleLines(subtitles, line);
+      if (line.trim()) sessionLines.push(line.trim());
       await renderSubtitles();
     }
   } catch {

@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/evenapi"
+
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/provider"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
@@ -130,6 +132,12 @@ type Server struct {
 	// Decomposed from ServerIntegrations — each independently constructable/testable.
 	*WorkflowSubsystem
 	*MemorySubsystem
+
+	// evenG2 is the G2 bridge handler, set by buildMux. A plain value field on
+	// Server (NOT inside *MemorySubsystem): that embed is a nil pointer on the
+	// zero Server that route-wiring tests construct, and writing through it
+	// segfaults buildMux — measured, not hypothetical.
+	evenG2 atomic.Pointer[evenapi.Handler]
 	*AutonomousSubsystem
 	*InfraSubsystem
 	*GenesisSubsystem

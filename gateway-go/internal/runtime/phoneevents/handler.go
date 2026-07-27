@@ -57,8 +57,13 @@ type Config struct {
 	// JudgmentModel is the model role (e.g. "submain") the phone-event judgment
 	// turn runs on. Empty → the turn resolves to the main role as before; setting
 	// it moves this high-volume lane off the interactive main subscription.
-	JudgmentModel      string
-	Relay              *proactive.Relay
+	JudgmentModel string
+	Relay         *proactive.Relay
+	// GlassNotice, if set, receives each judgment the relay actually delivered.
+	// The judgment turn already consulted the wiki and decided the event was
+	// worth the operator's attention; the glasses are one more surface for that
+	// same line, not a second judgment.
+	GlassNotice        func(text string)
 	ResolvePhoneAction func(ActionResult) bool
 	ShutdownContext    context.Context
 	Logger             *slog.Logger
@@ -89,6 +94,7 @@ type Config struct {
 // Handler accepts phone telemetry and runs proactive judgment turns.
 type Handler struct {
 	chatHandler         chatport.SyncRunner
+	glassNotice         func(text string)
 	judgmentModel       string
 	relay               *proactive.Relay
 	resolvePhoneAction  func(ActionResult) bool
@@ -108,6 +114,7 @@ func New(cfg Config) *Handler {
 	}
 	return &Handler{
 		chatHandler:         cfg.ChatHandler,
+		glassNotice:         cfg.GlassNotice,
 		judgmentModel:       cfg.JudgmentModel,
 		relay:               cfg.Relay,
 		resolvePhoneAction:  cfg.ResolvePhoneAction,
@@ -587,6 +594,9 @@ func (s *Handler) processJudgment(ctx context.Context, eventType, source, text s
 		s.logger.Error("phone-event relay failed",
 			"source", source, "type", eventType, "error", relayErr)
 		return false, relayErr
+	}
+	if delivered && s.glassNotice != nil {
+		s.glassNotice(output)
 	}
 	s.logger.Info("phone-event processed",
 		"source", source, "type", eventType,

@@ -33,9 +33,14 @@ const (
 	// DedupeWindow collapses Even's identical POST retries.
 	DedupeWindow = 5 * time.Second
 
+	// Answer-first is the Aside pattern (Even Hub AI #4): on a 10-line HUD the
+	// wearer reads the top line and often nothing else, so the conclusion has to
+	// be there — details underneath for the second glance, if any.
 	glassesSystemHint = "You are answering via Even Realities G2 smart glasses. " +
 		"Reply in short Korean plain text only. No markdown, code fences, URLs, or emoji. " +
-		"Keep under 400 characters. If the task needs longer work, say one short status line " +
+		"FIRST LINE: the core answer alone, under 30 characters. " +
+		"Then a blank line, then at most 3 short detail lines. " +
+		"Keep under 400 characters total. If the task needs longer work, say one short status line " +
 		"and continue the full result in the phone Deneb session."
 
 	ackLongRunning = "확인. 처리 중 — 결과는 폰 데네브에서 이어서 볼게요."
@@ -425,6 +430,28 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 // It is idempotent instead: the plugin remembers the last id it showed, and the
 // gateway simply stops offering this one after a while.
 const NoticeTTL = 10 * time.Minute
+
+// Notify puts one short line on the glasses without being asked — the same
+// channel late chat answers use. Callers hand it whatever they surfaced
+// elsewhere; only the first line rides along, because the glance overlay is one
+// line and the full report already landed in the native feed.
+func (h *Handler) Notify(text string) {
+	if h == nil {
+		return
+	}
+	line := strings.TrimSpace(text)
+	if i := strings.IndexByte(line, '\n'); i > 0 {
+		line = strings.TrimSpace(line[:i])
+	}
+	const maxRunes = 90
+	if r := []rune(line); len(r) > maxRunes {
+		line = string(r[:maxRunes-1]) + "…"
+	}
+	if line == "" {
+		return
+	}
+	h.setNotice(line)
+}
 
 func (h *Handler) setNotice(text string) {
 	if h == nil || strings.TrimSpace(text) == "" {
