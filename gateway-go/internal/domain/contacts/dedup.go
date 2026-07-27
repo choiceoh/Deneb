@@ -232,6 +232,41 @@ func (u *unionFind) find(x int) int { // iterative (path-halving), not recursive
 
 func (u *unionFind) union(a, b int) { u.parent[u.find(a)] = u.find(b) }
 
+// MergeJoinKeys returns phones and emails carried by at least two members of
+// members — the identifiers that actually justify linking this group on device.
+// Callers must not pass the union of every member's identifiers: a phone held by
+// only one member can still belong to a third party the dedup pass kept ambiguous,
+// and OR-matching on it would false-merge them.
+func MergeJoinKeys(contacts []Contact, members []int) (phones, emails []string) {
+	phoneCount := map[string]int{}
+	emailCount := map[string]int{}
+	for _, i := range members {
+		for _, p := range contacts[i].Phones {
+			if np := normalizePhone(p); len(np) >= 9 {
+				phoneCount[np]++
+			}
+		}
+		for _, e := range contacts[i].Emails {
+			if ne := normalizeEmail(e); ne != "" {
+				emailCount[ne]++
+			}
+		}
+	}
+	for p, c := range phoneCount {
+		if c >= 2 {
+			phones = append(phones, p)
+		}
+	}
+	for e, c := range emailCount {
+		if c >= 2 {
+			emails = append(emails, e)
+		}
+	}
+	sort.Strings(phones)
+	sort.Strings(emails)
+	return phones, emails
+}
+
 // mergeGroupsFromClusters turns the current union-find state into sorted
 // MergeGroups (only clusters of ≥2) plus the distinct-person count over all n.
 func mergeGroupsFromClusters(contacts []Contact, uf *unionFind) ([]MergeGroup, int) {

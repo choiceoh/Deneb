@@ -94,6 +94,35 @@ func TestContactsDedupReturnsSafeMergesAndCounts(t *testing.T) {
 	}
 }
 
+func TestContactsDedupMergePayloadUsesJoinKeysOnly(t *testing.T) {
+	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReplaceAll([]contacts.Contact{
+		{Name: "김철수", Phones: []string{"010-1111-2222", "010-3333-4444"}},
+		{Name: "김철수", Phones: []string{"010-1111-2222"}},
+		{Name: "이영희", Phones: []string{"010-3333-4444"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := ContactsMethods(ContactsDeps{Store: func() (*contacts.Store, error) { return store, nil }})["miniapp.contacts.dedup"]
+	resp := h(authenticatedContext(), request(t, "miniapp.contacts.dedup", nil))
+	var got struct {
+		Ambiguous int `json:"ambiguous"`
+		Merges    []struct {
+			Phones []string `json:"phones"`
+		} `json:"merges"`
+	}
+	decodeResponse(t, resp, &got)
+	if got.Ambiguous != 1 || len(got.Merges) != 1 {
+		t.Fatalf("ambiguous=%d merges=%d, want 1/1", got.Ambiguous, len(got.Merges))
+	}
+	if len(got.Merges[0].Phones) != 1 || got.Merges[0].Phones[0] != "01011112222" {
+		t.Fatalf("merge phones = %v, want only shared join key 01011112222", got.Merges[0].Phones)
+	}
+}
+
 func TestContactsDedupReturnsAmbiguousPairsForAdjudication(t *testing.T) {
 	store, err := contacts.NewStore(filepath.Join(t.TempDir(), "contacts.json"))
 	if err != nil {

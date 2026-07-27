@@ -110,23 +110,13 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 		merges := make([]mergeOut, 0, len(res.Merges))
 		for _, g := range res.Merges {
 			m := mergeOut{Canonical: g.Canonical}
-			seenP := map[string]bool{}
-			seenE := map[string]bool{}
 			for _, idx := range g.Members {
 				m.Names = append(m.Names, all[idx].Name)
-				for _, p := range all[idx].Phones {
-					if !seenP[p] {
-						seenP[p] = true
-						m.Phones = append(m.Phones, p)
-					}
-				}
-				for _, e := range all[idx].Emails {
-					if !seenE[e] {
-						seenE[e] = true
-						m.Emails = append(m.Emails, e)
-					}
-				}
 			}
+			// Device apply OR-matches on these lists — only identifiers shared by
+			// ≥2 members in the group. A member-only phone can belong to someone
+			// the dedup pass kept ambiguous and must not pull them in.
+			m.Phones, m.Emails = contacts.MergeJoinKeys(all, g.Members)
 			merges = append(merges, m)
 		}
 		party := func(i int) partyOut {
