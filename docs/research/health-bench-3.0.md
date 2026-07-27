@@ -157,7 +157,7 @@ primary screws; stability stays near-ceiling only with zero crashes.
 
 | Profile | Source |
 |---|---|
-| `fast` (CI) | Checked-in `scripts/audit/health-v3-runtime-cache.json` written by an external job on the gateway host. Stale TTL / missing cache → domain measurement failure |
+| `fast` (CI) | `~/.deneb/data/health-v3-runtime-cache.json` (live cache, written by deep/`--refresh-runtime-cache` on the gateway host; checked-in `scripts/audit/health-v3-runtime-cache.json` is a seed fallback only — 2026-07-27 fix: writing the tracked copy got reverted for auto-deploy cleanliness, so it was permanently stale). Stale TTL / missing cache → domain measurement failure |
 | `deep` / live | journald via existing collector |
 
 ---
@@ -264,7 +264,7 @@ overall   = exp(0.55*ln(50.4) + 0.25*ln(58.5) + 0.20*ln(43.0)) ≈ 50.7
 | Package | `scripts/audit/health_v3/` — `structure/` (port+harden v2), `runtime/` (wrap `runtime_health`), `fitness/` (new) |
 | Schema | `SCHEMA_VERSION = 3`, `RUBRIC_VERSION = "3.0.0"` |
 | Baseline | `scripts/audit/health-v3-baseline.json` |
-| Runtime cache | `scripts/audit/health-v3-runtime-cache.json` (CI fast) |
+| Runtime cache | `~/.deneb/data/health-v3-runtime-cache.json` (live); `scripts/audit/health-v3-runtime-cache.json` (checked-in seed fallback) |
 | Live snapshot | `scripts/audit/health-v3-snapshot.json` (external writer; meta + Fitness read) |
 | Make | `health-v3`, `health-v3-check`, `health-v3-deep`, `health-v3-test`, `health-v3-baseline` |
 | Coexistence | v1 `codebase-health.py`, v2, and standalone `runtime-health.py` stay until CI switches |

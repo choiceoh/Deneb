@@ -42,7 +42,12 @@ python3 scripts/audit/health-bench-v3.py --refresh-runtime-cache --write-snapsho
 ```
 
 - `scripts/audit/health-v3-baseline.json` — 일방향 래칫
-- `scripts/audit/health-v3-runtime-cache.json` — fast 프로필 Runtime 입력 (TTL)
+- `~/.deneb/data/health-v3-runtime-cache.json` — fast 프로필 Runtime 입력 (TTL 72h,
+  라이브 정본 — deep/`--refresh-runtime-cache` 가 여기 쓴다).
+  `scripts/audit/health-v3-runtime-cache.json` 은 리프레시를 한 번도 안 돌린 호스트용
+  체크인 seed 폴백일 뿐이다 — 체크인 캐시를 라이브로 쓰면 auto-deploy 트리 청결 때문에
+  갱신을 되돌리게 되고, TTL 이 지나면 fast 소비자 전체가 조용히 죽는다 (2026-07-18~27
+  실사고: health-finding miner 가 9일간 v2 폴백)
 - Baseline 손편집으로 check를 통과시키지 않는다. 운영자 승인 후에만
   `--update-baseline` / `--write-baseline`을 사용한다.
 

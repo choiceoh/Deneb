@@ -71,7 +71,8 @@ def collect_report(
         raise HealthToolError(
             f"required runtime evidence unavailable: {names}. "
             "Refresh with --refresh-runtime-cache on the gateway host "
-            "or restore scripts/audit/health-v3-runtime-cache.json"
+            "(writes ~/.deneb/data/health-v3-runtime-cache.json) or restore "
+            "the checked-in seed scripts/audit/health-v3-runtime-cache.json"
         )
     return Report(
         profile=profile,

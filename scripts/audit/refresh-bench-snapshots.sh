@@ -19,13 +19,15 @@ if [[ ! -f scripts/audit/health-bench-v3.py || ! -f scripts/audit/rsi-bench.py ]
 fi
 
 # 1) Force-overwrite health-v3 snapshot (meta QualityBench + RSI codebase-delta).
+# The runtime cache now lands in ~/.deneb/data (health_v3/runtime.py
+# state_cache_path) — the tracked seed under scripts/audit/ is never written,
+# so the production tree stays clean by construction. The old revert here
+# (git checkout -- the tracked cache) is exactly what kept the on-disk cache
+# permanently stale: every fast consumer read the last COMMITTED copy, blew the
+# 72h TTL, and the health-finding miner fell back to the v2 bench for nine days
+# (2026-07-18 → 07-27) without anyone noticing.
 python3 scripts/audit/health-bench-v3.py --deep --refresh-runtime-cache \
   --write-snapshot --append-history
-
-# Keep production tree clean for auto-deploy (runtime-cache is checked in).
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git checkout -- scripts/audit/health-v3-runtime-cache.json 2>/dev/null || true
-fi
 
 # 2) RSI deep refresh embeds the fresh health snapshot into the state-dir cache (~/.deneb/data/rsi-bench-cache.json)
 #    and writes rsi-bench-snapshot.json for meta RSI evidence.
