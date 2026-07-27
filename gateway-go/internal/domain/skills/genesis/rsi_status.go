@@ -347,7 +347,8 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 	tally := t.tallyL4Candidates(cands)
 	_, dispatchedToday := t.codingDispatchCounts()
 	runtime := t.codingDispatchRuntimeStatus()
-	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime))
+	miner := t.healthMinerRuntimeStatus()
+	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime, miner))
 	base.State, base.Diagnosis = rsiL4Verdict(tally, len(cands), runtime)
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
@@ -468,7 +469,7 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 	return tally
 }
 
-func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime) []rsiMetric {
+func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime, miner healthMinerRuntime) []rsiMetric {
 	return []rsiMetric{
 		{Label: "후보", Value: strconv.Itoa(total)},
 		{Label: "코드 후보", Value: strconv.Itoa(tally.byScope["code"])},
@@ -486,6 +487,7 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "연속 배차 실패", Value: strconv.Itoa(runtime.ConsecutiveFailures)},
 		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
 		{Label: "최장 대기", Value: rsiAgeValue(tally.oldestPendingAt)},
+		{Label: "공급 벤치", Value: rsiMinerBenchValue(miner)},
 	}
 }
 
@@ -556,6 +558,64 @@ func rsiDispatchTickValue(status codingDispatchRuntime) string {
 		return "기록 없음"
 	}
 	return status.LastResult + " · " + rsiAgeValue(status.LastTickAtMs)
+}
+
+// healthMinerRuntime mirrors scripts/audit/health_finding_miner.py's
+// write_miner_status payload — the L4 supply side of the status card.
+type healthMinerRuntime struct {
+	LastRunAtMs      int64  `json:"lastRunAtMs"`
+	StructuralSource string `json:"structuralSource"`
+	FallbackReason   string `json:"fallbackReason"`
+	Planned          int    `json:"planned"`
+	Filed            int    `json:"filed"`
+}
+
+func (t *Tracker) healthMinerRuntimeStatus() healthMinerRuntime {
+	path := filepath.Join(filepath.Dir(t.selfCorrectionPath), "health_finding_miner_status.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return healthMinerRuntime{}
+	}
+	var status healthMinerRuntime
+	if json.Unmarshal(raw, &status) != nil {
+		return healthMinerRuntime{}
+	}
+	return status
+}
+
+// rsiMinerBenchValue renders the miner's structural bench source. The point is
+// the DEGRADED case: the v3→v2 fallback ran silently for nine days (2026-07-18
+// → 07-27, stale runtime cache) because its only trace was a systemd unit's
+// stderr. A fallback or a dead miner must read as such on the card the operator
+// actually scans.
+func rsiMinerBenchValue(status healthMinerRuntime) string {
+	source := strings.TrimSpace(status.StructuralSource)
+	if source == "" {
+		return "기록 없음"
+	}
+	age := rsiAgeValue(status.LastRunAtMs)
+	switch source {
+	case "health-bench-v3":
+		return "v3 · " + age
+	case "unavailable":
+		return "⚠ 벤치 실패 · " + age + rsiMinerReasonSuffix(status.FallbackReason)
+	case "codebase-health-v2":
+		return "⚠ v2 폴백 · " + age + rsiMinerReasonSuffix(status.FallbackReason)
+	default:
+		return source + " · " + age
+	}
+}
+
+func rsiMinerReasonSuffix(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return ""
+	}
+	// Rune-aware truncation — the reason can carry Korean bench error text.
+	if runes := []rune(reason); len(runes) > 120 {
+		reason = string(runes[:120]) + "…"
+	}
+	return " — " + reason
 }
 
 func rsiAgeValue(atMs int64) string {

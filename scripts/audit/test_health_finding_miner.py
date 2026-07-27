@@ -492,3 +492,54 @@ class IncrementalContractTests(unittest.TestCase):
         self.assertEqual(len(diff), 1)
         self.assertIn("CANNOT disappear in one session", diff[0]["proposedChange"])
         self.assertNotIn("impactContract", diff[0])
+
+
+class MinerStatusTests(unittest.TestCase):
+    """The status drop is the anti-silent-degradation hook: rsi-status L4 reads
+    it, so a v3→v2 fallback (nine silent days, 2026-07-18 → 07-27) or a dead
+    bench shows on the operator card instead of only in unit stderr."""
+
+    def test_write_miner_status_roundtrip_and_atomic(self):
+        import health_finding_miner as hfm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "nested", "status.json")
+            err = io.StringIO()
+            hfm.write_miner_status(
+                {"lastRunAtMs": 1, "structuralSource": "health-bench-v3", "fallbackReason": ""},
+                err, path=path,
+            )
+            with open(path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            self.assertEqual(payload["structuralSource"], "health-bench-v3")
+            self.assertFalse(os.path.exists(path + ".tmp"))
+            self.assertEqual(err.getvalue(), "")
+
+    def test_write_miner_status_never_raises(self):
+        import health_finding_miner as hfm
+
+        err = io.StringIO()
+        # Directory path where the file should be — open() fails, but the miner run must not.
+        with tempfile.TemporaryDirectory() as tmp:
+            hfm.write_miner_status({"a": 1}, err, path=tmp)
+        self.assertIn("WARN", err.getvalue())
+
+    def test_main_records_unavailable_bench_status(self):
+        import health_finding_miner as hfm
+
+        with tempfile.TemporaryDirectory() as tmp:
+            status_path = os.path.join(tmp, "status.json")
+            original = hfm.miner_status_path
+            hfm.miner_status_path = lambda: status_path
+            try:
+                rc = main(
+                    ["--report", os.path.join(tmp, "missing.json"), "--url", "http://127.0.0.1:1"],
+                    stdout=io.StringIO(), stderr=io.StringIO(),
+                )
+            finally:
+                hfm.miner_status_path = original
+            self.assertEqual(rc, 1)
+            with open(status_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            self.assertEqual(payload["structuralSource"], "unavailable")
+            self.assertTrue(payload["fallbackReason"])
