@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -663,4 +664,55 @@ func TestDecodeChatContent(t *testing.T) {
 
 func jsonRaw(s string) json.RawMessage {
 	return json.RawMessage(s)
+}
+
+// Regression: conversations are no longer GC'd (#4353), so the scoped set grows
+// past maxSessionsLimit. A limit-only API would silently hide everything beyond
+// the cap — offset + total are what let a drawer page instead of truncating.
+func TestSessionsRecentPagesWithOffsetAndReportsTotal(t *testing.T) {
+	rows := make([]*session.Session, 0, 25)
+	for i := range 25 {
+		rows = append(rows, sample(fmt.Sprintf("client:main:c%02d", i), int64(1000-i), "client"))
+	}
+	h := sessionsRecent(SessionsDeps{Manager: &fakeSessionsLister{out: rows}})
+
+	pageKeys := func(limit, offset int) (keys []string, total int) {
+		resp := h(authedCtx(), reqWith(t, "miniapp.sessions.recent", map[string]any{
+			"limit": limit, "offset": offset, "channel": "client",
+		}))
+		var got struct {
+			Sessions []map[string]any `json:"sessions"`
+			Total    int              `json:"total"`
+			Offset   int              `json:"offset"`
+		}
+		decode(t, resp, &got)
+		if got.Offset != offset {
+			t.Errorf("offset echoed as %d, want %d", got.Offset, offset)
+		}
+		for _, s := range got.Sessions {
+			key, _ := s["key"].(string)
+			keys = append(keys, key)
+		}
+		return keys, got.Total
+	}
+
+	first, total := pageKeys(10, 0)
+	if total != 25 {
+		t.Errorf("total = %d, want 25 (whole scoped set, not the page)", total)
+	}
+	if len(first) != 10 || first[0] != "client:main:c00" {
+		t.Fatalf("first page = %v", first)
+	}
+	second, _ := pageKeys(10, 10)
+	if len(second) != 10 || second[0] != "client:main:c10" {
+		t.Fatalf("second page = %v, want it to continue where the first ended", second)
+	}
+	last, _ := pageKeys(10, 20)
+	if len(last) != 5 {
+		t.Errorf("tail page = %d rows, want the 5 that remain", len(last))
+	}
+	// Past the end is empty, not a wrapped or clamped page.
+	if beyond, _ := pageKeys(10, 25); len(beyond) != 0 {
+		t.Errorf("offset past the end returned %d rows, want 0", len(beyond))
+	}
 }

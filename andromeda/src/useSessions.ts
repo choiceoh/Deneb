@@ -14,6 +14,11 @@ import { type ChatTurn } from "@/hooks";
 import { errText } from "@/format";
 
 const MAIN_SESSION = "client:main";
+// One drawer page. SESSION_MAX_PAGE mirrors the gateway's per-response cap
+// (maxSessionsLimit in handlerminiapp/sessions), which is why a window wider
+// than one page is assembled from several offset fetches.
+const SESSION_PAGE = 20;
+const SESSION_MAX_PAGE = 100;
 
 // The AI panel's conversation-history state: the recent-sessions list, the active
 // session key, the drawer-open flag, and switching/deleting/new-chat. Pulled out of
@@ -51,15 +56,40 @@ export function useSessions(
     if (!connected) setSessions([]);
   }
 
-  // 20 rows covers a working day; 최근 대화 더 보기 raises to the server cap so
-  // older conversations stay reachable without an unbounded first fetch.
-  const [sessionsLimit, setSessionsLimit] = useState(20);
-  // A ref so the connect-time refetch backstops below always fetch at the
-  // *current* limit (20, or 100 after "더 보기") without re-running their effect.
-  const limitRef = useRef(sessionsLimit);
+  // 20 rows covers a working day; 이전 대화 더 보기 pulls the next page. Paging
+  // (not a bigger single fetch) is what keeps old conversations reachable: the
+  // gateway caps one response at 100 and conversations are no longer GC'd, so a
+  // limit-only drawer would silently stop at that cap as history accumulates.
+  const [loadedCount, setLoadedCount] = useState(SESSION_PAGE);
+  const [fetchedCount, setFetchedCount] = useState(0);
+  const [sessionTotal, setSessionTotal] = useState(0);
+  // A ref so the connect-time refetch backstops below always refresh the window
+  // the user has actually pulled in, without re-running their effect.
+  const loadedRef = useRef(loadedCount);
   useEffect(() => {
-    limitRef.current = sessionsLimit;
-  }, [sessionsLimit]);
+    loadedRef.current = loadedCount;
+  }, [loadedCount]);
+
+  // Fetch the first `count` rows as server-capped pages, so a window wider than
+  // one page still comes back whole. Returns raw rows (the namespace filter is
+  // applied by the caller) plus the size of the whole scoped set.
+  async function fetchWindow(count: number): Promise<{ rows: SessionRow[]; total: number }> {
+    const rows: SessionRow[] = [];
+    let total = 0;
+    for (let offset = 0; offset < count; offset += SESSION_MAX_PAGE) {
+      const page = await recentSessions(cfg, Math.min(SESSION_MAX_PAGE, count - offset), channel, offset);
+      total = page.total;
+      rows.push(...page.sessions);
+      if (page.sessions.length === 0 || rows.length >= total) break;
+    }
+    return { rows, total };
+  }
+
+  function applyPage(page: { rows: SessionRow[]; total: number }) {
+    setSessions(keep(page.rows));
+    setFetchedCount(page.rows.length);
+    setSessionTotal(page.total);
+  }
 
   // Load recent sessions once connected — then a couple more times on a short
   // backoff, and again whenever the window regains focus.
@@ -98,11 +128,11 @@ export function useSessions(
       retryMs = Math.min(retryMs * 2, 60000);
     }
     function load() {
-      void recentSessions(cfg, limitRef.current, channel)
-        .then((s) => {
+      void fetchWindow(loadedRef.current)
+        .then((page) => {
           if (cancelled) return;
           landed = true;
-          setSessions(keep(s));
+          applyPage(page);
           // Only clear what this loader put up — a transcript/delete error the
           // user has not seen yet must not be wiped by a background refresh.
           if (loadFailed) {
@@ -135,20 +165,23 @@ export function useSessions(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, cfg.url, cfg.token]);
 
-  async function refreshSessions(limit = sessionsLimit) {
+  async function refreshSessions(count = loadedCount) {
     try {
-      setSessions(keep(await recentSessions(cfg, limit, channel)));
+      applyPage(await fetchWindow(count));
       setSessionErr("");
     } catch (e) {
       setSessionErr(errText(e));
     }
   }
 
-  // The drawer's "이전 대화 더 보기" — one step to the gateway's cap (100).
-  const canLoadMoreSessions = sessionsLimit < 100 && sessions.length >= sessionsLimit;
+  // The drawer's "이전 대화 더 보기" — one more page. Compare against the RAW
+  // fetched count, not the filtered rows: a namespace filter that drops rows
+  // would otherwise keep offering a next page forever.
+  const canLoadMoreSessions = fetchedCount < sessionTotal;
   async function loadMoreSessions() {
-    setSessionsLimit(100);
-    await refreshSessions(100);
+    const next = loadedCount + SESSION_PAGE;
+    setLoadedCount(next);
+    await refreshSessions(next);
   }
 
   async function renameSession(key: string, label: string) {

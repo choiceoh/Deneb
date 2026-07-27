@@ -267,6 +267,7 @@ func effectiveChannel(s *session.Session) string {
 func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 	type params struct {
 		Limit   int    `json:"limit,omitempty"`
+		Offset  int    `json:"offset,omitempty"`
 		Channel string `json:"channel,omitempty"`
 	}
 	return minibind.BindOptional[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
@@ -276,6 +277,10 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		}
 		if limit > maxSessionsLimit {
 			limit = maxSessionsLimit
+		}
+		offset := p.Offset
+		if offset < 0 {
+			offset = 0
 		}
 
 		sessions := deps.Manager.List()
@@ -297,8 +302,20 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		sort.SliceStable(sessions, func(i, j int) bool {
 			return sessions[i].UpdatedAt > sessions[j].UpdatedAt
 		})
-		if len(sessions) > limit {
-			sessions = sessions[:limit]
+
+		// `total` is the size of the whole (filtered) set, before the page is
+		// cut. Without it a client cannot tell "that is all of them" from "the
+		// cap truncated you" — and since conversations are no longer GC'd (#4353)
+		// the set grows without bound, so a limit-only API silently hides every
+		// conversation past maxSessionsLimit.
+		total := len(sessions)
+		if offset >= total {
+			sessions = nil
+		} else {
+			sessions = sessions[offset:]
+			if len(sessions) > limit {
+				sessions = sessions[:limit]
+			}
 		}
 
 		out := make([]sessionRowOut, 0, len(sessions))
@@ -319,6 +336,8 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 		return rpcutil.RespondOK(req.ID, map[string]any{
 			"sessions": out,
 			"count":    len(out),
+			"offset":   offset,
+			"total":    total,
 		})
 	})
 }
