@@ -419,6 +419,19 @@ func (wd *WikiDreamer) reviseDreamRules(ctx context.Context, since []dreamCompar
 	defer cancel()
 
 	current := wd.loadWikiSynthesisRules()
+	// Utility evidence grounds the revision in consequence, not taste: the
+	// self-comparison judge grades the dreamer's own prose, while the recall
+	// ledger says which KINDS of page a real turn actually pulled in — and which
+	// questions had no page at all (dreamer_utility_evidence.go).
+	utility := wd.renderUtilityEvidence(dentime.Now())
+	utilitySection := ""
+	if utility != "" {
+		utilitySection = fmt.Sprintf(`
+## 실측 효용 (회상 원장, 최근 30일)
+%s
+이 분포는 취향이 아니라 실제 사용 기록입니다. 회상률이 낮은 종류는 덜/짧게 쓰고, 실제로 회상되는 종류와 답 못한 수요 주제 쪽으로 합성을 기울이세요.
+`, utility)
+	}
 	prompt := fmt.Sprintf(`당신은 위키 드리머의 합성 규칙 유지보수자입니다. 아래는 현재 규칙과, 사이클 간 자기비교에서 집계된 반복 약점입니다.
 
 ## 반복 약점 (카운트 높은 순 — 최우선: %s)
@@ -426,7 +439,7 @@ func (wd *WikiDreamer) reviseDreamRules(ctx context.Context, since []dreamCompar
 
 ## 최근 비교 근거
 %s
-
+%s
 ## 현재 규칙
 %s
 
@@ -434,7 +447,7 @@ func (wd *WikiDreamer) reviseDreamRules(ctx context.Context, since []dreamCompar
 반복 약점을 겨냥해 규칙을 **최소 수정**하세요 — 관련 규칙 한두 줄을 고치거나 짧은 줄 하나를 추가하는 수준. 전면 재작성 금지.
 불변식은 절대 제거/약화 금지: 6개 카테고리 체계, 프로젝트 폴더 슬롯(대표.md·로그.md 등), JSON 배열 출력 계약, 추측 금지 계열 규칙, 시스템 자동 관리 페이지 규칙.
 수정된 **전체 규칙 블록**을 '## 규칙'부터 끝까지 그대로 출력하세요. 다른 텍스트 없이.`,
-		target, renderWeaknessCounts(counts), renderRecentComparisons(since, 6), current)
+		target, renderWeaknessCounts(counts), renderRecentComparisons(since, 6), utilitySection, current)
 
 	resp, err := wd.client.Complete(ctx,
 		wd.llmRequest("You maintain a synthesis-rules document. Output only the full revised rules block.", prompt, dreamRulesReviseMaxTokens))
