@@ -280,11 +280,14 @@ func appendProcessedDiaryCapsule(capsules []processedDiaryCapsule, next processe
 }
 
 func capProcessedDiaryCapsules(capsules []processedDiaryCapsule) []processedDiaryCapsule {
-	if len(capsules) <= processedCapsuleLimit {
+	// Storage cap, NOT the prompt cap: the utility axis reads this history
+	// (bounded by utilityWindow), while the synthesis prompt slices its own
+	// last processedCapsuleLimit in formatProcessedDiaryCapsules.
+	if len(capsules) <= scoredCapsuleLimit {
 		return capsules
 	}
-	out := make([]processedDiaryCapsule, processedCapsuleLimit)
-	copy(out, capsules[len(capsules)-processedCapsuleLimit:])
+	out := make([]processedDiaryCapsule, scoredCapsuleLimit)
+	copy(out, capsules[len(capsules)-scoredCapsuleLimit:])
 	return out
 }
 

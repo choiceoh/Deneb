@@ -19,6 +19,11 @@ import (
 // recalled, so counting it as "unused" would just punish recency.
 const utilityGrace = 48 * time.Hour
 
+// utilityWindow bounds how far back the utility denominator reaches. Capsules
+// older than this judge pages against recall traffic the score-window ledger no
+// longer holds, which reads as decay that is really just ledger compaction.
+const utilityWindow = 30 * 24 * time.Hour
+
 // dreamQuality is the decomposed score. Score is 0–100; the sub-axes are 0–1.
 type dreamQuality struct {
 	Score         float64
@@ -101,6 +106,9 @@ func computeDreamQuality(in dreamQualityInputs) dreamQuality {
 		if err != nil || in.now.Sub(at) < utilityGrace {
 			continue // too fresh (or unstamped) to fairly judge
 		}
+		if in.now.Sub(at) > utilityWindow {
+			continue // older than the ledger's judgment window
+		}
 		for _, p := range cap.Paths {
 			if p == "" {
 				continue
@@ -124,7 +132,17 @@ func computeDreamQuality(in dreamQualityInputs) dreamQuality {
 	if denom > 0 {
 		u := num / float64(denom)
 		q.Utility = u
-		axes = append(axes, axis{value: u, weight: 0.4, ok: true})
+		// The utility axis only participates in the collapsed Score when this
+		// cycle actually did work. An idle cycle (nothing proposed, nothing
+		// applied) used to collapse to utility alone — and utility judges PRIOR
+		// cycles, so doing nothing reliably outscored doing something (measured
+		// 07-25~27: idle cycles logged 88/70/71 while working cycles logged
+		// 73/77). A slow-loop tuner fed that trend would learn "don't write".
+		// The utility VALUE stays reported either way — it is real signal about
+		// past pages; it just must not masquerade as this cycle's grade.
+		if in.proposed > 0 || len(in.updates) > 0 {
+			axes = append(axes, axis{value: u, weight: 0.4, ok: true})
+		}
 	}
 
 	// Weighted average over the axes that had evidence.

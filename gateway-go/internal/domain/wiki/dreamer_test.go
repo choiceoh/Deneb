@@ -91,7 +91,7 @@ func TestWikiDreamerScanDiariesReadsSameDayDespiteCutoff(t *testing.T) {
 
 func TestProcessedDiaryCapsulesAreCappedAndFormatted(t *testing.T) {
 	var capsules []processedDiaryCapsule
-	for i := 0; i < processedCapsuleLimit+3; i++ {
+	for i := 0; i < scoredCapsuleLimit+3; i++ {
 		capsules = appendProcessedDiaryCapsule(capsules, processedDiaryCapsule{
 			At:        "2026-05-05T00:00:00Z",
 			DiaryDate: "2026-05-" + twoDigit(i+1),
@@ -101,8 +101,8 @@ func TestProcessedDiaryCapsulesAreCappedAndFormatted(t *testing.T) {
 			Paths:     []string{"프로젝트/deneb.md", "프로젝트/deneb.md"},
 		})
 	}
-	if len(capsules) != processedCapsuleLimit {
-		t.Fatalf("capsule count = %d, want %d", len(capsules), processedCapsuleLimit)
+	if len(capsules) != scoredCapsuleLimit {
+		t.Fatalf("capsule count = %d, want %d (storage cap)", len(capsules), scoredCapsuleLimit)
 	}
 	formatted := formatProcessedDiaryCapsules(capsules)
 	if strings.Contains(formatted, "2026-05-01") {
