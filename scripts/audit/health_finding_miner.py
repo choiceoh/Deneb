@@ -624,9 +624,18 @@ def repo_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def run_structural_bench(root: str, stderr: TextIO) -> dict[str, Any]:
-    """Prefer Health Bench 3.0; fall back to v2 when v3 cannot run."""
+def run_structural_bench(root: str, stderr: TextIO) -> tuple[dict[str, Any], str, str]:
+    """Prefer Health Bench 3.0; fall back to v2 when v3 cannot run.
+
+    Returns (report, bench_source, fallback_reason). The source travels into the
+    miner status file (write_miner_status) because the v3→v2 fallback ran
+    SILENTLY for nine days (2026-07-18 → 07-27, stale runtime cache) — stderr
+    of a 05:20 systemd unit is where degradation notices go to die. rsi-status
+    L4 renders the source, so a fallback streak is visible on the operator's
+    standard diagnostic surface, not just in journald.
+    """
     v3 = os.path.join(root, "scripts", "audit", "health-bench-v3.py")
+    fallback_reason = ""
     if os.path.isfile(v3):
         print("running health-bench-v3 (fast profile)…", file=stderr)
         proc = subprocess.run(
@@ -634,12 +643,15 @@ def run_structural_bench(root: str, stderr: TextIO) -> dict[str, Any]:
             capture_output=True, text=True, cwd=root, check=False, timeout=900,
         )
         if proc.returncode == 0:
-            return parse_leading_json(proc.stdout)
+            return parse_leading_json(proc.stdout), "health-bench-v3", ""
+        fallback_reason = (proc.stderr[-200:] or f"rc={proc.returncode}").strip()
         print(
-            f"health-bench-v3 unavailable ({proc.stderr[-200:] or proc.returncode}); "
+            f"health-bench-v3 unavailable ({fallback_reason}); "
             "falling back to codebase-health-v2",
             file=stderr,
         )
+    else:
+        fallback_reason = "health-bench-v3.py missing"
     script = os.path.join(root, "scripts", "audit", "codebase-health-v2.py")
     print("running codebase-health-v2 (fast profile)…", file=stderr)
     proc = subprocess.run(
@@ -648,7 +660,26 @@ def run_structural_bench(root: str, stderr: TextIO) -> dict[str, Any]:
     )
     if proc.returncode != 0:
         raise GatewayError(f"codebase-health-v2 failed (rc={proc.returncode}): {proc.stderr[-400:]}")
-    return parse_leading_json(proc.stdout)
+    return parse_leading_json(proc.stdout), "codebase-health-v2", fallback_reason
+
+
+def miner_status_path() -> str:
+    """FIXED under ~/.deneb/data (graduation-state convention; DENEB_STATE_DIR
+    does not move it) so the Go rsi-status reader and this writer agree."""
+    return os.path.expanduser("~/.deneb/data/health_finding_miner_status.json")
+
+
+def write_miner_status(payload: dict[str, Any], stderr: TextIO, path: str | None = None) -> None:
+    """Best-effort status drop for rsi-status L4 — never fails the mining run."""
+    target = path or miner_status_path()
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        tmp = target + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        os.replace(tmp, target)
+    except OSError as exc:
+        print(f"WARN: could not persist miner status ({exc})", file=stderr)
 
 
 def runtime_report_from_v3(report: dict[str, Any]) -> dict[str, Any] | None:
@@ -757,10 +788,22 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
                 token = handle.read().strip()
 
     root = repo_root()
+    bench_source, fallback_reason = "pre-generated", ""
     try:
-        report = _load_json_file(args.report) if args.report else run_structural_bench(root, err)
+        if args.report:
+            report = _load_json_file(args.report)
+        else:
+            report, bench_source, fallback_reason = run_structural_bench(root, err)
     except (OSError, ValueError, GatewayError) as exc:
         print(f"structural bench unavailable: {exc}", file=err)
+        if not args.dry_run:
+            write_miner_status({
+                "lastRunAtMs": int(time.time() * 1000),
+                "structuralSource": "unavailable",
+                "fallbackReason": str(exc)[-200:],
+                "planned": 0,
+                "filed": 0,
+            }, err)
         return 1
     if args.runtime_report:
         try:
@@ -854,7 +897,17 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         "impactPending": len(impact_skipped),
         "impactRejected": len(impact_errors),
         "impacts": impact_evaluated,
+        "structuralSource": bench_source,
+        "fallbackReason": fallback_reason,
     }
+    if not args.dry_run:
+        write_miner_status({
+            "lastRunAtMs": now_ms,
+            "structuralSource": bench_source,
+            "fallbackReason": fallback_reason,
+            "planned": summary["planned"],
+            "filed": summary["filed"],
+        }, err)
     if args.json:
         print(json.dumps(summary, ensure_ascii=False), file=out)
     else:

@@ -754,3 +754,46 @@ func TestRSIConfirmRateValueCarriesItsDenominator(t *testing.T) {
 		}
 	}
 }
+
+// The miner's structural-bench source must surface on the L4 card. The v3→v2
+// fallback ran silently for nine days (2026-07-18 → 07-27) because its only
+// trace was the 05:20 unit's stderr — a degraded supply bench has to be
+// readable where the operator actually looks.
+func TestRSIStatus_L4SurfacesMinerBenchFallback(t *testing.T) {
+	tr := newTestTracker(t)
+	statusPath := filepath.Join(filepath.Dir(tr.selfCorrectionPath), "health_finding_miner_status.json")
+
+	// No status file → 기록 없음 (a miner that has never run is also visible).
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if got := rsiMetricValue(l.Metrics, "공급 벤치"); got != "기록 없음" {
+		t.Fatalf("no-status metric = %q", got)
+	}
+
+	// Healthy v3 run.
+	if err := os.WriteFile(statusPath, []byte(`{"lastRunAtMs":1,"structuralSource":"health-bench-v3","fallbackReason":"","planned":3,"filed":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l = rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if got := rsiMetricValue(l.Metrics, "공급 벤치"); !strings.HasPrefix(got, "v3 · ") {
+		t.Fatalf("v3 metric = %q", got)
+	}
+
+	// Fallback → loud, with the reason attached.
+	if err := os.WriteFile(statusPath, []byte(`{"lastRunAtMs":1,"structuralSource":"codebase-health-v2","fallbackReason":"required runtime evidence unavailable: runtime-cache"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l = rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	got := rsiMetricValue(l.Metrics, "공급 벤치")
+	if !strings.Contains(got, "v2 폴백") || !strings.Contains(got, "runtime-cache") {
+		t.Fatalf("fallback metric = %q", got)
+	}
+
+	// Bench completely down → also loud.
+	if err := os.WriteFile(statusPath, []byte(`{"lastRunAtMs":1,"structuralSource":"unavailable","fallbackReason":"rc=2"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l = rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if got := rsiMetricValue(l.Metrics, "공급 벤치"); !strings.Contains(got, "벤치 실패") {
+		t.Fatalf("unavailable metric = %q", got)
+	}
+}
