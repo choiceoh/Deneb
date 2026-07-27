@@ -43,25 +43,18 @@ export function maneuverArrow(instruction: string): ArrowKind | null {
   return null;
 }
 
-// ARROW_W/H — the image container's box. 288×144 is the SDK's maximum for an
-// image container, and the whole box is used: the arrow takes the left third and
-// the distance the rest.
+// SQUARE, and the image matches its container exactly.
 //
-// The distance lives in the BITMAP, not in a text container, because
-// TextContainerProperty has no font-size field — the panel renders text at one
-// size. Both shipping G2 navigation plugins (Navigaze #1, G2 Maps #11) make the
-// distance the largest thing on screen, which is only reachable this way. That
-// is the single biggest readability difference between their HUD and a text-only
-// one.
-// 280×140, not the documented maximum of 288×144: the spec's bounds are stated
-// as a range and an inclusive-vs-exclusive edge is exactly the kind of thing a
-// host rejects silently. Backing off two pixels costs nothing and removes the
-// question.
-export const ARROW_W = 176;
-export const ARROW_H = 96;
-
-/** Where the arrow half ends and the distance half begins. */
-const ARROW_COL = 72;
+// It was 176×96 with the arrow crammed into the left 72px — that space was for
+// the distance, which moved out to the text line and left the glyph drawn small
+// in a corner of a wide, mostly-black bitmap. A non-square container also
+// squashes a vertical arrow when the SDK resizes into it. Square container +
+// square image + proportional geometry = the shape that was drawn is the shape
+// that appears.
+//
+// 120 sits inside the SDK's 20~288 × 20~144 bounds with room to spare.
+export const ARROW_W = 120;
+export const ARROW_H = 120;
 
 /**
  * arrowPng draws one maneuver arrow and returns PNG bytes.
@@ -70,42 +63,54 @@ const ARROW_COL = 72;
  * shades and is read in sunlight at a glance, so a thin elegant arrow is a grey
  * smudge. White on black matches the panel's native rendering (green on black).
  */
-export async function arrowPng(
-  kind: ArrowKind,
-  distance?: string,
-): Promise<Uint8Array> {
+export async function arrowPng(kind: ArrowKind): Promise<Uint8Array> {
   const canvas = document.createElement("canvas");
   canvas.width = ARROW_W;
   canvas.height = ARROW_H;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2d canvas context unavailable");
 
+  // Everything below is a fraction of the canvas, so the shape survives any
+  // future resize of the box.
+  const W = ARROW_W;
+  const H = ARROW_H;
+  const cx = W / 2;
+  const stroke = Math.round(W * 0.15);
+  const headHalf = Math.round(W * 0.26); // half-width of the arrowhead base
+  const headLen = Math.round(H * 0.26); // tip to base
+  const pad = Math.round(W * 0.08);
+
   ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, ARROW_W, ARROW_H);
+  ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = "#ffffff";
   ctx.fillStyle = "#ffffff";
-  ctx.lineWidth = 14;
+  ctx.lineWidth = stroke;
   ctx.lineCap = "butt";
   ctx.lineJoin = "miter";
 
-  // Arrow on the LEFT, distance to its right — the layout both shipping plugins
-  // use. Reads in the same order as the sentence below it.
-  const cx = ARROW_COL / 2;
-  const head = (x: number, y: number, dir: ArrowKind) => {
-    const s = 34;
+  /** Filled triangle pointing `dir`, tip at (x, y). */
+  const head = (
+    x: number,
+    y: number,
+    dir: "up" | "down" | "left" | "right",
+  ) => {
     ctx.beginPath();
-    if (dir === "left") {
-      ctx.moveTo(x - s, y);
-      ctx.lineTo(x + s * 0.2, y - s * 0.8);
-      ctx.lineTo(x + s * 0.2, y + s * 0.8);
-    } else if (dir === "right") {
-      ctx.moveTo(x + s, y);
-      ctx.lineTo(x - s * 0.2, y - s * 0.8);
-      ctx.lineTo(x - s * 0.2, y + s * 0.8);
+    if (dir === "up") {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - headHalf, y + headLen);
+      ctx.lineTo(x + headHalf, y + headLen);
+    } else if (dir === "down") {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - headHalf, y - headLen);
+      ctx.lineTo(x + headHalf, y - headLen);
+    } else if (dir === "left") {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + headLen, y - headHalf);
+      ctx.lineTo(x + headLen, y + headHalf);
     } else {
-      ctx.moveTo(x, y - s);
-      ctx.lineTo(x - s * 0.8, y + s * 0.2);
-      ctx.lineTo(x + s * 0.8, y + s * 0.2);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - headLen, y - headHalf);
+      ctx.lineTo(x - headLen, y + headHalf);
     }
     ctx.closePath();
     ctx.fill();
@@ -114,73 +119,56 @@ export async function arrowPng(
   switch (kind) {
     case "straight": {
       ctx.beginPath();
-      ctx.moveTo(cx, ARROW_H - 12);
-      ctx.lineTo(cx, 44);
+      ctx.moveTo(cx, H - pad);
+      ctx.lineTo(cx, pad + headLen);
       ctx.stroke();
-      head(cx, 34, "straight");
+      head(cx, pad, "up");
       break;
     }
     case "left":
     case "right": {
-      // An L, not a diagonal: the stem shows you are travelling forward and the
-      // bend shows where the turn happens, which reads faster than a slash.
-      const bendY = 44;
-      const tipX = kind === "left" ? 30 : ARROW_W - 30;
+      // An L, not a diagonal: the stem says you are going forward and the bend
+      // says where the turn is. Reads faster than a slash at a junction.
+      const bendY = Math.round(H * 0.42);
+      const dir = kind === "left" ? "left" : "right";
+      const tipX = kind === "left" ? pad : W - pad;
+      const bendEnd = kind === "left" ? tipX + headLen : tipX - headLen;
       ctx.beginPath();
-      ctx.moveTo(cx, ARROW_H - 12);
+      ctx.moveTo(cx, H - pad);
       ctx.lineTo(cx, bendY);
-      ctx.lineTo(tipX, bendY);
+      ctx.lineTo(bendEnd, bendY);
       ctx.stroke();
-      head(tipX, bendY, kind);
+      head(tipX, bendY, dir);
       break;
     }
     case "uturn": {
+      // Up the right side, over the top, back down the left — head pointing
+      // DOWN, because a u-turn brings you back toward yourself.
+      const r = Math.round(W * 0.22);
+      const rightX = cx + r;
+      const leftX = cx - r;
+      const topY = Math.round(H * 0.3);
       ctx.beginPath();
-      ctx.moveTo(cx + 34, ARROW_H - 12);
-      ctx.lineTo(cx + 34, 60);
-      ctx.arc(cx, 60, 34, 0, Math.PI, true);
-      ctx.lineTo(cx - 34, ARROW_H - 46);
+      ctx.moveTo(rightX, H - pad);
+      ctx.lineTo(rightX, topY);
+      ctx.arc(cx, topY, r, 0, Math.PI, true);
+      ctx.lineTo(leftX, H - pad - headLen);
       ctx.stroke();
-      // Head points DOWN — you come back toward yourself. Drawn directly
-      // rather than drawn-then-erased: clearRect punches transparency, not
-      // black, and the SDK's greyscale conversion has no defined behaviour for
-      // an alpha hole.
-      ctx.beginPath();
-      ctx.moveTo(cx - 34, ARROW_H - 8);
-      ctx.lineTo(cx - 34 - 27, ARROW_H - 46);
-      ctx.lineTo(cx - 34 + 27, ARROW_H - 46);
-      ctx.closePath();
-      ctx.fill();
+      head(leftX, H - pad, "down");
       break;
     }
     case "goal": {
-      // A filled ring reads as "here" without implying a direction.
+      // A ring reads as "here" without implying a direction.
+      const outer = Math.round(W * 0.3);
       ctx.beginPath();
-      ctx.arc(cx, ARROW_H / 2, 40, 0, Math.PI * 2);
-      ctx.lineWidth = 18;
+      ctx.arc(cx, H / 2, outer, 0, Math.PI * 2);
+      ctx.lineWidth = Math.round(stroke * 0.9);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(cx, ARROW_H / 2, 12, 0, Math.PI * 2);
+      ctx.arc(cx, H / 2, Math.round(outer * 0.32), 0, Math.PI * 2);
       ctx.fill();
       break;
     }
-  }
-
-  const d = (distance ?? "").trim();
-  if (d) {
-    // Sized to fill the remaining width; shrink only when it would overflow, so
-    // "80m" is as large as the box allows and "1.5km" still fits.
-    const boxW = ARROW_W - ARROW_COL - 8;
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    let size = 76;
-    do {
-      ctx.font = `bold ${size}px sans-serif`;
-      if (ctx.measureText(d).width <= boxW) break;
-      size -= 4;
-    } while (size > 28);
-    ctx.fillText(d, ARROW_COL + 4, ARROW_H / 2);
   }
 
   const blob: Blob = await new Promise((resolve, reject) => {
