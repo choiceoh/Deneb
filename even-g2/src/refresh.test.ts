@@ -347,17 +347,21 @@ describe("mergeWearStatus", () => {
     batteryLevel: 74,
   };
 
-  it("discards an event that is only SDK defaults", () => {
-    // The reported bug: worn on the face, HUD said 벗음 / 0%. The SDK fills
-    // absent fields with false/0, so a connection-only event looks exactly like
-    // "not worn, flat".
+  it("ignores a defaulted battery but keeps the rest of the event", () => {
+    // Two guesses about this field were wrong in opposite directions: first
+    // trusting a defaulted "벗음 0%", then discarding EVERY event and reporting
+    // 착용 상태 미보고 forever. A 0 invalidates the battery only — 0% on a G2
+    // that is powered off cannot be reported — and never the wear state, which
+    // is what the polling loop actually keys on.
     const defaulted = {
       isWearing: false,
       isInCase: false,
       isCharging: false,
       batteryLevel: 0,
     };
-    expect(mergeWearStatus(worn, defaulted)).toEqual(worn);
+    const merged = mergeWearStatus(worn, defaulted);
+    expect(merged?.batteryLevel).toBe(74);
+    expect(merged?.isWearing).toBe(false);
   });
 
   it("accepts a genuine 'taken off' event that carries a real battery", () => {

@@ -197,19 +197,26 @@ export function mergeWearStatus(
   incoming: WearStatus | undefined,
 ): WearStatus | undefined {
   if (!incoming) return known;
+  // Per field, not all-or-nothing.
+  //
+  // The first cut discarded the ENTIRE payload whenever batteryLevel was 0,
+  // reasoning that a G2 at 0% is powered off and so 0 is always the SDK's
+  // default. That much is still true — but if the host never populates battery
+  // at all, every event gets thrown away and the wearer is told "착용 상태
+  // 미보고" forever. Trading a wrong reading for no reading is not a fix.
+  //
+  // So battery 0 only invalidates BATTERY. Wear and case state stand on their
+  // own; they are what the polling loop actually keys on.
   const battery = incoming.batteryLevel;
-  const looksDefaulted = battery === 0;
-  if (looksDefaulted) return known;
+  const realBattery =
+    typeof battery === "number" && Number.isFinite(battery) && battery > 0
+      ? battery
+      : undefined;
   return {
-    isWearing: incoming.isWearing,
-    isInCase: incoming.isInCase,
-    isCharging: incoming.isCharging,
-    // Keep a battery figure only when it is a real one; an absent field is
-    // "unknown", which the status screen renders differently from a number.
-    batteryLevel:
-      typeof battery === "number" && Number.isFinite(battery) && battery > 0
-        ? battery
-        : known?.batteryLevel,
+    isWearing: incoming.isWearing ?? known?.isWearing,
+    isInCase: incoming.isInCase ?? known?.isInCase,
+    isCharging: incoming.isCharging ?? known?.isCharging,
+    batteryLevel: realBattery ?? known?.batteryLevel,
   };
 }
 
