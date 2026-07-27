@@ -304,6 +304,10 @@ func (m *Manager) executeTracked(ctx context.Context, req ExecRequest, tracked *
 			m.logger.Info("exec sandbox: blocked user env var", "key", k)
 			continue
 		}
+		if isSecretEnvKey(k) {
+			m.logger.Info("exec sandbox: withheld user secret env var", "key", k)
+			continue
+		}
 		if strings.ToUpper(k) == "NODE_OPTIONS" {
 			v = sanitizeNodeOptions(v)
 			if v == "" {
