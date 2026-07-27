@@ -83,7 +83,7 @@ type toolCallPrep struct {
 
 // prepareToolCall runs the in-order pre-execution stage: start/emit hooks,
 // loop detection, the before-call veto hook, and the file-effect snapshot.
-// Both the sequential loop and executeToolsParallel call it in call order, so
+// Both the sequential loop and parallel tracked path call it in call order, so
 // loop-detection semantics (which are sequence-sensitive) never change.
 func prepareToolCall(
 	tc llm.ContentBlock,
@@ -155,7 +155,7 @@ func prepareToolCall(
 
 // runToolCore executes the tool fn under the progress heartbeat and a panic
 // recover. It is the only stage allowed to run CONCURRENTLY across a turn's
-// calls (executeToolsParallel): everything it touches is per-call or
+// calls (parallel tool segments): everything it touches is per-call or
 // mutex-guarded (the ToolRegistry wrapper's stats/cache/gate state, the
 // stream broadcaster behind OnToolProgress).
 func runToolCore(
@@ -376,24 +376,6 @@ type toolCallLifecycle struct {
 type parallelToolExecution struct {
 	results []llm.ContentBlock
 	calls   []toolCallLifecycle
-}
-
-// executeToolsParallel preserves the original result-only API for focused
-// helper tests and callers that do not need lifecycle metadata.
-func executeToolsParallel(
-	ctx context.Context,
-	calls []llm.ContentBlock,
-	tools ToolExecutor,
-	hooks StreamHooks,
-	turnReason string,
-	turn int,
-	logger *slog.Logger,
-	runLog *agentlog.RunLogger,
-	loopDetector *ToolLoopDetector,
-) []llm.ContentBlock {
-	return executeToolsParallelTracked(
-		ctx, calls, tools, hooks, turnReason, turn, logger, runLog, loopDetector,
-	).results
 }
 
 // executeToolsParallelTracked runs one segment's tool calls concurrently.
