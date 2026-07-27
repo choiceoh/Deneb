@@ -110,3 +110,55 @@ func TestComputeDreamQuality_IdleCycleReturnsZeroScore(t *testing.T) {
 		t.Errorf("idle cycle should be unscored: signals=%d score=%.2f", q.Signals, q.Score)
 	}
 }
+
+// Regression (2026-07-27, live logs): an idle cycle used to collapse to the
+// utility axis alone — and utility judges PRIOR cycles' pages, so doing nothing
+// scored 88 while working cycles scored 73. A slow-loop tuner fed that trend
+// would learn "don't write". The utility VALUE stays visible; the collapsed
+// Score does not exist for a cycle that did no work.
+func TestComputeDreamQuality_IdleCycleReportsUtilityButNoScore(t *testing.T) {
+	now := time.Now()
+	old := now.Add(-72 * time.Hour).Format(time.RFC3339)
+	q := computeDreamQuality(dreamQualityInputs{
+		proposed: 0, // idle: nothing proposed…
+		applied:  0, // …nothing applied
+		priorPaths: []processedDiaryCapsule{
+			{At: old, Paths: []string{"프로젝트/a.md", "프로젝트/b.md"}},
+		},
+		recalls: map[string]RecallUsage{
+			"프로젝트/a.md": {Reads: 3},
+			"프로젝트/b.md": {Reads: 1},
+		},
+		now: now,
+	})
+	if q.Signals != 0 || q.Score != 0 {
+		t.Errorf("idle cycle must stay unscored: signals=%d score=%.2f", q.Signals, q.Score)
+	}
+	if !approx(q.Utility, 1.0) || q.RecalledPages != 2 {
+		t.Errorf("utility visibility lost: utility=%.2f recalled=%d", q.Utility, q.RecalledPages)
+	}
+}
+
+// Capsules older than utilityWindow judge pages against recall traffic the
+// compacted ledger no longer holds — excluded so ledger compaction cannot read
+// as page decay.
+func TestComputeDreamQuality_UtilityIgnoresCapsulesPastTheWindow(t *testing.T) {
+	now := time.Now()
+	ancient := now.Add(-utilityWindow - 24*time.Hour).Format(time.RFC3339)
+	recent := now.Add(-72 * time.Hour).Format(time.RFC3339)
+	q := computeDreamQuality(dreamQualityInputs{
+		proposed: 1,
+		applied:  1,
+		updates:  []wikiUpdate{{Confidence: "high"}},
+		priorPaths: []processedDiaryCapsule{
+			// Unrecalled ancient pages would drag utility to 1/3 if counted.
+			{At: ancient, Paths: []string{"기타/old-1.md", "기타/old-2.md"}},
+			{At: recent, Paths: []string{"프로젝트/a.md"}},
+		},
+		recalls: map[string]RecallUsage{"프로젝트/a.md": {Reads: 2}},
+		now:     now,
+	})
+	if !approx(q.Utility, 1.0) {
+		t.Errorf("utility = %.2f, want 1.0 (window must exclude ancient capsules)", q.Utility)
+	}
+}

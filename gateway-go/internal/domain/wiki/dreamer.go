@@ -43,7 +43,16 @@ const (
 	wikiDreamMaxTokens    = 8192
 	diaryProcessStateFile = ".diary-process-state.json"
 	dreamProposalFile     = ".dream-last-proposal.json"
+	// processedCapsuleLimit bounds the capsule slice the SYNTHESIS PROMPT sees
+	// (formatProcessedDiaryCapsules) — recent context, kept small on purpose.
 	processedCapsuleLimit = 12
+	// scoredCapsuleLimit bounds capsule STORAGE. The utility axis judges pages
+	// from prior capsules, and at 12 retained cycles (~4 days at the live
+	// cadence) its denominator was 1–8 pages — the score swung 0.33↔0.88 on
+	// single-page noise, useless to a slow-loop tuner. ~90 retains the full
+	// utilityWindow (30d at ~3 cycles/day); the age cut in computeDreamQuality
+	// is the real boundary, this is its storage backstop.
+	scoredCapsuleLimit = 90
 	// Transient-failure retry: a synthesis LLM call that dies on transport
 	// (wormhole timeout, deploy hot-swap canceling the context) used to back
 	// off the full 8h interval — 12 of the 14 synthesis failures in the week
