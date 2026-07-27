@@ -251,7 +251,17 @@ export function glyphProbeLines(): string[] {
  * advanceNav alone cannot catch.
  */
 export function initialNavStateAt(route: NavRoute, pos: NavCoord): NavState {
-  return advanceNav(route, initialNavState(), pos);
+  if (route.steps.length === 0) return initialNavState();
+  // Step 0 is 출발 — where the wearer is standing the moment the route arrives.
+  // Opening there is wrong by definition, and it is NOT a question of distance:
+  // the first cut asked advanceNav, which only moves within ARRIVE_RADIUS_M of
+  // the start point. TMap snaps the route origin to the road network, so indoors
+  // or set back from the street that point is routinely further away than the
+  // radius — the HUD then sat on 출발 for the whole leg, showing "1/7" and
+  // skipping the arrow because 출발 has no direction. Observed on the device as
+  // `image:arrow = skipped:출발`.
+  const start = Math.min(1, route.steps.length - 1);
+  return advanceNav(route, { stepIndex: start, arrived: false }, pos);
 }
 
 /**
