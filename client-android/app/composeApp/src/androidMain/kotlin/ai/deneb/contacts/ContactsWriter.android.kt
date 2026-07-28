@@ -33,9 +33,9 @@ actual class ContactsWriter actual constructor() {
         ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) ==
         PackageManager.PERMISSION_GRANTED
 
-    actual suspend fun linkByIdentity(phones: List<String>, emails: List<String>): Int {
+    actual suspend fun linkByIdentity(phones: List<String>, emails: List<String>, names: List<String>): Int {
         if (!hasAccess()) return 0
-        return withContext(Dispatchers.IO) { linkRawContacts(context, phones, emails) }
+        return withContext(Dispatchers.IO) { linkRawContacts(context, phones, emails, names) }
     }
 
     actual suspend fun countMergeLinks(): Int {
@@ -125,9 +125,33 @@ private fun clearMergeLinks(context: Context, pairs: List<MergePair>): Int {
 // Full national digits so apply-time matching stays aligned with the gateway
 // contacts mirror (normalizePhone). Last-8 suffix matching would link unrelated
 // contacts that merely share a trailing digit run.
+// How many device raw-contacts a group may exceed its member count by before the
+// link is refused. Small: the group already enumerates the entries the gateway saw,
+// and the slack only covers device-only duplicates it could not have seen.
+private const val linkFanoutSlack = 3
+
 private fun normPhone(s: String): String {
     val d = s.filter { it.isDigit() }
     return if (d.startsWith("82") && d.length > 2) "0" + d.substring(2) else d
+}
+
+// Display name per raw-contact id, for the name gate. One fixed query; the
+// aggregate's name is not usable here because the whole point is to decide what
+// belongs in the aggregate.
+private fun rawContactNames(context: Context): Map<Long, String> {
+    val out = HashMap<Long, String>()
+    context.contentResolver.query(
+        ContactsContract.RawContacts.CONTENT_URI,
+        arrayOf(ContactsContract.RawContacts._ID, ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY),
+        null,
+        null,
+        null,
+    )?.use { c ->
+        val idCol = c.getColumnIndexOrThrow(ContactsContract.RawContacts._ID)
+        val nameCol = c.getColumnIndexOrThrow(ContactsContract.RawContacts.DISPLAY_NAME_PRIMARY)
+        while (c.moveToNext()) out[c.getLong(idCol)] = c.getString(nameCol).orEmpty()
+    }
+    return out
 }
 
 // Every raw-contact id that carries one of the target phones/emails. Two fixed
@@ -160,12 +184,27 @@ private fun rawContactIdsForIdentity(context: Context, phones: Set<String>, emai
 
 // KEEP_TOGETHER is pairwise, so linking each subsequent raw contact to the first
 // aggregates the whole set into one contact. Reversible: a KEEP_SEPARATE unlinks.
-private fun linkRawContacts(context: Context, phones: List<String>, emails: List<String>): Int {
+private fun linkRawContacts(
+    context: Context,
+    phones: List<String>,
+    emails: List<String>,
+    names: List<String>,
+): Int {
     val phoneKeys = phones.map(::normPhone).filter { it.isNotEmpty() }.toSet()
     val emailKeys = emails.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
     if (phoneKeys.isEmpty() && emailKeys.isEmpty()) return 0
-    val rawIds = rawContactIdsForIdentity(context, phoneKeys, emailKeys).toList()
+    // No usable name for the group means no gate, and an ungated link is the bug
+    // that collapsed the book. Refuse rather than fall back to identifiers alone.
+    val groupKeys = groupMatchKeys(names)
+    if (groupKeys.isEmpty()) return 0
+    val byIdentity = rawContactIdsForIdentity(context, phoneKeys, emailKeys)
+    val displayNames = rawContactNames(context)
+    val rawIds = byIdentity.filter { nameBelongsToGroup(displayNames[it].orEmpty(), groupKeys) }
     if (rawIds.size < 2) return 0
+    // Backstop: a real person does not hold many more cards than the group the
+    // gateway named. A blow-up here means the gate let something through, so skip
+    // the group entirely rather than link a crowd.
+    if (rawIds.size > names.size + linkFanoutSlack) return 0
     val ops = ArrayList<ContentProviderOperation>()
     for (i in 1 until rawIds.size) {
         ops += ContentProviderOperation.newUpdate(AggregationExceptions.CONTENT_URI)

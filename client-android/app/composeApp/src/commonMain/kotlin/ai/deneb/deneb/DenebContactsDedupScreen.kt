@@ -131,7 +131,7 @@ fun DenebContactsDedupScreen(
         var ruleMerged = 0
         applyState = ContactsApplyState.RuleMerging(done = 0, total = data.merges.size)
         data.merges.forEachIndexed { i, m ->
-            if (writer.linkByIdentity(m.phones, m.emails) >= 2) ruleMerged++
+            if (writer.linkByIdentity(m.linkPhones, m.linkEmails, m.names) >= 2) ruleMerged++
             applyState = ContactsApplyState.RuleMerging(done = i + 1, total = data.merges.size)
         }
         // 2) AI adjudication of the ambiguous pairs. SAME → link; diff/unsure left be.
@@ -143,7 +143,14 @@ fun DenebContactsDedupScreen(
             val verdicts = client.fetchContactsAdjudicate(chunk).orEmpty()
             chunk.forEachIndexed { i, pair ->
                 if (verdicts.getOrNull(i) == "same" &&
-                    writer.linkByIdentity(pair.a.phones + pair.b.phones, pair.a.emails + pair.b.emails) >= 2
+                    // Two adjudicated parties = a two-name group; the writer's name
+                    // gate keeps this to those two even when the shared identifier
+                    // is a line half the company carries.
+                    writer.linkByIdentity(
+                        pair.a.phones + pair.b.phones,
+                        pair.a.emails + pair.b.emails,
+                        listOf(pair.a.name, pair.b.name),
+                    ) >= 2
                 ) {
                     aiMerged++
                 }

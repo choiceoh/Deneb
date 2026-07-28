@@ -203,6 +203,11 @@ internal data class DedupMergeRow(
     val names: List<String> = emptyList(),
     val phones: List<String> = emptyList(),
     val emails: List<String> = emptyList(),
+    // Personal identifiers only — what to MATCH on when applying to a device.
+    // phones/emails above are the display union and include company lines that
+    // match half the org; matching on those is what collapsed the book.
+    val linkPhones: List<String> = emptyList(),
+    val linkEmails: List<String> = emptyList(),
 )
 
 /** One ambiguous pair (same identifier, different name) for the AI to adjudicate. */
