@@ -16,7 +16,7 @@ func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) 
 // batchDeps wires mock extractors + a capturing Chat stub. runs counts RunSync
 // calls (the whole point: N files must produce ONE turn, not N). lastMessage holds
 // the pointer turn the agent received.
-func batchDeps(saveCapture bool) (Deps, *int, *string) {
+func batchDeps(saveCapture bool) (MiniappDeps, *int, *string) {
 	runs := new(int)
 	lastMessage := new(string)
 	stub := &chatPortStub{runSync: func(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
@@ -24,7 +24,7 @@ func batchDeps(saveCapture bool) (Deps, *int, *string) {
 		*lastMessage = req.Message
 		return &chatport.SyncResult{Text: "분석 결과", BestText: "분석 결과"}, nil
 	}}
-	deps := Deps{
+	deps := MiniappDeps{
 		Chat:            stub,
 		OcrImage:        func(context.Context, []byte) (string, error) { return "이미지 OCR 텍스트", nil },
 		Transcribe:      func(context.Context, []byte, string, string) (string, error) { return "녹음 전사 텍스트", nil },

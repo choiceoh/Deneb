@@ -143,7 +143,7 @@ func TestMethodsAndMiniappMethodsNilContract(t *testing.T) {
 	if got := Methods(Deps{}); got != nil {
 		t.Fatalf("Methods nil chat = %+v", got)
 	}
-	if got := MiniappMethods(Deps{}); got != nil {
+	if got := MiniappMethods(MiniappDeps{}); got != nil {
 		t.Fatalf("MiniappMethods nil chat = %+v", got)
 	}
 }
@@ -152,7 +152,7 @@ func TestWebTranslateHandlerContract(t *testing.T) {
 	t.Run("success preserves request order", func(t *testing.T) {
 		var gotSegments []string
 		var gotTarget string
-		method := handleMiniappWebTranslate(Deps{Translate: func(_ context.Context, segments []string, target string) ([]string, error) {
+		method := handleMiniappWebTranslate(MiniappDeps{Translate: func(_ context.Context, segments []string, target string) ([]string, error) {
 			gotSegments = append([]string(nil), segments...)
 			gotTarget = target
 			return []string{"하나", "둘", "셋"}, nil
@@ -187,7 +187,7 @@ func TestWebTranslateHandlerContract(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			method := handleMiniappWebTranslate(Deps{Translate: tt.translate})
+			method := handleMiniappWebTranslate(MiniappDeps{Translate: tt.translate})
 			resp := method(context.Background(), requestFrame("id", tt.params))
 			requireRPCErrorCode(t, resp, tt.wantCode)
 		})
@@ -196,7 +196,7 @@ func TestWebTranslateHandlerContract(t *testing.T) {
 
 func TestCaptureImageValidationContract(t *testing.T) {
 	var seen []byte
-	method := handleMiniappCaptureImage(Deps{OcrImage: func(_ context.Context, image []byte) (string, error) {
+	method := handleMiniappCaptureImage(MiniappDeps{OcrImage: func(_ context.Context, image []byte) (string, error) {
 		seen = append([]byte(nil), image...)
 		return "", nil
 	}})
@@ -223,7 +223,7 @@ func TestCaptureImageValidationContract(t *testing.T) {
 		t.Fatalf("decoded image = %q", seen)
 	}
 
-	errMethod := handleMiniappCaptureImage(Deps{OcrImage: func(context.Context, []byte) (string, error) {
+	errMethod := handleMiniappCaptureImage(MiniappDeps{OcrImage: func(context.Context, []byte) (string, error) {
 		return "", errors.New("ocr down")
 	}})
 	resp := errMethod(context.Background(), requestFrame("id", `{"image":"aW1hZ2U="}`))
@@ -233,7 +233,7 @@ func TestCaptureImageValidationContract(t *testing.T) {
 func TestCaptureDocumentValidationContract(t *testing.T) {
 	var gotData []byte
 	var gotFilename, gotMIME string
-	method := handleMiniappCaptureDocument(Deps{ExtractDocument: func(_ context.Context, data []byte, filename, mime string) string {
+	method := handleMiniappCaptureDocument(MiniappDeps{ExtractDocument: func(_ context.Context, data []byte, filename, mime string) string {
 		gotData = append([]byte(nil), data...)
 		gotFilename = filename
 		gotMIME = mime
@@ -265,7 +265,7 @@ func TestCaptureDocumentValidationContract(t *testing.T) {
 func TestCaptureAudioValidationAndHotwordContract(t *testing.T) {
 	var gotAudio []byte
 	var gotMIME, gotHotwords string
-	method := handleMiniappCaptureAudio(Deps{
+	method := handleMiniappCaptureAudio(MiniappDeps{
 		Hotwords: func() string { return "Deneb, SolarPrime" },
 		Transcribe: func(_ context.Context, audio []byte, mime, hotwords string) (string, error) {
 			gotAudio = append([]byte(nil), audio...)
@@ -297,7 +297,7 @@ func TestCaptureAudioValidationAndHotwordContract(t *testing.T) {
 	if string(gotAudio) != "audio" || gotMIME != "audio/wav" || gotHotwords != "Deneb, SolarPrime" {
 		t.Fatalf("transcriber input = %q/%q/%q", gotAudio, gotMIME, gotHotwords)
 	}
-	errMethod := handleMiniappCaptureAudio(Deps{Transcribe: func(context.Context, []byte, string, string) (string, error) {
+	errMethod := handleMiniappCaptureAudio(MiniappDeps{Transcribe: func(context.Context, []byte, string, string) (string, error) {
 		return "", errors.New("asr down")
 	}})
 	resp := errMethod(context.Background(), requestFrame("id", `{"audio":"YXVkaW8="}`))
@@ -307,7 +307,7 @@ func TestCaptureAudioValidationAndHotwordContract(t *testing.T) {
 func TestEventIngestHandlerContract(t *testing.T) {
 	type ingested struct{ typ, source, text string }
 	var events []ingested
-	method := handleMiniappEventIngest(Deps{IngestEvent: func(typ, source, text string) {
+	method := handleMiniappEventIngest(MiniappDeps{IngestEvent: func(typ, source, text string) {
 		events = append(events, ingested{typ: typ, source: source, text: text})
 	}})
 	for _, tt := range []struct {
@@ -384,9 +384,9 @@ func (f *contractFeed) Rewrite(id, newBody string) (workfeed.Item, error) {
 }
 
 func TestRecordAndFindWorkFeedContract(t *testing.T) {
-	recordWorkFeed(Deps{}, workfeed.Item{ID: "ignored"})
+	recordWorkFeed(MiniappDeps{}, workfeed.Item{ID: "ignored"})
 	feed := &contractFeed{}
-	deps := Deps{WorkFeed: feed}
+	deps := MiniappDeps{WorkFeed: feed}
 	recordWorkFeed(deps, workfeed.Item{ID: "a", Title: "A"})
 	recordWorkFeed(deps, workfeed.Item{ID: "b", Title: "B"})
 	if len(feed.items) != 2 {
@@ -420,14 +420,14 @@ func TestAlreadyCardedThisTurnContract(t *testing.T) {
 		{ID: "wrong-source", Source: workfeed.SourceCaptureDocument, SessionKey: "client:main", CreatedAtMs: now + 1},
 		{ID: "match", Source: workfeed.SourceDocAnalysis, SessionKey: "client:main", CreatedAtMs: now},
 	}}
-	deps := Deps{WorkFeed: feed}
+	deps := MiniappDeps{WorkFeed: feed}
 	if !alreadyCardedThisTurn(deps, "client:main", now) {
 		t.Fatal("matching card was not detected")
 	}
 	if alreadyCardedThisTurn(deps, "client:main", now+1) {
 		t.Fatal("strictly older card matched")
 	}
-	if alreadyCardedThisTurn(Deps{}, "client:main", now) {
+	if alreadyCardedThisTurn(MiniappDeps{}, "client:main", now) {
 		t.Fatal("nil feed matched")
 	}
 	feed.listErr = errors.New("failed")
@@ -439,11 +439,11 @@ func TestAlreadyCardedThisTurnContract(t *testing.T) {
 func TestCardCapturedDocumentFallbackAndPublishContract(t *testing.T) {
 	result := &chatport.SyncResult{Text: "analysis body", DeliverableText: "final body", BestText: "final body"}
 	t.Run("nil feed is safe", func(t *testing.T) {
-		cardCapturedDocument(Deps{}, "client:main", result, 0)
+		cardCapturedDocument(MiniappDeps{}, "client:main", result, 0)
 	})
 	t.Run("raw fallback", func(t *testing.T) {
 		feed := &contractFeed{}
-		cardCapturedDocument(Deps{WorkFeed: feed}, "client:main", result, 0)
+		cardCapturedDocument(MiniappDeps{WorkFeed: feed}, "client:main", result, 0)
 		if len(feed.items) != 1 {
 			t.Fatalf("items = %+v", feed.items)
 		}
@@ -455,7 +455,7 @@ func TestCardCapturedDocumentFallbackAndPublishContract(t *testing.T) {
 	t.Run("successful deliverable suppresses raw", func(t *testing.T) {
 		feed := &contractFeed{}
 		publishedBody := ""
-		cardCapturedDocument(Deps{
+		cardCapturedDocument(MiniappDeps{
 			WorkFeed: feed,
 			PublishDeliverable: func(body string) (bool, error) {
 				publishedBody = body
@@ -468,7 +468,7 @@ func TestCardCapturedDocumentFallbackAndPublishContract(t *testing.T) {
 	})
 	t.Run("publish error falls back raw", func(t *testing.T) {
 		feed := &contractFeed{}
-		cardCapturedDocument(Deps{
+		cardCapturedDocument(MiniappDeps{
 			WorkFeed:           feed,
 			PublishDeliverable: func(string) (bool, error) { return false, errors.New("down") },
 		}, "client:main", result, 0)
@@ -572,7 +572,7 @@ func TestContactsSummaryContract(t *testing.T) {
 func TestCaptureContactsAdditionalValidationContract(t *testing.T) {
 	t.Run("enrich only succeeds", func(t *testing.T) {
 		var payload []byte
-		method := handleMiniappCaptureContacts(Deps{EnrichContacts: func(raw []byte) (wiki.ContactEnrichResult, error) {
+		method := handleMiniappCaptureContacts(MiniappDeps{EnrichContacts: func(raw []byte) (wiki.ContactEnrichResult, error) {
 			payload = append([]byte(nil), raw...)
 			return wiki.ContactEnrichResult{Total: 1, Matched: 1, Updated: 1, Names: []string{"Jane"}}, nil
 		}})
@@ -593,7 +593,7 @@ func TestCaptureContactsAdditionalValidationContract(t *testing.T) {
 
 	t.Run("save receives exact envelope", func(t *testing.T) {
 		var payload []byte
-		method := handleMiniappCaptureContacts(Deps{SaveContacts: func(raw []byte) (int, error) {
+		method := handleMiniappCaptureContacts(MiniappDeps{SaveContacts: func(raw []byte) (int, error) {
 			payload = append([]byte(nil), raw...)
 			return 2, nil
 		}})
@@ -608,7 +608,7 @@ func TestCaptureContactsAdditionalValidationContract(t *testing.T) {
 
 	t.Run("save failure short circuits enrich", func(t *testing.T) {
 		enriched := false
-		method := handleMiniappCaptureContacts(Deps{
+		method := handleMiniappCaptureContacts(MiniappDeps{
 			SaveContacts: func([]byte) (int, error) { return 0, errors.New("disk full") },
 			EnrichContacts: func([]byte) (wiki.ContactEnrichResult, error) {
 				enriched = true

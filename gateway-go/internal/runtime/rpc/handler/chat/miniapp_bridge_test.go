@@ -13,7 +13,7 @@ import (
 
 func TestMiniappCaptureContactsReturnsSavedAndEnrichedSummary(t *testing.T) {
 	var savedPayload, enrichPayload []byte
-	deps := Deps{
+	deps := MiniappDeps{
 		SaveContacts: func(b []byte) (int, error) {
 			savedPayload = b
 			return 3, nil
@@ -67,7 +67,7 @@ func TestMiniappCaptureContactsReturnsSavedAndEnrichedSummary(t *testing.T) {
 // Save alone (no wiki) is enough to register and succeed — the wiki enrichment is
 // an optional bonus.
 func TestMiniappCaptureContacts_SaveOnly(t *testing.T) {
-	deps := Deps{
+	deps := MiniappDeps{
 		SaveContacts: func([]byte) (int, error) { return 2798, nil },
 	}
 	handler := handleMiniappCaptureContacts(deps)
@@ -91,7 +91,7 @@ func TestMiniappCaptureContacts_SaveOnly(t *testing.T) {
 
 func TestMiniappCaptureContacts_MissingParam(t *testing.T) {
 	called := false
-	deps := Deps{SaveContacts: func([]byte) (int, error) {
+	deps := MiniappDeps{SaveContacts: func([]byte) (int, error) {
 		called = true
 		return 0, nil
 	}}
@@ -112,7 +112,7 @@ func TestMiniappCaptureContacts_MissingParam(t *testing.T) {
 
 // A SaveContacts failure is the primary failure path and surfaces as an RPC error.
 func TestMiniappCaptureContacts_SaveError(t *testing.T) {
-	deps := Deps{SaveContacts: func([]byte) (int, error) {
+	deps := MiniappDeps{SaveContacts: func([]byte) (int, error) {
 		return 0, errors.New("contacts store unavailable")
 	}}
 	handler := handleMiniappCaptureContacts(deps)
@@ -127,7 +127,7 @@ func TestMiniappCaptureContacts_SaveError(t *testing.T) {
 // A wiki enrichment failure must NOT fail the sync once the book is already stored
 // — enrichment is best-effort.
 func TestMiniappCaptureContacts_EnrichErrorTolerated(t *testing.T) {
-	deps := Deps{
+	deps := MiniappDeps{
 		SaveContacts: func([]byte) (int, error) { return 5, nil },
 		EnrichContacts: func([]byte) (wiki.ContactEnrichResult, error) {
 			return wiki.ContactEnrichResult{}, errors.New("wiki store unavailable")

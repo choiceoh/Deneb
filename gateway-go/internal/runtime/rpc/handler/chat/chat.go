@@ -20,10 +20,10 @@ import (
 // BroadcastFunc is the canonical broadcast type defined in rpcutil.
 type BroadcastFunc = rpcutil.BroadcastFunc
 
-// ChatHandler is the protocol and synchronous-run surface consumed by this RPC
+// ChatHandler is the protocol surface consumed by the standard chat.* RPC
 // domain. The concrete chat pipeline implements it at the composition root.
 type ChatHandler interface {
-	chatport.SyncRunner
+	ChatReady() bool
 	Send(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
 	History(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
 	Abort(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
@@ -34,6 +34,31 @@ type ChatHandler interface {
 type Deps struct {
 	Chat        ChatHandler
 	Broadcaster BroadcastFunc // optional; receives chat.steer_received events
+}
+
+// MiniappChatHandler is the narrow chat pipeline surface consumed by the native
+// miniapp bridge. It intentionally excludes async chat.send/abort/steer so the
+// native bridge does not share the standard chat.* RPC dependency contract.
+type MiniappChatHandler interface {
+	chatport.SyncRunner
+	History(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
+}
+
+// WorkFeedStore is the native bridge's work-feed persistence port.
+type WorkFeedStore interface {
+	Append(workfeed.Item) (workfeed.Item, error)
+	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
+	// Correct annotates a card with a user correction (native long-press
+	// feedback) and returns the updated item; used by miniapp.workfeed.feedback.
+	Correct(id, note string) (workfeed.Item, error)
+	// Rewrite replaces a card's body with a regenerated analysis and returns
+	// the updated item; used by miniapp.workfeed.rewrite.
+	Rewrite(id, newBody string) (workfeed.Item, error)
+}
+
+// MiniappDeps holds the dependencies for the native-client miniapp chat bridge.
+type MiniappDeps struct {
+	Chat MiniappChatHandler
 	// OcrImage OCRs a directly-shared image (native-client image capture).
 	// Optional; nil disables miniapp.capture.image.
 	OcrImage func(ctx context.Context, img []byte) (string, error)
@@ -92,16 +117,7 @@ type Deps struct {
 	// context — see handleMiniappChatSend. Optional; capture handlers ignore
 	// append failures because the chat turn is still the source of truth, and a
 	// nil store just means no feed context is injected.
-	WorkFeed interface {
-		Append(workfeed.Item) (workfeed.Item, error)
-		List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
-		// Correct annotates a card with a user correction (native long-press
-		// feedback) and returns the updated item; used by miniapp.workfeed.feedback.
-		Correct(id, note string) (workfeed.Item, error)
-		// Rewrite replaces a card's body with a regenerated analysis and returns
-		// the updated item; used by miniapp.workfeed.rewrite.
-		Rewrite(id, newBody string) (workfeed.Item, error)
-	}
+	WorkFeed WorkFeedStore
 	// PublishDeliverable files a document-analysis result as a proper doc_analysis
 	// work-feed card (derived title, substance-gated) instead of a raw capture card.
 	// Returns (true, nil) when a card was filed; (false, nil) when the analysis was

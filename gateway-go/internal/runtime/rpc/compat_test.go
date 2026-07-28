@@ -22,6 +22,7 @@ import (
 
 type (
 	ChatDeps           = handlerchat.Deps
+	ChatMiniappDeps    = handlerchat.MiniappDeps
 	ChatBtwDeps        = handlerchat.BtwDeps
 	SessionExecDeps    = handlersession.ExecDeps
 	EventsDeps         = handlerevents.EventsDeps

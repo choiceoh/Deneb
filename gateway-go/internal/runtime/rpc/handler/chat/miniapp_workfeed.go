@@ -31,7 +31,7 @@ import (
 // Params:
 //   - itemId   (string, required): the work-feed card id
 //   - feedback (string, required): the user's correction / teaching text
-func handleMiniappWorkfeedFeedback(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappWorkfeedFeedback(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			ItemID   string `json:"itemId"`
@@ -126,7 +126,7 @@ func buildWorkfeedFeedbackMessage(card workfeed.Item, feedback string) string {
 //
 // Params:
 //   - itemId (string, required): the work-feed card id
-func handleMiniappWorkfeedRewrite(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappWorkfeedRewrite(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			ItemID string `json:"itemId"`
@@ -193,7 +193,7 @@ func buildWorkfeedRewriteMessage(card workfeed.Item) string {
 	return b.String()
 }
 
-func findWorkFeedItem(deps Deps, itemID string) (workfeed.Item, bool) {
+func findWorkFeedItem(deps MiniappDeps, itemID string) (workfeed.Item, bool) {
 	items, _, err := deps.WorkFeed.List(0, true)
 	if err != nil {
 		return workfeed.Item{}, false
