@@ -570,6 +570,44 @@ func TestRunMarkerLifecycle_WriteOnRunningDeleteOnTerminal(t *testing.T) {
 	})
 }
 
+// Test: lifecycle listener skips delegated sub-agent runs (client:sub:*).
+func TestRunMarkerLifecycleIgnoresSpawnedChildSessions(t *testing.T) {
+	tmpHome := t.TempDir()
+	srv := newAutoResumeTestServer(t, tmpHome)
+	unsub := srv.initRunMarkerLifecycle()
+	defer unsub()
+
+	sm := srv.sessions
+	store := srv.runMarkerStore()
+	childKey := session.SpawnedChildKey("task", time.Now().UnixMilli())
+
+	sm.Create(childKey, session.KindDirect)
+	if err := sm.Set(&session.Session{
+		Key: childKey, Kind: session.KindDirect, Channel: "client",
+		Status: session.StatusRunning,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sentinel direct session: once its marker appears, the sub-agent event
+	// has been processed.
+	sm.Create("client:sentinel", session.KindDirect)
+	if err := sm.Set(&session.Session{
+		Key: "client:sentinel", Kind: session.KindDirect, Channel: "client",
+		Status: session.StatusRunning,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitForCondition(t, 2*time.Second, func() bool {
+		m, _ := store.Read("client:sentinel")
+		return m != nil
+	})
+
+	if m, _ := store.Read(childKey); m != nil {
+		t.Errorf("expected no marker for spawned child session, got %+v", m)
+	}
+}
+
 // Test: lifecycle listener skips non-direct kinds (cron/subagent do not
 // need markers — those have their own retry paths).
 func TestRunMarkerLifecycleIgnoresNonDirectSessionKinds(t *testing.T) {
