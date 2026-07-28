@@ -348,7 +348,8 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 	_, dispatchedToday := t.codingDispatchCounts()
 	runtime := t.codingDispatchRuntimeStatus()
 	miner := t.healthMinerRuntimeStatus()
-	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime, miner))
+	declineReasons := rsiDeclineReasons(cands, 3)
+	base := newRSILayer(rsilifecycle.LayerL4, rsiL4Metrics(tally, len(cands), dispatchedToday, runtime, miner, declineReasons))
 	base.State, base.Diagnosis = rsiL4Verdict(tally, len(cands), runtime)
 	// Dispatch-outcome history (graduation-ladder evidence: the cap-raise row
 	// needs a measured land rate) rides the diagnosis text — no new metric row,
@@ -469,7 +470,7 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 	return tally
 }
 
-func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime, miner healthMinerRuntime) []rsiMetric {
+func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispatchRuntime, miner healthMinerRuntime, declineReasons string) []rsiMetric {
 	return []rsiMetric{
 		{Label: "후보", Value: strconv.Itoa(total)},
 		{Label: "코드 후보", Value: strconv.Itoa(tally.byScope["code"])},
@@ -488,7 +489,58 @@ func rsiL4Metrics(tally l4Tally, total, dispatchedToday int, runtime codingDispa
 		{Label: "최근 성공", Value: rsiAgeValue(runtime.LastSuccessfulAtMs)},
 		{Label: "최장 대기", Value: rsiAgeValue(tally.oldestPendingAt)},
 		{Label: "공급 벤치", Value: rsiMinerBenchValue(miner)},
+		{Label: "안전 종료 사유", Value: declineReasons},
 	}
+}
+
+// rsiDeclineReasons renders the newest declined dispatches' rationales.
+// Precedent: the INCREMENTAL_KINDS contract revision came from manually reading
+// four decline notes out of the dispatch log — 2-18 min of lane quota each had
+// been burned on contracts the sessions could not honestly satisfy. Keeping the
+// rationales on the card turns that one-off archaeology into a standing review
+// input: a repeated reason is the next contract revision.
+func rsiDeclineReasons(cands []SelfCorrectionCandidateRecord, limit int) string {
+	type declined struct {
+		at     int64
+		source string
+		reason string
+	}
+	var rows []declined
+	for _, c := range mergeSelfCorrectionRecords(cands) {
+		if c.DispatchPhase != selfCorrectionDispatchDeclined {
+			continue
+		}
+		reason := strings.TrimSpace(c.OutcomeNote)
+		// The dispatch executor appends "…; decline: <session rationale>" when
+		// the session explains itself; older notes only carry rc/elapsed facts.
+		if _, rationale, ok := strings.Cut(reason, "decline: "); ok {
+			reason = strings.TrimSpace(rationale)
+		}
+		if reason == "" {
+			reason = "(사유 미기록)"
+		}
+		prefix, _, _ := strings.Cut(c.Source, ":")
+		if prefix == "" {
+			prefix = "?"
+		}
+		rows = append(rows, declined{at: c.UpdatedAt, source: prefix, reason: reason})
+	}
+	if len(rows) == 0 {
+		return "없음"
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].at > rows[j].at })
+	if limit > 0 && len(rows) > limit {
+		rows = rows[:limit]
+	}
+	parts := make([]string, 0, len(rows))
+	for _, row := range rows {
+		reason := row.reason
+		if runes := []rune(reason); len(runes) > 90 {
+			reason = string(runes[:90]) + "…"
+		}
+		parts = append(parts, "["+row.source+"] "+reason)
+	}
+	return strings.Join(parts, " | ")
 }
 
 func rsiL4ImpactValue(tally l4Tally) string {

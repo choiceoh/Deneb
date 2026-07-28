@@ -797,3 +797,63 @@ func TestRSIStatus_L4SurfacesMinerBenchFallback(t *testing.T) {
 		t.Fatalf("unavailable metric = %q", got)
 	}
 }
+
+// Decline rationales must ride the card. The INCREMENTAL_KINDS contract
+// revision required manually digging four decline notes out of the dispatch
+// log; a repeated reason on the card is the next revision's standing input.
+func TestRSIDeclineReasonsNewestFirstWithRationaleExtraction(t *testing.T) {
+	longReason := strings.Repeat("가", 120)
+	cands := []SelfCorrectionCandidateRecord{
+		{
+			ID: "a", Scope: "code", Title: "recurring rpc warn", Source: "runtime-error:x", DispatchPhase: selfCorrectionDispatchDeclined,
+			OutcomeNote: "dispatch session rc=0 elapsed=420s; prState=unknown; decline: 시그니처의 유일한 발생 경로는 정상 동작", UpdatedAt: 300,
+		},
+		{
+			ID: "b", Scope: "code", Source: "health-finding:y", DispatchPhase: selfCorrectionDispatchDeclined,
+			OutcomeNote: "dispatch session rc=0 elapsed=109s; prState=unknown", UpdatedAt: 200,
+		},
+		{
+			ID: "c", Scope: "code", Source: "tool-quality:z", DispatchPhase: selfCorrectionDispatchDeclined,
+			OutcomeNote: "decline: " + longReason, UpdatedAt: 100,
+		},
+		// Non-declined phases stay out regardless of note content.
+		{
+			ID: "d", Scope: "code", Source: "deadcode-finding:w", DispatchPhase: selfCorrectionDispatchWatchPassed,
+			OutcomeNote: "decline: red herring", UpdatedAt: 400,
+		},
+	}
+
+	got := rsiDeclineReasons(cands, 3)
+	// Newest-first: a (300) then b (200) then c (100); d excluded.
+	if !strings.Contains(got, "[runtime-error] 시그니처의 유일한 발생 경로는 정상 동작") {
+		t.Fatalf("rationale extraction failed: %q", got)
+	}
+	if strings.Index(got, "[runtime-error]") > strings.Index(got, "[health-finding]") {
+		t.Fatalf("not newest-first: %q", got)
+	}
+	// The rc/elapsed-only legacy note passes through as-is (still evidence).
+	if !strings.Contains(got, "[health-finding] dispatch session rc=0") {
+		t.Fatalf("legacy note lost: %q", got)
+	}
+	// Rune-aware truncation of the long Korean rationale.
+	if !strings.Contains(got, strings.Repeat("가", 90)+"…") || strings.Contains(got, strings.Repeat("가", 91)) {
+		t.Fatalf("truncation wrong: %q", got)
+	}
+	if strings.Contains(got, "red herring") {
+		t.Fatalf("non-declined phase leaked: %q", got)
+	}
+
+	if got := rsiDeclineReasons(nil, 3); got != "없음" {
+		t.Fatalf("empty = %q", got)
+	}
+
+	// The metric row itself.
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(cands[0]); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if got := rsiMetricValue(l.Metrics, "안전 종료 사유"); !strings.Contains(got, "정상 동작") {
+		t.Fatalf("card metric = %q", got)
+	}
+}
