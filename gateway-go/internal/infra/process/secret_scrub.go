@@ -34,6 +34,11 @@ var secretEnvExact = map[string]struct{}{
 	"OPENROUTER_API_KEY":             {},
 	"DEEPSEEK_API_KEY":               {},
 	"KAGI_API_KEY":                   {},
+	// AWS SDK standard names — not caught by suffix rules (_KEY/_TOKEN are too
+	// broad for GH_TOKEN/WORMHOLE_TOKEN, and AWS_SECRET_ACCESS_KEY ≠ *_SECRET_KEY).
+	"AWS_ACCESS_KEY_ID":     {},
+	"AWS_SECRET_ACCESS_KEY": {},
+	"AWS_SESSION_TOKEN":     {},
 }
 
 // secretEnvSuffixes match any variable whose name unambiguously denotes a
@@ -51,6 +56,9 @@ var secretEnvKeep = map[string]struct{}{
 	"GH_TOKEN":     {},
 	"GITHUB_TOKEN": {},
 }
+
+// IsSecretEnvKey is the exported alias for cross-package exec env overlay scrubbing.
+func IsSecretEnvKey(key string) bool { return isSecretEnvKey(key) }
 
 // isSecretEnvKey reports whether an env var carries a credential that must not
 // reach a model-controlled subprocess. The operational keep-list wins.

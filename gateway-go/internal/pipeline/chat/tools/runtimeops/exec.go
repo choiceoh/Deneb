@@ -194,6 +194,9 @@ func execFallback(ctx context.Context, p execParams, workDir string, timeoutMs i
 	cmd.Dir = workDir
 	env := process.SanitizeEnv(os.Environ(), slog.Default())
 	for k, v := range p.Env {
+		if process.IsSecretEnvKey(k) {
+			continue
+		}
 		env = append(env, k+"="+v)
 	}
 	cmd.Env = env
