@@ -85,13 +85,13 @@ func buildTodayFeedDigest(items []workfeed.Item, now time.Time) string {
 // RPC response, matching the native client's request/response model.
 //
 // Registered late (needs the chat handler); see method_registry.go.
-func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
+func MiniappMethods(deps MiniappDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Chat == nil || !deps.Chat.ChatReady() {
 		return nil
 	}
 	m := map[string]rpcutil.HandlerFunc{
 		"miniapp.chat.send":    handleMiniappChatSend(deps),
-		"miniapp.chat.history": handleHistory(deps),
+		"miniapp.chat.history": handleMiniappHistory(deps),
 	}
 	// Image capture (share a photo/screenshot to Deneb) needs the OCR sidecar
 	// wired; skip the method cleanly when it isn't.
@@ -144,6 +144,12 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 	return m
 }
 
+func handleMiniappHistory(deps MiniappDeps) rpcutil.HandlerFunc {
+	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		return deps.Chat.History(ctx, req)
+	}
+}
+
 // handleMiniappCaptureImage OCRs a directly-shared image and runs one agent turn
 // over the extracted text — the native client's "share an image to Deneb" path.
 //
@@ -154,7 +160,7 @@ func MiniappMethods(deps Deps) map[string]rpcutil.HandlerFunc {
 //   - caption    (string, optional): source context the image alone lacks — e.g.
 //     the originating notification's app/sender/text. Prepended to the OCR turn
 //     so the agent sees both the picture and where it came from.
-func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappCaptureImage(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Image      string `json:"image"`
@@ -245,7 +251,7 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 //   - sessionKey (string, optional): defaults to "client:main"
 //   - caption    (string, optional): source context — e.g. the question the user
 //     typed alongside the attachment. Prepended to the turn.
-func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappCaptureDocument(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Document   string `json:"document"`
@@ -367,7 +373,7 @@ func previewText(text string, n int) string {
 // returns a human kind label ("문서"/"이미지"/"녹음"), the SaveCapture store kind, and
 // the extracted text. It reuses the same extractors as the single-file capture
 // handlers so batch and single paths can't drift.
-func extractBatchFile(ctx context.Context, deps Deps, data []byte, filename, mime string) (kindLabel, storeKind, text string, err error) {
+func extractBatchFile(ctx context.Context, deps MiniappDeps, data []byte, filename, mime string) (kindLabel, storeKind, text string, err error) {
 	switch {
 	case strings.HasPrefix(mime, "image/"):
 		// Prefer vision understanding (chart/diagram/photo), which internally falls
@@ -433,7 +439,7 @@ func batchDisplayName(filename string, idx int) string {
 // and the tiny-LLM preview are already concurrency-safe, and SaveCapture
 // serializes its own unique-name write (wiki captureMu). idx is the 1-based
 // position, used only for the fallback display name.
-func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, caption string, idx int) batchFile {
+func processBatchFile(ctx context.Context, deps MiniappDeps, data64, mime, filename, caption string, idx int) batchFile {
 	name := batchDisplayName(filename, idx)
 	raw := stripDataURL(data64)
 	if raw == "" {
@@ -496,7 +502,7 @@ func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, ca
 //   - files      ([]{data(base64), mimeType, filename}, required)
 //   - caption    (string, optional): the question the user typed with the batch
 //   - sessionKey (string, optional): defaults to "client:main"
-func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappCaptureBatch(deps MiniappDeps) rpcutil.HandlerFunc {
 	dedup := newBatchDedupCache(batchDedupTTL, batchDedupMax)
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
@@ -653,7 +659,7 @@ func buildBatchCaptureMessage(files []batchFile, caption string, dropped int) st
 // Params:
 //   - segments   ([]string, required): page text segments to translate
 //   - targetLang (string, optional): defaults to Korean
-func handleMiniappWebTranslate(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappWebTranslate(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Segments   []string `json:"segments"`
@@ -689,7 +695,7 @@ func handleMiniappWebTranslate(deps Deps) rpcutil.HandlerFunc {
 //   - audio      (base64, required; an optional `data:...;base64,` prefix is stripped)
 //   - mimeType   (string, optional): codec hint (server sniffs the real codec)
 //   - sessionKey (string, optional): defaults to "client:main"
-func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappCaptureAudio(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Audio      string `json:"audio"`
@@ -775,7 +781,7 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string) (*chatport.SyncResult, error) {
+func sendUntrustedCapture(ctx context.Context, deps MiniappDeps, sessionKey, message string) (*chatport.SyncResult, error) {
 	return runNativeSync(ctx, deps, chatport.SyncRequest{
 		SessionKey:          sessionKey,
 		Message:             message,
@@ -785,7 +791,7 @@ func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message st
 	})
 }
 
-func runNativeSync(ctx context.Context, deps Deps, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+func runNativeSync(ctx context.Context, deps MiniappDeps, req chatport.SyncRequest) (*chatport.SyncResult, error) {
 	turnCtx, cancel := context.WithTimeout(ctx, nativeSyncTurnDeadline)
 	defer cancel()
 	return deps.Chat.RunSync(turnCtx, req)
@@ -802,7 +808,7 @@ func runNativeSync(ctx context.Context, deps Deps, req chatport.SyncRequest) (*c
 //
 // Params:
 //   - contacts ([]{name, phones[], emails[], org}, required)
-func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappCaptureContacts(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Contacts   json.RawMessage `json:"contacts"`
@@ -859,7 +865,7 @@ func handleMiniappCaptureContacts(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-func recordWorkFeed(deps Deps, item workfeed.Item) {
+func recordWorkFeed(deps MiniappDeps, item workfeed.Item) {
 	if deps.WorkFeed == nil {
 		return
 	}
@@ -875,7 +881,7 @@ func recordWorkFeed(deps Deps, item workfeed.Item) {
 //   - falls back to the raw capture card when the analysis is too thin to be a
 //     deliverable (PublishDeliverable suppressed it) or PublishDeliverable is
 //     unwired, so a shared document is never silently dropped.
-func cardCapturedDocument(deps Deps, sessionKey string, res *chatport.SyncResult, turnStartMs int64) {
+func cardCapturedDocument(deps MiniappDeps, sessionKey string, res *chatport.SyncResult, turnStartMs int64) {
 	body := res.BestText
 	if alreadyCardedThisTurn(deps, sessionKey, turnStartMs) {
 		return
@@ -897,7 +903,7 @@ func cardCapturedDocument(deps Deps, sessionKey string, res *chatport.SyncResult
 // alreadyCardedThisTurn reports whether a doc_analysis deliverable card for this
 // session was created since turnStartMs — i.e. the model published one itself
 // during the (synchronous) turn, so the server must not add a duplicate.
-func alreadyCardedThisTurn(deps Deps, sessionKey string, turnStartMs int64) bool {
+func alreadyCardedThisTurn(deps MiniappDeps, sessionKey string, turnStartMs int64) bool {
 	if deps.WorkFeed == nil {
 		return false
 	}
@@ -926,7 +932,7 @@ func alreadyCardedThisTurn(deps Deps, sessionKey string, turnStartMs int64) bool
 //   - type   (string, optional): "notification" (default) / "context" / "clipboard" / "sms" / "*_update"
 //   - source (string, optional): app/sender label (e.g. "카카오톡")
 //   - text   (string, required): the notification/event body
-func handleMiniappEventIngest(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappEventIngest(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			Type   string `json:"type"`
@@ -952,7 +958,7 @@ func handleMiniappEventIngest(deps Deps) rpcutil.HandlerFunc {
 //   - message    (string, required): the user message
 //   - sessionKey  (string, optional): conversation key; defaults to "client:main"
 //   - model       (string, optional): model override; empty uses the default
-func handleMiniappChatSend(deps Deps) rpcutil.HandlerFunc {
+func handleMiniappChatSend(deps MiniappDeps) rpcutil.HandlerFunc {
 	return func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
 		p, errResp := rpcutil.DecodeParams[struct {
 			SessionKey string `json:"sessionKey"`

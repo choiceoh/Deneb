@@ -8,9 +8,10 @@
 
 - `chat.go`의 `ChatHandler`, `Deps`, `Methods`, `BtwMethods`가 표준
   `chat.send/history/abort/steer/btw` handler map을 만든다.
-- `miniapp_bridge.go`의 `MiniappMethods`가 native-client request/response
-  bridge와 optional capture method 등록을 소유한다. native-client session
-  기본값과 delivery channel 계약은 `pipeline/chatport`가 소유한다.
+- `miniapp_bridge.go`의 `MiniappMethods`와 `MiniappDeps`가 native-client
+  request/response bridge와 optional capture method 등록을 소유한다.
+  native-client session 기본값과 delivery channel 계약은 `pipeline/chatport`가
+  소유한다.
 - `miniapp_workfeed.go`는 work-feed feedback/rewrite adapter를 제공한다. method
   이름의 최종 등록 위치는 server composition root의 `method_registry*.go`다.
 
@@ -18,7 +19,7 @@
 
 - 의존 방향은 `runtime/server → handler/chat → chatport + domain ports +
   rpcutil`이다. handler는 concrete `pipeline/chat`나 `GatewayHub`를 import하지
-  않고 필요한 능력을 `Deps`로 받는다.
+  않고 필요한 능력을 표준 `Deps` 또는 native `MiniappDeps`로 받는다.
 - `Methods`와 `MiniappMethods`는 `ChatReady`인 typed port가 없으면 method를
   노출하지 않는다. OCR/ASR/translation/work-feed 같은 optional method도 해당
   dependency가 있을 때만 등록한다.

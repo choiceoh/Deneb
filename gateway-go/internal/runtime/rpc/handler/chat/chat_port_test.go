@@ -37,11 +37,10 @@ func (*chatPortStub) EnqueueSteer(string, string) bool { return true }
 
 func TestChatMethodsRejectTypedNilPort(t *testing.T) {
 	var typedNil *chatPortStub
-	deps := Deps{Chat: typedNil}
-	if got := Methods(deps); got != nil {
+	if got := Methods(Deps{Chat: typedNil}); got != nil {
 		t.Fatalf("Methods with typed nil chat = %#v", got)
 	}
-	if got := MiniappMethods(deps); got != nil {
+	if got := MiniappMethods(MiniappDeps{Chat: typedNil}); got != nil {
 		t.Fatalf("MiniappMethods with typed nil chat = %#v", got)
 	}
 }
@@ -56,7 +55,7 @@ func TestMiniappChatSendAppliesNativeTurnDeadline(t *testing.T) {
 		remaining = time.Until(deadline)
 		return &chatport.SyncResult{BestText: "ok"}, nil
 	}}
-	handler := MiniappMethods(Deps{Chat: stub})["miniapp.chat.send"]
+	handler := MiniappMethods(MiniappDeps{Chat: stub})["miniapp.chat.send"]
 	req, err := protocol.NewRequestFrame("req-1", "miniapp.chat.send", map[string]string{"message": "hello"})
 	if err != nil {
 		t.Fatalf("NewRequestFrame: %v", err)

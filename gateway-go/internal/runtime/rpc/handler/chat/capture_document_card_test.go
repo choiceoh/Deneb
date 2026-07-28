@@ -7,7 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
-// fakeCaptureFeed is a minimal Deps.WorkFeed for the capture-card tests.
+// fakeCaptureFeed is a minimal MiniappDeps.WorkFeed for the capture-card tests.
 type fakeCaptureFeed struct{ items []workfeed.Item }
 
 func (f *fakeCaptureFeed) Append(it workfeed.Item) (workfeed.Item, error) {
@@ -28,7 +28,7 @@ func TestCardCapturedDocumentCreatesCardAndSkipsDuplicates(t *testing.T) {
 
 	t.Run("substantial analysis becomes a doc_analysis deliverable card", func(t *testing.T) {
 		feed := &fakeCaptureFeed{}
-		deps := Deps{
+		deps := MiniappDeps{
 			WorkFeed: feed,
 			PublishDeliverable: func(text string) (bool, error) {
 				feed.items = append(feed.items, workfeed.Item{Source: workfeed.SourceDocAnalysis, Body: text})
@@ -43,7 +43,7 @@ func TestCardCapturedDocumentCreatesCardAndSkipsDuplicates(t *testing.T) {
 
 	t.Run("thin analysis falls back to the raw capture card", func(t *testing.T) {
 		feed := &fakeCaptureFeed{}
-		deps := Deps{
+		deps := MiniappDeps{
 			WorkFeed:           feed,
 			PublishDeliverable: func(string) (bool, error) { return false, nil }, // suppressed
 		}
@@ -58,7 +58,7 @@ func TestCardCapturedDocumentCreatesCardAndSkipsDuplicates(t *testing.T) {
 			{Source: workfeed.SourceDocAnalysis, SessionKey: "client:main", CreatedAtMs: 2000},
 		}}
 		published := false
-		deps := Deps{
+		deps := MiniappDeps{
 			WorkFeed:           feed,
 			PublishDeliverable: func(string) (bool, error) { published = true; return true, nil },
 		}
@@ -75,7 +75,7 @@ func TestCardCapturedDocumentCreatesCardAndSkipsDuplicates(t *testing.T) {
 		feed := &fakeCaptureFeed{items: []workfeed.Item{
 			{Source: workfeed.SourceDocAnalysis, SessionKey: "client:main", CreatedAtMs: 500},
 		}}
-		deps := Deps{
+		deps := MiniappDeps{
 			WorkFeed: feed,
 			PublishDeliverable: func(string) (bool, error) {
 				feed.items = append(feed.items, workfeed.Item{Source: workfeed.SourceDocAnalysis})
