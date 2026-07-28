@@ -7,6 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/groupwareops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
@@ -265,7 +266,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		Observe:   observeFn,
 		Fleet:     runtimeops.ToolFleet(&deps.Fleet),
 		Browser:   runtimeops.ToolBrowser(&deps.Browser),
-		Groupware: runtimeops.ToolGroupware(deps.Wiki.Store),
+		Groupware: groupwareops.ToolGroupware(deps.Wiki.Store),
 		Solarflow: runtimeops.ToolSolarflow(),
 	}
 	if deps.SpilloverStore != nil {

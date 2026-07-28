@@ -17,6 +17,8 @@
   실행·세션 제어 표면을 소유한다.
 - `artifact/`는 chart/diagram/file/media 결과물, `document/`는 문서 추출,
   `schedule/`은 calendar/todo, `mailarchive/`는 archive 조회 구현이다.
+- `groupwareops/`는 Amaranth10 전자결재·게시판·ERP 원장 조회와
+  people wiki/org enrichment를 소유한다.
 - `skilltool/`과 `lifecycletool/`이 skill 조회·수명주기 구현을 소유하며
   top-level alias 파일은 기존 등록 계약을 유지하는 얇은 호환 표면이다.
 - `routine/`의 `ToolMorningLetter`, `ToolEveningLetter`는 정기 산출물
