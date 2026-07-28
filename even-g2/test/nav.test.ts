@@ -232,6 +232,14 @@ describe("fetchRoute", () => {
       /경로/,
     );
   });
+
+  it("rejects a truncated route so the HUD never false-arrives mid-trip", async () => {
+    stubFetch(200, {
+      route: { steps: [{ short: "직진", full: "", distanceM: 0, turnType: 0, coord: P0 }], totalM: 1000, totalSec: 60, mode: "car", truncated: true },
+      destination: { name: "부산" },
+    });
+    await expect(fetchRoute(settings, P0, "부산", "car")).rejects.toThrow(/너무 길어/);
+  });
 });
 
 describe("initialNavStateAt", () => {

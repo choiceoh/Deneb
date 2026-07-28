@@ -153,12 +153,19 @@ class DenebNotificationListenerService : NotificationListenerService() {
         val wanted = room.trim()
         if (wanted.isEmpty() || text.isBlank()) return false
         val live = activeNotifications ?: return false
+        var match: StatusBarNotification? = null
         for (sbn in live) {
             val notification = sbn?.notification ?: continue
             if (!roomMatches(notification, wanted)) continue
-            if (sendReply(notification, text)) return true
+            if (match != null) {
+                // Two live notifications share this title — replying would pick
+                // one at random and send to the wrong chat.
+                Log.w(TAG, "notification reply ambiguous: multiple rooms named $wanted")
+                return false
+            }
+            match = sbn
         }
-        false
+        match?.notification?.let { sendReply(it, text) } ?: false
     }.onFailure { Log.w(TAG, "notification reply failed", it) }.getOrDefault(false)
 
     /** Matches the same room name the digest shows: conversation title, else title. */
