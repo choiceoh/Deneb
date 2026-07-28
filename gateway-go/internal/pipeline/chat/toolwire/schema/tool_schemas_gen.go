@@ -722,6 +722,11 @@ func ChartToolSchema() map[string]any {
 				"type":        "string",
 				"description": "차트 상단 제목 (예: '월별 발주 추이')",
 			},
+			"value_kind": map[string]any{
+				"type":        "string",
+				"description": "값이 무엇인지 알려주면 축 서식이 자동으로 맞춰진다 — amount=금액(정수 눈금·천단위 구분), count=건수(정수 눈금, 단위 기본 '건'), ratio=비율(단위 기본 '%'), temperature=온도(단위 기본 '°C' + 0부터 그리지 않음 — 18~26°C를 0부터 그리면 변화가 안 보인다), score=점수(단위 기본 '점'). y_unit을 직접 주면 그 값이 우선한다(만원·백만원 등)",
+				"enum":        []string{"amount", "count", "ratio", "temperature", "score"},
+			},
 			"y_unit": map[string]any{
 				"type":        "string",
 				"description": "값 축 단위 (예: 건, 만원, %). 눈금에 접미사로 표시되고 도넛 범례의 값에도 붙는다",
