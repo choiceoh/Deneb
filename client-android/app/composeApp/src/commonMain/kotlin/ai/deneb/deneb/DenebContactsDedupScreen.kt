@@ -33,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -70,6 +71,18 @@ internal sealed interface ContactsApplyState {
 }
 
 /**
+ * Undo phases. The apply linked raw contacts; this puts every forced merge back to
+ * Android's automatic aggregation and re-syncs so the mirror (and 인물 위키) heal.
+ */
+internal sealed interface ContactsUndoState {
+    data object Idle : ContactsUndoState
+    data object NeedPermission : ContactsUndoState
+    data object Resetting : ContactsUndoState
+    data object Syncing : ContactsUndoState
+    data class Done(val undone: Int, val backupPath: String, val synced: Boolean) : ContactsUndoState
+}
+
+/**
  * 연락처 정리 — the address-book dedup ([miniapp.contacts.dedup]) plus a one-tap
  * apply that LINKS the safe duplicate groups AND runs the AI over the ambiguous
  * pairs, then re-syncs so the gateway mirror (and the 인물 위키) heal. All links are
@@ -91,13 +104,18 @@ fun DenebContactsDedupScreen(
     val perms = remember { ContactsPermissionController() }
     SetupContactsPermissionHandler(perms)
     var applyState by remember { mutableStateOf<ContactsApplyState>(ContactsApplyState.Idle) }
+    var undoState by remember { mutableStateOf<ContactsUndoState>(ContactsUndoState.Idle) }
+    var mergeLinks by remember { mutableStateOf(0) }
 
     suspend fun load() {
         failed = false
         val fetched = client.fetchContactsDedup()
         if (fetched == null) failed = true else payload = fetched
     }
-    LaunchedEffect(Unit) { load() }
+    LaunchedEffect(Unit) {
+        load()
+        mergeLinks = writer.countMergeLinks()
+    }
 
     // One tap → the whole cleanup, driving [applyState] through each phase so the UI
     // stays visibly alive: (1) link the deterministic safe groups, (2) let the AI
@@ -146,6 +164,30 @@ fun DenebContactsDedupScreen(
         applyState = ContactsApplyState.Done(ruleMerged = ruleMerged, aiMerged = aiMerged, synced = synced)
     }
 
+    // Undo the apply: every forced merge goes back to Android's own aggregation, then
+    // re-sync so the gateway mirror (and the 인물 위키 built from it) return with it.
+    // Nothing is deleted here either — only the aggregation hints are cleared.
+    suspend fun undoAll() {
+        if (!writer.hasAccess()) perms.requestPermission()
+        if (!writer.hasAccess()) {
+            undoState = ContactsUndoState.NeedPermission
+            return
+        }
+        undoState = ContactsUndoState.Resetting
+        val result = writer.resetMergeLinks()
+        var synced = false
+        if (result.undone > 0) {
+            undoState = ContactsUndoState.Syncing
+            val restored = reader.readAll()
+            if (restored.isNotEmpty()) {
+                client.captureContacts(restored)
+                synced = true
+            }
+        }
+        mergeLinks = writer.countMergeLinks()
+        undoState = ContactsUndoState.Done(result.undone, result.backupPath, synced)
+    }
+
     DenebScreenScaffold(title = "연락처 정리", onBack = onBack, tabBar = navigationTabBar) {
         val p = payload
         when {
@@ -159,6 +201,9 @@ fun DenebContactsDedupScreen(
                 payload = p,
                 canApply = writer.isSupported(),
                 applyState = applyState,
+                mergeLinks = mergeLinks,
+                undoState = undoState,
+                onUndo = { scope.launch { undoAll() } },
                 onApply = { scope.launch { applyAll(p) } },
                 onRescan = {
                     scope.launch {
@@ -179,6 +224,9 @@ internal fun ContactsDedupContent(
     payload: ContactsDedupPayload,
     canApply: Boolean = false,
     applyState: ContactsApplyState = ContactsApplyState.Idle,
+    mergeLinks: Int = 0,
+    undoState: ContactsUndoState = ContactsUndoState.Idle,
+    onUndo: () -> Unit = {},
     onApply: () -> Unit = {},
     onRescan: () -> Unit = {},
 ) {
@@ -208,6 +256,12 @@ internal fun ContactsDedupContent(
                             canApply = canApply,
                             needPermission = applyState is ContactsApplyState.NeedPermission,
                             onApply = onApply,
+                        )
+                        DedupUndo(
+                            canApply = canApply,
+                            mergeLinks = mergeLinks,
+                            undoState = undoState,
+                            onUndo = onUndo,
                         )
                     }
                 }
@@ -260,6 +314,68 @@ private fun DedupPlan(
         Spacer(Modifier.height(20.dp))
         Button(onClick = onApply, modifier = Modifier.fillMaxWidth()) {
             Text("정리 시작", style = DenebType.button)
+        }
+    }
+}
+
+/** Undo of a previous apply. Offered whenever forced merges exist on the device —
+ *  a wrong merge shows up as one contact wearing someone else's name, and this is
+ *  the way back. Restores Android's automatic aggregation; deletes nothing. */
+@Composable
+private fun DedupUndo(
+    canApply: Boolean,
+    mergeLinks: Int,
+    undoState: ContactsUndoState,
+    onUndo: () -> Unit,
+) {
+    when (val s = undoState) {
+        ContactsUndoState.Resetting, ContactsUndoState.Syncing -> {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                if (s == ContactsUndoState.Resetting) "묶인 연락처를 푸는 중…" else "지식 미러 동기화 중…",
+                style = DenebType.rowTitle,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+
+        is ContactsUndoState.Done -> {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "${s.undone.grouped()}개 묶음을 되돌렸습니다",
+                style = DenebType.rowTitle,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                buildString {
+                    append(if (s.synced) "지식 미러도 갱신됐어요" else "연락처만 복구했어요")
+                    if (s.backupPath.isNotEmpty()) append(" · 되돌리기 백업 저장됨")
+                },
+                style = DenebType.rowSubtitle,
+                color = denebHint(),
+            )
+        }
+
+        ContactsUndoState.NeedPermission -> {
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "연락처 쓰기 권한이 필요합니다 (설정 → 권한 → 연락처)",
+                style = DenebType.rowSubtitle,
+                color = denebInsight(),
+            )
+        }
+
+        ContactsUndoState.Idle -> {
+            if (!canApply || mergeLinks <= 0) return
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onUndo, modifier = Modifier.fillMaxWidth()) {
+                Text("정리 되돌리기 (${mergeLinks.grouped()}개 묶음)", style = DenebType.button)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "합쳐진 걸 전부 풀어 원래대로 되돌립니다",
+                style = DenebType.rowSubtitle,
+                color = denebHint(),
+            )
         }
     }
 }

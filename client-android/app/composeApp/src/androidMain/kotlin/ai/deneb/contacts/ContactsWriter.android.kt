@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.java.KoinJavaComponent.inject
+import java.io.File
 
 // WRITE_CONTACTS is declared only in the foss flavor's manifest (privacy parity,
 // mirrors READ_CONTACTS); playStore omits it. Compile-time per flavor.
@@ -36,6 +37,89 @@ actual class ContactsWriter actual constructor() {
         if (!hasAccess()) return 0
         return withContext(Dispatchers.IO) { linkRawContacts(context, phones, emails) }
     }
+
+    actual suspend fun countMergeLinks(): Int {
+        if (!hasAccess()) return 0
+        return withContext(Dispatchers.IO) { readMergeLinks(context).size }
+    }
+
+    actual suspend fun resetMergeLinks(): ContactsResetResult {
+        if (!hasAccess()) return ContactsResetResult()
+        return withContext(Dispatchers.IO) {
+            val pairs = readMergeLinks(context)
+            if (pairs.isEmpty()) {
+                ContactsResetResult()
+            } else {
+                // Back up before undoing: once a pair returns to AUTOMATIC the provider
+                // forgets it, and the pairs cannot be recomputed afterwards.
+                val backup = writeMergeBackup(context, pairs)
+                ContactsResetResult(undone = clearMergeLinks(context, pairs), backupPath = backup)
+            }
+        }
+    }
+}
+
+private class MergePair(val id1: Long, val id2: Long)
+
+// Every forced merge currently on the device. KEEP_SEPARATE rows are skipped on
+// purpose: those say "never merge these two", so clearing them would create merges
+// rather than undo them.
+private fun readMergeLinks(context: Context): List<MergePair> {
+    val out = ArrayList<MergePair>()
+    context.contentResolver.query(
+        AggregationExceptions.CONTENT_URI,
+        arrayOf(
+            AggregationExceptions.TYPE,
+            AggregationExceptions.RAW_CONTACT_ID1,
+            AggregationExceptions.RAW_CONTACT_ID2,
+        ),
+        null,
+        null,
+        null,
+    )?.use { c ->
+        val typeCol = c.getColumnIndexOrThrow(AggregationExceptions.TYPE)
+        val id1Col = c.getColumnIndexOrThrow(AggregationExceptions.RAW_CONTACT_ID1)
+        val id2Col = c.getColumnIndexOrThrow(AggregationExceptions.RAW_CONTACT_ID2)
+        while (c.moveToNext()) {
+            if (c.getInt(typeCol) == AggregationExceptions.TYPE_KEEP_TOGETHER) {
+                out += MergePair(c.getLong(id1Col), c.getLong(id2Col))
+            }
+        }
+    }
+    return out
+}
+
+private fun writeMergeBackup(context: Context, pairs: List<MergePair>): String = try {
+    val file = File(context.filesDir, "contacts-merge-backup-${System.currentTimeMillis()}.json")
+    file.writeText(pairs.joinToString(",", "[", "]") { "{\"a\":${it.id1},\"b\":${it.id2}}" })
+    file.absolutePath
+} catch (_: Exception) {
+    ""
+}
+
+// TYPE_AUTOMATIC hands the pair back to Android's own aggregation — the pre-apply
+// state. Chunked because the provider re-aggregates on every apply, so one huge
+// batch stalls; and a chunk that fails (e.g. a raw contact was since deleted) must
+// not strand the rest.
+private fun clearMergeLinks(context: Context, pairs: List<MergePair>): Int {
+    var undone = 0
+    pairs.chunked(64).forEach { chunk ->
+        val ops = ArrayList<ContentProviderOperation>(chunk.size)
+        chunk.forEach { pair ->
+            ops += ContentProviderOperation.newUpdate(AggregationExceptions.CONTENT_URI)
+                .withValue(AggregationExceptions.TYPE, AggregationExceptions.TYPE_AUTOMATIC)
+                .withValue(AggregationExceptions.RAW_CONTACT_ID1, pair.id1)
+                .withValue(AggregationExceptions.RAW_CONTACT_ID2, pair.id2)
+                .build()
+        }
+        try {
+            context.contentResolver.applyBatch(ContactsContract.AUTHORITY, ops)
+            undone += chunk.size
+        } catch (_: Exception) {
+            // keep going: partial recovery beats aborting the whole undo
+        }
+    }
+    return undone
 }
 
 // Full national digits so apply-time matching stays aligned with the gateway
