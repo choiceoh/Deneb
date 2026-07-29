@@ -1,4 +1,4 @@
-package prompt
+package promptbudget
 
 import (
 	"strings"
@@ -8,8 +8,8 @@ import (
 )
 
 func TestTokenestEstimateReturnsReasonableTokenCounts(t *testing.T) {
-	// Verify tokenest.Estimate produces reasonable values for content
-	// used in budget optimization.
+	// Verify tokenest.Estimate produces reasonable values for content used in
+	// budget optimization.
 	tests := []struct {
 		name      string
 		input     string
@@ -62,8 +62,8 @@ func TestNewFragmentCreatesPriorityByName(t *testing.T) {
 }
 
 // makeContent creates a string with approximately the given token count.
-// Uses ASCII 'a' characters for predictable estimation under the
-// script-aware tokenest engine (Latin ratio ~3.5 runes/token for default family).
+// Uses ASCII 'a' characters for predictable estimation under the script-aware
+// tokenest engine (Latin ratio ~3.5 runes/token for default family).
 func makeContent(tokens uint64) string {
 	if tokens == 0 {
 		return ""
@@ -83,8 +83,8 @@ func makeContent(tokens uint64) string {
 }
 
 func TestOptimize_WithinBudget(t *testing.T) {
-	budget := PromptBudget{Total: 1000}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 1000}
+	fragments := []Fragment{
 		{Name: "soul", Content: makeContent(200), Priority: 0},
 		{Name: "memory", Content: makeContent(300), Priority: 2, Shrinkable: true},
 		{Name: "low_priority", Content: makeContent(100), Priority: 3, Shrinkable: true},
@@ -103,10 +103,10 @@ func TestOptimize_WithinBudget(t *testing.T) {
 }
 
 func TestOptimize_RemovePriority3(t *testing.T) {
-	// Total: 200+300+100 = 600 tokens. Budget: 550 → need to cut ~50.
+	// Total: 200+300+100 = 600 tokens. Budget: 550 -> need to cut ~50.
 	// Removing priority 3 (100 tokens) brings total to 500 which fits.
-	budget := PromptBudget{Total: 550}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 550}
+	fragments := []Fragment{
 		{Name: "soul", Content: makeContent(200), Priority: 0},
 		{Name: "memory", Content: makeContent(300), Priority: 2, Shrinkable: true},
 		{Name: "low_priority", Content: makeContent(100), Priority: 3, Shrinkable: true},
@@ -125,9 +125,9 @@ func TestOptimize_RemovePriority3(t *testing.T) {
 
 func TestOptimize_ShrinkPriority2(t *testing.T) {
 	// Total after removing p3: 200+400 = 600. Budget: 450.
-	// Shrink p2 (400→200): total = 400, fits.
-	budget := PromptBudget{Total: 450}
-	fragments := []PromptFragment{
+	// Shrink p2 (400->200): total = 400, fits.
+	budget := Budget{Total: 450}
+	fragments := []Fragment{
 		{Name: "soul", Content: makeContent(200), Priority: 0},
 		{Name: "memory", Content: makeContent(400), Priority: 2, Shrinkable: true},
 		{Name: "low_priority", Content: makeContent(50), Priority: 3, Shrinkable: true},
@@ -150,11 +150,11 @@ func TestOptimize_ShrinkPriority2(t *testing.T) {
 }
 
 func TestOptimize_RemovePriority2(t *testing.T) {
-	// After removing p3 and shrinking p2: still over budget → remove p2.
+	// After removing p3 and shrinking p2: still over budget -> remove p2.
 	// soul(500) + memory(500 shrunk to 250) = 750 > budget 600.
 	// Remove memory (smallest p2 after shrink). soul(500) fits in 600.
-	budget := PromptBudget{Total: 600}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 600}
+	fragments := []Fragment{
 		{Name: "soul", Content: makeContent(500), Priority: 0},
 		{Name: "memory", Content: makeContent(500), Priority: 2, Shrinkable: true},
 		{Name: "low_priority", Content: makeContent(50), Priority: 3, Shrinkable: true},
@@ -170,9 +170,9 @@ func TestOptimize_RemovePriority2(t *testing.T) {
 }
 
 func TestOptimize_Priority0NeverRemoved(t *testing.T) {
-	// Priority 0 fragment exceeds budget alone — must still be kept.
-	budget := PromptBudget{Total: 100}
-	fragments := []PromptFragment{
+	// Priority 0 fragment exceeds budget alone -- must still be kept.
+	budget := Budget{Total: 100}
+	fragments := []Fragment{
 		{Name: "soul", Content: makeContent(500), Priority: 0},
 	}
 
@@ -186,8 +186,8 @@ func TestOptimize_Priority0NeverRemoved(t *testing.T) {
 }
 
 func TestOptimize_Priority1NeverRemoved(t *testing.T) {
-	budget := PromptBudget{Total: 100}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 100}
+	fragments := []Fragment{
 		{Name: "tool_schemas", Content: makeContent(300), Priority: 1},
 	}
 
@@ -198,7 +198,7 @@ func TestOptimize_Priority1NeverRemoved(t *testing.T) {
 }
 
 func TestOptimize_EmptyInput(t *testing.T) {
-	budget := PromptBudget{Total: 1000}
+	budget := Budget{Total: 1000}
 	result := budget.Optimize(nil)
 	if result != nil {
 		t.Errorf("got %v, want nil", result)
@@ -206,8 +206,8 @@ func TestOptimize_EmptyInput(t *testing.T) {
 }
 
 func TestOptimize_ZeroBudget(t *testing.T) {
-	budget := PromptBudget{Total: 0}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 0}
+	fragments := []Fragment{
 		{Name: "soul", Content: "hello", Priority: 0},
 	}
 	// Zero budget returns fragments unchanged (no optimization attempted).
@@ -218,8 +218,8 @@ func TestOptimize_ZeroBudget(t *testing.T) {
 }
 
 func TestAssembleReturnsConcatenatedFragmentContent(t *testing.T) {
-	budget := PromptBudget{Total: 1000}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 1000}
+	fragments := []Fragment{
 		{Name: "a", Content: "hello ", Priority: 0},
 		{Name: "b", Content: "world", Priority: 0},
 	}
@@ -232,8 +232,8 @@ func TestAssembleReturnsConcatenatedFragmentContent(t *testing.T) {
 
 func TestAssemble_WithOptimization(t *testing.T) {
 	// Budget only fits fragment a. Fragment b (p3) should be removed.
-	budget := PromptBudget{Total: 5}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 5}
+	fragments := []Fragment{
 		{Name: "a", Content: "hi", Priority: 0},
 		{Name: "b", Content: makeContent(100), Priority: 3, Shrinkable: true},
 	}
@@ -271,8 +271,8 @@ func TestShrinkContentTruncatesByFraction(t *testing.T) {
 func TestOptimize_MultiplePriority2_SmallestRemovedFirst(t *testing.T) {
 	// soul(100) + small_mem(50 shrunk to 25) + big_mem(200 shrunk to 100) = 225 > budget 200.
 	// Remove smallest p2 (small_mem at 25 after shrink). Total: 100+100=200.
-	budget := PromptBudget{Total: 200}
-	fragments := []PromptFragment{
+	budget := Budget{Total: 200}
+	fragments := []Fragment{
 		{Name: "soul", Content: makeContent(100), Priority: 0},
 		{Name: "small_mem", Content: makeContent(50), Priority: 2, Shrinkable: true},
 		{Name: "big_mem", Content: makeContent(200), Priority: 2, Shrinkable: true},
@@ -290,6 +290,6 @@ func TestOptimize_MultiplePriority2_SmallestRemovedFirst(t *testing.T) {
 	if _, ok := names["soul"]; !ok {
 		t.Error("soul (p0) should survive")
 	}
-	// At least one p2 should survive (big_mem is more likely to remain
-	// since smallest is removed first).
+	// At least one p2 should survive (big_mem is more likely to remain since
+	// smallest is removed first).
 }

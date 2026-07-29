@@ -1,7 +1,7 @@
 # Chat Prompt 변경 지도
 
-이 패키지는 system prompt 조립, workspace context 파일 로딩, session-frozen
-snapshot과 prompt token budget을 소유한다. chat turn은 완성된 prompt를
+이 패키지는 system prompt 조립, workspace context 파일 로딩,
+session-frozen snapshot과 static cache key 입력을 소유한다. chat turn은 완성된 prompt를
 소비하며 cache 구획과 context 신뢰 경계를 다시 조립하지 않는다.
 세부 cache 정책의 정본은 `docs/agent-rules/prompt-cache.md`다.
 
@@ -17,10 +17,12 @@ snapshot과 prompt token budget을 소유한다. chat turn은 완성된 prompt�
 - `prompt_cache.go`의 `PromptCache`와 package singleton `Cache`가
   static prompt, context mtime, session/topic snapshot을 한 lock 체계로
   관리한다.
-- `budget.go`의 `PromptBudget`, `PromptFragment`,
-  `PromptBudget.Optimize`가 선택 가능한 prompt 조각의 token 예산을 소유한다.
 - `topic_knowledge.go`의 `LoadTopicKnowledge`와
   `PersonaCacheKeyFor`가 topic/persona 내용을 cache key에 결합한다.
+
+Variable prompt addition token 예산은 sibling leaf 패키지
+`gateway-go/internal/pipeline/chat/promptbudget`가 소유한다. `prompt/`는 system
+prompt 본문, context file snapshot, static cache key 입력만 소유한다.
 
 ## 의존 방향과 불변조건
 

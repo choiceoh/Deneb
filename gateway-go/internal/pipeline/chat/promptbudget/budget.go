@@ -1,5 +1,6 @@
-// Package prompt provides system prompt assembly and token budget optimization.
-package prompt
+// Package promptbudget provides token budget optimization for variable prompt
+// additions assembled by the chat pipeline.
+package promptbudget
 
 import (
 	"sort"
@@ -8,26 +9,26 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/tokenest"
 )
 
-// PromptFragment represents a named segment of the system prompt with
-// priority metadata for budget-aware optimization.
-type PromptFragment struct {
+// Fragment represents a named prompt segment with priority metadata for
+// budget-aware optimization.
+type Fragment struct {
 	Name       string // e.g., "soul", "tool_schemas", "memory", "proactive_hints"
 	Content    string
 	Priority   int  // 0=highest (never remove), 1=high, 2=medium, 3=low (first to remove)
 	Shrinkable bool // true if content can be truncated when over budget
 }
 
-// PromptBudget controls system prompt token allocation.
-type PromptBudget struct {
-	Total uint64 // max tokens for the optimizable portion of the system prompt
+// Budget controls token allocation for variable prompt additions.
+type Budget struct {
+	Total uint64 // max tokens for the optimizable portion of the prompt
 }
 
-// DefaultPriorities maps well-known fragment names to their default priority.
+// defaultPriorities maps well-known fragment names to their default priority.
 // Priority 0: never removed or shrunk.
-// Priority 1: never removed (tool schemas need to be complete).
+// Priority 1: never removed.
 // Priority 2: can be shrunk or removed under pressure.
 // Priority 3: first to be removed entirely.
-var DefaultPriorities = map[string]int{
+var defaultPriorities = map[string]int{
 	"soul":          0,
 	"identity":      0,
 	"user_profile":  0,
@@ -43,20 +44,23 @@ var defaultShrinkable = map[int]bool{
 	3: true,
 }
 
-// NewFragment creates a PromptFragment with default priority and shrinkable
-// settings looked up from DefaultPriorities.
-func NewFragment(name, content string) PromptFragment {
+// NewFragment creates a Fragment with default priority and shrinkable settings
+// looked up from the known fragment names.
+func NewFragment(name, content string) Fragment {
 	priority := 2 // default to medium if name is unknown
-	if p, ok := DefaultPriorities[name]; ok {
+	if p, ok := defaultPriorities[name]; ok {
 		priority = p
 	}
-	return PromptFragment{
+	return Fragment{
 		Name:       name,
 		Content:    content,
 		Priority:   priority,
 		Shrinkable: defaultShrinkable[priority],
 	}
 }
+
+// EstimateTokens returns the chat pipeline's shared token estimate for text.
+func EstimateTokens(text string) int { return tokenest.Estimate(text) }
 
 // Optimize returns a copy of fragments that fits within the token budget.
 // Optimization proceeds in priority order:
@@ -65,13 +69,13 @@ func NewFragment(name, content string) PromptFragment {
 //  3. Shrink priority 2 fragments to half (largest first).
 //  4. Remove priority 2 fragments (smallest first).
 //  5. Priority 0 and 1 are never modified.
-func (b *PromptBudget) Optimize(fragments []PromptFragment) []PromptFragment {
+func (b *Budget) Optimize(fragments []Fragment) []Fragment {
 	if b.Total == 0 || len(fragments) == 0 {
 		return fragments
 	}
 
 	// Work on a copy so callers' slices are not mutated.
-	result := make([]PromptFragment, len(fragments))
+	result := make([]Fragment, len(fragments))
 	copy(result, fragments)
 
 	if sumTokens(result) <= b.Total {
@@ -97,7 +101,7 @@ func (b *PromptBudget) Optimize(fragments []PromptFragment) []PromptFragment {
 }
 
 // Assemble runs Optimize and concatenates the surviving fragment contents.
-func (b *PromptBudget) Assemble(fragments []PromptFragment) string {
+func (b *Budget) Assemble(fragments []Fragment) string {
 	optimized := b.Optimize(fragments)
 	var sb strings.Builder
 	for _, f := range optimized {
@@ -109,7 +113,7 @@ func (b *PromptBudget) Assemble(fragments []PromptFragment) string {
 }
 
 // sumTokens returns the total estimated tokens across all fragments.
-func sumTokens(fragments []PromptFragment) uint64 {
+func sumTokens(fragments []Fragment) uint64 {
 	var total uint64
 	for _, f := range fragments {
 		total += uint64(tokenest.Estimate(f.Content))
@@ -118,8 +122,8 @@ func sumTokens(fragments []PromptFragment) uint64 {
 }
 
 // filterByPriority removes all fragments with the given priority.
-func filterByPriority(fragments []PromptFragment, priority int) []PromptFragment {
-	result := make([]PromptFragment, 0, len(fragments))
+func filterByPriority(fragments []Fragment, priority int) []Fragment {
+	result := make([]Fragment, 0, len(fragments))
 	for _, f := range fragments {
 		if f.Priority != priority {
 			result = append(result, f)
@@ -130,7 +134,7 @@ func filterByPriority(fragments []PromptFragment, priority int) []PromptFragment
 
 // shrinkByPriority truncates shrinkable fragments at the given priority level
 // to the specified fraction of their original rune count (largest first).
-func shrinkByPriority(fragments []PromptFragment, priority int, fraction float64) []PromptFragment {
+func shrinkByPriority(fragments []Fragment, priority int, fraction float64) []Fragment {
 	// Sort indices by token count descending so we shrink the biggest first.
 	type idxTokens struct {
 		idx    int
@@ -146,7 +150,7 @@ func shrinkByPriority(fragments []PromptFragment, priority int, fraction float64
 		return targets[i].tokens > targets[j].tokens
 	})
 
-	result := make([]PromptFragment, len(fragments))
+	result := make([]Fragment, len(fragments))
 	copy(result, fragments)
 	for _, t := range targets {
 		result[t.idx].Content = shrinkContent(result[t.idx].Content, fraction)
@@ -156,7 +160,7 @@ func shrinkByPriority(fragments []PromptFragment, priority int, fraction float64
 
 // removeShrinkableSmallestFirst removes priority-level fragments one by one
 // (smallest token count first) until the total fits within the budget.
-func removeShrinkableSmallestFirst(fragments []PromptFragment, priority int, budget uint64) []PromptFragment {
+func removeShrinkableSmallestFirst(fragments []Fragment, priority int, budget uint64) []Fragment {
 	// Collect indices of removable fragments, sorted by token count ascending.
 	type idxTokens struct {
 		idx    int
@@ -182,7 +186,7 @@ func removeShrinkableSmallestFirst(fragments []PromptFragment, priority int, bud
 		total -= r.tokens
 	}
 
-	result := make([]PromptFragment, 0, len(fragments)-len(removeSet))
+	result := make([]Fragment, 0, len(fragments)-len(removeSet))
 	for i, f := range fragments {
 		if !removeSet[i] {
 			result = append(result, f)
