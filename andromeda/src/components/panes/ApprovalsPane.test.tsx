@@ -89,47 +89,74 @@ describe("ApprovalsPane", () => {
     expect(screen.getByRole("button", { name: "반려" })).toBeInTheDocument();
   });
 
-  // 검토 모드는 문서 "제목"에서만 근거를 찾는다 — 기안자 이름으로 기안자의
-  // 인물 위키를 여는 것(결재 내용 대신 사람 정보로 읽힘)은 회귀.
-  it("review mode follows the title's project, never the drafter's person wiki", async () => {
-    const splitWiki = vi.fn();
-    const pending: GroupwareApprovalRow[] = [
-      {
-        docId: "11",
-        title: "일반 경비 지출 품의",
-        drafter: "홍길동",
-        date: ymd,
-        status: "미결",
-        folder: "pending",
-        canAct: true,
-      },
-      {
-        docId: "12",
-        title: "완도 관산포 기자재 발주 품의",
-        drafter: "홍길동",
-        date: ymd,
-        status: "미결",
-        folder: "pending",
-        canAct: true,
-      },
-    ];
-    render(
+  const reviewRows: GroupwareApprovalRow[] = [
+    {
+      docId: "11",
+      title: "일반 경비 지출 품의",
+      drafter: "홍길동",
+      date: ymd,
+      status: "미결",
+      folder: "pending",
+      canAct: true,
+    },
+    {
+      docId: "12",
+      title: "완도 관산포 기자재 발주 품의",
+      drafter: "홍길동",
+      date: ymd,
+      status: "미결",
+      folder: "pending",
+      canAct: true,
+    },
+  ];
+
+  function renderReview(value: Partial<ReturnType<typeof workspaceValue>>) {
+    return render(
       <DataProviderScope
         dataProvider={fakeProvider({
-          approvals: pending,
+          approvals: reviewRows,
           progress: [{ project: "완도 관산포", path: "프로젝트/완도 관산포/대표.md" }],
           people: [{ name: "홍길동", wikiPath: "인물/홍길동.md" }],
         })}
       >
-        <WorkspaceStub value={workspaceValue({ splitWiki })}>
+        <WorkspaceStub value={workspaceValue(value)}>
           <ApprovalsPane />
         </WorkspaceStub>
       </DataProviderScope>,
     );
-    // 기안자(홍길동)만 걸리는 문서 — 아무 위키도 자동 배치되지 않는다.
+  }
+
+  // 결재 행을 여는 것만으로 위키 타일이 끼어들면 안 된다 — splitWiki는 새 타일에
+  // 포커스를 주고 3타일이 차 있으면 기존 타일을 밀어내, "결재 내용이 아니라
+  // 프로젝트 정보"가 뜬 것으로 읽혔다. 근거는 버튼 한 개로만 제시한다.
+  it("never steals the pane on open — the wiki hit is an explicit button", async () => {
+    const splitWiki = vi.fn();
+    renderReview({ splitWiki });
+
+    await userEvent.click(await screen.findByText("완도 관산포 기자재 발주 품의"));
+    expect(splitWiki).not.toHaveBeenCalled();
+
+    const openWiki = await screen.findByRole("button", { name: /근거 위키 · 완도 관산포/ });
+    await userEvent.click(openWiki);
+    expect(splitWiki).toHaveBeenCalledWith("프로젝트/완도 관산포/대표.md");
+  });
+
+  // 검토 모드는 문서 "제목"에서만 근거를 찾는다 — 기안자 이름으로 기안자의
+  // 인물 위키를 제시하는 것(결재 내용 대신 사람 정보로 읽힘)은 회귀.
+  it("matches the title's project, never the drafter's person wiki", async () => {
+    renderReview({});
+    // 기안자(홍길동)만 걸리는 문서 — 근거 위키 버튼 자체가 없다.
     await userEvent.click(await screen.findByText("일반 경비 지출 품의"));
-    // 제목이 프로젝트를 담은 문서 — 그 프로젝트 위키가 옆 타일로 열린다.
-    await userEvent.click(screen.getByText("완도 관산포 기자재 발주 품의"));
+    await screen.findByRole("button", { name: "닫기" });
+    expect(screen.queryByRole("button", { name: /근거 위키/ })).not.toBeInTheDocument();
+  });
+
+  // 컨텍스트 팔로우 모드(명시 opt-in)에서만 자동 배치가 살아난다.
+  it("auto-splits the wiki only when 컨텍스트 팔로우 모드 is on", async () => {
+    const splitWiki = vi.fn();
+    renderReview({ splitWiki, followMode: true });
+
+    await userEvent.click(await screen.findByText("완도 관산포 기자재 발주 품의"));
     await waitFor(() => expect(splitWiki).toHaveBeenCalledWith("프로젝트/완도 관산포/대표.md"));
     expect(splitWiki).toHaveBeenCalledTimes(1);
   });

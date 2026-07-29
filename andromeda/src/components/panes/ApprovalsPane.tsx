@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { GroupwareApprovalRow } from "@/gen/miniappWire";
 import { useCachedList } from "@/cachedList";
-import { matchEntities } from "@/entityMatch";
+import { type EntityHit, matchEntities } from "@/entityMatch";
 import { APPROVALS_RPC } from "@/resources";
 import type { Person, ProjectDigest } from "@/types";
 import { addDays, dayLabel, errText, startOfDay } from "@/format";
@@ -41,7 +41,7 @@ function rowLine(a: GroupwareApprovalRow): string {
 }
 
 export function ApprovalsPane() {
-  const { connected, splitWiki } = useWorkspace();
+  const { connected, splitWiki, followMode } = useWorkspace();
   const [dayMs, setDayMs] = useState<number>(() => startOfDay());
   const [pendingOnly, setPendingOnly] = useState(false);
   const { result, query } = useCachedList<GroupwareApprovalRow & { id?: string }>("approvals", connected, {
@@ -55,29 +55,39 @@ export function ApprovalsPane() {
   // 자동 랜딩 원샷 플래그 — 아래 렌더 조정 블록과 date 점프 타깃이 공유한다.
   const [landed, setLanded] = useState(false);
 
-  // 결재 검토 모드: 미결(canAct) 문서를 열면 제목과 매칭되는 프로젝트/인물
-  // 위키를 옆 타일로 자동 배치 — 승인·반려 근거가 클릭 없이 보인다.
+  // 결재 검토 모드: 문서 제목이 가리키는 프로젝트/인물 위키를 승인·반려의
+  // "근거"로 붙여 준다 — 다만 화면을 뺏지 않는 방식으로.
+  // 자동 배치(splitWiki)는 컨텍스트 팔로우 모드(기본 OFF)일 때만 한다: splitWiki는
+  // 새 위키 타일에 포커스를 주고(=AI 컨텍스트 주인이 바뀐다) 3타일이 차 있으면
+  // 기존 타일을 밀어내서, 결재 행을 누를 때마다 "결재 내용이 아니라 프로젝트
+  // 정보"가 자리를 차지했다. 기본값은 상세 헤더의 버튼 한 개 — 근거를 볼지는
+  // 사람이 고른다 (침습적 조종은 opt-in이라는 ContextFollow와 같은 규칙).
   // 기안자 이름은 매칭 대상이 아니다: 기안자는 거의 항상 인물 위키에 있어
   // 문서를 열 때마다 기안자 프로필이 떠 "결재 내용 대신 사람 정보"로 읽혔다.
-  // 근거는 문서가 다루는 대상(제목)에서만 찾는다. 읽기 전용 조종(위키 열람)
-  // 뿐이라 수용 게이트와 무관. 문서당 1회만, 매칭 실패 시 조용히 아무것도 안 한다.
+  // 근거는 문서가 다루는 대상(제목)에서만 찾는다.
   const reviewProjects = useCachedList<ProjectDigest>("progress", connected);
   const reviewPeople = useCachedList<Person>("people", connected);
-  const reviewedRef = useRef(new Set<string>());
   const selForReview = selectedId != null ? rows.find((a) => String(a.id) === String(selectedId)) : undefined;
-  const reviewTitle = selForReview?.canAct ? (selForReview.title ?? "") : "";
+  const reviewTitle = selForReview?.title ?? "";
+  const projectRows = reviewProjects.result?.data;
+  const peopleRows = reviewPeople.result?.data;
+  const reviewHit = useMemo(() => {
+    if (!reviewTitle.trim()) return undefined;
+    const projects = (projectRows ?? []).map((d) => ({ name: d.project, path: d.path }));
+    const people = (peopleRows ?? []).map((p) => ({ name: p.name, path: p.wikiPath }));
+    return matchEntities(reviewTitle, { projects, people }, 1)[0];
+  }, [reviewTitle, projectRows, peopleRows]);
+
+  // 팔로우 모드 자동 배치는 문서당 1회만 — 위키 목록이 늦게 도착해도 재배치 없음.
+  const followedRef = useRef(new Set<string>());
   useEffect(() => {
-    if (!selectedId || !reviewTitle.trim()) return;
+    if (!followMode || !selectedId || !reviewHit) return;
     const key = String(selectedId);
-    if (reviewedRef.current.has(key)) return;
-    const projects = (reviewProjects.result?.data ?? []).map((d) => ({ name: d.project, path: d.path }));
-    const people = (reviewPeople.result?.data ?? []).map((p) => ({ name: p.name, path: p.wikiPath }));
-    if (projects.length === 0 && people.length === 0) return; // 목록 로드 전 — 다음 렌더에서 재시도
-    reviewedRef.current.add(key);
-    const hit = matchEntities(reviewTitle, { projects, people }, 1)[0];
-    if (hit) splitWiki(hit.path);
+    if (followedRef.current.has(key)) return;
+    followedRef.current.add(key);
+    splitWiki(reviewHit.path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, reviewTitle, reviewProjects.result, reviewPeople.result]);
+  }, [followMode, selectedId, reviewHit]);
 
   // Deep link (오늘 KPI/섹션 · workspace 커맨드): query="pending" opens the 미결
   // inbox; an id selects that document (waits for rows to load — return false
@@ -284,6 +294,8 @@ export function ApprovalsPane() {
               <ApprovalDetail
                 doc={selected}
                 busy={busy}
+                wikiHit={reviewHit}
+                onOpenWiki={() => reviewHit && splitWiki(reviewHit.path)}
                 onApprove={() => setApproving(selected)}
                 onReject={() => openReject(selected)}
                 onClose={() => setSelectedId(undefined)}
@@ -348,12 +360,16 @@ export function ApprovalsPane() {
 function ApprovalDetail({
   doc,
   busy,
+  wikiHit,
+  onOpenWiki,
   onApprove,
   onReject,
   onClose,
 }: {
   doc: GroupwareApprovalRow;
   busy: boolean;
+  wikiHit?: EntityHit;
+  onOpenWiki: () => void;
   onApprove: () => void;
   onReject: () => void;
   onClose: () => void;
@@ -470,6 +486,15 @@ function ApprovalDetail({
           <div className="workfeed-detail-title">{sections.title || doc.title || "(제목 없음)"}</div>
         </div>
         <div className="workfeed-detail-actions">
+          {wikiHit ? (
+            <button
+              className="row-btn"
+              onClick={onOpenWiki}
+              title={`${wikiHit.kind === "project" ? "프로젝트" : "인물"} 위키를 옆 타일로 엽니다`}
+            >
+              근거 위키 · {wikiHit.name}
+            </button>
+          ) : null}
           <button className="row-btn" onClick={onClose}>
             닫기
           </button>
