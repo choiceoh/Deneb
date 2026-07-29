@@ -50,6 +50,7 @@ func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Contex
 	if err != nil {
 		return chattools.SkillSelfCorrectionCandidateResult{}, err
 	}
+	b.clearSkillLifecycleStatusCache()
 	return chattools.SkillSelfCorrectionCandidateResult{
 		OK:        true,
 		Candidate: &rec,
@@ -72,6 +73,7 @@ func (b *skillLifecycleBackend) ReviewSelfCorrectionCandidate(_ context.Context,
 	if err != nil {
 		return chattools.SkillSelfCorrectionReviewResult{}, err
 	}
+	b.clearSkillLifecycleStatusCache()
 	return chattools.SkillSelfCorrectionReviewResult{
 		OK:     true,
 		Review: &rec,
@@ -119,6 +121,7 @@ func (b *skillLifecycleBackend) RecordSkillValidationCase(_ context.Context, req
 	if err := b.tracker.RecordSkillValidationCase(record); err != nil {
 		return chattools.SkillValidationCaseResult{}, err
 	}
+	b.clearSkillLifecycleStatusCache()
 	return chattools.SkillValidationCaseResult{
 		OK:        true,
 		SkillName: lifecycleValue(strings.TrimSpace(req.SkillName)),
@@ -156,6 +159,7 @@ func (b *skillLifecycleBackend) RecordSkillValidationCaseFromSession(ctx context
 		}
 		return chattools.SkillValidationCaseFromSessionResult{}, err
 	}
+	b.clearSkillLifecycleStatusCache()
 	return chattools.SkillValidationCaseFromSessionResult{
 		OK:                 true,
 		SkillName:          lifecycleValue(strings.TrimSpace(req.SkillName)),
