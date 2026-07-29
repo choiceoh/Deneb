@@ -13,7 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/promptbudget"
 	compact "github.com/choiceoh/deneb/gateway-go/internal/pipeline/compaction"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
@@ -514,8 +514,8 @@ func finalizePrompt(
 	}
 
 	if tier1Addition != "" {
-		promptBudget := prompt.PromptBudget{Total: contextCfg.SystemPromptBudget}
-		baseTokens := uint64(prompt.EstimateTokens(string(systemPrompt)))
+		promptBudget := promptbudget.Budget{Total: contextCfg.SystemPromptBudget}
+		baseTokens := uint64(promptbudget.EstimateTokens(string(systemPrompt)))
 		var remainingBudget uint64
 		if promptBudget.Total > baseTokens {
 			remainingBudget = promptBudget.Total - baseTokens
@@ -523,9 +523,9 @@ func finalizePrompt(
 		if promptBudget.Total > 0 && remainingBudget == 0 {
 			return systemPrompt
 		}
-		additionBudget := prompt.PromptBudget{Total: remainingBudget}
+		additionBudget := promptbudget.Budget{Total: remainingBudget}
 
-		additionFragments := []prompt.PromptFragment{prompt.NewFragment("memory", tier1Addition)}
+		additionFragments := []promptbudget.Fragment{promptbudget.NewFragment("memory", tier1Addition)}
 		optimized := additionBudget.Optimize(additionFragments)
 		for _, f := range optimized {
 			systemPrompt = json.RawMessage(llm.AppendSystemText(llm.FlexibleFromRaw(systemPrompt), f.Content).Bytes())

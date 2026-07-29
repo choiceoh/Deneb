@@ -11,7 +11,8 @@
 | `tools/` | 순수 도구 구현(fs/exec/git/mail_archive/calendar/wiki/web/asr/paddleocr/sessions/…). `toolport/` 실행 계약과 `tooldeps/` 의존 bag을 소비 | chat/ import 금지 |
 | `toolwire/` | 도구 등록 허브. `core/register.go`의 `Register*Tools(...)`가 구현(tools/)+스키마(`schema/tool_schemas_gen.go`)를 `ToolRegistrar`에 배선. `schema/tool_schemas_gen.go`는 **생성물** | chat/ import 금지 |
 | `toolreg/` | 얇은 leaf — session tool-preset 상수/헬퍼만. 등록 배선은 `toolwire/` | chat/ import 금지 |
-| `prompt/` | 시스템 프롬프트 조립(`system_prompt.go`), 컨텍스트 파일 로더(`context_files.go`), `prompt_cache.go`, 토픽지식(`topic_knowledge.go`), 예산(`budget.go`) | — |
+| `prompt/` | 시스템 프롬프트 조립(`system_prompt.go`), 컨텍스트 파일 로더(`context_files.go`), `prompt_cache.go`, 토픽지식(`topic_knowledge.go`) | — |
+| `promptbudget/` | 리프 패키지. 런 준비 단계의 variable prompt addition token 예산(`Budget`/`Fragment`) | chat 내부 import 0, domain/platform import 0 |
 | `web/` | `web` 도구 백엔드: fetch/HTML 전처리/youtube/검색 escalate/stealth, singleflight+캐시 | — |
 | `linkenrichment/` | 입력 사용자 메시지 링크의 URL 추출, bounded 병렬 fetch, HTML/YouTube 변환, panic 격리와 start/join/cancel 수명주기 | chat root 타입을 import하지 않고 좁은 `Config`/`Sanitizer` 계약만 소비 |
 | `streaming/` | `Broadcaster` — 턴 이벤트 SSE 방출 | — |
@@ -25,6 +26,7 @@
 - **`recall_*` + `run_tail_inject.go`** — 회상 프리플라이트 → 마지막 user 메시지 꼬리 주입.
 - **`slash_*` + `*_dispatch.go`** — 슬래시 커맨드(`/help`·`/reset`·`/status`·`/kill`·`/goal`·`/rollback`·`/update`·`/restart`·`/weekly`).
 - 캐시 마커/바이트 안정성: `cache_breakpoints.go`·`tier1_cache.go`·`prompt_snapshot_persist.go`·`calendar_glance.go`·`tail_register.go`(런 경계 꼬리 재부착 — content-prefix 캐시, prompt-cache.md §1.6).
+- Variable prompt addition 예산: `promptbudget/`를 `run_prepare_compact.go`가 소비한다. 시스템 프롬프트 본문 조립은 `prompt/`에 둔다.
 
 ## 핵심 흐름: 한 턴의 실행 순서
 
