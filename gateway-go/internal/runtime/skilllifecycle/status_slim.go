@@ -29,6 +29,9 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 	if status == nil {
 		return
 	}
+	status.System.SourcePrinciples = nil
+	status.System.FilteredPrinciples = nil
+	slimStatusUsageStats(status)
 	if status.Recent != nil {
 		slim := make([]genesis.LifecycleLogEntry, len(*status.Recent))
 		copy(slim, *status.Recent)
@@ -85,6 +88,27 @@ func slimSkillLifecycleStatusForAgent(status *chattools.SkillLifecycleStatusResu
 			slim[i].Reason = genesiscommon.TruncateRunes(slim[i].Reason, statusSlimResultRunes)
 		}
 		status.Opportunities = &slim
+	}
+}
+
+func slimStatusUsageStats(status *chattools.SkillLifecycleStatusResult) {
+	if status.Stats == nil {
+		return
+	}
+	if status.Stats.Skill != nil {
+		skill := *status.Stats.Skill
+		skill.RecentErrors = nil
+		skill.RecentFailureTraces = nil
+		status.Stats.Skill = &skill
+	}
+	if len(status.Stats.Fleet) > 0 {
+		fleet := make([]genesis.UsageStats, len(status.Stats.Fleet))
+		copy(fleet, status.Stats.Fleet)
+		for i := range fleet {
+			fleet[i].RecentErrors = nil
+			fleet[i].RecentFailureTraces = nil
+		}
+		status.Stats.Fleet = fleet
 	}
 }
 

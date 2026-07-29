@@ -302,6 +302,36 @@ func NewTracker(logger *slog.Logger) (*Tracker, error) {
 	return t, nil
 }
 
+// StatusRevision fingerprints the persisted state read by skill_lifecycle
+// status. It is a cache key only: gates and lifecycle decisions still read the
+// ledgers themselves.
+func (t *Tracker) StatusRevision() string {
+	if t == nil {
+		return ""
+	}
+	paths := []string{
+		t.usagePath,
+		t.logPath,
+		t.curatorPath,
+		t.rejectedPath,
+		t.opportunityPath,
+		t.optimizerMemoryPath,
+		t.validationPath,
+		t.ablationPath,
+		t.selfCorrectionPath,
+	}
+	var b strings.Builder
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			fmt.Fprintf(&b, "%s:error:%s\n", filepath.Base(path), err)
+			continue
+		}
+		fmt.Fprintf(&b, "%s:%d:%d\n", filepath.Base(path), info.Size(), info.ModTime().UnixNano())
+	}
+	return b.String()
+}
+
 // isConsultInfraError reports whether a usage failure was caused by the skills
 // consult mechanism itself failing to load the skill (a gateway path/catalog
 // bug, e.g. #2125's "tool skills errored") rather than the skill running badly.

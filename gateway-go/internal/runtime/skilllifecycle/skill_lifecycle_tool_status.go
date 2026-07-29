@@ -13,8 +13,18 @@ import (
 // move, no behavior change): per-skill/global status assembly and the Propus
 // overview/doctrine DTOs.
 
+type skillLifecycleStatusCacheKey struct {
+	SkillName string
+	Limit     int
+}
+
+type skillLifecycleStatusCacheEntry struct {
+	Revision string
+	Result   chattools.SkillLifecycleStatusResult
+}
+
 // SkillLifecycleStatus returns the current skill-lifecycle status.
-func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chattools.SkillLifecycleStatusRequest) (chattools.SkillLifecycleStatusResult, error) {
+func (b *skillLifecycleBackend) SkillLifecycleStatus(ctx context.Context, req chattools.SkillLifecycleStatusRequest) (chattools.SkillLifecycleStatusResult, error) {
 	if b.tracker == nil {
 		return chattools.SkillLifecycleStatusResult{
 			System:   propuswire.SystemStatus(strings.TrimSpace(req.SkillName)),
@@ -24,15 +34,63 @@ func (b *skillLifecycleBackend) SkillLifecycleStatus(_ context.Context, req chat
 	}
 
 	limit := normalizeSkillLifecycleStatusLimit(req.Limit)
+	skillName := strings.TrimSpace(req.SkillName)
+	key := skillLifecycleStatusCacheKey{SkillName: skillName, Limit: limit}
+	revision := b.tracker.StatusRevision()
+	if cached, ok := b.cachedSkillLifecycleStatus(key, revision); ok {
+		return cached, nil
+	}
+
+	status, err := b.skillLifecycleStatusUncached(ctx, skillName, limit)
+	if err != nil {
+		return chattools.SkillLifecycleStatusResult{}, err
+	}
+	if revision != "" && b.tracker.StatusRevision() == revision {
+		b.storeSkillLifecycleStatusCache(key, revision, status)
+	}
+	return status, nil
+}
+
+func (b *skillLifecycleBackend) skillLifecycleStatusUncached(_ context.Context, skillName string, limit int) (chattools.SkillLifecycleStatusResult, error) {
 	recent, err := b.tracker.RecentLifecycleLog(limit)
 	if err != nil {
 		return chattools.SkillLifecycleStatusResult{}, err
 	}
-	skillName := strings.TrimSpace(req.SkillName)
 	if skillName != "" {
 		return b.skillLifecycleStatusForSkill(skillName, limit, recent)
 	}
 	return b.globalSkillLifecycleStatus(limit, recent)
+}
+
+func (b *skillLifecycleBackend) cachedSkillLifecycleStatus(key skillLifecycleStatusCacheKey, revision string) (chattools.SkillLifecycleStatusResult, bool) {
+	if revision == "" {
+		return chattools.SkillLifecycleStatusResult{}, false
+	}
+	b.statusCacheMu.Lock()
+	defer b.statusCacheMu.Unlock()
+	entry, ok := b.statusCache[key]
+	if !ok || entry.Revision != revision {
+		return chattools.SkillLifecycleStatusResult{}, false
+	}
+	return entry.Result, true
+}
+
+func (b *skillLifecycleBackend) storeSkillLifecycleStatusCache(key skillLifecycleStatusCacheKey, revision string, result chattools.SkillLifecycleStatusResult) {
+	if revision == "" {
+		return
+	}
+	b.statusCacheMu.Lock()
+	defer b.statusCacheMu.Unlock()
+	if b.statusCache == nil || len(b.statusCache) > 32 {
+		b.statusCache = make(map[skillLifecycleStatusCacheKey]skillLifecycleStatusCacheEntry)
+	}
+	b.statusCache[key] = skillLifecycleStatusCacheEntry{Revision: revision, Result: result}
+}
+
+func (b *skillLifecycleBackend) clearSkillLifecycleStatusCache() {
+	b.statusCacheMu.Lock()
+	defer b.statusCacheMu.Unlock()
+	b.statusCache = nil
 }
 
 func (b *skillLifecycleBackend) skillLifecycleStatusForSkill(skillName string, limit int, recent []genesis.LifecycleLogEntry) (chattools.SkillLifecycleStatusResult, error) {

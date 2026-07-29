@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -31,6 +32,8 @@ type skillLifecycleBackend struct {
 	logger          *slog.Logger
 	relevanceClient *llm.Client
 	relevanceModel  string
+	statusCacheMu   sync.Mutex
+	statusCache     map[skillLifecycleStatusCacheKey]skillLifecycleStatusCacheEntry
 
 	// Heartbeat shadow-replay deps (P1, heartbeat_shadow_replay.go). Nil/empty
 	// on backends that never serve the tool (e.g. the backfill task).
@@ -215,6 +218,7 @@ func (b *skillLifecycleBackend) RunSkillGenesis(ctx context.Context, req chattoo
 	}
 	if b.tracker != nil {
 		_ = b.tracker.LogGenesis(skill.Name, source, sessionKey, skill.Category, skill.Description)
+		b.clearSkillLifecycleStatusCache()
 	}
 	return chattools.SkillGenesisResult{
 		OK:     true,
@@ -240,6 +244,7 @@ func (b *skillLifecycleBackend) RunSkillEvolution(ctx context.Context, req chatt
 	if b.tracker != nil && result != nil && result.Evolved {
 		_ = b.tracker.MarkSkillPatched(req.SkillName)
 	}
+	b.clearSkillLifecycleStatusCache()
 	return chattools.SkillEvolutionResult{
 		OK:     true,
 		Result: result,
@@ -262,15 +267,18 @@ func (b *skillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req cha
 		if err := b.tracker.SetSkillPinned(skillName, true); err != nil {
 			return chattools.SkillCuratorActionResult{}, err
 		}
+		b.clearSkillLifecycleStatusCache()
 	case "unpin":
 		if err := b.tracker.SetSkillPinned(skillName, false); err != nil {
 			return chattools.SkillCuratorActionResult{}, err
 		}
+		b.clearSkillLifecycleStatusCache()
 	case "archive":
 		rec, err := b.tracker.SetSkillCuratorState(skillName, genesis.SkillCuratorStateArchived)
 		if err != nil {
 			return chattools.SkillCuratorActionResult{}, err
 		}
+		b.clearSkillLifecycleStatusCache()
 		return chattools.SkillCuratorActionResult{
 			OK:        true,
 			Action:    lifecycleValue(req.Action),
@@ -282,6 +290,7 @@ func (b *skillLifecycleBackend) RunSkillCuratorAction(_ context.Context, req cha
 		if err != nil {
 			return chattools.SkillCuratorActionResult{}, err
 		}
+		b.clearSkillLifecycleStatusCache()
 		return chattools.SkillCuratorActionResult{
 			OK:        true,
 			Action:    lifecycleValue(req.Action),
@@ -335,6 +344,7 @@ func (b *skillLifecycleBackend) logProposal(req chattools.SkillEvolutionProposal
 	}); err != nil && b.logger != nil {
 		b.logger.Warn("skill lifecycle: opportunity log failed", "error", err)
 	}
+	b.clearSkillLifecycleStatusCache()
 }
 
 func lifecycleValue[T any](value T) *T {

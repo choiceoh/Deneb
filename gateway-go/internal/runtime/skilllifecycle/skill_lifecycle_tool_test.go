@@ -221,6 +221,33 @@ func TestSkillLifecycleStatusIdentifiesPropusWhenTrackerMissing(t *testing.T) {
 	}
 }
 
+func TestSkillLifecycleStatusCacheInvalidatesOnTrackerRevisionChange(t *testing.T) {
+	tracker := newSkillLifecycleTestTracker(t)
+	backend := &skillLifecycleBackend{tracker: tracker}
+
+	got, err := backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{Limit: 5})
+	if err != nil {
+		t.Fatalf("initial SkillLifecycleStatus: %v", err)
+	}
+	if len(*got.Recent) != 0 {
+		t.Fatalf("expected empty initial recent log, got %+v", *got.Recent)
+	}
+
+	// Simulate a write that bypasses the tool backend, as dispatch/RPC paths do.
+	if err := tracker.LogGenesis("cache-proof", "session", "client:main", "coding", "cache revision proof"); err != nil {
+		t.Fatalf("LogGenesis: %v", err)
+	}
+
+	got, err = backend.SkillLifecycleStatus(context.Background(), chattools.SkillLifecycleStatusRequest{Limit: 5})
+	if err != nil {
+		t.Fatalf("SkillLifecycleStatus after external write: %v", err)
+	}
+	recent := *got.Recent
+	if len(recent) != 1 || recent[0].SkillName != "cache-proof" {
+		t.Fatalf("status cache returned stale recent log: %+v", recent)
+	}
+}
+
 func TestSkillLifecycleStatusKeepsPartialStateWhenRejectedEditsUnreadable(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
