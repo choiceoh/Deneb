@@ -54,6 +54,7 @@ internal suspend fun DenebGatewayClient.fetchRecentSessions(offset: Int = 0): Re
         "miniapp.sessions.recent",
         buildJsonObject {
             put("limit", SESSION_PAGE)
+            put("channel", "client")
             if (offset > 0) put("offset", offset)
         },
     ) ?: return null
