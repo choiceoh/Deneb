@@ -18,6 +18,7 @@ from .ledgers import (
     load_closure_window,
     load_dispatch_window,
     load_genesis_window,
+    load_impact_window,
     load_meta_window,
     load_watch_window,
 )
@@ -110,6 +111,22 @@ def score_operator_verdict(meta: MetaWindow | None = None, data: Path | None = N
             source = "DENEB_FEED_CARD_EXPORT"
     if adopted + rejected + reverted <= 0:
         adopted, rejected, reverted = meta.adopted, meta.rejected, meta.reverted
+        # The meta lane (system-prompt evolution) is the narrowest one there is —
+        # 29 rows all-time, adopted=1 — so reading it alone left this pillar
+        # pinned to the total<3 bootstrap floor while the lane that actually
+        # delivers had 33 landings in 28d and 12 measured post-deploy verdicts
+        # (2026-07-30 실측). Fold those in: a verdict is "something outside the
+        # loop judged this useful", and impactResult is the least gameable form
+        # of that — it is checked AFTER deploy against the metric the candidate
+        # declared, so it cannot be moved by accepting more candidates. Kept
+        # symmetric on purpose: no_effect lowers adopt_rate, regressed also
+        # counts as a revert.
+        impact = load_impact_window(data)
+        if impact.total > 0:
+            adopted += impact.verified
+            rejected += impact.no_effect
+            reverted += impact.regressed
+            source = f"{source}+self_correction_impact"
     total = adopted + rejected + reverted
     if total <= 0:
         return (
@@ -134,35 +151,64 @@ def score_operator_verdict(meta: MetaWindow | None = None, data: Path | None = N
     )
 
 
+def _health_structure(payload: dict[str, Any] | None) -> float | None:
+    """Structure-domain score out of a health-v3 snapshot or baseline payload.
+
+    Snapshots nest it under ``score.domains``; baselines keep a flat ``domains``.
+    """
+    if not payload:
+        return None
+    for holder in ((payload.get("score") or {}), payload):
+        domains = holder.get("domains") if isinstance(holder, dict) else None
+        if isinstance(domains, dict) and domains.get("structure") is not None:
+            try:
+                return float(domains["structure"])
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def score_codebase_delta(
     root: Path, *, cache: dict[str, Any] | None = None
 ) -> tuple[float, Evidence, list[Finding]]:
-    """Prefer live snapshot, then cache-embedded health overall, then bootstrap."""
+    """Health-v3 **structure** delta — deliberately not health overall.
+
+    Overall would make this metric self-referential and double-count: health's
+    Fitness domain re-exports RSI ``closure-land`` + ``operator-verdict`` AND
+    scores its own ``live-delta`` off the same live−baseline comparison, while
+    Fitness feeds health overall (w=0.20). Reading overall therefore let one
+    runtime dip hit the scoreboard three times and pinned this pillar at 0.0
+    while Structure had moved only −2.2 (2026-07-30 실측). Structure IS the
+    codebase — what this pillar claims to measure — and it is computed with no
+    RSI ledger input, so it stays an honest outer-loop signal.
+
+    Runtime regressions are not silently dropped: Runtime is health-v3's own
+    ratcheted domain and reaches this loop as runtime-lane L4 candidates
+    (``scripts/audit/health_finding_miner.py``). Do not "restore" overall here.
+    """
     findings: list[Finding] = []
     baseline = _read_json(root / "scripts" / "audit" / "health-v3-baseline.json")
     snapshot = _read_json(root / "scripts" / "audit" / "health-v3-snapshot.json")
-    snap_overall: float | None = None
+    base_structure = _health_structure(baseline)
+    live_structure = _health_structure(snapshot)
     source = "snapshot"
-    if snapshot:
-        snap_overall = float((snapshot.get("score") or {}).get("overall", snapshot.get("overall", 0.0)))
-    elif cache and isinstance(cache.get("health_v3"), dict):
-        hv = cache["health_v3"]
-        if hv.get("overall") is not None:
-            snap_overall = float(hv["overall"])
-            source = "cache"
-    if not baseline or snap_overall is None:
+    if live_structure is None and cache and isinstance(cache.get("health_v3"), dict):
+        live_structure = _health_structure(cache["health_v3"])
+        source = "cache"
+    if base_structure is None or live_structure is None:
+        # Unmeasured stays unmeasured — never fall back to overall, the coupled
+        # signal this metric exists to avoid.
         return (
             BOOTSTRAP["codebase-delta"],
             Evidence(
                 "utility-codebase-delta",
                 "bootstrap",
-                "health-v3 baseline/snapshot/cache overall missing",
+                "health-v3 structure score missing from baseline/snapshot/cache",
                 required=False,
             ),
             findings,
         )
-    base_overall = float(baseline.get("overall", 0.0))
-    delta = snap_overall - base_overall
+    delta = live_structure - base_structure
     score = clamp(25.0 + delta * 6.0)
     if delta < -0.3:
         findings.append(
@@ -172,8 +218,11 @@ def score_codebase_delta(
                 pillar="codebase-delta",
                 severity="high",
                 path="scripts/audit/health-v3-snapshot.json",
-                evidence=f"live {snap_overall:.1f} − baseline {base_overall:.1f} = {delta:+.1f} ({source})",
-                why="P5-5: outer-loop utility regressing on the codebase",
+                evidence=(
+                    f"structure live {live_structure:.1f} − baseline {base_structure:.1f} "
+                    f"= {delta:+.1f} ({source})"
+                ),
+                why="P5-5: outer-loop utility regressing on the codebase itself",
                 remediation="Land structural health findings before raising RSI cadence",
                 verify="python3 scripts/audit/health-bench-v3.py --check",
                 priority=85.0,
@@ -184,7 +233,8 @@ def score_codebase_delta(
         Evidence(
             "utility-codebase-delta",
             "measured",
-            f"source={source} live {snap_overall:.1f} − baseline {base_overall:.1f} = {delta:+.1f}",
+            f"source={source} structure live {live_structure:.1f} − "
+            f"baseline {base_structure:.1f} = {delta:+.1f}",
         ),
         findings,
     )
@@ -304,8 +354,10 @@ def evaluate_utility(
     # 25+20+20+15+20 = 100
     metrics = [
         Metric("closure-land", "Closure land", 25, c_score, "SkillSmith/L4 propose→land", {}, c_f),
-        Metric("operator-verdict", "Operator verdict", 20, o_score, "ANCHOR feed-card utility", {}, o_f),
-        Metric("codebase-delta", "Codebase delta", 20, d_score, "P5-5 health-v3 live−baseline", {}, d_f),
+        Metric("operator-verdict", "Operator verdict", 20, o_score,
+               "ANCHOR feed-card utility + measured post-deploy impact", {}, o_f),
+        Metric("codebase-delta", "Codebase delta", 20, d_score,
+               "P5-5 health-v3 structure live−baseline (not overall — self-referential)", {}, d_f),
         Metric("retention-proxy", "Retention proxy", 15, r_score, "CPE confirm / soft watch keep", {}, r_f),
         Metric("dispatch-land", "Dispatch land", 20, x_score, "L4 coding_dispatch land fidelity", {}, x_f),
     ]
