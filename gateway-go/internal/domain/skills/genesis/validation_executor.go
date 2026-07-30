@@ -144,14 +144,78 @@ func cleanReplayContextLines(lines []string) []string {
 // (which the caller treats as fail-open).
 func parseEmittedToolCalls(raw string) ([]emittedToolCall, error) {
 	plan, err := jsonutil.UnmarshalLLM[replayPlan](raw)
-	if err == nil {
+	if err == nil && plan.ToolCalls != nil {
 		return plan.ToolCalls, nil
 	}
-	arr, aerr := jsonutil.UnmarshalLLM[[]emittedToolCall](raw)
+	if recovered, ok := recoverReplayPlanObject(raw); ok {
+		if plan, rerr := jsonutil.UnmarshalLLM[replayPlan](recovered); rerr == nil && plan.ToolCalls != nil {
+			return plan.ToolCalls, nil
+		}
+	}
+	arr, aerr := jsonutil.UnmarshalLLMArray[emittedToolCall](raw)
 	if aerr == nil {
 		return arr, nil
 	}
+	if err == nil {
+		err = fmt.Errorf("missing tool_calls field")
+	}
 	return nil, fmt.Errorf("parse tool-call plan: %w", err)
+}
+
+func recoverReplayPlanObject(raw string) (string, bool) {
+	for searchFrom := 0; searchFrom < len(raw); {
+		keyAt := strings.Index(raw[searchFrom:], `"tool_calls"`)
+		if keyAt < 0 {
+			return "", false
+		}
+		keyAt += searchFrom
+		start := strings.LastIndex(raw[:keyAt], "{")
+		if start < 0 {
+			return "", false
+		}
+		if candidate, ok := balancedReplayPlanObject(raw[start:]); ok {
+			return candidate, true
+		}
+		searchFrom = keyAt + len(`"tool_calls"`)
+	}
+	return "", false
+}
+
+func balancedReplayPlanObject(raw string) (string, bool) {
+	if raw == "" || raw[0] != '{' {
+		return "", false
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := range len(raw) {
+		c := raw[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if c == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if c == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		switch c {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return raw[:i+1], true
+			}
+		}
+	}
+	return "", false
 }
 
 // traceFromEmittedCalls flattens the emitted plan into the same skillReplayTrace
