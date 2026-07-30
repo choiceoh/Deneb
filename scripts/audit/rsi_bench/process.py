@@ -214,7 +214,11 @@ def _score_judge(judge: JudgeWindow) -> tuple[float, Evidence, list[Finding]]:
     if judge.operator_verdicts == 0 and judge.accuracy >= 0.99:
         score = min(score, 45.0)
     findings: list[Finding] = []
+    chronic = judge.chronic_miss
     if judge.misses >= 3:
+        chronic_note = (
+            f"; chronic '{chronic[0]}' re-missed in {chronic[1]} runs" if chronic and chronic[1] > 1 else ""
+        )
         findings.append(
             Finding(
                 id=stable_id("judge-fuel", "misses", judge.misses),
@@ -222,19 +226,24 @@ def _score_judge(judge: JudgeWindow) -> tuple[float, Evidence, list[Finding]]:
                 pillar="judge-fuel",
                 severity="medium",
                 path="judge_accuracy_log.jsonl",
-                evidence=f"misses={judge.misses} accuracy={judge.accuracy:.3f}",
+                evidence=(
+                    f"distinct misses={judge.misses} (events={judge.miss_events}) "
+                    f"accuracy={judge.accuracy:.3f}{chronic_note}"
+                ),
                 why="BabelJudge/CoEvoSkills: planted-defect misses are verifier co-evolution fuel — and a live weakness",
                 remediation="Escalate probe curriculum; feed organic false-accept labels into evaluator epoch",
                 verify="python3 scripts/audit/rsi-bench.py --format json",
                 priority=68.0,
             )
         )
+    chronic_detail = f" chronic={chronic[0]}×{chronic[1]}" if chronic and chronic[1] > 1 else ""
     return (
         score,
         Evidence(
             "process-judge-fuel",
             "measured",
             f"runs={judge.runs} accuracy={judge.accuracy:.3f} misses={judge.misses} "
+            f"miss_events={judge.miss_events}{chronic_detail} "
             f"false_rejects={judge.false_rejects} operator_verdicts={judge.operator_verdicts}",
         ),
         findings,

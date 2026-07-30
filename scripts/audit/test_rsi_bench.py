@@ -445,6 +445,93 @@ class FindingContractTests(unittest.TestCase):
             )
 
 
+class JudgeMissFoldingTests(unittest.TestCase):
+    """Distinct defects are the fuel; probe frequency must not be the penalty."""
+
+    @staticmethod
+    def _log(root: Path, runs: int, misses_per_run: list[dict[str, str]]) -> None:
+        now = int(time.time() * 1000)
+        _write_jsonl(
+            root / "judge_accuracy_log.jsonl",
+            [
+                {"pairs": 10, "correct": 10, "createdAt": now - i * 1000, "misses": misses_per_run}
+                for i in range(runs)
+            ],
+        )
+
+    def test_same_defect_across_runs_folds_to_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._log(root, 28, [{"skill": "Playwright", "degradation": "imperative-drop"}])
+            judge = load_judge_window(root)
+            self.assertEqual(judge.misses, 1)  # one standing weakness
+            self.assertEqual(judge.miss_events, 28)  # ...seen 28 times
+            self.assertEqual(judge.chronic_miss, ("Playwright|imperative-drop", 28))
+
+    def test_distinct_degradations_of_one_skill_stay_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._log(
+                root,
+                2,
+                [
+                    {"skill": "Playwright", "degradation": "imperative-drop"},
+                    {"skill": "Playwright", "degradation": "truncation"},
+                ],
+            )
+            judge = load_judge_window(root)
+            self.assertEqual(judge.misses, 2)
+            self.assertEqual(judge.miss_events, 4)
+
+    def test_probing_more_does_not_lower_the_score(self) -> None:
+        """The regression: penalty scaled with run count, so measuring hurt."""
+        from rsi_bench.process import _score_judge
+
+        def score_for(runs: int) -> float:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self._log(root, runs, [{"skill": "Playwright", "degradation": "imperative-drop"}])
+                score, _ev, _f = _score_judge(load_judge_window(root))
+                return score
+
+        few, many = score_for(4), score_for(40)
+        self.assertGreaterEqual(many, few)
+
+    def test_finding_names_the_chronic_defect(self) -> None:
+        from rsi_bench.process import _score_judge
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            now = int(time.time() * 1000)
+            _write_jsonl(
+                root / "judge_accuracy_log.jsonl",
+                [
+                    {
+                        "pairs": 10,
+                        "correct": 9,
+                        "createdAt": now - i * 1000,
+                        "misses": [
+                            {"skill": "Playwright", "degradation": "imperative-drop"},
+                            *(
+                                [{"skill": "serper", "degradation": "truncation"}]
+                                if i == 0
+                                else []
+                            ),
+                            *([{"skill": "contract-review", "degradation": "swap"}] if i == 0 else []),
+                        ],
+                    }
+                    for i in range(5)
+                ],
+            )
+            judge = load_judge_window(root)
+            self.assertEqual(judge.misses, 3)
+            _score, ev, findings = _score_judge(judge)
+            self.assertEqual(len(findings), 1)
+            self.assertIn("Playwright", findings[0].evidence)
+            self.assertIn("events=7", findings[0].evidence)
+            self.assertIn("chronic=", ev.detail)
+
+
 class CodebaseDeltaDecouplingTests(unittest.TestCase):
     """codebase-delta must read health STRUCTURE, never health overall.
 
