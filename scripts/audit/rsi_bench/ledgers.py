@@ -101,12 +101,32 @@ class JudgeWindow:
     pairs: int = 0
     correct: int = 0
     operator_verdicts: int = 0
-    misses: int = 0
     false_rejects: int = 0
     by_category: dict[str, list[int]] = field(default_factory=dict)
     by_class: dict[str, list[int]] = field(default_factory=dict)
     # Per-run byClass accuracy maps (oldest→newest) for swap-consistency.
     class_rate_runs: list[dict[str, float]] = field(default_factory=list)
+    # Distinct miss identity → how many probe runs re-missed it. The probe is a
+    # standing curriculum re-run on a cadence, so one unfixed defect reappears
+    # in every run: 2026-07-30 실측 34 miss events were 4 distinct defects, one
+    # of them (a Playwright skill) 28×. Summing events made the penalty grow
+    # with probe FREQUENCY — probing more tanked the pillar — so the score reads
+    # `misses` (distinct weaknesses = the co-evolution fuel) and keeps the event
+    # count only as evidence. Same folding rule as closure-land's per-candidate
+    # fold; see docs/agent-rules/rsi-bench.md.
+    miss_events: int = 0
+    miss_repeats: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def misses(self) -> int:
+        return len(self.miss_repeats)
+
+    @property
+    def chronic_miss(self) -> tuple[str, int] | None:
+        """The most-repeated distinct miss, or None — names the standing weakness."""
+        if not self.miss_repeats:
+            return None
+        return max(self.miss_repeats.items(), key=lambda kv: (kv[1], kv[0]))
 
     @property
     def accuracy(self) -> float | None:
@@ -258,6 +278,21 @@ def _merge_pair_map(dst: dict[str, list[int]], src: object) -> None:
         bucket[1] += total
 
 
+def _miss_identity(miss: object) -> str:
+    """Stable identity for one planted-defect miss.
+
+    Keyed on skill + degradation so the same unfixed defect folds across probe
+    runs while two different degradations of one skill stay separate weaknesses.
+    """
+    if isinstance(miss, dict):
+        skill = str(miss.get("skill") or miss.get("skillName") or "").strip()
+        degradation = str(miss.get("degradation") or miss.get("kind") or "").strip()
+        if skill or degradation:
+            return f"{skill}|{degradation}"
+        return json.dumps(miss, sort_keys=True)[:160]
+    return str(miss)[:160]
+
+
 def load_judge_window(data: Path | None = None, *, days: int = 28) -> JudgeWindow:
     root = data or data_dir()
     cutoff = now_ms() - days * 86400 * 1000
@@ -282,7 +317,10 @@ def load_judge_window(data: Path | None = None, *, days: int = 28) -> JudgeWindo
             out.correct += correct
         misses = row.get("misses") or []
         if isinstance(misses, list):
-            out.misses += len(misses)
+            out.miss_events += len(misses)
+            for miss in misses:
+                key = _miss_identity(miss)
+                out.miss_repeats[key] = out.miss_repeats.get(key, 0) + 1
         fr = row.get("falseRejects") or row.get("false_rejects") or []
         if isinstance(fr, list):
             out.false_rejects += len(fr)
