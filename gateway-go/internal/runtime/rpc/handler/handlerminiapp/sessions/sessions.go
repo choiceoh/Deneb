@@ -285,9 +285,21 @@ func sessionsRecent(deps SessionsDeps) rpcutil.HandlerFunc {
 
 		sessions := deps.Manager.List()
 
+		// Drop delegated sub-agent runs: they share the client:main:* shape but are
+		// not conversations (#4355). Listing them here made the drawer show scratch
+		// work as "내 대화 · <epoch>", and dismissing one deleted its transcript.
+		filtered := sessions[:0]
+		for _, s := range sessions {
+			if session.IsSpawnedChildKey(s.Key) {
+				continue
+			}
+			filtered = append(filtered, s)
+		}
+		sessions = filtered
+
 		// Filter by channel if requested.
 		if p.Channel != "" {
-			filtered := sessions[:0]
+			filtered = sessions[:0]
 			for _, s := range sessions {
 				if effectiveChannel(s) == p.Channel {
 					filtered = append(filtered, s)

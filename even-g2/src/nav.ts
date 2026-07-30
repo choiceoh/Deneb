@@ -36,6 +36,8 @@ export interface NavRoute {
   totalM: number;
   totalSec: number;
   mode: string;
+  /** True when the gateway clipped the route (TMap step cap). Must not navigate. */
+  truncated?: boolean;
 }
 
 export interface NavState {
@@ -195,6 +197,11 @@ export async function fetchRoute(
     };
     if (!data.route || !Array.isArray(data.route.steps)) {
       throw new Error("경로를 받지 못했습니다");
+    }
+    if (data.route.truncated) {
+      throw new Error(
+        "경로가 너무 길어 안내에 맞지 않습니다 — 더 가까운 경유지로 나눠 주세요",
+      );
     }
     return {
       route: data.route,
