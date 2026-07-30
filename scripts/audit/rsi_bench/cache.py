@@ -100,8 +100,21 @@ def _rpc_rsi_status(base: str, token: str, timeout: float = 5.0) -> dict[str, An
     return payload if isinstance(payload, dict) else None
 
 
+def _snapshot_scores(snap: dict[str, Any]) -> tuple[float, dict[str, Any]]:
+    """(overall, per-domain scores) out of a health-v3 snapshot payload."""
+    score = snap.get("score") if isinstance(snap.get("score"), dict) else {}
+    overall = float(score.get("overall", snap.get("overall") or 0))
+    domains = score.get("domains") if isinstance(score.get("domains"), dict) else {}
+    return overall, dict(domains)
+
+
 def _embed_health_v3(root: Path, *, force: bool = True) -> dict[str, Any] | None:
-    """Embed Health Bench 3 overall for codebase-delta (leaf: run Python bench externally).
+    """Embed Health Bench 3 scores for codebase-delta (leaf: run Python bench externally).
+
+    Carries per-domain scores, not just overall: codebase-delta reads the
+    **structure** domain (see ``utility.score_codebase_delta`` — overall is the
+    self-referential signal it must not touch), so a cache without ``domains``
+    makes the pillar read bootstrap on snapshot-less hosts.
 
     When ``force`` (default on refresh_cache), always recompute and overwrite the
     gitignored snapshot so cadence timers cannot stick on a stale overall.
@@ -109,10 +122,9 @@ def _embed_health_v3(root: Path, *, force: bool = True) -> dict[str, Any] | None
     snap_path = root / "scripts" / "audit" / "health-v3-snapshot.json"
     if not force and snap_path.is_file():
         try:
-            snap = json.loads(snap_path.read_text(encoding="utf-8"))
-            overall = float((snap.get("score") or {}).get("overall", snap.get("overall") or 0))
+            overall, domains = _snapshot_scores(json.loads(snap_path.read_text(encoding="utf-8")))
             if overall > 0:
-                return {"overall": overall, "source": "snapshot"}
+                return {"overall": overall, "domains": domains, "source": "snapshot"}
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             pass
     try:
@@ -125,14 +137,19 @@ def _embed_health_v3(root: Path, *, force: bool = True) -> dict[str, Any] | None
             json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        return {"overall": report.overall, "source": "computed"}
+        _, domains = _snapshot_scores(payload)
+        return {"overall": report.overall, "domains": domains, "source": "computed"}
     except Exception as exc:  # noqa: BLE001 — advisory embed; never fail cache refresh
         if snap_path.is_file():
             try:
-                snap = json.loads(snap_path.read_text(encoding="utf-8"))
-                overall = float((snap.get("score") or {}).get("overall", snap.get("overall") or 0))
+                overall, domains = _snapshot_scores(json.loads(snap_path.read_text(encoding="utf-8")))
                 if overall > 0:
-                    return {"overall": overall, "source": "snapshot-fallback", "error": str(exc)[:200]}
+                    return {
+                        "overall": overall,
+                        "domains": domains,
+                        "source": "snapshot-fallback",
+                        "error": str(exc)[:200],
+                    }
             except (OSError, json.JSONDecodeError, TypeError, ValueError):
                 pass
         return {"overall": None, "source": "unavailable", "error": str(exc)[:200]}

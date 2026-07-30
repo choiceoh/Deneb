@@ -261,6 +261,15 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
     The runtime report is a rolling 7d window, so the synthetic finding id is
     the dimension name (``runtime-latency``) — stable across runs, which is
     what makes the reopen semantics meaningful.
+
+    Returns EVERY weak dimension, weakest first, and leaves the per-run cap to
+    ``select_candidates`` — which skips reopen-blocked rows without spending the
+    cap. Truncating to the cap here instead starved the whole lane: the two
+    weakest dims (latency, llm-serving) went into the 14d reopen cooldown, the
+    slice kept re-picking a blocked dim, and the runtime lane filed NOTHING for
+    the rest of the cooldown while ``tool-reliability`` (30.9) had never been
+    filed once (2026-07-30 실측). The cap still holds — this only changes WHICH
+    dim gets the slot, so a queue full of runtime findings stays impossible.
     """
     if not isinstance(runtime, dict):
         return []
@@ -274,7 +283,7 @@ def runtime_candidates(runtime: dict[str, Any] | None) -> list[dict[str, Any]]:
         key=lambda kv: (kv[1], kv[0]),
     )
     out: list[dict[str, Any]] = []
-    for name, score in weak[:MAX_RUNTIME_PER_RUN]:
+    for name, score in weak:
         detail_bits = "; ".join(str(d) for d in (detail.get(name) or [])[:3])
         extra_bits = " ".join(f"{k}={v}" for k, v in sorted((extra.get(name) or {}).items()))
         out.append({

@@ -196,6 +196,25 @@ class ClosureWindow:
     reverted: int = 0
 
 
+@dataclass
+class ImpactWindow:
+    """Post-deploy usefulness verdicts (``self_correction_impact`` rows).
+
+    Independent of the delivery rollback watch that ``ClosureWindow`` counts:
+    this is "did the metric the change declared actually move", checked after
+    the deploy. Strictly stronger evidence than acceptance, so it is the one
+    utility signal that cannot be gamed by approving more candidates.
+    """
+
+    verified: int = 0
+    no_effect: int = 0
+    regressed: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.verified + self.no_effect + self.regressed
+
+
 def load_genesis_window(data: Path | None = None, *, days: int = 7) -> GenesisWindow:
     root = data or data_dir()
     cutoff = now_ms() - days * 86400 * 1000
@@ -505,6 +524,42 @@ _REVIEW_LIFECYCLE = {
     "reverted",
     "superseded",
 }
+
+
+def load_impact_window(data: Path | None = None, *, days: int = 7) -> ImpactWindow:
+    """Fold ``self_correction_impact`` rows by candidate id, latest verdict wins.
+
+    Folding by id (not row) matters because the queue file is append-only — a
+    candidate re-checked three times would otherwise cast three votes. Only
+    terminal statuses count; ``pending`` is derived and non-terminal.
+    """
+    root = data or data_dir()
+    cutoff = now_ms() - days * 86400 * 1000
+    latest: dict[str, tuple[int, str]] = {}
+    for index, row in enumerate(iter_jsonl(root / "self_correction_candidates.jsonl")):
+        result = row.get("impactResult")
+        if not isinstance(result, dict):
+            continue
+        status = str(result.get("status") or "").strip().lower()
+        if status in ("", "pending"):
+            continue
+        ts = _created_at_ms(row) or int(result.get("checkedAt") or 0)
+        if ts < cutoff:
+            continue
+        key = str(row.get("id") or f"row-{index}")
+        # Ledger order is append order; a later row supersedes an earlier verdict.
+        prior = latest.get(key)
+        if prior is None or ts >= prior[0]:
+            latest[key] = (ts, status)
+    out = ImpactWindow()
+    for _ts, status in latest.values():
+        if status in ("verified", "confirmed", "improved"):
+            out.verified += 1
+        elif status in ("regressed", "worse", "failed", "violated"):
+            out.regressed += 1
+        else:  # no_effect and any future neutral terminal label
+            out.no_effect += 1
+    return out
 
 
 def load_closure_window(data: Path | None = None) -> ClosureWindow:

@@ -144,7 +144,7 @@ class StructuralCandidatesTest(unittest.TestCase):
 class RuntimeCandidatesTest(unittest.TestCase):
     def test_when_weakest_dim_below_bar_selected(self):
         cands = runtime_candidates(runtime_report())
-        self.assertEqual(len(cands), MAX_RUNTIME_PER_RUN)
+        self.assertEqual(len(cands), 1)  # fixture has exactly one weak dim
         cand = cands[0]
         self.assertEqual(cand["source"], "health-finding:runtime-latency")
         self.assertIn("runtime-latency", cand["evidence"])
@@ -160,6 +160,52 @@ class RuntimeCandidatesTest(unittest.TestCase):
 
     def test_missing_report_tolerated(self):
         self.assertEqual(runtime_candidates(None), [])
+
+    def test_offers_every_weak_dim_weakest_first(self):
+        """The cap belongs to select_candidates, not to this producer."""
+        report = runtime_report()
+        report["dims"] = {
+            "stability": 100.0,
+            "latency": 0.0,
+            "llm-serving": 37.8,
+            "tool-reliability": 30.9,
+        }
+        cands = runtime_candidates(report)
+        self.assertEqual(
+            [c["source"] for c in cands],
+            [
+                "health-finding:runtime-latency",
+                "health-finding:runtime-tool-reliability",
+                "health-finding:runtime-llm-serving",
+            ],
+        )
+
+    def test_cooldown_on_weakest_dims_does_not_silence_the_lane(self):
+        """Regression: truncating to the cap here starved the runtime lane.
+
+        latency + llm-serving sat in the 14d reopen cooldown, the old
+        ``weak[:1]`` slice kept re-offering a blocked dim, and the lane filed
+        nothing for the rest of the cooldown while tool-reliability (30.9) was
+        never filed once (2026-07-30 실측).
+        """
+        report = runtime_report()
+        report["dims"] = {
+            "stability": 100.0,
+            "latency": 0.0,
+            "llm-serving": 37.8,
+            "tool-reliability": 30.9,
+        }
+        existing = [
+            {"id": "sc-a", "source": "health-finding:runtime-latency",
+             "status": "applied", "createdAt": NOW - 1000},
+            {"id": "sc-b", "source": "health-finding:runtime-llm-serving",
+             "status": "applied", "createdAt": NOW - 1000},
+        ]
+        selected, _skipped = select_candidates(
+            runtime_candidates(report), existing, NOW, cap=MAX_RUNTIME_PER_RUN
+        )
+        self.assertEqual([c["source"] for c in selected],
+                         ["health-finding:runtime-tool-reliability"])
 
 
 class ReopenBlockedTest(unittest.TestCase):

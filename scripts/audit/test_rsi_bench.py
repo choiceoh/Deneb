@@ -445,5 +445,132 @@ class FindingContractTests(unittest.TestCase):
             )
 
 
+class CodebaseDeltaDecouplingTests(unittest.TestCase):
+    """codebase-delta must read health STRUCTURE, never health overall.
+
+    Overall folds in Fitness, which re-exports RSI closure-land/operator-verdict
+    and its own live−baseline delta — reading it made the pillar score itself.
+    """
+
+    @staticmethod
+    def _write(root: Path, baseline: dict[str, object], snapshot: dict[str, object] | None) -> None:
+        audit = root / "scripts" / "audit"
+        audit.mkdir(parents=True)
+        (audit / "health-v3-baseline.json").write_text(json.dumps(baseline), encoding="utf-8")
+        if snapshot is not None:
+            (audit / "health-v3-snapshot.json").write_text(json.dumps(snapshot), encoding="utf-8")
+
+    def test_reads_structure_and_ignores_overall_collapse(self) -> None:
+        from rsi_bench.utility import score_codebase_delta
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # Overall craters (49.1 → 32.3) purely from runtime/fitness while
+            # structure holds flat. The pillar must see the flat structure.
+            self._write(
+                root,
+                {"overall": 49.1, "domains": {"structure": 50.5, "runtime": 58.3, "fitness": 36.7}},
+                {"score": {"overall": 32.3, "domains": {"structure": 50.5, "runtime": 23.2, "fitness": 16.2}}},
+            )
+            score, ev, findings = score_codebase_delta(root)
+            self.assertEqual(ev.status, "measured")
+            self.assertIn("structure", ev.detail)
+            self.assertAlmostEqual(score, 25.0)  # delta 0 → neutral, not 0.0
+            self.assertEqual(findings, [])
+
+    def test_structure_regression_still_scores_and_files_a_finding(self) -> None:
+        from rsi_bench.utility import score_codebase_delta
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(
+                root,
+                {"overall": 49.1, "domains": {"structure": 50.5}},
+                {"score": {"overall": 49.0, "domains": {"structure": 48.5}}},
+            )
+            score, ev, findings = score_codebase_delta(root)
+            self.assertEqual(ev.status, "measured")
+            self.assertAlmostEqual(score, 13.0)  # 25 + (-2.0 * 6)
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].pillar, "codebase-delta")
+
+    def test_missing_structure_is_unmeasured_not_overall_fallback(self) -> None:
+        from rsi_bench.utility import score_codebase_delta
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # Overall present on both sides, structure absent → must NOT quietly
+            # score off overall (that is the coupled signal).
+            self._write(root, {"overall": 49.1}, {"score": {"overall": 10.0}})
+            score, ev, findings = score_codebase_delta(root)
+            self.assertEqual(ev.status, "bootstrap")
+            self.assertAlmostEqual(score, 25.0)
+            self.assertEqual(findings, [])
+
+    def test_cache_domains_serve_snapshotless_hosts(self) -> None:
+        from rsi_bench.utility import score_codebase_delta
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, {"overall": 49.1, "domains": {"structure": 50.5}}, None)
+            score, ev, _f = score_codebase_delta(
+                root, cache={"health_v3": {"overall": 32.3, "domains": {"structure": 53.5}}}
+            )
+            self.assertEqual(ev.status, "measured")
+            self.assertIn("cache", ev.detail)
+            self.assertAlmostEqual(score, 43.0)  # 25 + (+3.0 * 6)
+
+
+class ImpactWindowTests(unittest.TestCase):
+    def test_folds_by_candidate_id_and_maps_terminal_statuses(self) -> None:
+        from rsi_bench.ledgers import load_impact_window
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            now = int(time.time() * 1000)
+            rows = [
+                # Same candidate re-checked: the later verdict supersedes.
+                {"id": "sc-1", "createdAt": now - 5000, "impactResult": {"status": "no_effect"}},
+                {"id": "sc-1", "createdAt": now - 1000, "impactResult": {"status": "verified"}},
+                {"id": "sc-2", "createdAt": now - 2000, "impactResult": {"status": "no_effect"}},
+                {"id": "sc-3", "createdAt": now - 2000, "impactResult": {"status": "regressed"}},
+                # Non-terminal and out-of-window rows never vote.
+                {"id": "sc-4", "createdAt": now - 2000, "impactResult": {"status": "pending"}},
+                {"id": "sc-5", "createdAt": now - 40 * 86400 * 1000, "impactResult": {"status": "verified"}},
+            ]
+            (root / "self_correction_candidates.jsonl").write_text(
+                "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8"
+            )
+            win = load_impact_window(root)
+            self.assertEqual((win.verified, win.no_effect, win.regressed), (1, 1, 1))
+            self.assertEqual(win.total, 3)
+
+    def test_no_effect_lowers_the_verdict_score(self) -> None:
+        """Symmetry guard: folding impact in must not be a one-way score lift."""
+        from rsi_bench.utility import score_operator_verdict
+
+        def verdict(statuses: list[str]) -> float:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                now = int(time.time() * 1000)
+                rows = [
+                    {"id": f"sc-{i}", "createdAt": now - 1000, "impactResult": {"status": s}}
+                    for i, s in enumerate(statuses)
+                ]
+                (root / "self_correction_candidates.jsonl").write_text(
+                    "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8"
+                )
+                (root / "meta_evolution_log.jsonl").write_text("", encoding="utf-8")
+                score, _ev, _f = score_operator_verdict(data=root)
+                return score
+
+        all_good = verdict(["verified"] * 6)
+        mixed = verdict(["verified"] * 3 + ["no_effect"] * 3)
+        all_bad = verdict(["no_effect"] * 6)
+        self.assertGreater(all_good, mixed)
+        self.assertGreater(mixed, all_bad)
+        self.assertAlmostEqual(all_bad, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
