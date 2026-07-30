@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/media"
@@ -550,6 +551,127 @@ func TestAssessFetchResultStructured(t *testing.T) {
 	ok := assessFetchResult(okBody, nil)
 	if !ok.Usable || ok.HasError {
 		t.Fatalf("ok: %+v", ok)
+	}
+}
+
+func TestWebFetchURLDetailedKeepsFastSerperScrapePath(t *testing.T) {
+	t.Setenv("SERPER_API_KEY", "serper-test")
+
+	origScrape := serperScrapeFn
+	origFetch := fetchWithRetryFn
+	t.Cleanup(func() {
+		serperScrapeFn = origScrape
+		fetchWithRetryFn = origFetch
+	})
+
+	serperScrapeFn = func(context.Context, string, string) (*serperScrapeResponse, error) {
+		return &serperScrapeResponse{Markdown: strings.Repeat("serper body ", 80)}, nil
+	}
+	fetchWithRetryFn = func(context.Context, string, int64) (*media.FetchResult, error) {
+		t.Fatal("origin fetch should not run when Serper scrape succeeds before grace")
+		return nil, nil
+	}
+
+	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://fast-serper.example/article", 20000)
+	if err != nil {
+		t.Fatalf("webFetchURLDetailed: %v", err)
+	}
+	if !strings.Contains(out.Content, "Provider: serper") || !strings.Contains(out.Content, "serper body") {
+		t.Fatalf("unexpected Serper output:\n%s", out.Content)
+	}
+}
+
+func TestWebFetchURLDetailedStartsOriginAfterSlowSerperGrace(t *testing.T) {
+	t.Setenv("SERPER_API_KEY", "serper-test")
+
+	origScrape := serperScrapeFn
+	origFetch := fetchWithRetryFn
+	origGrace := serperScrapeGrace
+	t.Cleanup(func() {
+		serperScrapeFn = origScrape
+		fetchWithRetryFn = origFetch
+		serperScrapeGrace = origGrace
+	})
+	serperScrapeGrace = 10 * time.Millisecond
+
+	serperStarted := make(chan struct{})
+	rawStarted := make(chan struct{})
+	serperScrapeFn = func(ctx context.Context, _, _ string) (*serperScrapeResponse, error) {
+		close(serperStarted)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	fetchWithRetryFn = func(_ context.Context, targetURL string, _ int64) (*media.FetchResult, error) {
+		close(rawStarted)
+		body := []byte(strings.Repeat("fast origin body ", 80))
+		return &media.FetchResult{
+			Data:        body,
+			ContentType: "text/plain; charset=utf-8",
+			Size:        len(body),
+			FinalURL:    targetURL,
+			StatusCode:  200,
+		}, nil
+	}
+
+	start := time.Now()
+	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://slow-serper.example/article", 20000)
+	if err != nil {
+		t.Fatalf("webFetchURLDetailed: %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed > 250*time.Millisecond {
+		t.Fatalf("origin fetch waited too long for slow Serper scrape: %s", elapsed)
+	}
+	if !strings.Contains(out.Content, "Provider: stealth") || !strings.Contains(out.Content, "fast origin body") {
+		t.Fatalf("unexpected origin output:\n%s", out.Content)
+	}
+	select {
+	case <-serperStarted:
+	default:
+		t.Fatal("Serper scrape did not start")
+	}
+	select {
+	case <-rawStarted:
+	default:
+		t.Fatal("origin fetch did not start")
+	}
+}
+
+func TestWebFetchURLDetailedWaitsForSerperWhenOriginIsTiny(t *testing.T) {
+	t.Setenv("SERPER_API_KEY", "serper-test")
+
+	origScrape := serperScrapeFn
+	origFetch := fetchWithRetryFn
+	origGrace := serperScrapeGrace
+	t.Cleanup(func() {
+		serperScrapeFn = origScrape
+		fetchWithRetryFn = origFetch
+		serperScrapeGrace = origGrace
+	})
+	serperScrapeGrace = time.Millisecond
+
+	rawStarted := make(chan struct{})
+	serperScrapeFn = func(_ context.Context, _, _ string) (*serperScrapeResponse, error) {
+		<-rawStarted
+		return &serperScrapeResponse{Markdown: strings.Repeat("serper recovered body ", 80)}, nil
+	}
+	fetchWithRetryFn = func(_ context.Context, targetURL string, _ int64) (*media.FetchResult, error) {
+		close(rawStarted)
+		return &media.FetchResult{
+			Data:        []byte("tiny"),
+			ContentType: "text/plain; charset=utf-8",
+			Size:        len("tiny"),
+			FinalURL:    targetURL,
+			StatusCode:  200,
+		}, nil
+	}
+
+	out, err := webFetchURLDetailed(context.Background(), NewFetchCache(), nil, nil, "https://tiny-origin.example/article", 20000)
+	if err != nil {
+		t.Fatalf("webFetchURLDetailed: %v", err)
+	}
+	if !strings.Contains(out.Content, "Provider: serper") || !strings.Contains(out.Content, "serper recovered body") {
+		t.Fatalf("tiny origin should wait for Serper, got:\n%s", out.Content)
 	}
 }
 
