@@ -171,3 +171,26 @@ func TestEvaluateBehavior_ExecutorErrorFailsOpen(t *testing.T) {
 		t.Fatalf("expected fail-open (Evaluated=false) on executor error, got %+v", res)
 	}
 }
+
+func TestParseEmittedToolCallsRecoversMalformedWrappedPlan(t *testing.T) {
+	raw := `{"{"tool_calls":[{"name":"mail_archive","args":"action=\"read_thread\", message_id=\"MSG-12345\""}]}`
+	calls, err := parseEmittedToolCalls(raw)
+	if err != nil {
+		t.Fatalf("parseEmittedToolCalls: %v", err)
+	}
+	if len(calls) != 1 || calls[0].Name != "mail_archive" ||
+		!strings.Contains(string(calls[0].Args), "read_thread") ||
+		!strings.Contains(string(calls[0].Args), "MSG-12345") {
+		t.Fatalf("recovered call mismatch: %+v", calls)
+	}
+}
+
+func TestParseEmittedToolCallsStillAcceptsBareArray(t *testing.T) {
+	calls, err := parseEmittedToolCalls(`[{"name":"exec","args":"python3 topsolar.py dashboard"}]`)
+	if err != nil {
+		t.Fatalf("parseEmittedToolCalls: %v", err)
+	}
+	if len(calls) != 1 || calls[0].Name != "exec" || !strings.Contains(string(calls[0].Args), "topsolar.py") {
+		t.Fatalf("array call mismatch: %+v", calls)
+	}
+}
