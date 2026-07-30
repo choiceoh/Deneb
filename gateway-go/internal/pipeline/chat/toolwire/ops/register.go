@@ -16,6 +16,7 @@ import (
 // RuntimeOpsDeps is the narrow wiring contract for host and operations tools.
 type RuntimeOpsDeps struct {
 	WorkspaceDir   string
+	GatewayVersion string
 	ObserveTool    tooldeps.ObserveToolFunc
 	Fleet          tooldeps.FleetDeps
 	Browser        tooldeps.BrowserDeps
@@ -51,7 +52,7 @@ func RuntimeOpsToolSetFromDeps(deps RuntimeOpsDeps) RuntimeOpsToolSet {
 		})
 	}
 	set := RuntimeOpsToolSet{
-		Gateway:   runtimeops.ToolGateway(deps.WorkspaceDir),
+		Gateway:   runtimeops.ToolGatewayWithDeps(deps.WorkspaceDir, runtimeops.GatewayDeps{Version: deps.GatewayVersion}),
 		Observe:   observeFn,
 		Fleet:     runtimeops.ToolFleet(&deps.Fleet),
 		Browser:   runtimeops.ToolBrowser(&deps.Browser),
