@@ -30,6 +30,7 @@ import (
 // providers; unit tests swap these to assert failure fallback without network.
 var (
 	serperSearchRawFn  = serperSearchRaw
+	serperScrapeFn     = serperScrape
 	braveSearchRawFn   = braveSearchRaw
 	duckDuckGoSearchFn = duckDuckGoSearch
 )

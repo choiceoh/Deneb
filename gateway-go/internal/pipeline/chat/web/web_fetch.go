@@ -40,6 +40,14 @@ import (
 // same URL simultaneously, only one fetch executes and the result is shared.
 var fetchGroup singleflight
 
+// serperScrapeGrace is the time Serper gets to win the fast clean-markdown
+// path before we start the origin fetch in parallel. Slow scrape failures used
+// to add their full 10s timeout before the origin was even attempted.
+var serperScrapeGrace = 1500 * time.Millisecond
+
+// Test seam for the raw origin fetch path.
+var fetchWithRetryFn = fetchWithRetry
+
 // Tool returns the unified web tool handler (fetch + search + search+fetch).
 // spill (optional) lets the YouTube path offload full transcripts to disk while
 // returning only a summary to the conversation transcript.
@@ -195,88 +203,16 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	// Singleflight: collapse concurrent fetches for the same URL into one request.
 	// The result is cached after the first fetch completes.
 	v, err := fetchGroup.do(targetURL, func() (any, error) {
-		if key := serperAPIKey(); key != "" && !looksLikeBinaryURL(targetURL) {
-			if result, ok := webFetchViaSerper(ctx, cache, key, targetURL); ok {
-				return result, nil
-			}
-		}
-
 		maxBytes := int64(maxChars * 2)
 		if maxBytes > 5*1024*1024 {
 			maxBytes = 5 * 1024 * 1024
 		}
 
-		fetchStart := time.Now()
-		result, err := fetchWithRetry(ctx, targetURL, maxBytes)
-		fetchMs := time.Since(fetchStart).Milliseconds()
-		if err != nil {
-			classified := classifyFetchError(err, targetURL)
-			// Escalate to Kagi Extract when the free chain was blocked or hit a
-			// transient failure (403/429/5xx/timeout/reset) — content likely
-			// exists and Kagi's crawlers may still get it. Skips permanent
-			// errors (404/DNS/SSRF/TLS) so no paid call is wasted.
-			if kagiFetchEscalationEligible(classified) {
-				if md, ok := kagiExtractEscalateFn(ctx, targetURL); ok {
-					meta := webFetchMeta{
-						URL: targetURL, FinalURL: targetURL,
-						ContentType: "text/markdown", Provider: "kagi_extract",
-						OrigChars: len(md), ExtractChars: len(md),
-						WordCount: estimateWordCount(md), Retention: "100%",
-						Signals: []string{"escalated_kagi"},
-					}
-					fullResult := formatFetchResult(meta, md)
-					cache.Put(targetURL, fullResult)
-					slog.Info("web fetch escalated to kagi extract",
-						"url", targetURL, "chars", len(md), "prior_error", classified.Code)
-					return fetchOutcome{Content: fullResult, Assess: assessMetaBody(meta.Signals, md)}, nil
-				}
-			}
-			slog.Info("web fetch",
-				"url", targetURL, "provider", "stealth", "cache_hit", false,
-				"fetch_ms", fetchMs, "error", err.Error())
-			envelope := formatFetchError(classified)
-			return fetchOutcome{Content: envelope, Assess: fetchUsability{HasError: true}}, nil
+		out, err := webFetchURLUncached(ctx, localAI, targetURL, maxBytes)
+		if err == nil && !out.Assess.HasError {
+			cache.Put(targetURL, out.Content)
 		}
-
-		rawContent := normalizeCharset(result.Data, result.ContentType)
-		origChars := len(rawContent)
-
-		meta := webFetchMeta{
-			URL: targetURL, FinalURL: result.FinalURL,
-			ContentType: result.ContentType, StatusCode: result.StatusCode,
-			FetchMs: fetchMs, Provider: "stealth", OrigChars: origChars,
-		}
-
-		extractStart := time.Now()
-		content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
-		meta.ExtractChars = len(content)
-
-		if shouldEscalateThinContent(&meta) {
-			if escContent, ok := escalateThinContent(ctx, targetURL, maxBytes, localAI, &meta); ok {
-				content = escContent
-			}
-		}
-		extractMs := time.Since(extractStart).Milliseconds()
-
-		if origChars > 0 {
-			meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
-		} else {
-			meta.Retention = "0%"
-		}
-		if meta.WordCount == 0 {
-			meta.WordCount = estimateWordCount(content)
-		}
-
-		assess := assessMetaBody(meta.Signals, content)
-		slog.Info("web fetch",
-			"url", targetURL, "provider", meta.Provider, "cache_hit", false,
-			"fetch_ms", fetchMs, "extract_ms", extractMs,
-			"extract_chars", meta.ExtractChars, "signals", meta.Signals,
-			"usable", assess.Usable, "thin", assess.Thin)
-
-		fullResult := formatFetchResult(meta, content)
-		cache.Put(targetURL, fullResult)
-		return fetchOutcome{Content: fullResult, Assess: assess}, nil
+		return out, err
 	})
 	if err != nil {
 		return fetchOutcome{}, err
@@ -290,15 +226,168 @@ func webFetchURLDetailed(ctx context.Context, cache *FetchCache, localAI *LocalA
 	return out, nil
 }
 
+type webFetchAttempt struct {
+	out fetchOutcome
+	ok  bool
+	err error
+}
+
+func webFetchURLUncached(ctx context.Context, localAI *LocalAIExtractor, targetURL string, maxBytes int64) (fetchOutcome, error) {
+	key := serperAPIKey()
+	if key == "" || looksLikeBinaryURL(targetURL) {
+		return webFetchViaStealth(ctx, localAI, targetURL, maxBytes)
+	}
+	return webFetchViaSerperOrStealth(ctx, localAI, key, targetURL, maxBytes)
+}
+
+func webFetchViaSerperOrStealth(ctx context.Context, localAI *LocalAIExtractor, apiKey, targetURL string, maxBytes int64) (fetchOutcome, error) {
+	raceCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	serperCh := make(chan webFetchAttempt, 1)
+	go func() {
+		out, ok := webFetchViaSerper(raceCtx, apiKey, targetURL)
+		serperCh <- webFetchAttempt{out: out, ok: ok}
+	}()
+
+	timer := time.NewTimer(serperScrapeGrace)
+	defer timer.Stop()
+
+	select {
+	case res := <-serperCh:
+		if res.ok {
+			return res.out, nil
+		}
+		return webFetchViaStealth(ctx, localAI, targetURL, maxBytes)
+	case <-timer.C:
+	case <-ctx.Done():
+		return fetchOutcome{}, ctx.Err()
+	}
+
+	rawCh := make(chan webFetchAttempt, 1)
+	go func() {
+		out, err := webFetchViaStealth(raceCtx, localAI, targetURL, maxBytes)
+		rawCh <- webFetchAttempt{out: out, ok: err == nil, err: err}
+	}()
+
+	var (
+		serperDone bool
+		rawDone    bool
+		rawResult  webFetchAttempt
+	)
+	for {
+		select {
+		case res := <-serperCh:
+			serperDone = true
+			if res.ok {
+				cancel()
+				return res.out, nil
+			}
+			if rawDone {
+				return rawResult.out, rawResult.err
+			}
+		case res := <-rawCh:
+			rawDone = true
+			rawResult = res
+			if res.err != nil {
+				if serperDone {
+					return res.out, res.err
+				}
+				continue
+			}
+			if serperDone || originFetchCanBeatPendingSerper(res.out.Assess) {
+				cancel()
+				return res.out, nil
+			}
+		case <-ctx.Done():
+			return fetchOutcome{}, ctx.Err()
+		}
+	}
+}
+
+func originFetchCanBeatPendingSerper(a fetchUsability) bool {
+	return a.Usable && !a.Thin && a.BodyChars >= usableFetchMinChars
+}
+
+func webFetchViaStealth(ctx context.Context, localAI *LocalAIExtractor, targetURL string, maxBytes int64) (fetchOutcome, error) {
+	fetchStart := time.Now()
+	result, err := fetchWithRetryFn(ctx, targetURL, maxBytes)
+	fetchMs := time.Since(fetchStart).Milliseconds()
+	if err != nil {
+		classified := classifyFetchError(err, targetURL)
+		// Escalate to Kagi Extract when the free chain was blocked or hit a
+		// transient failure (403/429/5xx/timeout/reset) — content likely
+		// exists and Kagi's crawlers may still get it. Skips permanent
+		// errors (404/DNS/SSRF/TLS) so no paid call is wasted.
+		if kagiFetchEscalationEligible(classified) {
+			if md, ok := kagiExtractEscalateFn(ctx, targetURL); ok {
+				meta := webFetchMeta{
+					URL: targetURL, FinalURL: targetURL,
+					ContentType: "text/markdown", Provider: "kagi_extract",
+					OrigChars: len(md), ExtractChars: len(md),
+					WordCount: estimateWordCount(md), Retention: "100%",
+					Signals: []string{"escalated_kagi"},
+				}
+				fullResult := formatFetchResult(meta, md)
+				slog.Info("web fetch escalated to kagi extract",
+					"url", targetURL, "chars", len(md), "prior_error", classified.Code)
+				return fetchOutcome{Content: fullResult, Assess: assessMetaBody(meta.Signals, md)}, nil
+			}
+		}
+		slog.Info("web fetch",
+			"url", targetURL, "provider", "stealth", "cache_hit", false,
+			"fetch_ms", fetchMs, "error", err.Error())
+		envelope := formatFetchError(classified)
+		return fetchOutcome{Content: envelope, Assess: fetchUsability{HasError: true}}, nil
+	}
+
+	rawContent := normalizeCharset(result.Data, result.ContentType)
+	origChars := len(rawContent)
+
+	meta := webFetchMeta{
+		URL: targetURL, FinalURL: result.FinalURL,
+		ContentType: result.ContentType, StatusCode: result.StatusCode,
+		FetchMs: fetchMs, Provider: "stealth", OrigChars: origChars,
+	}
+
+	extractStart := time.Now()
+	content := processFetchedContent(ctx, rawContent, result.Data, result.ContentType, targetURL, localAI, &meta)
+	meta.ExtractChars = len(content)
+
+	if shouldEscalateThinContent(&meta) {
+		if escContent, ok := escalateThinContent(ctx, targetURL, maxBytes, localAI, &meta); ok {
+			content = escContent
+		}
+	}
+	extractMs := time.Since(extractStart).Milliseconds()
+
+	if origChars > 0 {
+		meta.Retention = fmt.Sprintf("%.1f%%", float64(meta.ExtractChars)/float64(origChars)*100)
+	} else {
+		meta.Retention = "0%"
+	}
+	if meta.WordCount == 0 {
+		meta.WordCount = estimateWordCount(content)
+	}
+
+	assess := assessMetaBody(meta.Signals, content)
+	slog.Info("web fetch",
+		"url", targetURL, "provider", meta.Provider, "cache_hit", false,
+		"fetch_ms", fetchMs, "extract_ms", extractMs,
+		"extract_chars", meta.ExtractChars, "signals", meta.Signals,
+		"usable", assess.Usable, "thin", assess.Thin)
+
+	fullResult := formatFetchResult(meta, content)
+	return fetchOutcome{Content: fullResult, Assess: assess}, nil
+}
+
 // webFetchViaSerper extracts content for a single URL via Serper's dedicated
 // scrape endpoint (scrape.serper.dev). Returns (fullResult, true) on success,
 // or ("", false) to signal the caller should fall through to the raw HTTP
 // fetcher (e.g. non-HTML URL, empty response, or API error).
-//
-// The returned result is already cached; the caller does not need to re-cache.
-func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL string) (fetchOutcome, bool) {
+func webFetchViaSerper(ctx context.Context, apiKey, targetURL string) (fetchOutcome, bool) {
 	fetchStart := time.Now()
-	scrape, err := serperScrape(ctx, apiKey, targetURL)
+	scrape, err := serperScrapeFn(ctx, apiKey, targetURL)
 	fetchMs := time.Since(fetchStart).Milliseconds()
 	if err != nil {
 		return fetchOutcome{}, false
@@ -330,7 +419,6 @@ func webFetchViaSerper(ctx context.Context, cache *FetchCache, apiKey, targetURL
 		"usable", assess.Usable, "thin", assess.Thin)
 
 	fullResult := formatFetchResult(meta, content)
-	cache.Put(targetURL, fullResult)
 	return fetchOutcome{Content: fullResult, Assess: assess}, true
 }
 
