@@ -16,6 +16,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/chrono"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/core"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/ops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 )
@@ -471,7 +472,7 @@ func TestWorkspaceRegistrationGroupsPreserveOrder(t *testing.T) {
 	noop := toolport.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
 	reg := &mockRegistrar{}
 	RegisterFileTools(reg, t.TempDir())
-	core.RegisterRuntimeOpsTools(reg, core.RuntimeOpsToolSet{
+	ops.RegisterRuntimeOpsTools(reg, ops.RuntimeOpsToolSet{
 		Gateway:       noop,
 		Observe:       noop,
 		Fleet:         noop,
@@ -497,10 +498,10 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 	groups := []group{
 		{name: "file", run: func(r *mockRegistrar) { RegisterFileTools(r, t.TempDir()) }, want: []string{"edit", "grep", "read", "write"}},
 		{name: "runtime-ops", run: func(r *mockRegistrar) {
-			core.RegisterRuntimeOpsTools(r, core.RuntimeOpsToolSet{Gateway: noop, Observe: noop, Fleet: noop, Browser: noop, Groupware: noop})
+			ops.RegisterRuntimeOpsTools(r, ops.RuntimeOpsToolSet{Gateway: noop, Observe: noop, Fleet: noop, Browser: noop, Groupware: noop})
 		}, want: []string{"browser", "fleet", "gateway", "groupware", "observe"}},
 		{name: "graph", run: func(r *mockRegistrar) { core.RegisterGraphTool(r, t.TempDir()) }, want: []string{"graphify"}},
-		{name: "phone", run: func(r *mockRegistrar) { core.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
+		{name: "phone", run: func(r *mockRegistrar) { ops.RegisterPhoneTools(r, nil) }, want: []string{"phone_read", "phone_write"}},
 		{name: "process", run: func(r *mockRegistrar) { RegisterProcessTools(r, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()}) }, want: []string{"exec", "process"}},
 		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web", "browse"}},
 		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
@@ -640,7 +641,7 @@ func TestToolDefinitionsCanBeInvokedWithCancelledContextWithoutRegistrationPanic
 		t.Fatal("context not cancelled")
 	}
 	reg := &mockRegistrar{}
-	core.RegisterPhoneTools(reg, nil)
+	ops.RegisterPhoneTools(reg, nil)
 	RegisterProcessTools(reg, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()})
 	RegisterWebTools(reg, nil)
 	RegisterSessionTools(reg, &tooldeps.SessionDeps{})

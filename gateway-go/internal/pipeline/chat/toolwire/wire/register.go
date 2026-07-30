@@ -1,5 +1,5 @@
-// Package wire composes toolwire/core, domain, and chrono registrations.
-// The parent toolwire facade imports this package instead of the three leaves
+// Package wire composes toolwire/core, ops, domain, and chrono registrations.
+// The parent toolwire facade imports this package instead of the registration leaves
 // so two-hop reach stays within Health Bench soft limits.
 package wire
 
@@ -13,6 +13,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/core"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/domain"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/ops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/webtools"
 )
 
@@ -28,11 +29,11 @@ func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, ski
 }
 
 func RegisterProcessTools(registry toolport.ToolRegistrar, d *tooldeps.ProcessDeps) {
-	core.RegisterProcessTools(registry, d)
+	ops.RegisterProcessTools(registry, d)
 }
 
 func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDeps) {
-	core.RegisterSessionTools(registry, d)
+	ops.RegisterSessionTools(registry, d)
 }
 
 func RegisterChronoTools(registry toolport.ToolRegistrar) {
