@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from textwrap import dedent
 
 from health_v3.baseline import BaselineRegressionError, check, snapshot, update
 from health_v3.model import (
@@ -29,9 +30,13 @@ from health_v3.runtime import (
 )
 from health_v3.structure import (
     _AI_EXTRA_TIGHTEN,
+    _AI_LANE_GUIDE_DOC,
     _CHANGE_BLAST_SCALE,
     _DELIVERY_SCALE,
     _TEST_TRUTH_SCALE,
+    _ai_lane_impact_coverage,
+    _collect_ai_lane_guides,
+    _unpaid_ai_lane_finding,
 )
 from health_v3 import model as v3_model
 import runtime_health as rh
@@ -125,6 +130,120 @@ class StructureCalibrationTests(unittest.TestCase):
         self.assertAlmostEqual(100.0 * _DELIVERY_SCALE, 42.0, places=1)
         self.assertAlmostEqual(92.8 * _TEST_TRUTH_SCALE, 65.0, places=0)
         self.assertLess(_AI_EXTRA_TIGHTEN, 1.0)
+
+
+class AILaneGuideEvidenceTests(unittest.TestCase):
+    def test_missing_non_go_guides_keep_original_unpaid_finding_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            guides = _collect_ai_lane_guides(root)
+            finding = _unpaid_ai_lane_finding(guides)
+
+            self.assertEqual(_ai_lane_impact_coverage(guides), 0.45)
+            self.assertIsNotNone(finding)
+            self.assertEqual(finding.id, "ai-maintainability:207960b23a30")
+
+    def test_grounded_non_go_guides_remove_unpaid_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_lane_fixture(root)
+
+            guides = _collect_ai_lane_guides(root)
+
+            self.assertEqual(sorted(guides), ["kotlin", "python", "typescript"])
+            self.assertTrue(all(item.measured for item in guides.values()))
+            self.assertEqual(_ai_lane_impact_coverage(guides), 1.0)
+            self.assertIsNone(_unpaid_ai_lane_finding(guides))
+
+    def test_lane_guides_require_source_defined_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_lane_fixture(root, python_symbol="wrong_symbol")
+
+            guides = _collect_ai_lane_guides(root)
+
+            self.assertTrue(guides["kotlin"].measured)
+            self.assertTrue(guides["typescript"].measured)
+            self.assertFalse(guides["python"].measured)
+            self.assertIn("no source-defined entry symbol", guides["python"].detail)
+            self.assertIsNotNone(_unpaid_ai_lane_finding(guides))
+
+
+def _write(root: Path, rel: str, text: str = "") -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _write_lane_fixture(root: Path, *, python_symbol: str = "structural_candidates") -> None:
+    _write(
+        root,
+        "Makefile",
+        dedent(
+            """
+            ci:
+            python-test:
+            python-lint:
+            health-v3-test:
+            """
+        ).lstrip(),
+    )
+    _write(
+        root,
+        "client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/AppRoot.kt",
+        "package ai.deneb\nfun App() {}\n",
+    )
+    _write(
+        root,
+        "client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/DenebGatewayClient.kt",
+        "package ai.deneb.deneb\nclass DenebGatewayClient\n",
+    )
+    _write(
+        root,
+        "client-android/app/composeApp/src/commonTest/kotlin/ai/deneb/AppRouteSerializationContractTest.kt",
+        "package ai.deneb\nclass AppRouteSerializationContractTest\n",
+    )
+    _write(
+        root,
+        "andromeda/src/gateway.ts",
+        "export async function callRpc() {}\nexport function gatewayFetch() {}\n",
+    )
+    _write(root, "andromeda/src/resources.ts", "export const RESOURCE_DEFS = [];\n")
+    _write(root, "andromeda/src/gateway.behavior.test.ts", "test('rpc', () => {});\n")
+    _write(root, "scripts/audit/health_finding_miner.py", "def structural_candidates(report):\n    return []\n")
+    _write(root, "scripts/audit/test_health_finding_miner.py", "import unittest\n")
+    _write(
+        root,
+        _AI_LANE_GUIDE_DOC.as_posix(),
+        dedent(
+            f"""
+            # Product Lane AI Maintainability
+
+            ## Kotlin Native Client
+
+            - Source anchors: `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/AppRoot.kt`,
+              `client-android/app/composeApp/src/commonMain/kotlin/ai/deneb/deneb/DenebGatewayClient.kt`.
+            - Entrypoints: `App`, `DenebGatewayClient`.
+            - Tests: `client-android/app/composeApp/src/commonTest/kotlin/ai/deneb/AppRouteSerializationContractTest.kt`.
+            - Verify: `make ci ARGS=--kotlin`.
+
+            ## TypeScript Desktop Workstation
+
+            - Source anchors: `andromeda/src/gateway.ts`, `andromeda/src/resources.ts`.
+            - Entrypoints: `callRpc`, `gatewayFetch`, `RESOURCE_DEFS`.
+            - Tests: `andromeda/src/gateway.behavior.test.ts`.
+            - Verify: `cd andromeda && pnpm verify`.
+
+            ## Python Audit And Ops Scripts
+
+            - Source anchors: `scripts/audit/health_finding_miner.py`.
+            - Entrypoints: `{python_symbol}`.
+            - Tests: `scripts/audit/test_health_finding_miner.py`.
+            - Verify: `make python-test`.
+            """
+        ).lstrip(),
+    )
 
 
 class RuntimeBarTests(unittest.TestCase):
