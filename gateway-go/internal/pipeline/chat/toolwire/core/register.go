@@ -150,6 +150,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	RegisterFileTools(registry, deps.WorkspaceDir, extraReadRoots...)
 	ops.RegisterRuntimeOps(registry, ops.RuntimeOpsDeps{
 		WorkspaceDir:   deps.WorkspaceDir,
+		GatewayVersion: deps.GatewayVersion,
 		ObserveTool:    deps.ObserveTool,
 		Fleet:          deps.Fleet,
 		Browser:        deps.Browser,

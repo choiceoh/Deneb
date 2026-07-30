@@ -73,11 +73,11 @@ func parseEnvelope(t *testing.T, s string) map[string]any {
 
 func TestGatewayStatusReturnsVersionPortAndUptime(t *testing.T) {
 	cfgPath := writeTempConfig(t, `{"gateway": {"port": 19999}}`)
-	GatewayVersion = "test-1.2.3"
 	tool := ToolGatewayWithDeps("", GatewayDeps{
 		ConfigPath: cfgPath,
 		Signaller:  &fakeSignaller{},
 		Now:        func() time.Time { return gatewayStartTime.Add(65 * time.Second) },
+		Version:    "test-1.2.3",
 	})
 	out := mustCallTool(t, tool, map[string]any{"action": "status"})
 	if !strings.Contains(out, "test-1.2.3") {

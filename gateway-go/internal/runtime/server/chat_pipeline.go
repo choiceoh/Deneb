@@ -204,6 +204,7 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 
 	s.toolDeps = &chat.CoreToolDeps{
 		WorkspaceDir:      workspaceDir,
+		GatewayVersion:    s.version,
 		SkillsCatalogDirs: skillCatalogDirs,
 		// Memory root as an extra read root: capture originals (and archived
 		// oversized-document sources the digest map references by path) live

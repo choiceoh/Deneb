@@ -217,6 +217,10 @@ type CalendarCreateInput struct {
 // It composes focused dep structs for each tool group.
 type CoreToolDeps struct {
 	WorkspaceDir string
+	// GatewayVersion is the running build version surfaced by gateway status.
+	// It is threaded from the server composition root so bootstrap does not
+	// reach into concrete tool implementation packages.
+	GatewayVersion string
 	// PhoneActionSender delivers a validated phone action to the native app for
 	// in-app Intent execution (the phone_write Intent ops). nil = no app channel
 	// wired, so those actions report unavailable instead of dropping silently.

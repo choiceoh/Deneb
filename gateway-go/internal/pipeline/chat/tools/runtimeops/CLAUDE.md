@@ -22,7 +22,7 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - `phone_action.go`/`phone.go`는 phone tool 검증·표현을 소유하고, native app
   dispatch 계약(`PhoneActionFunc`, `ErrPhoneActionUnconfirmed`)은 `tooldeps`가
   소유한다.
-- `gateway.go`의 `GatewayDeps`, `ToolGateway`, `ToolGatewayWithDeps`가 status,
+- `gateway.go`의 `GatewayDeps`, `ToolGatewayWithDeps`가 status,
   config, restart, update approval 흐름을 소유한다.
 
 ## 의존 방향과 불변조건

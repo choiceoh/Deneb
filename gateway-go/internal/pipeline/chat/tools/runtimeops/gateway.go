@@ -31,10 +31,6 @@ var gatewayStartTime = time.Now()
 // `config_set` refuses to write to these (agents should NEVER manage tokens).
 var secretPathPattern = regexp.MustCompile(`(?i)(token|apikey|api_key|password|secret|credential)`)
 
-// GatewayVersion is set by the bootstrap package at runtime so tools can
-// report the build version without importing cmd/. Package-level for tests.
-var GatewayVersion = "dev"
-
 // CommandRunner abstracts external command execution so tests can inject
 // fakes instead of shelling out to real git/make.
 type CommandRunner interface {
@@ -82,6 +78,7 @@ type GatewayDeps struct {
 	Signaller  ProcessSignaller
 	ConfigPath string // override for config file path (empty ⇒ config.ResolveConfigPath)
 	Now        func() time.Time
+	Version    string
 }
 
 func (d GatewayDeps) runner() CommandRunner {
@@ -112,7 +109,14 @@ func (d GatewayDeps) now() time.Time {
 	return time.Now()
 }
 
-// ToolGateway returns the gateway self-management tool. Backward compatible
+func (d GatewayDeps) version() string {
+	if d.Version != "" {
+		return d.Version
+	}
+	return "dev"
+}
+
+// ToolGatewayWithDeps returns the gateway self-management tool. Backward compatible
 // with the legacy action names (config.get / config.patch / config.apply /
 // config.schema.lookup / restart / restart.confirmed / update.run).
 //
@@ -126,10 +130,6 @@ func (d GatewayDeps) now() time.Time {
 // `needs_approval` envelope on first call; the agent must relay confirmation
 // to the user and then invoke the `.confirmed` variant with the same
 // `action_token` to execute.
-func ToolGateway(repoDir string) toolport.ToolFunc {
-	return ToolGatewayWithDeps(repoDir, GatewayDeps{})
-}
-
 // gatewayParams is the gateway tool's input payload.
 type gatewayParams struct {
 	Action      string         `json:"action"`
@@ -331,7 +331,7 @@ func gatewayStatus(deps GatewayDeps) (string, error) {
 		cfgPath = snap.Path
 	}
 	result := map[string]any{
-		"version":    GatewayVersion,
+		"version":    deps.version(),
 		"pid":        deps.signaller().PID(),
 		"port":       port,
 		"uptime":     formatGatewayUptime(uptime),

@@ -290,12 +290,12 @@ func TestGatewayDepsReturnsOverridesOrDefaults(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	runner := &fakeRunner{}
 	signaller := &fakeSignaller{}
-	deps := GatewayDeps{Runner: runner, Signaller: signaller, ConfigPath: "/custom/config", Now: func() time.Time { return now }}
-	if deps.runner() != runner || deps.signaller() != signaller || deps.configPath() != "/custom/config" || !deps.now().Equal(now) {
+	deps := GatewayDeps{Runner: runner, Signaller: signaller, ConfigPath: "/custom/config", Now: func() time.Time { return now }, Version: "v-test"}
+	if deps.runner() != runner || deps.signaller() != signaller || deps.configPath() != "/custom/config" || !deps.now().Equal(now) || deps.version() != "v-test" {
 		t.Fatal("overrides not returned")
 	}
 	defaults := GatewayDeps{}
-	if defaults.runner() == nil || defaults.signaller() == nil || defaults.configPath() == "" || defaults.now().IsZero() {
+	if defaults.runner() == nil || defaults.signaller() == nil || defaults.configPath() == "" || defaults.now().IsZero() || defaults.version() != "dev" {
 		t.Fatal("defaults missing")
 	}
 }
