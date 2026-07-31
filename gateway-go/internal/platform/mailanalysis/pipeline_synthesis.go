@@ -249,7 +249,7 @@ func extractDisplayName(from string) string {
 // return empty); sanitizeAnalysisLeak at the call site scrubs any stray marker.
 func runFinalSynthesis(ctx context.Context, deps PipelineDeps, userPrompt string, maxTok int) (string, error) {
 	if deps.AgentSynthesisFn != nil {
-		agentPrompt := finalAnalysisSystem + "\n\n" + userPrompt
+		agentPrompt := finalAnalysisSystem + "\n\n" + agentSynthesisReadOnlyInstruction + "\n\n" + userPrompt
 		out, err := deps.AgentSynthesisFn(ctx, agentPrompt)
 		if err == nil && strings.TrimSpace(out) != "" {
 			return out, nil

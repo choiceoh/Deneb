@@ -621,7 +621,9 @@ func TestRunFinalSynthesisReturnsAgentResultWhenAvailable(t *testing.T) {
 	called := 0
 	deps := PipelineDeps{AgentSynthesisFn: func(_ context.Context, prompt string) (string, error) {
 		called++
-		if !strings.Contains(prompt, finalAnalysisSystem) || !strings.Contains(prompt, "user prompt") {
+		if !strings.Contains(prompt, finalAnalysisSystem) ||
+			!strings.Contains(prompt, agentSynthesisReadOnlyInstruction) ||
+			!strings.Contains(prompt, "user prompt") {
 			t.Errorf("agent prompt = %q", prompt)
 		}
 		return " agent result ", nil
