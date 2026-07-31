@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -194,12 +195,48 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 		AutoDeliveredOutput: true,
 		EphemeralUser:       true,
 		EphemeralAssistant:  true,
+		BeforeToolCall:      mailAnalysisAgentToolGate,
 	})
 	if err != nil {
 		return "", err
 	}
 	return result.BestText(), nil
 }
+
+func mailAnalysisAgentToolGate(name, _ string, input []byte) (bool, string) {
+	switch name {
+	case "wiki":
+		action := toolInputField(input, "action")
+		if isMailAnalysisBlockedWikiAction(action) {
+			return true, mailAnalysisReadOnlyBlockReason
+		}
+	case "knowledge":
+		if strings.EqualFold(toolInputField(input, "op"), "record") {
+			return true, mailAnalysisReadOnlyBlockReason
+		}
+	}
+	return false, ""
+}
+
+func toolInputField(input []byte, field string) string {
+	var payload map[string]any
+	if err := json.Unmarshal(input, &payload); err != nil {
+		return ""
+	}
+	value, _ := payload[field].(string)
+	return strings.TrimSpace(value)
+}
+
+func isMailAnalysisBlockedWikiAction(action string) bool {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "write", "write-site", "seed-sites", "log", "close", "reopen", "ingest":
+		return true
+	default:
+		return false
+	}
+}
+
+const mailAnalysisReadOnlyBlockReason = "mail analysis synthesis is read-only; the mail analysis pipeline persists wiki/knowledge updates separately. Do not retry this write; return the final analysis."
 
 // initLMTPServer starts the LMTP (RFC 2033) mail-ingest server when enabled. An
 // on-box mail server (e.g. Maddy in Docker) PUSHES new mail over LMTP, which

@@ -280,6 +280,8 @@ const finalAnalysisSystem = `당신은 이메일 분석 어시스턴트입니다
 	"보고가 구조적(중요도·수치·기한·다음 행동)이면 도입부를 deneb-ui 카드 한 블록으로 시작하세요 — 여는 펜스는 ```deneb-ui 한 줄 그대로(그 줄 뒤에 다른 글자 금지), 다음 줄부터 루트 <column> 하나. 카드 안에는 백틱을 쓰지 마세요. " +
 	emojiRestraint
 
+const agentSynthesisReadOnlyInstruction = `이 합성 턴은 읽기 전용입니다. 필요한 경우 wiki 검색/읽기 또는 mail_archive 조회로 근거와 첨부만 확인하세요. wiki 기록·로그·수정·닫기·다시열기·수집 또는 knowledge 기록은 하지 마세요. 메일 분석 파이프라인이 분석 결과와 관련 프로젝트 상태를 별도로 저장합니다. 도구 확인이 끝나면 추가 기록 작업 없이 최종 분석을 작성하세요.`
+
 const finalAnalysisPrompt = `%s
 ## 이메일 원문
 %s
