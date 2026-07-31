@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/groupwareapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeattachmentapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 )
@@ -66,10 +67,13 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 			PushHub:           cfg.PushHub,
 			ShutdownContext:   cfg.ShutdownContext,
 			Logger:            cfg.Logger,
-			AttachmentFactory: adaptAttachmentFactory(cfg.AttachmentFactory),
 			TranslateThinking: cfg.TranslateThinking,
 		})
 	}
+	nativeAttachmentHandler := nativeattachmentapi.New(nativeattachmentapi.Config{
+		Logger:            cfg.Logger,
+		AttachmentFactory: adaptAttachmentFactory(cfg.AttachmentFactory),
+	})
 	groupwareHandler := groupwareapi.New(groupwareapi.Config{
 		Download: cfg.GroupwareAttachmentDownload,
 		Logger:   cfg.Logger,
@@ -85,7 +89,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		nativeHandler().Events(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", func(w http.ResponseWriter, r *http.Request) {
-		nativeHandler().GmailAttachment(w, r)
+		nativeAttachmentHandler.GmailAttachment(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/miniapp/groupware/approval/attachment", func(w http.ResponseWriter, r *http.Request) {
 		groupwareHandler.ApprovalAttachment(w, r)
@@ -153,11 +157,11 @@ func WithCORS(next http.Handler) http.Handler {
 	})
 }
 
-func adaptAttachmentFactory(factory func() (MailAttachmentClient, error)) func() (nativeapi.MailAttachmentClient, error) {
+func adaptAttachmentFactory(factory func() (MailAttachmentClient, error)) func() (nativeattachmentapi.AttachmentClient, error) {
 	if factory == nil {
 		return nil
 	}
-	return func() (nativeapi.MailAttachmentClient, error) {
+	return func() (nativeattachmentapi.AttachmentClient, error) {
 		return factory()
 	}
 }

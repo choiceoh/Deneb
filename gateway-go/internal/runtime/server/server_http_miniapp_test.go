@@ -13,6 +13,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeattachmentapi"
 )
 
 // newTestServer builds a minimal server for tests.
@@ -94,31 +95,37 @@ func getMiniappAttachment(t *testing.T, s *Server, token string, params map[stri
 		nil,
 	)
 	rec := httptest.NewRecorder()
-	nativeAPIHandler(s).GmailAttachment(rec, req)
+	nativeAttachmentHandler(s).GmailAttachment(rec, req)
 	return rec
 }
 
-var miniappMailAttachmentClientFactory func() (nativeapi.MailAttachmentClient, error)
+var miniappMailAttachmentClientFactory func() (nativeattachmentapi.AttachmentClient, error)
 
 func nativeAPIHandler(s *Server) *nativeapi.Handler {
+	return nativeapi.New(nativeapi.Config{
+		Dispatcher:      s.dispatcher,
+		ChatHandler:     s.chatHandler,
+		PushHub:         s.pushHub,
+		ShutdownContext: s.ShutdownCtx(),
+		Logger:          s.logger,
+	})
+}
+
+func nativeAttachmentHandler(s *Server) *nativeattachmentapi.Handler {
 	factory := miniappMailAttachmentClientFactory
 	if factory == nil {
-		factory = func() (nativeapi.MailAttachmentClient, error) {
+		factory = func() (nativeattachmentapi.AttachmentClient, error) {
 			client, err := s.newMiniappMailAttachmentClient()
 			return client, err
 		}
 	}
-	return nativeapi.New(nativeapi.Config{
-		Dispatcher:        s.dispatcher,
-		ChatHandler:       s.chatHandler,
-		PushHub:           s.pushHub,
-		ShutdownContext:   s.ShutdownCtx(),
+	return nativeattachmentapi.New(nativeattachmentapi.Config{
 		Logger:            s.logger,
 		AttachmentFactory: factory,
 	})
 }
 
-func withMiniappAttachmentClientFactory(t *testing.T, factory func() (nativeapi.MailAttachmentClient, error)) {
+func withMiniappAttachmentClientFactory(t *testing.T, factory func() (nativeattachmentapi.AttachmentClient, error)) {
 	t.Helper()
 	orig := miniappMailAttachmentClientFactory
 	miniappMailAttachmentClientFactory = factory
@@ -162,7 +169,7 @@ func TestHandleMiniappGmailAttachment_ValidClientTokenStreamsBytes(t *testing.T)
 	token := withClientToken(t)
 	s := newTestServer(t)
 	client := &fakeMiniappAttachmentClient{data: []byte("%PDF")}
-	withMiniappAttachmentClientFactory(t, func() (nativeapi.MailAttachmentClient, error) {
+	withMiniappAttachmentClientFactory(t, func() (nativeattachmentapi.AttachmentClient, error) {
 		return client, nil
 	})
 
@@ -216,7 +223,7 @@ func TestHandleMiniappGmailAttachment_MissingParams(t *testing.T) {
 func TestHandleMiniappGmailAttachmentReturns503WhenClientUnavailable(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
-	withMiniappAttachmentClientFactory(t, func() (nativeapi.MailAttachmentClient, error) {
+	withMiniappAttachmentClientFactory(t, func() (nativeattachmentapi.AttachmentClient, error) {
 		return nil, errors.New("OAuth not configured")
 	})
 
@@ -232,7 +239,7 @@ func TestHandleMiniappGmailAttachmentReturns503WhenClientUnavailable(t *testing.
 func TestHandleMiniappGmailAttachmentReturns404OnGmailNotFound(t *testing.T) {
 	token := withClientToken(t)
 	s := newTestServer(t)
-	withMiniappAttachmentClientFactory(t, func() (nativeapi.MailAttachmentClient, error) {
+	withMiniappAttachmentClientFactory(t, func() (nativeattachmentapi.AttachmentClient, error) {
 		return &fakeMiniappAttachmentClient{err: errors.New("Gmail API error (HTTP 404): not found")}, nil
 	})
 
