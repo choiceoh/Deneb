@@ -63,6 +63,7 @@ var rsiSubtleDegradationClasses = map[string]bool{
 	"imperative-drop": true, "safety-drop": true,
 	"imperative-weaken": true, "scope-narrow": true,
 	"exclusivity-drop": true,
+	"step-reorder":     true, "contradiction-example": true,
 }
 
 // rsiWeakenDegradationClasses is the escalated tier subset — seeing one in
@@ -72,6 +73,7 @@ var rsiSubtleDegradationClasses = map[string]bool{
 var rsiWeakenDegradationClasses = map[string]bool{
 	"imperative-weaken": true, "scope-narrow": true,
 	"exclusivity-drop": true,
+	"step-reorder":     true, "contradiction-example": true,
 }
 
 // rsiDispatchSources is the canonical set of accepted candidate sources: a code
