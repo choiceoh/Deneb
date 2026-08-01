@@ -19,7 +19,8 @@ globs: ["gateway-go/internal/pipeline/chat/tools/document/paddleocr.go", "gatewa
 | 모델 | 역할 | 기본 엔드포인트 | 코드 진입점 | 비고 |
 |---|---|---|---|---|
 | **PaddleOCR-VL-1.6** (0.9B) | 문서 OCR (스캔 PDF·이미지 첨부) | `http://127.0.0.1:18011/v1` | `chat/tools/document/paddleocr.go` | 상주 서빙. tesseract 폴백 있음. ↓ 상세 |
-| **MOSS-Transcribe-Diarize** (0.9B) | 음성 전사 + 화자분리 + 타임스탬프 (단일 패스 90분·50+개 언어·한국어) | `http://100.105.145.6:18014` (`POST /v1/transcribe`, VibeVoice 서버와 동일 계약) | `chat/tools/artifact/asr.go` | 2026-07-18 VibeVoice(9B) 컷오버. 정답자막 CER 8.5% vs 9.6%·RTF 0.26 vs 0.52·16GB→2GB(earlyoom 킬 리스크 소멸). 핫워드 프롬프트 주입. 롤백 = sidecar-remote.conf 18013 복원(vibevoice-asr 컨테이너 유지). ↓ 상세 |
+| **Gemini 음성 전사** (프론티어 클라우드, 2026-08-01 컷오버) | 음성 전사 + 화자분리 + 타임스탬프 — **현행 primary** | `generativelanguage.googleapis.com` (gemini-3.5-flash, `GOOGLE_API_KEY`) | `chat/tools/artifact/asr_gemini.go` (opt-in `DENEB_ASR_PROVIDER=gemini`, 모델 override `DENEB_ASR_GEMINI_MODEL`) | 운영자 방향 "귀는 프론티어" + 실측(핫워드 **없이** 김민준/탑솔라 정확·회의 슬라이스 RTF~0.14). 핫워드는 프롬프트 컨텍스트로 주입, ≤14MB inline·초과 Files API, 실패 시 MOSS 폴백(reachable일 때만). 라이브 테스트 `DENEB_ASR_GEMINI_LIVE=1` |
+| **MOSS-Transcribe-Diarize** (0.9B) | 음성 전사 **폴백** (구 primary) | `http://100.105.145.6:18014` (`POST /v1/transcribe`) | `chat/tools/artifact/asr.go` | 2026-07-18 VibeVoice(9B) 컷오버였으나 **2026-07-20 qwen36-fast(util 0.5)가 srv1 헤드룸을 소진한 뒤 earlyoom 상시 사살로 사실상 사망**(~12일 침묵 고장 — Gemini 컷오버의 직접 계기). 컨테이너는 stop 상태로 보존; srv1 메모리가 풀리면 `~/start-moss-asr.sh`로 복귀 가능. 롤백 = `DENEB_ASR_PROVIDER` 드롭인 제거 |
 | 메인 챗 LLM | 대화/분석/도구호출 | provider config (Anthropic/OpenRouter/vLLM 등) | `pipeline/chat/run_provider.go` | modelrole `main`. 로컬일 때 기본 `http://127.0.0.1:8000/v1` |
 | lightweight 서브 LLM | mailanalysis(메일폴)/genesis/pilot 등 잡일꾼 | modelrole `lightweight` | `pipeline/pilot/localai.go` | 메인보다 작은 모델, 백그라운드 작업용 |
 | NuExtract3-FP8 | 구조화 추출 (스키마 기반) | (config-driven, 코드 하드코딩 없음) | — | `~/models/NuExtract3-FP8`. 현재 게이트웨이 코드에서 직접 참조 없음 |
