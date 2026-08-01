@@ -161,7 +161,13 @@ func (e *Evolver) validateCandidatePreflight(skillName, originalContent, candida
 	// covered means a REAL regression check is active: at least one case the
 	// held-out gate can score (hasAssertions). Mere case existence let an
 	// assertion-less corpus grant the relaxed caps while the gate failed open.
-	covered := hasScorableValidationCase(e.validationCasesForCoverage(skillName))
+	cases := e.validationCasesForCoverage(skillName)
+	// Cheapest rejection first: a dropped tool mention is the largest quality
+	// bucket in the evolve ledger and needs neither a model nor a replay.
+	if ok, reason := requiredToolPreflight(cases, originalContent, candidateBody); !ok {
+		return false, reason
+	}
+	covered := hasScorableValidationCase(cases)
 	if ok, reason := guardrails.ValidateHermesEvolutionGuardrails(originalContent, candidateBody, covered); !ok {
 		return false, reason
 	}
