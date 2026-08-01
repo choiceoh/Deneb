@@ -81,6 +81,12 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 		Names     []string `json:"names"`
 		Phones    []string `json:"phones"`
 		Emails    []string `json:"emails"`
+		// Personal identifiers only — what a client must match on to find this
+		// group's entries on a device. Phones/Emails above stay the full union
+		// for display; matching on them collapses everyone who shares a company
+		// line into one contact.
+		LinkPhones []string `json:"linkPhones"`
+		LinkEmails []string `json:"linkEmails"`
 	}
 	type partyOut struct {
 		Name   string   `json:"name"`
@@ -109,7 +115,9 @@ func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
 		res := contacts.Dedup(all)
 		merges := make([]mergeOut, 0, len(res.Merges))
 		for _, g := range res.Merges {
-			m := mergeOut{Canonical: g.Canonical}
+			// Display keeps the full union; linking gets the personal identifiers
+			// only (see MergeGroup.LinkPhones — the union matches half the company).
+			m := mergeOut{Canonical: g.Canonical, LinkPhones: g.LinkPhones, LinkEmails: g.LinkEmails}
 			seenP := map[string]bool{}
 			seenE := map[string]bool{}
 			for _, idx := range g.Members {

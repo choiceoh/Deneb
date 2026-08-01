@@ -36,6 +36,15 @@ const (
 type MergeGroup struct {
 	Members   []int  `json:"members"`
 	Canonical string `json:"canonical"` // cleanest display name for the merged card
+	// LinkPhones/LinkEmails are the members' PERSONAL identifiers only — the union
+	// minus the switchboard numbers and role inboxes that grouping already refused
+	// to bridge on. Anything applying this group to a device MUST match on these.
+	// The raw union re-admits exactly the identifiers that match half the company,
+	// which is how one merge group becomes a mass collapse (2026-07-28: a shared
+	// company line pulled every colleague into one contact, cascading through their
+	// numbers until the 2,819-entry book fell to 1,270).
+	LinkPhones []string `json:"linkPhones"`
+	LinkEmails []string `json:"linkEmails"`
 }
 
 // AmbiguousPair links two entries that share a personal identifier but whose names
@@ -204,6 +213,27 @@ func Dedup(contacts []Contact) DedupResult {
 	}
 
 	merges, distinct := mergeGroupsFromClusters(contacts, uf)
+	// Personal identifiers per group, for apply-time matching. Same predicates the
+	// grouping used, so a number too widely shared to justify a merge is also never
+	// handed out as a way to FIND that merge's members.
+	for gi := range merges {
+		seenP := map[string]bool{}
+		seenE := map[string]bool{}
+		for _, idx := range merges[gi].Members {
+			for _, p := range contactPhones[idx] {
+				if !sharedPhone(p) && !seenP[p] {
+					seenP[p] = true
+					merges[gi].LinkPhones = append(merges[gi].LinkPhones, p)
+				}
+			}
+			for _, e := range contactEmails[idx] {
+				if !sharedEmail(e) && !seenE[e] {
+					seenE[e] = true
+					merges[gi].LinkEmails = append(merges[gi].LinkEmails, e)
+				}
+			}
+		}
+	}
 	res.Merges = merges
 	res.Ambiguous = ambiguous
 	res.Distinct = distinct
