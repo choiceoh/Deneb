@@ -180,6 +180,18 @@ func (t *Tracker) auditEvolutionDrift() driftVerdict {
 // driftMetaCounts walks the meta-revision ledger (newest first) and returns
 // how many of the recent lifecycle records are adoptions, how many are
 // reverts, and the current same-artifact adoption streak from the newest end.
+//
+// The streak measures DIVERSITY COLLAPSE — a loop that has stopped considering
+// anything but one lever. So any cycle touching a different artifact ends it,
+// including one that proposed nothing: a skip is still the loop looking at that
+// artifact and deciding, honestly, that its scoreboard held no work.
+//
+// Counting adoptions alone misreads a healthy rotation. The meta loop cycles
+// producer -> evaluator -> genesis every three days; when two of the three have
+// no actionable rejection evidence they correctly skip, and only the third ever
+// adopts. That is not collapse, but with skips invisible it looked identical
+// and froze L2 on 2026-07-31 (three progressive versions of one prompt, zero
+// corroborating quality signals — falseAccept/confirm/resolved all 0).
 func driftMetaCounts(revs []MetaRevisionRecord) (adopted, reverted, streak int) {
 	var streakArtifact string
 	streakActive := true
@@ -201,6 +213,14 @@ func driftMetaCounts(revs []MetaRevisionRecord) (adopted, reverted, streak int) 
 			reverted++
 			// A revert interrupts the "unbroken adoption streak" reading.
 			streakActive = false
+		default:
+			// A cycle that adopted nothing (skip, proposal awaiting review,
+			// rejection). It still proves the loop considered this artifact, so
+			// it breaks a streak held by a DIFFERENT one. Records for the streak
+			// artifact itself are its own proposal trail and change nothing.
+			if streakActive && streakArtifact != "" && r.Artifact != streakArtifact {
+				streakActive = false
+			}
 		}
 	}
 	return adopted, reverted, streak
