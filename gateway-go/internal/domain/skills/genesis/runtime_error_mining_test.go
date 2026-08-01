@@ -305,8 +305,17 @@ func TestRuntimeErrorMining_LeavesImpactPendingWhenWholeStreamIsQuiet(t *testing
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("expected the single candidate back (err=%v), got %d", err, len(rows))
 	}
-	if rows[0].ImpactResult != nil {
-		t.Fatalf("a dead stream cannot attribute quiet to the fix, got %+v", rows[0].ImpactResult)
+	// The measurement now RECORDS that it could not attribute, rather than
+	// staying silent: the ledger shows why this candidate has no usefulness
+	// answer, and the miner re-measures it once the stream is live again.
+	if rows[0].ImpactResult == nil {
+		t.Fatal("an unattributable measurement must still be recorded")
+	}
+	if rows[0].ImpactResult.Status != selfCorrectionImpactInconclusive {
+		t.Fatalf("dead stream must read inconclusive, got %q", rows[0].ImpactResult.Status)
+	}
+	if rows[0].ImpactResult.Samples != 0 {
+		t.Errorf("no control means zero samples, got %d", rows[0].ImpactResult.Samples)
 	}
 }
 

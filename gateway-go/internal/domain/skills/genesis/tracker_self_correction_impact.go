@@ -19,6 +19,20 @@ const (
 	selfCorrectionImpactVerified  = "verified"
 	selfCorrectionImpactNoEffect  = "no_effect"
 	selfCorrectionImpactRegressed = "regressed"
+	// selfCorrectionImpactInconclusive is the verdict for "we looked and could
+	// not tell" — the measurement ran but carried too little evidence to place
+	// the result against the contract.
+	//
+	// It exists because every other outcome is a CLAIM about the fix, and
+	// without this one an unmeasurable case has to become the nearest claim.
+	// That collapse is the defect this whole ledger kept reproducing (audit
+	// 2026-08-01): a quiet error stream read as "fixed", a baselined finding
+	// read as "fixed", a failed judge call read as "rejected". Insufficient
+	// samples used to raise an ERROR here, which the miner logged at Debug and
+	// dropped — so the honest answer was the one answer the ledger could not
+	// record. Unlike pending it states that a measurement was attempted, and
+	// unlike no_effect it makes no claim about the change.
+	selfCorrectionImpactInconclusive = "inconclusive"
 )
 
 // selfCorrectionImpactStatus returns the independent usefulness axis. Safety
@@ -155,11 +169,17 @@ func classifySelfCorrectionImpact(contract rsilifecycle.ImpactContract, result r
 	if !finiteImpactValue(result.Observed) {
 		return "", fmt.Errorf("observed value must be finite")
 	}
-	if result.Samples < contract.MinSamples {
-		return "", fmt.Errorf("samples %d below minimum %d", result.Samples, contract.MinSamples)
-	}
+	// Guardrails first: a tripped guardrail is OBSERVED harm, not an inference
+	// from the primary metric, so a thin sample count must not soften it to
+	// "could not tell".
 	if len(result.GuardrailViolations) > 0 {
 		return selfCorrectionImpactRegressed, nil
+	}
+	// Too little evidence is a verdict, not a failure. Returning an error here
+	// made the caller drop the observation entirely, leaving the candidate
+	// pending forever with nothing recording WHY it could never be judged.
+	if result.Samples < contract.MinSamples {
+		return selfCorrectionImpactInconclusive, nil
 	}
 	switch contract.Direction {
 	case selfCorrectionImpactDirectionDecrease:

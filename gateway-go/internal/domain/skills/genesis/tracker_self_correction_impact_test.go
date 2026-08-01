@@ -90,8 +90,17 @@ func TestSelfCorrectionImpactClassifiesTargetBaselineAndGuardrails(t *testing.T)
 			}
 		})
 	}
-	if _, err := classifySelfCorrectionImpact(contract, rsilifecycle.ImpactResult{Observed: 70, Samples: 9}); err == nil {
-		t.Fatal("insufficient sample result was accepted")
+	// Below MinSamples is now a recorded verdict rather than an error. Erroring
+	// made the caller drop the observation, so the ledger kept no trace of WHY a
+	// candidate had no usefulness answer — the collapse this axis exists to
+	// avoid. Note 70 would otherwise clear the target: an unmeasured success
+	// must not be scored as one.
+	got, err := classifySelfCorrectionImpact(contract, rsilifecycle.ImpactResult{Observed: 70, Samples: 9})
+	if err != nil {
+		t.Fatalf("insufficient evidence must not fail the record: %v", err)
+	}
+	if got != selfCorrectionImpactInconclusive {
+		t.Fatalf("insufficient sample result = %q, want inconclusive", got)
 	}
 }
 
