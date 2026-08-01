@@ -23,7 +23,18 @@ func TranscribeAudio(ctx context.Context, audio []byte, mimeType, hotwords strin
 // not even meaningful. The sidecar already returns the flat text alongside the
 // segments — this just stops throwing it away.
 func TranscribeAudioPlain(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error) {
-	r, err := transcribeAudio(ctx, audio, audioFilename(mimeType), mergeHotwords(hotwords, asrHotwords()))
+	merged := mergeHotwords(hotwords, asrHotwords())
+	if asrProvider() == "gemini" {
+		text, gerr := transcribeAudioGemini(ctx, audio, mimeType, merged, true)
+		if gerr == nil {
+			return text, nil
+		}
+		if !asrReady(ctx) {
+			return "", gerr
+		}
+		// fall through to the reachable sidecar
+	}
+	r, err := transcribeAudio(ctx, audio, audioFilename(mimeType), merged)
 	if err != nil {
 		return "", err
 	}

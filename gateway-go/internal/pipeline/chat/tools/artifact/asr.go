@@ -52,10 +52,8 @@ func asrBaseURL() string {
 }
 
 // asrReady reports whether the ASR sidecar is reachable (GET /health,
-// 200). It gates the YouTube audio→ASR fallback BEFORE any audio is downloaded,
-// so a deployment with the sidecar down doesn't waste the fetch budget on a
-// doomed transcription. A connection-refused probe returns fast, so this is cheap
-// relative to the download it guards.
+// 200). A connection-refused probe returns fast, so this is cheap
+// relative to the work it guards (e.g. the gemini→sidecar fallback).
 func asrReady(ctx context.Context) bool {
 	pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -241,12 +239,30 @@ func mmss(sec float64) string {
 	return fmt.Sprintf("%02d:%02d", m, s)
 }
 
-// transcribeAudioText is the single transcription entry point: it calls
-// the ASR sidecar and returns a ready-to-read diarized transcript. mimeType is a
-// hint used only to pick the multipart filename extension. There is no local
-// fallback — an unreachable server surfaces as an error the caller reports.
+// transcribeAudioText is the single transcription entry point, returning a
+// ready-to-read diarized transcript. Provider selection (asr_gemini.go):
+// DENEB_ASR_PROVIDER=gemini → frontier cloud primary with the MOSS sidecar as
+// reachable-only fallback; unset/moss → sidecar only, behavior unchanged.
+// mimeType is a hint (multipart filename / gemini mime). With no provider
+// configured there is no local fallback — an unreachable server surfaces as an
+// error the caller reports.
 func transcribeAudioText(ctx context.Context, audio []byte, mimeType, extraHotwords string) (string, error) {
-	r, err := transcribeAudio(ctx, audio, audioFilename(mimeType), mergeHotwords(extraHotwords, asrHotwords()))
+	hotwords := mergeHotwords(extraHotwords, asrHotwords())
+	if asrProvider() == "gemini" {
+		text, gerr := transcribeAudioGemini(ctx, audio, mimeType, hotwords, false)
+		if gerr == nil {
+			return text, nil
+		}
+		// Cloud failed: the sidecar may or may not be resident (srv1 memory
+		// pressure) — only bother when its health probe answers.
+		if asrReady(ctx) {
+			if r, merr := transcribeAudio(ctx, audio, audioFilename(mimeType), hotwords); merr == nil {
+				return formatTranscript(r), nil
+			}
+		}
+		return "", gerr
+	}
+	r, err := transcribeAudio(ctx, audio, audioFilename(mimeType), hotwords)
 	if err != nil {
 		return "", err
 	}
