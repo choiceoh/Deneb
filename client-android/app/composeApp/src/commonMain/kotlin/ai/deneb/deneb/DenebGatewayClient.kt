@@ -711,8 +711,18 @@ class DenebGatewayClient private constructor(
         const val FOOTPRINT_MAX_TOOLS = 5
 
         // Max idle between bytes on the chat SSE stream. The server emits a
-        // keepalive comment every 15s, so this only trips on a real stall.
-        const val STREAM_SOCKET_TIMEOUT_MS = 120_000L
+        // keepalive comment every 15s (chatStreamKeepaliveInterval), so 45s =
+        // three consecutive missed keepalives — a high-confidence dead socket,
+        // not a slow turn. The previous 120s window sat right at user patience:
+        // production 2026-08-01, a half-open socket kept "깊이 생각 중" up for
+        // ~2min with the finished answer stranded in the transcript, and the
+        // user re-sent at 2m22s — cancelling the recovery poll seconds before
+        // it would have installed the reply ("채팅 안 보임"). Tripping at 45s
+        // hands the zombie stream to recoverTurnFromTranscript (which shows the
+        // resuming chip and polls up to STREAM_RECOVERY_MAX_MS) well inside
+        // patience. A transient network blip that trips this is harmless: the
+        // same recovery path re-installs the canonical transcript.
+        const val STREAM_SOCKET_TIMEOUT_MS = 45_000L
 
         // Stream-failure recovery (recoverTurnFromTranscript): how long to keep
         // polling the transcript for the answer of a turn whose SSE died. The
