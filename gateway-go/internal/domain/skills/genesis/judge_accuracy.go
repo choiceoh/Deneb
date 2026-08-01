@@ -418,6 +418,13 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 		// ladder had nothing above it and L3 flatlined DATA-GATED.
 		if t.exclusivityTierUnlocked(rec.JudgeVersion) {
 			pairs = append(pairs, buildExclusivityJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+			// Tier 5 opens once tier 4 is outgrown too. Tier 4 saturated within
+			// a week of being added (164/164, 2026-08-01), which is the ladder
+			// working as designed: each rung buys signal only until the judge
+			// clears it, and the answer to a ceiling is another rung.
+			if t.reorderTierUnlocked(rec.JudgeVersion) {
+				pairs = append(pairs, buildReorderJudgeDegradationPairs(entries, judgeBenchMaxPairs*metaBenchScale())...)
+			}
 		}
 	}
 	verdictErrors, consecutiveErrors := 0, 0
@@ -508,6 +515,15 @@ func (t *JudgeAccuracyTask) weakenTierUnlocked(judgeVersion string) bool {
 // either way.
 func (t *JudgeAccuracyTask) exclusivityTierUnlocked(judgeVersion string) bool {
 	return t.tierSaturated(judgeVersion, weakenJudgeDegradations)
+}
+
+// reorderTierUnlocked is the rung test above tier 4. Same conservative shape as
+// the rungs below: callers gate it behind exclusivityTierUnlocked, so a judge
+// that has never been shown tier 4 reads as not-yet-saturated rather than
+// ready. Tier 5 differs in kind — its mutants are not shorter — so reaching it
+// means the judge has stopped being scorable by "was anything removed?".
+func (t *JudgeAccuracyTask) reorderTierUnlocked(judgeVersion string) bool {
+	return t.tierSaturated(judgeVersion, exclusivityJudgeDegradations)
 }
 
 // tierSaturated reports whether the newest judgeEscalationWindow lane runs

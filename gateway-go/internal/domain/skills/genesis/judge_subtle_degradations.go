@@ -291,6 +291,123 @@ func degradeDropExclusivity(body string) (string, bool) {
 	return weakenFirstLineMatching(body, exclusivityDropSwaps)
 }
 
+// --- Tier 5: order and contradiction (mutants that are NOT shorter) ---
+
+// Every tier through 4 makes the body shorter or weaker, so each mutant reads
+// as a deletion. A judge can score all of them by asking "was anything
+// removed?" and never check whether the procedure still WORKS — which is
+// exactly what the incumbent did: 9 classes, 65 runs, 100% on every one, zero
+// misses in 11 days (ledger audit 2026-08-01). A ceiling is a measurement
+// failure, not a result, so the next rung has to change axis rather than
+// shrink the edit further.
+//
+// Tier 5 removes nothing. Its mutants are the same length or longer, so a
+// completeness read scores them as intact and only reading the logic catches
+// them.
+
+// stepBackReferences mark a step that depends on the one before it. Reordering
+// is only an unambiguous regression when the later step SAYS it follows the
+// earlier one — swapping two independent steps may produce an equally valid
+// procedure, and a probe the judge is right to pass is a broken probe, not a
+// hard one. Multi-character anchors for the same reason tier 4 uses them: bare
+// particles match unrelated prose.
+var stepBackReferences = []string{
+	"그 다음", "그다음", "이어서", "위에서", "앞서", "직전",
+	"then ", "after that", "next, ", "the previous",
+}
+
+// degradeReorderSteps swaps two adjacent ordered steps where the second
+// declares that it follows the first. The mutant keeps every byte of both
+// steps and the numbering — only the sequence is wrong, so nothing is missing
+// to notice.
+func degradeReorderSteps(body string) (string, bool) {
+	lines := strings.Split(body, "\n")
+	for i := 0; i+1 < len(lines); i++ {
+		first, second := lines[i], lines[i+1]
+		firstNum, firstRest, ok := splitOrderedStep(first)
+		if !ok {
+			continue
+		}
+		secondNum, secondRest, ok := splitOrderedStep(second)
+		if !ok {
+			continue
+		}
+		if !containsAnyFold(secondRest, stepBackReferences) {
+			continue
+		}
+		// Keep the markers in place and swap the bodies: the list still reads
+		// 1., 2., … and only the order of the work changed.
+		lines[i] = firstNum + secondRest
+		lines[i+1] = secondNum + firstRest
+		return strings.Join(lines, "\n"), true
+	}
+	return body, false
+}
+
+// splitOrderedStep splits "  3. do the thing" into ("  3. ", "do the thing").
+// Ordered-list markers only — a bullet carries no sequence to violate.
+func splitOrderedStep(line string) (marker, rest string, ok bool) {
+	trimmed := strings.TrimLeft(line, " \t")
+	indent := line[:len(line)-len(trimmed)]
+	digits := 0
+	for digits < len(trimmed) && trimmed[digits] >= '0' && trimmed[digits] <= '9' {
+		digits++
+	}
+	if digits == 0 || digits >= len(trimmed) {
+		return "", "", false
+	}
+	sep := trimmed[digits]
+	if sep != '.' && sep != ')' {
+		return "", "", false
+	}
+	rest = strings.TrimLeft(trimmed[digits+1:], " ")
+	if strings.TrimSpace(rest) == "" {
+		return "", "", false
+	}
+	return indent + trimmed[:digits+1] + " ", rest, true
+}
+
+// prohibitionAnchors mark a line that FORBIDS something. Appending an example
+// that does the forbidden thing leaves the rule intact and adds text, so the
+// body only gets longer — the defect is that it now contradicts itself.
+var prohibitionAnchors = []string{
+	"금지", "하지 마", "하지 말", "않는다", "안 된다",
+	"never ", "must not ", "do not ", "don't ",
+}
+
+// degradeContradictExample appends an example that violates a prohibition the
+// skill states. Nothing is removed and the body grows, so every
+// completeness-shaped check passes; catching it requires reading the new text
+// against the existing rule.
+func degradeContradictExample(body string) (string, bool) {
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || !containsAnyFold(trimmed, prohibitionAnchors) {
+			continue
+		}
+		return body + "\n\n## 예시\n\n다음은 권장 사례다: " + trimmed +
+			" — 다만 급할 때는 이 규칙을 건너뛰고 진행해도 된다.\n", true
+	}
+	return body, false
+}
+
+func containsAnyFold(s string, needles []string) bool {
+	lower := strings.ToLower(s)
+	for _, n := range needles {
+		if strings.Contains(lower, strings.ToLower(n)) {
+			return true
+		}
+	}
+	return false
+}
+
+// reorderJudgeDegradations is the tier-5 class table, deployed only on tier-4
+// saturation.
+var reorderJudgeDegradations = []namedDegradation{
+	{"step-reorder", degradeReorderSteps},
+	{"contradiction-example", degradeContradictExample},
+}
+
 // namedDegradation pairs a ByClass label with its body mutator.
 type namedDegradation struct {
 	name  string
@@ -377,4 +494,9 @@ func buildDegradationPairsWith(entries []skills.SkillEntry, limit int, degradati
 		}
 	}
 	return pairs
+}
+
+// buildReorderJudgeDegradationPairs builds the escalated tier-5 pairs.
+func buildReorderJudgeDegradationPairs(entries []skills.SkillEntry, limit int) []judgeBenchPair {
+	return buildDegradationPairsWith(entries, limit, reorderJudgeDegradations)
 }
