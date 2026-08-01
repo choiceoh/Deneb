@@ -322,6 +322,14 @@ func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string,
 	for _, rec := range all {
 		switch rec.Status {
 		case genesis.SelfCorrectionStatusProposed, genesis.SelfCorrectionStatusAccepted:
+			// Label who will act on this once it leaves review. "accepted" only
+			// means "queued" for the coding-dispatch lane; everywhere else it
+			// means shelved, and a reviewer that cannot see the difference
+			// defaults to accepted — how 22 candidates went silent.
+			rec.Consumer = "none"
+			if strings.TrimSpace(rec.Scope) == "code" && genesis.SourceAutoDispatches(rec.Source) {
+				rec.Consumer = "coding-dispatch"
+			}
 			out = append(out, rec)
 		}
 		if len(out) >= limit {

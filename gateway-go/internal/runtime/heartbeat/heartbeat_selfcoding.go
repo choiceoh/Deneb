@@ -143,17 +143,26 @@ func (t *heartbeatTask) detectSelfCodingNudge(now time.Time) string {
 // NO_REPLY default), so a queue the model keeps ignoring surfaces to a human
 // instead of rotting behind silent retries.
 func buildSelfCodingNudge(count, ignoredStreak int) string {
-	nudge := fmt.Sprintf(`[자가코딩 제안 검토] 자가개선 후보 %d건이 '제안됨' 상태로 대기 중입니다. 이번 턴에서 반드시 처리하고 기록하세요 (최대 2건, 나머지는 다음 점검).
+	nudge := fmt.Sprintf(`[자가코딩 제안 검토] 자가개선 후보 %d건이 열려 있습니다. 이번 턴에서 처리하고 기록하세요 (최대 2건, 나머지는 다음 점검).
+
+목표는 큐를 비우는 것이 아니라 후보를 실제로 해소하는 것입니다. 판정은 그 결과를 적는 자리이지, 큐에서 치우는 수단이 아닙니다.
 
 필수 절차 — 턴을 끝내기 전에 실제로 수행할 것:
-1) skill_lifecycle(action=status)로 pending self-corrections를 열고 각 후보의 evidence·targetFiles·risk를 읽으세요.
-   - 이번 status 출력에서 status=proposed인 후보만 리뷰 대상입니다. accepted/rejected/superseded/applied 후보나 과거 로그·스필오버·기억에서 본 오래된 id에는 self_correction_review를 다시 호출하지 마세요.
-2) 스킬/테스트/문서 스코프(SKILL.md 수정, validation_case 추가 등 상태·데이터 파일)는 안전하면 직접 실행한 뒤 skill_lifecycle(action=self_correction_review, status=applied, reviewNote=수행 내용)로 기록하세요.
-3) 코드 스코프(저장소 소스 수정)는 하트비트에서 직접 고치지 말고, 판정만 내려 skill_lifecycle(action=self_correction_review, status=accepted 또는 rejected, reviewNote=근거)로 기록하세요.
-4) 안전하게 처리 못 할 후보도 방치 금지 — accepted(유효, 후속 필요) 또는 rejected(근거)로 판정해 '제안됨'에서 내보내세요.
-5) 같은 후보 id에는 이번 턴에서 self_correction_review를 최대 1회만 호출하세요. invalid status transition 오류가 나오면 그 id는 이미 다른 경로에서 terminal 처리된 것으로 보고 즉시 중단하세요.
+1) skill_lifecycle(action=status)로 열린 self-corrections를 열고 각 후보의 evidence·targetFiles·risk, 그리고 **consumer 필드**를 읽으세요.
+   - 이번 status 출력에 실제로 들어 있는 후보만 리뷰 대상입니다 (status=proposed, 그리고 아래 5)에 해당하는 accepted). 과거 로그·스필오버·기억에서 본 오래된 id에는 self_correction_review를 호출하지 마세요 — 이미 terminal 처리된 건을 되살리려는 것입니다.
+   - consumer=coding-dispatch: 코딩 배차 레인이 실제로 집어갈 후보입니다.
+   - consumer=none: 이 후보를 집어갈 곳이 **없습니다**. accepted로 적으면 아무도 안 하고 영구히 사라집니다.
+2) 스킬/테스트/문서 스코프(SKILL.md 수정, validation_case 추가 등 상태·데이터 파일)는 안전하면 직접 실행한 뒤 status=applied, reviewNote=수행 내용으로 기록하세요. 이게 기본값입니다 — 이 스코프는 하트비트가 처리하라고 있는 것이고, 대부분의 consumer=none 후보가 여기 속합니다.
+3) status 선택 (정확히 쓰세요):
+   - applied: 이번 턴에 실제로 고쳤다.
+   - accepted: **consumer=coding-dispatch 인 후보에만** 씁니다. "배차 큐에 넣는다"는 뜻입니다.
+   - rejected: 유효하지 않다 / 재현 안 된다 / 무해하다. 근거를 적으세요.
+   - superseded: 다른 후보와 같은 근본원인의 파생이다. 원본 id를 reviewNote에 적으세요. 같은 클러스터를 여러 건 각각 판정하지 마세요.
+4) 유효한데 이번 턴에 처리할 수 없고 consumer=none 이면 — **판정하지 말고 proposed로 두세요.** 대신 무엇이 막고 있는지(권한·스코프·근거 부족·필요한 사람) 사용자에게 2~3문장으로 보고하세요. 억지 판정보다 정직한 미결이 낫습니다.
+5) accepted 상태인 후보를 다시 볼 때: consumer=coding-dispatch 면 배차 대기 중이니 건드리지 마세요. consumer=none 이면 이전 판정이 잘못된 것이므로 위 3)의 올바른 status로 다시 판정하세요.
+6) 같은 후보 id에는 이번 턴에서 self_correction_review를 최대 1회만 호출하세요. invalid status transition 오류가 나오면 그 id는 이미 다른 경로에서 terminal 처리된 것으로 보고 즉시 중단하세요.
 
-★필수: 최소 1건에 skill_lifecycle(action=self_correction_review) 호출을 남긴 뒤 턴을 종료하세요. 판정을 하나도 기록하지 않고 NO_REPLY로 끝내면 큐가 그대로 남아 재점검만 반복 소모합니다. 사용자 메시지는 임원 판단이 필요한 발견일 때만 작성하고, 그 외에는 리뷰 기록을 마친 뒤 NO_REPLY 하세요.`, count)
+★한 건도 실제로 해소하지 못했다면 판정을 지어내지 말고, 무엇이 막았는지 사용자에게 보고한 뒤 종료하세요. 근거 없는 accepted는 후보를 조용히 없앨 뿐입니다 (2026-08-01 원장 감사: 그렇게 22건이 사라졌습니다). 그 외에는 처리 기록을 마친 뒤 NO_REPLY 하세요.`, count)
 	if ignoredStreak >= selfCodingEscalateAfterIgnored {
 		nudge += fmt.Sprintf(`
 
