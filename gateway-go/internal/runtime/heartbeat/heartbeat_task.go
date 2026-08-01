@@ -235,6 +235,7 @@ const heartbeatTriggerTemplate = prompt.HeartbeatTriggerPrefix + ` 30분 주기 
 - 완료된 항목은 새 content에서 빼서 호출하세요. 사용자가 중단을 요청한 항목도 즉시 빼세요.
 - 진행 중인 항목은 마지막 보고 시각·상태를 같은 줄에 갱신하세요
   (예: "[진행중 18:21 — pull 95%%, 다음 점검에서 결과 확인]").
+- ★사용자 행동이 필요 없는 순수 상태 메모(스윕 점검 기록·"상태 유지"·완료 확인 등)는 본문이 아니라 "## status" 섹션 아래에 두세요. "## status"와 "## archive" 아래 내용은 다음 점검을 깨우지 않습니다 — 실행할 일이 남은 항목만 본문에 남기세요. 본문에 상태 메모를 두면 매 30분 풀 턴이 그걸 다시 읽고 NO_REPLY만 내는 공회전이 됩니다.
 - 동일 항목이 3회 연속 진전 없이 반복되면 파일 하단의 "## archive" 섹션으로 이동하고 본문에서는 제거하세요.
 - 모든 항목이 종료되면 content="" 로 호출해 파일을 비우세요. 다음 점검은 자동 skip 됩니다.
 - heartbeat_update는 직전 내용을 HEARTBEAT.md.prev로 자동 백업하므로 잘못 지웠을 때 사용자가 복구할 수 있습니다.
@@ -439,7 +440,14 @@ func heartbeatShouldRun(content, signalSummary, selfCodingNudge, sweepNudge, res
 // heading inside the archive section ("### 2026-07") does not leave archive —
 // only a same-or-higher-level sibling section does.
 func heartbeatHasTasks(content string) bool {
-	archiveLevel := 0 // >0 → inside "## archive"; value = that heading's level
+	// >0 → inside an ignored ("## archive" / "## status") section; value = that
+	// heading's level. "status" carries lane bookkeeping (e.g. the
+	// self-improvement sweep's last-check notes): production 2026-07-18..08-01
+	// showed such notes parked at top level made 92% of firings "has tasks",
+	// each paying a full submain turn (~29K tokens) to re-read its own
+	// bookkeeping and conclude NO_REPLY (91% of 105 firings). Same disease as
+	// the 2026-07-05 scaffolding fix, new carrier.
+	ignoredLevel := 0
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
@@ -447,16 +455,16 @@ func heartbeatHasTasks(content string) bool {
 		}
 		if level, title, ok := markdownHeading(trimmed); ok {
 			switch {
-			case strings.EqualFold(title, "archive"):
-				archiveLevel = level
-			case archiveLevel > 0 && level > archiveLevel:
-				// Subheading nested under the archive section — stay archived.
+			case strings.EqualFold(title, "archive") || strings.EqualFold(title, "status"):
+				ignoredLevel = level
+			case ignoredLevel > 0 && level > ignoredLevel:
+				// Subheading nested under an ignored section — stays ignored.
 			default:
-				archiveLevel = 0
+				ignoredLevel = 0
 			}
 			continue
 		}
-		if archiveLevel > 0 || strings.HasPrefix(trimmed, "<!--") {
+		if ignoredLevel > 0 || strings.HasPrefix(trimmed, "<!--") {
 			continue
 		}
 		return true
