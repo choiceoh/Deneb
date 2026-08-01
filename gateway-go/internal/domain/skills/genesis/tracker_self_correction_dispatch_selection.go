@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"strings"
+	"time"
 
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
@@ -34,11 +35,19 @@ func (t *Tracker) NextSelfCorrectionDispatchCandidate(
 		}
 	}
 	impactPolicies := selfCorrectionImpactPolicies(records)
+	now := time.Now()
 	var selected SelfCorrectionCandidateRecord
 	found := false
 	for _, record := range records {
 		if excluded[record.ID] || !SelfCorrectionDispatchEligible(record) ||
 			!selfCorrectionImpactPolicyAllows(record, impactPolicies) {
+			continue
+		}
+		// Control group: eligible in every way, deliberately not dispatched yet.
+		// Checked here rather than inside SelfCorrectionDispatchEligible so the
+		// status tallies and ladder stats keep reading "eligible" — a held-out
+		// candidate is not withheld by policy, it is waiting by experiment.
+		if selfCorrectionHeldOut(record, now) {
 			continue
 		}
 		if !found || dispatchCandidateBefore(record, selected, impactPolicies) {
