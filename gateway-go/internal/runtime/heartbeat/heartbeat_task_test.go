@@ -268,6 +268,15 @@ func TestHeartbeatHasTasksTreatsScaffoldingAsEmpty(t *testing.T) {
 		{"hashtag-tagged task is content", "## Active Tasks\n#urgent LC 개설 확인", true},
 		{"nested heading stays archived", "## archive\n### 2026-07\n- 옛 작업", false},
 		{"sibling section after nested archive resumes", "## archive\n### 2026-07\n- 옛것\n\n## Active Tasks\n- 새 작업", true},
+		// "## status" = lane bookkeeping (sweep last-check notes). Production
+		// 2026-08-01: sweep status parked at top level made 91% of firings a
+		// full submain turn that concluded NO_REPLY — status must not wake the
+		// heartbeat, and a real task alongside it still must.
+		{"status only", "## status\n[자가개선 스윕 — 07-25 21:00 점검]\n이전 스윕 완료 상태 유지.", false},
+		{"status case-insensitive", "## Status\n- 스윕 상태 유지", false},
+		{"status plus archive only", "## status\n- 상태 메모\n\n## archive\n- 옛 작업", false},
+		{"real task after status resumes", "## status\n- 상태 메모\n\n## Active Tasks\n- LC 개설 확인", true},
+		{"nested heading stays status", "## status\n### 스윕\n- 상태 유지", false},
 	}
 	for _, tc := range cases {
 		if got := heartbeatHasTasks(tc.content); got != tc.want {
