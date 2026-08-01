@@ -33,15 +33,23 @@ type bootTask struct {
 	activity    *monitoring.ActivityTracker
 	logger      *slog.Logger
 	homeDir     string
-	firstRun    atomic.Bool // true after the initial boot run
+	// model routes the boot turn to a specific role/model ("" = default main).
+	// Production passes the fallback role (local, always-resident): the boot
+	// turn is a self-check that fires right after gateway start — exactly when
+	// cloud reachability is least trustworthy — and its judgment ("anything
+	// worth telling the user?") is low-stakes, measured well within local-tier
+	// quality (2026-08-01 0731 evals). 사용량 화면 "부팅 점검".
+	model    string
+	firstRun atomic.Bool // true after the initial boot run
 }
 
 // BootTask runs the startup BOOT.md workflow and its daily follow-up.
 type BootTask = bootTask
 
-// NewBootTask constructs the boot worker.
-func NewBootTask(chatHandler chatport.SyncRunner, activity *monitoring.ActivityTracker, logger *slog.Logger, homeDir string) *BootTask {
-	return &bootTask{chatHandler: chatHandler, activity: activity, logger: logger, homeDir: homeDir}
+// NewBootTask constructs the boot worker. model may be a role name (e.g.
+// "fallback") or a full model id; empty keeps the default (main).
+func NewBootTask(chatHandler chatport.SyncRunner, activity *monitoring.ActivityTracker, logger *slog.Logger, homeDir, model string) *BootTask {
+	return &bootTask{chatHandler: chatHandler, activity: activity, logger: logger, homeDir: homeDir, model: model}
 }
 
 // Name returns the component's stable scheduler name.
@@ -89,6 +97,7 @@ func (t *bootTask) Run(ctx context.Context) error {
 	result, err := t.chatHandler.RunSync(runCtx, chatport.SyncRequest{
 		SessionKey:       "boot",
 		Message:          prompt,
+		Model:            t.model,
 		ToolPreset:       string(toolpreset.PresetBoot),
 		MaxHistoryTokens: 30_000,
 		// Boot is a stateless startup turn — it inspects system status and

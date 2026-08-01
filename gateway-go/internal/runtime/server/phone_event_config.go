@@ -90,3 +90,15 @@ func (s *Server) submainRoleIfConfigured() string {
 	}
 	return ""
 }
+
+// fallbackRoleIfConfigured returns the "fallback" role name when a fallback
+// model is configured, else "" (caller resolves to main as before). The boot
+// self-check task uses this: it fires right after gateway start — when cloud
+// reachability is least trustworthy — so the always-resident local safety-net
+// model is the semantically right home for it (2026-08-01 rebalance).
+func (s *Server) fallbackRoleIfConfigured() string {
+	if s.modelRegistry != nil && s.modelRegistry.FullModelID(modelrole.RoleFallback) != "" {
+		return string(modelrole.RoleFallback)
+	}
+	return ""
+}
