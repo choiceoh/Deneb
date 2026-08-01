@@ -250,6 +250,10 @@ def structural_candidates(report: dict[str, Any]) -> list[dict[str, Any]]:
                 "baseline": 1,
                 "target": 0,
                 "minSamples": 1,
+                # Absence must come from a fresh bench run that still reports
+                # other findings — a bench that produced nothing at all cannot
+                # tell a fixed finding from an audit that did not run.
+                "guardrails": ["absent_in_a_bench_that_still_reports_findings"],
             }
         out.append(candidate)
     return out

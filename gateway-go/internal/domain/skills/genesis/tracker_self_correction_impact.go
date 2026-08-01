@@ -138,6 +138,23 @@ func normalizeSelfCorrectionImpactContract(contract *rsilifecycle.ImpactContract
 	if len([]rune(out.Metric)) > 160 {
 		return nil, fmt.Errorf("metric exceeds 160 characters")
 	}
+	// A metric satisfied by the observed thing DISAPPEARING can be satisfied by
+	// removing the signal instead of the defect, and the agent doing the fixing
+	// is usually the one who could remove it. Both live instances were exactly
+	// that shape (audit 2026-08-01): a deadcode finding left the audit by being
+	// added to a baseline the dispatched agent can edit, and a runtime signature
+	// went quiet with no check that anything still exercised the path.
+	//
+	// Guardrails are the declared falsifiers — the things whose movement means a
+	// "success" is not one. Requiring at least one on a disappearance oracle
+	// forces its author to say, up front, what would prove the absence hollow.
+	// Other shapes (a magnitude that must improve, a score that must rise) are
+	// not satisfiable by deletion and stay unconstrained.
+	if out.Direction == selfCorrectionImpactDirectionDecrease && out.Target == 0 && len(out.Guardrails) == 0 {
+		return nil, fmt.Errorf(
+			"a decrease-to-zero metric must declare at least one guardrail: absence is satisfiable by suppressing the signal",
+		)
+	}
 	if out.MinSamples <= 0 {
 		return nil, fmt.Errorf("minSamples must be positive")
 	}

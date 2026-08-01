@@ -134,6 +134,10 @@ class StructuralCandidatesTest(unittest.TestCase):
                 "baseline": 1,
                 "target": 0,
                 "minSamples": 1,
+                # A disappearance oracle must name what would prove the absence
+                # hollow — absence is satisfiable by suppressing the signal, and
+                # the agent being scored is often the one who could suppress it.
+                "guardrails": ["absent_in_a_bench_that_still_reports_findings"],
             },
         )
 
