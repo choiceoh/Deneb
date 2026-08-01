@@ -2,6 +2,7 @@ package ai.deneb.deneb
 
 import ai.deneb.contacts.ContactsReader
 import ai.deneb.contacts.ContactsWriter
+import ai.deneb.contacts.mergeLinksAdded
 import ai.deneb.tools.ContactsPermissionController
 import ai.deneb.tools.SetupContactsPermissionHandler
 import ai.deneb.ui.DenebScreenScaffold
@@ -127,6 +128,7 @@ fun DenebContactsDedupScreen(
             applyState = ContactsApplyState.NeedPermission
             return
         }
+        val mergeSnapshotBefore = writer.snapshotMergeLinks()
         // 1) deterministic safe merges — the clear duplicates, counted as we go.
         var ruleMerged = 0
         applyState = ContactsApplyState.RuleMerging(done = 0, total = data.merges.size)
@@ -158,6 +160,10 @@ fun DenebContactsDedupScreen(
             reviewed = (reviewed + chunk.size).coerceAtMost(pairs.size)
             applyState = ContactsApplyState.AiReviewing(done = reviewed, total = pairs.size, same = aiMerged)
         }
+        if (ruleMerged + aiMerged > 0) {
+            val added = mergeLinksAdded(mergeSnapshotBefore, writer.snapshotMergeLinks())
+            if (added.isNotEmpty()) writer.trackDedupMergeLinks(added)
+        }
         // 3) close the loop back to the knowledge source (mirror ReplaceAll → 인물 위키).
         var synced = false
         if (ruleMerged + aiMerged > 0) {
@@ -169,11 +175,11 @@ fun DenebContactsDedupScreen(
             }
         }
         applyState = ContactsApplyState.Done(ruleMerged = ruleMerged, aiMerged = aiMerged, synced = synced)
+        mergeLinks = writer.countMergeLinks()
     }
 
-    // Undo the apply: every forced merge goes back to Android's own aggregation, then
-    // re-sync so the gateway mirror (and the 인물 위키 built from it) return with it.
-    // Nothing is deleted here either — only the aggregation hints are cleared.
+    // Undo dedup-applied merges only, then re-sync so the gateway mirror (and the
+    // 인물 위키 built from it) return with it. Pre-existing manual merges stay put.
     suspend fun undoAll() {
         if (!writer.hasAccess()) perms.requestPermission()
         if (!writer.hasAccess()) {

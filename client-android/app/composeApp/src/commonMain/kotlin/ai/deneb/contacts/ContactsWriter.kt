@@ -1,5 +1,25 @@
 package ai.deneb.contacts
 
+/** One forced-merge pair (raw-contact ids), normalized so set ops are stable. */
+data class MergeLinkPair(val a: Long, val b: Long) {
+    init {
+        require(a < b) { "MergeLinkPair must be normalized (a < b)" }
+    }
+
+    companion object {
+        fun of(id1: Long, id2: Long): MergeLinkPair? {
+            if (id1 == id2) return null
+            return if (id1 < id2) MergeLinkPair(id1, id2) else MergeLinkPair(id2, id1)
+        }
+    }
+}
+
+/** Pairs added during a dedup apply = after snapshot minus the before snapshot. */
+internal fun mergeLinksAdded(
+    before: Set<MergeLinkPair>,
+    after: Set<MergeLinkPair>,
+): Set<MergeLinkPair> = after - before
+
 /**
  * Outcome of [ContactsWriter.resetMergeLinks]: how many forced merges were undone,
  * and where the pre-reset pairs were saved so the undo is itself reversible.
@@ -40,18 +60,26 @@ expect class ContactsWriter() {
      */
     suspend fun linkByIdentity(phones: List<String>, emails: List<String>, names: List<String>): Int
 
-    /** How many forced merges (KEEP_TOGETHER pairs) currently exist on the device. */
+    /**
+     * Every forced-merge pair currently on the device. Used to diff before/after apply
+     * so undo only touches links this feature created.
+     */
+    suspend fun snapshotMergeLinks(): Set<MergeLinkPair>
+
+    /**
+     * Record merge pairs added by a dedup apply (after − before snapshot). Repeated
+     * applies accumulate; undo clears exactly this tracked set.
+     */
+    suspend fun trackDedupMergeLinks(pairs: Set<MergeLinkPair>)
+
+    /** How many dedup-applied merge pairs are pending undo (not all device merges). */
     suspend fun countMergeLinks(): Int
 
     /**
-     * Undo every forced merge: each KEEP_TOGETHER pair goes back to TYPE_AUTOMATIC,
-     * returning the device to Android's own automatic aggregation — the state before
-     * any apply ran. KEEP_SEPARATE rows are deliberately left alone: those say "never
-     * merge these", so clearing them would create merges instead of undoing them.
-     *
-     * Contact data is never touched — only the aggregation hints. The pairs are saved
-     * to a backup file first, because once a pair goes back to AUTOMATIC the provider
-     * forgets it and there is no way to recompute which pairs were ours.
+     * Undo dedup-applied merges only: each tracked KEEP_TOGETHER pair goes back to
+     * TYPE_AUTOMATIC. Pre-existing manual merges and KEEP_SEPARATE rows are left
+     * alone. Contact data is never touched — only the aggregation hints. Tracked
+     * pairs are backed up first because the provider forgets them once AUTOMATIC.
      */
     suspend fun resetMergeLinks(): ContactsResetResult
 }
