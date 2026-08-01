@@ -252,6 +252,27 @@ def deadcode_candidates(findings: list[tuple[str, str]],
     return out
 
 
+def baseline_finding_ids(root: str) -> set[str]:
+    """Finding ids for everything currently in the checked-in deadcode baseline.
+
+    Same "<file> :: <symbol>" shape the ids hash, so a suppressed finding is
+    recognisable by id alone. Missing/unreadable baseline yields an empty set —
+    the caller then behaves exactly as before this check existed.
+    """
+    path = os.path.join(root, "scripts", "audit", "deadcode-baseline.txt")
+    out: set[str] = set()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                entry = line.strip()
+                if not entry or entry.startswith("#") or " :: " not in entry:
+                    continue
+                out.add(hashlib.sha256(entry.encode()).hexdigest()[:12])
+    except OSError:
+        return set()
+    return out
+
+
 def finding_ids(findings: list[tuple[str, str]]) -> set[str]:
     """Stable ids for the CURRENT audit findings (same hash as the source id)."""
     return {
@@ -260,19 +281,37 @@ def finding_ids(findings: list[tuple[str, str]]) -> set[str]:
     }
 
 
-def deadcode_impact_resolver(current_ids: set[str]):
+def deadcode_impact_resolver(current_ids: set[str], baselined_ids: set[str] | None = None):
     """Resolver for pending deadcode contracts against a fresh audit run.
 
     Presence is checked against the RAW parsed findings (pre-phantom-filter):
     the oracle is "does the audit still report it", not "would we file it".
     Metrics outside this miner's namespace return None for their own evaluator.
+
+    A finding can leave the audit two ways, and they are not the same result:
+    the symbol was DELETED, or it was added to deadcode-baseline.txt. Only the
+    audit's "+" lines feed current_ids, so a baselined finding also reads as
+    absent — which would score suppression as a verified fix, on a file no
+    CODEOWNERS rule protects and which the dispatched agent can edit. This
+    miner's own risk note tells that agent "do NOT edit the baseline to silence
+    review"; rewarding the edit anyway is an instruction pointed against its
+    own incentive (CLAUDE.md forbids silencing failures with baselines).
+    Baselined findings therefore report as still-present: no credit, whether the
+    entry was gamed or genuinely operator-approved — an approved keep means the
+    candidate improved no code either.
     """
     prefix = "deadcode.finding_present:"
+    baselined = baselined_ids or set()
 
     def resolve(metric: str):
         if not metric.startswith(prefix):
             return None
         fid = metric.removeprefix(prefix)
+        if fid in baselined:
+            return 1.0, 1, (
+                f"fresh deadcode-audit: finding {fid} left the audit by BASELINE, "
+                "not deletion — suppression earns no usefulness credit"
+            )
         present = fid in current_ids
         state = "still reported" if present else "absent"
         return float(present), 1, f"fresh deadcode-audit: finding {fid} {state}"
@@ -369,7 +408,7 @@ def main(argv: list[str] | None = None, stdout: TextIO | None = None,
         existing = []
 
     impact_observations, impact_skipped = pending_impact_observations_for(
-        existing, deadcode_impact_resolver(current_ids), now_ms
+        existing, deadcode_impact_resolver(current_ids, baseline_finding_ids(root)), now_ms
     )
     impact_evaluated: list[dict[str, str]] = []
     impact_errors: list[str] = []

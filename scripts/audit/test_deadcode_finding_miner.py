@@ -194,6 +194,53 @@ class ImpactContractTests(unittest.TestCase):
         self.assertEqual(contract["direction"], "decrease")
         self.assertEqual((contract["baseline"], contract["target"]), (1, 0))
 
+    def test_resolver_denies_credit_for_baselined_finding(self):
+        """Baselining removes a finding from the audit's "+" block exactly like
+        deletion does. Only one of those improved the code, and the file is
+        editable by the very agent whose usefulness is being scored — so a
+        baselined finding must read as still-present, not as a verified fix."""
+        from deadcode_finding_miner import deadcode_impact_resolver, finding_ids
+
+        suppressed = [("internal/c.go", "BaselinedFunc")]
+        fid = deadcode_candidates(suppressed)[0]["source"].split(":", 1)[1]
+
+        # Gone from the fresh audit (as a baseline entry always is) but present
+        # in the checked-in baseline.
+        resolve = deadcode_impact_resolver(finding_ids([]), {fid})
+        observed, samples, note = resolve(f"deadcode.finding_present:{fid}")
+        self.assertEqual((observed, samples), (1.0, 1))
+        self.assertIn("BASELINE", note)
+
+    def test_resolver_without_baseline_arg_keeps_prior_behaviour(self):
+        """The baseline set is optional so an older caller cannot break."""
+        from deadcode_finding_miner import deadcode_impact_resolver, finding_ids
+
+        resolve = deadcode_impact_resolver(finding_ids([]))
+        observed, _, note = resolve("deadcode.finding_present:deadbeef1234")
+        self.assertEqual(observed, 0.0)
+        self.assertIn("absent", note)
+
+    def test_baseline_finding_ids_reads_the_checked_in_file(self):
+        """Ids must hash the same "<file> :: <symbol>" shape the findings do, or
+        suppression would never be recognised."""
+        import hashlib
+        import tempfile
+
+        from deadcode_finding_miner import baseline_finding_ids
+
+        with tempfile.TemporaryDirectory() as root:
+            audit = os.path.join(root, "scripts", "audit")
+            os.makedirs(audit)
+            with open(os.path.join(audit, "deadcode-baseline.txt"), "w", encoding="utf-8") as fh:
+                fh.write("# comment line\n\ninternal/c.go :: BaselinedFunc\n")
+            want = hashlib.sha256(b"internal/c.go :: BaselinedFunc").hexdigest()[:12]
+            self.assertEqual(baseline_finding_ids(root), {want})
+
+    def test_baseline_finding_ids_tolerates_missing_file(self):
+        from deadcode_finding_miner import baseline_finding_ids
+
+        self.assertEqual(baseline_finding_ids("/nonexistent-root-xyz"), set())
+
     def test_resolver_closes_from_fresh_audit(self):
         from deadcode_finding_miner import deadcode_impact_resolver, finding_ids
 
