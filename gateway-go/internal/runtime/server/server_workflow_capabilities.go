@@ -114,7 +114,7 @@ func workflowHomeDir() string {
 
 func (s *Server) registerHeartbeatWorkflowTasks(homeDir string) {
 	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewBootTask(
-		s.chatHandler, s.activity, s.logger, homeDir,
+		s.chatHandler, s.activity, s.logger, homeDir, s.fallbackRoleIfConfigured(),
 	))
 	s.autonomousSvc.RegisterTask(runtimeheartbeat.NewTask(runtimeheartbeat.TaskConfig{
 		ChatHandler: s.chatHandler,
