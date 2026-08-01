@@ -364,20 +364,21 @@ func (t *Tracker) rsiAssessL4() rsiLayer {
 
 // l4Tally is the phase/status census of code candidates feeding the L4 card.
 type l4Tally struct {
-	byScope         map[string]int
-	dispatchable    int
-	staged          int
-	inFlight        int
-	applied         int
-	declined        int
-	failed          int
-	impactPending   int
-	impactVerified  int
-	impactNoEffect  int
-	impactRegressed int
-	strategyBlocked int
-	failureBlocked  int
-	oldestPendingAt int64
+	byScope            map[string]int
+	dispatchable       int
+	impactInconclusive int
+	staged             int
+	inFlight           int
+	applied            int
+	declined           int
+	failed             int
+	impactPending      int
+	impactVerified     int
+	impactNoEffect     int
+	impactRegressed    int
+	strategyBlocked    int
+	failureBlocked     int
+	oldestPendingAt    int64
 }
 
 func (l *l4Tally) markPending(createdAt int64) {
@@ -434,6 +435,8 @@ func (t *Tracker) tallyL4Candidates(cands []SelfCorrectionCandidateRecord) l4Tal
 				tally.impactNoEffect++
 			case selfCorrectionImpactRegressed:
 				tally.impactRegressed++
+			case selfCorrectionImpactInconclusive:
+				tally.impactInconclusive++
 			}
 		case rsilifecycle.DeliverySafeNoop:
 			// A clean session with no diff is a terminal, healthy no-op. It is

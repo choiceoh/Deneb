@@ -484,8 +484,13 @@ func (t *RuntimeErrorMiningTask) measurePendingImpacts(existing []SelfCorrection
 		if !strings.HasPrefix(cand.Source, runtimeErrorSourcePrefix+":") {
 			continue
 		}
-		if cand.DispatchPhase != selfCorrectionDispatchWatchPassed ||
-			cand.ImpactContract == nil || cand.ImpactResult != nil {
+		if cand.DispatchPhase != selfCorrectionDispatchWatchPassed || cand.ImpactContract == nil {
+			continue
+		}
+		// An inconclusive verdict is a record that we looked, not a terminal
+		// answer — re-measure it when the stream is alive again. Any other
+		// recorded result is final.
+		if cand.ImpactResult != nil && cand.ImpactResult.Status != selfCorrectionImpactInconclusive {
 			continue
 		}
 		// A signature absent from the rolling state aged out entirely — quiet
@@ -511,20 +516,26 @@ func (t *RuntimeErrorMiningTask) measurePendingImpacts(existing []SelfCorrection
 		// permanently idle signature staying pending is the honest reading.
 		quietSince := now.Add(-time.Duration(quietHours * float64(time.Hour)))
 		liveSiblings := activeSiblingSignatures(state, cand.Candidate, quietSince)
+		samples := 1
+		note := fmt.Sprintf("runtime-error miner: quiet-hours from the rolling signature window; "+
+			"%d sibling signature(s) fired in the same window (stream live, quiet is attributable)",
+			liveSiblings)
 		if liveSiblings == 0 {
-			logger.Debug("runtime-error-mining: impact unattributable — whole signature stream quiet",
-				"id", cand.ID, "quietHours", quietHours)
-			continue
+			// Samples 0 drives the inconclusive verdict: the measurement ran and
+			// carried no evidence. Recording it beats skipping — the ledger now
+			// shows WHY this candidate has no usefulness answer, and the guard
+			// above re-measures it once the stream is live.
+			samples = 0
+			note = "runtime-error miner: whole signature stream quiet in the same window — " +
+				"quiet is not attributable to the fix (no control), re-measured when the stream is live"
 		}
 		rec, err := t.Tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
 			ID:        cand.ID,
 			AttemptID: cand.AttemptID,
 			ImpactResult: &rsilifecycle.ImpactResult{
 				Observed: quietHours,
-				Samples:  1,
-				Note: fmt.Sprintf("runtime-error miner: quiet-hours from the rolling signature window; "+
-					"%d sibling signature(s) fired in the same window (stream live, quiet is attributable)",
-					liveSiblings),
+				Samples:  samples,
+				Note:     note,
 			},
 		})
 		if err != nil {
