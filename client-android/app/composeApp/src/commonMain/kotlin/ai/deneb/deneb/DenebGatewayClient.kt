@@ -141,6 +141,14 @@ class DenebGatewayClient private constructor(
             _chatTurnActive.value = value
         }
 
+    // Set when an in-flight turn (stream or its transcript recovery) is
+    // CANCELLED — typically by the user re-sending — while the server turn may
+    // still be running. The stranded answer lands only in the transcript, so
+    // the next completed ask reconciles the view against it (production
+    // 2026-08-01: a re-send cancelled recovery seconds before it would have
+    // installed the finished reply, leaving it permanently invisible).
+    internal var reconcileAfterTurn = false
+
     // Whether the gateway confirmed it can actually DELIVER push (FCM sender
     // configured server-side), from the last miniapp.push.register response.
     // Persisted so a cold start keeps the last known answer while offline.
@@ -723,6 +731,14 @@ class DenebGatewayClient private constructor(
         // patience. A transient network blip that trips this is harmless: the
         // same recovery path re-installs the canonical transcript.
         const val STREAM_SOCKET_TIMEOUT_MS = 45_000L
+
+        // Events-stream idle cap. Its server keepalive cadence is 30s
+        // (clientEventsKeepaliveInterval) — twice the chat stream's — so the
+        // same three-missed-keepalives discipline lands at 90s. Sharing the
+        // chat stream's 45s here would be only 1.5 intervals: one jittered
+        // keepalive would false-drop a healthy events stream into reconnect
+        // churn (radio wakeups) for no recovery benefit.
+        const val EVENTS_SOCKET_TIMEOUT_MS = 90_000L
 
         // Stream-failure recovery (recoverTurnFromTranscript): how long to keep
         // polling the transcript for the answer of a turn whose SSE died. The

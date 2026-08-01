@@ -95,6 +95,9 @@ internal suspend fun DenebGatewayClient.askGateway(
             }
         }
     } catch (cancel: CancellationException) {
+        // The server turn may still be running; its answer will land only in
+        // the transcript. Ask the NEXT completed turn to reconcile the view.
+        reconcileAfterTurn = true
         settleChatPlaceholder(assistantId, accumulated.toString())
         askActive = false
         throw cancel
@@ -117,6 +120,10 @@ internal suspend fun DenebGatewayClient.askGateway(
         val recovery = try {
             recoverTurnFromTranscript(sessionKeyAtSend, sendText)
         } catch (cancel: CancellationException) {
+            // A re-send cancelled the recovery poll — the finished answer it
+            // was about to install stays stranded in the transcript (production
+            // 2026-08-01, "채팅 안 보임"). Reconcile after the next turn.
+            reconcileAfterTurn = true
             settleChatPlaceholder(assistantId, accumulated.toString())
             askActive = false
             throw cancel
@@ -132,6 +139,7 @@ internal suspend fun DenebGatewayClient.askGateway(
                 try {
                     sendGatewayChat(http, gatewayUrl, clientToken, sessionKeyAtSend, sendText)
                 } catch (cancel: CancellationException) {
+                    reconcileAfterTurn = true
                     settleChatPlaceholder(assistantId, accumulated.toString())
                     askActive = false
                     throw cancel
@@ -177,6 +185,14 @@ internal suspend fun DenebGatewayClient.askGateway(
         }
     }
     askActive = false
+    // A previously cancelled turn/recovery left an answer stranded in the
+    // transcript: now that no turn is active, install the canonical transcript
+    // (epoch-guarded; the just-persisted current answer is included, so this
+    // merges rather than clobbers).
+    if (reconcileAfterTurn) {
+        reconcileAfterTurn = false
+        reconcileOpenConversationAsync()
+    }
     return reply.ok
 }
 
