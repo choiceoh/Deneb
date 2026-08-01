@@ -229,10 +229,17 @@ func TestRuntimeErrorMining_SelfMeasuresImpactAfterWatchPass(t *testing.T) {
 	}
 	watchPassImpactCandidate(t, tracker, cand.ID, "attempt-1")
 
-	// The fix landed and the signature went quiet for 72h (> target 48h).
+	// The fix landed and the signature went quiet for 72h (> target 48h) WHILE
+	// the error stream kept running. The live sibling is what makes the quiet
+	// attributable: with every signature silent the gateway merely went idle,
+	// and that case is asserted separately below.
 	st := loadRuntimeErrorState(task.StatePath)
 	for _, e := range st.Sigs {
 		e.LastAt = time.Now().Add(-72 * time.Hour).UnixMilli()
+	}
+	st.Sigs["unrelated noisy signature"] = &runtimeErrorSigEntry{
+		Count: 5, FirstAt: time.Now().Add(-96 * time.Hour).UnixMilli(),
+		LastAt: time.Now().Add(-1 * time.Hour).UnixMilli(),
 	}
 	if err := saveRuntimeErrorState(task.StatePath, st); err != nil {
 		t.Fatal(err)
@@ -251,6 +258,55 @@ func TestRuntimeErrorMining_SelfMeasuresImpactAfterWatchPass(t *testing.T) {
 	}
 	if rows[0].ImpactResult.Status != selfCorrectionImpactVerified {
 		t.Fatalf("quiet 72h >= target 48h must verify, got %q", rows[0].ImpactResult.Status)
+	}
+}
+
+// The confound the sibling control exists to kill: if EVERY signature is quiet,
+// the stream (not the defect) stopped, and a verdict either way would be
+// measuring our own downtime. The candidate must stay pending for a later run.
+func TestRuntimeErrorMining_LeavesImpactPendingWhenWholeStreamIsQuiet(t *testing.T) {
+	prevWindow := runtimeErrorImpactObservationWindow
+	runtimeErrorImpactObservationWindow = 0
+	defer func() { runtimeErrorImpactObservationWindow = prevWindow }()
+
+	var lines []observe.LogLine
+	for i := 0; i < 6; i++ {
+		lines = append(lines, errLine("nil deref in fooHandler seq=", int64(1000+i)))
+	}
+	task, tracker := newMiningTask(t, lines)
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := tracker.RecentSelfCorrectionCandidates("", SelfCorrectionStatusProposed, 10)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("expected 1 authored candidate (err=%v), got %d", err, len(got))
+	}
+	cand := got[0]
+	if _, err := tracker.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: cand.ID, Status: SelfCorrectionStatusAccepted, Reviewer: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	watchPassImpactCandidate(t, tracker, cand.ID, "attempt-1")
+
+	st := loadRuntimeErrorState(task.StatePath)
+	for _, e := range st.Sigs {
+		e.LastAt = time.Now().Add(-72 * time.Hour).UnixMilli()
+	}
+	if err := saveRuntimeErrorState(task.StatePath, st); err != nil {
+		t.Fatal(err)
+	}
+
+	task.ErrorLines = func(int) []observe.LogLine { return nil }
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tracker.RecentSelfCorrectionCandidates("", "", 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("expected the single candidate back (err=%v), got %d", err, len(rows))
+	}
+	if rows[0].ImpactResult != nil {
+		t.Fatalf("a dead stream cannot attribute quiet to the fix, got %+v", rows[0].ImpactResult)
 	}
 }
 

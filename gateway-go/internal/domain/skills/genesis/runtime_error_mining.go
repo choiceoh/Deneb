@@ -32,6 +32,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -496,13 +497,34 @@ func (t *RuntimeErrorMiningTask) measurePendingImpacts(existing []SelfCorrection
 		if quietHours < 0 {
 			quietHours = 0
 		}
+		// Attribution control. Quiet is evidence the fix worked only if the error
+		// stream was ALIVE while THIS signature stayed silent. When every other
+		// tracked signature went quiet too, the gateway — or whatever exercises
+		// the path — simply went idle, and crediting the fix would be measuring
+		// our own downtime. Ledger audit 2026-08-01: all 8 "verified" runtime
+		// impacts were bare hours-since-last-fire thresholds (52–68h) with no
+		// such control, which is why the loop could not tell a repair from a
+		// quiet weekend.
+		//
+		// No control available means no verdict yet, NOT no effect: leave the
+		// candidate pending so a later run with a live stream can judge it. A
+		// permanently idle signature staying pending is the honest reading.
+		quietSince := now.Add(-time.Duration(quietHours * float64(time.Hour)))
+		liveSiblings := activeSiblingSignatures(state, cand.Candidate, quietSince)
+		if liveSiblings == 0 {
+			logger.Debug("runtime-error-mining: impact unattributable — whole signature stream quiet",
+				"id", cand.ID, "quietHours", quietHours)
+			continue
+		}
 		rec, err := t.Tracker.RecordSelfCorrectionDispatch(SelfCorrectionCandidateRecord{
 			ID:        cand.ID,
 			AttemptID: cand.AttemptID,
 			ImpactResult: &rsilifecycle.ImpactResult{
 				Observed: quietHours,
 				Samples:  1,
-				Note:     "runtime-error miner self-measurement: quiet-hours from the rolling signature window",
+				Note: fmt.Sprintf("runtime-error miner: quiet-hours from the rolling signature window; "+
+					"%d sibling signature(s) fired in the same window (stream live, quiet is attributable)",
+					liveSiblings),
 			},
 		})
 		if err != nil {
@@ -533,4 +555,25 @@ func buildRuntimeErrorEvidence(a *runtimeErrorAgg, now time.Time) string {
 		b.WriteString(common.TruncateRunes(e, 300))
 	}
 	return b.String()
+}
+
+// activeSiblingSignatures counts tracked signatures OTHER than selfSig that
+// fired after `since` — the control group for an impact measurement. They come
+// from the same rolling state the miner already maintains, so this costs
+// nothing extra to collect and cannot drift away from what produced the
+// finding.
+func activeSiblingSignatures(state *runtimeErrorState, selfSig string, since time.Time) int {
+	if state == nil {
+		return 0
+	}
+	live := 0
+	for sig, entry := range state.Sigs {
+		if sig == selfSig || entry == nil {
+			continue
+		}
+		if time.UnixMilli(entry.LastAt).After(since) {
+			live++
+		}
+	}
+	return live
 }
