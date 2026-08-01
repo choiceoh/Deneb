@@ -194,6 +194,10 @@ def tool_quality_candidates(tools: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "baseline": 1,
                 "target": 0,
                 "minSamples": 1,
+                # Recovery only counts on a tool still being called: MIN_CALLS
+                # already keeps a silent tool pending rather than minting a
+                # false verified from silence.
+                "guardrails": ["recovered_while_still_called"],
                 "observationWindowMs": IMPACT_WINDOW_MS,
             },
         }))
@@ -268,6 +272,10 @@ def latency_candidates(recent: list[dict[str, Any]],
                 "baseline": 1,
                 "target": 0,
                 "minSamples": 1,
+                # Same falsifier as the desc oracle: a latency finding that
+                # "recovered" because the tool stopped being called is silence,
+                # not a fix.
+                "guardrails": ["recovered_while_still_called"],
                 "observationWindowMs": IMPACT_WINDOW_MS,
             },
         }))

@@ -247,6 +247,11 @@ def deadcode_candidates(findings: list[tuple[str, str]],
                 "baseline": 1,
                 "target": 0,
                 "minSamples": 1,
+                # The declared falsifier: absence only counts when the symbol is
+                # GONE. A finding that left the audit via deadcode-baseline.txt
+                # was suppressed, not fixed — and that file is editable by the
+                # very agent being scored (resolver enforces this).
+                "guardrails": ["resolved_by_deletion_not_baseline"],
             },
         })
     return out

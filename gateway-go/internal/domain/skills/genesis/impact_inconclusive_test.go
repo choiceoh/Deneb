@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"strings"
 	"testing"
 
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
@@ -61,5 +62,42 @@ func TestGuardrailViolationOutranksMissingEvidence(t *testing.T) {
 		rsilifecycle.ImpactResult{Observed: 72, Samples: 0, GuardrailViolations: []string{"latency"}})
 	if got != selfCorrectionImpactRegressed {
 		t.Errorf("guardrail violations must still regress, got %q", got)
+	}
+}
+
+// A metric satisfied by the observed thing DISAPPEARING can be satisfied by
+// removing the signal instead of the defect — and the agent being scored is
+// often the one who could remove it. Both 2026-08-01 instances were that shape.
+
+func TestDisappearanceOracleMustDeclareAGuardrail(t *testing.T) {
+	_, err := normalizeSelfCorrectionImpactContract(&rsilifecycle.ImpactContract{
+		Metric: "deadcode.finding_present:abc", Direction: selfCorrectionImpactDirectionDecrease,
+		Baseline: 1, Target: 0, MinSamples: 1,
+	})
+	if err == nil {
+		t.Fatal("a decrease-to-zero oracle with no guardrail must be rejected")
+	}
+	if !strings.Contains(err.Error(), "guardrail") {
+		t.Errorf("the error must say what is missing: %v", err)
+	}
+}
+
+func TestDisappearanceOracleAcceptedWithAGuardrail(t *testing.T) {
+	if _, err := normalizeSelfCorrectionImpactContract(&rsilifecycle.ImpactContract{
+		Metric: "deadcode.finding_present:abc", Direction: selfCorrectionImpactDirectionDecrease,
+		Baseline: 1, Target: 0, MinSamples: 1, Guardrails: []string{"not_baselined"},
+	}); err != nil {
+		t.Errorf("a declared falsifier must satisfy the rule: %v", err)
+	}
+}
+
+func TestNonDisappearanceMetricsStayUnconstrained(t *testing.T) {
+	// A magnitude that must improve is not satisfiable by deletion, so it needs
+	// no guardrail to be honest.
+	if _, err := normalizeSelfCorrectionImpactContract(&rsilifecycle.ImpactContract{
+		Metric: "runtime.health.score:latency", Direction: selfCorrectionImpactDirectionIncrease,
+		Baseline: 20, Target: 60, MinSamples: 1,
+	}); err != nil {
+		t.Errorf("an improvement metric must not require a guardrail: %v", err)
 	}
 }
