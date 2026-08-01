@@ -281,6 +281,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 	}
 	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
 	runs, misses, falseRejects := 0, 0, 0
+	var probeOutcomes []string
 	subtleDeployed, weakenDeployed := false, false
 	for _, r := range records {
 		if r.CreatedAt < cutoff {
@@ -290,6 +291,16 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 			continue // restart/warmup error storms are not L3 fuel
 		}
 		runs++
+		// One label per scored run: did this probe set separate anything at all?
+		// A corpus the judge aces every time carries no information, which is
+		// how tier 4 sat at 100% for 11 days with nobody noticing (2026-08-01).
+		if r.Pairs > 0 {
+			if r.Correct >= r.Pairs {
+				probeOutcomes = append(probeOutcomes, "all-caught")
+			} else {
+				probeOutcomes = append(probeOutcomes, "missed-some")
+			}
+		}
 		for _, m := range r.Misses {
 			if judgeMissCountsAsFuel(m) {
 				misses++
@@ -313,6 +324,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		base.State, base.Diagnosis = rsiStateIdle, "판정 정확도 레인이 최근 7일간 실행되지 않았습니다"
 		return base
 	}
+	discrimination := MeasureGateDiscrimination(probeOutcomes)
 	organic := len(t.organicFalseAccepts(organicFalseAcceptWindow, 50))
 	metrics := []rsiMetric{
 		{Label: "실행(7일)", Value: strconv.Itoa(runs)},
@@ -320,6 +332,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 		{Label: "오기각", Value: strconv.Itoa(falseRejects)},
 		{Label: "실전 라벨(30일)", Value: strconv.Itoa(organic)},
 		{Label: "운영자 라벨(7일)", Value: strconv.Itoa(operatorLabels)},
+		{Label: "프로브 판별력", Value: rsiDiscriminationValue(discrimination)},
 	}
 	base := newRSILayer(rsilifecycle.LayerL3, metrics)
 	switch {
@@ -1021,4 +1034,17 @@ func rsiScopeSummary(byScope map[string]int) string {
 		parts = append(parts, fmt.Sprintf("%s:%d", k, byScope[k]))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// rsiDiscriminationValue renders a gate's separation for the dashboard. A
+// saturated probe corpus is called out by name: it is not a good score, it is
+// the absence of one, and the ladder's answer to a ceiling is another rung.
+func rsiDiscriminationValue(d GateDiscrimination) string {
+	if d.Samples == 0 {
+		return "표본 없음"
+	}
+	if d.Saturated {
+		return fmt.Sprintf("포화 — %d런 전부 동일 (계측 정지)", d.Samples)
+	}
+	return fmt.Sprintf("%.0f%% 분리 (%d런)", d.MinorityShare*100, d.Samples)
 }
