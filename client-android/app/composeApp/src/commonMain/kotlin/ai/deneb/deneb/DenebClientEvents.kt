@@ -98,9 +98,11 @@ suspend fun DenebGatewayClient.subscribeEvents(onPush: (title: String, body: Str
                 header("Accept", "text/event-stream")
                 timeout {
                     // Long-lived: no overall cap. The 30s server keepalive
-                    // keeps the socket under STREAM_SOCKET_TIMEOUT_MS.
+                    // keeps the socket under EVENTS_SOCKET_TIMEOUT_MS (3 missed
+                    // keepalives = dead socket; the chat stream's tighter 45s
+                    // would be only 1.5 intervals here and churn reconnects).
                     requestTimeoutMillis = Long.MAX_VALUE
-                    socketTimeoutMillis = DenebGatewayClient.STREAM_SOCKET_TIMEOUT_MS
+                    socketTimeoutMillis = DenebGatewayClient.EVENTS_SOCKET_TIMEOUT_MS
                 }
             }.execute { response ->
                 if (!response.status.isSuccess()) {
