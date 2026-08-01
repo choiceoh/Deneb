@@ -149,7 +149,11 @@ func (s *Server) proposedSelfCodingFingerprint() (int, string) {
 		return 0, ""
 	}
 	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusProposed, 20)
-	if err != nil || len(recs) == 0 {
+	if err != nil {
+		return 0, ""
+	}
+	recs = append(recs, strandedAcceptedCandidates(tracker)...)
+	if len(recs) == 0 {
 		return 0, ""
 	}
 	newest := recs[0]
@@ -159,6 +163,36 @@ func (s *Server) proposedSelfCodingFingerprint() (int, string) {
 		}
 	}
 	return len(recs), fmt.Sprintf("%d:%s:%d", len(recs), newest.ID, newest.UpdatedAt)
+}
+
+// strandedAcceptedCandidates returns accepted candidates that NOTHING consumes.
+//
+// "accepted" only ends the story for a candidate the coding-dispatch lane can
+// actually claim: scope=code on an auto-dispatch source. Everything else — every
+// scope=skill candidate, plus code candidates whose source is still staged off
+// the allowlist — has no consumer at all, so the verdict quietly removed them
+// from the only queue anyone watches. That is the exact "capture without
+// consumption" failure this lane exists to prevent, one status further along.
+//
+// Ledger audit 2026-08-01 found 22 shelved this way, nearly all reviewed with
+// some form of "valid, but a coding agent should do it" — the heartbeat cannot
+// edit code, so it accepted them into silence. Counting them as open keeps them
+// surfacing; if the next review accepts them again without a consumer, the
+// fingerprint does not move and the existing did-nothing escalation fires, which
+// is the correct outcome: the loop cannot handle these and should say so.
+func strandedAcceptedCandidates(tracker *genesis.Tracker) []genesis.SelfCorrectionCandidateRecord {
+	recs, err := tracker.RecentSelfCorrectionCandidates("", genesis.SelfCorrectionStatusAccepted, 100)
+	if err != nil {
+		return nil
+	}
+	out := make([]genesis.SelfCorrectionCandidateRecord, 0, len(recs))
+	for _, record := range recs {
+		if strings.TrimSpace(record.Scope) == "code" && genesis.SourceAutoDispatches(record.Source) {
+			continue // the dispatcher's queue — accepted genuinely means "queued"
+		}
+		out = append(out, record)
+	}
+	return out
 }
 
 // dispatchBacklogSelfCodingCount counts accepted, dispatchable code candidates
