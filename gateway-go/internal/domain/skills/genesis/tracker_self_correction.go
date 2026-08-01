@@ -66,7 +66,15 @@ type SelfCorrectionCandidateRecord struct {
 	// clusters — no LLM procedure), and reserved-empty for the dispatch procedure
 	// (that governs the out-of-process coding session, a separate stage). Purely
 	// additive attribution — it feeds no gate.
-	ProcedureRef   string                       `json:"procedureRef,omitempty"`
+	ProcedureRef string `json:"procedureRef,omitempty"`
+	// Consumer names who can actually act on this candidate once it leaves
+	// review: "coding-dispatch" when the L4 lane will claim it (scope=code on an
+	// allowlisted or ladder-graduated source), "none" when nothing will. Set on
+	// the REVIEW SURFACE only and never persisted — the allowlist changes over
+	// time, so a stored copy would go stale and lie. Without it a reviewer cannot
+	// tell "queued" from "shelved forever" and defaults to accepted, which is how
+	// 22 candidates went silent (ledger audit 2026-08-01).
+	Consumer       string                       `json:"consumer,omitempty"`
 	Reviewer       string                       `json:"reviewer,omitempty"`
 	ReviewNote     string                       `json:"reviewNote,omitempty"`
 	ImpactContract *rsilifecycle.ImpactContract `json:"impactContract,omitempty"`
