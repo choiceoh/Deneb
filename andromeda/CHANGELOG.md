@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.113](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.112...andromeda-v0.0.113) (2026-08-02)
+
+
+### 🐛 Bug Fixes
+
+* **andromeda:** 결재 문서를 열 때 프로젝트 위키가 화면을 뺏지 않게 ([#4404](https://github.com/choiceoh/Deneb/issues/4404)) ([adf42bd](https://github.com/choiceoh/Deneb/commit/adf42bd6a58c8f21aefb0fa14f5b4c99a7fd9c5a))
+
 ## [0.0.112](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.111...andromeda-v0.0.112) (2026-07-27)
 
 
