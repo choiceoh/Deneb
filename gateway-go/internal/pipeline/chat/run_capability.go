@@ -6,6 +6,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 )
 
@@ -18,6 +19,12 @@ const (
 	// tiny (or misconfigured) window can never collapse the history budget
 	// to something the protected head/tail zones cannot fit into.
 	minClampedContextBudget = 4096
+	// dualModeDefaultThinkingBudget is the thinking budget attached when a
+	// dual-mode model runs with no session/caller thinking config (the
+	// "adaptive" tier of resolveThinkingConfig). The exact number only
+	// matters for budget→effort bucketing on non-dsv4 models; deepseek-v4
+	// maps any enabled budget to reasoning_effort "high" (openai.go).
+	dualModeDefaultThinkingBudget = 16384
 )
 
 // modelCapability resolves the effective capability for the run's
@@ -63,9 +70,12 @@ func routingProfileForRun(deps runDeps, providerID, model string) leafbind.Profi
 //   - Thinking toggle kwarg: an explicitly-disabled thinking config (session
 //     level "off" or a cron payload override) gets the model's
 //     chat_template_kwargs toggle attached — on dual-mode vLLM models that
-//     kwarg is the only effective off-switch (the reasoning_effort field is a
-//     no-op on deepseek-v4). The effort router builds its own disabled config
-//     with the kwarg already set; this covers the config-driven path.
+//     kwarg is the only per-request off-switch. The effort router builds its
+//     own disabled config with the kwarg already set; this covers the
+//     config-driven path.
+//   - Thinking default: a dual-mode model with NO thinking config at all gets
+//     enabled-adaptive thinking (fillDualModeDefaultThinking) — see that
+//     helper for why the serving default can no longer be relied on.
 func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, providerID, model string) {
 	if deps.briefcaseMode {
 		temperature, topP, zero := 0.0, 1.0, 0.0
@@ -79,6 +89,7 @@ func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, pr
 	if t := cfg.Thinking; t != nil && t.Type == "disabled" && t.TemplateKwarg == "" {
 		t.TemplateKwarg = modelCapability(deps, providerID, model).ThinkingToggleKwarg
 	}
+	fillDualModeDefaultThinking(cfg, deps, providerID, model)
 	if deps.registry == nil {
 		profile := modelrole.ProfileFor(model)
 		fillSamplingDefaults(cfg, profile)
@@ -90,6 +101,33 @@ func applyModelTuning(cfg *agent.AgentConfig, deps runDeps, params RunParams, pr
 			cfg.MaxTokens = floor
 		}
 	}
+}
+
+// fillDualModeDefaultThinking gives a dual-mode model (one with a per-request
+// chat-template thinking toggle — deepseek-v4 today) an enabled-adaptive
+// thinking config when the session/caller specified none.
+//
+// Historically an unset session level inherited "always thinking" from the
+// dual-mode SERVING default, so nil meant thinking-on. The 0731 serving
+// (tokenizer_mode=deepseek_v4) flipped that default to non-thinking, which
+// silently turned every unconfigured dsv4 chat run — most importantly the
+// fallback-from-cloud path — into a no-thinking run. Filling the default at
+// the model layer restores the intended semantics without touching sessions
+// that chose a level ("off" stays off) and without affecting models that have
+// no toggle (cloud mains stay exactly as configured). The model is adaptive:
+// easy turns emit near-zero reasoning, so the cost is self-limiting.
+//
+// Called from applyModelTuning (initial model) AND the fallback chain
+// (run_fallback.go), which reuses the original config with the model swapped
+// and therefore never re-runs applyModelTuning.
+func fillDualModeDefaultThinking(cfg *agent.AgentConfig, deps runDeps, providerID, model string) {
+	if cfg.Thinking != nil {
+		return
+	}
+	if modelCapability(deps, providerID, model).ThinkingToggleKwarg == "" {
+		return
+	}
+	cfg.Thinking = &llm.ThinkingConfig{Type: "enabled", BudgetTokens: dualModeDefaultThinkingBudget}
 }
 
 // fillSamplingDefaults copies profile sampling values into unset config

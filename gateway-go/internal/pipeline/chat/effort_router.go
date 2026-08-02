@@ -7,9 +7,12 @@
 // translating a RunParams turn into a leafbind.Request, swapping the agent's
 // thinking config, the per-step modulator, and the escalation/fallback restore.
 //
-// Dual-mode models (DeepSeek V4 family today) ship with an always-thinking
-// serving default that wastes tokens and latency on conversational turns:
-// disabling thinking per-request cuts completion tokens ~58% and wall-clock
+// Dual-mode models (DeepSeek V4 family today) run thinking-on by default —
+// originally an always-thinking serving default; since the 0731 serving
+// flipped that default to non-thinking, the model-layer default
+// (fillDualModeDefaultThinking, run_capability.go) restores it explicitly.
+// Thinking on every turn wastes tokens and latency on conversational turns:
+// disabling it per-request cuts completion tokens ~58% and wall-clock
 // ~42-62% on simple queries while the KV prefix cache survives the toggle (the
 // template flag only changes the generation tail). The router disables thinking
 // ONLY for obviously-simple short conversational turns; the error asymmetry
