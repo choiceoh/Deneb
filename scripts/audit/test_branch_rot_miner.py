@@ -108,11 +108,23 @@ class RotCandidateTests(unittest.TestCase):
         self.assertIn("retire", retire["title"])
         self.assertIn("trees_match", retire["proposedChange"])
         self.assertIn("recover", recover["title"])
-        self.assertIn("pr.sh", recover["proposedChange"])
+        self.assertIn("standard landing flow", recover["proposedChange"])
         for cand in got:
             self.assertEqual(cand["scope"], "code")
             self.assertEqual(cand["targetFiles"], [])
             self.assertIn("ahead=3", cand["evidence"])
+
+    def test_prose_never_names_the_landing_script(self) -> None:
+        """Dispatch-time ForbiddenSurfaceMentions scans every text field, and one
+        mention of an acceptance-machinery component makes the candidate
+        permanently undispatchable. This lane graduated onto the allowlist
+        2026-07-20 and then landed nothing for two weeks because the risk note
+        said "pr.sh" (found 2026-08-02) — a lane that looks alive with zero
+        possible output. Pin the exact regression."""
+        for cand in self.mine([row("done-branch", integrated=True), row("live-work")]):
+            for field in ("title", "candidate", "evidence", "reason", "proposedChange", "risk"):
+                self.assertNotIn("pr.sh", str(cand.get(field) or ""),
+                                 f"{cand['source']}:{field} names the landing script")
 
     def test_oldest_first_and_summary_in_evidence(self) -> None:
         got = self.mine([

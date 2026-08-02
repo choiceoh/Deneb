@@ -70,9 +70,18 @@ WT_TIMEOUT_SEC = 300
 EXCLUDED_BRANCH_PREFIXES = ("zcode/", "cursor/", "codex/", "claude/", "dispatch/")
 EXCLUDED_BRANCHES = ("main", "master")
 
+# Candidate prose must never name acceptance-machinery components (the landing
+# script, CI gate files, …): dispatch-time ForbiddenSurfaceMentions scans every
+# text field, and one mention makes the candidate permanently undispatchable.
+# That is exactly what happened to this lane — it graduated onto the dispatch
+# allowlist 2026-07-20 and then landed NOTHING, because this note said
+# "pr.sh" and every mined candidate was silently surface-blocked (found
+# 2026-08-02). Describe the flow generically; the dispatch session prompt
+# already names the concrete landing procedure.
 _RISK_NOTE = (
     "Branch recovery touches only the stale branch and its worktree; main moves "
-    "exclusively through a green-gated PR landed via scripts/dev/pr.sh land."
+    "exclusively through a green-gated PR landed via the repository's standard "
+    "landing flow."
 )
 
 
@@ -216,8 +225,8 @@ def rot_candidates(
             proposed = (
                 f"Decide this branch's fate: (1) rebase {branch} onto "
                 f"origin/main in its worktree; (2) still coherent and wanted → "
-                f"run the scoped gates and land through a PR + scripts/dev/pr.sh "
-                f"land; (3) superseded or obsolete → delete the worktree and "
+                f"run the scoped gates and land through a PR via the standard "
+                f"landing flow; (3) superseded or obsolete → delete the worktree and "
                 f"branch, recording why; (4) partially valuable → cherry-pick "
                 f"the valuable slice onto a fresh branch and retire the rest. "
                 f"Do not leave the branch in a third limbo state."
