@@ -746,6 +746,17 @@ func (e *Evolver) evolutionSuppressed(skillName string, now time.Time) (bool, st
 			skillName, h.TopEvolvedCount, time.UnixMilli(h.ThrashCooldownUntil).Format(time.RFC3339),
 		)
 	}
+	// Rejection backoff: repeated same-window rejections mean the producer has
+	// no working strategy for this skill right now. Another unattended attempt
+	// is the same coin in the same slot — stop until the window drains (or a
+	// human/heartbeat changes something, which shows up as a non-rejected entry
+	// resetting nothing but simply aging the streak out).
+	if n := e.tracker.RecentEvolveRejections(skillName, evolutionRejectionBackoffWindow); n >= evolutionRejectionBackoffMin {
+		return true, fmt.Sprintf(
+			"rejection backoff: %q rejected %d times in the last %s with no completed evolve; pausing unattended attempts",
+			skillName, n, evolutionRejectionBackoffWindow,
+		)
+	}
 	if window := skillEvolutionEvidenceWindow(); window > 0 {
 		if stats, err := e.tracker.Stats(skillName); err == nil && stats.LastUsed > 0 &&
 			stats.LastUsed < now.Add(-window).UnixMilli() {
