@@ -171,6 +171,63 @@ def open_pr_branches(checkout: str, gh_bin: str, err: TextIO) -> set[str] | None
         return None
 
 
+def squash_landed_commit(checkout: str, branch: str, scan_cap: int = 300) -> str | None:
+    """The main commit whose diff patch-id equals the branch's aggregate diff, or None.
+
+    The wt sensor's integrated flag is trees_match, which misses SQUASH landings:
+    a branch whose PR was squash-merged keeps distinct commit shas forever, so it
+    kept classifying as "recover" and each one burned a full coding session just
+    to discover there was nothing left to recover (2026-08-02: all three live
+    branch-rot candidates declined for exactly this — #2897, #2890, filestore).
+    Aggregate patch-id is the same test those sessions ran, done here for free.
+
+    Bounded: only main commits touching the branch's own files are scanned, and
+    at most scan_cap of them. Any git failure reads as "not landed" — the miner
+    then files a recover candidate, which is the pre-existing (safe, just more
+    expensive) behaviour.
+    """
+
+    def _git(*args: str) -> str | None:
+        proc = subprocess.run(
+            ["git", "-C", checkout, *args],
+            capture_output=True, text=True, timeout=WT_TIMEOUT_SEC, check=False,
+        )
+        return proc.stdout if proc.returncode == 0 else None
+
+    def _patch_id(diff: str) -> str | None:
+        proc = subprocess.run(
+            ["git", "-C", checkout, "patch-id", "--stable"],
+            input=diff, capture_output=True, text=True, timeout=WT_TIMEOUT_SEC, check=False,
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return None
+        return proc.stdout.split()[0]
+
+    try:
+        base = (_git("merge-base", "origin/main", branch) or "").strip()
+        if not base:
+            return None
+        diff = _git("diff", f"{base}..{branch}")
+        if diff is None:
+            return None
+        if not diff.strip():
+            return branch  # empty diff: trivially integrated
+        agg = _patch_id(diff)
+        if not agg:
+            return None
+        files = (_git("diff", "--name-only", f"{base}..{branch}") or "").split()
+        if not files:
+            return None
+        commits = (_git("log", "origin/main", f"--max-count={scan_cap}", "--format=%H", "--", *files) or "").split()
+        for commit in commits:
+            shown = _git("show", commit)
+            if shown and _patch_id(shown) == agg:
+                return commit
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    return None
+
+
 def rot_candidates(
     sensor: Any,
     checkout: str,
@@ -204,6 +261,11 @@ def rot_candidates(
         integrated = _is_integrated(row)
         dirty = _is_dirty(row)
         summary = str(row.get("summary") or "").strip()
+        squash_commit = None
+        if not integrated:
+            squash_commit = squash_landed_commit(checkout, branch)
+            if squash_commit:
+                integrated = True
         flavor = "retire" if integrated else "recover"
         facts = (
             f"{branch} [{flavor}] ahead={ahead} behind={behind} "
@@ -211,9 +273,22 @@ def rot_candidates(
             f"dirty={'yes' if dirty else 'no'} path={path or '(no worktree)'} "
             f"head={head.get('short_sha', '?')} {str(head.get('subject') or '').strip()}"
         )
+        if squash_commit and squash_commit != branch:
+            facts += (
+                f" | already landed on origin/main as {squash_commit[:12]} "
+                f"(aggregate patch-id match — squash merge)"
+            )
         if summary:
             facts += f" | summary: {summary}"
-        if integrated:
+        if squash_commit and squash_commit != branch:
+            proposed = (
+                f"This branch's aggregate diff already landed on origin/main as "
+                f"{squash_commit[:12]} (identical patch-id; squash merge). Verify with "
+                f"`git -C {checkout} diff origin/main...{branch}` context if desired, "
+                f"then remove the worktree and delete the branch — there is no source "
+                f"change left to recover."
+            )
+        elif integrated:
             proposed = (
                 f"wt reports this branch's tree content already integrated into "
                 f"origin/main (trees_match). Verify with `git -C {checkout} diff "

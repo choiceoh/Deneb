@@ -13,9 +13,12 @@ import io
 import json
 import os
 import tempfile
+import subprocess
+import pathlib
 import unittest
 
 from branch_rot_miner import (
+    squash_landed_commit,
     DEFAULT_MIN_AGE_DAYS,
     SOURCE_PREFIX,
     main,
@@ -193,3 +196,48 @@ class CliTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SquashLandingDetectionTest(unittest.TestCase):
+    """squash_landed_commit against a real throwaway repo — patch-id math cannot
+    be exercised with synthetic rows, and this exact blind spot cost three full
+    coding sessions on 2026-08-02 (every live candidate was already squash-landed)."""
+
+    def _git(self, *args):
+        subprocess.run(["git", "-C", self.repo, *args], check=True,
+                       capture_output=True, text=True)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = self.tmp.name
+        self.addCleanup(self.tmp.cleanup)
+        self._git("init", "-q", "-b", "main")
+        self._git("config", "user.email", "t@t")
+        self._git("config", "user.name", "t")
+        pathlib.Path(self.repo, "a.txt").write_text("base\n")
+        self._git("add", "."); self._git("commit", "-qm", "base")
+        # feature branch with two commits
+        self._git("checkout", "-qb", "feature")
+        pathlib.Path(self.repo, "a.txt").write_text("base\nchange1\n")
+        self._git("commit", "-aqm", "c1")
+        pathlib.Path(self.repo, "b.txt").write_text("new file\n")
+        self._git("add", "."); self._git("commit", "-qm", "c2")
+        # squash-merge onto main (single commit, different sha, same aggregate diff)
+        self._git("checkout", "-q", "main")
+        self._git("merge", "--squash", "-q", "feature")
+        self._git("commit", "-qm", "feat: squashed landing")
+        # the miner compares against origin/main
+        self._git("update-ref", "refs/remotes/origin/main", "main")
+
+    def test_detects_squash_landed_branch(self):
+        got = squash_landed_commit(self.repo, "feature")
+        self.assertIsNotNone(got, "a squash-landed branch must be detected")
+
+    def test_unlanded_branch_is_not_claimed(self):
+        # extend the feature past the landing: aggregate diff no longer matches
+        self._git("checkout", "-q", "feature")
+        pathlib.Path(self.repo, "c.txt").write_text("unlanded\n")
+        self._git("add", "."); self._git("commit", "-qm", "c3-unlanded")
+        self._git("checkout", "-q", "main")
+        self.assertIsNone(squash_landed_commit(self.repo, "feature"),
+                          "real unmerged work must stay a recover candidate")
