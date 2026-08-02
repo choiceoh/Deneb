@@ -65,11 +65,18 @@ func (s *Server) registerSidecarHealthWatch() {
 		})
 	}
 
-	// No fallback ⇒ must be watched, local or not.
-	for _, sc := range []struct{ name, base string }{
-		{"asr", artifact.ASRBaseURL()},
+	// No fallback ⇒ must be watched, local or not. ASR left this club with
+	// the Gemini cutover (#4422): the sidecar is now itself the fallback, so
+	// it is watched only while it is the primary transcription path —
+	// alerting an operator about a dead fallback they run on purpose is
+	// noise (live 2026-08-03).
+	sidecars := []struct{ name, base string }{
 		{"ocr", document.OCRBaseURL()},
-	} {
+	}
+	if artifact.ASRSidecarIsPrimary() {
+		sidecars = append(sidecars, struct{ name, base string }{"asr", artifact.ASRBaseURL()})
+	}
+	for _, sc := range sidecars {
 		if strings.TrimSpace(sc.base) == "" {
 			continue
 		}

@@ -44,10 +44,19 @@ func TranscribeAudioPlain(ctx context.Context, audio []byte, mimeType, hotwords 
 	return strings.TrimSpace(r.Transcription), nil
 }
 
-// ASRBaseURL exposes the configured ASR sidecar base so the gateway can watch
-// its liveness. Unlike a model provider, this sidecar has NO fallback chain —
-// if it is down, transcription simply fails — which is why it has to be probed
-// rather than left to a retry path that does not exist.
+// ASRBaseURL exposes the configured ASR sidecar base (probe wiring and the
+// in-package transcription client share it).
 func ASRBaseURL() string {
 	return asrBaseURL()
+}
+
+// ASRSidecarIsPrimary reports whether the MOSS sidecar is the PRIMARY
+// transcription path. Since the Gemini cutover (#4422, DENEB_ASR_PROVIDER=
+// gemini) the sidecar is only a fallback — its death no longer breaks
+// transcription, so the operator heartbeat must not page for it (live
+// 2026-08-03: a fallback-only sidecar outage produced repeated 다운 pushes
+// the operator explicitly did not want). When the provider reverts to the
+// sidecar, primary status — and the liveness watch — come back with it.
+func ASRSidecarIsPrimary() bool {
+	return asrProvider() != "gemini"
 }
