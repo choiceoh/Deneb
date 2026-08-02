@@ -215,13 +215,15 @@ class SquashLandingDetectionTest(unittest.TestCase):
         self._git("config", "user.email", "t@t")
         self._git("config", "user.name", "t")
         pathlib.Path(self.repo, "a.txt").write_text("base\n")
-        self._git("add", "."); self._git("commit", "-qm", "base")
+        self._git("add", ".")
+        self._git("commit", "-qm", "base")
         # feature branch with two commits
         self._git("checkout", "-qb", "feature")
         pathlib.Path(self.repo, "a.txt").write_text("base\nchange1\n")
         self._git("commit", "-aqm", "c1")
         pathlib.Path(self.repo, "b.txt").write_text("new file\n")
-        self._git("add", "."); self._git("commit", "-qm", "c2")
+        self._git("add", ".")
+        self._git("commit", "-qm", "c2")
         # squash-merge onto main (single commit, different sha, same aggregate diff)
         self._git("checkout", "-q", "main")
         self._git("merge", "--squash", "-q", "feature")
@@ -237,7 +239,8 @@ class SquashLandingDetectionTest(unittest.TestCase):
         # extend the feature past the landing: aggregate diff no longer matches
         self._git("checkout", "-q", "feature")
         pathlib.Path(self.repo, "c.txt").write_text("unlanded\n")
-        self._git("add", "."); self._git("commit", "-qm", "c3-unlanded")
+        self._git("add", ".")
+        self._git("commit", "-qm", "c3-unlanded")
         self._git("checkout", "-q", "main")
         self.assertIsNone(squash_landed_commit(self.repo, "feature"),
                           "real unmerged work must stay a recover candidate")
