@@ -28,7 +28,7 @@ func TestPaddleOCRReturnsTextFromLiveServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read image: %v", err)
 	}
-	text, err := paddleOCR(context.Background(), img, "OCR:")
+	text, _, err := paddleOCR(context.Background(), img, "OCR:")
 	if err != nil {
 		t.Fatalf("paddleOCR live: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestPaddleOCR_WireFormat(t *testing.T) {
 		0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
 		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
 	}
-	got, err := paddleOCR(context.Background(), png, "Table Recognition:")
+	got, _, err := paddleOCR(context.Background(), png, "Table Recognition:")
 	if err != nil {
 		t.Fatalf("paddleOCR: %v", err)
 	}

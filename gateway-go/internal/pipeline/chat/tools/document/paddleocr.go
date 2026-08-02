@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/coreparsing/htmlmd"
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
@@ -75,13 +74,19 @@ type ocrChatResponse struct {
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
+		// FinishReason distinguishes a completed read from one the token
+		// budget cut off. "length" is the strongest degeneration signal there
+		// is — a real page almost never needs the full budget — and it was
+		// being thrown away while the guard tried to re-derive the same fact
+		// from text shape (2026-07-27 sheet-music audit).
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 }
 
 // paddleOCR sends one image to PaddleOCR-VL and returns the recognized text.
 // task selects the recognition mode: "OCR:" for full-page text,
 // "Table Recognition:", "Formula Recognition:", or "Chart Recognition:".
-func paddleOCR(ctx context.Context, img []byte, task string) (string, error) {
+func paddleOCR(ctx context.Context, img []byte, task string) (string, string, error) {
 	if task == "" {
 		task = "OCR:"
 	}
@@ -104,7 +109,7 @@ func paddleOCR(ctx context.Context, img []byte, task string) (string, error) {
 		MaxTokens:   4096,
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	runCtx, cancel := context.WithTimeout(ctx, ocrVLTimeout)
@@ -113,33 +118,33 @@ func paddleOCR(ctx context.Context, img []byte, task string) (string, error) {
 	req, err := http.NewRequestWithContext(runCtx, http.MethodPost,
 		ocrVLBaseURL()+"/v1/chat/completions", bytes.NewReader(reqBody))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httputil.NewClient(ocrVLTimeout).Do(req)
 	if err != nil {
-		return "", fmt.Errorf("paddleocr-vl 연결 실패: %w", err)
+		return "", "", fmt.Errorf("paddleocr-vl 연결 실패: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2*1024))
-		return "", fmt.Errorf("paddleocr-vl HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", "", fmt.Errorf("paddleocr-vl HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var out ocrChatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("paddleocr-vl 응답 파싱 실패: %w", err)
+		return "", "", fmt.Errorf("paddleocr-vl 응답 파싱 실패: %w", err)
 	}
 	if len(out.Choices) == 0 {
-		return "", fmt.Errorf("paddleocr-vl 빈 응답")
+		return "", "", fmt.Errorf("paddleocr-vl 빈 응답")
 	}
 	text := strings.TrimSpace(out.Choices[0].Message.Content)
 	if text == "" {
-		return "", fmt.Errorf("paddleocr-vl 추출 텍스트 없음")
+		return "", "", fmt.Errorf("paddleocr-vl 추출 텍스트 없음")
 	}
-	return text, nil
+	return text, out.Choices[0].FinishReason, nil
 }
 
 // ocrImageBytes is the single OCR entry point used across attachment handling.
@@ -152,22 +157,36 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 	if cached, ok := ocrCacheGet(img); ok {
 		return cached, nil
 	}
-	text, err := paddleOCR(ctx, img, "OCR:")
+	text, finish, err := paddleOCR(ctx, img, "OCR:")
 	if err == nil {
 		final := ""
-		// Dense item tables can trap the full-page mode in a repetition loop
-		// (the same row emitted until max_tokens — reproduced 2026-07-18 on a
-		// real 발주서, CER 2.58). Sampling penalties don't fix it (they kill
-		// legitimate repeated cells too); the model's own table mode does
-		// (same page: CER 0.153, zero loops). Detect the loop and retry once
-		// in table mode, keeping the looped text only as a last resort.
-		if looksRepetitionLoop(text) {
-			slog.Default().Warn("paddleocr-vl full-page output degenerated into a repetition loop; retrying in table mode",
-				"chars", len(text))
-			if t2, err2 := paddleOCR(ctx, img, "Table Recognition:"); err2 == nil {
-				if conv := paddleTableToText(t2); strings.TrimSpace(conv) != "" && !looksRepetitionLoop(conv) {
-					final = conv
+		// Dense pages trap the full-page mode in degenerate loops: item tables
+		// repeat a row until max_tokens (2026-07-18 발주서, CER 2.58), and sheet
+		// music loops on bar numbers and fingerings — "40" 1,020 times, "4 4 3
+		// 2 1 2 3 2" 249 times (2026-07-27 audit). The old guard demanded ≥8
+		// runes AND ≥4 letters per repeated line, so every number-loop slipped
+		// through AND got cached, permanently serving garbage for that image.
+		// ocrDegenerate folds all observed collapse shapes, including the
+		// strongest signal of all: the token budget running out.
+		if why := ocrDegenerate(text, finish); why != "" {
+			slog.Default().Warn("paddleocr-vl full-page output degenerated; rescuing",
+				"why", why, "chars", len(text))
+			// Two rescues, best-of by surviving content: table mode re-reads
+			// the page (saves dense tables and lyric pages), truncation keeps
+			// the healthy prefix (saves headers when table mode loses them —
+			// on the audited pages each rescue won once, so neither is enough
+			// alone).
+			var tableText string
+			if t2, _, err2 := paddleOCR(ctx, img, "Table Recognition:"); err2 == nil {
+				if conv := paddleTableToText(t2); ocrDegenerate(conv, "") == "" {
+					tableText = strings.TrimSpace(conv)
 				}
+			}
+			truncated := strings.TrimSpace(truncateAtLoop(text))
+			if len(tableText) >= len(truncated) {
+				final = tableText
+			} else {
+				final = truncated
 			}
 		}
 		if final == "" {
@@ -176,9 +195,9 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 			// a grid instead of a flattened blob. No-op without a table.
 			final = htmlTablesToMarkdown(text)
 		}
-		// Cache healthy results only: a still-looped last resort must stay
+		// Cache healthy results only: a degenerate last resort must stay
 		// uncached so a later attempt gets to redo it.
-		if !looksRepetitionLoop(final) {
+		if ocrDegenerate(final, "") == "" {
 			ocrCachePut(img, final)
 		}
 		return final, nil
@@ -204,7 +223,7 @@ func chartOCR(ctx context.Context, img []byte) (string, error) {
 	if cached, ok := ocrCacheGet(chartCachePayload(img)); ok {
 		return cached, nil
 	}
-	raw, err := paddleOCR(ctx, img, "Chart Recognition:")
+	raw, _, err := paddleOCR(ctx, img, "Chart Recognition:")
 	if err != nil {
 		return "", err
 	}
@@ -231,38 +250,122 @@ func looksDataTable(s string) bool {
 	return false
 }
 
-// looksRepetitionLoop reports whether OCR output degenerated into a repeated
-// block. Signature: one substantive line (≥8 runes carrying ≥4 letters —
-// Hangul/Latin/etc.) occurring ≥12 times. Honest tables repeat short unit and
-// quantity cells ("EA", "20") far more often than that, but their item lines
-// differ row to row; only a degenerated output repeats a wordy line this much.
-func looksRepetitionLoop(text string) bool {
-	const (
-		minRunes   = 8
-		minLetters = 4
-		minRepeats = 12
-	)
-	counts := make(map[string]int)
-	for _, line := range strings.Split(text, "\n") {
-		t := strings.TrimSpace(line)
-		if utf8.RuneCountInString(t) < minRunes {
-			continue
+func ocrDegenerate(text, finishReason string) string {
+	// Budget exhaustion is degeneration by itself: a real page almost never
+	// needs the whole 4096-token budget, and both audited collapses ended
+	// exactly there.
+	if finishReason == "length" {
+		return "token-exhaustion"
+	}
+	lines := make([]string, 0, 64)
+	for _, l := range strings.Split(text, "\n") {
+		if t := strings.TrimSpace(l); t != "" {
+			lines = append(lines, t)
 		}
+	}
+	// Two repeat rules with different floors, because honest dense tables
+	// flatten to one cell per line: "EA" or an amount column legitimately
+	// recurs dozens of times INTERLEAVED with varying item lines. What honest
+	// output never does is emit the same line ≥12 times CONSECUTIVELY — that
+	// interleaving is the discriminator (the pre-existing honest-table tests
+	// pinned it, and caught this detector's first draft over-firing).
+	//
+	// R1 — prose-line global count (the old guard, kept): a line with real
+	// text repeating ≥12× anywhere is the 발주서 row-block collapse.
+	counts := map[string]int{}
+	for _, t := range lines {
 		letters := 0
 		for _, r := range t {
 			if unicode.IsLetter(r) {
 				letters++
 			}
 		}
-		if letters < minLetters {
+		if len([]rune(t)) < 8 || letters < 4 {
 			continue
 		}
 		counts[t]++
-		if counts[t] >= minRepeats {
-			return true
+		if counts[t] >= 12 {
+			return "line-repeat"
 		}
 	}
-	return false
+	// R2 — consecutive streak, NO floors: bar numbers and fingering rows
+	// ("40" ×1020, "4 4 3 2 1 2 3 2" ×249) repeat back-to-back, which no
+	// flattened honest column does.
+	streakLine, streak := "", 0
+	for _, t := range lines {
+		if t == streakLine {
+			streak++
+			if streak >= 12 {
+				return "line-streak"
+			}
+		} else {
+			streakLine, streak = t, 1
+		}
+	}
+	// Short repeating cycles (low-resolution loops emit "3","2","1","3","2",
+	// "1",…): the same ≤8-line block from the head, ≥12 consecutive times.
+	for period := 1; period <= 8; period++ {
+		if len(lines) < period*12 {
+			continue
+		}
+		matches := 0
+		for i := 0; i+period <= len(lines); i += period {
+			same := true
+			for j := 0; j < period; j++ {
+				if lines[i+j] != lines[j] {
+					same = false
+					break
+				}
+			}
+			if !same {
+				break
+			}
+			matches++
+		}
+		if matches >= 12 {
+			return "cycle"
+		}
+	}
+	// A single NON-WHITESPACE character ≥40× in a row (glyph smear: "♦♦♦…").
+	// Whitespace must not count — healthy pages carry long alignment-space
+	// runs (the carol page false-fired on exactly that offline).
+	var prev rune
+	run := 0
+	for _, r := range text {
+		if r == prev && !unicode.IsSpace(r) {
+			run++
+			if run >= 40 {
+				return "char-run"
+			}
+		} else {
+			run = 1
+		}
+		prev = r
+	}
+	return ""
+}
+
+// truncateAtLoop cuts the output where it collapses — the first line repeated
+// six times consecutively — keeping the healthy prefix (title, composer,
+// headers) that table-mode rescue loses on some pages.
+func truncateAtLoop(text string) string {
+	lines := strings.Split(text, "\n")
+	last, streak := "", 0
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		if t == last {
+			streak++
+			if streak >= 6 {
+				return strings.Join(lines[:i-streak+1], "\n")
+			}
+		} else {
+			last, streak = t, 1
+		}
+	}
+	return text
 }
 
 // paddleTableToText renders a Table Recognition response as readable rows.

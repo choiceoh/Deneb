@@ -11,29 +11,36 @@ import (
 	"testing"
 )
 
-func TestLooksRepetitionLoop(t *testing.T) {
+func TestDegenerateKeepsHonestTableExemptions(t *testing.T) {
 	t.Parallel()
 
+	// The 발주서 collapse: a full row block with real text repeating — R1.
 	looped := strings.Repeat("Duck Joint(B/Jumper부착)\nH100 L Type\nEA\n433\n2,000\n", 15)
-	if !looksRepetitionLoop(looped) {
+	if ocrDegenerate(looped, "") == "" {
 		t.Fatal("degenerated row block must be flagged")
 	}
 
-	// Honest dense table: short unit/qty cells repeat a lot, item lines differ.
+	// Honest dense table: short unit/qty cells repeat a lot but INTERLEAVED
+	// with varying item lines — the discriminator both repeat rules honor.
 	var honest strings.Builder
 	for i := 0; i < 40; i++ {
 		fmt.Fprintf(&honest, "케이블트레이 %d형\nEA\n%d\n12,000\n", i, i+1)
 	}
-	if looksRepetitionLoop(honest.String()) {
-		t.Fatal("honest table with repeated short cells must NOT be flagged")
+	if why := ocrDegenerate(honest.String(), ""); why != "" {
+		t.Fatalf("honest table with repeated short cells must NOT be flagged, got %q", why)
 	}
 
-	if looksRepetitionLoop("견적서\n합계 99,000원") {
+	if ocrDegenerate("견적서\n합계 99,000원", "") != "" {
 		t.Fatal("short prose must not be flagged")
 	}
-	// Repeated numeric line (same amount column) carries no letters — exempt.
-	if looksRepetitionLoop(strings.Repeat("866,000.00\n", 30)) {
-		t.Fatal("repeated numeric-only lines must not be flagged")
+
+	// CHANGED CONTRACT (2026-08-02): ≥12 IDENTICAL CONSECUTIVE lines now flag
+	// regardless of letters. The old guard exempted numeric-only repeats, and
+	// that exact blind spot let "40"×1,020 (a whole score page) through AND
+	// into the cache. A flattened honest column interleaves with its row's
+	// other cells, so back-to-back identical ≥12 has no honest reading.
+	if ocrDegenerate(strings.Repeat("866,000.00\n", 30), "") == "" {
+		t.Fatal("30 consecutive identical lines are the collapse signature")
 	}
 }
 
@@ -189,8 +196,8 @@ func TestOCRImageBytesLoopFallback_Live(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ocrImageBytes: %v", err)
 	}
-	if looksRepetitionLoop(got) {
-		t.Fatalf("live fallback still looped (%d chars)", len(got))
+	if why := ocrDegenerate(got, ""); why != "" {
+		t.Fatalf("live fallback still degenerate (%s, %d chars)", why, len(got))
 	}
 	t.Logf("live output %d chars, head: %.120s", len(got), got)
 }
