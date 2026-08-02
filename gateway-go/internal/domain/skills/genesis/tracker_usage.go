@@ -483,6 +483,15 @@ const (
 	// 6). Tuned to flag early; a false positive only shows an operator a glance.
 	evolutionThrashMinEvolves   = 3
 	evolutionThrashDominancePct = 60
+	// Rejection backoff: a skill whose recent evolve attempts ALL rejected gets
+	// no further unattended attempts for the window. The thrash cooldown cannot
+	// catch this — it counts COMPLETED evolves, and a skill that only ever
+	// rejects never completes one. Observed 2026-08-02: the nightly sweep spent
+	// 14 attempts across three skills in 2.5h, every one rejected on an
+	// immovable held-out score (35.8 vs 35.8) or a replay regression — an
+	// attempt loop with no strategy change, invisible to every existing guard.
+	evolutionRejectionBackoffMin    = 3
+	evolutionRejectionBackoffWindow = 24 * time.Hour
 )
 
 // EvolutionHealthSummary surfaces evolve-loop productivity for /health so a
@@ -634,4 +643,29 @@ func (t *Tracker) AgentSkillValueSummary() (total, unused int) {
 		}
 	}
 	return total, unused
+}
+
+// RecentEvolveRejections counts non-infrastructure evolve rejections for the
+// skill inside the window. Infra rejections (judge error, teacher escalation
+// failed) are outages, not verdicts — counting them would let a provider blip
+// lock a healthy skill out of its own repair lane.
+func (t *Tracker) RecentEvolveRejections(skillName string, window time.Duration) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entries, err := jsonlstore.Load[LifecycleLogEntry](t.logPath)
+	if err != nil {
+		return 0
+	}
+	cutoff := time.Now().Add(-window).UnixMilli()
+	n := 0
+	for _, e := range entries {
+		if e.CreatedAt < cutoff || e.Type != "evolve_rejected" || e.SkillName != skillName {
+			continue
+		}
+		if isInfrastructureRejection(e.Reason) {
+			continue
+		}
+		n++
+	}
+	return n
 }
