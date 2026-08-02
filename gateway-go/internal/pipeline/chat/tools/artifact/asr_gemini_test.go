@@ -240,3 +240,16 @@ func TestTranscribeGeminiLive(t *testing.T) {
 		t.Fatal("empty live transcript")
 	}
 }
+
+// The sidecar liveness watch keys off primary-ness: gemini primary means the
+// sidecar is a deliberate fallback whose death must not page the operator.
+func TestASRSidecarIsPrimary(t *testing.T) {
+	t.Setenv("DENEB_ASR_PROVIDER", "gemini")
+	if ASRSidecarIsPrimary() {
+		t.Fatal("gemini primary: sidecar must not be watched as primary")
+	}
+	t.Setenv("DENEB_ASR_PROVIDER", "")
+	if !ASRSidecarIsPrimary() {
+		t.Fatal("no provider override: sidecar is the primary path")
+	}
+}

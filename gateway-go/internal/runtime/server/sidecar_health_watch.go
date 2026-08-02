@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
@@ -63,11 +65,18 @@ func (s *Server) registerSidecarHealthWatch() {
 		})
 	}
 
-	// No fallback ⇒ must be watched, local or not.
-	for _, sc := range []struct{ name, base string }{
-		{"asr", artifact.ASRBaseURL()},
+	// No fallback ⇒ must be watched, local or not. ASR left this club with
+	// the Gemini cutover (#4422): the sidecar is now itself the fallback, so
+	// it is watched only while it is the primary transcription path —
+	// alerting an operator about a dead fallback they run on purpose is
+	// noise (live 2026-08-03).
+	sidecars := []struct{ name, base string }{
 		{"ocr", document.OCRBaseURL()},
-	} {
+	}
+	if artifact.ASRSidecarIsPrimary() {
+		sidecars = append(sidecars, struct{ name, base string }{"asr", artifact.ASRBaseURL()})
+	}
+	for _, sc := range sidecars {
 		if strings.TrimSpace(sc.base) == "" {
 			continue
 		}
@@ -85,7 +94,11 @@ func (s *Server) registerSidecarHealthWatch() {
 	}
 
 	if len(checks) > 0 {
-		s.notify.SetDependencyChecks(checks)
+		// Down-state survives restarts here — without it every deploy
+		// re-pushed the "down" alert for an outage the operator already
+		// knew about (15 duplicate ASR alerts across a single 41h fault).
+		stateFile := filepath.Join(config.ResolveStateDir(), "notify-dep-down.json")
+		s.notify.SetDependencyChecks(checks, stateFile)
 	}
 }
 

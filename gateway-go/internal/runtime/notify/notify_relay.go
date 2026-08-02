@@ -97,12 +97,16 @@ type Service struct {
 	lastSent   map[string]time.Time
 
 	// Dependency (sidecar) probes woven into each heartbeat — see
-	// notify_deps.go. depMu guards both fields; late-bound via
+	// notify_deps.go. depMu guards all three fields; late-bound via
 	// SetDependencyChecks because dependency handles are built after the
-	// notify service (Session phase vs Early phase).
-	depMu     sync.Mutex
-	depChecks []DepCheck
-	depDown   map[string]bool
+	// notify service (Session phase vs Early phase). depDown maps a dep
+	// name to when its outage was first observed (zero/absent = healthy);
+	// depStateFile persists that map across restarts so a standing outage
+	// does not re-alert on every deploy.
+	depMu        sync.Mutex
+	depChecks    []DepCheck
+	depDown      map[string]time.Time
+	depStateFile string
 }
 
 // notifyEvent is the worker's inbound message envelope.
