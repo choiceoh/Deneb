@@ -34,7 +34,14 @@ func ToolWrite(defaultDir string) toolport.ToolFunc {
 		}
 
 		dir := defaultDir
-		path := artifact.ResolvePath(p.FilePath, dir)
+		path, clamped := artifact.ResolvePathContained(p.FilePath, dir)
+		// A clamped path means the request pointed outside the workspace and
+		// the resolver handed back the workspace ROOT. Reporting anything about
+		// that directory against p.FilePath would be a statement about a path
+		// the tool never touched — say what actually happened instead.
+		if clamped {
+			return "", fmt.Errorf("%q is outside this tool's workspace (%s) — write only reaches files under the workspace", p.FilePath, dir)
+		}
 		// A directory target yields a confusing "rename: is a directory" error
 		// from atomicfile below; reject it up front with a clear message.
 		if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
@@ -98,7 +105,15 @@ func ToolEdit(defaultDir string) toolport.ToolFunc {
 		}
 
 		dir := defaultDir
-		path := artifact.ResolvePath(p.FilePath, dir)
+		path, clamped := artifact.ResolvePathContained(p.FilePath, dir)
+		// Same honesty rule as write: a clamped request never touched
+		// p.FilePath, so no verdict about the clamp target may be phrased
+		// against it. The old message here claimed real skill files were
+		// directories and cost the heartbeat 15 straight edit calls
+		// (2026-08-02 regression alert).
+		if clamped {
+			return "", fmt.Errorf("%q is outside this tool's workspace (%s) — edit only reaches files under the workspace", p.FilePath, dir)
+		}
 		if err := artifact.CheckProtectedPath(path, "edit"); err != nil {
 			return "", err
 		}
@@ -114,9 +129,9 @@ func ToolEdit(defaultDir string) toolport.ToolFunc {
 		if err != nil {
 			// A directory target yields a confusing "is a directory" read error.
 			// edit/write operate on a single file; point the model at read for
-			// directory exploration. (artifact.ResolvePath clamps out-of-workspace paths
-			// to the workspace root, which is itself a directory, so this also
-			// catches that case.)
+			// directory exploration. (Out-of-workspace clamps are rejected
+			// above, so reaching here means a genuine directory inside the
+			// workspace.)
 			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
 				return "", fmt.Errorf("%q is a directory, not a file — edit targets a single file; use the read tool to list a directory", p.FilePath)
 			}
