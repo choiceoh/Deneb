@@ -80,3 +80,79 @@ func TestToolBrowse_Live(t *testing.T) {
 	}
 	t.Logf("live page head: %.120s", out)
 }
+
+// Targeted extraction (2026-08-02): a selector-scoped read must pass the
+// selector through, label the output as partial, and report zero matches as a
+// statement — never silently fall back to the whole page, which would tell the
+// model the page HAS no such node while feeding it everything else.
+
+func TestToolBrowseSelectorPassthroughAndPartialLabel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		if p["selector"] != "table" {
+			t.Errorf("selector = %v", p["selector"])
+		}
+		matched := 2
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true, "url": "https://ex.com/pricing", "title": "Pricing",
+			"text": "모델 | 입력 | 출력", "truncated": false, "matched": matched,
+		})
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_BROWSE_URL", srv.URL)
+
+	out, err := ToolBrowse()(context.Background(), json.RawMessage(`{"url":"https://ex.com/pricing","selector":"table"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "셀렉터 일치 2건") {
+		t.Errorf("a targeted read must say it is partial: %q", out)
+	}
+	if !strings.Contains(out, "모델 | 입력 | 출력") {
+		t.Errorf("matched text must come through: %q", out)
+	}
+}
+
+func TestToolBrowseSelectorZeroMatchesIsAStatementNotAFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		matched := 0
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true, "url": "https://ex.com", "title": "홈",
+			"text": "", "truncated": false, "matched": matched,
+		})
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_BROWSE_URL", srv.URL)
+
+	out, err := ToolBrowse()(context.Background(), json.RawMessage(`{"url":"https://ex.com","selector":".none"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "0건") || !strings.Contains(out, ".none") {
+		t.Errorf("zero matches must be reported with the selector named: %q", out)
+	}
+}
+
+func TestToolBrowseWithoutSelectorKeepsWholePageShape(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var p map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&p)
+		if _, has := p["selector"]; has {
+			t.Errorf("no selector param must be sent when unset: %v", p)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": true, "url": "https://ex.com", "title": "홈", "text": "전체 본문", "truncated": false,
+		})
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_BROWSE_URL", srv.URL)
+
+	out, err := ToolBrowse()(context.Background(), json.RawMessage(`{"url":"https://ex.com"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "셀렉터") {
+		t.Errorf("an untargeted read must not claim partiality: %q", out)
+	}
+}

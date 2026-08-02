@@ -352,6 +352,10 @@ func BrowseToolSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
+			"selector": map[string]any{
+				"type":        "string",
+				"description": "선택: CSS 셀렉터 — 일치 요소들의 텍스트만 추출해 페이지 전체 대신 필요한 부분만 가져온다(예: 'table', '.pricing', '#spec'). 표·스펙시트처럼 페이지의 한 조각만 필요할 때 컨텍스트 낭비를 크게 줄인다. 0건 일치 시 전체 폴백 없이 그대로 보고된다",
+			},
 			"url": map[string]any{
 				"type":        "string",
 				"description": "열어 읽을 페이지 URL (http/https)",

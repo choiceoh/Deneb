@@ -45,15 +45,20 @@ type browseSidecarResponse struct {
 	Title     string `json:"title"`
 	Text      string `json:"text"`
 	Truncated bool   `json:"truncated"`
-	Error     string `json:"error"`
+	// Matched is the CSS-selector hit count, present only on a targeted read.
+	// Pointer so "no selector sent" and "selector matched zero nodes" stay
+	// distinguishable — the second one must reach the model as a statement.
+	Matched *int   `json:"matched,omitempty"`
+	Error   string `json:"error"`
 }
 
 // ToolBrowse reads a page via the resident browser sidecar.
 func ToolBrowse() toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			URL    string `json:"url"`
-			WaitMs int    `json:"wait_ms"`
+			URL      string `json:"url"`
+			WaitMs   int    `json:"wait_ms"`
+			Selector string `json:"selector"`
 		}
 		if err := jsonutil.UnmarshalInto("browse params", input, &p); err != nil {
 			return "", err
@@ -63,7 +68,11 @@ func ToolBrowse() toolport.ToolFunc {
 			return "", fmt.Errorf("browse: url must be http(s), got %q", p.URL)
 		}
 
-		body, err := json.Marshal(map[string]any{"url": u, "waitMs": p.WaitMs})
+		payload := map[string]any{"url": u, "waitMs": p.WaitMs}
+		if sel := strings.TrimSpace(p.Selector); sel != "" {
+			payload["selector"] = sel
+		}
+		body, err := json.Marshal(payload)
 		if err != nil {
 			return "", err
 		}
@@ -93,11 +102,21 @@ func ToolBrowse() toolport.ToolFunc {
 			}
 			return "", fmt.Errorf("browse 실패: %s", msg)
 		}
+		if out.Matched != nil && *out.Matched == 0 {
+			// An honest zero, never a silent whole-page fallback: the caller
+			// scoped the read and the page has no such node — say exactly that.
+			return fmt.Sprintf("[%s] %s\n\n셀렉터 %q에 일치하는 요소가 없습니다 (0건). 페이지 구조가 예상과 다릅니다 — 셀렉터를 바꾸거나 selector 없이 전체 본문을 읽으세요.",
+				out.Title, out.URL, strings.TrimSpace(p.Selector)), nil
+		}
 		if strings.TrimSpace(out.Text) == "" {
 			return "페이지가 열렸지만 본문 텍스트가 비어 있습니다 (렌더 지연·로그인 만료·빈 페이지일 수 있음). wait_ms를 늘리거나 로그인 상태를 확인하세요.", nil
 		}
 		var sb strings.Builder
-		fmt.Fprintf(&sb, "[%s] %s\n\n%s", out.Title, out.URL, out.Text)
+		fmt.Fprintf(&sb, "[%s] %s", out.Title, out.URL)
+		if out.Matched != nil {
+			fmt.Fprintf(&sb, "\n(셀렉터 일치 %d건만 추출)", *out.Matched)
+		}
+		fmt.Fprintf(&sb, "\n\n%s", out.Text)
 		if out.Truncated {
 			sb.WriteString("\n\n[본문이 길어 16,000자에서 잘렸습니다]")
 		}
