@@ -257,7 +257,7 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 	t.Run("disabled thinking gets the model toggle kwarg", func(t *testing.T) {
 		// Session-level "off" (or a cron payload override) produces a bare
 		// disabled config; the model's chat_template toggle must be attached
-		// here because on deepseek-v4 the reasoning_effort field is a no-op.
+		// here — it is the only per-request off-switch on deepseek-v4.
 		cfg := agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "disabled"}}
 		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
 		if cfg.Thinking.TemplateKwarg != "thinking" {
@@ -277,6 +277,59 @@ func TestApplyModelTuningWithProfileDefaultsAndOverrides(t *testing.T) {
 		applyModelTuning(&cfg, deps, RunParams{}, "vllm", "deepseek-v4-flash")
 		if cfg.Thinking.TemplateKwarg != "" {
 			t.Errorf("enabled config must not get a toggle kwarg, got %q", cfg.Thinking.TemplateKwarg)
+		}
+	})
+}
+
+func TestFillDualModeDefaultThinking(t *testing.T) {
+	t.Run("dual-mode model with no config gets enabled adaptive", func(t *testing.T) {
+		// The 0731 serving default is non-thinking, so nil no longer inherits
+		// thinking-on from the template — the model layer must fill it.
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, runDeps{}, RunParams{}, "vllm", "deepseek-v4-flash")
+		if cfg.Thinking == nil || cfg.Thinking.Type != "enabled" ||
+			cfg.Thinking.BudgetTokens != dualModeDefaultThinkingBudget {
+			t.Errorf("Thinking = %+v, want enabled with default budget %d",
+				cfg.Thinking, dualModeDefaultThinkingBudget)
+		}
+	})
+
+	t.Run("wormhole-fronted dual-mode model also gets the default", func(t *testing.T) {
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		fillDualModeDefaultThinking(&cfg, runDeps{}, "wormhole", "deepseek-v4-flash")
+		if cfg.Thinking == nil || cfg.Thinking.Type != "enabled" {
+			t.Errorf("Thinking = %+v, want enabled via wormhole provider", cfg.Thinking)
+		}
+	})
+
+	t.Run("session-chosen configs are never overridden", func(t *testing.T) {
+		// Explicit "off" stays off …
+		cfg := agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "disabled"}}
+		applyModelTuning(&cfg, runDeps{}, RunParams{}, "vllm", "deepseek-v4-flash")
+		if cfg.Thinking.Type != "disabled" {
+			t.Errorf("disabled config overridden: %+v", cfg.Thinking)
+		}
+		// … and an explicit budget stays as chosen.
+		cfg = agent.AgentConfig{MaxTokens: 8192, Thinking: &llm.ThinkingConfig{Type: "enabled", BudgetTokens: 4096}}
+		applyModelTuning(&cfg, runDeps{}, RunParams{}, "vllm", "deepseek-v4-flash")
+		if cfg.Thinking.BudgetTokens != 4096 {
+			t.Errorf("explicit budget overridden: %+v", cfg.Thinking)
+		}
+	})
+
+	t.Run("models without a template toggle stay nil", func(t *testing.T) {
+		// Non-dual-mode local model: no toggle, no default.
+		cfg := agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, runDeps{}, RunParams{}, "vllm", "qwen3.6-35b")
+		if cfg.Thinking != nil {
+			t.Errorf("qwen must stay nil, got %+v", cfg.Thinking)
+		}
+		// Same model name on a non-vLLM provider: the toggle (and therefore
+		// the default) must not leak to cloud providers.
+		cfg = agent.AgentConfig{MaxTokens: 8192}
+		applyModelTuning(&cfg, runDeps{}, RunParams{}, "acme", "deepseek-v4-flash")
+		if cfg.Thinking != nil {
+			t.Errorf("cloud-provider dsv4 must stay nil, got %+v", cfg.Thinking)
 		}
 	})
 }

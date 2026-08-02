@@ -14,6 +14,8 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 > ★ **현재값 칼럼은 스냅샷(2026-07-07 갱신)이다.** 오퍼레이터가 네이티브 모델 픽커로 수시로 바꾸므로 문서를 믿지 말고 **판단 전에 실측**하라: 프로덕션 호스트에서 `~/.deneb/deneb.json` 의 `agents.*Model` 키를 직접 읽는다. 이 문서가 과거에 "main=로컬 dsv4"를 서술하는 동안 실제 main 은 2026-06-28부터 클라우드 glm-5.2 였다 — 그 드리프트가 이 경고의 근거다.
 >
 > 2026-07-17 가용성 사실: dsv4 는 **srv2 단일노드 `vllm-dsv4`**(sparkfleet launch 가 복구 경로), wormhole 의 dsv4 별칭 2종에 **엔트리별 fallback→qwen3.6**(srv1 로컬 `:8000`)이 걸려 있어 dsv4 다운에도 lightweight/tiny 는 생존한다. **adaptive effort router 는 전 wormhole 모델 개통**(deneb.json `providers.wormhole.routing.enabled` + `DENEB_ADAPTIVE_EFFORT=1`) — 단순 대화 턴은 glm 도 thinking-off 로 ~5s. kimi 프로바이더는 402(멤버십 만료, 운영자 갱신 대기).
+>
+> 2026-08-02 **dsv4 thinking 기본 ON (모델 레이어)**: 0731 서빙이 템플릿 기본을 non-thinking 으로 뒤집어, 세션 레벨 미설정 시 dsv4 챗 런 — 특히 클라우드→dsv4 **폴백 턴** — 이 조용히 무추론으로 돌았다. `fillDualModeDefaultThinking`(chat/run_capability.go, 폴백 체인에도 배선)이 듀얼모드(토글 보유) 모델에 enabled-adaptive 를 기본 주입한다. 세션 "off" 는 존중, effort router 의 단순턴 off 도 그대로, tiny 역할 강제 off 도 무영향(raw 경로). 판정 주의 2가지: ① 응답 추론은 vLLM `reasoning` 필드로 온다(`reasoning_content` 아님 — llm 클라이언트는 양쪽 파싱) ② 쉬운 프롬프트는 적응형 모델이 추론 0자로 즉시 닫는 게 **정상** — 쉬운 프로브로 "thinking 고장" 을 판정하지 말 것 (2026-08-01~02 이틀간의 오판정 사례).
 
 | 역할 | 상수 | 의도 | 로컬/클라우드 (2026-07-17 스냅샷) |
 |---|---|---|---|

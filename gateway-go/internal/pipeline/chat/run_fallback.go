@@ -604,6 +604,12 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 				restoreEffort(&agentCfg, t.route)
 			}
 		}
+		// A dual-mode fallback model (dsv4) behind a main that carried no
+		// thinking config (cloud model, session level unset) must get the
+		// model-layer thinking default here: this path reuses the original
+		// config with the model swapped, so applyModelTuning never saw the
+		// fallback model.
+		fillDualModeDefaultThinking(&agentCfg, t.deps, fbCfg.ProviderID, fbCfg.Model)
 		t.agentResult, t.runErr = agent.RunAgent(fbCtx, agentCfg, t.messages, fbClient, t.deps.tools, t.hooks, t.logger, t.runLog)
 		// A stalled fallback (empty timeout) is also a failure — advance to
 		// the next role instead of returning its empty result.
