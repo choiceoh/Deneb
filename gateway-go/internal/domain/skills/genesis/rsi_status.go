@@ -154,6 +154,10 @@ func (t *Tracker) rsiAssessL1() rsiLayer {
 		{Label: "신규 스킬", Value: strconv.Itoa(h.Genesis7d)},
 		{Label: "제안", Value: strconv.Itoa(h.Proposals7d)},
 		{Label: "기각", Value: strconv.Itoa(h.EvolveRejected7d)},
+		// Ties are the blind pool failing to SEE the change, not the candidate
+		// failing the contract — surfaced apart so the headline cannot read
+		// measurement blindness as candidate quality.
+		{Label: "기각 중 동점(맹풀 비가시)", Value: strconv.Itoa(h.EvolveRejectedTies7d)},
 		// "판정자 장애" read as "the judge is broken". It counts rejections that were
 		// OUTAGES (the judge call itself failed) rather than verdicts, which is why
 		// it sits beside 기각 instead of inside it.

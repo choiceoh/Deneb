@@ -465,6 +465,7 @@ func (e *Evolver) buildEvolveUserPrompt(ctx context.Context, skillName, currentC
 		}
 		validationCases = e.validationCasesForPrompt(skillName)
 	}
+	disclosure := e.unmetBlindDisclosure(skillName, currentContent)
 
 	findingSection := ""
 	if strings.TrimSpace(reviewFinding) != "" {
@@ -483,7 +484,7 @@ func (e *Evolver) buildEvolveUserPrompt(ctx context.Context, skillName, currentC
 - 총 사용: %d회
 - 성공: %d회 (%.0f%%)
 - 실패: %d회
-- 최근 에러: %s%s%s%s%s%s%s%s`,
+- 최근 에러: %s%s%s%s%s%s%s%s%s`,
 		currentContent,
 		stats.TotalUses, stats.SuccessCount, stats.SuccessRate*100,
 		stats.FailureCount,
@@ -494,7 +495,8 @@ func (e *Evolver) buildEvolveUserPrompt(ctx context.Context, skillName, currentC
 		leverSection,
 		exemplarSection,
 		validationSection,
-		findingSection)
+		findingSection,
+		disclosure)
 }
 
 // formatEvolveExemplarSection renders confirmed evolve exemplars matched to the
