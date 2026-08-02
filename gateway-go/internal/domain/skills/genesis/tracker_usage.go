@@ -526,10 +526,15 @@ type EvolutionHealthSummary struct {
 	DistinctSkillsEvolved7d int    `json:"distinctSkillsEvolved7d"`
 	TopEvolvedSkill         string `json:"topEvolvedSkill,omitempty"`
 	TopEvolvedCount         int    `json:"topEvolvedCount,omitempty"`
-	LastRejectedSkill       string `json:"lastRejectedSkill,omitempty"`
-	LastRejectedReason      string `json:"lastRejectedReason,omitempty"`
-	Thrash                  bool   `json:"thrash"`
-	ThrashCooldownUntil     int64  `json:"thrashCooldownUntil,omitempty"`
+	// EvolveRejectedTies7d is the subset of EvolveRejected7d whose reason
+	// records an exact held-out score tie — the blind pool could not see the
+	// change. Split out so "기각 N" stops reading as N bad candidates when much
+	// of it is measurement blindness (2026-08-02: 7 of 15).
+	EvolveRejectedTies7d int    `json:"evolveRejectedTies7d,omitempty"`
+	LastRejectedSkill    string `json:"lastRejectedSkill,omitempty"`
+	LastRejectedReason   string `json:"lastRejectedReason,omitempty"`
+	Thrash               bool   `json:"thrash"`
+	ThrashCooldownUntil  int64  `json:"thrashCooldownUntil,omitempty"`
 }
 
 // EvolutionHealth summarizes evolve/genesis activity over the last 7 days from
@@ -576,6 +581,9 @@ func (t *Tracker) computeEvolutionHealthLocked(now time.Time) EvolutionHealthSum
 				break
 			}
 			s.EvolveRejected7d++
+			if isHeldOutTieRejection(e.Reason) {
+				s.EvolveRejectedTies7d++
+			}
 			if s.LastRejectedSkill == "" {
 				s.LastRejectedSkill = e.SkillName
 				s.LastRejectedReason = e.Reason
