@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/artifact"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/document"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
@@ -85,7 +87,11 @@ func (s *Server) registerSidecarHealthWatch() {
 	}
 
 	if len(checks) > 0 {
-		s.notify.SetDependencyChecks(checks)
+		// Down-state survives restarts here — without it every deploy
+		// re-pushed the "down" alert for an outage the operator already
+		// knew about (15 duplicate ASR alerts across a single 41h fault).
+		stateFile := filepath.Join(config.ResolveStateDir(), "notify-dep-down.json")
+		s.notify.SetDependencyChecks(checks, stateFile)
 	}
 }
 
