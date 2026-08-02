@@ -38,28 +38,77 @@ actual class ContactsWriter actual constructor() {
         return withContext(Dispatchers.IO) { linkRawContacts(context, phones, emails, names) }
     }
 
+    actual suspend fun snapshotMergeLinks(): Set<MergeLinkPair> {
+        if (!hasAccess()) return emptySet()
+        return withContext(Dispatchers.IO) { readMergeLinks(context).toNormalizedSet() }
+    }
+
+    actual suspend fun trackDedupMergeLinks(pairs: Set<MergeLinkPair>) {
+        if (!hasAccess() || pairs.isEmpty()) return
+        withContext(Dispatchers.IO) {
+            val tracked = readTrackedMergeLinks(context).toMutableSet()
+            tracked += pairs
+            writeTrackedMergeLinks(context, tracked)
+        }
+    }
+
     actual suspend fun countMergeLinks(): Int {
         if (!hasAccess()) return 0
-        return withContext(Dispatchers.IO) { readMergeLinks(context).size }
+        return withContext(Dispatchers.IO) { readTrackedMergeLinks(context).size }
     }
 
     actual suspend fun resetMergeLinks(): ContactsResetResult {
         if (!hasAccess()) return ContactsResetResult()
         return withContext(Dispatchers.IO) {
-            val pairs = readMergeLinks(context)
+            val pairs = readTrackedMergeLinks(context).map { MergePair(it.a, it.b) }
             if (pairs.isEmpty()) {
                 ContactsResetResult()
             } else {
-                // Back up before undoing: once a pair returns to AUTOMATIC the provider
-                // forgets it, and the pairs cannot be recomputed afterwards.
                 val backup = writeMergeBackup(context, pairs)
-                ContactsResetResult(undone = clearMergeLinks(context, pairs), backupPath = backup)
+                val undone = clearMergeLinks(context, pairs)
+                writeTrackedMergeLinks(context, emptySet())
+                ContactsResetResult(undone = undone, backupPath = backup)
             }
         }
     }
 }
 
 private class MergePair(val id1: Long, val id2: Long)
+
+private fun List<MergePair>.toNormalizedSet(): Set<MergeLinkPair> = buildSet {
+    for (pair in this@toNormalizedSet) {
+        MergeLinkPair.of(pair.id1, pair.id2)?.let { add(it) }
+    }
+}
+
+private fun trackedMergeFile(context: Context): File =
+    File(context.filesDir, "contacts-dedup-tracked-merges.json")
+
+private fun readTrackedMergeLinks(context: Context): Set<MergeLinkPair> = try {
+    val file = trackedMergeFile(context)
+    if (!file.exists()) return emptySet()
+    buildSet {
+        file.readLines().forEach { line ->
+            val parts = line.split(',')
+            if (parts.size != 2) return@forEach
+            val a = parts[0].trim().toLongOrNull() ?: return@forEach
+            val b = parts[1].trim().toLongOrNull() ?: return@forEach
+            MergeLinkPair.of(a, b)?.let { add(it) }
+        }
+    }
+} catch (_: Exception) {
+    emptySet()
+}
+
+private fun writeTrackedMergeLinks(context: Context, pairs: Set<MergeLinkPair>) {
+    try {
+        trackedMergeFile(context).writeText(
+            pairs.joinToString("\n") { "${it.a},${it.b}" },
+        )
+    } catch (_: Exception) {
+        // best-effort bookkeeping; undo may no-op if this fails
+    }
+}
 
 // Every forced merge currently on the device. KEEP_SEPARATE rows are skipped on
 // purpose: those say "never merge these two", so clearing them would create merges
