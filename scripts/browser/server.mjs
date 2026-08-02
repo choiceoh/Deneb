@@ -53,7 +53,7 @@ function enqueue(fn) {
   return run;
 }
 
-async function browse(url, waitMs) {
+async function browse(url, waitMs, selector) {
   if (!/^https?:\/\//i.test(url)) {
     return { ok: false, error: "url must be http(s)" };
   }
@@ -65,16 +65,40 @@ async function browse(url, waitMs) {
     await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
     await page.waitForTimeout(Math.min(Math.max(waitMs || 0, 500), 5_000));
     const title = await page.title();
-    const text = await page.evaluate(
-      () => (document.body && document.body.innerText) || "",
-    );
-    return {
+    // Targeted extraction: with a CSS selector only the matched nodes' text
+    // comes back, so a page-sized read shrinks to the part actually needed
+    // (a pricing table, a spec sheet section). Zero matches reports honestly
+    // as matched:0 with empty text — NO silent whole-page fallback: a caller
+    // that asked for "table" and got the full page would believe the page has
+    // no table-shaped noise, and mis-scoped reads are how context rots.
+    let text;
+    let matched;
+    if (typeof selector === "string" && selector.trim() !== "") {
+      const sel = selector.trim();
+      try {
+        const parts = await page.$$eval(
+          sel,
+          (nodes) => nodes.map((n) => n.innerText || "").filter(Boolean),
+        );
+        matched = parts.length;
+        text = parts.join("\n\n---\n\n");
+      } catch (err) {
+        return { ok: false, error: `invalid selector: ${String(err && err.message ? err.message : err).slice(0, 200)}` };
+      }
+    } else {
+      text = await page.evaluate(
+        () => (document.body && document.body.innerText) || "",
+      );
+    }
+    const out = {
       ok: true,
       url: page.url(),
       title,
       text: text.slice(0, MAX_CHARS),
       truncated: text.length > MAX_CHARS,
     };
+    if (matched !== undefined) out.matched = matched;
+    return out;
   } finally {
     await page.close().catch(() => {});
   }
@@ -106,8 +130,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "POST" && req.url === "/browse") {
-      const { url, waitMs } = JSON.parse((await readBody(req)) || "{}");
-      const out = await enqueue(() => browse(String(url || ""), Number(waitMs)));
+      const { url, waitMs, selector } = JSON.parse((await readBody(req)) || "{}");
+      const out = await enqueue(() => browse(String(url || ""), Number(waitMs), selector));
       if (!out.ok) res.statusCode = 422;
       res.end(JSON.stringify(out));
       return;
