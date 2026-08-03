@@ -85,7 +85,7 @@ jobs:
           submodules: false
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v6.2.0
 
       - name: spotless + detekt + desktopTest + android compile
         # desktopTest already includes Gateway*/DenebUiBlockIntegrationTest —
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v6.0.9
         with:
           package_json_file: andromeda/package.json
 

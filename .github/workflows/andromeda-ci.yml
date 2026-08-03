@@ -85,7 +85,7 @@ jobs:
 
       - name: Setup pnpm
         if: needs.scope.outputs.andromeda == 'true'
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v6.0.9
         with:
           package_json_file: andromeda/package.json
 
