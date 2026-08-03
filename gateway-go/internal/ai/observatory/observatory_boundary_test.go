@@ -269,28 +269,20 @@ func TestHitPatternsReturnsEveryMatchInDefinitionOrder(t *testing.T) {
 	}
 }
 
-func TestReadCapsMissingUnderOverAndDirectoryErrors(t *testing.T) {
+func TestReadTailCappedMissingUnderOverAndDirectoryErrors(t *testing.T) {
 	root := t.TempDir()
 	path := writeObservatoryFile(t, root, "data.log", "0123456789", time.Time{})
-	if got := string(readCapped(path, 4)); got != "0123" {
-		t.Fatalf("head cap = %q", got)
-	}
-	if got := string(readCapped(path, 100)); got != "0123456789" {
-		t.Fatalf("head under cap = %q", got)
-	}
 	if got := string(readTailCapped(path, 4)); got != "6789" {
 		t.Fatalf("tail cap = %q", got)
 	}
 	if got := string(readTailCapped(path, 100)); got != "0123456789" {
 		t.Fatalf("tail under cap = %q", got)
 	}
-	for _, fn := range []func(string, int64) []byte{readCapped, readTailCapped} {
-		if got := fn(filepath.Join(root, "missing"), 4); got != nil {
-			t.Errorf("missing read = %q", got)
-		}
-		if got := fn(root, 4); got != nil {
-			t.Errorf("directory read = %q", got)
-		}
+	if got := readTailCapped(filepath.Join(root, "missing"), 4); got != nil {
+		t.Errorf("missing read = %q", got)
+	}
+	if got := readTailCapped(root, 4); got != nil {
+		t.Errorf("directory read = %q", got)
 	}
 }
 
