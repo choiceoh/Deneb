@@ -14,6 +14,7 @@ package mailanalysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -37,6 +38,20 @@ const (
 	// largeAttachmentTimeout bounds one download (a 20MB file over a slow link).
 	largeAttachmentTimeout = 120 * time.Second
 )
+
+var errLargeAttachmentTooLarge = errors.New("large attachment exceeds byte cap")
+
+type largeAttachmentTooLargeError struct {
+	limit int
+}
+
+func (e largeAttachmentTooLargeError) Error() string {
+	return fmt.Sprintf("exceeds %d-byte cap", e.limit)
+}
+
+func (e largeAttachmentTooLargeError) Is(target error) bool {
+	return target == errLargeAttachmentTooLarge
+}
 
 // largeAttachRule allows a download host, optionally constrained to a path
 // fragment that marks a real attachment download (not, e.g., an inline
@@ -145,6 +160,10 @@ func (s *Service) fetchLargeAttachmentsInto(ctx context.Context, msg *gmail.Mess
 		}
 		data, filename, err := downloadLargeAttachment(ctx, client, ref)
 		if err != nil {
+			if errors.Is(err, errLargeAttachmentTooLarge) {
+				s.log.Warn("대용량첨부 크기 상한 초과 — 스킵", "file", ref.Filename, "host", hostOf(ref.URL), "error", err, "limitBytes", maxLargeAttachmentBytes, "msg", msg.ID)
+				continue
+			}
 			// User-observable: a real attachment failed to archive. Surface it.
 			s.log.Error("대용량첨부 다운로드 실패", "file", ref.Filename, "host", hostOf(ref.URL), "error", err, "msg", msg.ID)
 			continue
@@ -182,12 +201,15 @@ func downloadLargeAttachment(ctx context.Context, client *http.Client, ref gmail
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("status %d", resp.StatusCode)
 	}
+	if resp.ContentLength > int64(maxLargeAttachmentBytes) {
+		return nil, "", largeAttachmentTooLargeError{limit: maxLargeAttachmentBytes}
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxLargeAttachmentBytes+1))
 	if err != nil {
 		return nil, "", err
 	}
 	if len(data) > maxLargeAttachmentBytes {
-		return nil, "", fmt.Errorf("exceeds %d-byte cap", maxLargeAttachmentBytes)
+		return nil, "", largeAttachmentTooLargeError{limit: maxLargeAttachmentBytes}
 	}
 	filename := dispositionFilename(resp.Header.Get("Content-Disposition"))
 	if filename == "" {

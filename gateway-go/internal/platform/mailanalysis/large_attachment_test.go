@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/platform/gmail"
@@ -100,6 +101,43 @@ func TestFetchLargeAttachmentsDeniesRedirectToUnallowedHost(t *testing.T) {
 	}
 }
 
+func TestFetchLargeAttachmentsOversizeCapWarnsWithoutError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", strconv.FormatInt(int64(maxLargeAttachmentBytes)+1, 10))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_LARGE_ATTACH_HOSTS", mustHost(t, srv.URL))
+
+	handler := &captureSlogHandler{}
+	s := &Service{log: slog.New(handler)}
+	msg := &gmail.MessageDetail{
+		ID: "m1",
+		LargeAttachments: []gmail.LargeAttachmentRef{{
+			URL:      srv.URL + "/too-large",
+			Filename: "oversize.zip",
+		}},
+	}
+	attBytes := map[string][]byte{}
+	s.fetchLargeAttachmentsInto(context.Background(), msg, attBytes)
+
+	if len(msg.Attachments) != 0 || len(attBytes) != 0 {
+		t.Fatalf("oversized large attachment must be skipped, got %d attachments and %d byte entries", len(msg.Attachments), len(attBytes))
+	}
+	var sawWarn bool
+	for _, record := range handler.records {
+		if record.Level >= slog.LevelError {
+			t.Fatalf("oversized large attachment should not log Error, got %s %q", record.Level, record.Message)
+		}
+		if record.Level == slog.LevelWarn && record.Message == "대용량첨부 크기 상한 초과 — 스킵" {
+			sawWarn = true
+		}
+	}
+	if !sawWarn {
+		t.Fatalf("expected oversize skip warning, got %#v", handler.records)
+	}
+}
+
 func TestFetchLargeAttachmentsIntoNoOpWhenNoLinks(t *testing.T) {
 	s := &Service{log: slog.Default()}
 	msg := &gmail.MessageDetail{ID: "m1"}
@@ -117,4 +155,25 @@ func mustHost(t *testing.T, raw string) string {
 		t.Fatal(err)
 	}
 	return u.Hostname()
+}
+
+type captureSlogHandler struct {
+	records []slog.Record
+}
+
+func (h *captureSlogHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h *captureSlogHandler) Handle(_ context.Context, record slog.Record) error {
+	h.records = append(h.records, record.Clone())
+	return nil
+}
+
+func (h *captureSlogHandler) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *captureSlogHandler) WithGroup(string) slog.Handler {
+	return h
 }
