@@ -296,19 +296,6 @@ func readTailCapped(path string, max int64) []byte {
 	return data
 }
 
-func readCapped(path string, max int64) []byte {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, max))
-	if err != nil {
-		return nil
-	}
-	return data
-}
-
 type diaryProcessState struct {
 	MemoryConsumedThrough string `json:"memoryConsumedThrough"`
 	Files                 map[string]struct {
