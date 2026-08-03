@@ -156,22 +156,15 @@ func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent
 	return ch
 }
 
-// sendSSE makes parser backpressure interruptible. Without the context arm, a
-// parser whose buffer fills after the protocol translator has observed a
-// terminal event can remain blocked forever even after the response body is
-// closed: closing a reader only interrupts reads, not a channel send.
-// startSSEPipeline owns the common streaming lifecycle shared by OpenAI and
-// Anthropic modes: response-body cancellation, raw SSE parsing, translation,
-// and deterministic cleanup. A pipeline-local parser context is canceled when
-// a translator returns early on a terminal protocol event, so buffered trailing
-// provider events cannot strand the parser goroutine.
-func startSSEPipeline(ctx context.Context, body io.ReadCloser, forward sseForwarder) <-chan StreamEvent {
-	return startSSEPipelineWithByteLimit(ctx, body, 0, forward)
-}
-
-// startSSEPipelineWithByteLimit preserves the shared cancellation/cleanup
-// lifecycle while bounding raw provider bytes before an unterminated SSE event
-// can grow the parser buffer without limit.
+// startSSEPipelineWithByteLimit owns the common streaming lifecycle shared by
+// OpenAI and Anthropic modes: response-body cancellation, raw SSE parsing,
+// translation, and deterministic cleanup. A pipeline-local parser context is
+// canceled when a translator returns early on a terminal protocol event, so
+// buffered trailing provider events cannot strand the parser goroutine.
+//
+// The byte limit bounds raw provider bytes before an unterminated SSE event can
+// grow the parser buffer without limit. A non-positive limit preserves the
+// parser's historical unlimited behavior.
 func startSSEPipelineWithByteLimit(ctx context.Context, body io.ReadCloser, maxBytes int, forward sseForwarder) <-chan StreamEvent {
 	parserCtx, cancelParser := context.WithCancel(ctx)
 	rawEvents := parseSSE(parserCtx, body, maxBytes)

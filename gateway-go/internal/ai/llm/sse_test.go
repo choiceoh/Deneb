@@ -142,7 +142,7 @@ func (r *countingReadCloser) Close() error {
 	return nil
 }
 
-func TestStartSSEPipeline_EarlyTerminalCleansParserAndClosesBodyOnce(t *testing.T) {
+func TestStartSSEPipelineWithByteLimit_EarlyTerminalCleansParserAndClosesBodyOnce(t *testing.T) {
 	var input strings.Builder
 	input.WriteString("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
 	for i := range rawSSEBufferSize + 32 {
@@ -154,7 +154,7 @@ func TestStartSSEPipeline_EarlyTerminalCleansParserAndClosesBodyOnce(t *testing.
 	rawCaptured := make(chan (<-chan StreamEvent), 1)
 	terminalSeen := make(chan struct{})
 	releaseForwarder := make(chan struct{})
-	out := startSSEPipeline(ctx, body, func(_ context.Context, raw <-chan StreamEvent, _ chan<- StreamEvent) {
+	out := startSSEPipelineWithByteLimit(ctx, body, 0, func(_ context.Context, raw <-chan StreamEvent, _ chan<- StreamEvent) {
 		rawCaptured <- raw
 		terminal := <-raw
 		if terminal.Type != "message_stop" {
