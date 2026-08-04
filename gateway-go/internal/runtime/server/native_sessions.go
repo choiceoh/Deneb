@@ -28,6 +28,12 @@ type resumableSessionTarget struct {
 }
 
 func resumableSessionForMarker(sessionKey string) (resumableSessionTarget, bool) {
+	// Delegated sub-agent runs are client: sessions (KindDirect) but are scratch
+	// workspaces, not user conversations — resuming one re-dispatches tools and
+	// can duplicate side effects (emails sent twice, files written twice).
+	if runtimesession.IsSpawnedChildKey(sessionKey) {
+		return resumableSessionTarget{}, false
+	}
 	if isNativeClientSessionKey(sessionKey) {
 		return resumableSessionTarget{Channel: "client"}, true
 	}

@@ -115,6 +115,11 @@ func (s *Server) initRunMarkerLifecycle() func() {
 				if sess == nil || sess.Kind != session.KindDirect {
 					return
 				}
+				// Sub-agent runs are KindDirect but ephemeral delegated work —
+				// same exclusion as idle-review and restore (IsSpawnedChildKey).
+				if session.IsSpawnedChildKey(e.Key) {
+					return
+				}
 				now := time.Now().UnixMilli()
 				m := session.RunMarker{
 					SessionKey:     e.Key,
