@@ -25,7 +25,8 @@ import (
 // is older than DENEB_SKILL_IDLE_REVIEW_AFTER (default 6h; "0" disables),
 // re-reviews the most recent real session's transcript through the exact same
 // fenced review path (evaluate gate, reviewer, liveness recording) as a
-// threshold fire.
+// threshold fire. Those still-running crons are candidates here, not just
+// context for the starvation — see idleReviewableSessionKey.
 //
 // Pacing: a review that actually runs updates liveness lastReviewAt, which
 // re-arms the staleness check naturally. Gate-rejected attempts (thin
@@ -86,11 +87,37 @@ func idleReviewDue(now time.Time, lastReviewAtMs int64, lastReviewOK bool, stale
 	return true
 }
 
-// idleReviewableSessionKey reports whether key is a real user-facing session
-// worth re-reviewing. Mirrors the usage-source gate's intent: client surfaces
-// qualify; cron/system/review forks (non-client prefixes), the dream session,
-// and puppet-seat test sessions never do.
+// idleReviewableSessionKey reports whether key is a session worth re-reviewing
+// for skill ideas. Two families qualify.
+//
+// Client surfaces — the user's own conversations — minus puppet seats,
+// delegated sub-agent runs, and the dream loop.
+//
+// Cron work lanes — mail analysis, the morning letter, the weekly audits. The
+// nudger counts tool calls inside live chat turns, so an autonomous lane can
+// never cross its threshold: this backstop is its ONLY path into skill review.
+// Excluding it cost the loop its whole real-work corpus. Measured 2026-08-05:
+// the eligible pool was 137 live-test transcripts against 9 real client ones
+// while 32 mail-analysis sessions sat permanently unreviewable, so the triage
+// input was smoke runs ("read a Makefile") that the gate correctly judged "no
+// durable reusable workflow" every time — L1 read as starved when it was only
+// mis-fed. A daily job's repeats collapse into the tracker's echo window, the
+// same way a re-walked client session does.
+//
+// Live-test transcripts are excluded from BOTH families (IsLiveTestSession):
+// the harness mints `client:lt-<pid>` keys that satisfied the client check and
+// then dominated the pool.
+//
+// The remaining autonomous lanes need no rule here — system:* (mailpoll, and
+// the skill-review forks whose own output must never re-enter),
+// submain:heartbeat and phone-event:* keep no transcript in this dir at all.
 func idleReviewableSessionKey(key string) bool {
+	if runtimesession.IsLiveTestSession(key) {
+		return false
+	}
+	if runtimesession.IsCronSession(key) {
+		return true
+	}
 	if !runtimesession.IsClientSession(key) {
 		return false
 	}
@@ -102,10 +129,7 @@ func idleReviewableSessionKey(key string) bool {
 	if runtimesession.IsSpawnedChildKey(key) {
 		return false
 	}
-	if strings.HasSuffix(key, ":dream") {
-		return false
-	}
-	return true
+	return !strings.HasSuffix(key, ":dream")
 }
 
 // recentRealSessionKeys lists the newest reviewable session keys from the

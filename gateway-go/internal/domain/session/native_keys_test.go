@@ -66,6 +66,27 @@ func TestWorkTypeForKeySeparatesConversationsFromSpawnedChildren(t *testing.T) {
 	}
 }
 
+// Live-test transcripts sit inside client: and are otherwise indistinguishable
+// from real chats, so every consumer that mines "real use" needs one predicate
+// to tell them apart — the smoke corpus outnumbered real sessions 15:1 in the
+// skill-review pool while each one looked like a user session.
+func TestIsLiveTestSessionSeparatesHarnessRunsFromRealUse(t *testing.T) {
+	t.Parallel()
+	for key, want := range map[string]bool{
+		"client:lt-3902894":     true, // mock_native_client.py, bare pid
+		"client:lt-3902894-6":   true, // …with the per-message counter
+		"lt-verify-card-3":      true, // ad-hoc probe
+		"livetest:think-ko":     true,
+		"client:main":           false,
+		"client:main:lt-report": false, // "lt-" only marks the harness at the front
+		"cron:morning-letter:1": false,
+	} {
+		if got := IsLiveTestSession(key); got != want {
+			t.Errorf("IsLiveTestSession(%q) = %v, want %v", key, got, want)
+		}
+	}
+}
+
 // The minter and the classifier must never drift: every key SpawnedChildKey
 // produces has to read back as a spawned child, including labels that carry
 // characters a raw key would have split into extra segments.
