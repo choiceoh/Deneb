@@ -49,15 +49,21 @@ func TestIdleReviewDueReturnsTrueWhenStaleOrNeverReviewed(t *testing.T) {
 	}
 }
 
-func TestIdleReviewableSessionKeyReturnsTrueOnlyForUserSessions(t *testing.T) {
+func TestIdleReviewableSessionKeyAcceptsUserAndCronWorkSessions(t *testing.T) {
 	cases := map[string]bool{
 		"client:main":                      true,
 		"client:main:abc123":               true,
 		"client:main:dream":                false, // dream loop, not a user surface
 		"client:puppet-worktree":           false, // puppet-seat test session
-		"cron:morning-letter:123":          false, // cron never nudges — same here
+		"cron:email-analysis-full:123":     true,  // work lane: never nudges, so this is its only path in
+		"cron:morning-letter:123":          true,
+		"cron:weekly-ref-audit:123":        true,
 		"system:skill-review:client:main":  false, // reviewing a review fork
+		"system:mailpoll":                  false, // keeps no transcript in this dir
+		"submain:heartbeat":                false,
+		"client:lt-3902894-6":              false, // live-test harness (mock_native_client.py)
 		"lt-verify-card-3":                 false, // live-test scratch session
+		"livetest:think-ko":                false,
 		"telegram:7074071666:propus-x:123": false, // retired channel prefix
 	}
 	for key, want := range cases {
@@ -80,16 +86,17 @@ func TestRecentRealSessionKeysReturnsNewestFilteredKeys(t *testing.T) {
 		}
 	}
 	write("client:main.jsonl", 3*time.Hour)
-	write("client:main:abc.jsonl", 1*time.Hour)   // newest reviewable
+	write("client:main:abc.jsonl", 2*time.Hour)   // newest reviewable client session
 	write("client:main:dream.jsonl", time.Minute) // excluded despite recency
-	write("cron:morning-letter:1.jsonl", time.Minute)
+	write("client:lt-4242-1.jsonl", time.Minute)  // live-test harness, excluded despite recency
+	write("cron:morning-letter:1.jsonl", 1*time.Hour)
 	write("notes.txt", time.Minute) // non-transcript file
 
 	got, err := recentRealSessionKeys(dir, 2)
 	if err != nil {
 		t.Fatalf("recentRealSessionKeys: %v", err)
 	}
-	want := []string{"client:main:abc", "client:main"}
+	want := []string{"cron:morning-letter:1", "client:main:abc"}
 	if len(got) != len(want) {
 		t.Fatalf("keys = %v, want %v", got, want)
 	}

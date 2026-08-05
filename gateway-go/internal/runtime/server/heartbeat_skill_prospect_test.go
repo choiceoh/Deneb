@@ -32,7 +32,8 @@ func TestSessionsOlderThan(t *testing.T) {
 }
 
 // reviewableSessionsByMtime lists reviewable sessions newest-first with mtimes,
-// applying the same client-only filter as the idle-review lane.
+// applying the same filter as the idle-review lane: client surfaces and cron
+// work lanes in, harness and puppet transcripts out.
 func TestReviewableSessionsByMtimeNewestFirstAndFiltered(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Now().Add(-time.Hour)
@@ -46,20 +47,22 @@ func TestReviewableSessionsByMtimeNewestFirstAndFiltered(t *testing.T) {
 		}
 	}
 	write("client:one.jsonl", base.Add(1*time.Second))
-	write("client:two.jsonl", base.Add(3*time.Second))      // newest reviewable
-	write("cron:system.jsonl", base.Add(5*time.Second))     // filtered: non-client
-	write("client:puppet-x.jsonl", base.Add(4*time.Second)) // filtered: puppet
-	write("notes.txt", base.Add(6*time.Second))             // filtered: not .jsonl
+	write("client:two.jsonl", base.Add(3*time.Second))
+	write("cron:email-analysis-full:9.jsonl", base.Add(5*time.Second)) // newest reviewable: a work lane
+	write("system:mailpoll.jsonl", base.Add(7*time.Second))            // filtered: keeps no reviewable transcript
+	write("client:lt-4242-1.jsonl", base.Add(6*time.Second))           // filtered: live-test harness
+	write("client:puppet-x.jsonl", base.Add(4*time.Second))            // filtered: puppet
+	write("notes.txt", base.Add(8*time.Second))                        // filtered: not .jsonl
 
 	got, err := reviewableSessionsByMtime(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("got %d reviewable sessions, want 2 (%v)", len(got), got)
+	if len(got) != 3 {
+		t.Fatalf("got %d reviewable sessions, want 3 (%v)", len(got), got)
 	}
-	if got[0].key != "client:two" || got[1].key != "client:one" {
-		t.Fatalf("order = %v, want newest-first [client:two, client:one]", got)
+	if got[0].key != "cron:email-analysis-full:9" || got[1].key != "client:two" || got[2].key != "client:one" {
+		t.Fatalf("order = %v, want newest-first [cron:email-analysis-full:9, client:two, client:one]", got)
 	}
 	if !(got[0].modMs > got[1].modMs) {
 		t.Errorf("mtimes not newest-first: %d then %d", got[0].modMs, got[1].modMs)
