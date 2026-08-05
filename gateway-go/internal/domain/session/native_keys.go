@@ -165,8 +165,10 @@ func IsCronSession(sessionKey string) bool {
 // rather than from real use. The harness mints `client:lt-<pid>[-<n>]`
 // (scripts/dev/mock_native_client.py) and ad-hoc probes use bare `lt-` /
 // `livetest:` keys — all three satisfy no other classifier, and the first
-// satisfies IsClientSession, which is how smoke transcripts came to outnumber
-// real ones 15:1 in the skill-review candidate pool (2026-08-05).
+// satisfies IsClientSession. A fresh key per run means smoke transcripts pile
+// up faster than real conversations do (those reuse client:main and mint one
+// key per conversation): 142 harness transcripts against 58 real client ones in
+// the skill-review candidate pool, measured 2026-08-05.
 func IsLiveTestSession(sessionKey string) bool {
 	return strings.HasPrefix(sessionKey, "client:lt-") ||
 		strings.HasPrefix(sessionKey, "lt-") ||
