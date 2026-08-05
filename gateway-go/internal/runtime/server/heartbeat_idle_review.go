@@ -96,21 +96,30 @@ func idleReviewDue(now time.Time, lastReviewAtMs int64, lastReviewOK bool, stale
 // Cron work lanes — mail analysis, the morning letter, the weekly audits. The
 // nudger counts tool calls inside live chat turns, so an autonomous lane can
 // never cross its threshold: this backstop is its ONLY path into skill review.
-// Excluding it cost the loop its whole real-work corpus. Measured 2026-08-05:
-// the eligible pool was 137 live-test transcripts against 9 real client ones
-// while 32 mail-analysis sessions sat permanently unreviewable, so the triage
-// input was smoke runs ("read a Makefile") that the gate correctly judged "no
-// durable reusable workflow" every time — L1 read as starved when it was only
-// mis-fed. A daily job's repeats collapse into the tracker's echo window, the
+// Excluding it cost the loop most of its real-work corpus. Measured over the
+// whole transcript dir on 2026-08-05: 200 eligible sessions, of which 142 were
+// live-test transcripts and 58 real client ones, while 81 cron work sessions
+// sat permanently unreviewable — so the triage input was smoke runs ("read a
+// Makefile") that the gate correctly judged "no durable reusable workflow"
+// every time, and L1 read as starved when it was only mis-fed. The rule below
+// takes the pool to 139 (81 cron + 58 client) — smaller, but every candidate is
+// real work. A daily job's repeats collapse into the tracker's echo window, the
 // same way a re-walked client session does.
 //
 // Live-test transcripts are excluded from BOTH families (IsLiveTestSession):
-// the harness mints `client:lt-<pid>` keys that satisfied the client check and
-// then dominated the pool.
+// the harness mints a fresh `client:lt-<pid>` per run, so smoke transcripts
+// accumulate far faster than real conversations (which reuse client:main and
+// mint one key per conversation) — that is how 142 of them came to outnumber
+// real client sessions 2.4:1 while satisfying the client check.
 //
-// The remaining autonomous lanes need no rule here — system:* (mailpoll, and
-// the skill-review forks whose own output must never re-enter),
-// submain:heartbeat and phone-event:* keep no transcript in this dir at all.
+// The remaining autonomous lanes need no rule here because they keep no
+// transcript in this dir: the mail poller's synthesis turn reuses one fixed
+// `system:mailpoll` key and is deliberately ephemeral so that transcript cannot
+// grow unbounded (server_chat_config.go), the groupware approval analysis is a
+// direct LLM call with no session at all, and submain:heartbeat / phone-event:*
+// likewise leave nothing to mine. Reaching those needs per-run keys or
+// persistence first, not a rule here. The skill-review forks under system: must
+// never re-enter regardless — that would loop the lane onto its own output.
 func idleReviewableSessionKey(key string) bool {
 	if runtimesession.IsLiveTestSession(key) {
 		return false
