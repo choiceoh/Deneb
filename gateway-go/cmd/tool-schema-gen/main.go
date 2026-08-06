@@ -98,6 +98,10 @@ func generate(tools []map[string]any, pkg, source string) string {
 			fmt.Fprintf(&b, "\t\t\"required\": %s,\n", emitStringSlice(req))
 		}
 
+		if anyOf, ok := tool["anyOf"].([]any); ok && len(anyOf) > 0 {
+			fmt.Fprintf(&b, "\t\t\"anyOf\": %s,\n", emitSchemaArray(anyOf, 2))
+		}
+
 		fmt.Fprintf(&b, "\t}\n}\n\n")
 
 		if mo, ok := tool["max_output"].(float64); ok {
@@ -157,12 +161,27 @@ func emitPropDef(def map[string]any, depth int) string {
 	return b.String()
 }
 
+func emitSchemaArray(items []any, depth int) string {
+	indent := strings.Repeat("\t", depth)
+	var b strings.Builder
+	b.WriteString("[]any{\n")
+	for _, item := range items {
+		if m, ok := item.(map[string]any); ok {
+			fmt.Fprintf(&b, "%s\t%s,\n", indent, emitPropDef(m, depth+1))
+			continue
+		}
+		fmt.Fprintf(&b, "%s\t%s,\n", indent, emitValue(item))
+	}
+	fmt.Fprintf(&b, "%s}", indent)
+	return b.String()
+}
+
 func emitFieldValue(key string, val any, depth int) string {
 	switch key {
 	case "type", "description":
 		s, _ := val.(string)
 		return goStr(s)
-	case "default", "minimum", "maximum", "minItems", "maxItems":
+	case "default", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems":
 		return emitValue(val)
 	case "enum", "required":
 		items, _ := val.([]any)
@@ -234,13 +253,15 @@ var fieldRank = map[string]int{
 	"default":              2,
 	"minimum":              3,
 	"maximum":              4,
-	"minItems":             5,
-	"maxItems":             6,
-	"enum":                 7,
-	"required":             8,
-	"properties":           9,
-	"items":                10,
-	"additionalProperties": 11,
+	"minLength":            5,
+	"maxLength":            6,
+	"minItems":             7,
+	"maxItems":             8,
+	"enum":                 9,
+	"required":             10,
+	"properties":           11,
+	"items":                12,
+	"additionalProperties": 13,
 }
 
 // orderedFieldKeys returns map keys sorted by fieldRank, then alphabetically.

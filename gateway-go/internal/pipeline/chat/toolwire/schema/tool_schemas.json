@@ -101,53 +101,62 @@
   "properties": {
    "file_path": {
     "type": "string",
-    "description": "The absolute path to the file to modify"
+    "description": "Absolute workspace file path to modify. Must be a file, not a directory; use read/grep first to inspect it",
+    "minLength": 1
    },
    "old_string": {
     "type": "string",
-    "description": "The text to replace (must be unique unless replace_all is true). When regex=true, treated as a regex pattern"
+    "description": "Exact text copied from read output. Required for normal, regex, and line modes; must be unique unless replace_all=true. Include indentation/surrounding context when needed. When regex=true, this is a regex pattern",
+    "minLength": 1
    },
    "new_string": {
     "type": "string",
-    "description": "The text to replace it with. When regex=true, supports $1/$2 backreferences"
+    "description": "Replacement text. Required with old_string or anchor; may be empty to delete the matched text/line. When regex=true, supports $1/$2 backreferences"
    },
    "replace_all": {
     "type": "boolean",
-    "description": "Replace all occurrences instead of requiring a unique match (default: false)",
+    "description": "Replace every old_string/regex match. Default false requires a unique match; use line or more context instead when only one occurrence should change",
     "default": false
    },
    "regex": {
     "type": "boolean",
-    "description": "Treat old_string as a regex pattern (default: false)",
+    "description": "Treat old_string as a regex pattern. Use only when a literal old_string is impractical; default false",
     "default": false
    },
    "line": {
     "type": "number",
-    "description": "Replace at a specific line number (1-based). When set, old_string matches only on this line",
+    "description": "Optional 1-based line number used with old_string. Replaces old_string only on this line; it does not replace the whole line",
     "minimum": 1
    },
    "anchor": {
     "type": "string",
-    "description": "Content-hash anchor from read(hashes=true) identifying the line to replace. Replaces the whole anchored line with new_string — no old_string needed. Errors if the anchor matches zero or multiple (identical) lines"
+    "description": "Content-hash anchor from read(hashes=true). Use anchor+new_string to replace the whole anchored line; no old_string needed. Re-read if anchors are stale. Errors if the anchor matches zero or multiple identical lines",
+    "minLength": 1
    },
    "anchor_end": {
     "type": "string",
-    "description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string (which may span multiple lines)"
+    "description": "Optional second anchor. With anchor set, replaces the inclusive line range anchor..anchor_end with new_string, which may span multiple lines",
+    "minLength": 1
    },
    "edits": {
     "type": "array",
-    "description": "배치 편집: 같은 파일에 여러 치환을 한 번에 적용 (순차 적용 — 뒤 항목은 앞 항목 결과를 본다). 전부 성공해야 기록되는 all-or-nothing. N회 호출 대비 토큰·턴 절약; 사용 시 old_string/new_string은 생략",
+    "description": "Batch mode for multiple replacements in the same file. Provide file_path and edits only; omit top-level old_string/new_string. Edits apply sequentially in memory and commit all-or-nothing",
+    "minItems": 1,
     "items": {
      "type": "object",
      "properties": {
       "old_string": {
-       "type": "string"
+       "type": "string",
+       "description": "Exact text to replace for this batch item; must be non-empty and unique unless this item has replace_all=true",
+       "minLength": 1
       },
       "new_string": {
-       "type": "string"
+       "type": "string",
+       "description": "Replacement text for this batch item; may be empty to delete the matched text"
       },
       "replace_all": {
-       "type": "boolean"
+       "type": "boolean",
+       "description": "Replace every occurrence for this batch item instead of requiring a unique match"
       }
      },
      "required": [
@@ -158,8 +167,26 @@
    }
   },
   "required": [
-   "file_path",
-   "new_string"
+   "file_path"
+  ],
+  "anyOf": [
+   {
+    "required": [
+     "old_string",
+     "new_string"
+    ]
+   },
+   {
+    "required": [
+     "anchor",
+     "new_string"
+    ]
+   },
+   {
+    "required": [
+     "edits"
+    ]
+   }
   ]
  },
  {

@@ -132,8 +132,14 @@ func TestGeneratedSchemasSatisfyRecursiveStructuralContract(t *testing.T) {
 
 func validateSchemaNode(t *testing.T, path string, node any) {
 	t.Helper()
+	validateSchemaNodeWithProperties(t, path, node, nil)
+}
+
+func validateSchemaNodeWithProperties(t *testing.T, path string, node any, inheritedProperties map[string]any) {
+	t.Helper()
 	switch value := node.(type) {
 	case map[string]any:
+		availableProperties := inheritedProperties
 		if rawType, ok := value["type"]; ok {
 			if typeName, ok := rawType.(string); ok {
 				switch typeName {
@@ -148,16 +154,21 @@ func validateSchemaNode(t *testing.T, path string, node any) {
 			if !ok {
 				t.Errorf("%s properties has type %T", path, propertiesRaw)
 			} else {
+				availableProperties = properties
 				for name, child := range properties {
 					if strings.TrimSpace(name) == "" {
 						t.Errorf("%s has blank property name", path)
 					}
-					validateSchemaNode(t, path+".properties."+name, child)
+					validateSchemaNodeWithProperties(t, path+".properties."+name, child, nil)
 				}
 				validateRequired(t, path, value["required"], properties)
 			}
 		} else if required := stringSlice(value["required"]); len(required) > 0 {
-			t.Errorf("%s declares required=%v without properties", path, required)
+			if availableProperties == nil {
+				t.Errorf("%s declares required=%v without properties", path, required)
+			} else {
+				validateRequired(t, path, value["required"], availableProperties)
+			}
 		}
 		if value["type"] == "array" {
 			if _, ok := value["items"]; !ok {
@@ -167,18 +178,23 @@ func validateSchemaNode(t *testing.T, path string, node any) {
 		if enumRaw, ok := value["enum"]; ok {
 			validateEnum(t, path, enumRaw)
 		}
-		for _, key := range []string{"items", "additionalProperties", "anyOf", "oneOf", "allOf", "$defs", "definitions"} {
+		for _, key := range []string{"items", "additionalProperties", "$defs", "definitions"} {
 			if child, ok := value[key]; ok {
-				validateSchemaNode(t, path+"."+key, child)
+				validateSchemaNodeWithProperties(t, path+"."+key, child, nil)
+			}
+		}
+		for _, key := range []string{"anyOf", "oneOf", "allOf"} {
+			if child, ok := value[key]; ok {
+				validateSchemaNodeWithProperties(t, path+"."+key, child, availableProperties)
 			}
 		}
 	case []any:
 		for i, child := range value {
-			validateSchemaNode(t, fmt.Sprintf("%s[%d]", path, i), child)
+			validateSchemaNodeWithProperties(t, fmt.Sprintf("%s[%d]", path, i), child, inheritedProperties)
 		}
 	case []map[string]any:
 		for i, child := range value {
-			validateSchemaNode(t, fmt.Sprintf("%s[%d]", path, i), child)
+			validateSchemaNodeWithProperties(t, fmt.Sprintf("%s[%d]", path, i), child, inheritedProperties)
 		}
 	case bool, string, float64, int, int64, nil:
 		// Scalar schema metadata.
@@ -187,7 +203,7 @@ func validateSchemaNode(t *testing.T, path string, node any) {
 		rv := reflect.ValueOf(node)
 		if rv.IsValid() && rv.Kind() == reflect.Slice {
 			for i := 0; i < rv.Len(); i++ {
-				validateSchemaNode(t, fmt.Sprintf("%s[%d]", path, i), rv.Index(i).Interface())
+				validateSchemaNodeWithProperties(t, fmt.Sprintf("%s[%d]", path, i), rv.Index(i).Interface(), inheritedProperties)
 			}
 			return
 		}
@@ -274,7 +290,7 @@ func TestRequiredFieldsMatchMinimalSchemaContract(t *testing.T) {
 	want := map[string][]string{
 		"read":             {"file_path"},
 		"write":            {"file_path", "content"},
-		"edit":             {"file_path", "new_string"},
+		"edit":             {"file_path"},
 		"grep":             {"pattern"},
 		"exec":             {"command"},
 		"sessions_spawn":   {"task"},
@@ -302,6 +318,38 @@ func TestRequiredFieldsMatchMinimalSchemaContract(t *testing.T) {
 				t.Fatalf("required = %#v, want %#v", got, required)
 			}
 		})
+	}
+}
+
+func TestEditSchemaRequiresOneEditMode(t *testing.T) {
+	s := schema.EditToolSchema()
+	alternatives, ok := s["anyOf"].([]any)
+	if !ok {
+		t.Fatalf("edit schema anyOf = %T, want []any", s["anyOf"])
+	}
+
+	got := make([][]string, 0, len(alternatives))
+	for _, raw := range alternatives {
+		alt, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("edit schema anyOf alternative = %T, want map[string]any", raw)
+		}
+		got = append(got, stringSlice(alt["required"]))
+	}
+
+	want := [][]string{
+		{"old_string", "new_string"},
+		{"anchor", "new_string"},
+		{"edits"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("edit anyOf required = %#v, want %#v", got, want)
+	}
+
+	props := s["properties"].(map[string]any)
+	edits := props["edits"].(map[string]any)
+	if edits["minItems"] != 1 {
+		t.Fatalf("edit edits.minItems = %v, want 1", edits["minItems"])
 	}
 }
 
