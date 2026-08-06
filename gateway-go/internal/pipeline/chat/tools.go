@@ -47,6 +47,7 @@ type ToolRegistry struct {
 	spillStore     tooldeps.SpilloverStore // optional; spills large tool results to disk
 	provenanceRoot string                  // optional workspace root for content-free file effect metadata
 	cachedLLMTools []llm.Tool              // cached tool list; invalidated on RegisterTool
+	catalogRev     uint64                  // increments on registration; used by fetch_tools search caches
 }
 
 // NewToolRegistry creates an empty tool registry.
@@ -86,6 +87,7 @@ func (r *ToolRegistry) RegisterTool(def ToolDef) {
 	}
 	r.tools[def.Name] = def
 	r.cachedLLMTools = nil // invalidate cache
+	r.catalogRev++
 }
 
 // Execute runs the named tool. Returns an error if the tool is not found.
@@ -814,6 +816,15 @@ func (r *ToolRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
 		}
 	}
 	return out
+}
+
+// DeferredCatalogRevision returns a monotonic registry version for cached
+// deferred-tool search views. It advances on every registration because a
+// replacement can move a tool into or out of the deferred catalog.
+func (r *ToolRegistry) DeferredCatalogRevision() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.catalogRev
 }
 
 // DeferredToolDef returns the ToolDef for a deferred tool, or false if not found/not deferred.
