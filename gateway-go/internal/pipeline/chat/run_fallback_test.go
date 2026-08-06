@@ -396,6 +396,12 @@ func TestRunAgentWithFallback_FailedRoleLogSkipsUnassignedRungs(t *testing.T) {
 	if !strings.Contains(logs, "failedRole=coding nextRole=lightweight") {
 		t.Errorf("second walk line should advance the blame to coding:\n%s", logs)
 	}
+	if strings.Contains(logs, `level=ERROR msg="fallback also failed"`) {
+		t.Errorf("fallback rung failure logged at error level; final run failure is surfaced by handleRunError:\n%s", logs)
+	}
+	if !strings.Contains(logs, `level=WARN msg="fallback also failed"`) {
+		t.Errorf("fallback rung failure should remain visible as warn:\n%s", logs)
+	}
 }
 
 // resultRanSideEffectingTool must treat only the read-only allowlist as

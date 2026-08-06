@@ -625,7 +625,7 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 			// budget says nothing about the model's health.
 			t.deps.registry.RecordModelFailure(fbCfg.Model)
 		}
-		t.logger.Error("fallback also failed",
+		t.logger.Warn("fallback also failed",
 			"role", string(fbRole), "model", fbCfg.Model, "error", t.runErr)
 	}
 }
