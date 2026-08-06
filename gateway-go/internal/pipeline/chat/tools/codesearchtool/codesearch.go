@@ -1,4 +1,4 @@
-package tools
+package codesearchtool
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/embedding"
 	airerank "github.com/choiceoh/deneb/gateway-go/internal/ai/rerank"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/codesearch"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
@@ -24,7 +25,7 @@ import (
 // codesearch CLI does — no dep threading. The index lives in <repo>/.codegraph
 // (built by `make codesearch-index`); when absent, the tool returns guidance
 // instead of an error (expected state on a fresh checkout).
-func ToolCodeSearch(workspaceDir string) ToolFunc {
+func ToolCodeSearch(workspaceDir string) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
 			Query string `json:"query"`
