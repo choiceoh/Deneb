@@ -10,8 +10,9 @@ func TestGenerateOrdersSchemasAndEmitsBudgets(t *testing.T) {
 		"name":       "read_file",
 		"max_output": float64(1200),
 		"required":   []any{"path"},
+		"anyOf":      []any{map[string]any{"required": []any{"path"}}},
 		"properties": map[string]any{
-			"path":  map[string]any{"description": "file path", "type": "string"},
+			"path":  map[string]any{"description": "file path", "type": "string", "minLength": float64(1)},
 			"limit": map[string]any{"maximum": float64(100), "default": float64(20), "type": "integer"},
 		},
 	}}
@@ -19,7 +20,8 @@ func TestGenerateOrdersSchemasAndEmitsBudgets(t *testing.T) {
 	got := generate(tools, "tools", "schemas.json")
 	for _, want := range []string{
 		"func ReadFileToolSchema()", `"required": []string{"path"}`,
-		`"default": 20`, `"maximum": 100`, `"read_file": 1200`,
+		`"default": 20`, `"maximum": 100`, `"minLength": 1`,
+		`"anyOf": []any{`, `"read_file": 1200`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("generated output missing %q\n%s", want, got)

@@ -36,7 +36,7 @@ func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, ext
 	// edits are rare. read/write/grep stay eager; an editing turn fetches this.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "edit",
-		Description: "Search-and-replace in a file. old_string must be unique unless replace_all=true. Read first to find the exact string",
+		Description: "Edit one workspace file after reading it: pass file_path plus exactly one mode: old_string+new_string (exact unique text; add replace_all/line/regex only when needed), anchor+new_string (from read hashes=true, whole-line/range replacement), or edits=[{old_string,new_string}] for an all-or-nothing batch. Use write for brand-new or whole-file rewrites.",
 		InputSchema: schema.EditToolSchema(),
 		Fn:          filesystem.ToolEdit(workspaceDir),
 		Deferred:    true,
