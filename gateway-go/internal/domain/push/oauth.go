@@ -70,7 +70,7 @@ func (ts *tokenSource) accessToken(ctx context.Context) (string, error) {
 	// (it carries the access token on success).
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("push: token endpoint returned HTTP %d", resp.StatusCode)
+		return "", tokenEndpointStatusError{status: resp.StatusCode}
 	}
 	var out struct {
 		AccessToken string `json:"access_token"`
@@ -89,4 +89,12 @@ func (ts *tokenSource) accessToken(ctx context.Context) (string, error) {
 	}
 	ts.expiry = now.Add(ttl)
 	return ts.token, nil
+}
+
+type tokenEndpointStatusError struct {
+	status int
+}
+
+func (e tokenEndpointStatusError) Error() string {
+	return fmt.Sprintf("push: token endpoint returned HTTP %d", e.status)
 }

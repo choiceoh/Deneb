@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,7 +28,10 @@ type SendResult struct {
 	// (HTTP 401/403). The whole sender is broken until the operator fixes the
 	// service account; do NOT prune the device token in this case.
 	AuthFailed bool
-	Err        error
+	// Transient is true for retryable external failures (network/DNS, rate
+	// limit, 5xx). These do not prove a bad token or broken credentials.
+	Transient bool
+	Err       error
 }
 
 // FCMSender sends notifications via the FCM HTTP v1 API.
@@ -57,6 +61,14 @@ func NewFCMSender(cfg Config) (*FCMSender, error) {
 // ProjectID returns the Firebase project ID parsed from the credentials.
 func (s *FCMSender) ProjectID() string { return s.projectID }
 
+// Ready probes whether the sender can currently mint an access token. It avoids a
+// device-token send, but still exercises the OAuth dependency the real FCM path
+// needs before the native client may safely hand background delivery to FCM.
+func (s *FCMSender) Ready(ctx context.Context) error {
+	_, err := s.ts.accessToken(ctx)
+	return err
+}
+
 // Send delivers one notification to a single device token as a DATA-ONLY
 // message: title/body ride in `data` and there is deliberately no
 // `notification` block. A `notification` payload is rendered by the system
@@ -70,7 +82,10 @@ func (s *FCMSender) ProjectID() string { return s.projectID }
 func (s *FCMSender) Send(ctx context.Context, deviceToken, title, body string, data map[string]string) SendResult {
 	accessToken, err := s.ts.accessToken(ctx)
 	if err != nil {
-		return SendResult{Err: err}
+		if tokenErrorAuthFailed(err) {
+			return SendResult{AuthFailed: true, Err: err}
+		}
+		return SendResult{Transient: true, Err: err}
 	}
 
 	payloadData := make(map[string]string, len(data)+2)
@@ -104,7 +119,7 @@ func (s *FCMSender) Send(ctx context.Context, deviceToken, title, body string, d
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return SendResult{Err: fmt.Errorf("push: send request failed: %w", err)}
+		return SendResult{Transient: true, Err: fmt.Errorf("push: send request failed: %w", err)}
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
@@ -118,8 +133,8 @@ func fcmSendEndpoint(base, projectID string) string {
 
 // classifyFCMResponse maps an FCM HTTP v1 response to a SendResult. We only
 // prune on clear token-death signals; an ambiguous 400 (which can also be a
-// payload bug on our side) is treated as transient so a single mistake can't
-// wipe every registered device.
+// payload bug on our side) is not pruned, but is not downgraded as external
+// unavailability either.
 func classifyFCMResponse(status int, body []byte) SendResult {
 	if status == http.StatusOK {
 		return SendResult{OK: true}
@@ -135,8 +150,35 @@ func classifyFCMResponse(status int, body []byte) SendResult {
 	if status == http.StatusNotFound {
 		return SendResult{Permanent: true, Err: fmt.Errorf("push: FCM rejected token (HTTP 404)")}
 	}
-	// 400 INVALID_ARGUMENT (ambiguous), 429, 5xx, etc. — transient, keep token.
-	return SendResult{Err: fmt.Errorf("push: FCM transient error (HTTP %d, %s)", status, code)}
+	if isRetryableHTTPStatus(status) {
+		return SendResult{Transient: true, Err: fmt.Errorf("push: FCM transient error (HTTP %d, %s)", status, code)}
+	}
+	// 400 INVALID_ARGUMENT is ambiguous: it can be a payload bug on our side, so
+	// keep the token but still let the notifier escalate a total failure as Error.
+	return SendResult{Err: fmt.Errorf("push: FCM send error (HTTP %d, %s)", status, code)}
+}
+
+func tokenErrorAuthFailed(err error) bool {
+	var statusErr tokenEndpointStatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	return !isRetryableHTTPStatus(statusErr.status)
+}
+
+func isRetryableHTTPStatus(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		529: // Site overloaded (used by some API gateways).
+		return true
+	default:
+		return false
+	}
 }
 
 // fcmMessagingErrorCode extracts the canonical FCM error code (e.g.

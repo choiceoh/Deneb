@@ -18,23 +18,25 @@ func TestClassifyFCMResponseParsesStatusIntoOutcome(t *testing.T) {
 		wantOK   bool
 		wantPrm  bool
 		wantAuth bool
+		wantTmp  bool
 	}{
-		{"ok", 200, `{"name":"projects/p/messages/1"}`, true, false, false},
-		{"unauthorized", 401, `{"error":{"status":"UNAUTHENTICATED"}}`, false, false, true},
-		{"forbidden", 403, `{"error":{"status":"PERMISSION_DENIED"}}`, false, false, true},
-		{"unregistered 404", 404, `{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}`, false, true, false},
-		{"sender mismatch", 403, `{"error":{"status":"PERMISSION_DENIED","details":[{"errorCode":"SENDER_ID_MISMATCH"}]}}`, false, false, true},
-		{"plain 404", 404, `{}`, false, true, false},
-		{"ambiguous 400 not pruned", 400, `{"error":{"status":"INVALID_ARGUMENT"}}`, false, false, false},
-		{"server error transient", 503, `{}`, false, false, false},
-		{"rate limited transient", 429, `{}`, false, false, false},
+		{"ok", 200, `{"name":"projects/p/messages/1"}`, true, false, false, false},
+		{"unauthorized", 401, `{"error":{"status":"UNAUTHENTICATED"}}`, false, false, true, false},
+		{"forbidden", 403, `{"error":{"status":"PERMISSION_DENIED"}}`, false, false, true, false},
+		{"unregistered 404", 404, `{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}`, false, true, false, false},
+		{"sender mismatch", 403, `{"error":{"status":"PERMISSION_DENIED","details":[{"errorCode":"SENDER_ID_MISMATCH"}]}}`, false, false, true, false},
+		{"plain 404", 404, `{}`, false, true, false, false},
+		{"ambiguous 400 not pruned", 400, `{"error":{"status":"INVALID_ARGUMENT"}}`, false, false, false, false},
+		{"server error transient", 503, `{}`, false, false, false, true},
+		{"rate limited transient", 429, `{}`, false, false, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			res := classifyFCMResponse(tc.status, []byte(tc.body))
-			if res.OK != tc.wantOK || res.Permanent != tc.wantPrm || res.AuthFailed != tc.wantAuth {
-				t.Errorf("status %d: OK=%v Permanent=%v Auth=%v, want OK=%v Permanent=%v Auth=%v",
-					tc.status, res.OK, res.Permanent, res.AuthFailed, tc.wantOK, tc.wantPrm, tc.wantAuth)
+			if res.OK != tc.wantOK || res.Permanent != tc.wantPrm || res.AuthFailed != tc.wantAuth || res.Transient != tc.wantTmp {
+				t.Errorf("status %d: OK=%v Permanent=%v Auth=%v Transient=%v, want OK=%v Permanent=%v Auth=%v Transient=%v",
+					tc.status, res.OK, res.Permanent, res.AuthFailed, res.Transient,
+					tc.wantOK, tc.wantPrm, tc.wantAuth, tc.wantTmp)
 			}
 		})
 	}
@@ -187,6 +189,45 @@ func TestFCMSender_Send_AuthFailure(t *testing.T) {
 	res := s.Send(context.Background(), "device-1", "t", "b", nil)
 	if !res.AuthFailed {
 		t.Fatalf("want AuthFailed, got %+v", res)
+	}
+}
+
+func TestFCMSenderSendClassifiesTokenEndpointFailures(t *testing.T) {
+	cases := []struct {
+		name          string
+		status        int
+		wantAuth      bool
+		wantTransient bool
+	}{
+		{"auth", http.StatusBadRequest, true, false},
+		{"rate limit", http.StatusTooManyRequests, false, true},
+		{"service unavailable", http.StatusServiceUnavailable, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{"error":"do-not-log"}`))
+			}))
+			defer tokenSrv.Close()
+			fcmSrv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("FCM send endpoint should not be called when token minting fails")
+			}))
+			defer fcmSrv.Close()
+
+			s := newTestSender(t, tokenSrv, fcmSrv)
+			res := s.Send(context.Background(), "device-1", "t", "b", nil)
+			if res.AuthFailed != tc.wantAuth || res.Transient != tc.wantTransient {
+				t.Fatalf("AuthFailed=%v Transient=%v, want AuthFailed=%v Transient=%v",
+					res.AuthFailed, res.Transient, tc.wantAuth, tc.wantTransient)
+			}
+			if res.Err == nil {
+				t.Fatal("expected classified error")
+			}
+			if strings.Contains(res.Err.Error(), "do-not-log") {
+				t.Fatalf("token response body leaked in error: %v", res.Err)
+			}
+		})
 	}
 }
 

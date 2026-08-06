@@ -69,7 +69,7 @@ func TestPushRegister_WithIdentity(t *testing.T) {
 
 func TestPushRegisterReturnsDeliveryEnabledWhenSenderConfigured(t *testing.T) {
 	store := &fakePushStore{}
-	h := pushRegister(PushDeps{Store: store, DeliveryEnabled: func() bool { return true }})
+	h := pushRegister(PushDeps{Store: store, DeliveryEnabled: func(context.Context) bool { return true }})
 	ctx := clientauth.WithContext(context.Background(), sampleIdentity())
 
 	got := decodePayload(t, h(ctx, newPushReq(t, "miniapp.push.register",
