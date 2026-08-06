@@ -19,7 +19,10 @@ import (
 // chat.ToolRegistry: DeferredToolDef/DeferredSummaries only surface tools that
 // are Deferred and not Hidden, so tests exercise a realistic catalog.
 type fakeFetchRegistry struct {
-	defs map[string]toolport.ToolDef
+	defs         map[string]toolport.ToolDef
+	revision     uint64
+	summaryCalls int
+	toolDefCalls int
 }
 
 type fetchSemanticEmbedder struct {
@@ -92,6 +95,7 @@ func (e *fetchSemanticEmbedder) snapshotKinds() []string {
 }
 
 func (f *fakeFetchRegistry) DeferredToolDef(name string) (toolport.ToolDef, bool) {
+	f.toolDefCalls++
 	d, ok := f.defs[name]
 	if !ok || !d.Deferred {
 		return toolport.ToolDef{}, false
@@ -100,6 +104,7 @@ func (f *fakeFetchRegistry) DeferredToolDef(name string) (toolport.ToolDef, bool
 }
 
 func (f *fakeFetchRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
+	f.summaryCalls++
 	var out []toolport.DeferredToolSummary
 	for _, d := range f.defs {
 		if d.Deferred && !d.Hidden {
@@ -109,6 +114,15 @@ func (f *fakeFetchRegistry) DeferredSummaries() []toolport.DeferredToolSummary {
 	// Stable order so map iteration doesn't make tests flaky.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+func (f *fakeFetchRegistry) DeferredCatalogRevision() uint64 {
+	return f.revision
+}
+
+func (f *fakeFetchRegistry) registerForTest(def toolport.ToolDef) {
+	f.defs[def.Name] = def
+	f.revision++
 }
 
 func mustJSON(t *testing.T, v any) json.RawMessage {
@@ -188,6 +202,53 @@ func TestFetchTools_ByQueryFindsSemanticOnlyToolAndCachesCatalog(t *testing.T) {
 	}
 	if want := []string{"passage", "query", "query"}; !slices.Equal(embedder.snapshotKinds(), want) {
 		t.Fatalf("embedding roles/cache = %v, want %v", embedder.snapshotKinds(), want)
+	}
+}
+
+func TestFetchTools_QuerySearchCatalogCachesAndInvalidatesByRevision(t *testing.T) {
+	reg := &fakeFetchRegistry{
+		defs: map[string]toolport.ToolDef{
+			"mail_archive": {Name: "mail_archive", Description: "Read email from the local archive", Deferred: true},
+			"storage":      {Name: "storage", Description: "Manage object buckets", Deferred: true},
+		},
+	}
+	fn := ToolFetchTools(reg)
+	input := mustJSON(t, map[string]any{"query": "not-present"})
+
+	for range 2 {
+		out, err := fn(context.Background(), input)
+		if err != nil {
+			t.Fatalf("fetch query: %v", err)
+		}
+		if !strings.Contains(out, "No deferred tools match") {
+			t.Fatalf("expected no-match output, got: %s", out)
+		}
+	}
+	if reg.summaryCalls != 1 {
+		t.Fatalf("DeferredSummaries calls = %d, want 1", reg.summaryCalls)
+	}
+	if reg.toolDefCalls != 2 {
+		t.Fatalf("DeferredToolDef calls = %d, want 2", reg.toolDefCalls)
+	}
+
+	reg.registerForTest(toolport.ToolDef{
+		Name:        "param_tool",
+		Description: "Parameter-only search target",
+		Deferred:    true,
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"needle_param": map[string]any{"type": "string"},
+			},
+		},
+	})
+	out, err := fn(context.Background(), mustJSON(t, map[string]any{"query": "needle_param"}))
+	if err != nil {
+		t.Fatalf("fetch after revision change: %v", err)
+	}
+	assertActivated(t, out, "param_tool")
+	if reg.summaryCalls != 2 {
+		t.Fatalf("DeferredSummaries calls after invalidation = %d, want 2", reg.summaryCalls)
 	}
 }
 

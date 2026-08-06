@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/embedindex"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -24,6 +25,10 @@ import (
 type FetchToolsRegistry interface {
 	DeferredToolDef(name string) (toolport.ToolDef, bool)
 	DeferredSummaries() []toolport.DeferredToolSummary
+}
+
+type fetchToolsCatalogRevisioner interface {
+	DeferredCatalogRevision() uint64
 }
 
 // FetchToolReranker is an optional cross-encoder used only after lexical/dense
@@ -47,12 +52,13 @@ func ToolFetchTools(registry FetchToolsRegistry, embedders ...embedindex.Embedde
 // discovery. Explicit tool names bypass both semantic search and reranking.
 func ToolFetchToolsWithReranker(registry FetchToolsRegistry, embedder embedindex.Embedder, reranker FetchToolReranker) toolport.ToolFunc {
 	semantic := newFetchToolSemanticSearch(embedder)
+	catalog := newFetchToolSearchCatalog(registry)
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
-		return runFetchTools(ctx, input, registry, semantic, reranker)
+		return runFetchTools(ctx, input, registry, catalog, semantic, reranker)
 	}
 }
 
-func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToolsRegistry, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) (string, error) {
+func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToolsRegistry, catalog *fetchToolSearchCatalog, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) (string, error) {
 	if err := validateFetchToolsContext(ctx); err != nil {
 		return "", err
 	}
@@ -62,7 +68,7 @@ func runFetchTools(ctx context.Context, input json.RawMessage, registry FetchToo
 	}
 
 	access := fetchToolAccessFromContext(ctx)
-	names := selectFetchToolNames(ctx, request, registry, access, semantic, reranker)
+	names := selectFetchToolNames(ctx, request, catalog, access, semantic, reranker)
 	if request.selectsByQuery() && len(names) == 0 {
 		return fmt.Sprintf("No deferred tools match query %q.", request.Query), nil
 	}
@@ -124,11 +130,11 @@ func (a fetchToolAccess) allows(name string) bool {
 
 // selectFetchToolNames gives explicit names precedence. Query selection ranks
 // whole-token matches, then appends substring-only matches as a recall floor.
-func selectFetchToolNames(ctx context.Context, request fetchToolsRequest, registry FetchToolsRegistry, access fetchToolAccess, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) []string {
+func selectFetchToolNames(ctx context.Context, request fetchToolsRequest, catalog *fetchToolSearchCatalog, access fetchToolAccess, semantic *fetchToolSemanticSearch, reranker FetchToolReranker) []string {
 	if !request.selectsByQuery() {
 		return request.Names
 	}
-	docs := deferredToolSearchDocs(registry, access)
+	docs := filterFetchToolDocs(catalog.docs(), access)
 	poolLimit := searchResultLimit
 	if reranker != nil {
 		poolLimit = fetchToolRerankCandidateLimit
@@ -154,15 +160,124 @@ func clipFetchToolNames(names []string, limit int) []string {
 	return names
 }
 
-func deferredToolSearchDocs(registry FetchToolsRegistry, access fetchToolAccess) []searchDoc {
-	summaries := registry.DeferredSummaries()
+type fetchToolSearchCatalog struct {
+	registry FetchToolsRegistry
+
+	mu          sync.RWMutex
+	ready       bool
+	revision    uint64
+	fingerprint string
+	entries     []searchDoc
+}
+
+func newFetchToolSearchCatalog(registry FetchToolsRegistry) *fetchToolSearchCatalog {
+	return &fetchToolSearchCatalog{registry: registry}
+}
+
+func (c *fetchToolSearchCatalog) docs() []searchDoc {
+	if c == nil || c.registry == nil {
+		return nil
+	}
+	if revision, ok := fetchToolCatalogRevision(c.registry); ok {
+		if docs, ok := c.docsForRevision(revision); ok {
+			return docs
+		}
+		return c.rebuildVersioned(revision)
+	}
+
+	summaries := c.registry.DeferredSummaries()
+	fingerprint := fetchToolSummariesFingerprint(summaries)
+	if docs, ok := c.docsForFingerprint(fingerprint); ok {
+		return docs
+	}
+	return c.rebuildUnversioned(fingerprint, summaries)
+}
+
+func (c *fetchToolSearchCatalog) docsForRevision(revision uint64) ([]searchDoc, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if !c.ready || c.revision != revision {
+		return nil, false
+	}
+	return c.entries, true
+}
+
+func (c *fetchToolSearchCatalog) docsForFingerprint(fingerprint string) ([]searchDoc, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if !c.ready || c.fingerprint != fingerprint {
+		return nil, false
+	}
+	return c.entries, true
+}
+
+func (c *fetchToolSearchCatalog) rebuildVersioned(revision uint64) []searchDoc {
+	summaries := c.registry.DeferredSummaries()
+	docs := c.buildDocs(summaries)
+	if latest, ok := fetchToolCatalogRevision(c.registry); ok && latest != revision {
+		revision = latest
+		summaries = c.registry.DeferredSummaries()
+		docs = c.buildDocs(summaries)
+	}
+
+	c.mu.Lock()
+	c.ready = true
+	c.revision = revision
+	c.fingerprint = ""
+	c.entries = docs
+	c.mu.Unlock()
+	return docs
+}
+
+func (c *fetchToolSearchCatalog) rebuildUnversioned(fingerprint string, summaries []toolport.DeferredToolSummary) []searchDoc {
+	docs := c.buildDocs(summaries)
+	c.mu.Lock()
+	c.ready = true
+	c.revision = 0
+	c.fingerprint = fingerprint
+	c.entries = docs
+	c.mu.Unlock()
+	return docs
+}
+
+func (c *fetchToolSearchCatalog) buildDocs(summaries []toolport.DeferredToolSummary) []searchDoc {
 	docs := make([]searchDoc, 0, len(summaries))
 	for _, summary := range summaries {
-		if access.allows(summary.Name) {
-			docs = append(docs, deferredToolSearchDoc(registry, summary))
-		}
+		docs = append(docs, deferredToolSearchDoc(c.registry, summary))
 	}
 	return docs
+}
+
+func fetchToolCatalogRevision(registry FetchToolsRegistry) (uint64, bool) {
+	revisioner, ok := registry.(fetchToolsCatalogRevisioner)
+	if !ok {
+		return 0, false
+	}
+	return revisioner.DeferredCatalogRevision(), true
+}
+
+func fetchToolSummariesFingerprint(summaries []toolport.DeferredToolSummary) string {
+	var b strings.Builder
+	for _, summary := range summaries {
+		b.WriteString(summary.Name)
+		b.WriteByte('\x00')
+		b.WriteString(summary.Description)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func filterFetchToolDocs(docs []searchDoc, access fetchToolAccess) []searchDoc {
+	if access.allowed == nil {
+		return docs
+	}
+	filtered := make([]searchDoc, 0, len(docs))
+	for _, doc := range docs {
+		if access.allows(doc.name) {
+			filtered = append(filtered, doc)
+		}
+	}
+	return filtered
 }
 
 func deferredToolSearchDoc(registry FetchToolsRegistry, summary toolport.DeferredToolSummary) searchDoc {
