@@ -2,6 +2,7 @@ package push
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -74,6 +75,10 @@ func TestTokenSource_Non200IsError(t *testing.T) {
 	_, err := ts.accessToken(context.Background())
 	if err == nil {
 		t.Fatal("expected error on non-200")
+	}
+	var statusErr tokenEndpointStatusError
+	if !errors.As(err, &statusErr) || statusErr.status != http.StatusBadRequest {
+		t.Fatalf("status error = %#v, want HTTP 400", err)
 	}
 	if got := err.Error(); strings.Contains(got, "do-not-log") || strings.Contains(got, "invalid_grant") {
 		t.Errorf("error leaks response body: %v", err)

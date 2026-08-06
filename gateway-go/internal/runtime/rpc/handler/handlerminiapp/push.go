@@ -19,15 +19,12 @@ type PushTokenStore interface {
 // PushDeps wires the push registration methods.
 type PushDeps struct {
 	Store PushTokenStore
-	// DeliveryEnabled reports whether the FCM sender is actually configured
-	// (server credentials loaded), i.e. whether a registered token will ever
-	// receive a delivery. Late-bound closure: evaluated per request so wiring
-	// order against the notifier setup does not matter. The native client uses
-	// this to decide whether background-Doze mode is safe (battery doc §3.1 —
-	// tokens accumulate even while the sender is dormant, so registration
-	// success alone must not be read as "delivery works"). Nil means unknown,
-	// reported as false.
-	DeliveryEnabled func() bool
+	// DeliveryEnabled reports whether the FCM handoff is currently usable
+	// (credentials loaded and its OAuth dependency reachable). Late-bound closure:
+	// evaluated per request so wiring order against the notifier setup does not
+	// matter. The native client uses this to decide whether background-Doze mode
+	// is safe (battery doc section 3.1). Nil means unknown, reported as false.
+	DeliveryEnabled func(context.Context) bool
 }
 
 // maxPushTokenLen caps a registration ID to a sane bound. FCM tokens are ~160+
@@ -64,7 +61,7 @@ func pushRegister(deps PushDeps) rpcutil.HandlerFunc {
 		if err != nil {
 			return rpcerr.WrapUnavailable("push token registration failed", err).Response(req.ID)
 		}
-		delivery := deps.DeliveryEnabled != nil && deps.DeliveryEnabled()
+		delivery := deps.DeliveryEnabled != nil && deps.DeliveryEnabled(ctx)
 		return rpcutil.RespondOK(req.ID, map[string]any{"ok": true, "count": count, "delivery": delivery})
 	})
 }

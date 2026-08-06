@@ -438,11 +438,13 @@ func (s *Server) earlyNativeClientMethods(hub *rpcutil.GatewayHub, capabilities 
 		handlerobservatory.MiniappMethods(capabilities.observatory),
 		s.earlyMiniappGatewayMethods(hub),
 		capabilities.miniapp,
-		// DeliveryEnabled keeps the client on background SSE when device tokens
-		// exist but the server has no configured FCM sender.
+		// DeliveryEnabled keeps the client on background SSE when FCM is missing
+		// or its OAuth dependency is currently unreachable.
 		handlerminiapp.PushMethods(handlerminiapp.PushDeps{
-			Store:           s.pushTokenStore,
-			DeliveryEnabled: func() bool { return s.pushNotifier != nil },
+			Store: s.pushTokenStore,
+			DeliveryEnabled: func(ctx context.Context) bool {
+				return s.pushNotifier != nil && s.pushNotifier.DeliveryEnabled(ctx)
+			},
 		}),
 		handlerminiapp.WormholeMethods(handlerminiapp.WormholeDeps{}),
 		handlerminiapp.WorkFeedMethods(handlerminiapp.WorkFeedDeps{
