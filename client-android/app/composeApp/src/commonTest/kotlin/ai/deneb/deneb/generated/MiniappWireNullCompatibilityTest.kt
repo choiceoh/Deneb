@@ -1252,6 +1252,12 @@ class MiniappWireNullCompatibilityTest {
             field = "pageCount",
         ),
         nullContract(
+            name = "MemoryCategoryRow.displayName",
+            serializer = MemoryCategoryRow.serializer(),
+            empty = MemoryCategoryRow(),
+            field = "displayName",
+        ),
+        nullContract(
             name = "MemoryPageRow.path",
             serializer = MemoryPageRow.serializer(),
             empty = MemoryPageRow(),

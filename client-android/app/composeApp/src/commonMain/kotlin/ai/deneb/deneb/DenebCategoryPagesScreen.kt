@@ -60,6 +60,9 @@ fun DenebCategoryPagesScreen(
     // Disk/session snapshot paints instantly (cache-then-network); load() refreshes.
     var pages by remember(category) { mutableStateOf(client.sectionCaches.categoryPages.peek(category)) }
     var subFolders by remember(category) { mutableStateOf<List<CategoryNode>>(emptyList()) }
+    // Korean alias for the header when this category IS a code-named project
+    // folder; blank until load() resolves it (header falls back to the path).
+    var categoryAlias by remember(category) { mutableStateOf("") }
     // Top-level taxonomy categories, populated on load — the move picker's options.
     var topCategories by remember(category) { mutableStateOf<List<String>>(emptyList()) }
     var loadFailed by remember(category) { mutableStateOf(false) }
@@ -91,6 +94,7 @@ fun DenebCategoryPagesScreen(
         // that accrues several documents drills down instead of cluttering the
         // top-level list.
         subFolders = subCategories(category, cats)
+        categoryAlias = cats.firstOrNull { it.name == category }?.displayName.orEmpty()
         // Top-level taxonomy categories (first path segment) — the reclassify targets.
         topCategories = cats.map { it.name.substringBefore('/') }
             .filter { it.isNotBlank() }
@@ -192,7 +196,7 @@ fun DenebCategoryPagesScreen(
                 }
             } else {
                 Text(
-                    category.ifBlank { "(미분류)" },
+                    categoryAlias.ifBlank { category.ifBlank { "(미분류)" } },
                     style = DenebType.subject,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -209,7 +213,7 @@ fun DenebCategoryPagesScreen(
             ) {
                 if (!selecting && subFolders.isNotEmpty()) {
                     subFolders.forEach { sf ->
-                        SubCategoryRow(sf.name.substringAfterLast('/'), sf.pageCount) { onOpenCategory(sf.name) }
+                        SubCategoryRow(sf.label(), sf.pageCount) { onOpenCategory(sf.name) }
                     }
                     Spacer(Modifier.height(4.dp))
                 }

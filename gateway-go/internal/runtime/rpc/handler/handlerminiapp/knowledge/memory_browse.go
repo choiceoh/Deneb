@@ -22,6 +22,11 @@ import (
 type MemoryCategoryRow struct {
 	Name      string `json:"name"`
 	PageCount int    `json:"pageCount"`
+	// DisplayName is the Korean name to show INSTEAD of the last path segment,
+	// set only for project folders whose name is a frozen code
+	// ("프로젝트/pl2-kia-epc-001" → "기아 화성 국유지 태양광"). Empty everywhere
+	// else — clients fall back to Name, which stays the navigation key either way.
+	DisplayName string `json:"displayName,omitempty"`
 }
 
 // MemoryPageRow is one row in a category page listing. Same scoping
@@ -50,9 +55,14 @@ func memoryCategories(deps MemoryDeps) rpcutil.HandlerFunc {
 			return rpcerr.WrapUnavailable("memory store unavailable", err).Response(req.ID)
 		}
 		stats := store.Stats()
+		aliaser, _ := store.(memoryProjectAliaser)
 		cats := make([]MemoryCategoryRow, 0, len(stats.CategoryCount))
 		for name, count := range stats.CategoryCount {
-			cats = append(cats, MemoryCategoryRow{Name: name, PageCount: count})
+			row := MemoryCategoryRow{Name: name, PageCount: count}
+			if aliaser != nil {
+				row.DisplayName = aliaser.ProjectDisplayLabel(name)
+			}
+			cats = append(cats, row)
 		}
 		// Sort: page count desc, then name asc for stability so the
 		// largest buckets bubble up but ties stay deterministic.

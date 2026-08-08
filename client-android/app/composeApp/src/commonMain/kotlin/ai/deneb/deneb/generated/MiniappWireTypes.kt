@@ -366,6 +366,7 @@ data class MemberOut(
 data class MemoryCategoryRow(
     val name: String = "",
     val pageCount: Int = 0,
+    val displayName: String = "",
 )
 
 @Immutable

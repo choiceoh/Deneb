@@ -48,6 +48,14 @@ type memoryPlanSearcher interface {
 	SearchPlan(ctx context.Context, plan wiki.QueryPlan, limit int) (wiki.SearchReport, error)
 }
 
+// memoryProjectAliaser is an optional extension implemented by *wiki.Store: the
+// Korean display name of the project owning a wiki path. Kept out of
+// MemorySearcher for the same reason as the other extensions here — test fakes
+// keep the small contract, and a fake without it simply yields no alias.
+type memoryProjectAliaser interface {
+	ProjectDisplayLabel(path string) string
+}
+
 type memorySemanticStatus interface {
 	SemanticStatus() wiki.SemanticIndexStatus
 }

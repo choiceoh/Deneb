@@ -47,7 +47,7 @@ suspend fun DenebGatewayClient.fetchCategories(force: Boolean = false): WikiCate
         val p = callRpc<CategoriesPayload>("miniapp.memory.categories", buildJsonObject {})
             ?: return@getOrLoad null
         WikiCategories(
-            categories = p.categories.map { WikiCategory(it.name, it.pageCount) },
+            categories = p.categories.map { WikiCategory(it.name, it.pageCount, it.displayName) },
             totalPages = p.totalPages,
             totalBytes = p.totalBytes,
         )

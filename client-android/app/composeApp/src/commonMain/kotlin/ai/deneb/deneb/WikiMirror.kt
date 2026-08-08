@@ -74,9 +74,15 @@ internal class WikiMirrorStore(
             loadLocked()
             if (pages.isEmpty()) return@state null
             val counts = pages.values.groupingBy { wikiMirrorCategoryOf(it.path).ifBlank { "(root)" } }.eachCount()
+            // Korean aliases offline, mirroring the gateway's rule (alias == the
+            // 대표 page's title) so a code-named project folder reads the same
+            // whether or not the network is up.
+            val aliases = pages.values
+                .filter { it.path.endsWith("/대표.md") && it.title.isNotBlank() }
+                .associate { it.path.removeSuffix("/대표.md") to it.title }
             WikiCategories(
                 categories = counts.entries
-                    .map { WikiCategory(it.key, it.value) }
+                    .map { WikiCategory(it.key, it.value, aliasFor(it.key, aliases)) }
                     .sortedWith(compareByDescending<WikiCategory> { it.pageCount }.thenBy { it.name }),
                 totalPages = pages.size,
                 totalBytes = pages.values.sumOf { it.body.length.toLong() },
@@ -361,6 +367,19 @@ internal data class WikiMirrorMeta(
 
 /** The category a wiki path files under (its leading directory). */
 internal fun wikiMirrorCategoryOf(path: String): String = path.substringBeforeLast('/', missingDelimiterValue = "")
+
+/** Korean alias for a category path, from folder → 대표-title [aliases]. Matches
+ *  the project folder itself ("프로젝트/<code>") and its slots
+ *  ("프로젝트/<code>/메일분석"), which resolve to the same owning project. An
+ *  alias equal to the folder name adds nothing, so it is dropped. */
+internal fun aliasFor(category: String, aliases: Map<String, String>): String {
+    var probe = category
+    while (probe.isNotBlank()) {
+        aliases[probe]?.let { if (it != probe.substringAfterLast('/')) return it }
+        probe = probe.substringBeforeLast('/', missingDelimiterValue = "")
+    }
+    return ""
+}
 
 /** ~80 chars of body context around the first hit of [token] (else the head). */
 internal fun wikiMirrorSnippet(page: WikiPage, token: String): String {

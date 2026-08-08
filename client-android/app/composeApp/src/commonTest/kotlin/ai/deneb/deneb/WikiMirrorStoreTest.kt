@@ -83,6 +83,33 @@ class WikiMirrorStoreTest {
         assertEquals(setOf("프로젝트", "사람"), cats.categories.map { it.name }.toSet())
     }
 
+    // Offline parity: a code-named project folder must read in Korean without the
+    // network, resolved the same way the gateway resolves it — alias == 대표 title.
+    @Test
+    fun categoriesCarryKoreanAliasForCodeNamedProjectFolders() = runTest {
+        val s = store(MemoryMirrorFiles())
+        s.replaceAll(
+            listOf(
+                page("프로젝트/pl2-kia-epc-001/대표.md", title = "기아 화성 국유지 태양광"),
+                page("프로젝트/pl2-kia-epc-001/메일분석/m1.md", title = "Re: 설치계획도"),
+                page("프로젝트/영산고/대표.md", title = "영산고"),
+                page("업무/BEP.md", title = "BEP 계산"),
+            ),
+            nowMs = 1_000,
+        )
+
+        val byName = s.categories()!!.categories.associateBy { it.name }
+        assertEquals("기아 화성 국유지 태양광", byName.getValue("프로젝트/pl2-kia-epc-001").displayName)
+        // Slot folders inherit the owning project's alias.
+        assertEquals(
+            "기아 화성 국유지 태양광",
+            byName.getValue("프로젝트/pl2-kia-epc-001/메일분석").displayName,
+        )
+        // A descriptive folder whose 대표 title equals its name needs no alias.
+        assertEquals("", byName.getValue("프로젝트/영산고").displayName)
+        assertEquals("", byName.getValue("업무").displayName)
+    }
+
     @Test
     fun persistsAcrossStoreInstances() = runTest {
         val files = MemoryMirrorFiles()
