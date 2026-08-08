@@ -1,11 +1,27 @@
 package phoneevents
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
+
+type judgmentErrorRunner struct {
+	err error
+}
+
+func (r judgmentErrorRunner) ChatReady() bool { return true }
+
+func (r judgmentErrorRunner) RunSync(context.Context, chatport.SyncRequest) (*chatport.SyncResult, error) {
+	return nil, r.err
+}
 
 // The usage event type must skip the notification-specific tiny gate (its ads/OTP
 // classifier doesn't fit a usage digest) and run the full default-silence judgment,
@@ -90,6 +106,62 @@ func TestRecordPhoneUsageWritesTrimmedPayload(t *testing.T) {
 	}
 	if got := string(data); got != payload {
 		t.Fatalf("usage cache = %q, want %q", got, payload)
+	}
+}
+
+func TestProcessJudgmentLogsModelCircuitOpenAsDebugSkip(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	runner := judgmentErrorRunner{
+		err: errors.New(modelCircuitOpenErrorText),
+	}
+	h := New(Config{
+		ChatHandler: runner,
+		Logger:      logger,
+	})
+
+	delivered, err := h.processJudgment(context.Background(), "context", "native", "office wifi connected")
+	if err == nil || !strings.Contains(err.Error(), modelCircuitOpenErrorText) {
+		t.Fatalf("error = %v, want circuit-open error", err)
+	}
+	if delivered {
+		t.Fatal("circuit-open judgment must not report delivery")
+	}
+	got := logs.String()
+	if strings.Contains(got, "phone-event judgment turn failed") || strings.Contains(got, "level=ERROR") {
+		t.Fatalf("circuit-open skip must not be logged as a failure:\n%s", got)
+	}
+	for _, want := range []string{"level=DEBUG", "phone-event judgment turn skipped", "reason=model_circuit_open"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("debug skip log missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestProcessJudgmentLogsOrdinaryRunSyncErrorAsFailure(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	runner := judgmentErrorRunner{
+		err: errors.New("provider 500"),
+	}
+	h := New(Config{
+		ChatHandler: runner,
+		Logger:      logger,
+	})
+
+	delivered, err := h.processJudgment(context.Background(), "context", "native", "office wifi connected")
+	if err == nil || !strings.Contains(err.Error(), "provider 500") {
+		t.Fatalf("error = %v, want provider error", err)
+	}
+	if delivered {
+		t.Fatal("failed judgment must not report delivery")
+	}
+	got := logs.String()
+	if !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "phone-event judgment turn failed") {
+		t.Fatalf("ordinary run error must stay logged as a failure:\n%s", got)
+	}
+	if strings.Contains(got, "phone-event judgment turn skipped") {
+		t.Fatalf("ordinary run error must not use the circuit-open skip log:\n%s", got)
 	}
 }
 
