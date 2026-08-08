@@ -24,6 +24,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/core/observe"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/daemon"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/prompts"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/push"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
@@ -48,7 +49,6 @@ import (
 	runtimemeeting "github.com/choiceoh/deneb/gateway-go/internal/runtime/meeting"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	runtimenotify "github.com/choiceoh/deneb/gateway-go/internal/runtime/notify"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/proactive"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
@@ -163,7 +163,7 @@ type Server struct {
 	// HTTP door (/api/event/ingest) builds its handler per request, so the lazy
 	// init is guarded by phoneEventLedgerOnce (concurrent ingests must share one
 	// ledger, not race two into existence — server_phone_action.go).
-	phoneEventLedger     *phoneevents.Ledger
+	phoneEventLedger     *phoneledger.Ledger
 	phoneEventLedgerOnce sync.Once
 
 	// siteVisitRecorder logs project 현장 visits from phone location fixes

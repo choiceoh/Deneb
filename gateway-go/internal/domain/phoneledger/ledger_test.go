@@ -1,4 +1,4 @@
-package phoneevents
+package phoneledger
 
 import (
 	"io"
@@ -13,7 +13,7 @@ import (
 func testLedgerLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func TestLedgerNilAndDisabled(t *testing.T) {
-	if l := NewLedger("", testLedgerLogger()); l != nil {
+	if l := New("", testLedgerLogger()); l != nil {
 		t.Error("empty dir should disable the ledger")
 	}
 	var nilLedger *Ledger
@@ -22,11 +22,11 @@ func TestLedgerNilAndDisabled(t *testing.T) {
 
 func TestLedgerAppendAndReadTail(t *testing.T) {
 	dir := t.TempDir()
-	l := NewLedger(dir, testLedgerLogger())
+	l := New(dir, testLedgerLogger())
 	l.Append("notification", "카카오톡/업무방", "발주 다음 주로 밀렸어요")
 	l.Append("sms", "010-1234", "회의 3시로 변경")
 
-	tail, err := ReadLedgerTail(dir, nil, 10_000)
+	tail, err := ReadTail(dir, nil, 10_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestLedgerAppendAndReadTail(t *testing.T) {
 
 	// Committing offsets consumes: a second read returns only new lines.
 	l.Append("notification", "카카오톡/업무방", "추가 메시지")
-	tail2, err := ReadLedgerTail(dir, tail.NextOffsets, 10_000)
+	tail2, err := ReadTail(dir, tail.NextOffsets, 10_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,12 +50,12 @@ func TestLedgerAppendAndReadTail(t *testing.T) {
 
 func TestLedgerReadTailBudgetStopsAtLineBoundary(t *testing.T) {
 	dir := t.TempDir()
-	l := NewLedger(dir, testLedgerLogger())
+	l := New(dir, testLedgerLogger())
 	l.Append("notification", "a", strings.Repeat("가", 100))
 	l.Append("notification", "b", strings.Repeat("나", 100))
 	l.Append("notification", "c", strings.Repeat("다", 100))
 
-	tail, err := ReadLedgerTail(dir, nil, 250) // fits 2 entries, not 3
+	tail, err := ReadTail(dir, nil, 250) // fits 2 entries, not 3
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestLedgerReadTailBudgetStopsAtLineBoundary(t *testing.T) {
 		t.Fatalf("entries=%d truncated=%v, want 2/true", len(tail.Entries), tail.Truncated)
 	}
 	// The committed offset must resume exactly at the third entry.
-	rest, err := ReadLedgerTail(dir, tail.NextOffsets, 10_000)
+	rest, err := ReadTail(dir, tail.NextOffsets, 10_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,11 +74,11 @@ func TestLedgerReadTailBudgetStopsAtLineBoundary(t *testing.T) {
 
 func TestLedgerRedactsSecretsAndTruncatesOversizedText(t *testing.T) {
 	dir := t.TempDir()
-	l := NewLedger(dir, testLedgerLogger())
+	l := New(dir, testLedgerLogger())
 	l.Append("notification", "mail", "api key sk-proj-abcdefghijklmnopqrstuvwxyz012345 유출 주의")
 	l.Append("notification", "big", strings.Repeat("x", ledgerMaxTextRunes+500))
 
-	tail, err := ReadLedgerTail(dir, nil, 100_000)
+	tail, err := ReadTail(dir, nil, 100_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestLedgerRedactsSecretsAndTruncatesOversizedText(t *testing.T) {
 
 func TestLedgerIgnoresOTPMessages(t *testing.T) {
 	dir := t.TempDir()
-	l := NewLedger(dir, testLedgerLogger())
+	l := New(dir, testLedgerLogger())
 	// OTP / security-code notifications must not persist to the raw ledger.
 	l.Append("sms", "네이버", "[네이버] 인증번호 [382910] 를 입력하세요")
 	l.Append("notification", "은행", "verification code: 4821")
@@ -103,7 +103,7 @@ func TestLedgerIgnoresOTPMessages(t *testing.T) {
 	// A normal work message with a number that is NOT an OTP stays.
 	l.Append("notification", "카카오톡/업무방", "발주 2건 다음 주로 연기")
 
-	tail, err := ReadLedgerTail(dir, nil, 100_000)
+	tail, err := ReadTail(dir, nil, 100_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestLedgerPruneEvictsExpiredDayFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, old+".jsonl"), []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	l := NewLedger(dir, testLedgerLogger())
+	l := New(dir, testLedgerLogger())
 	l.Append("notification", "s", "t") // first append of the day triggers prune
 
 	if _, err := os.Stat(filepath.Join(dir, old+".jsonl")); !os.IsNotExist(err) {

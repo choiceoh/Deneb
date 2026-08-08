@@ -78,9 +78,9 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
   `wikiwork/wiki_research_task.go`의 `NewResearchTask`,
   `wikiwork/supernote_digest_task.go`의 `NewSupernoteDigestTask`가 wiki 배경 작업
   진입점이다. 파일 저장·검증 불변조건은 wiki store에 남긴다.
-- `phoneevents/handler.go`의 `New`, `Handler.ServeHTTP`와
-  `phoneevents/ledger.go`의 `NewLedger`가 phone action 수집 경계다. HTTP handler는
-  ledger append와 async ingest 순서를 바꾸지 않는다.
+- `phoneevents/handler.go`의 `New`, `Handler.ServeHTTP`가 phone action 수집 경계다.
+  raw notification 저장은 `../domain/phoneledger/ledger.go`의 `New`, `ReadTail`이 소유한다.
+  HTTP handler는 ledger append와 async ingest 순서를 바꾸지 않는다.
 - `rpc/handler/skill/skill.go`의 `Methods`,
   `rpc/handler/skill/skill_genesis.go`의 `GenesisMethods`,
   `rpc/handler/mail/analyzebind/gmail_analyze.go`의 `GmailAnalyzeMethods`,
@@ -90,7 +90,7 @@ registerWorkflowSideEffects() # 비-RPC: autonomous/dreaming/notifier (server_rp
   `insights/engine.go`의 `New`, `insights/render.go`의 `RenderPlain`은 독립 런타임
   엔진이다. 외부 IO는 caller가 넘긴 interface 뒤에 둔다.
 
-`cd gateway-go && go test ./internal/runtime/proactive ./internal/runtime/meeting ./internal/runtime/wikiwork ./internal/runtime/phoneevents ./internal/runtime/rpc/handler/skill ./internal/runtime/rpc/handler/mail ./internal/runtime/briefcase ./internal/runtime/insights`
+`cd gateway-go && go test ./internal/domain/phoneledger ./internal/runtime/proactive ./internal/runtime/meeting ./internal/runtime/wikiwork ./internal/runtime/phoneevents ./internal/runtime/rpc/handler/skill ./internal/runtime/rpc/handler/mail ./internal/runtime/briefcase ./internal/runtime/insights`
 
 ## 함정
 

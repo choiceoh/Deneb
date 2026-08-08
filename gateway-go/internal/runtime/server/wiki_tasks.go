@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/configresolve"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
@@ -98,7 +98,7 @@ func (s *Server) registerNotiDigestTask(homeDir string) {
 		s.activity,
 		s.logger,
 		filepath.Join(stateDir, wikiwork.NotiDigestStateFile),
-		filepath.Join(stateDir, phoneevents.LedgerDirname),
+		filepath.Join(stateDir, phoneledger.Dirname),
 		configresolve.WorkspaceDir(),
 	))
 	s.logger.Info("noti-digest task registered", "interval", wikiwork.NotiDigestInterval.String())

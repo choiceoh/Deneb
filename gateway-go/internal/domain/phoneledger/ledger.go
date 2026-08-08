@@ -1,20 +1,20 @@
-// ledger.go — durable raw ledger for phone notification events.
+// Package phoneledger owns the durable raw ledger for phone notification events.
 //
-// The judgment path is deliberately ephemeral ("persist nothing"): it decides
-// whether to ALERT, and most events rightly end as silent NO_REPLY. But the
-// silently-judged majority is exactly where the memory value lives — a
+// The phone-event judgment path is deliberately ephemeral ("persist nothing"):
+// it decides whether to ALERT, and most events rightly end as silent NO_REPLY.
+// But the silently-judged majority is exactly where the memory value lives — a
 // KakaoTalk room saying "발주 다음 주로 밀렸어요" is not push-worthy (the user
 // saw it) yet absolutely belongs in the project log. Without a ledger that
 // content evaporated at judgment time, making the phone stream the one big
 // connector with no raw dump (OpenWiki's deterministic-pull layer was the
 // model here: raw capture first, synthesis separately).
 //
-// So: every notification/sms event is appended — redacted, bounded — to a
-// daily JSONL under <state>/phone-events/, regardless of what the judgment
-// decides. The noti-digest task (runtime/wikiwork) consumes unread tails into
-// the wiki on its own cadence, and files older than the retention window are
-// pruned, so what ultimately persists is the wiki synthesis, not the raw feed.
-package phoneevents
+// So: every notification/sms event is appended — redacted, bounded — to a daily
+// JSONL under <state>/phone-events/, regardless of what the judgment decides.
+// The noti-digest task consumes unread tails into the wiki on its own cadence,
+// and files older than the retention window are pruned, so what ultimately
+// persists is the wiki synthesis, not the raw feed.
+package phoneledger
 
 import (
 	"bufio"
@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	// LedgerDirname is the ledger directory under the gateway state dir.
-	LedgerDirname = "phone-events"
+	// Dirname is the ledger directory under the gateway state dir.
+	Dirname = "phone-events"
 	// ledgerRetentionDays bounds how long raw notification text is kept. The
 	// durable form is the wiki synthesis; the raw feed is working data.
 	ledgerRetentionDays = 30
@@ -44,8 +44,8 @@ const (
 	ledgerMaxTextRunes = 4000
 )
 
-// LedgerEntry is one recorded notification event line.
-type LedgerEntry struct {
+// Entry is one recorded notification event line.
+type Entry struct {
 	TS     string `json:"ts"` // RFC3339
 	Type   string `json:"type"`
 	Source string `json:"source"`
@@ -62,9 +62,9 @@ type Ledger struct {
 	prunedDate string // YYYY-MM-DD the retention prune last ran for
 }
 
-// NewLedger creates a ledger rooted at dir. Empty dir disables recording
+// New creates a ledger rooted at dir. Empty dir disables recording
 // (returns nil, which every method tolerates).
-func NewLedger(dir string, logger *slog.Logger) *Ledger {
+func New(dir string, logger *slog.Logger) *Ledger {
 	if strings.TrimSpace(dir) == "" {
 		return nil
 	}
@@ -107,7 +107,7 @@ func (l *Ledger) Append(eventType, source, text string) {
 	// Deneb-canonical clock: day-file naming and entry timestamps are
 	// human-facing wiki-adjacent dates (the digest prompt shows them).
 	now := dentime.Now()
-	entry := LedgerEntry{
+	entry := Entry{
 		TS:     now.Format(time.RFC3339),
 		Type:   strings.TrimSpace(eventType),
 		Source: strings.TrimSpace(source),
@@ -176,11 +176,11 @@ func truncateLedgerText(s string) string {
 	return string(r[:ledgerMaxTextRunes]) + " (이하 생략)"
 }
 
-// LedgerTail is unconsumed ledger content plus the offsets to commit once the
+// Tail is unconsumed ledger content plus the offsets to commit once the
 // consumer has durably used it.
-type LedgerTail struct {
+type Tail struct {
 	// Entries in file order (oldest file first, in-file order preserved).
-	Entries []LedgerEntry
+	Entries []Entry
 	// NextOffsets is the per-file byte offset AFTER the returned entries —
 	// commit these only when consumption succeeded.
 	NextOffsets map[string]int64
@@ -188,12 +188,12 @@ type LedgerTail struct {
 	Truncated bool
 }
 
-// ReadLedgerTail returns unconsumed entries beyond the given per-file byte
+// ReadTail returns unconsumed entries beyond the given per-file byte
 // offsets, bounded by budgetRunes of entry text. Reading stops at whole-line
 // boundaries so committed offsets always land between records. Files no
 // longer on disk are dropped from NextOffsets (retention prune).
-func ReadLedgerTail(dir string, offsets map[string]int64, budgetRunes int) (*LedgerTail, error) {
-	tail := &LedgerTail{NextOffsets: map[string]int64{}}
+func ReadTail(dir string, offsets map[string]int64, budgetRunes int) (*Tail, error) {
+	tail := &Tail{NextOffsets: map[string]int64{}}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -235,7 +235,7 @@ func ReadLedgerTail(dir string, offsets map[string]int64, budgetRunes int) (*Led
 	return tail, nil
 }
 
-func readLedgerFileTail(path string, offset int64, budget *int) (int64, []LedgerEntry, bool, error) {
+func readLedgerFileTail(path string, offset int64, budget *int) (int64, []Entry, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return offset, nil, false, err
@@ -246,14 +246,14 @@ func readLedgerFileTail(path string, offset int64, budget *int) (int64, []Ledger
 			return offset, nil, false, serr
 		}
 	}
-	var out []LedgerEntry
+	var out []Entry
 	next := offset
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := sc.Bytes()
 		lineLen := int64(len(line)) + 1 // trailing \n
-		var entry LedgerEntry
+		var entry Entry
 		if json.Unmarshal(line, &entry) != nil || strings.TrimSpace(entry.Text) == "" {
 			next += lineLen // malformed/empty line: consume and move on
 			continue

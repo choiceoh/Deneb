@@ -1,14 +1,14 @@
 // noti_digest_task.go — digest the phone notification ledger into the wiki.
 //
 // The phone judgment path (runtime/phoneevents) decides whether to ALERT and
-// deliberately persists nothing; the ledger (phoneevents/ledger.go) shadows it
-// with a raw record. This task is the memory half: on its own cadence it takes
-// the unconsumed ledger tail — KakaoTalk rooms, approval notifications, SMS —
-// and runs one bounded internal agent turn that consolidates the memorable
-// part into the wiki (project 로그 ops, people signals, commitments), applying
-// the same noise discipline the dreamer uses. Alerting stays instant and
-// ephemeral; memory is batched and durable — the OpenWiki deterministic-pull /
-// synthesis-run split, applied to the phone connector.
+// deliberately persists nothing; phoneledger shadows it with a raw record. This
+// task is the memory half: on its own cadence it takes the unconsumed ledger
+// tail — KakaoTalk rooms, approval notifications, SMS — and runs one bounded
+// internal agent turn that consolidates the memorable part into the wiki
+// (project 로그 ops, people signals, commitments), applying the same noise
+// discipline the dreamer uses. Alerting stays instant and ephemeral; memory is
+// batched and durable — the OpenWiki deterministic-pull / synthesis-run split,
+// applied to the phone connector.
 //
 // Tool surface: PresetNotiDigest (wiki + fetch_tools only). Notification text
 // is third-party content, so the turn must reach neither an external channel
@@ -34,10 +34,10 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/autonomous"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/toolpreset"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 	"github.com/choiceoh/deneb/gateway-go/pkg/atomicfile"
 )
 
@@ -134,7 +134,7 @@ func (t *notiDigestTask) Run(ctx context.Context) error {
 	}
 
 	state := t.loadState()
-	tail, err := phoneevents.ReadLedgerTail(t.ledgerDir, state.Offsets, notiDigestBudgetRunes)
+	tail, err := phoneledger.ReadTail(t.ledgerDir, state.Offsets, notiDigestBudgetRunes)
 	if err != nil {
 		return fmt.Errorf("noti-digest: ledger read failed: %w", err)
 	}
@@ -190,7 +190,7 @@ func (t *notiDigestTask) Run(ctx context.Context) error {
 }
 
 // buildPrompt renders the batch plus the digestion rules.
-func (t *notiDigestTask) buildPrompt(entries []phoneevents.LedgerEntry, truncated bool) string {
+func (t *notiDigestTask) buildPrompt(entries []phoneledger.Entry, truncated bool) string {
 	var b strings.Builder
 	b.WriteString("[자율 노티 다이제스트 — 백그라운드 메모리 유지보수 턴]\n\n")
 	b.WriteString(fmt.Sprintf("아래는 최근 수집된 휴대폰 알림 %d건입니다 (카카오톡·전자결재·SMS 등, 시간순).\n", len(entries)))
