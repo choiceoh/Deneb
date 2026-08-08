@@ -9,13 +9,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 )
 
 func seedLedger(t *testing.T, day time.Time, entries ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("DENEB_STATE_DIR", dir)
-	events := filepath.Join(dir, "phone-events")
+	events := filepath.Join(dir, phoneledger.Dirname)
 	if err := os.MkdirAll(events, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -27,7 +29,7 @@ func seedLedger(t *testing.T, day time.Time, entries ...string) string {
 }
 
 func entry(ts, source, text string) string {
-	b, _ := json.Marshal(phoneLedgerEntry{TS: ts, Type: "notification", Source: source, Text: text})
+	b, _ := json.Marshal(phoneledger.Entry{TS: ts, Type: "notification", Source: source, Text: text})
 	return string(b)
 }
 

@@ -51,6 +51,13 @@ type ActionResult struct {
 	Error string `json:"error,omitempty"`
 }
 
+// LedgerAppender is the narrow storage port phoneevents needs: the handler only
+// shadows notification-like events into a raw ledger. Reading, retention, and
+// entry shape are owned by the ledger package.
+type LedgerAppender interface {
+	Append(eventType, source, text string)
+}
+
 // Config supplies the late-bound runtime dependencies for phone event handling.
 type Config struct {
 	ChatHandler chatport.SyncRunner
@@ -67,10 +74,9 @@ type Config struct {
 	ResolvePhoneAction func(ActionResult) bool
 	ShutdownContext    context.Context
 	Logger             *slog.Logger
-	// Ledger records notification/sms events for later wiki digestion
-	// (ledger.go). nil disables recording; the judgment path is unaffected
-	// either way.
-	Ledger *Ledger
+	// Ledger records notification/sms events for later wiki digestion. nil
+	// disables recording; the judgment path is unaffected either way.
+	Ledger LedgerAppender
 	// OnLocationPlace, if set, receives each location_update payload so a
 	// site-visit recorder can match its geocoded place against project 현장
 	// and log a visit. nil disables site-visit recording.
@@ -100,7 +106,7 @@ type Handler struct {
 	resolvePhoneAction  func(ActionResult) bool
 	shutdownContext     context.Context
 	logger              *slog.Logger
-	ledger              *Ledger
+	ledger              LedgerAppender
 	onLocationPlace     func(payload string)
 	browserEnrich       func(ctx context.Context, source, text string) string
 	triggerApprovalScan func(ctx context.Context) error

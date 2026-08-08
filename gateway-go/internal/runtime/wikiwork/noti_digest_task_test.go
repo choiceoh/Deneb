@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
 )
 
 func TestNotiDigestConstructionReturnsErrorOnDisabledRun(t *testing.T) {
@@ -39,7 +39,7 @@ func TestNotiDigestBuildPromptRendersEntriesWithGuidanceRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	task := &notiDigestTask{workspaceDir: ws}
-	entries := []phoneevents.LedgerEntry{
+	entries := []phoneledger.Entry{
 		{TS: "2026-07-12T09:30:00+09:00", Type: "notification", Source: "카카오톡/기아PE방", Text: "발주 다음 주로 연기"},
 		{TS: "2026-07-12T10:00:00+09:00", Type: "sms", Source: "010-1111", Text: "회의 3시 변경"},
 	}
@@ -73,7 +73,7 @@ func TestNotiDigestBuildPromptRendersEntriesWithGuidanceRules(t *testing.T) {
 // block — the delimiter is defanged and newlines flattened to one line.
 func TestNotiDigestFenceNormalizesInjectedDelimiter(t *testing.T) {
 	task := &notiDigestTask{}
-	entries := []phoneevents.LedgerEntry{{
+	entries := []phoneledger.Entry{{
 		TS:     "2026-07-12T09:30:00+09:00",
 		Type:   "notification",
 		Source: "카카오톡/공격방",

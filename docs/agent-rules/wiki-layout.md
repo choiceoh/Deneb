@@ -211,7 +211,7 @@ globs:
 
 ## 노티 다이제스트 (휴대폰 알림 → 기억)
 
-- **레저** (`runtime/phoneevents/ledger.go`): 판단 경로(휴대폰 이벤트 판단 턴은 의도적 ephemeral)와
+- **레저** (`domain/phoneledger/ledger.go`): 판단 경로(휴대폰 이벤트 판단 턴은 의도적 ephemeral)와
   무관하게 notification/sms 이벤트를 redact+바운드 후 `<state>/phone-events/YYYY-MM-DD.jsonl`에
   append. tiny 게이트 **앞**에서 기록 — 게이트는 푸시 가치 기준이지 기억 가치 기준이 아니다
   (카톡 "발주 밀림"은 NO_REPLY가 정답이지만 프로젝트 로그감). 보존 30일 자동 프룬.

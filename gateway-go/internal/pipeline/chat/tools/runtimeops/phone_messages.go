@@ -10,15 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 )
 
-// The phone-event ledger is owned by runtime/phoneevents, which writes one
-// JSONL file per day under this directory. Reading it here rather than
-// importing that package keeps the pipeline from depending upward on runtime;
-// the entry shape ({ts,type,source,text}) is the stable part of the contract.
+// The phone-event ledger is owned by domain/phoneledger, which writes one JSONL
+// file per day. The runtime phone-event handler only appends through a narrow
+// port; readers consume this lower-layer ledger contract directly.
 const (
-	phoneLedgerDirname = "phone-events"
 	// A week is the useful horizon for "what were we talking about" — long
 	// enough to cover a slow thread, short enough that the digest stays
 	// readable. The ledger itself retains 30 days.
@@ -28,13 +27,6 @@ const (
 	phoneMessagesPerRoom = 8
 	phoneMessagesRooms   = 12
 )
-
-type phoneLedgerEntry struct {
-	TS     string `json:"ts"`
-	Type   string `json:"type"`
-	Source string `json:"source"`
-	Text   string `json:"text"`
-}
 
 // phoneRoomEntries splits one notification into (room, messages).
 //
@@ -53,7 +45,7 @@ type phoneLedgerEntry struct {
 // thread, so a single card-approval text turned into six "messages" and crowded
 // a real conversation out of the digest. A push title and its body are likewise
 // one event, not two.
-func phoneRoomEntries(e phoneLedgerEntry) (room string, messages []string) {
+func phoneRoomEntries(e phoneledger.Entry) (room string, messages []string) {
 	lines := strings.Split(e.Text, "\n")
 	if len(lines) > 0 && strings.HasPrefix(lines[0], "대화방: ") {
 		room = strings.TrimSpace(strings.TrimPrefix(lines[0], "대화방: "))
@@ -110,7 +102,7 @@ type phoneRoomThread struct {
 // turns a flat, ephemeral feed into the context an assistant can actually reason
 // over — "이 건 어디까지 이야기됐지" is a question about a thread, not an event.
 func readPhoneMessageThreads(now time.Time, days int) []phoneRoomThread {
-	dir := filepath.Join(config.ResolveStateDir(), phoneLedgerDirname)
+	dir := filepath.Join(config.ResolveStateDir(), phoneledger.Dirname)
 	byRoom := map[string]*phoneRoomThread{}
 	for d := days - 1; d >= 0; d-- {
 		day := now.AddDate(0, 0, -d).Format("2006-01-02")
@@ -121,7 +113,7 @@ func readPhoneMessageThreads(now time.Time, days int) []phoneRoomThread {
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 		for sc.Scan() {
-			var e phoneLedgerEntry
+			var e phoneledger.Entry
 			if json.Unmarshal(sc.Bytes(), &e) != nil || e.Type != "notification" {
 				continue
 			}

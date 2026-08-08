@@ -10,11 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
-
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/phoneledger"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/config"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/phoneevents"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/server/toolbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/wikiwork"
 )
 
@@ -22,10 +21,10 @@ import (
 // HTTP loopback door (server_http_routing.go) builds its phone-event handler
 // per request, so this can run concurrently — sync.Once ensures every ingest
 // records into one ledger rather than racing separate instances into being.
-func (s *Server) phoneEventLedgerInstance() *phoneevents.Ledger {
+func (s *Server) phoneEventLedgerInstance() *phoneledger.Ledger {
 	s.phoneEventLedgerOnce.Do(func() {
-		s.phoneEventLedger = phoneevents.NewLedger(
-			filepath.Join(config.ResolveStateDir(), phoneevents.LedgerDirname), s.logger,
+		s.phoneEventLedger = phoneledger.New(
+			filepath.Join(config.ResolveStateDir(), phoneledger.Dirname), s.logger,
 		)
 	})
 	return s.phoneEventLedger
