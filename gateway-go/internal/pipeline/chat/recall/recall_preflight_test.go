@@ -278,6 +278,50 @@ func TestFormatRecallWikiNoteIncludesStalenessMarker(t *testing.T) {
 	}
 }
 
+// A recalled sub-page under a frozen code folder must carry its project's
+// Korean name: ref= stays the raw code path (it has to remain readable), so this
+// label is the model's only route to the human name — otherwise the reply cites
+// "pl2-kia-epc-001" at an operator who never memorized the codes.
+func TestFormatRecallWikiNoteNamesOwningProjectInKorean(t *testing.T) {
+	dir := t.TempDir()
+	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	rep := wiki.NewPage("기아 오토랜드 화성 태양광", "프로젝트", nil)
+	if err := store.WritePage("프로젝트/pl2-kia-epc-001/대표.md", rep); err != nil {
+		t.Fatalf("WritePage rep: %v", err)
+	}
+	mail := &wiki.Page{
+		Meta: wiki.Frontmatter{Title: "Re: FW: 설치계획도 회신"},
+		Body: "국유지 모듈 배치 도면을 회신합니다.",
+	}
+	if err := store.WritePage("프로젝트/pl2-kia-epc-001/메일분석/m1.md", mail); err != nil {
+		t.Fatalf("WritePage mail: %v", err)
+	}
+
+	note := formatRecallWikiNote(store, wiki.SearchResult{Path: "프로젝트/pl2-kia-epc-001/메일분석/m1.md"})
+	if !strings.Contains(note, "프로젝트: 기아 오토랜드 화성 태양광") {
+		t.Fatalf("note must name the owning project in Korean, got %q", note)
+	}
+	// The project label precedes the page's own title (a mail subject), so the
+	// model reads "which project" before "which document".
+	if strings.Index(note, "프로젝트:") > strings.Index(note, "title:") {
+		t.Fatalf("project label must come before title, got %q", note)
+	}
+
+	// Pages outside an aliased project folder gain no label row.
+	plain := &wiki.Page{Meta: wiki.Frontmatter{Title: "BEP 계산"}, Body: "손익분기 계산."}
+	if err := store.WritePage("업무/BEP.md", plain); err != nil {
+		t.Fatalf("WritePage plain: %v", err)
+	}
+	if n := formatRecallWikiNote(store, wiki.SearchResult{Path: "업무/BEP.md"}); strings.Contains(n, "프로젝트:") {
+		t.Fatalf("non-project note must not carry a project label, got %q", n)
+	}
+}
+
 func TestBuildRecallPreflightUsesRecentDiaryFallbackWhenTopicless(t *testing.T) {
 	dir := t.TempDir()
 	store, err := wiki.NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
