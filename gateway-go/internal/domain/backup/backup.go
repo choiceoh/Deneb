@@ -62,6 +62,10 @@ type Task struct {
 	preSnapshot func(context.Context) // optional hook (wiki git snapshot)
 	ship        shipFunc
 	prune       func(context.Context) error
+	// shipped reports whether the named archive already exists remotely — the
+	// same-day catch-up check (see Interval/Run). Injectable for tests.
+	shipped func(ctx context.Context, name string) (bool, error)
+	now     func() time.Time // injectable clock for date-stamped archive names
 }
 
 // NewTask builds the daily backup task. preSnapshot (optional) runs before
@@ -93,31 +97,53 @@ func NewTask(cfg Config, preSnapshot func(context.Context)) (*Task, error) {
 	if strings.HasPrefix(cfg.SSHHost, "-") || strings.ContainsAny(cfg.SSHHost, " \t\r\n'\"`$;|&<>") {
 		return nil, fmt.Errorf("backup: invalid SSHHost: %q", cfg.SSHHost)
 	}
-	t := &Task{cfg: cfg, preSnapshot: preSnapshot}
+	t := &Task{cfg: cfg, preSnapshot: preSnapshot, now: time.Now}
 	t.ship = t.sshShip
 	t.prune = t.sshPrune
+	t.shipped = t.sshShipped
 	return t, nil
 }
 
 // Name implements autonomous.PeriodicTask.
 func (t *Task) Name() string { return "memory-backup" }
 
-// Interval implements autonomous.PeriodicTask. Daily: memory changes are
-// incremental and the wiki git history inside the archive covers intra-day
-// granularity.
-func (t *Task) Interval() time.Duration { return 24 * time.Hour }
+// Interval implements autonomous.PeriodicTask. Hourly RETRY cadence for one
+// DAILY archive: Run no-ops once today's archive exists remotely, so the extra
+// ticks cost one cheap ssh probe each.
+//
+// Why not a 24h interval: the scheduler stamps LastRunAt on every run, success
+// or failure, so a failed run's next attempt was a full day later — and the
+// archive name is date-stamped, so that day's backup was lost for good. That
+// is not hypothetical: 2026-08-06 has no archive because one ssh timeout hit
+// the single daily attempt. Hourly + a remote existence check turns a
+// transient outage into a delay instead of a hole.
+func (t *Task) Interval() time.Duration { return time.Hour }
 
-// Run implements autonomous.PeriodicTask: snapshot → archive → ship → prune.
+// Run implements autonomous.PeriodicTask: snapshot → archive → ship → prune,
+// skipped entirely when today's archive already shipped.
 func (t *Task) Run(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, runTimeout)
 	defer cancel()
 	start := time.Now()
 
+	name := "deneb-memory-" + t.now().Format("20060102") + ".tar.gz"
+
+	// Same-day catch-up gate. The REMOTE is the source of truth (not an
+	// in-process flag): the gateway restarts often, and a restart must not
+	// re-ship an archive that already landed. A probe error means "unknown" —
+	// fall through and attempt, so a probe outage can never suppress a backup.
+	if t.shipped != nil {
+		if done, err := t.shipped(ctx, name); err != nil {
+			t.cfg.Logger.Debug("memory backup: remote probe failed; attempting anyway",
+				"archive", name, "error", err)
+		} else if done {
+			return nil
+		}
+	}
+
 	if t.preSnapshot != nil {
 		t.preSnapshot(ctx)
 	}
-
-	name := "deneb-memory-" + time.Now().Format("20060102") + ".tar.gz"
 
 	pr, pw := io.Pipe()
 	archiveErr := make(chan error, 1)
@@ -167,6 +193,32 @@ func (t *Task) sshShip(ctx context.Context, name string, archive io.Reader) erro
 		return fmt.Errorf("ssh ship: %w (%s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// sshShipped reports whether the named archive already exists on the remote.
+// A non-zero ssh exit with no transport error means "absent" (test -f failed);
+// a transport failure surfaces as an error so the caller can treat it as
+// unknown rather than as "absent" or "present".
+func (t *Task) sshShipped(ctx context.Context, name string) (bool, error) {
+	dst := t.cfg.RemoteDir + "/" + name
+	// Echo a sentinel instead of trusting the exit code alone: ssh itself exits
+	// non-zero on transport failure too, and conflating the two would make a
+	// network outage look like "already shipped" — the exact silent-hole class
+	// this gate exists to close.
+	remote := fmt.Sprintf("test -f %s && echo PRESENT || echo ABSENT", dst)
+	cmd := exec.CommandContext(ctx, "ssh", "-o", "BatchMode=yes", t.cfg.SSHHost, remote) //nolint:gosec // G204 — host and dir are validated in NewTask; ssh is the designed transport
+	out, err := cmd.Output()
+	answer := strings.TrimSpace(string(out))
+	switch answer {
+	case "PRESENT":
+		return true, nil
+	case "ABSENT":
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("ssh probe: %w", err)
+	}
+	return false, fmt.Errorf("ssh probe: unexpected answer %q", answer)
 }
 
 // sshPrune deletes remote archives older than the retention window.
