@@ -31,8 +31,32 @@ python3 scripts/audit/health-bench-v3.py --deep --refresh-runtime-cache \
 
 # 2) RSI deep refresh embeds the fresh health snapshot into the state-dir cache (~/.deneb/data/rsi-bench-cache.json)
 #    and writes rsi-bench-snapshot.json for meta RSI evidence.
-python3 scripts/audit/rsi-bench.py --deep --refresh-cache \
-  --write-snapshot --append-history
+#    --check rides the SAME deep run (a second invocation would pay for the whole
+#    report twice). Its exit code is captured rather than allowed to abort under
+#    `set -e`: the refresh's own job is to produce snapshots, and it must finish
+#    writing them even when the ratchet is breached. The breach is re-raised at
+#    the end so the oneshot unit goes `failed` and stops being silent — RSI
+#    Process sat below its baseline from 2026-07-25 to 08-08 with nothing wired
+#    to notice, because the cadence only ever refreshed and never checked.
+ratchet_check="$HOME/.deneb/data/rsi-bench-check-latest.txt"
+mkdir -p "$(dirname "$ratchet_check")"
+ratchet_breached=0
+if python3 scripts/audit/rsi-bench.py --deep --refresh-cache \
+  --write-snapshot --append-history --check > "$ratchet_check.tmp" 2>&1; then
+  mv "$ratchet_check.tmp" "$ratchet_check"
+else
+  rc=$?
+  mv "$ratchet_check.tmp" "$ratchet_check"
+  # 2 = bench error (bad cache/baseline), 1 = ratchet breach. Both must be loud.
+  if [[ $rc -eq 1 ]]; then
+    ratchet_breached=1
+    echo "WARNING: RSI Bench ratchet BREACHED — see $ratchet_check" >&2
+  else
+    echo "WARNING: RSI Bench run failed (exit $rc) — see $ratchet_check" >&2
+    ratchet_breached=1
+  fi
+fi
+cat "$ratchet_check"
 
 # 3) e-process cutover evidence. The ladder's rollback half is structurally
 #    near-unreachable by waiting (no evolve has ever regressed), and this
@@ -53,3 +77,10 @@ if [[ -d gateway-go/cmd/rsi-backtest ]]; then
 fi
 
 echo "bench snapshots refreshed under $ROOT/scripts/audit/"
+
+if [[ $ratchet_breached -eq 1 ]]; then
+  echo "ERROR: RSI Bench ratchet check did not pass — snapshots are written, but the" >&2
+  echo "       run is reported as failed so the breach surfaces instead of decaying" >&2
+  echo "       quietly. Details: $ratchet_check" >&2
+  exit 1
+fi
