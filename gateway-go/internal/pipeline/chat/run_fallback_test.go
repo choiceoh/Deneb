@@ -313,6 +313,87 @@ func TestHealthyFallbackExists(t *testing.T) {
 	})
 }
 
+func TestRunAgentWithFallback_OpenCircuitSkipIsDebugOnly(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		models []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		models = append(models, req.Model)
+		mu.Unlock()
+		if req.Model == "m-main" {
+			t.Error("open breaker should skip the unhealthy main model")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, sseResponse("fallback reply", "end_turn"))
+	}))
+	defer server.Close()
+
+	reg := modelrole.NewRegistryWithOptions(discardLogger(), modelrole.RegistryOptions{
+		MainModel:        "test/m-main",
+		LightweightModel: "test/m-fb",
+		FallbackModel:    "test/m-fb",
+		Providers: map[string]modelrole.ProviderResolved{
+			"test": {BaseURL: server.URL, APIKey: "k"},
+		},
+	})
+	for range 3 {
+		reg.RecordModelFailure("m-main")
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	cfg := agent.AgentConfig{
+		Model:     "m-main",
+		MaxTurns:  2,
+		Timeout:   5 * time.Second,
+		MaxTokens: 128,
+	}
+	messages := []llm.Message{llm.NewTextMessage("user", "hello")}
+	client := llm.NewClient(server.URL, "test-key")
+	runLog := agentlog.NewRunLogger(nil, "test-session", "test-run")
+
+	result, actualModel, fellBack, err := runAgentWithFallback(
+		context.Background(), cfg, messages, client,
+		runDeps{registry: reg, logger: logger},
+		"test", modelrole.RoleMain, nil, agent.StreamHooks{}, logger, runLog,
+	)
+	if err != nil {
+		t.Fatalf("err = %v, want fallback success", err)
+	}
+	if result == nil || result.Text != "fallback reply" {
+		t.Fatalf("result = %+v, want fallback reply", result)
+	}
+	if actualModel != "m-fb" || !fellBack {
+		t.Fatalf("actualModel=%q fellBack=%v, want m-fb true", actualModel, fellBack)
+	}
+	mu.Lock()
+	gotModels := append([]string(nil), models...)
+	mu.Unlock()
+	if strings.Join(gotModels, ",") != "m-fb" {
+		t.Fatalf("models called = %v, want only fallback model", gotModels)
+	}
+
+	logs := buf.String()
+	if strings.Contains(logs, "model circuit open; skipping straight to fallback chain") {
+		t.Errorf("open-circuit skip should not be emitted at the default log level:\n%s", logs)
+	}
+	if strings.Contains(logs, `level=WARN msg="model failed, trying fallback"`) {
+		t.Errorf("synthetic circuit-open recovery should not be logged as a model failure:\n%s", logs)
+	}
+}
+
 // TestIsEmptyFinalResult pins the accidental-empty-completion classifier: an
 // end_turn with tool activity (Turns > 1) and zero text is a failure surface
 // (blank bubble), while intentional silence (NO_REPLY token), single-shot
