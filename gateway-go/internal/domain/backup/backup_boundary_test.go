@@ -255,8 +255,14 @@ func TestNewTaskDefaultsAndPeriodicContract(t *testing.T) {
 	if task.Name() != "memory-backup" {
 		t.Fatalf("Name = %q", task.Name())
 	}
-	if task.Interval() != 24*time.Hour {
+	// Hourly RETRY cadence for one daily archive — Run gates on the remote
+	// existence check, so a failed attempt retries within the hour instead of
+	// losing the day (see Interval's doc comment).
+	if task.Interval() != time.Hour {
 		t.Fatalf("Interval = %v", task.Interval())
+	}
+	if task.shipped == nil {
+		t.Fatal("shipped probe was not wired — Run would re-ship every hour")
 	}
 }
 
@@ -915,4 +921,112 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 	n := w.remaining
 	w.remaining = 0
 	return n, w.err
+}
+
+// TestRunSkipsWhenTodaysArchiveAlreadyShipped: the catch-up gate's happy path —
+// a tick that finds today's archive on the remote does no work at all (no
+// snapshot, no ship, no prune), so the hourly retry cadence costs one probe.
+func TestRunSkipsWhenTodaysArchiveAlreadyShipped(t *testing.T) {
+	dir := t.TempDir()
+	writeBoundaryFile(t, dir, "memory/a.md", "x", 0o600)
+
+	snapshots := 0
+	task, err := NewTask(Config{StateDir: dir, SSHHost: "storage"}, func(context.Context) { snapshots++ })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var probed string
+	task.shipped = func(_ context.Context, name string) (bool, error) { probed = name; return true, nil }
+	ships, prunes := 0, 0
+	task.ship = func(context.Context, string, io.Reader) error { ships++; return nil }
+	task.prune = func(context.Context) error { prunes++; return nil }
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run = %v, want nil", err)
+	}
+	if ships != 0 || prunes != 0 || snapshots != 0 {
+		t.Errorf("already-shipped tick did work: ships=%d prunes=%d snapshots=%d", ships, prunes, snapshots)
+	}
+	if want := "deneb-memory-" + time.Now().Format("20060102") + ".tar.gz"; probed != want {
+		t.Errorf("probed %q, want today's archive %q", probed, want)
+	}
+}
+
+// TestRunRetriesSameDayAfterTransientShipFailure is the 2026-08-06 regression:
+// one ssh timeout used to lose that whole day (24h interval + date-stamped
+// name). A later tick in the SAME day must ship the SAME archive name.
+func TestRunRetriesSameDayAfterTransientShipFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeBoundaryFile(t, dir, "memory/a.md", "x", 0o600)
+
+	task, err := NewTask(Config{StateDir: dir, SSHHost: "storage"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := time.Date(2026, 8, 6, 8, 40, 0, 0, time.UTC)
+	task.now = func() time.Time { return day }
+
+	remote := map[string]bool{}
+	task.shipped = func(_ context.Context, name string) (bool, error) { return remote[name], nil }
+	task.prune = func(context.Context) error { return nil }
+
+	// Tick 1: the transient outage.
+	task.ship = func(context.Context, string, io.Reader) error { return errors.New("connection timed out") }
+	if err := task.Run(context.Background()); err == nil {
+		t.Fatal("failed ship must surface an error")
+	}
+
+	// Tick 2, one hour later, same day: the retry succeeds and the archive
+	// carries THAT day's date — the backup is delayed, not lost.
+	task.now = func() time.Time { return day.Add(time.Hour) }
+	var shippedName string
+	task.ship = func(_ context.Context, name string, archive io.Reader) error {
+		shippedName = name
+		remote[name] = true
+		_, err := io.ReadAll(archive)
+		return err
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("retry = %v, want success", err)
+	}
+	if shippedName != "deneb-memory-20260806.tar.gz" {
+		t.Errorf("retry shipped %q, want the same day's archive", shippedName)
+	}
+
+	// Tick 3: now that it landed, further ticks are no-ops.
+	task.ship = func(context.Context, string, io.Reader) error {
+		t.Fatal("re-shipped an archive that already landed")
+		return nil
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("post-success tick = %v, want nil", err)
+	}
+}
+
+// TestRunAttemptsWhenProbeFails: an unreachable remote makes the probe error;
+// "unknown" must fall through to an attempt, never be read as "already done"
+// (that would let a network outage silently suppress backups indefinitely).
+func TestRunAttemptsWhenProbeFails(t *testing.T) {
+	dir := t.TempDir()
+	writeBoundaryFile(t, dir, "memory/a.md", "x", 0o600)
+
+	task, err := NewTask(Config{StateDir: dir, SSHHost: "storage"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.shipped = func(context.Context, string) (bool, error) { return false, errors.New("network unreachable") }
+	shipped := false
+	task.ship = func(_ context.Context, _ string, archive io.Reader) error {
+		shipped = true
+		_, err := io.ReadAll(archive)
+		return err
+	}
+	task.prune = func(context.Context) error { return nil }
+
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if !shipped {
+		t.Error("probe failure suppressed the backup attempt")
+	}
 }
