@@ -219,6 +219,13 @@ func wikiSearchWithPlan(ctx context.Context, store *wiki.Store, query, planText,
 			lineRef = fmt.Sprintf("L%d-L%d", r.Line, r.EndLine)
 		}
 		meta := fmt.Sprintf("%s · 관련도 %.2f", lineRef, r.Score)
+		// Owning project's Korean name, composed at render time (never stored
+		// on the result — retrieval inputs stay untouched): the ref above is a
+		// frozen code path, and without this label a 로그/메일분석 hit gives the
+		// model no human name to answer with.
+		if alias := store.ProjectDisplayLabel(r.Path); alias != "" {
+			meta += " · 프로젝트: " + alias
+		}
 		if len(r.Context) > 0 {
 			meta += " · " + strings.Join(r.Context, " › ")
 		}

@@ -389,6 +389,14 @@ func writeDynamicKnowledge(d *strings.Builder, params SystemPromptParams, toolSe
 		d.WriteString("- **이번 세션의 사라진 대화 → polaris**: 컨텍스트에서 압축돼 사라진 '아까 그거'·합의·숫자·결정. 현재 세션 한정.\n")
 		d.WriteString("- **관계·맥락·연쇄 추론 → graphify**: 단순 키워드 룩업이 아닌 \"누가 어떤 결정에 엮였나\", \"이 함수가 어떤 개념을 구현하나\" 같은 그래프 탐색.\n\n")
 
+		// Folder names are frozen codes since the 2026-07-19 pivot, so every path
+		// the model sees is opaque. Constant text (no per-turn bytes — vLLM APC
+		// safe); the Korean name itself arrives via the wiki/recall render labels.
+		d.WriteString("### 프로젝트를 부르는 이름 — 사용자에겐 항상 한글\n")
+		d.WriteString("프로젝트 폴더명은 동결 코드(`프로젝트/pl2-kia-epc-001/…`)다. 코드는 도구 인자(read/write 경로)로만 쓰고 **응답 텍스트에는 그 프로젝트의 한글 이름을 써라** — 검색 결과와 회상 근거의 `프로젝트: …` 라벨이 그 이름이다.\n")
+		d.WriteString("- 좋음: \"기아 오토랜드 화성 태양광 건은 …\" · 나쁨: \"pl2-kia-epc-001의 …\"\n")
+		d.WriteString("- 사용자는 코드를 외우지 않는다 — 코드를 그대로 노출하면 어느 사업인지 알 수 없다. 한글 이름이 안 보이면 대표페이지를 읽어 확인하고, 그래도 없으면 폴더명을 쓰되 무슨 사업인지 한 마디 덧붙여라.\n\n")
+
 		// NOTE: graphify deep-coaching (graph=wiki|code, 탐색/chaining/community
 		// 패턴) lives in the graphify tool description and arrives at fetch_tools
 		// time — it was duplicated here verbatim before the prompt audit

@@ -93,6 +93,35 @@ func TestWikiSearch_ReturnsKoreanResults(t *testing.T) {
 	}
 }
 
+// A hit under a frozen code folder renders its owning project's Korean name in
+// the meta line: the w: ref must stay the raw code path (readable), so this
+// label is the model's route to the human name — composed at render time only,
+// never stored on the SearchResult (retrieval inputs untouched).
+func TestWikiSearchLabelsOwningProjectInKorean(t *testing.T) {
+	store := newTestWikiStore(t)
+	rep := wiki.NewPage("기아 오토랜드 화성 태양광", "프로젝트", nil)
+	if err := store.WritePage("프로젝트/pl2-kia-epc-001/대표.md", rep); err != nil {
+		t.Fatal(err)
+	}
+	mail := wiki.NewPage("Re: FW: 설치계획도 회신", "프로젝트", nil)
+	mail.Body = "국유지 모듈 배치 도면을 회신합니다."
+	if err := store.WritePage("프로젝트/pl2-kia-epc-001/메일분석/m1.md", mail); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := wikiSearch(context.Background(), store, "국유지 모듈 배치", 5)
+	if err != nil {
+		t.Fatalf("wikiSearch: %v", err)
+	}
+	if !strings.Contains(out, "프로젝트: 기아 오토랜드 화성 태양광") {
+		t.Errorf("expected Korean project label in meta, got: %q", out)
+	}
+	// The citation ref itself stays the raw code path.
+	if !strings.Contains(out, "w:프로젝트/pl2-kia-epc-001/메일분석/m1") {
+		t.Errorf("expected raw code-path ref, got: %q", out)
+	}
+}
+
 // TestWikiRead_AcceptsNamespacedRef verifies a "w:" citation (from wiki search
 // or knowledge recall) is readable through wiki read — the unified ref scheme.
 func TestWikiRead_AcceptsNamespacedRef(t *testing.T) {

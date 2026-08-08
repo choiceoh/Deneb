@@ -154,6 +154,9 @@ export interface WikiPage {
 export interface WikiCategory {
   category?: string;
   name?: string;
+  // Korean display label for code-named project folders ("프로젝트/pl2-kia-epc-001"
+  // → "기아 오토랜드 화성 태양광"); empty elsewhere. Display only — name stays the key.
+  displayName?: string;
   pageCount?: number;
   count?: number;
   pages?: number;

@@ -19,6 +19,19 @@ function categoryName(c: WikiCategory): string {
   return c.name ?? c.category ?? "(root)";
 }
 
+// Korean display label per category path: code-named project folders carry
+// displayName from the gateway ("프로젝트/pl2-kia-epc-001" → "기아 오토랜드 화성
+// 태양광"); everything else renders its path. The raw path stays the move VALUE
+// either way — only the row label changes.
+function categoryLabels(categories: WikiCategory[]): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const c of categories) {
+    const name = categoryName(c);
+    if (c.displayName) labels.set(name, `${c.displayName} (${name})`);
+  }
+  return labels;
+}
+
 // Split a page path into its directory and filename so each is editable on its own.
 function dirOf(path: string): string {
   const i = path.lastIndexOf("/");
@@ -55,9 +68,10 @@ export function MovePageModal({
   const name = baseOf(path);
   // Existing categories + the page's current directory, deduped — so the source
   // category is always offered even if the registry hasn't surfaced it.
+  const labels = categoryLabels(categories);
   const options = Array.from(
     new Set([dirOf(path), ...categories.map(categoryName)].filter((c) => c && c !== "(root)")),
-  ).sort((a, b) => a.localeCompare(b, "ko"));
+  ).sort((a, b) => (labels.get(a) ?? a).localeCompare(labels.get(b) ?? b, "ko"));
 
   const effectiveDir = addingCat ? newCat : dir;
   const to = joinPath(effectiveDir, name);
@@ -90,7 +104,7 @@ export function MovePageModal({
           setDir("");
         })}
         {options.map((c) =>
-          catRow(c, !addingCat && dir === c, () => {
+          catRow(labels.get(c) ?? c, !addingCat && dir === c, () => {
             setAddingCat(false);
             setDir(c);
           }),

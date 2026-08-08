@@ -274,6 +274,16 @@ func formatRecallWikiNote(store *wiki.Store, result wiki.SearchResult) string {
 		if marker := recallWikiStalenessMarker(page.Meta); marker != "" {
 			parts = append(parts, marker)
 		}
+		// Owning project in Korean, ahead of the page's own title: ref= carries
+		// the frozen folder code (프로젝트/pl2-kia-epc-001/…) because it must
+		// stay a readable path, so this label is how the model learns the human
+		// name of the project a 로그/메일분석 hit belongs to — without it the
+		// reply quotes the code back at the operator. Render-layer only: the
+		// label is composed here, not stored on SearchResult, so retrieval
+		// inputs (rerank document text) are untouched.
+		if alias := store.ProjectDisplayLabel(result.Path); alias != "" {
+			parts = append(parts, "프로젝트: "+alias)
+		}
 		if page.Meta.Title != "" {
 			parts = append(parts, "title: "+page.Meta.Title)
 		}
