@@ -875,6 +875,7 @@ func TestDefaultTargetsSatisfyPathSafetyContract(t *testing.T) {
 		"transcripts",
 		"polaris",
 		"workspace",
+		"network", // infra config snapshots (CRS812 switch export) — device-only state
 		"contacts.json",
 		"kv.json",
 	}

@@ -36,6 +36,11 @@ var DefaultTargets = []string{
 	"transcripts",
 	"polaris",
 	"workspace",
+	// network: infrastructure config snapshots that live nowhere else — the
+	// CRS812 fabric switch's exported config (scripts/deploy/crs812-config-backup.sh).
+	// Jumbo l2mtu, fan tuning, and the NTP client exist only on that device;
+	// without a shipped copy a dead unit means rebuilding them from memory.
+	"network",
 	"contacts.json",
 	"kv.json",
 }
