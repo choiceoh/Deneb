@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -17,6 +18,19 @@ import (
 // Self-correction and validation-case recording split out of
 // skill_lifecycle_tool.go (pure move, no behavior change): candidate
 // record/review, validation-case capture, and session backfill.
+
+const (
+	// maxDistinctReplayShapes caps how many DISTINCT tool-call shapes one case
+	// asserts. A session is a multi-turn trajectory while the behavioral gate
+	// replays a single plan, so encoding the whole trace made the fixture
+	// unsatisfiable by construction: the backfill lane averaged 11 distinct
+	// shapes per case, and the UNCHANGED incumbent skill scored 15-63% against
+	// its own corpus. A gate the incumbent cannot pass cannot rank a rewrite —
+	// 15 straight rejections and zero landed evolutions (2026-07-25 → 08-08).
+	maxDistinctReplayShapes = 4
+	// maxOrderedReplayCalls bounds when sequence itself is asserted.
+	maxOrderedReplayCalls = 3
+)
 
 // RecordSelfCorrectionCandidate queues an evidence-backed correction for later review.
 func (b *skillLifecycleBackend) RecordSelfCorrectionCandidate(ctx context.Context, req chattools.SkillSelfCorrectionCandidateRequest) (chattools.SkillSelfCorrectionCandidateResult, error) {
@@ -342,7 +356,11 @@ func buildSkillValidationCaseFromSession(req chattools.SkillValidationCaseFromSe
 	if len(autoExpectedCalls) > 0 {
 		replay.ExpectedToolCalls = append(autoExpectedCalls, replay.ExpectedToolCalls...)
 		replay.RequiredTools = appendUniqueStrings(replay.RequiredTools, skillReplayToolNames(autoExpectedCalls)...)
-		if len(autoExpectedCalls) > 1 {
+		// Order is only a fair assertion while the sequence is short enough for
+		// one plan to lay out. Demanding the full ordering of a long trajectory
+		// was a guaranteed miss — "expected tool calls are out of order" is 7%
+		// of every replay failure on record.
+		if len(autoExpectedCalls) > 1 && len(autoExpectedCalls) <= maxOrderedReplayCalls {
 			replay.RequireOrder = true
 		}
 	}
@@ -379,10 +397,39 @@ func BuildValidationCaseFromSession(req chattools.SkillValidationCaseFromSession
 	return buildSkillValidationCaseFromSession(req, sctx)
 }
 
+// replayVolatileFragment matches argument substrings welded to the session that
+// produced them — timestamps, absolute paths, ids, long digit runs. Asserting on
+// those turns "did the rewrite break what worked" into "reproduce that July
+// session verbatim": a replay can pick the right tool for the right reason and
+// still never emit the same date or path.
+var replayVolatileFragment = regexp.MustCompile(`\d{4}-\d{2}-\d{2}|/home/|~/|[0-9a-f]{8,}|\d{6,}`)
+
+// stableReplayIncludes drops session-bound fragments. Returning nil is the point
+// when everything was volatile: the call keeps asserting the TOOL, which is the
+// durable half of the observation, and stops asserting an unrepeatable argument.
+func stableReplayIncludes(includes []string) []string {
+	out := make([]string, 0, len(includes))
+	for _, include := range includes {
+		if replayVolatileFragment.MatchString(include) {
+			continue
+		}
+		out = append(out, include)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func replayCallShapeKey(call genesis.SkillReplayToolCallRecord) string {
+	return call.Name + "\x00" + strings.Join(call.InputIncludes, "\x01")
+}
+
 func skillReplayToolCallsFromActivities(activities []generation.ToolActivity) ([]genesis.SkillReplayToolCallRecord, []genesis.SkillReplayToolCallRecord) {
 	const maxExtractedReplayToolCalls = 12
-	expected := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
+	expected := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxDistinctReplayShapes))
 	forbidden := make([]genesis.SkillReplayToolCallRecord, 0, min(len(activities), maxExtractedReplayToolCalls))
+	seen := make(map[string]struct{}, maxExtractedReplayToolCalls)
 	for _, activity := range activities {
 		name := strings.TrimSpace(activity.Name)
 		if name == "" {
@@ -390,10 +437,18 @@ func skillReplayToolCallsFromActivities(activities []generation.ToolActivity) ([
 		}
 		call := genesis.SkillReplayToolCallRecord{
 			Name:          name,
-			InputIncludes: skillReplayInputIncludes(activity.Input),
+			InputIncludes: stableReplayIncludes(skillReplayInputIncludes(activity.Input)),
 			FixtureOutput: truncateRunes(strings.TrimSpace(activity.Output), 1000),
 			FixtureError:  activity.IsError,
 		}
+		// A trajectory repeats the same shape (exec seven times in a row is the
+		// median here); the gate matches on existence, so the repeats add no
+		// signal and only crowd out distinct behavior.
+		key := replayCallShapeKey(call)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 		if activity.IsError {
 			if len(call.InputIncludes)+len(call.InputExcludes) > 0 {
 				forbidden = append(forbidden, genesis.SkillReplayToolCallRecord{
@@ -402,7 +457,7 @@ func skillReplayToolCallsFromActivities(activities []generation.ToolActivity) ([
 					InputExcludes: append([]string(nil), call.InputExcludes...),
 				})
 			}
-		} else {
+		} else if len(expected) < maxDistinctReplayShapes {
 			expected = append(expected, call)
 		}
 		if len(expected)+len(forbidden) >= maxExtractedReplayToolCalls {
