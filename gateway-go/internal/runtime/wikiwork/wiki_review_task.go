@@ -193,10 +193,30 @@ func (t *wikiReviewTask) Run(ctx context.Context) error {
 	}
 	// Retroactive mail filing: unlinked analyses whose project has since become
 	// known move into that project's 메일분석 slot (deterministic signals only).
+	// Domain-signal proposals (observe mode, until DENEB_MAIL_RECLASS_DOMAIN=1)
+	// go to the state file's audit trail instead of moving — the same
+	// observe→arm pattern as duplicate merges.
 	refiled := 0
-	for _, m := range t.wikiStore.ReclassifyUnlinkedMailAnalyses(time.Now(), 10) {
-		t.logger.Info("wiki-review: unlinked mail re-filed", "from", m.From, "project", m.Project)
+	moved, proposals := t.wikiStore.ReclassifyUnlinkedMailAnalyses(time.Now(), 10)
+	for _, m := range moved {
+		t.logger.Info("wiki-review: unlinked mail re-filed",
+			"from", m.From, "project", m.Project, "signal", m.Signal)
 		refiled++
+	}
+	if len(proposals) > 0 {
+		state := t.loadState()
+		for _, p := range proposals {
+			t.logger.Info("wiki-review: domain-signal refile proposal (observe mode — no move)",
+				"from", p.From, "project", p.Project)
+			state.Observed = append(state.Observed,
+				fmt.Sprintf("%s | mail-domain %s → %s", time.Now().Format("2006-01-02 15:04"), p.From, p.Project))
+		}
+		if over := len(state.Observed) - wikiReviewObservedCap; over > 0 {
+			state.Observed = state.Observed[over:]
+		}
+		if err := t.saveState(state); err != nil {
+			t.logger.Warn("wiki-review: failed to persist domain proposals", "error", err)
+		}
 	}
 	t.logger.Info("wiki-review cycle completed",
 		"touched", len(touched), "suspects", suspectCount, "merged", merged,

@@ -47,7 +47,7 @@ func TestReclassifyUnlinkedMailAnalysesReturnsMoved(t *testing.T) {
 	writeUnlinkedMail(t, store, "m3", "기아 화성 + 해남 희망에너지 EPC 비교", nil)            // ambiguous → stays
 	writeUnlinkedMail(t, store, "m4", "뉴스레터", nil)                               // no signal → stays
 
-	moved := store.ReclassifyUnlinkedMailAnalyses(now, 10)
+	moved, _ := store.ReclassifyUnlinkedMailAnalyses(now, 10)
 	if len(moved) != 2 {
 		t.Fatalf("moved = %+v, want exactly the two signal mails", moved)
 	}
@@ -72,7 +72,7 @@ func TestReclassifyUnlinkedMailAnalysesReturnsMoved(t *testing.T) {
 	}
 
 	// Idempotent: nothing left to move.
-	if again := store.ReclassifyUnlinkedMailAnalyses(now, 10); len(again) != 0 {
+	if again, _ := store.ReclassifyUnlinkedMailAnalyses(now, 10); len(again) != 0 {
 		t.Errorf("second pass moved again: %+v", again)
 	}
 }
@@ -92,7 +92,7 @@ func TestReclassifyTarget_TwoDistinctRelatedProjectsReturnsEmpty(t *testing.T) {
 			"프로젝트/해남-희망에너지-epc/대표.md",
 		},
 	}}
-	if got := reclassifyTarget(ambiguous, projects); got != "" {
+	if got, _ := reclassifyTarget(ambiguous, projects); got != "" {
 		t.Errorf("two distinct related projects must be ambiguous, got %q", got)
 	}
 
@@ -103,14 +103,14 @@ func TestReclassifyTarget_TwoDistinctRelatedProjectsReturnsEmpty(t *testing.T) {
 			`프로젝트\기아-화성\로그.md`, // same project, other slot + windows separators
 		},
 	}}
-	if got := reclassifyTarget(sameTwice, projects); got != "기아-화성" {
+	if got, _ := reclassifyTarget(sameTwice, projects); got != "기아-화성" {
 		t.Errorf("agreeing related entries = %q, want 기아-화성", got)
 	}
 
 	// End-to-end: the ambiguous mail stays in the unlinked bucket.
 	writeUnlinkedMail(t, store, "amb1", "비교 검토",
 		[]string{"프로젝트/기아-화성/대표.md", "프로젝트/해남-희망에너지-epc/대표.md"})
-	if moved := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved) != 0 {
+	if moved, _ := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved) != 0 {
 		t.Errorf("ambiguous mail was re-filed: %+v", moved)
 	}
 }
@@ -122,9 +122,138 @@ func TestReclassifyUnlinkedMailAnalyses_CapEnforcesBoundary(t *testing.T) {
 	writeUnlinkedMail(t, store, "c2", "기아 화성 문의 2", nil)
 	writeUnlinkedMail(t, store, "c3", "기아 화성 문의 3", nil)
 
-	if moved := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 2); len(moved) != 2 {
+	if moved, _ := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 2); len(moved) != 2 {
 		t.Fatalf("moved = %d, want cap 2", len(moved))
 	}
+}
+
+// writeFiledMail plants an analysis mail INSIDE a project's 메일분석 slot with a
+// sender-domain tag — the evidence the domain histogram counts.
+func writeFiledMail(t *testing.T, store *Store, project, id, domain string) {
+	t.Helper()
+	page := NewPage("RE: "+id, "프로젝트", []string{domain})
+	page.Meta.Type = "log"
+	page.Body = "분석"
+	if err := store.WritePage(MailAnalysisPagePath(project, id), page); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestDomainSignalObserveThenArmed: the sunkean shape from the 2026-08-08
+// measurement — a domain with ≥3 filed mails under exactly one project. In
+// observe mode (default) the mail stays put and comes back as a proposal; with
+// DENEB_MAIL_RECLASS_DOMAIN=1 it moves, stamped signal="domain".
+func TestDomainSignalObserveThenArmed(t *testing.T) {
+	store := newReclassifyStore(t)
+	for i, id := range []string{"f1", "f2", "f3"} {
+		_ = i
+		writeFiledMail(t, store, "기아-화성", id, "sunkean.com")
+	}
+	writeUnlinkedMail(t, store, "u1", "견적 회신드립니다", nil) // no related/title signal
+	// The unlinked mail carries the sender-domain tag like real analyzer output.
+	_ = store.UpdatePage(MailAnalysisPagePath("", "u1"), func(cur *Page) (*Page, error) {
+		cur.Meta.Tags = []string{"sunkean.com"}
+		return cur, nil
+	})
+
+	// Observe mode: proposal surfaces, nothing moves.
+	t.Setenv("DENEB_MAIL_RECLASS_DOMAIN", "")
+	moved, proposals := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10)
+	if len(moved) != 0 {
+		t.Fatalf("observe mode must not move, got %+v", moved)
+	}
+	if len(proposals) != 1 || proposals[0].Project != "기아-화성" || proposals[0].Signal != "domain" {
+		t.Fatalf("proposals = %+v, want one domain proposal for 기아-화성", proposals)
+	}
+	if _, err := store.ReadPage(MailAnalysisPagePath("", "u1")); err != nil {
+		t.Fatalf("observe mode moved the page: %v", err)
+	}
+
+	// Armed: the same evidence now files the mail.
+	t.Setenv("DENEB_MAIL_RECLASS_DOMAIN", "1")
+	moved, proposals = store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10)
+	if len(proposals) != 0 {
+		t.Errorf("armed runs must not emit proposals, got %+v", proposals)
+	}
+	if len(moved) != 1 || moved[0].Signal != "domain" || moved[0].Project != "기아-화성" {
+		t.Fatalf("moved = %+v, want the domain-signal move", moved)
+	}
+	if _, err := store.ReadPage(MailAnalysisPagePath("기아-화성", "u1")); err != nil {
+		t.Errorf("armed move missing at destination: %v", err)
+	}
+}
+
+// TestDomainSignalGuards: every firing condition individually blocks —
+// under-evidence (<3), split evidence (two projects), blocklisted domains
+// (internal + freemail), and archived-project evidence exclusion.
+func TestDomainSignalGuards(t *testing.T) {
+	t.Setenv("DENEB_MAIL_RECLASS_DOMAIN", "1")
+
+	t.Run("under_evidence_stays", func(t *testing.T) {
+		store := newReclassifyStore(t)
+		writeFiledMail(t, store, "기아-화성", "f1", "acme.co.kr")
+		writeFiledMail(t, store, "기아-화성", "f2", "acme.co.kr") // only 2 < 3
+		writeUnlinkedMail(t, store, "u1", "문의", nil)
+		_ = store.UpdatePage(MailAnalysisPagePath("", "u1"), func(cur *Page) (*Page, error) {
+			cur.Meta.Tags = []string{"acme.co.kr"}
+			return cur, nil
+		})
+		if moved, props := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved)+len(props) != 0 {
+			t.Errorf("K=3 guard failed: moved=%+v props=%+v", moved, props)
+		}
+	})
+
+	t.Run("split_evidence_stays", func(t *testing.T) {
+		store := newReclassifyStore(t)
+		for _, id := range []string{"f1", "f2", "f3"} {
+			writeFiledMail(t, store, "기아-화성", id, "acme.co.kr")
+		}
+		writeFiledMail(t, store, "해남-희망에너지-epc", "f4", "acme.co.kr") // one competitor kills it
+		writeUnlinkedMail(t, store, "u1", "문의", nil)
+		_ = store.UpdatePage(MailAnalysisPagePath("", "u1"), func(cur *Page) (*Page, error) {
+			cur.Meta.Tags = []string{"acme.co.kr"}
+			return cur, nil
+		})
+		if moved, props := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved)+len(props) != 0 {
+			t.Errorf("unanimity guard failed: moved=%+v props=%+v", moved, props)
+		}
+	})
+
+	t.Run("blocklisted_domains_stay", func(t *testing.T) {
+		store := newReclassifyStore(t)
+		for _, dom := range []string{"topsolar.kr", "naver.com"} {
+			for _, id := range []string{"f1", "f2", "f3"} {
+				writeFiledMail(t, store, "기아-화성", dom+"-"+id, dom)
+			}
+			mailID := "u-" + dom
+			writeUnlinkedMail(t, store, mailID, "문의", nil)
+			_ = store.UpdatePage(MailAnalysisPagePath("", mailID), func(cur *Page) (*Page, error) {
+				cur.Meta.Tags = []string{dom}
+				return cur, nil
+			})
+		}
+		if moved, props := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved)+len(props) != 0 {
+			t.Errorf("blocklist guard failed: moved=%+v props=%+v", moved, props)
+		}
+	})
+
+	t.Run("archived_project_evidence_excluded", func(t *testing.T) {
+		store := newReclassifyStore(t)
+		for _, id := range []string{"f1", "f2", "f3"} {
+			writeFiledMail(t, store, "기아-화성", id, "acme.co.kr")
+		}
+		if _, err := store.CloseProject("기아-화성", "", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		writeUnlinkedMail(t, store, "u1", "문의", nil)
+		_ = store.UpdatePage(MailAnalysisPagePath("", "u1"), func(cur *Page) (*Page, error) {
+			cur.Meta.Tags = []string{"acme.co.kr"}
+			return cur, nil
+		})
+		if moved, props := store.ReclassifyUnlinkedMailAnalyses(time.Now(), 10); len(moved)+len(props) != 0 {
+			t.Errorf("closed-project evidence must not fire: moved=%+v props=%+v", moved, props)
+		}
+	})
 }
 
 // newClientGroupStore builds two projects of one 거래처 plus an unrelated one —
@@ -198,11 +327,11 @@ func TestReclassifyTarget_ClientMentionReturnsEmpty(t *testing.T) {
 	projects := store.KnownProjects()
 
 	bare := &Page{Meta: Frontmatter{Title: "금호타이어 태양광 문의"}}
-	if got := reclassifyTarget(bare, projects); got != "" {
+	if got, _ := reclassifyTarget(bare, projects); got != "" {
 		t.Errorf("bare client title must stay put, got %q", got)
 	}
 	specific := &Page{Meta: Frontmatter{Title: "금호타이어 곡성 2단계 준공 서류"}}
-	if got := reclassifyTarget(specific, projects); got != "금호타이어-곡성-2단계" {
+	if got, _ := reclassifyTarget(specific, projects); got != "금호타이어-곡성-2단계" {
 		t.Errorf("specific title = %q, want 금호타이어-곡성-2단계", got)
 	}
 }
