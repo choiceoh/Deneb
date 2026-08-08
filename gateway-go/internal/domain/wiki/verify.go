@@ -66,6 +66,10 @@ func (wd *WikiDreamer) verifyPages(ctx context.Context) []verifyFinding {
 	// 5c: Stale-deadline detection (pure computation).
 	findings = append(findings, wd.detectStaleDeadlines()...)
 
+	// 5c-2: Rep-title rule violations (pure computation, advisory — a title
+	// edit changes search ranking, so the rename stays a human decision).
+	findings = append(findings, detectTitleRuleViolations(entries)...)
+
 	// 5d: Long-superseded pages get archived (pure computation). Supersession is
 	// a soft flag — without this, superseded zombies pile up in search/index
 	// forever (they were a third of the 2026-07 duplicate mess's long tail).
