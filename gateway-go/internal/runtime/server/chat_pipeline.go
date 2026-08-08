@@ -113,6 +113,24 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				})
 			}
 
+			// Vocabulary-gap query expander (tiny role). Dormant unless
+			// DENEB_WIKI_QUERY_EXPANSION=backfill — the store only invokes it
+			// when that gate is on AND a query under-fills its result limit
+			// (domain/wiki/query_expansion.go), so this wiring is free at rest.
+			if tinyClient, tinyModel := (*regPtr).Client(modelrole.RoleTiny), (*regPtr).Model(modelrole.RoleTiny); tinyClient != nil && tinyModel != "" {
+				// Registry-aware thinking-off (dreamerLLMShape's three-way,
+				// scoped to the tiny role): a dual-mode reasoning tiny would
+				// otherwise spend the whole expansion budget on thinking.
+				var extraBody map[string]any
+				tinyCfg := (*regPtr).Config(modelrole.RoleTiny)
+				if directive := (*regPtr).ThinkingOffDirectiveFor(tinyCfg.ProviderID, tinyCfg.Model); directive != nil {
+					extraBody = map[string]any{
+						"chat_template_kwargs": map[string]any{directive.TemplateKwarg(): false},
+					}
+				}
+				wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger))
+			}
+
 			// Wiki dreamer.
 			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
 			lwModel := (*regPtr).Model(modelrole.RoleLightweight)

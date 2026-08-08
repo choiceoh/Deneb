@@ -13,6 +13,7 @@ import (
 
 type (
 	Store                   = wiki.Store
+	QueryExpander           = wiki.QueryExpander
 	Config                  = wiki.Config
 	SearchOptions           = wiki.SearchOptions
 	RecallEvent             = wiki.RecallEvent
