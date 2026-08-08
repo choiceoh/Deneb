@@ -38,15 +38,24 @@ class BaselineRegressionError(BaselineError):
 @dataclass(frozen=True)
 class CheckResult:
     regressions: tuple[str, ...] = ()
+    # Floors missed by a pillar whose evidence never resolved. The number is a
+    # bootstrap constant, not a measurement, so calling it a regression sends the
+    # reader hunting for code that got worse. It still fails the check —
+    # starvation is a real fault — but it is named for what it is: on 2026-08-07
+    # three unmeasured pillars dropped Process 6.4 points while every measured
+    # pillar held or improved.
+    unmeasured: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
-        return not self.regressions
+        return not self.regressions and not self.unmeasured
 
     def format_lines(self) -> list[str]:
         if self.ok:
             return ["RSI Bench baseline check passed."]
-        return [f"REGRESSION: {message}" for message in self.regressions]
+        lines = [f"REGRESSION: {message}" for message in self.regressions]
+        lines.extend(f"UNMEASURED: {message}" for message in self.unmeasured)
+        return lines
 
 
 def _number(value: object, field: str) -> float:
@@ -204,6 +213,21 @@ def update(
     _atomic_write(path, payload)
 
 
+def _unresolved_evidence(report: Report) -> dict[str, str]:
+    """Pillar id -> why its evidence never resolved.
+
+    Evidence names are dash-joined (`process-acceptor-trust`) while pillar ids are
+    dot-joined; normalise so a floor miss can be attributed to a starved sample
+    rather than to code that regressed.
+    """
+    out: dict[str, str] = {}
+    for item in report.evidence:
+        if item.status not in {"bootstrap", "unavailable"}:
+            continue
+        out[item.name.replace("-", ".", 1)] = f"{item.status}: {item.detail}"
+    return out
+
+
 def check(report: Report, baseline: dict[str, Any]) -> CheckResult:
     tolerances = baseline.get("tolerances") or {}
     overall_tol = float(tolerances.get("overall", OVERALL_TOLERANCE))
@@ -212,6 +236,8 @@ def check(report: Report, baseline: dict[str, Any]) -> CheckResult:
     conf_floor = float(tolerances.get("confidence", MIN_CHECK_CONFIDENCE))
     ratcheted = set(baseline.get("ratcheted_domains") or ["process", "utility"])
     regressions: list[str] = []
+    unmeasured: list[str] = []
+    unresolved = _unresolved_evidence(report)
 
     if report.confidence + _EPSILON < conf_floor:
         regressions.append(
@@ -229,9 +255,16 @@ def check(report: Report, baseline: dict[str, Any]) -> CheckResult:
             continue
         floor = float(baseline["domains"][domain.id])
         if domain.score + domain_tol + _EPSILON < floor:
-            regressions.append(
+            starved = sorted(
+                pillar for pillar in unresolved if pillar.startswith(f"{domain.id}.")
+            )
+            message = (
                 f"domain {domain.id} {domain.score:.1f} < baseline {floor:.1f} (tol {domain_tol})"
             )
+            if starved:
+                unmeasured.append(f"{message}; starved pillars: {', '.join(starved)}")
+            else:
+                regressions.append(message)
     scores = report.pillar_scores()
     for pillar_id, floor in baseline["pillars"].items():
         domain_id = pillar_id.split(".", 1)[0]
@@ -241,9 +274,13 @@ def check(report: Report, baseline: dict[str, Any]) -> CheckResult:
         if score is None:
             regressions.append(f"missing pillar {pillar_id}")
         elif score + pillar_tol + _EPSILON < float(floor):
-            regressions.append(
+            message = (
                 f"pillar {pillar_id} {score:.1f} < baseline {float(floor):.1f} (tol {pillar_tol})"
             )
+            if pillar_id in unresolved:
+                unmeasured.append(f"{message} — {unresolved[pillar_id]}")
+            else:
+                regressions.append(message)
 
     old_high = baseline.get("high_findings") or {}
     new_high = _high_findings(report)
@@ -252,4 +289,4 @@ def check(report: Report, baseline: dict[str, Any]) -> CheckResult:
             regressions.append(f"new {severity} finding {finding_id}")
         elif SEVERITY_ORDER[severity] > SEVERITY_ORDER.get(old_high[finding_id], 0):
             regressions.append(f"escalated finding {finding_id} to {severity}")
-    return CheckResult(regressions=tuple(regressions))
+    return CheckResult(regressions=tuple(regressions), unmeasured=tuple(unmeasured))

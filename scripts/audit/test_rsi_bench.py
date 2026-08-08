@@ -353,6 +353,71 @@ class ProcessUtilityTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(any("utility" in r for r in result.regressions))
 
+    def test_starved_pillar_reports_as_unmeasured_not_regression(self) -> None:
+        """A floor missed because evidence never resolved is not a code regression.
+
+        It still fails the check — a starved lane is a real fault — but it is
+        reported separately so the reader is not sent hunting for a code change
+        that never happened (2026-08-07: acceptor-trust, confirm-honesty and
+        retention-proxy all sat on bootstrap floors with resolved=0).
+        """
+        process = Domain(
+            id="process",
+            title="Process",
+            weight=DOMAIN_WEIGHTS["process"],
+            metrics=self._process_metrics(40),
+            ratcheted=True,
+        )
+        good = Report(
+            profile="fast",
+            revision="r1",
+            domains=[
+                process,
+                Domain(
+                    id="utility",
+                    title="Utility",
+                    weight=DOMAIN_WEIGHTS["utility"],
+                    metrics=self._utility_metrics(50),
+                    ratcheted=True,
+                ),
+            ],
+            evidence=self._evidence(),
+        )
+        starved_metrics = self._utility_metrics(50)
+        starved_metrics[3] = Metric("retention-proxy", "r", 15, 10.0, "x")
+        bad = Report(
+            profile="fast",
+            revision="r2",
+            domains=[
+                process,
+                Domain(
+                    id="utility",
+                    title="Utility",
+                    weight=DOMAIN_WEIGHTS["utility"],
+                    metrics=starved_metrics,
+                    ratcheted=True,
+                ),
+            ],
+            evidence=[
+                *self._evidence(),
+                Evidence("utility-retention-proxy", "bootstrap", "resolved=0; watches=0"),
+            ],
+        )
+        result = check_baseline(bad, baseline_snapshot(good))
+        self.assertFalse(result.ok)
+        self.assertTrue(
+            any("utility.retention-proxy" in m for m in result.unmeasured),
+            f"expected the starved pillar under unmeasured, got {result.unmeasured}",
+        )
+        self.assertFalse(
+            any("utility.retention-proxy" in m for m in result.regressions),
+            f"starved pillar must not be reported as a regression, got {result.regressions}",
+        )
+        self.assertTrue(
+            any(line.startswith("UNMEASURED:") for line in result.format_lines()),
+            result.format_lines(),
+        )
+
     def test_process_regression_is_caught(self) -> None:
         utility = Domain(
             id="utility",
