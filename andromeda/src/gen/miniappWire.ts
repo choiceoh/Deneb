@@ -299,6 +299,7 @@ export interface MemberOut {
 export interface MemoryCategoryRow {
   name?: string
   pageCount?: number
+  displayName?: string
 }
 
 export interface MemoryPageRow {

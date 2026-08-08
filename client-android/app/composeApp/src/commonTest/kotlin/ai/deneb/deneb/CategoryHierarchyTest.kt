@@ -82,6 +82,33 @@ class CategoryHierarchyTest {
         assertEquals(emptyList(), subCategories("없는분류", categories))
     }
 
+    // Project folders are frozen codes, so the drill-down row must render the
+    // gateway's Korean alias while `name` stays the navigation key. The alias
+    // rides on every row under the project (the gateway resolves the OWNING
+    // project), so a deeper slot row supplies it just as well as the folder row.
+    @Test
+    fun drilldownRendersKoreanAliasAndKeepsPathAsKey() {
+        val coded = listOf(
+            WikiCategory("프로젝트/pl2-kia-epc-001", 2, "기아 화성 국유지 태양광"),
+            WikiCategory("프로젝트/pl2-kia-epc-001/메일분석", 9, "기아 화성 국유지 태양광"),
+            WikiCategory("프로젝트/영산고", 2),
+        )
+
+        val nodes = subCategories("프로젝트", coded)
+
+        assertEquals(listOf("프로젝트/pl2-kia-epc-001", "프로젝트/영산고"), nodes.map { it.name })
+        assertEquals(listOf("기아 화성 국유지 태양광", "영산고"), nodes.map { it.label() })
+        // Counts still roll up the whole subtree.
+        assertEquals(11, nodes.first().pageCount)
+    }
+
+    @Test
+    fun aliasSurvivesWhenOnlyADeeperRowCarriesIt() {
+        val slotOnly = listOf(WikiCategory("프로젝트/nde-ztt-cbl-001/기자재", 4, "비금도 해저케이블"))
+
+        assertEquals("비금도 해저케이블", subCategories("프로젝트", slotOnly).single().label())
+    }
+
     @Test
     fun emptyInputProducesNoNavigationNodes() {
         assertEquals(emptyList(), topLevelCategories(emptyList()))

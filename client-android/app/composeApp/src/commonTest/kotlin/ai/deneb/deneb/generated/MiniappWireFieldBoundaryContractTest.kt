@@ -1677,6 +1677,14 @@ class MiniappWireFieldBoundaryContractTest {
             expectation = Expectation.Exact,
         ),
         fieldContract(
+            name = "MemoryCategoryRow.displayName",
+            serializer = MemoryCategoryRow.serializer(),
+            field = "displayName",
+            valid = boundaryText,
+            invalid = JsonObject(emptyMap()),
+            expectation = Expectation.Exact,
+        ),
+        fieldContract(
             name = "MemoryPageRow.path",
             serializer = MemoryPageRow.serializer(),
             field = "path",

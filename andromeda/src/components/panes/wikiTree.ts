@@ -12,16 +12,28 @@ export interface WikiTreeFile {
 
 export interface WikiTreeFolder {
   path: string; // folder path ("" for the root)
-  name: string; // last segment ("프로젝트", "영산고", …)
+  name: string; // last segment ("프로젝트", "영산고", …) — the navigation key
   folders: WikiTreeFolder[];
   files: WikiTreeFile[];
   count: number; // pages anywhere beneath (shown as the folder badge)
+  // Korean label to render instead of `name`, set when the folder holds a 대표
+  // page whose title differs from the segment — i.e. exactly the code-named
+  // project folders ("pl2-kia-epc-001" → "기아 화성 국유지 태양광"). Same rule
+  // as the gateway's alias (wiki/display_alias.go): the alias IS the 대표 title.
+  label?: string;
 }
 
 // Fixed per-project slots render with their slot name (instantly recognizable
 // structure) and sort ahead of ordinary pages; everything else shows its
 // title. Mirrors the gateway's project layout (wiki/project_layout.go).
 const SLOT_ORDER: Record<string, number> = { "대표.md": 0, "로그.md": 1, "로그-보관.md": 2 };
+const REP_PAGE = "대표.md";
+
+/** What to render for a folder: its Korean alias when it has one, else the
+ *  raw path segment. `path`/`name` stay the navigation keys either way. */
+export function folderLabel(folder: WikiTreeFolder): string {
+  return folder.label ?? folder.name;
+}
 
 export function fileLabel(file: WikiTreeFile): string {
   if (file.name in SLOT_ORDER) return stripMd(file.name);
@@ -70,8 +82,17 @@ export function buildWikiTree(pages: WikiPage[]): WikiTreeFolder {
     }
   }
 
+  // Fold each folder's 대표 title in as its Korean label before sorting, so the
+  // tree sorts by what the reader actually sees rather than by opaque codes.
+  const labelDeep = (node: WikiTreeFolder) => {
+    const rep = node.files.find((f) => f.name === REP_PAGE)?.title?.trim();
+    if (rep && rep !== node.name) node.label = rep;
+    node.folders.forEach(labelDeep);
+  };
+  labelDeep(root);
+
   const sortDeep = (node: WikiTreeFolder) => {
-    node.folders.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+    node.folders.sort((a, b) => folderLabel(a).localeCompare(folderLabel(b), "ko"));
     node.files.sort((a, b) => {
       const ra = SLOT_ORDER[a.name] ?? 9;
       const rb = SLOT_ORDER[b.name] ?? 9;

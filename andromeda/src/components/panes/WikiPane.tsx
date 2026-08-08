@@ -10,7 +10,7 @@ import { Icon } from "@/components/Icon";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { DeleteModal, OneFieldModal } from "./commonModals";
 import { MovePageModal, type NewPageDraft, NewPageModal, UnsavedWikiModal } from "./WikiModals";
-import { ancestorsOf, buildWikiTree, fileLabel, type WikiTreeFolder } from "./wikiTree";
+import { ancestorsOf, buildWikiTree, fileLabel, folderLabel, type WikiTreeFolder } from "./wikiTree";
 
 type BrowseMode = "tree" | "search" | "diary";
 
@@ -332,7 +332,7 @@ export function WikiPane() {
           <span className="wiki-tree-caret" aria-hidden>
             {open ? "▾" : "▸"}
           </span>
-          <span>{sub.name}</span>
+          <span>{folderLabel(sub)}</span>
           <small>{sub.count}</small>
         </button>,
       );

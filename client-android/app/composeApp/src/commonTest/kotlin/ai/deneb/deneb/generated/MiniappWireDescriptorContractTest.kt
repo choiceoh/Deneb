@@ -238,7 +238,7 @@ class MiniappWireDescriptorContractTest {
             name = "MemoryCategoryRow",
             serializer = MemoryCategoryRow.serializer(),
             empty = MemoryCategoryRow(),
-            fields = listOf("name", "pageCount"),
+            fields = listOf("name", "pageCount", "displayName"),
         ),
         contract(
             name = "MemoryPageRow",

@@ -32,6 +32,36 @@ func TestDisplayPathAnnotatesCodeFolders(t *testing.T) {
 	}
 }
 
+// A sub-page deep inside a code folder resolves to its OWNING project's Korean
+// name — the case the label form exists for, since such a page's own title is a
+// mail subject or "진행 로그" and never names the project.
+func TestProjectDisplayLabelResolvesOwningProject(t *testing.T) {
+	store := testutilNewStore(t)
+	rep := NewPage("기아 화성 국유지 태양광", "프로젝트", nil)
+	if err := store.WritePage("프로젝트/pl2-kia-epc-001/대표.md", rep); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{
+		"프로젝트/pl2-kia-epc-001/대표.md",
+		"프로젝트/pl2-kia-epc-001/로그.md",
+		"프로젝트/pl2-kia-epc-001/메일분석/abc@topsolar.kr.md",
+	} {
+		if got := store.ProjectDisplayLabel(path); got != "기아 화성 국유지 태양광" {
+			t.Errorf("ProjectDisplayLabel(%q) = %q, want 기아 화성 국유지 태양광", path, got)
+		}
+	}
+
+	// Non-project and unknown paths yield no label, so callers omit the field
+	// rather than rendering an empty "프로젝트: " row.
+	if got := store.ProjectDisplayLabel("업무/BEP.md"); got != "" {
+		t.Errorf("non-project label = %q, want empty", got)
+	}
+	if got := store.ProjectDisplayLabel("프로젝트/unknown-x/로그.md"); got != "" {
+		t.Errorf("unknown-project label = %q, want empty", got)
+	}
+}
+
 // The alias cache must refresh when pages change (generation-keyed).
 func TestProjectDisplayAliasRefreshesOnWrite(t *testing.T) {
 	store := testutilNewStore(t)

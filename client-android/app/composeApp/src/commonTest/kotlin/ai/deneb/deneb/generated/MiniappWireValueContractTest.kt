@@ -1337,6 +1337,11 @@ class MiniappWireValueContractTest {
                     value = JsonPrimitive(Int.MAX_VALUE),
                     expectation = Expectation.Exact,
                 ),
+                fieldValue(
+                    name = "displayName",
+                    value = boundaryText,
+                    expectation = Expectation.Exact,
+                ),
             ),
             invalidField = "name",
             invalidValue = JsonObject(emptyMap()),

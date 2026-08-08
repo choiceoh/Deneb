@@ -71,6 +71,44 @@ func (s *Store) ProjectDisplayAlias(folderName string) string {
 	return s.aliasCache.byName[folderName]
 }
 
+// ProjectDisplayLabel returns the Korean alias of the project that OWNS a path
+// ("프로젝트/nde-ztt-cbl-001/메일분석" → "비금도 154kV 해저케이블 (ZTT)"), or ""
+// for non-project paths and folders that need no annotation. Accepts a page
+// path or a bare folder path — the category browser lists folders, not pages.
+//
+// The LABEL form of the alias, for surfaces that render the name in a field of
+// its own while the raw path stays the navigation key (miniapp.memory.categories
+// → the clients' 위키 카테고리 browser). Prefer it over DisplayPath wherever the
+// string could be fed back into a read: an annotated path is not openable
+// (ReadPage misses), so DisplayPath's output must stay purely decorative.
+func (s *Store) ProjectDisplayLabel(path string) string {
+	if s == nil {
+		return ""
+	}
+	name, ok := projectFolderForDisplay(path)
+	if !ok {
+		return ""
+	}
+	return s.ProjectDisplayAlias(name)
+}
+
+// projectFolderForDisplay resolves the owning project folder for display, from
+// either a page path or a bare folder path. ProjectNameOf alone rejects the
+// single-segment folder form ("프로젝트/pl2-kia-epc-001") because at the storage
+// layer it can't be told apart from a not-yet-created page — but the category
+// browser lists exactly that form, and for display the ambiguity is harmless:
+// an unknown folder simply has no alias and renders as-is.
+func projectFolderForDisplay(relPath string) (string, bool) {
+	if name, ok := ProjectNameOf(relPath); ok {
+		return name, true
+	}
+	seg := splitProjectPath(relPath)
+	if len(seg) != 1 || strings.HasSuffix(seg[0], ".md") || isReservedProjectDir(seg[0]) {
+		return "", false
+	}
+	return seg[0], true
+}
+
 // DisplayPath annotates a wiki path's project folder segment with its Korean
 // alias for HUMAN-facing rendering: "프로젝트/nde-ztt-cbl-001/로그.md" →
 // "프로젝트/nde-ztt-cbl-001(비금도 154kV 해저케이블)/로그.md". Non-project

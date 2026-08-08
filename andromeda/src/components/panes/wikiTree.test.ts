@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ancestorsOf, buildWikiTree, fileLabel } from "./wikiTree";
+import { ancestorsOf, buildWikiTree, fileLabel, folderLabel } from "./wikiTree";
 
 describe("buildWikiTree", () => {
   it("folds flat paths into nested folders with recursive counts", () => {
@@ -53,6 +53,38 @@ describe("fileLabel", () => {
     expect(fileLabel({ path: "p/로그.md", name: "로그.md", title: "영산고 진행 로그" })).toBe("로그");
     expect(fileLabel({ path: "p/x.md", name: "x.md", title: "기아 화성 모듈 RFX" })).toBe("기아 화성 모듈 RFX");
     expect(fileLabel({ path: "p/slug-name.md", name: "slug-name.md" })).toBe("slug-name");
+  });
+});
+
+describe("folderLabel", () => {
+  it("shows the 대표 title for code-named project folders, sorting by it", () => {
+    const root = buildWikiTree([
+      { path: "프로젝트/pl2-kia-epc-001/대표.md", title: "기아 화성 국유지 태양광" },
+      { path: "프로젝트/pl2-kia-epc-001/메일분석/m1.md", title: "Re: FW: 설치계획도" },
+      { path: "프로젝트/nde-ztt-cbl-001/대표.md", title: "비금도 154kV 해저케이블" },
+    ]);
+    const project = root.folders.find((f) => f.name === "프로젝트")!;
+
+    // Codes stay the navigation keys; labels are what the reader sees, and the
+    // ordering follows the labels (기 < 비 in ko collation) — by code it would
+    // be the other way round (nde- < pl2-).
+    expect(project.folders.map(folderLabel)).toEqual(["기아 화성 국유지 태양광", "비금도 154kV 해저케이블"]);
+    expect(project.folders.map((f) => f.name)).toEqual(["pl2-kia-epc-001", "nde-ztt-cbl-001"]);
+
+    // Slot folders under a project keep their own name — only the project
+    // folder itself carries a 대표 page.
+    const kia = project.folders.find((f) => f.name === "pl2-kia-epc-001")!;
+    expect(folderLabel(kia.folders.find((f) => f.name === "메일분석")!)).toBe("메일분석");
+  });
+
+  it("falls back to the segment for descriptive folders and taxonomy buckets", () => {
+    const root = buildWikiTree([
+      { path: "프로젝트/영산고/대표.md", title: "영산고" }, // title == folder name
+      { path: "업무/구리값-동향.md", title: "구리값 동향" }, // no 대표 page
+    ]);
+    expect(folderLabel(root.folders.find((f) => f.name === "업무")!)).toBe("업무");
+    const project = root.folders.find((f) => f.name === "프로젝트")!;
+    expect(folderLabel(project.folders.find((f) => f.name === "영산고")!)).toBe("영산고");
   });
 });
 

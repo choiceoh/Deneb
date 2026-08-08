@@ -324,7 +324,11 @@ data class WikiPage(
 /** A wiki category with its page count, for the category browser. */
 @Immutable
 @Serializable
-data class WikiCategory(val name: String, val pageCount: Int)
+/** [name] is the full category path and stays the navigation key.
+ *  [displayName] is the Korean name to SHOW instead of the last path segment —
+ *  set only for project folders named with a frozen code
+ *  ("프로젝트/pl2-kia-epc-001" → "기아 화성 국유지 태양광"), blank elsewhere. */
+data class WikiCategory(val name: String, val pageCount: Int, val displayName: String = "")
 
 /** All wiki categories plus corpus totals. */
 @Immutable

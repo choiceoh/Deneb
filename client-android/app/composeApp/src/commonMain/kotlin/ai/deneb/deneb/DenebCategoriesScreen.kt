@@ -179,8 +179,18 @@ private fun PinnedEntryRow(label: String, onClick: () -> Unit) {
 }
 
 /** A browsable category node — a top-level bucket or a sub-folder. [name] is the
- *  full category path (the navigation key); [pageCount] is its subtree total. */
-internal data class CategoryNode(val name: String, val pageCount: Int)
+ *  full category path (the navigation key); [pageCount] is its subtree total.
+ *  [displayName] is the Korean label to render instead of the trailing path
+ *  segment, non-blank only for code-named project folders; see [subCategories]. */
+internal data class CategoryNode(
+    val name: String,
+    val pageCount: Int,
+    val displayName: String = "",
+)
+
+/** The label to show for this node: the Korean alias when the folder name is a
+ *  frozen code, else the trailing path segment. */
+internal fun CategoryNode.label(): String = displayName.ifBlank { name.substringAfterLast('/') }
 
 /** Collapse the flat category list into top-level buckets keyed by the first
  *  path segment, summing each subtree so "프로젝트/영산고" folds under "프로젝트" and
@@ -200,10 +210,16 @@ internal fun topLevelCategories(cats: List<WikiCategory>): List<CategoryNode> {
 internal fun subCategories(parent: String, cats: List<WikiCategory>): List<CategoryNode> {
     val prefix = "$parent/"
     val sums = LinkedHashMap<String, Int>()
+    // Korean alias per segment. Every row under a project folder carries the same
+    // alias (the gateway resolves the OWNING project, so "프로젝트/<code>/메일분석"
+    // aliases too), hence first non-blank wins — the deeper rows agree.
+    val labels = LinkedHashMap<String, String>()
     for (c in cats) {
         if (!c.name.startsWith(prefix)) continue
         val seg = c.name.removePrefix(prefix).substringBefore('/')
-        if (seg.isNotBlank()) sums[seg] = (sums[seg] ?: 0) + c.pageCount
+        if (seg.isBlank()) continue
+        sums[seg] = (sums[seg] ?: 0) + c.pageCount
+        if (c.displayName.isNotBlank() && labels[seg].isNullOrBlank()) labels[seg] = c.displayName
     }
-    return sums.map { (seg, count) -> CategoryNode(prefix + seg, count) }
+    return sums.map { (seg, count) -> CategoryNode(prefix + seg, count, labels[seg].orEmpty()) }
 }
