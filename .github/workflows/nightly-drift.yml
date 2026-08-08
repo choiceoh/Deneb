@@ -244,6 +244,22 @@ jobs:
           RECALL_WORKLIST: "1"
         run: scripts/dev/recall-health.sh | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Weekly (Monday runs): grow the traffic gold set from the recall-utility
+      # ledger. inject×cite joins are use-confirmed real-query gold at zero
+      # annotation cost — the compounding source the hand-written sets lack;
+      # the miner was built for weekly reruns but had no runner at all (found
+      # unwired 2026-08-08, yielding 4 cases/day of real traffic). Dedupes by
+      # normalized query, so append-only reruns are idempotent. Advisory like
+      # the rest of this job; the output lives outside the repo (~/.deneb).
+      - name: mine traffic gold (weekly)
+        if: always()
+        run: |
+          if [ "$(date +%u)" = "1" ]; then
+            python3 scripts/audit/mine_traffic_gold.py | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "traffic gold mining runs Mondays; skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   health-v3:
     # Health Bench 3.0 ratchet (Structure + Runtime; Fitness advisory).
     #
