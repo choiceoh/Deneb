@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -169,6 +170,59 @@ func TestEvaluateBehavior_ExecutorErrorFailsOpen(t *testing.T) {
 	}
 	if res.Evaluated {
 		t.Fatalf("expected fail-open (Evaluated=false) on executor error, got %+v", res)
+	}
+}
+
+// TestEvaluateBehavior_ExecutorNoiseDoesNotCountAsRegression pins the fix for
+// the 2026-07/08 evolve drought: the executor is a simulation, so scoring the
+// original once made its own run-to-run variance look like candidate breakage.
+// Here the UNCHANGED original emits the proven plan on its first replay and
+// drops it on the second — a 1-assertion swing with no edit involved. A
+// candidate that lands at that same lower value has not been shown to break
+// anything, so the gate must pass it; the old single-run comparison rejected
+// exactly this shape 15 times running and starved the RSI lifecycle samples.
+func TestEvaluateBehavior_ExecutorNoiseDoesNotCountAsRegression(t *testing.T) {
+	const fullPlan = `{"tool_calls":[{"name":"exec","args":"python3 topsolar.py dashboard"}]}`
+	const emptyPlan = `{"tool_calls":[]}`
+	var mu sync.Mutex
+	origCalls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		plan := emptyPlan
+		if strings.Contains(string(body), "PLAN_FLAKY") {
+			mu.Lock()
+			origCalls++
+			if origCalls == 1 {
+				plan = fullPlan
+			}
+			mu.Unlock()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, toolPlanCompletion(t, plan))
+	}))
+	defer srv.Close()
+
+	engine, tr := newBehaviorEngine(t, srv.URL)
+	if err := tr.RecordSkillValidationCase(behaviorTestCase()); err != nil {
+		t.Fatalf("record case: %v", err)
+	}
+	orig := "# Skill\n\nRun `python3 topsolar.py dashboard`. PLAN_FLAKY"
+	cand := "# Skill\n\nRun `python3 topsolar.py dashboard`, noting the caveat first. PLAN_EMPTY"
+	res, err := engine.EvaluateBehavior(context.Background(), "topsolar-db", orig, cand)
+	if err != nil {
+		t.Fatalf("EvaluateBehavior: %v", err)
+	}
+	if !res.Evaluated {
+		t.Fatalf("expected Evaluated=true, got %+v", res)
+	}
+	if res.ReplayNoise == 0 {
+		t.Fatalf("expected the two original runs to disagree so the noise is measured, got %+v", res)
+	}
+	if !res.Pass {
+		t.Fatalf("candidate matched the original's own worst run; expected pass, got %+v", res)
+	}
+	if origCalls != 2 {
+		t.Fatalf("expected the original to be replayed exactly twice, got %d", origCalls)
 	}
 }
 
