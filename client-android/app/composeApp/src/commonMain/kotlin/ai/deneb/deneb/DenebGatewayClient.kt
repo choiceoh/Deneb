@@ -170,6 +170,10 @@ class DenebGatewayClient private constructor(
     private val _hasMoreConversations = MutableStateFlow(false)
     override val hasMoreConversations: StateFlow<Boolean> = _hasMoreConversations
     private var serverRowsLoaded = 0
+    // Guard against double-tap on "이전 대화 더 보기" racing two page fetches with
+    // the same offset — duplicate Conversation.id values crash LazyColumn.
+    @Volatile
+    private var loadMoreConversationsInFlight = false
 
     // Deneb wiki pages. getMemories() returns this snapshot and also kicks a refresh;
     // observers rebuild their state once the RPC lands.
@@ -543,18 +547,24 @@ class DenebGatewayClient private constructor(
     }
 
     override fun loadMoreConversations() {
+        if (loadMoreConversationsInFlight) return
+        loadMoreConversationsInFlight = true
         scope.launch {
-            val epoch = credEpoch
-            val loaded = _savedConversations.value
-            // Offset by what the SERVER has handed over so far. The 업무 home row is
-            // synthesized locally when the first page lacks it, so counting the
-            // rendered list would skip a real conversation at the page boundary.
-            val next = fetchRecentSessions(offset = serverRowsLoaded) ?: return@launch
-            if (epoch != credEpoch) return@launch
-            serverRowsLoaded += next.serverRows
-            val known = loaded.mapTo(mutableSetOf()) { it.id }
-            _savedConversations.value = loaded + next.conversations.filterNot { it.id in known }
-            _hasMoreConversations.value = serverRowsLoaded < next.total && next.serverRows > 0
+            try {
+                val epoch = credEpoch
+                val loaded = _savedConversations.value
+                // Offset by what the SERVER has handed over so far. The 업무 home row is
+                // synthesized locally when the first page lacks it, so counting the
+                // rendered list would skip a real conversation at the page boundary.
+                val next = fetchRecentSessions(offset = serverRowsLoaded) ?: return@launch
+                if (epoch != credEpoch) return@launch
+                serverRowsLoaded += next.serverRows
+                val known = loaded.mapTo(mutableSetOf()) { it.id }
+                _savedConversations.value = loaded + next.conversations.filterNot { it.id in known }
+                _hasMoreConversations.value = serverRowsLoaded < next.total && next.serverRows > 0
+            } finally {
+                loadMoreConversationsInFlight = false
+            }
         }
     }
 

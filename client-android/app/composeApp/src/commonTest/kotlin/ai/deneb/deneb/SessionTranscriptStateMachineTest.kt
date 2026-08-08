@@ -820,4 +820,41 @@ class SessionTranscriptStateMachineTest {
         assertEquals(1, page?.total)
         assertEquals(1, page?.serverRows)
     }
+
+    // Regression (#4372): without channel scoping, cron/system rows can fill page 1
+    // and hide user conversations — the desktop drawer fixed this in #4353.
+    @Test
+    fun fetchRecentSessionsScopesToClientChannel() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(sessionsPayload(SessionRowOut(key = "client:main", updatedAtMs = 9)))
+
+        f.client.fetchRecentSessions()
+
+        assertEquals("client", f.transport.singleRequest().rpcParams?.get("channel")?.jsonPrimitive?.content)
+    }
+
+    // Double-tap "이전 대화 더 보기" must not race two fetches at the same offset —
+    // duplicate LazyColumn keys crash the drawer.
+    @Test
+    fun loadMoreConversationsIgnoresConcurrentCalls() = runTest {
+        val f = gatewayClientFixture()
+        f.transport.enqueueRpc(
+            sessionsPayload(SessionRowOut(key = "client:main", updatedAtMs = 9), total = 12),
+        )
+        f.client.loadConversations()
+        f.transport.awaitRequestCount(1)
+
+        f.transport.clearRequests()
+
+        val gate = CompletableDeferred<Unit>()
+        f.transport.enqueueRpc(
+            sessionsPayload(SessionRowOut(key = "client:main:older", updatedAtMs = 3), total = 12),
+            gate = gate,
+        )
+        f.client.loadMoreConversations()
+        f.client.loadMoreConversations()
+        f.transport.awaitRequestCount(1)
+        assertEquals(1, f.transport.requests.size)
+        gate.complete(Unit)
+    }
 }

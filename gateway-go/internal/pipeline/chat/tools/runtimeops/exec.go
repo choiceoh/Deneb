@@ -196,7 +196,7 @@ func execFallback(ctx context.Context, p execParams, workDir string, timeoutMs i
 	for k, v := range p.Env {
 		env = append(env, k+"="+v)
 	}
-	cmd.Env = env
+	cmd.Env = process.SanitizeEnv(env, slog.Default())
 	out, err := cmd.CombinedOutput()
 	elapsed := time.Since(start)
 
