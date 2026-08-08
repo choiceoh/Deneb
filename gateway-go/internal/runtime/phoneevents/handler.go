@@ -265,6 +265,12 @@ const phoneEventApprovalDeadline = 12 * time.Minute
 // session that silently grows unbounded (the EphemeralUser doctrine).
 const phoneEventSessionPrefix = "phone-event"
 
+// modelCircuitOpenErrorText is synthesized inside pipeline/chat when a model's
+// health breaker is open and the turn should skip directly to configured
+// fallbacks. That sentinel is package-local, so this boundary classifies the
+// stable error text rather than importing the chat implementation package.
+const modelCircuitOpenErrorText = "model circuit open: skipped after repeated recent failures"
+
 // phoneEventPromptTmpl frames a real-time phone event for the 비서실장 persona.
 // The four %s are, in order: kind label, source, body text, and the type-specific
 // guidance line (built by phoneEventGuidance, which embeds the NO_REPLY token).
@@ -566,8 +572,7 @@ func (s *Handler) processJudgment(ctx context.Context, eventType, source, text s
 		AutoDeliveredOutput: true, // relayNative delivers; agent must not use message tool
 	})
 	if err != nil {
-		s.logger.Error("phone-event judgment turn failed",
-			"source", source, "type", eventType, "error", err)
+		s.logJudgmentTurnFailure(source, eventType, err)
 		return false, err
 	}
 	// relayNative applies the same noise floor as every proactive surface:
@@ -603,6 +608,20 @@ func (s *Handler) processJudgment(ctx context.Context, eventType, source, text s
 		"delivered", delivered, "outputLen", len(output), "approval", approval,
 		"docId", approvalDocID)
 	return delivered, nil
+}
+
+func (s *Handler) logJudgmentTurnFailure(source, eventType string, err error) {
+	if isModelCircuitOpenError(err) {
+		s.logger.Debug("phone-event judgment turn skipped",
+			"source", source, "type", eventType, "reason", "model_circuit_open", "error", err)
+		return
+	}
+	s.logger.Error("phone-event judgment turn failed",
+		"source", source, "type", eventType, "error", err)
+}
+
+func isModelCircuitOpenError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), modelCircuitOpenErrorText)
 }
 
 // isPolledGmailNotification reports whether a phone event is a Gmail app
