@@ -106,6 +106,54 @@ func TestOCRImageBytesRetriesTableModeOnLoop(t *testing.T) {
 	}
 }
 
+// finish_reason=length with shape-healthy text must not be cached when rescue
+// fails — the budget signal is the degeneration, and shape-only checks miss it.
+func TestOCRImageBytesDoesNotCacheTokenExhaustionWhenRescueFails(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("Chapter 1\n\nCoherent document text.\n")
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&b, "Paragraph %d with distinct content.\n", i)
+	}
+	coherent := b.String()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Messages []struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		task := req.Messages[0].Content[1].Text
+		content, finish := coherent, "length"
+		if task == "Table Recognition:" {
+			content = strings.Repeat("40\n", 20)
+			finish = ""
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{
+				"message":       map[string]string{"content": content},
+				"finish_reason": finish,
+			}},
+		})
+	}))
+	defer srv.Close()
+	t.Setenv("DENEB_OCR_VL_URL", srv.URL)
+	cacheDir := t.TempDir()
+	t.Setenv("DENEB_OCR_CACHE_DIR", cacheDir)
+
+	got, err := ocrImageBytes(context.Background(), []byte("\x89PNG length"))
+	if err != nil {
+		t.Fatalf("ocrImageBytes: %v", err)
+	}
+	if strings.TrimSpace(got) != strings.TrimSpace(coherent) {
+		t.Fatalf("coherent last resort must survive, got %.40q", got)
+	}
+	if entries, _ := os.ReadDir(cacheDir); len(entries) != 0 {
+		t.Fatalf("token-exhausted output must stay uncached when rescue fails, found %d entries", len(entries))
+	}
+}
+
 // A degenerated table-mode answer must not replace the original output.
 func TestOCRImageBytesKeepsOriginalWhenRetryAlsoLoops(t *testing.T) {
 	looped := strings.Repeat("Duck Joint(B/Jumper부착) H100 L Type\n", 20)

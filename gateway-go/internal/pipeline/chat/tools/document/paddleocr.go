@@ -160,6 +160,8 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 	text, finish, err := paddleOCR(ctx, img, "OCR:")
 	if err == nil {
 		final := ""
+		primaryDegenerate := ocrDegenerate(text, finish)
+		var rescuedTable string
 		// Dense pages trap the full-page mode in degenerate loops: item tables
 		// repeat a row until max_tokens (2026-07-18 발주서, CER 2.58), and sheet
 		// music loops on bar numbers and fingerings — "40" 1,020 times, "4 4 3
@@ -168,9 +170,9 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 		// through AND got cached, permanently serving garbage for that image.
 		// ocrDegenerate folds all observed collapse shapes, including the
 		// strongest signal of all: the token budget running out.
-		if why := ocrDegenerate(text, finish); why != "" {
+		if primaryDegenerate != "" {
 			slog.Default().Warn("paddleocr-vl full-page output degenerated; rescuing",
-				"why", why, "chars", len(text))
+				"why", primaryDegenerate, "chars", len(text))
 			// Two rescues, best-of by surviving content: table mode re-reads
 			// the page (saves dense tables and lyric pages), truncation keeps
 			// the healthy prefix (saves headers when table mode loses them —
@@ -182,6 +184,7 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 					tableText = strings.TrimSpace(conv)
 				}
 			}
+			rescuedTable = tableText
 			truncated := strings.TrimSpace(truncateAtLoop(text))
 			if len(tableText) >= len(truncated) {
 				final = tableText
@@ -197,7 +200,15 @@ func ocrImageBytes(ctx context.Context, img []byte) (string, error) {
 		}
 		// Cache healthy results only: a degenerate last resort must stay
 		// uncached so a later attempt gets to redo it.
-		if ocrDegenerate(final, "") == "" {
+		cacheFinish := ""
+		if primaryDegenerate == "token-exhaustion" && rescuedTable == "" &&
+			strings.TrimSpace(final) == strings.TrimSpace(truncateAtLoop(text)) {
+			// finish_reason=length is invisible to shape-only checks; when
+			// rescue failed to replace the primary output, keep the signal
+			// so truncated-but-coherent pages are not cached permanently.
+			cacheFinish = finish
+		}
+		if ocrDegenerate(final, cacheFinish) == "" {
 			ocrCachePut(img, final)
 		}
 		return final, nil
