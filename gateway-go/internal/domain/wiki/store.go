@@ -124,6 +124,11 @@ type Store struct {
 	// pre-mutation snapshot (e.g. a wiki_forget followed by recall).
 	graphGen uint64
 
+	// queryExpander, when set via SetQueryExpander, bridges query vocabulary to
+	// wiki vocabulary for the backfill path (query_expansion.go). Set once at
+	// wiring time before serving; nil disables expansion.
+	queryExpander QueryExpander
+
 	// aliasCache memoizes project folder → rep-title display aliases for the
 	// code-keyed folder pivot (display_alias.go). Invalidated by generation
 	// comparison against graphGen — no extra bookkeeping on the write path.

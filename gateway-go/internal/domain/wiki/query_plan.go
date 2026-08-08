@@ -222,6 +222,11 @@ func (s *Store) SearchPlan(ctx context.Context, plan QueryPlan, limit int) (Sear
 	rerankScores, rerankWeights, rerankDiagnostics := s.applyModelRerank(ctx, rerankQuery, results, plan.ForceRerank)
 	diagnostics.Rerank = rerankDiagnostics
 	results = truncateResults(results, limit)
+	// Vocabulary-gap backfill (query_expansion.go): fires only when the primary
+	// plan under-fills the limit — a full result list is byte-identical to the
+	// pre-expansion pipeline. After truncate (slots are known), before metadata
+	// (backfilled hits get context/snippets like any other result).
+	results = s.backfillWithExpansion(ctx, rerankQuery, results, limit)
 	s.attachResultMetadata(plan.Clauses[0].Query, results)
 	diagnostics.ContextExpanded = s.attachLateContext(results)
 	diagnostics.ReturnedCount = len(results)

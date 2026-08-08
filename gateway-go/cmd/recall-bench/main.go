@@ -620,6 +620,17 @@ func runBenchmark(ctx context.Context, cfg benchmarkConfig, stdout, stderr io.Wr
 	if err != nil {
 		return err
 	}
+	// A/B arm for the vocabulary-gap backfill (query_expansion.go): with
+	// DENEB_EXPANSION_MODEL set AND DENEB_WIKI_QUERY_EXPANSION=backfill this
+	// wires an LLM expander at the wormhole script endpoint; unset = the exact
+	// production-default (expansion-off) pipeline. Cloud models only — a bench
+	// hammering the shared local dsv4 stalled live chat turns on 2026-07-21.
+	if model := strings.TrimSpace(os.Getenv("DENEB_EXPANSION_MODEL")); model != "" {
+		if es, ok := store.(interface{ SetQueryExpander(wiki.QueryExpander) }); ok {
+			es.SetQueryExpander(benchQueryExpander(model))
+			fmt.Fprintf(stdout, "== query expansion: model=%s mode=%s\n", model, os.Getenv("DENEB_WIKI_QUERY_EXPANSION"))
+		}
+	}
 	if !semantic {
 		// Loud, not just a header flag: a silently BM25-degraded run produces
 		// numbers that look complete but measure a different retrieval stack —

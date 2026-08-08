@@ -701,6 +701,13 @@ func (s *Store) composeSearchReport(
 
 	admitted := len(results)
 	results = truncateResults(results, limit)
+	// Vocabulary-gap backfill (query_expansion.go): fires only when the primary
+	// query under-fills the limit — a full list is byte-identical to today.
+	// Gated out of sub-searches (skipMetadata marks plan-internal clause runs
+	// and the expansion's own lookups must never recurse).
+	if !options.skipMetadata {
+		results = s.backfillWithExpansion(ctx, query, results, limit)
+	}
 	if !options.skipMetadata {
 		s.attachResultMetadata(query, results)
 		diagnostics.ContextExpanded = s.attachLateContext(results)
