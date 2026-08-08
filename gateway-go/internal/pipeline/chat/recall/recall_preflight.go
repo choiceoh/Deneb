@@ -364,7 +364,9 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 			// recall_misses.go). Cue-only: silent auto-recall legitimately finds
 			// nothing on smalltalk, and recording that would bury real demand.
 			recordRecallMiss(deps.Wiki, params.SessionKey, message, logger)
-			return formatRecallNoEvidence(), truncated
+			// The no-evidence notice also carries the routing hint: "찾은 게
+			// 없다"에서 끝내지 말고 맞는 도구로 가라는 다음 행선지.
+			return appendRoutingHint(formatRecallNoEvidence(), message), truncated
 		}
 		return "", truncated
 	}
@@ -383,7 +385,11 @@ func Build(ctx context.Context, params Params, deps Deps, logger *slog.Logger) (
 	if !deps.Briefcase {
 		StoreInjectedPaths(params.SessionKey, injected)
 	}
-	return formatRecallEvidenceAt(evidence, deps.now()), truncated
+	// Routing hint for query shapes page search cannot answer (aggregate/
+	// temporal/graph — recall_route.go): the wiki evidence above usually EXISTS
+	// for these but is the wrong answer surface, so the hint rides along to
+	// nudge the right tool. Outside the fence — server guidance, not recall.
+	return appendRoutingHint(formatRecallEvidenceAt(evidence, deps.now()), message), truncated
 }
 
 func buildRecallSources(params Params, deps Deps, queries []string, message string) []recallSource {
