@@ -11,7 +11,11 @@
 # The switch is reachable only from srv2 (192.168.88.10), hence the double hop.
 # Writes only when the config actually changed, so the file's mtime is a real
 # "last changed" signal rather than "last polled".
-set -euo pipefail
+#
+# ALWAYS exits 0 (release-and-deploy.md): a red unit invites an operator to
+# disable the timer, ending the snapshots this exists to take. Failures go to
+# the journal; the previous good snapshot stays untouched either way.
+set -uo pipefail
 
 DEST="${DENEB_STATE_DIR:-$HOME/.deneb}/network/crs812-config.rsc"
 mkdir -p "$(dirname "$DEST")"
@@ -21,13 +25,13 @@ trap 'rm -f "$tmp"' EXIT
 if ! ssh -o BatchMode=yes -o ConnectTimeout=10 srv2 \
         "ssh -o BatchMode=yes -o ConnectTimeout=10 admin@192.168.88.1 '/export'" > "$tmp" 2>/dev/null; then
     echo "crs812-config-backup: export failed (switch unreachable)" >&2
-    exit 1
+    exit 0
 fi
 # A valid export always carries the RouterOS header; refuse to overwrite a good
 # snapshot with a truncated or error-page response.
 if ! head -1 "$tmp" | grep -q "by RouterOS"; then
     echo "crs812-config-backup: refusing to save malformed export" >&2
-    exit 1
+    exit 0
 fi
 
 # Ignore the timestamp comment on line 1 when comparing — it changes every run.
