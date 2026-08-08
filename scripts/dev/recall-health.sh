@@ -35,9 +35,26 @@ export DENEB_RERANK_FORCE="${DENEB_RERANK_FORCE:-on}"
 export DENEB_RERANK_URL="${DENEB_RERANK_URL:-http://127.0.0.1:8004}"
 export DENEB_RERANK_MODEL="${DENEB_RERANK_MODEL:-xprovence-bgem3-v2}"
 
+# Vocabulary-gap expansion backfill went live in production on 2026-08-08
+# (#4473; gateway drop-in sets DENEB_WIKI_QUERY_EXPANSION=backfill), so parity
+# needs the bench arm too — the exact drift class this block exists to prevent.
+# The bench expander mirrors the production tiny role (qwen via wormhole);
+# without the wormhole token the expander calls fail per-query and the run is
+# effectively expansion-off, so warn loudly rather than measure silently.
+export DENEB_WIKI_QUERY_EXPANSION="${DENEB_WIKI_QUERY_EXPANSION:-backfill}"
+export DENEB_EXPANSION_MODEL="${DENEB_EXPANSION_MODEL:-qwen3.6-35b-a3b}"
+if [[ -z "${DENEB_EXPANSION_API_KEY:-}" && -f "$HOME/.wormhole/config.json" ]]; then
+    DENEB_EXPANSION_API_KEY="$(python3 -c 'import json,os;print(os.path.expandvars(json.load(open(os.path.expanduser("~/.wormhole/config.json")))["token"]))' 2>/dev/null || true)"
+    export DENEB_EXPANSION_API_KEY
+fi
+if [[ "$DENEB_WIKI_QUERY_EXPANSION" == "backfill" && -z "${DENEB_EXPANSION_API_KEY:-}" ]]; then
+    echo "recall-health: WARNING — expansion=backfill but no wormhole token; expander calls will fail and the run scores expansion-OFF (not production parity)" >&2
+fi
+
 echo "recall-health: fusion 1:${DENEB_WIKI_RRF_SEM_WEIGHT}:${DENEB_WIKI_RRF_GRAPH_WEIGHT}" \
      "· rerank=${DENEB_RERANK_FORCE} (${DENEB_RERANK_MODEL})" \
-     "· embed=${DENEB_EMBEDDING_URL} · floor=${DENEB_WIKI_SEM_FLOOR}"
+     "· embed=${DENEB_EMBEDDING_URL} · floor=${DENEB_WIKI_SEM_FLOOR}" \
+     "· expansion=${DENEB_WIKI_QUERY_EXPANSION} (${DENEB_EXPANSION_MODEL})"
 
 if [[ ! -d "$WIKI_SRC" ]]; then
     echo "recall-health: wiki not found at $WIKI_SRC (set DENEB_WIKI_DIR)" >&2
