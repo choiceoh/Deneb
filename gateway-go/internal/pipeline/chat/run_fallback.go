@@ -189,7 +189,7 @@ func runAgentWithFallback(
 		deps.registry.ModelUnhealthy(cfg.Model) &&
 		healthyFallbackExists(deps.registry, initialRole, cfg.Model)
 	if t.skipInitial {
-		logger.Warn("model circuit open; skipping straight to fallback chain",
+		logger.Debug("model circuit open; skipping straight to fallback chain",
 			"model", cfg.Model, "role", string(initialRole))
 	}
 
@@ -571,11 +571,19 @@ func (t *fallbackTurn) walkFallbackChain(ctx context.Context) {
 			continue
 		}
 		triedModels[fbCfg.Model] = true
-		t.logger.Warn("model failed, trying fallback",
-			"failedRole", string(failedRole),
-			"nextRole", string(fbRole),
-			"nextModel", fbCfg.Model,
-			"error", t.runErr)
+		if errors.Is(t.runErr, errModelCircuitOpen) {
+			t.logger.Debug("model circuit open; trying fallback",
+				"failedRole", string(failedRole),
+				"nextRole", string(fbRole),
+				"nextModel", fbCfg.Model,
+				"error", t.runErr)
+		} else {
+			t.logger.Warn("model failed, trying fallback",
+				"failedRole", string(failedRole),
+				"nextRole", string(fbRole),
+				"nextModel", fbCfg.Model,
+				"error", t.runErr)
+		}
 		agentCfg := t.cfg
 		agentCfg.Model = fbCfg.Model
 		// cfg's cache_control policy (system markers + trailing-marker hook)
