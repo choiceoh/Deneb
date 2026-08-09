@@ -527,11 +527,13 @@ JSON 배열만 반환. 다른 텍스트 없이.
 
 	req := wd.llmRequest("You are a wiki category validator. Respond only with a JSON array.", prompt, 2048)
 	// Strict-JSON one-shot: disable thinking so the output budget goes to the
-	// verdict array, not chain-of-thought. Live 2026-07-06 this call died with
-	// "empty content (finish_reason=length): reasoning consumed the output
-	// budget". The OpenAI path maps disabled → reasoning_effort "low", which
-	// the wormhole GLM route treats as an explicit thinking-off signal.
-	req.Thinking = &llm.ThinkingConfig{Type: "disabled"}
+	// verdict array, not chain-of-thought. When server wiring already attached a
+	// chat_template_kwargs off-switch, do not also set Thinking{disabled}: the
+	// OpenAI path would add reasoning_effort="low" before ExtraBody is merged,
+	// which can keep dual-mode vLLM models reasoning despite the template toggle.
+	if !hasTemplateThinkingOff(wd.llmExtraBody) {
+		req.Thinking = &llm.ThinkingConfig{Type: "disabled"}
+	}
 	resp, err := wd.client.Complete(ctx, req)
 	if err != nil {
 		wd.logger.Warn("wiki-verify: LLM misclassification check failed", "error", err)
@@ -564,6 +566,28 @@ JSON 배열만 반환. 다른 텍스트 없이.
 	}
 
 	return findings
+}
+
+func hasTemplateThinkingOff(extra jsonObject) bool {
+	raw, ok := extra["chat_template_kwargs"]
+	if !ok {
+		return false
+	}
+	switch kwargs := raw.(type) {
+	case map[string]any:
+		for _, v := range kwargs {
+			if b, ok := v.(bool); ok && !b {
+				return true
+			}
+		}
+	case map[string]bool:
+		for _, b := range kwargs {
+			if !b {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // levenshtein computes the edit distance between two strings (rune-level).
