@@ -292,9 +292,11 @@ func finishToolCall(
 	logToolExecution(runLog, turn, tc, block, elapsed, fileEffects, "", errors.Is(toolErr, ErrUnknownTool))
 
 	// Gateway-log a compact "tool complete" entry — pairs with the existing
-	// "exec" start line so each tool call has a bracketed timing + outcome. On
-	// error, include the first 120 chars of the error message so the operator
-	// sees the cause without opening the agent detail jsonl.
+	// "exec" start line so each tool call has a bracketed timing + outcome.
+	// A model-facing tool_result error is part of normal turn recovery, not a
+	// gateway runtime warning. Real executor defects still have their own
+	// Error/Warn at the source, and the agent detail log keeps isError=true for
+	// reliability metrics.
 	logFields := []any{
 		"name", tc.Name,
 		"turn", turn,
@@ -308,10 +310,8 @@ func finishToolCall(
 			head = head[:120] + "…"
 		}
 		logFields = append(logFields, "errorHead", head)
-		logger.Warn("tool complete", logFields...)
-	} else {
-		logger.Info("tool complete", logFields...)
 	}
+	logger.Info("tool complete", logFields...)
 	return block
 }
 
