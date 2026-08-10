@@ -54,7 +54,7 @@ service.go (주기 폴 / 외부 트리거)
 
 ## 함정
 
-- **모델 역할 직교**: stage1=tiny(단순 구조화 추출), stage2=main(사용자가 읽는 합성 — analysis 제거로 main, **의도적 클라우드 OK**), 추출기=lightweight. 추출기를 main으로 올리면 비용·레이턴시가 샌다 — `docs/agent-rules/model-roles.md` 도그마 5.
+- **모델 역할 직교**: stage1=tiny(단순 구조화 추출), stage2=main(사용자가 읽는 합성 — analysis 제거로 main, **의도적 클라우드 OK**), 단 자동 agent synthesis는 `agents.submainModel` 구성 시 자율 배경 lane(submain)을 사용하고 실패 시 main single-completion으로 fallback한다. 추출기=lightweight. 추출기를 main으로 올리면 비용·레이턴시가 샌다 — `docs/agent-rules/model-roles.md` 도그마 5.
 - **`mailAnalysisModels()`는 server에 있다**(`runtime/server/`), 역할 해석의 단일 지점. mailanalysis는 그 모델을 소비만.
 - **추론 누출 방어**: 분석 텍스트에 모델 self-talk/reasoning이 새는 이력 — `reasoning_leak.go`로 스트립([project_cron_narration_leak]). 본문에 메타발화 의심되면 여기부터.
 - **cron 트리거 회귀 이력**: bind·잡이름404·배포폭풍 in-flight abort 3회. cron 복원은 `deliverableLen>0`까지 라이브 검증([project_kakao_mail_pipeline]).
