@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestShouldWarnMemPressureIgnoresAllocSawtoothWhenRetainedHeapIsStable(t *testing.T) {
 	const mib = uint64(1024 * 1024)
@@ -62,6 +65,42 @@ func TestShouldWarnMemPressureSignalsActionableConditions(t *testing.T) {
 				t.Fatal("expected memory pressure warning")
 			}
 		})
+	}
+}
+
+func TestMemPressureWarningStateSuppressesUnchangedEpisode(t *testing.T) {
+	var state memPressureWarningState
+	start := time.Unix(1000, 0)
+
+	if !state.shouldWarn(start, []string{"host_psi"}) {
+		t.Fatal("first pressure tick must warn")
+	}
+	if state.shouldWarn(start.Add(30*time.Second), []string{"host_psi"}) {
+		t.Fatal("unchanged pressure reason must not warn every tick")
+	}
+	if !state.shouldWarn(start.Add(time.Minute), []string{"host_psi", "heap_alloc"}) {
+		t.Fatal("new pressure reason set must warn")
+	}
+	if state.shouldWarn(start.Add(2*time.Minute), nil) {
+		t.Fatal("pressure clear must not warn")
+	}
+	if !state.shouldWarn(start.Add(3*time.Minute), []string{"host_psi"}) {
+		t.Fatal("new pressure episode must warn")
+	}
+}
+
+func TestMemPressureWarningStateRepeatsAfterCooldown(t *testing.T) {
+	var state memPressureWarningState
+	start := time.Unix(1000, 0)
+
+	if !state.shouldWarn(start, []string{"host_psi"}) {
+		t.Fatal("first pressure tick must warn")
+	}
+	if state.shouldWarn(start.Add(memPressureRepeatWarnEvery-time.Second), []string{"host_psi"}) {
+		t.Fatal("pressure reminder must wait for cooldown")
+	}
+	if !state.shouldWarn(start.Add(memPressureRepeatWarnEvery), []string{"host_psi"}) {
+		t.Fatal("persistent pressure must warn again after cooldown")
 	}
 }
 
