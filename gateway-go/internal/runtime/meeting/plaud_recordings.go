@@ -666,9 +666,16 @@ func (s *plaudRecordingsService) handleToolError(err error) {
 		strings.Contains(strings.ToLower(msg), "unauthorized"):
 		s.logger.Error("plaud recordings: MCP auth expired — operator re-login needed", "error", err)
 		s.notifyAuthExpiredOnce()
+	case isPlaudListFetchFailure(msg):
+		s.logger.Debug("plaud recordings: list_files fetch failed, skipping tick", "error", err)
 	default:
 		s.logger.Warn("plaud recordings: list_files failed", "error", err)
 	}
+}
+
+func isPlaudListFetchFailure(msg string) bool {
+	msg = strings.ToLower(msg)
+	return strings.Contains(msg, "fetch failed")
 }
 
 // notifyAuthExpiredOnce posts at most one token-expiry card per 24h.

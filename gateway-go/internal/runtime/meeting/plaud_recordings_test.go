@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -530,9 +532,70 @@ func TestPlaudAuthErrorThrottledNotice(t *testing.T) {
 	}
 }
 
+func TestPlaudListFetchFailureLogsAtDebug(t *testing.T) {
+	execErr := func(ctx context.Context, name string, args json.RawMessage) (string, error) {
+		return "", context.DeadlineExceeded
+	}
+	s, _ := newTestPlaudService(t, execErr)
+	logs := &recordingSlogHandler{}
+	s.logger = slog.New(logs)
+
+	s.handleToolError(testError("mcp tool list_files failed: Failed to list files: TypeError: fetch failed"))
+	s.handleToolError(testError("mcp tool list_files failed: bad response"))
+
+	entries := logs.entries()
+	if len(entries) != 2 {
+		t.Fatalf("want 2 log entries, got %d", len(entries))
+	}
+	if entries[0].level != slog.LevelDebug {
+		t.Fatalf("fetch failed level = %v, want Debug", entries[0].level)
+	}
+	if entries[0].msg != "plaud recordings: list_files fetch failed, skipping tick" {
+		t.Fatalf("fetch failed message = %q", entries[0].msg)
+	}
+	if entries[1].level != slog.LevelWarn {
+		t.Fatalf("non-fetch list failure level = %v, want Warn", entries[1].level)
+	}
+}
+
 type testError string
 
 func (e testError) Error() string { return string(e) }
+
+type recordedSlogEntry struct {
+	level slog.Level
+	msg   string
+}
+
+type recordingSlogHandler struct {
+	mu      sync.Mutex
+	records []recordedSlogEntry
+}
+
+func (h *recordingSlogHandler) Enabled(context.Context, slog.Level) bool {
+	return true
+}
+
+func (h *recordingSlogHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	h.records = append(h.records, recordedSlogEntry{level: r.Level, msg: r.Message})
+	h.mu.Unlock()
+	return nil
+}
+
+func (h *recordingSlogHandler) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *recordingSlogHandler) WithGroup(string) slog.Handler {
+	return h
+}
+
+func (h *recordingSlogHandler) entries() []recordedSlogEntry {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]recordedSlogEntry(nil), h.records...)
+}
 
 // Every reduce chunk must carry the meeting header + its position, so a chunk
 // from the middle of a long meeting still knows which meeting it belongs to
