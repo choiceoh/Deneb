@@ -47,7 +47,9 @@ func (s *Server) StartMonitoring(ctx context.Context) {
 }
 
 // runMemPressureMonitor ticks every 30s and emits a compact memory snapshot
-// when the Go heap is unusually large or Linux PSI reports stall time.
+// when the Go heap is unusually large or Linux PSI reports stall time. Warnings
+// are edge-triggered per reason set, with a slow reminder, so a host-level
+// pressure episode does not flood the warning/error mining surfaces every tick.
 //
 // Snapshot conditions (any one triggers a log line):
 //   - Go Alloc >= 6 GiB  — gateway's normal resident is < 1 GiB; 6× headroom
@@ -67,13 +69,14 @@ func runMemPressureMonitor(ctx context.Context, logger *slog.Logger) {
 		logger = slog.Default()
 	}
 	var previous memPressureSnapshot
+	var warningState memPressureWarningState
 	ticker := time.NewTicker(memPressureTickEvery)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case tickAt := <-ticker.C:
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
 			psi := readPSIMemorySome()
@@ -87,7 +90,7 @@ func runMemPressureMonitor(ctx context.Context, logger *slog.Logger) {
 				"numGoroutine", runtime.NumGoroutine(),
 				"psiSome10", psi)
 			warnReasons := memPressureWarningReasons(previous, current)
-			if len(warnReasons) > 0 {
+			if warningState.shouldWarn(tickAt, warnReasons) {
 				logger.Warn("mem pressure",
 					"reason", strings.Join(warnReasons, ","),
 					"alloc", m.Alloc,
@@ -112,6 +115,7 @@ const (
 	memPressureHeapWarnBytes    = uint64(6 * 1024 * 1024 * 1024) // 6 GiB
 	memPressurePSIWarnPercent   = 1.0                            // 1 % stall
 	memPressureGrowthFactorWarn = 2.0
+	memPressureRepeatWarnEvery  = 15 * time.Minute
 	// Retained heap is process footprint, not live heap. Production false
 	// positives repeatedly fired below 3 GiB with psi=0 and alloc<3 GiB.
 	memPressureGrowthFloorBytes = uint64(4 * 1024 * 1024 * 1024)
@@ -121,6 +125,39 @@ type memPressureSnapshot struct {
 	alloc        uint64
 	retainedHeap uint64
 	psiSome10    float64
+}
+
+type memPressureWarningState struct {
+	reasons    []string
+	lastWarnAt time.Time
+}
+
+func (s *memPressureWarningState) shouldWarn(now time.Time, reasons []string) bool {
+	if len(reasons) == 0 {
+		s.reasons = nil
+		s.lastWarnAt = time.Time{}
+		return false
+	}
+	if !sameStringSlice(s.reasons, reasons) ||
+		s.lastWarnAt.IsZero() ||
+		now.Sub(s.lastWarnAt) >= memPressureRepeatWarnEvery {
+		s.reasons = append(s.reasons[:0], reasons...)
+		s.lastWarnAt = now
+		return true
+	}
+	return false
+}
+
+func sameStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func newMemPressureSnapshot(m runtime.MemStats, psiSome10 float64) memPressureSnapshot {
