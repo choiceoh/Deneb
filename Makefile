@@ -4,7 +4,7 @@
 
 .PHONY: all \
        go go-run go-dev go-test skill-eval-test go-vet go-fmt go-lint go-clean go-bench go-binary gateway-prod wormhole briefcase briefcase-test briefcase-smoke \
-       test clean check check-go fmt generate generate-check \
+       test clean check check-go fmt generate generate-check quality-gate \
        tool-schemas tool-schemas-check \
        data-gen data-gen-check \
        kotlin-models kotlin-models-check \
@@ -197,17 +197,25 @@ clean: go-clean
 
 check-go: go-fmt go-vet go-lint go-test
 
-# Full check: generate-check first (sequential), then Go and deterministic audit checks.
+# Full check: generate-check first (sequential), then Go, deterministic audit
+# checks, and the opt-in Korean-response quality regression gate.
 # Health Bench 2.0 is out of CI entirely (operator decision 2026-07-24): both the
 # pillar ratchet AND the scorer unit tests were removed from PR CI and Nightly Drift.
 # The score/ratchet is now manual-only via `make health-v2-check`. The scorer unit
 # tests stay in this LOCAL `make check` so edits to the scorer itself don't rot.
-check: generate-check check-go runtime-health-test health-v2-test
+check: generate-check check-go runtime-health-test health-v2-test quality-gate
 	@echo "All checks passed"
 
 # Fast check: format + vet + lint only (no tests). Good for pre-commit gate.
 check/fast: go-fmt go-vet go-lint
 	@echo "Fast checks passed (fmt + vet + lint, no tests)"
+
+# Korean-response quality regression gate. It is disabled by default so local
+# and CI `make check` runs stay deterministic off-DGX. Set DENEB_QUALITY_GATE=1
+# on a live model-capable host to run the end-to-end quality metric and compare
+# it against this branch's saved baseline.
+quality-gate:
+	@bash scripts/dev/quality-gate.sh
 
 # Codebase structural-health score (advisory — like scripts/audit/deadcode-audit.sh,
 # NOT part of `make check`/`ci`). Aggregates file-size discipline, layer cohesion,
