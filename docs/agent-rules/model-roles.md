@@ -59,7 +59,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 |---|---|---|---|
 | 일간/모닝레터 합성 | `tools/routine/morning_letter.go` 결정적 수집 → `cronrunner` 1회 무도구 의미 투영 → `morning_card.go` 고정 렌더 | **main** | 사용자가 읽는 프로젝트별 중요도·맥락·후행 제안은 품질 종합이라 main. 모델은 JSON 의미 슬롯만 1턴 채우고 양식·수치·이스케이프는 서버가 소유한다. 모델/채팅 장애 시 동일 수집값의 사실 전용 카드로 fail-open. 수동 요청은 도구의 결정적 `delivery`를 그대로 반환 |
 | 프로젝트 위키 딥리서치 갱신 (6h) | `runtime/wikiwork/wiki_research_task.go` | **main** | 도구무거운 에이전트 턴(내부 소스 재조사→위키 본문 갱신·supersede). boot/heartbeat/goal과 동형의 에이전트 턴이라 main, 헬퍼 요약 콜 아님. wiki-research 프리셋(웹 제외)으로 내부 소스 한정, 로컬 |
-| 메일 리포트 종합 (stage2) | `mailAnalysisModels()` | **main** | 사용자가 읽는 리포트, 품질 최우선 — analysis 제거로 main(가장 강력·의도적 클라우드 OK) |
+| 메일 리포트 종합 (stage2) | `mailAnalysisModels()` / `mailAnalysisAgentSynthesis()` | **main** for 수동·fallback single completion, **submain** for 자동 agent synthesis when configured | 사용자가 읽는 리포트라 수동 분석과 agent 실패 fallback은 main 품질 하한을 유지한다. 자동 메일 합성은 도구무거운 배경 레인이라 submain 구성 시 heartbeat·phone-event와 같은 자율 lane으로 보내 main latency p95를 보호한다. |
 | 메일 추출 (stage1) · gmail facts/actions/deal | `mailAnalysisModels()`, `platform/mailanalysis/pipeline_extractors.go` | **tiny** | 단순 구조화 JSON 추출 |
 | 거래 조건 인용 추출 (deal facts 2차 패스) | `platform/mailanalysis/deal_facts.go` | **tiny** | 거래 메일 한정 — 물량·단가·지급조건·하자보수·지체상금을 **원문 인용 필수**로 추출, Go 결정적 게이트(`verifyDealFacts`: 인용⊂원문 + 값 숫자⊂인용)가 미검증 필드 드롭. stage1과 같은 배치·같은 예산, fail-open |
 | 세션 자동 제목 | `chat/session_autotitle.go` | **tiny** | 짧은 명사구 제목 |

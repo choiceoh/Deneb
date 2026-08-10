@@ -182,7 +182,8 @@ func (s *Server) archiveThreadSource() mailanalysis.ThreadSource {
 // mailAnalysisAgentSynthesis runs the mail-analysis synthesis as a chat agent
 // turn with the full toolset, so the analysis prompt's tool steps (wiki search,
 // mail_archive) actually execute instead of leaking as <tool_call> text into the
-// feed. It uses an isolated "system:" session (kept out of
+// feed. It uses the autonomous submain lane when configured, and an isolated
+// "system:" session (kept out of
 // recall + the session drawer) with ephemeral messages so the fixed-key
 // transcript can't grow unbounded. s.chatHandler is read at call time — long
 // after startup — so wiring order does not matter; a nil handler returns an error
@@ -191,7 +192,7 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 	if s.chatHandler == nil {
 		return "", fmt.Errorf("chat handler unavailable")
 	}
-	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, "", &chat.SyncOptions{
+	result, err := s.chatHandler.SendSync(ctx, "system:mailpoll", prompt, s.mailAnalysisAgentModel(), &chat.SyncOptions{
 		AutoDeliveredOutput: true,
 		EphemeralUser:       true,
 		EphemeralAssistant:  true,
@@ -201,6 +202,10 @@ func (s *Server) mailAnalysisAgentSynthesis(ctx context.Context, prompt string) 
 		return "", err
 	}
 	return result.BestText(), nil
+}
+
+func (s *Server) mailAnalysisAgentModel() string {
+	return s.submainRoleIfConfigured()
 }
 
 func mailAnalysisAgentToolGate(name, _ string, input []byte) (bool, string) {
