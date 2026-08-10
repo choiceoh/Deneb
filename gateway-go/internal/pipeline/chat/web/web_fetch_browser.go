@@ -10,14 +10,15 @@
 // SSRF: the sidecar is a full browser with no dialer guard, and a tier-memory
 // jump can reach this stage without the SSRF-safe transport ever having
 // vetted the URL — so the target is validated against the same private-range
-// rules (media.ValidatePublicTarget) before dispatch. The browse TOOL
-// intentionally has no such guard (operator-driven browsing); the web tool's
-// contract is public-web only.
-//
-// The sidecar carries the operator's login sessions. The browse tool already
-// exposes exactly this render capability to the model, so routing stealth
-// escalations through it grants no new authority — but a render can differ
-// from an anonymous fetch on sites where the operator is signed in.
+// rules (media.ValidatePublicTarget) before dispatch. But ValidatePublicTarget
+// only vets the *top-level* target; once the page loads, its own subresources
+// and JavaScript egress are unconstrained. This path feeds the model UNTRUSTED
+// public URLs (search results, thin-content escalation), so it renders with
+// isolated:true — the sidecar then uses an ephemeral, profile-less context
+// (no operator cookies → no CSRF against logged-in origins) with a private-
+// range egress block on every request the page makes (no loopback/RFC1918
+// SSRF). The browse TOOL is operator-driven and keeps the persistent login
+// context; only this automatic web-tool path is isolated.
 package web
 
 import (
@@ -67,7 +68,9 @@ func browserRender(ctx context.Context, targetURL string, maxBytes int64) (*medi
 	if err := validatePublicTargetFn(ctx, targetURL); err != nil {
 		return nil, err
 	}
-	body, err := json.Marshal(map[string]any{"url": targetURL})
+	// isolated:true — untrusted public render (see package doc): ephemeral,
+	// profile-less context + private-range egress block on the sidecar side.
+	body, err := json.Marshal(map[string]any{"url": targetURL, "isolated": true})
 	if err != nil {
 		return nil, err
 	}
