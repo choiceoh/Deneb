@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.142.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.142.0...deneb-v4.142.1) (2026-08-10)
+
+
+### 🐛 Bug Fixes
+
+* **meeting:** quiet transient plaud fetch failures ([#4459](https://github.com/choiceoh/Deneb/issues/4459)) ([02ee686](https://github.com/choiceoh/Deneb/commit/02ee686dc4bb068f43ec335cb47f56bf39d86283))
+
 ## [4.142.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.141.0...deneb-v4.142.0) (2026-08-10)
 
 
