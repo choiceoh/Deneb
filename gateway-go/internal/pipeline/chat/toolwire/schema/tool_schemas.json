@@ -393,6 +393,14 @@
    "selector": {
     "type": "string",
     "description": "선택: CSS 셀렉터 — 일치 요소들의 텍스트만 추출해 페이지 전체 대신 필요한 부분만 가져온다(예: 'table', '.pricing', '#spec'). 표·스펙시트처럼 페이지의 한 조각만 필요할 때 컨텍스트 낭비를 크게 줄인다. 0건 일치 시 전체 폴백 없이 그대로 보고된다"
+   },
+   "screenshot": {
+    "type": "boolean",
+    "description": "선택: true면 페이지 스크린샷 PNG를 찍어 사용자에게 사진으로 전송한다(텍스트 추출과 함께). 캔버스·이미지 위주라 텍스트 추출이 부실하거나, 레이아웃·로그인/캡차 상태를 눈으로 확인해야 할 때 쓴다"
+   },
+   "full_page": {
+    "type": "boolean",
+    "description": "선택: screenshot=true일 때만 적용 — true면 보이는 영역(뷰포트)이 아니라 페이지 전체를 위에서 끝까지 캡처한다. 기본은 뷰포트만"
    }
   },
   "required": [

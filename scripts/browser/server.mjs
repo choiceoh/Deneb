@@ -5,13 +5,30 @@
 // the sessions to the agent — the exact browser the agent drives is the one
 // the human sees. Read-only v1: navigate + settle + extract readable text.
 //
-// Loopback-only HTTP API (the gateway lives on the same host):
-//   GET  /health           → {ok, profile, pages}
-//   POST /browse {url, waitMs?} → {ok, url, title, text} | {ok:false, error}
+// Two contexts, chosen per request by the `isolated` flag:
+//   - operator (default): the persistent profile above. The `browse` TOOL uses
+//     this — operator-driven reads that WANT the logged-in sessions.
+//   - isolated (isolated:true): an ephemeral context off a separate browser
+//     with NO profile and a private-range egress block. The `web` tool's
+//     automatic stealth/escalation renders use this: they feed the model
+//     UNTRUSTED public URLs, so they must not run inside the operator's
+//     authenticated cookies (CSRF against logged-in origins) nor be able to
+//     reach loopback/RFC1918 services (SSRF). The top-level target is already
+//     ValidatePublicTarget-checked on the Go side; this guards the rendered
+//     page's own subresource/JS egress, which that check never saw.
 //
-// Requests are serialized (one resident browser); each browse opens its own
-// tab and closes it, so the noVNC view keeps only the human's tabs.
+// Loopback-only HTTP API (the gateway lives on the same host):
+//   GET  /health                          → {ok, profile, pages}
+//   POST /browse {url, waitMs?, selector?, isolated?, screenshot?, fullPage?}
+//        → {ok, url, title, text, matched?, screenshot?} | {ok:false, error}
+//
+// Requests are serialized (one resident browser) and each carries a hard
+// deadline so a hung navigation/launch can't wedge the queue for every later
+// request; each browse opens its own tab and closes it, so the noVNC view
+// keeps only the human's tabs.
 import http from "node:http";
+import net from "node:net";
+import dns from "node:dns/promises";
 import { chromium } from "playwright";
 
 const PORT = Number(process.env.DENEB_BROWSER_PORT || 18930);
@@ -19,31 +36,248 @@ const PROFILE =
   process.env.DENEB_BROWSER_PROFILE || `${process.env.HOME}/.deneb/browser-profile`;
 const MAX_CHARS = 16_000;
 const NAV_TIMEOUT_MS = 25_000;
+// Hard ceiling for one queued operation. page.goto is already bounded, but
+// launchPersistentContext / newPage are not, and the queue is serial — so an
+// unbounded op wedges every request behind it (the process stays alive, so
+// systemd never restarts it). This turns "permanent wedge" into "at most one
+// OP_DEADLINE_MS stall, then the queue drains".
+const OP_DEADLINE_MS = Number(process.env.DENEB_BROWSER_OP_DEADLINE_MS || 90_000);
+// A viewport/UA for the isolated (profile-less) context so untrusted renders
+// still look like a normal browser.
+const ISO_VIEWPORT = { width: 1280, height: 900 };
+const ISO_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-let ctx = null;
+// ---------------------------------------------------------------------------
+// Private-range egress guard (isolated context only)
+// ---------------------------------------------------------------------------
 
-async function ensureContext() {
-  if (ctx) {
+function ipv4IsPrivate(ip) {
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return false;
+  const [a, b] = p;
+  if (a === 10) return true; // 10.0.0.0/8
+  if (a === 127) return true; // loopback
+  if (a === 0) return true; // 0.0.0.0/8
+  if (a === 169 && b === 254) return true; // link-local
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64.0.0/10
+  return false;
+}
+
+function addrIsPrivate(addr) {
+  const fam = net.isIP(addr);
+  if (fam === 4) return ipv4IsPrivate(addr);
+  if (fam === 6) {
+    const lower = addr.toLowerCase();
+    if (lower === "::1" || lower === "::") return true; // loopback / unspecified
+    // IPv4-mapped (::ffff:a.b.c.d) — judge on the embedded v4.
+    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return ipv4IsPrivate(mapped[1]);
+    if (lower.startsWith("fe80")) return true; // link-local
+    const head = parseInt(lower.split(":")[0] || "0", 16);
+    if ((head & 0xfe00) === 0xfc00) return true; // ULA fc00::/7
+    return false;
+  }
+  return false;
+}
+
+// hostIsPrivate resolves a request host to a verdict. IP literals judge
+// directly; hostnames resolve through DNS (so a public name pointing at a
+// private address — DNS-rebinding style — is still caught). Resolve failure is
+// fail-open: a broken lookup must not block an otherwise-legitimate render.
+async function hostIsPrivate(hostname) {
+  if (!hostname) return false;
+  const lower = hostname.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost")) return true;
+  if (net.isIP(hostname)) return addrIsPrivate(hostname);
+  try {
+    const addrs = await dns.lookup(hostname, { all: true });
+    return addrs.some((a) => addrIsPrivate(a.address));
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Resident resources: operator persistent context + isolated ephemeral browser
+// ---------------------------------------------------------------------------
+
+let opCtx = null; // persistent operator context (browse tool)
+let isoBrowser = null; // profile-less browser for untrusted isolated renders
+
+async function ensureOperatorContext() {
+  if (opCtx) {
     try {
-      ctx.pages(); // throws once the context is closed
-      return ctx;
+      opCtx.pages(); // throws once the context is closed
+      return opCtx;
     } catch {
-      ctx = null;
+      opCtx = null;
     }
   }
-  ctx = await chromium.launchPersistentContext(PROFILE, {
+  opCtx = await chromium.launchPersistentContext(PROFILE, {
     headless: false,
     viewport: { width: 1280, height: 900 },
     args: ["--disable-blink-features=AutomationControlled"],
   });
-  ctx.on("close", () => {
-    ctx = null;
+  opCtx.on("close", () => {
+    opCtx = null;
   });
-  return ctx;
+  return opCtx;
 }
 
-// Serialize agent requests: one resident browser, no interleaved navigations.
+async function ensureIsolatedBrowser() {
+  if (isoBrowser && isoBrowser.isConnected()) return isoBrowser;
+  isoBrowser = await chromium.launch({
+    headless: false,
+    args: ["--disable-blink-features=AutomationControlled"],
+  });
+  isoBrowser.on("disconnected", () => {
+    isoBrowser = null;
+  });
+  return isoBrowser;
+}
+
+// newIsolatedContext returns a fresh ephemeral context with no operator cookies
+// and a private-range egress block installed on every request it makes.
+async function newIsolatedContext() {
+  const browser = await ensureIsolatedBrowser();
+  const context = await browser.newContext({
+    viewport: ISO_VIEWPORT,
+    userAgent: ISO_UA,
+  });
+  await context.route("**/*", async (route) => {
+    try {
+      const u = new URL(route.request().url());
+      if (u.protocol === "http:" || u.protocol === "https:") {
+        if (await hostIsPrivate(u.hostname)) {
+          await route.abort("blockedbyclient");
+          return;
+        }
+      }
+    } catch {
+      /* unparseable URL: fall through to continue */
+    }
+    await route.continue().catch(() => {});
+  });
+  return context;
+}
+
+// ---------------------------------------------------------------------------
+// Extraction (frame-aware)
+// ---------------------------------------------------------------------------
+
+// extractAllFrames concatenates readable text across the main frame AND every
+// child frame. A page's body.innerText excludes text inside its <iframe>s (they
+// are separate documents), so top-frame-only extraction returns near-nothing on
+// the many Korean sites that wrap their article in an iframe (Naver blog/cafe).
+// Walking page.frames() — which includes cross-origin OOPIFs — recovers it.
+// Trivial/ad frames (< 20 chars) and exact-duplicate frames are dropped.
+async function extractAllFrames(page) {
+  const parts = [];
+  const seen = new Set();
+  for (const frame of page.frames()) {
+    let t;
+    try {
+      t = await frame.evaluate(() => (document.body && document.body.innerText) || "");
+    } catch {
+      continue; // detached / not-yet-loaded frame
+    }
+    const trimmed = (t || "").trim();
+    if (trimmed.length < 20) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    parts.push(t);
+  }
+  return parts.join("\n\n");
+}
+
+// extractSelector aggregates matched-node text across all frames. The main
+// frame decides selector validity (a syntactically bad selector throws there);
+// child-frame throws are ignored so a valid selector that matches only inside
+// an iframe still works.
+async function extractSelector(page, sel) {
+  const all = [];
+  let matched = 0;
+  let mainErr = null;
+  const frames = page.frames();
+  for (let i = 0; i < frames.length; i++) {
+    try {
+      const parts = await frames[i].$$eval(sel, (nodes) =>
+        nodes.map((n) => n.innerText || "").filter(Boolean),
+      );
+      matched += parts.length;
+      all.push(...parts);
+    } catch (err) {
+      if (i === 0) mainErr = err;
+    }
+  }
+  if (mainErr && matched === 0) {
+    const msg = String(mainErr && mainErr.message ? mainErr.message : mainErr).slice(0, 200);
+    return { invalid: `invalid selector: ${msg}` };
+  }
+  return { matched, text: all.join("\n\n---\n\n") };
+}
+
+async function browse(url, waitMs, selector, opts = {}) {
+  if (!/^https?:\/\//i.test(url)) {
+    return { ok: false, error: "url must be http(s)" };
+  }
+  const isolated = !!opts.isolated;
+  let context;
+  let ephemeral = false;
+  if (isolated) {
+    context = await newIsolatedContext();
+    ephemeral = true;
+  } else {
+    context = await ensureOperatorContext();
+  }
+  const page = await context.newPage();
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+    // SPA settle: bounded network-idle, then a short paint delay.
+    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
+    await page.waitForTimeout(Math.min(Math.max(waitMs || 0, 500), 5_000));
+    const title = await page.title();
+
+    let text;
+    let matched;
+    if (typeof selector === "string" && selector.trim() !== "") {
+      const res = await extractSelector(page, selector.trim());
+      if (res.invalid) return { ok: false, error: res.invalid };
+      matched = res.matched;
+      text = res.text;
+    } else {
+      text = await extractAllFrames(page);
+    }
+
+    const out = {
+      ok: true,
+      url: page.url(),
+      title,
+      text: text.slice(0, MAX_CHARS),
+      truncated: text.length > MAX_CHARS,
+    };
+    if (matched !== undefined) out.matched = matched;
+    if (opts.screenshot) {
+      const buf = await page.screenshot({ fullPage: !!opts.fullPage, type: "png" });
+      out.screenshot = buf.toString("base64");
+    }
+    return out;
+  } finally {
+    await page.close().catch(() => {});
+    if (ephemeral) await context.close().catch(() => {});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Serial queue with a per-op deadline (head-of-line wedge protection)
+// ---------------------------------------------------------------------------
+
 let chain = Promise.resolve();
+let consecutiveTimeouts = 0;
+
 function enqueue(fn) {
   const run = chain.then(fn, fn);
   chain = run.then(
@@ -53,55 +287,42 @@ function enqueue(fn) {
   return run;
 }
 
-async function browse(url, waitMs, selector) {
-  if (!/^https?:\/\//i.test(url)) {
-    return { ok: false, error: "url must be http(s)" };
-  }
-  const context = await ensureContext();
-  const page = await context.newPage();
-  try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
-    // SPA settle: bounded network-idle, then a short paint delay.
-    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
-    await page.waitForTimeout(Math.min(Math.max(waitMs || 0, 500), 5_000));
-    const title = await page.title();
-    // Targeted extraction: with a CSS selector only the matched nodes' text
-    // comes back, so a page-sized read shrinks to the part actually needed
-    // (a pricing table, a spec sheet section). Zero matches reports honestly
-    // as matched:0 with empty text — NO silent whole-page fallback: a caller
-    // that asked for "table" and got the full page would believe the page has
-    // no table-shaped noise, and mis-scoped reads are how context rots.
-    let text;
-    let matched;
-    if (typeof selector === "string" && selector.trim() !== "") {
-      const sel = selector.trim();
-      try {
-        const parts = await page.$$eval(
-          sel,
-          (nodes) => nodes.map((n) => n.innerText || "").filter(Boolean),
-        );
-        matched = parts.length;
-        text = parts.join("\n\n---\n\n");
-      } catch (err) {
-        return { ok: false, error: `invalid selector: ${String(err && err.message ? err.message : err).slice(0, 200)}` };
-      }
-    } else {
-      text = await page.evaluate(
-        () => (document.body && document.body.innerText) || "",
+// runWithDeadline races an operation against OP_DEADLINE_MS. A win resets the
+// timeout counter; a loss increments it, and 3 consecutive timeouts mean the
+// browser is genuinely wedged (not just one slow page) — exit so systemd
+// restarts a clean sidecar (Restart=on-failure, RestartSec=5).
+function runWithDeadline(fn) {
+  return enqueue(() => {
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`operation exceeded ${OP_DEADLINE_MS}ms`)),
+        OP_DEADLINE_MS,
       );
-    }
-    const out = {
-      ok: true,
-      url: page.url(),
-      title,
-      text: text.slice(0, MAX_CHARS),
-      truncated: text.length > MAX_CHARS,
-    };
-    if (matched !== undefined) out.matched = matched;
-    return out;
-  } finally {
-    await page.close().catch(() => {});
-  }
+    });
+    return Promise.race([Promise.resolve().then(fn), deadline]).then(
+      (v) => {
+        clearTimeout(timer);
+        consecutiveTimeouts = 0;
+        return v;
+      },
+      (err) => {
+        clearTimeout(timer);
+        if (String(err && err.message).includes("operation exceeded")) {
+          consecutiveTimeouts += 1;
+          console.error(
+            `browse op timeout (${consecutiveTimeouts}/3):`,
+            err.message,
+          );
+          if (consecutiveTimeouts >= 3) {
+            console.error("sidecar wedged — exiting for systemd restart");
+            process.exit(1);
+          }
+        }
+        throw err;
+      },
+    );
+  });
 }
 
 function readBody(req) {
@@ -122,7 +343,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") {
       let pages = 0;
       try {
-        pages = ctx ? ctx.pages().length : 0;
+        pages = opCtx ? opCtx.pages().length : 0;
       } catch {
         /* context closed */
       }
@@ -130,8 +351,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "POST" && req.url === "/browse") {
-      const { url, waitMs, selector } = JSON.parse((await readBody(req)) || "{}");
-      const out = await enqueue(() => browse(String(url || ""), Number(waitMs), selector));
+      const { url, waitMs, selector, isolated, screenshot, fullPage } = JSON.parse(
+        (await readBody(req)) || "{}",
+      );
+      const out = await runWithDeadline(() =>
+        browse(String(url || ""), Number(waitMs), selector, {
+          isolated: !!isolated,
+          screenshot: !!screenshot,
+          fullPage: !!fullPage,
+        }),
+      );
       if (!out.ok) res.statusCode = 422;
       res.end(JSON.stringify(out));
       return;

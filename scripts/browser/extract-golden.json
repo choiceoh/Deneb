@@ -1,0 +1,25 @@
+{
+  "_comment": "Extraction golden set for the browser sidecar. Each case fetches a live public page through the sidecar and asserts a floor on extracted text — a regression guard for the extraction path (htmlmd suppression, frame traversal, settle timing). Network-dependent, so this is a MANUAL live probe (npm run bench), not a CI gate. minChars is deliberately conservative so normal page edits don't flip it; a case dropping to ~0 is the signal (e.g. an iframe-wrapped page losing frame traversal). Add representative Korean surfaces here as new failure modes are found.",
+  "cases": [
+    {
+      "name": "example.com (sanity: trivial static page renders)",
+      "url": "https://example.com",
+      "waitMs": 800,
+      "minChars": 20,
+      "mustInclude": ["Example Domain"]
+    },
+    {
+      "name": "ko.wikipedia article (CJK shaping + large body)",
+      "url": "https://ko.wikipedia.org/wiki/%EB%8C%80%ED%95%9C%EB%AF%BC%EA%B5%AD",
+      "waitMs": 1500,
+      "minChars": 2000,
+      "mustInclude": ["대한민국"]
+    },
+    {
+      "name": "blog.naver desktop (iframe body — frame-traversal regression guard)",
+      "url": "https://blog.naver.com/naver_diary",
+      "waitMs": 2500,
+      "minChars": 200
+    }
+  ]
+}
