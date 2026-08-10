@@ -1,5 +1,48 @@
 # Changelog
 
+## [4.142.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.141.0...deneb-v4.142.0) (2026-08-10)
+
+
+### ✨ Features
+
+* **backup:** 스위치 설정 스냅샷을 오프사이트 백업에 편입 ([#4479](https://github.com/choiceoh/Deneb/issues/4479)) ([a1be0f7](https://github.com/choiceoh/Deneb/commit/a1be0f7b792dc7c7ffc96a636210bf5635cd3090))
+* **chat:** 챗 표면에 프로젝트 한글 이름 — 회상 노트·wiki 검색 라벨·프롬프트 지시 ([#4469](https://github.com/choiceoh/Deneb/issues/4469)) ([22859e4](https://github.com/choiceoh/Deneb/commit/22859e40a7dac7f0a105e1247fba8ce220efc531))
+* **fleet:** CRS812 스위치 하드웨어 헬스 감시 — 팬·PSU·온도 이상 시 알림 ([#4481](https://github.com/choiceoh/Deneb/issues/4481)) ([cceed72](https://github.com/choiceoh/Deneb/commit/cceed7239afdf1d4d7a5b61ba08055a3e24b59bc))
+* **recall:** 집계·시간·그래프 질의 라우팅 힌트 — 페이지 검색이 못 답하는 형태를 맞는 도구로 ([#4472](https://github.com/choiceoh/Deneb/issues/4472)) ([80ae160](https://github.com/choiceoh/Deneb/commit/80ae160c8bb3af83b5fca591e6b1e6005f3fac18))
+* **wiki:** 대표 title 규약 lint — verify advisory + 드리머 규칙 + 오디트 스크립트 ([#4470](https://github.com/choiceoh/Deneb/issues/4470)) ([cf5c048](https://github.com/choiceoh/Deneb/commit/cf5c0488b673b832964699f731c5f9c57239e290))
+* **wiki:** 메일 재분류 신호 3 — 발신도메인 증거 히스토그램 (관찰 모드 기본) ([#4474](https://github.com/choiceoh/Deneb/issues/4474)) ([3ecec13](https://github.com/choiceoh/Deneb/commit/3ecec13ff33312dd224a5eb299f0719de9826a99))
+* **wiki:** 어휘갭 쿼리확장 backfill — 원질의 미달 슬롯만 보충 (기본 off) ([#4473](https://github.com/choiceoh/Deneb/issues/4473)) ([39863eb](https://github.com/choiceoh/Deneb/commit/39863eb7546ea3fb0787128f00923522debc06a1))
+* **wiki:** 카테고리 브라우저에 프로젝트 한글 별칭 표시 ([#4467](https://github.com/choiceoh/Deneb/issues/4467)) ([b538a06](https://github.com/choiceoh/Deneb/commit/b538a064064af57f15e552e3e20bf706fd1a04de))
+
+
+### 🐛 Bug Fixes
+
+* **backup:** 같은 날 재시도 — 일시 SSH 실패가 하루치 백업을 영구 상실시키던 결함 ([#4478](https://github.com/choiceoh/Deneb/issues/4478)) ([980acb4](https://github.com/choiceoh/Deneb/commit/980acb49ab86ab86a3c3de236b1d8fdb6154e165))
+* **chat:** lower open circuit fallback logs ([#4476](https://github.com/choiceoh/Deneb/issues/4476)) ([fd3ada3](https://github.com/choiceoh/Deneb/commit/fd3ada3e80a00e48a5d4322986db7fe276f9ee83))
+* **chat:** tighten edit tool schema ([#4461](https://github.com/choiceoh/Deneb/issues/4461)) ([7df423a](https://github.com/choiceoh/Deneb/commit/7df423ab24a938ad961771973ef28d67590452c3))
+* **chat:** warn on fallback rung failures ([#4464](https://github.com/choiceoh/Deneb/issues/4464)) ([b1540bb](https://github.com/choiceoh/Deneb/commit/b1540bb0e98fdbc4ea4fc7f1510f5166bfca5b21))
+* **mailanalysis:** treat oversized large attachments as controlled skips ([#4449](https://github.com/choiceoh/Deneb/issues/4449)) ([fcfa224](https://github.com/choiceoh/Deneb/commit/fcfa224c09632304366ced2932f4159d08fa7617))
+* **phoneevents:** downgrade circuit-open judgment skips ([#4480](https://github.com/choiceoh/Deneb/issues/4480)) ([e38ec16](https://github.com/choiceoh/Deneb/commit/e38ec1659c95a7d2e62967215a3f927641068fba))
+* **push:** gate FCM readiness on OAuth availability ([#4463](https://github.com/choiceoh/Deneb/issues/4463)) ([cd51832](https://github.com/choiceoh/Deneb/commit/cd51832551cd3db9e2fdc83dd036baf801a8aff6))
+* **recall:** 나이틀리 벤치에 쿼리확장 backfill 패리티 — 프로드 드롭인과 동기 ([#4475](https://github.com/choiceoh/Deneb/issues/4475)) ([5ef4a43](https://github.com/choiceoh/Deneb/commit/5ef4a4323f9f75b3ce45a10dd464ca5d22b94da1))
+* **rsi:** L1 수요 필터 확장 — 자율 업무 레인 유입 + 라이브테스트 세션 배제 ([#4457](https://github.com/choiceoh/Deneb/issues/4457)) ([085ebc9](https://github.com/choiceoh/Deneb/commit/085ebc93c9ae625520d8cb38fdabbc173229aecb))
+* **rsi:** 리플레이 게이트 노이즈 보정 · 래칫 체크 배선 · 미측정 구분 ([#4468](https://github.com/choiceoh/Deneb/issues/4468)) ([fdd959f](https://github.com/choiceoh/Deneb/commit/fdd959f79c4c06f6a891ebadfd4a25e7d7179b9b))
+* **skilllifecycle:** record replay fixtures at unit granularity, not whole sessions ([#4477](https://github.com/choiceoh/Deneb/issues/4477)) ([357cbf5](https://github.com/choiceoh/Deneb/commit/357cbf54d1f2a1347896a2b24f891d7f44814482))
+* **wiki:** avoid reasoning on verify off-switch ([#4483](https://github.com/choiceoh/Deneb/issues/4483)) ([5c9cbcc](https://github.com/choiceoh/Deneb/commit/5c9cbccd75cecf9e948beece58e179107be1cd3e))
+
+
+### ⚡ Performance
+
+* **chat:** cache fetch_tools query catalog ([#4460](https://github.com/choiceoh/Deneb/issues/4460)) ([d8f1a64](https://github.com/choiceoh/Deneb/commit/d8f1a647dabc910ff8e8b4939bf095b7b5e7e993))
+
+
+### 🔧 Internal
+
+* **chat:** isolate code_search tool implementation ([#4462](https://github.com/choiceoh/Deneb/issues/4462)) ([6222801](https://github.com/choiceoh/Deneb/commit/622280110cf97bbddd036f2fab80ff60b6910091))
+* **llm:** remove dead sse pipeline wrapper ([#4454](https://github.com/choiceoh/Deneb/issues/4454)) ([bacf34f](https://github.com/choiceoh/Deneb/commit/bacf34fd55fa14eef0f1e5493081fa106df83fab))
+* **observatory:** remove dead capped reader ([#4453](https://github.com/choiceoh/Deneb/issues/4453)) ([c0dbef1](https://github.com/choiceoh/Deneb/commit/c0dbef1ceaa23322fdfafa63ecebcab266bc43a1))
+* **phoneevents:** split phone ledger port ([#4482](https://github.com/choiceoh/Deneb/issues/4482)) ([1665ce6](https://github.com/choiceoh/Deneb/commit/1665ce6d5c1e994bbed8e102cdbe21bed03140c0))
+
 ## [4.141.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.140.0...deneb-v4.141.0) (2026-08-02)
 
 

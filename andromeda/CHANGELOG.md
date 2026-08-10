@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.114](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.113...andromeda-v0.0.114) (2026-08-10)
+
+
+### ✨ Features
+
+* **chat:** 챗 표면에 프로젝트 한글 이름 — 회상 노트·wiki 검색 라벨·프롬프트 지시 ([#4469](https://github.com/choiceoh/Deneb/issues/4469)) ([22859e4](https://github.com/choiceoh/Deneb/commit/22859e40a7dac7f0a105e1247fba8ce220efc531))
+* **wiki:** 카테고리 브라우저에 프로젝트 한글 별칭 표시 ([#4467](https://github.com/choiceoh/Deneb/issues/4467)) ([b538a06](https://github.com/choiceoh/Deneb/commit/b538a064064af57f15e552e3e20bf706fd1a04de))
+
 ## [0.0.113](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.112...andromeda-v0.0.113) (2026-08-02)
 
 
