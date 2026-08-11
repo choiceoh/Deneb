@@ -533,9 +533,11 @@ func writeLoopCase(t *testing.T, feedback string) (*casepack.Pack, evalbriefcase
 		ToolPolicy:    casepack.ToolPolicy{Default: casepack.ToolDeny, MaxCalls: 1},
 		NetworkPolicy: casepack.NetworkPolicy{Mode: casepack.NetworkDeny},
 	}
-	if _, err := casepack.SetCanonicalDigest(&manifest); err != nil {
+	digest, err := casepack.CanonicalDigest(manifest)
+	if err != nil {
 		t.Fatal(err)
 	}
+	manifest.ManifestDigest = digest
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		t.Fatal(err)

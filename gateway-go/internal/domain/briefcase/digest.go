@@ -28,20 +28,6 @@ func CanonicalDigest(manifest Manifest) (string, error) {
 	return DigestBytes(canonical), nil
 }
 
-// SetCanonicalDigest updates ManifestDigest and returns the value. It is useful
-// to casepack builders; loaders never repair a missing or stale digest.
-func SetCanonicalDigest(manifest *Manifest) (string, error) {
-	if manifest == nil {
-		return "", fmt.Errorf("briefcase: nil manifest")
-	}
-	digest, err := CanonicalDigest(*manifest)
-	if err != nil {
-		return "", err
-	}
-	manifest.ManifestDigest = digest
-	return digest, nil
-}
-
 func DigestBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
