@@ -46,7 +46,7 @@ func TestLoadDirValidCasepack(t *testing.T) {
 	}
 }
 
-func TestCanonicalDigestChangesWithManifestAndRejectsNil(t *testing.T) {
+func TestCanonicalDigestChangesWithManifest(t *testing.T) {
 	_, manifest := writeValidCase(t)
 	want := manifest.ManifestDigest
 
@@ -67,10 +67,6 @@ func TestCanonicalDigestChangesWithManifestAndRejectsNil(t *testing.T) {
 	}
 	if changed == want {
 		t.Fatal("digest did not change after semantic manifest change")
-	}
-
-	if _, err := SetCanonicalDigest(nil); err == nil {
-		t.Fatal("SetCanonicalDigest(nil): expected error")
 	}
 }
 
@@ -560,9 +556,11 @@ func writeValidCase(t *testing.T) (string, Manifest) {
 
 func writeManifest(t *testing.T, dir string, manifest *Manifest) {
 	t.Helper()
-	if _, err := SetCanonicalDigest(manifest); err != nil {
+	digest, err := CanonicalDigest(*manifest)
+	if err != nil {
 		t.Fatal(err)
 	}
+	manifest.ManifestDigest = digest
 	writeManifestWithoutDigestUpdate(t, dir, *manifest)
 }
 

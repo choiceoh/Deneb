@@ -601,9 +601,11 @@ func writeDevicePlanCase(t *testing.T) (string, *casepack.Pack, string) {
 		Path: planPath, SHA256: casepack.DigestBytes(planData), EventAt: manifest.FrozenNow, AvailableAt: manifest.FrozenNow,
 		CapturedAt: manifest.FrozenNow, SourceRef: devicePlanSourceRef,
 	})
-	if _, err := casepack.SetCanonicalDigest(&manifest); err != nil {
+	digest, err := casepack.CanonicalDigest(manifest)
+	if err != nil {
 		t.Fatal(err)
 	}
+	manifest.ManifestDigest = digest
 	writeTestJSON(t, filepath.Join(destination, casepack.ManifestFile), manifest)
 	pack, err = casepack.LoadDir(destination)
 	if err != nil {

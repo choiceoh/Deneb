@@ -9,7 +9,7 @@ package a pure domain contract.
 - `loader.go` — `LoadDir` (directory → `Pack`)
 - `types.go` — `Pack`, `Manifest`, episode/artifact policy types
 - `validate.go` — `Validate`, `ValidationError`
-- `digest.go` — `CanonicalDigest`, `SetCanonicalDigest`, `FileDigest`
+- `digest.go` — `CanonicalDigest`, `FileDigest`
 - `json.go` — `RejectDuplicateJSONKeys`
 - `number.go` — `ParseBoundedRational`, `BoundedRationalKey`
 
