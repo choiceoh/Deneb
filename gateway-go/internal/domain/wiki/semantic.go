@@ -124,6 +124,11 @@ func (si *semanticIndex) shutdown() {
 // path, so it can afford to wait rather than time out on a caller's recall budget.
 const semanticRefreshTimeout = 3 * time.Minute
 
+// semanticQueryTimeout bounds user-facing query embeddings. Page refresh owns a
+// longer timeout; query embedding is a best-effort semantic signal and must
+// fall back to BM25 before one tool call consumes the turn.
+var semanticQueryTimeout = 800 * time.Millisecond
+
 // refreshAsync re-embeds changed pages in the background, at most one at a time.
 // Request paths (search, related-link suggestion, graph rerank) call this and
 // then read whatever vectors exist now — eventually consistent — instead of
@@ -666,7 +671,7 @@ func (s *Store) searchSemantic(ctx context.Context, query string, limit int) []S
 	// short text) still runs on the request ctx — fast and necessary.
 	s.sem.refreshAsync(s)
 
-	qvecs, err := embedindex.EmbedQueries(ctx, s.sem.embedder, []string{query})
+	qvecs, err := embedSemanticQueries(ctx, s.sem.embedder, []string{query})
 	if err != nil || len(qvecs) == 0 {
 		return nil
 	}
@@ -792,7 +797,7 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 	if len(texts) == 0 {
 		return nil
 	}
-	vecs, err := embedindex.EmbedQueries(ctx, s.sem.embedder, texts)
+	vecs, err := embedSemanticQueries(ctx, s.sem.embedder, texts)
 	if err != nil || len(vecs) != len(texts) {
 		return nil
 	}
@@ -801,6 +806,19 @@ func (s *Store) embedQueriesBatch(ctx context.Context, queries []string) [][]flo
 		out[i] = vecs[j]
 	}
 	return out
+}
+
+func embedSemanticQueries(ctx context.Context, embedder embedindex.TextEmbedder, texts []string) ([][]float32, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeout := semanticQueryTimeout
+	if timeout <= 0 {
+		return embedindex.EmbedQueries(ctx, embedder, texts)
+	}
+	queryCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return embedindex.EmbedQueries(queryCtx, embedder, texts)
 }
 
 // refresh re-embeds pages whose content changed and drops deleted ones. Holds
