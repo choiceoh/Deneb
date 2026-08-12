@@ -41,6 +41,22 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 	return out, nil
 }
 
+type timeoutEmbedder struct {
+	fakeEmbedder
+}
+
+func (t timeoutEmbedder) Embed(ctx context.Context, _ []string) ([][]float32, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func withSemanticQueryTimeout(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	orig := semanticQueryTimeout
+	semanticQueryTimeout = timeout
+	t.Cleanup(func() { semanticQueryTimeout = orig })
+}
+
 func TestWarmSemanticIndex_EmbedsAllPagesUpfrontNoopWithoutEmbedder(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary"))
@@ -136,6 +152,62 @@ func TestSearchSemanticWithVecHonorsCanceledContext(t *testing.T) {
 	cancel()
 	if hits := store.searchSemanticWithVec(ctx, []float32{1, 0}, 5); len(hits) != 0 {
 		t.Fatalf("canceled semantic scan returned hits: %+v", hits)
+	}
+}
+
+func TestSearchSemanticQueryEmbedTimeoutFallsBackToBM25(t *testing.T) {
+	withSemanticQueryTimeout(t, 20*time.Millisecond)
+	store, err := NewStore(filepath.Join(t.TempDir(), "wiki"), filepath.Join(t.TempDir(), "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	mustWrite(t, store, "프로젝트/contract.md", &Page{
+		Meta: Frontmatter{ID: "contract", Title: "계약 일정", Category: "프로젝트"},
+		Body: "계약 일정 검토 내용입니다.",
+	})
+	store.SetEmbedder(timeoutEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}})
+
+	parent, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	report, err := store.SearchWithOptions(parent, "계약 일정", 5, QueryOptions{})
+	if err != nil {
+		t.Fatalf("SearchWithOptions: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed >= 150*time.Millisecond {
+		t.Fatalf("semantic query embed was not bounded, elapsed %s", elapsed)
+	}
+	if report.Diagnostics.Fusion != "bm25-fallback" || len(report.Results) != 1 {
+		t.Fatalf("expected BM25 fallback after semantic timeout, got %+v", report)
+	}
+}
+
+func TestSearchBatchSemanticQueryEmbedTimeoutFallsBackToBM25(t *testing.T) {
+	withSemanticQueryTimeout(t, 20*time.Millisecond)
+	store, err := NewStore(filepath.Join(t.TempDir(), "wiki"), filepath.Join(t.TempDir(), "diary"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	mustWrite(t, store, "프로젝트/contract.md", &Page{
+		Meta: Frontmatter{ID: "contract", Title: "계약 일정", Category: "프로젝트"},
+		Body: "계약 일정 검토 내용입니다.",
+	})
+	store.SetEmbedder(timeoutEmbedder{fakeEmbedder: fakeEmbedder{healthy: true}})
+
+	parent, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	reports, err := store.SearchBatchWithOptions(parent, []string{"계약 일정"}, 5, QueryOptions{})
+	if err != nil {
+		t.Fatalf("SearchBatchWithOptions: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed >= 150*time.Millisecond {
+		t.Fatalf("semantic batch query embed was not bounded, elapsed %s", elapsed)
+	}
+	if len(reports) != 1 || reports[0].Diagnostics.Fusion != "bm25-fallback" || len(reports[0].Results) != 1 {
+		t.Fatalf("expected batch BM25 fallback after semantic timeout, got %+v", reports)
 	}
 }
 
