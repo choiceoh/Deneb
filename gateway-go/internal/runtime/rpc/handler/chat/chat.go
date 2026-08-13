@@ -9,9 +9,6 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/core/rpcerr"
-	wiki "github.com/choiceoh/deneb/gateway-go/internal/domain/wikiport"
-	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/events"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/rpcutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -34,102 +31,6 @@ type ChatHandler interface {
 type Deps struct {
 	Chat        ChatHandler
 	Broadcaster BroadcastFunc // optional; receives chat.steer_received events
-}
-
-// MiniappChatHandler is the narrow chat pipeline surface consumed by the native
-// miniapp bridge. It intentionally excludes async chat.send/abort/steer so the
-// native bridge does not share the standard chat.* RPC dependency contract.
-type MiniappChatHandler interface {
-	chatport.SyncRunner
-	History(context.Context, *protocol.RequestFrame) *protocol.ResponseFrame
-}
-
-// WorkFeedStore is the native bridge's work-feed persistence port.
-type WorkFeedStore interface {
-	Append(workfeed.Item) (workfeed.Item, error)
-	List(limit int, includeAcked bool) ([]workfeed.Item, int, error)
-	// Correct annotates a card with a user correction (native long-press
-	// feedback) and returns the updated item; used by miniapp.workfeed.feedback.
-	Correct(id, note string) (workfeed.Item, error)
-	// Rewrite replaces a card's body with a regenerated analysis and returns
-	// the updated item; used by miniapp.workfeed.rewrite.
-	Rewrite(id, newBody string) (workfeed.Item, error)
-}
-
-// MiniappDeps holds the dependencies for the native-client miniapp chat bridge.
-type MiniappDeps struct {
-	Chat MiniappChatHandler
-	// OcrImage OCRs a directly-shared image (native-client image capture).
-	// Optional; nil disables miniapp.capture.image.
-	OcrImage func(ctx context.Context, img []byte) (string, error)
-	// DescribeImage understands a directly-shared image via the vision-capable
-	// model chain (main model → dedicated vision model), falling back to OcrImage
-	// glyph extraction when no vision model is available or the describe fails — so
-	// a chart/diagram/photo/handwriting is described, not flattened to sparse OCR
-	// text. Optional; nil keeps the OCR-only image path.
-	DescribeImage func(ctx context.Context, img []byte, mime string) string
-	// Transcribe transcribes a directly-shared audio recording (native-client
-	// voice/meeting capture) via the ASR sidecar (MOSS-Transcribe-Diarize). hotwords is an
-	// optional proper-noun bias list. Optional; nil disables miniapp.capture.audio.
-	Transcribe func(ctx context.Context, audio []byte, mimeType, hotwords string) (string, error)
-	// ExtractDocument extracts readable text from a directly-shared document's raw
-	// bytes — PDF/Excel/Word/PowerPoint/CSV/text, with a scanned-PDF / image OCR
-	// fallback (the native-client document attach path). Optional; nil disables
-	// miniapp.capture.document.
-	ExtractDocument func(ctx context.Context, data []byte, filename, mimeType string) string
-	// DigestOversized condenses an oversized extracted document (a line-mapped
-	// chunk-digest map via the local lightweight model, or a visible head
-	// truncation) before it enters the agent turn. Runs AFTER raw capture
-	// persistence so the full original still lands in captures; sourcePath/
-	// sourceBodyLine locate that archived file so the map's line numbers stay
-	// openable ("" / 0 when persistence failed). Optional; nil injects text
-	// unbounded.
-	DigestOversized func(ctx context.Context, name, text, sourcePath string, sourceBodyLine int) string
-	// SummarizePreview condenses one attachment's extracted text into a compact
-	// (~1000자) local tiny-model summary for the batch-capture pointer turn — a
-	// representative preview instead of a raw front-of-text cut. Returns "" when
-	// the local model is unavailable or the summary fails; the batch handler then
-	// falls back to its own front-cut preview. Optional; nil keeps the front-cut.
-	SummarizePreview func(ctx context.Context, name, text string) string
-	// Translate translates web-page text segments for the in-app browser's
-	// in-place translation (en/ru → ko). Returns a same-length, same-order
-	// slice. Optional; nil disables miniapp.web.translate.
-	Translate func(ctx context.Context, segments []string, targetLang string) ([]string, error)
-	// Hotwords supplies proper-noun bias (wiki people/companies/domain terms)
-	// for audio-capture transcription. Optional; nil or "" means no bias.
-	Hotwords func() string
-	// SaveCapture durably stores raw captured content (full ASR transcript,
-	// OCR text) and returns the stored file's memory-relative path, absolute
-	// path, and the 1-based line where the body starts inside the file. The
-	// agent turn only summarizes; without this the original is unrecoverable
-	// once the chat transcript ages out. Optional; nil skips persistence.
-	SaveCapture func(kind, context, text string) (rel, abs string, bodyStartLine int, err error)
-	// EnrichContacts merges a shared address book into EXISTING wiki 사람 pages —
-	// it creates no pages, only enriches people already in the wiki with their
-	// phone/email/org (native-client contacts sync). Optional; nil disables the
-	// wiki enrichment bonus (the contacts store save is the primary path).
-	EnrichContacts func(contactsJSON []byte) (wiki.ContactEnrichResult, error)
-	// SaveContacts mirrors the synced address book into the contacts store (phone
-	// lookup, name search, ASR hotwords). Optional; nil disables the store write.
-	SaveContacts func(contactsJSON []byte) (int, error)
-	// WorkFeed records native-client inputs as actionable work-feed items, and
-	// (List) reads them back so a 업무 chat turn can inject today's feed as
-	// context — see handleMiniappChatSend. Optional; capture handlers ignore
-	// append failures because the chat turn is still the source of truth, and a
-	// nil store just means no feed context is injected.
-	WorkFeed WorkFeedStore
-	// PublishDeliverable files a document-analysis result as a proper doc_analysis
-	// work-feed card (derived title, substance-gated) instead of a raw capture card.
-	// Returns (true, nil) when a card was filed; (false, nil) when the analysis was
-	// too thin to be a deliverable — the caller then falls back to the raw capture
-	// card so a shared document is never dropped. Wired to the proactive relay's card
-	// builder; nil keeps the legacy raw capture card.
-	PublishDeliverable func(text string) (bool, error)
-	// IngestEvent queues a proactive 비서실장 judgment turn for a phone event — the
-	// native NotificationListener's broad capture (the gateway triages: OTP/spam/
-	// routine → NO_REPLY, signal → work feed + push). Optional; nil disables
-	// miniapp.event.ingest. eventType is "notification"/"context"/"clipboard"/sms.
-	IngestEvent func(eventType, source, text string)
 }
 
 // BtwDeps holds the dependencies for the chat.btw side-question RPC method.

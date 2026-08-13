@@ -1,4 +1,4 @@
-package chat
+package miniapp
 
 import (
 	"context"
@@ -16,7 +16,7 @@ func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) 
 // batchDeps wires mock extractors + a capturing Chat stub. runs counts RunSync
 // calls (the whole point: N files must produce ONE turn, not N). lastMessage holds
 // the pointer turn the agent received.
-func batchDeps(saveCapture bool) (MiniappDeps, *int, *string) {
+func batchDeps(saveCapture bool) (Deps, *int, *string) {
 	runs := new(int)
 	lastMessage := new(string)
 	stub := &chatPortStub{runSync: func(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
@@ -24,7 +24,7 @@ func batchDeps(saveCapture bool) (MiniappDeps, *int, *string) {
 		*lastMessage = req.Message
 		return &chatport.SyncResult{Text: "분석 결과", BestText: "분석 결과"}, nil
 	}}
-	deps := MiniappDeps{
+	deps := Deps{
 		Chat:            stub,
 		OcrImage:        func(context.Context, []byte) (string, error) { return "이미지 OCR 텍스트", nil },
 		Transcribe:      func(context.Context, []byte, string, string) (string, error) { return "녹음 전사 텍스트", nil },
@@ -53,7 +53,7 @@ func batchRequest(t *testing.T, files []map[string]any, caption string) *protoco
 
 func TestCaptureBatchRunsOneTurnOverAllFiles(t *testing.T) {
 	deps, runs, msg := batchDeps(true)
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	if handler == nil {
 		t.Fatal("miniapp.capture.batch not registered")
 	}
@@ -87,7 +87,7 @@ func TestCaptureBatchRunsOneTurnOverAllFiles(t *testing.T) {
 
 func TestCaptureBatchInlinesWhenPersistenceUnavailable(t *testing.T) {
 	deps, runs, msg := batchDeps(false) // no SaveCapture
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	req := batchRequest(t, []map[string]any{
 		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
 	}, "")
@@ -107,7 +107,7 @@ func TestCaptureBatchInlinesWhenPersistenceUnavailable(t *testing.T) {
 
 func TestCaptureBatchSkipsBadFilesAndReportsThem(t *testing.T) {
 	deps, runs, msg := batchDeps(true)
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	req := batchRequest(t, []map[string]any{
 		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "good.pdf"},
 		{"data": "%%%not-base64%%%", "mimeType": "application/pdf", "filename": "bad.pdf"},
@@ -127,7 +127,7 @@ func TestCaptureBatchSkipsBadFilesAndReportsThem(t *testing.T) {
 
 func TestCaptureBatchAllUnreadableIsUnavailable(t *testing.T) {
 	deps, runs, _ := batchDeps(true)
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	req := batchRequest(t, []map[string]any{
 		{"data": "%%%bad%%%", "mimeType": "application/pdf", "filename": "bad.pdf"},
 	}, "")
@@ -146,7 +146,7 @@ func TestCaptureBatchUsesSummaryPreviewWhenWired(t *testing.T) {
 	deps.SummarizePreview = func(_ context.Context, name, _ string) string {
 		return "주제: " + name + " 요약\n- 핵심 사실"
 	}
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	req := batchRequest(t, []map[string]any{
 		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
 	}, "")
@@ -164,7 +164,7 @@ func TestCaptureBatchFallsBackToFrontCutWhenSummaryEmpty(t *testing.T) {
 	deps, runs, msg := batchDeps(true)
 	// Local model down/gated → SummarizePreview returns "" → front-cut fallback.
 	deps.SummarizePreview = func(context.Context, string, string) string { return "" }
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	req := batchRequest(t, []map[string]any{
 		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
 	}, "")
@@ -180,7 +180,7 @@ func TestCaptureBatchFallsBackToFrontCutWhenSummaryEmpty(t *testing.T) {
 
 func TestCaptureBatchPreservesFileOrder(t *testing.T) {
 	deps, runs, msg := batchDeps(true)
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	// Files are now materialized concurrently; the numbered pointer list must still
 	// follow the caller's input order, not whichever goroutine finished first.
 	names := []string{"a.pdf", "b.pdf", "c.pdf", "d.pdf", "e.pdf"}
@@ -208,7 +208,7 @@ func TestCaptureBatchPreservesFileOrder(t *testing.T) {
 
 func TestCaptureBatchDedupsIdenticalResend(t *testing.T) {
 	deps, runs, _ := batchDeps(true)
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	files := []map[string]any{
 		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
 	}
@@ -234,7 +234,7 @@ func TestCaptureBatchDedupsIdenticalResend(t *testing.T) {
 
 func TestCaptureBatchMissingFilesRejected(t *testing.T) {
 	deps, _, _ := batchDeps(true)
-	handler := MiniappMethods(deps)["miniapp.capture.batch"]
+	handler := Methods(deps)["miniapp.capture.batch"]
 	req := batchRequest(t, []map[string]any{}, "no files")
 	if resp := handler(context.Background(), req); resp.OK {
 		t.Fatalf("empty files should be rejected, got OK: %+v", resp)
