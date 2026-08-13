@@ -302,5 +302,5 @@ recall preflight 가 여러 소스에서 **같은 엔티티에 상충하는 사�
 - 논문: [arXiv 2605.26086](https://arxiv.org/abs/2605.26086) · [HTML](https://arxiv.org/html/2605.26086) · 국내 보도 [AI Matters](https://aimatters.co.kr/news-report/43380/)
 - 관련 벤치마크: [π-Bench (2605.14678)](https://arxiv.org/html/2605.14678v3) — proactive long-horizon 평가 (B 발견 보강 참고)
 - Deneb research: `docs/research/{improvement-ideas, ideal-agent-environment-harness, hermes-deneb-mapping, memory-integration-strategy}.md`
-- 코드 근거: `gateway-go/internal/domain/autonomous/`, `internal/pipeline/chat/recall_preflight.go`, `internal/pipeline/compaction/polaris.go`, `internal/pipeline/chat/tools.go`, `internal/runtime/rpc/handler/chat/miniapp_bridge.go`
+- 코드 근거: `gateway-go/internal/domain/autonomous/`, `internal/pipeline/chat/recall_preflight.go`, `internal/pipeline/compaction/polaris.go`, `internal/pipeline/chat/tools.go`, `internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go`
 - 도메인 규칙: `docs/agent-rules/{live-testing, prompt-cache, logging, optimization}.md`

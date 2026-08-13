@@ -132,7 +132,7 @@ DENEB_OCR_VL_LIVE=1 DENEB_OCR_VL_IMG=/path/to.png DENEB_OCR_VL_URL=http://127.0.
 - `gateway-go/internal/pipeline/chat/tools/artifact/asr.go`:
   - `transcribeAudio(ctx, audio, filename, hotwords)` — `/v1/transcribe` 에 멀티파트 `file`(+ 선택 `hotwords`) 전송, `{segments, transcription}` 파싱. segment `speaker` 가 문자열 라벨 또는 숫자 인덱스 **둘 다** 와서 `flexStr` 로 수용(라이브 테스트가 잡은 함정).
   - `transcribeAudioText(ctx, audio, mimeType)` — **단일 전사 진입점**. 화자분리+타임스탬프로 포맷(`[mm:ss 화자N] …`), segment 없으면 flat transcription 폴백.
-- `chat/tools/artifact/asr_export.go` 의 `TranscribeAudio` 래퍼가 패키지-프라이빗 진입점 노출 → `miniapp.capture.audio` 브리지 RPC(`handler/chat/miniapp_bridge.go`, `deps.Transcribe != nil` 일 때만 등록)가 공유 녹음을 전사해 한 agent turn 실행. PaddleOCR 의 `miniapp.capture.image` 와 동형.
+- `chat/tools/artifact/asr_export.go` 의 `TranscribeAudio` 래퍼가 패키지-프라이빗 진입점 노출 → `miniapp.capture.audio` 브리지 RPC(`gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go`, `deps.Transcribe != nil` 일 때만 등록)가 공유 녹음을 전사해 한 agent turn 실행. PaddleOCR 의 `miniapp.capture.image` 와 동형.
 - **네이티브 경로**: 안드로이드가 오디오 파일을 공유(`ACTION_SEND audio/*`)하면 `captureAudio` → `miniapp.capture.audio`.
 - **폴백 없음**: OCR 의 tesseract 같은 로컬 ASR 폴백이 없어 서버 다운 시 connection refused → 명확한 에러 surface (graceful degradation = 명확한 실패).
 - **override**: 환경변수 `DENEB_ASR_URL`(기본 `http://127.0.0.1:18013`), `DENEB_ASR_HOTWORDS`(고유명사 교정 bias, 선택).
