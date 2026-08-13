@@ -11,11 +11,7 @@ var (
 	ToolGraphify      = tools.ToolGraphify
 	ToolCodeSearch    = codesearchtool.ToolCodeSearch
 	ToolOffice        = tools.ToolOffice
-	ToolGoal          = tools.ToolGoal
-	ToolBlackboard    = tools.ToolBlackboard
 	ToolOrg           = tools.ToolOrg
 	ToolMessage       = tools.ToolMessage
 	ToolResearchPanel = tools.ToolResearchPanel
-	NewGoalGlanceFunc = tools.NewGoalGlanceFunc
-	HandleGoalCommand = tools.HandleGoalCommand
 )

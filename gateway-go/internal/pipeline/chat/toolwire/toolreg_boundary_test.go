@@ -19,6 +19,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/ops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/recall"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/workflow"
 )
 
 type schemaCase struct {
@@ -554,6 +555,9 @@ func TestRegistrationGroupsEnforceExactNamesWithoutCrossGroupDuplicates(t *testi
 		{name: "web", run: func(r *mockRegistrar) { RegisterWebTools(r, nil) }, want: []string{"web", "browse"}},
 		{name: "session", run: func(r *mockRegistrar) { RegisterSessionTools(r, &tooldeps.SessionDeps{}) }, want: []string{"sessions", "sessions_spawn", "subagents"}},
 		{name: "chrono", run: func(r *mockRegistrar) { RegisterChronoTools(r) }, want: []string{"message", "heartbeat_update"}},
+		{name: "workflow", run: func(r *mockRegistrar) {
+			workflow.RegisterTools(r, workflow.ToolSet{Goal: noop, Blackboard: noop})
+		}, want: []string{"blackboard", "goal"}},
 		{name: "todo", run: func(r *mockRegistrar) { chrono.RegisterTodoTool(r) }, want: []string{"todo"}},
 		{name: "routine", run: func(r *mockRegistrar) { chrono.RegisterRoutineTools(r, &tooldeps.ChronoDeps{}, "", "", nil) }, want: []string{"cron", "evening_letter", "files", "morning_letter"}},
 		{name: "skills", run: func(r *mockRegistrar) { RegisterSkillsTools(r, nil, t.TempDir(), "", nil) }, want: []string{"skills"}},
@@ -688,12 +692,14 @@ func TestToolDefinitionsCanBeInvokedWithCancelledContextWithoutRegistrationPanic
 	default:
 		t.Fatal("context not cancelled")
 	}
+	noop := toolport.ToolFunc(func(context.Context, json.RawMessage) (string, error) { return "", nil })
 	reg := &mockRegistrar{}
 	ops.RegisterPhoneTools(reg, nil)
 	RegisterProcessTools(reg, &tooldeps.ProcessDeps{WorkspaceDir: t.TempDir()})
 	RegisterWebTools(reg, nil)
 	RegisterSessionTools(reg, &tooldeps.SessionDeps{})
 	RegisterChronoTools(reg)
+	workflow.RegisterTools(reg, workflow.ToolSet{Goal: noop, Blackboard: noop})
 	chrono.RegisterRoutineTools(reg, &tooldeps.ChronoDeps{}, "", "", nil)
 	RegisterSkillsTools(reg, nil, t.TempDir(), "", nil)
 	RegisterMediaTools(reg, t.TempDir(), nil)

@@ -15,11 +15,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/ops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/webtools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/workflow"
 )
 
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 func RegisterCoreTools(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	core.Register(registry, deps)
+	workflow.Register(registry)
 	domain.Register(registry, deps)
 	chrono.Register(registry, deps)
 }
@@ -81,12 +83,12 @@ type (
 
 // NewGoalGlanceFunc builds the ambient standing-goal glance.
 func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
-	return core.NewGoalGlanceFunc()
+	return workflow.NewGoalGlanceFunc()
 }
 
 // HandleGoalCommand processes the /goal slash command.
 func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
-	core.HandleGoalCommand(sessionKey, args, respond)
+	workflow.HandleGoalCommand(sessionKey, args, respond)
 }
 
 // Type aliases so the toolwire facade can avoid importing toolport/tooldeps.
