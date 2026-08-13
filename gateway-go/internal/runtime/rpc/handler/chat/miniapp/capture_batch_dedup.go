@@ -1,4 +1,4 @@
-package chat
+package miniapp
 
 import (
 	"crypto/sha256"

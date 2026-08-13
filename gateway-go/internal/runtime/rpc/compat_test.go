@@ -8,6 +8,7 @@ import (
 
 	handleragent "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/agent"
 	handlerchat "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat"
+	handlerchatminiapp "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/chat/miniapp"
 	handlergateway "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/gateway"
 	handlerevents "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/handlerevents"
 	handlerprocess "github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc/handler/process"
@@ -22,7 +23,7 @@ import (
 
 type (
 	ChatDeps           = handlerchat.Deps
-	ChatMiniappDeps    = handlerchat.MiniappDeps
+	ChatMiniappDeps    = handlerchatminiapp.Deps
 	ChatBtwDeps        = handlerchat.BtwDeps
 	SessionExecDeps    = handlersession.ExecDeps
 	EventsDeps         = handlerevents.EventsDeps

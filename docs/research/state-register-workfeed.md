@@ -50,7 +50,7 @@ reads:
 - `gateway-go/internal/domain/workfeed/store.go:511` Correct
 - `gateway-go/internal/domain/workfeed/store.go:559` EscalateApproval
 - `gateway-go/internal/domain/workfeed/store.go:560` EscalateApproval
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:216` writeOriginalWorkFeedCard
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_workfeed.go:209` writeOriginalWorkFeedCard
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
 - `gateway-go/internal/runtime/server/tooldeps_adapters.go:60` mapWorkFeedItem
 
@@ -69,8 +69,8 @@ reads:
 - `gateway-go/internal/domain/workfeed/store.go:401` ListFiltered
 - `gateway-go/internal/domain/workfeed/store.go:404` ListFiltered
 - `gateway-go/internal/domain/workfeed/store.go:461` Engagement
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:62` buildTodayFeedDigest
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go:36` buildTodayFeedDigest
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go:906` alreadyCardedThisTurn
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:241` projectWorkFeedItem
 - `gateway-go/internal/runtime/server/tooldeps_adapters.go:63` mapWorkFeedItem
 
@@ -100,7 +100,7 @@ reads:
 - `gateway-go/internal/domain/workfeed/store.go:752` RunActionWithEffect
 - `gateway-go/internal/domain/workfeed/store.go:771` settleAction
 - `gateway-go/internal/runtime/proactive/proactive_relay.go:429` appendProactiveWorkFeed
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:202` findWorkFeedItem
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_workfeed.go:196` findWorkFeedItem
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:240` projectWorkFeedItem
 - `gateway-go/internal/runtime/server/groupware_radar.go:281` publishApprovalAnalysisFeed
 - `gateway-go/internal/runtime/server/groupware_radar.go:370` notifyGroupwareRadarListFailed
@@ -214,9 +214,9 @@ reads:
 - `gateway-go/internal/domain/workfeed/item_helpers.go:109` normalizeItem
 - `gateway-go/internal/domain/workfeed/store.go:691` RunActionWithEffect
 - `gateway-go/internal/domain/workfeed/store.go:703` RunActionWithEffect
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:64` handleMiniappWorkfeedFeedback
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:145` handleMiniappWorkfeedRewrite
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go:906` alreadyCardedThisTurn
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_workfeed.go:34` handleMiniappWorkfeedFeedback
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_workfeed.go:129` handleMiniappWorkfeedRewrite
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:123` workFeedAnswer
 - `gateway-go/internal/runtime/server/tooldeps_adapters.go:61` mapWorkFeedItem
 
@@ -260,7 +260,7 @@ reads:
 - `gateway-go/internal/domain/workfeed/store.go:262` isMeetingNearDuplicate
 - `gateway-go/internal/domain/workfeed/store.go:463` Engagement
 - `gateway-go/internal/domain/workfeed/store.go:536` EscalateApproval
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:581` alreadyCardedThisTurn
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go:906` alreadyCardedThisTurn
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:225` workFeedActionRun
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:230` workFeedActionRun
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/workfeed.go:235` workFeedActionRun
@@ -315,8 +315,8 @@ reads:
 - `gateway-go/internal/domain/workfeed/item_helpers.go:294` contextBody
 - `gateway-go/internal/domain/workfeed/store.go:277` meetingCardFingerprint
 - `gateway-go/internal/domain/workfeed/store.go:548` EscalateApproval
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:66` buildTodayFeedDigest
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:219` writeOriginalWorkFeedCard
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go:36` buildTodayFeedDigest
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_workfeed.go:209` writeOriginalWorkFeedCard
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:384` workFeedSubtitle
 - `gateway-go/internal/runtime/server/groupware_radar.go:273` publishApprovalAnalysisFeed
@@ -341,8 +341,8 @@ reads:
 - `gateway-go/internal/domain/workfeed/store.go:277` meetingCardFingerprint
 - `gateway-go/internal/domain/workfeed/store.go:300` meetingCardFingerprint
 - `gateway-go/internal/runtime/curriculumenv/digest.go:152` writeFeedSection
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_bridge.go:65` buildTodayFeedDigest
-- `gateway-go/internal/runtime/rpc/handler/chat/miniapp_workfeed.go:211` writeOriginalWorkFeedCard
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_bridge.go:36` buildTodayFeedDigest
+- `gateway-go/internal/runtime/rpc/handler/chat/miniapp/miniapp_workfeed.go:209` writeOriginalWorkFeedCard
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:233` projectWorkFeedItem
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/dashboard/dashboard.go:236` projectWorkFeedItem
 - `gateway-go/internal/runtime/server/groupware_radar.go:275` publishApprovalAnalysisFeed
