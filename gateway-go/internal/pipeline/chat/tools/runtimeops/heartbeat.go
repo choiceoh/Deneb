@@ -12,14 +12,14 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
-// HeartbeatFileName is the filename written under <home>/.deneb/.
-const HeartbeatFileName = "HEARTBEAT.md"
+// heartbeatFileName is the filename written under <home>/.deneb/.
+const heartbeatFileName = "HEARTBEAT.md"
 
-// HeartbeatBackupName is the 1-generation backup written before each overwrite.
+// heartbeatBackupName is the 1-generation backup written before each overwrite.
 // Lets the user (or agent) recover from an accidental clear by restoring this
 // file. Only the most recent prior content is kept — heartbeat updates can be
 // frequent and a deeper history would just add maintenance noise.
-const HeartbeatBackupName = "HEARTBEAT.md.prev"
+const heartbeatBackupName = "HEARTBEAT.md.prev"
 
 // ToolHeartbeatUpdate writes ~/.deneb/HEARTBEAT.md atomically. The path is
 // fixed: the heartbeat task reads from this exact location, so a free-form
@@ -60,8 +60,8 @@ func toolHeartbeatUpdateWithHome(homeDir string) toolport.ToolFunc {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return "", fmt.Errorf("heartbeat_update: cannot create %s: %w", dir, err)
 		}
-		path := filepath.Join(dir, HeartbeatFileName)
-		backup := filepath.Join(dir, HeartbeatBackupName)
+		path := filepath.Join(dir, heartbeatFileName)
+		backup := filepath.Join(dir, heartbeatBackupName)
 
 		// Best-effort 1-generation backup. A missing/unreadable previous file
 		// is fine (first run, or someone manually deleted it); a failed

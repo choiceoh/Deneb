@@ -40,6 +40,7 @@ func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDe
 
 func RegisterChronoTools(registry toolport.ToolRegistrar) {
 	core.RegisterChronoTools(registry)
+	ops.RegisterHeartbeatTool(registry)
 }
 
 func RegisterMediaTools(registry toolport.ToolRegistrar, workspaceDir string, spill tooldeps.SpilloverStore) {

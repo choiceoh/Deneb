@@ -4,7 +4,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/ops"
@@ -149,6 +148,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	webtools.Register(registry, deps.SpilloverStore)
 	ops.RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
+	ops.RegisterHeartbeatTool(registry)
 	media.RegisterMediaTools(registry, deps.WorkspaceDir, deps.SpilloverStore)
 	ops.RegisterPhoneTools(registry, deps.PhoneActionSender)
 	ops.RegisterWorkstationTool(registry, ops.WorkstationDeps{
@@ -214,7 +214,7 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	// they need the concrete registry surface (FetchToolsRegistry / ToolInvoker).
 }
 
-// RegisterChronoTools registers messaging tools (non-periodic).
+// RegisterChronoTools registers messaging tools.
 //
 // message is deferred (prompt audit 2026-06-12): 1 use in 14 days for its wire
 // tokens. Normal replies auto-route as the turn's final text, so message only
@@ -232,16 +232,5 @@ func RegisterChronoTools(registry toolport.ToolRegistrar) {
 		InputSchema: schema.MessageToolSchema(),
 		Fn:          surface.ToolMessage(),
 		Deferred:    true,
-	})
-	registry.RegisterTool(toolport.ToolDef{
-		Name: "heartbeat_update",
-		Description: "Overwrite ~/.deneb/HEARTBEAT.md with a new full content string. Pass empty content to clear the file. " +
-			"Used by the 30-minute autonomous heartbeat to retire completed/cancelled items, update progress notes, " +
-			"and archive stalled items. Also callable by the user via natural language (\"add X to my heartbeat\", \"remove the spark deploy task\"). " +
-			"Auto-backs up the prior content to HEARTBEAT.md.prev. Eager registration: the autonomous heartbeat " +
-			"trigger explicitly directs the agent to call this tool, so it must be visible in the default prompt " +
-			"(deferring it would force a fetch_tools round-trip and add a fragile turn).",
-		InputSchema: schema.HeartbeatUpdateToolSchema(),
-		Fn:          runtimeops.ToolHeartbeatUpdate(),
 	})
 }
