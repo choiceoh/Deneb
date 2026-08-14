@@ -532,7 +532,7 @@ func TestPlaudAuthErrorThrottledNotice(t *testing.T) {
 	}
 }
 
-func TestPlaudListFetchFailureLogsAtDebug(t *testing.T) {
+func TestPlaudTransientListFailureLogsAtDebug(t *testing.T) {
 	execErr := func(ctx context.Context, name string, args json.RawMessage) (string, error) {
 		return "", context.DeadlineExceeded
 	}
@@ -541,20 +541,27 @@ func TestPlaudListFetchFailureLogsAtDebug(t *testing.T) {
 	s.logger = slog.New(logs)
 
 	s.handleToolError(testError("mcp tool list_files failed: Failed to list files: TypeError: fetch failed"))
+	s.handleToolError(testError("mcp tool list_files failed: Failed to list files: Error: API error: 500 Internal Server Error"))
 	s.handleToolError(testError("mcp tool list_files failed: bad response"))
 
 	entries := logs.entries()
-	if len(entries) != 2 {
-		t.Fatalf("want 2 log entries, got %d", len(entries))
+	if len(entries) != 3 {
+		t.Fatalf("want 3 log entries, got %d", len(entries))
 	}
 	if entries[0].level != slog.LevelDebug {
 		t.Fatalf("fetch failed level = %v, want Debug", entries[0].level)
 	}
-	if entries[0].msg != "plaud recordings: list_files fetch failed, skipping tick" {
+	if entries[0].msg != "plaud recordings: list_files transient failure, skipping tick" {
 		t.Fatalf("fetch failed message = %q", entries[0].msg)
 	}
-	if entries[1].level != slog.LevelWarn {
-		t.Fatalf("non-fetch list failure level = %v, want Warn", entries[1].level)
+	if entries[1].level != slog.LevelDebug {
+		t.Fatalf("api 500 level = %v, want Debug", entries[1].level)
+	}
+	if entries[1].msg != "plaud recordings: list_files transient failure, skipping tick" {
+		t.Fatalf("api 500 message = %q", entries[1].msg)
+	}
+	if entries[2].level != slog.LevelWarn {
+		t.Fatalf("non-transient list failure level = %v, want Warn", entries[2].level)
 	}
 }
 

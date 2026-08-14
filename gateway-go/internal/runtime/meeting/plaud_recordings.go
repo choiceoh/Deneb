@@ -654,7 +654,8 @@ func (s *plaudRecordingsService) projectCandidates() []mailanalysis.ProjectCandi
 }
 
 // handleToolError separates "not wired yet" (quiet) from auth expiry (loud,
-// throttled operator card) from everything else (warn).
+// throttled operator card) from transient Plaud list outages (quiet) from
+// everything else (warn).
 func (s *plaudRecordingsService) handleToolError(err error) {
 	msg := err.Error()
 	switch {
@@ -666,16 +667,18 @@ func (s *plaudRecordingsService) handleToolError(err error) {
 		strings.Contains(strings.ToLower(msg), "unauthorized"):
 		s.logger.Error("plaud recordings: MCP auth expired — operator re-login needed", "error", err)
 		s.notifyAuthExpiredOnce()
-	case isPlaudListFetchFailure(msg):
-		s.logger.Debug("plaud recordings: list_files fetch failed, skipping tick", "error", err)
+	case isPlaudListTransientFailure(msg):
+		s.logger.Debug("plaud recordings: list_files transient failure, skipping tick", "error", err)
 	default:
 		s.logger.Warn("plaud recordings: list_files failed", "error", err)
 	}
 }
 
-func isPlaudListFetchFailure(msg string) bool {
+func isPlaudListTransientFailure(msg string) bool {
 	msg = strings.ToLower(msg)
-	return strings.Contains(msg, "fetch failed")
+	return strings.Contains(msg, "fetch failed") ||
+		strings.Contains(msg, "api error: 5") ||
+		strings.Contains(msg, "internal server error")
 }
 
 // notifyAuthExpiredOnce posts at most one token-expiry card per 24h.
