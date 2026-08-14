@@ -105,7 +105,6 @@ func nativeAPIHandler(s *Server) *nativeapi.Handler {
 	return nativeapi.New(nativeapi.Config{
 		Dispatcher:      s.dispatcher,
 		ChatHandler:     s.chatHandler,
-		PushHub:         s.pushHub,
 		ShutdownContext: s.ShutdownCtx(),
 		Logger:          s.logger,
 	})

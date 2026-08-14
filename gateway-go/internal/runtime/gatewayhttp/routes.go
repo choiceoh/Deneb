@@ -20,6 +20,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/mcpapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeattachmentapi"
+	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeeventsapi"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 )
@@ -64,12 +65,16 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		return nativeapi.New(nativeapi.Config{
 			Dispatcher:        cfg.Dispatcher,
 			ChatHandler:       cfg.ChatHandler,
-			PushHub:           cfg.PushHub,
 			ShutdownContext:   cfg.ShutdownContext,
 			Logger:            cfg.Logger,
 			TranslateThinking: cfg.TranslateThinking,
 		})
 	}
+	nativeEventsHandler := nativeeventsapi.New(nativeeventsapi.Config{
+		PushHub:         cfg.PushHub,
+		ShutdownContext: cfg.ShutdownContext,
+		Logger:          cfg.Logger,
+	})
 	nativeAttachmentHandler := nativeattachmentapi.New(nativeattachmentapi.Config{
 		Logger:            cfg.Logger,
 		AttachmentFactory: adaptAttachmentFactory(cfg.AttachmentFactory),
@@ -86,7 +91,7 @@ func RegisterRoutes(mux *http.ServeMux, cfg Config) {
 		nativeHandler().ChatStream(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/miniapp/events", func(w http.ResponseWriter, r *http.Request) {
-		nativeHandler().Events(w, r)
+		nativeEventsHandler.Events(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/miniapp/gmail/attachment", func(w http.ResponseWriter, r *http.Request) {
 		nativeAttachmentHandler.GmailAttachment(w, r)
@@ -146,7 +151,7 @@ func WithCORS(next http.Handler) http.Handler {
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Add("Vary", "Origin")
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			h.Set("Access-Control-Allow-Headers", nativeapi.ClientTokenHeader+", "+nativeapi.ClientKindHeader+", Authorization, Content-Type")
+			h.Set("Access-Control-Allow-Headers", nativeapi.ClientTokenHeader+", "+nativeeventsapi.ClientKindHeader+", Authorization, Content-Type")
 			h.Set("Access-Control-Max-Age", "600")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)

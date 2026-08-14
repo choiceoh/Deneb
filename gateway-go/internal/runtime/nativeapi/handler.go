@@ -37,7 +37,6 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/clientauth"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativeauth"
-	"github.com/choiceoh/deneb/gateway-go/internal/runtime/nativepush"
 	"github.com/choiceoh/deneb/gateway-go/internal/runtime/rpc"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
@@ -46,11 +45,6 @@ import (
 // Route middleware should reference this constant instead of duplicating the
 // authentication package's wire name.
 const ClientTokenHeader = clientauth.Header
-
-// ClientKindHeader tags a client surface (e.g. "desktop") on SSE subscribe
-// requests. Browser-context clients (Tauri webview, vite dev) send it from a
-// CORS-enforced origin, so it must stay in the CORS allow-list (routes.go).
-const ClientKindHeader = "X-Deneb-Client-Kind"
 
 // Authenticator binds the native client authentication adapter to a logger for
 // sibling HTTP surfaces that share the same token contract.
@@ -64,7 +58,6 @@ func Authenticator(logger *slog.Logger) func(http.ResponseWriter, *http.Request)
 type Config struct {
 	Dispatcher      *rpc.Dispatcher
 	ChatHandler     chatport.SyncStreamRunner
-	PushHub         *nativepush.Hub
 	ShutdownContext context.Context
 	Logger          *slog.Logger
 	// TranslateThinking renders the turn's reasoning into Korean for the done
@@ -78,7 +71,6 @@ type Config struct {
 type Handler struct {
 	dispatcher        *rpc.Dispatcher
 	chatHandler       chatport.SyncStreamRunner
-	pushHub           *nativepush.Hub
 	shutdownContext   context.Context
 	logger            *slog.Logger
 	translateThinking func(ctx context.Context, text string) (string, bool)
@@ -93,7 +85,6 @@ func New(cfg Config) *Handler {
 	return &Handler{
 		dispatcher:        cfg.Dispatcher,
 		chatHandler:       cfg.ChatHandler,
-		pushHub:           cfg.PushHub,
 		shutdownContext:   shutdownContext,
 		logger:            cfg.Logger,
 		translateThinking: cfg.TranslateThinking,
