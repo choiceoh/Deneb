@@ -21,8 +21,9 @@ func depTestService(t *testing.T) *Service {
 	return s
 }
 
-// Transitions fire exactly on state CHANGES: down on the first failing beat,
-// nothing while it stays down, recovery on the first healthy beat.
+// Transitions fire exactly on confirmed state CHANGES: a first failing beat is
+// shown in the heartbeat line only, the second consecutive failure alerts down,
+// steady-down stays quiet, and recovery alerts once.
 func TestProbeDependenciesTransitions(t *testing.T) {
 	s := depTestService(t)
 	healthy := true
@@ -46,8 +47,16 @@ func TestProbeDependenciesTransitions(t *testing.T) {
 	if len(down) != 1 || !strings.Contains(down[0], "bge-m3") {
 		t.Fatalf("first failing beat down=%v", down)
 	}
+	if len(tr) != 0 {
+		t.Fatalf("first failing beat is only a pending blip, transitions=%v", tr)
+	}
+
+	down, tr = s.probeDependencies()
+	if len(down) != 1 || !strings.Contains(down[0], "bge-m3") {
+		t.Fatalf("second failing beat down=%v", down)
+	}
 	if len(tr) != 1 || !tr[0].down || tr[0].name != "bge-m3" {
-		t.Fatalf("first failing beat transitions=%v", tr)
+		t.Fatalf("second failing beat transitions=%v", tr)
 	}
 
 	down, tr = s.probeDependencies()
@@ -59,6 +68,31 @@ func TestProbeDependenciesTransitions(t *testing.T) {
 	_, tr = s.probeDependencies()
 	if len(tr) != 1 || tr[0].down {
 		t.Fatalf("recovery beat transitions=%v", tr)
+	}
+}
+
+func TestProbeDependenciesSingleFailureClearsWithoutTransition(t *testing.T) {
+	s := depTestService(t)
+	healthy := false
+	s.SetDependencyChecks([]DepCheck{{
+		Name: "ocr",
+		Check: func() error {
+			if healthy {
+				return nil
+			}
+			return errors.New("context deadline exceeded")
+		},
+	}}, "")
+
+	down, tr := s.probeDependencies()
+	if len(down) != 1 || len(tr) != 0 {
+		t.Fatalf("single failing beat should be pending only: down=%v transitions=%v", down, tr)
+	}
+
+	healthy = true
+	down, tr = s.probeDependencies()
+	if len(down) != 0 || len(tr) != 0 {
+		t.Fatalf("pending one-beat blip must clear silently: down=%v transitions=%v", down, tr)
 	}
 }
 
@@ -95,11 +129,14 @@ func TestDepDownPersistsAcrossRestart(t *testing.T) {
 	failing := func() error { return errors.New("connection refused") }
 	healthy := func() error { return nil }
 
-	// Process 1 observes the outage and alerts once.
+	// Process 1 observes and confirms the outage, then alerts once.
 	s1 := depTestService(t)
 	s1.SetDependencyChecks([]DepCheck{{Name: "asr", Check: failing}}, stateFile)
+	if _, tr := s1.probeDependencies(); len(tr) != 0 {
+		t.Fatalf("process 1 first failing beat should be pending only: %v", tr)
+	}
 	if _, tr := s1.probeDependencies(); len(tr) != 1 || !tr[0].down {
-		t.Fatalf("process 1 first failing beat transitions=%v", tr)
+		t.Fatalf("process 1 second failing beat transitions=%v", tr)
 	}
 
 	// Process 2 (restart) sees the same standing outage — silence.
@@ -123,8 +160,11 @@ func TestDepDownPersistsAcrossRestart(t *testing.T) {
 	// Recovery cleared the file: the next restart starts clean.
 	s4 := depTestService(t)
 	s4.SetDependencyChecks([]DepCheck{{Name: "asr", Check: failing}}, stateFile)
+	if _, tr = s4.probeDependencies(); len(tr) != 0 {
+		t.Fatalf("post-recovery first failure must be pending again: %v", tr)
+	}
 	if _, tr = s4.probeDependencies(); len(tr) != 1 || !tr[0].down {
-		t.Fatalf("post-recovery outage must alert again: %v", tr)
+		t.Fatalf("post-recovery confirmed outage must alert again: %v", tr)
 	}
 }
 

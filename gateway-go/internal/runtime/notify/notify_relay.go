@@ -101,11 +101,14 @@ type Service struct {
 	// SetDependencyChecks because dependency handles are built after the
 	// notify service (Session phase vs Early phase). depDown maps a dep
 	// name to when its outage was first observed (zero/absent = healthy);
-	// depStateFile persists that map across restarts so a standing outage
+	// depPending remembers the first failed probe for a dependency that has
+	// not yet failed twice in a row, so single heartbeat blips do not page;
+	// depStateFile persists depDown across restarts so a standing outage
 	// does not re-alert on every deploy.
 	depMu        sync.Mutex
 	depChecks    []DepCheck
 	depDown      map[string]time.Time
+	depPending   map[string]depPending
 	depStateFile string
 }
 
