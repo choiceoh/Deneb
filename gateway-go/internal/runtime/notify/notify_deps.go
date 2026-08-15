@@ -5,9 +5,11 @@
 // its embedding client logged "server unhealthy" every batch — but nothing
 // surfaced it to the operator: the heartbeat only reported the gateway's own
 // liveness. Silent degradation is the failure mode this file closes: every
-// heartbeat now probes the registered dependencies, weaves failures into the
-// beat line, and fires a distinct alert on each state TRANSITION (down and
-// recovery), so an operator learns within one beat instead of a day later.
+// heartbeat now probes the registered dependencies, weaves even first-sample
+// failures into the beat line, and fires a distinct alert on confirmed state
+// transitions (down after consecutive failing beats, recovery immediately), so
+// an operator learns within minutes instead of a day later without being paged
+// for a one-off remote timeout.
 //
 // Down-state is persisted (2026-08-03): the transition edge used to live only
 // in memory, so every gateway restart re-fired the "down" push for a fault the
@@ -54,6 +56,9 @@ func (n *Service) SetDependencyChecks(checks []DepCheck, stateFile string) {
 	if n.depDown == nil {
 		n.depDown = make(map[string]time.Time, len(checks))
 	}
+	if n.depPending == nil {
+		n.depPending = make(map[string]depPending, len(checks))
+	}
 	installed := make(map[string]bool, len(checks))
 	for _, c := range checks {
 		installed[c.Name] = true
@@ -65,13 +70,27 @@ func (n *Service) SetDependencyChecks(checks []DepCheck, stateFile string) {
 			delete(n.depDown, name)
 		}
 	}
+	for name := range n.depPending {
+		if !installed[name] {
+			delete(n.depPending, name)
+		}
+	}
 	// Seed persisted outages — but never clobber live in-process knowledge
 	// (a replace-call after probes have run knows more than the disk does).
 	for name, since := range persisted {
 		if installed[name] && n.depDown[name].IsZero() {
 			n.depDown[name] = since
+			delete(n.depPending, name)
 		}
 	}
+}
+
+// depPending is a first failed probe that has not yet been confirmed by the
+// next beat. Loopback and Tailscale sidecars can produce one-off timeout/refused
+// samples during remote restarts or gateway boot; only consecutive failures
+// become a down transition.
+type depPending struct {
+	since time.Time
 }
 
 // depTransition is one dependency state change observed by a beat.
@@ -86,8 +105,8 @@ type depTransition struct {
 }
 
 // probeDependencies runs every registered check, updates the known state, and
-// returns the currently-down set (for the heartbeat line) plus the state
-// transitions since the previous beat (for immediate alerts).
+// returns the currently failing set (for the heartbeat line) plus confirmed
+// state transitions since the previous beat (for immediate alerts).
 func (n *Service) probeDependencies() (down []string, transitions []depTransition) {
 	n.depMu.Lock()
 	checks := n.depChecks
@@ -106,17 +125,29 @@ func (n *Service) probeDependencies() (down []string, transitions []depTransitio
 		n.depMu.Lock()
 		since := n.depDown[c.Name]
 		wasDown := !since.IsZero()
+		pending, wasPending := n.depPending[c.Name]
 		switch {
 		case isDown && !wasDown:
-			since = time.Now()
-			n.depDown[c.Name] = since
+			if wasPending {
+				since = pending.since
+				n.depDown[c.Name] = since
+				delete(n.depPending, c.Name)
+			} else {
+				since = time.Now()
+				n.depPending[c.Name] = depPending{since: since}
+			}
 		case !isDown && wasDown:
 			delete(n.depDown, c.Name)
+		case !isDown && wasPending:
+			delete(n.depPending, c.Name)
 		}
 		n.depMu.Unlock()
 
 		if isDown {
 			down = append(down, fmt.Sprintf("%s(%s)", c.Name, truncate(errString(err), 80)))
+		}
+		if isDown && !wasDown && !wasPending {
+			continue
 		}
 		if isDown != wasDown {
 			transitions = append(transitions, depTransition{name: c.Name, down: isDown, err: err, downSince: since})
