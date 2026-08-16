@@ -91,6 +91,30 @@ class SaveFlowTest {
     }
 
     @Test
+    fun `자동 저장이 실패했다가 복구되면 수동 저장이 자동 저장도 되살린다`() {
+        val store = FlakySaveStore()
+        val vm = GameViewModel(store)
+        vm.start("goldenage", "hanseong", "normal", seed = 1)
+        vm.endTurn()
+        val staleTurn = Save.decode(store.read(SaveSlot.AUTO)!!).turn
+
+        // 저장 공간이 막혀 자동 저장이 실패한 채로 두 분기를 더 진행한다.
+        store.failWrites = true
+        vm.endTurn()
+        vm.endTurn()
+        assertEquals(staleTurn, Save.decode(store.read(SaveSlot.AUTO)!!).turn, "자동 저장이 실패하지 않았다")
+
+        // 공간이 확보돼 수동 저장에 성공하면, 같은 판이라도 자동 저장을 새로 써야 한다.
+        store.failWrites = false
+        assertTrue(vm.saveNow())
+        assertEquals(
+            vm.game.turn,
+            Save.decode(store.read(SaveSlot.AUTO)!!).turn,
+            "저장했다고 알려놓고 이어하기는 실패 이전 상태로 돌아간다",
+        )
+    }
+
+    @Test
     fun `같은 판을 수동 저장해도 자동 저장을 과거로 되돌리지 않는다`() {
         val store = MemorySaveStore()
         val vm = GameViewModel(store)
@@ -214,4 +238,17 @@ private class FailingSaveStore(private val preset: Map<SaveSlot, String> = empty
     override fun write(slot: SaveSlot, text: String) = false
     override fun read(slot: SaveSlot): String? = preset[slot]
     override fun clear(slot: SaveSlot) = Unit
+}
+
+/** 저장 공간이 막혔다가 풀리는 상황을 흉내내는 테스트용 저장소. */
+private class FlakySaveStore : SaveStore {
+    private val inner = MemorySaveStore()
+    var failWrites = false
+
+    override fun write(slot: SaveSlot, text: String): Boolean =
+        if (failWrites) false else inner.write(slot, text)
+
+    override fun read(slot: SaveSlot): String? = inner.read(slot)
+
+    override fun clear(slot: SaveSlot) = inner.clear(slot)
 }

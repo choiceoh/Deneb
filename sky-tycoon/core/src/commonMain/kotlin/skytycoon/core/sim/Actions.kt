@@ -497,6 +497,19 @@ object Actions {
             }
             val cost = Stock.buyCost(state, airline.id, target.id, cmd.shares)
             if (airline.cash < cost) return ActionResult.fail(state, "매수 자금이 부족합니다.")
+            // 과반을 넘기는 매수라면 잔여 지분 정리 대금까지 감당할 수 있어야 한다.
+            // 매수 대금만 재고 통과시키면 견적에 없던 청구가 뒤따라와 빚더미에 앉는다.
+            val squeeze = Stock.squeezeOutCost(state, airline.id, target.id, cmd.shares)
+            if (squeeze > 0.0) {
+                val room = (debtCapacity(state, airline) - airline.debt).coerceAtLeast(0.0)
+                if (airline.cash - cost + room < squeeze) {
+                    return ActionResult.fail(
+                        state,
+                        "인수는 되지만 잔여 지분 정리에 ${(squeeze / 1e6).toInt()}백만 달러가 더 듭니다. " +
+                            "차입 여력까지 모자랍니다.",
+                    )
+                }
+            }
             var next = state.withAirline(airline.id) {
                 it.copy(
                     cash = it.cash - cost,

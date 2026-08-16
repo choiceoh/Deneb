@@ -1,6 +1,7 @@
 package skytycoon.core.sim
 
 import skytycoon.core.model.Airline
+import skytycoon.core.model.Business
 import skytycoon.core.model.BusinessType
 import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsItem
@@ -74,6 +75,27 @@ object Stock {
         return lo
     }
 
+    /** 인수가 성립하면 인수사가 소수 주주에게 치러야 하는 잔여 지분 정리 대금. */
+    fun minorityStakeValue(state: GameState, acquirerId: String, targetId: String): Double {
+        val target = state.airlineOrNull(targetId) ?: return 0.0
+        return state.airlines
+            .filter { it.id != acquirerId && it.id != targetId }
+            .sumOf { (it.holdings[targetId] ?: 0.0) * target.sharePrice }
+    }
+
+    /**
+     * 이 매수로 인수가 성립할 때 **추가로** 나갈 돈. 매수 대금만 보고 통과시키면
+     * 화면에 없던 정리 대금이 뒤늦게 청구돼 그대로 빚더미에 앉는다.
+     */
+    fun squeezeOutCost(state: GameState, buyerId: String, targetId: String, shares: Double): Double {
+        val target = state.airlineOrNull(targetId) ?: return 0.0
+        val held = (state.airlineOrNull(buyerId)?.holdings?.get(targetId) ?: 0.0) + shares
+        val stake = held / target.shares.coerceAtLeast(1.0)
+        if (stake <= Balance.TAKEOVER_THRESHOLD) return 0.0
+        // 피인수사의 금고가 먼저 쓰이므로 그만큼은 인수사가 따로 마련하지 않아도 된다.
+        return (minorityStakeValue(state, buyerId, targetId) - target.cash).coerceAtLeast(0.0)
+    }
+
     /**
      * 지분 50% 초과를 확보한 항공사가 있으면 흡수합병한다.
      * 플레이어가 인수당하면 게임이 끝난다.
@@ -131,26 +153,34 @@ object Stock {
 
         // 소수 주주를 시장가로 몰아내는 값은 인수사가 낸다. 어디서도 빼지 않으면
         // 과반만 사고도 회사 전체를 가져가면서 시장 전체 현금이 불어난다.
-        val minorityPayout = state.airlines
-            .filter { it.id != acquirerId && it.id != targetId }
-            .sumOf { (it.holdings[targetId] ?: 0.0) * target.sharePrice }
+        val minorityPayout = minorityStakeValue(state, acquirerId, targetId)
 
         // 같은 도시에 같은 시설이 둘 생기지 않게 정리한다. BuildBusiness 가 막는 조합이라
         // 합병으로만 만들어질 수 있고, 그대로 두면 수입·브랜드·자산이 이중으로 잡힌다.
-        val mergedBusinesses = (acquirer.businesses + target.businesses)
-            .distinctBy { it.type to it.city }
-            .let { list ->
-                // 정비창은 회사에 하나뿐이라는 규칙도 지킨다 (정비 할인은 어차피 한 번만 먹는다).
-                val hangars = list.filter { it.type == BusinessType.HANGAR }
-                if (hangars.size <= 1) list else list.filter { it.type != BusinessType.HANGAR } + hangars.first()
-            }
+        // 겹치는 쪽은 **팔아서** 장부가를 현금으로 돌려준다 — 그냥 지우면 인수사가
+        // 주식값에 얹어 이미 값을 치른 자산이 소리 없이 증발한다.
+        val mergedBusinesses = mutableListOf<Business>()
+        val soldOff = mutableListOf<Business>()
+        for (b in acquirer.businesses + target.businesses) {
+            val sameSite = mergedBusinesses.any { it.type == b.type && it.city == b.city }
+            // 정비창은 회사에 하나뿐이라는 규칙도 지킨다 (정비 할인은 어차피 한 번만 먹는다).
+            val extraHangar = b.type == BusinessType.HANGAR &&
+                mergedBusinesses.any { it.type == BusinessType.HANGAR }
+            if (sameSite || extraHangar) soldOff += b else mergedBusinesses += b
+        }
+        val disposalProceeds = Economics.businessValue(state, soldOff)
+
+        // 인수 대금을 감당 못 하면 그 차액만큼 차입한다. 현금을 마이너스로 두면
+        // 다음 분기 결산 전까지 화면에 음수 잔고가 그대로 뜬다.
+        val pooled = acquirer.cash + target.cash + disposalProceeds
+        val financed = (minorityPayout - pooled).coerceAtLeast(0.0)
 
         // 다른 주주들은 시장가로 정리한다.
         val airlines = state.airlines.map { a ->
             when (a.id) {
                 acquirerId -> a.copy(
-                    cash = a.cash + target.cash - minorityPayout,
-                    debt = a.debt + target.debt,
+                    cash = (pooled - minorityPayout).coerceAtLeast(0.0),
+                    debt = a.debt + target.debt + financed,
                     shares = acquirerShares,
                     slots = mergedSlots,
                     holdings = mergedHoldings,
@@ -179,11 +209,18 @@ object Stock {
             }
         }
 
+        // 잔여 지분 정리에 얼마가 나갔는지는 알려줘야 한다 — 인수 직후 현금이 비면
+        // 플레이어는 이유를 모른 채 자금난에 빠진다.
+        val settlementNote = when {
+            financed > 0 -> " 잔여 지분 정리에 ${millions(minorityPayout)}이 들어 ${millions(financed)}을 차입했습니다."
+            minorityPayout > 0 -> " 잔여 지분 정리에 ${millions(minorityPayout)}을 지급했습니다."
+            else -> ""
+        }
         val news = NewsItem(
             turn = state.turn,
             kind = NewsKind.MARKET,
             headline = "${acquirer.name}, ${target.name} 인수 완료",
-            body = "${target.name}의 노선망과 기재가 ${acquirer.name}으로 넘어갔습니다.",
+            body = "${target.name}의 노선망과 기재가 ${acquirer.name}으로 넘어갔습니다.$settlementNote",
         )
         // 선금까지 치른 발주는 인수사가 이어받는다. 안 넘기면 죽은 회사 앞으로
         // 기재가 인도돼 그대로 증발한다.
@@ -220,4 +257,7 @@ object Stock {
         }
         return others + merged
     }
+
+    /** 뉴스 본문용 간단 금액 표기 (UI 포맷터는 core 에 없다). */
+    private fun millions(v: Double): String = "${(v / 1e6).toInt()}백만 달러"
 }

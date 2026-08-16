@@ -310,7 +310,16 @@ object TurnEngine {
                 },
             )
             .withAirline(airline.id) {
-                it.copy(alive = false, cash = 0.0, debt = 0.0, slots = emptyMap(), holdings = emptyMap())
+                // 부대사업까지 정리해야 한다. 남겨두면 Economics.equity 가 원가의 70% 를
+                // 계속 자산으로 쳐서, 파산한 회사가 기업가치 플러스로 순위표에 남는다.
+                it.copy(
+                    alive = false,
+                    cash = 0.0,
+                    debt = 0.0,
+                    slots = emptyMap(),
+                    holdings = emptyMap(),
+                    businesses = emptyList(),
+                )
             }
             .copy(
                 news = state.news + NewsItem(

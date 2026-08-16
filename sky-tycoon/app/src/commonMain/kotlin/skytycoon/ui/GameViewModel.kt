@@ -148,11 +148,11 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
             message = "저장에 실패했습니다. 저장 공간을 확인하세요."
             return false
         }
-        // 이어하기는 자동 저장 슬롯을 "지금 하는 판"으로 믿는다. 새 판을 시작하고
-        // 분기를 넘기기 전에 수동 저장만 했다면 자동 저장은 아직 예전 판이라,
-        // 여기서 옮겨두지 않으면 이어하기가 방금 저장한 판을 못 찾는다.
-        val auto = load(SaveSlot.AUTO)
-        val claimed = if (auto == null || campaignKey(auto) != campaignKey(s)) autoSave() else true
+        // 이어하기는 자동 저장 슬롯을 "지금 하는 판"으로 믿으므로 여기서 함께 갱신한다.
+        // 같은 판일 때는 건너뛰면 될 것 같지만 그러면 안 된다 — 앞선 자동 저장이 실패해
+        // 슬롯이 낡아 있어도 그대로 두게 되고, 저장했다고 알린 판을 이어하기가 못 찾는다.
+        // 지금 상태를 쓰는 것이라 자동 저장이 과거로 밀릴 일도 없다.
+        val claimed = autoSave()
         val label = "${s.displayYear}년 ${s.displayQuarter}분기"
         message = if (claimed) "${label}를 저장했습니다." else "${label}를 저장했지만 $autoSaveWarning"
         return true

@@ -3,6 +3,7 @@ package skytycoon.core
 import skytycoon.core.data.AircraftCatalog
 import skytycoon.core.data.Cities
 import skytycoon.core.data.Scenarios
+import skytycoon.core.model.Business
 import skytycoon.core.model.BusinessType
 import skytycoon.core.model.CityState
 import skytycoon.core.model.GameState
@@ -563,13 +564,13 @@ class RegressionTest {
         val victim = s.livingAirlines.first { it.id != "hanseong" }
         val city = s.player.home
         val dup = listOf(
-            skytycoon.core.model.Business(BusinessType.HOTEL, city),
-            skytycoon.core.model.Business(BusinessType.HANGAR, city),
+            Business(BusinessType.HOTEL, city),
+            Business(BusinessType.HANGAR, city),
         )
         s = s.withAirline2("hanseong") { it.copy(businesses = dup) }
         s = s.withAirline2(victim.id) {
             it.copy(
-                businesses = dup + skytycoon.core.model.Business(BusinessType.HANGAR, victim.home),
+                businesses = dup + Business(BusinessType.HANGAR, victim.home),
                 holdings = emptyMap(),
             )
         }
@@ -584,6 +585,107 @@ class RegressionTest {
             1,
             merged.count { it.type == BusinessType.HANGAR },
             "정비창은 회사에 하나여야 하는데 합병으로 늘어났다",
+        )
+    }
+
+    @Test
+    fun `인수 대금이 모자라면 현금을 마이너스로 두지 않고 차입한다`() {
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        val victimId = rivals[0].id
+        val minorityId = rivals[1].id
+
+        s = s.withAirline2(minorityId) {
+            it.copy(holdings = it.holdings + (victimId to s.airline(victimId).shares * 0.45))
+        }
+        s = s.withAirline2(victimId) { it.copy(cash = 0.0) }
+        // 지분값에 비해 현금이 턱없이 모자란 인수사.
+        s = s.withAirline2("hanseong") {
+            it.copy(cash = 1e6, holdings = it.holdings + (victimId to s.airline(victimId).shares * 0.55))
+        }
+
+        val buyer = s.airline("hanseong")
+        val victim = s.airline(victimId)
+        val payout = victim.shares * 0.45 * victim.sharePrice
+        val after = Stock.merge(s, "hanseong", victimId).airline("hanseong")
+
+        assertTrue(payout > buyer.cash, "테스트가 헛돈다 — 인수 대금이 현금보다 적다")
+        assertTrue(after.cash >= 0.0, "인수 직후 현금이 ${after.cash} 로 마이너스가 됐다")
+        assertTrue(
+            abs(after.debt - (buyer.debt + victim.debt + (payout - buyer.cash - victim.cash))) < 1.0,
+            "모자란 인수 대금이 부채로 잡히지 않았다",
+        )
+    }
+
+    @Test
+    fun `합병에서 처분한 중복 시설은 매각대로 돌아온다`() {
+        var s = fresh()
+        val victimId = s.livingAirlines.first { it.id != "hanseong" }.id
+        val hotel = Business(BusinessType.HOTEL, s.player.home)
+        // 양쪽이 같은 도시에 같은 호텔을 가진 상태 — 하나는 처분된다.
+        s = s.withAirline2("hanseong") { it.copy(businesses = listOf(hotel), holdings = emptyMap()) }
+        s = s.withAirline2(victimId) { it.copy(businesses = listOf(hotel), holdings = emptyMap()) }
+
+        val buyer = s.airline("hanseong")
+        val victim = s.airline(victimId)
+        val after = Stock.merge(s, "hanseong", victimId).airline("hanseong")
+
+        assertEquals(1, after.businesses.size, "중복 시설이 그대로 남았다")
+        assertTrue(
+            abs(after.cash - (buyer.cash + victim.cash + Economics.businessValue(s, listOf(hotel)))) < 1.0,
+            "겹친 시설이 매각대 한 푼 없이 사라졌다",
+        )
+    }
+
+    @Test
+    fun `잔여 지분 정리 대금까지 못 내면 인수 매수가 막힌다`() {
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        val victimId = rivals[0].id
+        val minorityId = rivals[1].id
+        val victimShares = s.airline(victimId).shares
+
+        // 제3자가 45%, 우리가 48% — 3% 만 더 사면 인수가 성립한다.
+        s = s.withAirline2(minorityId) {
+            it.copy(holdings = it.holdings + (victimId to victimShares * 0.45))
+        }
+        s = s.withAirline2(victimId) { it.copy(cash = 0.0) }
+        val block = victimShares * 0.03
+        s = s.withAirline2("hanseong") {
+            it.copy(holdings = it.holdings + (victimId to victimShares * 0.48))
+        }
+        // 매수 대금은 낼 수 있지만 정리 대금까지는 어림도 없는 현금·차입 여력.
+        // 매집 단가는 지분율에 따라 오르므로 지분을 올린 **뒤에** 견적을 내야 한다.
+        val blockCost = Stock.buyCost(s, "hanseong", victimId, block)
+        s = s.withAirline2("hanseong") {
+            it.copy(cash = blockCost * 1.05, debt = Actions.debtCapacity(s, it))
+        }
+
+        val r = Actions.execute(s, Command.TradeShares("hanseong", victimId, block))
+        assertFalse(r.ok, "정리 대금을 못 내는데도 인수가 성립했다")
+        assertTrue(r.message.contains("잔여 지분"), "실패 이유가 정리 대금이라고 알려주지 않는다: ${r.message}")
+    }
+
+    @Test
+    fun `파산한 회사의 부대사업은 자산으로 남지 않는다`() {
+        var s = fresh()
+        val doomedId = s.livingAirlines.first { it.id != "hanseong" }.id
+        s = s.withAirline2(doomedId) {
+            it.copy(
+                businesses = listOf(Business(BusinessType.HOTEL, it.home)),
+                cash = -1e9,
+                debt = 5e9,
+                negativeQuarters = Balance.BANKRUPTCY_GRACE + 1,
+            )
+        }
+        s = TurnEngine.advance(s)
+
+        val dead = s.airline(doomedId)
+        assertFalse(dead.alive, "자본잠식이 이어졌는데 파산하지 않았다")
+        assertTrue(dead.businesses.isEmpty(), "파산했는데 호텔이 남아 자산으로 잡힌다")
+        assertTrue(
+            Economics.equity(s, dead) <= 0.0,
+            "파산한 회사의 기업가치가 ${Economics.equity(s, dead)} 로 플러스다",
         )
     }
 
