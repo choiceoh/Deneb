@@ -41,6 +41,51 @@ func TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources(t *tes
 			t.Fatalf("%q should be staged (not auto-dispatch)", s)
 		}
 	}
+	// Incremental health-findings stay queued but must not consume the
+	// unattended coding cap — the finding cannot clear in one session.
+	held := []string{
+		"health-finding:responsibility-cochange:abcd",
+		"health-finding:structure:diffuse-change-responsibility:cafe",
+		"health-finding:structure:fanout-hotspot:0001",
+		"health-finding:volatile-contract-responsibility:eeee",
+	}
+	for _, s := range held {
+		if SourceAutoDispatches(s) {
+			t.Fatalf("%q is incremental and must stay staged", s)
+		}
+	}
+	if !SourceAutoDispatches("health-finding:structure:volatile-hub:9f42") {
+		t.Fatal("clearable volatile-hub must stay auto-dispatch")
+	}
+	if !SourceAutoDispatches("health-finding:runtime-latency") {
+		t.Fatal("runtime standing weakness must stay auto-dispatch")
+	}
+}
+
+// Incremental health-findings must not look like a new source to graduate —
+// health-finding is already on the compiled allowlist.
+func TestStagedSourceReviewStatsSkipsIncrementalHealthFindings(t *testing.T) {
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
+		Title:  "structural finding: responsibility-cochange",
+		Source: "health-finding:structure:responsibility-cochange:abcd",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk2",
+		Title: "novel finding", Source: "novel-miner:abcd",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stats := tr.stagedSourceReviewStats()
+	if _, ok := stats["health-finding"]; ok {
+		t.Fatalf("incremental health-finding must not count as staged supply: %+v", stats)
+	}
+	if stats["novel-miner"].proposed != 1 {
+		t.Fatalf("novel prefix must still count as staged supply: %+v", stats)
+	}
 }
 
 // A tool-quality code candidate now counts as dispatchable in L4 (the graduation
@@ -414,7 +459,7 @@ func TestRSIStatusL4ReviewAcceptedCandidateReturnsDispatchable(t *testing.T) {
 	tr := newTestTracker(t)
 	rec, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
-		Title: "structural finding: fanout", Source: "health-finding:fanout-hotspot:aa",
+		Title: "structural finding: volatile-hub", Source: "health-finding:volatile-hub:aa",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -430,6 +475,29 @@ func TestRSIStatusL4ReviewAcceptedCandidateReturnsDispatchable(t *testing.T) {
 	}
 	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "1" {
 		t.Fatalf("dispatchable metric = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
+func TestRSIStatusL4IncrementalHealthFindingCountsAsStagedNotDispatchable(t *testing.T) {
+	tr := newTestTracker(t)
+	rec, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
+		Title: "structural finding: fanout", Source: "health-finding:fanout-hotspot:aa",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tr.RecordSelfCorrectionReview(SelfCorrectionCandidateRecord{
+		ID: rec.ID, Status: SelfCorrectionStatusAccepted, ReviewNote: "코딩 에이전트 후속",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "0" {
+		t.Fatalf("incremental must not be dispatchable: %q (%+v)", got, l.Metrics)
+	}
+	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "1" {
+		t.Fatalf("incremental must count as staged: %q (%+v)", got, l.Metrics)
 	}
 }
 

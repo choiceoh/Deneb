@@ -236,6 +236,9 @@ func (t *Tracker) stagedSourceReviewStats() map[string]sourceReviewStats {
 			continue
 		}
 		prefix, _, _ := strings.Cut(strings.TrimSpace(c.Source), ":")
+		if rsiCompiledDispatchNamespace(prefix) {
+			continue
+		}
 		if prefix == "" {
 			continue
 		}

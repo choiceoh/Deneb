@@ -112,6 +112,9 @@ _RISK_NOTE = (
 # They get an honest bounded-step contract instead, and NO finding-present
 # impact contract (a landed bounded step would otherwise be mislabeled
 # "no effect" when the finding, correctly, is still present).
+# Keep in lockstep with genesis rsiIncrementalHealthKinds — Go withholds
+# these from auto-dispatch (검토 대기). Changing the set here without the
+# Go twin re-opens the unattended coding cap.
 INCREMENTAL_KINDS = frozenset({
     "responsibility-cochange",
     "volatile-contract-responsibility",
