@@ -17,6 +17,17 @@ enum class ThemeMode {
 }
 
 @Serializable
+private data class ComposerDraftEntry(
+    val id: String,
+    val text: String,
+)
+
+@Serializable
+private data class ComposerDraftStore(
+    val entries: List<ComposerDraftEntry> = emptyList(),
+)
+
+@Serializable
 private data class TranscriptCacheEntry(
     val sessionKey: String,
     val payloadKey: String,
@@ -89,14 +100,64 @@ class AppSettings(internal val settings: Settings) {
         return raw.split(',').filterTo(LinkedHashSet()) { it.isNotBlank() }
     }
 
-    fun getComposerDraft(): String = settings.getString(KEY_COMPOSER_DRAFT, "")
+    fun getComposerDraft(sessionId: String): String {
+        if (sessionId.isBlank()) return ""
+        loadComposerDrafts()[sessionId]?.let { return it }
+        val legacy = settings.getStringOrNull(KEY_COMPOSER_DRAFT).orEmpty()
+        if (legacy.isEmpty()) return ""
+        setComposerDraft(sessionId, legacy)
+        settings.remove(KEY_COMPOSER_DRAFT)
+        return legacy.take(COMPOSER_DRAFT_MAX)
+    }
 
-    fun setComposerDraft(text: String) {
+    fun setComposerDraft(sessionId: String, text: String) {
+        if (sessionId.isBlank()) return
+        val drafts = loadComposerDrafts()
         val trimmed = text.take(COMPOSER_DRAFT_MAX)
         if (trimmed.isEmpty()) {
-            settings.remove(KEY_COMPOSER_DRAFT)
+            drafts.remove(sessionId)
         } else {
-            settings.putString(KEY_COMPOSER_DRAFT, trimmed)
+            drafts.remove(sessionId)
+            drafts[sessionId] = trimmed
+            while (drafts.size > COMPOSER_DRAFT_MAX_SESSIONS) {
+                drafts.remove(drafts.keys.first())
+            }
+        }
+        persistComposerDrafts(drafts)
+    }
+
+    private fun loadComposerDrafts(): LinkedHashMap<String, String> {
+        val raw = settings.getStringOrNull(KEY_COMPOSER_DRAFTS) ?: return LinkedHashMap()
+        val store = runCatching { SharedJson.decodeFromString<ComposerDraftStore>(raw) }.getOrNull()
+            ?: return LinkedHashMap()
+        val drafts = LinkedHashMap<String, String>()
+        for (entry in store.entries) {
+            if (entry.id.isNotBlank() && entry.text.isNotEmpty()) {
+                drafts[entry.id] = entry.text.take(COMPOSER_DRAFT_MAX)
+            }
+        }
+        return drafts
+    }
+
+    private fun persistComposerDrafts(drafts: Map<String, String>) {
+        if (drafts.isEmpty()) {
+            settings.remove(KEY_COMPOSER_DRAFTS)
+            return
+        }
+        val store = ComposerDraftStore(drafts.map { ComposerDraftEntry(it.key, it.value) })
+        settings.putString(KEY_COMPOSER_DRAFTS, SharedJson.encodeToString(store))
+    }
+
+    // Drop keys that no longer exist in the 더보기 catalog (retired tiles). Does not
+    // invent an allow-list of its own — the caller passes the live tile keys so
+    // tests can still persist fake keys through get/set without a prune.
+    fun pruneHiddenMoreTiles(knownKeys: Set<String>) {
+        if (knownKeys.isEmpty()) return
+        val raw = settings.getStringOrNull(KEY_HIDDEN_MORE_TILES) ?: return
+        val stored = raw.split(',').filterTo(LinkedHashSet()) { it.isNotBlank() }
+        val pruned = stored.filterTo(LinkedHashSet()) { it in knownKeys }
+        if (pruned != stored) {
+            settings.putString(KEY_HIDDEN_MORE_TILES, pruned.joinToString(","))
         }
     }
 
@@ -700,14 +761,19 @@ class AppSettings(internal val settings: Settings) {
         const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
         const val KEY_HIDDEN_MORE_TILES = "hidden_more_tiles"
         const val KEY_COMPOSER_DRAFT = "composer_draft"
+        const val KEY_COMPOSER_DRAFTS = "composer_drafts"
         const val COMPOSER_DRAFT_MAX = 8_000
+        const val COMPOSER_DRAFT_MAX_SESSIONS = 20
+        const val COMPOSER_DRAFT_NEW = "__new__"
+
+        fun composerDraftSessionKey(conversationId: String?): String = conversationId?.takeIf { it.isNotBlank() } ?: COMPOSER_DRAFT_NEW
 
         // 더보기 기본 숨김: 매일 안 여는 콘솔/메타 표면. 설정 → 더보기 표시 항목에서 다시 켤 수 있다.
+        // Keys must exist in [ai.deneb.deneb.moreGroups] — retired tiles do not belong here.
         val DEFAULT_HIDDEN_MORE_TILES: Set<String> = setOf(
             "deneb_rsi",
             "deneb_usage",
             "deneb_org",
-            "deneb_project_digests",
             "deneb_dashboard",
         )
         const val KEY_BROWSER_BOOKMARKS = "browser_bookmarks"

@@ -38,13 +38,13 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 internal fun AppTilesTab(appSettings: AppSettings) {
-    var hidden by remember { mutableStateOf(appSettings.getHiddenMoreTiles()) }
+    var hidden by remember { mutableStateOf(appSettings.hiddenMoreTilesForUi()) }
     AppTilesContent(
         hidden = hidden,
         onToggle = { key, hide ->
             appSettings.setMoreTileHidden(key, hide)
             // Re-read so the source of truth stays the persisted set (not a local mutation).
-            hidden = appSettings.getHiddenMoreTiles()
+            hidden = appSettings.hiddenMoreTilesForUi()
         },
     )
 }

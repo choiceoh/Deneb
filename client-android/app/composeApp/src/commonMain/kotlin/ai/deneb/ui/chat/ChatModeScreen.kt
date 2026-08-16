@@ -5,6 +5,7 @@
 
 package ai.deneb.ui.chat
 
+import ai.deneb.data.AppSettings
 import ai.deneb.ui.chat.composables.ChatInputOverlay
 import ai.deneb.ui.chat.composables.ChatMessageList
 import ai.deneb.ui.chat.composables.ChatTopOverlay
@@ -64,14 +65,19 @@ internal fun ChatModeScreen(
     uiState: ChatUiState,
     textToSpeech: TextToSpeechInstance?,
     navigationTabBar: (@Composable () -> Unit)?,
-    initialDraft: String = "",
-    onDraftChange: (String) -> Unit = {},
+    loadDraft: (String) -> String = { "" },
+    onDraftChange: (String, String) -> Unit = { _, _ -> },
 ) {
     // Hoisted here so the draft survives recompositions that remove QuestionInput
-    // from composition and would otherwise drop the text. [initialDraft] restores
-    // a process-killed compose from AppSettings; rememberSaveable covers rotation.
+    // from composition and would otherwise drop the text. Session-keyed AppSettings
+    // restores a process-killed compose; rememberSaveable covers rotation. Do not
+    // key rememberSaveable on the session id — that would drop the old text before
+    // we can persist it.
+    var boundSession by remember {
+        mutableStateOf(AppSettings.composerDraftSessionKey(uiState.currentConversationId))
+    }
     var questionInputText by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(initialDraft))
+        mutableStateOf(TextFieldValue(loadDraft(boundSession)))
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -132,11 +138,23 @@ internal fun ChatModeScreen(
         uiState.actions.clearSnackbar()
     }
 
+    // Persist the outgoing session's text first, then load the incoming draft.
+    // Keying rememberSaveable on the session id would drop the old text first.
+    LaunchedEffect(uiState.currentConversationId) {
+        val next = AppSettings.composerDraftSessionKey(uiState.currentConversationId)
+        if (next == boundSession) return@LaunchedEffect
+        onDraftChange(boundSession, questionInputText.text)
+        boundSession = next
+        val restored = loadDraft(next)
+        questionInputText = TextFieldValue(restored, selection = TextRange(restored.length))
+    }
+
     // Persist the compose draft across process death (AppSettings). Debounced so
-    // each keystroke doesn't hit the settings store.
-    LaunchedEffect(questionInputText.text) {
+    // each keystroke doesn't hit the settings store. Session-keyed so a switch
+    // cannot overwrite the other conversation's box.
+    LaunchedEffect(boundSession, questionInputText.text) {
         delay(250)
-        onDraftChange(questionInputText.text)
+        onDraftChange(boundSession, questionInputText.text)
     }
 
     // A failed send restores the user's text into the input so a typo or a long prompt
