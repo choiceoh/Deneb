@@ -11,6 +11,7 @@ import (
 func curriculumFixture(t *testing.T, resp curriculumResp, catalog map[string]string) (*CurriculumTask, *Tracker) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -260,6 +261,7 @@ func TestCurriculumRun_GroundingRejectsScaffoldingQuote(t *testing.T) {
 	// HOME before NewTracker: the tracker resolves ~/.deneb at construction, so
 	// setting HOME afterward would read the real user ledgers (Codex review).
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

@@ -32,6 +32,7 @@ func TestRollback_BaselineTestObservation(t *testing.T) {
 
 	t.Run("agreement: healthy baseline then hard regression", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)
@@ -73,6 +74,7 @@ func TestRollback_BaselineTestObservation(t *testing.T) {
 
 	t.Run("disagreement: noisy baseline where threshold overfires", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)

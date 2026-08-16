@@ -186,6 +186,7 @@ func contains(s []string, v string) bool {
 // REJECTED by the real preflight — a pass is the alarm condition.
 func TestProbeGateExploitTrap_RejectedByPreflight(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

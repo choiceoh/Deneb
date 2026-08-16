@@ -32,6 +32,7 @@ func TestRollback_EProcessOwnership(t *testing.T) {
 
 	t.Run("e-process fires on hard regression even when legacy threshold is far away", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		t.Setenv("DENEB_EPROCESS_OWNS_ROLLBACK", "1")
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
@@ -76,6 +77,7 @@ func TestRollback_EProcessOwnership(t *testing.T) {
 
 	t.Run("noisy baseline: threshold-crossing fails do NOT fire under e-process ownership", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		t.Setenv("DENEB_EPROCESS_OWNS_ROLLBACK", "1")
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
@@ -134,6 +136,7 @@ func TestRollback_EProcessOwnership(t *testing.T) {
 // thresholds (n>=20, agreement>=90%).
 func TestEProcessCutoverReadiness(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -205,6 +208,7 @@ func TestEProcessCutoverReadiness(t *testing.T) {
 // agreement was measured against a case the mechanisms could disagree on.
 func TestEProcessCutoverReadiness_PureConfirmsNotReady(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -248,6 +252,7 @@ func TestEProcessCutoverReadiness_PureConfirmsNotReady(t *testing.T) {
 // silently disabled rollback.
 func TestRollback_EProcessOwnership_ProductionThreshold(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	t.Setenv("DENEB_EPROCESS_OWNS_ROLLBACK", "1")
 	tr, err := NewTracker(slog.Default())
 	if err != nil {

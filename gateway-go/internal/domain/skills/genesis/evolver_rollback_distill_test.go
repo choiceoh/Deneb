@@ -15,6 +15,7 @@ import (
 // rejected edit, and the failure evidence as a hard-frontier held-out case.
 func TestRollbackSkill_PersistsEvidence(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	dir := t.TempDir()
 	file := filepath.Join(dir, "SKILL.md")
 	original := "---\nname: sk\nversion: 1.0.0\n---\n\n# sk\n\noriginal body\n"
@@ -69,6 +70,7 @@ func TestRollbackSkill_PersistsEvidence(t *testing.T) {
 // cannot mistake a stale evolved-version entry for a still-live one.
 func TestRollbackSkill_ReRegistersRestoredVersion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	dir := t.TempDir()
 	file := filepath.Join(dir, "SKILL.md")
 	original := "---\nname: sk\nversion: 1.0.0\n---\n\n# sk\n\noriginal body\n"
@@ -137,6 +139,7 @@ func TestLockSkillSerializesSameSkillConcurrentlyAndSeparatesDifferentSkills(t *
 // weak-case guard — no case, no error noise.
 func TestRollbackSkill_WeakEvidenceSkipsDistillation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tracker, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

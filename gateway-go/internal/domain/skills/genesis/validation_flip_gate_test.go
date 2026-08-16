@@ -29,6 +29,7 @@ func TestValidateCandidateFlipGateRejectsRegressionOfPreviouslyPassingCase(t *te
 	engine := func(t *testing.T, cases ...SkillValidationCaseRecord) *SkillValidationEngine {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)

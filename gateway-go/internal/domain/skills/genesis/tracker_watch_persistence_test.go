@@ -27,6 +27,7 @@ func TestTrackerSaveWatchesWithoutPathIsNoop(t *testing.T) {
 func TestTracker_EvolveWatchSurvivesRestart(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("DENEB_STATE_DIR", home)
 
 	use := func(tr *Tracker, ok bool) {
 		t.Helper()
