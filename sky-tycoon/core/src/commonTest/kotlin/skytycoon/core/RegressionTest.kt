@@ -1,6 +1,8 @@
 package skytycoon.core
 
 import skytycoon.core.data.AircraftCatalog
+import skytycoon.core.data.Cities
+import skytycoon.core.data.Scenarios
 import skytycoon.core.model.BusinessType
 import skytycoon.core.model.CityState
 import skytycoon.core.model.GameState
@@ -9,6 +11,7 @@ import skytycoon.core.model.Order
 import skytycoon.core.sim.Actions
 import skytycoon.core.sim.Balance
 import skytycoon.core.sim.Command
+import skytycoon.core.sim.Demand
 import skytycoon.core.sim.Economics
 import skytycoon.core.sim.Events
 import skytycoon.core.sim.NewGame
@@ -523,6 +526,103 @@ class RegressionTest {
         assertTrue(
             r.state.outcome?.won == true,
             "경쟁사를 모두 흡수했는데 승리 선언이 다음 턴으로 미뤄졌다",
+        )
+    }
+
+    // ------------------------------------------------------------ 합병 회계
+
+    @Test
+    fun `소수 주주 정리 대금은 인수사가 낸다`() {
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        val victim = rivals[0]
+        val minority = rivals[1]
+
+        // 제3자가 피인수사 지분 20% 를 들고 있는 상태에서 우리가 과반을 쥔다.
+        s = s.withAirline2(minority.id) {
+            it.copy(holdings = it.holdings + (victim.id to victim.shares * 0.20))
+        }
+        s = s.withAirline2("hanseong") {
+            it.copy(holdings = it.holdings + (victim.id to victim.shares * 0.60))
+        }
+
+        val before = s.livingAirlines.sumOf { it.cash }
+        val after = Stock.merge(s, "hanseong", victim.id)
+        val total = after.airlines.filter { it.alive }.sumOf { it.cash }
+
+        assertTrue(abs(total - before) < 1.0, "합병으로 시장 전체 현금이 ${total - before} 만큼 변했다")
+        assertTrue(
+            (after.airline(minority.id).cash) > minority.cash,
+            "소수 주주가 지분 대금을 못 받았다",
+        )
+    }
+
+    @Test
+    fun `합병으로 같은 도시에 같은 시설이 둘 생기지 않는다`() {
+        var s = fresh()
+        val victim = s.livingAirlines.first { it.id != "hanseong" }
+        val city = s.player.home
+        val dup = listOf(
+            skytycoon.core.model.Business(BusinessType.HOTEL, city),
+            skytycoon.core.model.Business(BusinessType.HANGAR, city),
+        )
+        s = s.withAirline2("hanseong") { it.copy(businesses = dup) }
+        s = s.withAirline2(victim.id) {
+            it.copy(
+                businesses = dup + skytycoon.core.model.Business(BusinessType.HANGAR, victim.home),
+                holdings = emptyMap(),
+            )
+        }
+
+        val merged = Stock.merge(s, "hanseong", victim.id).airline("hanseong").businesses
+        assertEquals(
+            merged.size,
+            merged.distinctBy { it.type to it.city }.size,
+            "같은 도시에 같은 시설이 둘 남아 수입이 이중으로 잡힌다",
+        )
+        assertEquals(
+            1,
+            merged.count { it.type == BusinessType.HANGAR },
+            "정비창은 회사에 하나여야 하는데 합병으로 늘어났다",
+        )
+    }
+
+    // ------------------------------------------------------------ 초기 기재·수요 추정
+
+    @Test
+    fun `시작 기재는 취항 전에 만들어지지 않는다`() {
+        for (scenario in Scenarios.all) {
+            val s = NewGame.create(scenarioId = scenario.id, seed = 7, companyId = "hanseong")
+            for (p in s.planes) {
+                val type = AircraftCatalog[p.typeId]
+                val built = s.startYear - p.ageQuarters / 4
+                assertTrue(
+                    built >= type.year,
+                    "${type.name}(${type.year} 취항)이 ${s.startYear}년 시작 기재에서 ${built}년식으로 나왔다",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `연간 수요 추정은 지난 분기에 일시 효과를 소급하지 않는다`() {
+        val base = fresh()
+        val a = Cities["seoul"]
+        val b = Cities["tokyo"]
+
+        // 3분기로 옮긴 뒤, 이번 분기에만 걸리는 폐쇄를 넣는다.
+        var s = base.copy(turn = base.turn + 2)
+        val plain = Demand.annualEstimate(s, a, b)
+        s = s.copy(
+            cityState = s.cityState + ("seoul" to (s.cityState["seoul"] ?: CityState()).copy(closedUntilTurn = s.turn)),
+        )
+        val withClosure = Demand.annualEstimate(s, a, b)
+
+        assertTrue(withClosure > 0.0, "한 분기 폐쇄가 연간 수요를 통째로 0 으로 만들었다")
+        assertTrue(withClosure < plain, "폐쇄가 연간 추정에 전혀 반영되지 않았다")
+        assertTrue(
+            withClosure > plain * 0.5,
+            "한 분기 폐쇄인데 연간 추정이 절반 넘게 깎였다 (지난 분기까지 소급됐다)",
         )
     }
 

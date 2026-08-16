@@ -35,7 +35,7 @@ private class AndroidSaveStore(private val dir: File) : SaveStore {
         if (!tmp.renameTo(target)) {
             // 기존 세이브를 지우지 않고 옆으로 치운다. 지웠다가 교체마저 실패하면
             // 유일한 복구본이 사라진다.
-            val backup = File(dir, "${target.name}.bak")
+            val backup = backup(target)
             backup.delete()
             val stashed = target.exists() && target.renameTo(backup)
             if (!tmp.renameTo(target)) {
@@ -46,10 +46,19 @@ private class AndroidSaveStore(private val dir: File) : SaveStore {
         }
     }.isSuccess
 
-    override fun read(slot: SaveSlot): String? =
-        file(slot).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+    // 교체 도중 죽으면 직전 세이브가 .bak 에만 남는다 — 그것도 봐야 캠페인을 안 잃는다.
+    override fun read(slot: SaveSlot): String? {
+        val target = file(slot)
+        val source = target.takeIf { it.isFile } ?: backup(target).takeIf { it.isFile } ?: return null
+        return runCatching { source.readText() }.getOrNull()
+    }
 
     override fun clear(slot: SaveSlot) {
-        file(slot).delete()
+        val target = file(slot)
+        target.delete()
+        // 백업까지 지워야 지운 슬롯이 다음 read 에서 되살아나지 않는다.
+        backup(target).delete()
     }
+
+    private fun backup(target: File) = File(dir, "${target.name}.bak")
 }

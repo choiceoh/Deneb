@@ -92,6 +92,11 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         if (result.ok) {
             state = result.state
             if (result.message.isNotBlank()) message = result.message
+            // 명령 하나로 판이 끝날 수 있다 (마지막 경쟁사 인수). 그 뒤엔 분기 진행 버튼이
+            // 잠겨 자동 저장 기회가 영영 없으므로, 여기서 승리를 남겨 둔다.
+            if (current.outcome == null && result.state.outcome != null && !autoSave()) {
+                message = autoSaveWarning
+            }
         } else {
             message = result.message
         }

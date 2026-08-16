@@ -1,6 +1,7 @@
 package skytycoon.core.sim
 
 import skytycoon.core.model.Airline
+import skytycoon.core.model.BusinessType
 import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsItem
 import skytycoon.core.model.NewsKind
@@ -128,16 +129,32 @@ object Stock {
         val treasury = target.holdings[acquirerId] ?: 0.0
         val acquirerShares = (acquirer.shares - treasury).coerceAtLeast(acquirer.shares * 0.1)
 
+        // 소수 주주를 시장가로 몰아내는 값은 인수사가 낸다. 어디서도 빼지 않으면
+        // 과반만 사고도 회사 전체를 가져가면서 시장 전체 현금이 불어난다.
+        val minorityPayout = state.airlines
+            .filter { it.id != acquirerId && it.id != targetId }
+            .sumOf { (it.holdings[targetId] ?: 0.0) * target.sharePrice }
+
+        // 같은 도시에 같은 시설이 둘 생기지 않게 정리한다. BuildBusiness 가 막는 조합이라
+        // 합병으로만 만들어질 수 있고, 그대로 두면 수입·브랜드·자산이 이중으로 잡힌다.
+        val mergedBusinesses = (acquirer.businesses + target.businesses)
+            .distinctBy { it.type to it.city }
+            .let { list ->
+                // 정비창은 회사에 하나뿐이라는 규칙도 지킨다 (정비 할인은 어차피 한 번만 먹는다).
+                val hangars = list.filter { it.type == BusinessType.HANGAR }
+                if (hangars.size <= 1) list else list.filter { it.type != BusinessType.HANGAR } + hangars.first()
+            }
+
         // 다른 주주들은 시장가로 정리한다.
         val airlines = state.airlines.map { a ->
             when (a.id) {
                 acquirerId -> a.copy(
-                    cash = a.cash + target.cash,
+                    cash = a.cash + target.cash - minorityPayout,
                     debt = a.debt + target.debt,
                     shares = acquirerShares,
                     slots = mergedSlots,
                     holdings = mergedHoldings,
-                    businesses = a.businesses + target.businesses,
+                    businesses = mergedBusinesses,
                     brand = a.brand.mapValues { (r, v) ->
                         minOf(Balance.BRAND_MAX, v + (target.brand[r] ?: 0.0) * 0.4)
                     },

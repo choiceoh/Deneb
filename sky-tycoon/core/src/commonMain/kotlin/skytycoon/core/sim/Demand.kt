@@ -81,12 +81,17 @@ object Demand {
         )
     }
 
-    /** 노선 계획 화면에서 쓰는 연간 환산 수요. */
+    /**
+     * 노선 계획 화면에서 쓰는 연간 환산 수요 — 지금부터 네 분기를 내다본다.
+     *
+     * 올해 1분기부터 되감으면 안 된다. [CityState] 는 일시 효과의 **끝 턴**만 들고 있어서,
+     * 3분기에 시작한 두 분기짜리 부스트를 되감긴 1·2분기에도 걸린 것으로 쳐 버린다
+     * (폐쇄도 마찬가지로 지난 분기까지 0 으로 만든다). 앞을 보면 효과가 제때 꺼진다.
+     */
     fun annualEstimate(state: GameState, a: City, b: City): Double {
         var sum = 0.0
         for (q in 0 until 4) {
-            val shifted = state.copy(turn = state.turn - state.quarter + 1 + q)
-            sum += quarterly(shifted, a, b).total
+            sum += quarterly(state.copy(turn = state.turn + q), a, b).total
         }
         return sum
     }

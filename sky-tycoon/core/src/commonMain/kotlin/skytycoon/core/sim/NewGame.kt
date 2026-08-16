@@ -78,12 +78,15 @@ object NewGame {
             val fleet = mutableListOf<Plane>()
             for ((typeId, count) in seedCo.startFleet) {
                 val type = eraEquivalent(typeId, year)
+                // 취항 전에 만들어진 기체는 없다 — 1970년에 1968년 취항 737 을
+                // 6년 반 된 것으로 깔면 정비비는 부풀고 자산가치는 깎인다.
+                val oldest = ((year - type.year) * 4).coerceIn(2, 26)
                 repeat(count) {
                     fleet += Plane(
                         id = nextId++,
                         typeId = type.id,
                         airlineId = seedCo.id,
-                        ageQuarters = rng.int(2, 26),
+                        ageQuarters = rng.int(2, oldest),
                     )
                 }
             }

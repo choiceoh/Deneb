@@ -46,6 +46,21 @@ class FileSaveStoreTest {
     }
 
     @Test
+    fun `교체 도중 죽어 백업만 남아도 읽어낸다`() {
+        assertTrue(store.write(SaveSlot.MANUAL, "20년짜리 캠페인"))
+        // 백업으로 옮긴 직후 프로세스가 죽은 상황 — 대상 파일이 없고 .bak 만 있다.
+        val target = File(dir, "manual.json")
+        assertTrue(target.renameTo(File(dir, "manual.json.bak")))
+        assertFalse(target.exists())
+
+        assertEquals("20년짜리 캠페인", store.read(SaveSlot.MANUAL), "백업만 남은 세이브를 못 찾았다")
+
+        // 지운 슬롯이 백업 때문에 되살아나서는 안 된다.
+        store.clear(SaveSlot.MANUAL)
+        assertEquals(null, store.read(SaveSlot.MANUAL), "지운 슬롯이 백업에서 되살아났다")
+    }
+
+    @Test
     fun `슬롯끼리 서로를 덮어쓰지 않는다`() {
         store.write(SaveSlot.AUTO, "자동")
         store.write(SaveSlot.MANUAL, "수동")

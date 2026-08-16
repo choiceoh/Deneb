@@ -26,7 +26,7 @@ class FileSaveStore(private val dir: File) : SaveStore {
      * 지웠다가 두 번째 rename 마저 실패하면 유일한 복구본이 사라진다.
      */
     internal fun replaceViaBackup(tmp: File, target: File) {
-        val backup = File(target.parentFile, "${target.name}.bak")
+        val backup = backup(target)
         backup.delete()
         val stashed = target.exists() && target.renameTo(backup)
         if (!tmp.renameTo(target)) {
@@ -36,12 +36,24 @@ class FileSaveStore(private val dir: File) : SaveStore {
         backup.delete()
     }
 
-    override fun read(slot: SaveSlot): String? =
-        file(slot).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+    /**
+     * 교체 도중 프로세스가 죽으면 직전 세이브가 `.bak` 에만 남는다. 대상만 보고 없다고
+     * 하면 멀쩡히 남아 있는 캠페인을 두고 "저장된 게임이 없습니다"가 뜬다.
+     */
+    override fun read(slot: SaveSlot): String? {
+        val target = file(slot)
+        val source = target.takeIf { it.isFile } ?: backup(target).takeIf { it.isFile } ?: return null
+        return runCatching { source.readText() }.getOrNull()
+    }
 
     override fun clear(slot: SaveSlot) {
-        file(slot).delete()
+        val target = file(slot)
+        target.delete()
+        // 백업까지 지워야 한다 — 안 지우면 지운 슬롯이 다음 read 에서 되살아난다.
+        backup(target).delete()
     }
+
+    private fun backup(target: File) = File(dir, "${target.name}.bak")
 
     companion object {
         fun default(): FileSaveStore = FileSaveStore(File(System.getProperty("user.home"), ".skytycoon"))

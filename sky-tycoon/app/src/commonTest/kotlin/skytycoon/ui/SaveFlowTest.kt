@@ -1,6 +1,7 @@
 package skytycoon.ui
 
 import skytycoon.core.save.Save
+import skytycoon.core.sim.Command
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,6 +33,41 @@ class SaveFlowTest {
         assertTrue(third.resume())
         assertEquals(savedTurn, third.game.turn)
         assertEquals("hanseong", third.game.playerId)
+    }
+
+    @Test
+    fun `명령 하나로 판이 끝나면 그 결과를 저장한다`() {
+        val store = MemorySaveStore()
+        val vm = GameViewModel(store)
+        vm.start("goldenage", "hanseong", "normal", seed = 1)
+        vm.endTurn()
+
+        // 마지막 경쟁사 인수 직전 상태를 만든다 — 매수 한 번으로 판이 끝난다.
+        val s = vm.game
+        val rivals = s.livingAirlines.filter { it.id != s.playerId }
+        val last = rivals.last()
+        val staged = s.copy(
+            airlines = s.airlines.map { a ->
+                if (a.id != s.playerId) {
+                    a
+                } else {
+                    a.copy(
+                        cash = 5e9,
+                        holdings = rivals.associate {
+                            it.id to it.shares * (if (it.id == last.id) 0.45 else 0.60)
+                        },
+                    )
+                }
+            },
+        )
+        assertTrue(vm.importSave(Save.encode(staged)))
+        assertTrue(vm.run(Command.TradeShares(s.playerId, last.id, last.shares * 0.06)))
+        assertTrue(vm.game.outcome?.won == true, "마지막 경쟁사를 인수했는데 승리하지 않았다")
+
+        // 분기 진행 버튼은 이 시점에 잠기므로, 여기서 저장되지 않으면 승리가 통째로 날아간다.
+        val resumed = GameViewModel(store)
+        assertTrue(resumed.resume())
+        assertTrue(resumed.game.outcome?.won == true, "재시작하니 승리 이전 상태로 돌아갔다")
     }
 
     @Test
