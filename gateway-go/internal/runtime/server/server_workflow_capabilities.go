@@ -187,7 +187,7 @@ func strandedAcceptedCandidates(tracker *genesis.Tracker) []genesis.SelfCorrecti
 	}
 	out := make([]genesis.SelfCorrectionCandidateRecord, 0, len(recs))
 	for _, record := range recs {
-		if strings.TrimSpace(record.Scope) == "code" && genesis.SourceAutoDispatches(record.Source) {
+		if strings.TrimSpace(record.Scope) == "code" && genesis.CandidateAutoDispatches(record) {
 			continue // the dispatcher's queue — accepted genuinely means "queued"
 		}
 		out = append(out, record)
@@ -217,7 +217,7 @@ func (s *Server) dispatchBacklogSelfCodingCount() int {
 		if rec.Scope != "code" {
 			continue
 		}
-		if !genesis.SourceAutoDispatches(rec.Source) {
+		if !genesis.CandidateAutoDispatches(rec) {
 			continue
 		}
 		if tracker.DispatchMarkerBlocks(rec.ID) {

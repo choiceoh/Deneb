@@ -343,7 +343,7 @@ func selfCorrectionCandidate(rec genesis.SelfCorrectionCandidateRecord) SelfCorr
 		Risk:           textutil.TruncateRunes(rec.Risk, lifecycleTextMaxRunes, "…"),
 		Source:         rec.Source,
 		Surface:        rec.Surface,
-		AutoDispatch:   rec.Scope == "code" && genesis.SourceAutoDispatches(rec.Source),
+		AutoDispatch:   rec.Scope == "code" && genesis.CandidateAutoDispatches(rec),
 		Reviewer:       rec.Reviewer,
 		ReviewNote:     textutil.TruncateRunes(rec.ReviewNote, lifecycleTextMaxRunes, "…"),
 		ImpactContract: selfCorrectionImpactContract(rec.ImpactContract),

@@ -9,16 +9,24 @@ import (
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
+func minerTestContract() *rsilifecycle.ImpactContract {
+	return &rsilifecycle.ImpactContract{
+		Metric: "health.finding_present:x", Direction: "decrease",
+		Baseline: 1, Target: 0, MinSamples: 1,
+	}
+}
+
 func TestNextSelfCorrectionDispatchCandidateSearchesBeyondRecentViewLimit(t *testing.T) {
 	tracker := newTestTracker(t)
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "old-accepted", Scope: "code", Status: SelfCorrectionStatusAccepted,
-		Source: "tool-quality:x", CreatedAt: 1,
+		Source: "tool-quality:x", CreatedAt: 1, ImpactContract: minerTestContract(),
 	})
 	for i := range 501 {
 		appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 			ID: fmt.Sprintf("new-proposed-%03d", i), Scope: "code",
 			Status: SelfCorrectionStatusProposed, Source: "health-finding:x", CreatedAt: int64(i + 2),
+			ImpactContract: minerTestContract(),
 		})
 	}
 
@@ -36,7 +44,7 @@ func TestSelfCorrectionSafetyDecisionsFailClosedOnCorruptLedger(t *testing.T) {
 	tracker := newTestTracker(t)
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "safe", Scope: "code", Status: SelfCorrectionStatusAccepted,
-		Source: "health-finding:x", CreatedAt: 1,
+		Source: "health-finding:x", CreatedAt: 1, ImpactContract: minerTestContract(),
 	})
 	f, err := os.OpenFile(tracker.selfCorrectionPath, os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -76,9 +84,15 @@ func TestSelfCorrectionDispatchEligibleCentralizesReviewDeliveryAndSurfacePolicy
 	base := SelfCorrectionCandidateRecord{
 		ID: "safe", Scope: "code", Status: SelfCorrectionStatusProposed,
 		Source: "health-finding:x", ProposedChange: "narrow a gateway contract",
+		ImpactContract: minerTestContract(),
 	}
 	if !SelfCorrectionDispatchEligible(base) {
 		t.Fatal("safe graduated candidate should dispatch")
+	}
+	noContract := base
+	noContract.ImpactContract = nil
+	if SelfCorrectionDispatchEligible(noContract) {
+		t.Fatal("miner candidate without an impact contract must not dispatch")
 	}
 	tests := []SelfCorrectionCandidateRecord{
 		{ID: "wrong-scope", Scope: "skill", Status: SelfCorrectionStatusProposed, Source: "health-finding:x"},
@@ -111,14 +125,17 @@ func TestNextSelfCorrectionDispatchCandidatePrioritizesNegativeImpactFollowUp(t 
 		{
 			ID: "newest-normal", Scope: "code", Status: SelfCorrectionStatusProposed,
 			Source: "health-finding:normal", ProposedChange: "fix normal", CreatedAt: 300,
+			ImpactContract: minerTestContract(),
 		},
 		{
 			ID: "no-effect-follow-up", Scope: "code", Status: SelfCorrectionStatusProposed,
 			Source: "health-finding:no-effect", ProposedChange: "fix no effect", CreatedAt: 200,
+			ImpactContract: minerTestContract(),
 		},
 		{
 			ID: "regressed-follow-up", Scope: "code", Status: SelfCorrectionStatusProposed,
 			Source: "health-finding:regressed", ProposedChange: "fix regression", CreatedAt: 100,
+			ImpactContract: minerTestContract(),
 		},
 	} {
 		appendFunnel(t, tracker.selfCorrectionPath, record)
@@ -146,14 +163,16 @@ func TestNextSelfCorrectionDispatchCandidateRequiresStrategyShiftAfterRepeatedNe
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "repeated-strategy", Scope: "code", Status: SelfCorrectionStatusProposed,
 		Source: source, ProposedChange: "  ADD   A GUARD ", CreatedAt: 400,
+		ImpactContract: minerTestContract(),
 	})
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "missing-strategy", Scope: "code", Status: SelfCorrectionStatusProposed,
-		Source: source, CreatedAt: 500,
+		Source: source, CreatedAt: 500, ImpactContract: minerTestContract(),
 	})
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "fallback", Scope: "code", Status: SelfCorrectionStatusProposed,
 		Source: "health-finding:fallback", ProposedChange: "fix fallback", CreatedAt: 300,
+		ImpactContract: minerTestContract(),
 	})
 
 	got, ok, err := tracker.NextSelfCorrectionDispatchCandidate(nil)
@@ -164,6 +183,7 @@ func TestNextSelfCorrectionDispatchCandidateRequiresStrategyShiftAfterRepeatedNe
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "shifted-strategy", Scope: "code", Status: SelfCorrectionStatusProposed,
 		Source: source, ProposedChange: "Replace the invalidation algorithm", CreatedAt: 600,
+		ImpactContract: minerTestContract(),
 	})
 	got, ok, err = tracker.NextSelfCorrectionDispatchCandidate(nil)
 	if err != nil || !ok || got.ID != "shifted-strategy" {
@@ -190,10 +210,12 @@ func TestLatestVerifiedImpactClearsNegativePriorityAndStrategyGate(t *testing.T)
 		{
 			ID: "recovered-follow-up", Scope: "code", Status: SelfCorrectionStatusProposed,
 			Source: source, ProposedChange: "same strategy", CreatedAt: 400,
+			ImpactContract: minerTestContract(),
 		},
 		{
 			ID: "newer-normal", Scope: "code", Status: SelfCorrectionStatusProposed,
 			Source: "health-finding:normal", ProposedChange: "normal strategy", CreatedAt: 500,
+			ImpactContract: minerTestContract(),
 		},
 	} {
 		appendFunnel(t, tracker.selfCorrectionPath, record)
@@ -213,13 +235,13 @@ func TestSelfCorrectionDispatchWithheldAfterRepeatedFailures(t *testing.T) {
 	// every tick. Once the count reaches the cap it is withheld entirely.
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "unwinnable", Scope: "code", Status: SelfCorrectionStatusAccepted,
-		Source: "health-finding:x", CreatedAt: 200,
+		Source: "health-finding:x", CreatedAt: 200, ImpactContract: minerTestContract(),
 	})
 	appendSelfCorrectionDispatchFailures(t, tracker.selfCorrectionPath, "unwinnable", maxSelfCorrectionDispatchFailures)
 	// A sibling still under the cap stays retryable.
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "retryable", Scope: "code", Status: SelfCorrectionStatusAccepted,
-		Source: "health-finding:y", CreatedAt: 100,
+		Source: "health-finding:y", CreatedAt: 100, ImpactContract: minerTestContract(),
 	})
 	appendSelfCorrectionDispatchFailures(t, tracker.selfCorrectionPath, "retryable", maxSelfCorrectionDispatchFailures-1)
 
@@ -246,7 +268,7 @@ func TestSelfCorrectionDispatchFailureCountIsIdempotentAndRestartSafe(t *testing
 	tracker := newTestTracker(t)
 	appendFunnel(t, tracker.selfCorrectionPath, SelfCorrectionCandidateRecord{
 		ID: "cand", Scope: "code", Status: SelfCorrectionStatusAccepted,
-		Source: "health-finding:x", CreatedAt: 1,
+		Source: "health-finding:x", CreatedAt: 1, ImpactContract: minerTestContract(),
 	})
 	appendSelfCorrectionDispatchFailures(t, tracker.selfCorrectionPath, "cand", maxSelfCorrectionDispatchFailures)
 	// Replaying the latest attempt's terminal "failed" row (a retried ledger

@@ -88,7 +88,7 @@ func SelfCorrectionDispatchEligible(record SelfCorrectionCandidateRecord) bool {
 	if !rsilifecycle.CanDispatch(
 		rsilifecycle.ReviewState(record.Status),
 		rsilifecycle.DeliveryPhase(record.DispatchPhase),
-	) || !SourceAutoDispatches(record.Source) {
+	) || !CandidateAutoDispatches(record) {
 		return false
 	}
 	values := []string{

@@ -189,8 +189,13 @@ acceptance machinery stays forbidden at record time.
   window, and named guardrails). After `watch_passed`, its impact is derived as
   `pending`; `miniapp.self_improvement_coding.impact` accepts observations for
   the exact dispatch attempt and deterministic Go classifies the terminal
-  result as `verified`, `no_effect`, or `regressed`. Legacy candidates without
-  a contract remain valid and do not fabricate an impact verdict. The health
+  result as `verified`, `no_effect`, or `regressed`. Miner-authored sources
+  (`health-finding`, `tool-quality`, `runtime-error`, `deadcode-finding`)
+  without a named contract stay in the queue as 검토 대기 — they do not
+  auto-dispatch (2026-08-16; the unchecked-landing pile was 21 health-finding
+  and 7 tool-quality). Reactive sources (`evolve-tool-gap`, `self-harness`) stay
+  exempt. Legacy rows without a contract remain valid and do not fabricate an
+  impact verdict. The health
   miner closes deterministic contracts from fresh reports. Supported metrics:
   `health.finding_present:<id>`, `runtime.health.score:<dimension>`,
   `health.score:overall`, `health.domain.score:<domain>`,

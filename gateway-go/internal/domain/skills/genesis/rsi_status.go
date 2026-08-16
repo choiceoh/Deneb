@@ -108,9 +108,39 @@ var rsiIncrementalHealthKinds = []string{
 
 // SourceAutoDispatches reports whether a self-correction candidate from this
 // source is on the auto-dispatch track (compiled allowlist or ladder-graduated)
-// vs still staged. Exported for the miniapp wire projection so clients can
-// label each candidate 자동수리 vs 검토 대기.
+// vs still staged. Namespace-only — CandidateAutoDispatches also requires a
+// measurability contract for miner-authored sources.
 func SourceAutoDispatches(source string) bool { return rsiSourceDispatchable(source) }
+
+// rsiMinerImpactContractNamespaces are sources whose miners can declare how a
+// landing will be judged. Unattended sessions without a contract produced the
+// 2026-07/08 unchecked-landing pile. Reactive sources (evolve-tool-gap,
+// self-harness) stay exempt — they are not miner-authored.
+var rsiMinerImpactContractNamespaces = []string{
+	"health-finding", "tool-quality", "runtime-error", "deadcode-finding",
+}
+
+// CandidateAutoDispatches is the client/picker predicate: allowlisted source
+// AND, for miner namespaces, a named impact metric. A landing we cannot
+// judge is 검토 대기, not 자동수리.
+func CandidateAutoDispatches(record SelfCorrectionCandidateRecord) bool {
+	if !SourceAutoDispatches(record.Source) {
+		return false
+	}
+	if !rsiDispatchNeedsImpactContract(record.Source) {
+		return true
+	}
+	return record.ImpactContract != nil && strings.TrimSpace(record.ImpactContract.Metric) != ""
+}
+
+func rsiDispatchNeedsImpactContract(source string) bool {
+	for _, ns := range rsiMinerImpactContractNamespaces {
+		if rsiSourceMatchesNamespace(source, ns) {
+			return true
+		}
+	}
+	return false
+}
 
 const rsiGraduationDetail = "자율성 졸업 사다리의 행별 증거를 상시 심사하고, 임계 충족 시 잠금 해제를 자동 실행하는 계기판입니다 (2026-07-14 위임). 모든 실행은 원장 기록과 재잠금 비토 카드를 남기며, 임계값 정책 자체는 루프가 편집할 수 없습니다."
 
