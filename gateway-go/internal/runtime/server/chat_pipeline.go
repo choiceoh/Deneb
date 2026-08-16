@@ -131,12 +131,14 @@ func (s *Server) initMemorySubsystem(chatCfg *chat.HandlerConfig, regPtr **model
 				wikiStore.SetQueryExpander(makeWikiQueryExpander(tinyClient, tinyModel, extraBody, s.logger))
 			}
 
-			// Wiki dreamer.
-			lwClient := (*regPtr).Client(modelrole.RoleLightweight)
-			lwModel := (*regPtr).Model(modelrole.RoleLightweight)
-			if lwClient != nil && lwModel != "" {
-				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, lwClient, lwModel, wikiCfg, s.logger)
-				// Shape the dreamer's raw LLM calls for the lightweight model:
+			// Wiki dreamer. This bounded JSON-synthesis lane favors the tiny
+			// model: on srv4 that is local dsv4-nothink, avoiding a dependency on
+			// the cloud lightweight provider for autonomous memory maintenance.
+			dreamClient := (*regPtr).Client(wikiDreamerModelRole)
+			dreamModel := (*regPtr).Model(wikiDreamerModelRole)
+			if dreamClient != nil && dreamModel != "" {
+				s.wikiDreamer = wiki.NewWikiDreamer(wikiStore, dreamClient, dreamModel, wikiCfg, s.logger)
+				// Shape the dreamer's raw LLM calls for the selected tiny model:
 				// thinking off on dual-mode reasoning models (deepseek-v4's
 				// chain-of-thought consumed the whole 4096-token synthesis
 				// budget — 2026-07-02/03 "empty content (finish_reason=length)"
@@ -463,8 +465,10 @@ func formatRecentPolarisSummaries(nodes []polaris.SummaryNode) string {
 	return sb.String()
 }
 
+const wikiDreamerModelRole = modelrole.RoleTiny
+
 // dreamerLLMShape computes the request shaping for the wiki dreamer's raw
-// lightweight-role LLM calls. The dreamer talks to the registry client
+// tiny-role LLM calls. The dreamer talks to the registry client
 // directly — it goes through neither the pilot/localai hub (which injects
 // enable_thinking=false for non-reasoning models, localai.mergeRequestBody)
 // nor the chat effort router (which attaches the dual-mode thinking toggle,
@@ -483,7 +487,7 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 	if reg == nil {
 		return nil, 0
 	}
-	cfg := reg.Config(modelrole.RoleLightweight)
+	cfg := reg.Config(wikiDreamerModelRole)
 	// Shared three-way, registry-aware so deneb.json routing.toggleKwarg
 	// overrides shape the dreamer like they shape foreground turns (see
 	// modelrole.ThinkingOffDirectiveFor).

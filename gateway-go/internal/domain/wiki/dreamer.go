@@ -216,7 +216,7 @@ type WikiDreamer struct {
 
 	// llmExtraBody is merged into every dreamer LLM request (synthesis,
 	// verify, open-loops, project-digest). The chat pipeline wires it with
-	// the lightweight model's thinking-off shaping: the dreamer calls the
+	// the selected model's thinking-off shaping: the dreamer calls the
 	// raw client — not pilot/localai, not the chat effort router — so
 	// without this a dual-mode reasoning model (deepseek-v4) spends the
 	// whole output budget on chain-of-thought and returns empty content
