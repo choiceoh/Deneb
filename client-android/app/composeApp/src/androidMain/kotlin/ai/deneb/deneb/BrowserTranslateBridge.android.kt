@@ -45,6 +45,7 @@ internal class BrowserTranslateBridge(
 ) {
     private val lock = Any()
     private val queued = ArrayDeque<BrowserTranslationWork>()
+    private val activeRequestIds = linkedSetOf<String>()
     private var active = 0
     private var generation = 0L
     private var generationScope = newGenerationScope()
@@ -96,22 +97,33 @@ internal class BrowserTranslateBridge(
     /** Drops the old document's queued work and cancels its active RPCs. A new
      * page gets a fresh scheduler generation instead of waiting behind it. */
     fun cancelForNavigation() {
-        val expired = synchronized(lock) {
+        val (expiredScope, expiredRequestIds) = synchronized(lock) {
+            val requestIds = linkedSetOf<String>().apply {
+                queued.forEach { add(it.requestId) }
+                addAll(activeRequestIds)
+            }
             generation++
             queued.clear()
+            activeRequestIds.clear()
             active = 0
             generationScope.also {
                 generationScope = newGenerationScope()
-            }
+            } to requestIds
         }
-        expired.cancel()
+        // A navigation can be stopped before the old document is replaced. Tell
+        // that document to clear its pending/in-flight entries so translation can
+        // retry instead of leaving those nodes permanently stuck.
+        expiredRequestIds.forEach { reject(it, retryable = true) }
+        expiredScope.cancel()
     }
 
     private fun drainReadyLocked(): List<BrowserTranslationWork> {
         val ready = ArrayList<BrowserTranslationWork>(MAX_TRANSLATE_IN_FLIGHT)
         while (active < MAX_TRANSLATE_IN_FLIGHT && queued.isNotEmpty()) {
+            val work = queued.removeFirst()
             active++
-            ready += queued.removeFirst()
+            activeRequestIds += work.requestId
+            ready += work
         }
         return ready
     }
@@ -150,6 +162,7 @@ internal class BrowserTranslateBridge(
                 } finally {
                     val next = synchronized(lock) {
                         if (work.generation == generation) {
+                            activeRequestIds.remove(work.requestId)
                             active = (active - 1).coerceAtLeast(0)
                             drainReadyLocked()
                         } else {

@@ -35,6 +35,8 @@ class BrowserTranslateAssetContractTest {
         assertContains(nativeSource, "markStarted(work.requestId)")
         assertContains(nativeSource, "fun cancelForNavigation()")
         assertContains(nativeSource, "queued.clear()")
+        assertContains(nativeSource, "activeRequestIds.clear()")
+        assertContains(nativeSource, "expiredRequestIds.forEach { reject(it, retryable = true) }")
         assertContains(jsSource, "function beginBatch(rid)")
         assertTrue(jsSource.jsInt("NATIVE_BATCH_TIMEOUT_MS").toLong() > DenebGatewayClient.REQUEST_TIMEOUT_MS)
 
