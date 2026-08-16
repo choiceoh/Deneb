@@ -7,6 +7,7 @@ import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsItem
 import skytycoon.core.model.NewsKind
 import skytycoon.core.model.Route
+import kotlin.math.abs
 
 object Stock {
     /** 주가 = 자산가치와 수익력의 혼합. 적자가 이어지면 주가가 무너져 인수당하기 쉬워진다. */
@@ -20,8 +21,26 @@ object Stock {
             .coerceAtLeast(0.2 * state.world.inflation)
     }
 
-    fun repriceAll(state: GameState): GameState =
-        state.copy(airlines = state.airlines.map { it.copy(sharePrice = price(state, it)) })
+    /**
+     * 전 종목 주가 재산정.
+     *
+     * 한 번만 돌면 안 된다 — 자기자본에는 남의 주식(교차 보유)이 들어가는데, 한 패스로는
+     * 그 값을 **재산정 이전** 시세로 읽는다. 증자나 합병으로 한 회사 값이 뛰어도 그 회사
+     * 주식을 든 쪽에는 이번 분기 내내 전달되지 않는다. 값이 잦아들 때까지 돌린다
+     * (항공사가 몇 안 돼 보통 두 패스면 끝난다).
+     */
+    fun repriceAll(state: GameState): GameState {
+        var s = state
+        repeat(6) {
+            val next = s.copy(airlines = s.airlines.map { it.copy(sharePrice = price(s, it)) })
+            val settled = next.airlines.zip(s.airlines).all { (after, before) ->
+                abs(after.sharePrice - before.sharePrice) <= before.sharePrice * 1e-9
+            }
+            s = next
+            if (settled) return s
+        }
+        return s
+    }
 
     /** 시장에 남은 주식 (누구도 들고 있지 않은 몫). */
     fun floatShares(state: GameState, targetId: String): Double {

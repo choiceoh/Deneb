@@ -863,6 +863,30 @@ class RegressionTest {
         )
     }
 
+    @Test
+    fun `주가 재산정은 교차 보유까지 반영해 수렴한다`() {
+        // 한 패스만 돌면 남의 주식 값이 재산정 이전 시세로 굳어, 한 번 더 돌릴 때마다
+        // 값이 계속 움직인다 — 그러면 같은 분기에 낡은 시세로 거래하게 된다.
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        s = s.withAirline2("hanseong") {
+            it.copy(holdings = it.holdings + (rivals[0].id to rivals[0].shares * 0.40))
+        }
+        s = s.withAirline2(rivals[0].id) {
+            it.copy(holdings = it.holdings + (rivals[1].id to rivals[1].shares * 0.30))
+        }
+
+        val once = Stock.repriceAll(s)
+        val twice = Stock.repriceAll(once)
+        for (a in once.airlines) {
+            val again = twice.airline(a.id).sharePrice
+            assertTrue(
+                abs(a.sharePrice - again) <= a.sharePrice * 1e-6,
+                "${a.name} 주가가 재산정을 또 돌리자 ${a.sharePrice} → $again 로 바뀐다 (수렴 안 함)",
+            )
+        }
+    }
+
     // ------------------------------------------------------------ AI 견적
 
     @Test
