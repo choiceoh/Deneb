@@ -34,7 +34,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration.Companion.hours
@@ -583,6 +586,35 @@ class DenebGatewayClient private constructor(
         // cache will be rebuilt then — eviction here is harmless in that case.)
         removeCachedTranscript(id)
         _savedConversations.update { list -> list.filterNot { it.id == id } }
+    }
+
+    override suspend fun renameConversation(id: String, label: String) {
+        val trimmed = label.trim()
+        if (id.isBlank() || trimmed.isEmpty()) return
+        val out = callRpc<JsonObject>(
+            "miniapp.sessions.rename",
+            buildJsonObject {
+                put("sessionKey", id)
+                put("label", trimmed)
+            },
+        ) ?: return
+        val applied = out["label"]?.jsonPrimitive?.contentOrNull ?: trimmed
+        _savedConversations.update { list ->
+            list.map { if (it.id == id) it.copy(title = applied) else it }
+        }
+    }
+
+    override suspend fun steer(note: String): Boolean {
+        val trimmed = note.trim()
+        if (trimmed.isEmpty()) return false
+        val out = callRpc<JsonObject>(
+            "miniapp.chat.steer",
+            buildJsonObject {
+                put("sessionKey", sessionKey)
+                put("note", trimmed)
+            },
+        ) ?: return false
+        return out["steered"]?.jsonPrimitive?.booleanOrNull == true
     }
 
     // --- Memory screen → Deneb wiki (read-only browser) ---------------------

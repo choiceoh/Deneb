@@ -79,4 +79,9 @@ type Deps struct {
 	// IngestEvent queues a proactive judgment turn for a phone event.
 	// Optional; nil disables miniapp.event.ingest.
 	IngestEvent func(eventType, source, text string)
+	// SteerNative folds a mid-turn note into the active native run and
+	// persists it as a user transcript line. Optional; nil disables
+	// miniapp.chat.steer. Kept off ChatHandler so the native bridge stays
+	// free of the async chat.send/abort/steer contract.
+	SteerNative func(sessionKey, note string) bool
 }

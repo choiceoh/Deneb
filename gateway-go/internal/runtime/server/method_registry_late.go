@@ -163,6 +163,12 @@ func (s *Server) registerLateMethods(hub *rpcutil.GatewayHub) {
 				return s.proactiveRelay.PublishDeliverable(text)
 			},
 			IngestEvent: phoneevents.New(s.phoneEventHandlerConfig()).IngestAsync,
+			SteerNative: func(sessionKey, note string) bool {
+				if s.chatHandler == nil {
+					return false
+				}
+				return s.chatHandler.SteerNative(sessionKey, note)
+			},
 		}),
 		handlersession.ExecMethods(handlersession.ExecDeps{
 			Chat:       s.chatHandler,

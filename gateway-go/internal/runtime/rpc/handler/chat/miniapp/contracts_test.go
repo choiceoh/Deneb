@@ -47,6 +47,62 @@ func TestMethodsNilContract(t *testing.T) {
 	}
 }
 
+func TestChatSteerHandlerContract(t *testing.T) {
+	var gotKey, gotNote string
+	method := handleMiniappChatSteer(Deps{SteerNative: func(sessionKey, note string) bool {
+		gotKey, gotNote = sessionKey, note
+		return true
+	}})
+	resp := method(context.Background(), requestFrame("id", `{"sessionKey":" client:other ","note":"  모레로  "}`))
+	if !resp.OK {
+		t.Fatalf("response = %+v", resp)
+	}
+	if gotKey != "client:other" || gotNote != "모레로" {
+		t.Fatalf("steer input = %q/%q", gotKey, gotNote)
+	}
+	got := decodeResponsePayload[struct {
+		OK         bool   `json:"ok"`
+		Steered    bool   `json:"steered"`
+		SessionKey string `json:"sessionKey"`
+	}](t, resp)
+	if !got.OK || !got.Steered || got.SessionKey != "client:other" {
+		t.Fatalf("payload = %+v", got)
+	}
+
+	for _, tt := range []struct {
+		name     string
+		params   string
+		wantCode string
+	}{
+		{name: "malformed", params: `{`, wantCode: protocol.ErrInvalidRequest},
+		{name: "missing note", params: `{}`, wantCode: protocol.ErrMissingParam},
+		{name: "blank note", params: `{"note":"  "}`, wantCode: protocol.ErrMissingParam},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			requireRPCErrorCode(t, method(context.Background(), requestFrame("id", tt.params)), tt.wantCode)
+		})
+	}
+
+	declined := handleMiniappChatSteer(Deps{SteerNative: func(string, string) bool { return false }})
+	declinedResp := declined(context.Background(), requestFrame("id", `{"note":"정정"}`))
+	if !declinedResp.OK {
+		t.Fatalf("declined steer must be OK: %+v", declinedResp)
+	}
+	declinedPayload := decodeResponsePayload[struct {
+		Steered bool `json:"steered"`
+	}](t, declinedResp)
+	if declinedPayload.Steered {
+		t.Fatal("declined steer reported steered")
+	}
+
+	if Methods(Deps{Chat: &chatPortStub{}})["miniapp.chat.steer"] != nil {
+		t.Fatal("steer registered without SteerNative")
+	}
+	if Methods(Deps{Chat: &chatPortStub{}, SteerNative: func(string, string) bool { return true }})["miniapp.chat.steer"] == nil {
+		t.Fatal("steer missing when SteerNative is wired")
+	}
+}
+
 func TestWebTranslateHandlerContract(t *testing.T) {
 	t.Run("success preserves request order", func(t *testing.T) {
 		var gotSegments []string

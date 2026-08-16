@@ -51,6 +51,13 @@ interface DataRepository {
     fun loadMoreConversations()
     fun loadConversation(id: String)
     suspend fun deleteConversation(id: String)
+    /** Pins a drawer label so the auto-titler will not overwrite it. */
+    suspend fun renameConversation(id: String, label: String)
+    /**
+     * Folds a mid-turn note into the active reply. Returns `true` when the
+     * gateway accepted it; `false` means the caller should queue instead.
+     */
+    suspend fun steer(note: String): Boolean
     fun startNewChat()
     fun popLastExchange()
     fun truncateFrom(messageId: String)

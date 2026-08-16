@@ -251,4 +251,42 @@ class ChatViewModelQueueTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun `text follow-up during streaming steers instead of queueing`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        fakeRepository.askGate = gate
+        fakeRepository.steerResult = true
+        val viewModel = createViewModel()
+
+        viewModel.state.test {
+            val initialState = awaitItem()
+            initialState.actions.ask("first")
+            var loadingState: ChatUiState
+            do {
+                loadingState = awaitItem()
+            } while (!loadingState.isLoading)
+
+            loadingState.actions.ask("내일 말고 모레")
+            var steeredState: ChatUiState
+            do {
+                steeredState = awaitItem()
+            } while (steeredState.lastSteerNote == null)
+
+            assertEquals("내일 말고 모레", steeredState.lastSteerNote)
+            assertTrue(steeredState.pendingQuestions.isEmpty())
+            assertEquals(listOf("내일 말고 모레"), fakeRepository.steerCalls)
+            assertEquals(1, fakeRepository.askCalls.size)
+
+            fakeRepository.askGate = null
+            gate.complete(Unit)
+            var doneState: ChatUiState
+            do {
+                doneState = awaitItem()
+            } while (doneState.isLoading)
+            assertNull(doneState.lastSteerNote)
+            assertEquals(1, fakeRepository.askCalls.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

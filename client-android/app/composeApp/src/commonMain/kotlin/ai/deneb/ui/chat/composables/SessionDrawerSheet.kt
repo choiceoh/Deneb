@@ -23,9 +23,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -123,9 +125,24 @@ fun DenebSessionDrawerSheet(
                         modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
                     )
                 } else {
-                    val chats = conversations.filter { !isSystemSession(it.id) }
+                    val chats = conversations.filter { !isSystemSession(it.id) && !isWorkCardSession(it.id) }
+                    val workCards = conversations.filter { isWorkCardSession(it.id) }
                     val systemSessions = conversations.filter { isSystemSession(it.id) }
+                    var renameTarget by remember { mutableStateOf<ConversationSummary?>(null) }
+                    var workExpanded by remember {
+                        mutableStateOf(currentConversationId != null && isWorkCardSession(currentConversationId))
+                    }
                     var systemExpanded by remember { mutableStateOf(false) }
+                    renameTarget?.let { target ->
+                        RenameConversationDialog(
+                            initial = target.title,
+                            onSave = { label ->
+                                actions.renameConversation(target.id, label)
+                                renameTarget = null
+                            },
+                            onDismiss = { renameTarget = null },
+                        )
+                    }
                     LazyColumn(
                         state = rememberLazyListState(),
                         contentPadding = PaddingValues(horizontal = 28.dp),
@@ -147,16 +164,48 @@ fun DenebSessionDrawerSheet(
                                 } else {
                                     { actions.deleteConversation(conversation.id) }
                                 },
+                                onRename = { renameTarget = conversation },
                             )
+                        }
+                        // Feed-card side chats (client:main:wf-*) fold so they
+                        // don't bury the user's own conversations.
+                        if (workCards.isNotEmpty()) {
+                            item(key = "__work_card_folder__") {
+                                SessionFolderHeader(
+                                    label = "카드 대화",
+                                    count = workCards.size,
+                                    expanded = workExpanded,
+                                    onToggle = { workExpanded = !workExpanded },
+                                    collapseLabel = "카드 대화 접기",
+                                    expandLabel = "카드 대화 펼치기",
+                                )
+                            }
+                            if (workExpanded) {
+                                items(workCards, key = { it.id }) { conversation ->
+                                    SessionItem(
+                                        conversation = conversation,
+                                        isActive = conversation.id == currentConversationId,
+                                        onClick = {
+                                            actions.loadConversation(conversation.id)
+                                            onClose()
+                                        },
+                                        onDelete = { actions.deleteConversation(conversation.id) },
+                                        onRename = { renameTarget = conversation },
+                                    )
+                                }
+                            }
                         }
                         // Machine-driven sessions (cron runs, system, boot) fold into
                         // one collapsible group so they don't bury the real chats above.
                         if (systemSessions.isNotEmpty()) {
                             item(key = "__system_folder__") {
                                 SessionFolderHeader(
+                                    label = "예약·시스템 세션",
                                     count = systemSessions.size,
                                     expanded = systemExpanded,
                                     onToggle = { systemExpanded = !systemExpanded },
+                                    collapseLabel = "예약·시스템 세션 접기",
+                                    expandLabel = "예약·시스템 세션 펼치기",
                                 )
                             }
                             if (systemExpanded) {
@@ -169,6 +218,7 @@ fun DenebSessionDrawerSheet(
                                             onClose()
                                         },
                                         onDelete = { actions.deleteConversation(conversation.id) },
+                                        onRename = { renameTarget = conversation },
                                     )
                                 }
                             }
@@ -211,15 +261,19 @@ private fun SessionItem(
     isActive: Boolean,
     onClick: () -> Unit,
     onDelete: (() -> Unit)?,
+    onRename: () -> Unit,
 ) {
     val haptics = rememberHaptics()
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .denebPressable(onClick = {
-                haptics.tap()
-                onClick()
-            })
+            .denebPressable(
+                onClick = {
+                    haptics.tap()
+                    onClick()
+                },
+                onLongClick = onRename,
+            )
             .handCursor()
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -302,10 +356,55 @@ internal fun isSystemSession(id: String): Boolean = when (id.substringBefore(':'
     else -> true
 }
 
-// Collapsible header for the machine-session folder, in the drawer's text-first
-// idiom: a ▸/▾ glyph + label + count, no Material expander chrome.
+// Feed-card side chats are keyed client:main:wf-<slug>. They stay under the
+// client: prefix (so isSystemSession is false) but fold into their own group.
+internal fun isWorkCardSession(id: String): Boolean =
+    id.substringAfterLast(':').startsWith("wf-")
+
+private const val RENAME_LABEL_MAX = 60
+
 @Composable
-private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+private fun RenameConversationDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draft by remember(initial) { mutableStateOf(initial) }
+    val trimmed = draft.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("이름 변경", style = DenebType.rowTitle) },
+        confirmButton = {
+            TextButton(
+                enabled = trimmed.isNotEmpty(),
+                onClick = { onSave(trimmed) },
+            ) { Text("저장") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        text = {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { next ->
+                    draft = if (next.length <= RENAME_LABEL_MAX) next else next.take(RENAME_LABEL_MAX)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+        },
+    )
+}
+
+// Collapsible header for a drawer folder, in the text-first idiom:
+// a ▸/▾ glyph + label + count, no Material expander chrome.
+@Composable
+private fun SessionFolderHeader(
+    label: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    collapseLabel: String,
+    expandLabel: String,
+) {
     val haptics = rememberHaptics()
     Row(
         modifier = Modifier
@@ -315,7 +414,7 @@ private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> U
                     haptics.toggle(!expanded)
                     onToggle()
                 },
-                onClickLabel = if (expanded) "예약·시스템 세션 접기" else "예약·시스템 세션 펼치기",
+                onClickLabel = if (expanded) collapseLabel else expandLabel,
                 role = Role.Button,
             )
             .handCursor()
@@ -329,7 +428,7 @@ private fun SessionFolderHeader(count: Int, expanded: Boolean, onToggle: () -> U
             modifier = Modifier.padding(end = 10.dp),
         )
         Text(
-            text = "예약·시스템 세션",
+            text = label,
             style = DenebType.rowTitle,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

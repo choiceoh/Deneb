@@ -50,6 +50,17 @@ internal fun ChatInputOverlay(
             // queue-send button): a quiet one-line notice above the
             // input — first message previewed, +N for the rest, × drops
             // the queue. They fire automatically when the turn completes.
+            val lastSteer = uiState.lastSteerNote
+            if (!lastSteer.isNullOrBlank()) {
+                Text(
+                    text = "끼어들기 전달됨: $lastSteer",
+                    style = DenebType.snippet,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 2.dp),
+                )
+            }
             val pending = uiState.pendingQuestions
             if (pending.isNotEmpty()) {
                 Row(
