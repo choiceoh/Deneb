@@ -5,6 +5,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
@@ -13,7 +14,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.RenderProcessGoneDetail
@@ -34,13 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayInputStream
@@ -67,7 +64,7 @@ actual fun DenebWebView(
     // closed page can't post stale translations. We keep a WebView ref to post
     // evaluateJavascript back onto it on the main thread.
     val scope = rememberCoroutineScope()
-    val holder = remember(state) { WebViewHolder() }
+    val holder = remember(state) { WebViewHolder(state) }
     val context = LocalContext.current
     val latestOpenNewTab = rememberUpdatedState(onOpenNewTab)
 
@@ -135,7 +132,15 @@ actual fun DenebWebView(
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
-                web.addJavascriptInterface(TranslateBridge(scope, translate, holder), BRIDGE_NAME)
+                val translateBridge = BrowserTranslateBridge(
+                    scope = scope,
+                    translateSegments = translate,
+                    state = state,
+                    webView = { holder.web },
+                    translationEnabled = { holder.translationEnabled },
+                )
+                holder.translateBridge = translateBridge
+                web.addJavascriptInterface(translateBridge, BROWSER_TRANSLATE_BRIDGE_NAME)
                 web.webViewClient = object : WebViewClient() {
                     // App/deep-link schemes (intent://, market://, kakaotalk://, tel:,
                     // mailto:, bank cert auth) cannot be rendered by a WebView. With no
@@ -145,6 +150,9 @@ actual fun DenebWebView(
                         view: WebView,
                         request: WebResourceRequest,
                     ): Boolean {
+                        if (request.isForMainFrame && request.hasGesture()) {
+                            holder.finishDetachedRestore()
+                        }
                         val url = request.url?.toString().orEmpty()
                         if (!isExternalSchemeUrl(url)) return false
                         if (openExternalUrl(context, url)) return true
@@ -181,9 +189,21 @@ actual fun DenebWebView(
                     }
 
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                        state.currentUrl = url
-                        state.loadError = null
-                        state.pageTitle = ""
+                        holder.translateBridge?.cancelForNavigation()
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        if (canBookmarkUrl(url)) {
+                            state.markRendererRecoveryStarted(url)
+                            if (url != previousStable) {
+                                state.pageTitle = ""
+                                state.pageFavicon = null
+                                state.pagePreview = null
+                                state.clearTranslationProgress()
+                            }
+                        } else if (!state.rendererRecoveryPending && !(urlScheme(url) == "about" && previousStable.isNotBlank())) {
+                            state.currentUrl = url
+                        }
+                        favicon?.let(::browserFaviconImage)?.let { state.pageFavicon = it }
+                        if (!state.rendererRecoveryPending) state.loadError = null
                         state.loading = true
                         adBlockHits.set(0)
                         state.adBlockedCount = 0
@@ -192,11 +212,25 @@ actual fun DenebWebView(
                     }
 
                     override fun onPageFinished(view: WebView, url: String) {
-                        state.currentUrl = url
+                        if (canBookmarkUrl(url)) {
+                            state.markRendererRecoveryStarted(url)
+                        } else if (!state.rendererRecoveryPending && urlScheme(url) != "about") {
+                            state.currentUrl = url
+                        }
                         state.canGoBack = view.canGoBack()
                         state.canGoForward = view.canGoForward()
+                        view.post {
+                            holder.restoreScroll(view, state)
+                            captureBrowserPreview(view)?.let { state.pagePreview = it }
+                            if (holder.restoringDetachedTab) {
+                                holder.restoringDetachedTab = false
+                            } else {
+                                state.commitNavigation(url)
+                            }
+                        }
                         injectSiteQuirk(view, url)
                         injectTranslateScript(view)
+                        holder.translateBridge?.resumeForDocument()
                         // Re-apply the toggle: a fresh page starts untranslated.
                         view.evaluateJavascript(
                             "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
@@ -215,6 +249,7 @@ actual fun DenebWebView(
                         error: WebResourceError,
                     ) {
                         if (!request.isForMainFrame) return
+                        resumeBrowserTranslation(holder, state, view)
                         state.loadError = browserPageErrorMessage(error.errorCode, error.description?.toString())
                     }
 
@@ -222,6 +257,7 @@ actual fun DenebWebView(
                     // business mail and groupware sessions.
                     override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                         handler.cancel()
+                        resumeBrowserTranslation(holder, state, view)
                         state.loadError = browserSslErrorMessage(error.primaryError)
                     }
 
@@ -232,16 +268,24 @@ actual fun DenebWebView(
                         holder.rendererGone = true
                         if (holder.web === view) holder.web = null
                         state.markRendererGone(detail.didCrash())
-                        view.removeJavascriptInterface(BRIDGE_NAME)
+                        view.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
                         view.destroy()
                         return true
                     }
 
                     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                         super.doUpdateVisitedHistory(view, url, isReload)
-                        state.currentUrl = url
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        if (canBookmarkUrl(url)) {
+                            state.markRendererRecoveryStarted(url)
+                        } else if (!(urlScheme(url) == "about" && previousStable.isNotBlank())) {
+                            state.currentUrl = url
+                        }
                         state.canGoBack = view.canGoBack()
                         state.canGoForward = view.canGoForward()
+                        if (!holder.restoringDetachedTab) {
+                            view.post { state.commitNavigation(url, force = isReload) }
+                        }
                         // SPA soft-nav keeps the document, so the quirk's observer
                         // survives; re-running is a no-op behind its re-entry guard
                         // and covers the case where the lock lands only after the
@@ -255,7 +299,12 @@ actual fun DenebWebView(
                 }
                 web.webChromeClient = object : WebChromeClient() {
                     override fun onReceivedTitle(view: WebView, title: String?) {
-                        state.pageTitle = title.orEmpty()
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        state.pageTitle = stableBrowserPageTitle(title, view.url.orEmpty(), previousStable, state.pageTitle)
+                    }
+
+                    override fun onReceivedIcon(view: WebView, icon: Bitmap) {
+                        browserFaviconImage(icon)?.let { state.pageFavicon = it }
                     }
 
                     override fun onProgressChanged(view: WebView, newProgress: Int) {
@@ -316,11 +365,27 @@ actual fun DenebWebView(
 
                         fun dispatch(url: String): Boolean {
                             if (dispatched || !browserAdoptPopupUrl(url)) return false
+                            val route = browserPopupRoute(url)
+                            if (route == BrowserPopupRoute.IGNORE) return false
                             dispatched = true
                             mainHandler.removeCallbacks(abandonPopup)
-                            when (urlScheme(url)) {
-                                "http", "https" -> latestOpenNewTab.value(url)
-                                else -> if (isExternalSchemeUrl(url)) openExternalUrl(context, url)
+                            when (route) {
+                                BrowserPopupRoute.NEW_TAB -> latestOpenNewTab.value(url)
+
+                                BrowserPopupRoute.SAME_TAB -> view.loadUrl(url)
+
+                                BrowserPopupRoute.EXTERNAL -> {
+                                    if (!openExternalUrl(context, url)) {
+                                        val fallback = intentFallbackUrl(url)
+                                        if (fallback != null) {
+                                            latestOpenNewTab.value(fallback)
+                                        } else {
+                                            Toast.makeText(context, "이 링크를 열 앱이 없습니다", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+
+                                BrowserPopupRoute.IGNORE -> Unit
                             }
                             popup.stopLoading()
                             popup.destroy()
@@ -353,10 +418,14 @@ actual fun DenebWebView(
                         params: FileChooserParams,
                     ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
                 }
-                val restored = (state.platformState as? Bundle)?.let { saved ->
+                val savedPlatformState = state.platformState as? Bundle
+                holder.restoringDetachedTab = savedPlatformState != null
+                val restored = savedPlatformState?.let { saved ->
                     state.platformState = null
                     runCatching { web.restoreState(saved) != null }.getOrDefault(false)
                 } ?: false
+                holder.restoringDetachedTab = restored
+                holder.scrollRestorePending = state.platformScrollX != 0 || state.platformScrollY != 0
                 if (!restored && !state.rendererRecoveryPending) {
                     state.currentUrl.ifBlank { state.url }.takeIf { it.isNotBlank() }?.let(web::loadUrl)
                 }
@@ -365,12 +434,17 @@ actual fun DenebWebView(
         update = { /* navigation/commands handled via LaunchedEffect below */ },
         onRelease = { web ->
             fileChooser.deliver(null)
+            holder.translateBridge?.cancelForNavigation()
+            holder.translateBridge = null
             if (!holder.rendererGone) {
+                state.platformScrollX = web.scrollX
+                state.platformScrollY = web.scrollY
+                captureBrowserPreview(web)?.let { state.pagePreview = it }
                 val saved = Bundle()
                 if (runCatching { web.saveState(saved) }.getOrNull() != null) {
                     state.platformState = saved
                 }
-                web.removeJavascriptInterface(BRIDGE_NAME)
+                web.removeJavascriptInterface(BROWSER_TRANSLATE_BRIDGE_NAME)
                 web.destroy()
             }
             if (holder.web === web) holder.web = null
@@ -378,7 +452,7 @@ actual fun DenebWebView(
     )
 
     LaunchedEffect(state.diagnosticsTick) {
-        if (state.diagnosticsTick == 0) return@LaunchedEffect
+        if (!holder.commands.consumeDiagnostics(state)) return@LaunchedEffect
         holder.web?.evaluateJavascript(BROWSER_SCROLL_DIAGNOSTIC_JS) { raw ->
             // evaluateJavascript hands back a JSON-encoded string; unwrap one level.
             val page = runCatching {
@@ -396,36 +470,58 @@ actual fun DenebWebView(
     }
 
     LaunchedEffect(state.url) {
-        val target = state.url
+        val target = browserWebViewCommandUrl(
+            requestedUrl = state.url,
+            currentUrl = state.currentUrl,
+            rendererRecoveryUrl = state.rendererRecoveryUrl,
+            rendererRecoveryPending = state.rendererRecoveryPending,
+        )
         if (target.isNotBlank() && holder.lastCommandUrl != target) {
+            holder.finishDetachedRestore()
             holder.lastCommandUrl = target
             holder.web?.loadUrl(target)
         }
     }
     LaunchedEffect(state.goBackTick) {
-        if (state.goBackTick > 0) holder.web?.let { if (it.canGoBack()) it.goBack() }
+        if (holder.commands.consumeGoBack(state)) {
+            holder.finishDetachedRestore()
+            holder.web?.let { if (it.canGoBack()) it.goBack() }
+        }
     }
     LaunchedEffect(state.reloadTick) {
-        if (state.reloadTick > 0) holder.web?.reload()
+        if (holder.commands.consumeReload(state)) {
+            holder.finishDetachedRestore()
+            holder.web?.reload()
+        }
     }
     LaunchedEffect(state.goForwardTick) {
-        if (state.goForwardTick > 0) holder.web?.let { if (it.canGoForward()) it.goForward() }
+        if (holder.commands.consumeGoForward(state)) {
+            holder.finishDetachedRestore()
+            holder.web?.let { if (it.canGoForward()) it.goForward() }
+        }
     }
     LaunchedEffect(state.stopTick) {
-        if (state.stopTick > 0) holder.web?.stopLoading()
+        if (holder.commands.consumeStop(state)) {
+            holder.web?.let { web ->
+                web.stopLoading()
+                resumeBrowserTranslation(holder, state, web)
+            }
+        }
     }
     LaunchedEffect(state.retryTick) {
-        if (state.retryTick == 0) return@LaunchedEffect
-        val target = state.currentUrl.ifBlank { state.url }
+        if (!holder.commands.consumeRetry(state)) return@LaunchedEffect
+        val target = stableBrowserTabUrl(state.rendererRecoveryUrl, state.currentUrl, state.url)
         holder.web?.let { web ->
             if (target.isNotBlank()) {
-                holder.lastCommandUrl = state.url
+                holder.finishDetachedRestore()
+                holder.lastCommandUrl = target
                 web.loadUrl(target)
             }
         }
     }
     LaunchedEffect(state.translateEnabled) {
         holder.translationEnabled = state.translateEnabled
+        if (!state.translateEnabled) state.clearTranslationProgress()
         holder.web?.evaluateJavascript(
             "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
             null,
@@ -433,11 +529,9 @@ actual fun DenebWebView(
     }
 }
 
-private const val BRIDGE_NAME = "DenebTranslateBridge"
-private const val MAX_TRANSLATE_IN_FLIGHT = 8
 private const val POPUP_RESOLUTION_TIMEOUT_MS = 10_000L
 
-private class WebViewHolder {
+private class WebViewHolder(state: DenebWebViewState) {
     @Volatile
     var web: WebView? = null
     var lastCommandUrl: String = ""
@@ -445,89 +539,64 @@ private class WebViewHolder {
     @Volatile
     var translationEnabled: Boolean = false
     var rendererGone: Boolean = false
+    var translateBridge: BrowserTranslateBridge? = null
+    val commands = BrowserCommandCursor(state)
+    var scrollRestorePending: Boolean = false
+    var restoringDetachedTab: Boolean = false
+
+    fun finishDetachedRestore() {
+        restoringDetachedTab = false
+    }
+
+    fun restoreScroll(web: WebView, state: DenebWebViewState) {
+        if (!scrollRestorePending) return
+        scrollRestorePending = false
+        web.scrollTo(state.platformScrollX, state.platformScrollY)
+    }
 }
 
-/**
- * JS → native bridge. [translate] is called on a coroutine (the @JavascriptInterface
- * method runs on a binder thread), then the result is posted back into the page on
- * the main thread. A null/failed translation simply drops the batch — the page
- * keeps its originals, matching the gateway's count-preserving contract.
- */
-private class TranslateBridge(
-    private val scope: CoroutineScope,
-    private val translate: TranslateFn,
-    private val holder: WebViewHolder,
-) {
-    private val inFlight = AtomicInteger(0)
+/** Draws a small runtime-only card image without allocating a full-screen bitmap. */
+private fun captureBrowserPreview(web: WebView): ImageBitmap? {
+    if (web.width <= 0 || web.height <= 0) return null
+    return runCatching {
+        val bitmap = Bitmap.createBitmap(BROWSER_PREVIEW_WIDTH, BROWSER_PREVIEW_HEIGHT, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.scale(
+            BROWSER_PREVIEW_WIDTH.toFloat() / web.width.toFloat(),
+            BROWSER_PREVIEW_HEIGHT.toFloat() / web.height.toFloat(),
+        )
+        web.draw(canvas)
+        bitmap.asImageBitmap()
+    }.getOrNull()
+}
 
-    // Diagnostic + UX: when translation is enabled, the page reports how many
-    // translatable nodes it found. 0 → nothing to translate (e.g. the page is already
-    // Korean, or the DOM walk found nothing); >0 → translating. Surfaced as a brief
-    // toast so a silent no-op is visible to the user (and pinpoints where it breaks).
-    @JavascriptInterface
-    fun onEnable(count: Int) {
-        if (!holder.translationEnabled) return
-        toast(if (count == 0) "DeepL로 번역할 텍스트를 찾지 못했습니다" else "DeepL 번역 중… ${count}개")
-    }
+private const val BROWSER_PREVIEW_WIDTH = 320
+private const val BROWSER_PREVIEW_HEIGHT = 180
 
-    @JavascriptInterface
-    fun translate(requestId: String, segmentsJson: String) {
-        if (!holder.translationEnabled || !isBrowserTranslateEnvelopeWithinLimits(requestId, segmentsJson.length)) {
-            reject(requestId)
-            return
-        }
-        val segments = decodeStringList(segmentsJson)
-        if (!areBrowserTranslateSegmentsWithinLimits(segments)) {
-            reject(requestId)
-            return
-        }
-        if (inFlight.incrementAndGet() > MAX_TRANSLATE_IN_FLIGHT) {
-            inFlight.decrementAndGet()
-            reject(requestId)
-            return
-        }
-        scope.launch {
-            try {
-                val translated = runCatching { translate(segments, "ko") }.getOrNull()
-                if (translated == null) {
-                    toast("DeepL 번역 실패 — 서버 응답 없음")
-                    reject(requestId)
-                    return@launch
-                }
-                if (translated.size != segments.size) {
-                    toast("DeepL 번역 응답 개수 불일치")
-                    reject(requestId)
-                    return@launch
-                }
-                val ridLiteral = jsStringLiteral(requestId)
-                val payloadLiteral = jsStringLiteral(encodeStringList(translated))
-                withContext(Dispatchers.Main) {
-                    holder.web?.evaluateJavascript(
-                        "window.DenebTranslate&&window.DenebTranslate.applyBatch($ridLiteral,$payloadLiteral);",
-                        null,
-                    )
-                }
-            } finally {
-                inFlight.decrementAndGet()
-            }
-        }
+private fun browserFaviconImage(icon: Bitmap): ImageBitmap? = runCatching {
+    val largest = maxOf(icon.width, icon.height).coerceAtLeast(1)
+    val scale = minOf(1f, BROWSER_FAVICON_SIZE.toFloat() / largest.toFloat())
+    val owned = if (scale < 1f) {
+        Bitmap.createScaledBitmap(
+            icon,
+            (icon.width * scale).toInt().coerceAtLeast(1),
+            (icon.height * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+    } else {
+        icon.copy(Bitmap.Config.ARGB_8888, false) ?: icon
     }
+    owned.asImageBitmap()
+}.getOrNull()
 
-    private fun reject(requestId: String) {
-        if (!isBrowserTranslateEnvelopeWithinLimits(requestId, 0)) return
-        val ridLiteral = jsStringLiteral(requestId)
-        Handler(Looper.getMainLooper()).post {
-            holder.web?.evaluateJavascript(
-                "window.DenebTranslate&&window.DenebTranslate.rejectBatch&&window.DenebTranslate.rejectBatch($ridLiteral);",
-                null,
-            )
-        }
-    }
+private const val BROWSER_FAVICON_SIZE = 64
 
-    private fun toast(msg: String) {
-        val ctx = holder.web?.context ?: return
-        Handler(Looper.getMainLooper()).post { Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show() }
-    }
+private fun resumeBrowserTranslation(holder: WebViewHolder, state: DenebWebViewState, web: WebView) {
+    holder.translateBridge?.resumeForDocument()
+    web.evaluateJavascript(
+        "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
+        null,
+    )
 }
 
 /**
@@ -546,16 +615,6 @@ private fun injectTranslateScript(view: WebView) {
     }.getOrNull() ?: return
     view.evaluateJavascript(js, null)
 }
-
-private val stringListSerializer = ListSerializer(String.serializer())
-
-private fun decodeStringList(json: String): List<String> = runCatching { webViewJson.decodeFromString(stringListSerializer, json) }.getOrDefault(emptyList())
-
-private fun encodeStringList(values: List<String>): String = webViewJson.encodeToString(stringListSerializer, values)
-
-/** Encodes [value] as a JS string literal (JSON string), safe to embed in an
- *  evaluateJavascript expression. */
-private fun jsStringLiteral(value: String): String = webViewJson.encodeToString(String.serializer(), value)
 
 /** Empty successful response used to drop ad/tracker subresource requests. */
 private fun emptyBlockedResponse(url: String): WebResourceResponse = WebResourceResponse(

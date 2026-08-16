@@ -73,4 +73,13 @@ class BrowserNavigationTest {
         // Only intent:// carries a fallback.
         assertNull(intentFallbackUrl("https://example.com?S.browser_fallback_url=https%3A%2F%2Fa.com"))
     }
+
+    @Test
+    fun popupTargetsKeepBlobAndDataContentInsteadOfDiscardingIt() {
+        assertEquals(BrowserPopupRoute.NEW_TAB, browserPopupRoute("https://pay.example/auth"))
+        assertEquals(BrowserPopupRoute.SAME_TAB, browserPopupRoute("blob:https://pay.example/result"))
+        assertEquals(BrowserPopupRoute.SAME_TAB, browserPopupRoute("data:text/html,<p>receipt</p>"))
+        assertEquals(BrowserPopupRoute.EXTERNAL, browserPopupRoute("intent://pay/#Intent;end"))
+        assertEquals(BrowserPopupRoute.IGNORE, browserPopupRoute("about:blank"))
+    }
 }

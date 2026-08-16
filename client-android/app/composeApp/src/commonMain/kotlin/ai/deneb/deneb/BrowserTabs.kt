@@ -39,8 +39,9 @@ internal fun encodeBrowserTabStore(store: BrowserTabStore): String = browserTabs
 
 /**
  * Resolves entry into the browser. A routed web link gets its own tab while room
- * remains. At the five-tab cap it replaces only the active tab, never a
- * background tab. A lone blank tab is reused instead of leaving dead clutter.
+ * remains. At the five-tab cap the opener is preserved; the UI asks the user to
+ * close a tab before continuing. A lone blank tab is reused instead of leaving
+ * dead clutter.
  */
 internal fun resolveBrowserTabStore(
     stored: BrowserTabStore,
@@ -85,7 +86,7 @@ internal fun resolveBrowserTabStore(
     val next = when {
         store.tabs.size == 1 && active.url.isBlank() -> store.tabs.toMutableList().apply { this[activeIndex] = replacement }
         store.tabs.size < BROWSER_TAB_LIMIT -> store.tabs + replacement
-        else -> store.tabs.toMutableList().apply { this[activeIndex] = replacement }
+        else -> return store
     }
     return BrowserTabStore(activeId = replacement.id, tabs = next).sanitized()
 }
@@ -162,6 +163,38 @@ internal fun updateBrowserTab(
 internal fun browserTabDisplayTitle(tab: BrowserTabSnapshot): String = tab.title.ifBlank { browserTabHost(tab.url) }.ifBlank { "새 탭" }
 
 internal fun browserTabDisplayUrl(tab: BrowserTabSnapshot): String = tab.url.ifBlank { "주소를 입력하세요" }
+
+/** True when a distinct web target cannot be opened without closing a tab. */
+internal fun browserTabLimitBlocks(store: BrowserTabStore, targetUrl: String): Boolean {
+    val target = targetUrl.trim().takeIf(::canBookmarkUrl) ?: return false
+    val clean = store.sanitized()
+    return clean.tabs.size >= BROWSER_TAB_LIMIT && clean.tabs.none { it.url == target }
+}
+
+/**
+ * Chooses durable tab metadata without allowing a renderer's transient
+ * `about:blank`/`data:` URL to erase the last restorable web URL.
+ */
+internal fun stableBrowserTabUrl(currentUrl: String, requestedUrl: String, previousUrl: String): String = sequenceOf(currentUrl, previousUrl, requestedUrl)
+    .map(String::trim)
+    .firstOrNull(::canBookmarkUrl)
+    .orEmpty()
+
+internal fun stableBrowserPageTitle(reportedTitle: String?, reportedUrl: String, stableUrl: String, previousTitle: String): String {
+    val next = reportedTitle.orEmpty().trim()
+    if (next.isEmpty()) return previousTitle
+    if (!canBookmarkUrl(reportedUrl) && canBookmarkUrl(stableUrl)) return previousTitle
+    return next
+}
+
+/** Keeps a transient blob/data/about document from pairing its title with the
+ * durable HTTP URL that will actually be restored after a restart. */
+internal fun stableBrowserTabTitle(currentUrl: String, stableUrl: String, reportedTitle: String, previousTitle: String): String {
+    val current = currentUrl.trim()
+    val durable = stableUrl.trim()
+    if (!canBookmarkUrl(current) || current != durable) return cleanBrowserTabTitle(previousTitle)
+    return cleanBrowserTabTitle(reportedTitle).ifBlank { cleanBrowserTabTitle(previousTitle) }
+}
 
 private fun BrowserTabStore.ensureActive(nowMs: Long): BrowserTabStore {
     val active = tabs.firstOrNull { it.id == activeId } ?: tabs.first()

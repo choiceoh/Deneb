@@ -35,7 +35,8 @@
  *
  * The native bridge contract:
  *   window.DenebTranslateBridge.translate(requestId, jsonSegments)
- *     → native calls miniapp.web.translate, then
+ *     → native acknowledges execution with beginBatch(requestId), calls
+ *       miniapp.web.translate, then
  *   window.DenebTranslate.applyBatch(requestId, jsonTranslations)
  */
 (function () {
@@ -49,8 +50,13 @@
   var persistentStores = {}; // localStorageKey -> cache store
   var persistentDirtyStores = {};
   var inFlight = {};         // tid -> true while a native/gateway batch is pending
+  var failed = {};           // tid -> true after a terminal batch failure
+  var chunkResults = {};     // tid -> { count, values } for split long text nodes
   var pending = {};          // requestId -> [{ tids, ... }]
+  var pendingDeadlines = {}; // requestId -> execution timeout (queue wait is untimed)
   var nextRequestId = 1;
+  var requestPrefix = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  var nextChunkToken = 1;
   var enabled = false; // OFF by default — the native chrome calls setEnabled(true) per the toggle
   var debounceTimer = null;
   var viewportTimer = null;
@@ -61,9 +67,18 @@
   var MAX_PERSISTENT_CACHE_ENTRIES = 700;
   var MAX_SITE_CACHE_ENTRIES = 1600;
   var MAX_GLOBAL_CACHE_ENTRIES = 1000;
-  var MAX_CONTEXT_CHARS = 420;
+  var MAX_CONTEXT_CHARS = 300;
   var MAX_GROUP_PARTS = 8;
-  var MAX_GROUP_CHARS = 800;
+  var MAX_GROUP_CHARS = 720;
+  // Keep producer and native/gateway validation aligned. The lower producer
+  // budget leaves room for UTF-16/rune differences and JSON escaping.
+  var MAX_SEGMENT_PAYLOAD_CHARS = 1100;
+  var MAX_BATCH_PAYLOAD_CHARS = 20000;
+  var MAX_BATCH_JSON_CHARS = 44000;
+  var MAX_LONG_TEXT_CHUNK_CHARS = 900;
+  // Starts only after the native queue dequeues this batch. The gateway client
+  // permits a 180s RPC, so leave cleanup margin beyond that transport deadline.
+  var NATIVE_BATCH_TIMEOUT_MS = 210000;
   var VIEWPORT_MARGIN = 900;
   // Max forced-layout (getBoundingClientRect) measurements per dispatch pass, so a
   // large still-untranslated page can't reflow-storm on every scroll tick. Covers
@@ -414,6 +429,7 @@
   }
 
   function unitPayload(unit) {
+    if (unit && typeof unit.payload === 'string') return unit.payload;
     if (!unit || unit.tids.length === 0) return '';
     if (unit.tids.length === 1) return segmentPayload(nodes[unit.tids[0]]);
     var parts = [];
@@ -437,6 +453,94 @@
     } catch (e) {
       return segmentPayload(nodes[unit.tids[0]]);
     }
+  }
+
+  function splitLongText(text) {
+    var source = String(text || '');
+    var chunks = [];
+    var joiners = [];
+    var start = 0;
+    while (start < source.length) {
+      var end = Math.min(source.length, start + MAX_LONG_TEXT_CHUNK_CHARS);
+      if (end < source.length) {
+        var minimum = start + Math.floor(MAX_LONG_TEXT_CHUNK_CHARS / 2);
+        for (var boundary = end; boundary > minimum; boundary--) {
+          if (/\s/.test(source.charAt(boundary))) { end = boundary; break; }
+        }
+        // Never bisect a UTF-16 surrogate pair on a hard boundary.
+        var before = source.charCodeAt(end - 1);
+        var after = source.charCodeAt(end);
+        if (before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF) end--;
+      }
+      var rawChunk = source.slice(start, end);
+      var chunk = rawChunk.trim();
+      var nextStart = end;
+      while (nextStart < source.length && /\s/.test(source.charAt(nextStart))) nextStart++;
+      if (chunk) {
+        chunks.push(chunk);
+        // Normalize a real source whitespace boundary to one space, but preserve
+        // a hard split as empty so CJK/unspaced text is not corrupted on rejoin.
+        joiners.push(nextStart > end || /\s$/.test(rawChunk) ? ' ' : '');
+      }
+      start = nextStart;
+    }
+    return { chunks: chunks, joiners: joiners };
+  }
+
+  function expandShipUnit(unit) {
+    var payload = unitPayload(unit);
+    if (payload.length <= MAX_SEGMENT_PAYLOAD_CHARS) {
+      unit.payload = payload;
+      return [unit];
+    }
+    // A grouped context envelope can overflow even when its raw parts are safe.
+    // Split it into single-node units and let each one shed context if needed.
+    if (unit.tids.length > 1) {
+      var singles = [];
+      for (var i = 0; i < unit.tids.length; i++) {
+        var rec = nodes[unit.tids[i]];
+        if (!rec) continue;
+        var expanded = expandShipUnit({ key: '', tids: [unit.tids[i]], chars: rec.original.length, primary: !!rec.primary });
+        for (var j = 0; j < expanded.length; j++) singles.push(expanded[j]);
+      }
+      return singles;
+    }
+    var tid = unit.tids[0];
+    var record = nodes[tid];
+    if (!record) return [];
+    var raw = String(record.original || '');
+    if (raw.length <= MAX_SEGMENT_PAYLOAD_CHARS) {
+      unit.payload = raw; // Context is optional; source text is not.
+      return [unit];
+    }
+    var split = splitLongText(raw);
+    var chunks = split.chunks;
+    if (!chunks.length) return [];
+    var chunkToken = nextChunkToken++;
+    chunkResults[tid] = { count: chunks.length, values: [], joiners: split.joiners, token: chunkToken };
+    var out = [];
+    for (var c = 0; c < chunks.length; c++) {
+      out.push({
+        key: '',
+        tids: [tid],
+        chars: chunks[c].length,
+        primary: !!record.primary,
+        chunkIndex: c,
+        chunkCount: chunks.length,
+        chunkToken: chunkToken,
+        payload: chunks[c]
+      });
+    }
+    return out;
+  }
+
+  function expandShipUnits(units) {
+    var out = [];
+    for (var i = 0; i < units.length; i++) {
+      var expanded = expandShipUnit(units[i]);
+      for (var j = 0; j < expanded.length; j++) out.push(expanded[j]);
+    }
+    return out;
   }
 
   function unitTids(units) {
@@ -464,7 +568,11 @@
   function applyTranslationToTid(tid, translated) {
     var rec = nodes[tid];
     if (!rec) return;
-    if (typeof translated !== 'string' || translated === rec.original) return;
+    if (typeof translated !== 'string') {
+      failed[tid] = true;
+      return;
+    }
+    delete failed[tid];
     rememberTranslation(rec.original, translated);
     replace(rec, translated);
   }
@@ -681,6 +789,8 @@
     if (applied != null && cur === applied) return;
     if (!translatable(cur) || skipParent(n) || hiddenParent(n)) return;
     delete inFlight[tid];
+    delete failed[tid];
+    delete chunkResults[tid];
     rec.original = cur;
     rec.context = null;
     fresh.push(tid);
@@ -822,6 +932,8 @@
       if (!n || !n.isConnected) {
         delete nodes[tid];
         delete inFlight[tid];
+        delete failed[tid];
+        delete chunkResults[tid];
       }
     }
   }
@@ -849,6 +961,24 @@
     return tr != null && rec.node.nodeValue === tr;
   }
 
+  function reportProgress() {
+    if (!enabled || !window.DenebTranslateBridge || !window.DenebTranslateBridge.onProgress) return;
+    var total = 0;
+    var applied = 0;
+    var waiting = 0;
+    var failedCount = 0;
+    for (var tid in nodes) {
+      if (!nodes.hasOwnProperty(tid)) continue;
+      total++;
+      if (isApplied(nodes[tid])) applied++;
+      else if (inFlight[tid]) waiting++;
+      else if (failed[tid]) failedCount++;
+    }
+    try {
+      window.DenebTranslateBridge.onProgress(total, applied, waiting, failedCount);
+    } catch (e) {}
+  }
+
   function dispatch(tids) {
     if (!enabled || !tids.length) return;
     if (!window.DenebTranslateBridge) return;
@@ -859,6 +989,7 @@
       var rec = nodes[tids[i]];
       if (!rec) continue;
       if (inFlight[tids[i]] || isApplied(rec)) continue;
+      delete failed[tids[i]];
       var cached = cachedTranslation(rec.original);
       if (cached != null) { replace(rec, cached); continue; }
       inFlight[tids[i]] = true;
@@ -866,6 +997,7 @@
       if (batch.length >= MAX_SEGMENTS_PER_BATCH) { ship(batch); batch = []; }
     }
     if (batch.length) ship(batch);
+    reportProgress();
   }
 
   function clearInFlight(tids) {
@@ -919,12 +1051,36 @@
   }
 
   function ship(tids) {
-    var units = buildShipUnits(tids);
+    var units = expandShipUnits(buildShipUnits(tids));
     if (!units.length) {
       clearInFlight(tids);
+      reportProgress();
       return;
     }
-    var rid = String(nextRequestId++);
+    var batch = [];
+    var chars = 0;
+    var jsonChars = 2;
+    for (var i = 0; i < units.length; i++) {
+      var payload = unitPayload(units[i]);
+      var payloadChars = payload.length;
+      var encodedChars = JSON.stringify(payload).length + (batch.length ? 1 : 0);
+      if (batch.length && (batch.length >= MAX_SEGMENTS_PER_BATCH || chars + payloadChars > MAX_BATCH_PAYLOAD_CHARS || jsonChars + encodedChars > MAX_BATCH_JSON_CHARS)) {
+        shipUnits(batch);
+        batch = [];
+        chars = 0;
+        jsonChars = 2;
+        encodedChars = JSON.stringify(payload).length;
+      }
+      batch.push(units[i]);
+      chars += payloadChars;
+      jsonChars += encodedChars;
+    }
+    if (batch.length) shipUnits(batch);
+    reportProgress();
+  }
+
+  function shipUnits(units) {
+    var rid = requestPrefix + '-' + String(nextRequestId++);
     pending[rid] = units;
     var segments = [];
     for (var i = 0; i < units.length; i++) segments.push(unitPayload(units[i]));
@@ -932,20 +1088,74 @@
       window.DenebTranslateBridge.translate(rid, JSON.stringify(segments));
     } catch (e) {
       delete pending[rid];
-      clearInFlight(unitTids(units));
+      failUnits(units, false);
     }
-    window.setTimeout(function () {
-      if (!pending[rid]) return;
-      delete pending[rid];
-      clearInFlight(unitTids(units));
-    }, 45000);
   }
 
-  function rejectBatch(rid) {
+  function clearBatchDeadline(rid) {
+    var timer = pendingDeadlines[rid];
+    if (!timer) return;
+    window.clearTimeout(timer);
+    delete pendingDeadlines[rid];
+  }
+
+  // Native calls this only after a queued request acquires an execution slot.
+  // Long queue waits therefore cannot expire a batch before its RPC even starts.
+  function beginBatch(rid) {
+    if (!pending[rid] || pendingDeadlines[rid]) return;
+    pendingDeadlines[rid] = window.setTimeout(function () {
+      delete pendingDeadlines[rid];
+      if (pending[rid]) rejectBatch(rid, false);
+    }, NATIVE_BATCH_TIMEOUT_MS);
+  }
+
+  function failUnits(units, retryable) {
+    var tids = unique(unitTids(units));
+    for (var i = 0; i < tids.length; i++) {
+      delete inFlight[tids[i]];
+      delete chunkResults[tids[i]];
+      if (retryable) delete failed[tids[i]];
+      else failed[tids[i]] = true;
+    }
+    reportProgress();
+    if (retryable) {
+      window.setTimeout(function () {
+        if (enabled) dispatchPrioritized(tids);
+      }, 350);
+    }
+  }
+
+  function rejectBatch(rid, retryable) {
     var units = pending[rid];
+    clearBatchDeadline(rid);
     if (!units) return;
     delete pending[rid];
-    clearInFlight(unitTids(units));
+    failUnits(units, !!retryable);
+  }
+
+  // Navigation cancellation is not a translation failure. Clear bookkeeping
+  // silently so an aborted load can translate again on the next scan/toggle,
+  // while a real navigation cannot leak retries or progress into the new page.
+  function cancelBatch(rid) {
+    var units = pending[rid];
+    clearBatchDeadline(rid);
+    if (!units) return;
+    delete pending[rid];
+    var tids = unique(unitTids(units));
+    for (var i = 0; i < tids.length; i++) {
+      delete inFlight[tids[i]];
+      delete chunkResults[tids[i]];
+      delete failed[tids[i]];
+    }
+  }
+
+  function suspendForNavigation() {
+    enabled = false;
+    var requestIds = [];
+    for (var rid in pending) {
+      if (pending.hasOwnProperty(rid)) requestIds.push(rid);
+    }
+    for (var i = 0; i < requestIds.length; i++) cancelBatch(requestIds[i]);
   }
 
   function replace(rec, translated) {
@@ -994,31 +1204,59 @@
   function applyBatch(requestId, translationsJson) {
     var units = pending[requestId];
     delete pending[requestId];
+    clearBatchDeadline(requestId);
     if (!units) return;
-    var tids = unitTids(units);
     var translations;
     try {
       translations = JSON.parse(translationsJson);
     } catch (e) {
-      clearInFlight(tids);
+      failUnits(units, false);
       return;
     }
     if (!Array.isArray(translations) || translations.length !== units.length) {
-      clearInFlight(tids);
+      failUnits(units, false);
       return;
     }
-    clearInFlight(tids);
     for (var i = 0; i < units.length; i++) {
       var unit = units[i];
       var tr = translations[i];
+      if (typeof unit.chunkIndex === 'number') {
+        var chunkTid = unit.tids[0];
+        var accumulator = chunkResults[chunkTid];
+        if (!accumulator || accumulator.count !== unit.chunkCount || accumulator.token !== unit.chunkToken || typeof tr !== 'string') continue;
+        accumulator.values[unit.chunkIndex] = tr;
+        var complete = true;
+        for (var c = 0; c < accumulator.count; c++) {
+          if (typeof accumulator.values[c] !== 'string') { complete = false; break; }
+        }
+        if (complete) {
+          var chunkRec = nodes[chunkTid];
+          var combined = accumulator.values[0] || '';
+          for (var part = 1; part < accumulator.count; part++) {
+            combined += (accumulator.joiners[part - 1] || '') + accumulator.values[part];
+          }
+          delete chunkResults[chunkTid];
+          delete inFlight[chunkTid];
+          if (chunkRec) applyTranslationToTid(chunkTid, restoreOriginalSpacing(chunkRec.original, combined));
+        }
+        continue;
+      }
       if (unit.tids.length === 1) {
+        delete inFlight[unit.tids[0]];
         applyTranslationToTid(unit.tids[0], tr);
         continue;
       }
       var parts = translatedParts(tr, unit.tids.length);
-      if (!parts) continue;
-      for (var j = 0; j < unit.tids.length; j++) applyTranslationToTid(unit.tids[j], parts[j]);
+      if (!parts) {
+        failUnits([unit], false);
+        continue;
+      }
+      for (var j = 0; j < unit.tids.length; j++) {
+        delete inFlight[unit.tids[j]];
+        applyTranslationToTid(unit.tids[j], parts[j]);
+      }
     }
+    reportProgress();
   }
 
   function scan(root) {
@@ -1076,6 +1314,7 @@
           window.DenebTranslateBridge.onEnable(n);
         }
       } catch (e) {}
+      reportProgress();
       return;
     }
     // Restore originals.
@@ -1162,8 +1401,11 @@
 
   window.DenebTranslate = {
     __installed: true,
+    beginBatch: beginBatch,
     applyBatch: applyBatch,
     rejectBatch: rejectBatch,
+    cancelBatch: cancelBatch,
+    suspendForNavigation: suspendForNavigation,
     setEnabled: setEnabled,
     onLocationChange: onLocationChange,
     start: function () {
