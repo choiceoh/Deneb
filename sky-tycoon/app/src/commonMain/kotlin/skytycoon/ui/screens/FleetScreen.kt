@@ -135,10 +135,11 @@ private fun OwnedFleet(vm: GameViewModel, modifier: Modifier) {
 private fun AircraftMarket(vm: GameViewModel, modifier: Modifier) {
     val s = vm.game
     var usedMode by remember { mutableStateOf(false) }
-    val catalog = if (usedMode) AircraftCatalog.usedFor(s.year) else AircraftCatalog.newFor(s.year)
+    // 판이 끝나면 turn 이 totalTurns 라 s.year 는 플레이하지도 않은 다음 해가 된다.
+    val catalog = if (usedMode) AircraftCatalog.usedFor(s.displayYear) else AircraftCatalog.newFor(s.displayYear)
 
     Column(modifier) {
-        Panel(title = "기재 시장 · ${s.year}년") {
+        Panel(title = "기재 시장 · ${s.displayYear}년") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("신조기", selected = !usedMode, onClick = { usedMode = false })
                 Chip("중고기", selected = usedMode, accent = Amber, onClick = { usedMode = true })

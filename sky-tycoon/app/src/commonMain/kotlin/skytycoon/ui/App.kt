@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
@@ -187,7 +188,16 @@ private fun TopStatusBar(vm: GameViewModel, wide: Boolean) {
         }
     }
 
-    Column(Modifier.fillMaxWidth().background(InkPanel).padding(horizontal = 14.dp, vertical = 8.dp)) {
+    // 안드로이드는 enableEdgeToEdge 로 그리므로, 직접 만든 상단 바는 상태표시줄 인셋을
+    // 스스로 챙겨야 한다. 안 그러면 시계·노치가 회사명과 분기 진행 버튼을 덮는다
+    // (Material TopAppBar 와 달리 이 Column 은 인셋을 모른다). 데스크톱에서는 0 이다.
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(InkPanel)
+            .statusBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(player.name, color = TextHigh, fontSize = 16.sp, fontWeight = FontWeight.Bold)

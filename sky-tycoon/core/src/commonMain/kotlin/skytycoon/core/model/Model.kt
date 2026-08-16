@@ -159,6 +159,14 @@ data class Plane(
     val airlineId: String,
     val ageQuarters: Int,
     val routeId: Int? = null,
+    /**
+     * 장부가 배율 — 자산가치를 "잔존가치 × 이 값"으로 잡는다.
+     *
+     * 중고기는 잔존가치보다 싸게(USED_PRICE_MUL) 사는데 장부는 잔존가치 그대로 잡으면,
+     * 사는 순간 차액만큼 자기자본이 공짜로 생긴다. 매물이 무한하니 그걸로 차입 한도와
+     * 최종 순위를 부풀릴 수 있다. 산 값 기준을 기체에 새겨 두면 그 구멍이 막힌다.
+     */
+    val valueMul: Double = 1.0,
 )
 
 @Serializable

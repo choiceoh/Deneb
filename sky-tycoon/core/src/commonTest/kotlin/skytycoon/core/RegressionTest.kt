@@ -147,6 +147,28 @@ class RegressionTest {
     }
 
     @Test
+    fun `중고기를 사도 자기자본이 공짜로 생기지 않는다`() {
+        // 잔존가치로 장부를 잡으면 산 값과의 차액(28%)이 그대로 자본이 된다. 매물이
+        // 무한하니 마지막 분기에 사재기만 해도 차입 한도와 최종 순위가 부풀려진다.
+        var s = fresh().let { it.copy(turn = (1980 - it.startYear) * 4) }
+        val type = AircraftCatalog.usedFor(s.year).first()
+        s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }
+
+        val before = Economics.equity(s, s.player)
+        val cash = s.player.cash
+        val r = Actions.execute(s, Command.BuyAircraft("hanseong", type.id, 3, used = true))
+        assertTrue(r.ok, r.message)
+
+        val spent = cash - r.state.player.cash
+        val gained = Economics.equity(r.state, r.state.player) - before
+        assertTrue(spent > 0.0, "중고기를 샀는데 돈이 안 나갔다")
+        assertTrue(
+            gained <= 1.0,
+            "중고기 ${(spent / 1e6).toInt()}M 를 샀는데 기업가치가 ${(gained / 1e6).toInt()}M 늘었다",
+        )
+    }
+
+    @Test
     fun `잔존가치는 연 단위로 감가한다`() {
         // 분기마다 깎으면 15년 만에 하한까지 떨어져 기업가치가 통째로 무너진다.
         val at15 = AircraftCatalog.residualRatio(15 * 4)

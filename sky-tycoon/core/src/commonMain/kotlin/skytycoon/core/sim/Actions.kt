@@ -365,7 +365,14 @@ object Actions {
             if (airline.cash < total) return ActionResult.fail(state, "중고기 구입 자금이 부족합니다.")
             var nextId = state.nextId
             val newPlanes = List(cmd.count) {
-                Plane(id = nextId++, typeId = type.id, airlineId = airline.id, ageQuarters = age)
+                // 산 값 그대로 장부에 올린다 — 잔존가치로 잡으면 사는 순간 차액이 자본으로 둔갑한다.
+                Plane(
+                    id = nextId++,
+                    typeId = type.id,
+                    airlineId = airline.id,
+                    ageQuarters = age,
+                    valueMul = Balance.USED_PRICE_MUL,
+                )
             }
             val next = state
                 .copy(planes = state.planes + newPlanes, nextId = nextId)

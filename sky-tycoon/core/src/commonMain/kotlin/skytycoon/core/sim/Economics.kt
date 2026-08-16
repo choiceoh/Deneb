@@ -175,7 +175,7 @@ object Economics {
 
     /** 보유 기재의 시장가 합 (잔존가치 기준). */
     fun fleetValue(planes: List<Plane>): Double = planes.sumOf {
-        AircraftCatalog[it.typeId].price * AircraftCatalog.residualRatio(it.ageQuarters)
+        AircraftCatalog[it.typeId].price * AircraftCatalog.residualRatio(it.ageQuarters) * it.valueMul
     }
 
     /** 슬롯 1개 매입가 — 남은 슬롯이 적을수록 급등한다. */

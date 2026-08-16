@@ -116,7 +116,8 @@ fun SetupScreen(
                 for (sc in Scenarios.all) {
                     SelectCard(
                         selected = scenario == sc.id,
-                        title = "${sc.name} · ${sc.startYear}–${sc.startYear + sc.years}",
+                        // 마지막으로 플레이하는 해는 startYear + years - 1 이다 (GameState.endYear 와 같은 계산).
+                        title = "${sc.name} · ${sc.startYear}–${sc.startYear + sc.years - 1}",
                         body = sc.desc,
                         onClick = { scenario = sc.id },
                     )
