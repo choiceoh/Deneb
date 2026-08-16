@@ -693,6 +693,25 @@ class RegressionTest {
     }
 
     @Test
+    fun `대출 한도까지 당겨 쓴 회사도 소수 지분은 살 수 있다`() {
+        // 인수가 아닌 평범한 매수까지 차입 여력으로 막으면 안 된다 — 빚이 늘지 않는 거래다.
+        var s = fresh()
+        val targetId = s.livingAirlines.first { it.id != "hanseong" }.id
+        s = s.withAirline2("hanseong") {
+            it.copy(cash = 5e8, debt = Actions.debtCapacity(s, it) * 1.2)
+        }
+
+        val block = s.airline(targetId).shares * 0.02
+        assertTrue(
+            Stock.canAfford(s, "hanseong", targetId, block),
+            "빚이 늘지도 않는 소수 지분 매수를 차입 여력으로 막았다",
+        )
+        val r = Actions.execute(s, Command.TradeShares("hanseong", targetId, block))
+        assertTrue(r.ok, r.message)
+        assertTrue(Stock.affordableShares(s, "hanseong", targetId) > 0.0, "버튼이 아무 물량도 제안하지 않는다")
+    }
+
+    @Test
     fun `연쇄 인수로 물려받는 빚까지 함께 따진다`() {
         var s = fresh()
         val rivals = s.livingAirlines.filter { it.id != "hanseong" }

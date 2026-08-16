@@ -99,6 +99,10 @@ object Stock {
         val settled = settleTakeovers(applyPurchase(state, buyerId, targetId, shares, cost))
         val after = settled.airlineOrNull(buyerId) ?: return false
         if (!after.alive) return false
+        // 인수 때문에 **새로 진 빚**만 따진다. 무조건 재면, 이미 대출 한도까지 당겨 쓴
+        // 회사가 현금은 멀쩡한데 소수 지분조차 못 사게 된다 (매집 프리미엄이 자기자본을
+        // 깎아 한도가 도리어 줄어드는 탓).
+        if (after.debt <= buyer.debt) return true
         // 인수로 자산이 늘면 차입 여력도 함께 늘어난다 — 그 늘어난 여력을 기준으로 잰다.
         return after.debt <= Actions.debtCapacity(settled, after)
     }
