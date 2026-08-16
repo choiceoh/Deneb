@@ -72,6 +72,7 @@ attempt; it does not mean the change shipped. Delivery advances through
 | `runtime_error_mining.go` | L4 proactive source — recurring code-actionable errors → propose-only scope=code candidates |
 | `retry_correction_miner.go` | Deterministic transcript mining of failed-then-successful tool retries into `tool_retry` evidence clusters for the sweep (EMG adoption, 2026-07-21) |
 | `genesis/rsi_status.go` | RSI loop-status snapshot (`miniapp.rsi.status`) — L1–L4 layer state classification |
+| `judge_accuracy.go` | P3 planted-defect + false-reject lane. When the highest probe rung (reorder) saturates, `Run` thins to one pair per class (canary) instead of replaying the full catalog; a miss re-opens the corpus. |
 
 ## Surface Tiers (`surfaces/surfaces.go`)
 

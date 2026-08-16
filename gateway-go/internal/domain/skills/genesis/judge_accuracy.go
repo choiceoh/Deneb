@@ -427,6 +427,16 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 			}
 		}
 	}
+	// Highest planted rung outgrown: 52 all-caught pairs are not
+	// measurement, they are token burn. Keep one pair per class so a
+	// regression re-opens the full corpus; false-reject mining still runs.
+	ceiling := t.probeCeilingSaturated(rec.JudgeVersion)
+	if ceiling {
+		before := len(pairs)
+		pairs = thinPairsToCanary(pairs)
+		logger.Info("judge-accuracy: highest probe tier saturated — canary only",
+			"pairsBefore", before, "pairsAfter", len(pairs), "judgeVersion", rec.JudgeVersion)
+	}
 	verdictErrors, consecutiveErrors := 0, 0
 	for _, pair := range pairs {
 		if ctx.Err() != nil {
@@ -488,7 +498,7 @@ func (t *JudgeAccuracyTask) Run(ctx context.Context) error {
 	logger.Info("judge-accuracy: lane run ledgered (P3 label food)",
 		"pairs", rec.Pairs, "correct", rec.Correct, "misses", len(rec.Misses),
 		"falseRejects", len(rec.FalseRejects), "judgeVersion", rec.JudgeVersion,
-		"weakenTier", escalated, "verdictErrors", verdictErrors)
+		"weakenTier", escalated, "ceilingCanary", ceiling, "verdictErrors", verdictErrors)
 	// Heal storm-poisoned judge adoptions on the P3 cadence (hours), not the
 	// meta slow-loop (days) — once usable probes clear, undo miss-cited
 	// tighten patches without waiting for the next evaluator epoch.
@@ -524,6 +534,28 @@ func (t *JudgeAccuracyTask) exclusivityTierUnlocked(judgeVersion string) bool {
 // means the judge has stopped being scorable by "was anything removed?".
 func (t *JudgeAccuracyTask) reorderTierUnlocked(judgeVersion string) bool {
 	return t.tierSaturated(judgeVersion, exclusivityJudgeDegradations)
+}
+
+// probeCeilingSaturated reports that the incumbent has outgrown the highest
+// planted rung (tier 5 reorder). Full-corpus replay then produces no labels.
+func (t *JudgeAccuracyTask) probeCeilingSaturated(judgeVersion string) bool {
+	return t.tierSaturated(judgeVersion, reorderJudgeDegradations)
+}
+
+// thinPairsToCanary keeps the first pair of each degradation class so a
+// saturated ceiling still watches for regression without replaying the
+// whole catalog.
+func thinPairsToCanary(pairs []judgeBenchPair) []judgeBenchPair {
+	seen := make(map[string]bool, len(pairs))
+	out := make([]judgeBenchPair, 0, 16)
+	for _, p := range pairs {
+		if seen[p.Degradation] {
+			continue
+		}
+		seen[p.Degradation] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // tierSaturated reports whether the newest judgeEscalationWindow lane runs

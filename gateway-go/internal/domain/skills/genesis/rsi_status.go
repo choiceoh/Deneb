@@ -66,14 +66,19 @@ var rsiSubtleDegradationClasses = map[string]bool{
 	"step-reorder":     true, "contradiction-example": true,
 }
 
-// rsiWeakenDegradationClasses is the escalated tier subset — seeing one in
-// the ledger means the lane already probes above the drop tier. It includes
-// tier 4 so the "at the ceiling" diagnosis keeps meaning the CURRENT top rung
-// rather than whichever rung was top when it was written.
+// rsiWeakenDegradationClasses is the escalated mid-ladder subset — seeing
+// one means the lane already probes above the drop tier. Top-rung classes
+// live in rsiTopDegradationClasses so the ceiling diagnosis can name
+// reorder instead of forever saying "약화 프로브".
 var rsiWeakenDegradationClasses = map[string]bool{
 	"imperative-weaken": true, "scope-narrow": true,
 	"exclusivity-drop": true,
-	"step-reorder":     true, "contradiction-example": true,
+}
+
+// rsiTopDegradationClasses is the highest planted rung (tier 5). Saturation
+// here is the end of synthetic fuel, not a score.
+var rsiTopDegradationClasses = map[string]bool{
+	"step-reorder": true, "contradiction-example": true,
 }
 
 // rsiDispatchSources is the canonical set of accepted candidate sources: a code
@@ -299,7 +304,7 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 	cutoff := time.Now().Add(-7 * 24 * time.Hour).UnixMilli()
 	runs, misses, falseRejects := 0, 0, 0
 	var probeOutcomes []string
-	subtleDeployed, weakenDeployed := false, false
+	subtleDeployed, weakenDeployed, topTierDeployed := false, false, false
 	for _, r := range records {
 		if r.CreatedAt < cutoff {
 			continue
@@ -334,6 +339,9 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 			if rsiWeakenDegradationClasses[cls] {
 				weakenDeployed = true
 			}
+			if rsiTopDegradationClasses[cls] {
+				topTierDeployed = true
+			}
 		}
 	}
 	if runs == 0 && operatorLabels == 0 {
@@ -359,6 +367,9 @@ func (t *Tracker) rsiAssessL3() rsiLayer {
 	case !subtleDeployed:
 		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("%d회 실행; 판정자가 명백한 결함은 모두 잡았고 미묘 프로브는 아직 원장에 없습니다", runs)
+	case topTierDeployed:
+		base.State = rsiStateDataGated
+		base.Diagnosis = fmt.Sprintf("최고 티어(재정렬)까지 %d회 실행 모두 잡았습니다 — 합성 프로브는 포화입니다. 실전·운영자 라벨이 연료입니다", runs)
 	case weakenDeployed:
 		base.State = rsiStateDataGated
 		base.Diagnosis = fmt.Sprintf("격상된 약화 프로브까지 %d회 실행 모두 잡았습니다 — 판정자가 현행 프로브 최고 티어에서 강합니다", runs)
