@@ -313,13 +313,24 @@ func (wd *WikiDreamer) llmRequest(system, prompt string, maxTokens int) llm.Chat
 		maxTokens *= 4
 	}
 	systemJSON, _ := json.Marshal(system)
-	return llm.ChatRequest{
+	req := llm.ChatRequest{
 		Model:     wd.model,
 		System:    llm.FlexibleFromRaw(systemJSON),
 		Messages:  []llm.Message{llm.NewTextMessage("user", prompt)},
 		MaxTokens: maxTokens,
 		ExtraBody: flexibleExtraBody(wd.llmExtraBody),
 	}
+	// A headroom-only shape means the model emits reasoning but has no
+	// chat-template off-switch. These dreamer calls are bounded extraction and
+	// synthesis jobs, so ask the transport to disable thinking explicitly while
+	// retaining the larger budget as a fallback for models that cannot truly
+	// switch it off. On GLM behind wormhole this becomes reasoning_effort=low,
+	// which wormhole translates to thinking.type=disabled; without it GLM spent
+	// the entire budget on reasoning and returned empty content.
+	if wd.llmExtraBody == nil && wd.synthesisMaxTokens > 0 {
+		req.Thinking = &llm.ThinkingConfig{Type: "disabled"}
+	}
+	return req
 }
 
 // synthesisBudget returns the synthesis call's MaxTokens (override or default).

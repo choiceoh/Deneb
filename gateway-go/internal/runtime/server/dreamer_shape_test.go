@@ -74,6 +74,16 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 		}
 	})
 
+	t.Run("glm behind wormhole gets native reasoning headroom", func(t *testing.T) {
+		extra, synthMax := shape("wormhole/glm-5.3")
+		if extra != nil {
+			t.Errorf("extra = %v, want nil so the typed thinking-off signal reaches wormhole", extra)
+		}
+		if synthMax != 16384 {
+			t.Errorf("synthMax = %d, want 16384", synthMax)
+		}
+	})
+
 	t.Run("reasoning model with no off-switch gets budget headroom", func(t *testing.T) {
 		extra, synthMax := shape("zai/deepseek-r1")
 		if extra != nil {

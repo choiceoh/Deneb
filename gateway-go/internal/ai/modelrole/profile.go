@@ -42,6 +42,14 @@ func ProfileFor(model string) Profile {
 		// mis-ordered the hub fallback chain.
 		return Profile{Reasoning: true}
 
+	case strings.Contains(m, "glm-5"), strings.Contains(m, "glm5"):
+		// GLM-5.x emits a separate reasoning channel. Marking it as reasoning
+		// keeps raw structured-output callers from attaching the vLLM-only
+		// enable_thinking kwarg and lets them request transport-native thinking
+		// disablement instead (wormhole translates reasoning_effort=low to
+		// GLM's thinking.type=disabled dialect).
+		return Profile{Reasoning: true}
+
 	case strings.Contains(m, "qwen3") || strings.Contains(m, "qwen36") || strings.Contains(m, "qwen35"):
 		// Qwen3 family: recommended sampling temp 0.7 / top_p 0.8 / top_k 20
 		// (qwen.readthedocs.io). The explicit *-instruct-* variants ship with

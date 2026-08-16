@@ -22,7 +22,7 @@ func TestIsReasoningModelReturnsPerModelClassification(t *testing.T) {
 		{"deepseek-reasoner", true},
 		{"gpt-oss-20b", true},
 		{"gemma4", false},
-		{"glm-5-turbo", false},
+		{"glm-5-turbo", true},
 		{"qwen2.5-72b-instruct", false},
 		{"", false},
 	}
