@@ -12,6 +12,7 @@ Go HTTP + SSE gateway server — the primary Deneb runtime.
 | `make go-vet` | Run `go vet` |
 | `make go-fmt` | Check formatting |
 | `scripts/audit/deadcode-audit.sh` | Advisory dead-code diff vs checked-in baseline (run from repo root; `--update` needs operator approval) |
+| `scripts/audit/todo-audit.sh` | Advisory TODO/FIXME/HACK/XXX ratchet vs checked-in baseline (comment-anchored; repo-wide; `--update` needs operator approval) |
 
 ## Directory Map
 
@@ -94,4 +95,3 @@ Re-registering an existing tool name **silently replaces** the prior definition
 and logs a `slog.Warn` so collisions are visible in the operator log. If a plugin
 might collide with a core tool name, **namespace it** (e.g. `honcho:search`)
 rather than relying on last-writer-wins.
-

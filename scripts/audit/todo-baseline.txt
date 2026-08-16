@@ -1,0 +1,12 @@
+# todo-baseline.txt — accepted markers of scripts/audit/todo-audit.sh.
+# Format: <path> :: <line-text>, sorted. Regenerate with --update (operator
+# approval required per docs/agent-rules/testing.md). Line numbers are
+# deliberately absent so edits that shift lines don't churn this file.
+#
+# Keep-policy: markers stay here only if they are (a) deliberate placeholders,
+# (b) backed by a tracked issue, or (c) pending an operator decision. New
+# markers must clear an existing one or be approved here.
+client-android/app/composeApp/src/iosMain/kotlin/ai/deneb/tools/CalendarPermissionController.ios.kt :: // TODO: Implement using EventKit EKEventStore.authorizationStatus
+client-android/app/composeApp/src/iosMain/kotlin/ai/deneb/tools/CalendarPermissionController.ios.kt :: // TODO: Implement using EventKit EKEventStore.requestAccess
+scripts/audit/codebase-health.py :: # --- debt (TODO/FIXME/HACK/XXX + naked panics per KLOC) ---------------------- #
+scripts/audit/codebase-health.py :: # debt: TODO/FIXME/HACK/XXX + naked panics per KLOC; DEBT_BUDGET tolerated.
