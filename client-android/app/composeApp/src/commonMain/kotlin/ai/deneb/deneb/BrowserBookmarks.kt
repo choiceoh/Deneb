@@ -78,8 +78,11 @@ internal fun canBookmarkUrl(url: String): Boolean {
     return authority.isNotBlank()
 }
 
-/** No http(s) page yet — show the start surface instead of a blank WebView. */
-internal fun browserShowsStart(url: String, currentUrl: String = url): Boolean = !canBookmarkUrl(currentUrl.ifBlank { url })
+/** No renderable page yet — show the start surface instead of a blank WebView. */
+internal fun browserShowsStart(url: String, currentUrl: String = url): Boolean {
+    if (canBookmarkUrl(currentUrl) || canBookmarkUrl(url)) return false
+    return urlScheme(currentUrl) !in setOf("blob", "data")
+}
 
 /**
  * Resolve the browser entry URL: explicit nav route, else last http(s) page,

@@ -74,6 +74,9 @@ class BrowserBookmarksTest {
         assertTrue(browserShowsStart("", "about:blank"))
         assertFalse(browserShowsStart("https://example.com"))
         assertFalse(browserShowsStart("https://example.com", ""))
+        assertFalse(browserShowsStart("https://example.com", "about:blank"))
+        assertFalse(browserShowsStart("", "blob:https://example.com/result"))
+        assertFalse(browserShowsStart("", "data:text/plain,result"))
         assertTrue(browserShowsStart("", "javascript:alert(1)"))
     }
 }

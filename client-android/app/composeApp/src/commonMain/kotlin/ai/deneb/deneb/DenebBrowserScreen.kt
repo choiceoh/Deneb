@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -120,6 +121,10 @@ fun DenebBrowserScreen(
         }
     }
     var tabStore by remember { mutableStateOf(initialStore) }
+    var showBookmarks by remember { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
+    var showTabs by remember { mutableStateOf(false) }
+    var pendingTabUrl by remember { mutableStateOf<String?>(null) }
 
     fun currentStore(): BrowserTabStore = BrowserTabStore(
         activeId = tabStore.activeId,
@@ -151,20 +156,31 @@ fun DenebBrowserScreen(
         persistStore(next)
     }
 
+    fun openInTab(target: String) {
+        val before = currentStore()
+        if (browserTabLimitBlocks(before, target)) {
+            pendingTabUrl = target
+            showTabs = true
+            return
+        }
+        pendingTabUrl = null
+        switchStore(
+            resolveBrowserTabStore(
+                stored = before,
+                explicitUrl = target,
+                fallbackUrl = "",
+                translateDefault = appSettings.isBrowserTranslateEnabled(),
+            ),
+        )
+    }
+
     val activeRuntime = tabRuntimes[tabStore.activeId] ?: error("browser active tab missing")
     val state = activeRuntime.state
 
     LaunchedEffect(url) {
         // A navigation route can change while this screen stays composed. Resolve
         // it into the existing tab set so background WebView Bundles survive.
-        switchStore(
-            resolveBrowserTabStore(
-                stored = currentStore(),
-                explicitUrl = url,
-                fallbackUrl = "",
-                translateDefault = appSettings.isBrowserTranslateEnabled(),
-            ),
-        )
+        if (url.isNotBlank()) openInTab(url)
     }
     LaunchedEffect(state.translateEnabled) {
         if (state.translateEnabled != appSettings.isBrowserTranslateEnabled()) {
@@ -185,7 +201,7 @@ fun DenebBrowserScreen(
         val next = updateBrowserTab(
             store = currentStore(),
             id = tabStore.activeId,
-            url = state.currentUrl.ifBlank { state.url },
+            url = stableBrowserTabUrl(state.currentUrl, state.url, activeRuntime.stableUrl),
             title = state.pageTitle,
             translateEnabled = state.translateEnabled,
         )
@@ -203,9 +219,6 @@ fun DenebBrowserScreen(
         ) { "browser" }
         browserTranslateCache.attachPersistence(load = { slot.load() }, save = { slot.save(it) })
     }
-    var showBookmarks by remember { mutableStateOf(false) }
-    var showHistory by remember { mutableStateOf(false) }
-    var showTabs by remember { mutableStateOf(false) }
     var homeUrl by remember { mutableStateOf(appSettings.getBrowserHomeUrl()) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
     var history by remember { mutableStateOf(decodeBrowserHistory(appSettings.getBrowserHistoryJson())) }
@@ -219,16 +232,22 @@ fun DenebBrowserScreen(
         appSettings.setBrowserHistoryJson(json)
         history = decodeBrowserHistory(json)
     }
-    LaunchedEffect(state.currentUrl, state.pageTitle) {
-        val current = state.currentUrl.trim()
-        if (!canBookmarkUrl(current)) return@LaunchedEffect
-        if (current != appSettings.getBrowserLastUrl()) {
-            appSettings.setBrowserLastUrl(current)
-        }
+    val navigationCommit = state.pendingNavigationCommit
+    LaunchedEffect(navigationCommit) {
+        val commit = navigationCommit ?: return@LaunchedEffect
+        val current = state.consumeNavigationCommit(commit) ?: return@LaunchedEffect
+        if (current != appSettings.getBrowserLastUrl()) appSettings.setBrowserLastUrl(current)
         val next = recordBrowserVisit(history, current, state.pageTitle)
         if (next != history) persistHistory(next)
     }
-    val bookmarkUrl = state.currentUrl.ifBlank { state.url }
+    LaunchedEffect(state.pageTitle) {
+        val current = stableBrowserTabUrl(state.currentUrl, state.url, activeRuntime.stableUrl)
+        val next = updateBrowserVisitTitle(history, current, state.pageTitle)
+        if (next != history) {
+            persistHistory(next)
+        }
+    }
+    val bookmarkUrl = stableBrowserTabUrl(state.currentUrl, state.url, activeRuntime.stableUrl)
     val bookmarkable = canBookmarkUrl(bookmarkUrl)
     val bookmarked = isBrowserBookmarked(bookmarks, bookmarkUrl)
     DenebBrowserChrome(
@@ -262,7 +281,7 @@ fun DenebBrowserScreen(
             homeUrl = ""
         },
     ) {
-        if (browserShowsStart(state.url, state.currentUrl)) {
+        if (browserShowsStart(state.url, state.currentUrl) && !state.rendererRecoveryPending) {
             BrowserStartPane(
                 bookmarks = bookmarks,
                 visits = history,
@@ -281,16 +300,7 @@ fun DenebBrowserScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    onOpenNewTab = { target ->
-                        switchStore(
-                            resolveBrowserTabStore(
-                                stored = currentStore(),
-                                explicitUrl = target,
-                                fallbackUrl = "",
-                                translateDefault = appSettings.isBrowserTranslateEnabled(),
-                            ),
-                        )
-                    },
+                    onOpenNewTab = ::openInTab,
                 )
             }
         }
@@ -377,18 +387,35 @@ fun DenebBrowserScreen(
     if (showTabs) {
         BrowserTabsSheet(
             store = currentStore(),
+            visuals = tabRuntimes.mapValues { (_, runtime) ->
+                BrowserTabVisual(favicon = runtime.state.pageFavicon, preview = runtime.state.pagePreview)
+            },
+            waitingForSlot = pendingTabUrl != null,
             onSelect = { id ->
                 switchStore(selectBrowserTab(currentStore(), id))
                 showTabs = false
             },
             onClose = { id ->
-                switchStore(
-                    closeBrowserTab(
-                        store = currentStore(),
-                        id = id,
-                        translateDefault = appSettings.isBrowserTranslateEnabled(),
-                    ),
+                val closed = closeBrowserTab(
+                    store = currentStore(),
+                    id = id,
+                    translateDefault = appSettings.isBrowserTranslateEnabled(),
                 )
+                val pending = pendingTabUrl
+                if (pending != null && !browserTabLimitBlocks(closed, pending)) {
+                    pendingTabUrl = null
+                    switchStore(
+                        resolveBrowserTabStore(
+                            stored = closed,
+                            explicitUrl = pending,
+                            fallbackUrl = "",
+                            translateDefault = appSettings.isBrowserTranslateEnabled(),
+                        ),
+                    )
+                    showTabs = false
+                } else {
+                    switchStore(closed)
+                }
             },
             onAdd = {
                 switchStore(
@@ -399,7 +426,10 @@ fun DenebBrowserScreen(
                 )
                 showTabs = false
             },
-            onDismiss = { showTabs = false },
+            onDismiss = {
+                pendingTabUrl = null
+                showTabs = false
+            },
         )
     }
 }
@@ -408,24 +438,41 @@ private class BrowserTabRuntime(
     val id: String,
     val state: DenebWebViewState,
     var lastUsedAtMs: Long,
+    initialUrl: String,
+    initialTitle: String,
 ) {
-    fun snapshot(): BrowserTabSnapshot = BrowserTabSnapshot(
-        id = id,
-        url = state.currentUrl.ifBlank { state.url },
-        title = state.pageTitle,
-        translateEnabled = state.translateEnabled,
-        lastUsedAtMs = lastUsedAtMs,
-    )
+    var stableUrl: String = initialUrl
+        private set
+    private var stableTitle: String = initialTitle
+
+    fun snapshot(): BrowserTabSnapshot {
+        val nextUrl = stableBrowserTabUrl(state.currentUrl, state.url, stableUrl)
+        if (nextUrl != stableUrl) {
+            stableUrl = nextUrl
+            stableTitle = ""
+        }
+        state.pageTitle.trim().takeIf { it.isNotEmpty() }?.let { stableTitle = it }
+        return BrowserTabSnapshot(
+            id = id,
+            url = stableUrl,
+            title = stableTitle,
+            translateEnabled = state.translateEnabled,
+            lastUsedAtMs = lastUsedAtMs,
+        )
+    }
 }
 
 private fun BrowserTabSnapshot.toRuntime(adBlockEnabled: Boolean): BrowserTabRuntime = BrowserTabRuntime(
     id = id,
     state = DenebWebViewState(
         initialUrl = url,
+        initialPageTitle = title,
         translateEnabled = translateEnabled,
         adBlockEnabled = adBlockEnabled,
     ),
     lastUsedAtMs = lastUsedAtMs,
+    initialUrl = url,
+    initialTitle = title,
 )
 
 /**
@@ -470,7 +517,7 @@ fun DenebBrowserChrome(
     PlatformBackHandler(enabled = true) { if (state.canGoBack) state.goBack() else onBack() }
 
     // Editable address bar value, re-synced to the real URL as the page navigates.
-    var field by remember(state.currentUrl) { mutableStateOf(state.currentUrl) }
+    var field by remember(state, state.currentUrl) { mutableStateOf(state.currentUrl) }
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
@@ -480,6 +527,37 @@ fun DenebBrowserChrome(
             content()
             if (state.loading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), progress = { state.progress / 100f })
+            }
+            if (state.translateEnabled) {
+                val translation = state.translationProgress
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(denebInsight().copy(alpha = 0.08f))
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        browserTranslationStatusText(translation),
+                        style = DenebType.meta,
+                        color = denebInsight(),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (translation.total > 0) {
+                        LinearProgressIndicator(
+                            progress = { translation.applied.toFloat() / translation.total.toFloat() },
+                            modifier = Modifier.width(88.dp).height(3.dp),
+                            color = denebInsight(),
+                            trackColor = denebInsight().copy(alpha = 0.18f),
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            modifier = Modifier.width(88.dp).height(3.dp),
+                            color = denebInsight(),
+                            trackColor = denebInsight().copy(alpha = 0.18f),
+                        )
+                    }
+                }
             }
             // A failed load leaves the WebView blank; say why instead of showing
             // an empty page with no explanation.

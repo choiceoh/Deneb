@@ -23,7 +23,7 @@ class BrowserTabsTest {
     }
 
     @Test
-    fun `routed links reuse matches then add tabs up to the cap`() {
+    fun `routed links reuse matches then preserve the opener at the cap`() {
         var store = resolveBrowserTabStore(BrowserTabStore(), "https://one.example", "", false, nowMs = 1)
         store = resolveBrowserTabStore(store, "https://two.example", "", false, nowMs = 2)
         val reused = resolveBrowserTabStore(store, "https://one.example", "", false, nowMs = 3)
@@ -36,11 +36,12 @@ class BrowserTabsTest {
             store = resolveBrowserTabStore(store, "https://$i.example", "", false, nowMs = i.toLong())
         }
         assertEquals(BROWSER_TAB_LIMIT, store.tabs.size)
-        val backgroundIds = store.tabs.filterNot { it.id == store.activeId }.map { it.id }.toSet()
+        val opener = store.tabs.first { it.id == store.activeId }
         val capped = resolveBrowserTabStore(store, "https://replacement.example", "", false, nowMs = 9)
-        assertEquals(BROWSER_TAB_LIMIT, capped.tabs.size)
-        assertEquals(backgroundIds, capped.tabs.filterNot { it.id == capped.activeId }.map { it.id }.toSet())
-        assertEquals("https://replacement.example", capped.tabs.first { it.id == capped.activeId }.url)
+        assertEquals(store, capped)
+        assertEquals(opener, capped.tabs.first { it.id == capped.activeId })
+        assertTrue(browserTabLimitBlocks(store, "https://replacement.example"))
+        assertFalse(browserTabLimitBlocks(store, opener.url))
     }
 
     @Test
@@ -105,5 +106,18 @@ class BrowserTabsTest {
         assertEquals("Two page", browserTabDisplayTitle(tab))
         assertTrue(tab.translateEnabled)
         assertEquals(updated, updateBrowserTab(updated, id, "javascript:alert(1)", "bad", false, nowMs = 3))
+    }
+
+    @Test
+    fun `transient renderer urls keep the last durable web url`() {
+        assertEquals(
+            "https://saved.example/article",
+            stableBrowserTabUrl(
+                currentUrl = "about:blank",
+                requestedUrl = "blob:https://saved.example/local",
+                previousUrl = "https://saved.example/article",
+            ),
+        )
+        assertEquals("", stableBrowserTabUrl("about:blank", "data:text/plain,hello", ""))
     }
 }

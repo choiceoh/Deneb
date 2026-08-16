@@ -5,6 +5,53 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+
+internal data class BrowserNavigationCommit(val serial: Int, val url: String)
+
+internal data class BrowserTranslationProgress(
+    val scanned: Boolean = false,
+    val total: Int = 0,
+    val applied: Int = 0,
+    val pending: Int = 0,
+    val failed: Int = 0,
+)
+
+internal fun browserTranslationStatusText(progress: BrowserTranslationProgress): String = when {
+    !progress.scanned -> "번역할 텍스트 찾는 중"
+    progress.total == 0 -> "번역할 텍스트 없음"
+    progress.pending > 0 -> "번역 중 · ${progress.applied}/${progress.total}"
+    progress.failed > 0 -> "번역 일부 실패 · ${progress.applied}/${progress.total}"
+    progress.applied >= progress.total -> "번역 완료 · ${progress.total}개"
+    else -> "번역 준비 중 · ${progress.total}개"
+}
+
+internal class BrowserCommandCursor(state: DenebWebViewState) {
+    private var diagnostics = state.diagnosticsTick
+    private var goBack = state.goBackTick
+    private var goForward = state.goForwardTick
+    private var reload = state.reloadTick
+    private var stop = state.stopTick
+    private var retry = state.retryTick
+
+    fun consumeDiagnostics(state: DenebWebViewState): Boolean = consume(state.diagnosticsTick, diagnostics) { diagnostics = it }
+
+    fun consumeGoBack(state: DenebWebViewState): Boolean = consume(state.goBackTick, goBack) { goBack = it }
+
+    fun consumeGoForward(state: DenebWebViewState): Boolean = consume(state.goForwardTick, goForward) { goForward = it }
+
+    fun consumeReload(state: DenebWebViewState): Boolean = consume(state.reloadTick, reload) { reload = it }
+
+    fun consumeStop(state: DenebWebViewState): Boolean = consume(state.stopTick, stop) { stop = it }
+
+    fun consumeRetry(state: DenebWebViewState): Boolean = consume(state.retryTick, retry) { retry = it }
+
+    private inline fun consume(current: Int, consumed: Int, update: (Int) -> Unit): Boolean {
+        if (current <= consumed) return false
+        update(current)
+        return true
+    }
+}
 
 /**
  * Shared, platform-agnostic state for the in-app browser WebView. The Android
@@ -17,6 +64,7 @@ import androidx.compose.ui.Modifier
  */
 class DenebWebViewState(
     initialUrl: String,
+    initialPageTitle: String = "",
     translateEnabled: Boolean = false,
     adBlockEnabled: Boolean = true,
 ) {
@@ -29,7 +77,14 @@ class DenebWebViewState(
         internal set
 
     /** The page title reported by the platform WebView, used for bookmarks. */
-    var pageTitle by mutableStateOf("")
+    var pageTitle by mutableStateOf(initialPageTitle)
+        internal set
+
+    /** Runtime-only tab visuals. They are intentionally not persisted as browsing data. */
+    var pageFavicon by mutableStateOf<ImageBitmap?>(null)
+        internal set
+
+    var pagePreview by mutableStateOf<ImageBitmap?>(null)
         internal set
 
     var canGoBack by mutableStateOf(false)
@@ -55,6 +110,9 @@ class DenebWebViewState(
 
     /** Subresource requests dropped by adblock since the current page started. */
     var adBlockedCount by mutableStateOf(0)
+        internal set
+
+    internal var translationProgress by mutableStateOf(BrowserTranslationProgress())
         internal set
 
     /** Main-frame load failure, or null when the page loaded. Cleared on every
@@ -92,9 +150,18 @@ class DenebWebViewState(
     internal var retryTick by mutableStateOf(0)
         private set
 
+    private var navigationSerial = 0
+    private var lastCommittedNavigationUrl = ""
+    internal var pendingNavigationCommit by mutableStateOf<BrowserNavigationCommit?>(null)
+        private set
+
     /** Opaque platform state. Android stores a Bundle here while a background
      * tab is detached, preserving its back/forward list and scroll position. */
     internal var platformState: Any? = null
+
+    /** WebView.saveState omits the visual scroll offset, so preserve it explicitly. */
+    internal var platformScrollX: Int = 0
+    internal var platformScrollY: Int = 0
 
     /** Changes when Android must discard a dead renderer and create a new
      * WebView. The chrome keys the platform view with this generation. */
@@ -104,9 +171,18 @@ class DenebWebViewState(
     internal var rendererRecoveryPending by mutableStateOf(false)
         private set
 
+    internal var rendererRecoveryUrl: String = stableBrowserTabUrl(initialUrl, initialUrl, "")
+        private set
+
     fun load(newUrl: String) {
         rendererRecoveryPending = false
         loadError = null
+        platformState = null
+        platformScrollX = 0
+        platformScrollY = 0
+        pageFavicon = null
+        pagePreview = null
+        translationProgress = BrowserTranslationProgress()
         url = newUrl
     }
 
@@ -132,7 +208,37 @@ class DenebWebViewState(
         retryTick++
     }
 
+    internal fun commitNavigation(url: String, force: Boolean = false) {
+        val stable = url.trim().takeIf(::canBookmarkUrl) ?: return
+        if (!force && stable == lastCommittedNavigationUrl) return
+        lastCommittedNavigationUrl = stable
+        navigationSerial++
+        pendingNavigationCommit = BrowserNavigationCommit(navigationSerial, stable)
+    }
+
+    internal fun consumeNavigationCommit(commit: BrowserNavigationCommit): String? {
+        if (pendingNavigationCommit != commit) return null
+        pendingNavigationCommit = null
+        return commit.url
+    }
+
+    internal fun updateTranslationProgress(total: Int, applied: Int, pending: Int, failed: Int) {
+        val cleanTotal = total.coerceAtLeast(0)
+        translationProgress = BrowserTranslationProgress(
+            scanned = true,
+            total = cleanTotal,
+            applied = applied.coerceIn(0, cleanTotal),
+            pending = pending.coerceAtLeast(0),
+            failed = failed.coerceAtLeast(0),
+        )
+    }
+
+    internal fun clearTranslationProgress() {
+        translationProgress = BrowserTranslationProgress()
+    }
+
     internal fun markRendererGone(crashed: Boolean) {
+        rendererRecoveryUrl = stableBrowserTabUrl(currentUrl, url, rendererRecoveryUrl)
         platformState = null
         rendererRecoveryPending = true
         loadError = browserRendererGoneMessage(crashed)
@@ -141,6 +247,14 @@ class DenebWebViewState(
         canGoBack = false
         canGoForward = false
         rendererGeneration++
+    }
+
+    internal fun markRendererRecoveryStarted(url: String) {
+        if (!canBookmarkUrl(url)) return
+        rendererRecoveryUrl = url.trim()
+        currentUrl = url
+        rendererRecoveryPending = false
+        loadError = null
     }
 }
 

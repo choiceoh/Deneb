@@ -23,8 +23,9 @@ class DenebWebViewStateTest {
 
     @Test
     fun constructorCanSeedTranslateEnabled() {
-        val state = DenebWebViewState("https://example.com", translateEnabled = true)
+        val state = DenebWebViewState("https://example.com", initialPageTitle = "Saved title", translateEnabled = true)
         assertTrue(state.translateEnabled)
+        assertEquals("Saved title", state.pageTitle)
     }
 
     @Test
@@ -168,5 +169,70 @@ class DenebWebViewStateTest {
         assertFalse(state.rendererRecoveryPending)
         assertEquals(null, state.loadError)
         assertEquals(1, state.retryTick)
+    }
+
+    @Test
+    fun commandCursorDoesNotReplayCommandsAfterRendererReattach() {
+        val state = DenebWebViewState("https://example.com")
+        state.goBack()
+        state.reload()
+        val attached = BrowserCommandCursor(state)
+
+        assertFalse(attached.consumeGoBack(state))
+        assertFalse(attached.consumeReload(state))
+
+        state.goBack()
+        assertTrue(attached.consumeGoBack(state))
+        assertFalse(attached.consumeGoBack(state))
+    }
+
+    @Test
+    fun navigationCommitsAreOneShotAndDoNotReplayOnTabSelection() {
+        val state = DenebWebViewState("https://example.com")
+        state.commitNavigation("https://example.com/article")
+        val commit = state.pendingNavigationCommit ?: error("missing commit")
+
+        assertEquals("https://example.com/article", state.consumeNavigationCommit(commit))
+        assertEquals(null, state.consumeNavigationCommit(commit))
+        assertEquals(null, state.pendingNavigationCommit)
+
+        state.commitNavigation("https://example.com/article")
+        assertEquals(null, state.pendingNavigationCommit)
+        state.commitNavigation("https://example.com/article", force = true)
+        assertTrue(state.pendingNavigationCommit != null)
+    }
+
+    @Test
+    fun newLoadsClearDetachedScrollAndTranslationProgress() {
+        val state = DenebWebViewState("https://example.com")
+        state.platformState = "saved"
+        state.platformScrollX = 20
+        state.platformScrollY = 800
+        state.updateTranslationProgress(total = 10, applied = 4, pending = 6, failed = 0)
+
+        state.load("https://example.com/next")
+
+        assertEquals(null, state.platformState)
+        assertEquals(0, state.platformScrollX)
+        assertEquals(0, state.platformScrollY)
+        assertEquals(BrowserTranslationProgress(), state.translationProgress)
+    }
+
+    @Test
+    fun translationStatusMakesScanningProgressCompletionAndFailureVisible() {
+        assertTrue(browserTranslationStatusText(BrowserTranslationProgress()).contains("찾는 중"))
+        assertEquals(
+            "번역 중 · 4/10",
+            browserTranslationStatusText(BrowserTranslationProgress(scanned = true, total = 10, applied = 4, pending = 6)),
+        )
+        assertTrue(
+            browserTranslationStatusText(BrowserTranslationProgress(scanned = true, total = 10, applied = 9, failed = 1))
+                .contains("일부 실패"),
+        )
+        assertEquals(
+            "번역 완료 · 10개",
+            browserTranslationStatusText(BrowserTranslationProgress(scanned = true, total = 10, applied = 10)),
+        )
+        assertEquals("번역할 텍스트 없음", browserTranslationStatusText(BrowserTranslationProgress(scanned = true)))
     }
 }

@@ -47,6 +47,15 @@ internal fun removeBrowserVisit(visits: List<BrowserVisit>, url: String): List<B
     return visits.filterNot { it.url.trim() == key }.sanitizedBrowserHistory()
 }
 
+/** Refreshes a committed visit's title without changing its recency/order. */
+internal fun updateBrowserVisitTitle(visits: List<BrowserVisit>, url: String, title: String): List<BrowserVisit> {
+    val key = url.trim()
+    if (!canBookmarkUrl(key) || title.isBlank()) return visits.sanitizedBrowserHistory()
+    return visits.map { visit ->
+        if (visit.url == key) visit.copy(title = cleanBrowserHistoryTitle(title, key)) else visit
+    }.sanitizedBrowserHistory()
+}
+
 internal fun browserVisitDisplayTitle(visit: BrowserVisit): String = visit.title.ifBlank { browserHistoryHost(visit.url) }.ifBlank { visit.url }
 
 private fun List<BrowserVisit>.sanitizedBrowserHistory(): List<BrowserVisit> = asSequence()
