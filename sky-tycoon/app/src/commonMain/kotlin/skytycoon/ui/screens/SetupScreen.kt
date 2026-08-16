@@ -92,9 +92,12 @@ fun SetupScreen(
             Text("SKY TYCOON", color = TextHigh, fontSize = 34.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
             Text("항공사 경영 시뮬레이션", color = Amber, fontSize = 14.sp, fontWeight = FontWeight.Medium)
             VSpace(6)
+            // 시나리오마다 기간이 다르다 (20 / 16 / 14년). 20년으로 박아 두면
+            // 다른 시대를 고른 플레이어에게 남은 시간을 잘못 알려준다.
+            val chosen = Scenarios.all.first { it.id == scenario }
             Text(
                 "노선을 열고, 슬롯을 사들이고, 기재를 갈아 끼우며 하늘의 패권을 다툰다.\n" +
-                    "20년 뒤 기업가치 1위에 오르거나, 경쟁사를 전부 삼키면 승리한다.",
+                    "${chosen.years}년 뒤 기업가치 1위에 오르거나, 경쟁사를 전부 삼키면 승리한다.",
                 color = TextMid,
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
@@ -124,9 +127,7 @@ fun SetupScreen(
             SetupSection("회사를 고르세요") {
                 // 시드 자본은 시나리오 시작 연도의 물가로 환산돼 지급된다. 1970년 명목값을
                 // 그대로 보여주면 2012년 시나리오에서 실제 자본의 1/5 로 읽힌다.
-                val startInflation = NewGame.inflationFor(
-                    Scenarios.all.first { it.id == scenario }.startYear,
-                )
+                val startInflation = NewGame.inflationFor(chosen.startYear)
                 for (co in Companies.all) {
                     val home = Cities[co.home]
                     val fleet = co.startFleet.sumOf { it.second }
