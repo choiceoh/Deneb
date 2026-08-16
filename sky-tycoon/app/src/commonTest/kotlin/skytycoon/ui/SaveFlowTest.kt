@@ -1,0 +1,71 @@
+package skytycoon.ui
+
+import skytycoon.core.save.Save
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+/**
+ * 세이브 슬롯이 하나뿐이라, "언제 슬롯을 차지하는가"가 곧 캠페인의 안전장치다.
+ */
+class SaveFlowTest {
+
+    @Test
+    fun `새 게임을 시작하는 것만으로는 기존 세이브를 덮어쓰지 않는다`() {
+        val store = MemorySaveStore()
+        val first = GameViewModel(store)
+        first.start("goldenage", "hanseong", "normal", seed = 1)
+        first.endTurn()
+        first.endTurn()
+        val saved = store.read(SaveSlot.AUTO)!!
+        val savedTurn = Save.decode(saved).turn
+
+        // 시작 화면에서 다른 회사로 새 게임을 눌러본다.
+        val second = GameViewModel(store)
+        second.start("goldenage", "fuji", "normal", seed = 2)
+        assertEquals(saved, store.read(SaveSlot.AUTO), "새 게임을 고른 것만으로 기존 캠페인이 지워졌다")
+
+        // 되돌아가 이어하기를 하면 원래 진행 상황이 살아 있어야 한다.
+        val third = GameViewModel(store)
+        assertTrue(third.hasSavedGame())
+        assertTrue(third.resume())
+        assertEquals(savedTurn, third.game.turn)
+        assertEquals("hanseong", third.game.playerId)
+    }
+
+    @Test
+    fun `분기를 넘기면 자동 저장된다`() {
+        val store = MemorySaveStore()
+        val vm = GameViewModel(store)
+        assertFalse(vm.hasSavedGame())
+        vm.start("goldenage", "hanseong", "normal", seed = 7)
+        vm.endTurn()
+        assertTrue(vm.hasSavedGame(), "분기를 넘겼는데 저장되지 않았다")
+        assertEquals(vm.game.turn, Save.decode(store.read(SaveSlot.AUTO)!!).turn)
+    }
+
+    @Test
+    fun `저장 지점으로 되돌리면 그 분기 상태가 그대로 온다`() {
+        val store = MemorySaveStore()
+        val vm = GameViewModel(store)
+        vm.start("goldenage", "hanseong", "normal", seed = 11)
+        vm.endTurn()
+
+        // 아직 수동 저장이 없으면 되돌릴 곳도 없다.
+        assertFalse(vm.hasManualSave())
+        assertFalse(vm.loadSaved())
+
+        val marker = vm.game.turn
+        val cashAtMarker = vm.game.player.cash
+        vm.saveNow()
+
+        // 여러 분기를 더 굴려도 수동 저장 지점은 자동 저장에 덮이지 않아야 한다.
+        repeat(3) { vm.endTurn() }
+        assertTrue(vm.game.turn > marker)
+
+        assertTrue(vm.loadSaved())
+        assertEquals(marker, vm.game.turn, "저장해 둔 분기로 돌아오지 않았다")
+        assertEquals(cashAtMarker, vm.game.player.cash)
+    }
+}

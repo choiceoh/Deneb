@@ -36,6 +36,8 @@ object TurnEngine {
         s = resolveDistress(s)
 
         s = clearQuarterlyCounters(s)
+        // 해가 바뀌는 경계에서 물가·성장을 올린다 — 새해 첫 화면부터 새 가격이 보이도록.
+        s = Events.yearTick(s, s.turn + 1)
         s = s.copy(turn = s.turn + 1, rngState = rng.state)
         return checkEnd(s)
     }

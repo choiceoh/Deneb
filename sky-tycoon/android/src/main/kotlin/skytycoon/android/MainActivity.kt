@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import skytycoon.ui.App
+import skytycoon.ui.SaveSlot
 import skytycoon.ui.SaveStore
 import skytycoon.ui.SaveStorage
 import java.io.File
@@ -16,21 +17,24 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // 백그라운드에서 프로세스가 정리돼도 캠페인이 남도록 앱 전용 저장소에 붙인다.
-        SaveStorage.current = AndroidSaveStore(File(filesDir, "save.json"))
+        SaveStorage.current = AndroidSaveStore(filesDir)
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent { App() }
     }
 }
 
-private class AndroidSaveStore(private val file: File) : SaveStore {
-    override fun write(text: String) {
-        runCatching { file.writeText(text) }
+private class AndroidSaveStore(private val dir: File) : SaveStore {
+    private fun file(slot: SaveSlot) = File(dir, if (slot == SaveSlot.AUTO) "auto.json" else "manual.json")
+
+    override fun write(slot: SaveSlot, text: String) {
+        runCatching { file(slot).writeText(text) }
     }
 
-    override fun read(): String? = if (file.isFile) runCatching { file.readText() }.getOrNull() else null
+    override fun read(slot: SaveSlot): String? =
+        file(slot).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
 
-    override fun clear() {
-        file.delete()
+    override fun clear(slot: SaveSlot) {
+        file(slot).delete()
     }
 }

@@ -141,9 +141,6 @@ object Events {
     fun stepWorld(state: GameState, rng: Rng): GameState {
         var s = state
         val w = s.world
-        // 첫 턴은 이미 시작 연도 기준으로 세팅돼 있다. 여기서 또 돌리면 게임이
-        // 시작하자마자 한 해 앞선 물가·성장률로 굴러간다.
-        val yearlyTick = s.quarter == 1 && s.turn > 0
 
         val targetOil = NewGame.oilFor(s.year)
         val oil = (w.oil + (targetOil - w.oil) * 0.10 + w.oil * rng.normal() * 0.035).coerceAtLeast(0.01)
@@ -151,38 +148,44 @@ object Events {
         val regionEconomy = w.regionEconomy.mapValues { (_, v) ->
             (v + (1.0 - v) * 0.09 + rng.normal() * 0.02).coerceIn(0.4, 1.6)
         }
-        val inflation = if (yearlyTick) {
-            // 지금 막 들어선 해의 물가로 올린다 (다음 해가 아니라).
-            w.inflation * (NewGame.inflationFor(s.year) / NewGame.inflationFor(s.year - 1))
-        } else {
-            w.inflation
-        }
-        val travelIndex = if (yearlyTick) w.travelIndex * Balance.TRAVEL_GROWTH_PER_YEAR else w.travelIndex
         val interest = (w.interest + (Balance.BASE_INTEREST - w.interest) * 0.08 + rng.normal() * 0.004)
             .coerceIn(0.02, 0.22)
 
-        s = s.copy(
+        return s.copy(
             world = w.copy(
                 oil = oil,
                 economy = economy,
                 regionEconomy = regionEconomy,
-                inflation = inflation,
-                travelIndex = travelIndex,
                 interest = interest,
             ),
         )
+    }
 
-        if (yearlyTick) {
+    /**
+     * 해가 바뀌는 순간(4분기 → 다음 해 1분기)에 물가·여행 보급·도시 성장을 한 번에 올린다.
+     *
+     * 분기 진행이 끝난 뒤에 부르는 이유: 플레이어가 새해 1분기 화면에서 슬롯이나 기재를
+     * 살 때 이미 그 해 물가가 적용돼 있어야 한다. 1분기를 결산할 때 올리면 계획은
+     * 작년 가격으로 세우고 결산만 새 가격으로 하는 셈이 된다.
+     *
+     * @param nextTurn 이번 진행이 끝나면 도달할 턴
+     */
+    fun yearTick(state: GameState, nextTurn: Int): GameState {
+        if (nextTurn <= 0 || nextTurn % 4 != 0) return state
+        val nextYear = state.startYear + nextTurn / 4
+        val ratio = NewGame.inflationFor(nextYear) / NewGame.inflationFor(nextYear - 1)
+        return state.copy(
+            world = state.world.copy(
+                inflation = state.world.inflation * ratio,
+                travelIndex = state.world.travelIndex * Balance.TRAVEL_GROWTH_PER_YEAR,
+            ),
             // 도시는 해마다 자란다. 지역 경기가 좋으면 더 빨리 큰다.
-            s = s.copy(
-                cityState = s.cityState.mapValues { (id, cs) ->
-                    val city = Cities[id]
-                    val regional = (s.world.regionEconomy[city.region] ?: 1.0).pow(0.35)
-                    cs.copy(dev = cs.dev * (1.0 + (city.growth - 1.0) * regional))
-                },
-            )
-        }
-        return s
+            cityState = state.cityState.mapValues { (id, cs) ->
+                val city = Cities[id]
+                val regional = (state.world.regionEconomy[city.region] ?: 1.0).pow(0.35)
+                cs.copy(dev = cs.dev * (1.0 + (city.growth - 1.0) * regional))
+            },
+        )
     }
 
     /** 역사 이벤트 + 무작위 사건. */

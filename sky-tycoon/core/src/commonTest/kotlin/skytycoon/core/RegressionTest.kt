@@ -117,6 +117,28 @@ class RegressionTest {
     // ------------------------------------------------------------ 자산 가치
 
     @Test
+    fun `내용연수를 넘긴 기재는 더 이상 상각하지 않는다`() {
+        val young = listOf(skytycoon.core.model.Plane(1, "b727", "x", ageQuarters = 4))
+        val old = listOf(skytycoon.core.model.Plane(2, "b727", "x", ageQuarters = 200))
+        assertTrue(Economics.depreciation(young) > 0.0)
+        assertEquals(0.0, Economics.depreciation(old), "다 상각된 기재가 계속 비용을 만들면 안 된다")
+    }
+
+    @Test
+    fun `발주 선급금은 인도 전에도 자산으로 잡힌다`() {
+        var s = fresh()
+        val before = Economics.equity(s, s.player)
+        val r = Actions.execute(s, Command.BuyAircraft("hanseong", "b747_100", 2))
+        assertTrue(r.ok, r.message)
+        s = r.state
+        val after = Economics.equity(s, s.player)
+        assertTrue(
+            after > before * 0.98,
+            "발주만 했는데 기업가치가 ${((before - after) / 1e6).toInt()}M 증발했다 (선급금 미인식)",
+        )
+    }
+
+    @Test
     fun `잔존가치는 연 단위로 감가한다`() {
         // 분기마다 깎으면 15년 만에 하한까지 떨어져 기업가치가 통째로 무너진다.
         val at15 = AircraftCatalog.residualRatio(15 * 4)
@@ -155,11 +177,12 @@ class RegressionTest {
             after.world.inflation,
             "시작 연도 1분기를 넘기는 것만으로 물가가 한 해 뛰면 안 된다",
         )
-        // 새해 1분기를 결산할 때 비로소 그 해 물가로 올라간다.
+        // 4분기를 넘겨 새해에 들어서는 순간 그 해 물가가 적용돼 있어야 한다
+        // (1분기 계획을 작년 가격으로 세우면 안 된다).
         var t = s
-        repeat(5) { t = TurnEngine.advance(t) }
-        assertTrue(t.year > s.year, "5분기를 넘겼는데 해가 바뀌지 않았다")
-        assertTrue(t.world.inflation > started, "해가 바뀌었는데 물가가 그대로다")
+        repeat(4) { t = TurnEngine.advance(t) }
+        assertTrue(t.year > s.year, "4분기를 넘겼는데 해가 바뀌지 않았다")
+        assertTrue(t.world.inflation > started, "새해에 들어섰는데 물가가 작년 그대로다")
     }
 
     // ------------------------------------------------------------ 광고·부대사업

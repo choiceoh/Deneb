@@ -423,8 +423,19 @@ object Ai {
         val a = s.airline(airlineId)
         if (a.cash < 220e6 * s.world.inflation) return s
         if (!rng.chance(0.35)) return s
-        val type = rng.pick(BusinessType.entries.toList())
-        val city = a.slots.filterValues { it > 0 }.keys
+
+        // 취항 중인 도시에만 낼 수 있고, 정비창은 전사 하나뿐이다 (BuildBusiness 규칙과 맞춘다).
+        val served = s.routesOf(airlineId)
+            .filter { it.active }
+            .flatMap { listOf(it.from, it.to) }
+            .distinct()
+        if (served.isEmpty()) return s
+        val candidates = BusinessType.entries.filter { t ->
+            t != BusinessType.HANGAR || a.businesses.none { it.type == BusinessType.HANGAR }
+        }
+        if (candidates.isEmpty()) return s
+        val type = rng.pick(candidates)
+        val city = served
             .filter { c -> a.businesses.none { it.type == type && it.city == c } }
             .maxByOrNull { a.slotsAt(it) } ?: return s
         return cmd(s, Command.BuildBusiness(airlineId, type, city))

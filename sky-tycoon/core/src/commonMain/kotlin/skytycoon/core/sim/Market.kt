@@ -71,9 +71,13 @@ object Market {
             val fareRatio = (fare / standard).coerceAtLeast(0.05)
 
             val brand = (airline.brandIn(a.region) + airline.brandIn(b.region)) / 2.0
+            // 확장으로 늘어난 슬롯까지 분모에 넣는다. 안 그러면 확장된 공항에서
+            // 점유율이 1.0 을 넘어 있지도 않은 지배력 보너스가 붙는다.
+            val capacityA = (a.slots + (state.cityState[a.id]?.extraSlots ?: 0)).coerceAtLeast(1)
+            val capacityB = (b.slots + (state.cityState[b.id]?.extraSlots ?: 0)).coerceAtLeast(1)
             val hub = (
-                airline.slotsAt(a.id).toDouble() / a.slots.coerceAtLeast(1) +
-                    airline.slotsAt(b.id).toDouble() / b.slots.coerceAtLeast(1)
+                airline.slotsAt(a.id).toDouble() / capacityA +
+                    airline.slotsAt(b.id).toDouble() / capacityB
                 ) / 2.0
             val prestige = planes.sumOf { AircraftCatalog[it.typeId].prestige } / planes.size
             val bizFacilities = airline.businesses

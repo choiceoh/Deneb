@@ -34,8 +34,13 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
 
     val game: GameState get() = requireNotNull(state) { "게임이 아직 시작되지 않았습니다" }
 
+    private fun load(slot: SaveSlot): GameState? = store.read(slot)?.let { Save.decodeOrNull(it) }
+
     /** 이어서 할 수 있는 저장이 있는가 (시작 화면에서 쓴다). */
-    fun hasSavedGame(): Boolean = store.read()?.let { Save.decodeOrNull(it) != null } ?: false
+    fun hasSavedGame(): Boolean = SaveSlot.entries.any { load(it) != null }
+
+    /** 수동으로 저장해 둔 지점이 있는가. */
+    fun hasManualSave(): Boolean = load(SaveSlot.MANUAL) != null
 
     fun start(scenarioId: String, companyId: String, difficultyId: String, seed: Int = Random.nextInt()) {
         state = NewGame.create(
@@ -46,14 +51,14 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         )
         pendingReport = null
         message = null
-        autoSave()
+        // 여기서 저장하지 않는다. 시작 화면에서 잘못 눌렀을 때 기존 캠페인이
+        // 즉시 지워지면 되돌릴 방법이 없다 — 첫 분기를 넘겨야 비로소 슬롯을 차지한다.
     }
 
-    /** 저장된 게임 이어하기. */
+    /** 저장된 게임 이어하기 — 자동/수동 중 더 멀리 진행된 쪽을 집는다. */
     fun resume(): Boolean {
-        val text = store.read() ?: return false
-        val loaded = Save.decodeOrNull(text) ?: run {
-            message = "저장된 게임을 읽을 수 없습니다."
+        val loaded = SaveSlot.entries.mapNotNull { load(it) }.maxByOrNull { it.turn } ?: run {
+            message = "저장된 게임이 없습니다."
             return false
         }
         state = loaded
@@ -98,28 +103,27 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
     // ---- 세이브 ----
 
     fun autoSave() {
-        state?.let { store.write(Save.encode(it)) }
+        state?.let { store.write(SaveSlot.AUTO, Save.encode(it)) }
     }
 
+    /** 수동 저장은 자동 저장과 다른 슬롯에 넣는다 — 안 그러면 다음 분기에 곧바로 지워진다. */
     fun saveNow(): Boolean {
         val s = state ?: return false
-        store.write(Save.encode(s))
-        message = "${s.year}년 ${s.quarter}분기 상태를 저장했습니다."
+        store.write(SaveSlot.MANUAL, Save.encode(s))
+        message = "${s.year}년 ${s.quarter}분기를 저장했습니다."
         return true
     }
 
+    /** 수동 저장 지점으로 되돌린다. */
     fun loadSaved(): Boolean {
-        val text = store.read() ?: run {
-            message = "저장된 게임이 없습니다."
-            return false
-        }
-        val loaded = Save.decodeOrNull(text) ?: run {
-            message = "세이브 파일을 읽을 수 없습니다."
+        val loaded = load(SaveSlot.MANUAL) ?: run {
+            message = "저장해 둔 지점이 없습니다."
             return false
         }
         state = loaded
         pendingReport = null
-        message = "${loaded.year}년 ${loaded.quarter}분기 세이브를 불러왔습니다."
+        autoSave()
+        message = "${loaded.year}년 ${loaded.quarter}분기로 되돌렸습니다."
         return true
     }
 
@@ -127,6 +131,7 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
     fun exportSave(): String? = state?.let { Save.encode(it, indent = true) }
 
     fun importSave(text: String): Boolean {
+        @Suppress("UNUSED_EXPRESSION")
         val loaded = Save.decodeOrNull(text) ?: run {
             message = "세이브 파일을 읽을 수 없습니다."
             return false

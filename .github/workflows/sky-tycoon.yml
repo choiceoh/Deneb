@@ -44,7 +44,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Simulation tests + UI compile
-        run: ./gradlew :core:jvmTest :app:compileKotlinDesktop --no-daemon
+        run: ./gradlew :core:jvmTest :app:desktopTest :app:compileKotlinDesktop --no-daemon
 
       - name: Render screens headlessly
         run: ./gradlew :app:screenshots --no-daemon

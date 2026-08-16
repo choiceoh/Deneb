@@ -199,7 +199,16 @@ fun ManageScreen(vm: GameViewModel, wide: Boolean) {
                 VSpace(10)
                 for (type in BusinessType.entries) {
                     val exists = player.businesses.any { it.type == type && it.city == city }
+                    val hangarElsewhere = type == BusinessType.HANGAR &&
+                        player.businesses.any { it.type == BusinessType.HANGAR }
                     val cost = type.cost * s.world.inflation
+                    val blocked = when {
+                        myCities.isEmpty() -> "취항 필요"
+                        exists -> "보유"
+                        hangarElsewhere -> "전사 1개"
+                        player.cash < cost -> moneyShort(cost)
+                        else -> null
+                    }
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -214,9 +223,9 @@ fun ManageScreen(vm: GameViewModel, wide: Boolean) {
                         }
                         OutlinedButton(
                             onClick = { vm.run(Command.BuildBusiness(player.id, type, city)) },
-                            enabled = !exists && player.cash >= cost,
+                            enabled = blocked == null,
                         ) {
-                            Text(if (exists) "보유" else moneyShort(cost), fontSize = 11.sp)
+                            Text(blocked ?: moneyShort(cost), fontSize = 11.sp)
                         }
                     }
                     VSpace(6)
@@ -226,16 +235,21 @@ fun ManageScreen(vm: GameViewModel, wide: Boolean) {
         VSpace(12)
         Panel(title = "저장") {
             Text(
-                "분기를 넘길 때마다 자동 저장됩니다. 필요하면 지금 저장하거나 마지막 저장 지점으로 되돌릴 수 있습니다.",
+                "분기를 넘길 때마다 자동 저장됩니다. 그와 별개로 지금 시점을 찍어 두었다가 " +
+                    "언제든 그 자리로 되돌아올 수 있습니다.",
                 color = TextLow,
                 fontSize = 11.sp,
             )
             VSpace(8)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { vm.saveNow() }, modifier = Modifier.weight(1f)) {
-                    Text("지금 저장", fontSize = 12.sp)
+                    Text("이 시점 저장", fontSize = 12.sp)
                 }
-                OutlinedButton(onClick = { vm.loadSaved() }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(
+                    onClick = { vm.loadSaved() },
+                    enabled = vm.hasManualSave(),
+                    modifier = Modifier.weight(1f),
+                ) {
                     Text("저장 지점으로", fontSize = 12.sp)
                 }
             }

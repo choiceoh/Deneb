@@ -153,9 +153,13 @@ object Economics {
         )
     }
 
-    /** 분기 감가상각 — 보유 기재 장부가의 정액 상각. */
-    fun depreciation(planes: List<Plane>): Double =
-        planes.sumOf { AircraftCatalog[it.typeId].price / Balance.DEPRECIATION_QUARTERS }
+    /**
+     * 분기 감가상각 — 내용연수(15년)까지만 상각한다.
+     * 기령을 안 보면 다 상각된 기재가 영원히 비용을 만들어 순익과 주가를 눌러 앉힌다.
+     */
+    fun depreciation(planes: List<Plane>): Double = planes
+        .filter { it.ageQuarters < Balance.DEPRECIATION_QUARTERS }
+        .sumOf { AircraftCatalog[it.typeId].price / Balance.DEPRECIATION_QUARTERS }
 
     /** 회사 유지 간접비. */
     fun overhead(state: GameState, airline: Airline): Double {
@@ -205,6 +209,11 @@ object Economics {
         val stocks = airline.holdings.entries.sumOf { (id, shares) ->
             (state.airlineOrNull(id)?.sharePrice ?: 0.0) * shares
         }
-        return airline.cash + fleet + slots + biz + stocks - airline.debt
+        // 발주 대금은 이미 현금에서 빠져나갔다. 인도 전까지 선급금으로 잡아 주지 않으면
+        // 대형 발주 한 번에 자기자본이 무너져 차입 한도가 깎이고 자본잠식으로 오인된다.
+        val prepaid = state.orders
+            .filter { it.airlineId == airline.id }
+            .sumOf { AircraftCatalog[it.typeId].price * it.count }
+        return airline.cash + fleet + slots + biz + stocks + prepaid - airline.debt
     }
 }

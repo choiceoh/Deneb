@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,6 +52,34 @@ fun SetupScreen(
     var scenario by remember { mutableStateOf(Scenarios.all.first().id) }
     var company by remember { mutableStateOf(Companies.all.first().id) }
     var difficulty by remember { mutableStateOf("normal") }
+    var confirmOverwrite by remember { mutableStateOf(false) }
+
+    if (confirmOverwrite) {
+        AlertDialog(
+            onDismissRequest = { confirmOverwrite = false },
+            title = { Text("저장된 게임이 있습니다", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "새로 시작하면 첫 분기를 넘기는 순간 기존 캠페인이 덮어써집니다. " +
+                        "세이브 슬롯은 하나뿐이라 되돌릴 수 없습니다.",
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmOverwrite = false
+                    onStart(scenario, company, difficulty)
+                }) { Text("새로 시작") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    confirmOverwrite = false
+                    onResume()
+                }) { Text("이어서 하기") }
+            },
+        )
+    }
 
     Box(Modifier.fillMaxSize().background(Ink), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -136,7 +166,10 @@ fun SetupScreen(
 
             VSpace(26)
             Button(
-                onClick = { onStart(scenario, company, difficulty) },
+                onClick = {
+                    // 저장된 캠페인이 있으면 확인을 받는다 — 슬롯이 하나뿐이라 되돌릴 수 없다.
+                    if (canResume) confirmOverwrite = true else onStart(scenario, company, difficulty)
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("취항하기", fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(6.dp))
