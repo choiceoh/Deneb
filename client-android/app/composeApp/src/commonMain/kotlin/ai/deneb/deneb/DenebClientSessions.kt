@@ -302,6 +302,49 @@ internal suspend fun DenebGatewayClient.recoverTurnFromTranscript(
     return TurnRecoveryResult.GiveUp
 }
 
+/**
+ * Wait for a capture turn the gateway already accepted. Unlike stream recovery,
+ * NotArrived is not "never sent" — the RPC started the turn, and the user row
+ * may land a moment later. Poll until the assistant reply appears or the
+ * detached-turn budget expires.
+ */
+internal suspend fun DenebGatewayClient.awaitDetachedCaptureTurn(
+    key: String,
+    sentText: String,
+): TurnRecoveryResult {
+    val started = TimeSource.Monotonic.markNow()
+    var candidate: List<History>? = null
+    var candidateTail: Pair<Int, String>? = null
+    while (started.elapsedNow().inWholeMilliseconds < DenebGatewayClient.STREAM_RECOVERY_MAX_MS) {
+        if (sessionKey != key) return TurnRecoveryResult.GiveUp
+        val payload = fetchTranscriptPayload(key)
+        if (payload != null) {
+            val transcript = mapTranscriptMessages(payload.messages)
+            when (val probe = effectiveTurnProbe(probeTranscriptForTurn(transcript, sentText), payload.turnRunning)) {
+                is TurnProbe.Answered -> {
+                    val tail = transcript.size to probe.text
+                    if (tail == candidateTail) {
+                        installRecoveredTranscript(key, transcript)
+                        return TurnRecoveryResult.Recovered(GatewayReply(text = probe.text, ok = true))
+                    }
+                    candidate = transcript
+                    candidateTail = tail
+                }
+
+                TurnProbe.StillRunning, TurnProbe.NotArrived -> Unit
+            }
+        }
+        delay(DenebGatewayClient.STREAM_RECOVERY_POLL_MS)
+    }
+    val last = candidate
+    val text = candidateTail?.second
+    if (last != null && text != null) {
+        installRecoveredTranscript(key, last)
+        return TurnRecoveryResult.Recovered(GatewayReply(text = text, ok = true))
+    }
+    return TurnRecoveryResult.GiveUp
+}
+
 /** Install a recovered transcript as the visible history (and cache it). */
 private suspend fun DenebGatewayClient.installRecoveredTranscript(key: String, transcript: List<History>) {
     historyGate.withLock {

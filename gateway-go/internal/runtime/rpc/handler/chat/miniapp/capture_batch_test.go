@@ -3,9 +3,12 @@ package miniapp
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
@@ -16,12 +19,12 @@ func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) 
 // batchDeps wires mock extractors + a capturing Chat stub. runs counts RunSync
 // calls (the whole point: N files must produce ONE turn, not N). lastMessage holds
 // the pointer turn the agent received.
-func batchDeps(saveCapture bool) (Deps, *int, *string) {
-	runs := new(int)
+func batchDeps(saveCapture bool) (Deps, *atomic.Int32, *string) {
+	runs := new(atomic.Int32)
 	lastMessage := new(string)
 	stub := &chatPortStub{runSync: func(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
-		*runs++
 		*lastMessage = req.Message
+		runs.Add(1)
 		return &chatport.SyncResult{Text: "분석 결과", BestText: "분석 결과"}, nil
 	}}
 	deps := Deps{
@@ -36,6 +39,28 @@ func batchDeps(saveCapture bool) (Deps, *int, *string) {
 		}
 	}
 	return deps, runs, lastMessage
+}
+
+func waitRuns(t *testing.T, runs *atomic.Int32, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if int(runs.Load()) >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("RunSync called %d times, want %d", runs.Load(), want)
+}
+
+func payloadString(t *testing.T, resp *protocol.ResponseFrame, key string) string {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal(resp.Payload, &m); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	s, _ := m[key].(string)
+	return s
 }
 
 func batchRequest(t *testing.T, files []map[string]any, caption string) *protocol.RequestFrame {
@@ -67,9 +92,13 @@ func TestCaptureBatchRunsOneTurnOverAllFiles(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("batch capture failed: %+v", resp)
 	}
+	if got := payloadString(t, resp, "text"); !strings.Contains(got, "저장했습니다") {
+		t.Fatalf("RPC should ack the save, got %q", got)
+	}
+	waitRuns(t, runs, 1)
 	// The whole point: three files, ONE turn.
-	if *runs != 1 {
-		t.Fatalf("RunSync called %d times, want exactly 1 (N files -> one turn)", *runs)
+	if runs.Load() != 1 {
+		t.Fatalf("RunSync called %d times, want exactly 1 (N files -> one turn)", runs.Load())
 	}
 	// The turn lists every file as an openable pointer, not one turn per file.
 	for _, name := range []string{"photo.png", "report.pdf", "memo.mp3"} {
@@ -93,8 +122,12 @@ func TestCaptureBatchInlinesWhenPersistenceUnavailable(t *testing.T) {
 	}, "")
 
 	resp := handler(context.Background(), req)
-	if !resp.OK || *runs != 1 {
-		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	if !resp.OK {
+		t.Fatalf("batch capture: ok=%v", resp.OK)
+	}
+	waitRuns(t, runs, 1)
+	if runs.Load() != 1 {
+		t.Fatalf("batch capture: runs=%d", runs.Load())
 	}
 	// Without an archive path the content must ride inline so nothing is lost.
 	if strings.Contains(*msg, "경로:") || !strings.Contains(*msg, "내용:") {
@@ -114,8 +147,12 @@ func TestCaptureBatchSkipsBadFilesAndReportsThem(t *testing.T) {
 	}, "")
 
 	resp := handler(context.Background(), req)
-	if !resp.OK || *runs != 1 {
-		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	if !resp.OK {
+		t.Fatalf("batch capture: ok=%v", resp.OK)
+	}
+	waitRuns(t, runs, 1)
+	if runs.Load() != 1 {
+		t.Fatalf("batch capture: runs=%d", runs.Load())
 	}
 	if !strings.Contains(*msg, "good.pdf") {
 		t.Errorf("good file missing, got:\n%s", *msg)
@@ -136,8 +173,8 @@ func TestCaptureBatchAllUnreadableIsUnavailable(t *testing.T) {
 	if resp.OK {
 		t.Fatalf("all-unreadable batch should fail, got OK: %+v", resp)
 	}
-	if *runs != 0 {
-		t.Fatalf("no turn should run when nothing is readable, runs=%d", *runs)
+	if runs.Load() != 0 {
+		t.Fatalf("no turn should run when nothing is readable, runs=%d", runs.Load())
 	}
 }
 
@@ -154,8 +191,12 @@ func TestCaptureBatchPersistedFilesArePointersOnly(t *testing.T) {
 	}, "")
 
 	resp := handler(context.Background(), req)
-	if !resp.OK || *runs != 1 {
-		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	if !resp.OK {
+		t.Fatalf("batch capture: ok=%v", resp.OK)
+	}
+	waitRuns(t, runs, 1)
+	if runs.Load() != 1 {
+		t.Fatalf("batch capture: runs=%d", runs.Load())
 	}
 	if !strings.Contains(*msg, "경로:") || !strings.Contains(*msg, "report.pdf") {
 		t.Errorf("persisted file should be a path pointer, got:\n%s", *msg)
@@ -168,9 +209,11 @@ func TestCaptureBatchPersistedFilesArePointersOnly(t *testing.T) {
 
 func TestCaptureDocumentSavesPointerNotBody(t *testing.T) {
 	var last string
+	var runs atomic.Int32
 	deps := Deps{
 		Chat: &chatPortStub{runSync: func(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
 			last = req.Message
+			runs.Add(1)
 			return &chatport.SyncResult{Text: "ok", BestText: "ok"}, nil
 		}},
 		ExtractDocument: func(context.Context, []byte, string, string) string {
@@ -194,6 +237,7 @@ func TestCaptureDocumentSavesPointerNotBody(t *testing.T) {
 	if !resp.OK {
 		t.Fatalf("capture.document failed: %+v", resp)
 	}
+	waitRuns(t, &runs, 1)
 	if !strings.Contains(last, "경로: /abs/captures/doc.md") || !strings.Contains(last, "epc.pdf") {
 		t.Errorf("document turn should be a path pointer, got:\n%s", last)
 	}
@@ -214,8 +258,12 @@ func TestCaptureBatchPreservesFileOrder(t *testing.T) {
 	}
 
 	resp := handler(context.Background(), batchRequest(t, files, ""))
-	if !resp.OK || *runs != 1 {
-		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+	if !resp.OK {
+		t.Fatalf("batch capture: ok=%v", resp.OK)
+	}
+	waitRuns(t, runs, 1)
+	if runs.Load() != 1 {
+		t.Fatalf("batch capture: runs=%d", runs.Load())
 	}
 	lastAt := -1
 	for i, n := range names {
@@ -243,16 +291,18 @@ func TestCaptureBatchDedupsIdenticalResend(t *testing.T) {
 	if !r1.OK || !r2.OK {
 		t.Fatalf("both should be OK: %v %v", r1.OK, r2.OK)
 	}
-	if *runs != 1 {
-		t.Errorf("identical resend should reuse the first turn, runs=%d want 1", *runs)
+	waitRuns(t, runs, 1)
+	if runs.Load() != 1 {
+		t.Errorf("identical resend should reuse the first turn, runs=%d want 1", runs.Load())
 	}
 
 	// A different caption is a genuinely different request → a new turn runs.
 	if r := handler(context.Background(), batchRequest(t, files, "다른 질문")); !r.OK {
 		t.Fatalf("different-caption request failed: %+v", r)
 	}
-	if *runs != 2 {
-		t.Errorf("different caption should run a new turn, runs=%d want 2", *runs)
+	waitRuns(t, runs, 2)
+	if runs.Load() != 2 {
+		t.Errorf("different caption should run a new turn, runs=%d want 2", runs.Load())
 	}
 }
 
@@ -262,5 +312,85 @@ func TestCaptureBatchMissingFilesRejected(t *testing.T) {
 	req := batchRequest(t, []map[string]any{}, "no files")
 	if resp := handler(context.Background(), req); resp.OK {
 		t.Fatalf("empty files should be rejected, got OK: %+v", resp)
+	}
+}
+
+func TestCaptureBatchRPCReturnsBeforeTurnFinishes(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	deps, _, _ := batchDeps(true)
+	deps.Chat = &chatPortStub{runSync: func(ctx context.Context, _ chatport.SyncRequest) (*chatport.SyncResult, error) {
+		close(started)
+		select {
+		case <-release:
+		case <-ctx.Done():
+			t.Errorf("turn ctx cancelled while RPC should have already returned: %v", ctx.Err())
+		}
+		return &chatport.SyncResult{Text: "분석 결과", BestText: "분석 결과"}, nil
+	}}
+	handler := Methods(deps)["miniapp.capture.batch"]
+	req := batchRequest(t, []map[string]any{
+		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
+	}, "")
+
+	done := make(chan *protocol.ResponseFrame, 1)
+	go func() { done <- handler(context.Background(), req) }()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn should start")
+	}
+	select {
+	case resp := <-done:
+		if !resp.OK {
+			t.Fatalf("RPC should return while the turn is still running: %+v", resp)
+		}
+		if got := payloadString(t, resp, "text"); !strings.Contains(got, "저장했습니다") {
+			t.Fatalf("RPC text should be the save ack, got %q", got)
+		}
+		if got := payloadString(t, resp, "turnMessage"); !strings.Contains(got, "report.pdf") {
+			t.Fatalf("RPC should return the pointer turn for client recovery, got %q", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("RPC blocked on the agent turn")
+	}
+	close(release)
+}
+
+func TestCaptureBatchTurnSurvivesRPCCancel(t *testing.T) {
+	started := make(chan struct{})
+	cancelled := make(chan struct{})
+	deps, _, _ := batchDeps(true)
+	deps.Chat = &chatPortStub{runSync: func(ctx context.Context, _ chatport.SyncRequest) (*chatport.SyncResult, error) {
+		close(started)
+		select {
+		case <-ctx.Done():
+			close(cancelled)
+			return nil, ctx.Err()
+		case <-time.After(150 * time.Millisecond):
+			return &chatport.SyncResult{Text: "ok", BestText: "ok"}, nil
+		}
+	}}
+	handler := Methods(deps)["miniapp.capture.batch"]
+	req := batchRequest(t, []map[string]any{
+		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
+	}, "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	resp := handler(ctx, req)
+	if !resp.OK {
+		t.Fatalf("RPC should accept the files: %+v", resp)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn should start")
+	}
+	cancel()
+	select {
+	case <-cancelled:
+		t.Fatal("turn ctx must not be cancelled when the RPC ctx dies")
+	case <-time.After(200 * time.Millisecond):
 	}
 }

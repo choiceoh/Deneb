@@ -218,22 +218,28 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(원문 보관: memory/" + savedPath + ")"
 		}
-		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
-		}
-		recordWorkFeed(deps, workfeed.Item{
-			Source:     workfeed.SourceCaptureImage,
-			Title:      "공유 이미지",
-			Summary:    workfeed.Preview(res.BestText, 180),
-			Body:       res.BestText,
-			SessionKey: sessionKey,
+		startUntrustedCapture(ctx, deps, sessionKey, message, func(res *chatport.SyncResult, err error) {
+			if err != nil {
+				slog.Error("capture image turn failed", "session", sessionKey, "error", err)
+				return
+			}
+			if res == nil {
+				return
+			}
+			recordWorkFeed(deps, workfeed.Item{
+				Source:     workfeed.SourceCaptureImage,
+				Title:      "공유 이미지",
+				Summary:    workfeed.Preview(res.BestText, 180),
+				Body:       res.BestText,
+				SessionKey: sessionKey,
+			})
 		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"text":       res.Text,
-			"ocr":        strings.TrimSpace(text),
-			"model":      res.Model,
-			"sessionKey": sessionKey,
+			"text":        "이미지를 저장했습니다. 분석합니다.",
+			"turnMessage": message,
+			"accepted":    true,
+			"ocr":         strings.TrimSpace(text),
+			"sessionKey":  sessionKey,
 		})
 	}
 }
@@ -304,16 +310,22 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 		message := buildBatchCaptureMessage([]batchFile{item}, p.Caption, 0)
 		// Turn start — the dedup window for a model-published deliverable card below.
 		turnStartMs := time.Now().UnixMilli()
-		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
-		}
-		cardCapturedDocument(deps, sessionKey, res, turnStartMs)
+		startUntrustedCapture(ctx, deps, sessionKey, message, func(res *chatport.SyncResult, err error) {
+			if err != nil {
+				slog.Error("capture document turn failed", "session", sessionKey, "error", err)
+				return
+			}
+			if res == nil {
+				return
+			}
+			cardCapturedDocument(deps, sessionKey, res, turnStartMs)
+		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"text":       res.Text,
-			"document":   strings.TrimSpace(text),
-			"model":      res.Model,
-			"sessionKey": sessionKey,
+			"text":        "문서를 저장했습니다. 분석합니다.",
+			"turnMessage": message,
+			"accepted":    true,
+			"document":    strings.TrimSpace(text),
+			"sessionKey":  sessionKey,
 		})
 	}
 }
@@ -471,14 +483,14 @@ func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, ca
 	return item
 }
 
-// handleMiniappCaptureBatch materializes N attached files and runs ONE agent turn
-// over a POINTER list — the multi-file path, instead of one turn per file. Each
-// file is extracted (OCR / transcript / document text) with the same extractors as
-// the single-file handlers and archived via SaveCapture (which lands under the
-// memory read-root the `read`/`office` tools can open). The turn carries filename,
-// kind, and path only — the extract stays on disk. The agent reads whichever
-// files it needs and cross-references them, so six attachments land as one
-// context, not six isolated turns.
+// handleMiniappCaptureBatch materializes N attached files and starts ONE agent
+// turn over a POINTER list — the multi-file path, instead of one turn per file.
+// Each file is extracted (OCR / transcript / document text) with the same
+// extractors as the single-file handlers and archived via SaveCapture (which
+// lands under the memory read-root the `read`/`office` tools can open). The
+// turn carries filename, kind, and path only — the extract stays on disk. The
+// RPC returns as soon as the files are saved; the turn runs detached so a
+// proxy/RPC deadline cannot abort it mid-reasoning.
 //
 // Params:
 //   - files      ([]{data(base64), mimeType, filename}, required)
@@ -558,26 +570,35 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 		}
 
 		message := buildBatchCaptureMessage(files, p.Caption, dropped)
-		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
-		}
-		recordWorkFeed(deps, workfeed.Item{
-			Source:     workfeed.SourceCaptureDocument,
-			Title:      fmt.Sprintf("첨부 %d개", saved),
-			Summary:    workfeed.Preview(res.BestText, 180),
-			Body:       res.BestText,
-			SessionKey: sessionKey,
+		// Accept the files on this RPC. The agent turn used to run here and the
+		// outer HTTP/RPC deadline (proxy ~100s, then Dispatcher.safeCall) aborted
+		// it mid-reasoning — the extract was already on disk.
+		startUntrustedCapture(ctx, deps, sessionKey, message, func(res *chatport.SyncResult, err error) {
+			if err != nil {
+				slog.Error("capture batch turn failed", "session", sessionKey, "error", err)
+				return
+			}
+			if res == nil {
+				return
+			}
+			recordWorkFeed(deps, workfeed.Item{
+				Source:     workfeed.SourceCaptureDocument,
+				Title:      fmt.Sprintf("첨부 %d개", saved),
+				Summary:    workfeed.Preview(res.BestText, 180),
+				Body:       res.BestText,
+				SessionKey: sessionKey,
+			})
 		})
 		out := make([]map[string]any, 0, len(files))
 		for _, f := range files {
 			out = append(out, map[string]any{"name": f.name, "kind": f.kind, "skipped": f.skip != ""})
 		}
 		payload := map[string]any{
-			"text":       res.Text,
-			"files":      out,
-			"model":      res.Model,
-			"sessionKey": sessionKey,
+			"text":        fmt.Sprintf("첨부 %d개를 저장했습니다. 분석합니다.", saved),
+			"turnMessage": message,
+			"accepted":    true,
+			"files":       out,
+			"sessionKey":  sessionKey,
 		}
 		dedup.put(dedupKey, payload, time.Now())
 		return rpcutil.RespondOK(req.ID, payload)
@@ -740,34 +761,62 @@ func handleMiniappCaptureAudio(deps Deps) rpcutil.HandlerFunc {
 		if savedPath != "" {
 			message += "\n\n(전사 원문 보관: memory/" + savedPath + " — 회의록에 이 경로를 출처로 남겨라)"
 		}
-		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
-		if err != nil {
-			return rpcerr.WrapDependencyFailed("chat send failed", err).Response(req.ID)
-		}
-		recordWorkFeed(deps, workfeed.Item{
-			Source:     workfeed.SourceCaptureAudio,
-			Title:      "공유 녹음",
-			Summary:    workfeed.Preview(res.BestText, 180),
-			Body:       res.BestText,
-			SessionKey: sessionKey,
+		startUntrustedCapture(ctx, deps, sessionKey, message, func(res *chatport.SyncResult, err error) {
+			if err != nil {
+				slog.Error("capture audio turn failed", "session", sessionKey, "error", err)
+				return
+			}
+			if res == nil {
+				return
+			}
+			recordWorkFeed(deps, workfeed.Item{
+				Source:     workfeed.SourceCaptureAudio,
+				Title:      "공유 녹음",
+				Summary:    workfeed.Preview(res.BestText, 180),
+				Body:       res.BestText,
+				SessionKey: sessionKey,
+			})
 		})
 		return rpcutil.RespondOK(req.ID, map[string]any{
-			"text":       res.Text,
-			"transcript": strings.TrimSpace(transcript),
-			"model":      res.Model,
-			"sessionKey": sessionKey,
+			"text":        "녹음을 저장했습니다. 분석합니다.",
+			"turnMessage": message,
+			"accepted":    true,
+			"transcript":  strings.TrimSpace(transcript),
+			"sessionKey":  sessionKey,
 		})
 	}
 }
 
-func sendUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string) (*chatport.SyncResult, error) {
-	return runNativeSync(ctx, deps, chatport.SyncRequest{
+func untrustedCaptureRequest(sessionKey, message string) chatport.SyncRequest {
+	return chatport.SyncRequest{
 		SessionKey:          sessionKey,
 		Message:             message,
 		Delivery:            &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 		AutoDeliveredOutput: true,
 		GateUntrustedTools:  true,
-	})
+	}
+}
+
+// startUntrustedCapture runs the capture-triggered agent turn detached from the
+// RPC request. Waiting for RunSync inside miniapp.capture.* let the outer
+// HTTP/RPC deadline (proxy idle ~100s, then Dispatcher.safeCall) cancel the
+// turn mid-reasoning. The extract is already on disk; the RPC only accepts the
+// files. The turn is bounded by nativeSyncTurnDeadline and persists to the
+// session transcript so the client can pick the answer up.
+func startUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message string, onDone func(*chatport.SyncResult, error)) {
+	turnCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), nativeSyncTurnDeadline)
+	go func() {
+		defer cancel()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("capture turn panicked", "session", sessionKey, "recover", r)
+			}
+		}()
+		res, err := deps.Chat.RunSync(turnCtx, untrustedCaptureRequest(sessionKey, message))
+		if onDone != nil {
+			onDone(res, err)
+		}
+	}()
 }
 
 func runNativeSync(ctx context.Context, deps Deps, req chatport.SyncRequest) (*chatport.SyncResult, error) {

@@ -101,7 +101,7 @@ class GatewayCaptureStateContractTest {
         assertTrue(accepted)
         assertEquals(2, f.client.chatHistory.value.size)
         assertEquals(
-            "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다.",
+            "이미지를 저장했습니다. 분석합니다.",
             f.client.chatHistory.value.last().content,
         )
     }
@@ -116,7 +116,7 @@ class GatewayCaptureStateContractTest {
 
         assertTrue(accepted)
         assertEquals(
-            "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다.",
+            "이미지를 저장했습니다. 분석합니다.",
             f.client.chatHistory.value.last().content,
         )
     }
@@ -176,7 +176,7 @@ class GatewayCaptureStateContractTest {
         f.client.captureAudio(byteArrayOf(1, 2), "audio/wav")
 
         assertEquals(
-            "녹음에서 음성을 인식하지 못했거나 전사에 실패했습니다.",
+            "녹음을 저장했습니다. 분석합니다.",
             f.client.chatHistory.value.last().content,
         )
     }
@@ -266,7 +266,7 @@ class GatewayCaptureStateContractTest {
 
         assertTrue(accepted)
         assertEquals(
-            "문서에서 텍스트를 추출하지 못했거나 분석에 실패했습니다.",
+            "문서를 저장했습니다. 분석합니다.",
             f.client.chatHistory.value.last().content,
         )
     }
