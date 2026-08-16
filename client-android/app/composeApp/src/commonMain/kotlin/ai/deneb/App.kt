@@ -70,8 +70,8 @@ import ai.deneb.ui.chat.composables.ROUTE_HOME
 import ai.deneb.ui.chat.composables.ROUTE_MAIL
 import ai.deneb.ui.chat.composables.ROUTE_MAIN
 import ai.deneb.ui.chat.composables.ROUTE_MORE
-import ai.deneb.ui.chat.composables.denebBottomBarRoutes
 import ai.deneb.ui.chat.composables.denebBottomChromeReservePx
+import ai.deneb.ui.chat.composables.denebShowsBottomBar
 import ai.deneb.ui.chat.composables.denebLiveTabRequests
 import ai.deneb.ui.chat.composables.isDenebLiveTab
 import ai.deneb.ui.chat.composables.navigateToDenebSection
@@ -840,14 +840,14 @@ internal fun AppContent(
                 // screens hide it and keep their back nav.
                 //
                 // Keyboard: reserve max(tabBar, IME) as one bottom chrome so the
-                // composer rides the IME curve. A boolean hide (imeVisible) jumped
-                // the layout one step late and overlapped the chat body. The
-                // content box consumes ime+nav on tab routes so child imePadding
-                // / navigationBarsPadding don't double-apply.
+                // composer rides the IME curve. Chat hides the bar entirely
+                // (KakaoTalk room) — its own imePadding owns the bottom. Other
+                // tab routes keep the bar; the content box consumes ime+nav so
+                // child imePadding / navigationBarsPadding don't double-apply.
                 val route = currentRoute
                 val density = LocalDensity.current
                 val imePx = WindowInsets.ime.getBottom(density)
-                val onTabRoute = route in denebBottomBarRoutes
+                val onTabRoute = denebShowsBottomBar(route, selectedTabRoute)
                 val tabBarFullPx = with(density) {
                     (
                         DenebBottomBarHeight +

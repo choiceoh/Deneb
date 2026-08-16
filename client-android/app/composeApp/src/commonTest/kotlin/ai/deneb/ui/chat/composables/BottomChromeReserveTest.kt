@@ -30,4 +30,18 @@ class BottomChromeReserveTest {
         assertEquals(100, denebBottomChromeReservePx(tabBarFullPx = 100, imePx = 100))
         assertEquals(101, denebBottomChromeReservePx(tabBarFullPx = 100, imePx = 101))
     }
+
+    @Test
+    fun chatSurfaceHidesTheTabBar() {
+        assertEquals(false, denebShowsBottomBar(ROUTE_MAIN, ROUTE_HOME))
+        assertEquals(false, denebShowsBottomBar(ROUTE_HOME, ROUTE_HOME))
+    }
+
+    @Test
+    fun feedAndSectionsKeepTheTabBar() {
+        assertEquals(true, denebShowsBottomBar(ROUTE_MAIN, ROUTE_FEED))
+        assertEquals(true, denebShowsBottomBar(ROUTE_FEED, ROUTE_FEED))
+        assertEquals(true, denebShowsBottomBar(ROUTE_MAIL, ROUTE_MAIL))
+        assertEquals(false, denebShowsBottomBar("deneb_mail_detail", ROUTE_MAIL))
+    }
 }
