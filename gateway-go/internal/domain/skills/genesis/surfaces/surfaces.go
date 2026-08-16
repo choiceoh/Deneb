@@ -7,10 +7,12 @@ import (
 
 // Declared self-improvement editable surfaces (Self-Harness principle: a
 // proposer may only claim DECLARED surfaces, and permission control lives
-// outside the improvement loop). Deneb's only auto-apply surface today is the
-// skill-body evolve path, which has the full gate stack (patch-first budget +
-// judge + held-out replay + post-evolve rollback). Everything else is
-// PROPOSE-ONLY: recorded, reviewed, and landed through normal PR gates.
+// outside the improvement loop). Auto-apply surfaces today: the skill-body
+// evolve path (patch-first budget + judge + held-out replay + post-evolve
+// rollback) and, since the 2026-08-16 rollback drill, gateway source via the
+// coding lane (dev-tree gates + PR/CI + deploy-watch rollback). Everything
+// else is PROPOSE-ONLY: recorded, reviewed, and landed through normal PR
+// gates.
 // Widening a surface to auto-apply requires (1) a behavioral regression gate
 // equivalent to the skill held-out replay and (2) explicit operator approval —
 // never flip a tier as a drive-by.
@@ -111,11 +113,14 @@ func DeclaredEditableSurfaces() []EditableSurface {
 			// DECLARED propose-only surface. The execution contract for the
 			// coding lane: dev worktree only, full gates (make check + live-test
 			// smoke) green, PR + CI green, land → auto-deploy hot-swap; prod
-			// tree is never edited directly. Auto-apply stays off until the
-			// deploy-level rollback watch exists.
-			Name: "gateway-source", Tier: SurfaceTierProposeOnly,
+			// tree is never edited directly. Graduated to auto-apply
+			// 2026-08-16: the deploy-level rollback watch exists and was
+			// proven by a live drill (freeze → detect 55s → bak-prev restore
+			// → healthy in 89s) with explicit operator approval — the
+			// graduation ladder's final row.
+			Name: "gateway-source", Tier: SurfaceTierAutoApply,
 			Patterns: []string{"*.go"},
-			Note:     "operator-authorized self-edit via dev-tree + gates + hot-swap (2026-07-12); acceptance-machinery excluded above",
+			Note:     "operator-authorized self-edit via dev-tree + gates + hot-swap (2026-07-12); auto-apply graduated 2026-08-16 on rollback-drill evidence; acceptance-machinery excluded above",
 		},
 		{
 			Name: "skill-body", Tier: SurfaceTierAutoApply,

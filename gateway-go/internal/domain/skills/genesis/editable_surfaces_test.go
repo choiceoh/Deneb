@@ -18,7 +18,7 @@ func TestClassifySurfaceReturnsTierByPathPattern(t *testing.T) {
 		{"workspace/AGENTS.md", "workspace-context", surfaces.SurfaceTierProposeOnly},
 		{"gateway-go/internal/pipeline/chat/prompt/prompt_cache.go", "prompt-cache-path", surfaces.SurfaceTierForbidden},
 		{".github/dependabot.yml", "security-owned", surfaces.SurfaceTierForbidden},
-		{"gateway-go/internal/runtime/mailflow/mail_counterparty.go", "gateway-source", surfaces.SurfaceTierProposeOnly},
+		{"gateway-go/internal/runtime/mailflow/mail_counterparty.go", "gateway-source", surfaces.SurfaceTierAutoApply},
 		{"", "undeclared", surfaces.SurfaceTierProposeOnly},
 	}
 	for _, tc := range cases {

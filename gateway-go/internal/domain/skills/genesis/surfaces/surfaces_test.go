@@ -26,11 +26,12 @@ func TestClassifyProposalSurfacesEmptyTargetsDefaultProposeOnly(t *testing.T) {
 	}
 }
 
-// Operator authorization 2026-07-12: gateway source is declared propose-only,
-// while the acceptance machinery stays forbidden — the loop must never be able
-// to queue an edit to its own gates.
-func TestClassifySurfaceReturnsGatewaySourceProposeOnlyAndAcceptanceMachineryForbidden(t *testing.T) {
-	if s := ClassifySurface("gateway-go/internal/runtime/heartbeat/heartbeat_task.go"); s.Name != "gateway-source" || s.Tier != SurfaceTierProposeOnly {
+// Operator authorization 2026-07-12 declared gateway source propose-only;
+// the 2026-08-16 rollback drill (detect 55s, restore 89s) plus operator
+// approval graduated it to auto-apply. The acceptance machinery stays
+// forbidden — the loop must never be able to queue an edit to its own gates.
+func TestClassifySurfaceReturnsGatewaySourceAutoApplyAndAcceptanceMachineryForbidden(t *testing.T) {
+	if s := ClassifySurface("gateway-go/internal/runtime/heartbeat/heartbeat_task.go"); s.Name != "gateway-source" || s.Tier != SurfaceTierAutoApply {
 		t.Fatalf("gateway source = %+v", s)
 	}
 	for _, acceptor := range []string{
@@ -46,7 +47,7 @@ func TestClassifySurfaceReturnsGatewaySourceProposeOnlyAndAcceptanceMachineryFor
 	}
 	// Precedence: forbidden acceptor files must not be shadowed by *.go.
 	tier, forbidden := ClassifyProposalSurfaces([]string{"a_normal_file.go", "validation_engine.go"})
-	if tier != SurfaceTierProposeOnly || len(forbidden) != 1 {
+	if tier != SurfaceTierAutoApply || len(forbidden) != 1 {
 		t.Fatalf("mixed proposal = tier %q forbidden %v", tier, forbidden)
 	}
 }
