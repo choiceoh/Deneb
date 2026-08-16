@@ -33,8 +33,16 @@ private class AndroidSaveStore(private val dir: File) : SaveStore {
         val tmp = File(dir, "${target.name}.tmp")
         tmp.writeText(text)
         if (!tmp.renameTo(target)) {
-            target.delete()
-            check(tmp.renameTo(target)) { "세이브 교체 실패" }
+            // 기존 세이브를 지우지 않고 옆으로 치운다. 지웠다가 교체마저 실패하면
+            // 유일한 복구본이 사라진다.
+            val backup = File(dir, "${target.name}.bak")
+            backup.delete()
+            val stashed = target.exists() && target.renameTo(backup)
+            if (!tmp.renameTo(target)) {
+                if (stashed) backup.renameTo(target)
+                error("세이브 교체 실패")
+            }
+            backup.delete()
         }
     }.isSuccess
 

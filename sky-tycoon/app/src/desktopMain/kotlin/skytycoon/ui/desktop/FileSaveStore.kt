@@ -17,11 +17,24 @@ class FileSaveStore(private val dir: File) : SaveStore {
         val target = file(slot)
         val tmp = File(dir, "${target.name}.tmp")
         tmp.writeText(text)
-        if (!tmp.renameTo(target)) {
-            target.delete()
-            check(tmp.renameTo(target)) { "세이브 교체 실패" }
-        }
+        if (!tmp.renameTo(target)) replaceViaBackup(tmp, target)
     }.isSuccess
+
+    /**
+     * 대상 파일이 있으면 rename 이 실패하는 플랫폼(윈도 등)을 위한 경로.
+     * 기존 세이브를 **지우지 않고** 옆으로 치워 두고, 교체가 실패하면 되돌린다 —
+     * 지웠다가 두 번째 rename 마저 실패하면 유일한 복구본이 사라진다.
+     */
+    internal fun replaceViaBackup(tmp: File, target: File) {
+        val backup = File(target.parentFile, "${target.name}.bak")
+        backup.delete()
+        val stashed = target.exists() && target.renameTo(backup)
+        if (!tmp.renameTo(target)) {
+            if (stashed) backup.renameTo(target)
+            error("세이브 교체 실패")
+        }
+        backup.delete()
+    }
 
     override fun read(slot: SaveSlot): String? =
         file(slot).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }

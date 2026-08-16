@@ -407,18 +407,32 @@ class RegressionTest {
             },
             routes = s.routes.map { if (it.airlineId == "hanseong") it.copy(planeIds = emptyList()) else it },
         )
-        val playerName = s.player.name
+        assertNoPlayerAccident(s, "격납고에 세워둔 비행기가 착륙 사고를 냈다")
+    }
 
+    @Test
+    fun `운휴 노선에 남겨둔 기재도 사고를 내지 않는다`() {
+        var s = fresh()
+        // 배속은 그대로 두고 노선만 세운다 — 주 0편이면 뜨는 비행기가 없다.
+        s = s.copy(
+            planes = s.planes.map { if (it.airlineId == "hanseong") it.copy(ageQuarters = 400) else it },
+            routes = s.routes.map {
+                if (it.airlineId == "hanseong") it.copy(active = false, freq = 0) else it
+            },
+        )
+        assertNoPlayerAccident(s, "운휴시킨 노선의 기재가 착륙 사고를 냈다")
+    }
+
+    /** 200분기를 굴려도 플레이어 사고가 없는지 — 다른 회사 사고는 나야 테스트가 헛돌지 않는다. */
+    private fun assertNoPlayerAccident(state: GameState, why: String) {
+        val playerName = state.player.name
         val rng = Rng(12345)
-        var t = s
+        var t = state
         repeat(200) { t = Events.fire(t, rng) }
 
         val accidents = t.news.filter { it.kind == NewsKind.ACCIDENT }
         assertTrue(accidents.isNotEmpty(), "200분기를 굴렸는데 사고가 한 건도 없다 — 테스트가 헛돌고 있다")
-        assertTrue(
-            accidents.none { it.headline.startsWith(playerName) },
-            "격납고에 세워둔 비행기가 착륙 사고를 냈다",
-        )
+        assertTrue(accidents.none { it.headline.startsWith(playerName) }, why)
     }
 
     // ------------------------------------------------------------ 마지막 분기

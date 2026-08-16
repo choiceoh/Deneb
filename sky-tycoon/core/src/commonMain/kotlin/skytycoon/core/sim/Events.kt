@@ -199,13 +199,27 @@ object Events {
         return random(s, rng)
     }
 
+    /**
+     * 이번 분기에 실제로 뜨는 노선. 배속만 돼 있고 운휴(비활성·주 0편)거나 공항이 닫힌
+     * 노선의 기재는 격납고에 있는 것과 같다.
+     */
+    private fun operatingRouteIds(state: GameState): Set<Int> = state.routes
+        .filter { r ->
+            r.active && r.freq > 0 &&
+                state.cityState[r.from]?.isClosed(state.turn) != true &&
+                state.cityState[r.to]?.isClosed(state.turn) != true
+        }
+        .map { it.id }
+        .toSet()
+
     private fun random(state: GameState, rng: Rng): GameState {
         var s = state
+        val operating = operatingRouteIds(s)
 
         // 항공 사고 — 노후 기재를 많이 굴릴수록 확률이 오른다.
         for (a in s.livingAirlines) {
-            // 노선에 배속돼 실제로 뜨는 기재만 대상 — 세워둔 비행기가 착륙 사고를 낼 수는 없다.
-            val planes = s.planesOf(a.id).filter { it.routeId != null }
+            // 실제로 뜨는 노선의 기재만 대상 — 세워둔 비행기가 착륙 사고를 낼 수는 없다.
+            val planes = s.planesOf(a.id).filter { p -> p.routeId?.let { it in operating } == true }
             if (planes.isEmpty()) continue
             val avgAge = planes.sumOf { it.ageQuarters }.toDouble() / planes.size
             val p = 0.004 + (avgAge / 100.0) * 0.016 + (planes.size / 400.0)
