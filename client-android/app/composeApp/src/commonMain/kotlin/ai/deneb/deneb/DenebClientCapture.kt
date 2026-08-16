@@ -48,15 +48,17 @@ suspend fun DenebGatewayClient.captureImage(bytes: ByteArray, mimeType: String, 
                 if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
             },
         )
-        payload?.text?.ifBlank { null } ?: "이미지에서 텍스트를 찾지 못했거나 분석에 실패했습니다."
+        CaptureAck(
+            payload?.text?.ifBlank { null } ?: "이미지를 저장했습니다. 분석합니다.",
+            payload?.turnMessage.orEmpty(),
+        )
     } catch (c: CancellationException) {
         _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
         throw c
     } catch (e: Exception) {
-        "⚠️ ${e.message ?: "이미지 캡처 실패"}"
+        CaptureAck("⚠️ ${e.message ?: "이미지 캡처 실패"}")
     }
-    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-    syncNativeStateAsync()
+    finishAcceptedCapture(reply)
     return true
 }
 
@@ -80,15 +82,17 @@ suspend fun DenebGatewayClient.captureAudio(bytes: ByteArray, mimeType: String) 
                 put("sessionKey", sessionKey)
             },
         )
-        payload?.text?.ifBlank { null } ?: "녹음에서 음성을 인식하지 못했거나 전사에 실패했습니다."
+        CaptureAck(
+            payload?.text?.ifBlank { null } ?: "녹음을 저장했습니다. 분석합니다.",
+            payload?.turnMessage.orEmpty(),
+        )
     } catch (c: CancellationException) {
         _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
         throw c
     } catch (e: Exception) {
-        "⚠️ ${e.message ?: "녹음 캡처 실패"}"
+        CaptureAck("⚠️ ${e.message ?: "녹음 캡처 실패"}")
     }
-    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-    syncNativeStateAsync()
+    finishAcceptedCapture(reply)
 }
 
 /**
@@ -127,15 +131,17 @@ suspend fun DenebGatewayClient.captureDocument(
                 if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
             },
         )
-        payload?.text?.ifBlank { null } ?: "문서에서 텍스트를 추출하지 못했거나 분석에 실패했습니다."
+        CaptureAck(
+            payload?.text?.ifBlank { null } ?: "문서를 저장했습니다. 분석합니다.",
+            payload?.turnMessage.orEmpty(),
+        )
     } catch (c: CancellationException) {
         _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
         throw c
     } catch (e: Exception) {
-        "⚠️ ${e.message ?: "문서 캡처 실패"}"
+        CaptureAck("⚠️ ${e.message ?: "문서 캡처 실패"}")
     }
-    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-    syncNativeStateAsync()
+    finishAcceptedCapture(reply)
     return true
 }
 
@@ -186,15 +192,17 @@ suspend fun DenebGatewayClient.captureBatch(files: List<DenebAttachment>, captio
                 if (trimmedCaption.isNotBlank()) put("caption", trimmedCaption)
             },
         )
-        payload?.text?.ifBlank { null } ?: "첨부에서 내용을 추출하지 못했거나 분석에 실패했습니다."
+        CaptureAck(
+            payload?.text?.ifBlank { null } ?: "첨부 파일을 저장했습니다. 분석합니다.",
+            payload?.turnMessage.orEmpty(),
+        )
     } catch (c: CancellationException) {
         _chatHistory.update { history -> history.filterNot { it.id == pending.id } }
         throw c
     } catch (e: Exception) {
-        "⚠️ ${e.message ?: "첨부 캡처 실패"}"
+        CaptureAck("⚠️ ${e.message ?: "첨부 캡처 실패"}")
     }
-    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
-    syncNativeStateAsync()
+    finishAcceptedCapture(reply)
     return true
 }
 
@@ -234,5 +242,20 @@ suspend fun DenebGatewayClient.captureContacts(contacts: List<ContactData>) {
         "⚠️ ${e.message ?: "주소록 동기화 실패"}"
     }
     _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = reply) }
+    syncNativeStateAsync()
+}
+
+private data class CaptureAck(val text: String, val turnMessage: String = "")
+
+/**
+ * Show the save ack immediately, then wait for the detached capture turn to
+ * land in the transcript. A blocking RPC used to die (~100s) while the agent
+ * was still reading the file.
+ */
+private suspend fun DenebGatewayClient.finishAcceptedCapture(ack: CaptureAck) {
+    _chatHistory.update { it + History(role = History.Role.ASSISTANT, content = ack.text) }
+    if (ack.turnMessage.isNotBlank()) {
+        awaitDetachedCaptureTurn(sessionKey, ack.turnMessage)
+    }
     syncNativeStateAsync()
 }

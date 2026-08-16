@@ -120,7 +120,7 @@ class GatewayCaptureBatchContractTest {
 
         assertTrue(accepted)
         assertEquals(
-            "첨부에서 내용을 추출하지 못했거나 분석에 실패했습니다.",
+            "첨부 파일을 저장했습니다. 분석합니다.",
             f.client.chatHistory.value[1].content,
         )
     }

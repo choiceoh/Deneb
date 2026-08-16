@@ -472,7 +472,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
       };
       if (caption) params.caption = caption;
       const res = await callRpc<{ text?: string }>(cfg, "miniapp.capture.batch", params);
-      const text = res?.text?.trim() || "첨부에서 내용을 추출하지 못했거나 분석에 실패했습니다.";
+      const text = res?.text?.trim() || "첨부 파일을 저장했습니다. 분석합니다.";
       patch((turn) => ({ ...turn, parts: [{ kind: "text" as const, text }], text, status: "done" }));
       for (const resource of ["workfeed", "wiki", "search"]) clearCachedResource(resource);
       invalidate({ resource: "workfeed", invalidates: ["list"] });
