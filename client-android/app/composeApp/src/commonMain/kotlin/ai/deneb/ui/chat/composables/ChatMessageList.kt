@@ -436,26 +436,52 @@ internal fun ChatMessageList(
                 turnStart.value = if (uiState.isLoading) TimeSource.Monotonic.markNow() else null
             }
 
-            // Follow the stream: while a reply streams in, keep the newest tokens
-            // in view — yet only when the user is already near the bottom, so
-            // scrolling up to re-read earlier text isn't yanked back down.
-            val isNearBottom by remember {
-                derivedStateOf {
+            // Stick-to-bottom follow: IME shrinks the viewport (LazyColumn pins
+            // the top, so the newest line would slide under the composer) and a
+            // streaming reply grows the last row. Ride those deltas with scrollBy
+            // — not a snap-to-end — so the keyboard and tokens move together the
+            // way KakaoTalk / GPT / Claude do. Leave the user alone if they
+            // scrolled up to re-read.
+            LaunchedEffect(listState) {
+                var prevHeight = 0
+                var prevLastIndex = -1
+                var prevLastSize = 0
+                var stickToBottom = true
+                snapshotFlow {
                     val info = listState.layoutInfo
-                    val last = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-                    last.index >= info.totalItemsCount - 1 &&
-                        last.offset + last.size <= info.viewportEndOffset + 240
-                }
-            }
-            val streamingLen = uiState.history.lastOrNull()?.content?.length ?: 0
-            // Coalesce the follow-scroll: the streaming reply's text is sampled
-            // ~15×/s, so keying on the raw length would fire scrollToItem on every
-            // emission. Bucketing by ~48 chars (≈1–2 lines) drops that to a few
-            // snaps/sec — invisibly smooth given the 240px near-bottom slack above,
-            // and far less layout churn on the hot streaming path.
-            LaunchedEffect(streamingLen / 48, uiState.isLoading) {
-                if (uiState.isLoading && isNearBottom) {
-                    listState.scrollToTrueBottom()
+                    val last = info.visibleItemsInfo.lastOrNull()
+                    ChatStickSnapshot(
+                        viewportHeight = info.viewportSize.height,
+                        lastIndex = last?.index ?: -1,
+                        lastSize = last?.size ?: 0,
+                        lastBottom = if (last == null) 0 else last.offset + last.size,
+                        viewportEnd = info.viewportEndOffset,
+                        total = info.totalItemsCount,
+                    )
+                }.collect { snap ->
+                    val shrink = if (prevHeight > 0) prevHeight - snap.viewportHeight else 0
+                    val shrinking = shrink > 0
+                    val nearBottom = snap.lastIndex < 0 || (
+                        snap.lastIndex >= snap.total - 1 &&
+                            snap.lastBottom <= snap.viewportEnd + 240 + maxOf(shrink, 0)
+                        )
+                    if (!shrinking) stickToBottom = nearBottom
+                    val follow = chatStickFollowScrollPx(
+                        previousViewportHeight = prevHeight,
+                        viewportHeight = snap.viewportHeight,
+                        previousLastKey = prevLastIndex,
+                        lastKey = snap.lastIndex,
+                        previousLastSize = prevLastSize,
+                        lastSize = snap.lastSize,
+                        stickToBottom = stickToBottom,
+                    )
+                    prevHeight = snap.viewportHeight
+                    prevLastIndex = snap.lastIndex
+                    prevLastSize = snap.lastSize
+                    if (follow > 0) {
+                        listState.scrollBy(follow.toFloat())
+                        stickToBottom = true
+                    }
                 }
             }
 
