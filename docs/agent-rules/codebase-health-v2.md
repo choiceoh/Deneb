@@ -3,6 +3,8 @@ description: "Health Bench 2.0 점수·finding·baseline 변경 규약"
 globs: ["scripts/audit/codebase-health-v2.py", "scripts/audit/health_v2/**", "scripts/audit/health-v2-*.json"]
 ---
 
+> **⚠️ 마이그레이션 안내 (2026-08).** 이 벤치는 **Health Bench 3.0**(`codebase-health-v3.md`)에 승계되었다. 3.0이 구조·런타임·RSI 피트니스를 단일 벤치로 통합하며(설계: `docs/research/health-bench-3.0.md`), v1/v2/v3 점수는 서로 비교하지 않는다. v2의 **scorer 단위 테스트(`make health-v2-test`)는 운영자 결정(2026-07-24)으로 로컬 `make check`에 남아** 있어 scorer 자체가 썩지 않게 한다 — 이는 퇴역이 아니라 의도된 병존이다. 신규 평가·래칫은 v3(`make health-v3`, `make bench-check`)를 쓴다.
+
 # Codebase Health Bench 2.0
 
 Health Bench 2.0은 줄 수를 줄이는 게임이 아니라, 변경이 국소적이고 계약이
