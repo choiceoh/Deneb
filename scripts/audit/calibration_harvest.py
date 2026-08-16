@@ -7,9 +7,11 @@ bench samples and fitness evidence. Both the revert and the conclusion used to
 be manual, so the campaign could end silently with nothing harvested — this
 script closes the window deliberately:
 
-  1. harvest  — read meta_evolution_log.jsonl, compute per-epoch benched-cycle
-                counts since window open (target: >= 10 each) plus a cycle
-                inventory, and write a markdown conclusion to the state dir.
+  1. harvest  — read meta_evolution_log.jsonl: per-epoch benched-cycle counts
+                (target: >= 10 each), adopted/rejected/reverted revisions,
+                first-vs-last 7d feed-card snapshot, and a cycle inventory.
+                Write a markdown conclusion to the state dir. The report must
+                name which meta revisions landed — not just that the loop ran.
   2. publish  — best-effort: create a wiki page via the gateway RPC so the
                 conclusion is operator-visible and recallable (fail-open).
   3. revert   — with --revert: delete the drop-in, daemon-reload, and reload
@@ -38,7 +40,37 @@ WINDOW_CLOSE = "2026-08-23"
 BENCH_TARGET = 10
 EPOCHS = ("producer", "evaluator", "genesis")
 BENCH_FIELDS = ("benchIncumbent", "benchShadow", "benchGenesis")
+ADOPT_ACTIONS = ("adopted", "auto_adopted")
+REJECT_ACTIONS = ("rejected",)
+REVERT_ACTIONS = ("operator_reverted", "auto_reverted")
 CALIBRATION_CONF = Path.home() / ".config/systemd/user/deneb-gateway.service.d/rsi-calibration.conf"
+
+
+def _as_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return default
+
+
+def _utility_snapshot(row: dict) -> dict | None:
+    raw = row.get("operatorUtility")
+    if not isinstance(raw, dict):
+        return None
+    return {
+        "at": _as_int(row.get("createdAt")),
+        "adopted7d": _as_int(raw.get("adopted7d")),
+        "rejected7d": _as_int(raw.get("rejected7d")),
+        "reverted7d": _as_int(raw.get("reverted7d")),
+        "adoptionRate": _as_float(raw.get("adoptionRate")),
+    }
 
 
 def load_cycles(ledger: Path) -> list[dict]:
@@ -57,40 +89,89 @@ def load_cycles(ledger: Path) -> list[dict]:
 
 
 def harvest(cycles: list[dict]) -> dict:
-    """Per-epoch benched-cycle counts since window open + cycle inventory.
+    """Window-scoped harvest: benches, landed revisions, feed-card snapshots.
 
-    Mirrors the Go ladderCalibrationRow rule: a cycle counts when it was
-    created at/after the window open, names an epoch, and carries at least one
-    bench payload.
+    Cycle rows (empty action) feed the ladderCalibrationRow bench counts.
+    Action rows (adopted/rejected/reverted) are the operator-visible outcome
+    of those cycles — they must not inflate the bench denominator.
     """
     open_ms = int(WINDOW_OPEN_UTC.timestamp() * 1000)
     benched = {e: 0 for e in EPOCHS}
+    cycles_by_epoch = {e: 0 for e in EPOCHS}
     inventory = []
+    adoptions: list[dict] = []
+    verdicts = {"adopted": 0, "rejected": 0, "reverted": 0}
+    utilities: list[dict] = []
+    unbenched_reasons: list[str] = []
     for c in cycles:
-        try:
-            created = int(c.get("createdAt") or 0)
-        except (TypeError, ValueError):
-            continue
+        created = _as_int(c.get("createdAt"))
         if created < open_ms:
+            continue
+        action = str(c.get("action") or "")
+        if action:
+            item = {
+                "createdAt": created,
+                "action": action,
+                "epoch": str(c.get("epoch") or ""),
+                "artifact": str(c.get("artifact") or ""),
+                "reason": str(c.get("reason") or "")[:120],
+                "revisionClass": str(c.get("revisionClass") or ""),
+            }
+            if action in ADOPT_ACTIONS:
+                verdicts["adopted"] += 1
+                adoptions.append(item)
+            elif action in REJECT_ACTIONS:
+                verdicts["rejected"] += 1
+            elif action in REVERT_ACTIONS:
+                verdicts["reverted"] += 1
             continue
         epoch = str(c.get("epoch") or "")
         has_bench = any(c.get(f) is not None for f in BENCH_FIELDS)
+        if epoch in cycles_by_epoch:
+            cycles_by_epoch[epoch] += 1
         if epoch in benched and has_bench:
             benched[epoch] += 1
+        elif epoch in benched:
+            reason = str(c.get("reason") or "").strip() or "벤치 없음"
+            unbenched_reasons.append(reason[:80])
         inventory.append(
             {
                 "createdAt": created,
                 "epoch": epoch or "(none)",
                 "benched": has_bench,
                 "reason": str(c.get("reason") or "")[:120],
+                "artifact": str(c.get("artifact") or ""),
             }
         )
+        if snap := _utility_snapshot(c):
+            utilities.append(snap)
+    ready = all(v >= BENCH_TARGET for v in benched.values())
+    utilities.sort(key=lambda row: row["at"])
+    feed = None
+    if utilities:
+        first, last = utilities[0], utilities[-1]
+        feed = {
+            "first": first,
+            "last": last,
+            "rateDelta": last["adoptionRate"] - first["adoptionRate"],
+        }
+    bottleneck = None
+    if not ready:
+        bottleneck = {
+            "starved": [e for e in EPOCHS if benched[e] < BENCH_TARGET],
+            "cyclesByEpoch": cycles_by_epoch,
+            "unbenched": unbenched_reasons[:8],
+        }
     return {
         "benched": benched,
         "target": BENCH_TARGET,
-        "ready": all(v >= BENCH_TARGET for v in benched.values()),
+        "ready": ready,
         "cyclesSinceOpen": len(inventory),
         "inventory": inventory,
+        "adoptions": adoptions,
+        "verdicts": verdicts,
+        "feed": feed,
+        "bottleneck": bottleneck,
     }
 
 
@@ -112,26 +193,99 @@ def render_report(result: dict, now: dt.datetime, conf_present: bool, reverted: 
         lines.append(f"- {e}: **{b[e]}** — {verdict}")
     lines += [
         "",
-        f"**종합: {'목표 달성 — 사다리 행 졸업 근거 확보' if result['ready'] else '목표 미달 — 아래 사이클 인벤토리로 병목 진단'}**",
+        f"**종합: {'목표 달성 — 사다리 행 졸업 근거 확보' if result['ready'] else '목표 미달 — 병목을 남기고 창은 예정대로 닫는다'}**",
         "",
+    ]
+    lines += _render_adoptions(result)
+    lines += _render_feed(result)
+    lines += [
         f"## 윈도 내 사이클 인벤토리 ({result['cyclesSinceOpen']}건)",
         "",
     ]
     for c in result["inventory"]:
         when = dt.datetime.fromtimestamp(c["createdAt"] / 1000, tz=dt.timezone.utc).astimezone()
         mark = "벤치 ✓" if c["benched"] else "벤치 없음"
-        lines.append(f"- {when:%m-%d %H:%M} · {c['epoch']} · {mark} · {c['reason']}")
-    if not result["ready"]:
-        lines += [
-            "",
-            "## 미달 시 참고",
-            "",
-            "- 벤치는 메타 사이클(Epoch 있는 개정)에만 붙는다 — 사이클 자체가 돌았는데 벤치가 비면"
-            " 벤치 실행 실패/스킵을 의심하라 (meta_*_bench 경로).",
-            "- 케이던스 노브 이력: 2026-07-12 2d 개시 → 2026-07-18 1d 보정.",
-        ]
+        artifact = f" · {c['artifact']}" if c.get("artifact") else ""
+        lines.append(f"- {when:%m-%d %H:%M} · {c['epoch']}{artifact} · {mark} · {c['reason']}")
+    if bottleneck := result.get("bottleneck"):
+        lines += _render_bottleneck(bottleneck, result["benched"])
     lines.append("")
     return "\n".join(lines)
+
+
+def _when(ms: int) -> str:
+    return dt.datetime.fromtimestamp(ms / 1000, tz=dt.timezone.utc).astimezone().strftime("%m-%d %H:%M")
+
+
+def _render_adoptions(result: dict) -> list[str]:
+    v = result.get("verdicts") or {}
+    adopted = result.get("adoptions") or []
+    lines = [
+        "## 채택된 메타 개정",
+        "",
+        f"- 윈도 내 판정: 채택 {v.get('adopted', 0)} · 기각 {v.get('rejected', 0)} · 되돌림 {v.get('reverted', 0)}",
+        "",
+    ]
+    if not adopted:
+        lines.append("- 채택된 개정 없음 — 루프가 돌아도 메타 아티팩트는 그대로다.")
+        lines.append("")
+        return lines
+    for row in adopted:
+        klass = row["revisionClass"] or "미분류"
+        artifact = row["artifact"] or "(artifact 없음)"
+        lines.append(
+            f"- {_when(row['createdAt'])} · {row['action']} · {row['epoch'] or '?'} · "
+            f"{artifact} ({klass}) · {row['reason'] or '사유 없음'}"
+        )
+    lines.append("")
+    return lines
+
+
+def _render_feed(result: dict) -> list[str]:
+    lines = ["## 피드 카드 판정 (윈도 초 → 말, 7일 스냅샷)", ""]
+    feed = result.get("feed")
+    if not feed:
+        lines += [
+            "- 원장에 operatorUtility 스냅샷이 없다. 피드 채택률 델타를 계산할 수 없음.",
+            "",
+        ]
+        return lines
+    first, last = feed["first"], feed["last"]
+    delta = feed["rateDelta"]
+    sign = "+" if delta >= 0 else ""
+    lines += [
+        f"- 초({_when(first['at'])}): 채택 {first['adopted7d']} · 기각 {first['rejected7d']} · "
+        f"되돌림 {first['reverted7d']} (채택률 {first['adoptionRate'] * 100:.0f}%)",
+        f"- 말({_when(last['at'])}): 채택 {last['adopted7d']} · 기각 {last['rejected7d']} · "
+        f"되돌림 {last['reverted7d']} (채택률 {last['adoptionRate'] * 100:.0f}%)",
+        f"- 채택률 델타: {sign}{delta * 100:.0f}pp (자문 — 게이트 아님)",
+        "",
+    ]
+    return lines
+
+
+def _render_bottleneck(bottleneck: dict, benched: dict) -> list[str]:
+    lines = [
+        "",
+        "## 병목",
+        "",
+        "- 창은 예정대로 닫는다. 아래는 다음 창을 열지 말아야 할 이유다.",
+    ]
+    cycles = bottleneck.get("cyclesByEpoch") or {}
+    for epoch in bottleneck.get("starved") or []:
+        have, ran = benched.get(epoch, 0), cycles.get(epoch, 0)
+        lines.append(
+            f"- {epoch}: 벤치 {have}/{BENCH_TARGET} · 사이클 {ran}건 "
+            f"(부족 {BENCH_TARGET - have})"
+        )
+    for reason in bottleneck.get("unbenched") or []:
+        lines.append(f"- 벤치 없는 사이클: {reason}")
+    lines += [
+        "- 벤치는 메타 사이클(Epoch 있는 개정)에만 붙는다 — 사이클이 있는데 벤치가 비면 "
+        "meta_*_bench 스킵/실패를 의심하라.",
+        "- 케이던스 노브 이력: 2026-07-12 2d 개시 → 2026-07-18 1d 보정.",
+    ]
+    return lines
 
 
 def publish_wiki(report: str, now: dt.datetime, gateway: str) -> str:
@@ -230,10 +384,12 @@ def main() -> int:
             print(f"wiki: {path}")
 
     b = result["benched"]
+    v = result["verdicts"]
     print(
         "benched cycles since window open — "
         + " · ".join(f"{e}: {b[e]}/{BENCH_TARGET}" for e in EPOCHS)
         + (" — READY" if result["ready"] else " — SHORTFALL")
+        + f" · adopted {v['adopted']} rejected {v['rejected']} reverted {v['reverted']}"
     )
     return 0
 
