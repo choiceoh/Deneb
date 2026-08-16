@@ -141,8 +141,10 @@ func TestCaptureBatchAllUnreadableIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestCaptureBatchUsesSummaryPreviewWhenWired(t *testing.T) {
+func TestCaptureBatchPersistedFilesArePointersOnly(t *testing.T) {
 	deps, runs, msg := batchDeps(true)
+	// Even if a summarizer is wired, the turn must stay a path list — the
+	// extract lives on disk for `read`, not in the user message.
 	deps.SummarizePreview = func(_ context.Context, name, _ string) string {
 		return "주제: " + name + " 요약\n- 핵심 사실"
 	}
@@ -155,26 +157,48 @@ func TestCaptureBatchUsesSummaryPreviewWhenWired(t *testing.T) {
 	if !resp.OK || *runs != 1 {
 		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
 	}
-	if !strings.Contains(*msg, "주제: report.pdf 요약") {
-		t.Errorf("preview should be the tiny-model summary, got:\n%s", *msg)
+	if !strings.Contains(*msg, "경로:") || !strings.Contains(*msg, "report.pdf") {
+		t.Errorf("persisted file should be a path pointer, got:\n%s", *msg)
+	}
+	if strings.Contains(*msg, "미리보기") || strings.Contains(*msg, "주제: report.pdf") ||
+		strings.Contains(*msg, "문서 추출 텍스트") {
+		t.Errorf("extracted body must not ride in the user message, got:\n%s", *msg)
 	}
 }
 
-func TestCaptureBatchFallsBackToFrontCutWhenSummaryEmpty(t *testing.T) {
-	deps, runs, msg := batchDeps(true)
-	// Local model down/gated → SummarizePreview returns "" → front-cut fallback.
-	deps.SummarizePreview = func(context.Context, string, string) string { return "" }
-	handler := Methods(deps)["miniapp.capture.batch"]
-	req := batchRequest(t, []map[string]any{
-		{"data": b64("doc"), "mimeType": "application/pdf", "filename": "report.pdf"},
-	}, "")
-
-	resp := handler(context.Background(), req)
-	if !resp.OK || *runs != 1 {
-		t.Fatalf("batch capture: ok=%v runs=%d", resp.OK, *runs)
+func TestCaptureDocumentSavesPointerNotBody(t *testing.T) {
+	var last string
+	deps := Deps{
+		Chat: &chatPortStub{runSync: func(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+			last = req.Message
+			return &chatport.SyncResult{Text: "ok", BestText: "ok"}, nil
+		}},
+		ExtractDocument: func(context.Context, []byte, string, string) string {
+			return "공사금액 1060억 계약서 전문이 여기에 있다"
+		},
+		SaveCapture: func(_, _, _ string) (string, string, int, error) {
+			return "captures/doc.md", "/abs/captures/doc.md", 3, nil
+		},
 	}
-	if !strings.Contains(*msg, "문서 추출 텍스트: report.pdf") {
-		t.Errorf("empty summary should fall back to the front-cut preview, got:\n%s", *msg)
+	handler := Methods(deps)["miniapp.capture.document"]
+	req, err := protocol.NewRequestFrame("doc-1", "miniapp.capture.document", map[string]any{
+		"document":   b64("pdf"),
+		"filename":   "epc.pdf",
+		"mimeType":   "application/pdf",
+		"sessionKey": "client:main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp := handler(context.Background(), req)
+	if !resp.OK {
+		t.Fatalf("capture.document failed: %+v", resp)
+	}
+	if !strings.Contains(last, "경로: /abs/captures/doc.md") || !strings.Contains(last, "epc.pdf") {
+		t.Errorf("document turn should be a path pointer, got:\n%s", last)
+	}
+	if strings.Contains(last, "1060억") || strings.Contains(last, "공유 문서에서 추출한 텍스트") {
+		t.Errorf("document body must not ride in the user message, got:\n%s", last)
 	}
 }
 
