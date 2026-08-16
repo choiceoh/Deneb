@@ -480,6 +480,15 @@ func (s *Handler) IngestAsync(eventType, source, text string) {
 			"source", strings.TrimSpace(source))
 		return
 	}
+	// Toss notifications are dropped before judgment: the native listener already
+	// skips the Toss app on-device, and this is the same cut for any leftover
+	// path (older APK, loopback ingest). Scope is the Toss super-app only —
+	// 토스뱅크/토스증권 keep their own labels and still run.
+	if isIgnoredTossNotification(eventType, source) {
+		s.logger.Info("phone-event: Toss notification skipped",
+			"source", strings.TrimSpace(source))
+		return
+	}
 	source = strings.TrimSpace(source)
 	if source == "" {
 		source = "(미상)"
@@ -651,6 +660,20 @@ func isPolledGmailNotification(eventType, source string) bool {
 	}
 	s := strings.ToLower(strings.TrimSpace(source))
 	return s == "com.google.android.gm" || s == "com.google.android.gm.lite" || s == "gmail"
+}
+
+// isIgnoredTossNotification drops Toss super-app notifications before judgment.
+// The native listener already skips them (isToss); this is defense in depth for
+// leftover ingest paths. Matches the Play Store package and the "토스"/"Toss"
+// display label — not 토스뱅크/토스증권. Only notification-type events qualify.
+func isIgnoredTossNotification(eventType, source string) bool {
+	switch strings.TrimSpace(strings.ToLower(eventType)) {
+	case "notification", "":
+	default:
+		return false
+	}
+	s := strings.ToLower(strings.TrimSpace(source))
+	return s == "토스" || s == "toss" || s == "viva.republica.toss" || strings.HasPrefix(s, "viva.republica.toss.")
 }
 
 // notificationLikeEvent reports whether an event type uses the "worth surfacing?"

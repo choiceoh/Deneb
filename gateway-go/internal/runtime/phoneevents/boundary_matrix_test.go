@@ -707,6 +707,10 @@ func TestPhoneEventPureBoundariesConcurrent(t *testing.T) {
 					errs <- fmt.Errorf("gmail worker=%d", worker)
 					return
 				}
+				if !isIgnoredTossNotification("notification", "토스") {
+					errs <- fmt.Errorf("toss worker=%d", worker)
+					return
+				}
 			}
 		}()
 	}

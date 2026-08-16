@@ -81,6 +81,39 @@ func TestIsPolledGmailNotificationIgnoresOnlyGmailSource(t *testing.T) {
 	}
 }
 
+// Toss notifications are suppressed (the operator does not want that app in the
+// work feed), but ONLY the Toss super-app — 토스뱅크/토스증권 keep their labels
+// and must still run. Non-notification types pass through even from Toss.
+func TestIsIgnoredTossNotificationIgnoresOnlyTossSource(t *testing.T) {
+	type tc struct {
+		eventType string
+		source    string
+		want      bool
+	}
+	cases := []tc{
+		{"notification", "토스", true},
+		{"notification", "Toss", true},
+		{"notification", "TOSS", true},
+		{"", "토스", true},
+		{"notification", "viva.republica.toss", true},
+		{"notification", "viva.republica.toss.internal", true},
+		{"notification", " 토스 ", true},
+		{"notification", "토스뱅크", false},
+		{"notification", "토스증권", false},
+		{"notification", "com.kakao.talk", false},
+		{"notification", "Gmail", false},
+		{"notification", "", false},
+		{"clipboard", "토스", false},
+		{"context", "viva.republica.toss", false},
+		{"location_update", "토스", false},
+	}
+	for _, c := range cases {
+		if got := isIgnoredTossNotification(c.eventType, c.source); got != c.want {
+			t.Errorf("isIgnoredTossNotification(%q, %q) = %v, want %v", c.eventType, c.source, got, c.want)
+		}
+	}
+}
+
 // The usage type carries its own label + guidance, and the guidance embeds the
 // NO_REPLY placeholder so its default-silence branch can be filled by the caller.
 func TestUsageEventLabelAndGuidanceFormatPlaceholder(t *testing.T) {
