@@ -234,13 +234,19 @@ func (t *Tracker) ladderDispatchCapRow() ladderRow {
 // ladderStagedSourcesRow: novel L4 sources auto-graduate on candidate supply
 // (no human first-batch review). Any still-staged open code candidates mean
 // the watch can unlock on its next tick — surface READY so the dashboard
-// shows actionable supply before the unlock lands.
+// shows actionable supply before the unlock lands. Incremental health-finding
+// kinds are the exception: they are permanently non-dispatchable (one
+// unattended session cannot land a multi-hundred-commit refactor), so once
+// every novel namespace has graduated they are a manual-review backlog, not
+// pending graduation supply — the row reports DONE with their count instead
+// of a READY that can never auto-resolve.
 func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 	cands, err := t.RecentSelfCorrectionCandidates("", "", 300)
 	if err != nil {
 		return ladderRow{"스테이징 소스 졸업", ladderStateGrowing, "후보 저장소를 읽을 수 없음"}
 	}
 	bySource := map[string]int{}
+	manualN := 0
 	for _, c := range cands {
 		st := normalizeSelfCorrectionStatus(c.Status)
 		if strings.TrimSpace(c.Scope) != "code" || (st != SelfCorrectionStatusProposed && st != SelfCorrectionStatusAccepted) {
@@ -249,13 +255,24 @@ func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 		if rsiSourceDispatchable(c.Source) {
 			continue
 		}
+		if rsiHealthFindingIncremental(c.Source) {
+			manualN++
+			continue
+		}
 		prefix, _, _ := strings.Cut(c.Source, ":")
 		if prefix == "" {
 			prefix = "(no source)"
 		}
 		bySource[prefix]++
 	}
+	manualNote := ""
+	if manualN > 0 {
+		manualNote = fmt.Sprintf(" · 증분형 health-finding %d건 수동 검토 대기", manualN)
+	}
 	if len(bySource) == 0 {
+		if manualN > 0 {
+			return ladderRow{"스테이징 소스 졸업", ladderStateDone, "신규 소스 전부 졸업" + manualNote}
+		}
 		return ladderRow{"스테이징 소스 졸업", ladderStateGrowing, "스테이징 후보 0건 (마이너 대기)"}
 	}
 	parts := make([]string, 0, len(bySource))
@@ -263,7 +280,7 @@ func (t *Tracker) ladderStagedSourcesRow() ladderRow {
 		parts = append(parts, fmt.Sprintf("%s %d건", src, n))
 	}
 	sort.Strings(parts)
-	return ladderRow{"스테이징 소스 졸업", ladderStateReady, "공급 충족 → 자동 졸업 대기: " + strings.Join(parts, "·")}
+	return ladderRow{"스테이징 소스 졸업", ladderStateReady, "공급 충족 → 자동 졸업 대기: " + strings.Join(parts, "·") + manualNote}
 }
 
 // ladderCalibrationRow: the P5-2 window closes when every rotating epoch has

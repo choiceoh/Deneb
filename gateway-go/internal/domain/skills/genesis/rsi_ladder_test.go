@@ -371,3 +371,34 @@ func TestNextGraduationDispatchCap(t *testing.T) {
 		}
 	}
 }
+
+// Incremental health-finding kinds are permanently non-dispatchable: once they
+// are the only staged supply left, the row must report DONE (manual-review
+// backlog), not a READY that can never auto-resolve.
+func TestLadderStagedSourcesIncrementalBacklog(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
+		Title: "large refactor: responsibility co-change", Source: "health-finding:responsibility-cochange:abcd",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	row := tr.ladderStagedSourcesRow()
+	if row.State != ladderStateDone || !strings.Contains(row.Detail, "증분형 health-finding 1건") {
+		t.Fatalf("incremental-only staged row = %+v, want DONE with manual backlog note", row)
+	}
+	// A genuinely novel source on top flips the row back to READY and still
+	// carries the manual-backlog note.
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",
+		Title: "novel finding: triage gap", Source: "novel-miner:xyz",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	row = tr.ladderStagedSourcesRow()
+	if row.State != ladderStateReady || !strings.Contains(row.Detail, "novel-miner 1건") ||
+		!strings.Contains(row.Detail, "증분형 health-finding 1건") {
+		t.Fatalf("mixed staged row = %+v, want READY naming novel supply + manual backlog", row)
+	}
+}
