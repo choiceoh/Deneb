@@ -128,8 +128,20 @@ class BrowserTabsTest {
             stableBrowserPageTitle("about:blank", "about:blank", "https://saved.example/article", "Saved title"),
         )
         assertEquals(
+            "Saved title",
+            stableBrowserPageTitle("Popup title", "blob:https://saved.example/local", "https://saved.example/article", "Saved title"),
+        )
+        assertEquals(
             "Loaded title",
             stableBrowserPageTitle(" Loaded title ", "https://saved.example/article", "https://saved.example/article", "Saved title"),
+        )
+        assertEquals(
+            "Saved title",
+            stableBrowserTabTitle("data:text/plain,popup", "https://saved.example/article", "Popup title", "Saved title"),
+        )
+        assertEquals(
+            "Loaded title",
+            stableBrowserTabTitle("https://saved.example/article", "https://saved.example/article", " Loaded title ", "Saved title"),
         )
     }
 }

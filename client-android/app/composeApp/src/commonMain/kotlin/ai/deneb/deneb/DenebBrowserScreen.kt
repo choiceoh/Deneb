@@ -198,11 +198,13 @@ fun DenebBrowserScreen(
         }
     }
     LaunchedEffect(tabStore.activeId, state.currentUrl, state.pageTitle, state.translateEnabled) {
+        val current = currentStore()
+        val active = current.tabs.first { it.id == tabStore.activeId }
         val next = updateBrowserTab(
-            store = currentStore(),
+            store = current,
             id = tabStore.activeId,
-            url = stableBrowserTabUrl(state.currentUrl, state.url, activeRuntime.stableUrl),
-            title = state.pageTitle,
+            url = active.url,
+            title = active.title,
             translateEnabled = state.translateEnabled,
         )
         persistStore(next)
@@ -240,8 +242,8 @@ fun DenebBrowserScreen(
         val next = recordBrowserVisit(history, current, state.pageTitle)
         if (next != history) persistHistory(next)
     }
-    LaunchedEffect(state.pageTitle) {
-        val current = stableBrowserTabUrl(state.currentUrl, state.url, activeRuntime.stableUrl)
+    LaunchedEffect(state.currentUrl, state.pageTitle) {
+        val current = state.currentUrl.trim().takeIf(::canBookmarkUrl) ?: return@LaunchedEffect
         val next = updateBrowserVisitTitle(history, current, state.pageTitle)
         if (next != history) {
             persistHistory(next)
@@ -451,7 +453,7 @@ private class BrowserTabRuntime(
             stableUrl = nextUrl
             stableTitle = ""
         }
-        state.pageTitle.trim().takeIf { it.isNotEmpty() }?.let { stableTitle = it }
+        stableTitle = stableBrowserTabTitle(state.currentUrl, stableUrl, state.pageTitle, stableTitle)
         return BrowserTabSnapshot(
             id = id,
             url = stableUrl,
@@ -516,8 +518,10 @@ fun DenebBrowserChrome(
     // No on-screen back button — system back owns "back": page history first, then exit.
     PlatformBackHandler(enabled = true) { if (state.canGoBack) state.goBack() else onBack() }
 
-    // Editable address bar value, re-synced to the real URL as the page navigates.
-    var field by remember(state, state.currentUrl) { mutableStateOf(state.currentUrl) }
+    // Re-sync only after this tab actually navigates. The state-local guard keeps
+    // an unfinished edit when the user switches to another tab and comes back.
+    LaunchedEffect(state, state.currentUrl) { state.syncOmniboxWithCurrentUrl() }
+    val field = state.omniboxDraft
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
@@ -618,7 +622,7 @@ fun DenebBrowserChrome(
                 }
                 BasicTextField(
                     value = field,
-                    onValueChange = { field = it },
+                    onValueChange = state::editOmnibox,
                     singleLine = true,
                     textStyle = DenebType.meta.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -628,7 +632,7 @@ fun DenebBrowserChrome(
                             val target = normalizeUrl(field)
                             if (target.isNotEmpty()) {
                                 state.load(target)
-                                field = target
+                                state.editOmnibox(target)
                             }
                             focusManager.clearFocus()
                         },
@@ -646,7 +650,7 @@ fun DenebBrowserChrome(
                                 IconButton(
                                     onClick = {
                                         haptics.tap()
-                                        field = ""
+                                        state.editOmnibox("")
                                     },
                                     modifier = Modifier.size(28.dp),
                                 ) {

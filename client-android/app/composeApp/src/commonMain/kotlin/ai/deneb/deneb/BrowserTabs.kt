@@ -183,8 +183,17 @@ internal fun stableBrowserTabUrl(currentUrl: String, requestedUrl: String, previ
 internal fun stableBrowserPageTitle(reportedTitle: String?, reportedUrl: String, stableUrl: String, previousTitle: String): String {
     val next = reportedTitle.orEmpty().trim()
     if (next.isEmpty()) return previousTitle
-    if (urlScheme(reportedUrl) == "about" && canBookmarkUrl(stableUrl)) return previousTitle
+    if (!canBookmarkUrl(reportedUrl) && canBookmarkUrl(stableUrl)) return previousTitle
     return next
+}
+
+/** Keeps a transient blob/data/about document from pairing its title with the
+ * durable HTTP URL that will actually be restored after a restart. */
+internal fun stableBrowserTabTitle(currentUrl: String, stableUrl: String, reportedTitle: String, previousTitle: String): String {
+    val current = currentUrl.trim()
+    val durable = stableUrl.trim()
+    if (!canBookmarkUrl(current) || current != durable) return cleanBrowserTabTitle(previousTitle)
+    return cleanBrowserTabTitle(reportedTitle).ifBlank { cleanBrowserTabTitle(previousTitle) }
 }
 
 private fun BrowserTabStore.ensureActive(nowMs: Long): BrowserTabStore {

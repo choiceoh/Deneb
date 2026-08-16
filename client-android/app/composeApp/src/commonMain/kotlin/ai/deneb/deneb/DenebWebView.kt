@@ -76,6 +76,22 @@ class DenebWebViewState(
     var currentUrl by mutableStateOf(initialUrl)
         internal set
 
+    /** Per-tab omnibox edit. [omniboxSyncedUrl] keeps tab re-selection from
+     * replacing an unfinished draft merely because the composable re-attached. */
+    internal var omniboxDraft by mutableStateOf(initialUrl)
+        private set
+    private var omniboxSyncedUrl = initialUrl
+
+    internal fun editOmnibox(value: String) {
+        omniboxDraft = value
+    }
+
+    internal fun syncOmniboxWithCurrentUrl() {
+        if (currentUrl == omniboxSyncedUrl) return
+        omniboxSyncedUrl = currentUrl
+        omniboxDraft = currentUrl
+    }
+
     /** The page title reported by the platform WebView, used for bookmarks. */
     var pageTitle by mutableStateOf(initialPageTitle)
         internal set

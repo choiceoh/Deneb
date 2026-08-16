@@ -65,6 +65,24 @@ class DenebWebViewStateTest {
     }
 
     @Test
+    fun omniboxDraftSurvivesTabReattachUntilThatTabNavigates() {
+        val first = DenebWebViewState("https://one.example")
+        val second = DenebWebViewState("https://two.example")
+
+        first.editOmnibox("unfinished search")
+        second.editOmnibox("second draft")
+        first.syncOmniboxWithCurrentUrl()
+        second.syncOmniboxWithCurrentUrl()
+
+        assertEquals("unfinished search", first.omniboxDraft)
+        assertEquals("second draft", second.omniboxDraft)
+
+        first.currentUrl = "https://one.example/landed"
+        first.syncOmniboxWithCurrentUrl()
+        assertEquals("https://one.example/landed", first.omniboxDraft)
+    }
+
+    @Test
     fun backCommandsUseMonotonicTicks() {
         val state = DenebWebViewState("https://example.com")
 

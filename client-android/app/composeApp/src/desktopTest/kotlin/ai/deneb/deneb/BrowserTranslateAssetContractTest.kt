@@ -3,6 +3,7 @@ package ai.deneb.deneb
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class BrowserTranslateAssetContractTest {
@@ -21,13 +22,26 @@ class BrowserTranslateAssetContractTest {
 
     @Test
     fun nativeBridgeQueuesOverflowBehindTheExecutionLimit() {
-        val source = sourceFile(
+        val nativeSource = sourceFile(
             "src/androidMain/kotlin/ai/deneb/deneb/BrowserTranslateBridge.android.kt",
         ).readText()
+        val jsSource = sourceFile("src/androidMain/assets/deneb-translate.js").readText()
 
-        assertTrue(source.kotlinInt("MAX_TRANSLATE_QUEUED") > source.kotlinInt("MAX_TRANSLATE_IN_FLIGHT"))
-        assertContains(source, "queued.addLast(work)")
-        assertContains(source, "drainReadyLocked()")
+        assertTrue(nativeSource.kotlinInt("MAX_TRANSLATE_QUEUED") > nativeSource.kotlinInt("MAX_TRANSLATE_IN_FLIGHT"))
+        assertContains(nativeSource, "queued.addLast(work)")
+        assertContains(nativeSource, "drainReadyLocked()")
+        assertContains(nativeSource, "markStarted(work.requestId)")
+        assertContains(jsSource, "function beginBatch(rid)")
+        assertTrue(jsSource.jsInt("NATIVE_BATCH_TIMEOUT_MS").toLong() > DenebGatewayClient.REQUEST_TIMEOUT_MS)
+    }
+
+    @Test
+    fun identityTranslationsCountAsCompletedInsteadOfFailed() {
+        val source = sourceFile("src/androidMain/assets/deneb-translate.js").readText()
+        val applyBody = source.substringAfter("function applyTranslationToTid").substringBefore("function textLength")
+
+        assertContains(applyBody, "rememberTranslation(rec.original, translated)")
+        assertFalse(applyBody.contains("translated === rec.original"))
     }
 
     private fun sourceFile(relative: String): File = sequenceOf(

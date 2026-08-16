@@ -35,7 +35,8 @@
  *
  * The native bridge contract:
  *   window.DenebTranslateBridge.translate(requestId, jsonSegments)
- *     → native calls miniapp.web.translate, then
+ *     → native acknowledges execution with beginBatch(requestId), calls
+ *       miniapp.web.translate, then
  *   window.DenebTranslate.applyBatch(requestId, jsonTranslations)
  */
 (function () {
@@ -52,6 +53,7 @@
   var failed = {};           // tid -> true after a terminal batch failure
   var chunkResults = {};     // tid -> { count, values } for split long text nodes
   var pending = {};          // requestId -> [{ tids, ... }]
+  var pendingDeadlines = {}; // requestId -> execution timeout (queue wait is untimed)
   var nextRequestId = 1;
   var requestPrefix = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var nextChunkToken = 1;
@@ -74,6 +76,9 @@
   var MAX_BATCH_PAYLOAD_CHARS = 20000;
   var MAX_BATCH_JSON_CHARS = 44000;
   var MAX_LONG_TEXT_CHUNK_CHARS = 900;
+  // Starts only after the native queue dequeues this batch. The gateway client
+  // permits a 180s RPC, so leave cleanup margin beyond that transport deadline.
+  var NATIVE_BATCH_TIMEOUT_MS = 210000;
   var VIEWPORT_MARGIN = 900;
   // Max forced-layout (getBoundingClientRect) measurements per dispatch pass, so a
   // large still-untranslated page can't reflow-storm on every scroll tick. Covers
@@ -548,7 +553,7 @@
   function applyTranslationToTid(tid, translated) {
     var rec = nodes[tid];
     if (!rec) return;
-    if (typeof translated !== 'string' || translated === rec.original) {
+    if (typeof translated !== 'string') {
       failed[tid] = true;
       return;
     }
@@ -1070,10 +1075,23 @@
       delete pending[rid];
       failUnits(units, false);
     }
-    window.setTimeout(function () {
-      if (!pending[rid]) return;
-      rejectBatch(rid, false);
-    }, 45000);
+  }
+
+  function clearBatchDeadline(rid) {
+    var timer = pendingDeadlines[rid];
+    if (!timer) return;
+    window.clearTimeout(timer);
+    delete pendingDeadlines[rid];
+  }
+
+  // Native calls this only after a queued request acquires an execution slot.
+  // Long queue waits therefore cannot expire a batch before its RPC even starts.
+  function beginBatch(rid) {
+    if (!pending[rid] || pendingDeadlines[rid]) return;
+    pendingDeadlines[rid] = window.setTimeout(function () {
+      delete pendingDeadlines[rid];
+      if (pending[rid]) rejectBatch(rid, false);
+    }, NATIVE_BATCH_TIMEOUT_MS);
   }
 
   function failUnits(units, retryable) {
@@ -1094,6 +1112,7 @@
 
   function rejectBatch(rid, retryable) {
     var units = pending[rid];
+    clearBatchDeadline(rid);
     if (!units) return;
     delete pending[rid];
     failUnits(units, !!retryable);
@@ -1145,6 +1164,7 @@
   function applyBatch(requestId, translationsJson) {
     var units = pending[requestId];
     delete pending[requestId];
+    clearBatchDeadline(requestId);
     if (!units) return;
     var translations;
     try {
@@ -1338,6 +1358,7 @@
 
   window.DenebTranslate = {
     __installed: true,
+    beginBatch: beginBatch,
     applyBatch: applyBatch,
     rejectBatch: rejectBatch,
     setEnabled: setEnabled,

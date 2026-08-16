@@ -104,6 +104,7 @@ internal class BrowserTranslateBridge(
                         reject(work.requestId, retryable = false)
                         return@launch
                     }
+                    markStarted(work.requestId)
                     val translated = runCatching { translateSegments(work.segments, "ko") }.getOrNull()
                     if (translated == null || translated.size != work.segments.size) {
                         reject(work.requestId, retryable = false)
@@ -126,6 +127,17 @@ internal class BrowserTranslateBridge(
                     )
                 }
             }
+        }
+    }
+
+    private suspend fun markStarted(requestId: String) {
+        val requestLiteral = jsStringLiteral(requestId)
+        withContext(Dispatchers.Main.immediate) {
+            webView()?.evaluateJavascript(
+                "window.DenebTranslate&&window.DenebTranslate.beginBatch&&" +
+                    "window.DenebTranslate.beginBatch($requestLiteral);",
+                null,
+            )
         }
     }
 
