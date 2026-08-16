@@ -8,12 +8,17 @@ import skytycoon.core.sim.Rng
 import skytycoon.core.sim.TurnEngine
 import skytycoon.ui.App
 import skytycoon.ui.GameViewModel
+import skytycoon.ui.MemorySaveStore
+import skytycoon.ui.SaveStorage
 import skytycoon.ui.Tab
 import java.io.File
 
 private class Shot(val name: String, val size: Size, val tab: Tab?) {
     class Size(val w: Int, val h: Int, val density: Float)
 }
+
+/** 고정 시드 — 스크린샷이 실행마다 달라지면 레이아웃 회귀를 눈으로 잡을 수 없다. */
+private const val SCREENSHOT_SEED = 20260816
 
 /**
  * X 서버 없이 각 화면을 PNG 로 렌더한다. UI 를 눈으로 확인하는 가장 확실한 방법이면서,
@@ -24,8 +29,9 @@ fun main(args: Array<String>) {
     val outDir = File(args.firstOrNull() ?: "build/screenshots").apply { mkdirs() }
 
     // 몇 분기 굴려서 실적·뉴스가 채워진 상태를 찍는다 (빈 화면은 검증 가치가 없다).
+    SaveStorage.current = MemorySaveStore()
     val vm = GameViewModel()
-    vm.start("goldenage", "hanseong", "normal")
+    vm.start("goldenage", "hanseong", "normal", seed = SCREENSHOT_SEED)
     repeat(6) {
         vm.state?.let { s ->
             val piloted = Ai.autoPilot(s, s.playerId, Rng(s.rngState xor 0x5EED))
@@ -54,7 +60,7 @@ fun main(args: Array<String>) {
     )
 
     for (shot in shots) {
-        val target = if (shot.tab == null) GameViewModel() else vm
+        val target = if (shot.tab == null) GameViewModel(MemorySaveStore()) else vm
         val scene = ImageComposeScene(
             width = shot.size.w,
             height = shot.size.h,

@@ -199,7 +199,9 @@ object Economics {
         val slots = airline.slots.entries.sumOf { (city, n) ->
             n * Balance.SLOT_BASE_PRICE * ((Cities[city].econ + Cities[city].tour) / 100.0) * state.world.inflation * 0.6
         }
-        val biz = airline.businesses.sumOf { it.type.cost * 0.7 }
+        // 매입가는 물가가 붙는데 자산가치만 명목 원가로 잡으면, 후기 시나리오에서
+        // 사업을 낼 때마다 기업가치가 깎여 나간다.
+        val biz = airline.businesses.sumOf { it.type.cost * 0.7 } * state.world.inflation
         val stocks = airline.holdings.entries.sumOf { (id, shares) ->
             (state.airlineOrNull(id)?.sharePrice ?: 0.0) * shares
         }

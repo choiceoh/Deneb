@@ -141,7 +141,9 @@ object Events {
     fun stepWorld(state: GameState, rng: Rng): GameState {
         var s = state
         val w = s.world
-        val yearlyTick = s.quarter == 1
+        // 첫 턴은 이미 시작 연도 기준으로 세팅돼 있다. 여기서 또 돌리면 게임이
+        // 시작하자마자 한 해 앞선 물가·성장률로 굴러간다.
+        val yearlyTick = s.quarter == 1 && s.turn > 0
 
         val targetOil = NewGame.oilFor(s.year)
         val oil = (w.oil + (targetOil - w.oil) * 0.10 + w.oil * rng.normal() * 0.035).coerceAtLeast(0.01)
@@ -150,7 +152,8 @@ object Events {
             (v + (1.0 - v) * 0.09 + rng.normal() * 0.02).coerceIn(0.4, 1.6)
         }
         val inflation = if (yearlyTick) {
-            w.inflation * (NewGame.inflationFor(s.year + 1) / NewGame.inflationFor(s.year))
+            // 지금 막 들어선 해의 물가로 올린다 (다음 해가 아니라).
+            w.inflation * (NewGame.inflationFor(s.year) / NewGame.inflationFor(s.year - 1))
         } else {
             w.inflation
         }

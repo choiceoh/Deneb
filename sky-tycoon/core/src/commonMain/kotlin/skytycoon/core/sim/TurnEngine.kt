@@ -1,6 +1,7 @@
 package skytycoon.core.sim
 
 import skytycoon.core.data.AircraftCatalog
+import skytycoon.core.data.Cities
 import skytycoon.core.model.Airline
 import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsItem
@@ -26,14 +27,15 @@ object TurnEngine {
         val outcomes = Market.resolveAll(s)
         s = settle(s, outcomes)
 
-        s = deliverOrders(s)
         s = ageFleet(s)
+        s = deliverOrders(s)
         s = updateBrandAndSafety(s)
 
         s = Stock.repriceAll(s)
         s = Stock.settleTakeovers(s)
         s = resolveDistress(s)
 
+        s = clearQuarterlyCounters(s)
         s = s.copy(turn = s.turn + 1, rngState = rng.state)
         return checkEnd(s)
     }
@@ -145,8 +147,12 @@ object TurnEngine {
     // --------------------------------------------------------------- 기재·브랜드
 
     private fun deliverOrders(state: GameState): GameState {
-        val due = state.orders.filter { it.deliverTurn <= state.turn }
-        if (due.isEmpty()) return state
+        // 죽은 회사 앞으로는 인도하지 않는다 (선금은 합병 때 인수사로 넘어간다).
+        val alive = state.orders.filter { state.airlineOrNull(it.airlineId)?.alive == true }
+        val dropped = state.orders - alive.toSet()
+        // deliverTurn 은 "기재를 쓸 수 있게 되는 분기". 이 advance 가 끝나면 turn 이 +1 이다.
+        val due = alive.filter { it.deliverTurn <= state.turn + 1 }
+        if (due.isEmpty() && dropped.isEmpty()) return state
         var nextId = state.nextId
         val newPlanes = mutableListOf<Plane>()
         val news = mutableListOf<NewsItem>()
@@ -166,11 +172,22 @@ object TurnEngine {
         }
         return state.copy(
             planes = state.planes + newPlanes,
-            orders = state.orders - due.toSet(),
+            orders = alive - due.toSet(),
             nextId = nextId,
             news = state.news + news,
         )
     }
+
+    /** 분기 상한(지분 매집·유상증자)은 분기가 넘어갈 때 비워진다. */
+    private fun clearQuarterlyCounters(state: GameState): GameState = state.copy(
+        airlines = state.airlines.map {
+            if (it.boughtThisQuarter.isEmpty() && it.issuedThisQuarter == 0.0) {
+                it
+            } else {
+                it.copy(boughtThisQuarter = emptyMap(), issuedThisQuarter = 0.0)
+            }
+        },
+    )
 
     private fun ageFleet(state: GameState): GameState =
         state.copy(planes = state.planes.map { it.copy(ageQuarters = it.ageQuarters + 1) })
@@ -180,12 +197,18 @@ object TurnEngine {
             if (!a.alive) {
                 a
             } else {
-                val spent = a.adBudget.values.sum().coerceAtMost(maxOf(0.0, a.cash) * 0.25 + 1.0)
-                val totalWanted = a.adBudget.values.sum().coerceAtLeast(1.0)
+                // 결산에서 "실제로 청구된" 광고비를 그대로 쓴다. 여기서 다시 추정하면
+                // 청구액과 브랜드 반영액이 어긋난다.
+                val spent = a.lastResult?.adSpend ?: 0.0
+                val totalWanted = a.adBudget.values.sum()
                 val brand = a.brand.mapValues { (region, v) ->
-                    val regionSpend = (a.adBudget[region] ?: 0.0) * (spent / totalWanted)
-                    val gain = regionSpend / 1e6 * Balance.AD_EFFICIENCY * state.world.inflation.let { 1.0 / it }
-                    (v * Balance.BRAND_DECAY + gain).coerceIn(0.0, Balance.BRAND_MAX)
+                    val regionShare = if (totalWanted <= 0.0) 0.0 else (a.adBudget[region] ?: 0.0) / totalWanted
+                    val gain = spent * regionShare / 1e6 * Balance.AD_EFFICIENCY / state.world.inflation
+                    // 그 지역 도시에 낸 부대사업도 이름값을 만든다.
+                    val facilities = a.businesses
+                        .filter { b -> Cities[b.city].region == region }
+                        .sumOf { b -> b.type.brandBoost }
+                    (v * Balance.BRAND_DECAY + gain + facilities).coerceIn(0.0, Balance.BRAND_MAX)
                 }
                 a.copy(brand = brand, safety = (a.safety + 0.015).coerceAtMost(1.0))
             }
@@ -251,6 +274,12 @@ object TurnEngine {
             .copy(
                 planes = state.planes.filter { it.airlineId != airline.id },
                 routes = state.routes.filter { it.airlineId != airline.id },
+                // 선금 치른 발주는 함께 사라진다. 안 지우면 죽은 회사 앞으로 기재가 계속 도착한다.
+                orders = state.orders.filter { it.airlineId != airline.id },
+                // 남의 손에 있던 이 회사 주식은 휴지가 된다. 그대로 두면 기업가치가 부풀려진다.
+                airlines = state.airlines.map { a ->
+                    if (a.holdings.containsKey(airline.id)) a.copy(holdings = a.holdings - airline.id) else a
+                },
             )
             .withAirline(airline.id) {
                 it.copy(alive = false, cash = 0.0, debt = 0.0, slots = emptyMap(), holdings = emptyMap())

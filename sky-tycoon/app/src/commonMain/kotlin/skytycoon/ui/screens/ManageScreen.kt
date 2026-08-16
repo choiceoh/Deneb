@@ -171,8 +171,16 @@ fun ManageScreen(vm: GameViewModel, wide: Boolean) {
                 }
                 VSpace(8)
             }
-            var city by remember { mutableStateOf(player.home) }
-            val myCities = player.slots.filterValues { it > 0 }.keys.sortedBy { Cities.name(it) }
+            // 슬롯만 있는 도시가 아니라 실제로 취항 중인 도시만 후보로 (규칙과 일치시킨다).
+            val myCities = s.routesOf(player.id)
+                .filter { it.active }
+                .flatMap { listOf(it.from, it.to) }
+                .distinct()
+                .sortedBy { Cities.name(it) }
+            var city by remember(myCities.firstOrNull()) { mutableStateOf(myCities.firstOrNull() ?: player.home) }
+            if (myCities.isEmpty()) {
+                Text("취항 중인 노선이 없어 사업을 낼 수 없습니다.", color = Coral, fontSize = 12.sp)
+            }
             Column {
                 Text("도시 선택", color = TextLow, fontSize = 11.sp)
                 VSpace(4)
@@ -215,6 +223,24 @@ fun ManageScreen(vm: GameViewModel, wide: Boolean) {
                 }
             }
         }
+        VSpace(12)
+        Panel(title = "저장") {
+            Text(
+                "분기를 넘길 때마다 자동 저장됩니다. 필요하면 지금 저장하거나 마지막 저장 지점으로 되돌릴 수 있습니다.",
+                color = TextLow,
+                fontSize = 11.sp,
+            )
+            VSpace(8)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { vm.saveNow() }, modifier = Modifier.weight(1f)) {
+                    Text("지금 저장", fontSize = 12.sp)
+                }
+                OutlinedButton(onClick = { vm.loadSaved() }, modifier = Modifier.weight(1f)) {
+                    Text("저장 지점으로", fontSize = 12.sp)
+                }
+            }
+        }
+
         VSpace(20)
     }
 }

@@ -239,6 +239,14 @@ data class Airline(
     val businesses: List<Business> = emptyList(),
     /** 타사 주식 보유 (항공사 id → 주식 수) */
     val holdings: Map<String, Double> = emptyMap(),
+    /**
+     * 이번 분기에 이미 사들인 주식 수 (항공사 id → 주식 수). 분기가 넘어갈 때 비워진다.
+     * 매수 한 번마다 따로 상한을 재면 한 분기에 여러 번 눌러 상한을 우회할 수 있어서,
+     * 분기 누적으로 재야 한다.
+     */
+    val boughtThisQuarter: Map<String, Double> = emptyMap(),
+    /** 이번 분기에 이미 발행한 신주 수. 증자 한도도 분기 누적으로 재야 우회가 막힌다. */
+    val issuedThisQuarter: Double = 0.0,
     val adBudget: Map<Region, Double> = emptyMap(),
     val alive: Boolean = true,
     val mergedInto: String? = null,

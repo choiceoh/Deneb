@@ -154,7 +154,7 @@ private fun AircraftMarket(vm: GameViewModel, modifier: Modifier) {
         VSpace(10)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(catalog, key = { it.id }) { t ->
-                val price = if (usedMode) Actions.usedPrice(t, 32) else t.price
+                val price = if (usedMode) Actions.usedPrice(s, t.id) else t.price
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -172,7 +172,8 @@ private fun AircraftMarket(vm: GameViewModel, modifier: Modifier) {
                     VSpace(6)
                     Text(
                         "${t.seats}석 · 항속 ${km(t.range.toDouble())} · ${grouped(t.speed.toLong())}km/h · " +
-                            "연료 ${decimals(t.fuel, 1)}L/km",
+                            "연료 ${decimals(t.fuel, 1)}L/km" +
+                            if (usedMode) " · 기령 ${Actions.usedAge(s, t.id) / 4}년" else "",
                         color = TextMid,
                         fontSize = 11.sp,
                     )

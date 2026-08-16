@@ -44,6 +44,13 @@ object Market {
      */
     fun resolvePair(state: GameState, a: City, b: City, routes: List<Route>): List<RouteOutcome> {
         if (routes.isEmpty()) return emptyList()
+        // 공항이 닫히면 비행기가 안 뜬다. 빈 결과를 돌려줘야 결산에서 연료·승무원·착륙료가
+        // 청구되지 않는다 (수요만 0 으로 만들면 원가는 그대로 나간다).
+        if (state.cityState[a.id]?.isClosed(state.turn) == true ||
+            state.cityState[b.id]?.isClosed(state.turn) == true
+        ) {
+            return emptyList()
+        }
         val dist = Geo.distance(a.id, b.id)
         val standard = Economics.standardFare(dist, state.world.inflation)
 

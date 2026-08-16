@@ -1,0 +1,59 @@
+name: Sky Tycoon CI
+
+# sky-tycoon/ 은 자체 Gradle 빌드를 가진 독립 프로젝트라 루트의 어떤 게이트에도 걸리지 않는다.
+# 이 레인이 없으면 시뮬레이션 테스트가 PR 에서 한 번도 돌지 않는다.
+#
+# Android SDK 는 설치하지 않는다 — settings.gradle.kts 가 SDK 부재를 감지해
+# :android 모듈을 빌드에서 빼므로, :core 와 :app(데스크톱)만 검증한다.
+
+on:
+  push:
+    branches: [main]
+    paths: ["sky-tycoon/**", ".github/workflows/sky-tycoon.yml"]
+  pull_request:
+    paths: ["sky-tycoon/**", ".github/workflows/sky-tycoon.yml"]
+
+concurrency:
+  group: sky-tycoon-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: core test + desktop compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: sky-tycoon
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Simulation tests + UI compile
+        run: ./gradlew :core:jvmTest :app:compileKotlinDesktop --no-daemon
+
+      - name: Render screens headlessly
+        run: ./gradlew :app:screenshots --no-daemon
+
+      - name: Upload rendered screens
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sky-tycoon-screens
+          path: sky-tycoon/app/build/screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 7

@@ -105,7 +105,7 @@ class ActionsTest {
         assertTrue(r.ok, r.message)
         s = r.state
         assertEquals(before, s.planesOf("hanseong").size, "발주 즉시 기재가 늘면 안 된다")
-        repeat(3) { s = TurnEngine.advance(s) }
+        repeat(2) { s = TurnEngine.advance(s) }
         assertTrue(s.planesOf("hanseong").size >= before + 2, "발주한 기재가 도착하지 않았다")
     }
 
@@ -113,6 +113,7 @@ class ActionsTest {
     fun `취항하지 않은 도시에는 부대사업을 못 낸다`() {
         val s = fresh()
         assertFalse(Actions.execute(s, Command.BuildBusiness("hanseong", BusinessType.HOTEL, "lagos")).ok)
+        // 서울은 모기지라 취항 노선이 반드시 있다.
         assertTrue(Actions.execute(s, Command.BuildBusiness("hanseong", BusinessType.HOTEL, "seoul")).ok)
     }
 

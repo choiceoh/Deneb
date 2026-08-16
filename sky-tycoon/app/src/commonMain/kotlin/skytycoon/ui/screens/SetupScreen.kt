@@ -42,7 +42,11 @@ import skytycoon.ui.components.VSpace
 import skytycoon.ui.moneyShort
 
 @Composable
-fun SetupScreen(onStart: (String, String, String) -> Unit) {
+fun SetupScreen(
+    canResume: Boolean = false,
+    onResume: () -> Unit = {},
+    onStart: (String, String, String) -> Unit,
+) {
     var scenario by remember { mutableStateOf(Scenarios.all.first().id) }
     var company by remember { mutableStateOf(Companies.all.first().id) }
     var difficulty by remember { mutableStateOf("normal") }
@@ -64,7 +68,15 @@ fun SetupScreen(onStart: (String, String, String) -> Unit) {
                 fontSize = 13.sp,
                 lineHeight = 20.sp,
             )
-            VSpace(26)
+            VSpace(20)
+            if (canResume) {
+                Button(onClick = onResume, modifier = Modifier.fillMaxWidth()) {
+                    Text("이어서 하기", fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(4.dp))
+                }
+                VSpace(6)
+                Text("마지막으로 진행한 분기부터 다시 시작합니다.", color = TextLow, fontSize = 11.sp)
+            }
+            VSpace(20)
 
             SetupSection("시대를 고르세요") {
                 for (sc in Scenarios.all) {

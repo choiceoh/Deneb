@@ -116,8 +116,15 @@ object Actions {
         }
     }
 
-    /** 한 분기 증자 한도 — 기존 주식의 30%. */
-    fun maxIssuable(airline: Airline): Double = airline.shares * 0.30
+    /**
+     * 한 분기 증자 한도 — 분기 시작 시점 주식 수의 30%.
+     * 발행할 때마다 shares 가 늘어나므로, 현재 주식 수를 기준으로 재면
+     * 버튼을 연타할수록 한도가 함께 불어나 현금을 무한히 찍어낼 수 있다.
+     */
+    fun maxIssuable(airline: Airline): Double {
+        val atQuarterStart = airline.shares - airline.issuedThisQuarter
+        return (atQuarterStart * 0.30 - airline.issuedThisQuarter).coerceAtLeast(0.0)
+    }
 
     /** 여러 명령을 순서대로. 하나라도 실패하면 그 지점까지의 상태와 실패 사유를 돌려준다. */
     fun executeAll(state: GameState, cmds: List<Command>): ActionResult {
@@ -318,6 +325,22 @@ object Actions {
     fun usedPrice(type: AircraftType, ageQuarters: Int): Double =
         type.price * AircraftCatalog.residualRatio(ageQuarters) * Balance.USED_PRICE_MUL
 
+    /**
+     * 이번 분기 중고 매물의 기령. 분기·기종에서 결정론적으로 뽑는다 —
+     * 살 때마다 무작위로 정하면 화면에 뜬 값과 실제로 빠져나가는 돈이 달라진다.
+     */
+    fun usedAge(state: GameState, typeId: String): Int {
+        val type = AircraftCatalog[typeId]
+        // 취항 연도보다 오래된 기체는 존재할 수 없다 (2017년에 13년 된 787은 없다).
+        val oldest = ((state.year - type.year) * 4).coerceIn(4, 52)
+        val youngest = minOf(20, oldest)
+        return Rng.fromString("used:${state.turn}:$typeId").int(youngest, oldest)
+    }
+
+    /** 화면과 매입에 함께 쓰는 이번 분기 중고 시세. */
+    fun usedPrice(state: GameState, typeId: String): Double =
+        usedPrice(AircraftCatalog[typeId], usedAge(state, typeId))
+
     fun sellPrice(type: AircraftType, ageQuarters: Int): Double =
         type.price * AircraftCatalog.residualRatio(ageQuarters) * Balance.SELL_PENALTY
 
@@ -328,22 +351,19 @@ object Actions {
         if (cmd.used) {
             if (state.year <= type.year + 2) return ActionResult.fail(state, "${type.name}은 아직 중고 매물이 없습니다.")
             if (state.year > type.retire + 12) return ActionResult.fail(state, "${type.name}은 시장에서 자취를 감췄습니다.")
-            val rng = Rng(state.rngState)
-            var cash = airline.cash
-            val newPlanes = mutableListOf<Plane>()
+            val age = usedAge(state, type.id)
+            val unit = usedPrice(type, age)
+            val total = unit * cmd.count
+            // 부분 체결은 하지 않는다 — 화면에 뜬 견적대로 전부 사거나, 아예 못 산다.
+            if (airline.cash < total) return ActionResult.fail(state, "중고기 구입 자금이 부족합니다.")
             var nextId = state.nextId
-            repeat(cmd.count) {
-                val age = rng.int(20, 52)
-                val price = usedPrice(type, age)
-                if (cash < price) return@repeat
-                cash -= price
-                newPlanes += Plane(id = nextId++, typeId = type.id, airlineId = airline.id, ageQuarters = age)
+            val newPlanes = List(cmd.count) {
+                Plane(id = nextId++, typeId = type.id, airlineId = airline.id, ageQuarters = age)
             }
-            if (newPlanes.isEmpty()) return ActionResult.fail(state, "중고기 구입 자금이 부족합니다.")
             val next = state
-                .copy(planes = state.planes + newPlanes, nextId = nextId, rngState = rng.state)
-                .withAirline(airline.id) { it.copy(cash = cash) }
-            return ActionResult(next, true, "${type.name} 중고 ${newPlanes.size}대를 인수했습니다.")
+                .copy(planes = state.planes + newPlanes, nextId = nextId)
+                .withAirline(airline.id) { it.copy(cash = it.cash - total) }
+            return ActionResult(next, true, "${type.name} 중고 ${cmd.count}대를 인수했습니다.")
         }
 
         if (state.year < type.year) return ActionResult.fail(state, "${type.name}은 ${type.year}년부터 인도됩니다.")
@@ -434,11 +454,17 @@ object Actions {
 
     private fun buildBusiness(state: GameState, airline: Airline, cmd: Command.BuildBusiness): ActionResult {
         val city = Cities.find(cmd.city) ?: return ActionResult.fail(state, "알 수 없는 도시입니다.")
-        if (airline.slotsAt(city.id) <= 0) {
-            return ActionResult.fail(state, "${city.name}에 취항 슬롯이 있어야 사업을 낼 수 있습니다.")
+        // 슬롯만 사두고 사업을 내는 걸 막는다 — UI 도 문서도 "취항 도시"라고 약속했다.
+        if (state.routes.none { it.airlineId == airline.id && it.active && it.touches(city.id) }) {
+            return ActionResult.fail(state, "${city.name}에 취항 중인 노선이 있어야 사업을 낼 수 있습니다.")
         }
         if (airline.businesses.any { it.type == cmd.type && it.city == city.id }) {
             return ActionResult.fail(state, "${city.name}에 이미 ${cmd.type.label}이(가) 있습니다.")
+        }
+        // 정비창 할인은 전사에 한 번만 적용된다. 두 번째부터는 순수한 낭비라 아예 막는다.
+        if (cmd.type == BusinessType.HANGAR && airline.businesses.any { it.type == BusinessType.HANGAR }) {
+            val where = airline.businesses.first { it.type == BusinessType.HANGAR }.city
+            return ActionResult.fail(state, "정비창은 전사에 하나면 충분합니다 (${Cities.name(where)} 보유).")
         }
         val cost = cmd.type.cost * state.world.inflation
         if (airline.cash < cost) return ActionResult.fail(state, "사업 자금이 부족합니다.")
@@ -472,6 +498,8 @@ object Actions {
                 it.copy(
                     cash = it.cash - cost,
                     holdings = it.holdings + (target.id to (it.holdings[target.id] ?: 0.0) + cmd.shares),
+                    boughtThisQuarter = it.boughtThisQuarter +
+                        (target.id to (it.boughtThisQuarter[target.id] ?: 0.0) + cmd.shares),
                 )
             }
             // 우리 회사가 노려지고 있다면 반드시 알려준다 — 모르고 당하면 게임이 아니다.
@@ -511,12 +539,17 @@ object Actions {
     private fun issueShares(state: GameState, airline: Airline, cmd: Command.IssueShares): ActionResult {
         if (cmd.shares <= 0) return ActionResult.fail(state, "발행 주식 수가 올바르지 않습니다.")
         val limit = maxIssuable(airline)
+        if (limit <= 0.0) return ActionResult.fail(state, "이번 분기 증자 한도를 이미 다 썼습니다.")
         if (cmd.shares > limit) {
-            return ActionResult.fail(state, "한 분기 증자 한도는 ${(limit / 1e6).toInt()}백만 주입니다.")
+            return ActionResult.fail(state, "이번 분기에 더 발행할 수 있는 물량은 ${(limit / 1e6).toInt()}백만 주입니다.")
         }
         val proceeds = cmd.shares * airline.sharePrice * Balance.ISSUE_DISCOUNT
         val next = state.withAirline(airline.id) {
-            it.copy(cash = it.cash + proceeds, shares = it.shares + cmd.shares)
+            it.copy(
+                cash = it.cash + proceeds,
+                shares = it.shares + cmd.shares,
+                issuedThisQuarter = it.issuedThisQuarter + cmd.shares,
+            )
         }
         return ActionResult(
             next,

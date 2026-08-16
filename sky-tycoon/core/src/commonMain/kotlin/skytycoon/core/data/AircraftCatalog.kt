@@ -42,6 +42,11 @@ object AircraftCatalog {
     /** 중고 시장 매물 (생산 종료 후 12년까지). */
     fun usedFor(year: Int): List<AircraftType> = all.filter { year > it.year + 2 && year <= it.retire + 12 }
 
-    /** 기령(분기)에 따른 잔존가치 비율. 15년이면 약 35%, 25년이면 하한 12%. */
-    fun residualRatio(ageQuarters: Int): Double = (0.965.pow(ageQuarters)).coerceAtLeast(0.12)
+    /**
+     * 기령에 따른 잔존가치 비율 — **연 7%씩** 감가한다.
+     * (분기마다 3.5%를 깎으면 15년 만에 하한까지 떨어져 기업가치·중고 시세가 통째로 무너진다)
+     * 15년 ≈ 34%, 25년 ≈ 16%, 하한 12%.
+     */
+    fun residualRatio(ageQuarters: Int): Double =
+        (0.93.pow(ageQuarters / 4.0)).coerceAtLeast(0.12)
 }

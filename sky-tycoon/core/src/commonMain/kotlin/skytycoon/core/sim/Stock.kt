@@ -43,10 +43,14 @@ object Stock {
         return shares * target.sharePrice * premium
     }
 
-    /** 한 분기에 사들일 수 있는 최대 주식 수 (지분 상한 + 유통 물량). */
+    /**
+     * 한 분기에 더 사들일 수 있는 주식 수. 이번 분기에 이미 매수한 몫을 빼야
+     * 여러 번 나눠 사서 상한을 우회하는 일이 막힌다.
+     */
     fun maxBuyableThisQuarter(state: GameState, buyerId: String, targetId: String): Double {
         val target = state.airline(targetId)
-        val cap = target.shares * Balance.MAX_STAKE_PER_QUARTER
+        val already = state.airlineOrNull(buyerId)?.boughtThisQuarter?.get(targetId) ?: 0.0
+        val cap = target.shares * Balance.MAX_STAKE_PER_QUARTER - already
         return minOf(cap, floatShares(state, targetId)).coerceAtLeast(0.0)
     }
 
@@ -140,7 +144,18 @@ object Stock {
             headline = "${acquirer.name}, ${target.name} 인수 완료",
             body = "${target.name}의 노선망과 기재가 ${acquirer.name}으로 넘어갔습니다.",
         )
-        return state.copy(airlines = airlines, planes = planes, routes = routes, news = state.news + news)
+        // 선금까지 치른 발주는 인수사가 이어받는다. 안 넘기면 죽은 회사 앞으로
+        // 기재가 인도돼 그대로 증발한다.
+        val orders = state.orders.map {
+            if (it.airlineId == targetId) it.copy(airlineId = acquirerId) else it
+        }
+        return state.copy(
+            airlines = airlines,
+            planes = planes,
+            routes = routes,
+            orders = orders,
+            news = state.news + news,
+        )
     }
 
     /** 합병으로 같은 도시쌍에 자기 노선이 둘 생기면 하나로 합친다. */
