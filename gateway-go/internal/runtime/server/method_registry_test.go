@@ -206,8 +206,6 @@ var requiredMethods = []string{
 	// Full address-book list (miniapp.contacts.list) — the contacts store
 	// resolves in tests (temp state dir), so this always registers.
 	"miniapp.contacts.list",
-	// Deterministic dedup preview (miniapp.contacts.dedup) — same store.
-	"miniapp.contacts.dedup",
 	// 시장 시세 (miniapp.market.summary) — keyless cache fetcher is always wired.
 	"miniapp.market.summary",
 	// 전자결재 browse/act/get/analyze + ERP list — always registered;

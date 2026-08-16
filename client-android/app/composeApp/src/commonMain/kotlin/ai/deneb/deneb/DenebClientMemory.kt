@@ -3,7 +3,6 @@ package ai.deneb.deneb
 import ai.deneb.data.MemoryEntry
 import ai.deneb.deneb.generated.ContactRow
 import ai.deneb.deneb.generated.SearchAllResult
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
@@ -281,25 +280,4 @@ suspend fun DenebGatewayClient.fetchContacts(force: Boolean = false): List<Conta
         "miniapp.contacts.list",
         buildJsonObject {},
     )?.contacts?.filter { it.name.isNotBlank() }
-}
-
-/** miniapp.contacts.dedup — the deterministic dedup preview (how many entries collapse
- *  to how many people, plus the safe merge groups). Computed fresh each call rather
- *  than session-cached: it is an action result, and the operator runs it deliberately.
- *  Null on transport/auth failure or an unconfigured store. */
-internal suspend fun DenebGatewayClient.fetchContactsDedup(): ContactsDedupPayload? = callRpc<ContactsDedupPayload>(
-    "miniapp.contacts.dedup",
-    buildJsonObject {},
-)
-
-/** miniapp.contacts.adjudicate — the LLM's verdict ("same"/"diff"/"unsure") for each
- *  ambiguous pair, in order. Send a bounded chunk (≤32) per call; null on failure. */
-internal suspend fun DenebGatewayClient.fetchContactsAdjudicate(pairs: List<DedupPairRow>): List<String>? {
-    if (pairs.isEmpty()) return emptyList()
-    return callRpc<ContactsAdjudicatePayload>(
-        "miniapp.contacts.adjudicate",
-        buildJsonObject {
-            put("pairs", jsonCodec.encodeToJsonElement(ListSerializer(DedupPairRow.serializer()), pairs))
-        },
-    )?.verdicts
 }

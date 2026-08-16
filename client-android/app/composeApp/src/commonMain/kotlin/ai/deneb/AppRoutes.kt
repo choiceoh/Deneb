@@ -111,11 +111,6 @@ data class DenebPerson(val sender: String)
 @SerialName("deneb_contacts")
 object DenebContacts
 
-// 연락처 정리 — deterministic dedup preview of the address book (miniapp.contacts.dedup).
-@Serializable
-@SerialName("deneb_contacts_dedup")
-object DenebContactsDedup
-
 @Serializable
 @SerialName("deneb_categories")
 object DenebCategories

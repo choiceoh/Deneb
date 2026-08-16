@@ -15,7 +15,6 @@ import ai.deneb.deneb.generated.SessionRowOut
 import ai.deneb.deneb.generated.TodoOut
 import ai.deneb.deneb.generated.TranscriptMsgOut
 import ai.deneb.ui.chat.WorkFeedItem
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
@@ -184,51 +183,6 @@ internal data class PeopleListPayload(val people: List<PersonRow> = emptyList())
 
 @Serializable
 internal data class ContactsListPayload(val contacts: List<ContactRow> = emptyList())
-
-/** miniapp.contacts.dedup — the deterministic dedup preview: how many address-book
- *  entries collapse to how many people, plus the safe merge groups. Hand-written
- *  (the Go response is a plain struct, not a //deneb:wire type). */
-@Serializable
-internal data class ContactsDedupPayload(
-    val total: Int = 0,
-    val distinct: Int = 0,
-    val ambiguous: Int = 0,
-    @SerialName("ambiguous_pairs") val ambiguousPairs: List<DedupPairRow> = emptyList(),
-    val merges: List<DedupMergeRow> = emptyList(),
-)
-
-@Serializable
-internal data class DedupMergeRow(
-    val canonical: String = "",
-    val names: List<String> = emptyList(),
-    val phones: List<String> = emptyList(),
-    val emails: List<String> = emptyList(),
-    // Personal identifiers only — what to MATCH on when applying to a device.
-    // phones/emails above are the display union and include company lines that
-    // match half the org; matching on those is what collapsed the book.
-    val linkPhones: List<String> = emptyList(),
-    val linkEmails: List<String> = emptyList(),
-)
-
-/** One ambiguous pair (same identifier, different name) for the AI to adjudicate. */
-@Serializable
-internal data class DedupPairRow(
-    val a: DedupPartyRow = DedupPartyRow(),
-    val b: DedupPartyRow = DedupPartyRow(),
-    val shared: String = "",
-)
-
-@Serializable
-internal data class DedupPartyRow(
-    val name: String = "",
-    val org: String = "",
-    val phones: List<String> = emptyList(),
-    val emails: List<String> = emptyList(),
-)
-
-/** miniapp.contacts.adjudicate — one verdict per submitted pair ("same"/"diff"/"unsure"). */
-@Serializable
-internal data class ContactsAdjudicatePayload(val verdicts: List<String> = emptyList())
 
 @Serializable
 internal data class WikiPagePayload(

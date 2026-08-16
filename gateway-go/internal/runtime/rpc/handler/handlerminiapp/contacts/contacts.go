@@ -28,10 +28,6 @@ type ContactRow = miniappcontract.ContactRow
 // instead of crashing the gateway at boot.
 type ContactsDeps struct {
 	Store func() (*contacts.Store, error)
-	// Adjudicator resolves dedup ambiguous pairs with an LLM. Optional: when nil
-	// (no model configured), miniapp.contacts.adjudicate is not registered — the
-	// deterministic miniapp.contacts.dedup still is.
-	Adjudicator contacts.Adjudicator
 }
 
 // ContactsMethods returns the miniapp.contacts.* handler map, or nil when no store
@@ -40,14 +36,9 @@ func ContactsMethods(deps ContactsDeps) map[string]rpcutil.HandlerFunc {
 	if deps.Store == nil {
 		return nil
 	}
-	methods := map[string]rpcutil.HandlerFunc{
-		"miniapp.contacts.list":  contactsList(deps),
-		"miniapp.contacts.dedup": contactsDedup(deps),
+	return map[string]rpcutil.HandlerFunc{
+		"miniapp.contacts.list": contactsList(deps),
 	}
-	if deps.Adjudicator != nil {
-		methods["miniapp.contacts.adjudicate"] = contactsAdjudicate(deps)
-	}
-	return methods
 }
 
 func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
@@ -67,161 +58,4 @@ func contactsList(deps ContactsDeps) rpcutil.HandlerFunc {
 		}
 		return rpcutil.RespondOK(req.ID, out{Contacts: rows, Count: len(rows)})
 	})
-}
-
-// contactsDedup runs the DETERMINISTIC dedup pass over the mirror and returns the
-// safe merge groups (each with the cleanest name + the union of phones/emails) so
-// the client can preview the cleanup, PLUS the ambiguous pairs (same identifier,
-// different name) for the client to adjudicate via miniapp.contacts.adjudicate.
-// It never mutates and never calls the model here — the LLM pass is the client's
-// chunked follow-up — so this stays a fast, synchronous RPC.
-func contactsDedup(deps ContactsDeps) rpcutil.HandlerFunc {
-	type mergeOut struct {
-		Canonical string   `json:"canonical"`
-		Names     []string `json:"names"`
-		Phones    []string `json:"phones"`
-		Emails    []string `json:"emails"`
-		// Personal identifiers only — what a client must match on to find this
-		// group's entries on a device. Phones/Emails above stay the full union
-		// for display; matching on them collapses everyone who shares a company
-		// line into one contact.
-		LinkPhones []string `json:"linkPhones"`
-		LinkEmails []string `json:"linkEmails"`
-	}
-	type partyOut struct {
-		Name   string   `json:"name"`
-		Org    string   `json:"org,omitempty"`
-		Phones []string `json:"phones,omitempty"`
-		Emails []string `json:"emails,omitempty"`
-	}
-	type pairOut struct {
-		A      partyOut `json:"a"`
-		B      partyOut `json:"b"`
-		Shared string   `json:"shared"`
-	}
-	type out struct {
-		Total          int        `json:"total"`           // address-book entries in
-		Distinct       int        `json:"distinct"`        // people after the safe merges
-		Ambiguous      int        `json:"ambiguous"`       // pair count left for AI review
-		AmbiguousPairs []pairOut  `json:"ambiguous_pairs"` // the pairs, for adjudicate
-		Merges         []mergeOut `json:"merges"`
-	}
-	return minibind.Authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		store, err := deps.Store()
-		if err != nil {
-			return rpcerr.Unavailable("contacts store unavailable").Response(req.ID)
-		}
-		all := store.All()
-		res := contacts.Dedup(all)
-		merges := make([]mergeOut, 0, len(res.Merges))
-		for _, g := range res.Merges {
-			// Display keeps the full union; linking gets the personal identifiers
-			// only (see MergeGroup.LinkPhones — the union matches half the company).
-			m := mergeOut{Canonical: g.Canonical, LinkPhones: g.LinkPhones, LinkEmails: g.LinkEmails}
-			seenP := map[string]bool{}
-			seenE := map[string]bool{}
-			for _, idx := range g.Members {
-				m.Names = append(m.Names, all[idx].Name)
-				for _, p := range all[idx].Phones {
-					if !seenP[p] {
-						seenP[p] = true
-						m.Phones = append(m.Phones, p)
-					}
-				}
-				for _, e := range all[idx].Emails {
-					if !seenE[e] {
-						seenE[e] = true
-						m.Emails = append(m.Emails, e)
-					}
-				}
-			}
-			merges = append(merges, m)
-		}
-		party := func(i int) partyOut {
-			c := all[i]
-			return partyOut{Name: c.Name, Org: c.Org, Phones: c.Phones, Emails: c.Emails}
-		}
-		pairs := make([]pairOut, 0, len(res.Ambiguous))
-		for _, p := range res.Ambiguous {
-			pairs = append(pairs, pairOut{A: party(p.A), B: party(p.B), Shared: p.Shared})
-		}
-		return rpcutil.RespondOK(req.ID, out{
-			Total:          res.Total,
-			Distinct:       res.Distinct,
-			Ambiguous:      len(res.Ambiguous),
-			AmbiguousPairs: pairs,
-			Merges:         merges,
-		})
-	})
-}
-
-// maxAdjudicatePairs bounds one adjudicate call so the request stays within the
-// client's timeout (each pair costs a slice of an LLM batch). The client works
-// through the ambiguous list in chunks rather than one multi-minute request.
-const maxAdjudicatePairs = 32
-
-// contactsAdjudicate rules on a bounded batch of ambiguous pairs with the LLM,
-// returning one verdict per pair ("same"/"diff"/"unsure"). Stateless: the client
-// sends the pairs it got from miniapp.contacts.dedup and applies the verdicts.
-// Only registered when an Adjudicator is wired.
-func contactsAdjudicate(deps ContactsDeps) rpcutil.HandlerFunc {
-	type partyIn struct {
-		Name   string   `json:"name"`
-		Org    string   `json:"org"`
-		Phones []string `json:"phones"`
-		Emails []string `json:"emails"`
-	}
-	type pairIn struct {
-		A      partyIn `json:"a"`
-		B      partyIn `json:"b"`
-		Shared string  `json:"shared"`
-	}
-	type params struct {
-		Pairs []pairIn `json:"pairs"`
-	}
-	type out struct {
-		Verdicts []string `json:"verdicts"`
-	}
-	return minibind.Bind(func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
-		if len(p.Pairs) > maxAdjudicatePairs {
-			return rpcerr.InvalidRequest("too many pairs (max 32 per call)").Response(req.ID)
-		}
-		if len(p.Pairs) == 0 {
-			return rpcutil.RespondOK(req.ID, out{Verdicts: []string{}})
-		}
-		cs := make([]contacts.Contact, 0, 2*len(p.Pairs))
-		pairs := make([]contacts.AmbiguousPair, len(p.Pairs))
-		for i, pr := range p.Pairs {
-			aIdx, bIdx := len(cs), len(cs)+1
-			cs = append(
-				cs,
-				contacts.Contact{Name: pr.A.Name, Org: pr.A.Org, Phones: pr.A.Phones, Emails: pr.A.Emails},
-				contacts.Contact{Name: pr.B.Name, Org: pr.B.Org, Phones: pr.B.Phones, Emails: pr.B.Emails},
-			)
-			pairs[i] = contacts.AmbiguousPair{A: aIdx, B: bIdx, Shared: pr.Shared}
-		}
-		verdicts, err := deps.Adjudicator.Adjudicate(ctx, cs, pairs)
-		if err != nil {
-			return rpcerr.Unavailable("contacts adjudication unavailable").Response(req.ID)
-		}
-		res := make([]string, len(pairs))
-		for i := range res {
-			res[i] = "unsure"
-			if i < len(verdicts) {
-				res[i] = verdictString(verdicts[i])
-			}
-		}
-		return rpcutil.RespondOK(req.ID, out{Verdicts: res})
-	})
-}
-
-func verdictString(v contacts.Verdict) string {
-	switch v {
-	case contacts.VerdictSame:
-		return "same"
-	case contacts.VerdictDifferent:
-		return "diff"
-	default:
-		return "unsure"
-	}
 }

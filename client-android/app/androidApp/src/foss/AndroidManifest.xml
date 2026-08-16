@@ -32,13 +32,6 @@
       so the Play Store variant never shows it.
     -->
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
-    <!--
-      Contacts write (FOSS-only) powers 연락처 정리: it LINKS duplicate raw contacts
-      into one aggregated contact (AggregationExceptions, KEEP_TOGETHER) — Android's
-      own merge, which deletes nothing and is reversible. Same runtime-probe gating
-      as READ_CONTACTS, so the Play Store variant never shows it.
-    -->
-    <uses-permission android:name="android.permission.WRITE_CONTACTS"/>
 
     <!--
       Location sensing (FOSS-only). On-demand: a FusedLocationProvider read forwarded
