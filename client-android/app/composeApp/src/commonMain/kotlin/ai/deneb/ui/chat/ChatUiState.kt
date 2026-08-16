@@ -228,6 +228,20 @@ fun stableTranscriptId(role: History.Role, content: String, timestampMs: Long): 
 /** Latest assistant message that should render in the UI (non-empty content, not a thinking-only entry). */
 fun List<History>.lastRenderedAssistant(): History? = lastOrNull { it.role == History.Role.ASSISTANT && it.content.isNotEmpty() && !it.isThinking }
 
+/** True when the latest user turn has no answer-bearing assistant after it. */
+fun List<History>.hasUnansweredUserTurn(): Boolean {
+    val lastUser = indexOfLast { it.role == History.Role.USER }
+    if (lastUser < 0) return false
+    val lastAnswer = indexOfLast {
+        it.role == History.Role.ASSISTANT && !it.isThinking && it.content.isNotEmpty()
+    }
+    return lastAnswer < lastUser
+}
+
+/** Silent-death recovery: the turn finished, nothing rendered, no error banner. */
+fun ChatUiState.needsEmptyReplyRecovery(): Boolean =
+    !isLoading && !isRestoring && error == null && history.hasUnansweredUserTurn()
+
 @Immutable
 data class ToolCallInfo(
     val id: String,

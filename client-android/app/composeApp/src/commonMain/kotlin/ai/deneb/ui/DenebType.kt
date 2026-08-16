@@ -112,7 +112,12 @@ object DenebType {
 
     /** Timestamp / meta caption — `.email-row-time` (12px / +0.02em, tabular). */
     val meta: TextStyle
-        @Composable get() = TextStyle(fontFamily = family).copy(fontSize = 12.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.02.em)
+        @Composable get() = TextStyle(fontFamily = family).copy(
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Normal,
+            letterSpacing = 0.02.em,
+            fontFeatureSettings = "tnum",
+        )
 
     /** Body prose — `.analysis-card-body` (14px / 300 / 1.7 / -0.003em). */
     val body: TextStyle

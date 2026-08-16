@@ -82,10 +82,23 @@ class AppSettings(internal val settings: Settings) {
     // (theme, recall): a visibility preference, unlike the gateway token, is non-critical, so
     // the DurableMirrorSettings whitelist would be overkill — at worst an Android OTA prefs
     // wipe resets tiles to "all shown", a harmless reappearance the user can redo.
-    fun getHiddenMoreTiles(): Set<String> = settings.getStringOrNull(KEY_HIDDEN_MORE_TILES)
-        ?.split(',')
-        ?.filterTo(LinkedHashSet()) { it.isNotBlank() }
-        ?: emptySet()
+    fun getHiddenMoreTiles(): Set<String> {
+        // null = never customized → product defaults (console tiles stay in 설정).
+        // A persisted empty string means the user turned every default back on.
+        val raw = settings.getStringOrNull(KEY_HIDDEN_MORE_TILES) ?: return DEFAULT_HIDDEN_MORE_TILES
+        return raw.split(',').filterTo(LinkedHashSet()) { it.isNotBlank() }
+    }
+
+    fun getComposerDraft(): String = settings.getString(KEY_COMPOSER_DRAFT, "")
+
+    fun setComposerDraft(text: String) {
+        val trimmed = text.take(COMPOSER_DRAFT_MAX)
+        if (trimmed.isEmpty()) {
+            settings.remove(KEY_COMPOSER_DRAFT)
+        } else {
+            settings.putString(KEY_COMPOSER_DRAFT, trimmed)
+        }
+    }
 
     fun setMoreTileHidden(key: String, hidden: Boolean) {
         if (key.isBlank()) return
@@ -686,6 +699,17 @@ class AppSettings(internal val settings: Settings) {
 
         const val KEY_FEED_SEEN_IDS = "feed_seen_ids"
         const val KEY_HIDDEN_MORE_TILES = "hidden_more_tiles"
+        const val KEY_COMPOSER_DRAFT = "composer_draft"
+        const val COMPOSER_DRAFT_MAX = 8_000
+
+        // 더보기 기본 숨김: 매일 안 여는 콘솔/메타 표면. 설정 → 더보기 표시 항목에서 다시 켤 수 있다.
+        val DEFAULT_HIDDEN_MORE_TILES: Set<String> = setOf(
+            "deneb_rsi",
+            "deneb_usage",
+            "deneb_org",
+            "deneb_project_digests",
+            "deneb_dashboard",
+        )
         const val KEY_BROWSER_BOOKMARKS = "browser_bookmarks"
         const val KEY_BROWSER_LAST_URL = "browser_last_url"
         const val KEY_BROWSER_TRANSLATE_ENABLED = "browser_translate_enabled"

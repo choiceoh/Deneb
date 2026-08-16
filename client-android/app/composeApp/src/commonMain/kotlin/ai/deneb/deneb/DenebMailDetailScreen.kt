@@ -8,6 +8,7 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
+import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -188,6 +189,9 @@ fun DenebMailDetailScreen(
             mail.subject.ifBlank { "(제목 없음)" },
             style = DenebType.subject,
             color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.denebSharedBounds("mail-subject-${mail.id}"),
         )
         Spacer(Modifier.height(6.dp))
         Text(mail.from, style = DenebType.rowSubtitle, color = MaterialTheme.colorScheme.onSurface)

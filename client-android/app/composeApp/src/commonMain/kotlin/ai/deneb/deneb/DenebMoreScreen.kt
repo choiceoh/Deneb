@@ -16,7 +16,6 @@ import ai.deneb.DenebUsage
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
-import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.icons.outlined.AccountTree
 import ai.deneb.ui.icons.outlined.Assignment
 import ai.deneb.ui.icons.outlined.Autorenew
@@ -26,7 +25,6 @@ import ai.deneb.ui.icons.outlined.Contacts
 import ai.deneb.ui.icons.outlined.Dashboard
 import ai.deneb.ui.icons.outlined.Folder
 import ai.deneb.ui.icons.outlined.Insights
-import ai.deneb.ui.icons.outlined.KeyboardVoice
 import ai.deneb.ui.icons.outlined.Public
 import ai.deneb.ui.icons.outlined.Storage
 import androidx.compose.foundation.layout.Column
@@ -57,7 +55,6 @@ internal data class MoreEntry(
     val alwaysShown: Boolean = false,
 )
 
-// Voice dictation (Android-only input action) tails this group.
 private const val TOOLS_GROUP = "도구"
 
 // The secondary sections, grouped into labeled inset cards — the same idiom as the
@@ -121,10 +118,6 @@ fun DenebMoreScreen(
     onOpen: (Any) -> Unit,
     hiddenTiles: Set<String> = emptySet(),
 ) {
-    // Live voice dictation (system speech recognizer → chat). An input action, not a
-    // file, so it lives here rather than cluttering the attach (+) button. Android-only
-    // (captures present); hidden on desktop/iOS.
-    val captures = LocalCaptureActions.current
     DenebScreenScaffold(title = "더보기", onBack = onBack) {
         Column(
             Modifier
@@ -134,24 +127,14 @@ fun DenebMoreScreen(
         ) {
             moreGroups.forEach { (label, all) ->
                 val entries = visibleMoreEntries(all, hiddenTiles)
-                val withVoice = label == TOOLS_GROUP && captures != null
-                if (entries.isEmpty() && !withVoice) return@forEach
+                if (entries.isEmpty()) return@forEach
                 DenebGroup(label = label) {
                     entries.forEachIndexed { i, entry ->
                         DenebListRow(
                             title = entry.label,
                             onClick = { onOpen(entry.dest) },
                             icon = entry.icon,
-                            divider = i < entries.lastIndex || withVoice,
-                        )
-                    }
-                    if (withVoice) {
-                        DenebListRow(
-                            title = "음성 입력",
-                            onClick = captures.onVoiceInput,
-                            icon = Icons.Outlined.KeyboardVoice,
-                            divider = false,
-                            chevron = false,
+                            divider = i < entries.lastIndex,
                         )
                     }
                 }

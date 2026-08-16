@@ -177,7 +177,22 @@ class AppSettingsStateAndCacheTest {
 
         settings.setMoreTileHidden("mail", false)
 
-        assertEquals(setOf("calendar"), settings.getHiddenMoreTiles())
+        assertEquals(AppSettings.DEFAULT_HIDDEN_MORE_TILES + "calendar", settings.getHiddenMoreTiles())
+    }
+
+    @Test
+    fun composerDraftPersistsAndClearsAndCaps() {
+        val (_, settings) = fixture()
+        assertEquals("", settings.getComposerDraft())
+
+        settings.setComposerDraft("초안")
+        assertEquals("초안", settings.getComposerDraft())
+
+        settings.setComposerDraft("")
+        assertEquals("", settings.getComposerDraft())
+
+        settings.setComposerDraft("x".repeat(AppSettings.COMPOSER_DRAFT_MAX + 50))
+        assertEquals(AppSettings.COMPOSER_DRAFT_MAX, settings.getComposerDraft().length)
     }
 
     @Test

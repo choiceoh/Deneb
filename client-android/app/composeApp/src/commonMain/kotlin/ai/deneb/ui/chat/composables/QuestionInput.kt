@@ -12,7 +12,6 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebBreathing
 import ai.deneb.ui.gradientBrush
 import ai.deneb.ui.handCursor
-import ai.deneb.ui.icons.outlined.KeyboardVoice
 import ai.deneb.ui.outlineTextFieldColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,7 +30,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.DisableSelection
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SuggestionChip
@@ -293,18 +291,6 @@ fun QuestionInput(
                         TrailingIcon(icon = Res.drawable.ic_stop, onClick = cancel, isPulsing = true, contentDescription = "중지")
                     } else if (hasSendable) {
                         TrailingIcon(icon = Res.drawable.ic_up, onClick = { submitQuestion() }, contentDescription = "보내기")
-                    } else if (captures != null) {
-                        // Live voice dictation (system speech recognizer → chat). Moved here
-                        // from the retired 더보기 screen: it's an input action, so it belongs
-                        // in the chat input, not a settings list. Shown only with captures
-                        // present (Android) and only when there is no text to send, so it
-                        // shares the send button's slot instead of crowding the bar.
-                        CircleIconButton(
-                            icon = Icons.Outlined.KeyboardVoice,
-                            onClick = captures.onVoiceInput,
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            contentDescription = "음성 입력",
-                        )
                     }
                 }
             },
@@ -316,8 +302,7 @@ fun QuestionInput(
             leadingIcon = run {
                 // The attach (+) button opens the single picker directly — no
                 // "what to insert" menu. The picker (above) routes the result by
-                // file type. The live mic (voice input) is the trailing button when
-                // the field is empty (see trailingIcon above).
+                // file type.
                 if (filePickerLauncher == null) {
                     null
                 } else {
