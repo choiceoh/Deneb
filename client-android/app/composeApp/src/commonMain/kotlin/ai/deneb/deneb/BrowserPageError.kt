@@ -111,3 +111,16 @@ internal class BrowserJsDialog(
     /** Dismiss = cancel, which is what the page sees if the user taps outside. */
     fun cancel() = answer(false, null)
 }
+
+/**
+ * A `window.open` / `target=_blank` hitch should hand this URL to the same
+ * WebView (no tabs). Skip blank/about/javascript — OAuth often opens
+ * `about:blank` first, then navigates; we wait for that real URL.
+ */
+internal fun browserAdoptPopupUrl(url: String): Boolean {
+    val s = url.trim()
+    if (s.isEmpty()) return false
+    if (s.startsWith("about:", ignoreCase = true)) return false
+    if (s.startsWith("javascript:", ignoreCase = true)) return false
+    return true
+}

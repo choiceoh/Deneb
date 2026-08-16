@@ -28,6 +28,17 @@ class BrowserPageErrorTest {
         assertTrue(browserSslErrorMessage(BrowserSslCode.UNTRUSTED).contains("신뢰할 수 없"))
         assertTrue(browserSslErrorMessage(99).contains("보안 인증서"))
     }
+
+    @Test
+    fun popupHitchAdoptsRealUrlsAndSkipsBlankAboutAndJavascript() {
+        assertTrue(browserAdoptPopupUrl("https://pay.example/auth"))
+        assertTrue(browserAdoptPopupUrl("http://login.example"))
+        assertTrue(browserAdoptPopupUrl("intent://scan/#Intent;end"))
+        assertFalse(browserAdoptPopupUrl(""))
+        assertFalse(browserAdoptPopupUrl("about:blank"))
+        assertFalse(browserAdoptPopupUrl("  about:blank  "))
+        assertFalse(browserAdoptPopupUrl("javascript:void(0)"))
+    }
 }
 
 class BrowserJsDialogTest {

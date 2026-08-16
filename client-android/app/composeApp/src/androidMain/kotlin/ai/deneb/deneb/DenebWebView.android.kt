@@ -10,6 +10,7 @@ import android.net.http.SslError
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.JsPromptResult
@@ -105,6 +106,11 @@ actual fun DenebWebView(
                 // browserUserAgent — only that token is dropped, so the UA keeps
                 // this device's real Android/Chrome build.
                 web.settings.userAgentString = browserUserAgent(web.settings.userAgentString)
+                // window.open / target=_blank: without these the tap is a no-op
+                // (login and payment flows). We still have one WebView — the hitch
+                // hands the URL back to this view (see onCreateWindow).
+                web.settings.setSupportMultipleWindows(true)
+                web.settings.javaScriptCanOpenWindowsAutomatically = true
                 // Third-party cookies are off by default in a WebView, which breaks
                 // SSO/social sign-in on sites that hand the session off across hosts.
                 CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
@@ -277,8 +283,19 @@ actual fun DenebWebView(
                         callback: ValueCallback<Array<Uri>>,
                         params: FileChooserParams,
                     ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
+
+                    override fun onCreateWindow(
+                        view: WebView,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message,
+                    ): Boolean = attachPopupToSameWindow(view, resultMsg)
+
+                    override fun onCloseWindow(window: WebView) {
+                        window.destroy()
+                    }
                 }
-                web.loadUrl(state.url)
+                if (state.url.isNotBlank()) web.loadUrl(state.url)
             }
         },
         update = { /* navigation/commands handled via LaunchedEffect below */ },
@@ -328,6 +345,43 @@ actual fun DenebWebView(
             null,
         )
     }
+}
+
+/**
+ * Single-webview adopt for window.open / target=_blank. The hitch exists only
+ * so Chromium can deliver the URL; we load it in [host] and destroy the hitch.
+ * about:blank is ignored — OAuth often opens that first, then navigates.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+private fun attachPopupToSameWindow(host: WebView, resultMsg: Message): Boolean {
+    val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+    val hitch = WebView(host.context)
+    hitch.settings.javaScriptEnabled = true
+    hitch.settings.domStorageEnabled = true
+    hitch.webViewClient = object : WebViewClient() {
+        private var adopted = false
+
+        private fun adopt(url: String) {
+            if (adopted || !browserAdoptPopupUrl(url)) return
+            adopted = true
+            host.post {
+                host.loadUrl(url)
+                hitch.destroy()
+            }
+        }
+
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            adopt(request.url?.toString().orEmpty())
+            return true
+        }
+
+        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            adopt(url)
+        }
+    }
+    transport.webView = hitch
+    resultMsg.sendToTarget()
+    return true
 }
 
 private const val BRIDGE_NAME = "DenebTranslateBridge"

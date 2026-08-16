@@ -66,4 +66,14 @@ class BrowserBookmarksTest {
         assertEquals("", resolveBrowserStartUrl("", "about:blank", "about:blank"))
         assertEquals("", resolveBrowserStartUrl("  ", "", ""))
     }
+
+    @Test
+    fun `blank or about urls show the start surface`() {
+        assertTrue(browserShowsStart(""))
+        assertTrue(browserShowsStart("about:blank"))
+        assertTrue(browserShowsStart("", "about:blank"))
+        assertFalse(browserShowsStart("https://example.com"))
+        assertFalse(browserShowsStart("https://example.com", ""))
+        assertTrue(browserShowsStart("", "javascript:alert(1)"))
+    }
 }

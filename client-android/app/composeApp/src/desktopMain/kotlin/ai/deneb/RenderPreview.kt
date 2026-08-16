@@ -3,6 +3,9 @@
 package ai.deneb
 
 import ai.deneb.deneb.AppTilesContent
+import ai.deneb.deneb.BrowserBookmark
+import ai.deneb.deneb.BrowserStartPane
+import ai.deneb.deneb.BrowserVisit
 import ai.deneb.deneb.CalendarEventDetail
 import ai.deneb.deneb.DenebBrowserChrome
 import ai.deneb.deneb.DenebMoreScreen
@@ -93,6 +96,37 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     scene.close()
 }
 
+private fun renderBrowserStart(name: String, scheme: ColorScheme, empty: Boolean) {
+    val state = DenebWebViewState("")
+    val bookmarks = if (empty) {
+        emptyList()
+    } else {
+        listOf(BrowserBookmark(url = "https://en.wikipedia.org/wiki/Deneb", title = "Deneb"))
+    }
+    val visits = if (empty) {
+        emptyList()
+    } else {
+        listOf(BrowserVisit(url = "https://example.com", title = "Example"))
+    }
+    val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
+        MaterialTheme(colorScheme = scheme) {
+            DenebBrowserChrome(state = state, onBack = {}) {
+                BrowserStartPane(
+                    bookmarks = bookmarks,
+                    visits = visits,
+                    onOpen = {},
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                )
+            }
+        }
+    }
+    val image = scene.render()
+    val data = image.encodeToData(EncodedImageFormat.PNG) ?: error("PNG encode failed")
+    File("/tmp/deneb-render").mkdirs()
+    File("/tmp/deneb-render/$name").writeBytes(data.bytes)
+    scene.close()
+}
+
 private fun renderMore(name: String, scheme: ColorScheme, hidden: Set<String> = emptySet()) {
     val scene = ImageComposeScene(width = 824, height = 1500, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
@@ -135,6 +169,9 @@ fun main() {
     renderScreen("states_light.png", "states", LightColorScheme, 824, 1500)
     renderBrowser("browser_dark.png", DarkColorScheme)
     renderBrowser("browser_light.png", LightColorScheme)
+    renderBrowserStart("browser_start_dark.png", DarkColorScheme, empty = false)
+    renderBrowserStart("browser_start_light.png", LightColorScheme, empty = false)
+    renderBrowserStart("browser_start_empty_dark.png", DarkColorScheme, empty = true)
     renderMore("more_dark.png", DarkColorScheme)
     renderMore("more_light.png", LightColorScheme)
     // 더보기 숨김: the grid with two tiles hidden (검색·브라우저) — verify they drop out.
