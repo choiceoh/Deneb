@@ -1,10 +1,12 @@
 package skilllifecycle
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/generation"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // The review runs with a dedicated lean system prompt instead of the full
@@ -31,11 +33,57 @@ func TestBuildSkillReviewPromptIncludesIndexGuidanceAndFallback(t *testing.T) {
 	if !strings.Contains(prompt, "skills action=list") {
 		t.Error("prompt missing skills-index guidance")
 	}
+	if !strings.Contains(prompt, "Do not call fetch_tools in the normal path") {
+		t.Error("prompt missing direct preloaded-tool guidance")
+	}
 	if !strings.Contains(prompt, "decide conservatively") {
 		t.Error("prompt missing empty-listing fallback discipline")
 	}
 	if !strings.Contains(prompt, "user: 테스트") {
 		t.Error("prompt missing embedded transcript")
+	}
+}
+
+type captureReviewChat struct {
+	req chatport.SyncRequest
+}
+
+func (*captureReviewChat) ChatReady() bool { return true }
+
+func (c *captureReviewChat) RunSync(_ context.Context, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+	c.req = req
+	return &chatport.SyncResult{StopReason: "end_turn"}, nil
+}
+
+func TestRunSkillReviewUsesBoundedNoThinkingPolicy(t *testing.T) {
+	chat := &captureReviewChat{}
+	fork := NewReviewFork(chat, nil, nil, "provider/coding-model", nil)
+
+	if err := fork.RunSkillReview(context.Background(), "client:main", generation.SessionContext{
+		AllText: "user: reusable workflow",
+		Turns:   2,
+	}); err != nil {
+		t.Fatalf("RunSkillReview() error = %v", err)
+	}
+
+	if chat.req.SessionKey != "system:skill-review:client:main" {
+		t.Fatalf("SessionKey = %q", chat.req.SessionKey)
+	}
+	if chat.req.Model != "provider/coding-model" || chat.req.ToolPreset != "self-review" {
+		t.Fatalf("model/preset = %q/%q", chat.req.Model, chat.req.ToolPreset)
+	}
+	if chat.req.MaxTokens == nil || *chat.req.MaxTokens != skillReviewMaxTokens {
+		t.Fatalf("MaxTokens = %v, want %d", chat.req.MaxTokens, skillReviewMaxTokens)
+	}
+	if chat.req.Thinking != skillReviewThinking {
+		t.Fatalf("Thinking = %q, want %q", chat.req.Thinking, skillReviewThinking)
+	}
+	if chat.req.MaxHistoryTokens != skillReviewHistoryBudget || !chat.req.EphemeralUser || !chat.req.EphemeralAssistant {
+		t.Fatalf("history/ephemeral policy = history %d user %v assistant %v",
+			chat.req.MaxHistoryTokens, chat.req.EphemeralUser, chat.req.EphemeralAssistant)
+	}
+	if !strings.Contains(chat.req.SystemPrompt, "do not call fetch_tools unless one is unexpectedly unavailable") {
+		t.Fatal("system prompt must steer away from the fetch_tools prelude")
 	}
 }
 
