@@ -15,6 +15,17 @@ func quietRouter(cfg config) *router {
 	return newRouter(cfg, "", slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
+func TestRouterAllowsLongNonStreamingCompletion(t *testing.T) {
+	rt := quietRouter(config{})
+	transport, ok := rt.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport = %T, want *http.Transport", rt.client.Transport)
+	}
+	if got := transport.ResponseHeaderTimeout; got < 20*time.Minute {
+		t.Fatalf("ResponseHeaderTimeout = %v, want at least 20m", got)
+	}
+}
+
 func TestChatCompletions_ForwardsRewritesInjectsKeyAndStreams(t *testing.T) {
 	var gotModel, gotAuth string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -17,6 +17,8 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/httputil"
 )
 
+const llmResponseHeaderTimeout = 20 * time.Minute
+
 // sharedTransport is a connection-pooled HTTP transport shared across all
 // LLM clients. Avoids per-request TCP/TLS handshake overhead by reusing
 // idle connections. Tuned for DGX Spark single-user deployment where most
@@ -30,12 +32,14 @@ var sharedTransport = &http.Transport{
 	MaxIdleConnsPerHost: 16,
 	IdleConnTimeout:     90 * time.Second,
 	TLSHandshakeTimeout: 5 * time.Second,
-	// Healthy providers (including queued vLLM — FastAPI returns the
-	// StreamingResponse before scheduling) send headers near-instantly, so
-	// this only bounds a wedged server that accepts the connection but never
-	// responds. Matters because the overall client timeout below is generous
-	// to accommodate long streams.
-	ResponseHeaderTimeout: 2 * time.Minute,
+	// Streaming providers normally send headers immediately, but Complete uses
+	// a non-streaming response and cloud models may not emit headers until a
+	// long prefill + generation finishes. Aurora Dream's GLM synthesis crossed
+	// the old 2-minute boundary three times and failed after 363 seconds even
+	// though its caller budget was longer. Keep the transport ceiling above the
+	// long-call budgets; caller contexts and the stream idle watchdog remain
+	// the task-specific hang guards.
+	ResponseHeaderTimeout: llmResponseHeaderTimeout,
 	ForceAttemptHTTP2:     true,
 }
 

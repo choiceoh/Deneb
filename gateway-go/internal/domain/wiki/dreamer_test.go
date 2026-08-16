@@ -16,6 +16,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/testutil"
 )
 
+func TestWikiDreamTimeoutsAllowLongCloudSynthesis(t *testing.T) {
+	if wikiDreamSynthesisTimeout < 15*time.Minute {
+		t.Fatalf("synthesis timeout = %v, want at least 15m", wikiDreamSynthesisTimeout)
+	}
+	if wikiDreamTimeout < 2*wikiDreamSynthesisTimeout {
+		t.Fatalf("cycle timeout = %v, want at least twice synthesis timeout %v", wikiDreamTimeout, wikiDreamSynthesisTimeout)
+	}
+}
+
 func TestWikiDreamerScanDiariesReadsFromOffsets(t *testing.T) {
 	dir := t.TempDir()
 	store := testutil.Must(NewStore(filepath.Join(dir, "wiki"), filepath.Join(dir, "diary")))

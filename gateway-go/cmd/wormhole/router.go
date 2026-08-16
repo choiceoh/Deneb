@@ -105,6 +105,8 @@ type router struct {
 	log      *slog.Logger
 }
 
+const wormholeResponseHeaderTimeout = 20 * time.Minute
+
 func newRouter(cfg config, path string, log *slog.Logger) *router {
 	rt := &router{
 		path:        path,
@@ -113,9 +115,13 @@ func newRouter(cfg config, path string, log *slog.Logger) *router {
 		// request context cancels on client disconnect. Only the dial, TLS
 		// handshake, and time-to-first-response-header are bounded.
 		client: &http.Client{Transport: &http.Transport{
-			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 120 * time.Second,
+			DialContext:         (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+			// Non-streaming OpenAI-compatible calls receive no response headers
+			// until generation completes. Large Aurora Dream synthesis requests
+			// legitimately exceed two minutes, so keep this above their caller
+			// budget instead of turning healthy long generations into retries.
+			ResponseHeaderTimeout: wormholeResponseHeaderTimeout,
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
 		}},

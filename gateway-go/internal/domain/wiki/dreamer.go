@@ -29,11 +29,15 @@ const (
 	// window. The floor keeps back-to-back preference turns from dreaming
 	// every turn.
 	wikiDreamPrefMinInterval = 30 * time.Minute
-	wikiDreamTimeout         = 10 * time.Minute
-	// wikiDreamSynthesisTimeout bounds the synthesis LLM call alone: a wedged
-	// backend must fail the phase quickly instead of eating the whole cycle
-	// budget (a stuck vLLM engine held every cycle for the full 10 minutes).
-	wikiDreamSynthesisTimeout = 5 * time.Minute
+	// Cloud synthesis is intentionally allowed well beyond the old six-minute
+	// retry wall. GLM's non-streaming response can spend several minutes on a
+	// large wiki batch before returning headers; leave a second half-cycle for
+	// critique, verification, snapshots, and notification.
+	wikiDreamTimeout = 30 * time.Minute
+	// wikiDreamSynthesisTimeout bounds the synthesis LLM call alone. Fifteen
+	// minutes admits a healthy long cloud generation while still reserving half
+	// of the cycle for downstream phases if the backend is actually wedged.
+	wikiDreamSynthesisTimeout = 15 * time.Minute
 	// wikiDreamMaxTokens sizes the synthesis answer. 4096 was tuned in the
 	// qwen-lightweight era and truncated mid-JSON once dsv4 (thinking off)
 	// started emitting full page bodies for a multi-day diary backlog — the
