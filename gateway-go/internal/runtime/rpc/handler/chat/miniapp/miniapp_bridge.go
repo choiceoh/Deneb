@@ -238,11 +238,9 @@ func handleMiniappCaptureImage(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-// handleMiniappCaptureDocument extracts text from a directly-attached document and
-// runs one agent turn over it — the native client's "attach a pdf/doc/sheet to
-// Deneb" path. Mirrors handleMiniappCaptureImage but uses the in-house document
-// extractor (PDF/Excel/Word/PowerPoint/CSV/text, with a scanned-PDF / image OCR
-// fallback) instead of plain image OCR.
+// handleMiniappCaptureDocument extracts a directly-attached document, archives
+// the extract, and starts one pointer turn — the agent `read`s the file if it
+// needs the body. The extracted text does not ride in the user message.
 //
 // Params:
 //   - document   (base64, required; an optional `data:...;base64,` prefix is stripped)
@@ -281,36 +279,29 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 			return rpcerr.Unavailable("no text could be extracted from the document").Response(req.ID)
 		}
 		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
-		// Persist the raw extracted text before the turn: the agent only
-		// summarizes, and the original must outlive the chat transcript.
-		var savedPath, savedAbs string
-		var savedBodyLine int
+		// Persist the extract so the agent can `read` it. The turn itself is a
+		// pointer — dumping the body (or a digest of it) into the user message
+		// is what made a shared contract look parsed into the chat.
+		var savedAbs string
 		if deps.SaveCapture != nil {
-			if rel, abs, bodyLine, serr := deps.SaveCapture("document", p.Caption, text); serr != nil {
+			if _, abs, _, serr := deps.SaveCapture("document", p.Caption, text); serr != nil {
 				slog.Error("capture document: raw persistence failed", "error", serr)
 			} else {
-				savedPath, savedAbs, savedBodyLine = rel, abs, bodyLine
+				savedAbs = abs
 			}
 		}
-		// Oversized documents would flood the turn's context; digest AFTER the
-		// raw persistence above so the full original still outlives the digest —
-		// the digest map's line numbers point into that archived file.
-		if deps.DigestOversized != nil {
-			text = deps.DigestOversized(ctx, p.Filename, text, savedAbs, savedBodyLine)
+		name := strings.TrimSpace(p.Filename)
+		if name == "" {
+			name = "document"
 		}
-		header := "📄 공유 문서에서 추출한 텍스트"
-		if name := strings.TrimSpace(p.Filename); name != "" {
-			header += " (" + name + ")"
+		item := batchFile{name: name, kind: "문서", path: savedAbs}
+		if item.path == "" {
+			if deps.DigestOversized != nil {
+				text = deps.DigestOversized(ctx, p.Filename, text, "", 0)
+			}
+			item.inline = strings.TrimSpace(text)
 		}
-		message := header + ":\n\n" + strings.TrimSpace(text)
-		if c := strings.TrimSpace(p.Caption); c != "" {
-			// The caption carries the question the user typed with the attachment;
-			// lead with it so the turn analyzes the document in that light.
-			message = "📲 공유 맥락:\n" + c + "\n\n" + message
-		}
-		if savedPath != "" {
-			message += "\n\n(원문 보관: memory/" + savedPath + ")"
-		}
+		message := buildBatchCaptureMessage([]batchFile{item}, p.Caption, 0)
 		// Turn start — the dedup window for a model-published deliverable card below.
 		turnStartMs := time.Now().UnixMilli()
 		res, err := sendUntrustedCapture(ctx, deps, sessionKey, message)
@@ -327,25 +318,25 @@ func handleMiniappCaptureDocument(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-// Batch capture bounds. A batch carries POINTERS, not inlined content, so the
-// per-file preview stays small (the agent reads the full file if it needs to),
-// and the file count is capped so a stray huge selection can't fan out unbounded.
+// Batch capture bounds. A batch carries POINTERS, not inlined content — the
+// agent reads the archived file if it needs the body. The file count is capped
+// so a stray huge selection can't fan out unbounded.
 const (
 	batchPreviewRunes = 500
 	maxBatchFiles     = 20
 	// batchExtractConcurrency bounds how many files are materialized in parallel.
-	// Each file's work is slow and independent — extraction (OCR/ASR/document) plus
-	// a per-file tiny-LLM preview — so a sequential loop serialized a 20-file batch
-	// into minutes. 4 matches document.ExtractAttachments; the OCR/ASR/LLM sidecars
-	// queue internally, and SaveCapture is concurrency-safe (wiki captureMu).
+	// Each file's work is slow and independent (OCR/ASR/document extract +
+	// SaveCapture), so a sequential loop serialized a 20-file batch into minutes.
+	// 4 matches document.ExtractAttachments; the OCR/ASR sidecars queue
+	// internally, and SaveCapture is concurrency-safe (wiki captureMu).
 	batchExtractConcurrency = 4
 )
 
-// batchFile is one prepared attachment in a capture batch: either archived (path +
-// preview, the agent opens it on demand) or, when persistence is unavailable,
-// carried inline; or skipped with a reason.
+// batchFile is one prepared attachment in a capture batch: archived (path only —
+// the agent opens it on demand), inlined when persistence is unavailable, or
+// skipped with a reason.
 type batchFile struct {
-	name, kind, path, preview, inline, skip string
+	name, kind, path, inline, skip string
 }
 
 // stripDataURL removes an optional `data:...;base64,` prefix from a base64 blob.
@@ -457,9 +448,10 @@ func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, ca
 		}
 		return batchFile{name: name, kind: kindLabel, skip: reason}
 	}
-	// Archive the extracted text under the memory read-root so the agent can open
-	// it with `read`. If persistence is unavailable, fall back to inlining the
-	// (digested) text so the content is never lost.
+	// Archive the extracted text under the memory read-root so the agent can
+	// open it with `read`. The chat turn gets the path only — putting the
+	// extract (or a tiny-model "preview" of it) in the user message is what
+	// made a shared contract look like it had been parsed into the chat.
 	var abs string
 	if deps.SaveCapture != nil {
 		if _, a, _, serr := deps.SaveCapture(storeKind, caption, text); serr != nil {
@@ -468,16 +460,7 @@ func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, ca
 			abs = a
 		}
 	}
-	// Preview: a tiny-model summary (~1000자) is more representative than a raw
-	// front-of-text cut; fall back to the front cut when the local model is
-	// unavailable or the summary fails.
-	preview := previewText(text, batchPreviewRunes)
-	if deps.SummarizePreview != nil {
-		if s := strings.TrimSpace(deps.SummarizePreview(ctx, name, text)); s != "" {
-			preview = s
-		}
-	}
-	item := batchFile{name: name, kind: kindLabel, preview: preview}
+	item := batchFile{name: name, kind: kindLabel}
 	if abs != "" {
 		item.path = abs
 	} else if deps.DigestOversized != nil {
@@ -492,11 +475,10 @@ func processBatchFile(ctx context.Context, deps Deps, data64, mime, filename, ca
 // over a POINTER list — the multi-file path, instead of one turn per file. Each
 // file is extracted (OCR / transcript / document text) with the same extractors as
 // the single-file handlers and archived via SaveCapture (which lands under the
-// memory read-root the `read`/`office` tools can open). The turn carries the file
-// list + short previews + agent-openable paths, and instructs the agent to read
-// whichever files it needs and cross-reference them — so six attachments land as
-// one context to analyze together, not six isolated turns. Bulky content is never
-// inlined (the agent pulls it on demand), which keeps the turn token-lean.
+// memory read-root the `read`/`office` tools can open). The turn carries filename,
+// kind, and path only — the extract stays on disk. The agent reads whichever
+// files it needs and cross-references them, so six attachments land as one
+// context, not six isolated turns.
 //
 // Params:
 //   - files      ([]{data(base64), mimeType, filename}, required)
@@ -602,9 +584,9 @@ func handleMiniappCaptureBatch(deps Deps) rpcutil.HandlerFunc {
 	}
 }
 
-// buildBatchCaptureMessage renders the pointer turn: caption context, an explicit
-// instruction to READ the files (previews are not the full content) and cross-
-// reference them, then the numbered file list with openable paths + previews.
+// buildBatchCaptureMessage renders the pointer turn: caption context, an
+// instruction to READ the archived files, then the numbered path list. Extracted
+// bodies stay on disk — they do not ride in the user message.
 func buildBatchCaptureMessage(files []batchFile, caption string, dropped int) string {
 	var b strings.Builder
 	if c := strings.TrimSpace(caption); c != "" {
@@ -614,7 +596,7 @@ func buildBatchCaptureMessage(files []batchFile, caption string, dropped int) st
 		b.WriteString(c)
 		b.WriteString("\n\n")
 	}
-	b.WriteString("📎 첨부 파일을 저장했습니다. 아래 목록의 **미리보기는 전문이 아니다** — 분석에 필요한 파일은 반드시 원문을 열어서 읽어라: 문서·이미지(OCR)·녹음(전사)은 `read <경로>`, 스프레드시트의 셀·시트 구조는 `office`. 여러 파일이면 함께 비교·교차분석하라.\n\n")
+	b.WriteString("📎 첨부 파일을 저장했습니다. 분석에 필요한 파일은 원문을 열어서 읽어라: 문서·이미지(OCR)·녹음(전사)은 `read <경로>`, 스프레드시트의 셀·시트 구조는 `office`. 여러 파일이면 함께 비교·교차분석하라.\n\n")
 	n := 0
 	for _, f := range files {
 		if f.skip != "" {
@@ -625,9 +607,6 @@ func buildBatchCaptureMessage(files []batchFile, caption string, dropped int) st
 		switch {
 		case f.path != "":
 			fmt.Fprintf(&b, "   경로: %s\n", f.path)
-			if f.preview != "" {
-				fmt.Fprintf(&b, "   미리보기: %s\n", f.preview)
-			}
 		case f.inline != "":
 			// Not archived — the content rides inline so nothing is lost.
 			fmt.Fprintf(&b, "   내용:\n%s\n", f.inline)

@@ -50,8 +50,9 @@ type Deps struct {
 	// DigestOversized condenses an oversized extracted document before it enters
 	// the agent turn. Optional; nil injects text unbounded.
 	DigestOversized func(ctx context.Context, name, text, sourcePath string, sourceBodyLine int) string
-	// SummarizePreview condenses one attachment's extracted text into a compact
-	// local tiny-model summary for the batch-capture pointer turn. Optional.
+	// SummarizePreview is unused: batch/document turns are path pointers, and
+	// putting a summary in the user message re-parsed the attachment into chat.
+	// Kept on Deps so method_registry wiring does not churn.
 	SummarizePreview func(ctx context.Context, name, text string) string
 	// Translate translates web-page text segments for the in-app browser's
 	// in-place translation. Optional; nil disables miniapp.web.translate.
