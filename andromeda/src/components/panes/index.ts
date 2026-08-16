@@ -22,7 +22,6 @@ import { GroupwareERPPane } from "./GroupwareERPPane";
 import { SkillsPane } from "./SkillsPane";
 import { RsiPane } from "./RsiPane";
 import { ObservePane } from "./ObservePane";
-import { SiteMapPane } from "./SiteMapPane";
 import { TodayPane } from "./TodayPane";
 import { SettingsPane } from "./SettingsPane";
 
@@ -61,7 +60,6 @@ export const PANES: PaneDef[] = [
   { key: "skills", label: "스킬", shortcut: "i", Component: SkillsPane },
   { key: "rsi", label: "자가개선", shortcut: "r", Component: RsiPane },
   { key: "observe", label: "관찰", shortcut: "o", Component: ObservePane },
-  { key: "sitemap", label: "현장 지도", shortcut: "g", Component: SiteMapPane },
   // App settings live at the bottom of the rail; ⌘, mirrors the OS settings shortcut.
   { key: "settings", label: "설정", shortcut: ",", Component: SettingsPane },
 ];

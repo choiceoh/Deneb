@@ -48,7 +48,6 @@ reads:
 - `andromeda/src/components/panes/SearchPane.tsx:32` SearchPane
 - `andromeda/src/components/panes/SettingsPane.tsx:45` SettingsPane
 - `andromeda/src/components/panes/SettingsPane.tsx:278` PromptSettings
-- `andromeda/src/components/panes/SiteMapPane.tsx:338` SiteMapPane
 - `andromeda/src/components/panes/SkillsPane.tsx:134` SkillsPane
 - `andromeda/src/components/panes/WikiPane.tsx:25` WikiPane
 - `andromeda/src/components/panes/WorkfeedPane.tsx:57` WorkfeedPane
@@ -90,7 +89,6 @@ reads:
 - `andromeda/src/components/panes/SearchPane.tsx:32` SearchPane
 - `andromeda/src/components/panes/SettingsPane.tsx:45` SettingsPane
 - `andromeda/src/components/panes/SettingsPane.tsx:278` PromptSettings
-- `andromeda/src/components/panes/SiteMapPane.tsx:338` SiteMapPane
 - `andromeda/src/components/panes/SkillsPane.tsx:134` SkillsPane
 - `andromeda/src/components/panes/TodayPane.tsx:151` TodayPane
 - `andromeda/src/components/panes/TodoPane.tsx:14` TodoPane
@@ -173,7 +171,6 @@ reads:
 - `andromeda/src/components/panes/ProgressPane.tsx:30` ProgressPane
 - `andromeda/src/components/panes/ProjectHomePane.tsx:63` ProjectHomePane
 - `andromeda/src/components/panes/SearchPane.tsx:32` SearchPane
-- `andromeda/src/components/panes/SiteMapPane.tsx:338` SiteMapPane
 
 ## paletteOpen — write 0 · read 1
 

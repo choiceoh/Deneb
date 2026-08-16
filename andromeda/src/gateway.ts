@@ -8,15 +8,7 @@ import { readJsonSSE } from "./sse";
 import { log } from "./log";
 import { getJSON, setJSON } from "./storage";
 import { isTauri } from "./tauri";
-import type {
-  MailAttachment,
-  ProjectSiteEnsureOut,
-  ProjectSiteSetStatusOut,
-  ProjectSiteUpdateOut,
-  PromptDetailOut,
-  PromptListResponse,
-  PromptRow,
-} from "./types";
+import type { MailAttachment, PromptDetailOut, PromptListResponse, PromptRow } from "./types";
 
 const rpcLog = log.child("rpc");
 const chatLog = log.child("chat");
@@ -191,29 +183,6 @@ export const updatePrompt = (cfg: GatewayConfig, id: string, text: string) =>
 
 export const resetPrompt = (cfg: GatewayConfig, id: string) =>
   callRpc<PromptDetailOut>(cfg, "miniapp.prompts.reset", { id });
-
-// --- Project sites (miniapp.project.site.*) ---
-
-/** Set a 현장 page lifecycle status (후보/계약/개설/준공, or "" = 미분류). */
-export const setProjectSiteStatus = (cfg: GatewayConfig, path: string, status: string) =>
-  callRpc<ProjectSiteSetStatusOut>(cfg, "miniapp.project.site.setStatus", { path, status });
-
-/** Find or create a 현장 page for one address under the project owning path. */
-export const ensureProjectSite = (cfg: GatewayConfig, path: string, address: string) =>
-  callRpc<ProjectSiteEnsureOut>(cfg, "miniapp.project.site.ensure", { path, address });
-
-/** Partial milestone update on an existing 현장 page (empty fields unchanged). */
-export const updateProjectSite = (
-  cfg: GatewayConfig,
-  path: string,
-  fields: {
-    contract_date?: string;
-    construction_start?: string;
-    module_delivery?: string;
-    pre_use_inspection?: string;
-    completion_inspection?: string;
-  },
-) => callRpc<ProjectSiteUpdateOut>(cfg, "miniapp.project.site.update", { path, ...fields });
 
 // --- Sessions (miniapp.sessions.*) — conversation history drawer ---
 

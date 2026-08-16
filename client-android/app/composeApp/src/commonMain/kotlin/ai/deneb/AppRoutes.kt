@@ -146,10 +146,6 @@ object DenebUsage
 object DenebProjectDigests
 
 @Serializable
-@SerialName("deneb_site_map")
-object DenebSiteMap
-
-@Serializable
 @SerialName("deneb_org")
 object DenebOrgChart
 

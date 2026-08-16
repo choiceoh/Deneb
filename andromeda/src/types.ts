@@ -241,7 +241,6 @@ export type View =
   | "skills"
   | "rsi"
   | "observe"
-  | "sitemap"
   | "settings";
 
 // Gateway wire types — generated from the gateway's //deneb:wire Go structs (the

@@ -77,9 +77,6 @@ export const RESOURCE_DEFS: ResourceDef[] = [
   // straight into a grid/card pane like people/workfeed. Rows carry no id; the
   // pane keys on `path`/`project`.
   { name: "progress", label: "진행", list: "miniapp.project.digests", listKey: "digests" },
-  // 현장 지도 — every active project carrying a 현장 (all sites, not only projects
-  // with a progress digest); a parameterless read like progress.
-  { name: "sitemap", label: "현장 지도", list: "miniapp.project.sites", listKey: "sites" },
   // Skill catalog (miniapp.skills.list) — a parameterless list of the skills the
   // agent can use. detail/lifecycle/update/delete are query-driven actions below.
   { name: "skills", label: "스킬", list: "miniapp.skills.list", listKey: "skills" },
