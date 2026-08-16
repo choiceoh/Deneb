@@ -96,8 +96,10 @@ func syncOptionsFromPort(req chatport.SyncRequest) *SyncOptions {
 		GateUntrustedTools:  req.GateUntrustedTools,
 		BeforeToolCall:      req.BeforeToolCall,
 		OnToolResult:        req.OnToolResult,
+		OnProgress:          req.OnProgress,
 		OnThinking:          req.OnThinking,
 		OnReasoning:         req.OnReasoning,
+		SoftDeadline:        req.SoftDeadline,
 	}
 	if req.OnToolEvent != nil {
 		options.OnToolEvent = func(event ToolStreamEvent) {

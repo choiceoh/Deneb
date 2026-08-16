@@ -1548,6 +1548,12 @@ input[type="checkbox"] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.deneb-status-elapsed {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
 /* Dedicated chat tab has a wide (760px) reading column, so the progress line fits
    on one line — let the summary fill the column and ellipsize only at the far edge,
    instead of clamping to the narrow side-panel's 260px / two-line box. */

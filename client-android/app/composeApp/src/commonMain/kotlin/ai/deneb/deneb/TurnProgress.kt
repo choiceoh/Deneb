@@ -28,6 +28,17 @@ internal data class ToolEvent(
     val isError: Boolean = false,
 )
 
+/** Deterministic gateway-owned turn phase; unlike thinking previews this never
+ * contains model chain-of-thought. */
+@Serializable
+internal data class ProgressEvent(
+    val phase: String = "",
+    val label: String = "",
+    val startedAtMs: Long = 0,
+    val softDeadlineMs: Long = 0,
+    val hardDeadlineMs: Long = 0,
+)
+
 /**
  * Turn-scoped live progress for [DenebGatewayClient.ask]: gateway `tool`/
  * `thinking` SSE frames become transient [History.Role.TOOL_EXECUTING] rows
@@ -36,8 +47,9 @@ internal data class ToolEvent(
  * same mechanism the local-provider pipeline uses.
  *
  * Coverage goal: never regress the chip to the generic spinner mid-turn.
- * Thinking frames narrate the live reasoning tail ("깊이 생각 중: …"), and
- * when the last running tool completes the row is repurposed as a
+ * Gateway progress frames narrate safe server-owned phases; legacy gateways
+ * can still fall back to their thinking preview. When the last running tool
+ * completes the row is repurposed as a
  * continuity status ("결과 검토 중…") that bridges the event-silent prefill
  * stretch until the next thinking/tool/delta event.
  *
@@ -55,6 +67,8 @@ internal class TurnProgress(
     private val chatHistory: MutableStateFlow<List<History>>,
     private val scope: CoroutineScope,
 ) {
+    private val phaseId = "progress-phase-${Uuid.random()}"
+    private var phaseVisible = false
     private val thinkingId = "progress-thinking-${Uuid.random()}"
     private var thinkingVisible = false
 
@@ -71,15 +85,44 @@ internal class TurnProgress(
     // source of the post-turn footprint line under the answer.
     private val trail = mutableListOf<Pair<String, Boolean>>()
 
+    /** Gateway-authored phase narration shown from request acceptance through
+     * finalization. Later tool/thinking frames temporarily replace it with their
+     * more concrete status; the next progress frame restores the phase row. */
+    fun onProgress(ev: ProgressEvent) {
+        val label = ev.label.trim()
+        if (label.isEmpty()) return
+        hideThinking()
+        hideContinuity()
+        if (!phaseVisible) {
+            phaseVisible = true
+            allRowIds += phaseId
+            chatHistory.update { list ->
+                list + History(
+                    id = phaseId,
+                    role = History.Role.TOOL_EXECUTING,
+                    content = ev.phase.ifBlank { "progress" },
+                    toolName = label,
+                    isStatusMessage = true,
+                )
+            }
+        } else {
+            chatHistory.update { list ->
+                list.map {
+                    if (it.id == phaseId) it.copy(content = ev.phase.ifBlank { it.content }, toolName = label) else it
+                }
+            }
+        }
+    }
+
     /**
-     * Reasoning liveness pulse → show "깊이 생각 중…" until text or a tool
-     * arrives. [preview] is a chip-sized tail of the live reasoning text
-     * (server-throttled to ~1 frame / 2s); when present the row narrates
-     * the actual thought — "깊이 생각 중: …발신인 이력을 대조" — and each
-     * pulse refreshes it.
+     * Reasoning liveness pulse → keep the gateway-authored phase when present,
+     * otherwise retain the legacy thinking preview for compatibility with older
+     * gateways. New gateways always emit the safe phase immediately first, so
+     * raw reasoning is not used as their process narration.
      */
     fun onThinking(preview: String) {
         hideContinuity()
+        if (phaseVisible) return
         val label = ToolStatusLabels.THINKING +
             if (preview.isNotEmpty()) ": $preview" else ""
         if (!thinkingVisible) {
@@ -101,7 +144,8 @@ internal class TurnProgress(
         }
     }
 
-    /** Visible answer text is flowing — drop the status rows (O(1) when hidden). */
+    /** Visible answer text is flowing — drop legacy transient rows while the
+     * gateway-owned writing phase remains visible. */
     fun onDelta() {
         hideThinking()
         hideContinuity()
@@ -112,6 +156,7 @@ internal class TurnProgress(
         if (key.isBlank() || ev.tool.isBlank()) return
         when (ev.state) {
             "started" -> {
+                hidePhase()
                 hideThinking()
                 hideContinuity()
                 val label = ToolStatusLabels.label(ev.tool) +
@@ -242,6 +287,7 @@ internal class TurnProgress(
     fun clear() {
         if (allRowIds.isEmpty()) return
         thinkingVisible = false
+        phaseVisible = false
         continuityRowId = null
         val ids = allRowIds.toSet()
         chatHistory.update { list -> list.filter { it.id !in ids } }
@@ -251,6 +297,12 @@ internal class TurnProgress(
         if (!thinkingVisible) return
         thinkingVisible = false
         removeRow(thinkingId)
+    }
+
+    private fun hidePhase() {
+        if (!phaseVisible) return
+        phaseVisible = false
+        removeRow(phaseId)
     }
 
     private fun hideContinuity() {

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -149,6 +150,43 @@ func TestSendSyncStream_StreamsDeltaAndPreservesExplicitModel(t *testing.T) {
 	}
 }
 
+func TestSendSyncStream_DeadlineReturnsAndPersistsTimeoutFallback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	store := transcriptstore.NewMemoryTranscriptStore()
+	h := newSyncTestHandler(server, store)
+	defer h.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	result, err := h.SendSyncStream(ctx, "sync-timeout", "long request", "", nil, nil)
+	testutil.NoError(t, err)
+	if result == nil || result.StopReason != "timeout" || result.BestText() != fallbackForStopReason("timeout") {
+		t.Fatalf("timeout result = %#v", result)
+	}
+
+	messages, _, err := store.Load("sync-timeout", 0)
+	testutil.NoError(t, err)
+	if len(messages) < 2 {
+		t.Fatalf("transcript messages = %d, want user + terminal assistant fallback", len(messages))
+	}
+	last := messages[len(messages)-1]
+	if last.Role != "assistant" || last.TextContent() != fallbackForStopReason("timeout") {
+		t.Fatalf("terminal row = role %q text %q", last.Role, last.TextContent())
+	}
+	if got := h.sessions.Get("sync-timeout").Status; got != session.StatusDone {
+		t.Fatalf("session status = %q, want done after persisted fallback", got)
+	}
+}
+
 func TestBuildSyncResult_FillsAbortedEmptyFallback(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
@@ -257,10 +295,12 @@ func TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter(t *testing.T) {
 	}
 
 	var activeDuringRun bool
+	var sessionRunningDuringRun bool
 	var gotCtx context.Context
 	_, err := h.withSyncRunLifecycle(context.Background(), sessionKey, "run-1", false,
 		func(ctx context.Context) (*SyncResult, error) {
 			activeDuringRun = h.abort.HasActiveRun(sessionKey)
+			sessionRunningDuringRun = h.sessions.Get(sessionKey).Status == session.StatusRunning
 			gotCtx = ctx
 			return &SyncResult{Text: "ok"}, nil
 		})
@@ -270,10 +310,45 @@ func TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter(t *testing.T) {
 	if !activeDuringRun {
 		t.Error("HasActiveRun was false during the run — auto-steer/kill/merge cannot see a native turn")
 	}
+	if !sessionRunningDuringRun {
+		t.Error("session lifecycle was not running during the sync turn — transcript recovery cannot distinguish an in-flight answer")
+	}
 	if gotCtx == nil {
 		t.Error("run received a nil context — it must be the cancellable run ctx")
 	}
 	if h.abort.HasActiveRun(sessionKey) {
 		t.Error("HasActiveRun still true after return — cleanup must be synchronous or the next SendSync folds into a ghost run")
+	}
+	if got := h.sessions.Get(sessionKey).Status; got != session.StatusDone {
+		t.Errorf("session status after sync return = %q, want %q", got, session.StatusDone)
+	}
+}
+
+func TestPersistSynthesizedSyncFallbackAppendsTerminalAssistantRow(t *testing.T) {
+	store := transcriptstore.NewMemoryTranscriptStore()
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	h := newSyncTestHandler(server, store)
+	defer h.Close()
+
+	res, err := h.buildSyncTimeoutFallback("test-model")
+	testutil.NoError(t, err)
+	if !res.synthesizedFallback {
+		t.Fatal("timeout result was not marked as synthesized")
+	}
+	persistSynthesizedSyncFallback(
+		RunParams{SessionKey: "client:timeout"},
+		h.buildRunDeps(),
+		res,
+		h.logger,
+	)
+
+	messages, total, err := store.Load("client:timeout", 0)
+	testutil.NoError(t, err)
+	if total != 1 || len(messages) != 1 {
+		t.Fatalf("persisted messages = %d/%d, want one terminal assistant row", len(messages), total)
+	}
+	if messages[0].Role != "assistant" || messages[0].TextContent() != fallbackForStopReason("timeout") {
+		t.Fatalf("terminal row = role %q text %q", messages[0].Role, messages[0].TextContent())
 	}
 }

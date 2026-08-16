@@ -189,6 +189,16 @@ func executeAgentRun(
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
 	cfg, spawnFlag, execStats, skillConsults := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
+	if params.SoftDeadline > 0 {
+		// Pin the soft preference to the end-to-end turn clock. Model fallbacks
+		// reuse this absolute instant instead of accidentally granting themselves
+		// another full soft-deadline window.
+		cfg.SoftDeadline = params.SoftDeadline
+		cfg.SoftDeadlineAt = runStart.Add(params.SoftDeadline)
+		cfg.OnSoftDeadline = func() {
+			emitPhase(deps, params, "wrapping_up", time.Now())
+		}
+	}
 	for _, name := range autoLoadedSkills {
 		skillConsults.Add(name)
 	}
@@ -236,10 +246,12 @@ func executeAgentRun(
 		"prepMs", time.Since(runStart).Milliseconds(),
 		"model", model, "provider", providerID,
 		"messages", len(messages), "tools", len(cfg.Tools))
+	emitPhase(deps, params, "thinking", time.Now())
 
 	// Execute agent loop with model fallback chain.
 	agentStart := time.Now()
 	agentResult, actualModel, fellBack, err := runAgentWithFallback(ctx, cfg, messages, client, deps, providerID, initialRole, effortRt, hooks, logger, runLog)
+	emitPhase(deps, params, "finalizing", time.Now())
 	logEffortRouteFailure(logger, effortDecision, effortRt, actualModel, err)
 	usageModel := actualModel
 	if usageModel == "" {
@@ -840,6 +852,9 @@ func wireBeforeAPICall(cfg *agent.AgentConfig, deps runDeps, params RunParams, p
 // Telegram status controller established). Silently no-ops when the agent
 // emit callback is unset (sub-agents, tests).
 func emitPhase(deps runDeps, params RunParams, phase string, at time.Time) {
+	if params.OnProgress != nil {
+		params.OnProgress(phase)
+	}
 	if deps.callbacks.emitAgentFn == nil {
 		return
 	}

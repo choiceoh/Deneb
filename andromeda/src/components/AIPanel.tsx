@@ -367,11 +367,6 @@ export function AIPanel({
             })}
           </>
         )}
-        {/* Once content has started streaming, a mid-turn thinking burst (between
-            tools) shows here; before the first token it rides in the sparkle above. */}
-        {thinking && last?.role === "assistant" && last.status === "streaming" && (last.parts?.length ?? 0) > 0 && (
-          <div className="ai-thinking">{thinking}…</div>
-        )}
       </div>
 
       <ScrollToBottomButton visible={!atBottom && turns.length > 0} onClick={scrollToBottom} />

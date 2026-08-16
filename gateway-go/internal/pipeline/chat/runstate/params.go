@@ -3,6 +3,7 @@ package runstate
 
 import (
 	"context"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -126,6 +127,16 @@ type Params struct {
 	// send stays retryable. Composed (fan-out) with the broadcaster's own
 	// result hook, so it never displaces streaming. nil = no observer.
 	OnToolResult func(name, toolUseID, result string, isErr bool)
+
+	// OnProgress observes deterministic server-owned phase changes for a live
+	// interactive turn (preparing, recalling, thinking, finalizing, ...). The
+	// callback is transport-only and never enters the model prompt or transcript.
+	OnProgress func(phase string)
+
+	// SoftDeadline is an end-to-end preference for interactive runs. Once it is
+	// reached, the agent gets one no-new-tools wrap-up instruction; the caller's
+	// context remains the hard cancellation boundary.
+	SoftDeadline time.Duration
 
 	// GateUntrustedTools enables the untrusted-origin tool gate for this run: if
 	// a prompt-injection signature has entered the turn (flagged tool output,

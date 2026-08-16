@@ -31,7 +31,9 @@ type fakeLLMStreamer struct {
 	// content bytes — copied at send time so a later in-place history mutation
 	// (compaction, image strip) cannot rewrite what a prior turn actually sent.
 	// Used to verify within-run wire-prefix stability for content-prefix caches.
-	recordedMsgs [][][]byte
+	recordedMsgs        [][][]byte
+	recordedTools       [][]llm.Tool
+	recordedToolChoices []llm.FlexibleJSON
 }
 
 func (f *fakeLLMStreamer) next() []llm.StreamEvent {
@@ -53,8 +55,62 @@ func (f *fakeLLMStreamer) StreamChat(_ context.Context, req llm.ChatRequest) (<-
 		snap[i] = append([]byte(m.Role+"\x00"), m.Content.Bytes()...)
 	}
 	f.recordedMsgs = append(f.recordedMsgs, snap)
+	f.recordedTools = append(f.recordedTools, append([]llm.Tool(nil), req.Tools...))
+	f.recordedToolChoices = append(f.recordedToolChoices, req.ToolChoice)
 	f.mu.Unlock()
 	return f.stream(), nil
+}
+
+func TestRunAgentSoftDeadlineForcesNoToolsWrapUp(t *testing.T) {
+	client := &fakeLLMStreamer{turns: [][]llm.StreamEvent{
+		buildTextTurnEvents("지금까지 확인한 결과입니다.", 10, 8),
+	}}
+	notifications := 0
+	persisted := make([]llm.Message, 0, 1)
+	result, err := RunAgent(
+		context.Background(),
+		AgentConfig{
+			MaxTurns:       3,
+			Timeout:        time.Second,
+			SoftDeadline:   time.Hour,
+			SoftDeadlineAt: time.Now().Add(-time.Second),
+			Model:          "test-model",
+			MaxTokens:      1024,
+			Tools:          []llm.Tool{{Name: "read"}},
+			OnSoftDeadline: func() { notifications++ },
+			OnMessagePersist: func(message llm.Message) {
+				persisted = append(persisted, message)
+			},
+		},
+		[]llm.Message{llm.NewTextMessage("user", "오래 걸리는 작업")},
+		client,
+		newFakeToolExecutor(),
+		StreamHooks{},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RunAgent: %v", err)
+	}
+	if result.Text != "지금까지 확인한 결과입니다." {
+		t.Fatalf("result text = %q", result.Text)
+	}
+	if notifications != 1 {
+		t.Fatalf("soft deadline notifications = %d, want 1", notifications)
+	}
+	if len(client.recordedTools) != 1 || len(client.recordedTools[0]) != 0 {
+		t.Fatalf("soft-deadline request tools = %#v, want none", client.recordedTools)
+	}
+	if got := client.recordedToolChoices[0].String(); got != `"none"` {
+		t.Fatalf("soft-deadline tool choice = %s, want none", got)
+	}
+	last := client.recordedMsgs[0][len(client.recordedMsgs[0])-1]
+	if !strings.Contains(string(last), softDeadlineWrapUpPrompt) {
+		t.Fatalf("soft-deadline request missing wrap-up prompt: %q", last)
+	}
+	if len(persisted) != 1 || persisted[0].Role != "assistant" {
+		t.Fatalf("persisted messages = %#v, want only the assistant reply", persisted)
+	}
 }
 
 func (f *fakeLLMStreamer) Complete(_ context.Context, _ llm.ChatRequest) (string, error) {

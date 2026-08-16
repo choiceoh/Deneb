@@ -249,6 +249,23 @@ describe("AssistantBody", () => {
     expect(Array.from(container.querySelectorAll("p"), (node) => node.textContent)).toEqual(["첫 문장", "둘째 문장"]);
   });
 
+  it("keeps the progress row visible after answer text starts streaming", () => {
+    render(
+      <AssistantBody
+        turn={turn({
+          text: "부분",
+          parts: [{ kind: "text", text: "부분" }],
+          status: "streaming",
+          startedAt: Date.now(),
+        })}
+        thinking="답변을 작성하고 있습니다"
+        onUiSubmit={() => {}}
+        busy
+      />,
+    );
+    expect(screen.getByText(/답변을 작성하고 있습니다/)).toHaveClass("deneb-status-summary");
+  });
+
   it("renders tool activity inline with text", () => {
     const tool: ToolPart = {
       kind: "tool",

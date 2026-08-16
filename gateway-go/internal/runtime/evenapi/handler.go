@@ -261,6 +261,7 @@ func (h *Handler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 			SessionKey:   h.session,
 			Message:      utterance,
 			SystemPrompt: glassesSystemHint,
+			SoftDeadline: chatport.InteractiveTurnSoftDeadline,
 			Delivery: &chatport.DeliveryContext{
 				Channel: "client",
 				To:      h.session,

@@ -141,6 +141,7 @@ func TestSyncOptionsFromPortPreservesRuntimeAndStreamContract(t *testing.T) {
 	maxTokens, maxTurns, maxCalls := 10, 2, 3
 	delivery := &chatport.DeliveryContext{Channel: "client", To: "client:main"}
 	var gotEvent chatport.ToolStreamEvent
+	var gotPhase string
 	req := chatport.SyncRequest{
 		MaxTokens:           &maxTokens,
 		MaxTurns:            &maxTurns,
@@ -159,7 +160,9 @@ func TestSyncOptionsFromPortPreservesRuntimeAndStreamContract(t *testing.T) {
 		BeforeToolCall:      func(string, string, []byte) (bool, string) { return true, "blocked" },
 		OnToolResult:        func(string, string, string, bool) {},
 		OnToolEvent:         func(event chatport.ToolStreamEvent) { gotEvent = event },
+		OnProgress:          func(phase string) { gotPhase = phase },
 		OnThinking:          func(string) {},
+		SoftDeadline:        20 * time.Minute,
 	}
 
 	got := syncOptionsFromPort(req)
@@ -169,7 +172,8 @@ func TestSyncOptionsFromPortPreservesRuntimeAndStreamContract(t *testing.T) {
 		got.MaxHistoryTokens != req.MaxHistoryTokens || got.Delivery != delivery ||
 		!got.EphemeralUser || !got.EphemeralAssistant || !got.AutoDeliveredOutput ||
 		!got.SkipRecall || got.FeedContext != req.FeedContext || !got.GateUntrustedTools ||
-		got.BeforeToolCall == nil || got.OnToolResult == nil || got.OnThinking == nil || got.OnToolEvent == nil {
+		got.BeforeToolCall == nil || got.OnToolResult == nil || got.OnThinking == nil || got.OnToolEvent == nil ||
+		got.OnProgress == nil || got.SoftDeadline != req.SoftDeadline {
 		t.Fatalf("port request mapping lost fields: %#v", got)
 	}
 	got.OnToolEvent(ToolStreamEvent{
@@ -179,6 +183,10 @@ func TestSyncOptionsFromPortPreservesRuntimeAndStreamContract(t *testing.T) {
 		State: "completed", Tool: "wiki", ToolUseID: "tool-1", Detail: "done", IsError: true,
 	}) {
 		t.Fatalf("stream event = %#v", gotEvent)
+	}
+	got.OnProgress("preparing")
+	if gotPhase != "preparing" {
+		t.Fatalf("progress phase = %q, want preparing", gotPhase)
 	}
 }
 

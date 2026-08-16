@@ -55,6 +55,49 @@ class TurnProgressStateMachineTest {
     private fun List<History>.progressRows() = filter { it.role == History.Role.TOOL_EXECUTING && it.isStatusMessage }
 
     @Test
+    fun gatewayProgressAddsAndUpdatesOneServerOwnedPhaseRow() = runTest {
+        val rows = history(user())
+        val progress = TurnProgress(rows, this)
+
+        progress.onProgress(ProgressEvent(phase = "preparing", label = "대화 맥락을 준비하고 있습니다"))
+        val id = rows.value.last().id
+        progress.onProgress(ProgressEvent(phase = "recalling", label = "관련 기억을 확인하고 있습니다"))
+        progress.onThinking("provider reasoning preview")
+
+        assertEquals(1, rows.value.progressRows().size)
+        assertEquals(id, rows.value.last().id)
+        assertEquals("recalling", rows.value.last().content)
+        assertEquals("관련 기억을 확인하고 있습니다", rows.value.last().toolName)
+    }
+
+    @Test
+    fun toolTemporarilyReplacesPhaseAndNextProgressRestoresIt() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onProgress(ProgressEvent(phase = "preparing", label = "준비 중"))
+
+        progress.onTool(started())
+        assertEquals(ToolStatusLabels.label("mail_search"), rows.value.single().toolName)
+
+        progress.onTool(completed())
+        progress.onProgress(ProgressEvent(phase = "reviewing", label = "확인한 결과를 검토하고 있습니다"))
+        assertEquals("확인한 결과를 검토하고 있습니다", rows.value.single().toolName)
+    }
+
+    @Test
+    fun answerDeltaKeepsTheWritingPhaseVisibleUntilTurnClear() = runTest {
+        val rows = history()
+        val progress = TurnProgress(rows, this)
+        progress.onProgress(ProgressEvent(phase = "writing", label = "답변을 작성하고 있습니다"))
+
+        progress.onDelta()
+        assertEquals("답변을 작성하고 있습니다", rows.value.single().toolName)
+
+        progress.clear()
+        assertTrue(rows.value.isEmpty())
+    }
+
+    @Test
     fun thinkingPulseAddsOneStatusRowAfterExistingHistory() = runTest {
         val rows = history(user(), assistant())
         val progress = TurnProgress(rows, this)

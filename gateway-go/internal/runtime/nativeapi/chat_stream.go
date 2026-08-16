@@ -58,11 +58,14 @@ const maxMiniappChatStreamBodyBytes = 8 << 20 // 8 MiB
 const chatStreamKeepaliveInterval = 15 * time.Second
 
 // chatStreamTurnDeadline hard-caps a DETACHED streamed turn so a run that
-// outlives its client connection can never run forever. It sits just above the
-// chat pipeline's own turn deadline (server.DefaultTurnDeadline = 5m; not
-// imported here to avoid a server→nativeapi→server cycle) so the run's own
-// deadline fires first with a cleaner error and this is only a backstop.
+// outlives its client connection can never run forever. The agent's provider
+// stream watchdog still stops genuine inactivity much earlier; this backstop
+// is intentionally wide enough for healthy multi-tool work.
 const chatStreamTurnDeadline = chatport.InteractiveTurnDeadline
+
+// chatStreamSoftDeadline switches a long-running agent into a no-new-tools
+// wrap-up turn while preserving hard-deadline headroom for the answer itself.
+const chatStreamSoftDeadline = chatport.InteractiveTurnSoftDeadline
 
 // chatStreamResult is the terminal payload of a streamed chat turn.
 type chatStreamResult struct {
@@ -82,6 +85,7 @@ type chatStreamResult struct {
 type chatStreamSinks struct {
 	Delta     func(delta string)
 	Tool      func(ev chatport.ToolStreamEvent)
+	Progress  func(phase string)
 	Thinking  func(preview string)
 	Reasoning func(full string)
 }
@@ -101,6 +105,43 @@ type toolStreamFrame struct {
 // bare liveness pulse stays minimal (and older clients ignore it either way).
 type thinkingStreamFrame struct {
 	Preview string `json:"preview,omitempty"`
+}
+
+// progressStreamFrame is deterministic UI state, not model reasoning. Labels
+// are owned by the gateway so Android and Andromeda render the same wording.
+// The deadline fields let future clients explain the long-turn policy without
+// hard-coding server constants; older clients ignore the entire event.
+type progressStreamFrame struct {
+	Phase          string `json:"phase"`
+	Label          string `json:"label"`
+	StartedAtMS    int64  `json:"startedAtMs"`
+	SoftDeadlineMS int64  `json:"softDeadlineMs"`
+	HardDeadlineMS int64  `json:"hardDeadlineMs"`
+}
+
+func chatProgressLabel(phase string) string {
+	switch phase {
+	case "accepted":
+		return "요청을 받았습니다"
+	case "preparing":
+		return "대화 맥락을 준비하고 있습니다"
+	case "recalling":
+		return "관련 기억을 확인하고 있습니다"
+	case "thinking":
+		return "해결 방법을 검토하고 있습니다"
+	case "working":
+		return "도구로 필요한 내용을 확인하고 있습니다"
+	case "reviewing":
+		return "확인한 결과를 검토하고 있습니다"
+	case "writing":
+		return "답변을 작성하고 있습니다"
+	case "wrapping_up":
+		return "마무리 답변을 작성하고 있습니다"
+	case "finalizing":
+		return "답변을 정리하고 있습니다"
+	default:
+		return "응답을 준비하고 있습니다"
+	}
 }
 
 // chatStreamRunner runs a streaming chat turn, invoking the sink callbacks as
@@ -164,6 +205,7 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	runCtx, cancelRun := context.WithTimeout(clientauth.WithContext(s.shutdownContext, identity), chatStreamTurnDeadline)
 	defer cancelRun()
 	runner := func(ctx context.Context, sinks chatStreamSinks) (*chatStreamResult, error) {
+		sinks.Progress("accepted")
 		res, err := s.chatHandler.RunSyncStream(ctx, chatport.SyncRequest{
 			SessionKey: sessionKey,
 			Message:    reqBody.Message,
@@ -176,9 +218,11 @@ func (s *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 			GateUntrustedTools: true,
 			// Live progress for the client's waiting indicator: which tool is
 			// running, and a throttled "thinking" pulse before the first token.
-			OnToolEvent: sinks.Tool,
-			OnThinking:  sinks.Thinking,
-			OnReasoning: sinks.Reasoning,
+			OnToolEvent:  sinks.Tool,
+			OnProgress:   sinks.Progress,
+			OnThinking:   sinks.Thinking,
+			OnReasoning:  sinks.Reasoning,
+			SoftDeadline: chatStreamSoftDeadline,
 		}, sinks.Delta)
 		if err != nil {
 			return nil, err
@@ -215,7 +259,8 @@ func writeChatStreamSSE(
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
-	// A streamed turn runs up to DefaultTurnDeadline; lift the global WriteTimeout.
+	// An interactive streamed turn can run for 30 minutes; lift the global
+	// WriteTimeout so the per-turn deadline remains authoritative.
 	disableWriteDeadline(w)
 
 	h := w.Header()
@@ -242,6 +287,28 @@ func writeChatStreamSSE(
 		_, _ = w.Write(data)
 		_, _ = io.WriteString(w, "\n\n")
 		flusher.Flush()
+	}
+	startedAtMS := time.Now().UnixMilli()
+	var progressMu sync.Mutex
+	currentPhase := ""
+	emitProgress := func(phase string) {
+		if phase == "" {
+			return
+		}
+		progressMu.Lock()
+		if currentPhase == phase {
+			progressMu.Unlock()
+			return
+		}
+		currentPhase = phase
+		progressMu.Unlock()
+		writeEvent("progress", progressStreamFrame{
+			Phase:          phase,
+			Label:          chatProgressLabel(phase),
+			StartedAtMS:    startedAtMS,
+			SoftDeadlineMS: chatStreamSoftDeadline.Milliseconds(),
+			HardDeadlineMS: chatStreamTurnDeadline.Milliseconds(),
+		})
 	}
 
 	// Keepalive ticker: comment frames during silent stretches (long tool
@@ -278,11 +345,15 @@ func writeChatStreamSSE(
 			if delta == "" {
 				return
 			}
+			emitProgress("writing")
 			writeEvent("delta", map[string]string{"delta": delta})
 		},
 		Tool: func(ev chatport.ToolStreamEvent) {
 			if ev.Tool == "" {
 				return
+			}
+			if ev.State == "started" {
+				emitProgress("working")
 			}
 			writeEvent("tool", toolStreamFrame{
 				State:     ev.State,
@@ -291,8 +362,15 @@ func writeChatStreamSSE(
 				Detail:    ev.Detail,
 				IsError:   ev.IsError,
 			})
+			if ev.State == "completed" {
+				emitProgress("reviewing")
+			}
+		},
+		Progress: func(phase string) {
+			emitProgress(phase)
 		},
 		Thinking: func(preview string) {
+			emitProgress("thinking")
 			writeEvent("thinking", thinkingStreamFrame{Preview: preview})
 		},
 		Reasoning: func(full string) {

@@ -186,6 +186,7 @@ class GatewayChatTransportContractTest {
         val transport = GatewayHttpHarness()
         val deltas = mutableListOf<String>()
         val tools = mutableListOf<ToolEvent>()
+        val progress = mutableListOf<ProgressEvent>()
         val thinking = mutableListOf<String>()
 
         val reply = streamGatewayChat(
@@ -196,6 +197,7 @@ class GatewayChatTransportContractTest {
             sessionKey = "client:main",
             message = "hello",
             onTool = tools::add,
+            onProgress = progress::add,
             onThinking = thinking::add,
             onDelta = deltas::add,
         )
@@ -204,6 +206,7 @@ class GatewayChatTransportContractTest {
         assertTrue(reply.text.contains("토큰"))
         assertTrue(deltas.isEmpty())
         assertTrue(tools.isEmpty())
+        assertTrue(progress.isEmpty())
         assertTrue(thinking.isEmpty())
         assertTrue(transport.requests.isEmpty())
     }
@@ -214,6 +217,9 @@ class GatewayChatTransportContractTest {
         transport.enqueueSse(
             """
             : keepalive
+
+            event: progress
+            data: {"phase":"preparing","label":"대화 맥락을 준비하고 있습니다","startedAtMs":123,"softDeadlineMs":1200000,"hardDeadlineMs":1800000}
 
             event: thinking
             data: {"preview":"계약 조항 비교 중"}
@@ -237,6 +243,7 @@ class GatewayChatTransportContractTest {
         )
         val deltas = mutableListOf<String>()
         val tools = mutableListOf<ToolEvent>()
+        val progress = mutableListOf<ProgressEvent>()
         val thinking = mutableListOf<String>()
 
         val reply = streamGatewayChat(
@@ -247,11 +254,15 @@ class GatewayChatTransportContractTest {
             sessionKey = "client:main:stream",
             message = "분석",
             onTool = tools::add,
+            onProgress = progress::add,
             onThinking = thinking::add,
             onDelta = deltas::add,
         )
 
         assertEquals(listOf("계약 조항 비교 중"), thinking)
+        assertEquals(listOf("preparing"), progress.map { it.phase })
+        assertEquals("대화 맥락을 준비하고 있습니다", progress.single().label)
+        assertEquals(1_800_000L, progress.single().hardDeadlineMs)
         assertEquals(listOf("첫째 ", "둘째"), deltas)
         assertEquals(listOf("started", "completed"), tools.map { it.state })
         assertEquals(listOf("mail_search", "mail_search"), tools.map { it.tool })

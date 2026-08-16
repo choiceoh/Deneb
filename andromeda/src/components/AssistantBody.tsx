@@ -109,13 +109,13 @@ export function AssistantBody({
   // and settles on the done frame — it rides above the answer/status throughout.
   const reasoning = turn.reasoning?.trim() ? <ReasoningBlock text={turn.reasoning} /> : null;
   if (!parts || parts.length === 0) {
-    // Pre-content stream → Deneb's "응답 중" sparkle, with the gateway's thinking
-    // preview as its inline summary; the live reasoning block sits above it.
+    // Pre-content stream → Deneb's "응답 중" sparkle, with the gateway-owned
+    // progress phase as its inline summary; the live reasoning block sits above it.
     if (turn.status === "streaming") {
       return (
         <div className="ai-turn-body">
           {reasoning}
-          <DenebStatus summary={thinking?.trim() ? thinking : undefined} />
+          <DenebStatus summary={thinking?.trim() ? thinking : undefined} startedAt={turn.startedAt} />
         </div>
       );
     }
@@ -138,6 +138,9 @@ export function AssistantBody({
           <ToolChip key={p.id || i} part={p} />
         ),
       )}
+      {turn.status === "streaming" ? (
+        <DenebStatus summary={thinking?.trim() ? thinking : undefined} startedAt={turn.startedAt} />
+      ) : null}
     </div>
   );
 }

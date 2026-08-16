@@ -58,27 +58,36 @@ func TestWriteChatStreamSSE_DeltasThenDone(t *testing.T) {
 		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
 	}
 	events := parseSSEEvents(t, rec.Body.String())
-	if len(events) != 3 {
-		t.Fatalf("event count = %d, want 3 (2 delta + 1 done): %q", len(events), rec.Body.String())
+	if len(events) != 4 {
+		t.Fatalf("event count = %d, want 4 (progress + 2 delta + done): %q", len(events), rec.Body.String())
 	}
-	if events[0].Event != "delta" || events[1].Event != "delta" {
-		t.Errorf("first two events = %q/%q, want delta/delta", events[0].Event, events[1].Event)
+	if events[0].Event != "progress" || events[1].Event != "delta" || events[2].Event != "delta" {
+		t.Errorf("first events = %q/%q/%q, want progress/delta/delta", events[0].Event, events[1].Event, events[2].Event)
+	}
+	var progress progressStreamFrame
+	if err := json.Unmarshal([]byte(events[0].Data), &progress); err != nil {
+		t.Fatalf("progress payload: %v", err)
+	}
+	if progress.Phase != "writing" || progress.Label != "답변을 작성하고 있습니다" ||
+		progress.SoftDeadlineMS != chatStreamSoftDeadline.Milliseconds() ||
+		progress.HardDeadlineMS != chatStreamTurnDeadline.Milliseconds() || progress.StartedAtMS <= 0 {
+		t.Errorf("progress = %+v, want writing label + server deadlines", progress)
 	}
 	var d0 struct {
 		Delta string `json:"delta"`
 	}
-	if err := json.Unmarshal([]byte(events[0].Data), &d0); err != nil || d0.Delta != "안녕" {
+	if err := json.Unmarshal([]byte(events[1].Data), &d0); err != nil || d0.Delta != "안녕" {
 		t.Errorf("delta[0] = %q (err %v), want 안녕", d0.Delta, err)
 	}
-	if events[2].Event != "done" {
-		t.Fatalf("last event = %q, want done", events[2].Event)
+	if events[3].Event != "done" {
+		t.Fatalf("last event = %q, want done", events[3].Event)
 	}
 	var done struct {
 		Text     string `json:"text"`
 		Model    string `json:"model"`
 		FellBack bool   `json:"fellBack"`
 	}
-	if err := json.Unmarshal([]byte(events[2].Data), &done); err != nil {
+	if err := json.Unmarshal([]byte(events[3].Data), &done); err != nil {
 		t.Fatalf("done payload: %v", err)
 	}
 	if done.Text != "안녕하세요" || done.Model != "step3p7" || !done.FellBack {
@@ -165,7 +174,11 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 	writeChatStreamSSE(context.Background(), context.Background(), rec, "client:test", run, nil, nil)
 
 	events := parseSSEEvents(t, rec.Body.String())
-	wantOrder := []string{"thinking", "thinking", "tool", "tool", "delta", "done"}
+	wantOrder := []string{
+		"progress", "thinking", "thinking",
+		"progress", "tool", "tool", "progress",
+		"progress", "delta", "done",
+	}
 	if len(events) != len(wantOrder) {
 		t.Fatalf("event count = %d, want %d: %q", len(events), len(wantOrder), rec.Body.String())
 	}
@@ -175,27 +188,41 @@ func TestWriteChatStreamSSE_ToolAndThinkingFrames(t *testing.T) {
 		}
 	}
 	var thinking thinkingStreamFrame
-	if err := json.Unmarshal([]byte(events[0].Data), &thinking); err != nil || thinking.Preview != "발신인 이력을 대조" {
+	if err := json.Unmarshal([]byte(events[1].Data), &thinking); err != nil || thinking.Preview != "발신인 이력을 대조" {
 		t.Errorf("thinking payload = %+v (err %v), want preview passthrough", thinking, err)
 	}
-	if strings.Contains(events[1].Data, "preview") {
-		t.Errorf("empty preview should be omitted from the frame: %q", events[1].Data)
+	if strings.Contains(events[2].Data, "preview") {
+		t.Errorf("empty preview should be omitted from the frame: %q", events[2].Data)
 	}
 	var tool toolStreamFrame
-	if err := json.Unmarshal([]byte(events[2].Data), &tool); err != nil {
+	if err := json.Unmarshal([]byte(events[4].Data), &tool); err != nil {
 		t.Fatalf("tool payload: %v", err)
 	}
 	if tool.State != "started" || tool.Tool != "gmail" || tool.ToolUseID != "tu_1" || tool.Detail != "아르고에너지" || tool.IsError {
 		t.Errorf("tool[started] = %+v, want {started gmail tu_1 아르고에너지 false}", tool)
 	}
-	if strings.Contains(events[2].Data, "isError") {
-		t.Errorf("started frame should omit isError: %q", events[2].Data)
+	if strings.Contains(events[4].Data, "isError") {
+		t.Errorf("started frame should omit isError: %q", events[4].Data)
 	}
-	if err := json.Unmarshal([]byte(events[3].Data), &tool); err != nil || tool.State != "completed" || !tool.IsError {
+	if err := json.Unmarshal([]byte(events[5].Data), &tool); err != nil || tool.State != "completed" || !tool.IsError {
 		t.Errorf("tool[completed] = %+v (err %v), want state=completed isError=true", tool, err)
 	}
-	if strings.Contains(events[3].Data, "detail") {
-		t.Errorf("completed frame should omit empty detail: %q", events[3].Data)
+	if strings.Contains(events[5].Data, "detail") {
+		t.Errorf("completed frame should omit empty detail: %q", events[5].Data)
+	}
+	var phases []string
+	for _, ev := range events {
+		if ev.Event != "progress" {
+			continue
+		}
+		var frame progressStreamFrame
+		if err := json.Unmarshal([]byte(ev.Data), &frame); err != nil {
+			t.Fatalf("progress frame: %v", err)
+		}
+		phases = append(phases, frame.Phase)
+	}
+	if got, want := strings.Join(phases, ","), "thinking,working,reviewing,writing"; got != want {
+		t.Errorf("progress phases = %q, want %q", got, want)
 	}
 }
 

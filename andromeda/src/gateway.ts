@@ -3,7 +3,7 @@
 // Phase 0 (this file): raw RPC envelope + token auth + ping + chat SSE stream.
 // Phase 1: wrap callRpc() in a Refine data provider so resources (mail, calendar,
 // todo, memory …) flow into grids/forms automatically.
-import { asBool, asStr } from "./format";
+import { asBool, asNum, asStr } from "./format";
 import { readJsonSSE } from "./sse";
 import { log } from "./log";
 import { getJSON, setJSON } from "./storage";
@@ -468,9 +468,20 @@ export interface ChatToolEvent {
   isError?: boolean;
 }
 
+// Deterministic gateway-owned phase narration. Unlike `thinking`, this payload
+// never contains model reasoning and is safe to keep visible for the whole turn.
+export interface ChatProgressEvent {
+  phase: string;
+  label: string;
+  startedAtMs?: number;
+  softDeadlineMs?: number;
+  hardDeadlineMs?: number;
+}
+
 export interface ChatHandlers {
   onDelta?: (text: string) => void;
   onTool?: (ev: ChatToolEvent) => void;
+  onProgress?: (ev: ChatProgressEvent) => void;
   onThinking?: (preview: string) => void;
   onReasoning?: (reasoning: string) => void;
   onDone?: (final: { text: string; model?: string; fellBack?: boolean; reasoning?: string }) => void;
@@ -504,7 +515,7 @@ export async function streamFetch(
 }
 
 // Minimal SSE parser matching the gateway frame format:
-//   event: delta|tool|thinking|done|error
+//   event: progress|delta|tool|thinking|done|error
 //   data:  {...}
 export async function chatStream(
   cfg: GatewayConfig,
@@ -563,6 +574,19 @@ export async function chatStream(
         }
         break;
       }
+      case "progress": {
+        const label = asStr(obj.label);
+        if (label) {
+          handlers.onProgress?.({
+            phase: asStr(obj.phase) ?? "",
+            label,
+            startedAtMs: asNum(obj.startedAtMs),
+            softDeadlineMs: asNum(obj.softDeadlineMs),
+            hardDeadlineMs: asNum(obj.hardDeadlineMs),
+          });
+        }
+        break;
+      }
       case "thinking": {
         const preview = asStr(obj.preview);
         if (preview !== undefined) handlers.onThinking?.(preview);
@@ -611,7 +635,7 @@ export function composeChatMessage(message: string, workspaceContext?: string): 
 // the transcript for that answer instead of freezing on the streamed preamble.
 
 export const CHAT_RECOVERY_BUDGET_MS = 90_000; // no-signal give-up window
-export const CHAT_RECOVERY_MAX_MS = 363_000; // extended window once confirmed running (server InteractiveTurnDeadline 6m + poll)
+export const CHAT_RECOVERY_MAX_MS = 1_803_000; // confirmed-running window (server InteractiveTurnDeadline 30m + poll)
 export const CHAT_RECOVERY_POLL_MS = 3_000;
 
 export type TurnProbe = { kind: "answered"; text: string } | { kind: "running" } | { kind: "notArrived" };

@@ -31,6 +31,10 @@ type agentRunner struct {
 	preparer  *turnRequestPreparer
 	baseLimit int
 
+	softDeadlineAt time.Time
+
+	softDeadlineFinal bool
+
 	maxToolCallAttempts  int
 	toolCallAttemptsUsed int
 	streamBytesUsed      int
@@ -79,6 +83,10 @@ func newAgentRunner(
 	}
 	runCtx, cancel := newAgentRunContext(ctx, cfg.Timeout)
 	state := newAgentRunState(messages, cfg.OnMessagePersist)
+	softDeadlineAt := cfg.SoftDeadlineAt
+	if softDeadlineAt.IsZero() && cfg.SoftDeadline > 0 {
+		softDeadlineAt = time.Now().Add(cfg.SoftDeadline)
+	}
 	runner := &agentRunner{
 		cfg:                 cfg,
 		client:              client,
@@ -92,6 +100,7 @@ func newAgentRunner(
 		result:              state.result,
 		journal:             state.journal,
 		baseLimit:           cfg.MaxTokens,
+		softDeadlineAt:      softDeadlineAt,
 		maxToolCallAttempts: maxToolCallAttempts,
 	}
 	runner.preparer = newTurnRequestPreparer(&runner.cfg)
@@ -176,6 +185,7 @@ func (r *agentRunner) runTurn(turn int) (bool, error) {
 }
 
 func (r *agentRunner) prepareTurn(turn int) (preparedAgentTurn, bool, error) {
+	r.maybeEnterSoftDeadlineFinalMode()
 	requestMaxTokens, done := r.requestTokenBudget()
 	if done {
 		return preparedAgentTurn{}, true, nil
@@ -186,12 +196,35 @@ func (r *agentRunner) prepareTurn(turn int) (preparedAgentTurn, bool, error) {
 	}
 	r.result.Turns = turn + 1
 	prepared := r.preparer.prepare(r.runCtx, turn, r.journal.messages, r.result.ToolActivities)
+	if r.softDeadlineFinal {
+		// A soft deadline is a final-answer preference, not cancellation. Remove
+		// tools and explicitly disable tool choice so this and any defensive retry
+		// spend the remaining hard-budget headroom writing the answer.
+		prepared.request.Tools = nil
+		prepared.request.ToolChoice = llm.FlexibleFromValue("none")
+	}
 	prepared.request.MaxTokens = requestMaxTokens
 	return preparedAgentTurn{
 		index:                turn,
 		request:              prepared,
 		remainingStreamBytes: remainingStreamBytes,
 	}, false, nil
+}
+
+const softDeadlineWrapUpPrompt = "[System: 응답 시간의 소프트 한도에 도달했습니다. 지금까지 확인한 내용만으로 최종 답변을 작성하세요. 새 도구를 호출하지 말고, 불확실한 부분은 명시하세요.]"
+
+func (r *agentRunner) maybeEnterSoftDeadlineFinalMode() {
+	if r.softDeadlineFinal || r.softDeadlineAt.IsZero() || time.Now().Before(r.softDeadlineAt) {
+		return
+	}
+	r.softDeadlineFinal = true
+	r.journal.appendEphemeral(llm.NewTextMessage("user", softDeadlineWrapUpPrompt))
+	if r.cfg.OnSoftDeadline != nil {
+		r.cfg.OnSoftDeadline()
+	}
+	r.logger.Warn("agent soft deadline reached; forcing no-tools wrap-up",
+		"softDeadline", r.cfg.SoftDeadline,
+		"turn", r.result.Turns+1)
 }
 
 func (r *agentRunner) requestTokenBudget() (int, bool) {
