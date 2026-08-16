@@ -132,9 +132,31 @@ func TestLadderDispatchCapUsesLatestTerminalWatchedCohort(t *testing.T) {
 	}
 }
 
+// plantCalibrationDropIn marks the P5-2 window as still open under HOME.
+func plantCalibrationDropIn(t *testing.T) {
+	t.Helper()
+	path := calibrationDropInPath()
+	if path == "" {
+		t.Fatal("calibration drop-in path empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("# test window\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func isolateCalibrationHome(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+}
+
 // Calibration row counts only post-window bench-carrying CYCLE records and
 // requires every rotating epoch to reach the target.
 func TestLadderCalibrationRowReadyOnlyWhenAllEpochsReachBenchTarget(t *testing.T) {
+	isolateCalibrationHome(t)
+	plantCalibrationDropIn(t)
 	tr := newTestTracker(t)
 	seed := func(epoch string, n int) {
 		t.Helper()
@@ -177,6 +199,8 @@ func TestLadderCalibrationProducerTargetIsLowerThanDefault(t *testing.T) {
 
 	// Producer met (5) but evaluator/genesis below their 10 must stay
 	// accumulating — the lower producer bar does not leak to other epochs.
+	isolateCalibrationHome(t)
+	plantCalibrationDropIn(t)
 	tr := newTestTracker(t)
 	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
 		for i := 0; i < ladderCalibrationBenchTargetProducer; i++ {
@@ -197,6 +221,8 @@ func TestLadderCalibrationProducerTargetIsLowerThanDefault(t *testing.T) {
 // must count toward calibration. Keying the skip off Action (instead of Epoch)
 // dropped exactly the succeeding cycles, stalling the row below target forever.
 func TestLadderCalibrationCountsAutoAdoptedCycles(t *testing.T) {
+	isolateCalibrationHome(t)
+	plantCalibrationDropIn(t)
 	tr := newTestTracker(t)
 	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
 		for i := 0; i < ladderCalibrationBenchTargetFor(epoch); i++ {
@@ -210,6 +236,34 @@ func TestLadderCalibrationCountsAutoAdoptedCycles(t *testing.T) {
 	}
 	if row := tr.ladderCalibrationRow(); row.State != ladderStateReady {
 		t.Fatalf("auto_adopted cycles with benches must count toward calibration: %+v", row)
+	}
+}
+
+// After harvest deletes the drop-in, the row must read 완료 — otherwise the
+// dashboard keeps nagging "제거 결정 가능" on a window that already closed.
+func TestLadderCalibrationRowDoneWhenDropInRemoved(t *testing.T) {
+	isolateCalibrationHome(t)
+	tr := newTestTracker(t)
+	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
+		for i := 0; i < ladderCalibrationBenchTargetFor(epoch); i++ {
+			if err := tr.LogMetaRevision(MetaRevisionRecord{
+				Epoch: epoch, Artifact: "a.md", Proposed: true,
+				BenchShadow: &producerBenchOutcome{Skills: 1},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	row := tr.ladderCalibrationRow()
+	if row.State != ladderStateDone {
+		t.Fatalf("absent drop-in must read done, got %+v", row)
+	}
+	if !strings.Contains(row.Detail, "드롭인 제거됨") {
+		t.Fatalf("done detail should name the closed window: %+v", row)
+	}
+	plantCalibrationDropIn(t)
+	if row := tr.ladderCalibrationRow(); row.State != ladderStateReady {
+		t.Fatalf("re-planted drop-in must return to READY: %+v", row)
 	}
 }
 

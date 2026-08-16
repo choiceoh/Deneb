@@ -437,7 +437,8 @@ func (t *RuntimeErrorMiningTask) Run(ctx context.Context) error {
 			Evidence:  evidence,
 			Reason:    "recurring gateway error signature (grounded, non-external)",
 			ProposedChange: "Locate the source path emitting this error and fix the root cause. " +
-				"If the condition is expected/external rather than a defect, downgrade the log level instead of leaving it at error.",
+				"If the condition is expected, external, or transient rather than a defect in our source, " +
+				"land nothing and record why — do not downgrade the log just to silence the miner.",
 			Risk: "Diagnose from the evidence before editing. If the root cause is not clearly in our source " +
 				"(external dependency, user input, transient), land nothing and record why.",
 			Source: source,
