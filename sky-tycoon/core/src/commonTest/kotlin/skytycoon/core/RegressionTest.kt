@@ -451,6 +451,58 @@ class RegressionTest {
         )
     }
 
+    @Test
+    fun `끝난 판은 마지막으로 진행한 분기로 표시된다`() {
+        val s = fresh().let { it.copy(turn = it.totalTurns - 1) }
+        val end = TurnEngine.advance(s)
+
+        assertEquals(s.endYear, end.displayYear, "종료 화면이 플레이하지도 않은 다음 해로 뜬다")
+        assertEquals(4, end.displayQuarter, "종료 화면이 4분기가 아닌 1분기로 뜬다")
+        // 진행 중일 때는 그냥 현재 분기다.
+        assertEquals(s.year, s.displayYear)
+        assertEquals(s.quarter, s.displayQuarter)
+    }
+
+    // ------------------------------------------------------------ 탈락 순위
+
+    @Test
+    fun `탈락 순위는 살아남은 회사 뒤에 매긴다`() {
+        var s = fresh()
+        // 플레이어와 한 곳만 남기고 나머지를 지운다 — 1:1 승부에서 지면 2위여야 한다.
+        val survivor = s.livingAirlines.first { it.id != "hanseong" }.id
+        s = s.copy(
+            airlines = s.airlines.map {
+                if (it.id == "hanseong" || it.id == survivor) it else it.copy(alive = false)
+            },
+        )
+        s = s.withAirline2("hanseong") { it.copy(alive = false, mergedInto = survivor) }
+
+        val end = TurnEngine.evaluateOutcome(s)
+        val outcome = requireNotNull(end.outcome) { "회사가 사라졌는데 판이 끝나지 않았다" }
+        assertFalse(outcome.won)
+        assertEquals(2, outcome.rank, "이미 망한 경쟁사까지 우리 위로 세어졌다")
+    }
+
+    // ------------------------------------------------------------ 중고 매물 기령
+
+    @Test
+    fun `단종된 기종의 중고는 단종 이후로 젊을 수 없다`() {
+        val s = fresh()
+        for (type in AircraftCatalog.all) {
+            for (year in listOf(1975, 1990, 2005, 2020)) {
+                val t = s.copy(turn = (year - s.startYear) * 4)
+                if (t.year <= type.year + 2) continue
+                val age = Actions.usedAge(t, type.id)
+                val built = t.year - age / 4
+                assertTrue(
+                    built <= type.retire,
+                    "${type.name}(${type.year}–${type.retire} 생산)이 ${t.year}년 매물에서 ${built}년식으로 나왔다",
+                )
+                assertTrue(built >= type.year, "${type.name}이 취항 전인 ${built}년식으로 나왔다")
+            }
+        }
+    }
+
     // ------------------------------------------------------------ 즉시 승리
 
     @Test

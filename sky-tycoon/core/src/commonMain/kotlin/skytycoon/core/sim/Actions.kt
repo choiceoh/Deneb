@@ -331,9 +331,12 @@ object Actions {
      */
     fun usedAge(state: GameState, typeId: String): Int {
         val type = AircraftCatalog[typeId]
+        // 생산이 끝난 뒤로는 새로 만들어지지 않는다 — 1990년의 707(1979년 단종)은
+        // 아무리 새것이라도 11년은 됐다. 이 하한은 13년 상한보다 우선한다.
+        val sinceRetire = ((state.year - type.retire) * 4).coerceAtLeast(0)
         // 취항 연도보다 오래된 기체는 존재할 수 없다 (2017년에 13년 된 787은 없다).
-        val oldest = ((state.year - type.year) * 4).coerceIn(4, 52)
-        val youngest = minOf(20, oldest)
+        val oldest = ((state.year - type.year) * 4).coerceIn(4, 52).coerceAtLeast(sinceRetire)
+        val youngest = minOf(20, oldest).coerceAtLeast(sinceRetire).coerceAtMost(oldest)
         return Rng.fromString("used:${state.turn}:$typeId").int(youngest, oldest)
     }
 

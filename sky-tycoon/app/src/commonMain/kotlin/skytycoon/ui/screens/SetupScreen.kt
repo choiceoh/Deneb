@@ -34,6 +34,7 @@ import skytycoon.core.data.Cities
 import skytycoon.core.data.Companies
 import skytycoon.core.data.Difficulties
 import skytycoon.core.data.Scenarios
+import skytycoon.core.sim.NewGame
 import skytycoon.ui.Amber
 import skytycoon.ui.Ink
 import skytycoon.ui.InkPanel
@@ -121,6 +122,11 @@ fun SetupScreen(
 
             VSpace(20)
             SetupSection("회사를 고르세요") {
+                // 시드 자본은 시나리오 시작 연도의 물가로 환산돼 지급된다. 1970년 명목값을
+                // 그대로 보여주면 2012년 시나리오에서 실제 자본의 1/5 로 읽힌다.
+                val startInflation = NewGame.inflationFor(
+                    Scenarios.all.first { it.id == scenario }.startYear,
+                )
                 for (co in Companies.all) {
                     val home = Cities[co.home]
                     val fleet = co.startFleet.sumOf { it.second }
@@ -129,7 +135,7 @@ fun SetupScreen(
                         accent = Color(co.colorArgb),
                         title = "${co.name} · ${home.name} (${home.code})",
                         body = "${co.bonusLabel} — ${co.bonusDesc}",
-                        meta = "자본 ${moneyShort(co.cash)} · 기재 ${fleet}대 · " +
+                        meta = "자본 ${moneyShort(co.cash * startInflation)} · 기재 ${fleet}대 · " +
                             "허브 규모 ${hubGrade(home.slots, home.econ)} · 성향 ${co.trait.label}",
                         onClick = { company = co.id },
                     )

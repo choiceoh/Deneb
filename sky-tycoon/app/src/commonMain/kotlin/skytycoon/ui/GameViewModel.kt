@@ -76,7 +76,7 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         }
         state = loaded
         pendingReport = null
-        message = "${loaded.year}년 ${loaded.quarter}분기부터 이어서 진행합니다."
+        message = "${loaded.displayYear}년 ${loaded.displayQuarter}분기부터 이어서 진행합니다."
         return true
     }
 
@@ -143,7 +143,13 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
             message = "저장에 실패했습니다. 저장 공간을 확인하세요."
             return false
         }
-        message = "${s.year}년 ${s.quarter}분기를 저장했습니다."
+        // 이어하기는 자동 저장 슬롯을 "지금 하는 판"으로 믿는다. 새 판을 시작하고
+        // 분기를 넘기기 전에 수동 저장만 했다면 자동 저장은 아직 예전 판이라,
+        // 여기서 옮겨두지 않으면 이어하기가 방금 저장한 판을 못 찾는다.
+        val auto = load(SaveSlot.AUTO)
+        val claimed = if (auto == null || campaignKey(auto) != campaignKey(s)) autoSave() else true
+        val label = "${s.displayYear}년 ${s.displayQuarter}분기"
+        message = if (claimed) "${label}를 저장했습니다." else "${label}를 저장했지만 $autoSaveWarning"
         return true
     }
 
@@ -162,9 +168,9 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         pendingReport = null
         val saved = autoSave()
         message = if (saved) {
-            "${loaded.year}년 ${loaded.quarter}분기로 되돌렸습니다."
+            "${loaded.displayYear}년 ${loaded.displayQuarter}분기로 되돌렸습니다."
         } else {
-            "${loaded.year}년 ${loaded.quarter}분기로 되돌렸지만 $autoSaveWarning"
+            "${loaded.displayYear}년 ${loaded.displayQuarter}분기로 되돌렸지만 $autoSaveWarning"
         }
         return true
     }
@@ -181,9 +187,9 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         state = loaded
         val saved = autoSave()
         message = if (saved) {
-            "${loaded.year}년 ${loaded.quarter}분기 세이브를 불러왔습니다."
+            "${loaded.displayYear}년 ${loaded.displayQuarter}분기 세이브를 불러왔습니다."
         } else {
-            "${loaded.year}년 ${loaded.quarter}분기 세이브를 불러왔지만 $autoSaveWarning"
+            "${loaded.displayYear}년 ${loaded.displayQuarter}분기 세이브를 불러왔지만 $autoSaveWarning"
         }
         return true
     }

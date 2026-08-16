@@ -306,6 +306,15 @@ data class GameState(
     val quarter: Int get() = turn % 4 + 1
     val endYear: Int get() = startYear + (totalTurns - 1) / 4
 
+    /**
+     * 화면·세이브 문구에 쓰는 턴. 마지막 분기를 넘기면 turn 이 totalTurns 로 올라가
+     * 종료 화면이 "플레이하지도 않은 다음 해 1분기"로 뜬다 — 끝난 판은 마지막으로
+     * 진행한 분기를 그대로 보여준다.
+     */
+    val displayTurn: Int get() = if (outcome != null && turn >= totalTurns) turn - 1 else turn
+    val displayYear: Int get() = startYear + displayTurn / 4
+    val displayQuarter: Int get() = displayTurn % 4 + 1
+
     val player: Airline get() = airlines.first { it.id == playerId }
     fun airline(id: String): Airline = airlines.first { it.id == id }
     fun airlineOrNull(id: String): Airline? = airlines.firstOrNull { it.id == id }

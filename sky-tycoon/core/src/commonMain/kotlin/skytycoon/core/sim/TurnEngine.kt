@@ -338,8 +338,10 @@ object TurnEngine {
     private fun checkEnd(state: GameState): GameState {
         val player = state.airlineOrNull(state.playerId)
         if (player == null || !player.alive) {
+            // 살아남은 회사들 바로 뒤가 우리 자리다. 전체 회사 수를 쓰면 이미 망한
+            // 경쟁사까지 우리보다 위로 세어져, 1:1 승부에서 져도 4위로 적힌다.
             return state.copy(
-                outcome = Outcome(false, state.airlines.size, "회사가 사라졌습니다."),
+                outcome = Outcome(false, state.livingAirlines.size + 1, "회사가 사라졌습니다."),
                 news = state.news + NewsItem(state.turn, NewsKind.MILESTONE, "게임 오버", "경영에 실패했습니다."),
             )
         }

@@ -35,6 +35,42 @@ class SaveFlowTest {
     }
 
     @Test
+    fun `새 판을 수동 저장하면 이어하기가 그 판을 집는다`() {
+        val store = MemorySaveStore()
+        val old = GameViewModel(store)
+        old.start("goldenage", "hanseong", "normal", seed = 1)
+        old.endTurn()
+        old.endTurn()
+
+        // 새 판을 시작해 분기를 넘기기 전에 수동 저장만 한다. 자동 저장 슬롯은
+        // 아직 예전 판이라, 여기서 슬롯을 넘겨받지 않으면 이어하기가 예전 판을 집는다.
+        val fresh = GameViewModel(store)
+        fresh.start("goldenage", "fuji", "normal", seed = 2)
+        assertTrue(fresh.saveNow())
+
+        val resumed = GameViewModel(store)
+        assertTrue(resumed.resume())
+        assertEquals("fuji", resumed.game.playerId, "방금 저장한 새 판 대신 예전 판이 되살아났다")
+        assertEquals(2, resumed.game.seed)
+    }
+
+    @Test
+    fun `같은 판을 수동 저장해도 자동 저장을 과거로 되돌리지 않는다`() {
+        val store = MemorySaveStore()
+        val vm = GameViewModel(store)
+        vm.start("goldenage", "hanseong", "normal", seed = 1)
+        vm.endTurn()
+        vm.saveNow()
+        vm.endTurn()
+        vm.endTurn()
+        val advanced = vm.game.turn
+
+        // 이 시점의 수동 저장은 자동 저장과 같은 판이므로 자동 저장은 그대로여야 한다.
+        vm.saveNow()
+        assertEquals(advanced, Save.decode(store.read(SaveSlot.AUTO)!!).turn, "자동 저장이 과거로 밀렸다")
+    }
+
+    @Test
     fun `이어하기는 진행 중인 판을 집는다`() {
         val store = MemorySaveStore()
 

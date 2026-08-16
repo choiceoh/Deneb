@@ -158,7 +158,8 @@ private fun TopStatusBar(vm: GameViewModel, wide: Boolean) {
     val player = s.player
     // 회사가 사라지면 순위표에서 빠져 -1 이 나온다. 그때는 확정된 최종 순위를 쓴다.
     val rank = s.outcome?.rank
-        ?: TurnEngine.ranking(s).indexOfFirst { it.first.id == player.id }.let { if (it < 0) s.airlines.size else it + 1 }
+        ?: TurnEngine.ranking(s).indexOfFirst { it.first.id == player.id }
+            .let { if (it < 0) s.livingAirlines.size + 1 else it + 1 }
     val last = player.lastResult
 
     val stats: @Composable () -> Unit = {
@@ -190,7 +191,7 @@ private fun TopStatusBar(vm: GameViewModel, wide: Boolean) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(player.name, color = TextHigh, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(quarterLabel(s.year, s.quarter), color = TextMid, fontSize = 11.sp)
+                Text(quarterLabel(s.displayYear, s.displayQuarter), color = TextMid, fontSize = 11.sp)
             }
             if (wide) {
                 Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) { stats() }
