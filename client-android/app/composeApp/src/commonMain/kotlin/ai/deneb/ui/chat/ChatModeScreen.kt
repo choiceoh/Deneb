@@ -72,16 +72,14 @@ internal fun ChatModeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Immersive top overlay: the top bar + banners float over the conversation,
-    // which fills the full height and scrolls under them (and under the transparent
-    // status bar — enableEdgeToEdge is set in MainActivity). The overlay's measured
-    // height feeds the message list's top contentPadding so the first message rests
+    // which scrolls under them (and under the transparent status bar —
+    // enableEdgeToEdge is set in MainActivity). The overlay's measured height
+    // feeds the message list's top contentPadding so the first message rests
     // just below the bar instead of under it, while older messages scroll behind.
+    // The composer is a sibling under the list (not an overlay) so IME resize
+    // lifts list+input together.
     val topOverlayDensity = LocalDensity.current
     var topOverlayHeightPx by remember { mutableStateOf(0) }
-    // Same idea at the bottom: the input bar floats over the conversation; its
-    // measured height becomes the list's bottom contentPadding so the last message
-    // rests just above the input while older messages scroll behind it.
-    var bottomOverlayHeightPx by remember { mutableStateOf(0) }
 
     // The chat stays composed while another tab is selected (LiveTabPane) — a
     // hidden tab must never intercept system back, so both drawer handlers AND
@@ -207,10 +205,10 @@ internal fun ChatModeScreen(
                             // height and scrolls under the transparent status bar + the
                             // floating top overlay below (statusBarsPadding moves onto
                             // that overlay so its controls still clear the status bar).
-                            // imePadding on the root Box lifts BOTH the input bar and
-                            // the list above the keyboard. The list's follow-scroll
-                            // (see ChatMessageList) then rides the newest message up so
-                            // it rests exactly above the input bar as the keyboard opens.
+                            // imePadding lifts the list+composer column together. On a
+                            // tab-bar route App.kt already reserved max(tabBar, IME) and
+                            // consumed those insets, so this is a no-op there and only
+                            // defends previews / hosts that don't own the IME.
                             .imePadding(),
                     ) {
                         Column(Modifier.fillMaxSize()) {
@@ -219,8 +217,12 @@ internal fun ChatModeScreen(
                                 textToSpeech = textToSpeech,
                                 topOverlayDensity = topOverlayDensity,
                                 topOverlayHeightPx = topOverlayHeightPx,
-                                bottomOverlayHeightPx = bottomOverlayHeightPx,
                                 modifier = Modifier.weight(1f),
+                            )
+                            ChatInputOverlay(
+                                uiState = uiState,
+                                questionInputText = questionInputText,
+                                onQuestionInputTextChange = { questionInputText = it },
                             )
                         }
 
@@ -231,14 +233,6 @@ internal fun ChatModeScreen(
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } },
                             modifier = Modifier.align(TopStart),
                             onHeightChange = { topOverlayHeightPx = it },
-                        )
-
-                        ChatInputOverlay(
-                            uiState = uiState,
-                            questionInputText = questionInputText,
-                            onQuestionInputTextChange = { questionInputText = it },
-                            modifier = Modifier.align(BottomCenter),
-                            onHeightChange = { bottomOverlayHeightPx = it },
                         )
 
                         SnackbarHost(

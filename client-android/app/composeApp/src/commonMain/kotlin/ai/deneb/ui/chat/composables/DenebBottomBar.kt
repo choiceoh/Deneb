@@ -156,7 +156,15 @@ val denebBottomBarRoutes: Set<String> = setOf(
 // while still fitting the icon + small label without clipping. This sits just above the
 // icon + indicator + label intrinsic stack, so don't trim further without re-checking
 // the live render for clipping.
-private val DenebBottomBarHeight = 52.dp
+internal val DenebBottomBarHeight = 52.dp
+
+/**
+ * Bottom chrome reserved on a tab-bar route: the taller of the tab bar and the
+ * IME. The content column sits above this reserve, so the composer rides the
+ * keyboard without a boolean tab-bar hide (which jumps the layout one step late).
+ */
+internal fun denebBottomChromeReservePx(tabBarFullPx: Int, imePx: Int): Int =
+    maxOf(tabBarFullPx, imePx.coerceAtLeast(0))
 
 @Composable
 fun DenebBottomBar(
