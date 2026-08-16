@@ -56,25 +56,6 @@ object Stock {
         return minOf(cap, floatShares(state, targetId)).coerceAtLeast(0.0)
     }
 
-    /**
-     * 주어진 현금으로 살 수 있는 최대 주식 수. 매집 단가가 지분율에 따라 오르므로
-     * 역산이 어렵다 — 이분 탐색으로 구한다.
-     *
-     * 이게 없으면 UI 가 "이번 분기 한도 전액"만 살 수 있게 만들어, 45% 를 쥐고
-     * 6% 는 살 수 있는 플레이어가 인수를 끝내지 못한다.
-     */
-    fun affordableShares(state: GameState, buyerId: String, targetId: String, cash: Double): Double {
-        var lo = 0.0
-        var hi = maxBuyableThisQuarter(state, buyerId, targetId)
-        if (hi <= 0.0 || cash <= 0.0) return 0.0
-        if (buyCost(state, buyerId, targetId, hi) <= cash) return hi
-        repeat(40) {
-            val mid = (lo + hi) / 2
-            if (buyCost(state, buyerId, targetId, mid) <= cash) lo = mid else hi = mid
-        }
-        return lo
-    }
-
     /** 인수가 성립하면 인수사가 소수 주주에게 치러야 하는 잔여 지분 정리 대금. */
     fun minorityStakeValue(state: GameState, acquirerId: String, targetId: String): Double {
         val target = state.airlineOrNull(targetId) ?: return 0.0
@@ -83,17 +64,64 @@ object Stock {
             .sumOf { (it.holdings[targetId] ?: 0.0) * target.sharePrice }
     }
 
+    /** 매수를 상태에 반영한다. 사전 검증과 실제 실행이 **같은 코드**를 써야 어긋나지 않는다. */
+    fun applyPurchase(
+        state: GameState,
+        buyerId: String,
+        targetId: String,
+        shares: Double,
+        cost: Double,
+    ): GameState = state.withAirline(buyerId) {
+        it.copy(
+            cash = it.cash - cost,
+            holdings = it.holdings + (targetId to (it.holdings[targetId] ?: 0.0) + shares),
+            boughtThisQuarter = it.boughtThisQuarter +
+                (targetId to (it.boughtThisQuarter[targetId] ?: 0.0) + shares),
+        )
+    }
+
     /**
-     * 이 매수로 인수가 성립할 때 **추가로** 나갈 돈. 매수 대금만 보고 통과시키면
-     * 화면에 없던 정리 대금이 뒤늦게 청구돼 그대로 빚더미에 앉는다.
+     * 이 매수를 감당할 수 있는가 — **연쇄 인수까지 끝난 모습**으로 판단한다.
+     *
+     * 직접 대상만 재면 두 군데서 틀린다. (1) 과반을 넘기는 순간 잔여 지분 정리 대금이
+     * 따라붙는데 매수 대금만 보고 통과시키면 견적에 없던 청구가 떨어진다. (2) 상대가
+     * 들고 있던 지분을 물려받아 그 자리에서 다음 회사까지 삼키면 빚이 한 번 더 불어난다.
+     * 실제로 굴려 보는 게 두 경우를 다 덮는 유일한 방법이다.
+     *
+     * UI 버튼과 명령이 이 함수 하나를 공유해야 "제안한 물량이 실행에서 튕기는" 일이 없다.
      */
-    fun squeezeOutCost(state: GameState, buyerId: String, targetId: String, shares: Double): Double {
-        val target = state.airlineOrNull(targetId) ?: return 0.0
-        val held = (state.airlineOrNull(buyerId)?.holdings?.get(targetId) ?: 0.0) + shares
-        val stake = held / target.shares.coerceAtLeast(1.0)
-        if (stake <= Balance.TAKEOVER_THRESHOLD) return 0.0
-        // 피인수사의 금고가 먼저 쓰이므로 그만큼은 인수사가 따로 마련하지 않아도 된다.
-        return (minorityStakeValue(state, buyerId, targetId) - target.cash).coerceAtLeast(0.0)
+    fun canAfford(state: GameState, buyerId: String, targetId: String, shares: Double): Boolean {
+        if (shares <= 0.0) return false
+        val buyer = state.airlineOrNull(buyerId) ?: return false
+        val cost = buyCost(state, buyerId, targetId, shares)
+        if (buyer.cash < cost) return false
+
+        val settled = settleTakeovers(applyPurchase(state, buyerId, targetId, shares, cost))
+        val after = settled.airlineOrNull(buyerId) ?: return false
+        if (!after.alive) return false
+        // 인수로 자산이 늘면 차입 여력도 함께 늘어난다 — 그 늘어난 여력을 기준으로 잰다.
+        return after.debt <= Actions.debtCapacity(settled, after)
+    }
+
+    /**
+     * 지금 실행 가능한 최대 매수량. 매집 단가가 지분율에 따라 오르고 과반을 넘는 순간
+     * 정리 대금이 붙어 역산이 어렵다 — [canAfford] 를 술어로 이분 탐색한다.
+     *
+     * 이게 없으면 UI 가 "이번 분기 한도 전액"만 살 수 있게 만들어, 45% 를 쥐고
+     * 6% 는 살 수 있는 플레이어가 인수를 끝내지 못한다.
+     */
+    fun affordableShares(state: GameState, buyerId: String, targetId: String): Double {
+        var lo = 0.0
+        var hi = maxBuyableThisQuarter(state, buyerId, targetId)
+        if (hi <= 0.0) return 0.0
+        if (canAfford(state, buyerId, targetId, hi)) return hi
+        // 비용은 매수량에 대해 단조 증가라 (정리 대금은 과반에서 한 번 계단으로 뛴다)
+        // 이분 탐색이 성립한다.
+        repeat(24) {
+            val mid = (lo + hi) / 2
+            if (canAfford(state, buyerId, targetId, mid)) lo = mid else hi = mid
+        }
+        return lo
     }
 
     /**

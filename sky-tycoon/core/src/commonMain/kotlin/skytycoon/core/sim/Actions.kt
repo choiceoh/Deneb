@@ -497,27 +497,16 @@ object Actions {
             }
             val cost = Stock.buyCost(state, airline.id, target.id, cmd.shares)
             if (airline.cash < cost) return ActionResult.fail(state, "매수 자금이 부족합니다.")
-            // 과반을 넘기는 매수라면 잔여 지분 정리 대금까지 감당할 수 있어야 한다.
+            // 잔여 지분 정리 대금과 연쇄 인수까지 굴려 보고 감당되는지 확인한다.
             // 매수 대금만 재고 통과시키면 견적에 없던 청구가 뒤따라와 빚더미에 앉는다.
-            val squeeze = Stock.squeezeOutCost(state, airline.id, target.id, cmd.shares)
-            if (squeeze > 0.0) {
-                val room = (debtCapacity(state, airline) - airline.debt).coerceAtLeast(0.0)
-                if (airline.cash - cost + room < squeeze) {
-                    return ActionResult.fail(
-                        state,
-                        "인수는 되지만 잔여 지분 정리에 ${(squeeze / 1e6).toInt()}백만 달러가 더 듭니다. " +
-                            "차입 여력까지 모자랍니다.",
-                    )
-                }
-            }
-            var next = state.withAirline(airline.id) {
-                it.copy(
-                    cash = it.cash - cost,
-                    holdings = it.holdings + (target.id to (it.holdings[target.id] ?: 0.0) + cmd.shares),
-                    boughtThisQuarter = it.boughtThisQuarter +
-                        (target.id to (it.boughtThisQuarter[target.id] ?: 0.0) + cmd.shares),
+            if (!Stock.canAfford(state, airline.id, target.id, cmd.shares)) {
+                return ActionResult.fail(
+                    state,
+                    "매수는 되지만 인수에 따르는 잔여 지분 정리 대금까지는 감당할 수 없습니다. " +
+                        "차입 여력을 늘리거나 지분을 나눠 모으세요.",
                 )
             }
+            var next = Stock.applyPurchase(state, airline.id, target.id, cmd.shares, cost)
             // 우리 회사가 노려지고 있다면 반드시 알려준다 — 모르고 당하면 게임이 아니다.
             if (target.isPlayer) {
                 val stake = Stock.ownershipRatio(next, airline.id, target.id)
@@ -536,7 +525,9 @@ object Actions {
             }
             // 마지막 경쟁사를 삼켰다면 여기서 바로 승리가 확정돼야 한다.
             // 다음 분기까지 기다리게 하면 그 사이에 파산해 패배로 뒤집힐 수도 있다.
-            val settled = TurnEngine.evaluateOutcome(Stock.settleTakeovers(next))
+            // 합병으로 대차대조표가 바뀌었으니 주가도 다시 매긴다 — 분기 진행 때와 같은 순서다.
+            // 안 그러면 낡은 주가로 증자하거나 남의 지분을 잘못된 값으로 들고 있게 된다.
+            val settled = TurnEngine.evaluateOutcome(Stock.repriceAll(Stock.settleTakeovers(next)))
             return ActionResult(settled, true, "${target.name} 주식을 매수했습니다.")
         }
 

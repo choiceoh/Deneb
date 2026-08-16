@@ -40,10 +40,22 @@ object Events {
 
     private fun GameState.interest(v: Double) = copy(world = world.copy(interest = v.coerceIn(0.02, 0.22)))
 
+    /**
+     * 일시 수요 효과를 건다. 이미 걸린 효과를 **덮어쓰지 않는다** — 사스로 0.45 까지
+     * 떨어진 홍콩에 같은 분기의 무작위 관광 붐이 1.4 를 덮으면 폭락이 통째로 사라진다.
+     * 곱해서 합치고 만료는 늦은 쪽에 맞춘다 (CityState 가 효과를 하나만 들고 있어
+     * 각각의 만료를 따로 추적하지는 못하는 근사다).
+     */
     private fun GameState.cityBoost(cityId: String, mult: Double, quarters: Int): GameState {
         val cs = cityState[cityId] ?: CityState()
+        val active = cs.boostAt(turn)
         return copy(
-            cityState = cityState + (cityId to cs.copy(boost = mult, boostUntilTurn = turn + quarters - 1)),
+            cityState = cityState + (
+                cityId to cs.copy(
+                    boost = (active * mult).coerceIn(0.2, 3.0),
+                    boostUntilTurn = maxOf(turn + quarters - 1, cs.boostUntilTurn),
+                )
+                ),
         )
     }
 

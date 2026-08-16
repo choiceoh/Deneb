@@ -316,8 +316,11 @@ object Ai {
                     val needTo = (freq - s.freeSlots(airlineId, to.id)).coerceAtLeast(0)
                     if (needFrom > s.unsoldSlots(from) || needTo > s.unsoldSlots(to)) continue
 
-                    val cost = needFrom * Economics.slotPrice(s, airlineId, fromId) +
-                        needTo * Economics.slotPrice(s, airlineId, to.id) +
+                    // 슬롯값은 한 개 살 때마다 오른다. 현재 단가에 개수를 곱하면 실제보다 싸게
+                    // 잡혀, 예산은 통과했는데 BuySlots 가 실패한다 — 그때 반대편 슬롯은 이미
+                    // 사둔 뒤라 노선도 못 열고 슬롯만 놀린다. 매입과 같은 계산을 쓴다.
+                    val cost = Actions.slotCost(s, airlineId, fromId, needFrom) +
+                        Actions.slotCost(s, airlineId, to.id, needTo) +
                         Actions.routeSetupCost(s, fromId, to.id)
                     if (cost > budget) continue
 

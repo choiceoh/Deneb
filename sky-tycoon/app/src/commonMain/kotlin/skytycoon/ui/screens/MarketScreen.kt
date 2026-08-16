@@ -100,8 +100,9 @@ fun MarketScreen(vm: GameViewModel, wide: Boolean) {
             val myStake = Stock.ownershipRatio(s, player.id, rival.id)
             val annualNet = rival.results.takeLast(4).sumOf { it.net }
             val limit = if (alive) Stock.maxBuyableThisQuarter(s, player.id, rival.id) else 0.0
-            // 한도 전액을 못 내더라도 낼 수 있는 만큼은 살 수 있어야 한다.
-            val buyable = if (alive) Stock.affordableShares(s, player.id, rival.id, player.cash) else 0.0
+            // 한도 전액을 못 내더라도 낼 수 있는 만큼은 살 수 있어야 한다. 인수에 따르는
+            // 정리 대금·연쇄 인수까지 계산된 값이라 여기 뜬 물량은 반드시 실행된다.
+            val buyable = if (alive) Stock.affordableShares(s, player.id, rival.id) else 0.0
             val cost = if (buyable > 0) Stock.buyCost(s, player.id, rival.id, buyable) else 0.0
 
             Column(

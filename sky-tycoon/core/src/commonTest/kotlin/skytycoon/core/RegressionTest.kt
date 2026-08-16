@@ -667,6 +667,68 @@ class RegressionTest {
     }
 
     @Test
+    fun `화면이 제안한 매수량은 실행 단계에서 튕기지 않는다`() {
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        val victimId = rivals[0].id
+        val minorityId = rivals[1].id
+        val shares = s.airline(victimId).shares
+
+        // 정리 대금이 큰 판 — 제3자가 45%, 우리가 48% 를 쥐고 있다.
+        s = s.withAirline2(minorityId) { it.copy(holdings = it.holdings + (victimId to shares * 0.45)) }
+        s = s.withAirline2(victimId) { it.copy(cash = 0.0) }
+        s = s.withAirline2("hanseong") { it.copy(holdings = it.holdings + (victimId to shares * 0.48)) }
+
+        // 현금이 빠듯한 구간부터 넉넉한 구간까지 — 버튼이 내놓은 값은 언제나 실행돼야 한다.
+        var everOffered = false
+        for (cash in listOf(1e7, 5e7, 2e8, 1e9, 1e10)) {
+            val t = s.withAirline2("hanseong") { it.copy(cash = cash) }
+            val offer = Stock.affordableShares(t, "hanseong", victimId)
+            if (offer <= 0.0) continue
+            everOffered = true
+            val r = Actions.execute(t, Command.TradeShares("hanseong", victimId, offer))
+            assertTrue(r.ok, "현금 $cash 에서 제안한 물량이 튕겼다: ${r.message}")
+        }
+        assertTrue(everOffered, "어느 현금 구간에서도 매수를 제안하지 않았다 — 테스트가 헛돈다")
+    }
+
+    @Test
+    fun `연쇄 인수로 물려받는 빚까지 함께 따진다`() {
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        val firstId = rivals[0].id
+        val secondId = rivals[1].id
+        val thirdId = rivals[2].id
+
+        // first 가 second 의 과반을 쥐고 있다 — first 를 삼키면 second 까지 연쇄로 넘어온다.
+        s = s.withAirline2(firstId) {
+            it.copy(holdings = it.holdings + (secondId to s.airline(secondId).shares * 0.60))
+        }
+        // third 가 second 지분 35% 를 들고 있어 연쇄 인수에 큰 정리 대금이 붙는다.
+        s = s.withAirline2(thirdId) {
+            it.copy(holdings = it.holdings + (secondId to s.airline(secondId).shares * 0.35))
+        }
+        s = s.withAirline2(secondId) { it.copy(cash = 0.0) }
+        s = s.withAirline2("hanseong") {
+            it.copy(cash = 1e10, holdings = it.holdings + (firstId to s.airline(firstId).shares * 0.48))
+        }
+
+        val block = s.airline(firstId).shares * 0.03
+        val r = Actions.execute(s, Command.TradeShares("hanseong", firstId, block))
+        assertTrue(r.ok, r.message)
+
+        assertFalse(r.state.airline(firstId).alive, "과반을 넘겼는데 인수가 성립하지 않았다")
+        assertFalse(r.state.airline(secondId).alive, "연쇄 인수가 일어나지 않아 테스트가 헛돈다")
+
+        val me = r.state.airline("hanseong")
+        assertTrue(me.cash >= 0.0, "연쇄 인수로 현금이 ${me.cash} 가 됐다")
+        assertTrue(
+            me.debt <= Actions.debtCapacity(r.state, me) + 1.0,
+            "연쇄 인수로 차입 여력(${Actions.debtCapacity(r.state, me)})을 넘는 빚 ${me.debt} 를 떠안았다",
+        )
+    }
+
+    @Test
     fun `파산한 회사의 부대사업은 자산으로 남지 않는다`() {
         var s = fresh()
         val doomedId = s.livingAirlines.first { it.id != "hanseong" }.id
@@ -686,6 +748,49 @@ class RegressionTest {
         assertTrue(
             Economics.equity(s, dead) <= 0.0,
             "파산한 회사의 기업가치가 ${Economics.equity(s, dead)} 로 플러스다",
+        )
+    }
+
+    // ------------------------------------------------------------ 일시 효과 중첩
+
+    @Test
+    fun `일시 수요 효과는 서로를 덮어쓰지 않는다`() {
+        var s = fresh()
+        // 2008년 3분기 — 베이징 올림픽(배율 2.0)이 대본으로 걸리는 분기.
+        s = s.copy(turn = (2008 - s.startYear) * 4 + 2)
+        // 그 위에 이미 수요를 반토막 낸 효과가 걸려 있다.
+        s = s.copy(
+            cityState = s.cityState + (
+                "beijing" to (s.cityState["beijing"] ?: CityState())
+                    .copy(boost = 0.5, boostUntilTurn = s.turn + 1)
+                ),
+        )
+
+        val t = Events.fire(s, Rng(1))
+        val boost = t.cityState["beijing"]!!.boostAt(t.turn)
+
+        assertTrue(boost < 2.0, "폭락을 지우고 올림픽 부스트가 통째로 덮였다 (배율 $boost)")
+        assertTrue(boost > 0.5, "올림픽이 아예 반영되지 않았다 (배율 $boost)")
+    }
+
+    // ------------------------------------------------------------ AI 견적
+
+    @Test
+    fun `AI 슬롯 견적은 매입할 때와 같은 누적 단가를 쓴다`() {
+        val s = fresh()
+        val city = s.routesOf("hanseong").first().from
+        // 한 개 단가 × 개수로 잡으면 실제보다 싸다 — 살수록 값이 오르기 때문.
+        val naive = Economics.slotPrice(s, "hanseong", city) * 5
+        val real = Actions.slotCost(s, "hanseong", city, 5)
+        assertTrue(real > naive, "슬롯값이 매입할수록 오르지 않는다 — 테스트가 헛돈다")
+
+        // 그리고 매입은 정확히 slotCost 만큼만 청구해야 한다.
+        val before = s.player.cash
+        val r = Actions.execute(s, Command.BuySlots("hanseong", city, 5))
+        assertTrue(r.ok, r.message)
+        assertTrue(
+            abs((before - r.state.player.cash) - real) < 1.0,
+            "견적 $real 과 실제 청구 ${before - r.state.player.cash} 가 다르다",
         )
     }
 

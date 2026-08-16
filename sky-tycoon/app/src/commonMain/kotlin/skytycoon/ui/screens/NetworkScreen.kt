@@ -186,11 +186,15 @@ private fun CityPanel(vm: GameViewModel, city: City, onCompose: (String) -> Unit
 
         VSpace(12)
         Panel(title = "취항 후보") {
-            val candidates = Cities.all
+            // 수요 상위만 보여주면 추천은 깔끔하지만, 양쪽 도시가 서로를 14위 밖으로 미는
+            // 한산한 노선은 개설 화면에 영영 닿지 못한다 (시뮬레이션은 지원하는데도).
+            // 기본은 추천 순, 펼치면 전 도시.
+            var showAll by remember(city.id) { mutableStateOf(false) }
+            val ranked = Cities.all
                 .filter { it.id != city.id }
                 .map { it to Demand.annualEstimate(s, city, it) }
                 .sortedByDescending { it.second }
-                .take(14)
+            val candidates = if (showAll) ranked else ranked.take(14)
 
             for ((dest, demand) in candidates) {
                 val dist = Geo.distance(city.id, dest.id)
@@ -233,6 +237,20 @@ private fun CityPanel(vm: GameViewModel, city: City, onCompose: (String) -> Unit
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
+            }
+            if (ranked.size > 14) {
+                VSpace(6)
+                Text(
+                    if (showAll) "추천 상위만 보기" else "전체 ${ranked.size}개 도시 보기",
+                    color = Sky,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showAll = !showAll }
+                        .padding(vertical = 8.dp),
+                )
             }
         }
         VSpace(20)
