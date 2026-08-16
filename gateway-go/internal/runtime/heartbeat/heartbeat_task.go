@@ -41,6 +41,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/monitoring"
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/prompt"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
@@ -121,10 +122,12 @@ type heartbeatTask struct {
 	model string
 
 	// deliver, when set, hands the finished report to the proactive relay
-	// (RelayNative → client:main + push). The turn now reasons in an isolated
-	// session, so this explicit relay is how the report reaches the user;
-	// RelayNative suppresses NO_REPLY/empty output. Nil in tests → no delivery.
-	deliver func(text string) (bool, error)
+	// (RelayNative → client:main + push). source is the work-feed lane
+	// (system_log for self-coding/sweep/research-only ticks; empty → proactive).
+	// The turn now reasons in an isolated session, so this explicit relay is
+	// how the report reaches the user; RelayNative suppresses NO_REPLY/empty
+	// output. Nil in tests → no delivery.
+	deliver func(text, source string) (bool, error)
 
 	// nowFn overrides the task clock in tests so the active-hours gate is
 	// deterministic (a real run leaves it nil → time.Now).
@@ -150,7 +153,7 @@ type TaskConfig struct {
 	SelfImproveEvidence       func(limit int) []genesis.FailureClusterSummary
 	IdleSkillReview           func(context.Context) (bool, string)
 	Model                     string
-	Deliver                   func(text string) (bool, error)
+	Deliver                   func(text, source string) (bool, error)
 	Now                       func() time.Time
 }
 
@@ -391,7 +394,7 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	delivered := false
 	if t.deliver != nil {
 		var derr error
-		if delivered, derr = t.deliver(result.BestText); derr != nil {
+		if delivered, derr = t.deliver(result.BestText, heartbeatFeedSource(content, signalSummary, selfCodingNudge, sweepNudge, researchNudge)); derr != nil {
 			t.logger.Error("heartbeat: report delivery failed", "error", derr)
 		}
 	}
@@ -423,6 +426,21 @@ func (t *heartbeatTask) detectSignalSummary(ctx context.Context) string {
 // has HEARTBEAT.md checks, there are escalation-worthy signals to surface, or
 // a lane (self-coding review, new-data research) fired a nudge. Pure for unit
 // testing.
+// heartbeatFeedSource picks the work-feed lane for this tick's report.
+// Self-coding / sweep / research-only ticks are system logs. A HEARTBEAT.md
+// task or calendar/todo signal keeps the card on the 업무 feed even when a
+// system nudge rode along — hiding a deadline behind 로그 is worse.
+func heartbeatFeedSource(content, signalSummary, selfCodingNudge, sweepNudge, researchNudge string) string {
+	work := strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != ""
+	system := strings.TrimSpace(selfCodingNudge) != "" ||
+		strings.TrimSpace(sweepNudge) != "" ||
+		strings.TrimSpace(researchNudge) != ""
+	if system && !work {
+		return workfeed.SourceSystemLog
+	}
+	return ""
+}
+
 func heartbeatShouldRun(content, signalSummary, selfCodingNudge, sweepNudge, researchNudge string) bool {
 	return strings.TrimSpace(content) != "" || strings.TrimSpace(signalSummary) != "" ||
 		strings.TrimSpace(selfCodingNudge) != "" || strings.TrimSpace(sweepNudge) != "" ||
