@@ -8,16 +8,21 @@ import (
 )
 
 // TestDreamerLLMShape pins the request shaping that keeps the wiki dreamer
-// alive across lightweight-model changes: the 2026-07-02/03 dream failures
+// alive across tiny-model changes: the 2026-07-02/03 dream failures
 // were dsv4 (dual-mode reasoning) spending the whole 4096-token synthesis
 // budget on chain-of-thought because the dreamer's raw client calls carried
 // no thinking-off kwarg.
 func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
-	shape := func(lightweight string) (map[string]any, int) {
+	if wikiDreamerModelRole != modelrole.RoleTiny {
+		t.Fatalf("wiki dreamer role = %q, want tiny", wikiDreamerModelRole)
+	}
+
+	shape := func(tiny string) (map[string]any, int) {
 		t.Helper()
 		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 			MainModel:        "zai/main-model",
-			LightweightModel: lightweight,
+			LightweightModel: "zai/unused-lightweight",
+			TinyModel:        tiny,
 			// Hermetic endpoints: registry construction probes vLLM-backed
 			// providers for /v1/models discovery — an unroutable loopback
 			// port fails instantly on any host, so the test neither dials a
@@ -52,6 +57,14 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 	t.Run("dsv4 fronted by wormhole gets the same toggle", func(t *testing.T) {
 		extra, _ := shape("wormhole/deepseek-v4-flash")
 		assertToggle(t, extra, "thinking")
+	})
+
+	t.Run("srv4 tiny alias stays thinking off", func(t *testing.T) {
+		extra, synthMax := shape("wormhole/dsv4-nothink")
+		assertToggle(t, extra, "enable_thinking")
+		if synthMax != 0 {
+			t.Errorf("synthMax = %d, want 0", synthMax)
+		}
 	})
 
 	t.Run("non-reasoning model mirrors the hub NoThinking kwargs", func(t *testing.T) {
@@ -114,7 +127,8 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 		yes := true
 		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 			MainModel:        "zai/main-model",
-			LightweightModel: "mycloud/mystery-reasoner",
+			LightweightModel: "zai/unused-lightweight",
+			TinyModel:        "mycloud/mystery-reasoner",
 			Providers: map[string]modelrole.ProviderResolved{
 				"mycloud": {BaseURL: "http://127.0.0.1:1/v1", Reasoning: &yes},
 			},
@@ -132,7 +146,8 @@ func TestDreamerLLMShapeReturnsToggleAndBudgetByModel(t *testing.T) {
 		kw := "custom_thinking"
 		reg := modelrole.NewRegistryWithOptions(slog.Default(), modelrole.RegistryOptions{
 			MainModel:        "zai/main-model",
-			LightweightModel: "myvllm/custom-dual-mode",
+			LightweightModel: "zai/unused-lightweight",
+			TinyModel:        "myvllm/custom-dual-mode",
 			Providers: map[string]modelrole.ProviderResolved{
 				"myvllm": {BaseURL: "http://127.0.0.1:1/v1", Routing: &modelrole.RoutingOverride{ToggleKwarg: &kw}},
 			},
