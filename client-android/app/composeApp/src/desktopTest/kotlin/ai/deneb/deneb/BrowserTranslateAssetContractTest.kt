@@ -66,6 +66,26 @@ class BrowserTranslateAssetContractTest {
         assertFalse(applyBody.contains("translated === rec.original"))
     }
 
+    @Test
+    fun transientNativeFailuresRetryWithBoundedBackoff() {
+        val nativeSource = sourceFile(
+            "src/androidMain/kotlin/ai/deneb/deneb/BrowserTranslateBridge.android.kt",
+        ).readText()
+        val jsSource = sourceFile("src/androidMain/assets/deneb-translate.js").readText()
+
+        val nativeResultBody = nativeSource.substringAfter("if (translated == null)").substringBefore("val requestLiteral")
+        assertContains(nativeResultBody, "reject(work.requestId, retryable = true)")
+        assertContains(nativeResultBody, "reject(work.requestId, retryable = false)")
+
+        assertTrue(jsSource.jsInt("MAX_TRANSIENT_RETRIES") in 1..6)
+        assertContains(jsSource, "retryAttempts[tid] = attempt")
+        assertContains(jsSource, "RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)")
+        assertContains(jsSource, "if (inFlight[tids[i]] || failed[tids[i]] || isApplied(rec)) continue")
+        val disableBody = jsSource.substringAfter("// Restore originals.").substringBefore("function onLocationChange")
+        assertContains(disableBody, "delete failed[tid]")
+        assertContains(disableBody, "delete retryAttempts[tid]")
+    }
+
     private fun sourceFile(relative: String): File = sequenceOf(
         File(relative),
         File("composeApp/$relative"),
