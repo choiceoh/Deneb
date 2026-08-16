@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.denebAdaptiveCardBorder
 import ai.deneb.ui.denebAdaptiveCardColors
 import ai.deneb.ui.icons.filled.Map
@@ -254,9 +255,18 @@ internal fun RenderChildren(
             val visible = remember(stateKey) { MutableTransitionState(false).apply { targetState = true } }
             AnimatedVisibility(
                 visibleState = visible,
-                enter = fadeIn(animationSpec = tween(280, delayMillis = index * 60)) +
+                enter = fadeIn(
+                    animationSpec = tween(
+                        DenebMotion.DurationCardEnter,
+                        delayMillis = index * DenebMotion.StaggerCard,
+                    ),
+                ) +
                     slideInVertically(
-                        animationSpec = tween(320, delayMillis = index * 60, easing = FastOutSlowInEasing),
+                        animationSpec = tween(
+                            DenebMotion.DurationCardSlide,
+                            delayMillis = index * DenebMotion.StaggerCard,
+                            easing = FastOutSlowInEasing,
+                        ),
                         initialOffsetY = { it / 6 },
                     ),
             ) {

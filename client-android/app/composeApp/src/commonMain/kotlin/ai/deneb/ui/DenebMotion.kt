@@ -79,6 +79,23 @@ object DenebMotion {
 
     /** One half-cycle of a live-status "breath" (in-flight dots, stop button). */
     const val DurationBreath = 1300
+
+    // ---- deneb-ui content reveals (keep the authored cadence; do not fold into DurationMedium) ----
+
+    /** Fade for a streamed deneb-ui node entering a card. */
+    const val DurationCardEnter = 280
+
+    /** Slide paired with [DurationCardEnter] — slightly longer so the rise lands after the fade starts. */
+    const val DurationCardSlide = 320
+
+    /** Delay between sibling card nodes so a streamed tree reads as a cascade. */
+    const val StaggerCard = 60
+
+    /** Chart path/bars drawing themselves in. */
+    const val DurationChartDraw = 700
+
+    /** Stat numeric count-up to its target. */
+    const val DurationStatCount = 600
 }
 
 // ---- Spring specs (spatial channels only) ----

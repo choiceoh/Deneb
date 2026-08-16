@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.denebOnSuccessContainer
 import ai.deneb.ui.denebOnWarningContainer
 import ai.deneb.ui.icons.Visibility
@@ -206,7 +207,10 @@ internal fun RenderChart(node: ChartNode) {
             // snap to fully drawn, not strand a partial chart (review catch
             // on #3234).
             if (motion) {
-                drawAnim.animateTo(1f, animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing))
+                drawAnim.animateTo(
+                    1f,
+                    animationSpec = tween(durationMillis = DenebMotion.DurationChartDraw, easing = FastOutSlowInEasing),
+                )
             } else {
                 drawAnim.snapTo(1f)
             }
