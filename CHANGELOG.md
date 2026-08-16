@@ -1,5 +1,38 @@
 # Changelog
 
+## [4.142.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.142.1...deneb-v4.142.2) (2026-08-16)
+
+
+### 🐛 Bug Fixes
+
+* **agent:** log tool-result errors as info ([#4487](https://github.com/choiceoh/Deneb/issues/4487)) ([76bb93b](https://github.com/choiceoh/Deneb/commit/76bb93ba3da458bbc68f7f36aa41e60fcb114658))
+* **android:** 토스 앱 알림은 업무 피드로 넘기지 않음 ([#4508](https://github.com/choiceoh/Deneb/issues/4508)) ([901578e](https://github.com/choiceoh/Deneb/commit/901578e9322d83e89dc2af032966701208f29012))
+* **audit:** 주간 참조감사 워크트리 노이즈를 빼고 warn-drift 13건을 정리 ([#4511](https://github.com/choiceoh/Deneb/issues/4511)) ([6e861d4](https://github.com/choiceoh/Deneb/commit/6e861d4c91c316a11fa2f76d70186378737005cd))
+* **chat:** keep capture attachments as path pointers, not parsed bodies ([#4510](https://github.com/choiceoh/Deneb/issues/4510)) ([ed503ea](https://github.com/choiceoh/Deneb/commit/ed503eaa3f3da011994ebb83b206c3f17cec12b2))
+* **genesis:** close calibration card and veto no-effect L4 reopens ([#4503](https://github.com/choiceoh/Deneb/issues/4503)) ([8db8893](https://github.com/choiceoh/Deneb/commit/8db889340586814193ecf2ac32cccd7cde0fda9b))
+* **genesis:** hold incremental health-findings off auto-dispatch ([#4504](https://github.com/choiceoh/Deneb/issues/4504)) ([54a2be1](https://github.com/choiceoh/Deneb/commit/54a2be1974391bda653ee98836cdf5cbc186fe9b))
+* **genesis:** require impact contracts for miner auto-dispatch ([#4506](https://github.com/choiceoh/Deneb/issues/4506)) ([b0663c8](https://github.com/choiceoh/Deneb/commit/b0663c853f4d1e3b62d3e4eafa7647185c79fd82))
+* **genesis:** thin saturated L3 probes to a canary ([#4505](https://github.com/choiceoh/Deneb/issues/4505)) ([d20f928](https://github.com/choiceoh/Deneb/commit/d20f92857b048d653000e28e20590aaeee06cd0e))
+* **meeting:** quiet transient Plaud list 5xx ([#4500](https://github.com/choiceoh/Deneb/issues/4500)) ([4a2ce9d](https://github.com/choiceoh/Deneb/commit/4a2ce9db467958711a0c3bb39e1e7f7064fb7ea8))
+* **notify:** confirm sidecar outages before alerting ([#4502](https://github.com/choiceoh/Deneb/issues/4502)) ([e6edf73](https://github.com/choiceoh/Deneb/commit/e6edf739b8e01d4885efb489d6fca0a5910e149d))
+* **runtime:** rate-limit memory pressure warnings ([#4489](https://github.com/choiceoh/Deneb/issues/4489)) ([8f99c8e](https://github.com/choiceoh/Deneb/commit/8f99c8e54398aa78e0513f9367d7440c285c5342))
+* **workfeed:** take card titles from labeled tiny output ([#4509](https://github.com/choiceoh/Deneb/issues/4509)) ([b1d1e89](https://github.com/choiceoh/Deneb/commit/b1d1e897c645d61ddead2f948399cf4753c7f051))
+
+
+### ⚡ Performance
+
+* **runtime:** route mail synthesis to submain ([#4490](https://github.com/choiceoh/Deneb/issues/4490)) ([74b338e](https://github.com/choiceoh/Deneb/commit/74b338e3b214efc6e4f46bf90dd13f78af8987cd))
+* **wiki:** bound semantic query embeddings ([#4492](https://github.com/choiceoh/Deneb/issues/4492)) ([7668411](https://github.com/choiceoh/Deneb/commit/7668411667e46baa0e4f62432420db35f98bb617))
+
+
+### 🔧 Internal
+
+* **briefcase:** remove dead canonical digest setter ([#4491](https://github.com/choiceoh/Deneb/issues/4491)) ([a762baf](https://github.com/choiceoh/Deneb/commit/a762baf00ef46ede1f3fa83ab17ed9e68ceeab5c))
+* **chat:** split miniapp RPC bridge package ([#4494](https://github.com/choiceoh/Deneb/issues/4494)) ([d33ff74](https://github.com/choiceoh/Deneb/commit/d33ff74cfa7d4753358e4a17474c4008e027d1e3))
+* **nativeapi:** split native event stream adapter ([#4499](https://github.com/choiceoh/Deneb/issues/4499)) ([d5d4ffd](https://github.com/choiceoh/Deneb/commit/d5d4ffd0403dc798444b8c4ceb9f27b6ad5faca3))
+* **runtimeops:** hide heartbeat wiring behind ops port ([#4501](https://github.com/choiceoh/Deneb/issues/4501)) ([f0c1e8c](https://github.com/choiceoh/Deneb/commit/f0c1e8ce3f570b47e08ae784e4db05c5483b42e3))
+* **toolwire:** isolate workflow tool registration ([#4498](https://github.com/choiceoh/Deneb/issues/4498)) ([08b4852](https://github.com/choiceoh/Deneb/commit/08b4852cd7fdc5adffd275f2b34c8bc8b9bde2c4))
+
 ## [4.142.1](https://github.com/choiceoh/Deneb/compare/deneb-v4.142.0...deneb-v4.142.1) (2026-08-10)
 
 
