@@ -171,6 +171,7 @@ reads:
 - `andromeda/src/components/panes/ProgressPane.tsx:30` ProgressPane
 - `andromeda/src/components/panes/ProjectHomePane.tsx:63` ProjectHomePane
 - `andromeda/src/components/panes/SearchPane.tsx:32` SearchPane
+
 ## paletteOpen — write 0 · read 1
 
 reads:
