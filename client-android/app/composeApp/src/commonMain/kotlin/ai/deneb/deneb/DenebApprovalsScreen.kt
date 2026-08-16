@@ -69,6 +69,7 @@ fun DenebApprovalsScreen(
     onBack: () -> Unit,
     onOpenDetail: (GroupwareApprovalRow) -> Unit = {},
     onOpenFeed: (() -> Unit)? = null,
+    onOpenLog: (() -> Unit)? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     remember {
@@ -85,6 +86,12 @@ fun DenebApprovalsScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val openFeed: (() -> Unit)? = onOpenFeed?.let { open ->
+        {
+            haptics.tap()
+            open()
+        }
+    }
+    val openLog: (() -> Unit)? = onOpenLog?.let { open ->
         {
             haptics.tap()
             open()
@@ -136,7 +143,7 @@ fun DenebApprovalsScreen(
     }
     val hasMore = nextAfter != null
 
-    DenebSiblingSwipeHost(onSwipeRight = openFeed) {
+    DenebSiblingSwipeHost(onSwipeRight = openFeed, onSwipeLeft = openLog) {
         DenebScreenScaffold(
             title = "결재",
             onBack = onBack,
@@ -145,6 +152,7 @@ fun DenebApprovalsScreen(
                 DenebFeedApprovalPivots(
                     active = DenebFeedApprovalPage.Approvals,
                     onOpenFeed = openFeed,
+                    onOpenLog = openLog,
                 )
             },
         ) {

@@ -103,8 +103,12 @@ internal fun FeedScreen(
     // re-arm the rememberSaveable consumption below.
     openRequestKey: Long = 0L,
     onOpenApprovals: (() -> Unit)? = null,
+    onOpenLog: (() -> Unit)? = null,
+    onOpenFeed: (() -> Unit)? = null,
+    lane: FeedLane = FeedLane.Work,
     // groupware-approval cards: open the Amaranth detail for item.refId.
     onOpenApprovalDetail: ((docId: String, title: String) -> Unit)? = null,
+    navigationTabBar: (@Composable () -> Unit)? = null,
 ) {
     val haptics = rememberHaptics()
     val openApprovals: (() -> Unit)? = onOpenApprovals?.let { open ->
@@ -113,15 +117,40 @@ internal fun FeedScreen(
             open()
         }
     }
-    DenebSiblingSwipeHost(onSwipeLeft = openApprovals) {
+    val openLog: (() -> Unit)? = onOpenLog?.let { open ->
+        {
+            haptics.tap()
+            open()
+        }
+    }
+    val openFeed: (() -> Unit)? = onOpenFeed?.let { open ->
+        {
+            haptics.tap()
+            open()
+        }
+    }
+    val laneItems = remember(items, lane) { items.forFeedLane(lane) }
+    DenebSiblingSwipeHost(
+        onSwipeLeft = when (lane) {
+            FeedLane.Work -> openApprovals
+            FeedLane.Log -> null
+        },
+        onSwipeRight = when (lane) {
+            FeedLane.Work -> null
+            FeedLane.Log -> openApprovals
+        },
+    ) {
         DenebScreenScaffold(
-            title = "피드",
+            title = if (lane == FeedLane.Log) "로그" else "피드",
             onBack = {},
             showBack = false,
+            tabBar = navigationTabBar,
             titleContent = {
                 DenebFeedApprovalPivots(
-                    active = DenebFeedApprovalPage.Feed,
+                    active = if (lane == FeedLane.Log) DenebFeedApprovalPage.Log else DenebFeedApprovalPage.Feed,
+                    onOpenFeed = openFeed,
                     onOpenApprovals = openApprovals,
+                    onOpenLog = openLog,
                 )
             },
         ) {
@@ -143,7 +172,7 @@ internal fun FeedScreen(
                     today = Clock.System.todayIn(tz)
                 }
             }
-            val dates = remember(items) { items.map { localDateOf(it.createdAtMs) } }
+            val dates = remember(laneItems) { laneItems.map { localDateOf(it.createdAtMs) } }
             val initialDate = remember(initialOpenItemId, initialOpenItemCreatedAtMs, today) {
                 if (initialOpenItemId.isNullOrBlank() || initialOpenItemCreatedAtMs <= 0L) {
                     today
@@ -211,8 +240,8 @@ internal fun FeedScreen(
             // live re-partition would yank the tapped item from 안읽음 (top) down into the
             // 읽음 section mid-tap, so it expanded out of view and couldn't be read. Read
             // items re-sort into 읽음 the next time the feed's data reloads.
-            val seenSnapshot = remember(items) { seenIds }
-            val dayItems = items.filter { localDateOf(it.createdAtMs) == selectedDate }
+            val seenSnapshot = remember(laneItems) { seenIds }
+            val dayItems = laneItems.filter { localDateOf(it.createdAtMs) == selectedDate }
             // Read = opened on this device (seen-set) OR on any device (gateway readAtMs,
             // arrives via List/sync) — so a card read on the desktop reads here too. The
             // seen-set stays snapshotted so the just-tapped row doesn't yank mid-tap.
@@ -225,11 +254,11 @@ internal fun FeedScreen(
                 expandedId = if (expandedId == id) null else id
                 onMarkSeen(id)
             }
-            LaunchedEffect(pendingOpenItemId, items) {
-                val consumption = consumeFeedItemOpen(pendingOpenItemId, items.map(WorkFeedItem::id))
+            LaunchedEffect(pendingOpenItemId, laneItems) {
+                val consumption = consumeFeedItemOpen(pendingOpenItemId, laneItems.map(WorkFeedItem::id))
                 pendingOpenItemId = consumption.pendingItemId
                 val itemId = consumption.openedItemId ?: return@LaunchedEffect
-                val item = items.firstOrNull { it.id == itemId } ?: return@LaunchedEffect
+                val item = laneItems.firstOrNull { it.id == itemId } ?: return@LaunchedEffect
                 selectedDateIso = localDateOf(item.createdAtMs).toString()
                 expandedId = itemId
                 onMarkSeen(itemId)
@@ -256,9 +285,13 @@ internal fun FeedScreen(
 
                     dayItems.isEmpty() -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         DenebEmpty(
-                            feedEmptyLabel(selectedDate, today),
+                            feedEmptyLabel(selectedDate, today, lane),
                             icon = Icons.Outlined.Notifications,
-                            hint = "데네브가 분석한 업무 카드가 여기에 도착합니다",
+                            hint = if (lane == FeedLane.Log) {
+                                "모델·자가개선 기록이 여기에 모입니다"
+                            } else {
+                                "데네브가 분석한 업무 카드가 여기에 도착합니다"
+                            },
                         )
                     }
 
@@ -423,10 +456,19 @@ private fun feedDateLabel(date: LocalDate, today: LocalDate): String {
     }
 }
 
-private fun feedEmptyLabel(date: LocalDate, today: LocalDate): String = when (date) {
-    today -> "오늘 받은 피드가 없습니다"
-    today.minus(1, DateTimeUnit.DAY) -> "어제 받은 피드가 없습니다"
-    else -> "이 날 받은 피드가 없습니다"
+private fun feedEmptyLabel(date: LocalDate, today: LocalDate, lane: FeedLane = FeedLane.Work): String {
+    if (lane == FeedLane.Log) {
+        return when (date) {
+            today -> "오늘 로그가 없습니다"
+            today.minus(1, DateTimeUnit.DAY) -> "어제 로그가 없습니다"
+            else -> "이 날 로그가 없습니다"
+        }
+    }
+    return when (date) {
+        today -> "오늘 받은 피드가 없습니다"
+        today.minus(1, DateTimeUnit.DAY) -> "어제 받은 피드가 없습니다"
+        else -> "이 날 받은 피드가 없습니다"
+    }
 }
 
 @Composable

@@ -62,6 +62,7 @@ import ai.deneb.ui.chat.ChatScreen
 import ai.deneb.ui.chat.ChatViewModel
 import ai.deneb.ui.chat.composables.DenebBottomBar
 import ai.deneb.ui.chat.composables.DenebBottomBarHeight
+import ai.deneb.ui.chat.composables.FeedLane
 import ai.deneb.ui.chat.composables.FeedScreen
 import ai.deneb.ui.chat.composables.ROUTE_CALENDAR
 import ai.deneb.ui.chat.composables.ROUTE_FEED
@@ -74,6 +75,7 @@ import ai.deneb.ui.chat.composables.denebLiveTabRequests
 import ai.deneb.ui.chat.composables.denebShowsBottomBar
 import ai.deneb.ui.chat.composables.isDenebLiveTab
 import ai.deneb.ui.chat.composables.navigateToDenebSection
+import ai.deneb.ui.chat.isLogCard
 import ai.deneb.ui.components.FullScreenImageHost
 import ai.deneb.ui.denebComposable
 import ai.deneb.ui.denebNavEnter
@@ -320,7 +322,8 @@ internal fun AppContent(
                 val feedTz = TimeZone.currentSystemDefault()
                 val feedToday = Clock.System.todayIn(feedTz)
                 val feedUnread = feedState.workFeed.count {
-                    it.status == "unread" &&
+                    !it.isLogCard &&
+                        it.status == "unread" &&
                         it.id !in feedSeenIds &&
                         it.readAtMs == 0L &&
                         Instant.fromEpochMilliseconds(it.createdAtMs).toLocalDateTime(feedTz).date == feedToday
@@ -588,6 +591,40 @@ internal fun AppContent(
                                             )
                                         }
                                     }
+                                    denebComposable<DenebFeedLog> {
+                                        FeedScreen(
+                                            items = feedState.workFeed,
+                                            loaded = feedState.workFeedLoaded,
+                                            seenIds = feedSeenIds,
+                                            lane = FeedLane.Log,
+                                            onMarkSeen = { id ->
+                                                appSettings.markFeedSeen(id)
+                                                feedSeenIds = appSettings.getFeedSeenIds()
+                                                feedState.actions.markWorkFeedRead(id)
+                                            },
+                                            onLoadDateRange = feedState.actions.refreshWorkFeedRange,
+                                            onRunAction = feedState.actions.runWorkFeedAction,
+                                            onAnswer = feedState.actions.answerWorkFeed,
+                                            onSubmitFeedback = feedState.actions.submitWorkFeedFeedback,
+                                            onRewrite = feedState.actions.rewriteWorkFeedCard,
+                                            onAsk = { id ->
+                                                feedState.actions.openWorkFeedItem(id)
+                                                openLiveTab(Home)
+                                            },
+                                            onOpenFeed = { openLiveTab(DenebFeed()) },
+                                            onOpenApprovals = { navigateToDenebSection(navController, DenebApprovals) },
+                                            navigationTabBar = if (showTabBar) navigationTabBar else null,
+                                            onOpenApprovalDetail = { docId, title ->
+                                                navController.navigate(
+                                                    DenebApprovalDetail(
+                                                        docId = docId,
+                                                        title = title,
+                                                        canAct = true,
+                                                    ),
+                                                )
+                                            },
+                                        )
+                                    }
                                     denebComposable<DenebApprovals> {
                                         denebClient?.let { client ->
                                             DenebApprovalsScreen(
@@ -606,6 +643,7 @@ internal fun AppContent(
                                                     )
                                                 },
                                                 onOpenFeed = { openLiveTab(DenebFeed()) },
+                                                onOpenLog = { navigateToDenebSection(navController, DenebFeedLog) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }
@@ -756,8 +794,9 @@ internal fun AppContent(
                                     feedState.actions.openWorkFeedItem(id)
                                     openLiveTab(Home)
                                 },
-                                // Zune-style title pivot + left swipe → 결재.
+                                // Zune-style title pivot: 피드 | 결재 | 로그.
                                 onOpenApprovals = { navigateToDenebSection(navController, DenebApprovals) },
+                                onOpenLog = { navigateToDenebSection(navController, DenebFeedLog) },
                                 onOpenApprovalDetail = { docId, title ->
                                     navController.navigate(
                                         DenebApprovalDetail(
