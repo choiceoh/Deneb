@@ -106,7 +106,7 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         state = next
         pendingReport = next.airlineOrNull(next.playerId)?.lastResult
         busy = false
-        autoSave()
+        if (!autoSave()) message = autoSaveWarning
     }
 
     fun dismissReport() {
@@ -119,14 +119,19 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
     var saveFailed by mutableStateOf(false)
         private set
 
-    fun autoSave() {
-        val s = state ?: return
+    /**
+     * 자동 저장. 성공 여부를 돌려주고 메시지는 **호출부가** 정한다 —
+     * 여기서 message 를 직접 쓰면 뒤이어 성공 문구를 덮어쓰는 호출부에서 경고가 사라진다.
+     */
+    fun autoSave(): Boolean {
+        val s = state ?: return false
         val ok = store.write(SaveSlot.AUTO, Save.encode(s))
-        if (!ok && !saveFailed) {
-            message = "자동 저장에 실패했습니다. 저장 공간을 확인하세요 — 지금 종료하면 진행 상황이 사라집니다."
-        }
         saveFailed = !ok
+        return ok
     }
+
+    private val autoSaveWarning =
+        "자동 저장에 실패했습니다. 저장 공간을 확인하세요 — 지금 종료하면 진행 상황이 사라집니다."
 
     /** 수동 저장은 자동 저장과 다른 슬롯에 넣는다 — 안 그러면 다음 분기에 곧바로 지워진다. */
     fun saveNow(): Boolean {
@@ -152,8 +157,12 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         }
         state = loaded
         pendingReport = null
-        autoSave()
-        message = "${loaded.year}년 ${loaded.quarter}분기로 되돌렸습니다."
+        val saved = autoSave()
+        message = if (saved) {
+            "${loaded.year}년 ${loaded.quarter}분기로 되돌렸습니다."
+        } else {
+            "${loaded.year}년 ${loaded.quarter}분기로 되돌렸지만 $autoSaveWarning"
+        }
         return true
     }
 
@@ -167,8 +176,12 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
             return false
         }
         state = loaded
-        autoSave()
-        message = "${loaded.year}년 ${loaded.quarter}분기 세이브를 불러왔습니다."
+        val saved = autoSave()
+        message = if (saved) {
+            "${loaded.year}년 ${loaded.quarter}분기 세이브를 불러왔습니다."
+        } else {
+            "${loaded.year}년 ${loaded.quarter}분기 세이브를 불러왔지만 $autoSaveWarning"
+        }
         return true
     }
 }

@@ -109,13 +109,37 @@ class SaveFlowTest {
 
         vm.endTurn()
         assertTrue(vm.saveFailed, "자동 저장 실패가 표시되지 않았다")
+        assertTrue(vm.message?.contains("실패") == true, "분기 진행 시 실패를 알리지 않았다")
         assertFalse(vm.hasSavedGame(), "쓰이지도 않은 세이브가 있다고 나온다")
+    }
+
+    @Test
+    fun `되돌리기 성공 메시지가 저장 실패 경고를 덮지 않는다`() {
+        // 저장 지점은 읽히지만 디스크가 꽉 차 자동 저장은 실패하는 상황.
+        val seed = GameViewModel(MemorySaveStore()).let { warm ->
+            warm.start("goldenage", "hanseong", "normal", seed = 3)
+            warm.endTurn()
+            skytycoon.core.save.Save.encode(warm.game)
+        }
+        val store = FailingSaveStore(mapOf(SaveSlot.MANUAL to seed))
+        val vm = GameViewModel(store)
+        vm.start("goldenage", "hanseong", "normal", seed = 3)
+
+        assertTrue(vm.loadSaved(), "읽기는 되는데 되돌리기가 실패했다")
+        assertTrue(
+            vm.message?.contains("실패") == true,
+            "되돌리기 성공 문구가 저장 실패 경고를 덮었다: ${vm.message}",
+        )
+        assertTrue(vm.saveFailed)
     }
 }
 
-/** 항상 쓰기에 실패하는 저장소 (디스크 가득 참·읽기 전용 상황). */
-private class FailingSaveStore : SaveStore {
+/**
+ * 항상 쓰기에 실패하는 저장소 (디스크 가득 참·읽기 전용 상황).
+ * 읽기는 미리 넣어둔 내용을 돌려줘 "불러오기는 되는데 저장은 안 되는" 상황을 재현한다.
+ */
+private class FailingSaveStore(private val preset: Map<SaveSlot, String> = emptyMap()) : SaveStore {
     override fun write(slot: SaveSlot, text: String) = false
-    override fun read(slot: SaveSlot): String? = null
+    override fun read(slot: SaveSlot): String? = preset[slot]
     override fun clear(slot: SaveSlot) = Unit
 }
