@@ -313,18 +313,7 @@ describe("TodayPane boundary behavior", () => {
         .getAllByRole("checkbox")
         .filter((box) => box.parentElement?.classList.contains("today-editor-label"))
         .map((box) => box.parentElement?.textContent);
-      expect(labels).toEqual([
-        "메일",
-        "할일",
-        "타임라인",
-        "일정",
-        "결재",
-        "피드",
-        "마감",
-        "연락처",
-        "크론",
-        "시장",
-      ]);
+      expect(labels).toEqual(["메일", "할일", "타임라인", "일정", "결재", "피드", "마감", "연락처", "크론", "시장"]);
     });
 
     it("recovers from non-array order, hidden, and wide values", async () => {
