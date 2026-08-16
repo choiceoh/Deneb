@@ -10,18 +10,38 @@ const (
 	SourceGenesisLadder = "genesis-ladder"
 )
 
-// IsLogCard reports whether a work-feed item is a system/agent log, not a
-// work card. The native 피드|결재|로그 pivot uses the same rule: log cards
-// leave the 피드 list and land on 로그.
-func IsLogCard(source, title string) bool {
+// IsLogSource reports whether source is a system/agent log lane. The native
+// 피드|결재|로그 pivot uses this field only — producers stamp the source at
+// write time instead of asking the client to guess from the title.
+func IsLogSource(source string) bool {
 	s := strings.TrimSpace(source)
 	switch s {
 	case SourceSystemLog, SourceGenesisMeta, SourceGenesisLadder:
 		return true
 	}
-	if strings.HasPrefix(s, "genesis-") {
-		return true
+	return strings.HasPrefix(s, "genesis-")
+}
+
+// IsLogCard reports whether a work-feed item is a system/agent log.
+// Title is ignored; keep the argument so existing call sites compile.
+func IsLogCard(source, _ string) bool {
+	return IsLogSource(source)
+}
+
+// rewriteLegacyLogSource lifts pre-#4513 diagnostic cards that were stored as
+// proactive onto system_log. New producers stamp the source themselves; this
+// only heals cards already on disk so the client can stay source-only.
+func rewriteLegacyLogSource(item Item) Item {
+	if IsLogSource(item.Source) {
+		return item
 	}
+	if item.Source == SourceProactive && legacyProactiveLogTitle(item.Title) {
+		item.Source = SourceSystemLog
+	}
+	return item
+}
+
+func legacyProactiveLogTitle(title string) bool {
 	t := strings.TrimSpace(title)
 	if t == "" {
 		return false

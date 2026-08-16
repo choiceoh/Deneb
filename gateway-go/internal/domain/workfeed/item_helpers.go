@@ -105,6 +105,7 @@ func normalizeItem(item Item) Item {
 	item.ID = strings.TrimSpace(item.ID)
 	item.Source = strings.TrimSpace(item.Source)
 	item.Title = strings.TrimSpace(item.Title)
+	item = rewriteLegacyLogSource(item)
 	item.Body = strings.TrimSpace(item.Body)
 	item.SessionKey = strings.TrimSpace(item.SessionKey)
 	item.RefType = strings.TrimSpace(item.RefType)
@@ -128,6 +129,8 @@ func normalizeItem(item Item) Item {
 
 func defaultTitle(source string) string {
 	switch source {
+	case SourceSystemLog:
+		return "시스템 기록"
 	case SourceProactive:
 		return "업무 리포트"
 	case SourceMailReport:

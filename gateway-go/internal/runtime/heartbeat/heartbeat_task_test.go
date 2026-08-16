@@ -11,6 +11,7 @@ import (
 	"time"
 
 	runtimesession "github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/workfeed"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
@@ -179,9 +180,12 @@ func TestHeartbeatRunIsolatesSessionAndDeliversReport(t *testing.T) {
 		Logger:      slog.Default(),
 		HomeDir:     home,
 		Model:       "submain",
-		Deliver: func(text string) (bool, error) {
+		Deliver: func(text, source string) (bool, error) {
 			deliverCalled = true
 			deliveredText = text
+			if source != "" {
+				t.Errorf("work-task tick source = %q, want empty (proactive)", source)
+			}
 			return true, nil
 		},
 		// Active hours, and no ActivityTracker so the idle gate is skipped.
@@ -281,6 +285,27 @@ func TestHeartbeatHasTasksTreatsScaffoldingAsEmpty(t *testing.T) {
 	for _, tc := range cases {
 		if got := heartbeatHasTasks(tc.content); got != tc.want {
 			t.Errorf("%s: heartbeatHasTasks = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestHeartbeatFeedSource(t *testing.T) {
+	cases := []struct {
+		name                                      string
+		content, signals, coding, sweep, research string
+		want                                      string
+	}{
+		{"work task", "- 납품 확인", "", "", "", "", ""},
+		{"calendar signal", "", "내일 10시 미팅 충돌", "", "", "", ""},
+		{"self-coding only", "", "", "자가코딩 후보 2건", "", "", workfeed.SourceSystemLog},
+		{"sweep only", "", "", "", "스윕 넛지", "", workfeed.SourceSystemLog},
+		{"research only", "", "", "", "", "[연구] 신규 메일", workfeed.SourceSystemLog},
+		{"mixed prefers work", "- 납품 확인", "", "자가코딩 후보 2건", "", "", ""},
+	}
+	for _, tc := range cases {
+		got := heartbeatFeedSource(tc.content, tc.signals, tc.coding, tc.sweep, tc.research)
+		if got != tc.want {
+			t.Errorf("%s: source = %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }

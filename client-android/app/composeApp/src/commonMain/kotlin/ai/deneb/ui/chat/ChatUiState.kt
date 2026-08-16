@@ -75,29 +75,17 @@ val WorkFeedItem.isProactiveReport: Boolean
 
 /**
  * System/agent cards belong on the 로그 pivot, not the 업무 피드.
- * Keep aligned with `workfeed.IsLogCard` in gateway-go.
+ * Source only — keep aligned with `workfeed.IsLogSource` in gateway-go.
+ * The gateway stamps `system_log` / `genesis-*` at write time (and rewrites
+ * older proactive diagnostic cards on read).
  */
-fun isWorkFeedLogCard(source: String, title: String): Boolean {
+fun isWorkFeedLogCard(source: String): Boolean {
     val s = source.trim()
-    if (s == "system_log" || s == "genesis-meta" || s == "genesis-ladder" || s.startsWith("genesis-")) {
-        return true
-    }
-    val t = title.trim()
-    if (t.isEmpty()) return false
-    if (t.contains("모델 튜너") ||
-        t.startsWith("메타 개정") ||
-        t.contains("self-correction") ||
-        t.contains("자가개선 후보")
-    ) {
-        return true
-    }
-    val modelish = t.contains("GLM") || t.contains("K3") || t.contains("텔레메트리")
-    val healthish = t.contains("지연") || t.contains("오류") || t.contains("악화") || t.contains("회귀")
-    return modelish && healthish
+    return s == "system_log" || s == "genesis-meta" || s == "genesis-ladder" || s.startsWith("genesis-")
 }
 
 val WorkFeedItem.isLogCard: Boolean
-    get() = isWorkFeedLogCard(source, title)
+    get() = isWorkFeedLogCard(source)
 
 /**
  * One message queued while a reply was still streaming ([ChatUiState.pendingQuestions]).
