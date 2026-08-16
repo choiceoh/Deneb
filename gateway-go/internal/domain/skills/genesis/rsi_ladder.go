@@ -19,6 +19,8 @@ package genesis
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -59,6 +61,26 @@ func ladderCalibrationBenchTargetFor(epoch string) int {
 // window (2026-07-12, rsi-calibration.conf) — bench samples before it belong
 // to the default-cadence era and don't count toward closing it.
 var ladderCalibrationOpenedMs = time.Date(2026, 7, 12, 0, 0, 0, 0, time.UTC).UnixMilli()
+
+// calibrationDropInPath is the systemd drop-in that IS the P5-2 window.
+// Harvest --revert deletes it; absence means the acceleration campaign is over.
+func calibrationDropInPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "systemd", "user", "deneb-gateway.service.d", "rsi-calibration.conf")
+}
+
+// calibrationWindowOpen reports whether the acceleration drop-in is still on disk.
+func calibrationWindowOpen() bool {
+	path := calibrationDropInPath()
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 // Ladder row states (Korean display text — these live in metric VALUES and
 // the diagnosis, not in the layer-state machine keys).
@@ -257,6 +279,11 @@ func (t *Tracker) ladderCalibrationRow() ladderRow {
 		benched[metaEpochProducer], ladderCalibrationBenchTargetFor(metaEpochProducer),
 		benched[metaEpochEvaluator], ladderCalibrationBenchTargetFor(metaEpochEvaluator),
 		benched[metaEpochGenesis], ladderCalibrationBenchTargetFor(metaEpochGenesis))
+	// The drop-in is the window. Once harvest deletes it, READY would keep
+	// nagging "제거 결정 가능" forever — the honest state is 완료.
+	if !calibrationWindowOpen() {
+		return ladderRow{"캘리브레이션 창 종료", ladderStateDone, detail + " — 드롭인 제거됨 (가속 창 닫힘)"}
+	}
 	for _, epoch := range []string{metaEpochProducer, metaEpochEvaluator, metaEpochGenesis} {
 		if benched[epoch] < ladderCalibrationBenchTargetFor(epoch) {
 			return ladderRow{"캘리브레이션 창 종료", ladderStateGrowing, detail}

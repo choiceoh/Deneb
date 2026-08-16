@@ -171,12 +171,13 @@ func targetRecurrenceCandidateSource(signature string) string {
 //
 // A signature stays blocked while a twin is still live (proposed/accepted) or was
 // rejected/superseded — the operator ruled, and auto re-opening would spam the
-// queue. The ONE path that re-opens: a candidate that reached APPLIED (the fix was
-// attempted) whose signature recurs AGAIN after selfCorrectionReopenCooldown.
-// A terminal no-effect/regressed impact verdict is stronger evidence that the
-// fix did not hold, so a recurrence observed after that verdict can reopen
-// immediately. Neither path creates work without fresh recurrence evidence.
-// freshLastAt is the newest evidence timestamp (unix millis) for the signature.
+// queue. The ONE path that re-opens: a candidate that reached APPLIED without a
+// terminal negative impact, whose signature recurs AGAIN after
+// selfCorrectionReopenCooldown (fixed-but-still-failing). A no-effect or
+// regressed verdict is a standing veto: the same proposedChange template would
+// be re-authored, and live 2026-08 burned second sessions on mem-pressure and
+// slow-prep after the first landing measured no_effect. A different strategy
+// has to come from an operator or a new source, not from auto-reopen.
 func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, source string, freshLastAt int64, now time.Time) bool {
 	source = strings.TrimSpace(source)
 	if source == "" {
@@ -210,7 +211,7 @@ func selfCorrectionReopenBlocked(existing []SelfCorrectionCandidateRecord, sourc
 	}
 	if result := newest.ImpactResult; result != nil && result.CheckedAt > 0 &&
 		(result.Status == selfCorrectionImpactNoEffect || result.Status == selfCorrectionImpactRegressed) {
-		return freshLastAt <= result.CheckedAt
+		return true
 	}
 	// Applied: re-open only if the fix had time to prove itself AND the signature
 	// recurred again after its latest lifecycle update. UpdatedAt is the actual

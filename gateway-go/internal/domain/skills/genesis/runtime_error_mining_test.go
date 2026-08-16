@@ -156,6 +156,12 @@ func TestRuntimeErrorMining_RecurringCodeErrorBecomesCandidate(t *testing.T) {
 		c.ImpactContract.Target != runtimeErrorImpactQuietTargetHours {
 		t.Fatalf("candidate must carry the quiet-hours impact contract: %+v", c.ImpactContract)
 	}
+	if strings.Contains(c.ProposedChange, "downgrade the log level instead") {
+		t.Fatalf("log-level downgrade must not be the prescribed escape hatch: %q", c.ProposedChange)
+	}
+	if !strings.Contains(c.ProposedChange, "land nothing") {
+		t.Fatalf("expected/external defects must decline, not patch the logger: %q", c.ProposedChange)
+	}
 
 	// Second run over the same ring → dedup, no new candidate.
 	if err := task.Run(context.Background()); err != nil {
