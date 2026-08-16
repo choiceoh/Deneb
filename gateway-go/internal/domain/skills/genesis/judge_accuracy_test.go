@@ -311,3 +311,78 @@ func TestRecentJudgeAccuracySkipsUnusableStormRows(t *testing.T) {
 		t.Fatalf("recent window = %+v, want only the healthy run", recs)
 	}
 }
+
+func TestThinPairsToCanaryKeepsFirstOfEachClass(t *testing.T) {
+	pairs := []judgeBenchPair{
+		{Skill: "a", Degradation: "fake-tool"},
+		{Skill: "b", Degradation: "fake-tool"},
+		{Skill: "a", Degradation: "step-reorder"},
+		{Skill: "b", Degradation: "step-reorder"},
+	}
+	got := thinPairsToCanary(pairs)
+	if len(got) != 2 {
+		t.Fatalf("canary = %+v, want one pair per class", got)
+	}
+	if got[0].Skill != "a" || got[0].Degradation != "fake-tool" {
+		t.Fatalf("first canary pair = %+v", got[0])
+	}
+	if got[1].Skill != "a" || got[1].Degradation != "step-reorder" {
+		t.Fatalf("second canary pair = %+v", got[1])
+	}
+}
+
+func addAccuracySkill(t *testing.T, task *JudgeAccuracyTask, name string) {
+	t.Helper()
+	body := "# 스킬\n\n## When to Use\n" + fmt.Sprintf("%0400d", 0) + "\n\n## Procedure\n필수 절차 문구를 빠짐없이 지켜 진행한다.\n\n## Verification\n검증."
+	path := filepath.Join(t.TempDir(), name+".md")
+	if err := os.WriteFile(path, []byte("---\nname: "+name+"\nversion: 1.0.0\n---\n"+body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := skills.SkillEntry{}
+	e.Skill.Name = name
+	e.Skill.FilePath = path
+	task.Evolver.catalog.Register(e)
+}
+
+// Once the highest planted rung saturates, the lane must not replay every
+// catalog pair — one per class is enough to notice a regression.
+func TestJudgeAccuracyRunThinsToCanaryWhenReorderCeilingSaturated(t *testing.T) {
+	task, tr := accuracyFixture(t)
+	addAccuracySkill(t, task, "sk2")
+	addAccuracySkill(t, task, "sk3")
+	version := task.Meta.Version(generation.MetaSkillJudgeSystemPrompt,
+		generation.DefaultMetaArtifacts()[generation.MetaSkillJudgeSystemPrompt])
+	for i := 0; i < judgeEscalationWindow; i++ {
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
+			JudgeVersion: version, Pairs: 2, Correct: 2,
+			ByClass: map[string][2]int{
+				"step-reorder":          {1, 1},
+				"contradiction-example": {1, 1},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !task.probeCeilingSaturated(version) {
+		t.Fatal("ceiling not saturated after seeded reorder window")
+	}
+	task.verdictFn = func(_ context.Context, _, _, _ string) (judgeVerdict, error) {
+		return judgeVerdict{Pass: false}, nil
+	}
+	if err := task.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recs, err := tr.recentJudgeAccuracy(1)
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("ledger = %+v err=%v", recs, err)
+	}
+	rec := recs[0]
+	if rec.Pairs < 2 {
+		t.Fatalf("canary too thin: %+v", rec)
+	}
+	for cls, ct := range rec.ByClass {
+		if ct[1] > 1 {
+			t.Fatalf("class %s scored %d pairs after canary thin: %+v", cls, ct[1], rec.ByClass)
+		}
+	}
+}

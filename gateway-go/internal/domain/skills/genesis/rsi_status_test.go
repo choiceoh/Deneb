@@ -106,6 +106,36 @@ func TestRSIStatusL4ReturnsToolQualityCandidateAsDispatchable(t *testing.T) {
 
 // The structured health block is always present on the snapshot, and its rates
 // stay in [0,1] — clients draw a scoreboard from it instead of parsing strings.
+func TestRSIStatusL3NamesReorderCeilingWhenTopTierSaturated(t *testing.T) {
+	tr := newTestTracker(t)
+	now := time.Now().UnixMilli()
+	for i := 0; i < 5; i++ {
+		if err := tr.logJudgeAccuracy(judgeAccuracyRecord{
+			CreatedAt:    now - int64(i)*1000,
+			JudgeVersion: "judge-v1",
+			Pairs:        4, Correct: 4,
+			ByClass: map[string][2]int{
+				"step-reorder":          {1, 1},
+				"contradiction-example": {1, 1},
+				"imperative-weaken":     {1, 1},
+				"imperative-drop":       {1, 1},
+			},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L3")
+	if l.State != rsiStateDataGated {
+		t.Fatalf("L3 state = %s, want DATA-GATED (%s)", l.State, l.Diagnosis)
+	}
+	if !strings.Contains(l.Diagnosis, "재정렬") || !strings.Contains(l.Diagnosis, "실전") {
+		t.Fatalf("L3 diagnosis still hides the reorder ceiling: %q", l.Diagnosis)
+	}
+	if strings.Contains(l.Diagnosis, "약화 프로브까지") {
+		t.Fatalf("L3 diagnosis still names the mid-ladder as the ceiling: %q", l.Diagnosis)
+	}
+}
+
 func TestRSIStatusHealthRatesWithinZeroToOneRange(t *testing.T) {
 	st := newTestTracker(t).RSIStatus()
 	if st.Health.ConfirmRate < 0 || st.Health.ConfirmRate > 1 {
