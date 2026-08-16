@@ -165,8 +165,7 @@ internal val DenebBottomBarHeight = 52.dp
  * IME. The content column sits above this reserve, so the composer rides the
  * keyboard without a boolean tab-bar hide (which jumps the layout one step late).
  */
-internal fun denebBottomChromeReservePx(tabBarFullPx: Int, imePx: Int): Int =
-    maxOf(tabBarFullPx, imePx.coerceAtLeast(0))
+internal fun denebBottomChromeReservePx(tabBarFullPx: Int, imePx: Int): Int = maxOf(tabBarFullPx, imePx.coerceAtLeast(0))
 
 /**
  * Whether the app shell should dock the bottom tab bar.

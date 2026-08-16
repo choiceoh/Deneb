@@ -71,8 +71,8 @@ import ai.deneb.ui.chat.composables.ROUTE_MAIL
 import ai.deneb.ui.chat.composables.ROUTE_MAIN
 import ai.deneb.ui.chat.composables.ROUTE_MORE
 import ai.deneb.ui.chat.composables.denebBottomChromeReservePx
-import ai.deneb.ui.chat.composables.denebShowsBottomBar
 import ai.deneb.ui.chat.composables.denebLiveTabRequests
+import ai.deneb.ui.chat.composables.denebShowsBottomBar
 import ai.deneb.ui.chat.composables.isDenebLiveTab
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
