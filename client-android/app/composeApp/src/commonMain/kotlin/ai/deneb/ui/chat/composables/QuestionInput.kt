@@ -282,10 +282,13 @@ fun QuestionInput(
                     }
                     val hasSendable = textState.text.isNotBlank() || files.isNotEmpty()
                     if (isLoading && hasSendable) {
-                        // Queue-send: typing while a reply streams keeps the send
-                        // affordance next to stop — the message queues client-side and
-                        // fires the moment this turn completes (ask() handles the queue).
-                        TrailingIcon(icon = Res.drawable.ic_up, onClick = { submitQuestion() }, contentDescription = "보내기 (대기열)")
+                        // Text-only follow-up steers the live turn; files still
+                        // queue until this reply finishes (ChatViewModel.askInternal).
+                        TrailingIcon(
+                            icon = Res.drawable.ic_up,
+                            onClick = { submitQuestion() },
+                            contentDescription = sendWhileLoadingDescription(files.isNotEmpty()),
+                        )
                     }
                     if (isLoading) {
                         TrailingIcon(icon = Res.drawable.ic_stop, onClick = cancel, isPulsing = true, contentDescription = "중지")
@@ -326,6 +329,9 @@ fun QuestionInput(
         // mode switches, loads — not just a deliberate new chat, so it was removed.)
     }
 }
+
+/** TalkBack label for the send affordance while a reply is still streaming. */
+internal fun sendWhileLoadingDescription(hasFiles: Boolean): String = if (hasFiles) "보내기 (대기열)" else "끼어들기"
 
 /**
  * Shortens a filename that is too long to display in a chip. Returns the first [maxChars]

@@ -10,6 +10,7 @@ class SessionDrawerClassifierTest {
     fun workCardSessionsAreClientPrefixedButFolded() {
         val cases = listOf(
             "client:main:wf-deal-room-42" to true,
+            "client:main:wf-550e8400-e29b-41d4-a716-446655440000" to true,
             "client:main:wf-" to true,
             "client:main" to false,
             "client:main:abc123" to false,

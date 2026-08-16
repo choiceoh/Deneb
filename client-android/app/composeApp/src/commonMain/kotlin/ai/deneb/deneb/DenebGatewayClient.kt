@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -125,8 +126,8 @@ class DenebGatewayClient private constructor(
     // auto-select is still fetching that topic's transcript; without this gate
     // the late fetch overwrote both the shared message and its streaming reply,
     // so the share showed NO response until the user sent another message.
-    // ask() bumps the epoch when it appends; loadTranscriptGuarded only installs
-    // its result when the epoch is unchanged, making the two order-independent.
+    // ask() and a successful steer() bump the epoch when they append; loadTranscriptGuarded
+    // only installs its result when the epoch is unchanged, making the two order-independent.
     internal val historyGate = Mutex()
 
     // True while ask() drives a turn. Background transcript reconciles (events
@@ -614,7 +615,12 @@ class DenebGatewayClient private constructor(
                 put("note", trimmed)
             },
         ) ?: return false
-        return out["steered"]?.jsonPrimitive?.booleanOrNull == true
+        if (out["steered"]?.jsonPrimitive?.booleanOrNull != true) return false
+        historyGate.withLock {
+            historyEpoch++
+            _chatHistory.update { it.withSteerUserNote(trimmed) }
+        }
+        return true
     }
 
     // --- Memory screen → Deneb wiki (read-only browser) ---------------------
@@ -806,4 +812,31 @@ class DenebGatewayClient private constructor(
         // the gateway treats a cache older than ~30min as stale and does a live read.
         val LOCATION_FORWARD_INTERVAL = 10.minutes
     }
+}
+
+/**
+ * Inserts a mid-turn steer as a user row just before the live assistant so the
+ * bubble order matches the transcript (original user → steer → answer).
+ */
+internal fun List<History>.withSteerUserNote(note: String): List<History> {
+    val trimmed = note.trim()
+    if (trimmed.isEmpty()) return this
+    if (any { it.role == History.Role.USER && isSameSteerUserContent(it.content, trimmed) }) {
+        return this
+    }
+    val row = History(role = History.Role.USER, content = trimmed)
+    val assistantAt = indexOfLast { it.role == History.Role.ASSISTANT }
+    return if (assistantAt >= 0) {
+        take(assistantAt) + row + drop(assistantAt)
+    } else {
+        this + row
+    }
+}
+
+internal fun isSameSteerUserContent(content: String, note: String): Boolean {
+    val c = content.trim()
+    val n = note.trim()
+    if (c == n) return true
+    val close = c.indexOf("] ")
+    return close in 1..40 && c.startsWith("[") && c.substring(close + 2) == n
 }
