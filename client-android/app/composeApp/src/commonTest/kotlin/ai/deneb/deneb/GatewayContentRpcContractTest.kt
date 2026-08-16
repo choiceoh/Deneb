@@ -869,40 +869,6 @@ class GatewayContentRpcContractTest {
     }
 
     @Test
-    fun fetchProjectDigestsMapsRefsAndLongTimestamps() = runTest {
-        val f = gatewayClientFixture()
-        f.transport.enqueueRpc(
-            """{
-                "digests":[{
-                    "project":"남도에코",
-                    "headline":"실사 완료",
-                    "bullets":["계약 검토","재무 확인"],
-                    "due":"2026-07-31",
-                    "updatedAtMs":9223372036854775807,
-                    "path":"wiki/projects/namdo.md",
-                    "code":"ND-01",
-                    "client":"남도에코",
-                    "refs":["deal:namdo","wiki/projects/namdo.md"]
-                }]
-            }
-            """.trimIndent(),
-        )
-
-        val payload = f.client.fetchProjectDigests()
-
-        assertEquals("miniapp.project.digests", f.transport.singleRequest().rpcMethod)
-        assertTrue(f.transport.singleRequest().rpcParams?.isEmpty() == true)
-        val digest = assertNotNull(payload).digests.single()
-        assertEquals("남도에코", digest.project)
-        assertEquals("실사 완료", digest.headline)
-        assertEquals(listOf("계약 검토", "재무 확인"), digest.bullets)
-        assertEquals("2026-07-31", digest.due)
-        assertEquals(Long.MAX_VALUE, digest.updatedAtMs)
-        assertEquals("ND-01", digest.code)
-        assertEquals(2, digest.refs.size)
-    }
-
-    @Test
     fun fetchDashboardMapsLanesInGatewayOrderWithoutRegrouping() = runTest {
         val f = gatewayClientFixture()
         f.transport.enqueueRpc(
@@ -943,7 +909,7 @@ class GatewayContentRpcContractTest {
     @Test
     fun readOnlyDomainCallsReturnNullOnHttpFailure() = runTest {
         val f = gatewayClientFixture()
-        repeat(7) {
+        repeat(6) {
             f.transport.enqueueRpc(payload = "{}", status = HttpStatusCode.ServiceUnavailable)
         }
 
@@ -953,7 +919,6 @@ class GatewayContentRpcContractTest {
         val topic = f.client.fetchTopicDoc()
         val wormhole = f.client.fetchWormholeStatus()
         val org = f.client.fetchOrg()
-        val projects = f.client.fetchProjectDigests()
 
         assertNull(files)
         assertNull(notebooks)
@@ -961,7 +926,6 @@ class GatewayContentRpcContractTest {
         assertNull(topic)
         assertNull(wormhole)
         assertNull(org)
-        assertNull(projects)
         assertEquals(
             listOf(
                 "miniapp.files.list",
@@ -970,7 +934,6 @@ class GatewayContentRpcContractTest {
                 "miniapp.topicdocs.read_current",
                 "miniapp.wormhole.status",
                 "miniapp.org.get",
-                "miniapp.project.digests",
             ),
             f.transport.requestMethods(),
         )

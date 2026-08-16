@@ -264,7 +264,7 @@ export function buildDeadlineRadar(digests: ProjectDigest[], todos: Todo[], now:
       kind: "프로젝트",
       dday,
       dateLabel: new Date(ms).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }),
-      target: { view: "progress" },
+      target: { view: "projects" },
     });
   }
   for (const t of todos) {

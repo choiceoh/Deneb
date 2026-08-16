@@ -20,7 +20,6 @@ import ai.deneb.deneb.FilesTextViewerContent
 import ai.deneb.deneb.MailRow
 import ai.deneb.deneb.OrgChartContent
 import ai.deneb.deneb.OrgNodeEditor
-import ai.deneb.deneb.ProjectDigestContent
 import ai.deneb.deneb.PromptStyleEditor
 import ai.deneb.deneb.RsiStatusContent
 import ai.deneb.deneb.ScheduleDraft
@@ -88,15 +87,6 @@ import kotlinx.datetime.TimeZone
 // or to a text semantics tree. Each body is the bare screen under its theme; the
 // caller supplies the surface and size.
 internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = mapOf(
-    "project_digest" to { scheme ->
-        MaterialTheme(colorScheme = scheme) {
-            DenebScreenScaffold(title = "프로젝트 진행상황", onBack = {}) {
-                Column(Modifier.fillMaxWidth()) {
-                    ProjectDigestContent(sampleDigests) {}
-                }
-            }
-        }
-    },
     "search" to { scheme ->
         MaterialTheme(colorScheme = scheme) {
             DenebScreenScaffold(title = "검색", onBack = {}) {

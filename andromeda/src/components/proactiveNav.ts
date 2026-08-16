@@ -21,7 +21,6 @@ const NAV_VIEWS = new Set<View>([
   "crons",
   "files",
   "search",
-  "progress",
   "notebook",
   "today",
 ]);

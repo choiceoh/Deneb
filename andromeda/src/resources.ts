@@ -73,9 +73,8 @@ export const RESOURCE_DEFS: ResourceDef[] = [
     list: "miniapp.groupware.approvals.list",
     listKey: "approvals",
   },
-  // Project progress digests (Deneb #2834) — a parameterless read, so it flows
-  // straight into a grid/card pane like people/workfeed. Rows carry no id; the
-  // pane keys on `path`/`project`.
+  // Project progress digests — a parameterless read for ProjectHome / today
+  // radar / context-follow. Rows carry no id; consumers key on `path`/`project`.
   { name: "progress", label: "진행", list: "miniapp.project.digests", listKey: "digests" },
   // Skill catalog (miniapp.skills.list) — a parameterless list of the skills the
   // agent can use. detail/lifecycle/update/delete are query-driven actions below.

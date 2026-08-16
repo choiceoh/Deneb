@@ -60,7 +60,7 @@ reads:
 - `andromeda/src/components/CommandPalette.tsx:49` CommandPalette
 - `andromeda/src/components/Workstation.tsx:89` Workstation
 
-## connected — write 0 · read 32 · **크로스-파일 3개 디렉토리**
+## connected — write 0 · read 31 · **크로스-파일 3개 디렉토리**
 
 reads:
 
@@ -83,7 +83,6 @@ reads:
 - `andromeda/src/components/panes/MailPane.tsx:31` MailPane
 - `andromeda/src/components/panes/NotebookPane.tsx:26` NotebookPane
 - `andromeda/src/components/panes/ObservePane.tsx:98` ObservePane
-- `andromeda/src/components/panes/ProgressPane.tsx:30` ProgressPane
 - `andromeda/src/components/panes/ProjectHomePane.tsx:63` ProjectHomePane
 - `andromeda/src/components/panes/RsiPane.tsx:422` RsiPane
 - `andromeda/src/components/panes/SearchPane.tsx:32` SearchPane
@@ -158,7 +157,7 @@ reads:
 - `andromeda/src/components/panes/ProjectHomePane.tsx:63` ProjectHomePane
 - `andromeda/src/components/panes/TodayPane.tsx:151` TodayPane
 
-## openWiki — write 0 · read 10 · **크로스-파일 2개 디렉토리**
+## openWiki — write 0 · read 9 · **크로스-파일 2개 디렉토리**
 
 reads:
 
@@ -168,7 +167,6 @@ reads:
 - `andromeda/src/components/panes/MailDetail.tsx:299` AnalysisCard
 - `andromeda/src/components/panes/NotebookPane.tsx:26` NotebookPane
 - `andromeda/src/components/panes/PeoplePane.tsx:73` PersonCard
-- `andromeda/src/components/panes/ProgressPane.tsx:30` ProgressPane
 - `andromeda/src/components/panes/ProjectHomePane.tsx:63` ProjectHomePane
 - `andromeda/src/components/panes/SearchPane.tsx:32` SearchPane
 

@@ -2,12 +2,12 @@
 //
 //   miniapp.project.digests — each active project's latest-progress digest
 //                             (its 대표페이지 "## 현재 상태" section + due), newest
-//                             first, for the "프로젝트 진행상황" 모아보기 screen.
+//                             first. Andromeda's project home and today radar
+//                             read this; there is no dedicated 모아보기 screen.
 //
 // The digests live ON the project 대표페이지 (프로젝트/<name>.md), written by the
 // dream cycle (LLM roll-up) and kept fresh by mail analysis (dated bullets). This
-// handler is a thin read of the wiki store — no LLM on the path, so the screen
-// loads instantly.
+// handler is a thin read of the wiki store — no LLM on the path.
 
 package handlerminiapp
 

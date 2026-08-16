@@ -426,7 +426,6 @@ describe("proactiveNav", () => {
     "crons",
     "files",
     "search",
-    "progress",
     "notebook",
     "today",
   ])("when maps the %s event to its pane", (kind) => {

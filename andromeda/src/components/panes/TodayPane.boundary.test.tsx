@@ -80,7 +80,6 @@ describe("TodayPane boundary behavior", () => {
         "todo",
         "workfeed",
         "radar",
-        "progress",
         "people",
         "crons",
         "market",
@@ -93,7 +92,6 @@ describe("TodayPane boundary behavior", () => {
         "todo",
         "workfeed",
         "radar",
-        "progress",
         "people",
         "crons",
         "market",
@@ -112,7 +110,6 @@ describe("TodayPane boundary behavior", () => {
         "todo",
         "workfeed",
         "radar",
-        "progress",
         "people",
         "crons",
         "market",
@@ -125,7 +122,6 @@ describe("TodayPane boundary behavior", () => {
         "todo",
         "workfeed",
         "radar",
-        "progress",
         "people",
         "crons",
         "market",
@@ -325,7 +321,6 @@ describe("TodayPane boundary behavior", () => {
         "결재",
         "피드",
         "마감",
-        "진행",
         "연락처",
         "크론",
         "시장",
@@ -348,10 +343,10 @@ describe("TodayPane boundary behavior", () => {
 
     it("keeps newly introduced optional sections hidden for old saved orders", async () => {
       setDashboardState("Order", ["calendar", "mail", "todo", "workfeed"]);
-      renderToday({ progress: [{ project: "숨겨진 진행", headline: "아직 opt-in" }] });
-      expect(screen.queryByText("숨겨진 진행")).not.toBeInTheDocument();
+      renderToday({ people: [{ email: "lead@example.com", name: "숨겨진 연락처" }] });
+      expect(screen.queryByText("숨겨진 연락처")).not.toBeInTheDocument();
       const editor = await openEditor();
-      expect(within(editor).getByRole("checkbox", { name: "진행" })).not.toBeChecked();
+      expect(within(editor).getByRole("checkbox", { name: "연락처" })).not.toBeChecked();
     });
 
     it("restores a hidden section and persists a unique hidden list", async () => {
@@ -363,7 +358,6 @@ describe("TodayPane boundary behavior", () => {
         "todo",
         "workfeed",
         "radar",
-        "progress",
         "people",
         "crons",
         "market",
@@ -382,7 +376,7 @@ describe("TodayPane boundary behavior", () => {
       await userEvent.click(within(editor).getByRole("button", { name: "메일 위로" }));
       const stored = JSON.parse(localStorage.getItem("andromeda.todayOrder") ?? "[]") as string[];
       expect(stored.slice(0, 4)).toEqual(["timeline", "calendar", "mail", "approvals"]);
-      expect(new Set(stored).size).toBe(11);
+      expect(new Set(stored).size).toBe(10);
     });
 
     it("when disables moves beyond both order boundaries", async () => {
@@ -419,21 +413,6 @@ describe("TodayPane boundary behavior", () => {
   });
 
   describe("optional section semantics", () => {
-    it("renders progress headline as metadata under the project name", async () => {
-      setDashboardState("Order", ["progress"]);
-      setDashboardState("Hidden", []);
-      renderToday({ progress: [{ project: "Deneb", headline: "런타임 안정화 완료" }] });
-      expect(await screen.findByText("Deneb")).toBeInTheDocument();
-      expect(screen.getByText("런타임 안정화 완료")).toHaveClass("today-row-meta");
-    });
-
-    it("falls back to progress due text when a headline is absent", async () => {
-      setDashboardState("Order", ["progress"]);
-      setDashboardState("Hidden", []);
-      renderToday({ progress: [{ project: "Andromeda", due: "이번 주" }] });
-      expect(await screen.findByText("마감 이번 주")).toBeInTheDocument();
-    });
-
     it("when uses person name and latest subject while falling back to email and wiki summary", async () => {
       setDashboardState("Order", ["people"]);
       setDashboardState("Hidden", []);
@@ -519,7 +498,6 @@ describe("TodayPane boundary behavior", () => {
         "todo",
         "workfeed",
         "radar",
-        "progress",
         "people",
         "crons",
         "market",

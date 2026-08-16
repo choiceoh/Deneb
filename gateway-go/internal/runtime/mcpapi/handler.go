@@ -121,7 +121,7 @@ var mcpTools = []ToolDefinition{
 	},
 	{
 		Name:        "project_digests",
-		Description: "진행 중인 프로젝트별 현재 상태 요약(모아보기). 각 프로젝트의 최신 진행상황 헤드라인과 불릿을 돌려준다.",
+		Description: "진행 중인 프로젝트별 현재 상태 요약. 각 프로젝트의 최신 진행상황 헤드라인과 불릿을 돌려준다.",
 		Method:      "miniapp.project.digests",
 		Schema:      mcpObjectSchema(map[string]any{}, nil),
 	},
