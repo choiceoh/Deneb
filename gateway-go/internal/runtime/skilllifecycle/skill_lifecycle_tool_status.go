@@ -327,7 +327,7 @@ func (b *skillLifecycleBackend) recentSelfCorrectionCandidates(skillName string,
 			// means shelved, and a reviewer that cannot see the difference
 			// defaults to accepted — how 22 candidates went silent.
 			rec.Consumer = "none"
-			if strings.TrimSpace(rec.Scope) == "code" && genesis.SourceAutoDispatches(rec.Source) {
+			if strings.TrimSpace(rec.Scope) == "code" && genesis.CandidateAutoDispatches(rec) {
 				rec.Consumer = "coding-dispatch"
 			}
 			out = append(out, rec)

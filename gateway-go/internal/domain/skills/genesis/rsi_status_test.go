@@ -11,6 +11,14 @@ import (
 	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
+func minerRecordContract(metric string) *rsilifecycle.ImpactContract {
+	return &rsilifecycle.ImpactContract{
+		Metric: metric, Direction: "decrease",
+		Baseline: 1, Target: 0, MinSamples: 1,
+		Guardrails: []string{"finding still scored on a fresh audit"},
+	}
+}
+
 func rsiLayerByKey(layers []rsiLayer, key string) rsiLayer {
 	for _, l := range layers {
 		if l.Key == key {
@@ -90,11 +98,48 @@ func TestStagedSourceReviewStatsSkipsIncrementalHealthFindings(t *testing.T) {
 
 // A tool-quality code candidate now counts as dispatchable in L4 (the graduation
 // bug: the allowlist previously omitted it, undercounting the client's L4 view).
+func TestCandidateAutoDispatchesRequiresMinerImpactContract(t *testing.T) {
+	contract := &rsilifecycle.ImpactContract{
+		Metric: "tool.quality.finding_present:web:desc", Direction: "decrease",
+		Baseline: 1, Target: 0, MinSamples: 1,
+	}
+	miner := SelfCorrectionCandidateRecord{Source: "tool-quality:web:desc"}
+	if CandidateAutoDispatches(miner) {
+		t.Fatal("miner source without a contract must not auto-dispatch")
+	}
+	miner.ImpactContract = contract
+	if !CandidateAutoDispatches(miner) {
+		t.Fatal("miner source with a named metric should auto-dispatch")
+	}
+	reactive := SelfCorrectionCandidateRecord{Source: "evolve-tool-gap:missing-x"}
+	if !CandidateAutoDispatches(reactive) {
+		t.Fatal("reactive evolve-tool-gap stays exempt from the contract gate")
+	}
+}
+
+func TestRSIStatusL4HoldsMinerCandidateWithoutImpactContract(t *testing.T) {
+	tr := newTestTracker(t)
+	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
+		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "tool-quality",
+		Title: "tool description/schema quality: web", Source: "tool-quality:web:desc",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	l := rsiLayerByKey(tr.RSIStatus().Layers, "L4")
+	if got := rsiMetricValue(l.Metrics, "배차 가능"); got != "0" {
+		t.Fatalf("no-contract miner dispatchable = %q, want 0 (%+v)", got, l.Metrics)
+	}
+	if got := rsiMetricValue(l.Metrics, "검토 대기(비배차)"); got != "1" {
+		t.Fatalf("no-contract miner staged = %q, want 1 (%+v)", got, l.Metrics)
+	}
+}
+
 func TestRSIStatusL4ReturnsToolQualityCandidateAsDispatchable(t *testing.T) {
 	tr := newTestTracker(t)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "tool-quality",
 		Title: "tool description/schema quality: web", Source: "tool-quality:web:desc",
+		ImpactContract: minerRecordContract("tool.quality.finding_present:web:desc"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -439,10 +484,12 @@ func TestRSIStatusL4HealthFindingCountsDispatchableAlongsideStagedRuntimeError(t
 		{
 			Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
 			Title: "structural finding: volatile-hub @ domain/wiki", Source: "health-finding:volatile-hub:46a381ef4981",
+			ImpactContract: minerRecordContract("health.finding_present:volatile-hub"),
 		},
 		{
 			Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "gateway-runtime",
 			Title: "recurring runtime error: x", Source: "runtime-error:abc123",
+			ImpactContract: minerRecordContract("runtime.error.present:abc123"),
 		},
 	} {
 		if _, err := tr.RecordSelfCorrectionCandidate(rec); err != nil {
@@ -490,6 +537,7 @@ func TestRSIStatusL4ReviewAcceptedCandidateReturnsDispatchable(t *testing.T) {
 	rec, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "codebase-health",
 		Title: "structural finding: volatile-hub", Source: "health-finding:volatile-hub:aa",
+		ImpactContract: minerRecordContract("health.finding_present:volatile-hub"),
 	})
 	if err != nil {
 		t.Fatal(err)

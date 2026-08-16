@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis"
+	rsilifecycle "github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/lifecycle"
 )
 
 // The review surface must say who will act on each candidate. Without it a
@@ -32,9 +33,24 @@ func TestConsumerIsCodingDispatchForAllowlistedCodeSource(t *testing.T) {
 	got := consumerFor(t, genesis.SelfCorrectionCandidateRecord{
 		Scope: "code", SkillName: "gateway-runtime", Source: "runtime-error:abc123",
 		Title: "recurring runtime error",
+		ImpactContract: &rsilifecycle.ImpactContract{
+			Metric: "runtime.error.present:abc123", Direction: "decrease",
+			Baseline: 1, Target: 0, MinSamples: 1,
+			Guardrails: []string{"signature still exercised on a fresh journal window"},
+		},
 	})
 	if got != "coding-dispatch" {
 		t.Errorf("allowlisted code source should be claimable, got %q", got)
+	}
+}
+
+func TestConsumerIsNoneForMinerSourceWithoutImpactContract(t *testing.T) {
+	got := consumerFor(t, genesis.SelfCorrectionCandidateRecord{
+		Scope: "code", SkillName: "gateway-runtime", Source: "runtime-error:abc123",
+		Title: "recurring runtime error",
+	})
+	if got != "none" {
+		t.Errorf("miner source without a contract is not claimable, got %q", got)
 	}
 }
 
