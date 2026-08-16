@@ -22,6 +22,10 @@ func TestCleanSessionTitleNormalizesRawText(t *testing.T) {
 		{"trailing period", "예산 검토.", "예산 검토"},
 		{"collapses whitespace", "  탑솔라   계약   검토  ", "탑솔라 계약 검토"},
 		{"empty", "   ", ""},
+		{"strips thinking tags", "<think>plan</think>세금계산서 정리", "세금계산서 정리"},
+		{"rejects English CoT", "We need a short title", ""},
+		{"rejects thinking-tag leak", "<think>", ""},
+		{"rejects Korean CoT", "우리는 제목을 뽑아야 합니다", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

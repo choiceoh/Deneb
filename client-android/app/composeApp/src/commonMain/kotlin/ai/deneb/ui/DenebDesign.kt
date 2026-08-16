@@ -186,7 +186,7 @@ fun DenebScreenScaffold(
     tabBar: (@Composable () -> Unit)? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
     // Zune-style pivot labels rendered right after the title (dimmed, tappable) —
-    // sibling surfaces one tap away (피드 ⇄ 결재). See [DenebTitlePivot].
+    // sibling surfaces one tap away (피드 | 결재 | 로그). See [DenebTitlePivot].
     titlePivot: (@Composable RowScope.() -> Unit)? = null,
     // Full title-row replacement (e.g. fixed-order [DenebFeedApprovalPivots]). When
     // set, [title] and [titlePivot] are ignored.
@@ -279,7 +279,7 @@ fun DenebScreenScaffold(
 
 /**
  * Zune-HD-style pivot label: dimmed when idle, ink when selected. Used by
- * [DenebFeedApprovalPivots] so 피드|결재 always share one header order.
+ * [DenebFeedApprovalPivots] so 피드|결재|로그 always share one header order.
  */
 @Composable
 fun DenebTitlePivot(
@@ -312,18 +312,20 @@ fun DenebTitlePivot(
     )
 }
 
-/** Which page of the 피드⇄결재 pivot pair is active. */
-enum class DenebFeedApprovalPage { Feed, Approvals }
+/** Which page of the 피드|결재|로그 pivot is active. */
+enum class DenebFeedApprovalPage { Feed, Approvals, Log }
 
 /**
- * Fixed-order pivot header: always **피드** then **결재**, active ink / idle dimmed.
- * Tapping the idle sibling navigates; the active label is not clickable.
+ * Fixed-order pivot header: always **피드** then **결재** then **로그**,
+ * active ink / idle dimmed. Tapping an idle sibling navigates; the active
+ * label is not clickable.
  */
 @Composable
 fun RowScope.DenebFeedApprovalPivots(
     active: DenebFeedApprovalPage,
     onOpenFeed: (() -> Unit)? = null,
     onOpenApprovals: (() -> Unit)? = null,
+    onOpenLog: (() -> Unit)? = null,
 ) {
     DenebTitlePivot(
         label = "피드",
@@ -336,6 +338,11 @@ fun RowScope.DenebFeedApprovalPivots(
         selected = active == DenebFeedApprovalPage.Approvals,
         onClick = onOpenApprovals.takeIf { active != DenebFeedApprovalPage.Approvals },
     )
+    DenebTitlePivot(
+        label = "로그",
+        selected = active == DenebFeedApprovalPage.Log,
+        onClick = onOpenLog.takeIf { active != DenebFeedApprovalPage.Log },
+    )
 }
 
 // Sibling-swipe motion tokens (spatial channel — see DenebMotion springs for settle).
@@ -345,7 +352,7 @@ private val SiblingSwipeEdge = 36.dp
 private const val SiblingSwipeResistance = 0.6f
 
 /**
- * Follow-the-finger host for the 피드 ⇄ 결재 pivot pair. The content tracks a
+ * Follow-the-finger host for the 피드 | 결재 | 로그 pivot. The content tracks a
  * horizontal drag (damped + clamped), springs back on release, and fires
  * [onSwipeLeft]/[onSwipeRight] past the commit distance. Vertical-dominant
  * drags yield to list scroll / PTR; screen-edge starts yield to system back.

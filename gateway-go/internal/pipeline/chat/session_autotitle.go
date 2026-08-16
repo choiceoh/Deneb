@@ -9,6 +9,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
@@ -269,7 +270,10 @@ func GenerateSessionTitle(ctx context.Context, userMsg, reply string) string {
 
 // cleanSessionTitle normalizes a model/heuristic title to a single tidy line.
 func cleanSessionTitle(s string) string {
-	s = strings.TrimSpace(firstLine(s))
+	s = strings.TrimSpace(firstLine(jsonutil.StripThinkingTags(s)))
+	if looksLikeReasoningTitle(s) {
+		return ""
+	}
 	// The model sometimes still prefixes "제목:", echoes the prompt's speaker
 	// tags ("사용자:"/"어시스턴트:"), or wraps the title in quotes despite the
 	// instruction — strip those.
@@ -280,6 +284,19 @@ func cleanSessionTitle(s string) string {
 	s = strings.TrimRight(s, ".。")
 	s = strings.Join(strings.Fields(s), " ") // collapse internal whitespace/newlines
 	return capRunes(s, sessionTitleLabelCap)
+}
+
+func looksLikeReasoningTitle(s string) bool {
+	if strings.HasPrefix(s, "<") {
+		return true
+	}
+	lower := strings.ToLower(s)
+	for _, p := range []string{"we need", "need to ", "the user wants", "let me ", "i need to"} {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	return strings.HasPrefix(s, "我们") || strings.HasPrefix(s, "우리는 ")
 }
 
 func firstLine(s string) string {

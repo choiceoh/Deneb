@@ -86,6 +86,10 @@ object DenebPeople
 object DenebApprovals
 
 @Serializable
+@SerialName("deneb_feed_log")
+object DenebFeedLog
+
+@Serializable
 @SerialName("deneb_approval_detail")
 data class DenebApprovalDetail(
     val docId: String,

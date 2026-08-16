@@ -245,6 +245,12 @@ func TestParseLLMTitleSummary(t *testing.T) {
 			"제안 일정은 아직 회신이 없습니다.",
 		},
 		{
+			"thinking tags stripped before labeled parse",
+			"<think>We need a title</think>\n제목: 풍력 실측 재방문\n요약: 회신이 없습니다.",
+			"풍력 실측 재방문",
+			"회신이 없습니다.",
+		},
+		{
 			"mid-line 제목 after CoT on the same line",
 			"我们根据要求输出两行。제목: 풍력 실측 재방문 합의",
 			"풍력 실측 재방문 합의",

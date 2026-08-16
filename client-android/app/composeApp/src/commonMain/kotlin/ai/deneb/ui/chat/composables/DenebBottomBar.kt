@@ -141,6 +141,7 @@ val denebBottomBarRoutes: Set<String> = setOf(
     ROUTE_MAIL,
     ROUTE_CALENDAR,
     "deneb_approvals",
+    "deneb_feed_log",
     "deneb_search",
     "deneb_diary",
     "deneb_categories",
@@ -217,10 +218,14 @@ fun DenebBottomBar(
             },
     ) {
         denebBottomTabs.forEach { tab ->
-            // 결재 is a 피드 pivot sibling — keep the 피드 tab highlighted so the bar
+            // 결재/로그 are 피드 pivot siblings — keep the 피드 tab highlighted so the bar
             // still reads "you are here" in the feed cluster.
             val selected = when (tab.route) {
-                ROUTE_FEED -> currentRoute == ROUTE_FEED || currentRoute == "deneb_approvals"
+                ROUTE_FEED ->
+                    currentRoute == ROUTE_FEED ||
+                        currentRoute == "deneb_approvals" ||
+                        currentRoute == "deneb_feed_log"
+
                 else -> currentRoute == tab.route
             }
             NavigationBarItem(

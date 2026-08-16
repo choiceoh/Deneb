@@ -8,6 +8,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/pilot"
+	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
 )
 
 const (
@@ -21,6 +22,7 @@ const systemPrompt = `너는 업무 알림 카드의 제목과 짧은 요약을 
 요약: <무엇에 관한 것이고 왜 중요한지>
 
 규칙:
+- 추출만 한다. 추론·계획·사고 과정은 출력하지 마라. <think> 같은 태그도 쓰지 마라.
 - 제목은 한글 20자 이내. "메일 분석", "리포트", "보고" 같은 군더더기 단어를 붙이지 마라.
 - 요약은 카드 미리보기용으로 2문장(약 80자) 이내. 제목을 그대로 반복하지 말고 핵심 내용과 이유를 담는다.
 - 따옴표·마크다운·머리기호·이모지 금지. 위 두 줄 외에 다른 설명·접두어를 출력하지 마라.`
@@ -59,6 +61,7 @@ func EvaluateCardTitleRole(ctx context.Context, role modelrole.Role, content str
 // Unlabeled first lines are ignored — reasoning models often dump chain-of-thought
 // there ("We need answer in Korean…"), and that must not become the card title.
 func ParseLLMTitleSummary(raw string) (title, summary string) {
+	raw = jsonutil.StripThinkingTags(raw)
 	for _, line := range strings.Split(raw, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {

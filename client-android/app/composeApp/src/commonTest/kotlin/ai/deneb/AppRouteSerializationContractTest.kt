@@ -323,6 +323,7 @@ class AppRouteSerializationContractTest {
             { assertObjectRouteIdentity("deneb_more", DenebMore, DenebMore.serializer()) },
             { assertObjectRouteIdentity("deneb_people", DenebPeople, DenebPeople.serializer()) },
             { assertObjectRouteIdentity("deneb_approvals", DenebApprovals, DenebApprovals.serializer()) },
+            { assertObjectRouteIdentity("deneb_feed_log", DenebFeedLog, DenebFeedLog.serializer()) },
             { assertObjectRouteIdentity("deneb_groupware", DenebGroupware, DenebGroupware.serializer()) },
             { assertObjectRouteIdentity("deneb_contacts", DenebContacts, DenebContacts.serializer()) },
             { assertObjectRouteIdentity("deneb_categories", DenebCategories, DenebCategories.serializer()) },
