@@ -73,11 +73,11 @@ scripts/dev/live-test.sh logs-grep "cache_read_input_tokens\|cache_creation_inpu
 
 ## 1.6. Content-prefix 캐시 프로바이더 (kimi) — 턴간 바이트 안정성
 
-> 2026-07-20 실측 (웜홀 경유 라이브 A/B + dev 게이트웨이 요청 캡처): kimi 코딩 엔드포인트는 `cache_control` 을 **완전히 무시**하는 자동 content-prefix 캐시다 — **(system, tools) 정확 일치가 전제조건**(1바이트 변경 → 부분 히트 없이 전체 콜드), messages 는 256토큰 청크 prefix 매칭, `cache_creation` 상시 0, TTL 5–30분. 마커 기반 사고("dynamic 블록은 마커가 없어 공짜", "trailing 마커가 prefix 를 지킨다")가 통하지 않는 세 번째 캐시 체제로, capability 는 `modelcaps.ContentPrefixCache` (builtin: provider id `kimi*`) 가 표식한다. §1.5 원칙에 더해 다음이 강제된다:
+> 2026-07-20 실측 (웜홀 경유 라이브 A/B + dev 게이트웨이 요청 캡처): kimi 코딩 엔드포인트는 `cache_control` 을 **완전히 무시**하는 자동 content-prefix 캐시다 — **(system, tools) 정확 일치가 전제조건**(1바이트 변경 → 부분 히트 없이 전체 콜드), messages 는 256토큰 청크 prefix 매칭, `cache_creation` 상시 0, TTL 5–30분. 마커 기반 사고("dynamic 블록은 마커가 없어 공짜", "trailing 마커가 prefix 를 지킨다")가 통하지 않는 세 번째 캐시 체제로, capability 는 `modelcaps.HasContentPrefixCache` (builtin: provider id `kimi*`) 가 표식한다. §1.5 원칙에 더해 다음이 강제된다:
 
 1. **mid-run (system, tools) 불변.** 서브에이전트 완료 통지는 system append 가 아니라 다음 tool-results user 메시지의 text 블록으로 (`AgentConfig.DeferredTurnNotices`; 구 `DeferredSystemText` 는 제거). 유일하게 남은 mid-run 변이 = 지연 도구 활성화의 tools append — 모델이 미광고 도구를 호출하지 못해 (2026-07-20 kimi 프로브: in-band 스키마만으로는 fetch_tools 재호출만 반복) 활성화 턴당 1회 콜드는 도구가 호출 가능해지기 위한 불가피한 비용이다.
 2. **mid-run 히스토리 불변 (provider-conditional).** 완료 턴의 tool_result 축약(`CompactPriorToolResults`)은 content-prefix 프로바이더에서 skip (`AgentConfig.DisablePriorToolResultCompaction` ← `run_exec.go` 가 capability 로 설정). in-place 히스토리 변이가 그 지점 이후 전체를 콜드로 만들어 축약 절감보다 비싸다. 런 경계의 polaris 압축·spillover per-result 캡은 유지.
-3. **런 경계 꼬리 재부착.** §1.5 의 wire-only 꼬리는 런 안에서만 byte-stable — 다음 런은 클린 원문을 리로드해 대화 캐시 전체를 잃는다 (실측: client:main 런 경계마다 read 가 system+tools 크기에 고착, 매 런 전액 재과금). `chat/tail_register.go` 가 (클린 content 해시 → joined suffix) 를 세션별로 기록하고 `applyTailAdditions` 가 히스토리 user 메시지에 재부착한다 — transcript 는 클린 유지 (디스플레이·검색·이벤트 불변), wire 바이트만 런 간 동일. `/reset` 에서 clear, 상태 디렉토리(`user_message_tails.json`)에는 restorable 세션(client:main*)만 영속, 세션당 200개 FIFO.
+3. **런 경계 꼬리 재부착.** §1.5 의 wire-only 꼬리는 런 안에서만 byte-stable — 다음 런은 클린 원문을 리로드해 대화 캐시 전체를 잃는다 (실측: client:main 런 경계마다 read 가 system+tools 크기에 고착, 매 런 전액 재과금). `chat/tail_register.go` 가 (클린 content 해시 → joined suffix) 를 세션별로 기록하고 `applyTailAdditions` 가 히스토리 user 메시지에 재부착한다 — transcript 는 클린 유지 (디스플레이·검색·이벤트 불변), wire 바이트만 런 간 동일. `/reset` 에서 clear, 상태 디렉토리(`~/.deneb/user_message_tails.json`)에는 restorable 세션(client:main*)만 영속, 세션당 200개 FIFO.
 
 남은 의도적 콜드 (수용): 지연 도구 활성화(위 1), ephemeral 하트비트 트리거 메시지(비영속이라 다음 런 리로드에 없음), polaris 런 경계 압축(§5 공인 예외), 이미지 런의 `StripImagesAfterFirstTurn`.
 

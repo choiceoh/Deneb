@@ -28,7 +28,7 @@ things it shouldn't.
 
 1. **Session completes** → `LogGenesis` records the activity and marks the skill agent-created (`genesis/tracker.go` → `curator.go:markSkillAgentCreatedLocked`).
 2. **Threshold check** → `maybeFireEvolveLocked` fires the evolve trigger at 3 new skills, respecting a min-gap.
-3. **Skill generation** → the model generates `SKILL.md`; `Persist` writes to the managed dir. `ErrSkillDeduped` (`generation/service.go:54`) is an intentional skip, not a failure.
+3. **Skill generation** → the model generates `SKILL.md`; `Persist` writes to the managed dir. `ErrSkillDeduped` (`generation/service.go:55`) is an intentional skip, not a failure.
 4. **Catalog registration** → discovered by precedence `bundled < managed` (see `skills/CLAUDE.md`).
 5. **Evolution** → `Evolver.EvolveSkill` / `EvolveUnderperformers` rewrites; a candidate is judged by an independent judge model (`SetJudge`).
 6. **Validation gates** → `evolver_skill_validation.go`: the self-harness audit must name a target failure signature, and `validateSelfHarnessEditedSurface` verifies the claimed `edited_surface` matches the section actually changed.

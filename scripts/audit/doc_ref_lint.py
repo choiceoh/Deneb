@@ -411,11 +411,38 @@ def lint(
     return report
 
 
+# Nested agent worktree checkouts copy CLAUDE.md at the snapshot they were
+# created. Those copies rot as main moves and are not the docs we maintain —
+# weekly-ref-audit was filing hundreds of BROKEN hits from them.
+_WORKTREE_PARENTS = frozenset({".claude", ".zcode", ".cursor", ".codex", ".trae"})
+_SKIP_DIR_PARTS = frozenset({"node_modules", ".git"})
+
+
+def is_skipped_doc(path: Path, repo: Path | None = None) -> bool:
+    # Judge the path relative to the repo root. Absolute parts would skip
+    # every file when the checkout itself lives under ~/.cursor/worktrees/…
+    if repo is not None:
+        try:
+            parts = path.resolve().relative_to(repo.resolve()).parts
+        except ValueError:
+            parts = path.parts
+    else:
+        parts = path.parts
+    if any(part in _SKIP_DIR_PARTS for part in parts):
+        return True
+    if ".worktrees" in parts:
+        return True
+    for i, part in enumerate(parts):
+        if part == "worktrees" and i > 0 and parts[i - 1] in _WORKTREE_PARENTS:
+            return True
+    return False
+
+
 def collect_docs(repo: Path, globs: list[str]) -> list[Path]:
     seen: set[Path] = set()
     for g in globs:
         for p in sorted(repo.glob(g)):
-            if p.is_file() and "node_modules" not in p.parts and ".git" not in p.parts:
+            if p.is_file() and not is_skipped_doc(p, repo):
                 seen.add(p)
     return sorted(seen)
 

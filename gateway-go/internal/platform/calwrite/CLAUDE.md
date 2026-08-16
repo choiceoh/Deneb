@@ -9,7 +9,7 @@
 
 ## 진입점과 책임
 
-- `client.go` — `Client`(쓰기 클라이언트), `DefaultSyncer`, `Insert/Patch/Delete`
+- `client.go` — `Client`(쓰기 클라이언트), `DefaultSyncer`, `Insert`/`Patch`/`Delete`
   (Calendar v3 `/calendars/primary/events`), `writeEnabled`(env 게이트), `APIError`.
 - `syncer.go` — `Syncer`: localID→googleID 매핑을 소유(`{stateDir}/calendar-sync.json`
   영속)하고 `Push`(신규=POST·기존=PATCH)/`Remove`(DELETE+언매핑)/`MirroredGoogleIDs`

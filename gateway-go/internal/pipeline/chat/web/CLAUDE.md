@@ -28,7 +28,7 @@ bounded 결과 envelope로 변환한다. media·document parser를 조합하지�
   Firefox→**상주 브라우저 사이드카(:18930, `web_fetch_browser.go`)**→Jina로
   올리고, SPA shell(`js_required`/`empty_body`)은 Firefox를 건너뛰고 렌더
   스테이지로 간다. Jina는 사이드카 실패 시에만 도는 외부 최후 폴백.
-  `web_fetch_tier.go`의 도메인별 티어 메모리(state dir `web-stealth-tiers.json`,
+  `web_fetch_tier.go`의 도메인별 티어 메모리(state dir `~/.deneb/web-stealth-tiers.json`,
   7d TTL·24h 하향 프로브)가 시작 스테이지를 고른다. 사이드카 디스패치는
   `media.ValidatePublicTarget`으로 사설망을 차단한다(티어 점프가 SSRF-safe
   transport를 우회할 수 있어 필수). Serper scrape 타임아웃은 10s fail-fast.

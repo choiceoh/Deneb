@@ -15,8 +15,8 @@ description: Auto-capture + always-surface memory for the Claude Code coding age
 | 조각 | 훅 | 하는 일 | LLM |
 |---|---|---|---|
 | **수집** | `SessionEnd` → `scripts/dev/session-memory-capture.py` | git 골격(브랜치·커밋·바뀐 파일·dirty) + 세션의 첫 질문(topic)을 `episodes.jsonl`에 1줄 추가 | 없음 (순수 git) |
-| **표면화** | `SessionStart` → `scripts/dev/session-memory-surface.py` | `card.md` + 최근 세션 몇 건을 `additionalContext`로 주입 | 없음 (파일 읽기) |
-| **압축(의미층)** | 에이전트가 직접 | 중요한 결정·교훈·자기교정을 `card.md`에 요약 | 인-루프 에이전트 |
+| **표면화** | `SessionStart` → `scripts/dev/session-memory-surface.py` | `~/.claude/deneb-session-memory/card.md` + 최근 세션 몇 건을 `additionalContext`로 주입 | 없음 (파일 읽기) |
+| **압축(의미층)** | 에이전트가 직접 | 중요한 결정·교훈·자기교정을 `~/.claude/deneb-session-memory/card.md`에 요약 | 인-루프 에이전트 |
 
 - **넓게 수집 + 항상 표면화**가 운영자 선택. 그래서 표면화 블록은 **상한(카드 2500자,
   최근 세션 4건)** 을 둬 매 세션 컨텍스트가 부풀지 않게 한다(런타임 하트비트에서 고친
@@ -28,7 +28,7 @@ description: Auto-capture + always-surface memory for the Claude Code coding age
 레포가 아니라 **`~/.claude/deneb-session-memory/`** (사용자 홈, 모든 워크트리 공유):
 
 - `episodes.jsonl` — 자동 기록된 세션 골격(append-only).
-- `card.md` — 항상 표면화되는 짧은 요약(에이전트가 갱신).
+- `~/.claude/deneb-session-memory/card.md` — 항상 표면화되는 짧은 요약(에이전트가 갱신).
 
 세션 데이터라 레포에 커밋하지 않는다. 훅 스크립트만 버전 관리 대상.
 
