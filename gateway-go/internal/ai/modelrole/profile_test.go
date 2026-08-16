@@ -12,6 +12,8 @@ func TestProfileForReturnsReasoningAndSamplingFlags(t *testing.T) {
 		{"step3p7 bare", "step3p7", true, false},
 		{"step3p7 provider-prefixed", "vllm/step3p7", true, false},
 		{"step-3.7 dashed", "step-3.7", true, false},
+		{"glm-5.3 reasoning", "glm-5.3", true, false},
+		{"glm-5 provider-prefixed", "wormhole/glm-5-turbo", true, false},
 		{"qwen3 thinking: reasoning + sampling", "qwen3-30b", true, true},
 		{"qwen3 instruct: non-reasoning + sampling", "qwen3-30b-instruct", false, true},
 		{"qwen36 alias", "qwen36", true, true},

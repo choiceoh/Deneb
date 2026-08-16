@@ -541,3 +541,20 @@ func TestParseWikiUpdates_SalvagesDamagedArray(t *testing.T) {
 		}
 	})
 }
+
+func TestWikiDreamerLLMRequestDisablesThinkingForHeadroomModel(t *testing.T) {
+	wd := &WikiDreamer{synthesisMaxTokens: 16384}
+	req := wd.llmRequest("system", "prompt", 2048)
+
+	if req.Thinking == nil || req.Thinking.Type != "disabled" {
+		t.Fatalf("Thinking = %#v, want disabled for a reasoning model without a template toggle", req.Thinking)
+	}
+	if req.MaxTokens != 8192 {
+		t.Fatalf("MaxTokens = %d, want 8192 (4x auxiliary headroom)", req.MaxTokens)
+	}
+
+	plain := (&WikiDreamer{}).llmRequest("system", "prompt", 2048)
+	if plain.Thinking != nil {
+		t.Fatalf("plain-model Thinking = %#v, want nil", plain.Thinking)
+	}
+}
