@@ -11,12 +11,25 @@ import (
 
 // AgentConfig configures the agent execution loop.
 type AgentConfig struct {
-	MaxTurns  int           // Maximum tool-call turns before stopping. Default: 25.
-	Timeout   time.Duration // Maximum wall time for the entire agent run. Default: 30m.
-	Model     string
-	System    rawJSON // System prompt: JSON string or array of ContentBlocks.
-	Tools     []llm.Tool
-	MaxTokens int // Max output tokens per LLM call. Default: 8192.
+	MaxTurns int           // Maximum tool-call turns before stopping. Default: 25.
+	Timeout  time.Duration // Maximum wall time for the entire agent run. Default: 30m.
+	// SoftDeadline does not cancel the run. When SoftDeadlineAt is unset it is
+	// measured from this RunAgent invocation. At the next model boundary after it
+	// expires, the executor injects a wrap-up instruction and removes tools from
+	// subsequent requests so the remaining hard-deadline headroom is spent on a
+	// user-visible final answer. Zero disables it.
+	SoftDeadline time.Duration
+	// SoftDeadlineAt pins the preference to an absolute end-to-end turn time so
+	// retries and model fallbacks cannot restart the soft budget. When set it
+	// takes precedence over SoftDeadline.
+	SoftDeadlineAt time.Time
+	// OnSoftDeadline fires once when the wrap-up mode is entered. It is intended
+	// for deterministic UI progress only; the callback must be non-blocking.
+	OnSoftDeadline func()
+	Model          string
+	System         rawJSON // System prompt: JSON string or array of ContentBlocks.
+	Tools          []llm.Tool
+	MaxTokens      int // Max output tokens per LLM call. Default: 8192.
 	// MaxTotalOutputTokens caps the sum of output tokens across every LLM call
 	// in this agent loop. When enabled, each turn is charged the greater of
 	// provider usage and a deterministic estimate of its full structured output.

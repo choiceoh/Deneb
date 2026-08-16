@@ -292,7 +292,7 @@ describe("AIPanel conversations", () => {
       }),
     );
     render(wrapper(workspace(), <AIPanel cfg={cfg} />));
-    expect(screen.getByText("달력 확인 중…")).toHaveClass("ai-thinking");
+    expect(screen.getByText(/달력 확인 중/)).toHaveClass("deneb-status-summary");
   });
 
   it("when opens and routes the session drawer", async () => {

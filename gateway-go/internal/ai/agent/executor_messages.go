@@ -22,6 +22,12 @@ func (j *runMessageJournal) append(message llm.Message) {
 	j.persist(message)
 }
 
+// appendEphemeral adds an executor-owned instruction to the provider history
+// without writing it into the user-visible conversation transcript.
+func (j *runMessageJournal) appendEphemeral(message llm.Message) {
+	j.messages = append(j.messages, message)
+}
+
 func (j *runMessageJournal) stage(message llm.Message) *stagedRunMessage {
 	return &stagedRunMessage{journal: j, message: message}
 }

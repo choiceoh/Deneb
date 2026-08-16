@@ -97,6 +97,7 @@ internal suspend fun streamGatewayChat(
     sessionKey: String?,
     message: String,
     onTool: (ToolEvent) -> Unit = {},
+    onProgress: (ProgressEvent) -> Unit = {},
     onThinking: (String) -> Unit = {},
     onReasoning: (String) -> Unit = {},
     onDelta: (String) -> Unit,
@@ -131,6 +132,7 @@ internal suspend fun streamGatewayChat(
                 jsonCodec = jsonCodec,
                 onDelta = onDelta,
                 onTool = onTool,
+                onProgress = onProgress,
                 onThinking = onThinking,
                 onReasoning = onReasoning,
                 onDone = { terminal = it },
@@ -275,6 +277,7 @@ private fun dispatchGatewayEvent(
     jsonCodec: Json,
     onDelta: (String) -> Unit,
     onTool: (ToolEvent) -> Unit,
+    onProgress: (ProgressEvent) -> Unit,
     onThinking: (String) -> Unit,
     onReasoning: (String) -> Unit,
     onDone: (DoneEvent) -> Unit,
@@ -287,6 +290,10 @@ private fun dispatchGatewayEvent(
         "tool" -> decodeOrNull<ToolEvent>(jsonCodec, data)
             ?.takeIf { it.tool.isNotEmpty() }
             ?.let(onTool)
+
+        "progress" -> decodeOrNull<ProgressEvent>(jsonCodec, data)
+            ?.takeIf { it.label.isNotEmpty() }
+            ?.let(onProgress)
 
         "thinking" -> onThinking(decodeOrNull<ThinkingEvent>(jsonCodec, data)?.preview.orEmpty())
 

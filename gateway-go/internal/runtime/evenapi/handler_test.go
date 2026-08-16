@@ -70,6 +70,9 @@ func TestChatCompletionsHappyPath(t *testing.T) {
 	if chat.last.SystemPrompt == "" {
 		t.Fatal("expected glasses system hint")
 	}
+	if chat.last.SoftDeadline != chatport.InteractiveTurnSoftDeadline {
+		t.Fatalf("soft deadline=%s want %s", chat.last.SoftDeadline, chatport.InteractiveTurnSoftDeadline)
+	}
 }
 
 func TestChatCompletionsUnauthorizedAndDisabled(t *testing.T) {

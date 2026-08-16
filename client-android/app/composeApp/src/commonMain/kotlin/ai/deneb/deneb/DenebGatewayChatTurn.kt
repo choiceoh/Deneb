@@ -78,6 +78,7 @@ internal suspend fun DenebGatewayClient.askGateway(
                     sessionKey = sessionKey,
                     message = sendText,
                     onTool = progress::onTool,
+                    onProgress = progress::onProgress,
                     onThinking = progress::onThinking,
                     onReasoning = { reasoning ->
                         // Live full reasoning-so-far → grow the answer's expandable

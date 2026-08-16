@@ -799,6 +799,7 @@ func untrustedCaptureRequest(sessionKey, message string) chatport.SyncRequest {
 		Delivery:            &chatport.DeliveryContext{Channel: chatport.NativeClientChannel, To: sessionKey},
 		AutoDeliveredOutput: true,
 		GateUntrustedTools:  true,
+		SoftDeadline:        chatport.InteractiveTurnSoftDeadline,
 	}
 }
 
@@ -825,6 +826,9 @@ func startUntrustedCapture(ctx context.Context, deps Deps, sessionKey, message s
 }
 
 func runNativeSync(ctx context.Context, deps Deps, req chatport.SyncRequest) (*chatport.SyncResult, error) {
+	if req.SoftDeadline <= 0 {
+		req.SoftDeadline = chatport.InteractiveTurnSoftDeadline
+	}
 	turnCtx, cancel := context.WithTimeout(ctx, nativeSyncTurnDeadline)
 	defer cancel()
 	return deps.Chat.RunSync(turnCtx, req)

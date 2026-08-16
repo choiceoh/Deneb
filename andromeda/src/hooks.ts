@@ -57,6 +57,7 @@ export interface ChatTurn {
   model?: string;
   canRegenerate?: boolean;
   reasoning?: string; // assistant chain-of-thought → expandable reasoning block
+  startedAt?: number; // live-turn wall clock anchor for the visible elapsed timer
 }
 
 export interface SendOpts {
@@ -210,6 +211,7 @@ export function useChat(cfg: GatewayConfig): ChatState {
         status: "streaming",
         model: opts.model,
         canRegenerate: true,
+        startedAt: Date.now(),
       },
     ]);
     setBusy(true);
@@ -232,16 +234,18 @@ export function useChat(cfg: GatewayConfig): ChatState {
         cfg,
         msg,
         {
-          onThinking: (preview) => setThinking(preview.slice(0, 120)),
+          onProgress: (progress) => setThinking(progress.label),
+          // Preserve gateway-owned phase narration. Older gateways that emit
+          // only thinking frames retain their legacy preview for compatibility.
+          onThinking: (preview) =>
+            setThinking((current) => current || preview.trim().slice(0, 120) || "해결 방법을 검토하고 있습니다"),
           // Live full reasoning-so-far → grow the answer's expandable block while
           // streaming (the done frame settles the final value).
           onReasoning: (reasoning) => patch((turn) => ({ ...turn, reasoning })),
           onDelta: (t) => {
-            setThinking("");
             appendText(t);
           },
           onTool: (ev) => {
-            setThinking("");
             if (!ev.isError && ev.tool) seenTools.add(ev.tool);
             upsertTool(ev);
           },

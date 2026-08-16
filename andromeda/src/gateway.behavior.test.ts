@@ -237,6 +237,7 @@ describe("chatStream", () => {
       async () =>
         new Response(
           byteStream([
+            'event: progress\ndata: {"phase":"preparing","label":"대화 맥락을 준비하고 있습니다","startedAtMs":123,"softDeadlineMs":1200000,"hardDeadlineMs":1800000}\n',
             'event: delta\ndata: {"delta":"hello"}\n',
             'event: tool\ndata: {"state":"started","tool":"search","toolUseId":"t1","detail":"query","isError":false}\n',
             'event: thinking\ndata: {"preview":"reasoning"}\n',
@@ -250,6 +251,7 @@ describe("chatStream", () => {
     const handlers = {
       onDelta: vi.fn(),
       onTool: vi.fn(),
+      onProgress: vi.fn(),
       onThinking: vi.fn(),
       onDone: vi.fn(),
       onError: vi.fn(),
@@ -264,6 +266,13 @@ describe("chatStream", () => {
     });
 
     expect(handlers.onDelta).toHaveBeenCalledWith("hello");
+    expect(handlers.onProgress).toHaveBeenCalledWith({
+      phase: "preparing",
+      label: "대화 맥락을 준비하고 있습니다",
+      startedAtMs: 123,
+      softDeadlineMs: 1_200_000,
+      hardDeadlineMs: 1_800_000,
+    });
     expect(handlers.onTool).toHaveBeenCalledWith({
       state: "started",
       tool: "search",

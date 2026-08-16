@@ -5,10 +5,19 @@ import (
 	"time"
 )
 
-// InteractiveTurnDeadline is the transport-level backstop shared by native
-// streaming, blocking fallback/capture turns, and graceful restart draining.
-// The chat pipeline's own 5-minute budget should normally fire first.
-const InteractiveTurnDeadline = 6 * time.Minute
+const (
+	// InteractiveTurnSoftDeadline asks a long-running interactive agent to stop
+	// opening new tool work and produce the best answer it can from the evidence
+	// already gathered. It is deliberately a preference, not cancellation: the
+	// final answer still has ten minutes of headroom to stream and persist.
+	InteractiveTurnSoftDeadline = 20 * time.Minute
+
+	// InteractiveTurnDeadline is the hard transport backstop shared by native
+	// streaming and blocking fallback/capture turns. Agent execution has its own
+	// activity-aware provider-stream watchdog; this wider wall-clock cap lets
+	// healthy tool-heavy turns finish instead of being cut off at six minutes.
+	InteractiveTurnDeadline = 30 * time.Minute
+)
 
 // ProviderConfig is the stable provider configuration consumed outside the
 // chat implementation. The concrete chat handler aliases this type so runtime
@@ -87,8 +96,10 @@ type SyncRequest struct {
 	BeforeToolCall func(name, toolCallID string, input []byte) (block bool, blockReason string)
 	OnToolResult   func(name, toolUseID, result string, isErr bool)
 	OnToolEvent    func(ToolStreamEvent)
+	OnProgress     func(phase string)
 	OnThinking     func(preview string)
 	OnReasoning    func(full string)
+	SoftDeadline   time.Duration
 }
 
 // SyncResult is a transport-neutral snapshot of a completed chat run.

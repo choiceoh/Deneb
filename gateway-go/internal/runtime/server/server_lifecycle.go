@@ -13,16 +13,15 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/logging"
 	"github.com/choiceoh/deneb/gateway-go/internal/infra/sdsocket"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chatport"
 )
 
 // DefaultTurnDeadline is the end-to-end budget for one user turn.
 const DefaultTurnDeadline = 5 * time.Minute
 
-// chatDrainTimeout lets a detached native stream use its 6-minute backstop
-// before shutdown cancels the server lifecycle. New runs are rejected while
-// this wait is active, so deploys do not extend indefinitely under traffic.
-const chatDrainTimeout = chatport.InteractiveTurnDeadline
+// chatDrainTimeout is intentionally independent of the 30-minute interactive
+// turn backstop. A deploy gives accepted work a generous drain window, but it
+// must not make every restart wait for the full user-turn ceiling.
+const chatDrainTimeout = 6 * time.Minute
 
 // initAndListen creates the HTTP server, binds to the address, and starts
 // background subsystems (tick broadcaster, monitoring, session GC, hooks).

@@ -2,14 +2,18 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/modelrole"
 	"github.com/choiceoh/deneb/gateway-go/internal/core/agentlog"
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/leafbind"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/streaming"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire"
@@ -36,6 +40,11 @@ type SyncResult struct {
 	// the model produced no reasoning). Surfaced to clients as the expandable
 	// reasoning block; never fed back into the model context.
 	Thinking string
+	// synthesizedFallback marks text created after the agent loop (timeout,
+	// abort, or accidental empty completion). The sync caller uses it to persist
+	// the user-visible terminal message that per-turn model persistence could not
+	// have recorded.
+	synthesizedFallback bool
 }
 
 // BestTextRaw returns the answer selected for delivery before surface-specific
@@ -179,6 +188,11 @@ type SyncOptions struct {
 	// client renders these as the waiting indicator's tool label. Nil-safe.
 	OnToolEvent func(ev ToolStreamEvent)
 
+	// OnProgress receives deterministic lifecycle phases for a streaming run.
+	// Unlike reasoning previews these values are server-authored UI state and do
+	// not reveal chain-of-thought.
+	OnProgress func(phase string)
+
 	// OnThinking, when set on a streaming run (SendSyncStream only), fires
 	// while the model emits reasoning deltas (throttled by the broadcaster) so
 	// the transport can show a "thinking" hint before the first visible token.
@@ -189,6 +203,10 @@ type SyncOptions struct {
 	// OnReasoning fires alongside OnThinking with the full reasoning-so-far so the
 	// transport can grow a LIVE expandable reasoning block during streaming. Nil-safe.
 	OnReasoning func(full string)
+
+	// SoftDeadline asks the agent to wrap up without new tools once this much
+	// end-to-end turn time has elapsed. Zero disables the preference.
+	SoftDeadline time.Duration
 
 	// GateUntrustedTools enables the untrusted-origin tool gate (blocking
 	// irreversible tools when promptware enters the turn). Set by the
@@ -248,6 +266,8 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		params.AutoDeliveredOutput = opts.AutoDeliveredOutput
 		params.BeforeToolCall = opts.BeforeToolCall
 		params.OnToolResult = opts.OnToolResult
+		params.OnProgress = opts.OnProgress
+		params.SoftDeadline = opts.SoftDeadline
 		params.GateUntrustedTools = opts.GateUntrustedTools
 	}
 
@@ -322,7 +342,7 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 		StopReason:      result.StopReason,
 		Thinking:        reasoning,
 	}
-	res.fillEmptyStopFallback()
+	res.synthesizedFallback = res.fillEmptyStopFallback()
 	// Accidental empty completion — end_turn after tool activity with zero
 	// text and no silent token. fillEmptyStopFallback deliberately leaves
 	// end_turn alone (NO_REPLY silence must survive), and that narrow rule
@@ -332,8 +352,38 @@ func (h *Handler) buildSyncResult(model string, result *chatRunResult) (*SyncRes
 	if res.BestText() == "" && isEmptyFinalResult(result.AgentResult) {
 		msg := fallbackForEmptyFinalReply()
 		res.Text, res.AllText, res.DeliverableText = msg, msg, msg
+		res.synthesizedFallback = true
 	}
 	return res, nil
+}
+
+func (h *Handler) buildSyncTimeoutFallback(model string) (*SyncResult, error) {
+	return h.buildSyncResult(model, &chatRunResult{
+		AgentResult: &agent.AgentResult{StopReason: "timeout"},
+	})
+}
+
+// persistSynthesizedSyncFallback closes the persistence gap between the agent
+// loop and buildSyncResult. Per-turn persistence can only store model-emitted
+// messages; a timeout/empty fallback is created afterward, so without this
+// append a reconnect sees the user row but no assistant terminal row even
+// though the live SSE done frame showed one.
+func persistSynthesizedSyncFallback(params RunParams, deps runDeps, res *SyncResult, logger *slog.Logger) {
+	if res == nil || !res.synthesizedFallback || params.EphemeralAssistant || deps.transcript == nil {
+		return
+	}
+	text := strings.TrimSpace(res.BestText())
+	if text == "" {
+		return
+	}
+	assistantMsg := NewTextChatMessage("assistant", text, dentime.Now().UnixMilli())
+	if err := deps.transcript.Append(params.SessionKey, assistantMsg); err != nil {
+		logger.Error("failed to persist synthesized sync fallback", "session", params.SessionKey, "error", err)
+		return
+	}
+	if deps.callbacks.emitTranscriptFn != nil {
+		deps.callbacks.emitTranscriptFn(params.SessionKey, mustRawJSON(assistantMsg), "")
+	}
 }
 
 // SendSync runs the agent loop synchronously, blocking until the response is
@@ -369,12 +419,20 @@ func (h *Handler) SendSync(ctx context.Context, sessionKey, message, model strin
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRun(runCtx, params, deps, nil, nil, h.logger, runLog)
 			if err != nil {
+				if errors.Is(context.Cause(runCtx), context.DeadlineExceeded) {
+					res, buildErr := h.buildSyncTimeoutFallback(model)
+					if buildErr == nil {
+						persistSynthesizedSyncFallback(params, deps, res, h.logger)
+					}
+					return res, buildErr
+				}
 				return nil, err
 			}
 			normalizeRunCardReplies(result.AgentResult, params, deps, h.logger)
 			finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
 			res, err := h.buildSyncResult(model, result)
 			if err == nil {
+				persistSynthesizedSyncFallback(params, deps, res, h.logger)
 				h.autoTitleSessionAsync(sessionKey, message, res)
 			}
 			return res, err
@@ -436,6 +494,22 @@ func (h *Handler) withSyncRunLifecycleAdmission(
 	if !registered {
 		return nil, ErrRuntimeDraining
 	}
+	// The abort tracker answers cancellation/steer questions, while the session
+	// lifecycle backs transcript.turnRunning and reconnect recovery. Sync runs
+	// need both views to transition together.
+	if h.sessions != nil {
+		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+			Phase: session.PhaseStart,
+			Ts:    time.Now().UnixMilli(),
+		})
+	}
+	if h.broadcast != nil {
+		broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
+			SessionKey: sessionKey,
+			Reason:     "message_sent",
+			Status:     "running",
+		})
+	}
 	defer func() {
 		// Register an already-accepted continuation before removing this entry,
 		// under the same decision lock used by producers. This keeps both the
@@ -446,7 +520,46 @@ func (h *Handler) withSyncRunLifecycleAdmission(
 		}
 	}()
 
-	return fn(runCtx)
+	res, err := fn(runCtx)
+	h.finishSyncSessionLifecycle(runCtx, sessionKey, res, err)
+	return res, err
+}
+
+func (h *Handler) finishSyncSessionLifecycle(runCtx context.Context, sessionKey string, res *SyncResult, runErr error) {
+	phase := session.PhaseEnd
+	reason := "completed"
+	status := "done"
+	failureReason := ""
+	if runErr != nil {
+		if context.Cause(runCtx) != nil {
+			reason = "aborted"
+			status = "killed"
+		} else {
+			phase = session.PhaseError
+			reason = "error"
+			status = "failed"
+			failureReason = classifyRunFailureReason(runErr)
+		}
+	} else if res == nil {
+		phase = session.PhaseError
+		reason = "error"
+		status = "failed"
+		failureReason = "응답 결과가 비어 있습니다."
+	}
+	if h.sessions != nil {
+		h.sessions.ApplyLifecycleEvent(sessionKey, session.LifecycleEvent{
+			Phase:         phase,
+			Ts:            time.Now().UnixMilli(),
+			FailureReason: failureReason,
+		})
+	}
+	if h.broadcast != nil {
+		broadcastPayload(h.broadcast, "sessions.changed", SessionsChangedEvent{
+			SessionKey: sessionKey,
+			Reason:     reason,
+			Status:     status,
+		})
+	}
 }
 
 // steerMaxRunes bounds which mid-run follow-ups fold into the active turn as a
@@ -629,12 +742,20 @@ func (h *Handler) SendSyncStream(ctx context.Context, sessionKey, message, model
 		func(runCtx context.Context) (*SyncResult, error) {
 			result, err := executeAgentRunWithDelta(runCtx, params, deps, sinks, h.logger)
 			if err != nil {
+				if errors.Is(context.Cause(runCtx), context.DeadlineExceeded) {
+					res, buildErr := h.buildSyncTimeoutFallback(model)
+					if buildErr == nil {
+						persistSynthesizedSyncFallback(params, deps, res, h.logger)
+					}
+					return res, buildErr
+				}
 				return nil, err
 			}
 			normalizeRunCardReplies(result.AgentResult, params, deps, h.logger)
 			finishTurnSideEffects(deps, params, result.AgentResult, h.logger)
 			res, err := h.buildSyncResult(model, result)
 			if err == nil {
+				persistSynthesizedSyncFallback(params, deps, res, h.logger)
 				h.autoTitleSessionAsync(sessionKey, message, res)
 			}
 			return res, err
