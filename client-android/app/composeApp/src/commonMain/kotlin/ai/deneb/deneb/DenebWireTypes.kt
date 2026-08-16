@@ -283,33 +283,33 @@ internal data class DiaryMirrorEntryRow(
     val at: Long = 0,
 )
 
-	// Capture results: the gateway saves the extract and starts a detached turn.
-	// `text` is the immediate ack; `turnMessage` is the pointer the client uses
-	// to recover the analysis from the transcript.
-	@Serializable
-	internal data class CaptureImagePayload(
-		val text: String = "",
-		val turnMessage: String = "",
-	)
+// Capture results: the gateway saves the extract and starts a detached turn.
+// `text` is the immediate ack; `turnMessage` is the pointer the client uses
+// to recover the analysis from the transcript.
+@Serializable
+internal data class CaptureImagePayload(
+    val text: String = "",
+    val turnMessage: String = "",
+)
 
-	@Serializable
-	internal data class CaptureAudioPayload(
-		val text: String = "",
-		val turnMessage: String = "",
-	)
+@Serializable
+internal data class CaptureAudioPayload(
+    val text: String = "",
+    val turnMessage: String = "",
+)
 
-	@Serializable
-	internal data class CaptureDocumentPayload(
-		val text: String = "",
-		val turnMessage: String = "",
-	)
+@Serializable
+internal data class CaptureDocumentPayload(
+    val text: String = "",
+    val turnMessage: String = "",
+)
 
-	// Batch capture: N files materialized on the gateway, one detached turn.
-	@Serializable
-	internal data class CaptureBatchPayload(
-		val text: String = "",
-		val turnMessage: String = "",
-	)
+// Batch capture: N files materialized on the gateway, one detached turn.
+@Serializable
+internal data class CaptureBatchPayload(
+    val text: String = "",
+    val turnMessage: String = "",
+)
 
 @Serializable
 internal data class CaptureContactsPayload(val text: String = "")
