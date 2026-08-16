@@ -654,6 +654,12 @@ func buildBatchCaptureMessage(files []batchFile, caption string, dropped int) st
 	return strings.TrimSpace(b.String())
 }
 
+const (
+	maxWebTranslateSegments     = 40
+	maxWebTranslateSegmentRunes = 1200
+	maxWebTranslateTotalRunes   = 32000
+)
+
 // handleMiniappWebTranslate translates a batch of web-page text segments for the
 // in-app browser's in-place translation (en/ru → ko). The native DOM walker
 // sends the page's visible text segments and applies the returned — same-length,
@@ -675,6 +681,20 @@ func handleMiniappWebTranslate(deps Deps) rpcutil.HandlerFunc {
 		}
 		if len(p.Segments) == 0 {
 			return rpcerr.MissingParam("segments").Response(req.ID)
+		}
+		if len(p.Segments) > maxWebTranslateSegments {
+			return rpcerr.InvalidParams(fmt.Errorf("segments must contain at most %d items", maxWebTranslateSegments)).Response(req.ID)
+		}
+		totalRunes := 0
+		for _, segment := range p.Segments {
+			segmentRunes := len([]rune(segment))
+			if segmentRunes > maxWebTranslateSegmentRunes {
+				return rpcerr.InvalidParams(fmt.Errorf("each segment must contain at most %d characters", maxWebTranslateSegmentRunes)).Response(req.ID)
+			}
+			totalRunes += segmentRunes
+			if totalRunes > maxWebTranslateTotalRunes {
+				return rpcerr.InvalidParams(fmt.Errorf("segments must contain at most %d characters in total", maxWebTranslateTotalRunes)).Response(req.ID)
+			}
 		}
 		translated, err := deps.Translate(ctx, p.Segments, p.TargetLang)
 		if err != nil {

@@ -89,8 +89,24 @@ class DenebWebViewState(
         private set
     internal var stopTick by mutableStateOf(0)
         private set
+    internal var retryTick by mutableStateOf(0)
+        private set
+
+    /** Opaque platform state. Android stores a Bundle here while a background
+     * tab is detached, preserving its back/forward list and scroll position. */
+    internal var platformState: Any? = null
+
+    /** Changes when Android must discard a dead renderer and create a new
+     * WebView. The chrome keys the platform view with this generation. */
+    internal var rendererGeneration by mutableStateOf(0)
+        private set
+
+    internal var rendererRecoveryPending by mutableStateOf(false)
+        private set
 
     fun load(newUrl: String) {
+        rendererRecoveryPending = false
+        loadError = null
         url = newUrl
     }
 
@@ -108,6 +124,23 @@ class DenebWebViewState(
 
     fun stop() {
         stopTick++
+    }
+
+    fun retry() {
+        rendererRecoveryPending = false
+        loadError = null
+        retryTick++
+    }
+
+    internal fun markRendererGone(crashed: Boolean) {
+        platformState = null
+        rendererRecoveryPending = true
+        loadError = browserRendererGoneMessage(crashed)
+        loading = false
+        progress = 0
+        canGoBack = false
+        canGoForward = false
+        rendererGeneration++
     }
 }
 
@@ -128,4 +161,5 @@ expect fun DenebWebView(
     state: DenebWebViewState,
     translate: TranslateFn,
     modifier: Modifier,
+    onOpenNewTab: (String) -> Unit = { state.load(it) },
 )

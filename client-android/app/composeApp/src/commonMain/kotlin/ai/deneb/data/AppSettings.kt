@@ -175,6 +175,14 @@ class AppSettings(internal val settings: Settings) {
         settings.putString(KEY_BROWSER_BOOKMARKS, json)
     }
 
+    // Bounded in-app browser tab metadata. Platform WebView history/scroll stays
+    // process-local; this durable store restores the active tab and tab URLs.
+    fun getBrowserTabsJson(): String = settings.getString(KEY_BROWSER_TABS, "{}")
+
+    fun setBrowserTabsJson(json: String) {
+        settings.putString(KEY_BROWSER_TABS, json)
+    }
+
     // Last page shown in the in-app translation browser. Restored when reopening
     // from More with an empty route URL (leave → re-enter resumes where you left).
     fun getBrowserLastUrl(): String = settings.getString(KEY_BROWSER_LAST_URL, "")
@@ -777,6 +785,7 @@ class AppSettings(internal val settings: Settings) {
             "deneb_dashboard",
         )
         const val KEY_BROWSER_BOOKMARKS = "browser_bookmarks"
+        const val KEY_BROWSER_TABS = "browser_tabs_v1"
         const val KEY_BROWSER_LAST_URL = "browser_last_url"
         const val KEY_BROWSER_TRANSLATE_ENABLED = "browser_translate_enabled"
         const val KEY_BROWSER_HISTORY = "browser_history"

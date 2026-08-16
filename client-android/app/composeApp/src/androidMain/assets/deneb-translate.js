@@ -941,6 +941,13 @@
     }, 45000);
   }
 
+  function rejectBatch(rid) {
+    var units = pending[rid];
+    if (!units) return;
+    delete pending[rid];
+    clearInFlight(unitTids(units));
+  }
+
   function replace(rec, translated) {
     if (!enabled || translated == null) return;
     if (rec.node && rec.node.nodeValue !== translated) rec.node.nodeValue = translated;
@@ -1156,6 +1163,7 @@
   window.DenebTranslate = {
     __installed: true,
     applyBatch: applyBatch,
+    rejectBatch: rejectBatch,
     setEnabled: setEnabled,
     onLocationChange: onLocationChange,
     start: function () {
