@@ -71,4 +71,6 @@ doc-ref-lint`(CI 게이트, validate-or-freeze — arXiv:2607.13285에서 채택
 대조된다(하나라도 품으면 무고, 전부 밖이면 warn-drift → `--fix`가 심볼
 시작 줄로 스냅). 주간 자가감사 크론 `weekly-ref-audit`(토 06:30)이
 doc-ref-lint·memory-ref-audit를 돌려 메모리 rot은 자가 수리하고 레포 문서
-rot은 작업 피드 제안 카드로 올린다.
+rot은 작업 피드 제안 카드로 올린다. 에이전트 워크트리 사본
+(`.claude/worktrees`·`.cursor/worktrees`·`.zcode/worktrees` 등)의
+`CLAUDE.md`는 스냅샷이라 스캔에서 제외한다 — 본체 문서만 감사한다.

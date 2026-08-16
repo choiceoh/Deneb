@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from doc_ref_lint import Report, collect_docs, extract_refs, lint, looks_like_path
+from doc_ref_lint import Report, collect_docs, extract_refs, is_skipped_doc, lint, looks_like_path
 
 
 def make_repo(files: dict[str, str]) -> Path:
@@ -48,6 +48,27 @@ class ExtractionTest(unittest.TestCase):
         # dotfiles that DO live in the repo must still count
         self.assertTrue(looks_like_path(".golangci.yml"))
         self.assertTrue(looks_like_path("scripts/audit/doc_ref_lint.py"))
+
+    def test_collect_docs_skips_nested_agent_worktrees(self):
+        repo = make_repo(
+            {
+                "CLAUDE.md": "root\n",
+                "gateway-go/CLAUDE.md": "live\n",
+                ".claude/worktrees/stale/CLAUDE.md": "see `gone.go`\n",
+                ".cursor/worktrees/Deneb/sess/CLAUDE.md": "see `gone.go`\n",
+                ".zcode/worktrees/Deneb/sess/CLAUDE.md": "see `gone.go`\n",
+                ".worktrees/old-branch/CLAUDE.md": "see `gone.go`\n",
+            }
+        )
+        docs = collect_docs(repo, ["CLAUDE.md", "**/CLAUDE.md"])
+        rels = {str(p.relative_to(repo)) for p in docs}
+        self.assertEqual(rels, {"CLAUDE.md", "gateway-go/CLAUDE.md"})
+        self.assertTrue(is_skipped_doc(repo / ".claude/worktrees/stale/CLAUDE.md", repo))
+        self.assertFalse(is_skipped_doc(repo / "gateway-go/CLAUDE.md", repo))
+        # A checkout that itself lives under ~/.cursor/worktrees/… must still
+        # lint its own docs — only nested copies inside the repo are skipped.
+        nested_root = Path("/home/x/.cursor/worktrees/Deneb/sess/CLAUDE.md")
+        self.assertFalse(is_skipped_doc(nested_root, Path("/home/x/.cursor/worktrees/Deneb/sess")))
 
     def test_escapes_fence_lines_out(self):
         text = (
