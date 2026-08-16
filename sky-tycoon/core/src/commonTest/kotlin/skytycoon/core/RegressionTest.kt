@@ -823,6 +823,46 @@ class RegressionTest {
         assertTrue(boost > 0.5, "올림픽이 아예 반영되지 않았다 (배율 $boost)")
     }
 
+    @Test
+    fun `짧은 폐쇄가 긴 폐쇄를 앞당겨 끝내지 않는다`() {
+        var s = fresh()
+        // 1991년 1분기 — 걸프전 대본이 텔아비브를 두 분기 닫는 분기.
+        s = s.copy(turn = (1991 - s.startYear) * 4)
+        // 그보다 긴 폐쇄가 이미 걸려 있다면 대본이 그걸 줄여선 안 된다.
+        val longUntil = s.turn + 5
+        s = s.copy(
+            cityState = s.cityState + (
+                "telaviv" to (s.cityState["telaviv"] ?: CityState()).copy(closedUntilTurn = longUntil)
+                ),
+        )
+
+        val t = Events.fire(s, Rng(99))
+        assertEquals(
+            longUntil,
+            t.cityState["telaviv"]!!.closedUntilTurn,
+            "짧은 폐쇄가 덮어써서 공항이 일찍 열렸다",
+        )
+    }
+
+    @Test
+    fun `명령을 실행하면 주가가 곧바로 다시 매겨진다`() {
+        // 매도 수수료·증자·기재 매입 어느 쪽이든 자기자본이 바뀌면 주가도 바뀌어야 한다.
+        var s = fresh()
+        val targetId = s.livingAirlines.first { it.id != "hanseong" }.id
+        s = s.withAirline2("hanseong") {
+            it.copy(cash = 5e9, holdings = it.holdings + (targetId to s.airline(targetId).shares * 0.20))
+        }
+        s = Stock.repriceAll(s)
+        val before = s.player.sharePrice
+
+        val r = Actions.execute(s, Command.TradeShares("hanseong", targetId, -(s.player.holdings[targetId]!!)))
+        assertTrue(r.ok, r.message)
+        assertTrue(
+            r.state.player.sharePrice != before,
+            "지분을 전량 털었는데 주가가 $before 그대로다 (매도 수수료만큼 자기자본이 줄었다)",
+        )
+    }
+
     // ------------------------------------------------------------ AI 견적
 
     @Test

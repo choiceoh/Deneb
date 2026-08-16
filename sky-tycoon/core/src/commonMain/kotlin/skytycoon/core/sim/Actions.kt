@@ -99,7 +99,7 @@ object Actions {
         if (!airline.alive) return ActionResult.fail(state, "이미 사라진 항공사입니다.")
         if (state.outcome != null) return ActionResult.fail(state, "게임이 이미 끝났습니다.")
 
-        return when (cmd) {
+        val result = when (cmd) {
             is Command.OpenRoute -> openRoute(state, airline, cmd)
             is Command.CloseRoute -> closeRoute(state, airline, cmd)
             is Command.TuneRoute -> tuneRoute(state, airline, cmd)
@@ -114,6 +114,10 @@ object Actions {
             is Command.TradeShares -> tradeShares(state, airline, cmd)
             is Command.IssueShares -> issueShares(state, airline, cmd)
         }
+        // 명령 하나로도 현금·주식 수·자산이 바뀌고, 주가는 그 셋에서 나온다. 여기서
+        // 한 번에 다시 매겨야 분기가 끝날 때까지 낡은 시세로 증자하거나 지분을 사고파는
+        // 일이 없다. 명령마다 따로 챙기면 이번처럼 매도 경로 하나가 빠진다.
+        return if (result.ok) result.copy(state = Stock.repriceAll(result.state)) else result
     }
 
     /**
@@ -554,17 +558,14 @@ object Actions {
             return ActionResult.fail(state, "이번 분기에 더 발행할 수 있는 물량은 ${(limit / 1e6).toInt()}백만 주입니다.")
         }
         val proceeds = cmd.shares * airline.sharePrice * Balance.ISSUE_DISCOUNT
-        // 발행 즉시 주가를 다시 매긴다. 안 그러면 광고한 희석이 화면에 안 보이고,
-        // 남들은 낡은 시세로 우리 지분을 평가하며, 그 사이에 희석 전 값으로 매집당한다.
-        val next = Stock.repriceAll(
-            state.withAirline(airline.id) {
-                it.copy(
-                    cash = it.cash + proceeds,
-                    shares = it.shares + cmd.shares,
-                    issuedThisQuarter = it.issuedThisQuarter + cmd.shares,
-                )
-            },
-        )
+        // 주가 재산정은 execute 가 모든 명령에 대해 한 번에 해 준다.
+        val next = state.withAirline(airline.id) {
+            it.copy(
+                cash = it.cash + proceeds,
+                shares = it.shares + cmd.shares,
+                issuedThisQuarter = it.issuedThisQuarter + cmd.shares,
+            )
+        }
         return ActionResult(
             next,
             true,

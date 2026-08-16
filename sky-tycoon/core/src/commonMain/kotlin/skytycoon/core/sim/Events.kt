@@ -59,9 +59,17 @@ object Events {
         )
     }
 
+    /**
+     * 공항을 닫는다. 이미 걸린 폐쇄를 **줄이지 않는다** — 전쟁으로 두 분기 닫은 텔아비브에
+     * 같은 턴의 한 분기짜리 재해가 겹치면, 덮어쓸 경우 공항이 한 분기 일찍 열린다.
+     */
     private fun GameState.cityClose(cityId: String, quarters: Int): GameState {
         val cs = cityState[cityId] ?: CityState()
-        return copy(cityState = cityState + (cityId to cs.copy(closedUntilTurn = turn + quarters - 1)))
+        return copy(
+            cityState = cityState + (
+                cityId to cs.copy(closedUntilTurn = maxOf(cs.closedUntilTurn, turn + quarters - 1))
+                ),
+        )
     }
 
     private fun GameState.addSlots(cityId: String, n: Int): GameState {
