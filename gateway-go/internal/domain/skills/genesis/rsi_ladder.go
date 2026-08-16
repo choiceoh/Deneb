@@ -24,6 +24,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/choiceoh/deneb/gateway-go/internal/domain/skills/genesis/surfaces"
 )
 
 // Ladder row evidence thresholds. Proposal values from the roadmap table —
@@ -106,11 +108,20 @@ func (t *Tracker) ladderRows() []ladderRow {
 		t.ladderDispatchCapRow(),
 		t.ladderStagedSourcesRow(),
 		t.ladderCalibrationRow(),
-		{
-			Title: "소스 자동적용 티어", State: ladderStateManual,
-			Detail: "배포 롤백 1회 실전/소방훈련 완주가 증거 — 기계 판독 불가, 운영자 판단 행",
-		},
+		t.ladderSourceTierRow(),
 	}
+}
+
+// ladderSourceTierRow: the final row was operator-judged ("기계 판독 불가")
+// until the 2026-08-16 rollback drill supplied the evidence (gateway freeze →
+// watch detect 55s → bak-prev restore → healthy in 89s) and the operator
+// approved the flip. Now machine-readable: the declared gateway-source tier
+// IS the graduation — the row reads the policy instead of restating it.
+func (t *Tracker) ladderSourceTierRow() ladderRow {
+	if surfaces.ClassifySurface("internal/runtime/heartbeat/heartbeat_task.go").Tier == surfaces.SurfaceTierAutoApply {
+		return ladderRow{"소스 자동적용 티어", ladderStateDone, "gateway-source auto-apply — 롤백 드릴 완주(2026-08-16 감지 55초·복구 89초) + 운영자 승인"}
+	}
+	return ladderRow{"소스 자동적용 티어", ladderStateManual, "배포 롤백 1회 실전/소방훈련 완주가 증거 — 기계 판독 불가, 운영자 판단 행"}
 }
 
 // rsiAssessLadder folds the evaluated rows into the pseudo-layer card. Layer
