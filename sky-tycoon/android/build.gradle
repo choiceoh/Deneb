@@ -1,0 +1,35 @@
+// Android SDK 가 있는 머신에서만 빌드에 포함된다 (settings.gradle.kts 참고).
+// Groovy 로 둔 이유: SDK 가 없는 환경에서 .kts 가 AGP 타입을 못 찾아 스크립트 컴파일이 깨지기 때문.
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+android {
+    namespace = 'skytycoon.android'
+    compileSdk = libs.versions.androidCompileSdk.get() as Integer
+
+    defaultConfig {
+        applicationId = 'skytycoon.android'
+        minSdk = libs.versions.androidMinSdk.get() as Integer
+        targetSdk = libs.versions.androidTargetSdk.get() as Integer
+        versionCode = 1
+        versionName = '1.0'
+    }
+    buildTypes {
+        release {
+            minifyEnabled = false
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+}
+
+dependencies {
+    implementation project(':app')
+    implementation libs.androidx.activity.compose
+}

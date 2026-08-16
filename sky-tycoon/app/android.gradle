@@ -1,0 +1,23 @@
+// Android SDK 가 있는 머신에서만 적용된다 (settings.gradle.kts 참고).
+apply plugin: 'com.android.library'
+
+kotlin {
+    androidTarget()
+    sourceSets {
+        androidMain.dependencies {
+            implementation libs.androidx.activity.compose
+        }
+    }
+}
+
+android {
+    namespace = 'skytycoon.ui'
+    compileSdk = libs.versions.androidCompileSdk.get() as Integer
+    defaultConfig {
+        minSdk = libs.versions.androidMinSdk.get() as Integer
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}

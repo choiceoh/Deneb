@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SkyTycoon" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0B1220</item>
+        <item name="android:navigationBarColor">#141C2B</item>
+        <item name="android:windowBackground">#0B1220</item>
+    </style>
+</resources>
