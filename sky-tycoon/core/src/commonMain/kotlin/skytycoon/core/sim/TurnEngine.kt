@@ -34,6 +34,7 @@ object TurnEngine {
         s = Stock.repriceAll(s)
         s = Stock.settleTakeovers(s)
         s = resolveDistress(s)
+        s = syncClosingBalances(s)
 
         s = clearQuarterlyCounters(s)
         // 해가 바뀌는 경계에서 물가·성장을 올린다 — 새해 첫 화면부터 새 가격이 보이도록.
@@ -179,6 +180,23 @@ object TurnEngine {
             news = state.news + news,
         )
     }
+
+    /**
+     * 긴급 차입·기재 매각으로 잔고가 바뀐 뒤에 결산 리포트의 기말 수치를 맞춰 준다.
+     * 안 맞추면 리포트가 "기말 현금"이라며 구조 조치 이전 금액을 보여준다.
+     */
+    private fun syncClosingBalances(state: GameState): GameState = state.copy(
+        airlines = state.airlines.map { a ->
+            val last = a.results.lastOrNull() ?: return@map a
+            if (last.turn != state.turn) return@map a
+            val synced = last.copy(
+                cash = a.cash,
+                debt = a.debt,
+                equity = Economics.equity(state, a),
+            )
+            a.copy(results = a.results.dropLast(1) + synced)
+        },
+    )
 
     /** 분기 상한(지분 매집·유상증자)은 분기가 넘어갈 때 비워진다. */
     private fun clearQuarterlyCounters(state: GameState): GameState = state.copy(

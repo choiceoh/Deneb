@@ -263,6 +263,84 @@ class RegressionTest {
         assertTrue(abs(spent - quote) < 1.0, "화면에 뜬 값($quote)과 실제 결제액($spent)이 다르다")
     }
 
+    // ------------------------------------------------------------ 차익거래 차단
+
+    @Test
+    fun `중고기를 샀다가 즉시 되팔면 손해다`() {
+        // 매각가가 중고 매입가보다 높으면 사고파는 것만으로 현금을 무한히 찍어낼 수 있다.
+        assertTrue(
+            Balance.SELL_PENALTY < Balance.USED_PRICE_MUL,
+            "매각가 배율(${Balance.SELL_PENALTY})이 중고 매입가 배율(${Balance.USED_PRICE_MUL}) 이상이면 돈복사가 된다",
+        )
+
+        var s = NewGame.create(scenarioId = "modern", companyId = "liberty", seed = 21)
+        val type = AircraftCatalog.usedFor(s.year).first()
+        val before = s.airline("liberty").cash
+
+        val bought = Actions.execute(s, Command.BuyAircraft("liberty", type.id, 1, used = true))
+        assertTrue(bought.ok, bought.message)
+        s = bought.state
+        val plane = s.planesOf("liberty").first { it.routeId == null && it.typeId == type.id }
+        s = Actions.execute(s, Command.SellAircraft("liberty", plane.id)).state
+
+        assertTrue(
+            s.airline("liberty").cash < before,
+            "중고기를 사서 바로 팔았는데 현금이 늘었다 (무한 차익거래)",
+        )
+    }
+
+    // ------------------------------------------------------------ 합병 회계
+
+    @Test
+    fun `인수당한 회사가 들고 있던 우리 주식은 소각된다`() {
+        var s = fresh()
+        val mine = s.airline("hanseong").shares
+        val stake = mine * 0.08
+        s = Actions.execute(s, Command.Loan("fuji", 300e6)).state
+        s = Actions.execute(s, Command.TradeShares("fuji", "hanseong", stake)).state
+
+        s = Stock.merge(s, "hanseong", "fuji")
+        assertTrue(
+            s.airline("hanseong").shares < mine,
+            "상대가 들고 있던 자사주가 그냥 사라졌다 (발행 주식 수 그대로)",
+        )
+        assertTrue(s.airlines.none { it.holdings.containsKey("hanseong") })
+    }
+
+    // ------------------------------------------------------------ 이벤트 반영
+
+    @Test
+    fun `한쪽 도시만 수요가 꺾여도 그 노선에 반영된다`() {
+        val s = fresh()
+        val a = skytycoon.core.data.Cities["hongkong"]
+        val b = skytycoon.core.data.Cities["seoul"]
+        val before = skytycoon.core.sim.Demand.quarterly(s, a, b).total
+
+        // 사스처럼 한쪽 도시만 수요가 반 토막 나는 이벤트.
+        val hit = s.copy(
+            cityState = s.cityState + (a.id to (s.cityState[a.id] ?: CityState())
+                .copy(boost = 0.45, boostUntilTurn = s.turn + 2)),
+        )
+        val after = skytycoon.core.sim.Demand.quarterly(hit, a, b).total
+        assertTrue(after < before * 0.6, "한쪽만 꺾인 이벤트가 반대쪽 1.0 에 가려 사라졌다")
+    }
+
+    // ------------------------------------------------------------ 결산 리포트
+
+    @Test
+    fun `결산 리포트의 기말 잔고가 실제 잔고와 일치한다`() {
+        // 현금이 마르면 결산 뒤에 긴급 차입·기재 매각이 일어난다. 리포트가 그 이전 값을 들고 있으면
+        // 화면마다 다른 숫자가 보인다.
+        var s = fresh()
+        s = s.copy(airlines = s.airlines.map { if (it.id == "hanseong") it.copy(cash = -5e6) else it })
+        s = TurnEngine.advance(s)
+
+        val player = s.airline("hanseong")
+        val report = player.lastResult!!
+        assertEquals(player.cash, report.cash, "리포트의 기말 현금이 실제와 다르다")
+        assertEquals(player.debt, report.debt, "리포트의 기말 부채가 실제와 다르다")
+    }
+
     // ------------------------------------------------------------ 파산 정리
 
     @Test

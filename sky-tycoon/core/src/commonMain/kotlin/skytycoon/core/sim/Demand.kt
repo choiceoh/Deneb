@@ -64,7 +64,11 @@ object Demand {
         val regionMul = sqrt(
             (world.regionEconomy[a.region] ?: 1.0) * (world.regionEconomy[b.region] ?: 1.0),
         )
-        val boost = maxOf(csA?.boostAt(state.turn) ?: 1.0, csB?.boostAt(state.turn) ?: 1.0)
+        // 양끝의 수요 배율을 합칠 때 최댓값을 쓰면, 한쪽만 꺾인 이벤트(사스 등)가
+        // 반대쪽의 1.0 에 가려 통째로 사라진다. 상승은 큰 쪽을, 하락은 작은 쪽을 각각 살린다.
+        val modA = csA?.boostAt(state.turn) ?: 1.0
+        val modB = csB?.boostAt(state.turn) ?: 1.0
+        val boost = maxOf(1.0, modA, modB) * minOf(1.0, modA, modB)
         val common = world.travelIndex * regionMul * boost * diff.demandBonus / 4.0
 
         // 불황이 오면 관광이 먼저 죽고 출장은 비교적 버틴다.

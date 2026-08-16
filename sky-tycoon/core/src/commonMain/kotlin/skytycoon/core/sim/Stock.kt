@@ -104,6 +104,10 @@ object Stock {
             for ((id, n) in target.holdings) if (id != acquirerId) put(id, (get(id) ?: 0.0) + n)
             remove(targetId)
         }
+        // 상대가 우리 주식을 들고 있었다면 자사주가 되어 돌아온다. 그냥 버리면 자산이 증발하므로
+        // 발행 주식 수에서 소각한다 (남은 주주의 지분율이 그만큼 올라간다).
+        val treasury = target.holdings[acquirerId] ?: 0.0
+        val acquirerShares = (acquirer.shares - treasury).coerceAtLeast(acquirer.shares * 0.1)
 
         // 다른 주주들은 시장가로 정리한다.
         val airlines = state.airlines.map { a ->
@@ -111,6 +115,7 @@ object Stock {
                 acquirerId -> a.copy(
                     cash = a.cash + target.cash,
                     debt = a.debt + target.debt,
+                    shares = acquirerShares,
                     slots = mergedSlots,
                     holdings = mergedHoldings,
                     businesses = a.businesses + target.businesses,

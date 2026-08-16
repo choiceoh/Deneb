@@ -86,8 +86,10 @@ object Balance {
     const val AGE_MAINT_PER_QUARTER = 0.012
 
     // --- 기재 거래 ---
+    // 매각가는 반드시 중고 매입가보다 낮아야 한다. 반대가 되면 중고기를 사서 즉시 되파는
+    // 것만으로 무한히 현금을 찍어낼 수 있다 (BalanceTest 가 이 부등식을 지킨다).
     const val USED_PRICE_MUL = 0.72
-    const val SELL_PENALTY = 0.86
+    const val SELL_PENALTY = 0.62
     const val ORDER_DELAY_QUARTERS = 2
 
     // --- 슬롯 ---

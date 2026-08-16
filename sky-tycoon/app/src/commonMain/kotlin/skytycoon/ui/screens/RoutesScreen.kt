@@ -156,8 +156,10 @@ private fun RouteDetail(vm: GameViewModel, route: Route) {
     )
     val maxFreq = minOf(cap.maxFreq, slotHeadroom)
 
-    var fare by remember(route.id) { mutableStateOf(route.fareMul.toFloat()) }
-    var freq by remember(route.id) { mutableStateOf(route.freq.toFloat()) }
+    // 배속 변경으로 route.freq 가 자동으로 깎일 수 있다. 노선 id 만 키로 쓰면
+    // 슬라이더가 옛 값을 들고 있다가 범위 밖 값을 그대로 제출한다.
+    var fare by remember(route.id, route.fareMul) { mutableStateOf(route.fareMul.toFloat()) }
+    var freq by remember(route.id, route.freq) { mutableStateOf(route.freq.toFloat()) }
     var service by remember(route.id) { mutableStateOf(route.serviceExtra) }
     var editingFleet by remember(route.id) { mutableStateOf(false) }
 
