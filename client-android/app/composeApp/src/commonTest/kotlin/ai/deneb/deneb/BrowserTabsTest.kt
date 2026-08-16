@@ -119,5 +119,17 @@ class BrowserTabsTest {
             ),
         )
         assertEquals("", stableBrowserTabUrl("about:blank", "data:text/plain,hello", ""))
+        assertEquals(
+            "Saved title",
+            stableBrowserPageTitle("", "https://saved.example/article", "https://saved.example/article", "Saved title"),
+        )
+        assertEquals(
+            "Saved title",
+            stableBrowserPageTitle("about:blank", "about:blank", "https://saved.example/article", "Saved title"),
+        )
+        assertEquals(
+            "Loaded title",
+            stableBrowserPageTitle(" Loaded title ", "https://saved.example/article", "https://saved.example/article", "Saved title"),
+        )
     }
 }

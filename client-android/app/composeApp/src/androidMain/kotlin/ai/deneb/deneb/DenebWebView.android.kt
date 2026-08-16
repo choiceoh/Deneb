@@ -293,7 +293,8 @@ actual fun DenebWebView(
                 }
                 web.webChromeClient = object : WebChromeClient() {
                     override fun onReceivedTitle(view: WebView, title: String?) {
-                        state.pageTitle = title.orEmpty()
+                        val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
+                        state.pageTitle = stableBrowserPageTitle(title, view.url.orEmpty(), previousStable, state.pageTitle)
                     }
 
                     override fun onReceivedIcon(view: WebView, icon: Bitmap) {

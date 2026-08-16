@@ -180,6 +180,13 @@ internal fun stableBrowserTabUrl(currentUrl: String, requestedUrl: String, previ
     .firstOrNull(::canBookmarkUrl)
     .orEmpty()
 
+internal fun stableBrowserPageTitle(reportedTitle: String?, reportedUrl: String, stableUrl: String, previousTitle: String): String {
+    val next = reportedTitle.orEmpty().trim()
+    if (next.isEmpty()) return previousTitle
+    if (urlScheme(reportedUrl) == "about" && canBookmarkUrl(stableUrl)) return previousTitle
+    return next
+}
+
 private fun BrowserTabStore.ensureActive(nowMs: Long): BrowserTabStore {
     val active = tabs.firstOrNull { it.id == activeId } ?: tabs.first()
     return copy(
