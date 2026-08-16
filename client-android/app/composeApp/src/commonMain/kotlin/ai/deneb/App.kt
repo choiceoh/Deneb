@@ -36,6 +36,7 @@ import ai.deneb.deneb.DenebSkillScreen
 import ai.deneb.deneb.DenebTodoAddScreen
 import ai.deneb.deneb.DenebUsageScreen
 import ai.deneb.deneb.DenebWikiPageScreen
+import ai.deneb.deneb.hiddenMoreTilesForUi
 import ai.deneb.deneb.markWorkFeedRead
 import ai.deneb.deneb.openWorkFeedItem
 import ai.deneb.sensing.applyGeofences
@@ -830,7 +831,7 @@ internal fun AppContent(
                         // The hub is alive now — it no longer re-executes on entry, so
                         // re-read the hidden-tile set on every nav change (covers
                         // returning from 설정 where tiles were just toggled).
-                        val hiddenTiles = remember(currentBackStackEntry) { appSettings.getHiddenMoreTiles() }
+                        val hiddenTiles = remember(currentBackStackEntry) { appSettings.hiddenMoreTilesForUi() }
                         DenebMoreScreen(
                             onBack = { openLiveTab(DenebFeed()) },
                             onOpen = { dest -> navController.navigate(dest) },

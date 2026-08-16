@@ -13,6 +13,7 @@ import ai.deneb.DenebOrgChart
 import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch
 import ai.deneb.DenebUsage
+import ai.deneb.data.AppSettings
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
@@ -91,6 +92,17 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
  *  Drives the 설정 → "더보기 표시 항목" list; the keys here are the only ones a hidden-set
  *  persists. Flattened in display order. */
 internal val hideableMoreEntries: List<MoreEntry> = moreGroups.flatMap { it.second }.filterNot { it.alwaysShown }
+
+/** Live 더보기 keys — used to drop retired tiles from a persisted hidden set. */
+internal val knownMoreTileKeys: Set<String> =
+    moreGroups.flatMap { it.second }.mapTo(linkedSetOf()) { it.key }
+
+internal fun sanitizeHiddenMoreTiles(hidden: Set<String>): Set<String> = hidden.filterTo(LinkedHashSet()) { it in knownMoreTileKeys }
+
+internal fun AppSettings.hiddenMoreTilesForUi(): Set<String> {
+    pruneHiddenMoreTiles(knownMoreTileKeys)
+    return sanitizeHiddenMoreTiles(getHiddenMoreTiles())
+}
 
 /**
  * Filter a group's entries for display: [hidden] hides the user's 설정-chosen tiles by

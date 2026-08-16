@@ -28,8 +28,8 @@ fun ChatScreen(
         uiState = uiState,
         textToSpeech = textToSpeech,
         navigationTabBar = navigationTabBar,
-        initialDraft = appSettings.getComposerDraft(),
-        onDraftChange = { appSettings.setComposerDraft(it) },
+        loadDraft = appSettings::getComposerDraft,
+        onDraftChange = appSettings::setComposerDraft,
     )
 }
 
@@ -38,14 +38,14 @@ fun ChatScreenContent(
     uiState: ChatUiState,
     textToSpeech: TextToSpeechInstance? = null,
     navigationTabBar: (@Composable () -> Unit)? = null,
-    initialDraft: String = "",
-    onDraftChange: (String) -> Unit = {},
+    loadDraft: (String) -> String = { "" },
+    onDraftChange: (String, String) -> Unit = { _, _ -> },
 ) {
     ChatModeScreen(
         uiState = uiState,
         textToSpeech = textToSpeech,
         navigationTabBar = navigationTabBar,
-        initialDraft = initialDraft,
+        loadDraft = loadDraft,
         onDraftChange = onDraftChange,
     )
 }

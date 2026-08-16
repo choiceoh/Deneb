@@ -183,16 +183,70 @@ class AppSettingsStateAndCacheTest {
     @Test
     fun composerDraftPersistsAndClearsAndCaps() {
         val (_, settings) = fixture()
-        assertEquals("", settings.getComposerDraft())
+        assertEquals("", settings.getComposerDraft("s1"))
 
-        settings.setComposerDraft("초안")
-        assertEquals("초안", settings.getComposerDraft())
+        settings.setComposerDraft("s1", "초안")
+        assertEquals("초안", settings.getComposerDraft("s1"))
 
-        settings.setComposerDraft("")
-        assertEquals("", settings.getComposerDraft())
+        settings.setComposerDraft("s1", "")
+        assertEquals("", settings.getComposerDraft("s1"))
 
-        settings.setComposerDraft("x".repeat(AppSettings.COMPOSER_DRAFT_MAX + 50))
-        assertEquals(AppSettings.COMPOSER_DRAFT_MAX, settings.getComposerDraft().length)
+        settings.setComposerDraft("s1", "x".repeat(AppSettings.COMPOSER_DRAFT_MAX + 50))
+        assertEquals(AppSettings.COMPOSER_DRAFT_MAX, settings.getComposerDraft("s1").length)
+    }
+
+    @Test
+    fun composerDraftsAreIsolatedBySession() {
+        val (_, settings) = fixture()
+        settings.setComposerDraft("s1", "첫번째")
+        settings.setComposerDraft("s2", "두번째")
+
+        assertEquals("첫번째", settings.getComposerDraft("s1"))
+        assertEquals("두번째", settings.getComposerDraft("s2"))
+        assertEquals("", settings.getComposerDraft("s3"))
+    }
+
+    @Test
+    fun composerDraftMigratesLegacyUnscopedKeyIntoTheOpenedSession() {
+        val (raw, settings) = fixture {
+            putString(AppSettings.KEY_COMPOSER_DRAFT, "옛초안")
+        }
+
+        assertEquals("옛초안", settings.getComposerDraft("s1"))
+        assertFalse(raw.hasKey(AppSettings.KEY_COMPOSER_DRAFT))
+        assertEquals("옛초안", settings.getComposerDraft("s1"))
+        assertEquals("", settings.getComposerDraft("s2"))
+    }
+
+    @Test
+    fun composerDraftIgnoresBlankSessionId() {
+        val (raw, settings) = fixture()
+
+        settings.setComposerDraft("", "nope")
+        settings.setComposerDraft("   ", "nope")
+
+        assertEquals("", settings.getComposerDraft(""))
+        assertFalse(raw.hasKey(AppSettings.KEY_COMPOSER_DRAFTS))
+    }
+
+    @Test
+    fun composerDraftEvictsOldestSessionsPastTheCap() {
+        val (_, settings) = fixture()
+        val max = AppSettings.COMPOSER_DRAFT_MAX_SESSIONS
+        for (index in 0 until max) settings.setComposerDraft("s$index", "d$index")
+
+        settings.setComposerDraft("overflow", "new")
+
+        assertEquals("", settings.getComposerDraft("s0"))
+        assertEquals("d1", settings.getComposerDraft("s1"))
+        assertEquals("new", settings.getComposerDraft("overflow"))
+    }
+
+    @Test
+    fun composerDraftSessionKeyUsesSentinelForBlankId() {
+        assertEquals(AppSettings.COMPOSER_DRAFT_NEW, AppSettings.composerDraftSessionKey(null))
+        assertEquals(AppSettings.COMPOSER_DRAFT_NEW, AppSettings.composerDraftSessionKey(""))
+        assertEquals("client:main:a", AppSettings.composerDraftSessionKey("client:main:a"))
     }
 
     @Test

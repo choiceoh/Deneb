@@ -64,6 +64,32 @@ class MoreTileVisibilityTest {
     }
 
     @Test
+    fun `default hidden keys are all live tiles`() {
+        assertTrue(AppSettings.DEFAULT_HIDDEN_MORE_TILES.all { it in knownMoreTileKeys })
+        assertFalse("deneb_project_digests" in AppSettings.DEFAULT_HIDDEN_MORE_TILES)
+        assertFalse("deneb_site_map" in AppSettings.DEFAULT_HIDDEN_MORE_TILES)
+    }
+
+    @Test
+    fun `sanitize drops retired tile keys`() {
+        assertEquals(
+            setOf("deneb_rsi"),
+            sanitizeHiddenMoreTiles(setOf("deneb_rsi", "deneb_project_digests", "deneb_site_map")),
+        )
+    }
+
+    @Test
+    fun `ui hidden set prunes ghosts from persisted prefs`() {
+        val s = AppSettings(
+            MapSettings().apply {
+                putString(AppSettings.KEY_HIDDEN_MORE_TILES, "deneb_rsi,deneb_project_digests,deneb_site_map")
+            },
+        )
+        assertEquals(setOf("deneb_rsi"), s.hiddenMoreTilesForUi())
+        assertEquals(setOf("deneb_rsi"), s.getHiddenMoreTiles())
+    }
+
+    @Test
     fun `hidden-tile set round-trips through AppSettings`() {
         val s = AppSettings(MapSettings())
         assertEquals(AppSettings.DEFAULT_HIDDEN_MORE_TILES, s.getHiddenMoreTiles())
