@@ -2,6 +2,7 @@
 
 package ai.deneb.ui.dynamicui
 
+import ai.deneb.ui.DenebMotion
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.JetBrainsMonoFamily
 import ai.deneb.ui.denebOnSuccessContainer
@@ -706,7 +707,10 @@ internal fun statCountUpValue(value: String): String {
     val anim = remember(value) { Animatable(0f) }
     var settled by remember(value) { mutableStateOf(false) }
     LaunchedEffect(value) {
-        anim.animateTo(target, animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing))
+        anim.animateTo(
+            target,
+            animationSpec = tween(durationMillis = DenebMotion.DurationStatCount, easing = FastOutSlowInEasing),
+        )
         settled = true
     }
     // The animation is a transition, not the source of truth: once settled,
