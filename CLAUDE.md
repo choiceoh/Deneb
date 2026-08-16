@@ -108,4 +108,6 @@ codegraph explore  "영역..."  # 지형 one-shot (다중 토큰; --max-files �
 | rsi-bench.md | RSI Bench 과정·효용 점수·baseline·ratchet |
 | git-pr.md · testing.md · docs.md · build-status.md · collaboration.md · optimization.md | 각 주제 상세 |
 
+**결정 기록(ADR)**: 아키텍처·설계 결정의 시점별 근거는 `docs/adr/`에 기록한다 (Context / Decision / Alternatives rejected / Consequences). 되돌리기 어려운 중대 결정은 ADR로 남기고, 결정이 바뀌면 새 ADR로 supersede한다 — 규약은 [docs/adr/README.md](docs/adr/README.md).
+
 **도구 가이드** (`docs/tools/`): [zcode-environment.md](docs/tools/zcode-environment.md) (워크트리 격리·CodeGraph·훅 파이프라인·헬퍼 스크립트) · [creating-skills.md](docs/tools/creating-skills.md) (스킬 작성) · [worktrunk.md](docs/tools/worktrunk.md) (`wt` 수동 병렬 워크트리 CLI — `.worktrees/<branch>`, 머지는 여전히 pr.sh land).
