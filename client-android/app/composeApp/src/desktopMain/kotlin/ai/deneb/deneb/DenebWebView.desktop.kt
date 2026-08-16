@@ -10,7 +10,12 @@ import androidx.compose.ui.Modifier
 /** Non-Android stub: the in-app translation browser is an Android-only feature.
  *  Lets the desktop render harness exercise the surrounding chrome/navigation. */
 @Composable
-actual fun DenebWebView(state: DenebWebViewState, translate: TranslateFn, modifier: Modifier) {
+actual fun DenebWebView(
+    state: DenebWebViewState,
+    translate: TranslateFn,
+    modifier: Modifier,
+    onOpenNewTab: (String) -> Unit,
+) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("인앱 브라우저는 안드로이드 전용입니다")
     }

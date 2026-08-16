@@ -86,6 +86,12 @@ internal fun browserSslErrorMessage(primaryError: Int): String = when (primaryEr
     else -> "보안 인증서에 문제가 있어 연결하지 않았습니다"
 }
 
+internal fun browserRendererGoneMessage(crashed: Boolean): String = if (crashed) {
+    "페이지 렌더러가 비정상 종료됐습니다"
+} else {
+    "메모리 확보를 위해 페이지가 종료됐습니다"
+}
+
 /** A pending `alert()` / `confirm()` / `prompt()` from the page. */
 internal class BrowserJsDialog(
     val kind: Kind,
@@ -113,9 +119,9 @@ internal class BrowserJsDialog(
 }
 
 /**
- * A `window.open` / `target=_blank` hitch should hand this URL to the same
- * WebView (no tabs). Skip blank/about/javascript — OAuth often opens
- * `about:blank` first, then navigates; we wait for that real URL.
+ * A `window.open` / `target=_blank` hitch has reached a real target URL.
+ * Skip blank/about/javascript — OAuth often opens `about:blank` first, then
+ * navigates; the browser waits for that real URL before opening a tab.
  */
 internal fun browserAdoptPopupUrl(url: String): Boolean {
     val s = url.trim()

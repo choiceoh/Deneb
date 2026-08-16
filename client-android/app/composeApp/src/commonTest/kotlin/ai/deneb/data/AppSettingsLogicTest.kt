@@ -151,6 +151,10 @@ class AppSettingsLogicTest {
         assertEquals("[]", s.getBrowserHistoryJson())
         s.setBrowserHistoryJson("""[{"url":"https://example.com","title":"Ex","visitedAtMs":1}]""")
         assertTrue(s.getBrowserHistoryJson().contains("example.com"))
+
+        assertEquals("{}", s.getBrowserTabsJson())
+        s.setBrowserTabsJson("""{"activeId":"tab-1","tabs":[]}""")
+        assertTrue(s.getBrowserTabsJson().contains("tab-1"))
     }
 
     @Test

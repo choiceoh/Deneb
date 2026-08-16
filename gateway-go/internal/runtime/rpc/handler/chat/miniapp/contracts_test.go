@@ -126,6 +126,25 @@ func TestWebTranslateHandlerContract(t *testing.T) {
 			t.Fatalf("translations = %v", got.Translated)
 		}
 	})
+	t.Run("maximum bounded batch remains accepted", func(t *testing.T) {
+		segments := make([]string, maxWebTranslateSegments)
+		for i := range segments {
+			segments[i] = strings.Repeat("a", maxWebTranslateTotalRunes/maxWebTranslateSegments)
+		}
+		params, err := json.Marshal(map[string]any{"segments": segments})
+		if err != nil {
+			t.Fatal(err)
+		}
+		method := handleMiniappWebTranslate(Deps{Translate: func(_ context.Context, got []string, _ string) ([]string, error) {
+			if !reflect.DeepEqual(got, segments) {
+				t.Fatal("translator did not receive the bounded batch unchanged")
+			}
+			return got, nil
+		}})
+		if resp := method(context.Background(), requestFrame("id", string(params))); !resp.OK {
+			t.Fatalf("response = %+v", resp)
+		}
+	})
 
 	tests := []struct {
 		name      string
@@ -147,6 +166,32 @@ func TestWebTranslateHandlerContract(t *testing.T) {
 			requireRPCErrorCode(t, resp, tt.wantCode)
 		})
 	}
+
+	rejectOversized := func(t *testing.T, segments []string) {
+		t.Helper()
+		params, err := json.Marshal(map[string]any{"segments": segments})
+		if err != nil {
+			t.Fatal(err)
+		}
+		method := handleMiniappWebTranslate(Deps{Translate: func(context.Context, []string, string) ([]string, error) {
+			t.Fatal("translator called for an oversized request")
+			return nil, nil
+		}})
+		requireRPCErrorCode(t, method(context.Background(), requestFrame("id", string(params))), protocol.ErrInvalidRequest)
+	}
+	t.Run("too many segments", func(t *testing.T) {
+		rejectOversized(t, make([]string, maxWebTranslateSegments+1))
+	})
+	t.Run("segment too long", func(t *testing.T) {
+		rejectOversized(t, []string{strings.Repeat("가", maxWebTranslateSegmentRunes+1)})
+	})
+	t.Run("total text too long", func(t *testing.T) {
+		segments := make([]string, 27)
+		for i := range segments {
+			segments[i] = strings.Repeat("가", maxWebTranslateSegmentRunes)
+		}
+		rejectOversized(t, segments)
+	})
 }
 
 func TestCaptureImageValidationContract(t *testing.T) {

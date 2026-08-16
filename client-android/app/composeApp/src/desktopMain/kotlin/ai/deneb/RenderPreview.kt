@@ -82,7 +82,7 @@ private fun renderBrowser(name: String, scheme: ColorScheme) {
     val state = DenebWebViewState("https://en.wikipedia.org/wiki/Deneb").apply { translateEnabled = true }
     val scene = ImageComposeScene(width = 824, height = 900, density = Density(2f)) {
         MaterialTheme(colorScheme = scheme) {
-            DenebBrowserChrome(state = state, onBack = {}) {
+            DenebBrowserChrome(state = state, onBack = {}, tabCount = 3, onShowTabs = {}) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text("(웹 페이지 — Android WebView)", style = DenebType.meta, color = denebHint())
                 }

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
+import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -15,6 +16,7 @@ import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -30,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -57,19 +60,21 @@ actual fun DenebWebView(
     state: DenebWebViewState,
     translate: TranslateFn,
     modifier: Modifier,
+    onOpenNewTab: (String) -> Unit,
 ) {
     // Composition-scoped: translate round-trips launched from the JS bridge are
     // cancelled when the browser screen leaves (rememberCoroutineScope), so a
     // closed page can't post stale translations. We keep a WebView ref to post
     // evaluateJavascript back onto it on the main thread.
     val scope = rememberCoroutineScope()
-    val holder = remember { WebViewHolder() }
+    val holder = remember(state) { WebViewHolder() }
     val context = LocalContext.current
+    val latestOpenNewTab = rememberUpdatedState(onOpenNewTab)
 
     // Web forms with <input type="file"> need an activity result; without one the
     // "파일 선택" button does nothing at all. The callback must be answered even on
     // cancel, or the page's file input stays wedged for the rest of the session.
-    val fileChooser = remember { FileChooserHolder() }
+    val fileChooser = remember(state) { FileChooserHolder() }
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -81,6 +86,8 @@ actual fun DenebWebView(
         factory = { ctx ->
             WebView(ctx).also { web ->
                 holder.web = web
+                holder.lastCommandUrl = state.url
+                holder.translationEnabled = state.translateEnabled
                 val adBlockHits = AtomicInteger(0)
                 val mainHandler = Handler(Looper.getMainLooper())
                 web.settings.javaScriptEnabled = true
@@ -99,6 +106,11 @@ actual fun DenebWebView(
                 web.settings.setSupportZoom(true)
                 web.settings.builtInZoomControls = true
                 web.settings.displayZoomControls = false
+                // User-initiated target=_blank/window.open navigations are routed
+                // into a Deneb tab by onCreateWindow below. Script-only popups stay
+                // blocked by javaScriptCanOpenWindowsAutomatically=false.
+                web.settings.setSupportMultipleWindows(true)
+                web.settings.javaScriptCanOpenWindowsAutomatically = false
                 // Present as the mobile browser this is, not as an embedded
                 // WebView: Reddit answers the default `; wv` UA with its
                 // open-in-app gate, which pins an interstitial over the page and
@@ -106,11 +118,6 @@ actual fun DenebWebView(
                 // browserUserAgent — only that token is dropped, so the UA keeps
                 // this device's real Android/Chrome build.
                 web.settings.userAgentString = browserUserAgent(web.settings.userAgentString)
-                // window.open / target=_blank: without these the tap is a no-op
-                // (login and payment flows). We still have one WebView — the hitch
-                // hands the URL back to this view (see onCreateWindow).
-                web.settings.setSupportMultipleWindows(true)
-                web.settings.javaScriptCanOpenWindowsAutomatically = true
                 // Third-party cookies are off by default in a WebView, which breaks
                 // SSO/social sign-in on sites that hand the session off across hosts.
                 CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
@@ -218,6 +225,18 @@ actual fun DenebWebView(
                         state.loadError = browserSslErrorMessage(error.primaryError)
                     }
 
+                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                        // A dead renderer makes this WebView permanently unusable.
+                        // Mark the state first so the keyed caller replaces the
+                        // platform view, then destroy this exact instance.
+                        holder.rendererGone = true
+                        if (holder.web === view) holder.web = null
+                        state.markRendererGone(detail.didCrash())
+                        view.removeJavascriptInterface(BRIDGE_NAME)
+                        view.destroy()
+                        return true
+                    }
+
                     override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
                         super.doUpdateVisitedHistory(view, url, isReload)
                         state.currentUrl = url
@@ -278,31 +297,83 @@ actual fun DenebWebView(
                         return true
                     }
 
-                    override fun onShowFileChooser(
-                        webView: WebView,
-                        callback: ValueCallback<Array<Uri>>,
-                        params: FileChooserParams,
-                    ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
-
                     override fun onCreateWindow(
                         view: WebView,
                         isDialog: Boolean,
                         isUserGesture: Boolean,
                         resultMsg: Message,
-                    ): Boolean = attachPopupToSameWindow(view, resultMsg)
+                    ): Boolean {
+                        if (!isUserGesture) return false
+                        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                        val popup = WebView(view.context)
+                        var dispatched = false
+                        val abandonPopup = Runnable {
+                            if (!dispatched) {
+                                dispatched = true
+                                popup.destroy()
+                            }
+                        }
 
-                    override fun onCloseWindow(window: WebView) {
-                        window.destroy()
+                        fun dispatch(url: String): Boolean {
+                            if (dispatched || !browserAdoptPopupUrl(url)) return false
+                            dispatched = true
+                            mainHandler.removeCallbacks(abandonPopup)
+                            when (urlScheme(url)) {
+                                "http", "https" -> latestOpenNewTab.value(url)
+                                else -> if (isExternalSchemeUrl(url)) openExternalUrl(context, url)
+                            }
+                            popup.stopLoading()
+                            popup.destroy()
+                            return true
+                        }
+
+                        popup.settings.javaScriptEnabled = true
+                        popup.settings.domStorageEnabled = true
+                        popup.webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                request: WebResourceRequest,
+                            ): Boolean = dispatch(request.url?.toString().orEmpty())
+
+                            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                                dispatch(url)
+                            }
+                        }
+                        transport.webView = popup
+                        // A target=_blank page may stay on about:blank forever.
+                        // Do not retain that detached renderer indefinitely.
+                        mainHandler.postDelayed(abandonPopup, POPUP_RESOLUTION_TIMEOUT_MS)
+                        resultMsg.sendToTarget()
+                        return true
                     }
+
+                    override fun onShowFileChooser(
+                        webView: WebView,
+                        callback: ValueCallback<Array<Uri>>,
+                        params: FileChooserParams,
+                    ): Boolean = fileChooser.start(callback) { filePicker.launch(params.createIntent()) }
                 }
-                if (state.url.isNotBlank()) web.loadUrl(state.url)
+                val restored = (state.platformState as? Bundle)?.let { saved ->
+                    state.platformState = null
+                    runCatching { web.restoreState(saved) != null }.getOrDefault(false)
+                } ?: false
+                if (!restored && !state.rendererRecoveryPending) {
+                    state.currentUrl.ifBlank { state.url }.takeIf { it.isNotBlank() }?.let(web::loadUrl)
+                }
             }
         },
         update = { /* navigation/commands handled via LaunchedEffect below */ },
         onRelease = { web ->
-            web.removeJavascriptInterface(BRIDGE_NAME)
-            web.destroy()
-            holder.web = null
+            fileChooser.deliver(null)
+            if (!holder.rendererGone) {
+                val saved = Bundle()
+                if (runCatching { web.saveState(saved) }.getOrNull() != null) {
+                    state.platformState = saved
+                }
+                web.removeJavascriptInterface(BRIDGE_NAME)
+                web.destroy()
+            }
+            if (holder.web === web) holder.web = null
         },
     )
 
@@ -325,7 +396,11 @@ actual fun DenebWebView(
     }
 
     LaunchedEffect(state.url) {
-        holder.web?.let { if (it.url != state.url && state.url.isNotBlank()) it.loadUrl(state.url) }
+        val target = state.url
+        if (target.isNotBlank() && holder.lastCommandUrl != target) {
+            holder.lastCommandUrl = target
+            holder.web?.loadUrl(target)
+        }
     }
     LaunchedEffect(state.goBackTick) {
         if (state.goBackTick > 0) holder.web?.let { if (it.canGoBack()) it.goBack() }
@@ -339,7 +414,18 @@ actual fun DenebWebView(
     LaunchedEffect(state.stopTick) {
         if (state.stopTick > 0) holder.web?.stopLoading()
     }
+    LaunchedEffect(state.retryTick) {
+        if (state.retryTick == 0) return@LaunchedEffect
+        val target = state.currentUrl.ifBlank { state.url }
+        holder.web?.let { web ->
+            if (target.isNotBlank()) {
+                holder.lastCommandUrl = state.url
+                web.loadUrl(target)
+            }
+        }
+    }
     LaunchedEffect(state.translateEnabled) {
+        holder.translationEnabled = state.translateEnabled
         holder.web?.evaluateJavascript(
             "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
             null,
@@ -347,47 +433,18 @@ actual fun DenebWebView(
     }
 }
 
-/**
- * Single-webview adopt for window.open / target=_blank. The hitch exists only
- * so Chromium can deliver the URL; we load it in [host] and destroy the hitch.
- * about:blank is ignored — OAuth often opens that first, then navigates.
- */
-@SuppressLint("SetJavaScriptEnabled")
-private fun attachPopupToSameWindow(host: WebView, resultMsg: Message): Boolean {
-    val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-    val hitch = WebView(host.context)
-    hitch.settings.javaScriptEnabled = true
-    hitch.settings.domStorageEnabled = true
-    hitch.webViewClient = object : WebViewClient() {
-        private var adopted = false
-
-        private fun adopt(url: String) {
-            if (adopted || !browserAdoptPopupUrl(url)) return
-            adopted = true
-            host.post {
-                host.loadUrl(url)
-                hitch.destroy()
-            }
-        }
-
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-            adopt(request.url?.toString().orEmpty())
-            return true
-        }
-
-        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-            adopt(url)
-        }
-    }
-    transport.webView = hitch
-    resultMsg.sendToTarget()
-    return true
-}
-
 private const val BRIDGE_NAME = "DenebTranslateBridge"
+private const val MAX_TRANSLATE_IN_FLIGHT = 8
+private const val POPUP_RESOLUTION_TIMEOUT_MS = 10_000L
 
 private class WebViewHolder {
+    @Volatile
     var web: WebView? = null
+    var lastCommandUrl: String = ""
+
+    @Volatile
+    var translationEnabled: Boolean = false
+    var rendererGone: Boolean = false
 }
 
 /**
@@ -401,37 +458,69 @@ private class TranslateBridge(
     private val translate: TranslateFn,
     private val holder: WebViewHolder,
 ) {
+    private val inFlight = AtomicInteger(0)
+
     // Diagnostic + UX: when translation is enabled, the page reports how many
     // translatable nodes it found. 0 → nothing to translate (e.g. the page is already
     // Korean, or the DOM walk found nothing); >0 → translating. Surfaced as a brief
     // toast so a silent no-op is visible to the user (and pinpoints where it breaks).
     @JavascriptInterface
     fun onEnable(count: Int) {
+        if (!holder.translationEnabled) return
         toast(if (count == 0) "DeepL로 번역할 텍스트를 찾지 못했습니다" else "DeepL 번역 중… ${count}개")
     }
 
     @JavascriptInterface
     fun translate(requestId: String, segmentsJson: String) {
+        if (!holder.translationEnabled || !isBrowserTranslateEnvelopeWithinLimits(requestId, segmentsJson.length)) {
+            reject(requestId)
+            return
+        }
         val segments = decodeStringList(segmentsJson)
-        if (segments.isEmpty()) return
+        if (!areBrowserTranslateSegmentsWithinLimits(segments)) {
+            reject(requestId)
+            return
+        }
+        if (inFlight.incrementAndGet() > MAX_TRANSLATE_IN_FLIGHT) {
+            inFlight.decrementAndGet()
+            reject(requestId)
+            return
+        }
         scope.launch {
-            val translated = runCatching { translate(segments, "ko") }.getOrNull()
-            if (translated == null) {
-                toast("DeepL 번역 실패 — 서버 응답 없음")
-                return@launch
+            try {
+                val translated = runCatching { translate(segments, "ko") }.getOrNull()
+                if (translated == null) {
+                    toast("DeepL 번역 실패 — 서버 응답 없음")
+                    reject(requestId)
+                    return@launch
+                }
+                if (translated.size != segments.size) {
+                    toast("DeepL 번역 응답 개수 불일치")
+                    reject(requestId)
+                    return@launch
+                }
+                val ridLiteral = jsStringLiteral(requestId)
+                val payloadLiteral = jsStringLiteral(encodeStringList(translated))
+                withContext(Dispatchers.Main) {
+                    holder.web?.evaluateJavascript(
+                        "window.DenebTranslate&&window.DenebTranslate.applyBatch($ridLiteral,$payloadLiteral);",
+                        null,
+                    )
+                }
+            } finally {
+                inFlight.decrementAndGet()
             }
-            if (translated.size != segments.size) {
-                toast("DeepL 번역 응답 개수 불일치")
-                return@launch
-            }
-            val ridLiteral = jsStringLiteral(requestId)
-            val payloadLiteral = jsStringLiteral(encodeStringList(translated))
-            withContext(Dispatchers.Main) {
-                holder.web?.evaluateJavascript(
-                    "window.DenebTranslate&&window.DenebTranslate.applyBatch($ridLiteral,$payloadLiteral);",
-                    null,
-                )
-            }
+        }
+    }
+
+    private fun reject(requestId: String) {
+        if (!isBrowserTranslateEnvelopeWithinLimits(requestId, 0)) return
+        val ridLiteral = jsStringLiteral(requestId)
+        Handler(Looper.getMainLooper()).post {
+            holder.web?.evaluateJavascript(
+                "window.DenebTranslate&&window.DenebTranslate.rejectBatch&&window.DenebTranslate.rejectBatch($ridLiteral);",
+                null,
+            )
         }
     }
 

@@ -46,6 +46,8 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,6 +64,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,19 +96,74 @@ fun DenebBrowserScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // More tile opens with an empty route URL; resume the last http(s) page, else
-    // the user-chosen home. An explicit deep-link / open_url keeps its own URL
-    // and then becomes the new last. Translate preference is restored so leave →
-    // re-enter keeps ON.
-    val state = remember(url) {
-        DenebWebViewState(
-            initialUrl = resolveBrowserStartUrl(
-                url,
-                appSettings.getBrowserLastUrl(),
-                appSettings.getBrowserHomeUrl(),
+    // Durable metadata restores up to five tab URLs after an app restart. The
+    // Android actual additionally parks a WebView Bundle in each runtime while
+    // switching, so back/forward history and scroll survive without retaining
+    // five renderer processes at once.
+    val initialStore = remember {
+        resolveBrowserTabStore(
+            stored = decodeBrowserTabStore(appSettings.getBrowserTabsJson()),
+            explicitUrl = url,
+            fallbackUrl = resolveBrowserStartUrl(
+                navUrl = "",
+                lastUrl = appSettings.getBrowserLastUrl(),
+                homeUrl = appSettings.getBrowserHomeUrl(),
             ),
-            translateEnabled = appSettings.isBrowserTranslateEnabled(),
-            adBlockEnabled = appSettings.isBrowserAdBlockEnabled(),
+            translateDefault = appSettings.isBrowserTranslateEnabled(),
+        )
+    }
+    val tabRuntimes = remember {
+        mutableStateMapOf<String, BrowserTabRuntime>().apply {
+            initialStore.tabs.forEach { snapshot ->
+                put(snapshot.id, snapshot.toRuntime(appSettings.isBrowserAdBlockEnabled()))
+            }
+        }
+    }
+    var tabStore by remember { mutableStateOf(initialStore) }
+
+    fun currentStore(): BrowserTabStore = BrowserTabStore(
+        activeId = tabStore.activeId,
+        tabs = tabStore.tabs.map { snapshot -> tabRuntimes[snapshot.id]?.snapshot() ?: snapshot },
+    )
+
+    fun persistStore(next: BrowserTabStore) {
+        val keepIds = next.tabs.mapTo(HashSet()) { it.id }
+        tabRuntimes.keys.toList().filterNot { it in keepIds }.forEach(tabRuntimes::remove)
+        next.tabs.forEach { snapshot ->
+            val runtime = tabRuntimes[snapshot.id]
+            if (runtime == null) {
+                tabRuntimes[snapshot.id] = snapshot.toRuntime(appSettings.isBrowserAdBlockEnabled())
+            } else {
+                runtime.lastUsedAtMs = snapshot.lastUsedAtMs
+            }
+        }
+        tabStore = next
+        appSettings.setBrowserTabsJson(encodeBrowserTabStore(next))
+    }
+
+    fun switchStore(next: BrowserTabStore) {
+        if (next.activeId != tabStore.activeId) {
+            tabRuntimes[tabStore.activeId]?.state?.let { oldState ->
+                oldState.jsDialog?.cancel()
+                oldState.jsDialog = null
+            }
+        }
+        persistStore(next)
+    }
+
+    val activeRuntime = tabRuntimes[tabStore.activeId] ?: error("browser active tab missing")
+    val state = activeRuntime.state
+
+    LaunchedEffect(url) {
+        // A navigation route can change while this screen stays composed. Resolve
+        // it into the existing tab set so background WebView Bundles survive.
+        switchStore(
+            resolveBrowserTabStore(
+                stored = currentStore(),
+                explicitUrl = url,
+                fallbackUrl = "",
+                translateDefault = appSettings.isBrowserTranslateEnabled(),
+            ),
         )
     }
     LaunchedEffect(state.translateEnabled) {
@@ -116,6 +175,21 @@ fun DenebBrowserScreen(
         if (state.adBlockEnabled != appSettings.isBrowserAdBlockEnabled()) {
             appSettings.setBrowserAdBlockEnabled(state.adBlockEnabled)
         }
+        tabRuntimes.values.forEach { runtime ->
+            if (runtime.state.adBlockEnabled != state.adBlockEnabled) {
+                runtime.state.adBlockEnabled = state.adBlockEnabled
+            }
+        }
+    }
+    LaunchedEffect(tabStore.activeId, state.currentUrl, state.pageTitle, state.translateEnabled) {
+        val next = updateBrowserTab(
+            store = currentStore(),
+            id = tabStore.activeId,
+            url = state.currentUrl.ifBlank { state.url },
+            title = state.pageTitle,
+            translateEnabled = state.translateEnabled,
+        )
+        persistStore(next)
     }
     // Disk-back the translate cache (encrypted cached-section store) so recent
     // pages' translations survive an app restart. Constant owner: translations
@@ -131,6 +205,7 @@ fun DenebBrowserScreen(
     }
     var showBookmarks by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showTabs by remember { mutableStateOf(false) }
     var homeUrl by remember { mutableStateOf(appSettings.getBrowserHomeUrl()) }
     var bookmarks by remember { mutableStateOf(decodeBrowserBookmarks(appSettings.getBrowserBookmarksJson())) }
     var history by remember { mutableStateOf(decodeBrowserHistory(appSettings.getBrowserHistoryJson())) }
@@ -162,6 +237,7 @@ fun DenebBrowserScreen(
         modifier = modifier,
         bookmarksCount = bookmarks.size,
         historyCount = history.size,
+        tabCount = tabStore.tabs.size,
         homeUrl = homeUrl,
         isBookmarked = bookmarked,
         canBookmark = bookmarkable,
@@ -170,6 +246,7 @@ fun DenebBrowserScreen(
         },
         onShowBookmarks = { showBookmarks = true },
         onShowHistory = { showHistory = true },
+        onShowTabs = { showTabs = true },
         onGoHome = {
             val target = homeUrl.trim()
             if (canBookmarkUrl(target)) state.load(target)
@@ -193,17 +270,29 @@ fun DenebBrowserScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
         } else {
-            DenebWebView(
-                state = state,
-                // Recently seen segments (back-nav, reload, shared site chrome) apply
-                // instantly from the LRU cache; only misses round-trip to DeepL.
-                translate = { segments, lang ->
-                    browserTranslateCache.translate(segments, lang) { miss, missLang ->
-                        client.translateSegments(miss, missLang)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            )
+            key(activeRuntime.id, state.rendererGeneration) {
+                DenebWebView(
+                    state = state,
+                    // Recently seen segments (back-nav, reload, shared site chrome) apply
+                    // instantly from the LRU cache; only misses round-trip to DeepL.
+                    translate = { segments, lang ->
+                        browserTranslateCache.translate(segments, lang) { miss, missLang ->
+                            client.translateSegments(miss, missLang)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    onOpenNewTab = { target ->
+                        switchStore(
+                            resolveBrowserTabStore(
+                                stored = currentStore(),
+                                explicitUrl = target,
+                                fallbackUrl = "",
+                                translateDefault = appSettings.isBrowserTranslateEnabled(),
+                            ),
+                        )
+                    },
+                )
+            }
         }
     }
     var diagnosticsCopied by remember { mutableStateOf(false) }
@@ -285,7 +374,59 @@ fun DenebBrowserScreen(
             onDismiss = { showHistory = false },
         )
     }
+    if (showTabs) {
+        BrowserTabsSheet(
+            store = currentStore(),
+            onSelect = { id ->
+                switchStore(selectBrowserTab(currentStore(), id))
+                showTabs = false
+            },
+            onClose = { id ->
+                switchStore(
+                    closeBrowserTab(
+                        store = currentStore(),
+                        id = id,
+                        translateDefault = appSettings.isBrowserTranslateEnabled(),
+                    ),
+                )
+            },
+            onAdd = {
+                switchStore(
+                    addBrowserTab(
+                        store = currentStore(),
+                        translateDefault = appSettings.isBrowserTranslateEnabled(),
+                    ),
+                )
+                showTabs = false
+            },
+            onDismiss = { showTabs = false },
+        )
+    }
 }
+
+private class BrowserTabRuntime(
+    val id: String,
+    val state: DenebWebViewState,
+    var lastUsedAtMs: Long,
+) {
+    fun snapshot(): BrowserTabSnapshot = BrowserTabSnapshot(
+        id = id,
+        url = state.currentUrl.ifBlank { state.url },
+        title = state.pageTitle,
+        translateEnabled = state.translateEnabled,
+        lastUsedAtMs = lastUsedAtMs,
+    )
+}
+
+private fun BrowserTabSnapshot.toRuntime(adBlockEnabled: Boolean): BrowserTabRuntime = BrowserTabRuntime(
+    id = id,
+    state = DenebWebViewState(
+        initialUrl = url,
+        translateEnabled = translateEnabled,
+        adBlockEnabled = adBlockEnabled,
+    ),
+    lastUsedAtMs = lastUsedAtMs,
+)
 
 /**
  * Stateless browser chrome, separated from the stateful shell so renderPreviews can
@@ -309,12 +450,14 @@ fun DenebBrowserChrome(
     modifier: Modifier = Modifier,
     bookmarksCount: Int = 0,
     historyCount: Int = 0,
+    tabCount: Int = 1,
     homeUrl: String = "",
     isBookmarked: Boolean = false,
     canBookmark: Boolean = false,
     onToggleBookmark: (() -> Unit)? = null,
     onShowBookmarks: (() -> Unit)? = null,
     onShowHistory: (() -> Unit)? = null,
+    onShowTabs: (() -> Unit)? = null,
     onGoHome: (() -> Unit)? = null,
     onSetHome: (() -> Unit)? = null,
     onClearHome: (() -> Unit)? = null,
@@ -341,15 +484,21 @@ fun DenebBrowserChrome(
             // A failed load leaves the WebView blank; say why instead of showing
             // an empty page with no explanation.
             state.loadError?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.errorContainer)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = state::retry) { Text("재시도") }
+                }
             }
             HorizontalDivider(color = denebHairline())
             // Bottom chrome (Safari-style): close · forward · editable address bar
@@ -477,6 +626,29 @@ fun DenebBrowserChrome(
                         contentDescription = "북마크 목록",
                         tint = if (isBookmarked) denebInsight() else denebHint(),
                     )
+                }
+                IconButton(
+                    onClick = {
+                        haptics.tap()
+                        onShowTabs?.invoke()
+                    },
+                    enabled = onShowTabs != null,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    BadgedBox(
+                        badge = {
+                            Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                Text(tabCount.toString())
+                            }
+                        },
+                    ) {
+                        Icon(
+                            Icons.Outlined.ContentCopy,
+                            contentDescription = "탭 ${tabCount}개",
+                            tint = denebHint(),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
                 Box {
                     IconButton(

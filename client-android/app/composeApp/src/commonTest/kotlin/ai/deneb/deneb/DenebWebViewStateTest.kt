@@ -145,4 +145,28 @@ class DenebWebViewStateTest {
         assertEquals(0, state.reloadTick)
         assertEquals(0, state.stopTick)
     }
+
+    @Test
+    fun rendererFailureRequiresExplicitRetryAndAdvancesGeneration() {
+        val state = DenebWebViewState("https://example.com")
+        state.platformState = "saved"
+        state.canGoBack = true
+        state.canGoForward = true
+        state.progress = 75
+
+        state.markRendererGone(crashed = true)
+
+        assertTrue(state.rendererRecoveryPending)
+        assertEquals(1, state.rendererGeneration)
+        assertEquals(null, state.platformState)
+        assertTrue(state.loadError.orEmpty().contains("비정상 종료"))
+        assertFalse(state.canGoBack)
+        assertFalse(state.canGoForward)
+        assertEquals(0, state.progress)
+
+        state.retry()
+        assertFalse(state.rendererRecoveryPending)
+        assertEquals(null, state.loadError)
+        assertEquals(1, state.retryTick)
+    }
 }
