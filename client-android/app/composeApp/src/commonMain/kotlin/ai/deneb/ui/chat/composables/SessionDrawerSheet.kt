@@ -358,8 +358,7 @@ internal fun isSystemSession(id: String): Boolean = when (id.substringBefore(':'
 
 // Feed-card side chats are keyed client:main:wf-<slug>. They stay under the
 // client: prefix (so isSystemSession is false) but fold into their own group.
-internal fun isWorkCardSession(id: String): Boolean =
-    id.substringAfterLast(':').startsWith("wf-")
+internal fun isWorkCardSession(id: String): Boolean = id.substringAfterLast(':').startsWith("wf-")
 
 private const val RENAME_LABEL_MAX = 60
 
