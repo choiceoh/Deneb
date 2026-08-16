@@ -518,7 +518,10 @@ object Actions {
                     ),
                 )
             }
-            return ActionResult(Stock.settleTakeovers(next), true, "${target.name} 주식을 매수했습니다.")
+            // 마지막 경쟁사를 삼켰다면 여기서 바로 승리가 확정돼야 한다.
+            // 다음 분기까지 기다리게 하면 그 사이에 파산해 패배로 뒤집힐 수도 있다.
+            val settled = TurnEngine.evaluateOutcome(Stock.settleTakeovers(next))
+            return ActionResult(settled, true, "${target.name} 주식을 매수했습니다.")
         }
 
         val sell = -cmd.shares

@@ -202,6 +202,8 @@ data class QuarterResult(
     val depreciation: Double = 0.0,
     val interestCost: Double = 0.0,
     val businessIncome: Double = 0.0,
+    /** 파업 합의금 등 그 분기에만 생긴 일시 비용 */
+    val extraordinaryCost: Double = 0.0,
     val tax: Double = 0.0,
     val net: Double = 0.0,
     val pax: Double = 0.0,
@@ -214,7 +216,7 @@ data class QuarterResult(
     val totalRevenue get() = revenue + cargoRevenue + businessIncome
     val operatingCost
         get() = fuelCost + crewCost + maintCost + landingCost +
-            paxServiceCost + distributionCost + overhead + adSpend + depreciation
+            paxServiceCost + distributionCost + overhead + adSpend + depreciation + extraordinaryCost
     val loadFactor get() = if (asks <= 0) 0.0 else (rpk / asks).coerceAtMost(1.0)
 }
 
@@ -247,6 +249,11 @@ data class Airline(
     val boughtThisQuarter: Map<String, Double> = emptyMap(),
     /** 이번 분기에 이미 발행한 신주 수. 증자 한도도 분기 누적으로 재야 우회가 막힌다. */
     val issuedThisQuarter: Double = 0.0,
+    /**
+     * 결산에서 한 번에 털어낼 일시 비용 (파업 합의금 등). 현금에서 바로 빼면
+     * 손익계산서의 순익과 실제 현금 변동이 어긋나 리포트가 앞뒤가 안 맞게 된다.
+     */
+    val pendingCharges: Double = 0.0,
     val adBudget: Map<Region, Double> = emptyMap(),
     val alive: Boolean = true,
     val mergedInto: String? = null,

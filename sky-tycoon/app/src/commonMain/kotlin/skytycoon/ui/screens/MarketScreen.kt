@@ -100,7 +100,9 @@ fun MarketScreen(vm: GameViewModel, wide: Boolean) {
             val myStake = Stock.ownershipRatio(s, player.id, rival.id)
             val annualNet = rival.results.takeLast(4).sumOf { it.net }
             val limit = if (alive) Stock.maxBuyableThisQuarter(s, player.id, rival.id) else 0.0
-            val cost = if (limit > 0) Stock.buyCost(s, player.id, rival.id, limit) else 0.0
+            // 한도 전액을 못 내더라도 낼 수 있는 만큼은 살 수 있어야 한다.
+            val buyable = if (alive) Stock.affordableShares(s, player.id, rival.id, player.cash) else 0.0
+            val cost = if (buyable > 0) Stock.buyCost(s, player.id, rival.id, buyable) else 0.0
 
             Column(
                 Modifier
@@ -138,11 +140,15 @@ fun MarketScreen(vm: GameViewModel, wide: Boolean) {
                     VSpace(8)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { vm.run(Command.TradeShares(player.id, rival.id, limit)) },
-                            enabled = limit > 0 && player.cash >= cost,
+                            onClick = { vm.run(Command.TradeShares(player.id, rival.id, buyable)) },
+                            enabled = buyable > rival.shares * 0.001,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text("지분 매수 (${moneyShort(cost)})", fontSize = 11.sp)
+                            Text(
+                                if (buyable <= 0) "매수 불가" else
+                                    "지분 ${percent(buyable / rival.shares, 1)} 매수 (${moneyShort(cost)})",
+                                fontSize = 11.sp,
+                            )
                         }
                         if (myStake > 0) {
                             OutlinedButton(
@@ -155,8 +161,7 @@ fun MarketScreen(vm: GameViewModel, wide: Boolean) {
                         }
                     }
                     Text(
-                        "한 분기 매입 상한 ${percent(Balance.MAX_STAKE_PER_QUARTER)} · " +
-                            "50% 초과 시 인수 완료",
+                        "이번 분기 잔여 한도 ${percent(limit / rival.shares, 1)} · 50% 초과 시 인수 완료",
                         color = TextLow,
                         fontSize = 10.sp,
                     )

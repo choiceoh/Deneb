@@ -72,6 +72,9 @@ fun QuarterReportDialog(vm: GameViewModel, report: QuarterResult, onDismiss: () 
                 KeyValue("광고", moneyShort(report.adSpend))
                 KeyValue("감가상각", moneyShort(report.depreciation))
                 KeyValue("이자", moneyShort(report.interestCost))
+                if (report.extraordinaryCost > 0) {
+                    KeyValue("일시 비용(파업 등)", moneyShort(report.extraordinaryCost))
+                }
                 KeyValue("법인세", moneyShort(report.tax))
                 KeyValue("합계", moneyShort(report.operatingCost + report.interestCost + report.tax), TextHigh)
 

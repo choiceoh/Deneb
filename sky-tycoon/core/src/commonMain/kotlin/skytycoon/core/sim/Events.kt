@@ -204,7 +204,8 @@ object Events {
 
         // 항공 사고 — 노후 기재를 많이 굴릴수록 확률이 오른다.
         for (a in s.livingAirlines) {
-            val planes = s.planesOf(a.id)
+            // 노선에 배속돼 실제로 뜨는 기재만 대상 — 세워둔 비행기가 착륙 사고를 낼 수는 없다.
+            val planes = s.planesOf(a.id).filter { it.routeId != null }
             if (planes.isEmpty()) continue
             val avgAge = planes.sumOf { it.ageQuarters }.toDouble() / planes.size
             val p = 0.004 + (avgAge / 100.0) * 0.016 + (planes.size / 400.0)
@@ -224,7 +225,13 @@ object Events {
         if (rng.chance(0.045)) {
             val a = rng.pick(s.livingAirlines)
             val cost = 6e6 * s.world.inflation
-            s = s.withAirline(a.id) { it.copy(cash = it.cash - cost, safety = (it.safety - 0.02).coerceAtLeast(0.55)) }
+            // 현금을 직접 빼지 않고 결산에 넘긴다 — 그래야 순익과 현금 변동이 맞는다.
+            s = s.withAirline(a.id) {
+                it.copy(
+                    pendingCharges = it.pendingCharges + cost,
+                    safety = (it.safety - 0.02).coerceAtLeast(0.55),
+                )
+            }
                 .news(NewsKind.RIVAL, "${a.name} 승무원 파업", "임금 협상 결렬로 운항에 차질이 빚어졌습니다.")
         }
 

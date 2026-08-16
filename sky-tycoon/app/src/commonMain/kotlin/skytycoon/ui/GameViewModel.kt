@@ -102,9 +102,12 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         val current = state ?: return
         if (current.outcome != null) return
         busy = true
+        val settledTurn = current.turn
         val next = TurnEngine.advance(current)
         state = next
-        pendingReport = next.airlineOrNull(next.playerId)?.lastResult
+        // 인수당하면 이번 분기 결산이 없다. turn 을 확인하지 않으면 지난 분기 리포트가
+        // 패배 화면 앞에 한 번 더 뜬다.
+        pendingReport = next.airlineOrNull(next.playerId)?.lastResult?.takeIf { it.turn == settledTurn }
         busy = false
         if (!autoSave()) message = autoSaveWarning
     }

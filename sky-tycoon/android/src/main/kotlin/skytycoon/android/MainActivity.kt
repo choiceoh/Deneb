@@ -27,8 +27,16 @@ class MainActivity : ComponentActivity() {
 private class AndroidSaveStore(private val dir: File) : SaveStore {
     private fun file(slot: SaveSlot) = File(dir, if (slot == SaveSlot.AUTO) "auto.json" else "manual.json")
 
-    override fun write(slot: SaveSlot, text: String): Boolean =
-        runCatching { file(slot).writeText(text) }.isSuccess
+    // 임시 파일에 쓰고 바꿔 끼운다 — 쓰다 실패해도 직전 세이브는 남는다.
+    override fun write(slot: SaveSlot, text: String): Boolean = runCatching {
+        val target = file(slot)
+        val tmp = File(dir, "${target.name}.tmp")
+        tmp.writeText(text)
+        if (!tmp.renameTo(target)) {
+            target.delete()
+            check(tmp.renameTo(target)) { "세이브 교체 실패" }
+        }
+    }.isSuccess
 
     override fun read(slot: SaveSlot): String? =
         file(slot).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }

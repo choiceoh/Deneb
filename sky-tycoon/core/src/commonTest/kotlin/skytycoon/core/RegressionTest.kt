@@ -4,12 +4,15 @@ import skytycoon.core.data.AircraftCatalog
 import skytycoon.core.model.BusinessType
 import skytycoon.core.model.CityState
 import skytycoon.core.model.GameState
+import skytycoon.core.model.NewsKind
 import skytycoon.core.model.Order
 import skytycoon.core.sim.Actions
 import skytycoon.core.sim.Balance
 import skytycoon.core.sim.Command
 import skytycoon.core.sim.Economics
+import skytycoon.core.sim.Events
 import skytycoon.core.sim.NewGame
+import skytycoon.core.sim.Rng
 import skytycoon.core.sim.Stock
 import skytycoon.core.sim.TurnEngine
 import kotlin.math.abs
@@ -365,6 +368,95 @@ class RegressionTest {
         assertTrue(
             abs(player.sharePrice - repriced) / repriced.coerceAtLeast(1.0) < 0.02,
             "합병으로 자산이 바뀌었는데 주가가 갱신되지 않았다 (표시 ${player.sharePrice}, 실제 $repriced)",
+        )
+    }
+
+    // ------------------------------------------------------------ 일시 비용
+
+    @Test
+    fun `파업 합의금은 순익과 현금에 함께 반영된다`() {
+        // 현금에서 몰래 빼면 리포트의 순익과 잔고 변동이 어긋나 플레이어가 원인을 못 찾는다.
+        val base = fresh()
+        val charge = 20e6
+        val hit = base.withAirline2("hanseong") { it.copy(pendingCharges = charge) }
+
+        val clean = TurnEngine.advance(base).airline("hanseong")
+        val struck = TurnEngine.advance(hit).airline("hanseong")
+
+        assertEquals(0.0, clean.lastResult!!.extraordinaryCost)
+        assertEquals(charge, struck.lastResult!!.extraordinaryCost)
+
+        val netGap = clean.lastResult!!.net - struck.lastResult!!.net
+        assertTrue(netGap > charge * 0.5, "합의금 ${charge}가 순익에 반영되지 않았다 (차이 $netGap)")
+        assertTrue(
+            abs((clean.cash - struck.cash) - netGap) < 1.0,
+            "순익 감소분과 현금 감소분이 다르다 (현금 ${clean.cash - struck.cash}, 순익 $netGap)",
+        )
+        assertEquals(0.0, struck.pendingCharges, "털어내지 않으면 다음 분기에 또 청구된다")
+    }
+
+    // ------------------------------------------------------------ 사고 대상
+
+    @Test
+    fun `노선에 배속되지 않은 기재는 사고를 내지 않는다`() {
+        var s = fresh()
+        // 플레이어 기재를 전부 계류시키고 아주 낡게 만든다 — 뜨지 않으니 사고가 날 수 없다.
+        s = s.copy(
+            planes = s.planes.map {
+                if (it.airlineId == "hanseong") it.copy(routeId = null, ageQuarters = 400) else it
+            },
+            routes = s.routes.map { if (it.airlineId == "hanseong") it.copy(planeIds = emptyList()) else it },
+        )
+        val playerName = s.player.name
+
+        val rng = Rng(12345)
+        var t = s
+        repeat(200) { t = Events.fire(t, rng) }
+
+        val accidents = t.news.filter { it.kind == NewsKind.ACCIDENT }
+        assertTrue(accidents.isNotEmpty(), "200분기를 굴렸는데 사고가 한 건도 없다 — 테스트가 헛돌고 있다")
+        assertTrue(
+            accidents.none { it.headline.startsWith(playerName) },
+            "격납고에 세워둔 비행기가 착륙 사고를 냈다",
+        )
+    }
+
+    // ------------------------------------------------------------ 마지막 분기
+
+    @Test
+    fun `마지막 분기를 넘길 때는 다음 해 물가가 얹히지 않는다`() {
+        val s = fresh().let { it.copy(turn = it.totalTurns - 1) }
+        val inflation = s.world.inflation
+        val end = TurnEngine.advance(s)
+
+        assertTrue(end.outcome != null, "마지막 분기를 넘겼는데 판이 끝나지 않았다")
+        assertEquals(
+            inflation,
+            end.world.inflation,
+            "플레이하지도 않을 해의 물가가 최종 기업가치 순위에 얹혔다",
+        )
+    }
+
+    // ------------------------------------------------------------ 즉시 승리
+
+    @Test
+    fun `마지막 경쟁사를 인수하면 그 자리에서 판이 끝난다`() {
+        var s = fresh()
+        val rivals = s.livingAirlines.filter { it.id != "hanseong" }
+        val last = rivals.last()
+        // 나머지는 이미 과반, 마지막 한 곳만 45% — 이번 매수가 판을 끝낸다.
+        s = s.withAirline2("hanseong") { p ->
+            p.copy(
+                cash = 5e9,
+                holdings = rivals.associate { it.id to it.shares * (if (it.id == last.id) 0.45 else 0.60) },
+            )
+        }
+
+        val r = Actions.execute(s, Command.TradeShares("hanseong", last.id, last.shares * 0.06))
+        assertTrue(r.ok, r.message)
+        assertTrue(
+            r.state.outcome?.won == true,
+            "경쟁사를 모두 흡수했는데 승리 선언이 다음 턴으로 미뤄졌다",
         )
     }
 

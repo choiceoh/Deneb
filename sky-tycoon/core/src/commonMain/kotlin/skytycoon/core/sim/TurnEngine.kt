@@ -41,7 +41,9 @@ object TurnEngine {
 
         s = clearQuarterlyCounters(s)
         // 해가 바뀌는 경계에서 물가·성장을 올린다 — 새해 첫 화면부터 새 가격이 보이도록.
-        s = Events.yearTick(s, s.turn + 1)
+        // 단, 마지막 분기를 넘기는 순간에는 하지 않는다 (플레이하지도 않을 해의 성장이
+        // 최종 기업가치 순위에 얹히고, 결과 화면이 다음 해 1분기로 표시된다).
+        if (s.turn + 1 < s.totalTurns) s = Events.yearTick(s, s.turn + 1)
         s = s.copy(turn = s.turn + 1, rngState = rng.state)
         return checkEnd(s)
     }
@@ -96,6 +98,7 @@ object TurnEngine {
                 )
             }
 
+            val extraordinary = airline.pendingCharges
             val overhead = Economics.overhead(s, airline)
             val depreciation = Economics.depreciation(planes)
             val businessIncome = airline.businesses.sumOf { it.type.income } * s.world.inflation
@@ -104,7 +107,7 @@ object TurnEngine {
             val interestCost = airline.debt * Actions.interestRate(s, airline) / 4.0
 
             val revenue = passengerRevenue + cargoRevenue + businessIncome
-            val pretax = revenue - cost.total - overhead - depreciation - adSpend - interestCost
+            val pretax = revenue - cost.total - overhead - depreciation - adSpend - interestCost - extraordinary
             val tax = if (pretax > 0) pretax * Balance.TAX_RATE else 0.0
             val net = pretax - tax
             // 감가상각은 현금이 나가지 않는다.
@@ -126,6 +129,7 @@ object TurnEngine {
                 depreciation = depreciation,
                 interestCost = interestCost,
                 businessIncome = businessIncome,
+                extraordinaryCost = extraordinary,
                 tax = tax,
                 net = net,
                 pax = pax,
@@ -139,6 +143,7 @@ object TurnEngine {
             s = s.withAirline(airline.id) {
                 it.copy(
                     cash = it.cash + cashFlow,
+                    pendingCharges = 0.0,
                     results = (it.results + result).takeLast(80),
                     negativeQuarters = if (equityAfter < 0) it.negativeQuarters + 1 else 0,
                 )
@@ -325,6 +330,10 @@ object TurnEngine {
             .filter { it.alive }
             .map { it to Economics.equity(state, it) }
             .sortedByDescending { it.second }
+
+    /** 플레이어 행동(지분 인수 등)으로 판이 끝났는지 즉시 확인할 때 쓴다. */
+    fun evaluateOutcome(state: GameState): GameState =
+        if (state.outcome != null) state else checkEnd(state)
 
     private fun checkEnd(state: GameState): GameState {
         val player = state.airlineOrNull(state.playerId)

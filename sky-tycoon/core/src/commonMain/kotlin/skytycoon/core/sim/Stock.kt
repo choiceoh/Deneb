@@ -55,6 +55,25 @@ object Stock {
     }
 
     /**
+     * 주어진 현금으로 살 수 있는 최대 주식 수. 매집 단가가 지분율에 따라 오르므로
+     * 역산이 어렵다 — 이분 탐색으로 구한다.
+     *
+     * 이게 없으면 UI 가 "이번 분기 한도 전액"만 살 수 있게 만들어, 45% 를 쥐고
+     * 6% 는 살 수 있는 플레이어가 인수를 끝내지 못한다.
+     */
+    fun affordableShares(state: GameState, buyerId: String, targetId: String, cash: Double): Double {
+        var lo = 0.0
+        var hi = maxBuyableThisQuarter(state, buyerId, targetId)
+        if (hi <= 0.0 || cash <= 0.0) return 0.0
+        if (buyCost(state, buyerId, targetId, hi) <= cash) return hi
+        repeat(40) {
+            val mid = (lo + hi) / 2
+            if (buyCost(state, buyerId, targetId, mid) <= cash) lo = mid else hi = mid
+        }
+        return lo
+    }
+
+    /**
      * 지분 50% 초과를 확보한 항공사가 있으면 흡수합병한다.
      * 플레이어가 인수당하면 게임이 끝난다.
      */
