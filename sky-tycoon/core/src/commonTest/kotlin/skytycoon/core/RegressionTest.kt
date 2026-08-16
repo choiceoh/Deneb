@@ -5,6 +5,7 @@ import skytycoon.core.data.Cities
 import skytycoon.core.data.Scenarios
 import skytycoon.core.model.Business
 import skytycoon.core.model.BusinessType
+import skytycoon.core.model.CityEffect
 import skytycoon.core.model.CityState
 import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsKind
@@ -326,7 +327,7 @@ class RegressionTest {
         // 사스처럼 한쪽 도시만 수요가 반 토막 나는 이벤트.
         val hit = s.copy(
             cityState = s.cityState + (a.id to (s.cityState[a.id] ?: CityState())
-                .copy(boost = 0.45, boostUntilTurn = s.turn + 2)),
+                .copy(effects = listOf(CityEffect(0.45, s.turn + 2)))),
         )
         val after = skytycoon.core.sim.Demand.quarterly(hit, a, b).total
         assertTrue(after < before * 0.6, "한쪽만 꺾인 이벤트가 반대쪽 1.0 에 가려 사라졌다")
@@ -812,7 +813,7 @@ class RegressionTest {
         s = s.copy(
             cityState = s.cityState + (
                 "beijing" to (s.cityState["beijing"] ?: CityState())
-                    .copy(boost = 0.5, boostUntilTurn = s.turn + 1)
+                    .copy(effects = listOf(CityEffect(0.5, s.turn + 1)))
                 ),
         )
 
@@ -821,6 +822,40 @@ class RegressionTest {
 
         assertTrue(boost < 2.0, "폭락을 지우고 올림픽 부스트가 통째로 덮였다 (배율 $boost)")
         assertTrue(boost > 0.5, "올림픽이 아예 반영되지 않았다 (배율 $boost)")
+    }
+
+    @Test
+    fun `겹친 일시 효과는 각자 제 만료에 꺼진다`() {
+        // 짧은 폭락과 긴 붐이 겹치면, 폭락은 제 때 끝나고 붐만 남아야 한다.
+        val cs = CityState(
+            effects = listOf(
+                CityEffect(mult = 0.5, untilTurn = 10),
+                CityEffect(mult = 2.0, untilTurn = 20),
+            ),
+        )
+        assertTrue(abs(cs.boostAt(10) - 1.0) < 1e-9, "둘 다 걸린 동안은 0.5×2.0=1.0 이어야 한다")
+        assertTrue(abs(cs.boostAt(11) - 2.0) < 1e-9, "폭락이 만료됐는데 붐만 남지 않았다 (${cs.boostAt(11)})")
+        assertTrue(abs(cs.boostAt(21) - 1.0) < 1e-9, "둘 다 만료됐는데 효과가 남아 있다")
+
+        // 만료된 효과는 털어내야 20년치가 쌓이지 않는다.
+        assertEquals(1, cs.pruned(11).effects.size)
+        assertEquals(0, cs.pruned(21).effects.size)
+    }
+
+    @Test
+    fun `연간 수요 추정은 해를 넘기는 분기의 성장까지 반영한다`() {
+        // 3분기에서 내다보면 네 분기 중 둘이 새해다. 턴만 올리면 그 둘을 작년 수준으로 깐다.
+        val s = fresh().let { it.copy(turn = it.turn + 2) }
+        val a = Cities["seoul"]
+        val b = Cities["tokyo"]
+
+        val forward = Demand.annualEstimate(s, a, b)
+        // 성장을 빼고 계산한 값 (예전 방식) 보다는 커야 한다.
+        val flat = (0 until 4).sumOf { q -> Demand.quarterly(s.copy(turn = s.turn + q), a, b).total }
+        assertTrue(
+            forward > flat,
+            "해를 넘겨도 추정이 그대로다 — 여행 보급·도시 성장이 빠졌다 ($forward vs $flat)",
+        )
     }
 
     @Test

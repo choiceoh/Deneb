@@ -89,9 +89,15 @@ object Demand {
      * (폐쇄도 마찬가지로 지난 분기까지 0 으로 만든다). 앞을 보면 효과가 제때 꺼진다.
      */
     fun annualEstimate(state: GameState, a: City, b: City): Double {
+        var s = state
         var sum = 0.0
-        for (q in 0 until 4) {
-            sum += quarterly(state.copy(turn = state.turn + q), a, b).total
+        repeat(4) {
+            sum += quarterly(s, a, b).total
+            // 해를 넘어가는 분기에는 실제 진행과 똑같이 여행 보급·도시 성장을 올린다.
+            // 턴만 올리면 새해 분기를 작년 수준으로 깔아, 성장 빠른 도시쌍의 추정이
+            // 10% 넘게 낮아지고 후보 순위가 뒤바뀐다.
+            val nextTurn = s.turn + 1
+            s = Events.yearTick(s, nextTurn).copy(turn = nextTurn)
         }
         return sum
     }

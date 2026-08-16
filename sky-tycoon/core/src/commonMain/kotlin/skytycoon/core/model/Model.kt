@@ -118,20 +118,35 @@ data class World(
     val inflation: Double,
 )
 
+/** 도시에 한시적으로 걸린 수요 배율 하나 (올림픽·전염병·관광 붐 등). */
+@Serializable
+data class CityEffect(val mult: Double, val untilTurn: Int)
+
 @Serializable
 data class CityState(
     /** 도시 성장 누적치 */
     val dev: Double = 1.0,
-    /** 일시적 수요 배율 (엑스포·올림픽 등) */
-    val boost: Double = 1.0,
-    val boostUntilTurn: Int = -1,
+    /**
+     * 겹쳐 걸린 일시 효과들. 배율 하나로 합쳐 두면 만료가 서로 다를 때 짧은 쪽이
+     * 긴 쪽의 만료까지 살아남는다 — 사스 폭락이 관광 붐 끝까지 따라오는 식.
+     * 따로 들고 있어야 각자 제 때 꺼진다.
+     */
+    val effects: List<CityEffect> = emptyList(),
     /** 공항 폐쇄 (화산·전쟁) */
     val closedUntilTurn: Int = -1,
     /** 신공항·확장으로 늘어난 슬롯 */
     val extraSlots: Int = 0,
 ) {
     fun isClosed(turn: Int) = turn <= closedUntilTurn
-    fun boostAt(turn: Int) = if (turn <= boostUntilTurn) boost else 1.0
+
+    fun boostAt(turn: Int): Double = effects
+        .filter { turn <= it.untilTurn }
+        .fold(1.0) { acc, e -> acc * e.mult }
+        .coerceIn(0.2, 3.0)
+
+    /** 만료된 효과를 털어낸다 — 안 그러면 20년치가 그대로 쌓인다. */
+    fun pruned(turn: Int): CityState =
+        if (effects.none { turn > it.untilTurn }) this else copy(effects = effects.filter { turn <= it.untilTurn })
 }
 
 @Serializable
