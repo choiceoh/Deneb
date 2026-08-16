@@ -267,6 +267,7 @@ describe("NotebookPane", () => {
     await userEvent.click(screen.getByRole("button", { name: "추가" }));
 
     // add_file carried the raw bytes + filename + mime — NOT a typed path.
+    await waitFor(() => expect(uploaded).toHaveLength(1));
     const last = uploaded.at(-1);
     expect(last).toMatchObject({ filename: "topsolar.pdf", title: "계약서", mimeType: "application/pdf" });
     expect(last?.dataBase64.length).toBeGreaterThan(0);
