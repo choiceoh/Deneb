@@ -3,8 +3,10 @@ package chat
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -464,6 +466,36 @@ func (h *Handler) EnqueueSteer(sessionKey, note string) bool {
 		return false
 	}
 	return h.steer.Enqueue(sessionKey, note)
+}
+
+// SteerNative is the explicit mid-turn correction path for the native
+// client (miniapp.chat.steer). Unlike auto-steer on SendSync, this does
+// not start a turn and does not return an assistant ack — the in-flight
+// stream keeps going. Returns false when there is no interactive run or
+// the note is empty.
+func (h *Handler) SteerNative(sessionKey, note string) bool {
+	if h == nil {
+		return false
+	}
+	trimmed := strings.TrimSpace(note)
+	if trimmed == "" {
+		return false
+	}
+	if h.abort == nil || !h.abort.HasActiveInteractiveRun(sessionKey) {
+		return false
+	}
+	if !h.EnqueueSteer(sessionKey, trimmed) {
+		return false
+	}
+	if h.transcript != nil {
+		now := dentime.Now()
+		userMsg := NewTextChatMessage("user", formatTurnUserMessage(trimmed, now), now.UnixMilli())
+		if err := h.transcript.Append(sessionKey, userMsg); err != nil {
+			h.logger.Error("native-steer: persist steered user message failed", "sessionKey", sessionKey, "error", err)
+		}
+	}
+	h.logger.Info("native-steer: folded mid-run note into the active run", "sessionKey", sessionKey, "runes", utf8.RuneCountInString(trimmed))
+	return true
 }
 
 // SteerQueue returns the queue for internal wiring (used by runDeps to

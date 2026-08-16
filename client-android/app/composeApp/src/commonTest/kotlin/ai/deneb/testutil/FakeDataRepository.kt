@@ -102,6 +102,27 @@ class FakeDataRepository : DataRepository {
         savedConversations.update { it.filter { c -> c.id != id } }
     }
 
+    val renameCalls = mutableListOf<Pair<String, String>>()
+
+    override suspend fun renameConversation(id: String, label: String) {
+        renameCalls.add(id to label)
+        savedConversations.update { list ->
+            list.map { if (it.id == id) it.copy(title = label) else it }
+        }
+    }
+
+    /**
+     * Default false so existing queue-while-loading tests keep the after-turn
+     * path. Set true to exercise mid-turn steer.
+     */
+    var steerResult: Boolean = false
+    val steerCalls = mutableListOf<String>()
+
+    override suspend fun steer(note: String): Boolean {
+        steerCalls.add(note)
+        return steerResult
+    }
+
     override fun startNewChat() {
         currentConversationId.value = null
         chatHistory.value = emptyList()

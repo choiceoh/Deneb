@@ -93,6 +93,11 @@ func Methods(deps Deps) map[string]rpcutil.HandlerFunc {
 		"miniapp.chat.send":    handleMiniappChatSend(deps),
 		"miniapp.chat.history": handleMiniappHistory(deps),
 	}
+	// Mid-turn steer is optional so a Chat-ready gateway without the
+	// pipeline hook still exposes send/history.
+	if deps.SteerNative != nil {
+		m["miniapp.chat.steer"] = handleMiniappChatSteer(deps)
+	}
 	// Image capture (share a photo/screenshot to Deneb) needs the OCR sidecar
 	// wired; skip the method cleanly when it isn't.
 	if deps.OcrImage != nil {
@@ -976,6 +981,43 @@ func handleMiniappEventIngest(deps Deps) rpcutil.HandlerFunc {
 		}
 		deps.IngestEvent(p.Type, p.Source, text)
 		return rpcutil.RespondOK(req.ID, map[string]any{"status": "accepted"})
+	}
+}
+
+// handleMiniappChatSteer folds a mid-turn correction into the active native
+// run without starting a second turn. The in-flight stream keeps going; the
+// note is injected at the next tool-result boundary (same queue as /steer).
+//
+// Params:
+//   - note       (string, required)
+//   - sessionKey (string, optional): defaults to "client:main"
+//
+// steered=false is a successful RPC (no active interactive run, or the note
+// was empty after the pipeline trim) so the client can fall back to its
+// after-turn queue instead of treating it as a transport error.
+func handleMiniappChatSteer(deps Deps) rpcutil.HandlerFunc {
+	return func(_ context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
+		p, errResp := rpcutil.DecodeParams[struct {
+			SessionKey string `json:"sessionKey"`
+			Note       string `json:"note"`
+		}](req)
+		if errResp != nil {
+			return errResp
+		}
+		note := strings.TrimSpace(p.Note)
+		if note == "" {
+			return rpcerr.MissingParam("note").Response(req.ID)
+		}
+		sessionKey := chatport.DefaultNativeSessionKey(p.SessionKey)
+		if deps.SteerNative == nil {
+			return rpcerr.Unavailable("steer not available").Response(req.ID)
+		}
+		steered := deps.SteerNative(sessionKey, note)
+		return rpcutil.RespondOK(req.ID, map[string]any{
+			"ok":         true,
+			"steered":    steered,
+			"sessionKey": sessionKey,
+		})
 	}
 }
 

@@ -87,6 +87,7 @@ class ChatViewModel(
         selectService = ::selectService,
         loadConversation = ::loadConversation,
         deleteConversation = ::deleteConversation,
+        renameConversation = ::renameConversation,
         clearUnreadHeartbeat = ::clearUnreadHeartbeat,
         clearUnreadWorkReport = ::clearUnreadWorkReport,
         openWorkReport = ::openWorkReport,
@@ -278,17 +279,47 @@ class ChatViewModel(
         // files the user staged for a LATER message.
         presetFiles: ImmutableList<PlatformFile>? = null,
     ) {
-        // A send while a reply is still streaming QUEUES instead of being silently
-        // dropped: it fires automatically the moment this turn completes (see
-        // drainPendingQuestion). Retries (question == null) and UI-card submissions
-        // belong to the CURRENT turn's context and would be wrong to replay after
-        // it. Queued entries are tagged: user-typed sends (restoreText != null) may
-        // be restored into the input box later and take the staged attachments with
-        // them; programmatic prompts (work-feed card actions) must never surface in
-        // the input box and never touch the user's staged files.
+        // A send while a reply is still streaming: text-only typed follow-ups
+        // try mid-turn steer first. If the gateway declines (or the send has
+        // files / is programmatic), it QUEUES and fires when this turn completes
+        // (see drainPendingQuestion). Retries (question == null) and UI-card
+        // submissions belong to the CURRENT turn and must not replay after it.
         if (_state.value.isLoading) {
             if (question != null && uiSubmission == null) {
                 val userTyped = restoreText != null
+                val staged = if (userTyped) _state.value.files else persistentListOf()
+                // Text-only typed follow-up: try mid-turn steer first. Files and
+                // programmatic prompts stay on the after-turn queue.
+                val canSteer = userTyped && staged.isEmpty() && (presetFiles == null || presetFiles.isEmpty())
+                if (canSteer) {
+                    viewModelScope.launch(backgroundDispatcher + teardownHandler) {
+                        val ok = try {
+                            dataRepository.steer(question)
+                        } catch (exception: Exception) {
+                            if (exception is CancellationException) throw exception
+                            false
+                        }
+                        if (ok) {
+                            _state.update { it.copy(lastSteerNote = question) }
+                            return@launch
+                        }
+                        if (_state.value.isLoading) {
+                            _state.update {
+                                it.copy(
+                                    pendingQuestions = (
+                                        it.pendingQuestions + PendingQuestion(
+                                            text = question,
+                                            restoreToInput = true,
+                                        )
+                                        ).toImmutableList(),
+                                )
+                            }
+                        } else {
+                            askInternal(question, null, restoreText = question)
+                        }
+                    }
+                    return
+                }
                 _state.update {
                     val entry = PendingQuestion(
                         text = question,
@@ -325,7 +356,7 @@ class ChatViewModel(
 
                 if (delivered) {
                     _state.update {
-                        it.copy(isLoading = false)
+                        it.copy(isLoading = false, lastSteerNote = null)
                     }
                     drainPendingQuestion()
                 } else {
@@ -337,6 +368,7 @@ class ChatViewModel(
                     _state.update {
                         it.copy(
                             isLoading = false,
+                            lastSteerNote = null,
                             failedInput = foldIntoInput(null, it.pendingQuestions),
                             pendingQuestions = persistentListOf(),
                         )
@@ -352,6 +384,7 @@ class ChatViewModel(
                     it.copy(
                         error = exception.toUiError(),
                         isLoading = false,
+                        lastSteerNote = null,
                         failedInput = foldIntoInput(restoreText, it.pendingQuestions),
                         pendingQuestions = persistentListOf(),
                     )
@@ -473,6 +506,7 @@ class ChatViewModel(
             // the brake) — fold them back into the input instead of firing them.
             it.copy(
                 isLoading = false,
+                lastSteerNote = null,
                 stoppedMessageId = stoppedId,
                 failedInput = foldIntoInput(null, it.pendingQuestions),
                 pendingQuestions = persistentListOf(),
@@ -577,9 +611,18 @@ class ChatViewModel(
             it.copy(
                 error = null,
                 isLoading = false,
+                lastSteerNote = null,
                 failedInput = foldIntoInput(null, it.pendingQuestions),
                 pendingQuestions = persistentListOf(),
             )
+        }
+    }
+
+    private fun renameConversation(id: String, label: String) {
+        val trimmed = label.trim()
+        if (id.isBlank() || trimmed.isEmpty()) return
+        viewModelScope.launch(backgroundDispatcher + teardownHandler) {
+            dataRepository.renameConversation(id, trimmed)
         }
     }
 
@@ -767,6 +810,7 @@ class ChatViewModel(
             it.copy(
                 error = null,
                 isLoading = false,
+                lastSteerNote = null,
                 failedInput = foldIntoInput(null, it.pendingQuestions),
                 pendingQuestions = persistentListOf(),
             )

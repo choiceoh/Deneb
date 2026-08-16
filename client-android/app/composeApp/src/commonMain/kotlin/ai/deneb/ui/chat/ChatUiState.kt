@@ -162,6 +162,9 @@ data class ChatUiState(
     // entries are dropped. A session switch / new chat also clears the queue (a
     // queued message must never fire into a different conversation).
     val pendingQuestions: ImmutableList<PendingQuestion> = persistentListOf(),
+    // Latest mid-turn steer the gateway accepted while this reply streams.
+    // Cleared when the turn ends (success, failure, stop, or session switch).
+    val lastSteerNote: String? = null,
     val fallbackStatus: FallbackStatus? = null,
     val isRestoring: Boolean = true,
     // The user-typed message whose send failed, surfaced back into the input so a

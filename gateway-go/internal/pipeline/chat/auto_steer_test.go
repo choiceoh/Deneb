@@ -142,3 +142,38 @@ func TestTrySteerFoldsWhenInteractiveRunActiveDespiteAutomation(t *testing.T) {
 		t.Fatal("interactive run present: steer should fold")
 	}
 }
+
+func TestSteerNativeFoldsWhenInteractiveRunActive(t *testing.T) {
+	h := newSteerTestHandler()
+	markActiveRun(h, "client:main")
+
+	if !h.SteerNative("client:main", "  내일 말고 모레  ") {
+		t.Fatal("expected native steer to fold")
+	}
+	notes := h.steer.Drain("client:main")
+	if len(notes) != 1 || !strings.Contains(notes[0], "모레") {
+		t.Fatalf("steer queue missing the note: %v", notes)
+	}
+}
+
+func TestSteerNativeDeclinesWithoutInteractiveRun(t *testing.T) {
+	h := newSteerTestHandler()
+	if h.SteerNative("client:main", "짧은 정정") {
+		t.Fatal("steered with no active run")
+	}
+	markActiveAutomationRun(h, "client:main")
+	if h.SteerNative("client:main", "짧은 정정") {
+		t.Fatal("steered into an automation run")
+	}
+	if notes := h.steer.Drain("client:main"); len(notes) != 0 {
+		t.Fatalf("declined steer leaked a note: %v", notes)
+	}
+}
+
+func TestSteerNativeDeclinesBlankNote(t *testing.T) {
+	h := newSteerTestHandler()
+	markActiveRun(h, "client:main")
+	if h.SteerNative("client:main", "   ") {
+		t.Fatal("blank note was accepted")
+	}
+}

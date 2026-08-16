@@ -57,6 +57,7 @@ internal fun previewChatActions(): ChatActions = ChatActions(
     selectService = {},
     loadConversation = {},
     deleteConversation = {},
+    renameConversation = { _, _ -> },
     clearUnreadHeartbeat = {},
     clearUnreadWorkReport = {},
     openWorkReport = {},
