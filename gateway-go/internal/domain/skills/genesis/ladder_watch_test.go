@@ -16,6 +16,11 @@ func TestLadderWatchFiresOnceOnReadyTransitionRetriesOnMissingOrFailedCallback(t
 	// and never surface as READY. Pin the kill switch so this test covers the
 	// READY card transition itself.
 	t.Setenv("DENEB_AUTO_GRADUATE", "0")
+	// Hermetic HOME: graduatedDispatchSources() reads the operator's real
+	// graduation_state.json otherwise, so a source graduated live (e.g.
+	// sop-mining, unlocked 2026-08-16) silently becomes dispatchable here and
+	// the re-earned READY below never fires.
+	t.Setenv("HOME", t.TempDir())
 	tr := newTestTracker(t)
 	task := &LadderWatchTask{Tracker: tr}
 
