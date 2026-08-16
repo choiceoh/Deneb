@@ -185,17 +185,26 @@ fun DenebBrowserScreen(
             homeUrl = ""
         },
     ) {
-        DenebWebView(
-            state = state,
-            // Recently seen segments (back-nav, reload, shared site chrome) apply
-            // instantly from the LRU cache; only misses round-trip to DeepL.
-            translate = { segments, lang ->
-                browserTranslateCache.translate(segments, lang) { miss, missLang ->
-                    client.translateSegments(miss, missLang)
-                }
-            },
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        )
+        if (browserShowsStart(state.url, state.currentUrl)) {
+            BrowserStartPane(
+                bookmarks = bookmarks,
+                visits = history,
+                onOpen = { state.load(it) },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+        } else {
+            DenebWebView(
+                state = state,
+                // Recently seen segments (back-nav, reload, shared site chrome) apply
+                // instantly from the LRU cache; only misses round-trip to DeepL.
+                translate = { segments, lang ->
+                    browserTranslateCache.translate(segments, lang) { miss, missLang ->
+                        client.translateSegments(miss, missLang)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            )
+        }
     }
     var diagnosticsCopied by remember { mutableStateOf(false) }
     val screenClipboard = LocalClipboardManager.current
