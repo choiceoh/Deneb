@@ -21,6 +21,11 @@ object TurnEngine {
         var s = state
 
         s = Ai.actAll(s, rng)
+        // AI 매집이 우리 회사를 삼켰다면 그 자리에서 판이 끝난다. 그대로 밀고 나가면
+        // 이미 사라진 회사로 한 분기를 더 굴려, 결과 화면과 자동 저장이 인수 다음 분기로
+        // 뜨는데 게임 오버 뉴스만 인수 분기에 찍힌다.
+        if (s.outcome != null) return s.copy(rngState = rng.state)
+
         s = Events.stepWorld(s, rng)
         s = Events.fire(s, rng)
 

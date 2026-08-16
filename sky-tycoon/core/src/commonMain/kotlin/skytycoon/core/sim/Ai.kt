@@ -472,7 +472,10 @@ object Ai {
         val budget = warChest * 0.4 * skill
         val unit = Stock.buyCost(s, airlineId, target.id, 1.0)
         if (unit <= 0) return s
-        val shares = (budget / unit).coerceAtMost(limit)
+        // 과반을 넘기는 물량이면 잔여 지분 정리 대금까지 감당돼야 통과한다. 예산만 보고
+        // 크게 지르면 매 분기 거절당하며 49% 에 영영 머문다 — UI 버튼과 같은 계산으로 깎는다.
+        val affordable = Stock.affordableShares(s, airlineId, target.id)
+        val shares = (budget / unit).coerceAtMost(limit).coerceAtMost(affordable)
         if (shares < target.shares * 0.02) return s
         return cmd(s, Command.TradeShares(airlineId, target.id, shares))
     }
