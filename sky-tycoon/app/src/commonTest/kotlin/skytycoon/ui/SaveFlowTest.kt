@@ -35,6 +35,34 @@ class SaveFlowTest {
     }
 
     @Test
+    fun `이어하기는 진행 중인 판을 집는다`() {
+        val store = MemorySaveStore()
+
+        // 1) 예전 판을 한참 굴리고 중간 지점을 저장해 둔다.
+        val old = GameViewModel(store)
+        old.start("goldenage", "hanseong", "normal", seed = 100)
+        repeat(6) { old.endTurn() }
+        old.saveNow()
+        val oldTurn = old.game.turn
+
+        // 2) 새 판을 시작해 한 분기만 넘긴다.
+        val fresh = GameViewModel(store)
+        fresh.start("goldenage", "britannia", "normal", seed = 200)
+        fresh.endTurn()
+
+        // 3) 이어하기 — 진행도만 보면 예전 판(6분기)이 이기지만, 지금 판이 나와야 한다.
+        val resumed = GameViewModel(store)
+        assertTrue(resumed.resume())
+        assertEquals("britannia", resumed.game.playerId, "예전 판의 수동 저장이 새 판을 밀어냈다")
+        assertTrue(resumed.game.turn < oldTurn)
+
+        // 지난 판의 저장 지점은 되돌리기 대상으로도 노출되지 않는다.
+        assertFalse(resumed.hasManualSave())
+        assertFalse(resumed.loadSaved())
+        assertEquals("britannia", resumed.game.playerId)
+    }
+
+    @Test
     fun `분기를 넘기면 자동 저장된다`() {
         val store = MemorySaveStore()
         val vm = GameViewModel(store)

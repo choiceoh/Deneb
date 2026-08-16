@@ -60,8 +60,8 @@ fun SetupScreen(
             title = { Text("저장된 게임이 있습니다", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    "새로 시작하면 첫 분기를 넘기는 순간 기존 캠페인이 덮어써집니다. " +
-                        "세이브 슬롯은 하나뿐이라 되돌릴 수 없습니다.",
+                    "새로 시작하면 첫 분기를 넘기는 순간 진행 중이던 캠페인의 자동 저장이 " +
+                        "새 판으로 덮어써집니다. 되돌릴 수 없습니다.",
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                 )

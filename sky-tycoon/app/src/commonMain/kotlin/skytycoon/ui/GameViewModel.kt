@@ -36,11 +36,21 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
 
     private fun load(slot: SaveSlot): GameState? = store.read(slot)?.let { Save.decodeOrNull(it) }
 
+    /**
+     * 캠페인 식별자. 두 슬롯이 같은 판인지 구분하지 않으면, 새 게임을 시작한 뒤
+     * 이전 판의 수동 저장이 "더 많이 진행됐다"는 이유로 되살아난다.
+     */
+    private fun campaignKey(s: GameState) = "${s.seed}:${s.scenarioId}:${s.playerId}:${s.startYear}"
+
     /** 이어서 할 수 있는 저장이 있는가 (시작 화면에서 쓴다). */
     fun hasSavedGame(): Boolean = SaveSlot.entries.any { load(it) != null }
 
-    /** 수동으로 저장해 둔 지점이 있는가. */
-    fun hasManualSave(): Boolean = load(SaveSlot.MANUAL) != null
+    /** 지금 진행 중인 판에 되돌아갈 수동 저장 지점이 있는가. */
+    fun hasManualSave(): Boolean {
+        val current = state ?: return false
+        val manual = load(SaveSlot.MANUAL) ?: return false
+        return campaignKey(manual) == campaignKey(current)
+    }
 
     fun start(scenarioId: String, companyId: String, difficultyId: String, seed: Int = Random.nextInt()) {
         state = NewGame.create(
@@ -55,9 +65,12 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         // 즉시 지워지면 되돌릴 방법이 없다 — 첫 분기를 넘겨야 비로소 슬롯을 차지한다.
     }
 
-    /** 저장된 게임 이어하기 — 자동/수동 중 더 멀리 진행된 쪽을 집는다. */
+    /**
+     * 저장된 게임 이어하기 — 진행 중인 판(자동 저장)이 기준이다.
+     * 진행도로 고르면 예전 판의 수동 저장 지점이 새 판을 밀어내고 살아난다.
+     */
     fun resume(): Boolean {
-        val loaded = SaveSlot.entries.mapNotNull { load(it) }.maxByOrNull { it.turn } ?: run {
+        val loaded = load(SaveSlot.AUTO) ?: load(SaveSlot.MANUAL) ?: run {
             message = "저장된 게임이 없습니다."
             return false
         }
@@ -114,10 +127,15 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
         return true
     }
 
-    /** 수동 저장 지점으로 되돌린다. */
+    /** 수동 저장 지점으로 되돌린다 (같은 판일 때만). */
     fun loadSaved(): Boolean {
         val loaded = load(SaveSlot.MANUAL) ?: run {
             message = "저장해 둔 지점이 없습니다."
+            return false
+        }
+        val current = state
+        if (current != null && campaignKey(loaded) != campaignKey(current)) {
+            message = "지난 판의 저장 지점이라 되돌릴 수 없습니다."
             return false
         }
         state = loaded
