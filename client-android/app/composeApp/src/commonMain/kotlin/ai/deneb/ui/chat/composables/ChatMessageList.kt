@@ -447,7 +447,8 @@ internal fun ChatMessageList(
             LaunchedEffect(listState) {
                 var prevHeight = 0
                 var prevLastIndex = -1
-                var prevLastSize = 0
+                var prevLastBottom = 0
+                var prevTotal = 0
                 var stickToBottom = true
                 snapshotFlow {
                     val info = listState.layoutInfo
@@ -459,29 +460,66 @@ internal fun ChatMessageList(
                         lastBottom = if (last == null) 0 else last.offset + last.size,
                         viewportEnd = info.viewportEndOffset,
                         total = info.totalItemsCount,
-                    )
-                }.collect { snap ->
+                    ) to listDragged.value
+                }.collect { (snap, dragging) ->
                     val shrink = if (prevHeight > 0) prevHeight - snap.viewportHeight else 0
                     val shrinking = shrink > 0
+                    val viewportGrew = prevHeight > 0 && snap.viewportHeight > prevHeight
+                    val growth = if (prevLastIndex == snap.lastIndex && prevLastBottom > 0) {
+                        snap.lastBottom - prevLastBottom
+                    } else {
+                        0
+                    }
+                    val contentGrew = growth > 0
+                    val listGrew = prevTotal > 0 && snap.total > prevTotal
                     val nearBottom = snap.lastIndex < 0 || (
                         snap.lastIndex >= snap.total - 1 &&
-                            snap.lastBottom <= snap.viewportEnd + 240 + maxOf(shrink, 0)
+                            snap.lastBottom <= snap.viewportEnd + 240 +
+                            maxOf(shrink, 0) + maxOf(growth, 0)
                         )
-                    if (!shrinking) stickToBottom = nearBottom
+                    stickToBottom = chatStickKeepPinned(
+                        wasPinned = stickToBottom,
+                        nearBottom = nearBottom,
+                        viewportShrunk = shrinking,
+                        contentGrew = contentGrew,
+                        userDragging = dragging,
+                        listGrew = listGrew,
+                    )
                     val follow = chatStickFollowScrollPx(
                         previousViewportHeight = prevHeight,
                         viewportHeight = snap.viewportHeight,
                         previousLastKey = prevLastIndex,
                         lastKey = snap.lastIndex,
-                        previousLastSize = prevLastSize,
-                        lastSize = snap.lastSize,
+                        previousLastBottom = prevLastBottom,
+                        lastBottom = snap.lastBottom,
                         stickToBottom = stickToBottom,
                     )
                     prevHeight = snap.viewportHeight
                     prevLastIndex = snap.lastIndex
-                    prevLastSize = snap.lastSize
+                    prevLastBottom = snap.lastBottom
+                    prevTotal = snap.total
                     if (follow > 0) {
-                        listState.scrollBy(follow.toFloat())
+                        val advanced = listState.scrollBy(follow.toFloat())
+                        if (advanced < follow) {
+                            val total = listState.layoutInfo.totalItemsCount
+                            if (total > 0) {
+                                listState.scrollToItem(total - 1, Int.MAX_VALUE)
+                            }
+                        }
+                        stickToBottom = true
+                    } else if (
+                        chatStickNeedsSnap(
+                            stickToBottom = stickToBottom,
+                            lastIndex = snap.lastIndex,
+                            total = snap.total,
+                            listGrew = listGrew,
+                            viewportGrew = viewportGrew,
+                        )
+                    ) {
+                        val total = listState.layoutInfo.totalItemsCount
+                        if (total > 0) {
+                            listState.scrollToItem(total - 1, Int.MAX_VALUE)
+                        }
                         stickToBottom = true
                     }
                 }
@@ -717,7 +755,10 @@ internal fun ChatMessageList(
                             .handCursor(),
                         onClick = {
                             componentScope.launch {
-                                listState.scrollToTrueBottom(animate = true)
+                                // Same 8-frame pin as send/install: a tall last
+                                // markdown body is still measuring on the first
+                                // frame, so a single scrollToItem lands short.
+                                listState.scrollToTrueBottom()
                             }
                         },
                     ) {
