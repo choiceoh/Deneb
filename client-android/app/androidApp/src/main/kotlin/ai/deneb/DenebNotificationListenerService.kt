@@ -29,6 +29,7 @@ import org.koin.java.KoinJavaComponent.inject
  * miniapp.event.ingest. The gateway runs the proactive 비서실장 judgment (OTP/spam/
  * routine → silent NO_REPLY; signal → work feed + push), so the user only ever
  * sees signal. "다 읽되 다 보여주지 않는다": broad capture here, narrow surface server-side.
+ * Toss is the exception — its notifications never leave the device (see [isToss]).
  *
  * Beyond the basic title/body pair, extraction reads the structured extras
  * (big text, inbox lines, MessagingStyle messages) and applies app-specific
@@ -312,6 +313,10 @@ class DenebNotificationListenerService : NotificationListenerService() {
         if (n.visibility == Notification.VISIBILITY_SECRET) return null
 
         val source = appLabel(pkg)
+        // Toss is not a work signal for this install (sideload warnings, promo,
+        // in-app receipts the user already saw). Drop on-device so it never
+        // spends a judgment turn or lands in the feed.
+        if (isToss(pkg, source)) return null
         val raw = readNotificationText(n.extras)
         val kakaoTalk = isKakaoTalk(pkg, source)
         val amaranth10 = isAmaranth10(pkg, source)
@@ -460,6 +465,18 @@ class DenebNotificationListenerService : NotificationListenerService() {
         label.contains("카카오톡") ||
         label.contains("KakaoTalk", ignoreCase = true)
 
+    // Main Toss app only (viva.republica.toss + its subpackages, or the "토스"/"Toss"
+    // launcher label). Sister apps keep their own labels (토스뱅크/토스증권) and
+    // still ingest. Keep in sync with isIgnoredTossNotification on the gateway.
+    private fun isToss(pkg: String, label: String): Boolean {
+        val packageName = pkg.trim()
+        val source = label.trim()
+        return packageName == TOSS_PACKAGE ||
+            packageName.startsWith("$TOSS_PACKAGE.") ||
+            source == "토스" ||
+            source.equals("Toss", ignoreCase = true)
+    }
+
     // Identified by package/label ONLY — deliberately no content sniffing, so another
     // app's notification that merely mentions 아마란스/결재 (a mail subject, a chat
     // message) is never mislabeled as an electronic-approval event.
@@ -579,6 +596,9 @@ class DenebNotificationListenerService : NotificationListenerService() {
         // couple seconds is invisible for proactive sensing and collapses bursts.
         private const val COALESCE_WINDOW_MS = 2_000L
         private const val BATCH_THRESHOLD = 3
+
+        // Toss (Viva Republica) — Play Store package of the main super-app.
+        const val TOSS_PACKAGE = "viva.republica.toss"
 
         // Amaranth10 (Douzone groupware) — package from the Play Store listing.
         val AMARANTH10_PACKAGES = setOf("com.douzone.bizbox.klago.app")
