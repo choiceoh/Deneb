@@ -9,14 +9,10 @@ import ai.deneb.deneb.CalendarEmptyDay
 import ai.deneb.deneb.CalendarEvent
 import ai.deneb.deneb.CalendarEventContent
 import ai.deneb.deneb.CalendarMonthGrid
-import ai.deneb.deneb.ContactsApplyState
-import ai.deneb.deneb.ContactsDedupContent
-import ai.deneb.deneb.ContactsDedupPayload
 import ai.deneb.deneb.ContactsList
 import ai.deneb.deneb.CronEditContent
 import ai.deneb.deneb.DashboardLanesContent
 import ai.deneb.deneb.DealNotebookLinkRow
-import ai.deneb.deneb.DedupMergeRow
 import ai.deneb.deneb.DenebEmpty
 import ai.deneb.deneb.DenebError
 import ai.deneb.deneb.DenebLoading
@@ -503,54 +499,6 @@ internal val previewScreens: Map<String, @Composable (ColorScheme) -> Unit> = ma
             Surface(color = MaterialTheme.colorScheme.background) {
                 Box(Modifier.width(412.dp)) {
                     ContactsList(contacts = contacts, onOpen = {})
-                }
-            }
-        }
-    },
-    "contacts_dedup" to { scheme ->
-        val payload = ContactsDedupPayload(
-            total = 2819,
-            distinct = 1695,
-            ambiguous = 286,
-            merges = listOf(
-                DedupMergeRow("박한주", listOf("박한주", "#박한주 부장(솔라테크)", "박한주 팀장"), listOf("010-1111-2222"), emptyList()),
-                DedupMergeRow("김대희", listOf("김대희", "김대희 과장"), listOf("010-2222-3333"), listOf("kdh@topsolar.kr")),
-                DedupMergeRow("조창규", listOf("조창규", "#조창규 단장(한국서부발전)", "조창규 부장"), listOf("010-5555-1234", "010-5555-5678"), emptyList()),
-                DedupMergeRow("James Park", listOf("James Park", "박제임스"), listOf("010-1111-2222"), listOf("james@google.com")),
-            ),
-        )
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    ContactsDedupContent(payload, canApply = true)
-                }
-            }
-        }
-    },
-    "contacts_dedup_review" to { scheme ->
-        val payload = ContactsDedupPayload(total = 2819, distinct = 1695, ambiguous = 286)
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    ContactsDedupContent(
-                        payload,
-                        canApply = true,
-                        applyState = ContactsApplyState.AiReviewing(done = 128, total = 286, same = 47),
-                    )
-                }
-            }
-        }
-    },
-    "contacts_dedup_done" to { scheme ->
-        val payload = ContactsDedupPayload(total = 2819, distinct = 1695, ambiguous = 286)
-        MaterialTheme(colorScheme = scheme) {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                Box(Modifier.width(412.dp)) {
-                    ContactsDedupContent(
-                        payload,
-                        canApply = true,
-                        applyState = ContactsApplyState.Done(ruleMerged = 799, aiMerged = 47, synced = true),
-                    )
                 }
             }
         }

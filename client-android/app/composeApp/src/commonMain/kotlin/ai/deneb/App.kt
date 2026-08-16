@@ -14,7 +14,6 @@ import ai.deneb.deneb.DenebCalendarScreen
 import ai.deneb.deneb.DenebCategoriesScreen
 import ai.deneb.deneb.DenebCategoryPagesScreen
 import ai.deneb.deneb.DenebConfigScreen
-import ai.deneb.deneb.DenebContactsDedupScreen
 import ai.deneb.deneb.DenebContactsScreen
 import ai.deneb.deneb.DenebCronEditScreen
 import ai.deneb.deneb.DenebCronScreen
@@ -635,15 +634,6 @@ internal fun AppContent(
                                     denebComposable<DenebContacts> {
                                         denebClient?.let { client ->
                                             DenebContactsScreen(
-                                                client = client,
-                                                onBack = { navController.navigateUp() },
-                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                            )
-                                        }
-                                    }
-                                    denebComposable<DenebContactsDedup> {
-                                        denebClient?.let { client ->
-                                            DenebContactsDedupScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
