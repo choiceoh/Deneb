@@ -212,13 +212,21 @@ internal fun ChatModeScreen(
                             .imePadding(),
                     ) {
                         Column(Modifier.fillMaxSize()) {
-                            ChatMessageList(
-                                uiState = uiState,
-                                textToSpeech = textToSpeech,
-                                topOverlayDensity = topOverlayDensity,
-                                topOverlayHeightPx = topOverlayHeightPx,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                ChatMessageList(
+                                    uiState = uiState,
+                                    textToSpeech = textToSpeech,
+                                    topOverlayDensity = topOverlayDensity,
+                                    topOverlayHeightPx = topOverlayHeightPx,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                SnackbarHost(
+                                    hostState = snackbarHostState,
+                                    modifier = Modifier.align(BottomCenter).padding(bottom = 8.dp),
+                                ) { data ->
+                                    Snackbar(snackbarData = data)
+                                }
+                            }
                             ChatInputOverlay(
                                 uiState = uiState,
                                 questionInputText = questionInputText,
@@ -234,13 +242,6 @@ internal fun ChatModeScreen(
                             modifier = Modifier.align(TopStart),
                             onHeightChange = { topOverlayHeightPx = it },
                         )
-
-                        SnackbarHost(
-                            hostState = snackbarHostState,
-                            modifier = Modifier.align(BottomCenter).padding(bottom = 80.dp),
-                        ) { data ->
-                            Snackbar(snackbarData = data)
-                        }
                     }
                 } // ModalNavigationDrawer (left)
             } // CompositionLocalProvider Ltr (content)
