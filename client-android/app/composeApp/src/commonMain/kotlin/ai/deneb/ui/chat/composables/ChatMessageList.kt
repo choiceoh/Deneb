@@ -12,6 +12,7 @@ import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
 import ai.deneb.ui.chat.History
 import ai.deneb.ui.chat.lastRenderedAssistant
+import ai.deneb.ui.chat.needsEmptyReplyRecovery
 import ai.deneb.ui.components.VerticalScrollbarForList
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebContentWidthModifier
@@ -48,6 +49,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -676,6 +678,22 @@ internal fun ChatMessageList(
                         item(key = "error") {
                             Column(denebContentWidthModifier()) {
                                 ErrorMessage(error = error, retry = uiState.actions.retry)
+                            }
+                        }
+                    }
+                    if (uiState.needsEmptyReplyRecovery()) {
+                        item(key = "empty-reply") {
+                            Column(
+                                denebContentWidthModifier().padding(horizontal = 16.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    "응답이 비었습니다",
+                                    style = DenebType.body,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(onClick = uiState.actions.regenerate) {
+                                    Text("다시 생성")
+                                }
                             }
                         }
                     }

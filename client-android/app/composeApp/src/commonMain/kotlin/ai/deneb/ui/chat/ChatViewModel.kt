@@ -345,6 +345,7 @@ class ChatViewModel(
                     isLoading = true,
                     error = null,
                     failedInput = null,
+                    stoppedMessageId = null,
                     // Only a direct send consumes the staged files; a drained queue
                     // entry carries its own snapshot, so anything staged since then
                     // stays with the user's next draft.
@@ -497,10 +498,15 @@ class ChatViewModel(
     private fun cancel() {
         currentJob?.cancel()
         currentJob = null
-        // The partial answer streamed so far stays in the transcript; tag its id so
-        // the UI can mark it 중단됨 (otherwise a half-answer looks complete). Cancelling
-        // mid-"thinking" leaves no rendered answer, so there's simply nothing to tag.
-        val stoppedId = dataRepository.chatHistory.value.lastRenderedAssistant()?.id
+        // Tag 중단됨 only on the answer that was actually streaming. Cancelling
+        // mid-thinking leaves no new tokens — lastRenderedAssistant() would be the
+        // previous complete reply, which must not be marked stopped.
+        val history = dataRepository.chatHistory.value
+        val stoppedId = if (history.hasUnansweredUserTurn()) {
+            null
+        } else {
+            history.lastRenderedAssistant()?.id
+        }
         _state.update {
             // A stop also cancels the auto-send of queued messages (the user pulled
             // the brake) — fold them back into the input instead of firing them.

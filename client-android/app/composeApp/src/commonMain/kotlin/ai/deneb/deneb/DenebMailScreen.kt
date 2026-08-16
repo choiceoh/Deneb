@@ -10,6 +10,7 @@ import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebPressable
+import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.icons.outlined.FilterList
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -529,7 +530,7 @@ internal fun MailRow(
                     color = if (message.unread) MaterialTheme.colorScheme.onBackground else denebHint(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).denebSharedBounds("mail-subject-${message.id}"),
                 )
             }
             mailRowNativeMeta(message)?.let { meta ->

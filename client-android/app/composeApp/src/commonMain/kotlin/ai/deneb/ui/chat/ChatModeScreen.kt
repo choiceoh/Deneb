@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
 import org.jetbrains.compose.resources.getString
@@ -63,11 +64,14 @@ internal fun ChatModeScreen(
     uiState: ChatUiState,
     textToSpeech: TextToSpeechInstance?,
     navigationTabBar: (@Composable () -> Unit)?,
+    initialDraft: String = "",
+    onDraftChange: (String) -> Unit = {},
 ) {
     // Hoisted here so the draft survives recompositions that remove QuestionInput
-    // from composition and would otherwise drop the text.
+    // from composition and would otherwise drop the text. [initialDraft] restores
+    // a process-killed compose from AppSettings; rememberSaveable covers rotation.
     var questionInputText by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(""))
+        mutableStateOf(TextFieldValue(initialDraft))
     }
     val keyboardController = LocalSoftwareKeyboardController.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -126,6 +130,13 @@ internal fun ChatModeScreen(
         val resource = uiState.snackbarMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(getString(resource))
         uiState.actions.clearSnackbar()
+    }
+
+    // Persist the compose draft across process death (AppSettings). Debounced so
+    // each keystroke doesn't hit the settings store.
+    LaunchedEffect(questionInputText.text) {
+        delay(250)
+        onDraftChange(questionInputText.text)
     }
 
     // A failed send restores the user's text into the input so a typo or a long prompt

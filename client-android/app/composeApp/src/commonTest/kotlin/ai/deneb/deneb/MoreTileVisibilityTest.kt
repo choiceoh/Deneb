@@ -53,24 +53,36 @@ class MoreTileVisibilityTest {
     }
 
     @Test
+    fun `fresh install hides console tiles by default`() {
+        val s = AppSettings(MapSettings())
+        assertEquals(AppSettings.DEFAULT_HIDDEN_MORE_TILES, s.getHiddenMoreTiles())
+        val visible = visibleMoreEntries(allEntries, hidden = s.getHiddenMoreTiles())
+        assertFalse(visible.any { it.key == "deneb_rsi" })
+        assertFalse(visible.any { it.key == "deneb_usage" })
+        assertTrue(visible.any { it.key == "deneb_approvals" })
+        assertTrue(visible.any { it.key == "deneb_config" })
+    }
+
+    @Test
     fun `hidden-tile set round-trips through AppSettings`() {
         val s = AppSettings(MapSettings())
-        assertEquals(emptySet(), s.getHiddenMoreTiles())
+        assertEquals(AppSettings.DEFAULT_HIDDEN_MORE_TILES, s.getHiddenMoreTiles())
 
+        val defaults = AppSettings.DEFAULT_HIDDEN_MORE_TILES
         s.setMoreTileHidden("deneb_search", hidden = true)
         s.setMoreTileHidden("deneb_files", hidden = true)
-        assertEquals(setOf("deneb_search", "deneb_files"), s.getHiddenMoreTiles())
+        assertEquals(defaults + "deneb_search" + "deneb_files", s.getHiddenMoreTiles())
 
         // Un-hiding removes only that key.
         s.setMoreTileHidden("deneb_search", hidden = false)
-        assertEquals(setOf("deneb_files"), s.getHiddenMoreTiles())
+        assertEquals(defaults + "deneb_files", s.getHiddenMoreTiles())
 
         // Idempotent: hiding an already-hidden key keeps the set stable.
         s.setMoreTileHidden("deneb_files", hidden = true)
-        assertEquals(setOf("deneb_files"), s.getHiddenMoreTiles())
+        assertEquals(defaults + "deneb_files", s.getHiddenMoreTiles())
 
         // Blank keys are ignored.
         s.setMoreTileHidden("", hidden = true)
-        assertEquals(setOf("deneb_files"), s.getHiddenMoreTiles())
+        assertEquals(defaults + "deneb_files", s.getHiddenMoreTiles())
     }
 }
