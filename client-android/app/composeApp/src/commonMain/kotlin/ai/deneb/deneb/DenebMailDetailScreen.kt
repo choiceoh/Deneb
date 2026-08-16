@@ -8,7 +8,6 @@ import ai.deneb.network.httpTeardownTolerantHandler
 import ai.deneb.openUrl
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.DenebType
-import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.components.LinkifiedText
 import ai.deneb.ui.components.rememberHaptics
 import ai.deneb.ui.denebExpandIn
@@ -16,6 +15,7 @@ import ai.deneb.ui.denebHairline
 import ai.deneb.ui.denebHint
 import ai.deneb.ui.denebInsight
 import ai.deneb.ui.denebInsightContainer
+import ai.deneb.ui.denebSharedBounds
 import ai.deneb.ui.denebShrinkOut
 import ai.deneb.ui.handCursor
 import ai.deneb.ui.icons.outlined.AutoAwesome

@@ -239,8 +239,7 @@ fun List<History>.hasUnansweredUserTurn(): Boolean {
 }
 
 /** Silent-death recovery: the turn finished, nothing rendered, no error banner. */
-fun ChatUiState.needsEmptyReplyRecovery(): Boolean =
-    !isLoading && !isRestoring && error == null && history.hasUnansweredUserTurn()
+fun ChatUiState.needsEmptyReplyRecovery(): Boolean = !isLoading && !isRestoring && error == null && history.hasUnansweredUserTurn()
 
 @Immutable
 data class ToolCallInfo(
