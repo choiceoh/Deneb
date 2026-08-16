@@ -277,6 +277,11 @@ class ChatViewModelQueueTest {
             assertTrue(steeredState.pendingQuestions.isEmpty())
             assertEquals(listOf("내일 말고 모레"), fakeRepository.steerCalls)
             assertEquals(1, fakeRepository.askCalls.size)
+            assertTrue(
+                fakeRepository.chatHistory.value.any {
+                    it.role == History.Role.USER && it.content == "내일 말고 모레"
+                },
+            )
 
             fakeRepository.askGate = null
             gate.complete(Unit)

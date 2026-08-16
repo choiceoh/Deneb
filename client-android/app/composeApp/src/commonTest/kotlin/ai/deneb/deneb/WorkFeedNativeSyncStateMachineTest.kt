@@ -265,8 +265,8 @@ class WorkFeedNativeSyncStateMachineTest {
         val first = f.client.workItemSessionKey("한글")
         val second = f.client.workItemSessionKey("한글")
 
-        assertTrue(first.startsWith("client:main:"))
-        assertFalse(first.contains(":wf-"))
+        assertTrue(first.startsWith("client:main:wf-"))
+        assertTrue(second.startsWith("client:main:wf-"))
         assertFalse(first == second)
     }
 

@@ -331,17 +331,17 @@ suspend fun DenebGatewayClient.openWorkFeedItem(id: String): String? {
     return prompt
 }
 
-// Dedicated side-conversation key for a 업무 card, in the same
-// client:main:<suffix> explicit-conversation namespace as startNewChat(). The id
-// is slugged to ascii so the key shape stays identical to client:main:<uuid>
-// (single colon-suffix); a blank id falls back to a random conversation.
+// Dedicated side-conversation key for a 업무 card. The suffix always starts
+// with wf- so the drawer folds it under 카드 대화. ASCII ids slug in place;
+// Hangul-only ids cannot slug, so they get wf-<uuid> instead of a bare uuid
+// (which would leak into 내 대화).
 internal fun DenebGatewayClient.workItemSessionKey(itemId: String): String {
     val slug = itemId.trim().lowercase()
         .map { if (it in 'a'..'z' || it in '0'..'9') it else '-' }
         .joinToString("")
         .trim('-')
         .take(40)
-    return if (slug.isEmpty()) "client:main:${Uuid.random()}" else "client:main:wf-$slug"
+    return if (slug.isEmpty()) "client:main:wf-${Uuid.random()}" else "client:main:wf-$slug"
 }
 
 suspend fun DenebGatewayClient.runWorkFeedAction(

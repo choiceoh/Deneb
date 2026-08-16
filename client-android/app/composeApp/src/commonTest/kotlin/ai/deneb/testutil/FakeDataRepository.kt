@@ -120,6 +120,9 @@ class FakeDataRepository : DataRepository {
 
     override suspend fun steer(note: String): Boolean {
         steerCalls.add(note)
+        if (steerResult) {
+            chatHistory.update { it + History(role = History.Role.USER, content = note) }
+        }
         return steerResult
     }
 
