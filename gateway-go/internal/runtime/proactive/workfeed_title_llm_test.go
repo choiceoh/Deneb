@@ -10,15 +10,19 @@ import (
 
 func TestCleanLLMCardTitleRejectsGenericOrShortTitles(t *testing.T) {
 	cases := map[string]string{
-		"현대차 울산 가견적서 재송부":         "현대차 울산 가견적서 재송부",    // kept as-is (no hard length clamp)
-		"\"무림 과업지시서\"":            "무림 과업지시서",           // surrounding quotes
-		"## 📬 무림 지시서":             "📬 무림 지시서",           // markdown heading
-		"제목: 케이블 발주\n부가 설명은 무시한다": "제목: 케이블 발주",         // first line only
-		"  \t 「JOCA 가격 확인」  ":     "JOCA 가격 확인",         // CJK quotes + whitespace
-		"메일제목이아주아주많이길어서넘쳐버림":      "메일제목이아주아주많이길어서넘쳐버림", // long title kept intact (no clamp)
-		"메일 분석 리포트":               "",                   // generic echo → reject (fallback)
-		"음":                       "",                   // too short → reject
-		"":                        "",                   // empty
+		"현대차 울산 가견적서 재송부":                            "현대차 울산 가견적서 재송부",    // kept as-is (no hard length clamp)
+		"\"무림 과업지시서\"":                               "무림 과업지시서",           // surrounding quotes
+		"## 📬 무림 지시서":                                "📬 무림 지시서",           // markdown heading
+		"제목: 케이블 발주\n부가 설명은 무시한다":                    "제목: 케이블 발주",         // first line only
+		"  \t 「JOCA 가격 확인」  ":                        "JOCA 가격 확인",         // CJK quotes + whitespace
+		"메일제목이아주아주많이길어서넘쳐버림":                         "메일제목이아주아주많이길어서넘쳐버림", // long title kept intact (no clamp)
+		"메일 분석 리포트":                                  "",                   // generic echo → reject (fallback)
+		"음":                                          "",                   // too short → reject
+		"":                                           "",                   // empty
+		"<think>":                                    "",                   // thinking tag leak
+		"We need answer in Korean exactly two lines": "",                   // English CoT leak
+		"我们根据要求输出两行：标题和摘要":                           "",                   // Chinese CoT leak
+		"우리는 입력 텍스트를 기반으로 제목과 요약을 추출해야 합니다": "", // Korean CoT leak
 	}
 	for in, want := range cases {
 		if got := cleanLLMCardTitle(in); got != want {
@@ -133,22 +137,37 @@ func TestRelay_CardTitlerLLMWinsOrFallbackHeuristic(t *testing.T) {
 		}
 	})
 
-	t.Run("non-mail card is not LLM-titled", func(t *testing.T) {
+	t.Run("non-mail card is also LLM-titled", func(t *testing.T) {
 		feed := &recordingWorkFeed{}
 		called := false
 		d := proactiveRelayDeps{
 			transcriptStore: newRecordingTranscriptStore(),
 			workFeed:        feed,
-			cardTitler:      func(string) (string, string) { called = true; return "SHOULD NOT BE USED", "" },
+			cardTitler:      func(string) (string, string) { called = true; return "대한전선 오후 회의", "" },
 		}
 		if _, err := d.relayNative("## 📅 오늘 일정\n\n- 14:00 대한전선 회의"); err != nil {
 			t.Fatalf("relayNative: %v", err)
 		}
-		if called {
-			t.Error("cardTitler was called for a non-mail (calendar) body")
+		if !called {
+			t.Fatal("cardTitler was not called for a calendar body")
+		}
+		if got := feedTitle(feed); got != "대한전선 오후 회의" {
+			t.Errorf("non-mail title = %q, want the LLM title", got)
+		}
+	})
+
+	t.Run("empty LLM title keeps heuristic heading", func(t *testing.T) {
+		feed := &recordingWorkFeed{}
+		d := proactiveRelayDeps{
+			transcriptStore: newRecordingTranscriptStore(),
+			workFeed:        feed,
+			cardTitler:      func(string) (string, string) { return "", "" },
+		}
+		if _, err := d.relayNative("## 📅 오늘 일정\n\n- 14:00 대한전선 회의"); err != nil {
+			t.Fatalf("relayNative: %v", err)
 		}
 		if got := feedTitle(feed); got != "📅 오늘 일정" {
-			t.Errorf("non-mail title = %q, want the heuristic heading", got)
+			t.Errorf("fallback title = %q, want the heuristic heading", got)
 		}
 	})
 
@@ -214,10 +233,22 @@ func TestParseLLMTitleSummary(t *testing.T) {
 			"착수신고가 지연돼 오늘 중 회신이 필요합니다.",
 		},
 		{
-			"unlabeled: first line title, rest summary",
+			"unlabeled first line is ignored (not a title)",
 			"케이블 발주 검토\n진영상사 발주 건을 오늘까지 확인해야 합니다.",
-			"케이블 발주 검토",
-			"진영상사 발주 건을 오늘까지 확인해야 합니다.",
+			"",
+			"",
+		},
+		{
+			"CoT preamble then labeled title",
+			"We need answer in Korean exactly two lines.\n제목: 풍력 실측 재방문\n요약: 제안 일정은 아직 회신이 없습니다.",
+			"풍력 실측 재방문",
+			"제안 일정은 아직 회신이 없습니다.",
+		},
+		{
+			"mid-line 제목 after CoT on the same line",
+			"我们根据要求输出两行。제목: 풍력 실측 재방문 합의",
+			"풍력 실측 재방문 합의",
+			"",
 		},
 		{
 			"markdown + quotes stripped from both",

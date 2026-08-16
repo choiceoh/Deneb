@@ -78,14 +78,13 @@ type proactiveRelayDeps struct {
 		Append(workfeed.Item) (workfeed.Item, error)
 	}
 
-	// cardTitler names a mail-report work-feed card from its body using the
-	// lightweight model — the 📬 icon already says "mail", so the card title should be
-	// the email's subject, not the generic "메일 분석 리포트" heading the main-role synthesis model
-	// writes — and returns the card's 2-line summary from the same call. Best-effort:
-	// returns ("", "") on any failure, and the deterministic extractCardTitle /
-	// extractCardSummary heuristics are the fallbacks (independently — a non-empty
-	// title still applies when the summary comes back ""). nil in older wiring/tests
-	// (then the heuristics are used directly).
+	// cardTitler names a work-feed card from its body using the tiny model —
+	// the card title is an extracted noun phrase, not the first heading/line of
+	// the report — and returns the card's 2-line summary from the same call.
+	// Best-effort: returns ("", "") on any failure, and the deterministic
+	// extractCardTitle / extractCardSummary heuristics are the fallbacks
+	// (independently — a non-empty title still applies when the summary comes
+	// back ""). nil in older wiring/tests (then the heuristics are used directly).
 	cardTitler func(content string) (title, summary string)
 
 	// workModel resolves the display name of the model that produced a proactive
@@ -424,7 +423,7 @@ func (d proactiveRelayDeps) appendProactiveWorkFeed(
 	}
 
 	summary := extractCardSummary(extractSrc, titleLine)
-	if d.cardTitler != nil && (isMail || isWeakCardTitle(title, titleLine)) {
+	if d.cardTitler != nil {
 		if modelTitle, modelSummary := d.cardTitler(extractSrc); modelTitle != "" || modelSummary != "" {
 			if modelTitle != "" {
 				title = modelTitle
