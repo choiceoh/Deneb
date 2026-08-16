@@ -22,17 +22,15 @@ import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Alignment.Companion.TopCenter
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * Immersive bottom: the input bar floats over the conversation (which scrolls
- * under it). Split out of ChatModeScreen.kt.
+ * Composer sibling under the message list. Split out of ChatModeScreen.kt.
+ * The list+composer column shrinks together with IME, so the input rides the
+ * keyboard without a follow-scroll or overlay contentPadding.
  */
 @Composable
 internal fun ChatInputOverlay(
@@ -40,25 +38,11 @@ internal fun ChatInputOverlay(
     questionInputText: TextFieldValue,
     onQuestionInputTextChange: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
-    onHeightChange: (Int) -> Unit,
 ) {
-    // Immersive bottom: the input bar floats over the conversation (which
-    // scrolls under it). A bottom-up scrim keeps it legible over scrolling
-    // messages; the measured height feeds the list's bottom contentPadding so the
-    // last message rests just above the input. The nav-bar + ime insets
-    // come from the root Box, so the input still sits above the gesture bar
-    // and rises with the keyboard. Same width cap as the message rows so it
-    // lines up with the conversation column on desktop.
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .onSizeChanged { onHeightChange(it.height) }
-            .background(
-                Brush.verticalGradient(
-                    0f to Color.Transparent,
-                    1f to MaterialTheme.colorScheme.background,
-                ),
-            ),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = TopCenter,
     ) {
         Column(denebContentWidthModifier()) {

@@ -126,7 +126,9 @@ private val moreTab = DenebTabItem(
 // highlight when current; 메일/달력 jump into their section, which keeps the bar.
 val denebBottomTabs: List<DenebTabItem> = listOf(feedTab, mailTab, chatTab, calendarTab, moreTab)
 
-// Routes that show the bottom bar. The bar stays on 채팅(home) and on every 더보기 SECTION
+// Routes that *can* show the bottom bar. 채팅 is listed so NavHost motion still
+// classifies Home as a section, but the live chat surface hides the bar — see
+// [denebShowsBottomBar]. The bar stays on 피드 and every 더보기 SECTION
 // — 메일·달력·결재·검색·할일·일기·카테고리·조직도·현황·연락처·노트북·파일·브라우저·설정 — so you can
 // tab-switch without backing out first. Excluded on purpose: deep DETAILS reached *from* a
 // section (a specific mail/event/wiki page/person, settings sub-screens like fleet/skill/
@@ -156,7 +158,28 @@ val denebBottomBarRoutes: Set<String> = setOf(
 // while still fitting the icon + small label without clipping. This sits just above the
 // icon + indicator + label intrinsic stack, so don't trim further without re-checking
 // the live render for clipping.
-private val DenebBottomBarHeight = 52.dp
+internal val DenebBottomBarHeight = 52.dp
+
+/**
+ * Bottom chrome reserved on a tab-bar route: the taller of the tab bar and the
+ * IME. The content column sits above this reserve, so the composer rides the
+ * keyboard without a boolean tab-bar hide (which jumps the layout one step late).
+ */
+internal fun denebBottomChromeReservePx(tabBarFullPx: Int, imePx: Int): Int = maxOf(tabBarFullPx, imePx.coerceAtLeast(0))
+
+/**
+ * Whether the app shell should dock the bottom tab bar.
+ *
+ * Chat is a KakaoTalk-style room: entering 채팅 hides the bar so the composer
+ * owns the bottom (system back already steps to 피드). Other tab-bar routes
+ * keep the bar; the IME reserve then uses [denebBottomChromeReservePx].
+ */
+internal fun denebShowsBottomBar(route: String?, selectedTabRoute: String): Boolean {
+    if (route == null) return false
+    if (route == ROUTE_HOME) return false
+    if (route == ROUTE_MAIN && selectedTabRoute == ROUTE_HOME) return false
+    return route in denebBottomBarRoutes
+}
 
 @Composable
 fun DenebBottomBar(

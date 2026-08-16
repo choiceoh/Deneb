@@ -62,6 +62,7 @@ import ai.deneb.ui.Theme
 import ai.deneb.ui.chat.ChatScreen
 import ai.deneb.ui.chat.ChatViewModel
 import ai.deneb.ui.chat.composables.DenebBottomBar
+import ai.deneb.ui.chat.composables.DenebBottomBarHeight
 import ai.deneb.ui.chat.composables.FeedScreen
 import ai.deneb.ui.chat.composables.ROUTE_CALENDAR
 import ai.deneb.ui.chat.composables.ROUTE_FEED
@@ -69,8 +70,9 @@ import ai.deneb.ui.chat.composables.ROUTE_HOME
 import ai.deneb.ui.chat.composables.ROUTE_MAIL
 import ai.deneb.ui.chat.composables.ROUTE_MAIN
 import ai.deneb.ui.chat.composables.ROUTE_MORE
-import ai.deneb.ui.chat.composables.denebBottomBarRoutes
+import ai.deneb.ui.chat.composables.denebBottomChromeReservePx
 import ai.deneb.ui.chat.composables.denebLiveTabRequests
+import ai.deneb.ui.chat.composables.denebShowsBottomBar
 import ai.deneb.ui.chat.composables.isDenebLiveTab
 import ai.deneb.ui.chat.composables.navigateToDenebSection
 import ai.deneb.ui.components.FullScreenImageHost
@@ -88,11 +90,14 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -832,15 +837,25 @@ internal fun AppContent(
                 // The native client is mobile-only (the desktop workstation is a
                 // separate app, Andromeda). Dock the super-app bottom bar under the
                 // content on top-level sections (project_superapp_vision). Pushed detail
-                // screens hide it and keep their back nav; the keyboard also hides it so
-                // the chat input owns the bottom. The content area consumes the
-                // navigation-bar inset (the bar applies it) so the screens' own
-                // navigationBarsPadding doesn't double up.
+                // screens hide it and keep their back nav.
+                //
+                // Keyboard: reserve max(tabBar, IME) as one bottom chrome so the
+                // composer rides the IME curve. Chat hides the bar entirely
+                // (KakaoTalk room) — its own imePadding owns the bottom. Other
+                // tab routes keep the bar; the content box consumes ime+nav so
+                // child imePadding / navigationBarsPadding don't double-apply.
                 val route = currentRoute
-                val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                // The bottom tab bar is the app's primary navigation. Hidden only on
-                // non-tab routes (deep details) and while the keyboard is up.
-                val showBar = route in denebBottomBarRoutes && !imeVisible
+                val density = LocalDensity.current
+                val imePx = WindowInsets.ime.getBottom(density)
+                val onTabRoute = denebShowsBottomBar(route, selectedTabRoute)
+                val tabBarFullPx = with(density) {
+                    (
+                        DenebBottomBarHeight +
+                            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                        ).roundToPx()
+                }
+                val bottomReservePx = if (onTabRoute) denebBottomChromeReservePx(tabBarFullPx, imePx) else 0
+                val showBar = onTabRoute && imePx < tabBarFullPx
                 Column(Modifier.fillMaxSize()) {
                     Box(
                         Modifier
@@ -850,8 +865,10 @@ internal fun AppContent(
                             // so the transparent resting stub shows the pane beneath.
                             .background(MaterialTheme.colorScheme.background)
                             .then(
-                                if (showBar) {
-                                    Modifier.consumeWindowInsets(WindowInsets.navigationBars)
+                                if (onTabRoute) {
+                                    Modifier.consumeWindowInsets(
+                                        WindowInsets.ime.union(WindowInsets.navigationBars),
+                                    )
                                 } else {
                                     Modifier
                                 },
@@ -871,16 +888,25 @@ internal fun AppContent(
                         )
                         navHost(Modifier.fillMaxSize())
                     }
-                    if (showBar) {
-                        DenebBottomBar(
-                            // At the resting stub the bar highlights the live tab; on a
-                            // pushed bar-keeping section it highlights by route as before.
-                            currentRoute = if (route == ROUTE_MAIN) selectedTabRoute else route,
-                            onNavigate = { dest ->
-                                if (isDenebLiveTab(dest)) openLiveTab(dest) else navigateToDenebSection(navController, dest)
-                            },
-                            feedUnread = feedUnread,
-                        )
+                    if (onTabRoute) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(with(density) { bottomReservePx.toDp() }),
+                        ) {
+                            if (showBar) {
+                                DenebBottomBar(
+                                    // At the resting stub the bar highlights the live tab; on a
+                                    // pushed bar-keeping section it highlights by route as before.
+                                    modifier = Modifier.align(Alignment.BottomCenter),
+                                    currentRoute = if (route == ROUTE_MAIN) selectedTabRoute else route,
+                                    onNavigate = { dest ->
+                                        if (isDenebLiveTab(dest)) openLiveTab(dest) else navigateToDenebSection(navController, dest)
+                                    },
+                                    feedUnread = feedUnread,
+                                )
+                            }
+                        }
                     }
                 }
             }

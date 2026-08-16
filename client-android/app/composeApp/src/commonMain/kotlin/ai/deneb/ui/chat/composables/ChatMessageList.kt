@@ -86,7 +86,6 @@ import deneb.composeapp.generated.resources.tool_footprint
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import nl.marc_apps.tts.TextToSpeechInstance
@@ -106,7 +105,6 @@ internal fun ChatMessageList(
     textToSpeech: TextToSpeechInstance?,
     topOverlayDensity: Density,
     topOverlayHeightPx: Int,
-    bottomOverlayHeightPx: Int,
     modifier: Modifier = Modifier,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -218,10 +216,8 @@ internal fun ChatMessageList(
                     if (ownSendOrInstall || nearBottom) {
                         // Land on the true last row (trailing NON-history rows — the
                         // "loading" waiting row, the "error" row — sit below the last
-                        // message, so history.lastIndex isn't the list's last row) AND
-                        // clear the bottom contentPadding so the newest line rests just
-                        // above the floating input bar. scrollToTrueBottom handles both.
-                        listState.scrollToTrueBottom(bottomOverlayHeightPx)
+                        // message, so history.lastIndex isn't the list's last row).
+                        listState.scrollToTrueBottom()
                     }
                     val lastMessage = history.last()
                     if (uiState.isSpeechOutputEnabled && lastMessage.role == History.Role.ASSISTANT) {
@@ -459,60 +455,14 @@ internal fun ChatMessageList(
             // and far less layout churn on the hot streaming path.
             LaunchedEffect(streamingLen / 48, uiState.isLoading) {
                 if (uiState.isLoading && isNearBottom) {
-                    // Land on the true last row AND clear the input-bar contentPadding
-                    // so the streaming tokens' newest line isn't clipped under the bar.
-                    listState.scrollToTrueBottom(bottomOverlayHeightPx)
+                    listState.scrollToTrueBottom()
                 }
-            }
-
-            // Keyboard follow-scroll: the root Box's imePadding shrinks this list's
-            // viewport as the keyboard opens. LazyColumn pins the top item on a resize,
-            // so the newest message slides under the input bar. Track the viewport
-            // height (the source of truth — NOT raw WindowInsets.ime, which double-
-            // counts against imePadding's consumed nav-bar overlap) and scroll the list
-            // by exactly the px it lost.
-            //
-            // scrollBy alone isn't enough: at the list's scroll limit (last message
-            // near the end) it can't advance the full delta, and the bottom
-            // contentPadding (input-bar height) is consumed first — leaving the last
-            // message a few px shy (#3537). So after the frame-by-frame scrollBy tracks
-            // the keyboard's own curve, a scrollToItem(last) with a negative offset
-            // snaps the newest message to rest exactly above the input bar, clearing
-            // whatever the bounded scrollBy couldn't. snapshotFlow keeps this on the
-            // effect coroutine (no per-frame recomposition); near-bottom only, so a
-            // user scrolled up to re-read isn't yanked.
-            LaunchedEffect(listState, bottomOverlayHeightPx) {
-                var prevHeight = listState.layoutInfo.viewportSize.height
-                snapshotFlow { listState.layoutInfo.viewportSize.height }
-                    .collect { current ->
-                        val shrinkage = prevHeight - current
-                        prevHeight = current
-                        if (shrinkage > 0 && isNearBottom) {
-                            // Ride the keyboard's animation curve frame-by-frame. scrollBy
-                            // returns how far it actually advanced — at the list's scroll
-                            // limit (last message near the end) it falls short of the full
-                            // delta, and the bottom contentPadding (input-bar height) is
-                            // consumed first. When that happens, snap the newest message to
-                            // rest exactly above the input bar instead of leaving it a few
-                            // px shy (#3537). The snap only fires on the shortfall, so the
-                            // common case tracks the keyboard smoothly frame-by-frame.
-                            val advanced = listState.scrollBy(shrinkage.toFloat())
-                            if (advanced < shrinkage) {
-                                val total = listState.layoutInfo.totalItemsCount
-                                if (total > 0) {
-                                    listState.scrollToItem(total - 1, -bottomOverlayHeightPx)
-                                }
-                            }
-                        }
-                    }
             }
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 LazyColumn(
                     // Soft fade at the top/bottom edges so a message dissolves into
-                    // the bars as it scrolls past, instead of reading as hard-cut /
-                    // covered. The chat still fills the full height (small padding,
-                    // not a wide gap) — it just flows under the bars, uncovered.
+                    // the top overlay (and the composer seam) instead of a hard cut.
                     //
                     // Deliberately a SLIVER, not the bar's full height. Widening these
                     // to the measured overlay heights (56dp / 80dp) was tried and
@@ -527,9 +477,6 @@ internal fun ChatMessageList(
                     // below the bar; older messages scroll up behind it (immersive).
                     contentPadding = PaddingValues(
                         top = with(topOverlayDensity) { topOverlayHeightPx.toDp() },
-                        // Bottom inset = the floating input bar's measured height so the
-                        // last message rests just above it; older messages scroll behind.
-                        bottom = with(topOverlayDensity) { bottomOverlayHeightPx.toDp() },
                     ),
                 ) {
                     items(uiState.history, key = { it.id }, contentType = { it.role }) { history ->
@@ -710,12 +657,8 @@ internal fun ChatMessageList(
 
                 VerticalScrollbarForList(
                     listState = listState,
-                    // Inset by the same measured bars: a full-height track ran on
-                    // past the conversation and left a grey thumb floating beside
-                    // the input field.
                     modifier = Modifier.align(CenterEnd).fillMaxHeight().padding(
                         top = with(topOverlayDensity) { topOverlayHeightPx.toDp() },
-                        bottom = with(topOverlayDensity) { bottomOverlayHeightPx.toDp() },
                     ),
                 )
 
@@ -730,10 +673,7 @@ internal fun ChatMessageList(
                             .handCursor(),
                         onClick = {
                             componentScope.launch {
-                                // Lands on the true bottom AND clears the input-bar contentPadding
-                                // (animate, since this is a user tap) so the newest line rests just
-                                // above the bar — not clipped under it. No-ops when the list is empty.
-                                listState.scrollToTrueBottom(bottomOverlayHeightPx, animate = true)
+                                listState.scrollToTrueBottom(animate = true)
                             }
                         },
                     ) {
@@ -797,14 +737,13 @@ private fun rememberExecutingTools(history: ImmutableList<History>): ExecutingTo
 }
 
 /**
- * Scroll the list so the true last row's bottom edge rests exactly above the
- * floating input bar — i.e. the last visible line isn't clipped under it.
+ * Scroll the list so the true last row's bottom edge rests at the viewport
+ * bottom (just above the sibling composer).
  *
  * [LazyListState.scrollToItem] with `Int.MAX_VALUE` pins the last item's bottom
- * to the viewport's physical bottom, which IGNORES the list's bottom
- * contentPadding (the input-bar height). The newest line then sits under the
- * floating input bar ("완벽하게 밑까지 안 내려옴"). After pinning the item's
- * bottom, scroll DOWN by the contentPadding so the last line clears the bar.
+ * to the viewport's physical bottom, which ignores bottom contentPadding.
+ * After pinning, scroll DOWN by [contentPaddingBottomPx] so the last line
+ * clears that padding.
  *
  * `animate` picks [androidx.compose.foundation.lazy.LazyListState.animateScrollBy]
  * for the user-driven scroll-to-bottom button (smooth) vs the instant
@@ -812,7 +751,7 @@ private fun rememberExecutingTools(history: ImmutableList<History>): ExecutingTo
  * follow-scrolls (streaming / on-send) that already ride their own cadence.
  */
 private suspend fun LazyListState.scrollToTrueBottom(
-    contentPaddingBottomPx: Int,
+    contentPaddingBottomPx: Int = 0,
     animate: Boolean = false,
 ) {
     // On a cold chat-screen open the install scroll effect can fire before the
