@@ -26,8 +26,10 @@ const systemPrompt = `너는 업무 알림 카드의 제목과 짧은 요약을 
 - 따옴표·마크다운·머리기호·이모지 금지. 위 두 줄 외에 다른 설명·접두어를 출력하지 마라.`
 
 var (
-	titleLabelRe   = regexp.MustCompile(`(?i)^\s*(제목|title)\s*[:：]\s*`)
-	summaryLabelRe = regexp.MustCompile(`(?i)^\s*(요약|summary)\s*[:：]\s*`)
+	// Labels may sit mid-line after a reasoning preamble the model leaked
+	// into the content channel ("We need … 제목: 풍력 실측").
+	titleLabelRe   = regexp.MustCompile(`(?i)(?:^|[\s，,。．;；:：])(제목|title)\s*[:：]\s*`)
+	summaryLabelRe = regexp.MustCompile(`(?i)(?:^|[\s，,。．;；:：])(요약|summary)\s*[:：]\s*`)
 )
 
 // CallTiny asks the tiny role for a raw title/summary response.
@@ -53,27 +55,28 @@ func EvaluateCardTitleRole(ctx context.Context, role modelrole.Role, content str
 	return title, summary, raw, nil
 }
 
-// ParseLLMTitleSummary extracts title/summary lines from model output.
+// ParseLLMTitleSummary extracts title/summary from labeled model output only.
+// Unlabeled first lines are ignored — reasoning models often dump chain-of-thought
+// there ("We need answer in Korean…"), and that must not become the card title.
 func ParseLLMTitleSummary(raw string) (title, summary string) {
-	var titleLine, summaryLine string
 	for _, line := range strings.Split(raw, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		if titleLine == "" && titleLabelRe.MatchString(line) {
-			titleLine = titleLabelRe.ReplaceAllString(line, "")
+		if loc := titleLabelRe.FindStringIndex(line); loc != nil && title == "" {
+			rest := strings.TrimSpace(line[loc[1]:])
+			if sloc := summaryLabelRe.FindStringIndex(rest); sloc != nil {
+				title = strings.TrimSpace(rest[:sloc[0]])
+				summary = strings.TrimSpace(rest[sloc[1]:])
+				continue
+			}
+			title = rest
 			continue
 		}
-		if summaryLabelRe.MatchString(line) {
-			summaryLine = summaryLabelRe.ReplaceAllString(line, "")
-			continue
-		}
-		if titleLine == "" {
-			titleLine = line
-		} else if summaryLine == "" {
-			summaryLine = line
+		if loc := summaryLabelRe.FindStringIndex(line); loc != nil {
+			summary = strings.TrimSpace(line[loc[1]:])
 		}
 	}
-	return strings.TrimSpace(titleLine), strings.TrimSpace(summaryLine)
+	return strings.TrimSpace(title), strings.TrimSpace(summary)
 }

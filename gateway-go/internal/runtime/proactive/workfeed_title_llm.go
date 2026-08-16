@@ -9,28 +9,23 @@ import (
 
 // Tiny-LLM card titler + summarizer for proactive work-feed cards.
 //
-// The analysis (main) model often writes a generic heading ("메일 분석 리포트") or
-// opens with a narration sentence, so the deterministic heuristic ends up with a
-// poor card title (a generic label, or a whole sentence). Naming a card is a tiny
-// extraction job (≤20-char noun phrase + 2-line gist), so it is handed to the tiny
-// role — used both for mail reports (to surface the email's real subject) and for
-// any proactive body whose heuristic title is weak (see isWeakCardTitle).
+// The card title is whatever the tiny model extracts (labeled "제목:" / "요약:"),
+// not the first heading or prose line of the report. The analysis (main) model
+// often writes a generic heading ("메일 분석 리포트") or opens with narration, so
+// a first-line heuristic is the wrong source. Naming a card is a tiny extraction
+// job (≤20-char noun phrase + 2-line gist).
 //
 // Why tiny, not lightweight: this call caps output at a small token budget, which
 // only fits an answer with the thinking channel OFF. The tiny role is an explicit
-// self-hosted extraction model (agents.tinyModel, e.g. vLLM qwen3.6-35b-a3b) whose
-// thinking-off toggle is honored on the vLLM path — same role session titles and
-// mail-stage-1 extractors use. The lightweight role, by contrast, can resolve to a
-// cloud reasoning model (deepseek-v4-flash-api) that ignores the vLLM template
-// thinking toggle and burns the whole token budget on reasoning → empty content →
-// every card silently fell back to the raw-sentence heuristic.
+// self-hosted extraction model (agents.tinyModel) whose thinking-off toggle is
+// honored on the vLLM path. The lightweight role can resolve to a cloud reasoning
+// model that ignores the toggle and burns the token budget on reasoning.
 //
-// The same call also produces the card's 2-line summary, so the preview under the
-// title reads as a real gist instead of the heuristic's joined-and-clipped body
-// lines — one call, both outputs. Best-effort: any failure returns ("", "") and
-// proactive_relay falls back to the deterministic extractCardTitle / extractCardSummary
-// heuristics (independently — a good LLM title still applies even if the summary is
-// empty).
+// Parser rule: only labeled lines count. An unlabeled first line is ignored —
+// reasoning models dump chain-of-thought there, and that used to land as the
+// live card title (2026-08 srv4 workfeed). Best-effort: any failure or unlabeled
+// output returns ("", "") and proactive_relay falls back to extractCardTitle /
+// extractCardSummary independently.
 
 const (
 	// cardTitleMaxInputRunes bounds the report text sent to the model. The subject
@@ -67,10 +62,40 @@ func cleanLLMCardTitle(raw string) string {
 	line = stripMarkdownLine(line)
 	line = strings.Trim(line, " \t\"'`“”‘’「」『』")
 	line = strings.TrimSpace(line)
-	if len([]rune(line)) < 3 || isGenericMailReportTitle(line) {
+	if len([]rune(line)) < 3 || isGenericMailReportTitle(line) || isReasoningLeakTitle(line) {
 		return ""
 	}
 	return line
+}
+
+// isReasoningLeakTitle reports titles that are the model's own instructions or
+// chain-of-thought, not a card noun phrase. Live 2026-08 feed cards stored
+// "We need answer in Korean…" / "我们根据要求…" / "<think>" as the title when
+// the unlabeled first line of the titler output was accepted.
+func isReasoningLeakTitle(t string) bool {
+	if strings.HasPrefix(t, "<") {
+		return true
+	}
+	for _, prefix := range reasoningTitlePrefixes {
+		if hasPrefixFold(t, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+var reasoningTitlePrefixes = []string{
+	"We need", "Need answer", "Need to ", "The user wants",
+	"Let me ", "I need to",
+	"我们", "우리는 입력", "우리는 주어진", "우리는 출력",
+	"우선 입력", "사용자가 제공",
+}
+
+func hasPrefixFold(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
+	}
+	return strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 // cleanLLMCardSummary normalizes a raw model summary into a one-paragraph card
@@ -87,7 +112,7 @@ func cleanLLMCardSummary(raw string) string {
 	s := strings.Join(parts, " ")
 	s = strings.Trim(s, " \t\"'`“”‘’「」『』")
 	s = strings.TrimSpace(s)
-	if len([]rune(s)) < 4 {
+	if len([]rune(s)) < 4 || strings.HasPrefix(s, "<") {
 		return ""
 	}
 	return clipRunes(s, workFeedSummaryMaxRunes)
