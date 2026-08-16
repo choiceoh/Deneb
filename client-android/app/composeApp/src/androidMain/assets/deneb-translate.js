@@ -458,19 +458,33 @@
   function splitLongText(text) {
     var source = String(text || '');
     var chunks = [];
+    var joiners = [];
     var start = 0;
     while (start < source.length) {
       var end = Math.min(source.length, start + MAX_LONG_TEXT_CHUNK_CHARS);
       if (end < source.length) {
-        var boundary = source.lastIndexOf(' ', end);
-        if (boundary > start + Math.floor(MAX_LONG_TEXT_CHUNK_CHARS / 2)) end = boundary;
+        var minimum = start + Math.floor(MAX_LONG_TEXT_CHUNK_CHARS / 2);
+        for (var boundary = end; boundary > minimum; boundary--) {
+          if (/\s/.test(source.charAt(boundary))) { end = boundary; break; }
+        }
+        // Never bisect a UTF-16 surrogate pair on a hard boundary.
+        var before = source.charCodeAt(end - 1);
+        var after = source.charCodeAt(end);
+        if (before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF) end--;
       }
-      var chunk = source.slice(start, end).trim();
-      if (chunk) chunks.push(chunk);
-      start = end;
-      while (start < source.length && /\s/.test(source.charAt(start))) start++;
+      var rawChunk = source.slice(start, end);
+      var chunk = rawChunk.trim();
+      var nextStart = end;
+      while (nextStart < source.length && /\s/.test(source.charAt(nextStart))) nextStart++;
+      if (chunk) {
+        chunks.push(chunk);
+        // Normalize a real source whitespace boundary to one space, but preserve
+        // a hard split as empty so CJK/unspaced text is not corrupted on rejoin.
+        joiners.push(nextStart > end || /\s$/.test(rawChunk) ? ' ' : '');
+      }
+      start = nextStart;
     }
-    return chunks;
+    return { chunks: chunks, joiners: joiners };
   }
 
   function expandShipUnit(unit) {
@@ -499,10 +513,11 @@
       unit.payload = raw; // Context is optional; source text is not.
       return [unit];
     }
-    var chunks = splitLongText(raw);
+    var split = splitLongText(raw);
+    var chunks = split.chunks;
     if (!chunks.length) return [];
     var chunkToken = nextChunkToken++;
-    chunkResults[tid] = { count: chunks.length, values: [], token: chunkToken };
+    chunkResults[tid] = { count: chunks.length, values: [], joiners: split.joiners, token: chunkToken };
     var out = [];
     for (var c = 0; c < chunks.length; c++) {
       out.push({
@@ -1191,7 +1206,10 @@
         }
         if (complete) {
           var chunkRec = nodes[chunkTid];
-          var combined = accumulator.values.join(' ');
+          var combined = accumulator.values[0] || '';
+          for (var part = 1; part < accumulator.count; part++) {
+            combined += (accumulator.joiners[part - 1] || '') + accumulator.values[part];
+          }
           delete chunkResults[chunkTid];
           delete inFlight[chunkTid];
           if (chunkRec) applyTranslationToTid(chunkTid, restoreOriginalSpacing(chunkRec.original, combined));

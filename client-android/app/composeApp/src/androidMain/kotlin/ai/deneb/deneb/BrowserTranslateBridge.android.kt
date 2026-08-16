@@ -4,8 +4,12 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -25,6 +29,7 @@ private val browserTranslateStringListSerializer = ListSerializer(String.seriali
 private data class BrowserTranslationWork(
     val requestId: String,
     val segments: List<String>,
+    val generation: Long,
 )
 
 /**
@@ -41,6 +46,8 @@ internal class BrowserTranslateBridge(
     private val lock = Any()
     private val queued = ArrayDeque<BrowserTranslationWork>()
     private var active = 0
+    private var generation = 0L
+    private var generationScope = newGenerationScope()
 
     @JavascriptInterface
     fun onEnable(count: Int) {
@@ -71,12 +78,11 @@ internal class BrowserTranslateBridge(
             reject(requestId, retryable = false)
             return
         }
-        val work = BrowserTranslationWork(requestId, segments)
         val ready = synchronized(lock) {
             if (queued.size >= MAX_TRANSLATE_QUEUED) {
                 null
             } else {
-                queued.addLast(work)
+                queued.addLast(BrowserTranslationWork(requestId, segments, generation))
                 drainReadyLocked()
             }
         }
@@ -85,6 +91,20 @@ internal class BrowserTranslateBridge(
             return
         }
         launchAll(ready)
+    }
+
+    /** Drops the old document's queued work and cancels its active RPCs. A new
+     * page gets a fresh scheduler generation instead of waiting behind it. */
+    fun cancelForNavigation() {
+        val expired = synchronized(lock) {
+            generation++
+            queued.clear()
+            active = 0
+            generationScope.also {
+                generationScope = newGenerationScope()
+            }
+        }
+        expired.cancel()
     }
 
     private fun drainReadyLocked(): List<BrowserTranslationWork> {
@@ -98,14 +118,23 @@ internal class BrowserTranslateBridge(
 
     private fun launchAll(ready: List<BrowserTranslationWork>) {
         ready.forEach { work ->
-            scope.launch {
+            val executionScope = synchronized(lock) {
+                generationScope.takeIf { work.generation == generation }
+            } ?: return@forEach
+            executionScope.launch {
                 try {
                     if (!translationEnabled()) {
                         reject(work.requestId, retryable = false)
                         return@launch
                     }
                     markStarted(work.requestId)
-                    val translated = runCatching { translateSegments(work.segments, "ko") }.getOrNull()
+                    val translated = try {
+                        translateSegments(work.segments, "ko")
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
                     if (translated == null || translated.size != work.segments.size) {
                         reject(work.requestId, retryable = false)
                         return@launch
@@ -119,16 +148,23 @@ internal class BrowserTranslateBridge(
                         )
                     }
                 } finally {
-                    launchAll(
-                        synchronized(lock) {
+                    val next = synchronized(lock) {
+                        if (work.generation == generation) {
                             active = (active - 1).coerceAtLeast(0)
                             drainReadyLocked()
-                        },
-                    )
+                        } else {
+                            emptyList()
+                        }
+                    }
+                    launchAll(next)
                 }
             }
         }
     }
+
+    private fun newGenerationScope(): CoroutineScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]),
+    )
 
     private suspend fun markStarted(requestId: String) {
         val requestLiteral = jsStringLiteral(requestId)

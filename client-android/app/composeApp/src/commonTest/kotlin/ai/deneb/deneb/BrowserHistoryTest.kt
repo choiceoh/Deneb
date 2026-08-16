@@ -60,4 +60,24 @@ class BrowserHistoryTest {
         assertEquals(10, updated[1].visitedAtMs)
         assertEquals("Loaded title", updated[1].title)
     }
+
+    @Test
+    fun `same turn visit and title update preserve the new recency`() {
+        val visits = listOf(
+            BrowserVisit(url = "https://new.example", title = "New", visitedAtMs = 20),
+            BrowserVisit(url = "https://old.example", title = "Old", visitedAtMs = 10),
+        )
+
+        val updated = applyBrowserHistoryUpdate(
+            visits = visits,
+            committedUrl = "https://old.example",
+            currentUrl = "https://old.example",
+            title = "Loaded title",
+            nowMs = 30,
+        )
+
+        assertEquals("https://old.example", updated.first().url)
+        assertEquals(30, updated.first().visitedAtMs)
+        assertEquals("Loaded title", updated.first().title)
+    }
 }

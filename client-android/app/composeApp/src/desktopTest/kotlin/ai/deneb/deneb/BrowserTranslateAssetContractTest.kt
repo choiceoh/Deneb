@@ -18,6 +18,8 @@ class BrowserTranslateAssetContractTest {
         assertContains(source, "function splitLongText(text)")
         assertContains(source, "function expandShipUnit(unit)")
         assertContains(source, "MAX_BATCH_JSON_CHARS")
+        assertContains(source, "joiners: split.joiners")
+        assertFalse(source.contains("accumulator.values.join(' ')"))
     }
 
     @Test
@@ -28,11 +30,19 @@ class BrowserTranslateAssetContractTest {
         val jsSource = sourceFile("src/androidMain/assets/deneb-translate.js").readText()
 
         assertTrue(nativeSource.kotlinInt("MAX_TRANSLATE_QUEUED") > nativeSource.kotlinInt("MAX_TRANSLATE_IN_FLIGHT"))
-        assertContains(nativeSource, "queued.addLast(work)")
+        assertContains(nativeSource, "queued.addLast(BrowserTranslationWork")
         assertContains(nativeSource, "drainReadyLocked()")
         assertContains(nativeSource, "markStarted(work.requestId)")
+        assertContains(nativeSource, "fun cancelForNavigation()")
+        assertContains(nativeSource, "queued.clear()")
         assertContains(jsSource, "function beginBatch(rid)")
         assertTrue(jsSource.jsInt("NATIVE_BATCH_TIMEOUT_MS").toLong() > DenebGatewayClient.REQUEST_TIMEOUT_MS)
+
+        val webViewSource = sourceFile(
+            "src/androidMain/kotlin/ai/deneb/deneb/DenebWebView.android.kt",
+        ).readText()
+        assertContains(webViewSource, "holder.translateBridge?.cancelForNavigation()")
+        assertFalse(webViewSource.contains("DETACHED_RESTORE_GUARD_MS"))
     }
 
     @Test

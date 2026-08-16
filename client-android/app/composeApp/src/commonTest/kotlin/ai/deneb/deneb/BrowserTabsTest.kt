@@ -118,6 +118,14 @@ class BrowserTabsTest {
                 previousUrl = "https://saved.example/article",
             ),
         )
+        assertEquals(
+            "https://committed.example/article",
+            stableBrowserTabUrl(
+                currentUrl = "blob:https://committed.example/local",
+                requestedUrl = "https://stale-request.example/start",
+                previousUrl = "https://committed.example/article",
+            ),
+        )
         assertEquals("", stableBrowserTabUrl("about:blank", "data:text/plain,hello", ""))
         assertEquals(
             "Saved title",

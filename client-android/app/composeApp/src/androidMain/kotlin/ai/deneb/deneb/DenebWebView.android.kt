@@ -132,16 +132,15 @@ actual fun DenebWebView(
                         Toast.LENGTH_SHORT,
                     ).show()
                 }
-                web.addJavascriptInterface(
-                    BrowserTranslateBridge(
-                        scope = scope,
-                        translateSegments = translate,
-                        state = state,
-                        webView = { holder.web },
-                        translationEnabled = { holder.translationEnabled },
-                    ),
-                    BROWSER_TRANSLATE_BRIDGE_NAME,
+                val translateBridge = BrowserTranslateBridge(
+                    scope = scope,
+                    translateSegments = translate,
+                    state = state,
+                    webView = { holder.web },
+                    translationEnabled = { holder.translationEnabled },
                 )
+                holder.translateBridge = translateBridge
+                web.addJavascriptInterface(translateBridge, BROWSER_TRANSLATE_BRIDGE_NAME)
                 web.webViewClient = object : WebViewClient() {
                     // App/deep-link schemes (intent://, market://, kakaotalk://, tel:,
                     // mailto:, bank cert auth) cannot be rendered by a WebView. With no
@@ -151,6 +150,9 @@ actual fun DenebWebView(
                         view: WebView,
                         request: WebResourceRequest,
                     ): Boolean {
+                        if (request.isForMainFrame && request.hasGesture()) {
+                            holder.finishDetachedRestore()
+                        }
                         val url = request.url?.toString().orEmpty()
                         if (!isExternalSchemeUrl(url)) return false
                         if (openExternalUrl(context, url)) return true
@@ -187,6 +189,7 @@ actual fun DenebWebView(
                     }
 
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                        holder.translateBridge?.cancelForNavigation()
                         val previousStable = stableBrowserTabUrl(state.currentUrl, state.url, state.rendererRecoveryUrl)
                         if (canBookmarkUrl(url)) {
                             state.markRendererRecoveryStarted(url)
@@ -419,9 +422,6 @@ actual fun DenebWebView(
                     runCatching { web.restoreState(saved) != null }.getOrDefault(false)
                 } ?: false
                 holder.restoringDetachedTab = restored
-                if (restored) {
-                    web.postDelayed({ holder.restoringDetachedTab = false }, DETACHED_RESTORE_GUARD_MS)
-                }
                 holder.scrollRestorePending = state.platformScrollX != 0 || state.platformScrollY != 0
                 if (!restored && !state.rendererRecoveryPending) {
                     state.currentUrl.ifBlank { state.url }.takeIf { it.isNotBlank() }?.let(web::loadUrl)
@@ -431,6 +431,8 @@ actual fun DenebWebView(
         update = { /* navigation/commands handled via LaunchedEffect below */ },
         onRelease = { web ->
             fileChooser.deliver(null)
+            holder.translateBridge?.cancelForNavigation()
+            holder.translateBridge = null
             if (!holder.rendererGone) {
                 state.platformScrollX = web.scrollX
                 state.platformScrollY = web.scrollY
@@ -467,18 +469,28 @@ actual fun DenebWebView(
     LaunchedEffect(state.url) {
         val target = state.url
         if (target.isNotBlank() && holder.lastCommandUrl != target) {
+            holder.finishDetachedRestore()
             holder.lastCommandUrl = target
             holder.web?.loadUrl(target)
         }
     }
     LaunchedEffect(state.goBackTick) {
-        if (holder.commands.consumeGoBack(state)) holder.web?.let { if (it.canGoBack()) it.goBack() }
+        if (holder.commands.consumeGoBack(state)) {
+            holder.finishDetachedRestore()
+            holder.web?.let { if (it.canGoBack()) it.goBack() }
+        }
     }
     LaunchedEffect(state.reloadTick) {
-        if (holder.commands.consumeReload(state)) holder.web?.reload()
+        if (holder.commands.consumeReload(state)) {
+            holder.finishDetachedRestore()
+            holder.web?.reload()
+        }
     }
     LaunchedEffect(state.goForwardTick) {
-        if (holder.commands.consumeGoForward(state)) holder.web?.let { if (it.canGoForward()) it.goForward() }
+        if (holder.commands.consumeGoForward(state)) {
+            holder.finishDetachedRestore()
+            holder.web?.let { if (it.canGoForward()) it.goForward() }
+        }
     }
     LaunchedEffect(state.stopTick) {
         if (holder.commands.consumeStop(state)) holder.web?.stopLoading()
@@ -488,6 +500,7 @@ actual fun DenebWebView(
         val target = stableBrowserTabUrl(state.rendererRecoveryUrl, state.currentUrl, state.url)
         holder.web?.let { web ->
             if (target.isNotBlank()) {
+                holder.finishDetachedRestore()
                 holder.lastCommandUrl = target
                 web.loadUrl(target)
             }
@@ -504,7 +517,6 @@ actual fun DenebWebView(
 }
 
 private const val POPUP_RESOLUTION_TIMEOUT_MS = 10_000L
-private const val DETACHED_RESTORE_GUARD_MS = 2_000L
 
 private class WebViewHolder(state: DenebWebViewState) {
     @Volatile
@@ -514,9 +526,14 @@ private class WebViewHolder(state: DenebWebViewState) {
     @Volatile
     var translationEnabled: Boolean = false
     var rendererGone: Boolean = false
+    var translateBridge: BrowserTranslateBridge? = null
     val commands = BrowserCommandCursor(state)
     var scrollRestorePending: Boolean = false
     var restoringDetachedTab: Boolean = false
+
+    fun finishDetachedRestore() {
+        restoringDetachedTab = false
+    }
 
     fun restoreScroll(web: WebView, state: DenebWebViewState) {
         if (!scrollRestorePending) return

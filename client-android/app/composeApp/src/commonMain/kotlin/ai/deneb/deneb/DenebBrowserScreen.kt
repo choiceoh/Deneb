@@ -235,19 +235,18 @@ fun DenebBrowserScreen(
         history = decodeBrowserHistory(json)
     }
     val navigationCommit = state.pendingNavigationCommit
-    LaunchedEffect(navigationCommit) {
-        val commit = navigationCommit ?: return@LaunchedEffect
-        val current = state.consumeNavigationCommit(commit) ?: return@LaunchedEffect
-        if (current != appSettings.getBrowserLastUrl()) appSettings.setBrowserLastUrl(current)
-        val next = recordBrowserVisit(history, current, state.pageTitle)
-        if (next != history) persistHistory(next)
-    }
-    LaunchedEffect(state.currentUrl, state.pageTitle) {
-        val current = state.currentUrl.trim().takeIf(::canBookmarkUrl) ?: return@LaunchedEffect
-        val next = updateBrowserVisitTitle(history, current, state.pageTitle)
-        if (next != history) {
-            persistHistory(next)
+    LaunchedEffect(navigationCommit, state.currentUrl, state.pageTitle) {
+        val committed = navigationCommit?.let(state::consumeNavigationCommit)
+        if (committed != null && committed != appSettings.getBrowserLastUrl()) {
+            appSettings.setBrowserLastUrl(committed)
         }
+        val next = applyBrowserHistoryUpdate(
+            visits = history,
+            committedUrl = committed,
+            currentUrl = state.currentUrl.trim(),
+            title = state.pageTitle,
+        )
+        if (next != history) persistHistory(next)
     }
     val bookmarkUrl = stableBrowserTabUrl(state.currentUrl, state.url, activeRuntime.stableUrl)
     val bookmarkable = canBookmarkUrl(bookmarkUrl)
@@ -394,6 +393,7 @@ fun DenebBrowserScreen(
             },
             waitingForSlot = pendingTabUrl != null,
             onSelect = { id ->
+                pendingTabUrl = null
                 switchStore(selectBrowserTab(currentStore(), id))
                 showTabs = false
             },

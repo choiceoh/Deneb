@@ -56,6 +56,21 @@ internal fun updateBrowserVisitTitle(visits: List<BrowserVisit>, url: String, ti
     }.sanitizedBrowserHistory()
 }
 
+/** Applies one browser callback turn in order: a real navigation moves the URL
+ * to the front, then a title callback enriches that latest list without ever
+ * restoring stale recency from an earlier snapshot. */
+internal fun applyBrowserHistoryUpdate(
+    visits: List<BrowserVisit>,
+    committedUrl: String?,
+    currentUrl: String,
+    title: String,
+    nowMs: Long = browserHistoryNowMs(),
+): List<BrowserVisit> {
+    var next = committedUrl?.let { recordBrowserVisit(visits, it, title, nowMs) } ?: visits.sanitizedBrowserHistory()
+    if (canBookmarkUrl(currentUrl)) next = updateBrowserVisitTitle(next, currentUrl, title)
+    return next
+}
+
 internal fun browserVisitDisplayTitle(visit: BrowserVisit): String = visit.title.ifBlank { browserHistoryHost(visit.url) }.ifBlank { visit.url }
 
 private fun List<BrowserVisit>.sanitizedBrowserHistory(): List<BrowserVisit> = asSequence()

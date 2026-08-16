@@ -175,7 +175,7 @@ internal fun browserTabLimitBlocks(store: BrowserTabStore, targetUrl: String): B
  * Chooses durable tab metadata without allowing a renderer's transient
  * `about:blank`/`data:` URL to erase the last restorable web URL.
  */
-internal fun stableBrowserTabUrl(currentUrl: String, requestedUrl: String, previousUrl: String): String = sequenceOf(currentUrl, requestedUrl, previousUrl)
+internal fun stableBrowserTabUrl(currentUrl: String, requestedUrl: String, previousUrl: String): String = sequenceOf(currentUrl, previousUrl, requestedUrl)
     .map(String::trim)
     .firstOrNull(::canBookmarkUrl)
     .orEmpty()
