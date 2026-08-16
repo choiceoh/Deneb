@@ -11,6 +11,7 @@ import ai.deneb.onDragAndDropEventDropped
 import ai.deneb.ui.DenebType
 import ai.deneb.ui.chat.ChatUiState
 import ai.deneb.ui.chat.History
+import ai.deneb.ui.chat.hasUnansweredUserTurn
 import ai.deneb.ui.chat.lastRenderedAssistant
 import ai.deneb.ui.chat.needsEmptyReplyRecovery
 import ai.deneb.ui.components.VerticalScrollbarForList
@@ -221,22 +222,6 @@ internal fun ChatMessageList(
                         // message, so history.lastIndex isn't the list's last row).
                         listState.scrollToTrueBottom()
                     }
-                    val lastMessage = history.last()
-                    if (uiState.isSpeechOutputEnabled && lastMessage.role == History.Role.ASSISTANT) {
-                        componentScope.launch(getBackgroundDispatcher()) {
-                            textToSpeech?.stop()
-                            uiState.actions.setIsSpeaking(true, lastMessage.id)
-                            try {
-                                textToSpeech?.say(lastMessage.content.toSpeakableText())
-                            } catch (_: TextToSpeechSynthesisInterruptedError) {
-                                // Speech was interrupted by user
-                            } catch (_: Exception) {
-                                // Handle TTS errors gracefully (service failure, audio issues, etc.)
-                            } finally {
-                                uiState.actions.setIsSpeaking(false, lastMessage.id)
-                            }
-                        }
-                    }
                 }
             }
 
@@ -428,14 +413,53 @@ internal fun ChatMessageList(
             // long, so signal "done" even if the user has looked away.
             val haptics = rememberHaptics()
             val wasLoading = remember { mutableStateOf(false) }
+            // The user turn that was in flight when loading flipped on — so a
+            // session switch (isLoading drops) cannot speak the new transcript.
+            var loadingUserId by remember { mutableStateOf<String?>(null) }
             // Anchor for the waiting chip's elapsed display: marks the turn's
             // actual start, so the count survives the chip briefly leaving
             // composition (deneb-ui pending stretch).
             val turnStart = remember { mutableStateOf<TimeSource.Monotonic.ValueTimeMark?>(null) }
             LaunchedEffect(uiState.isLoading) {
-                if (wasLoading.value && !uiState.isLoading) haptics.tap()
+                val finishing = wasLoading.value && !uiState.isLoading
+                if (finishing) haptics.tap()
+                if (uiState.isLoading) {
+                    loadingUserId = uiState.history.lastOrNull { it.role == History.Role.USER }?.id
+                    turnStart.value = TimeSource.Monotonic.markNow()
+                    textToSpeech?.stop()
+                } else {
+                    turnStart.value = null
+                }
+                if (finishing) {
+                    val lastAssistant = uiState.history.lastRenderedAssistant()
+                    if (
+                        chatShouldSpeakFinishedReply(
+                            speechEnabled = uiState.isSpeechOutputEnabled,
+                            loadingUserId = loadingUserId,
+                            lastUserId = uiState.history.lastOrNull { it.role == History.Role.USER }?.id,
+                            lastAssistantId = lastAssistant?.id,
+                            lastAssistantHasText = lastAssistant?.content?.isNotBlank() == true,
+                            stoppedMessageId = uiState.stoppedMessageId,
+                            hasError = uiState.error != null,
+                            unanswered = uiState.history.hasUnansweredUserTurn(),
+                        ) && lastAssistant != null
+                    ) {
+                        componentScope.launch(getBackgroundDispatcher()) {
+                            textToSpeech?.stop()
+                            uiState.actions.setIsSpeaking(true, lastAssistant.id)
+                            try {
+                                textToSpeech?.say(lastAssistant.content.toSpeakableText())
+                            } catch (_: TextToSpeechSynthesisInterruptedError) {
+                                // Speech was interrupted by user
+                            } catch (_: Exception) {
+                                // Handle TTS errors gracefully (service failure, audio issues, etc.)
+                            } finally {
+                                uiState.actions.setIsSpeaking(false, lastAssistant.id)
+                            }
+                        }
+                    }
+                }
                 wasLoading.value = uiState.isLoading
-                turnStart.value = if (uiState.isLoading) TimeSource.Monotonic.markNow() else null
             }
 
             // Stick-to-bottom follow: IME shrinks the viewport (LazyColumn pins
@@ -695,11 +719,16 @@ internal fun ChatMessageList(
                             }
                         }
                     }
-                    // Skip the generic "thinking" row during a pending deneb-ui submission — the
-                    // pressed button's pulse already signals work in flight. Keep it for tool
-                    // activity so tool feedback isn't lost.
-                    val showWaitingRow = uiState.isLoading &&
-                        (frozenByAssistantId.values.none { it.isPending } || executingToolsState.tools.isNotEmpty())
+                    // Skip the generic "thinking" row once tokens are on screen
+                    // (the growing answer is the status) and during a pending
+                    // deneb-ui submit (the pressed button already pulses). Keep
+                    // it for in-flight tools so that feedback isn't lost.
+                    val showWaitingRow = chatShowWaitingRow(
+                        isLoading = uiState.isLoading,
+                        isResponseStreaming = isResponseStreaming,
+                        hasExecutingTools = executingToolsState.tools.isNotEmpty(),
+                        hasPendingUiSubmission = frozenByAssistantId.values.any { it.isPending },
+                    )
                     if (showWaitingRow) {
                         item(key = "loading") {
                             Column(denebContentWidthModifier()) {
