@@ -27,9 +27,8 @@ class MainActivity : ComponentActivity() {
 private class AndroidSaveStore(private val dir: File) : SaveStore {
     private fun file(slot: SaveSlot) = File(dir, if (slot == SaveSlot.AUTO) "auto.json" else "manual.json")
 
-    override fun write(slot: SaveSlot, text: String) {
-        runCatching { file(slot).writeText(text) }
-    }
+    override fun write(slot: SaveSlot, text: String): Boolean =
+        runCatching { file(slot).writeText(text) }.isSuccess
 
     override fun read(slot: SaveSlot): String? =
         file(slot).takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }

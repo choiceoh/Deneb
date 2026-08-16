@@ -17,7 +17,8 @@ enum class SaveSlot {
  * 코어와 UI 는 이 인터페이스만 알고, 실제 경로는 각 진입점(Main / MainActivity)이 꽂아 준다.
  */
 interface SaveStore {
-    fun write(slot: SaveSlot, text: String)
+    /** 저장에 성공했으면 true. 실패를 삼키면 플레이어가 "저장됐다"고 믿은 채 캠페인을 잃는다. */
+    fun write(slot: SaveSlot, text: String): Boolean
     fun read(slot: SaveSlot): String?
     fun clear(slot: SaveSlot)
 }
@@ -25,8 +26,9 @@ interface SaveStore {
 /** 기본 구현 — 앱을 껐다 켜면 사라진다. 진입점이 파일 기반 구현을 꽂으면 대체된다. */
 class MemorySaveStore : SaveStore {
     private val data = mutableMapOf<SaveSlot, String>()
-    override fun write(slot: SaveSlot, text: String) {
+    override fun write(slot: SaveSlot, text: String): Boolean {
         data[slot] = text
+        return true
     }
 
     override fun read(slot: SaveSlot): String? = data[slot]

@@ -34,6 +34,9 @@ object TurnEngine {
         s = Stock.repriceAll(s)
         s = Stock.settleTakeovers(s)
         s = resolveDistress(s)
+        // 합병·긴급 차입·기재 매각으로 대차대조표가 또 바뀌었다. 여기서 다시 매기지 않으면
+        // 다음 분기 내내 낡은 주가로 지분을 사고팔게 된다.
+        s = Stock.repriceAll(s)
         s = syncClosingBalances(s)
 
         s = clearQuarterlyCounters(s)

@@ -115,14 +115,26 @@ class GameViewModel(private val store: SaveStore = SaveStorage.current) {
 
     // ---- 세이브 ----
 
+    /** 자동 저장이 실패한 채로 진행 중인가 (경고를 한 번만 띄우기 위한 플래그). */
+    var saveFailed by mutableStateOf(false)
+        private set
+
     fun autoSave() {
-        state?.let { store.write(SaveSlot.AUTO, Save.encode(it)) }
+        val s = state ?: return
+        val ok = store.write(SaveSlot.AUTO, Save.encode(s))
+        if (!ok && !saveFailed) {
+            message = "자동 저장에 실패했습니다. 저장 공간을 확인하세요 — 지금 종료하면 진행 상황이 사라집니다."
+        }
+        saveFailed = !ok
     }
 
     /** 수동 저장은 자동 저장과 다른 슬롯에 넣는다 — 안 그러면 다음 분기에 곧바로 지워진다. */
     fun saveNow(): Boolean {
         val s = state ?: return false
-        store.write(SaveSlot.MANUAL, Save.encode(s))
+        if (!store.write(SaveSlot.MANUAL, Save.encode(s))) {
+            message = "저장에 실패했습니다. 저장 공간을 확인하세요."
+            return false
+        }
         message = "${s.year}년 ${s.quarter}분기를 저장했습니다."
         return true
     }

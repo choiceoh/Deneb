@@ -8,9 +8,9 @@ import java.io.File
 class FileSaveStore(private val dir: File) : SaveStore {
     private fun file(slot: SaveSlot) = File(dir, if (slot == SaveSlot.AUTO) "auto.json" else "manual.json")
 
-    override fun write(slot: SaveSlot, text: String) {
+    override fun write(slot: SaveSlot, text: String): Boolean {
         dir.mkdirs()
-        runCatching { file(slot).writeText(text) }
+        return runCatching { file(slot).writeText(text) }.isSuccess
     }
 
     override fun read(slot: SaveSlot): String? =

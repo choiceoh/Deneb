@@ -341,6 +341,33 @@ class RegressionTest {
         assertEquals(player.debt, report.debt, "리포트의 기말 부채가 실제와 다르다")
     }
 
+    // ------------------------------------------------------------ 주가 갱신
+
+    @Test
+    fun `합병 뒤 주가가 낡은 값으로 남지 않는다`() {
+        var s = fresh()
+        // 후지에어라인을 인수해 대차대조표를 크게 바꾼다.
+        // 상대는 유상증자(최대 30%)로 방어하므로, 희석 뒤에도 과반이 남을 만큼 쥐고 시작한다.
+        s = s.copy(
+            airlines = s.airlines.map {
+                if (it.id == "hanseong") {
+                    it.copy(holdings = it.holdings + ("fuji" to s.airline("fuji").shares * 0.85))
+                } else {
+                    it
+                }
+            },
+        )
+        s = TurnEngine.advance(s)
+        assertFalse(s.airline("fuji").alive, "증자로도 못 막을 지분인데 인수가 성사되지 않았다")
+
+        val player = s.airline("hanseong")
+        val repriced = Stock.price(s, player)
+        assertTrue(
+            abs(player.sharePrice - repriced) / repriced.coerceAtLeast(1.0) < 0.02,
+            "합병으로 자산이 바뀌었는데 주가가 갱신되지 않았다 (표시 ${player.sharePrice}, 실제 $repriced)",
+        )
+    }
+
     // ------------------------------------------------------------ 파산 정리
 
     @Test

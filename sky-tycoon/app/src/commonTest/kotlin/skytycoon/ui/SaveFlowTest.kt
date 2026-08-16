@@ -96,4 +96,26 @@ class SaveFlowTest {
         assertEquals(marker, vm.game.turn, "저장해 둔 분기로 돌아오지 않았다")
         assertEquals(cashAtMarker, vm.game.player.cash)
     }
+
+    @Test
+    fun `저장에 실패하면 성공했다고 알리지 않는다`() {
+        // 디스크가 꽉 찼는데 "저장했습니다"가 뜨면, 플레이어는 안심하고 앱을 닫는다.
+        val store = FailingSaveStore()
+        val vm = GameViewModel(store)
+        vm.start("goldenage", "hanseong", "normal", seed = 5)
+
+        assertFalse(vm.saveNow(), "저장이 실패했는데 성공으로 보고했다")
+        assertTrue(vm.message?.contains("실패") == true, "실패를 알리지 않았다: ${vm.message}")
+
+        vm.endTurn()
+        assertTrue(vm.saveFailed, "자동 저장 실패가 표시되지 않았다")
+        assertFalse(vm.hasSavedGame(), "쓰이지도 않은 세이브가 있다고 나온다")
+    }
+}
+
+/** 항상 쓰기에 실패하는 저장소 (디스크 가득 참·읽기 전용 상황). */
+private class FailingSaveStore : SaveStore {
+    override fun write(slot: SaveSlot, text: String) = false
+    override fun read(slot: SaveSlot): String? = null
+    override fun clear(slot: SaveSlot) = Unit
 }
