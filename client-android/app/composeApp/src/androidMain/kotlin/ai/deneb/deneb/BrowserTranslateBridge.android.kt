@@ -155,7 +155,15 @@ internal class BrowserTranslateBridge(
                     } catch (_: Exception) {
                         null
                     }
-                    if (translated == null || translated.size != work.segments.size) {
+                    if (translated == null) {
+                        // Transport/auth/provider availability is transient. Let
+                        // the page retry with its bounded exponential backoff so
+                        // a gateway restart cannot leave only cached headings
+                        // translated for the lifetime of the document.
+                        reject(work.requestId, retryable = true)
+                        return@launch
+                    }
+                    if (translated.size != work.segments.size) {
                         reject(work.requestId, retryable = false)
                         return@launch
                     }

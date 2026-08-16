@@ -51,6 +51,7 @@
   var persistentDirtyStores = {};
   var inFlight = {};         // tid -> true while a native/gateway batch is pending
   var failed = {};           // tid -> true after a terminal batch failure
+  var retryAttempts = {};    // tid -> bounded transient-failure retry count
   var chunkResults = {};     // tid -> { count, values } for split long text nodes
   var pending = {};          // requestId -> [{ tids, ... }]
   var pendingDeadlines = {}; // requestId -> execution timeout (queue wait is untimed)
@@ -79,6 +80,8 @@
   // Starts only after the native queue dequeues this batch. The gateway client
   // permits a 180s RPC, so leave cleanup margin beyond that transport deadline.
   var NATIVE_BATCH_TIMEOUT_MS = 210000;
+  var MAX_TRANSIENT_RETRIES = 4;
+  var RETRY_BASE_DELAY_MS = 750;
   var VIEWPORT_MARGIN = 900;
   // Max forced-layout (getBoundingClientRect) measurements per dispatch pass, so a
   // large still-untranslated page can't reflow-storm on every scroll tick. Covers
@@ -573,6 +576,7 @@
       return;
     }
     delete failed[tid];
+    delete retryAttempts[tid];
     rememberTranslation(rec.original, translated);
     replace(rec, translated);
   }
@@ -790,6 +794,7 @@
     if (!translatable(cur) || skipParent(n) || hiddenParent(n)) return;
     delete inFlight[tid];
     delete failed[tid];
+    delete retryAttempts[tid];
     delete chunkResults[tid];
     rec.original = cur;
     rec.context = null;
@@ -933,6 +938,7 @@
         delete nodes[tid];
         delete inFlight[tid];
         delete failed[tid];
+        delete retryAttempts[tid];
         delete chunkResults[tid];
       }
     }
@@ -988,10 +994,13 @@
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      if (inFlight[tids[i]] || isApplied(rec)) continue;
-      delete failed[tids[i]];
+      if (inFlight[tids[i]] || failed[tids[i]] || isApplied(rec)) continue;
       var cached = cachedTranslation(rec.original);
-      if (cached != null) { replace(rec, cached); continue; }
+      if (cached != null) {
+        delete retryAttempts[tids[i]];
+        replace(rec, cached);
+        continue;
+      }
       inFlight[tids[i]] = true;
       batch.push(tids[i]);
       if (batch.length >= MAX_SEGMENTS_PER_BATCH) { ship(batch); batch = []; }
@@ -1023,7 +1032,7 @@
     for (var i = 0; i < tids.length; i++) {
       var rec = nodes[tids[i]];
       if (!rec) continue;
-      if (inFlight[tids[i]] || isApplied(rec)) continue;
+      if (inFlight[tids[i]] || failed[tids[i]] || isApplied(rec)) continue;
       var near;
       if (reflows >= REFLOW_BUDGET) {
         near = false;
@@ -1111,17 +1120,30 @@
 
   function failUnits(units, retryable) {
     var tids = unique(unitTids(units));
+    var retryTids = [];
+    var retryDelay = 0;
     for (var i = 0; i < tids.length; i++) {
-      delete inFlight[tids[i]];
-      delete chunkResults[tids[i]];
-      if (retryable) delete failed[tids[i]];
-      else failed[tids[i]] = true;
+      var tid = tids[i];
+      delete inFlight[tid];
+      delete chunkResults[tid];
+      if (retryable) {
+        var attempt = (retryAttempts[tid] || 0) + 1;
+        if (attempt <= MAX_TRANSIENT_RETRIES) {
+          retryAttempts[tid] = attempt;
+          delete failed[tid];
+          retryTids.push(tid);
+          retryDelay = Math.max(retryDelay, RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+          continue;
+        }
+      }
+      delete retryAttempts[tid];
+      failed[tid] = true;
     }
     reportProgress();
-    if (retryable) {
+    if (retryTids.length) {
       window.setTimeout(function () {
-        if (enabled) dispatchPrioritized(tids);
-      }, 350);
+        if (enabled) dispatchPrioritized(retryTids);
+      }, retryDelay);
     }
   }
 
@@ -1146,6 +1168,7 @@
       delete inFlight[tids[i]];
       delete chunkResults[tids[i]];
       delete failed[tids[i]];
+      delete retryAttempts[tids[i]];
     }
   }
 
@@ -1321,6 +1344,9 @@
     for (var tid in nodes) {
       if (!nodes.hasOwnProperty(tid)) continue;
       var rec = nodes[tid];
+      // Turning the feature off and back on is an explicit manual retry.
+      delete failed[tid];
+      delete retryAttempts[tid];
       if (rec.node && rec.node.nodeValue !== rec.original) rec.node.nodeValue = rec.original;
     }
   }
