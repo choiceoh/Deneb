@@ -88,6 +88,19 @@ var rsiDispatchSources = []string{
 	"runtime-error", "deadcode-finding",
 }
 
+// rsiIncrementalHealthKinds are health-finding rule ids that score a large
+// public surface and/or a multi-hundred-commit git-history window. One
+// unattended session cannot make them disappear (mirrors
+// scripts/audit/health_finding_miner.py INCREMENTAL_KINDS). Live 2026-07 they
+// all declined; live 2026-08 they landed bounded refactors with no impact
+// contract and ate the daily cap. They stay in the queue as 검토 대기.
+var rsiIncrementalHealthKinds = []string{
+	"responsibility-cochange",
+	"volatile-contract-responsibility",
+	"diffuse-change-responsibility",
+	"fanout-hotspot",
+}
+
 // SourceAutoDispatches reports whether a self-correction candidate from this
 // source is on the auto-dispatch track (compiled allowlist or ladder-graduated)
 // vs still staged. Exported for the miniapp wire projection so clients can
@@ -1006,7 +1019,7 @@ func rsiSourceDispatchable(source string) bool {
 	// pick it — a false dashboard signal (Codex review of RSI eval M7).
 	for _, s := range rsiDispatchSources {
 		if rsiSourceMatchesNamespace(source, s) {
-			return true
+			return !rsiHealthFindingIncremental(source)
 		}
 	}
 	// Executed graduation-ladder unlocks admit staged sources at runtime
@@ -1025,6 +1038,40 @@ func rsiSourceDispatchable(source string) bool {
 // selfCorrectionSourceMatches).
 func rsiSourceMatchesNamespace(source, ns string) bool {
 	return source == ns || strings.HasPrefix(source, ns+":")
+}
+
+// rsiHealthFindingIncremental reports a health-finding whose rule id is in
+// rsiIncrementalHealthKinds. Source shapes are health-finding:<kind>:<hash>
+// and the v3 health-finding:structure:<kind>:<hash>.
+func rsiHealthFindingIncremental(source string) bool {
+	if !rsiSourceMatchesNamespace(source, "health-finding") {
+		return false
+	}
+	rest := strings.TrimPrefix(source, "health-finding:")
+	for _, part := range strings.Split(rest, ":") {
+		for _, kind := range rsiIncrementalHealthKinds {
+			if part == kind {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// rsiCompiledDispatchNamespace reports whether the first source segment is
+// already on the compiled allowlist. Held subtypes of an admitted namespace
+// (incremental health-findings) are not a new source to graduate.
+func rsiCompiledDispatchNamespace(prefix string) bool {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return false
+	}
+	for _, s := range rsiDispatchSources {
+		if prefix == s {
+			return true
+		}
+	}
+	return false
 }
 
 func rsiScopeSummary(byScope map[string]int) string {
