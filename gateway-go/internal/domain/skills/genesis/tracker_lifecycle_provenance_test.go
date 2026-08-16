@@ -9,6 +9,7 @@ import (
 // and reject paths, and legacy (nil-provenance) writes must stay readable.
 func TestTracker_EvolveProvenanceRoundTrip(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

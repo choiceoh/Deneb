@@ -18,6 +18,7 @@ func TestMaybeRevertAdoptionTriggersRollbackOnlyOnHardHealthRegression(t *testin
 	setup := func(t *testing.T) (*MetaEvolutionTask, *generation.MetaArtifacts, string) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)
@@ -151,6 +152,7 @@ func TestMaybeRevertStormPoisonedEvaluatorAdoption(t *testing.T) {
 	setup := func(t *testing.T) (*MetaEvolutionTask, *generation.MetaArtifacts, string) {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)

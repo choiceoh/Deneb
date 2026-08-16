@@ -15,6 +15,7 @@ import (
 func backoffTracker(t *testing.T) *Tracker {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

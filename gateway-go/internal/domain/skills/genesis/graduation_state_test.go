@@ -12,6 +12,7 @@ import (
 // isolated because the state file lives at the FIXED shared path.
 func TestGraduationStateUnlockIsIdempotentAndWidensDispatchPredicate(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 
 	if graduationUnlocked(graduationEProcess) {
@@ -73,6 +74,7 @@ func TestGraduationStateUnlockIsIdempotentAndWidensDispatchPredicate(t *testing.
 // must honor it; only an explicit operator (non-auto) unlock overrides.
 func TestRelockVetoSurvivesEvidenceMetAutoRegraduation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 
 	if fresh, err := tr.unlockGraduation(graduationDispatchCap, "판정 6·랜딩 60%", 4, true); err != nil || !fresh {
@@ -110,6 +112,7 @@ func TestRelockVetoSurvivesEvidenceMetAutoRegraduation(t *testing.T) {
 // knob overrides in BOTH directions.
 func TestEProcessOwnsRollbackFlipsOnGraduationAndEnvOverride(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	t.Setenv("DENEB_EPROCESS_OWNS_ROLLBACK", "")
 	tr := newTestTracker(t)
 	if eProcessOwnsRollback() {
@@ -136,6 +139,7 @@ func TestEProcessOwnsRollbackFlipsOnGraduationAndEnvOverride(t *testing.T) {
 // candidate supply alone (no human first-batch endorsement).
 func TestLadderWatchAutoGraduatesOnFloorStopsForVetoKillSwitchAndDriftFreeze(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	t.Setenv("DENEB_AUTO_GRADUATE", "")
 	tr := newTestTracker(t)
 	task := &LadderWatchTask{Tracker: tr}

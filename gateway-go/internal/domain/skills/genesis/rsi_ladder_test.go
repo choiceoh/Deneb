@@ -13,6 +13,7 @@ import (
 // reads 축적 중, and the aggregate card goes LIVE only when a row is READY.
 func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 
 	// Empty evidence: every machine row accumulates, aggregate DATA-GATED.
@@ -79,6 +80,7 @@ func TestRSIAssessLadderFlipsLiveWhenARowReachesReady(t *testing.T) {
 
 func TestLadderDispatchCapUsesLatestTerminalWatchedCohort(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 	dir := tr.dispatchMarkerDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -150,6 +152,7 @@ func plantCalibrationDropIn(t *testing.T) {
 func isolateCalibrationHome(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 }
 
 // Calibration row counts only post-window bench-carrying CYCLE records and
@@ -274,6 +277,7 @@ func TestLadderCalibrationRowDoneWhenDropInRemoved(t *testing.T) {
 // running at cap 4 with a 72% land rate.
 func TestLadderDispatchCapOffersNextRungAfterUnlock(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 	dir := tr.dispatchMarkerDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -351,6 +355,7 @@ func TestLadderDispatchCapOffersNextRungAfterUnlock(t *testing.T) {
 // re-offer the FIRST rung — not the step the veto never let run.
 func TestLadderDispatchCapReoffersFirstRungAfterRelock(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 	if _, err := tr.unlockGraduation(graduationDispatchCap, "cohort", 4, true); err != nil {
 		t.Fatal(err)
@@ -377,6 +382,7 @@ func TestNextGraduationDispatchCap(t *testing.T) {
 // backlog), not a READY that can never auto-resolve.
 func TestLadderStagedSourcesIncrementalBacklog(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 	if _, err := tr.RecordSelfCorrectionCandidate(SelfCorrectionCandidateRecord{
 		Scope: "code", Status: SelfCorrectionStatusProposed, SkillName: "sk",

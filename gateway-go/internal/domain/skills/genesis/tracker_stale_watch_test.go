@@ -2,6 +2,7 @@ package genesis
 
 import (
 	"log/slog"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -12,6 +13,7 @@ func TestResolveStaleWatchesConfirmsUsedExpiresUnusedLeavesFreshWatchesAlone(t *
 	newTracker := func(t *testing.T) *Tracker {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)
@@ -112,6 +114,7 @@ func TestResolveStaleWatchesConfirmsUsedExpiresUnusedLeavesFreshWatchesAlone(t *
 	t.Run("restored pre-timestamp watch starts its clock at restore", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("DENEB_STATE_DIR", filepath.Join(home, ".deneb"))
 		tr1, err := NewTracker(slog.Default())
 		if err != nil {
 			t.Fatal(err)

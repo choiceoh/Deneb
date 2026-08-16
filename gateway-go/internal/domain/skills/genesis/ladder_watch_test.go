@@ -21,6 +21,7 @@ func TestLadderWatchFiresOnceOnReadyTransitionRetriesOnMissingOrFailedCallback(t
 	// sop-mining, unlocked 2026-08-16) silently becomes dispatchable here and
 	// the re-earned READY below never fires.
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr := newTestTracker(t)
 	task := &LadderWatchTask{Tracker: tr}
 

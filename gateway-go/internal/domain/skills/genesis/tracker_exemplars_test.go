@@ -64,6 +64,7 @@ func (e *exemplarSemanticEmbedder) snapshotQueries() []string {
 
 func TestConfirmedEvolveExemplars_RetrievalContract(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -124,6 +125,7 @@ func TestFormatConfirmedEvolveExemplars(t *testing.T) {
 
 func TestEvolutionHealthReturnsFalseAcceptRateComplementingConfirmRate(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +156,7 @@ func TestEvolutionHealthReturnsFalseAcceptRateComplementingConfirmRate(t *testin
 // unrelated mechanisms stay excluded.
 func TestConfirmedEvolveExemplars_MechanismFallback(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -176,6 +179,7 @@ func TestConfirmedEvolveExemplars_MechanismFallback(t *testing.T) {
 
 func TestConfirmedEvolveExemplars_SemanticFallbackFindsAnalogousSuccess(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -219,6 +223,7 @@ func TestConfirmedEvolveExemplars_SemanticFallbackFindsAnalogousSuccess(t *testi
 
 func TestConfirmedEvolveExemplars_ExactMatchPrecedesSemanticLookup(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

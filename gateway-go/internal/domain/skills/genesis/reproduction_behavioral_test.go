@@ -75,6 +75,7 @@ func TestAdoptReproductionCaseKeepsBehavioralAssertionsWithoutAffectingOracleDis
 	newEvolver := func(t *testing.T) *Evolver {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		tr, err := NewTracker(nil)
 		if err != nil {
 			t.Fatal(err)

@@ -25,6 +25,7 @@ import (
 // genesis epochs already dropped in the same situation.
 func TestMetaEvolution_ProducerDropsWithoutShadowGenerator(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +89,7 @@ func TestMetaEvolution_SkipCycleBenchesIncumbentOnlyWhenCalibrationKnobSet(t *te
 	run := func(t *testing.T, knob bool) MetaRevisionRecord {
 		t.Helper()
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("DENEB_STATE_DIR", t.TempDir())
 		if knob {
 			t.Setenv("DENEB_META_BENCH_ON_SKIP", "1")
 		} else {
@@ -161,6 +163,7 @@ func TestMetaEvolution_SkipCycleBenchesIncumbentOnlyWhenCalibrationKnobSet(t *te
 // recorded; the cycle stays a benchless skip.
 func TestMetaEvolution_SkipCycleZeroSampleBenchIsDropped(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	t.Setenv("DENEB_META_BENCH_ON_SKIP", "1")
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
@@ -260,6 +263,7 @@ func TestMetaProposalGateRejectsIdenticalOversizedAndSchemaBreakingProposals(t *
 // then genesis, then back to producer — one part of the pipeline per window.
 func TestNextEpochRotatesProducerEvaluatorGenesisAndIgnoresActionRecords(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -315,6 +319,7 @@ func TestNextEpochRotatesProducerEvaluatorGenesisAndIgnoresActionRecords(t *test
 // surface newest-first, and the evidence block must include it.
 func TestMetaRevisionLedgerNewestFirstAndDisplayedInEvidence(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -351,6 +356,7 @@ func TestMetaRevisionLedgerNewestFirstAndDisplayedInEvidence(t *testing.T) {
 // nothing; a version mismatch is excluded.
 func TestAssembleEvidenceLoadsEvaluatorEpochOnIncumbentJudgeMissesOnly(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -415,6 +421,7 @@ func TestAssembleEvidenceLoadsEvaluatorEpochOnIncumbentJudgeMissesOnly(t *testin
 // judge version must not.
 func TestAssembleEvidenceLoadsOrganicFalseAcceptsForIncumbentJudgeVersion(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -458,6 +465,7 @@ func TestAssembleEvidenceLoadsOrganicFalseAcceptsForIncumbentJudgeVersion(t *tes
 // a fully-caught category must not appear.
 func TestAssembleEvidenceSurfacesCategorySkewWithoutFullyCaughtCategories(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -488,6 +496,7 @@ func TestAssembleEvidenceSurfacesCategorySkewWithoutFullyCaughtCategories(t *tes
 // epoch exactly as it was — the closure is a no-op until labels accumulate.
 func TestAssembleEvidenceLeavesMissBlockEmptyForCleanJudge(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -533,6 +542,7 @@ func TestWriteProposal_DoesNotTouchLiveArtifact(t *testing.T) {
 // summarized.
 func TestMetaEvolutionHealthWindowsRevisionsAndDisplaysNewest(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -568,6 +578,7 @@ func TestMetaEvolutionHealthWindowsRevisionsAndDisplaysNewest(t *testing.T) {
 // success tail; here we pin the nil-safety contract.)
 func TestMetaEvolutionTask_OnProposalNilSafe(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -625,6 +636,7 @@ func TestIntervalAndBenchScaleEnvOverridesWithBoundsFallback(t *testing.T) {
 // rejected); an empty ledger yields a zero value (quiet, not broken).
 func TestOperatorUtilitySignals(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -672,6 +684,7 @@ func TestOperatorUtilitySignals(t *testing.T) {
 // producer knows it is prose-grounding, not a gate.
 func TestAssembleOperatorUtilityEvidenceAdvisoryBlockAppearsInBothEpochsWhenVerdictsExist(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -751,6 +764,7 @@ func TestMetaRevisionRecord_OperatorUtilityRoundTrip(t *testing.T) {
 // gate.
 func TestAssembleEvidenceRuntimeHealthBlockAbsentUnlessClosureNonEmpty(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -790,6 +804,7 @@ func TestAssembleEvidenceRuntimeHealthBlockAbsentUnlessClosureNonEmpty(t *testin
 // and returns non-empty; absent when nil or empty. Both epochs carry it.
 func TestAssembleEvidenceQualityBenchBlockAbsentUnlessClosureNonEmpty(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

@@ -97,6 +97,7 @@ func TestClassifyMetaRevision_BodyRewriteRatio(t *testing.T) {
 // as zero, not as continuity.
 func TestMetaRevisionClassBalance_StreakAndJoin(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +137,7 @@ func TestMetaRevisionClassBalance_StreakAndJoin(t *testing.T) {
 
 func TestMetaRevisionClassBalance_UnknownClassEndsStreak(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
@@ -155,6 +157,7 @@ func TestMetaRevisionClassBalance_UnknownClassEndsStreak(t *testing.T) {
 // all (it revises the judge, not the producer).
 func TestAssembleEvidence_RevisionClassNudge(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)

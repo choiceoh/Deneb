@@ -10,6 +10,7 @@ import (
 // workout cases is a labeler false-pass suspect; every other combination is not.
 func TestLabelerBlindSpotsFlagsConfirmedSkillsThatFailOwnWorkoutCases(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	tr, err := NewTracker(slog.Default())
 	if err != nil {
 		t.Fatal(err)
