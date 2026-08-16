@@ -554,13 +554,17 @@ object Actions {
             return ActionResult.fail(state, "이번 분기에 더 발행할 수 있는 물량은 ${(limit / 1e6).toInt()}백만 주입니다.")
         }
         val proceeds = cmd.shares * airline.sharePrice * Balance.ISSUE_DISCOUNT
-        val next = state.withAirline(airline.id) {
-            it.copy(
-                cash = it.cash + proceeds,
-                shares = it.shares + cmd.shares,
-                issuedThisQuarter = it.issuedThisQuarter + cmd.shares,
-            )
-        }
+        // 발행 즉시 주가를 다시 매긴다. 안 그러면 광고한 희석이 화면에 안 보이고,
+        // 남들은 낡은 시세로 우리 지분을 평가하며, 그 사이에 희석 전 값으로 매집당한다.
+        val next = Stock.repriceAll(
+            state.withAirline(airline.id) {
+                it.copy(
+                    cash = it.cash + proceeds,
+                    shares = it.shares + cmd.shares,
+                    issuedThisQuarter = it.issuedThisQuarter + cmd.shares,
+                )
+            },
+        )
         return ActionResult(
             next,
             true,

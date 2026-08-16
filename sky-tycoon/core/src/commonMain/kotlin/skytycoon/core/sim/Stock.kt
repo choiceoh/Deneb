@@ -56,12 +56,19 @@ object Stock {
         return minOf(cap, floatShares(state, targetId)).coerceAtLeast(0.0)
     }
 
-    /** 인수가 성립하면 인수사가 소수 주주에게 치러야 하는 잔여 지분 정리 대금. */
+    /**
+     * 인수가 성립하면 인수사가 **자기 지분 외 전부**에 치러야 하는 정리 대금.
+     *
+     * 경쟁사가 들고 있는 몫만 세면 안 된다. 보통 인수는 과반을 조금 넘긴 선에서 끝나고
+     * 나머지 40~50% 는 시장에 풀린 물량(float)인데, 그걸 값도 안 치르고 소각하면
+     * 회사 전체를 절반 값에 가져가는 셈이 된다.
+     */
     fun minorityStakeValue(state: GameState, acquirerId: String, targetId: String): Double {
         val target = state.airlineOrNull(targetId) ?: return 0.0
-        return state.airlines
+        val heldByRivals = state.airlines
             .filter { it.id != acquirerId && it.id != targetId }
-            .sumOf { (it.holdings[targetId] ?: 0.0) * target.sharePrice }
+            .sumOf { it.holdings[targetId] ?: 0.0 }
+        return (heldByRivals + floatShares(state, targetId)) * target.sharePrice
     }
 
     /** 매수를 상태에 반영한다. 사전 검증과 실제 실행이 **같은 코드**를 써야 어긋나지 않는다. */
@@ -183,8 +190,9 @@ object Stock {
         val treasury = target.holdings[acquirerId] ?: 0.0
         val acquirerShares = (acquirer.shares - treasury).coerceAtLeast(acquirer.shares * 0.1)
 
-        // 소수 주주를 시장가로 몰아내는 값은 인수사가 낸다. 어디서도 빼지 않으면
-        // 과반만 사고도 회사 전체를 가져가면서 시장 전체 현금이 불어난다.
+        // 인수사 몫을 뺀 나머지 지분(경쟁사 보유분 + 시장 유통물량)을 시장가로 사들인다.
+        // 어디서도 빼지 않으면 과반만 사고 회사 전체를 가져가면서 현금이 불어난다.
+        // 유통물량 값은 게임 밖 주주에게 나가므로 인게임 현금 총량에서 그만큼 빠진다.
         val minorityPayout = minorityStakeValue(state, acquirerId, targetId)
 
         // 같은 도시에 같은 시설이 둘 생기지 않게 정리한다. BuildBusiness 가 막는 조합이라

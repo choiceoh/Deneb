@@ -548,13 +548,38 @@ class RegressionTest {
         }
 
         val before = s.livingAirlines.sumOf { it.cash }
+        // 시장에 풀린 물량은 게임 밖 주주 몫이라 그 값만큼은 인게임 현금에서 빠져나간다.
+        val floatValue = Stock.floatShares(s, victim.id) * s.airline(victim.id).sharePrice
+        assertTrue(floatValue > 0.0, "유통물량이 없다 — 테스트가 헛돈다")
+
         val after = Stock.merge(s, "hanseong", victim.id)
         val total = after.airlines.filter { it.alive }.sumOf { it.cash }
 
-        assertTrue(abs(total - before) < 1.0, "합병으로 시장 전체 현금이 ${total - before} 만큼 변했다")
+        assertTrue(
+            abs((before - total) - floatValue) < 1.0,
+            "현금 변동 ${before - total} 이 유통물량 값 $floatValue 과 다르다 — 어딘가에서 돈이 새거나 생겼다",
+        )
         assertTrue(
             (after.airline(minority.id).cash) > minority.cash,
             "소수 주주가 지분 대금을 못 받았다",
+        )
+    }
+
+    @Test
+    fun `인수 대금은 자기 지분을 뺀 전부에 매겨진다`() {
+        // 과반만 사고 나머지를 값도 안 치르고 소각하면 회사를 절반 값에 가져가게 된다.
+        var s = fresh()
+        val victimId = s.livingAirlines.first { it.id != "hanseong" }.id
+        val victim = s.airline(victimId)
+        s = s.withAirline2("hanseong") {
+            it.copy(holdings = it.holdings + (victimId to victim.shares * 0.55))
+        }
+
+        val payout = Stock.minorityStakeValue(s, "hanseong", victimId)
+        val restOfCompany = victim.shares * 0.45 * victim.sharePrice
+        assertTrue(
+            abs(payout - restOfCompany) < victim.sharePrice,
+            "정리 대금 $payout 이 남은 지분 45% 의 값 $restOfCompany 과 다르다",
         )
     }
 
@@ -623,16 +648,22 @@ class RegressionTest {
         val victimId = s.livingAirlines.first { it.id != "hanseong" }.id
         val hotel = Business(BusinessType.HOTEL, s.player.home)
         // 양쪽이 같은 도시에 같은 호텔을 가진 상태 — 하나는 처분된다.
-        s = s.withAirline2("hanseong") { it.copy(businesses = listOf(hotel), holdings = emptyMap()) }
+        // 현금이 0 으로 깎이면 매각대가 묻히므로 넉넉히 쥐여 준다.
+        s = s.withAirline2("hanseong") {
+            it.copy(cash = 1e11, businesses = listOf(hotel), holdings = emptyMap())
+        }
         s = s.withAirline2(victimId) { it.copy(businesses = listOf(hotel), holdings = emptyMap()) }
 
         val buyer = s.airline("hanseong")
         val victim = s.airline(victimId)
+        val payout = Stock.minorityStakeValue(s, "hanseong", victimId)
+        val disposal = Economics.businessValue(s, listOf(hotel))
         val after = Stock.merge(s, "hanseong", victimId).airline("hanseong")
 
         assertEquals(1, after.businesses.size, "중복 시설이 그대로 남았다")
+        assertTrue(after.cash > 0.0, "현금이 바닥나 매각대를 확인할 수 없다 — 테스트가 헛돈다")
         assertTrue(
-            abs(after.cash - (buyer.cash + victim.cash + Economics.businessValue(s, listOf(hotel)))) < 1.0,
+            abs(after.cash - (buyer.cash + victim.cash + disposal - payout)) < 1.0,
             "겹친 시설이 매각대 한 푼 없이 사라졌다",
         )
     }
