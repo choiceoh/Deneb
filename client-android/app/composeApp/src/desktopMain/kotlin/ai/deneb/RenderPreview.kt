@@ -14,7 +14,6 @@ import ai.deneb.deneb.SearchHit
 import ai.deneb.deneb.SearchResults
 import ai.deneb.deneb.Todo
 import ai.deneb.deneb.generated.ProjectDigestRow
-import ai.deneb.deneb.generated.ProjectSiteRow
 import ai.deneb.ui.DarkColorScheme
 import ai.deneb.ui.DenebRow
 import ai.deneb.ui.DenebScreenScaffold
@@ -428,19 +427,4 @@ internal val sampleDigests = listOf(
         updatedAtMs = 1783065600000L,
         path = "프로젝트/군산-옥구읍-수산리-태양광-발전소/대표.md",
     ),
-)
-
-// 현장 지도 mock: a mix of 에너지원(색)·특성(모양)·용량(크기) so the preview exercises
-// every legend axis + the 미배치 tray (황해도 resolves to no known 시도).
-internal val sampleSites = listOf(
-    ProjectSiteRow(project = "군산 수산리 태양광", client = "금호타이어", path = "프로젝트/gunsan/대표.md", due = "2026-07-18", sites = listOf("전북 군산시 옥구읍 수산리"), kinds = listOf("태양광/토지"), capacity = 24.0, status = "계약"),
-    ProjectSiteRow(project = "화성 향남 태양광", client = "한화솔루션", path = "프로젝트/hwaseong/대표.md", sites = listOf("경기 화성시 향남읍"), kinds = listOf("태양광/토지"), capacity = 12.0),
-    ProjectSiteRow(project = "성남 분당 기자재", client = "LS일렉트릭", path = "프로젝트/bundang/대표.md", sites = listOf("경기 성남시 분당구"), kinds = listOf("기자재/모듈"), capacity = 8.0),
-    ProjectSiteRow(project = "해남 산이 태양광", client = "한국남부발전", path = "프로젝트/haenam/대표.md", sites = listOf("전남 해남군 산이면"), kinds = listOf("태양광/토지"), capacity = 99.0),
-    ProjectSiteRow(project = "밀양 부북 ESS", client = "SK에코플랜트", path = "프로젝트/miryang/대표.md", sites = listOf("경남 밀양시 부북면"), kinds = listOf("태양광/ESS"), capacity = 40.0),
-    ProjectSiteRow(project = "당진 석문 풍력", client = "한국서부발전", path = "프로젝트/dangjin/대표.md", sites = listOf("충남 당진시 석문면"), kinds = listOf("풍력/육상"), capacity = 60.0, status = "개설"),
-    ProjectSiteRow(project = "인천 미추홀 루프탑", client = "인천도시공사", path = "프로젝트/incheon/대표.md", sites = listOf("인천 미추홀구 학익동"), kinds = listOf("태양광/루프탑"), capacity = 2.0, status = "후보"),
-    ProjectSiteRow(project = "서귀포 대정 해상풍력", client = "제주에너지", path = "프로젝트/jeju/대표.md", sites = listOf("제주 서귀포시 대정읍"), kinds = listOf("풍력/해상"), capacity = 100.0),
-    ProjectSiteRow(project = "신안 지도 수상태양광", client = "한국남동발전", path = "프로젝트/sinan/대표.md", sites = listOf("전남 신안군 지도읍"), kinds = listOf("태양광/수상"), capacity = 50.0),
-    ProjectSiteRow(project = "새만금 3구역", client = "농어촌공사", path = "프로젝트/saemangeum/대표.md", sites = listOf("황해도 어딘가면"), kinds = listOf("기자재/케이블"), capacity = 15.0, status = "후보"),
 )

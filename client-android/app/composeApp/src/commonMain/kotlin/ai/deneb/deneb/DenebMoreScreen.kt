@@ -13,7 +13,6 @@ import ai.deneb.DenebOrgChart
 import ai.deneb.DenebProjectDigests
 import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch
-import ai.deneb.DenebSiteMap
 import ai.deneb.DenebUsage
 import ai.deneb.ui.DenebGroup
 import ai.deneb.ui.DenebListRow
@@ -40,7 +39,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
@@ -80,7 +78,6 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("재귀적 자가개선", DenebRsi, Icons.Outlined.Autorenew, key = "deneb_rsi"),
         MoreEntry("사용량", DenebUsage, Icons.Outlined.Insights, key = "deneb_usage"),
         MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Article, key = "deneb_project_digests"),
-        MoreEntry("현장 지도", DenebSiteMap, Icons.Outlined.Place, key = "deneb_site_map"),
         MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org"),
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search"),
         MoreEntry("카테고리", DenebCategories, Icons.Outlined.Folder, key = "deneb_categories"),

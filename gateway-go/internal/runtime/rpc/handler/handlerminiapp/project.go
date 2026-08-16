@@ -21,14 +21,10 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/protocol"
 )
 
-// ProjectStatusSource yields each project's parsed 현재 상태 digest and 현장 list,
-// and can create/update 현장 pages. Satisfied by the wiki store.
+// ProjectStatusSource yields each project's parsed 현재 상태 digest.
+// Satisfied by the wiki store.
 type ProjectStatusSource interface {
 	ProjectStatuses() ([]wiki.ProjectStatus, error)
-	ProjectSites() ([]wiki.ProjectSite, error)
-	SetSiteStatus(path, status string) error
-	EnsureSitePage(projectPath, address string) (path string, created bool, err error)
-	UpdateSitePage(path string, f wiki.SiteFields) error
 }
 
 // ProjectLinkedNotebook / ProjectLinkedWorkItem are the minimal item projections
@@ -103,73 +99,6 @@ type ProjectDigestsOut struct {
 	Digests []ProjectDigestRow `json:"digests"`
 }
 
-// ProjectSiteRow is one active project's 현장 for the 현장 지도. Emitted for every
-// active 대표페이지 carrying Sites (unlike digests, which require a 현재 상태
-// section), so the map represents all current sites. Sites are canonical
-// administrative paths ("광역약칭 시/군 …"); the map keys on the first two tokens.
-//
-//deneb:wire
-type ProjectSiteRow struct {
-	Project  string   `json:"project"`
-	Client   string   `json:"client,omitempty"`
-	Path     string   `json:"path,omitempty"`
-	Due      string   `json:"due,omitempty"`
-	Sites    []string `json:"sites"`
-	Kinds    []string `json:"kinds,omitempty"`
-	Capacity float64  `json:"capacity,omitempty"`
-	// Status is the 현장's lifecycle stage (후보/계약/개설/준공); "" = 미분류. The map
-	// hides 후보 by default and offers it as a filter axis.
-	Status string `json:"status,omitempty"`
-	// 공정 일정 milestone dates — the map renders these as a timeline in the site
-	// detail sheet and surfaces the nearest upcoming 검사일. YYYY-MM-DD (모듈입고 may
-	// be a free-form 기간). Blank for 대표페이지-fallback rows.
-	ContractDate         string `json:"contract_date,omitempty"`
-	ConstructionStart    string `json:"construction_start,omitempty"`
-	ModuleDelivery       string `json:"module_delivery,omitempty"`
-	PreUseInspection     string `json:"pre_use_inspection,omitempty"`
-	CompletionInspection string `json:"completion_inspection,omitempty"`
-}
-
-// ProjectSitesOut is the miniapp.project.sites response.
-//
-//deneb:wire
-type ProjectSitesOut struct {
-	Sites []ProjectSiteRow `json:"sites"`
-}
-
-// ProjectSiteSetStatusOut is the miniapp.project.site.setStatus response: the
-// path written and the normalized status ("" = 미분류).
-//
-//deneb:wire
-type ProjectSiteSetStatusOut struct {
-	Path   string `json:"path"`
-	Status string `json:"status"`
-}
-
-// ProjectSiteEnsureOut is the miniapp.project.site.ensure response: the 현장 page
-// path (existing or newly created) for one address under a project.
-//
-//deneb:wire
-type ProjectSiteEnsureOut struct {
-	Path    string `json:"path"`
-	Created bool   `json:"created"`
-	Status  string `json:"status,omitempty"`
-}
-
-// ProjectSiteUpdateOut is the miniapp.project.site.update response after a
-// partial milestone (or other SiteFields) write — echoes the page's schedule.
-//
-//deneb:wire
-type ProjectSiteUpdateOut struct {
-	Path                 string `json:"path"`
-	Status               string `json:"status,omitempty"`
-	ContractDate         string `json:"contract_date,omitempty"`
-	ConstructionStart    string `json:"construction_start,omitempty"`
-	ModuleDelivery       string `json:"module_delivery,omitempty"`
-	PreUseInspection     string `json:"pre_use_inspection,omitempty"`
-	CompletionInspection string `json:"completion_inspection,omitempty"`
-}
-
 // ProjectLinkedOut is the miniapp.project.linked response: the IDs of items
 // linked to one project, grouped by type, resolved server-side. Clients filter
 // their already-fetched lists by these IDs instead of running a local heuristic.
@@ -194,171 +123,9 @@ func ProjectMethods(deps ProjectDeps) map[string]rpcutil.HandlerFunc {
 		return nil
 	}
 	return map[string]rpcutil.HandlerFunc{
-		"miniapp.project.digests":        projectDigests(deps),
-		"miniapp.project.linked":         projectLinked(deps),
-		"miniapp.project.sites":          projectSites(deps),
-		"miniapp.project.site.setStatus": projectSiteSetStatus(deps),
-		"miniapp.project.site.ensure":    projectSiteEnsure(deps),
-		"miniapp.project.site.update":    projectSiteUpdate(deps),
+		"miniapp.project.digests": projectDigests(deps),
+		"miniapp.project.linked":  projectLinked(deps),
 	}
-}
-
-// projectSiteSetStatus sets the lifecycle status on a 현장 page (후보/계약/개설/준공,
-// or "" to clear to 미분류). Only real 현장 pages are writable — 대표페이지 fallback
-// pins have no per-site page to update.
-func projectSiteSetStatus(deps ProjectDeps) rpcutil.HandlerFunc {
-	type params struct {
-		Path   string `json:"path"`
-		Status string `json:"status"`
-	}
-	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
-		path := strings.TrimSpace(p.Path)
-		if path == "" {
-			return rpcerr.MissingParam("path").Response(req.ID)
-		}
-		src, err := deps.Wiki()
-		if err != nil {
-			return rpcerr.WrapUnavailable("project site status unavailable", err).Response(req.ID)
-		}
-		if err := src.SetSiteStatus(path, p.Status); err != nil {
-			return projectSiteWriteError(req.ID, path, "project site status update failed", err)
-		}
-		status, _ := wiki.NormalizeSiteStatus(p.Status)
-		return rpcutil.RespondOK(req.ID, ProjectSiteSetStatusOut{Path: path, Status: status})
-	})
-}
-
-// projectSiteEnsure finds or creates a 현장 page for one address under the project
-// owning path (typically a 대표페이지 fallback pin). Idempotent.
-func projectSiteEnsure(deps ProjectDeps) rpcutil.HandlerFunc {
-	type params struct {
-		Path    string `json:"path"`
-		Address string `json:"address"`
-	}
-	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
-		path := strings.TrimSpace(p.Path)
-		address := strings.TrimSpace(p.Address)
-		if path == "" {
-			return rpcerr.MissingParam("path").Response(req.ID)
-		}
-		if address == "" {
-			return rpcerr.MissingParam("address").Response(req.ID)
-		}
-		src, err := deps.Wiki()
-		if err != nil {
-			return rpcerr.WrapUnavailable("project site ensure unavailable", err).Response(req.ID)
-		}
-		sitePath, created, err := src.EnsureSitePage(path, address)
-		if err != nil {
-			return projectSiteWriteError(req.ID, path, "project site ensure failed", err)
-		}
-		var status string
-		if sites, listErr := src.ProjectSites(); listErr == nil {
-			for _, s := range sites {
-				if s.Path == sitePath {
-					status = s.Status
-					break
-				}
-			}
-		}
-		return rpcutil.RespondOK(req.ID, ProjectSiteEnsureOut{Path: sitePath, Created: created, Status: status})
-	})
-}
-
-// projectSiteUpdate applies partial milestone (and other non-empty SiteFields) edits
-// to an existing 현장 page. Empty fields are left unchanged.
-func projectSiteUpdate(deps ProjectDeps) rpcutil.HandlerFunc {
-	type params struct {
-		Path                 string `json:"path"`
-		ContractDate         string `json:"contract_date"`
-		ConstructionStart    string `json:"construction_start"`
-		ModuleDelivery       string `json:"module_delivery"`
-		PreUseInspection     string `json:"pre_use_inspection"`
-		CompletionInspection string `json:"completion_inspection"`
-	}
-	return bindAuthenticated[params](func(ctx context.Context, req *protocol.RequestFrame, p params) *protocol.ResponseFrame {
-		path := strings.TrimSpace(p.Path)
-		if path == "" {
-			return rpcerr.MissingParam("path").Response(req.ID)
-		}
-		src, err := deps.Wiki()
-		if err != nil {
-			return rpcerr.WrapUnavailable("project site update unavailable", err).Response(req.ID)
-		}
-		fields := wiki.SiteFields{
-			ContractDate:         p.ContractDate,
-			ConstructionStart:    p.ConstructionStart,
-			ModuleDelivery:       p.ModuleDelivery,
-			PreUseInspection:     p.PreUseInspection,
-			CompletionInspection: p.CompletionInspection,
-		}
-		if err := src.UpdateSitePage(path, fields); err != nil {
-			return projectSiteWriteError(req.ID, path, "project site update failed", err)
-		}
-		out := ProjectSiteUpdateOut{Path: path}
-		if sites, listErr := src.ProjectSites(); listErr == nil {
-			for _, s := range sites {
-				if s.Path == path {
-					out.Status = s.Status
-					out.ContractDate = s.ContractDate
-					out.ConstructionStart = s.ConstructionStart
-					out.ModuleDelivery = s.ModuleDelivery
-					out.PreUseInspection = s.PreUseInspection
-					out.CompletionInspection = s.CompletionInspection
-					break
-				}
-			}
-		}
-		return rpcutil.RespondOK(req.ID, out)
-	})
-}
-
-func projectSiteWriteError(id, path, unavailableMsg string, err error) *protocol.ResponseFrame {
-	msg := err.Error()
-	switch {
-	case strings.Contains(msg, "not a site page"), strings.Contains(msg, "not a project path"),
-		strings.Contains(msg, "invalid status"), strings.Contains(msg, "address is required"):
-		return rpcerr.InvalidRequest(msg).Response(id)
-	case strings.Contains(msg, "not found"):
-		return rpcerr.NotFound("site page " + rpcutil.TruncateForError(path)).Response(id)
-	default:
-		return rpcerr.WrapUnavailable(unavailableMsg, err).Response(id)
-	}
-}
-
-// projectSites lists every active project that carries a 현장, for the 현장 지도.
-// Unlike digests it does not require a 현재 상태 section, so the map shows all
-// current sites — quiet/new projects included.
-func projectSites(deps ProjectDeps) rpcutil.HandlerFunc {
-	return authenticated(func(ctx context.Context, req *protocol.RequestFrame) *protocol.ResponseFrame {
-		src, err := deps.Wiki()
-		if err != nil {
-			return rpcerr.WrapUnavailable("project sites unavailable", err).Response(req.ID)
-		}
-		sites, err := src.ProjectSites()
-		if err != nil {
-			return rpcerr.WrapUnavailable("project sites unavailable", err).Response(req.ID)
-		}
-		rows := make([]ProjectSiteRow, 0, len(sites))
-		for _, s := range sites {
-			rows = append(rows, ProjectSiteRow{
-				Project:              s.Name,
-				Client:               s.Client,
-				Path:                 s.Path,
-				Due:                  s.Due,
-				Sites:                s.Sites,
-				Kinds:                s.Kinds,
-				Capacity:             s.Capacity,
-				Status:               s.Status,
-				ContractDate:         s.ContractDate,
-				ConstructionStart:    s.ConstructionStart,
-				ModuleDelivery:       s.ModuleDelivery,
-				PreUseInspection:     s.PreUseInspection,
-				CompletionInspection: s.CompletionInspection,
-			})
-		}
-		return rpcutil.RespondOK(req.ID, ProjectSitesOut{Sites: rows})
-	})
 }
 
 // projectLinked resolves which items (mail/work-feed/notebook) are linked to one

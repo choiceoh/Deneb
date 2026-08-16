@@ -109,28 +109,6 @@ const RPC: Record<string, (p: Record<string, any>) => unknown> = {
   "miniapp.people.list": () => ({ people: fx.people, windowDays: 30, scannedCount: fx.people.length }),
 
   "miniapp.project.digests": () => ({ digests: fx.digests }),
-  "miniapp.project.sites": () => ({ sites: fx.projectSites }),
-  "miniapp.project.site.setStatus": (p) => ({
-    path: String(p.path ?? ""),
-    status: typeof p.status === "string" ? p.status : "",
-  }),
-  "miniapp.project.site.ensure": (p) => ({
-    path: `프로젝트/demo/현장/${
-      String(p.address ?? "현장")
-        .split(/\s+/)
-        .pop() || "현장"
-    }.md`,
-    created: true,
-    status: "",
-  }),
-  "miniapp.project.site.update": (p) => ({
-    path: String(p.path ?? ""),
-    contract_date: p.contract_date,
-    construction_start: p.construction_start,
-    module_delivery: p.module_delivery,
-    pre_use_inspection: p.pre_use_inspection,
-    completion_inspection: p.completion_inspection,
-  }),
 
   "miniapp.crons.list": () => ({ jobs: fx.crons, total: fx.crons.length }),
   "miniapp.crons.update": (p) => ({ ...p }),

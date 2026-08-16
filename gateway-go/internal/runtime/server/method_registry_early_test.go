@@ -51,10 +51,6 @@ func TestEarlyCapabilityHelpers_PreserveMethodNames(t *testing.T) {
 			want: []string{
 				"miniapp.project.digests",
 				"miniapp.project.linked",
-				"miniapp.project.site.ensure",
-				"miniapp.project.site.setStatus",
-				"miniapp.project.site.update",
-				"miniapp.project.sites",
 			},
 		},
 		{
