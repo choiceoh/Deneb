@@ -58,7 +58,6 @@ vi.mock("./panes", () => {
     { key: "notebook", label: "노트북", shortcut: "3", Component: () => <div>notebook pane</div> },
     { key: "files", label: "파일", shortcut: "4", Component: () => <div>generic files pane</div> },
     { key: "chat", label: "채팅", shortcut: "5", Component: () => <div>generic chat pane</div> },
-    { key: "progress", label: "진행", shortcut: "c", Component: () => <div>progress pane</div> },
   ];
   return {
     PANES,

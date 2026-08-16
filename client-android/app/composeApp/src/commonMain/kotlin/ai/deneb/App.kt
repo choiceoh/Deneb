@@ -30,7 +30,6 @@ import ai.deneb.deneb.DenebNotebooksScreen
 import ai.deneb.deneb.DenebOrgChartScreen
 import ai.deneb.deneb.DenebPeopleScreen
 import ai.deneb.deneb.DenebPersonScreen
-import ai.deneb.deneb.DenebProjectDigestScreen
 import ai.deneb.deneb.DenebRsiScreen
 import ai.deneb.deneb.DenebSearchScreen
 import ai.deneb.deneb.DenebSkillScreen
@@ -500,17 +499,6 @@ internal fun AppContent(
                                             DenebUsageScreen(
                                                 client = client,
                                                 onBack = { navController.navigateUp() },
-                                                navigationTabBar = if (showTabBar) navigationTabBar else null,
-                                            )
-                                        }
-                                    }
-                                    denebComposable<DenebProjectDigests> {
-                                        denebClient?.let { client ->
-                                            DenebProjectDigestScreen(
-                                                client = client,
-                                                onBack = { navController.navigateUp() },
-                                                // Tap a project → open its 대표페이지 (the wiki page the digest lives on).
-                                                onOpenProject = { path -> navController.navigate(DenebWiki(path)) },
                                                 navigationTabBar = if (showTabBar) navigationTabBar else null,
                                             )
                                         }

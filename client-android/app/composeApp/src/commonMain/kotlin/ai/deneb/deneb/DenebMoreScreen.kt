@@ -10,7 +10,6 @@ import ai.deneb.DenebFiles
 import ai.deneb.DenebGroupware
 import ai.deneb.DenebNotebooks
 import ai.deneb.DenebOrgChart
-import ai.deneb.DenebProjectDigests
 import ai.deneb.DenebRsi
 import ai.deneb.DenebSearch
 import ai.deneb.DenebUsage
@@ -19,7 +18,6 @@ import ai.deneb.ui.DenebListRow
 import ai.deneb.ui.DenebScreenScaffold
 import ai.deneb.ui.chat.composables.LocalCaptureActions
 import ai.deneb.ui.icons.outlined.AccountTree
-import ai.deneb.ui.icons.outlined.Article
 import ai.deneb.ui.icons.outlined.Assignment
 import ai.deneb.ui.icons.outlined.Autorenew
 import ai.deneb.ui.icons.outlined.Book
@@ -77,7 +75,6 @@ internal val moreGroups: List<Pair<String, List<MoreEntry>>> = listOf(
         MoreEntry("파트별 업무 현황", DenebDashboard, Icons.Outlined.Dashboard, key = "deneb_dashboard"),
         MoreEntry("재귀적 자가개선", DenebRsi, Icons.Outlined.Autorenew, key = "deneb_rsi"),
         MoreEntry("사용량", DenebUsage, Icons.Outlined.Insights, key = "deneb_usage"),
-        MoreEntry("프로젝트 진행상황", DenebProjectDigests, Icons.Outlined.Article, key = "deneb_project_digests"),
         MoreEntry("조직도", DenebOrgChart, Icons.Outlined.AccountTree, key = "deneb_org"),
         MoreEntry("검색", DenebSearch, Icons.Outlined.Search, key = "deneb_search"),
         MoreEntry("카테고리", DenebCategories, Icons.Outlined.Folder, key = "deneb_categories"),

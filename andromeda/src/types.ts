@@ -224,7 +224,6 @@ export type View =
   | "today"
   | "chat"
   | "projects"
-  | "progress"
   | "todo"
   | "notebook"
   | "mail"

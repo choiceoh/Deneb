@@ -166,21 +166,21 @@ describe("TodayPane (오늘 대시보드)", () => {
   it("when treats extra sections as opt-in — hidden until chosen in the editor", async () => {
     const dataProvider = fakeProvider({
       calendar: [{ id: "c1", title: "스탠드업", start: { dateTime: "2026-06-18T09:00:00" } }],
-      progress: [{ project: "안드로메다", headline: "패널 정합 완료" }],
+      people: [{ email: "lead@example.com", name: "김리드", lastSubject: "계약 검토" }],
     });
     renderWithProviders(<TodayPane />, { connected: true, dataProvider });
 
-    // The default four show; 진행 is opt-in, so its content stays hidden initially.
+    // The default four show; 연락처 is opt-in, so its content stays hidden initially.
     expect(await screen.findByText(/스탠드업/)).toBeInTheDocument();
-    expect(screen.queryByText(/패널 정합 완료/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/김리드/)).not.toBeInTheDocument();
 
-    // Turn 진행 on from the editor → its card and content appear, and the choice persists.
+    // Turn 연락처 on from the editor → its card and content appear, and the choice persists.
     await userEvent.click(screen.getByRole("button", { name: "편집" }));
-    const progressToggle = screen.getByRole("checkbox", { name: "진행" });
-    expect(progressToggle).not.toBeChecked();
-    await userEvent.click(progressToggle);
+    const peopleToggle = screen.getByRole("checkbox", { name: "연락처" });
+    expect(peopleToggle).not.toBeChecked();
+    await userEvent.click(peopleToggle);
 
-    expect(await screen.findByText(/패널 정합 완료/)).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("andromeda.todayHidden") ?? "[]")).not.toContain("progress");
+    expect(await screen.findByText(/김리드/)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("andromeda.todayHidden") ?? "[]")).not.toContain("people");
   });
 });

@@ -142,10 +142,6 @@ object DenebRsi
 object DenebUsage
 
 @Serializable
-@SerialName("deneb_project_digests")
-object DenebProjectDigests
-
-@Serializable
 @SerialName("deneb_org")
 object DenebOrgChart
 

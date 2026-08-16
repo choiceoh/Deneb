@@ -248,9 +248,8 @@ func firstOf(ss []string) string {
 }
 
 // ProjectStatuses returns each project that has a non-empty 현재 상태 section,
-// newest-updated first. Projects with no status yet are omitted (the 모아보기
-// shows only what has actually moved). Satisfies the miniapp.project.digests
-// read path.
+// newest-updated first. Projects with no status yet are omitted (only what has
+// actually moved). Satisfies the miniapp.project.digests read path.
 func (s *Store) ProjectStatuses() ([]ProjectStatus, error) {
 	refs := s.knownProjects()
 	out := make([]ProjectStatus, 0, len(refs))

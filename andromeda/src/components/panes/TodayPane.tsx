@@ -54,7 +54,6 @@ const SECTIONS = [
   "todo",
   "workfeed",
   "radar",
-  "progress",
   "people",
   "crons",
   "market",
@@ -68,7 +67,6 @@ const SECTION_LABEL: Record<SectionKey, string> = {
   todo: "할일",
   workfeed: "피드",
   radar: "마감",
-  progress: "진행",
   people: "연락처",
   crons: "크론",
   market: "시장",
@@ -185,8 +183,8 @@ export function TodayPane() {
   const appr = useCachedList<GroupwareApprovalRow>("approvals", connected, {
     meta: { rpcParams: { folder: "total", limit: 100 } }, // == ApprovalsPane (shared cache entry)
   });
-  // 다이제스트는 마감 레이더와 진행 섹션 둘 다의 소스.
-  const prog = useCachedList<ProjectDigest>("progress", connected && (visible("progress") || visible("radar")));
+  // 다이제스트는 마감 레이더의 프로젝트 due 소스. 모아보기 카드는 없다.
+  const prog = useCachedList<ProjectDigest>("progress", connected && visible("radar"));
   const ppl = useCachedList<Person>("people", connected && visible("people"));
   const cron = useCachedList<Cron>("crons", connected && visible("crons"));
   const market = useCachedList<MarketQuote>("market", connected && visible("market"));
@@ -262,7 +260,7 @@ export function TodayPane() {
       key: "radar",
       label: "마감",
       icon: "progress",
-      view: "progress",
+      view: "projects",
       empty: "",
       query: prog.query,
       total: radarAll.length,
@@ -327,19 +325,6 @@ export function TodayPane() {
         title: w.title ?? "(항목)",
         meta: w.source ? workfeedSourceLabel(w.source) : undefined,
         target: { view: "workfeed", id: w.id },
-      })),
-    },
-    {
-      key: "progress",
-      label: "진행",
-      icon: "progress",
-      view: "progress",
-      empty: "진행 중인 프로젝트 없음",
-      query: prog.query,
-      total: digests.length,
-      lines: digests.slice(0, MAX).map((d) => ({
-        title: d.project,
-        meta: d.headline || (d.due ? `마감 ${d.due}` : undefined),
       })),
     },
     {
@@ -494,7 +479,7 @@ export function TodayPane() {
                 brief={b}
                 index={i}
                 wide={wide.includes(b.key)}
-                onNav={() => setView("progress")}
+                onNav={() => setView("projects")}
               >
                 <DeadlineRadar entries={radar} onOpen={(target) => openPane(target.view, target)} />
               </CockpitCard>
