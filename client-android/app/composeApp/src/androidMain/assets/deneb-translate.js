@@ -1133,6 +1133,31 @@
     failUnits(units, !!retryable);
   }
 
+  // Navigation cancellation is not a translation failure. Clear bookkeeping
+  // silently so an aborted load can translate again on the next scan/toggle,
+  // while a real navigation cannot leak retries or progress into the new page.
+  function cancelBatch(rid) {
+    var units = pending[rid];
+    clearBatchDeadline(rid);
+    if (!units) return;
+    delete pending[rid];
+    var tids = unique(unitTids(units));
+    for (var i = 0; i < tids.length; i++) {
+      delete inFlight[tids[i]];
+      delete chunkResults[tids[i]];
+      delete failed[tids[i]];
+    }
+  }
+
+  function suspendForNavigation() {
+    enabled = false;
+    var requestIds = [];
+    for (var rid in pending) {
+      if (pending.hasOwnProperty(rid)) requestIds.push(rid);
+    }
+    for (var i = 0; i < requestIds.length; i++) cancelBatch(requestIds[i]);
+  }
+
   function replace(rec, translated) {
     if (!enabled || translated == null) return;
     if (rec.node && rec.node.nodeValue !== translated) rec.node.nodeValue = translated;
@@ -1379,6 +1404,8 @@
     beginBatch: beginBatch,
     applyBatch: applyBatch,
     rejectBatch: rejectBatch,
+    cancelBatch: cancelBatch,
+    suspendForNavigation: suspendForNavigation,
     setEnabled: setEnabled,
     onLocationChange: onLocationChange,
     start: function () {

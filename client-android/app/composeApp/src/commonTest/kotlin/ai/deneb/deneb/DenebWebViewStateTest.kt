@@ -190,6 +190,23 @@ class DenebWebViewStateTest {
     }
 
     @Test
+    fun rendererRecoveryLoadsTheLastCapturedPageInsteadOfTheStaleRequest() {
+        val state = DenebWebViewState("https://example.com/requested")
+        state.currentUrl = "https://example.com/committed"
+        state.markRendererGone(crashed = true)
+
+        assertEquals(
+            "https://example.com/committed",
+            browserWebViewCommandUrl(
+                requestedUrl = state.url,
+                currentUrl = state.currentUrl,
+                rendererRecoveryUrl = state.rendererRecoveryUrl,
+                rendererRecoveryPending = state.rendererRecoveryPending,
+            ),
+        )
+    }
+
+    @Test
     fun commandCursorDoesNotReplayCommandsAfterRendererReattach() {
         val state = DenebWebViewState("https://example.com")
         state.goBack()

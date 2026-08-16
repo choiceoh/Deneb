@@ -230,6 +230,7 @@ actual fun DenebWebView(
                         }
                         injectSiteQuirk(view, url)
                         injectTranslateScript(view)
+                        holder.translateBridge?.resumeForDocument()
                         // Re-apply the toggle: a fresh page starts untranslated.
                         view.evaluateJavascript(
                             "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
@@ -248,6 +249,7 @@ actual fun DenebWebView(
                         error: WebResourceError,
                     ) {
                         if (!request.isForMainFrame) return
+                        resumeBrowserTranslation(holder, state, view)
                         state.loadError = browserPageErrorMessage(error.errorCode, error.description?.toString())
                     }
 
@@ -255,6 +257,7 @@ actual fun DenebWebView(
                     // business mail and groupware sessions.
                     override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                         handler.cancel()
+                        resumeBrowserTranslation(holder, state, view)
                         state.loadError = browserSslErrorMessage(error.primaryError)
                     }
 
@@ -467,7 +470,12 @@ actual fun DenebWebView(
     }
 
     LaunchedEffect(state.url) {
-        val target = state.url
+        val target = browserWebViewCommandUrl(
+            requestedUrl = state.url,
+            currentUrl = state.currentUrl,
+            rendererRecoveryUrl = state.rendererRecoveryUrl,
+            rendererRecoveryPending = state.rendererRecoveryPending,
+        )
         if (target.isNotBlank() && holder.lastCommandUrl != target) {
             holder.finishDetachedRestore()
             holder.lastCommandUrl = target
@@ -493,7 +501,12 @@ actual fun DenebWebView(
         }
     }
     LaunchedEffect(state.stopTick) {
-        if (holder.commands.consumeStop(state)) holder.web?.stopLoading()
+        if (holder.commands.consumeStop(state)) {
+            holder.web?.let { web ->
+                web.stopLoading()
+                resumeBrowserTranslation(holder, state, web)
+            }
+        }
     }
     LaunchedEffect(state.retryTick) {
         if (!holder.commands.consumeRetry(state)) return@LaunchedEffect
@@ -577,6 +590,14 @@ private fun browserFaviconImage(icon: Bitmap): ImageBitmap? = runCatching {
 }.getOrNull()
 
 private const val BROWSER_FAVICON_SIZE = 64
+
+private fun resumeBrowserTranslation(holder: WebViewHolder, state: DenebWebViewState, web: WebView) {
+    holder.translateBridge?.resumeForDocument()
+    web.evaluateJavascript(
+        "window.DenebTranslate&&window.DenebTranslate.setEnabled(${state.translateEnabled});",
+        null,
+    )
+}
 
 /**
  * Runs the per-site compatibility quirk, if this URL has one. Separate from the

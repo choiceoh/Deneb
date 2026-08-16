@@ -282,6 +282,17 @@ class DenebWebViewState(
  */
 typealias TranslateFn = suspend (segments: List<String>, targetLang: String) -> List<String>?
 
+internal fun browserWebViewCommandUrl(
+    requestedUrl: String,
+    currentUrl: String,
+    rendererRecoveryUrl: String,
+    rendererRecoveryPending: Boolean,
+): String = if (rendererRecoveryPending) {
+    stableBrowserTabUrl(rendererRecoveryUrl, currentUrl, requestedUrl)
+} else {
+    requestedUrl.trim()
+}
+
 /**
  * Renders the page. Android: a real WebView with the in-place translator injected
  * and bridged to [translate]. Other platforms: an Android-only stub.

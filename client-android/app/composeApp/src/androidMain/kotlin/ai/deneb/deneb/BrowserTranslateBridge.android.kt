@@ -45,7 +45,7 @@ internal class BrowserTranslateBridge(
 ) {
     private val lock = Any()
     private val queued = ArrayDeque<BrowserTranslationWork>()
-    private val activeRequestIds = linkedSetOf<String>()
+    private var acceptingRequests = true
     private var active = 0
     private var generation = 0L
     private var generationScope = newGenerationScope()
@@ -79,13 +79,21 @@ internal class BrowserTranslateBridge(
             reject(requestId, retryable = false)
             return
         }
-        val ready = synchronized(lock) {
-            if (queued.size >= MAX_TRANSLATE_QUEUED) {
-                null
-            } else {
-                queued.addLast(BrowserTranslationWork(requestId, segments, generation))
-                drainReadyLocked()
+        val (ready, accepted) = synchronized(lock) {
+            when {
+                !acceptingRequests -> emptyList<BrowserTranslationWork>() to false
+
+                queued.size >= MAX_TRANSLATE_QUEUED -> null to true
+
+                else -> {
+                    queued.addLast(BrowserTranslationWork(requestId, segments, generation))
+                    drainReadyLocked() to true
+                }
             }
+        }
+        if (!accepted) {
+            cancelRequest(requestId)
+            return
         }
         if (ready == null) {
             reject(requestId, retryable = true)
@@ -97,24 +105,25 @@ internal class BrowserTranslateBridge(
     /** Drops the old document's queued work and cancels its active RPCs. A new
      * page gets a fresh scheduler generation instead of waiting behind it. */
     fun cancelForNavigation() {
-        val (expiredScope, expiredRequestIds) = synchronized(lock) {
-            val requestIds = linkedSetOf<String>().apply {
-                queued.forEach { add(it.requestId) }
-                addAll(activeRequestIds)
-            }
+        val expiredScope = synchronized(lock) {
+            acceptingRequests = false
             generation++
             queued.clear()
-            activeRequestIds.clear()
             active = 0
             generationScope.also {
                 generationScope = newGenerationScope()
-            } to requestIds
+            }
         }
-        // A navigation can be stopped before the old document is replaced. Tell
-        // that document to clear its pending/in-flight entries so translation can
-        // retry instead of leaving those nodes permanently stuck.
-        expiredRequestIds.forEach { reject(it, retryable = true) }
+        // Disable the outgoing document and clear its JS bookkeeping without
+        // reporting stale progress or scheduling retries into the new generation.
+        suspendDocumentForNavigation()
         expiredScope.cancel()
+    }
+
+    /** Accepts requests again only after the current document has finished (or
+     * an explicitly stopped navigation returns control to the old document). */
+    fun resumeForDocument() {
+        synchronized(lock) { acceptingRequests = true }
     }
 
     private fun drainReadyLocked(): List<BrowserTranslationWork> {
@@ -122,7 +131,6 @@ internal class BrowserTranslateBridge(
         while (active < MAX_TRANSLATE_IN_FLIGHT && queued.isNotEmpty()) {
             val work = queued.removeFirst()
             active++
-            activeRequestIds += work.requestId
             ready += work
         }
         return ready
@@ -162,7 +170,6 @@ internal class BrowserTranslateBridge(
                 } finally {
                     val next = synchronized(lock) {
                         if (work.generation == generation) {
-                            activeRequestIds.remove(work.requestId)
                             active = (active - 1).coerceAtLeast(0)
                             drainReadyLocked()
                         } else {
@@ -200,6 +207,27 @@ internal class BrowserTranslateBridge(
                 null,
             )
         }
+    }
+
+    private fun cancelRequest(requestId: String) {
+        if (!isBrowserTranslateEnvelopeWithinLimits(requestId, 0)) return
+        val requestLiteral = jsStringLiteral(requestId)
+        runJavascript(
+            "window.DenebTranslate&&window.DenebTranslate.cancelBatch&&" +
+                "window.DenebTranslate.cancelBatch($requestLiteral);",
+        )
+    }
+
+    private fun suspendDocumentForNavigation() {
+        runJavascript(
+            "window.DenebTranslate&&window.DenebTranslate.suspendForNavigation&&" +
+                "window.DenebTranslate.suspendForNavigation();",
+        )
+    }
+
+    private fun runJavascript(script: String) {
+        val run = Runnable { webView()?.evaluateJavascript(script, null) }
+        if (Looper.myLooper() == Looper.getMainLooper()) run.run() else Handler(Looper.getMainLooper()).post(run)
     }
 }
 

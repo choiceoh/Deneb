@@ -35,15 +35,25 @@ class BrowserTranslateAssetContractTest {
         assertContains(nativeSource, "markStarted(work.requestId)")
         assertContains(nativeSource, "fun cancelForNavigation()")
         assertContains(nativeSource, "queued.clear()")
-        assertContains(nativeSource, "activeRequestIds.clear()")
-        assertContains(nativeSource, "expiredRequestIds.forEach { reject(it, retryable = true) }")
+        assertContains(nativeSource, "acceptingRequests = false")
+        assertContains(nativeSource, "suspendDocumentForNavigation()")
+        assertContains(nativeSource, "fun resumeForDocument()")
         assertContains(jsSource, "function beginBatch(rid)")
+        assertContains(jsSource, "function cancelBatch(rid)")
+        assertContains(jsSource, "function suspendForNavigation()")
         assertTrue(jsSource.jsInt("NATIVE_BATCH_TIMEOUT_MS").toLong() > DenebGatewayClient.REQUEST_TIMEOUT_MS)
+
+        val navigationCancelBody = jsSource.substringAfter("function cancelBatch(rid)").substringBefore("function replace")
+        assertFalse(navigationCancelBody.contains("failUnits("))
+        assertFalse(navigationCancelBody.contains("reportProgress("))
+        assertFalse(navigationCancelBody.contains("dispatchPrioritized("))
 
         val webViewSource = sourceFile(
             "src/androidMain/kotlin/ai/deneb/deneb/DenebWebView.android.kt",
         ).readText()
         assertContains(webViewSource, "holder.translateBridge?.cancelForNavigation()")
+        assertContains(webViewSource, "holder.translateBridge?.resumeForDocument()")
+        assertContains(webViewSource, "val target = browserWebViewCommandUrl(")
         assertFalse(webViewSource.contains("DETACHED_RESTORE_GUARD_MS"))
     }
 
