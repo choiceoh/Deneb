@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.143.0](https://github.com/choiceoh/Deneb/compare/deneb-v4.142.2...deneb-v4.143.0) (2026-08-16)
+
+
+### ✨ Features
+
+* **feed:** add 로그 tab next to 결재 ([#4513](https://github.com/choiceoh/Deneb/issues/4513)) ([6f360ad](https://github.com/choiceoh/Deneb/commit/6f360adbeb98e85877f6c37c04631fde086b2db5))
+
+
+### 🐛 Bug Fixes
+
+* **android:** 오작동하던 연락처 정리를 제거 ([#4512](https://github.com/choiceoh/Deneb/issues/4512)) ([5e0b2ca](https://github.com/choiceoh/Deneb/commit/5e0b2ca84e08e459f5fbff623edf05ab2aee0740))
+* **chat:** detach capture agent turns from the RPC deadline ([#4514](https://github.com/choiceoh/Deneb/issues/4514)) ([3f0b16e](https://github.com/choiceoh/Deneb/commit/3f0b16e6fddaec854d2ce03e7b54d34a1dd14940))
+* **chat:** 키보드에 입력창을 붙이고 채팅에서 탭바를 숨김 ([#4507](https://github.com/choiceoh/Deneb/issues/4507)) ([349427e](https://github.com/choiceoh/Deneb/commit/349427eedad18efdaa4993e4aa4a87c96eb40f77))
+
 ## [4.142.2](https://github.com/choiceoh/Deneb/compare/deneb-v4.142.1...deneb-v4.142.2) (2026-08-16)
 
 

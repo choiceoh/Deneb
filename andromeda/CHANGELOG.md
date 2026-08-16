@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.115](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.114...andromeda-v0.0.115) (2026-08-16)
+
+
+### 🐛 Bug Fixes
+
+* **chat:** detach capture agent turns from the RPC deadline ([#4514](https://github.com/choiceoh/Deneb/issues/4514)) ([3f0b16e](https://github.com/choiceoh/Deneb/commit/3f0b16e6fddaec854d2ce03e7b54d34a1dd14940))
+
 ## [0.0.114](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.113...andromeda-v0.0.114) (2026-08-10)
 
 
