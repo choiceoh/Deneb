@@ -126,13 +126,23 @@
   // 게임 종료 뒤에도 허용되는 행동 — 나머지는 저장 상태를 바꿔 최종 성적과 어긋나게 만든다.
   const ALLOWED_AFTER_END = new Set(['tab', 'new-game', 'close-modal']);
 
+  /**
+   * 종료 후 잠금. 클릭뿐 아니라 슬라이더(input/change)도 막아야 한다 —
+   * 인력 배분·할인율 슬라이더는 클릭 없이도 ui.state를 바꿔 저장까지 흘러간다.
+   */
+  function lockedAfterEnd(action) {
+    if (!ui.state.gameOver) return false;
+    if (ALLOWED_AFTER_END.has(action)) return false;
+    return true;
+  }
+
   function onClick(ev) {
     const btn = ev.target.closest('[data-action]');
     if (!btn || btn.disabled) return;
     const s = ui.state;
     const a = btn.dataset.action;
 
-    if (s.gameOver && !ALLOWED_AFTER_END.has(a)) {
+    if (lockedAfterEnd(a)) {
       toast('경영이 종료되어 더 이상 조작할 수 없다. 새 게임을 시작하라.', 'bad');
       return;
     }
@@ -256,6 +266,7 @@
   function onInput(ev) {
     const el = ev.target.closest('[data-action]');
     if (!el) return;
+    if (lockedAfterEnd(el.dataset.action)) return;
     const s = ui.state;
 
     if (el.dataset.action === 'design-input') {
@@ -314,6 +325,7 @@
   function onChange(ev) {
     const el = ev.target.closest('[data-action]');
     if (!el) return;
+    if (lockedAfterEnd(el.dataset.action)) return;
     if (el.dataset.action === 'share') render();
   }
 
