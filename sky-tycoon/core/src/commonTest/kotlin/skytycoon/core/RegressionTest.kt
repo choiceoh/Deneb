@@ -170,6 +170,24 @@ class RegressionTest {
     }
 
     @Test
+    fun `중고기는 정가가 아니라 산 값을 기준으로 상각한다`() {
+        // 정가로 상각하면 정가의 58% 에 산 기체가 남은 수명 동안 정가의 80% 를 털어내,
+        // 낸 돈보다 큰 손실이 순익과 주가를 눌러 앉힌다.
+        val type = AircraftCatalog["b727"]
+        val brandNew = listOf(skytycoon.core.model.Plane(1, type.id, "x", ageQuarters = 8))
+        val secondHand = listOf(
+            skytycoon.core.model.Plane(2, type.id, "x", ageQuarters = 8, valueMul = Balance.USED_PRICE_MUL),
+        )
+        val newDep = Economics.depreciation(brandNew)
+        val usedDep = Economics.depreciation(secondHand)
+        assertTrue(newDep > 0.0)
+        assertTrue(
+            abs(usedDep - newDep * Balance.USED_PRICE_MUL) < 1.0,
+            "중고기 상각액 $usedDep 이 산 값 기준(${newDep * Balance.USED_PRICE_MUL})과 다르다",
+        )
+    }
+
+    @Test
     fun `잔존가치는 연 단위로 감가한다`() {
         // 분기마다 깎으면 15년 만에 하한까지 떨어져 기업가치가 통째로 무너진다.
         val at15 = AircraftCatalog.residualRatio(15 * 4)

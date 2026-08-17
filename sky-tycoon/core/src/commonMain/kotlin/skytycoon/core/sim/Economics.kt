@@ -160,7 +160,10 @@ object Economics {
      */
     fun depreciation(planes: List<Plane>): Double = planes
         .filter { it.ageQuarters < Balance.DEPRECIATION_QUARTERS }
-        .sumOf { AircraftCatalog[it.typeId].price / Balance.DEPRECIATION_QUARTERS }
+        // 상각 기준은 **산 값**이다. 정가로 상각하면 정가의 58% 에 사들인 중고기가
+        // 남은 수명 동안 정가의 80% 를 비용으로 털어내, 낸 돈보다 훨씬 큰 손실이
+        // 순익과 주가를 눌러 앉힌다.
+        .sumOf { AircraftCatalog[it.typeId].price * it.valueMul / Balance.DEPRECIATION_QUARTERS }
 
     /** 회사 유지 간접비. */
     fun overhead(state: GameState, airline: Airline): Double {

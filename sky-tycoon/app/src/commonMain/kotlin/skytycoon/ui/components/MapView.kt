@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -124,7 +125,10 @@ fun WorldMap(
                             best = c
                         }
                     }
-                    onSelectCity(if (bestDist <= 30f) best?.id else null)
+                    // 포인터 좌표는 물리 픽셀이다. 30f 로 고정하면 xxhdpi 폰에서
+                    // 8~10dp 밖에 안 돼 도시를 거의 못 누른다 — 기준 타깃이 폰인데.
+                    val hitRadius = 22.dp.toPx()
+                    onSelectCity(if (bestDist <= hitRadius) best?.id else null)
                 }
             },
     ) {
