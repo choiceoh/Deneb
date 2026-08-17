@@ -214,9 +214,34 @@ test('파산으로 끝나도 마지막 재무 행이 최종 현금을 설명한�
       Math.abs(row.cash - Math.round(s.cash)) < 2,
       `seed ${seed}: 마지막 행 현금 ${row.cash} ≠ 실제 ${Math.round(s.cash)}`,
     );
+    // 종료 화면이 가리키는 분기와 장부의 마지막 분기가 같아야 한다.
+    assert.strictEqual(
+      E.turnLabel(s.gameOver.lastTurn),
+      row.label,
+      `seed ${seed}: 표시 분기 ${E.turnLabel(s.gameOver.lastTurn)} ≠ 마지막 재무 행 ${row.label}`,
+    );
     checked++;
   }
   assert.ok(checked > 0, '파산 표본을 찾지 못했다');
+});
+
+test('운항 정지 중인 기종은 재고를 처분할 수 없다', () => {
+  // 처분을 허용하면 "인도도 멈춘다"는 결함 이벤트 효과를 리스사 매각으로 우회한다.
+  const s = E.newGame(5);
+  const p = s.programs[0];
+  p.stock = 5;
+  s.effects.grounded[p.id] = 2;
+
+  const cashBefore = s.cash;
+  const r = E.sellStock(s, p.id, 5);
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error, /운항 정지/);
+  assert.strictEqual(p.stock, 5, '거부됐으면 재고가 줄면 안 된다');
+  assert.strictEqual(s.cash, cashBefore, '현금도 변하면 안 된다');
+
+  // 정지가 풀리면 다시 처분할 수 있다.
+  delete s.effects.grounded[p.id];
+  assert.strictEqual(E.sellStock(s, p.id, 5).ok, true);
 });
 
 test('차입 여유가 남아 있어도 총 유동성이 음수면 파산이다', () => {

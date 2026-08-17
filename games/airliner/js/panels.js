@@ -322,12 +322,15 @@
 
     const stocks = ready
       .filter((p) => p.stock > 0)
-      .map(
-        (p) => `<div class="row between stockrow">
-          <span><b>${esc(p.name)}</b> 미인도 재고 ${p.stock}기</span>
-          <button data-action="sell-stock" data-id="${p.id}">정가 68%로 처분 · ${money(p.stock * p.listPrice * 0.68)}</button>
-        </div>`,
-      )
+      .map((p) => {
+        const grounded = (s.effects.grounded && s.effects.grounded[p.id]) || 0;
+        return `<div class="row between stockrow">
+          <span><b>${esc(p.name)}</b> 미인도 재고 ${p.stock}기${grounded ? ` <span class="bad">· 운항 정지 ${grounded}분기</span>` : ''}</span>
+          <button data-action="sell-stock" data-id="${p.id}" ${grounded ? 'disabled' : ''}>
+            ${grounded ? '정지 중 처분 불가' : `정가 68%로 처분 · ${money(p.stock * p.listPrice * 0.68)}`}
+          </button>
+        </div>`;
+      })
       .join('');
 
     return `

@@ -330,6 +330,11 @@
     ensureShape(s);
     const p = s.programs.find((x) => x.id === programId);
     if (!p || p.stock <= 0) return { ok: false, error: '처분할 재고가 없습니다.' };
+    // 운항 정지 중이면 인도와 마찬가지로 처분도 막는다. 그러지 않으면
+    // "인도도 멈춘다"는 결함 이벤트 효과를 리스사 처분으로 우회할 수 있다.
+    if ((s.effects.grounded[p.id] || 0) > 0) {
+      return { ok: false, error: `${p.name}은(는) 운항 정지 중이라 처분할 수 없습니다.` };
+    }
     const n = Math.min(qty, p.stock);
     const revenue = Math.round(n * p.listPrice * 0.68);
     p.stock -= n;
@@ -475,8 +480,7 @@
     // 재고 처분 등으로 회생할 수 있다.
     if (checkBankrupt(s)) {
       // 여기서 끝나면 이 pending 을 흡수할 다음 분기가 영영 오지 않는다.
-      // 마지막 재무 행이 이벤트 이전 숫자로 남지 않도록 지금 반영한다.
-      absorbPending(s, report);
+      flushTerminalQuarter(s);
     }
 
     saveRng(s, rng);
@@ -706,26 +710,31 @@
     }
   }
 
-  /** 미결 실적(pending)을 리포트와 마지막 히스토리 행에 반영하고 비운다. */
-  function absorbPending(s, report) {
+  /**
+   * 종료 분기를 재무 행으로 남긴다.
+   * 이벤트로 파산하면 이 pending 을 흡수할 다음 분기가 오지 않는데, 직전 분기 행에
+   * 접붙이면 2014년 1분기 결함 비용이 2013년 4분기 실적으로 기록되고 종료 화면의
+   * 분기와도 어긋난다. 발생 분기에 별도 행을 만들어 장부와 표시를 일치시킨다.
+   */
+  function flushTerminalQuarter(s) {
     const p = s.pending;
     if (!p) return;
-    report.revenue += p.revenue;
-    report.delivered += p.delivered;
-    report.rdCost += p.rdCost;
-    report.capex += p.capex;
-    report.overhead += p.overhead;
+    const revenue = p.revenue;
+    const cost = p.rdCost + p.capex + p.overhead;
+    s.history.push({
+      turn: s.turn,
+      label: turnLabel(s.turn),
+      cash: Math.round(s.cash),
+      debt: Math.round(s.debt),
+      revenue: Math.round(revenue),
+      cost: Math.round(cost),
+      net: Math.round(revenue - cost),
+      delivered: p.delivered,
+      backlog: totalBacklog(s),
+      reputation: Math.round(s.reputation),
+    });
+    if (s.history.length > 120) s.history.shift();
     s.pending = { revenue: 0, delivered: 0, rdCost: 0, capex: 0, overhead: 0 };
-
-    const row = s.history[s.history.length - 1];
-    if (row) {
-      row.revenue = Math.round(report.revenue);
-      row.cost = Math.round(report.productionCost + report.rdCost + report.capex + report.overhead + report.interest);
-      row.net = row.revenue - row.cost;
-      row.delivered = report.delivered;
-      row.cash = Math.round(s.cash);
-      row.debt = Math.round(s.debt);
-    }
   }
 
   function tickEffects(s) {
