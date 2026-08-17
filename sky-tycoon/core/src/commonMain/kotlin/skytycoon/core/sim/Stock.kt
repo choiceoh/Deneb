@@ -286,11 +286,18 @@ object Stock {
         val orders = state.orders.map {
             if (it.airlineId == targetId) it.copy(airlineId = acquirerId) else it
         }
+        // 착공해 둔 확장 공사의 출자자 지위도 넘겨받는다. 안 넘기면 완공될 때
+        // 후원사가 죽은 것으로 보여 우선 배정 슬롯이 시장에 풀리고,
+        // 인수사는 인수 대금에 값을 치른 몫을 소리 없이 잃는다.
+        val expansions = state.expansions.map {
+            if (it.sponsorId == targetId) it.copy(sponsorId = acquirerId) else it
+        }
         return state.copy(
             airlines = airlines,
             planes = planes,
             routes = routes,
             orders = orders,
+            expansions = expansions,
             news = state.news + news,
         )
     }

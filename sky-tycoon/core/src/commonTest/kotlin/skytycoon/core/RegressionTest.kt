@@ -854,6 +854,28 @@ class RegressionTest {
     }
 
     @Test
+    fun `인수하면 상대가 착공해 둔 확장의 출자자 지위까지 넘어온다`() {
+        var s = fresh()
+        val victimId = s.livingAirlines.first { it.id != "hanseong" }.id
+        val city = s.routesOf(victimId).first().from
+        s = s.withAirline2(victimId) { it.copy(cash = 5e9) }
+        s = Actions.execute(s, Command.FundExpansion(victimId, city)).state
+        assertTrue(s.expansions.any { it.sponsorId == victimId }, "착공이 안 됐다 — 테스트가 헛돈다")
+
+        s = Stock.merge(s, "hanseong", victimId)
+        assertTrue(
+            s.expansions.none { it.sponsorId == victimId },
+            "사라진 회사가 출자자로 남아 있으면 완공 때 우선 배정 몫이 시장에 흩어진다",
+        )
+        val mine = s.player.slotsAt(city)
+        repeat(Balance.EXPANSION_QUARTERS) { s = TurnEngine.advance(s) }
+        assertTrue(
+            s.player.slotsAt(city) > mine,
+            "인수 대금에 값을 치른 확장 몫을 인수사가 받지 못했다",
+        )
+    }
+
+    @Test
     fun `연고 없는 공항은 확장 출자를 제안할 수 없다`() {
         var s = fresh()
         val stranger = Cities.all.first { c ->

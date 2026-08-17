@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import skytycoon.core.data.Cities
 import skytycoon.core.model.GameState
+import skytycoon.core.sim.Actions
 import skytycoon.core.sim.Economics
 import skytycoon.core.sim.Stock
 import skytycoon.core.sim.TurnEngine
@@ -235,7 +236,12 @@ private fun buildAlerts(s: GameState): List<Alert> {
     if (threat != null && threat.second >= 0.10) {
         out += Alert(
             "${threat.first.name}이 지분 ${percent(threat.second)} 보유",
-            "50%를 넘기면 회사를 잃습니다. 유상증자로 희석하세요.",
+            // 적자면 증자 자체가 막힌다 — 못 하는 수를 권하면 안 된다.
+            if (Actions.canIssueShares(player)) {
+                "50%를 넘기면 회사를 잃습니다. 유상증자로 희석하세요."
+            } else {
+                "50%를 넘기면 회사를 잃습니다. 적자라 증자가 막혀 있으니 실적부터 되돌리세요."
+            },
             Coral,
             Tab.MARKET,
         )
