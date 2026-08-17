@@ -29,9 +29,6 @@
     firstUnitPremium: 1.9, // T1 원가 = 표준원가 × 이 값
     maxDiscount: 0.35,
     rampPerQuarter: 0.22, // 라인 가동률 상승 속도
-    // 주문 잔량을 넘어 미리 만들어 둘 수 있는 기수(라인별). 취소분과 함께
-    // 화이트테일 재고의 원천이 되지만, 무한 생산은 막는다.
-    speculativeBuffer: 3,
   };
 
   /** 기체 세그먼트 — 설계 가능 범위와 기준점 */
@@ -269,8 +266,10 @@
           const cost = Math.round(p.delivered * p.unitCostBase * h.rng.range(0.08, 0.2));
           s.cash -= cost;
           h.reputation(-9);
-          s.effects.groundedProgram = p.id;
-          s.effects.groundedQuarters = h.rng.int(1, 3);
+          // 기종별로 기록하고, 이미 정지 중이면 더 긴 쪽을 남긴다
+          // (단일 슬롯이면 다른 기종의 정지가 기존 정지를 조기 해제해 버린다).
+          const q = h.rng.int(1, 3);
+          s.effects.grounded[p.id] = Math.max(s.effects.grounded[p.id] || 0, q);
           return `${p.name}에서 중대 결함이 발견돼 전 기체가 운항 정지됐다. 수리·보상에 ${h.fmt(cost)} 소요, 인도도 멈춘다.`;
         }
         const cost = Math.round(p.delivered * h.rng.range(0.15, 0.5));

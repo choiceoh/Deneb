@@ -43,8 +43,7 @@
       effects: {
         strikeQuarters: 0,
         supplyQuarters: 0,
-        groundedProgram: null,
-        groundedQuarters: 0,
+        grounded: {}, // programId → 남은 정지 분기수 (기종별로 독립)
         rateBump: 0,
         rateBumpQuarters: 0,
       },
@@ -58,6 +57,8 @@
       log: [],
       history: [],
       stats: { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 },
+      // 분기 중 즉시 발생한 실적(재고 처분 등) — 다음 endTurn 리포트가 흡수한다.
+      pending: { revenue: 0, delivered: 0 },
       events: [],
       gameOver: null,
     };
@@ -297,6 +298,10 @@
     s.cash += revenue;
     s.stats.delivered += n;
     s.stats.revenue += revenue;
+    // 분기 중 발생한 처분 실적 — 다음 정산 리포트에 합산해, 현금은 늘었는데
+    // 재무표의 매출·손익·인도에는 빠져 설명이 안 되는 상태를 막는다.
+    s.pending.revenue += revenue;
+    s.pending.delivered += n;
     adjustReputation(s, -1);
     pushLog(s, 'info', `${p.name} 재고 ${n}기를 리스사에 정가 68%로 처분. ${fmtMoney(revenue)} 확보.`);
     return { ok: true };
@@ -357,17 +362,21 @@
 
   function endTurn(s) {
     if (s.gameOver) return { ok: false, error: '게임이 종료되었습니다.' };
+    // 스키마가 늘어난 뒤 저장된 옛 상태 방어 (필드가 없으면 기본값으로).
+    if (!s.effects.grounded) s.effects.grounded = {};
+    if (!s.pending) s.pending = { revenue: 0, delivered: 0 };
     const rng = rngFor(s);
     const report = {
       label: turnLabel(s.turn),
-      revenue: 0,
+      revenue: s.pending.revenue,
       productionCost: 0,
       rdCost: 0,
       overhead: 0,
       interest: 0,
-      delivered: 0,
+      delivered: s.pending.delivered,
       ordersWon: 0,
     };
+    s.pending = { revenue: 0, delivered: 0 };
 
     resolveBids(s, rng, report);
     advanceDevelopment(s, rng, report);
@@ -389,13 +398,20 @@
     });
     if (s.history.length > 120) s.history.shift();
 
+    // 파산은 정산 결과로 확정한다. 다음 분기 이벤트를 먼저 굴리면 연구지원금 같은
+    // 현금 유입이 이미 지급불능인 회사를 되살려 "즉시 종료" 규칙과 어긋난다.
+    if (checkBankrupt(s)) {
+      saveRng(s, rng);
+      return { ok: true, report };
+    }
+
     // ── 다음 분기로 ──
     s.turn++;
 
     // 마지막 분기를 정산했다면 여기서 끝낸다. 존재하지 않는 다음 분기의 경쟁사 인도량이
-    // 최종 점유율을 깎거나, 이벤트가 최종 현금·평판은 물론 완주/파산 판정까지 뒤집는다.
+    // 최종 점유율을 깎거나, 이벤트가 최종 현금·평판까지 바꾼다.
     if (s.turn >= CONFIG.totalTurns) {
-      checkGameOver(s);
+      finishGame(s);
       saveRng(s, rng);
       return { ok: true, report };
     }
@@ -407,12 +423,15 @@
     s.rfps = generateRfps(s, rng);
     s.bids = {};
 
-    checkGameOver(s);
     saveRng(s, rng);
     return { ok: true, report };
   }
 
   function resolveBids(s, rng, report) {
+    // 1단계: 분기 시작 상태로 모든 입찰 점수를 먼저 고정한다.
+    // 순차 처리하면 앞선 수주로 오른 평판·관계가 뒤 입찰의 점수를 바꿔,
+    // 플레이어가 화면에서 확인한 점수와 다른 값으로 판정된다.
+    const pending = [];
     for (const rfp of s.rfps) {
       const bid = s.bids[rfp.id];
       if (!bid) {
@@ -425,7 +444,11 @@
 
       const score = scoreBid(s, rfp, program, bid.discount);
       if (score.blocked) continue;
+      pending.push({ rfp, program, score });
+    }
 
+    // 2단계: 고정된 점수로 판정하고 보상을 적용한다.
+    for (const { rfp, program, score } of pending) {
       s.stats.bidsMade++;
       const result = resolveBid(s, rfp, { score }, rng);
       s.relations[rfp.airlineId] = clamp((s.relations[rfp.airlineId] ?? 40) + 2, 0, 100);
@@ -537,9 +560,11 @@
       const p = s.programs.find((x) => x.id === line.programId);
       if (!p || p.phase !== 'production' || line.idle) continue;
 
-      // 이미 쌓아둔 재고를 빼고 남은 여유분. p.stock이 갱신되므로
+      // 미인도 주문에서 이미 쌓아둔 재고를 뺀 만큼만 만든다. p.stock이 갱신되므로
       // 같은 기종에 라인이 여러 개여도 자연히 나눠 갖는다.
-      const headroom = (ordered[p.id] || 0) - p.stock + CONFIG.speculativeBuffer;
+      // 주문을 넘어선 선행 생산은 허용하지 않는다 — 여유분을 두면 재고를 처분할 때마다
+      // 그만큼이 매 분기 재생성돼, 원가보다 비싼 처분가로 무한히 현금을 찍을 수 있다.
+      const headroom = (ordered[p.id] || 0) - p.stock;
       if (headroom <= 0) {
         // 만들 게 없으면 라인이 식는다 — 재가동 시 램프업을 다시 올려야 한다.
         line.ramp = Math.max(0.15, line.ramp - CONFIG.rampPerQuarter * 0.5);
@@ -574,7 +599,7 @@
     for (const o of orders) {
       const p = s.programs.find((x) => x.id === o.programId);
       if (!p || p.stock <= 0) continue;
-      if (s.effects.groundedProgram === p.id && s.effects.groundedQuarters > 0) continue;
+      if ((s.effects.grounded[p.id] || 0) > 0) continue;
 
       const n = Math.min(o.remaining, p.stock);
       const revenue = n * o.unitPrice * (1 - CONFIG.depositRate);
@@ -625,12 +650,12 @@
     if (e.strikeQuarters > 0) e.strikeQuarters--;
     if (e.supplyQuarters > 0) e.supplyQuarters--;
     if (e.rateBumpQuarters > 0) e.rateBumpQuarters--;
-    if (e.groundedQuarters > 0) {
-      e.groundedQuarters--;
-      if (e.groundedQuarters === 0) {
-        const p = s.programs.find((x) => x.id === e.groundedProgram);
+    for (const id of Object.keys(e.grounded)) {
+      e.grounded[id] -= 1;
+      if (e.grounded[id] <= 0) {
+        delete e.grounded[id];
+        const p = s.programs.find((x) => x.id === id);
         if (p) pushLog(s, 'good', `${p.name} 운항 정지 해제. 인도를 재개한다.`);
-        e.groundedProgram = null;
       }
     }
   }
@@ -686,16 +711,21 @@
     return fired;
   }
 
-  function checkGameOver(s) {
+  /** 지급불능 판정 — 종료됐으면 true. */
+  function checkBankrupt(s) {
+    if (s.gameOver) return true;
     if (s.cash < 0 && s.debt >= CONFIG.maxDebt) {
       s.gameOver = { reason: 'bankrupt', ...finalScore(s, true) };
       pushLog(s, 'bad', '자금이 완전히 고갈되고 차입 한도도 소진됐다. 회사는 법정관리에 들어간다.');
-      return;
+      return true;
     }
-    if (s.turn >= CONFIG.totalTurns) {
-      s.gameOver = { reason: 'complete', ...finalScore(s, false) };
-      pushLog(s, 'info', '20년의 경영이 끝났다. 최종 성적을 정산한다.');
-    }
+    return false;
+  }
+
+  function finishGame(s) {
+    if (s.gameOver) return;
+    s.gameOver = { reason: 'complete', ...finalScore(s, false) };
+    pushLog(s, 'info', '20년의 경영이 끝났다. 최종 성적을 정산한다.');
   }
 
   // ─────────────────────────────── 파생 지표 ───────────────────────────────

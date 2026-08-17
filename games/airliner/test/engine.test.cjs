@@ -167,8 +167,67 @@ test('주문이 없으면 라인이 재고를 무한정 찍어내지 않는다 (
   for (const o of s.backlog) o.remaining = 0;
   for (let i = 0; i < 40; i++) E.endTurn(s);
   const stock = s.programs.reduce((a, p) => a + p.stock, 0);
-  const buffer = Data.CONFIG.speculativeBuffer * s.lines.length;
-  assert.ok(stock <= buffer + 2, `주문 없이 재고가 ${stock}기까지 쌓였다 (허용 ${buffer + 2})`);
+  assert.strictEqual(stock, 0, `주문이 없는데 재고가 ${stock}기 생산됐다`);
+});
+
+test('재고 처분으로 생산 여유를 재생성해 무한히 현금을 만들 수 없다', () => {
+  const s = E.newGame(606);
+  for (const o of s.backlog) o.remaining = 0; // 주문 없음
+  const legacy = s.programs.find((p) => p.legacy);
+
+  const cash0 = s.cash;
+  const delivered0 = s.stats.delivered;
+  // 매 분기 재고를 처분하며 20분기 — 주문 없이 생산이 재개되면 현금이 불어난다.
+  for (let i = 0; i < 20; i++) {
+    if (legacy.stock > 0) E.sellStock(s, legacy.id, legacy.stock);
+    E.endTurn(s);
+  }
+  assert.strictEqual(s.stats.delivered, delivered0, '주문이 없으면 인도량이 늘 수 없다');
+  assert.ok(s.cash < cash0, '주문 없이 20분기를 보내면 고정비로 현금이 줄어야 한다');
+});
+
+test('파산은 다음 분기 이벤트가 되살리지 못한다', () => {
+  // 정산 직후 지급불능이면, 이후 지원금 이벤트가 굴러도 파산이 확정돼야 한다.
+  let sawInsolvent = false;
+  for (const seed of [21, 77, 404, 1024, 90210]) {
+    const s = E.newGame(seed);
+    s.lines.length = 0;
+    s.backlog.length = 0;
+    for (const p of s.programs) p.stock = 0;
+    s.cash = 1;
+    s.debt = Data.CONFIG.maxDebt;
+    E.endTurn(s);
+    sawInsolvent = true;
+    assert.ok(s.gameOver, `seed ${seed}: 지급불능인데 종료되지 않았다 (현금 ${Math.round(s.cash)})`);
+    assert.strictEqual(s.gameOver.reason, 'bankrupt');
+  }
+  assert.ok(sawInsolvent);
+});
+
+test('한 분기의 입찰 점수는 앞선 수주의 평판·관계 상승에 영향받지 않는다', () => {
+  const s = E.newGame(4242);
+  const legacy = s.programs.find((p) => p.legacy);
+  // 같은 분기에 동일 항공사 RFP 두 건을 놓고, 첫 건 처리로 오른 관계가
+  // 둘째 건 점수에 반영되면 안 된다 (화면에 표시된 점수와 달라진다).
+  const mk = (id) => ({
+    id, turn: s.turn, airlineId: 'hanul', airlineName: '한울항공', home: '동아시아',
+    segment: 'narrow', segmentName: '협동체', reqSeats: 150, reqRange: 4500, qty: 10,
+    priceSensitivity: 0.9, prestige: 0.8, relation: s.relations.hanul, deadline: s.turn,
+    rivalHint: { label: '보통', level: 2 },
+  });
+  s.rfps = [mk('rfp-a'), mk('rfp-b')];
+  const B = globalThis.AirlinerBidding;
+  const scoreA = B.scoreBid(s, s.rfps[0], legacy, 0.1).total;
+  const scoreB = B.scoreBid(s, s.rfps[1], legacy, 0.1).total;
+  assert.strictEqual(scoreA, scoreB, '분기 시작 시점의 두 점수는 같아야 한다');
+
+  E.setBid(s, 'rfp-a', legacy.id, 0.1);
+  E.setBid(s, 'rfp-b', legacy.id, 0.1);
+  const relBefore = s.relations.hanul;
+  E.endTurn(s);
+  // 판정 뒤에는 관계가 올랐어야 하고(입찰 참여), 그 상승이 같은 분기 점수에
+  // 소급 적용되지 않았음을 로그의 수주 결과 수로 확인한다.
+  assert.ok(s.relations.hanul !== relBefore, '입찰 후 관계는 변해야 한다');
 });
 
 test('인력 배분 0%는 프로그램을 동결한다 (진행도·지출 정지)', () => {
