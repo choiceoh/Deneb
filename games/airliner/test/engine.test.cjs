@@ -121,6 +121,55 @@ test('분기 현금 변화가 리포트의 매출·비용으로 설명된다 (�
   assert.ok(Math.abs(lhs - rhs) < 2, `현금 변화 ${Math.round(lhs)}가 매출-비용 ${Math.round(rhs)}와 어긋난다`);
 });
 
+test('회계 불변식이 이벤트가 도는 장기 플레이에서도 유지된다 (누적)', () => {
+  // 이벤트는 "다음 분기로 넘어가는" 단계에서 굴러 pending 에 쌓이고 다음 리포트가
+  // 흡수하므로, 분기 단위로는 한 턴 지연이 있다. 따라서 누적으로 검사한다:
+  //   Σ(보고된 손익) + 아직 미결인 pending = 현금증감 − 부채증감
+  // 어느 경로든 리포트를 거치지 않고 현금을 옮기면 이 등식이 깨진다.
+  const max = Data.CONFIG.maxDebt;
+  for (const seed of [3, 21, 404, 1234, 90210]) {
+    const s = E.newGame(seed);
+    const cash0 = s.cash;
+    const debt0 = s.debt;
+    let reportedNet = 0;
+
+    for (let i = 0; i < 60 && !s.gameOver; i++) {
+      for (const rfp of s.rfps) {
+        const el = E.eligiblePrograms(s, rfp).filter((x) => !x.score.blocked);
+        if (el.length) E.setBid(s, rfp.id, el[0].program.id, 0.12);
+      }
+      const r = E.endTurn(s);
+      if (!r.ok) break;
+      const rep = r.report;
+      reportedNet += rep.revenue - (rep.productionCost + rep.rdCost + rep.capex + rep.overhead + rep.interest);
+
+      // 지급불능인데 살아있는 분기가 없어야 한다 (남은 차입 여유 포함).
+      const room = Math.max(0, max - s.debt);
+      assert.ok(s.gameOver || s.cash + room >= 0, `seed ${seed} ${rep.label}: 지급불능인데 게임이 계속된다`);
+    }
+
+    const pendingNet = s.pending.revenue - (s.pending.rdCost + s.pending.capex + s.pending.overhead);
+    const actual = s.cash - cash0 - (s.debt - debt0);
+    assert.ok(
+      Math.abs(actual - (reportedNet + pendingNet)) < 2,
+      `seed ${seed}: 현금증감 ${Math.round(actual)} ≠ 보고손익 ${Math.round(reportedNet)} + 미결 ${Math.round(pendingNet)}`,
+    );
+  }
+});
+
+test('차입 여유가 남아 있어도 총 유동성이 음수면 파산이다', () => {
+  const s = E.newGame(17);
+  s.lines.length = 0;
+  s.backlog.length = 0;
+  for (const p of s.programs) p.stock = 0;
+  // 한도에 1M 못 미치지만, 그 1M 을 다 빌려도 여전히 마이너스인 상태.
+  s.debt = Data.CONFIG.maxDebt - 1;
+  s.cash = -741;
+  E.endTurn(s);
+  assert.ok(s.gameOver, '한도까지 빌려도 음수면 파산이어야 한다');
+  assert.strictEqual(s.gameOver.reason, 'bankrupt');
+});
+
 test('지속 효과 재발이 남은 기간을 단축하지 않는다 (파업·공급망)', () => {
   const s = E.newGame(11);
   const strike = Data.EVENTS.find((e) => e.id === 'strike');

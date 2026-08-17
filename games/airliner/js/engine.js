@@ -746,6 +746,16 @@
         rng,
         fmt: fmtMoney,
         reputation: (d) => adjustReputation(s, d),
+        // 이벤트의 현금 이동도 다음 분기 리포트가 흡수해야 한다.
+        // 직접 s.cash 를 건드리면 현금은 변했는데 재무표로 설명되지 않는다.
+        income: (amt) => {
+          s.cash += amt;
+          s.pending.revenue += amt;
+        },
+        expense: (amt) => {
+          s.cash -= amt;
+          s.pending.overhead += amt;
+        },
         /** 가중 추첨 — 결함 대상 선정처럼 "위험이 높을수록 자주 걸린다"를 표현할 때. */
         pickWeighted: (arr, weightOf) => {
           const w = arr.map((x) => Math.max(1e-4, weightOf(x)));
@@ -768,7 +778,11 @@
   /** 지급불능 판정 — 종료됐으면 true. */
   function checkBankrupt(s) {
     if (s.gameOver) return true;
-    if (s.cash < 0 && s.debt >= CONFIG.maxDebt) {
+    // 남은 차입 여유까지 끌어와도 음수면 지급불능이다.
+    // debt >= maxDebt 로만 보면, 부채가 한도에 1M 못 미친 채 이벤트로 현금이
+    // -741M 이 된 상태를 놓친다 (한도까지 빌려도 여전히 마이너스인데 생존).
+    const room = Math.max(0, CONFIG.maxDebt - s.debt);
+    if (s.cash + room < 0) {
       s.gameOver = { reason: 'bankrupt', ...finalScore(s, true) };
       pushLog(s, 'bad', '자금이 완전히 고갈되고 차입 한도도 소진됐다. 회사는 법정관리에 들어간다.');
       return true;

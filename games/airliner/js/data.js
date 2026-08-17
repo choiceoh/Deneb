@@ -248,7 +248,7 @@
       weight: 6,
       apply: (s, h) => {
         const amount = Math.round(h.rng.range(180, 520));
-        s.cash += amount;
+        h.income(amount);
         return `국책 항공기술 과제에 선정돼 지원금 ${h.fmt(amount)}을(를) 수령했다.`;
       },
     },
@@ -272,7 +272,7 @@
         const severity = h.rng.next() < p.defectRisk ? 'major' : 'minor';
         if (severity === 'major') {
           const cost = Math.round(p.delivered * p.unitCostBase * h.rng.range(0.08, 0.2));
-          s.cash -= cost;
+          h.expense(cost);
           h.reputation(-9);
           // 기종별로 기록하고, 이미 정지 중이면 더 긴 쪽을 남긴다
           // (단일 슬롯이면 다른 기종의 정지가 기존 정지를 조기 해제해 버린다).
@@ -281,7 +281,7 @@
           return `${p.name}에서 중대 결함이 발견돼 전 기체가 운항 정지됐다. 수리·보상에 ${h.fmt(cost)} 소요, 인도도 멈춘다.`;
         }
         const cost = Math.round(p.delivered * h.rng.range(0.15, 0.5));
-        s.cash -= cost;
+        h.expense(cost);
         h.reputation(-2);
         return `${p.name}에 경미한 결함 서비스회보가 발행됐다. 대응 비용 ${h.fmt(cost)}.`;
       },
