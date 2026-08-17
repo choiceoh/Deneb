@@ -95,6 +95,58 @@ test('품질 투자가 결함 이벤트의 발생 빈도까지 낮춘다', () =>
   assert.strictEqual(defect.weight(fresh), 0);
 });
 
+test('분기 현금 변화가 리포트의 매출·비용으로 설명된다 (회계 불변식)', () => {
+  // 분기 중 즉시 나가는 지출(착수금·품질투자·라인건설·채용)이 리포트에서 빠지면
+  // 현금은 줄었는데 재무표로는 설명되지 않는다. 차입은 부채도 같이 늘므로 상쇄한다.
+  const s = E.newGame(7);
+  s.cash = 20000;
+  const legacy = s.programs.find((p) => p.legacy);
+
+  // 리포트는 분기 중 행동까지 포함하므로, 기준점도 행동 이전이어야 한다.
+  const cash0 = s.cash;
+  const debt0 = s.debt;
+
+  E.buildLine(s, legacy.id);
+  E.hireEngineers(s, 500);
+  E.investQuality(s, legacy.id);
+  E.launchProgram(s, { segment: 'regional', seats: 90, range: 2500, tech: 40, material: 'aluminum' }, 'ACC-2');
+  if (legacy.stock > 0) E.sellStock(s, legacy.id, legacy.stock);
+  const r = E.endTurn(s);
+  const rep = r.report;
+  const cost = rep.productionCost + rep.rdCost + rep.capex + rep.overhead + rep.interest;
+
+  // 현금증감 − 부채증감 = 매출 − 비용 (차입/상환은 현금과 부채를 같은 만큼 움직인다)
+  const lhs = s.cash - cash0 - (s.debt - debt0);
+  const rhs = rep.revenue - cost;
+  assert.ok(Math.abs(lhs - rhs) < 2, `현금 변화 ${Math.round(lhs)}가 매출-비용 ${Math.round(rhs)}와 어긋난다`);
+});
+
+test('지속 효과 재발이 남은 기간을 단축하지 않는다 (파업·공급망)', () => {
+  const s = E.newGame(11);
+  const strike = Data.EVENTS.find((e) => e.id === 'strike');
+  const supply = Data.EVENTS.find((e) => e.id === 'supplier_delay');
+  const h = { rng: R.createRng(1), fmt: E.fmtMoney, reputation: () => {} };
+
+  s.effects.strikeQuarters = 2;
+  strike.apply(s, h);
+  assert.ok(s.effects.strikeQuarters >= 2, '파업 재발이 기간을 줄이면 안 된다');
+
+  s.effects.supplyQuarters = 3;
+  supply.apply(s, h);
+  assert.ok(s.effects.supplyQuarters >= 3, '공급망 차질 재발이 기간을 줄이면 안 된다');
+});
+
+test('위로금을 낼 현금이 없으면 감원이 거부된다', () => {
+  const s = E.newGame(13);
+  s.cash = 1; // 위로금도 못 낼 상황
+  const before = s.engineers;
+  const r = E.hireEngineers(s, -1000);
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error, /위로금/);
+  assert.strictEqual(s.engineers, before, '거부됐으면 인력이 줄면 안 된다');
+  assert.ok(s.cash >= 0, '현금이 음수로 내려가면 안 된다');
+});
+
 test('만료된 신용 경색의 가산폭은 재발 시 되살아나지 않는다', () => {
   const s = E.newGame(9);
   s.effects.rateBump = 0.011; // 강한 경색이

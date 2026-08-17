@@ -215,7 +215,8 @@
       weight: 6,
       condition: (s) => s.lines.length > 0,
       apply: (s, h) => {
-        s.effects.strikeQuarters = h.rng.int(1, 2);
+        // 재발이 기존 잔여 기간을 줄이면 악재가 오히려 이득이 된다 — 긴 쪽을 남긴다.
+        s.effects.strikeQuarters = Math.max(s.effects.strikeQuarters || 0, h.rng.int(1, 2));
         return `조립 노조가 파업에 돌입했다. ${s.effects.strikeQuarters}개 분기 동안 생산이 반토막 난다.`;
       },
     },
@@ -225,7 +226,7 @@
       weight: 8,
       condition: (s) => s.lines.length > 0,
       apply: (s, h) => {
-        s.effects.supplyQuarters = h.rng.int(1, 3);
+        s.effects.supplyQuarters = Math.max(s.effects.supplyQuarters || 0, h.rng.int(1, 3));
         return `1차 협력사가 납기를 놓쳤다. ${s.effects.supplyQuarters}개 분기 동안 생산율이 25% 깎인다.`;
       },
     },

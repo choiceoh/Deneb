@@ -58,7 +58,7 @@
       history: [],
       stats: { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 },
       // 분기 중 즉시 발생한 실적(재고 처분 등) — 다음 endTurn 리포트가 흡수한다.
-      pending: { revenue: 0, delivered: 0, rdCost: 0 },
+      pending: { revenue: 0, delivered: 0, rdCost: 0, capex: 0, overhead: 0 },
       events: [],
       gameOver: null,
     };
@@ -151,8 +151,10 @@
   function ensureShape(s) {
     if (!s.effects) s.effects = {};
     if (!s.effects.grounded) s.effects.grounded = {};
-    if (!s.pending) s.pending = { revenue: 0, delivered: 0, rdCost: 0 };
-    if (typeof s.pending.rdCost !== 'number') s.pending.rdCost = 0;
+    if (!s.pending) s.pending = { revenue: 0, delivered: 0, rdCost: 0, capex: 0, overhead: 0 };
+    for (const k of ['revenue', 'delivered', 'rdCost', 'capex', 'overhead']) {
+      if (typeof s.pending[k] !== 'number') s.pending[k] = 0;
+    }
     if (!s.stats) s.stats = { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 };
     return s;
   }
@@ -235,7 +237,10 @@
     if (p.qualityInvests >= 3) return { ok: false, error: '품질 투자는 3회까지입니다.' };
     const cost = Math.round(p.devCost * 0.06);
     if (s.cash < cost) return { ok: false, error: `${fmtMoney(cost)}이 부족합니다.` };
+    ensureShape(s);
     s.cash -= cost;
+    s.pending.rdCost += cost;
+    p.spent += cost; // 매몰비용 표시가 실제 지출과 어긋나지 않게
     p.qualityInvests++;
     p.defectRisk = Math.round(p.defectRisk * 0.75 * 1000) / 1000;
     pushLog(s, 'program', `${p.name} 추가 시험·검증에 ${fmtMoney(cost)} 투입. 결함 위험 ${(p.defectRisk * 100).toFixed(1)}%로 하락.`);
@@ -260,7 +265,9 @@
     if (!p || p.phase !== 'production') return { ok: false, error: '양산 가능한 기종이 아닙니다.' };
     const seg = SEGMENTS[p.segment];
     if (s.cash < seg.lineCost) return { ok: false, error: `라인 건설비 ${fmtMoney(seg.lineCost)}이 부족합니다.` };
+    ensureShape(s);
     s.cash -= seg.lineCost;
+    s.pending.capex += seg.lineCost;
     s.lines.push({
       id: 'line-' + s.nextId++,
       programId: p.id,
@@ -281,7 +288,9 @@
     const line = s.lines[idx];
     const p = s.programs.find((x) => x.id === line.programId);
     const refund = Math.round(SEGMENTS[p.segment].lineCost * 0.2);
+    ensureShape(s);
     s.cash += refund;
+    s.pending.capex -= refund; // 매각 대금은 설비 투자의 환입
     s.lines.splice(idx, 1);
     pushLog(s, 'info', `${p.name} 라인 폐쇄. 설비 매각으로 ${fmtMoney(refund)} 회수.`);
     return { ok: true };
@@ -329,16 +338,23 @@
   }
 
   function hireEngineers(s, count) {
+    ensureShape(s);
     const cost = Math.round(Math.abs(count) * CONFIG.engineerHireCost);
     if (count > 0) {
       if (s.cash < cost) return { ok: false, error: `채용 비용 ${fmtMoney(cost)}이 부족합니다.` };
       s.cash -= cost;
+      s.pending.overhead += cost;
       s.engineers += count;
       pushLog(s, 'info', `엔지니어 ${count.toLocaleString('ko-KR')}명 채용 (${fmtMoney(cost)}).`);
     } else {
       const cut = Math.min(-count, s.engineers - 500);
       if (cut <= 0) return { ok: false, error: '최소 인력 500명은 유지해야 합니다.' };
-      s.cash -= Math.round(cut * CONFIG.engineerHireCost * 0.5); // 퇴직 위로금
+      const severance = Math.round(cut * CONFIG.engineerHireCost * 0.5);
+      // 위로금을 낼 현금이 없으면 감원 자체가 불가능하다. 그냥 집행하면 현금이
+      // 음수가 된 채 파산 판정 없이 다음 분기까지 회복할 틈이 생긴다.
+      if (s.cash < severance) return { ok: false, error: `퇴직 위로금 ${fmtMoney(severance)}이 부족합니다.` };
+      s.cash -= severance;
+      s.pending.overhead += severance;
       s.engineers -= cut;
       adjustReputation(s, -1);
       pushLog(s, 'bad', `엔지니어 ${cut.toLocaleString('ko-KR')}명 감원. 조직이 술렁인다.`);
@@ -390,12 +406,13 @@
       revenue: s.pending.revenue,
       productionCost: 0,
       rdCost: s.pending.rdCost,
-      overhead: 0,
+      capex: s.pending.capex,
+      overhead: s.pending.overhead,
       interest: 0,
       delivered: s.pending.delivered,
       ordersWon: 0,
     };
-    s.pending = { revenue: 0, delivered: 0, rdCost: 0 };
+    s.pending = { revenue: 0, delivered: 0, rdCost: 0, capex: 0, overhead: 0 };
 
     resolveBids(s, rng, report);
     advanceDevelopment(s, rng, report);
@@ -409,8 +426,8 @@
       cash: Math.round(s.cash),
       debt: Math.round(s.debt),
       revenue: Math.round(report.revenue),
-      cost: Math.round(report.productionCost + report.rdCost + report.overhead + report.interest),
-      net: Math.round(report.revenue - report.productionCost - report.rdCost - report.overhead - report.interest),
+      cost: Math.round(report.productionCost + report.rdCost + report.capex + report.overhead + report.interest),
+      net: Math.round(report.revenue - report.productionCost - report.rdCost - report.capex - report.overhead - report.interest),
       delivered: report.delivered,
       backlog: totalBacklog(s),
       reputation: Math.round(s.reputation),

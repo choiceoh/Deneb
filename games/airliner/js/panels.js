@@ -107,7 +107,7 @@
 
   // ─────────────────────────────── 설계 ───────────────────────────────
 
-  function renderDesign(s, spec) {
+  function renderDesign(s, spec, designName) {
     const seg = SEGMENTS[spec.segment];
     const segTabs = SEGMENT_ORDER.map(
       (id) =>
@@ -150,7 +150,7 @@
           <h3 style="margin-top:18px">주 구조재</h3>
           <div class="mats">${mats}</div>
         </div>
-        <div class="card" id="design-preview">${renderDesignPreview(s, spec)}</div>
+        <div class="card" id="design-preview">${renderDesignPreview(s, spec, designName)}</div>
       </section>
 
       ${derivatives ? `<section class="card"><h3>파생형</h3><p class="muted">기존 형식증명을 물려받아 개발비 66%, 기간 50%를 아낀다.</p><div class="row">${derivatives}</div></section>` : ''}`;
@@ -164,7 +164,7 @@
   }
 
   /** 설계 미리보기 — 슬라이더를 움직일 때 이 영역만 갈아끼운다. */
-  function renderDesignPreview(s, spec) {
+  function renderDesignPreview(s, spec, designName) {
     const ev = D.evaluate(spec);
     const upfront = Math.round(ev.devCost * CONFIG.launchUpfrontRate);
     const seg = SEGMENTS[spec.segment];
@@ -207,7 +207,7 @@
       }
       ${ev.derivative ? `<p class="hint">${esc(spec.derivedFrom.name)} 파생형으로 인정 — 개발비·기간 할인이 적용됐다.</p>` : ''}
       <div class="row">
-        <input class="name-input" id="design-name" placeholder="기종명 (예: DN-200)" maxlength="18">
+        <input class="name-input" id="design-name" data-action="design-name" placeholder="기종명 (예: DN-200)" maxlength="18" value="${esc(designName || '')}">
         <button class="primary" data-action="launch" ${affordable ? '' : 'disabled'}>개발 착수 · ${money(upfront)}</button>
       </div>
       ${affordable ? '' : '<p class="warn-box">착수금이 부족하다.</p>'}`;
@@ -348,16 +348,7 @@
         const scored = candidates.map((p) => ({ p, sc: B.scoreBid(s, rfp, p, discount) }));
         const anyBiddable = scored.some((x) => !x.sc.blocked);
 
-        const options = scored
-          .map(({ p, sc }) => {
-            const sel = bid && bid.programId === p.id;
-            return `<button class="cand ${sel ? 'on' : ''} ${sc.blocked ? 'blocked' : ''}"
-                      data-action="pick-bid" data-rfp="${rfp.id}" data-id="${p.id}" ${sc.blocked ? 'disabled' : ''}>
-                      <b>${esc(p.name)}</b>
-                      <span>${sc.blocked ? sc.blocked : `점수 ${sc.total} · 대당 ${money(sc.price)}`}</span>
-                    </button>`;
-          })
-          .join('');
+        const options = renderBidCandidates(s, rfp, discount);
 
         return `<div class="card rfp">
           <div class="row between">
@@ -374,9 +365,9 @@
             !candidates.length
               ? '<p class="muted">이 세그먼트에 양산 중인 기종이 없다.</p>'
               : !anyBiddable
-                ? `<div class="cands">${options}</div>
+                ? `<div class="cands" id="cands-${rfp.id}">${options}</div>
                    <p class="warn-box">보유 기종 중 이 공고의 요구를 만족하는 기체가 없다. 후속기 개발이 급하다.</p>`
-                : `<div class="cands">${options}</div>
+                : `<div class="cands" id="cands-${rfp.id}">${options}</div>
                    <label class="slider">
                      <span>할인율<b id="disc-label-${rfp.id}">${Math.round(discount * 100)}%</b></span>
                      <input type="range" data-action="discount" data-rfp="${rfp.id}" min="0" max="${CONFIG.maxDiscount * 100}" step="1" value="${Math.round(discount * 100)}">
@@ -384,6 +375,23 @@
                    <div id="bidinfo-${rfp.id}">${renderBidInfo(s, rfp)}</div>`
           }
         </div>`;
+      })
+      .join('');
+  }
+
+  /** 후보 기종 버튼 — 표시 점수·가격이 현재 할인율을 반영해야 한다. */
+  function renderBidCandidates(s, rfp, discount) {
+    const bid = s.bids[rfp.id];
+    return s.programs
+      .filter((p) => p.phase === 'production' && p.segment === rfp.segment)
+      .map((p) => {
+        const sc = B.scoreBid(s, rfp, p, discount);
+        const sel = bid && bid.programId === p.id;
+        return `<button class="cand ${sel ? 'on' : ''} ${sc.blocked ? 'blocked' : ''}"
+                  data-action="pick-bid" data-rfp="${rfp.id}" data-id="${p.id}" ${sc.blocked ? 'disabled' : ''}>
+                  <b>${esc(p.name)}</b>
+                  <span>${sc.blocked ? sc.blocked : `점수 ${sc.total} · 대당 ${money(sc.price)}`}</span>
+                </button>`;
       })
       .join('');
   }
@@ -487,6 +495,7 @@
     renderProduction,
     renderRfps,
     renderBidInfo,
+    renderBidCandidates,
     renderFinance,
     renderLog,
     esc,

@@ -21,6 +21,8 @@
     spec: D.defaultSpec('narrow'),
     // 기종을 고르기 전에 만진 할인율 (RFP별). 선택 시 이 값을 그대로 물려준다.
     discountDraft: {},
+    // 설계 미리보기가 통째로 교체돼도 입력한 기종명이 날아가지 않게 보관한다.
+    designName: '',
   };
 
   const TABS = [
@@ -43,7 +45,7 @@
     const panel = document.getElementById('panel');
     switch (ui.tab) {
       case 'design':
-        panel.innerHTML = P.renderDesign(s, ui.spec);
+        panel.innerHTML = P.renderDesign(s, ui.spec, ui.designName);
         break;
       case 'programs':
         panel.innerHTML = P.renderPrograms(s);
@@ -180,9 +182,10 @@
 
       case 'launch': {
         const nameEl = document.getElementById('design-name');
-        const name = nameEl && nameEl.value.trim();
+        const name = ((nameEl && nameEl.value) || ui.designName || '').trim();
         const r = E.launchProgram(s, ui.spec, name);
         if (act(r)) {
+          ui.designName = '';
           ui.tab = 'programs';
           toast(`${P.esc(r.program.name)} 개발에 착수했다.`, 'good');
           render();
@@ -269,6 +272,11 @@
     if (lockedAfterEnd(el.dataset.action)) return;
     const s = ui.state;
 
+    if (el.dataset.action === 'design-name') {
+      ui.designName = el.value;
+      return; // 미리보기를 다시 그리면 입력 포커스가 끊긴다
+    }
+
     if (el.dataset.action === 'design-input') {
       const key = el.dataset.key;
       ui.spec[key] = Number(el.value);
@@ -276,7 +284,7 @@
       const lbl = document.getElementById('lbl-' + key);
       if (lbl) lbl.textContent = P.num(ui.spec[key]) + unit;
       const prev = document.getElementById('design-preview');
-      if (prev) prev.innerHTML = P.renderDesignPreview(s, ui.spec);
+      if (prev) prev.innerHTML = P.renderDesignPreview(s, ui.spec, ui.designName);
     } else if (el.dataset.action === 'share') {
       const p = s.programs.find((x) => x.id === el.dataset.id);
       if (!p) return;
@@ -295,6 +303,9 @@
         const info = document.getElementById('bidinfo-' + rfpId);
         const rfp = s.rfps.find((r) => r.id === rfpId);
         if (info && rfp) info.innerHTML = P.renderBidInfo(s, rfp);
+        // 후보 버튼의 점수·가격도 같은 할인율 기준으로 다시 그린다.
+        const cands = document.getElementById('cands-' + rfpId);
+        if (cands && rfp) cands.innerHTML = P.renderBidCandidates(s, rfp, pct / 100);
       }
     }
   }
@@ -352,7 +363,7 @@
     }
 
     const rep = r.report;
-    const net = rep.revenue - rep.productionCost - rep.rdCost - rep.overhead - rep.interest;
+    const net = rep.revenue - rep.productionCost - rep.rdCost - rep.capex - rep.overhead - rep.interest;
     toast(
       `${rep.label} 정산 — 매출 ${money(rep.revenue)} · 인도 ${rep.delivered}기 · 손익 <b>${net >= 0 ? '+' : ''}${money(net)}</b>`,
       net >= 0 ? 'good' : 'bad',
@@ -459,6 +470,7 @@
     ui.tab = 'overview';
     ui.spec = D.defaultSpec('narrow');
     ui.discountDraft = {};
+    ui.designName = '';
     closeModal();
     render();
     toast('새 경영을 시작한다. 주력기 DN-150이 버텨주는 동안 후속기를 띄워라.', 'good');
