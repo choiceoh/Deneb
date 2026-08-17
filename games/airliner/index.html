@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>에어라이너 — 여객기 제조사 경영</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈️</text></svg>"
+    />
+  </head>
+  <body>
+    <header id="hud" class="hud"></header>
+    <nav id="tabs" class="tabs"></nav>
+    <main id="panel" class="panel"></main>
+
+    <div id="toast" class="toast"></div>
+
+    <div id="modal" class="modal">
+      <div class="modal-card"><div class="modal-body"></div></div>
+    </div>
+
+    <footer class="foot">
+      <span>에어라이너 · 20년간 여객기 제조사를 경영한다</span>
+      <button class="ghost small" data-action="new-game">새 게임</button>
+    </footer>
+
+    <!-- 순서 중요: 아래로 갈수록 위 모듈에 의존한다 (전역 네임스페이스 IIFE) -->
+    <script src="js/rng.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/design.js"></script>
+    <script src="js/bidding.js"></script>
+    <script src="js/engine.js"></script>
+    <script src="js/panels.js"></script>
+    <script src="js/ui.js"></script>
+  </body>
+</html>
