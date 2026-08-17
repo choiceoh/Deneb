@@ -200,6 +200,12 @@
         <tr><th>라인 건설비</th><td>${money(seg.lineCost)} <span class="muted">(분기 최대 ${seg.lineMaxRate}기)</span></td></tr>
       </table>
       ${heavy ? `<p class="warn-box">총 개발비가 현재 동원 가능한 자금(${money(liquidity)})을 넘는다. 이대로 착수하면 개발 도중 파산할 가능성이 매우 높다.</p>` : ''}
+      ${
+        spec.derivedFrom && !ev.derivative
+          ? `<p class="warn-box">소재·기술·항속을 원형(${esc(spec.derivedFrom.name)})에서 너무 많이 바꿔 형식증명을 물려받을 수 없다. <b>신규 설계 비용</b>으로 계산된다.</p>`
+          : ''
+      }
+      ${ev.derivative ? `<p class="hint">${esc(spec.derivedFrom.name)} 파생형으로 인정 — 개발비·기간 할인이 적용됐다.</p>` : ''}
       <div class="row">
         <input class="name-input" id="design-name" placeholder="기종명 (예: DN-200)" maxlength="18">
         <button class="primary" data-action="launch" ${affordable ? '' : 'disabled'}>개발 착수 · ${money(upfront)}</button>

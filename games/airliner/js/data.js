@@ -254,7 +254,14 @@
     {
       id: 'defect',
       name: '운항 중 결함',
-      weight: 8,
+      // 발생 빈도 자체를 함대 평균 위험에 연동한다. 고정 가중치면 품질 투자로
+      // defectRisk 를 낮춰도 (특히 기종이 하나뿐인 초반) 빈도가 전혀 줄지 않는다.
+      weight: (s) => {
+        const fleet = s.programs.filter((p) => p.delivered > 0);
+        if (!fleet.length) return 0;
+        const avg = fleet.reduce((a, p) => a + p.defectRisk, 0) / fleet.length;
+        return Math.max(1, Math.min(16, 8 * (avg / 0.15)));
+      },
       condition: (s) => s.programs.some((p) => p.delivered > 0),
       apply: (s, h) => {
         // 결함 위험이 높은 기종일수록 자주 걸린다. 균등 추첨이면 품질 투자로 낮춘
@@ -329,8 +336,10 @@
       name: '신용 경색',
       weight: 5,
       apply: (s, h) => {
-        s.effects.rateBump = h.rng.range(0.004, 0.011);
-        s.effects.rateBumpQuarters = h.rng.int(2, 5);
+        // 진행 중인 경색보다 약한 재발이 덮어쓰면, 악재가 오히려 이자를 낮추고
+        // 기간을 앞당겨 끝내 버린다. 더 강하고 더 긴 쪽을 남긴다.
+        s.effects.rateBump = Math.max(s.effects.rateBump || 0, h.rng.range(0.004, 0.011));
+        s.effects.rateBumpQuarters = Math.max(s.effects.rateBumpQuarters || 0, h.rng.int(2, 5));
         return `금융시장이 경색됐다. 당분간 차입 이자율이 분기 ${(s.effects.rateBump * 100).toFixed(1)}%p 오른다.`;
       },
     },

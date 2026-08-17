@@ -41,12 +41,79 @@ test('설계: 슬라이더 값이 세그먼트 범위로 클램프된다', () =>
   assert.strictEqual(r.tech, 100);
 });
 
-test('파생형은 원형보다 개발비·기간이 크게 싸다', () => {
+test('파생형(호환 변경)은 원형보다 개발비·기간이 크게 싸다', () => {
   const base = { segment: 'narrow', seats: 180, range: 5500, tech: 60, material: 'aluminum' };
   const orig = D.evaluate(base);
-  const deriv = D.evaluate({ ...base, seats: 200, derivedFrom: { id: 'x', name: 'y' } });
+  // 좌석수만 늘린 동체 연장형 — 형식증명을 물려받을 수 있는 전형적인 파생형.
+  const deriv = D.evaluate({
+    ...base,
+    seats: 200,
+    derivedFrom: { id: 'x', name: 'y', tech: 60, material: 'aluminum', range: 5500 },
+  });
+  assert.strictEqual(deriv.derivative, true, '호환 변경은 파생형으로 인정돼야 한다');
   assert.ok(deriv.devCost < orig.devCost * 0.5);
   assert.ok(deriv.devQuarters < orig.devQuarters);
+});
+
+test('파생형 딱지로 신규 설계 비용을 우회할 수 없다', () => {
+  const s = E.newGame(1);
+  const legacy = s.programs.find((p) => p.legacy); // tech 38 · aluminum · 4800km
+  const seed = E.derivativeSpec(legacy, 20);
+
+  // 파생형 시드를 받은 뒤 소재·기술·항속을 전부 갈아엎으면 사실상 새 기체다.
+  const abused = { ...seed, tech: 100, material: 'composite', range: 7800 };
+  const honest = { ...abused };
+  delete honest.derivedFrom;
+
+  const a = D.evaluate(abused);
+  const h = D.evaluate(honest);
+  assert.strictEqual(a.derivative, false, '비호환 변경은 파생형으로 인정되면 안 된다');
+  assert.strictEqual(a.devCost, h.devCost, '신규 설계와 동일한 개발비여야 한다');
+  assert.strictEqual(a.devQuarters, h.devQuarters);
+
+  // 반대로, 좌석수만 바꾼 진짜 파생형은 계속 할인을 받아야 한다.
+  const genuine = D.evaluate(seed);
+  assert.strictEqual(genuine.derivative, true);
+  assert.ok(genuine.devCost < D.evaluate({ ...seed, derivedFrom: undefined }).devCost * 0.5);
+});
+
+test('품질 투자가 결함 이벤트의 발생 빈도까지 낮춘다', () => {
+  const defect = Data.EVENTS.find((e) => e.id === 'defect');
+  assert.strictEqual(typeof defect.weight, 'function', '결함 가중치는 상태 함수여야 한다');
+
+  const risky = E.newGame(5);
+  const safe = E.newGame(5);
+  const rp = risky.programs.find((p) => p.legacy);
+  const sp = safe.programs.find((p) => p.legacy);
+  rp.defectRisk = 0.3;
+  sp.defectRisk = 0.05;
+  assert.ok(defect.weight(risky) > defect.weight(safe), '위험이 낮으면 가중치도 낮아야 한다');
+
+  // 인도된 기종이 없으면 결함 이벤트 자체가 후보에서 빠진다.
+  const fresh = E.newGame(5);
+  for (const p of fresh.programs) p.delivered = 0;
+  assert.strictEqual(defect.weight(fresh), 0);
+});
+
+test('신용 경색 재발이 진행 중인 효과를 약화시키지 않는다', () => {
+  const s = E.newGame(9);
+  s.effects.rateBump = 0.011;
+  s.effects.rateBumpQuarters = 4;
+  const squeeze = Data.EVENTS.find((e) => e.id === 'credit_squeeze');
+  const rng = R.createRng(123);
+  squeeze.apply(s, { rng, fmt: E.fmtMoney, reputation: () => {} });
+  assert.ok(s.effects.rateBump >= 0.011, '이자 가산폭이 줄면 안 된다');
+  assert.ok(s.effects.rateBumpQuarters >= 4, '기간이 짧아지면 안 된다');
+});
+
+test('착수금이 다음 분기 연구개발비에 반영된다', () => {
+  const s = E.newGame(31);
+  s.cash = 500000;
+  const r = E.launchProgram(s, { segment: 'regional', seats: 90, range: 2500, tech: 40, material: 'aluminum' }, 'RD-1');
+  const upfront = r.program.spent;
+  assert.ok(upfront > 0);
+  const res = E.endTurn(s);
+  assert.ok(res.report.rdCost >= upfront, `착수금 ${upfront}이 분기 R&D 비용 ${res.report.rdCost}에 빠졌다`);
 });
 
 test('학습곡선: 누적 생산이 늘면 대당 원가가 내려가고 바닥에서 멈춘다', () => {

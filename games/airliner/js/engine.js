@@ -58,7 +58,7 @@
       history: [],
       stats: { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 },
       // 분기 중 즉시 발생한 실적(재고 처분 등) — 다음 endTurn 리포트가 흡수한다.
-      pending: { revenue: 0, delivered: 0 },
+      pending: { revenue: 0, delivered: 0, rdCost: 0 },
       events: [],
       gameOver: null,
     };
@@ -151,7 +151,8 @@
   function ensureShape(s) {
     if (!s.effects) s.effects = {};
     if (!s.effects.grounded) s.effects.grounded = {};
-    if (!s.pending) s.pending = { revenue: 0, delivered: 0 };
+    if (!s.pending) s.pending = { revenue: 0, delivered: 0, rdCost: 0 };
+    if (typeof s.pending.rdCost !== 'number') s.pending.rdCost = 0;
     if (!s.stats) s.stats = { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 };
     return s;
   }
@@ -200,6 +201,10 @@
       derivedFrom: spec.derivedFrom || null,
     };
     s.cash -= upfront;
+    // 착수금도 연구개발비다 — 리포트에 넣지 않으면 현금은 줄었는데
+    // 재무표의 비용·손익으로는 설명되지 않고, 총 R&D도 8% 적게 보고된다.
+    ensureShape(s);
+    s.pending.rdCost += upfront;
     s.programs.push(program);
     pushLog(
       s,
@@ -218,7 +223,8 @@
       range: base.range,
       tech: base.tech,
       material: base.material,
-      derivedFrom: { id: base.id, name: base.name },
+      // 호환성 판정에 쓰이도록 원형 스펙을 함께 싣는다.
+      derivedFrom: { id: base.id, name: base.name, tech: base.tech, material: base.material, range: base.range },
     };
   }
 
@@ -383,13 +389,13 @@
       label: turnLabel(s.turn),
       revenue: s.pending.revenue,
       productionCost: 0,
-      rdCost: 0,
+      rdCost: s.pending.rdCost,
       overhead: 0,
       interest: 0,
       delivered: s.pending.delivered,
       ordersWon: 0,
     };
-    s.pending = { revenue: 0, delivered: 0 };
+    s.pending = { revenue: 0, delivered: 0, rdCost: 0 };
 
     resolveBids(s, rng, report);
     advanceDevelopment(s, rng, report);
@@ -449,12 +455,14 @@
     // 1단계: 분기 시작 상태로 모든 입찰 점수를 먼저 고정한다.
     // 순차 처리하면 앞선 수주로 오른 평판·관계가 뒤 입찰의 점수를 바꿔,
     // 플레이어가 화면에서 확인한 점수와 다른 값으로 판정된다.
-    const pending = [];
+    const queued = [];
+    const noBidAirlines = [];
     for (const rfp of s.rfps) {
       const bid = s.bids[rfp.id];
       if (!bid) {
-        // 무응찰은 관계가 서서히 식는다.
-        s.relations[rfp.airlineId] = clamp((s.relations[rfp.airlineId] ?? 40) - 1.5, 0, 100);
+        // 무응찰 감점도 점수 계산이 모두 끝난 뒤에 적용한다 — 같은 항공사의
+        // 다른 공고 점수가 이 감점의 영향을 받으면 안 된다.
+        noBidAirlines.push(rfp.airlineId);
         continue;
       }
       const program = s.programs.find((p) => p.id === bid.programId);
@@ -462,11 +470,14 @@
 
       const score = scoreBid(s, rfp, program, bid.discount);
       if (score.blocked) continue;
-      pending.push({ rfp, program, score });
+      queued.push({ rfp, program, score });
     }
 
-    // 2단계: 고정된 점수로 판정하고 보상을 적용한다.
-    for (const { rfp, program, score } of pending) {
+    // 2단계: 고정된 점수로 판정하고 보상·감점을 적용한다.
+    for (const airlineId of noBidAirlines) {
+      s.relations[airlineId] = clamp((s.relations[airlineId] ?? 40) - 1.5, 0, 100);
+    }
+    for (const { rfp, program, score } of queued) {
       s.stats.bidsMade++;
       const result = resolveBid(s, rfp, { score }, rng);
       s.relations[rfp.airlineId] = clamp((s.relations[rfp.airlineId] ?? 40) + 2, 0, 100);
@@ -700,11 +711,14 @@
     if (rng.chance(0.15)) draws++;
 
     for (let i = 0; i < draws; i++) {
-      const pool = EVENTS.filter((e) => !e.condition || e.condition(s));
+      // weight 는 숫자 또는 상태 함수 — 결함처럼 발생 빈도가 게임 상태에 따라
+      // 달라져야 하는 이벤트가 있다.
+      const weightOf = (e) => (typeof e.weight === 'function' ? e.weight(s) : e.weight);
+      const pool = EVENTS.filter((e) => (!e.condition || e.condition(s)) && weightOf(e) > 0);
       if (!pool.length) break;
-      const totalW = pool.reduce((a, e) => a + e.weight, 0);
+      const totalW = pool.reduce((a, e) => a + weightOf(e), 0);
       let r = rng.next() * totalW;
-      const chosen = pool.find((e) => (r -= e.weight) <= 0) || pool[0];
+      const chosen = pool.find((e) => (r -= weightOf(e)) <= 0) || pool[0];
 
       const helpers = {
         rng,

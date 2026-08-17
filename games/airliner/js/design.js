@@ -9,6 +9,25 @@
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+  /** 파생형 할인 허용 오차 — 이 범위를 벗어나면 사실상 새 기체다. */
+  const DERIVATIVE_TOLERANCE = { techUp: 5, rangeRatio: 0.15 };
+
+  /**
+   * 원형의 형식증명을 물려받을 수 있는 변경인지.
+   * 좌석수 변경(동체 연장/단축)은 파생형의 본령이라 허용하고,
+   * 소재 교체·기술 상향·항속 대폭 변경은 재설계에 가까우므로 할인 대상이 아니다.
+   */
+  function isCompatibleDerivative(spec, range, tech) {
+    const d = spec.derivedFrom;
+    if (!d) return false;
+    // 원형 정보가 없는 옛 설계안은 보수적으로 할인하지 않는다.
+    if (d.material === undefined || d.tech === undefined || d.range === undefined) return false;
+    if (d.material !== spec.material) return false;
+    if (tech > d.tech + DERIVATIVE_TOLERANCE.techUp) return false;
+    if (Math.abs(range - d.range) > d.range * DERIVATIVE_TOLERANCE.rangeRatio) return false;
+    return true;
+  }
+
   /**
    * 설계안 평가.
    * @param {{segment:string, seats:number, range:number, tech:number, material:string, derivedFrom?:object}} spec
@@ -40,7 +59,11 @@
     let engineersNeeded = seg.engineersNeeded * Math.pow(seatRatio, 0.5) * (1 + (tech / 100) * 0.4);
 
     // 파생형: 기존 형식증명을 물려받아 개발비·기간이 크게 준다.
-    if (spec.derivedFrom) {
+    // 단, 원형의 형식증명을 실제로 재사용할 수 있는 변경일 때만 인정한다.
+    // 딱지만 붙인 채 소재·기술·항속을 갈아엎으면 신규 설계를 34% 가격에 사는 셈이라
+    // 개발비 제약 자체가 무너진다 (동일 설계 기준 $18.6B → $6.3B).
+    const derivative = isCompatibleDerivative(spec, range, tech);
+    if (derivative) {
       devCost *= 0.34;
       devQuarters *= 0.5;
       engineersNeeded *= 0.55;
@@ -87,6 +110,8 @@
       listPrice: Math.round(listPrice * 10) / 10,
       defectRisk: Math.round(defectRisk * 1000) / 1000,
       certQuarters: seg.certQuarters,
+      // UI가 "파생형 할인이 적용됐는지"를 그대로 보여줄 수 있게 노출한다.
+      derivative,
     };
   }
 
@@ -112,5 +137,5 @@
     };
   }
 
-  root.AirlinerDesign = { evaluate, unitCostAt, defaultSpec, clamp };
+  root.AirlinerDesign = { evaluate, unitCostAt, defaultSpec, clamp, isCompatibleDerivative };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

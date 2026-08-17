@@ -326,7 +326,10 @@
     const el = ev.target.closest('[data-action]');
     if (!el) return;
     if (lockedAfterEnd(el.dataset.action)) return;
+    // 드래그가 끝난 시점에 저장한다. onInput 은 메모리 상태만 바꾸므로,
+    // 여기서 저장하지 않으면 새로고침 시 이전 할인율로 되돌아간다.
     if (el.dataset.action === 'share') render();
+    else if (el.dataset.action === 'discount') save();
   }
 
   // ─────────────────────────────── 턴 진행 ───────────────────────────────
