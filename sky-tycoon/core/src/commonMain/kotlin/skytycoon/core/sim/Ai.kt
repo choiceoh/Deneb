@@ -45,6 +45,7 @@ object Ai {
         s = upgauge(s, airlineId, skill)
         s = manageFleet(s, airlineId, rng, skill)
         s = manageSlots(s, airlineId, rng, skill)
+        s = expandAirports(s, airlineId, skill)
         s = openRoutes(s, airlineId, rng, skill)
         s = finance(s, airlineId)
         s = marketing(s, airlineId, skill)
@@ -99,6 +100,36 @@ object Ai {
             }
         }
         return s
+    }
+
+    /**
+     * 슬롯이 동난 요지에 확장 공사를 건다. 후기에는 이게 유일한 성장 수단이라,
+     * 안 쓰면 AI 가 현금만 쌓아두고 멈춰 선다.
+     */
+    private fun expandAirports(state: GameState, airlineId: String, skill: Double): GameState {
+        val a = state.airline(airlineId)
+        // 내가 뜨는 도시 중 매물이 마른 곳.
+        val candidates = state.routesOf(airlineId)
+            .filter { it.active }
+            .flatMap { listOf(it.from, it.to) }
+            .distinct()
+            .filter { cityId ->
+                val city = Cities[cityId]
+                val extra = state.cityState[cityId]?.extraSlots ?: 0
+                // 완전히 마르기를 기다릴 필요는 없다 — 바닥이 보이면 이미 병목이다.
+                val dry = state.unsoldSlots(city) <= (city.slots + extra) * 0.05
+                dry && !Actions.expansionInProgress(state, cityId)
+            }
+        if (candidates.isEmpty()) return state
+
+        // 내 편수가 많이 걸린 공항부터 — 거기가 병목이다.
+        val target = candidates.maxByOrNull { state.usedSlots(airlineId, it) } ?: return state
+        val cost = Actions.expansionCost(state, airlineId, target)
+        val want = cost * (1.2 + (1.0 - skill))
+
+        // 빚을 내서까지 지르지는 않는다 — 이자만으로 흑자 회사가 자본잠식에 빠진다.
+        if (a.cash < want) return state
+        return cmd(state, Command.FundExpansion(airlineId, target))
     }
 
     /** 잘 나가는 노선에 편수를 붙이고, 남는 기재를 밀어 넣는다. */
@@ -462,14 +493,15 @@ object Ai {
             .filter { rival ->
                 val equity = Economics.equity(s, rival)
                 val ailing = rival.results.takeLast(4).sumOf { r -> r.net } < 0
-                // 휘청이는 회사이거나, 내가 세 배 넘게 크면 삼킬 만하다.
-                ailing || myEquity > equity * 3.0
+                // 휘청이는 회사이거나, 내가 두 배 가까이 크면 삼킬 만하다.
+                // 3배로 두면 후보가 거의 안 잡혀 인수가 영영 안 일어난다.
+                ailing || myEquity > equity * 1.8
             }
             .minByOrNull { Economics.equity(s, it) } ?: return s
 
         val limit = Stock.maxBuyableThisQuarter(s, airlineId, target.id)
         if (limit <= 0) return s
-        val budget = warChest * 0.4 * skill
+        val budget = warChest * 0.6 * skill
         val unit = Stock.buyCost(s, airlineId, target.id, 1.0)
         if (unit <= 0) return s
         // 과반을 넘기는 물량이면 잔여 지분 정리 대금까지 감당돼야 통과한다. 예산만 보고
@@ -487,6 +519,7 @@ object Ai {
             .maxOfOrNull { Stock.ownershipRatio(state, it.id, airlineId) } ?: 0.0
         if (threat < 0.25) return state
         val me = state.airline(airlineId)
+        if (!Actions.canIssueShares(me)) return state
         val issue = Actions.maxIssuable(me) * (if (threat > 0.4) 1.0 else 0.5)
         return cmd(state, Command.IssueShares(airlineId, issue))
     }

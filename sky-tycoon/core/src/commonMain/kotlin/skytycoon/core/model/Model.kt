@@ -136,6 +136,8 @@ data class CityState(
     val closedUntilTurn: Int = -1,
     /** 신공항·확장으로 늘어난 슬롯 */
     val extraSlots: Int = 0,
+    /** 지금까지 완공된 확장 공사 횟수 — 늘어날수록 다음 확장이 비싸진다 */
+    val expansions: Int = 0,
 ) {
     fun isClosed(turn: Int) = turn <= closedUntilTurn
 
@@ -167,6 +169,23 @@ data class Plane(
      * 최종 순위를 부풀릴 수 있다. 산 값 기준을 기체에 새겨 두면 그 구멍이 막힌다.
      */
     val valueMul: Double = 1.0,
+)
+
+/**
+ * 진행 중인 공항 확장 공사. 후원사가 공사비를 대고, 완공되면 새 슬롯의 일부를
+ * 우선 배정받는다 (나머지는 시장에 풀린다).
+ *
+ * 허브가 포화되면 돈을 아무리 벌어도 쓸 데가 없어 게임이 멈춘다. 확장은 그 교착을
+ * "큰돈과 긴 리드타임을 걸고 미래의 요지를 선점하는" 판단으로 바꾼다.
+ */
+@Serializable
+data class Expansion(
+    val id: Int,
+    val city: String,
+    val sponsorId: String,
+    val slots: Int,
+    val sponsorSlots: Int,
+    val deliverTurn: Int,
 )
 
 @Serializable
@@ -321,6 +340,7 @@ data class GameState(
     val routes: List<Route>,
     val planes: List<Plane>,
     val orders: List<Order> = emptyList(),
+    val expansions: List<Expansion> = emptyList(),
     val nextId: Int = 1,
     val news: List<NewsItem> = emptyList(),
     val outcome: Outcome? = null,

@@ -6,6 +6,7 @@ import skytycoon.core.model.Airline
 import skytycoon.core.model.AircraftType
 import skytycoon.core.model.Business
 import skytycoon.core.model.BusinessType
+import skytycoon.core.model.Expansion
 import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsItem
 import skytycoon.core.model.NewsKind
@@ -51,6 +52,9 @@ sealed interface Command {
     ) : Command
 
     data class BuySlots(override val airlineId: String, val city: String, val count: Int) : Command
+
+    /** 공항 확장 공사에 돈을 댄다. 완공까지 오래 걸리지만 새 슬롯의 절반을 우선 배정받는다. */
+    data class FundExpansion(override val airlineId: String, val city: String) : Command
 
     data class BuyAircraft(
         override val airlineId: String,
@@ -105,6 +109,7 @@ object Actions {
             is Command.TuneRoute -> tuneRoute(state, airline, cmd)
             is Command.AssignPlanes -> assignPlanes(state, airline, cmd)
             is Command.BuySlots -> buySlots(state, airline, cmd)
+            is Command.FundExpansion -> fundExpansion(state, airline, cmd)
             is Command.BuyAircraft -> buyAircraft(state, airline, cmd)
             is Command.SellAircraft -> sellAircraft(state, airline, cmd)
             is Command.Loan -> loan(state, airline, cmd)
@@ -304,6 +309,66 @@ object Actions {
             s = s.withAirline(airlineId) { a -> a.copy(slots = a.slots + (city to a.slotsAt(city) + 1)) }
         }
         return total
+    }
+
+    /**
+     * 공항 확장 공사비. 같은 수의 슬롯을 지금 시세로 사는 값에 배수를 얹고,
+     * 이미 확장된 공항일수록 더 붙인다 (한 곳을 무한히 키우지 못하게).
+     */
+    fun expansionCost(state: GameState, airlineId: String, city: String): Double {
+        val done = state.cityState[city]?.expansions ?: 0
+        val unit = Economics.slotPrice(state, airlineId, city)
+        var mul = Balance.EXPANSION_COST_MUL
+        repeat(done) { mul *= Balance.EXPANSION_REPEAT_MUL }
+        return unit * Balance.EXPANSION_SLOTS * mul
+    }
+
+    /** 이 공항에 이미 삽을 뜬 공사가 있는가 (한 번에 하나만). */
+    fun expansionInProgress(state: GameState, city: String): Boolean =
+        state.expansions.any { it.city == city }
+
+    private fun fundExpansion(state: GameState, airline: Airline, cmd: Command.FundExpansion): ActionResult {
+        val city = Cities.find(cmd.city) ?: return ActionResult.fail(state, "알 수 없는 도시입니다.")
+        if (expansionInProgress(state, city.id)) {
+            return ActionResult.fail(state, "${city.name} 공항은 이미 확장 공사 중입니다.")
+        }
+        // 취항도 안 한 공항을 넓혀 봐야 남 좋은 일이다 — 슬롯이든 노선이든 연고가 있어야 한다.
+        val connected = airline.slotsAt(city.id) > 0 ||
+            state.routesOf(airline.id).any { it.active && it.touches(city.id) }
+        if (!connected) return ActionResult.fail(state, "${city.name}에 취항하거나 슬롯을 가진 뒤에 제안할 수 있습니다.")
+
+        val cost = expansionCost(state, airline.id, city.id)
+        if (airline.cash < cost) {
+            return ActionResult.fail(state, "확장 공사비 ${(cost / 1e6).toInt()}백만 달러가 부족합니다.")
+        }
+
+        val sponsorSlots = (Balance.EXPANSION_SLOTS * Balance.EXPANSION_SPONSOR_SHARE).toInt()
+        val expansion = Expansion(
+            id = state.nextId,
+            city = city.id,
+            sponsorId = airline.id,
+            slots = Balance.EXPANSION_SLOTS,
+            sponsorSlots = sponsorSlots,
+            deliverTurn = state.turn + Balance.EXPANSION_QUARTERS,
+        )
+        val next = state
+            .copy(
+                expansions = state.expansions + expansion,
+                nextId = state.nextId + 1,
+                news = state.news + NewsItem(
+                    turn = state.turn,
+                    kind = NewsKind.MARKET,
+                    headline = "${city.name} 공항 확장 착공 — ${airline.name} 출자",
+                    body = "${Balance.EXPANSION_QUARTERS}분기 뒤 슬롯 ${expansion.slots}개가 늘어납니다. " +
+                        "그중 ${sponsorSlots}개는 출자사가 가져갑니다.",
+                ),
+            )
+            .withAirline(airline.id) { it.copy(cash = it.cash - cost) }
+        return ActionResult(
+            next,
+            true,
+            "${city.name} 공항 확장에 ${(cost / 1e6).toInt()}백만 달러를 출자했습니다.",
+        )
     }
 
     private fun buySlots(state: GameState, airline: Airline, cmd: Command.BuySlots): ActionResult {
@@ -557,8 +622,25 @@ object Actions {
         return ActionResult(next, true, "${target.name} 주식을 매도했습니다.")
     }
 
+    /**
+     * 적자 회사의 증자는 시장이 받아주지 않는다.
+     *
+     * 게임 규칙으로서 더 중요한 이유: 이 제한이 없으면 지분을 25% 넘게 모으는 순간
+     * 상대가 증자로 희석해 버려 **인수합병이 구조적으로 불가능해진다**. 실제로
+     * 20년 캠페인에서 인수가 한 건도 일어나지 않았다. "실적이 무너진 회사는 방어할
+     * 수단을 잃는다"로 두면, 경영을 잘해야 경영권을 지킨다는 압박이 생긴다.
+     */
+    fun canIssueShares(airline: Airline): Boolean =
+        airline.results.size < 4 || airline.results.takeLast(4).sumOf { it.net } >= 0
+
     private fun issueShares(state: GameState, airline: Airline, cmd: Command.IssueShares): ActionResult {
         if (cmd.shares <= 0) return ActionResult.fail(state, "발행 주식 수가 올바르지 않습니다.")
+        if (!canIssueShares(airline)) {
+            return ActionResult.fail(
+                state,
+                "연간 적자 상태에서는 증자를 인수해 줄 곳이 없습니다. 실적을 되돌린 뒤 다시 시도하세요.",
+            )
+        }
         val limit = maxIssuable(airline)
         if (limit <= 0.0) return ActionResult.fail(state, "이번 분기 증자 한도를 이미 다 썼습니다.")
         if (cmd.shares > limit) {

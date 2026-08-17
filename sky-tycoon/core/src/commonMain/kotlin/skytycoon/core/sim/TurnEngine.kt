@@ -34,6 +34,7 @@ object TurnEngine {
 
         s = ageFleet(s)
         s = deliverOrders(s)
+        s = deliverExpansions(s)
         s = updateBrandAndSafety(s)
 
         s = Stock.repriceAll(s)
@@ -192,6 +193,39 @@ object TurnEngine {
             nextId = nextId,
             news = state.news + news,
         )
+    }
+
+    /** 공사가 끝난 공항에 슬롯을 풀고, 출자사 몫을 먼저 떼어 준다. */
+    private fun deliverExpansions(state: GameState): GameState {
+        val due = state.expansions.filter { it.deliverTurn <= state.turn + 1 }
+        if (due.isEmpty()) return state
+        var s = state.copy(expansions = state.expansions - due.toSet())
+        for (e in due) {
+            val city = Cities[e.city]
+            val cs = s.cityState[e.city] ?: skytycoon.core.model.CityState()
+            s = s.copy(
+                cityState = s.cityState + (
+                    e.city to cs.copy(extraSlots = cs.extraSlots + e.slots, expansions = cs.expansions + 1)
+                    ),
+            )
+            // 출자사가 사라졌으면 그 몫도 그냥 시장에 풀린다.
+            val sponsor = s.airlineOrNull(e.sponsorId)
+            if (sponsor?.alive == true) {
+                s = s.withAirline(e.sponsorId) {
+                    it.copy(slots = it.slots + (e.city to it.slotsAt(e.city) + e.sponsorSlots))
+                }
+            }
+            s = s.copy(
+                news = s.news + NewsItem(
+                    turn = s.turn,
+                    kind = NewsKind.MARKET,
+                    headline = "${city.name} 공항 확장 완공",
+                    body = "슬롯 ${e.slots}개가 늘었습니다." +
+                        if (sponsor?.alive == true) " ${sponsor.name}이 ${e.sponsorSlots}개를 배정받았습니다." else "",
+                ),
+            )
+        }
+        return s
     }
 
     /**

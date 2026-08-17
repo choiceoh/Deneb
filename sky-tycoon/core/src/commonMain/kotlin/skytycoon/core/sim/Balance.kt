@@ -94,6 +94,29 @@ object Balance {
 
     // --- 슬롯 ---
     const val SLOT_BASE_PRICE = 0.42e6
+
+    // --- 공항 확장 공사 ---
+    /** 한 번 완공될 때마다 늘어나는 슬롯 수 */
+    const val EXPANSION_SLOTS = 18
+
+    /** 그중 후원사가 공짜로 배정받는 몫 */
+    const val EXPANSION_SPONSOR_SHARE = 0.5
+
+    /** 착공에서 완공까지 (분기). 길어야 "언제 지를까"가 판단이 된다. */
+    const val EXPANSION_QUARTERS = 6
+
+    /**
+     * 공사비 = 늘어나는 슬롯 전부를 지금 시세로 살 값의 이 배수.
+     *
+     * 후원사는 그중 절반만 받으므로, 이 값이 2.0 이면 "제값", 그 위는 웃돈이다.
+     * 웃돈이 과하면 출자할수록 자기자본이 깎여 나가 — 실제로 9.0 으로 뒀더니
+     * AI 가 확장할 때마다 자본을 태워 레버리지가 800% 까지 치솟았다.
+     * 포화 허브를 뚫는 값어치만큼만 얹는다.
+     */
+    const val EXPANSION_COST_MUL = 3.0
+
+    /** 같은 공항을 거듭 확장할수록 붙는 가중 (1회당) */
+    const val EXPANSION_REPEAT_MUL = 1.8
     const val SLOT_SCARCITY_EXP = 1.9
     const val SLOT_HOME_DISCOUNT = 0.6
 

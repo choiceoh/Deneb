@@ -10,6 +10,7 @@ import skytycoon.core.model.CityState
 import skytycoon.core.model.GameState
 import skytycoon.core.model.NewsKind
 import skytycoon.core.model.Order
+import skytycoon.core.model.QuarterResult
 import skytycoon.core.sim.Actions
 import skytycoon.core.sim.Balance
 import skytycoon.core.sim.Command
@@ -822,6 +823,62 @@ class RegressionTest {
             Economics.equity(s, dead) <= 0.0,
             "파산한 회사의 기업가치가 ${Economics.equity(s, dead)} 로 플러스다",
         )
+    }
+
+    // ------------------------------------------------------------ 공항 확장
+
+    @Test
+    fun `공항 확장은 완공 뒤에 슬롯을 풀고 출자사 몫을 먼저 준다`() {
+        var s = fresh()
+        val city = s.routesOf("hanseong").first().from
+        val before = Cities[city].slots + (s.cityState[city]?.extraSlots ?: 0)
+        val mine = s.player.slotsAt(city)
+        s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }
+
+        val r = Actions.execute(s, Command.FundExpansion("hanseong", city))
+        assertTrue(r.ok, r.message)
+        s = r.state
+        assertTrue(s.expansions.any { it.city == city }, "착공 기록이 없다")
+        // 같은 공항에 두 건은 못 건다.
+        assertFalse(Actions.execute(s, Command.FundExpansion("hanseong", city)).ok)
+
+        repeat(Balance.EXPANSION_QUARTERS) { s = TurnEngine.advance(s) }
+
+        val after = Cities[city].slots + (s.cityState[city]?.extraSlots ?: 0)
+        assertEquals(before + Balance.EXPANSION_SLOTS, after, "완공됐는데 슬롯이 안 늘었다")
+        assertTrue(s.expansions.none { it.city == city }, "완공된 공사가 목록에 남아 있다")
+        assertTrue(
+            s.player.slotsAt(city) >= mine + (Balance.EXPANSION_SLOTS * Balance.EXPANSION_SPONSOR_SHARE).toInt(),
+            "출자사가 우선 배정 몫을 못 받았다",
+        )
+    }
+
+    @Test
+    fun `연고 없는 공항은 확장 출자를 제안할 수 없다`() {
+        var s = fresh()
+        val stranger = Cities.all.first { c ->
+            s.player.slotsAt(c.id) == 0 && s.routesOf("hanseong").none { it.touches(c.id) }
+        }
+        s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }
+        val r = Actions.execute(s, Command.FundExpansion("hanseong", stranger.id))
+        assertFalse(r.ok, "취항도 안 한 공항을 넓혀 남 좋은 일을 시킬 수 있으면 안 된다")
+    }
+
+    // ------------------------------------------------------------ 증자 방어의 한계
+
+    @Test
+    fun `연간 적자면 증자로 지분을 희석할 수 없다`() {
+        // 이 제한이 없으면 25% 를 넘기는 순간 상대가 무한히 희석해 인수가 영영 불가능해진다.
+        var s = fresh()
+        val losing = List(4) { QuarterResult(turn = it, net = -50e6) }
+        s = s.withAirline2("hanseong") { it.copy(results = losing) }
+        assertFalse(Actions.canIssueShares(s.player))
+        val r = Actions.execute(s, Command.IssueShares("hanseong", 1e6))
+        assertFalse(r.ok, "적자 회사가 증자로 방어할 수 있으면 안 된다")
+
+        // 흑자로 돌아서면 다시 열린다.
+        s = s.withAirline2("hanseong") { it.copy(results = List(4) { i -> QuarterResult(turn = i, net = 50e6) }) }
+        assertTrue(Actions.execute(s, Command.IssueShares("hanseong", 1e6)).ok)
     }
 
     // ------------------------------------------------------------ 일시 효과 중첩

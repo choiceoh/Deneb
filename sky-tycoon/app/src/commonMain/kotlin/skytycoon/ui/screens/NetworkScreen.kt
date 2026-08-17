@@ -41,6 +41,7 @@ import skytycoon.core.data.AircraftCatalog
 import skytycoon.core.data.Cities
 import skytycoon.core.model.City
 import skytycoon.core.model.GameState
+import skytycoon.core.sim.Balance
 import skytycoon.core.sim.Actions
 import skytycoon.core.sim.Command
 import skytycoon.core.sim.Demand
@@ -180,7 +181,44 @@ private fun CityPanel(vm: GameViewModel, city: City, onCompose: (String) -> Unit
             }
             if (unsold == 0) {
                 VSpace(6)
-                Text("남은 슬롯이 없습니다. 공항이 확장되거나 항공사가 무너져야 풀립니다.", color = TextLow, fontSize = 11.sp)
+                Text("남은 슬롯이 없습니다. 공항을 넓히거나 항공사가 무너져야 풀립니다.", color = TextLow, fontSize = 11.sp)
+            }
+        }
+
+        VSpace(12)
+        Panel(title = "공항 확장 출자") {
+            val building = s.expansions.firstOrNull { it.city == city.id }
+            if (building != null) {
+                val left = building.deliverTurn - s.turn
+                val sponsor = s.airlineOrNull(building.sponsorId)
+                KeyValue("공사 중", "${left}분기 남음", Amber)
+                KeyValue("출자사", sponsor?.name ?: "—")
+                KeyValue("완공 시 슬롯", "+${building.slots}개 (출자사 ${building.sponsorSlots}개 우선)")
+            } else {
+                val cost = Actions.expansionCost(s, player.id, city.id)
+                val connected = mine > 0 || s.routesOf(player.id).any { it.active && it.touches(city.id) }
+                KeyValue("공사비", moneyShort(cost), Amber)
+                KeyValue("완공까지", "${Balance.EXPANSION_QUARTERS}분기")
+                KeyValue(
+                    "완공 시",
+                    "슬롯 +${Balance.EXPANSION_SLOTS}개 · 그중 " +
+                        "${(Balance.EXPANSION_SLOTS * Balance.EXPANSION_SPONSOR_SHARE).toInt()}개는 내 몫",
+                )
+                VSpace(8)
+                Button(
+                    onClick = { vm.run(Command.FundExpansion(player.id, city.id)) },
+                    enabled = connected && player.cash >= cost,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("확장 공사에 출자", fontSize = 13.sp) }
+                Text(
+                    if (!connected) {
+                        "이 공항에 취항하거나 슬롯을 가진 뒤에 제안할 수 있습니다."
+                    } else {
+                        "포화된 요지를 넓혀 선점하는 장기 투자입니다. 넓힐수록 다음 공사가 비싸집니다."
+                    },
+                    color = TextLow,
+                    fontSize = 11.sp,
+                )
             }
         }
 

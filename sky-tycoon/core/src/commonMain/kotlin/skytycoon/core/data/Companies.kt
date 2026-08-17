@@ -55,6 +55,40 @@ object Companies {
             bonusKey = "finance", bonusLabel = "월가의 신용",
             bonusDesc = "차입 한도가 40% 크고 이자율이 1%p 낮다.",
         ),
+        // 네 곳만으로는 세계가 텅 빈다 — 노선이 겹치지 않아 경쟁이 안 붙고,
+        // 삼킬 상대도 없어 인수합병이 아예 발동하지 않는다. 대륙마다 라이벌을 둔다.
+        CompanySeed(
+            id = "huanan", name = "화남항공", short = "HN", colorArgb = 0xFFE0654F,
+            home = "shanghai", trait = Trait.EXPAND, cash = 380e6, shares = 50e6,
+            startFleet = listOf("b727" to 3, "b737_200" to 4),
+            startSlots = mapOf("shanghai" to 24, "beijing" to 10, "hongkong" to 6, "tokyo" to 4, "bangkok" to 4),
+            bonusKey = "slot", bonusLabel = "국영의 뒷배",
+            bonusDesc = "슬롯 매입가가 20% 싸다. 본토 요지를 쓸어담는다.",
+        ),
+        CompanySeed(
+            id = "gulfwing", name = "걸프윙", short = "GW", colorArgb = 0xFF34B3A0,
+            home = "dubai", trait = Trait.PREMIUM, cash = 520e6, shares = 58e6,
+            startFleet = listOf("b707" to 4, "b727" to 3),
+            startSlots = mapOf("dubai" to 26, "cairo" to 8, "delhi" to 6, "london" to 5, "istanbul" to 5),
+            bonusKey = "fuel", bonusLabel = "산유국의 급유",
+            bonusDesc = "장기 계약으로 연료비를 6% 절감한다. 오일쇼크가 기회가 된다.",
+        ),
+        CompanySeed(
+            id = "condor", name = "콘도르항공", short = "CD", colorArgb = 0xFFC77DD8,
+            home = "saopaulo", trait = Trait.VALUE, cash = 340e6, shares = 46e6,
+            startFleet = listOf("b737_200" to 5, "dc9" to 3),
+            startSlots = mapOf("saopaulo" to 22, "buenosaires" to 10, "lima" to 6, "miami" to 5, "mexicocity" to 5),
+            bonusKey = "finance", bonusLabel = "원자재 재벌의 뒷돈",
+            bonusDesc = "차입 한도가 40% 크고 이자율이 1%p 낮다.",
+        ),
+        CompanySeed(
+            id = "southerncross", name = "서던크로스", short = "SX", colorArgb = 0xFF7FA8E8,
+            home = "sydney", trait = Trait.BALANCED, cash = 400e6, shares = 52e6,
+            startFleet = listOf("b707" to 3, "b727" to 3, "dc9" to 2),
+            startSlots = mapOf("sydney" to 24, "auckland" to 10, "singapore" to 6, "honolulu" to 5, "losangeles" to 4),
+            bonusKey = "service", bonusLabel = "남반구의 환대",
+            bonusDesc = "창업부터 기내 서비스 등급이 한 단계 높다.",
+        ),
     )
 
     operator fun get(id: String): CompanySeed = all.first { it.id == id }
