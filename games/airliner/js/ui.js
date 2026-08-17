@@ -364,8 +364,25 @@
     }
   }
 
+  /**
+   * 새 게임의 출발 시드.
+   * 게임 진행 자체는 rng.js의 시드 고정 PRNG가 굴리고 이 값은 그 출발점일 뿐이지만,
+   * 시드가 PRNG를 타고 전체 상태로 퍼지는 흐름을 코드 스캐너가 "취약한 난수"로 잡는다.
+   * 게임 시드에 암호학적 강도가 필요하진 않아도 crypto를 쓰는 데 드는 비용이 없으므로
+   * 경고를 남겨두는 대신 그냥 crypto로 뽑는다.
+   */
+  function randomSeed() {
+    const c = typeof crypto !== 'undefined' ? crypto : null;
+    if (c && typeof c.getRandomValues === 'function') {
+      return c.getRandomValues(new Uint32Array(1))[0] >>> 0;
+    }
+    // crypto가 없는 아주 오래된 브라우저 대비 (시드 품질만 떨어질 뿐 동작은 같다).
+    const t = Date.now();
+    return (t ^ (t << 13) ^ (t >>> 7)) >>> 0;
+  }
+
   function startNewGame() {
-    const seed = (Math.random() * 4294967296) >>> 0;
+    const seed = randomSeed();
     ui.state = E.newGame(seed);
     ui.tab = 'overview';
     ui.spec = D.defaultSpec('narrow');
@@ -376,7 +393,7 @@
 
   function boot() {
     const saved = load();
-    ui.state = saved || E.newGame((Math.random() * 4294967296) >>> 0);
+    ui.state = saved || E.newGame(randomSeed());
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
     document.addEventListener('change', onChange);
