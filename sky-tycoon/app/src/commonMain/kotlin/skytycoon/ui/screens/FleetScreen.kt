@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import skytycoon.core.data.AircraftCatalog
 import skytycoon.core.data.Cities
 import skytycoon.core.sim.Actions
+import skytycoon.core.sim.Balance
 import skytycoon.core.sim.Command
 import skytycoon.ui.Amber
 import skytycoon.ui.Coral
@@ -137,6 +138,8 @@ private fun AircraftMarket(vm: GameViewModel, modifier: Modifier) {
     var usedMode by remember { mutableStateOf(false) }
     // 판이 끝나면 turn 이 totalTurns 라 s.year 는 플레이하지도 않은 다음 해가 된다.
     val catalog = if (usedMode) AircraftCatalog.usedFor(s.displayYear) else AircraftCatalog.newFor(s.displayYear)
+    // 신조기는 인도까지 시간이 걸린다 — 명령과 같은 술어로 물어봐야 버튼이 갈라지지 않는다.
+    val inTime = Actions.orderFitsCampaign(s)
 
     Column(modifier) {
         Panel(title = "기재 시장 · ${s.displayYear}년") {
@@ -147,7 +150,7 @@ private fun AircraftMarket(vm: GameViewModel, modifier: Modifier) {
             VSpace(6)
             Text(
                 if (usedMode) "즉시 인도. 기령이 있어 정비비가 더 듭니다."
-                else "발주 후 2분기 뒤 인도. 대금은 지금 나갑니다.",
+                else "발주 후 ${Balance.ORDER_DELAY_QUARTERS}분기 뒤 인도. 대금은 지금 나갑니다.",
                 color = TextLow,
                 fontSize = 11.sp,
             )
@@ -183,10 +186,18 @@ private fun AircraftMarket(vm: GameViewModel, modifier: Modifier) {
                         for (n in listOf(1, 2, 5)) {
                             OutlinedButton(
                                 onClick = { vm.run(Command.BuyAircraft(s.playerId, t.id, n, used = usedMode)) },
-                                enabled = s.player.cash >= price * n,
+                                enabled = s.player.cash >= price * n && (usedMode || inTime),
                                 modifier = Modifier.weight(1f),
                             ) { Text("${n}대", fontSize = 11.sp, color = Sky) }
                         }
+                    }
+                    if (!usedMode && !inTime) {
+                        VSpace(6)
+                        Text(
+                            "남은 기간(${s.totalTurns - s.turn}분기) 안에 인도되지 않습니다. 중고로 알아보세요.",
+                            color = TextLow,
+                            fontSize = 10.sp,
+                        )
                     }
                 }
             }

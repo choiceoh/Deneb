@@ -923,6 +923,41 @@ class RegressionTest {
     }
 
     @Test
+    fun `판이 끝나기 전에 인도되지 않을 발주는 받지 않는다`() {
+        var s = fresh()
+        s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }
+
+        // 정확히 인도 기간만큼 남은 지점은 마지막 진행에 맞춰 들어오므로 허용돼야 한다.
+        val lastChance = s.copy(turn = s.totalTurns - Balance.ORDER_DELAY_QUARTERS)
+        // 기종은 그 시점의 카탈로그에서 고른다 — 시작 연도 기종은 판 끝엔 이미 단종이다.
+        val type = AircraftCatalog.newFor(lastChance.year).first()
+        val ok = Actions.execute(lastChance, Command.BuyAircraft("hanseong", type.id, 1))
+        assertTrue(ok.ok, "마지막으로 인도 가능한 시점인데 거절했다: ${ok.message}")
+        var delivered = ok.state
+        repeat(Balance.ORDER_DELAY_QUARTERS) {
+            if (delivered.outcome == null) delivered = TurnEngine.advance(delivered)
+        }
+        assertTrue(delivered.orders.none { it.airlineId == "hanseong" }, "허용해 놓고 인도되지 않았다")
+
+        // 한 분기라도 모자라면 거절한다 — 대금만 빠지고 기재는 영영 안 온다.
+        val tooLate = s.copy(turn = s.totalTurns - Balance.ORDER_DELAY_QUARTERS + 1)
+        val cash = tooLate.player.cash
+        val r = Actions.execute(tooLate, Command.BuyAircraft("hanseong", type.id, 1))
+        assertFalse(r.ok, "인도될 수 없는 발주를 받아 대금만 태웠다")
+        assertEquals(cash, r.state.player.cash, "실패했는데 발주 대금이 빠졌다")
+
+        // 중고기는 즉시 인수라 마감과 무관하게 살 수 있어야 한다.
+        val used = AircraftCatalog.usedFor(tooLate.year).first()
+        assertTrue(
+            Actions.execute(tooLate, Command.BuyAircraft("hanseong", used.id, 1, used = true)).ok,
+            "즉시 인도되는 중고기까지 마감에 걸렸다",
+        )
+
+        assertTrue(Actions.orderFitsCampaign(lastChance))
+        assertFalse(Actions.orderFitsCampaign(tooLate))
+    }
+
+    @Test
     fun `인수하면 피인수사 실적이 프로포마로 합쳐진다`() {
         var s = fresh()
         val victimId = s.livingAirlines.first { it.id != "hanseong" }.id

@@ -1,7 +1,9 @@
 package skytycoon.android
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import skytycoon.ui.App
@@ -18,7 +20,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // 백그라운드에서 프로세스가 정리돼도 캠페인이 남도록 앱 전용 저장소에 붙인다.
         SaveStorage.current = AndroidSaveStore(filesDir)
-        enableEdgeToEdge()
+        // 앱은 항상 어두운 팔레트(Ink)로 그린다. 인자 없는 enableEdgeToEdge 는 기기 테마를
+        // 따라가므로, 라이트 모드 폰에서 시계·상태 아이콘이 어두운 색으로 깔려 검은 바 위에서
+        // 보이지 않는다. 배경이 어둡다고 못박아 아이콘을 밝은 쪽으로 고정한다.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         setContent { App() }
     }

@@ -328,16 +328,25 @@ object Actions {
         state.expansions.any { it.city == city }
 
     /**
-     * 지금 착공해도 판이 끝나기 전에 완공되는가.
+     * 지금 돈을 내면 판이 끝나기 전에 물건이 손에 들어오는가.
      *
-     * 인도는 advance 안에서 `deliverTurn <= turn + 1` 일 때 터지므로 정확히
-     * [Balance.EXPANSION_QUARTERS] 분기가 남은 시점은 마지막 진행에 맞춰 완공된다.
+     * 인도는 advance 안에서 `deliverTurn <= turn + 1` 일 때 터지므로 정확히 [quarters]
+     * 분기가 남은 시점은 마지막 진행에 맞춰 도착한다. 그 뒤로는 대금만 빠지고
+     * 영영 오지 않는다 — outcome 이 서면 advance 가 곧장 돌아오기 때문이다.
      *
      * 명령과 UI 가 이 식을 각자 쓰면 갈라진다 — 버튼은 살아 있는데 누르면 늘 거절되는
      * 상태가 그렇게 나온다. 한 군데서 답하게 두고 양쪽이 이걸 부른다.
      */
+    fun arrivesBeforeEnd(state: GameState, quarters: Int): Boolean =
+        state.turn + quarters <= state.totalTurns
+
+    /** 지금 착공해도 판이 끝나기 전에 완공되는가. */
     fun expansionFitsCampaign(state: GameState): Boolean =
-        state.turn + Balance.EXPANSION_QUARTERS <= state.totalTurns
+        arrivesBeforeEnd(state, Balance.EXPANSION_QUARTERS)
+
+    /** 지금 발주해도 판이 끝나기 전에 기재가 인도되는가 (중고는 즉시 인수라 해당 없음). */
+    fun orderFitsCampaign(state: GameState): Boolean =
+        arrivesBeforeEnd(state, Balance.ORDER_DELAY_QUARTERS)
 
     private fun fundExpansion(state: GameState, airline: Airline, cmd: Command.FundExpansion): ActionResult {
         val city = Cities.find(cmd.city) ?: return ActionResult.fail(state, "알 수 없는 도시입니다.")
@@ -470,6 +479,14 @@ object Actions {
 
         if (state.year < type.year) return ActionResult.fail(state, "${type.name}은 ${type.year}년부터 인도됩니다.")
         if (state.year > type.retire) return ActionResult.fail(state, "${type.name}은 생산이 끝났습니다. 중고로 알아보세요.")
+        // 확장 공사와 같은 함정 — 대금은 지금 빠지는데 판이 먼저 끝나면 기재는 오지 않는다.
+        if (!orderFitsCampaign(state)) {
+            return ActionResult.fail(
+                state,
+                "남은 기간(${state.totalTurns - state.turn}분기) 안에 인도되지 않습니다 " +
+                    "(인도까지 ${Balance.ORDER_DELAY_QUARTERS}분기). 중고로 알아보세요.",
+            )
+        }
         val cost = type.price * cmd.count
         if (airline.cash < cost) return ActionResult.fail(state, "발주 대금이 부족합니다.")
 
