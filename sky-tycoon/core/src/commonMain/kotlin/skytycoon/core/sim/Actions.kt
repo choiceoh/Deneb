@@ -222,6 +222,17 @@ object Actions {
         return ActionResult(next, true, "${from.name}–${to.name} 노선을 개설했습니다.")
     }
 
+    /**
+     * 이 상태에서 취항이 끊겨 정리 대상이 된 부대사업의 도시들.
+     * 실제 처분은 분기 결산(`TurnEngine`)에서 하고, 여기선 미리 알리는 데만 쓴다.
+     */
+    fun orphanedBusinessCities(state: GameState, airlineId: String): List<String> {
+        val airline = state.airlineOrNull(airlineId) ?: return emptyList()
+        val served = state.routesOf(airlineId).filter { it.active }
+            .flatMap { listOf(it.from, it.to) }.toSet()
+        return airline.businesses.map { it.city }.filter { it !in served }.distinct()
+    }
+
     private fun closeRoute(state: GameState, airline: Airline, cmd: Command.CloseRoute): ActionResult {
         val route = state.routes.firstOrNull { it.id == cmd.routeId && it.airlineId == airline.id }
             ?: return ActionResult.fail(state, "노선을 찾을 수 없습니다.")
@@ -229,7 +240,13 @@ object Actions {
             routes = state.routes.filter { it.id != route.id },
             planes = state.planes.map { if (it.routeId == route.id) it.copy(routeId = null) else it },
         )
-        return ActionResult(next, true, "${Cities.name(route.from)}–${Cities.name(route.to)} 노선을 폐지했습니다.")
+        // 부대사업 운영권은 취항 도시에만 붙어 있다. 분기를 넘길 때 정리되므로,
+        // 폐지 버튼을 누른 자리에서 미리 알려 주지 않으면 뉴스로만 뒤늦게 알게 된다.
+        val stranded = orphanedBusinessCities(next, airline.id)
+        val note = if (stranded.isEmpty()) "" else {
+            " ${stranded.joinToString(", ") { Cities.name(it) }}의 부대사업은 이번 분기 말에 장부가로 정리됩니다."
+        }
+        return ActionResult(next, true, "${Cities.name(route.from)}–${Cities.name(route.to)} 노선을 폐지했습니다.$note")
     }
 
     private fun tuneRoute(state: GameState, airline: Airline, cmd: Command.TuneRoute): ActionResult {

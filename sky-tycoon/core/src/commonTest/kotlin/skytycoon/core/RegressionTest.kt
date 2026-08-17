@@ -923,6 +923,50 @@ class RegressionTest {
     }
 
     @Test
+    fun `취항이 끊기면 그 도시의 부대사업도 정리된다`() {
+        val base = fresh()
+        val route = base.routesOf("hanseong").first { it.active }
+        val city = route.to
+
+        // 노선을 없애는 세 가지 경로 — 명령 쪽에서 하나씩 막으면 반드시 하나를 빠뜨린다.
+        val ways = listOf<Pair<String, Command>>(
+            "노선 폐지" to Command.CloseRoute("hanseong", route.id),
+            "편수 0" to Command.TuneRoute("hanseong", route.id, freq = 0),
+            "기재 회수" to Command.AssignPlanes("hanseong", route.id, emptyList()),
+        )
+
+        for ((label, kill) in ways) {
+            var s = base.withAirline2("hanseong") { it.copy(cash = 5e9) }
+            s = Actions.execute(s, Command.BuildBusiness("hanseong", BusinessType.HOTEL, city))
+                .also { assertTrue(it.ok, "[$label] 사업을 못 냈다: ${it.message}") }.state
+            assertTrue(s.player.businesses.any { it.city == city }, "[$label] 사업이 안 생겼다")
+
+            s = Actions.execute(s, kill).also { assertTrue(it.ok, "[$label] ${it.message}") }.state
+            val cashBefore = s.player.cash
+            s = TurnEngine.advance(s)
+
+            assertTrue(
+                s.player.businesses.none { it.city == city },
+                "[$label] 취항이 끊겼는데 부대사업이 남아 수익을 계속 받는다",
+            )
+            // 장부가로 처분하므로 현금은 최소한 회수분만큼 늘어난다 (결산 손익이 겹쳐도 사라지진 않는다).
+            assertTrue(cashBefore != s.player.cash, "[$label] 처분 대금이 반영되지 않았다")
+        }
+    }
+
+    @Test
+    fun `취항 중인 도시의 부대사업은 그대로 둔다`() {
+        var s = fresh().withAirline2("hanseong") { it.copy(cash = 5e9) }
+        val city = s.routesOf("hanseong").first { it.active }.to
+        s = Actions.execute(s, Command.BuildBusiness("hanseong", BusinessType.HOTEL, city)).state
+        s = TurnEngine.advance(s)
+        assertTrue(
+            s.player.businesses.any { it.city == city },
+            "멀쩡히 취항 중인데 부대사업을 팔아치웠다",
+        )
+    }
+
+    @Test
     fun `판이 끝나기 전에 인도되지 않을 발주는 받지 않는다`() {
         var s = fresh()
         s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }

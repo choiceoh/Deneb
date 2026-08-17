@@ -29,6 +29,9 @@ object TurnEngine {
         s = Events.stepWorld(s, rng)
         s = Events.fire(s, rng)
 
+        // 결산 전에 판다 — 이번 분기에 취항을 접은 도시의 사업이 수익을 한 번 더 받으면 안 된다.
+        s = liquidateOrphanBusinesses(s)
+
         val outcomes = Market.resolveAll(s)
         s = settle(s, outcomes)
 
@@ -255,6 +258,47 @@ object TurnEngine {
             }
         },
     )
+
+    /**
+     * 취항이 끊긴 도시의 부대사업을 장부가로 처분한다.
+     *
+     * `BuildBusiness` 는 "취항 중인 노선이 있는 도시"만 허용하는데, 그 조건이 깨지는 경로는
+     * 셋이다 — 노선 폐지, 편수를 0 으로 내리기, 기재를 빼서 편수가 0 이 되기. 명령 쪽에서
+     * 하나씩 막으면 반드시 하나를 빠뜨리므로(그동안 여러 번 그랬다) 전부 모이는 여기서 쓸어낸다.
+     * 그러지 않으면 잠깐 노선을 열어 호텔을 짓고 바로 접어도 수익·자산·브랜드가 그대로 남는다.
+     *
+     * 처분가는 [Economics.businessValue] 와 같은 기준이라 자기자본은 그대로다 — 없어지는 건
+     * 자격 없이 받던 **수익**뿐이다.
+     */
+    private fun liquidateOrphanBusinesses(state: GameState): GameState {
+        var s = state
+        for (airline in state.livingAirlines) {
+            val current = s.airlineOrNull(airline.id) ?: continue
+            if (current.businesses.isEmpty()) continue
+            val served = s.routesOf(current.id).filter { it.active }
+                .flatMap { listOf(it.from, it.to) }.toSet()
+            val orphans = current.businesses.filter { it.city !in served }
+            if (orphans.isEmpty()) continue
+
+            val proceeds = Economics.businessValue(s, orphans)
+            s = s.withAirline(current.id) {
+                it.copy(cash = it.cash + proceeds, businesses = it.businesses.filter { b -> b.city in served })
+            }
+            if (current.isPlayer) {
+                val where = orphans.map { Cities.name(it.city) }.distinct().joinToString(", ")
+                s = s.copy(
+                    news = s.news + NewsItem(
+                        turn = s.turn,
+                        kind = NewsKind.PLAYER,
+                        headline = "취항이 끊긴 ${where}의 부대사업을 정리했습니다",
+                        body = "${orphans.joinToString(", ") { it.type.label }} — 운영권은 취항 중인 도시에만 유지됩니다. " +
+                            "장부가 ${(proceeds / 1e6).toInt()}백만 달러를 회수했습니다.",
+                    ),
+                )
+            }
+        }
+        return s
+    }
 
     private fun ageFleet(state: GameState): GameState =
         state.copy(planes = state.planes.map { it.copy(ageQuarters = it.ageQuarters + 1) })
