@@ -885,3 +885,104 @@ test('이벤트는 그 시점에 그 시장에 없는 제조사를 건드리지 
     }
   }
 });
+
+test('경쟁 강도 힌트는 실제 판정과 같은 기대값을 쓴다', () => {
+  // rivalBand 가 카탈로그 점수만 보고, rivalScore 는 응찰 우위를 더하면
+  // 힌트가 체계적으로 한 구간 물렁해진다 — 사용자가 할인율을 잘못 잡는다.
+  const s = E.newGame(9);
+  const rng = R.createRng(1);
+
+  for (const seg of ['regional', 'narrow', 'wide']) {
+    const sg = Data.SEGMENTS[seg];
+    const reqSeats = Math.round(sg.seats.ref);
+    const reqRange = Math.round(sg.range.ref);
+
+    const band = B.rivalBand(s, seg, reqSeats, reqRange);
+    const rfp = { segment: seg, reqSeats, reqRange };
+
+    // 난수를 여러 번 뽑아 실제 판정 점수의 평균을 낸다.
+    let sum = 0;
+    const N = 4000;
+    for (let i = 0; i < N; i++) sum += B.rivalScore(s, rfp, rng).score;
+    const mean = sum / N;
+
+    // 힌트가 가리키는 구간 안에 실제 평균이 들어와야 한다.
+    const lo = [0, 0, 50, 60, 70][band.level];
+    const hi = [0, 50, 60, 70, 200][band.level];
+    assert.ok(
+      mean >= lo - 1.5 && mean < hi + 1.5,
+      `${seg}: 힌트 '${band.label}'(${lo}~${hi})인데 실제 평균은 ${mean.toFixed(1)}`,
+    );
+  }
+});
+
+test('발주가 취소되면 인도 완료 로그도 취소분을 뺀 수량을 쓴다', () => {
+  const s = E.newGame(4);
+  // 다른 주문이 같은 분기에 완료돼 로그가 섞이지 않도록 하나만 남긴다.
+  const order = s.backlog.find((o) => o.remaining > 0);
+  assert.ok(order, '승계 백로그가 있어야 한다');
+  s.backlog = [order];
+
+  const cut = 5;
+  order.qty = 20;
+  order.cancelled = cut;
+  order.remaining = 1; // 이번 분기에 잔량이 0이 되어 완료 로그가 찍힌다
+
+  const prog = s.programs.find((p) => p.id === order.programId);
+  prog.stock = Math.max(prog.stock, 1);
+
+  E.endTurn(s);
+
+  const done = s.log.find((l) => /인도 완료/.test(l.text));
+  assert.ok(done, '인도 완료 로그가 남아야 한다');
+  assert.ok(
+    done.text.includes(`${order.qty - cut}기 인도 완료`),
+    `취소분을 뺀 ${order.qty - cut}기여야 하는데: ${done.text}`,
+  );
+  assert.ok(!done.text.includes(`${order.qty}기 인도 완료`), '최초 계약량을 그대로 쓰면 안 된다');
+});
+
+test('호환되지 않는 파생형은 프로그램에 파생형 표식을 남기지 않는다', () => {
+  const s = E.newGame(5);
+  s.cash = 40000;
+  const base = s.programs.find((p) => p.phase === 'production');
+  assert.ok(base, '승계 기종이 있어야 한다');
+
+  const spec = E.derivativeSpec(base, 20);
+  // 원형에서 소재·기술·항속을 허용 범위 밖으로 갈아엎는다 → 신규 설계로 판정돼야 한다.
+  spec.material = 'composite';
+  spec.tech = Math.min(100, base.tech + 40);
+  spec.range = Math.round(base.range * 1.6);
+
+  const ev = D.evaluate(spec);
+  assert.strictEqual(ev.derivative, false, '비호환 변경은 파생형이 아니다');
+
+  const r = E.launchProgram(s, spec, '검증기');
+  assert.ok(r.ok, r.reason);
+  const p = s.programs[s.programs.length - 1];
+  assert.strictEqual(p.derivative, false);
+  assert.strictEqual(p.derivedFrom, null, '전액을 낸 신규 설계에 원형 연결이 남으면 안 된다');
+});
+
+test('응찰 불가 공고는 canBid 로 걸러진다 (감점·확인창 공용 기준)', () => {
+  const s = E.newGame(6);
+  // 시작 시점엔 협동체 DN-150 하나뿐이다.
+  const segs = new Set(s.programs.filter((p) => p.phase === 'production').map((p) => p.segment));
+  assert.deepStrictEqual([...segs], ['narrow']);
+
+  const rng = R.createRng(3);
+  s.rfps = [];
+  for (let i = 0; i < 40; i++) s.rfps.push(...B.generateRfps(s, rng));
+
+  for (const rfp of s.rfps) {
+    const can = E.canBid(s, rfp);
+    if (rfp.segment !== 'narrow') {
+      assert.strictEqual(can, false, `${rfp.segment} 공고는 대응 기종이 없어 응찰 불가여야 한다`);
+    }
+    // 응찰 가능하다면 실격이 아닌 후보가 실제로 존재해야 한다.
+    if (can) {
+      const ok = E.eligiblePrograms(s, rfp).some((c) => !c.score.blocked);
+      assert.ok(ok, 'canBid 가 참이면 실격 아닌 후보가 있어야 한다');
+    }
+  }
+});

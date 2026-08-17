@@ -286,7 +286,7 @@
 
         return `<div class="card program ${p.phase}">
           <div class="row between">
-            <h3>${esc(p.name)} ${p.legacy ? '<span class="tag">노후 주력기</span>' : ''} ${p.derivedFrom ? '<span class="tag">파생형</span>' : ''}</h3>
+            <h3>${esc(p.name)} ${p.legacy ? '<span class="tag">노후 주력기</span>' : ''} ${p.derivative ? '<span class="tag">파생형</span>' : ''}</h3>
             <span class="phase ${p.phase}">${phaseLabel(p)}</span>
           </div>
           <table class="spec">${rows.join('')}</table>

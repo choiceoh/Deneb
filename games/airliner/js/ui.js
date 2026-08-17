@@ -357,7 +357,9 @@
 
   function nextTurn() {
     const s = ui.state;
-    const unbid = s.rfps.filter((r) => !s.bids[r.id]).length;
+    // 응찰 가능한 기종이 하나도 없는 공고까지 세면(초반엔 대부분이 그렇다) 확인창이
+    // 매 분기 뜨는데 수주 탭에 가도 고를 게 없다. 엔진의 무응찰 감점과 같은 기준을 쓴다.
+    const unbid = s.rfps.filter((r) => !s.bids[r.id] && E.canBid(s, r)).length;
     if (unbid && s.rfps.length && ui.tab !== 'rfps') {
       if (!confirm(`입찰하지 않은 공고가 ${unbid}건 있습니다. 그대로 분기를 종료할까요?`)) {
         ui.tab = 'rfps';

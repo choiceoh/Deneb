@@ -233,7 +233,9 @@
       stock: 0,
       launchTurn: s.turn,
       certTurn: null,
-      derivedFrom: spec.derivedFrom || null,
+      // 호환성 판정을 통과했을 때만 원형 연결을 남긴다. 원형에서 소재·기술·항속을
+      // 갈아엎어 신규 설계 비용을 전액 낸 설계에 파생형 딱지가 붙으면 안 된다.
+      derivedFrom: evalSpec.derivative ? spec.derivedFrom : null,
     };
     s.cash -= upfront;
     // 착수금도 연구개발비다 — 리포트에 넣지 않으면 현금은 줄었는데
@@ -523,12 +525,9 @@
         // 응찰 자체가 불가능한 공고(해당 세그먼트에 양산 기종이 없거나 전부 실격)는
         // 감점하지 않는다. 초반엔 협동체 DN-150 하나뿐이라 리저널·광동체 공고에
         // 대응할 방법이 없는데, 그걸로 관계가 깎이면 이후 입찰 점수까지 낮아진다.
-        const canBid = s.programs.some(
-          (p) => p.phase === 'production' && p.segment === rfp.segment && !scoreBid(s, rfp, p, 0).blocked,
-        );
         // 감점은 점수 계산이 모두 끝난 뒤에 적용한다 — 같은 항공사의 다른 공고
         // 점수가 이 감점의 영향을 받으면 안 된다.
-        if (canBid) noBidAirlines.push(rfp.airlineId);
+        if (canBid(s, rfp)) noBidAirlines.push(rfp.airlineId);
         continue;
       }
       const program = s.programs.find((p) => p.id === bid.programId);
@@ -709,7 +708,10 @@
 
       if (o.remaining === 0) {
         adjustReputation(s, 1);
-        pushLog(s, 'good', `${o.airlineName} ${o.programName} ${o.qty}기 인도 완료. 잔금 정산.`);
+        // 취소분을 빼야 실제 인도량이다. o.qty 를 쓰면 10기 중 5기가 취소되고 5기만
+        // 인도돼도 "10기 인도 완료"로 기록돼 경영 기록이 실적과 어긋난다.
+        const shipped = o.qty - (o.cancelled || 0);
+        pushLog(s, 'good', `${o.airlineName} ${o.programName} ${shipped}기 인도 완료. 잔금 정산.`);
       }
     }
   }
@@ -955,6 +957,17 @@
       .map((p) => ({ program: p, score: scoreBid(s, rfp, p, s.bids[rfp.id]?.discount ?? 0) }));
   }
 
+  /**
+   * 이 공고에 애초에 제출이 가능한가 — 해당 세그먼트 양산 기종이 있고, 그중 하나라도
+   * 제원 실격을 면하는가. 무응찰 감점(resolveBids)과 UI 확인창이 같은 기준을 쓰도록
+   * 여기 한 곳에만 둔다. 둘이 갈라지면 대응 불가능한 공고로 사용자를 괴롭히게 된다.
+   */
+  function canBid(s, rfp) {
+    return s.programs.some(
+      (p) => p.phase === 'production' && p.segment === rfp.segment && !scoreBid(s, rfp, p, 0).blocked,
+    );
+  }
+
   root.AirlinerEngine = {
     newGame,
     launchProgram,
@@ -971,6 +984,7 @@
     setBid,
     endTurn,
     eligiblePrograms,
+    canBid,
     totalBacklog,
     backlogValue,
     marketShare,

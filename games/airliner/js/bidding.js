@@ -78,7 +78,11 @@
    */
   function rivalBand(state, segmentId, reqSeats, reqRange) {
     const offer = bestOffering(state, segmentId, reqSeats, reqRange);
-    const best = offer ? offer.score : RIVAL_STRENGTH_FLOOR;
+    // 실제 판정에는 응찰 우위(RIVAL_BID_EDGE)가 얹히므로 힌트도 같은 기대값을 써야 한다.
+    // 카탈로그 점수만 쓰면 강도 구간(10점 폭)이 통째로 한 칸 물렁하게 표시된다.
+    const best = offer
+      ? clamp(offer.score + RIVAL_BID_EDGE, RIVAL_STRENGTH_FLOOR, RIVAL_STRENGTH_CAP)
+      : RIVAL_STRENGTH_FLOOR;
     const rival = offer ? offer.name : '—';
     if (best >= 70) return { label: '매우 치열', level: 4, rival };
     if (best >= 60) return { label: '치열', level: 3, rival };
