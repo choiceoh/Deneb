@@ -69,6 +69,8 @@
   }
 
   function renderHud(s) {
+    // 종료 후 s.turn 은 이미 다음 인덱스라, 그대로 쓰면 존재하지 않는 분기가 뜬다.
+    const shownTurn = s.gameOver ? s.gameOver.lastTurn ?? Math.max(0, s.turn - 1) : s.turn;
     const share = (E.marketShare(s) * 100).toFixed(1);
     const fuel = s.market.fuelIndex;
     const demand = s.market.demandIndex;
@@ -77,7 +79,11 @@
     document.getElementById('hud').innerHTML = `
       <div class="hud-left">
         <div class="hud-company">${P.esc(s.company)}</div>
-        <div class="hud-date">${E.turnLabel(s.turn)} <span class="muted">· ${CONFIG.totalTurns - s.turn}분기 남음</span></div>
+        <div class="hud-date">${E.turnLabel(shownTurn)} ${
+          s.gameOver
+            ? '<span class="muted">· 경영 종료</span>'
+            : `<span class="muted">· ${CONFIG.totalTurns - s.turn}분기 남음</span>`
+        }</div>
       </div>
       <div class="hud-stats">
         ${hudStat('현금', money(s.cash), s.cash < 500 ? 'bad' : '')}
@@ -385,7 +391,7 @@
       <h2 id="modal-title">${bankrupt ? '파산' : '20년의 경영이 끝났다'}</h2>
       <p class="go-reason">${
         bankrupt
-          ? `${E.turnLabel(s.turn)}, 자금이 고갈되고 차입 한도까지 소진됐다. 회사는 법정관리에 들어간다.`
+          ? `${E.turnLabel(g.lastTurn ?? s.turn)}, 자금이 고갈되고 차입 한도까지 소진됐다. 회사는 법정관리에 들어간다.`
           : `${s.company}는 ${P.num(g.delivered)}기의 여객기를 세상에 내보냈다.`
       }</p>
       <div class="grade ${g.grade}">${g.grade}</div>

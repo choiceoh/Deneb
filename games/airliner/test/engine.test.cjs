@@ -157,6 +157,68 @@ test('회계 불변식이 이벤트가 도는 장기 플레이에서도 유지�
   }
 });
 
+test('완주 시 표시 분기가 마지막 경영 분기와 일치한다', () => {
+  const s = E.newGame(2024);
+  while (!s.gameOver) {
+    s.cash = Math.max(s.cash, 50000); // 자금 제약을 배제하고 완주시킨다
+    E.endTurn(s);
+  }
+  assert.strictEqual(s.gameOver.reason, 'complete');
+  assert.strictEqual(s.gameOver.lastTurn, Data.CONFIG.totalTurns - 1, '마지막 경영 분기여야 한다');
+  // 존재하지 않는 다음 분기(2018년 1분기)가 표시되면 안 된다.
+  assert.strictEqual(s.log[0].label, s.history[s.history.length - 1].label);
+  assert.strictEqual(E.turnLabel(s.gameOver.lastTurn), s.history[s.history.length - 1].label);
+});
+
+test('경쟁사 인도가 플레이어와 같은 분기 수만큼 집계된다', () => {
+  // 경쟁사를 다음 분기 준비 단계에서 굴리면 79회만 돌아 점유율이 늘 유리해진다.
+  const s = E.newGame(777);
+  const before = s.stats.rivalDelivered;
+  let turns = 0;
+  while (!s.gameOver) {
+    s.cash = Math.max(s.cash, 50000);
+    E.endTurn(s);
+    turns++;
+  }
+  assert.strictEqual(turns, Data.CONFIG.totalTurns);
+  // 분기마다 최소 4기(하한)는 집계되므로, 79회만 돌았다면 이 하한에 미달한다.
+  assert.ok(
+    s.stats.rivalDelivered - before >= turns * 4,
+    `경쟁사 집계가 ${turns}분기에 못 미친다 (증가분 ${s.stats.rivalDelivered - before})`,
+  );
+});
+
+test('옛 세이브의 단일 슬롯 운항 정지가 새 맵으로 이관된다', () => {
+  const s = E.newGame(5);
+  const p = s.programs[0];
+  s.effects.groundedProgram = p.id;
+  s.effects.groundedQuarters = 2;
+  delete s.effects.grounded;
+
+  E.ensureShape(s);
+  assert.strictEqual(s.effects.grounded[p.id], 2, '남은 정지 기간이 이관돼야 한다');
+  assert.strictEqual(s.effects.groundedProgram, undefined, '옛 필드는 정리돼야 한다');
+});
+
+test('파산으로 끝나도 마지막 재무 행이 최종 현금을 설명한다', () => {
+  // 이벤트로 파산하면 pending 을 흡수할 다음 분기가 없다 — 그 자리에서 반영해야 한다.
+  const max = Data.CONFIG.maxDebt;
+  let checked = 0;
+  for (let seed = 1; seed < 400 && checked < 3; seed++) {
+    const s = E.newGame(seed);
+    s.debt = max;
+    for (let i = 0; i < 40 && !s.gameOver; i++) E.endTurn(s);
+    if (!s.gameOver || s.gameOver.reason !== 'bankrupt') continue;
+    const row = s.history[s.history.length - 1];
+    assert.ok(
+      Math.abs(row.cash - Math.round(s.cash)) < 2,
+      `seed ${seed}: 마지막 행 현금 ${row.cash} ≠ 실제 ${Math.round(s.cash)}`,
+    );
+    checked++;
+  }
+  assert.ok(checked > 0, '파산 표본을 찾지 못했다');
+});
+
 test('차입 여유가 남아 있어도 총 유동성이 음수면 파산이다', () => {
   const s = E.newGame(17);
   s.lines.length = 0;

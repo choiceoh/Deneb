@@ -255,8 +255,12 @@
               </div>
             </div>`;
         } else if (p.phase === 'cert') {
+          // 중단 버튼이 없으면 인증 프로그램 3개가 슬롯을 물고 신규 착수가 영영 막힌다.
           control = `<div class="devctl"><p class="cert">형식증명 심사 중 — 잔여 ${p.certRemaining}분기</p>
-            <div class="row"><button data-action="quality" data-id="${p.id}" ${p.qualityInvests >= 3 ? 'disabled' : ''}>품질 강화 (${p.qualityInvests}/3) · ${money(p.devCost * 0.06)}</button></div></div>`;
+            <div class="row">
+              <button data-action="quality" data-id="${p.id}" ${p.qualityInvests >= 3 ? 'disabled' : ''}>품질 강화 (${p.qualityInvests}/3) · ${money(p.devCost * 0.06)}</button>
+              <button class="danger" data-action="cancel-prog" data-id="${p.id}">개발 중단</button>
+            </div></div>`;
         } else if (p.phase === 'production') {
           const ordered = orderedBy(s, p.id);
           const lines = s.lines.filter((l) => l.programId === p.id).length;

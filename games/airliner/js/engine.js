@@ -150,7 +150,16 @@
    */
   function ensureShape(s) {
     if (!s.effects) s.effects = {};
-    if (!s.effects.grounded) s.effects.grounded = {};
+    if (!s.effects.grounded) {
+      s.effects.grounded = {};
+      // 단일 슬롯이던 옛 형식(groundedProgram/groundedQuarters)을 그대로 버리면
+      // 불러온 순간 정지가 풀려 인도가 재개된다. 남은 기간을 옮겨온다.
+      if (s.effects.groundedProgram && s.effects.groundedQuarters > 0) {
+        s.effects.grounded[s.effects.groundedProgram] = s.effects.groundedQuarters;
+      }
+      delete s.effects.groundedProgram;
+      delete s.effects.groundedQuarters;
+    }
     if (!s.pending) s.pending = { revenue: 0, delivered: 0, rdCost: 0, capex: 0, overhead: 0 };
     for (const k of ['revenue', 'delivered', 'rdCost', 'capex', 'overhead']) {
       if (typeof s.pending[k] !== 'number') s.pending[k] = 0;
@@ -418,6 +427,9 @@
     advanceDevelopment(s, rng, report);
     runProduction(s, report);
     runDeliveries(s, report);
+    // 경쟁사 인도도 이 분기 몫으로 집계한다. 다음 분기 준비 단계에서 굴리면
+    // 플레이어는 80분기, 경쟁사는 79분기가 되어 점유율이 늘 유리해진다.
+    simulateRivals(s, rng);
     settleFinance(s, report);
 
     s.history.push({
@@ -454,7 +466,6 @@
 
     tickEffects(s);
     driftMarket(s, rng);
-    simulateRivals(s, rng);
     s.events = rollEvents(s, rng);
     s.rfps = generateRfps(s, rng);
     s.bids = {};
@@ -462,7 +473,11 @@
     // 이벤트(결함 수리비 등)가 현금을 빼앗아 지급불능이 된 경우도 즉시 종료다.
     // 정산 직후 검사만 두면, 이벤트발 지급불능은 다음 분기 내내 살아남아
     // 재고 처분 등으로 회생할 수 있다.
-    checkBankrupt(s);
+    if (checkBankrupt(s)) {
+      // 여기서 끝나면 이 pending 을 흡수할 다음 분기가 영영 오지 않는다.
+      // 마지막 재무 행이 이벤트 이전 숫자로 남지 않도록 지금 반영한다.
+      absorbPending(s, report);
+    }
 
     saveRng(s, rng);
     return { ok: true, report };
@@ -691,6 +706,28 @@
     }
   }
 
+  /** 미결 실적(pending)을 리포트와 마지막 히스토리 행에 반영하고 비운다. */
+  function absorbPending(s, report) {
+    const p = s.pending;
+    if (!p) return;
+    report.revenue += p.revenue;
+    report.delivered += p.delivered;
+    report.rdCost += p.rdCost;
+    report.capex += p.capex;
+    report.overhead += p.overhead;
+    s.pending = { revenue: 0, delivered: 0, rdCost: 0, capex: 0, overhead: 0 };
+
+    const row = s.history[s.history.length - 1];
+    if (row) {
+      row.revenue = Math.round(report.revenue);
+      row.cost = Math.round(report.productionCost + report.rdCost + report.capex + report.overhead + report.interest);
+      row.net = row.revenue - row.cost;
+      row.delivered = report.delivered;
+      row.cash = Math.round(s.cash);
+      row.debt = Math.round(s.debt);
+    }
+  }
+
   function tickEffects(s) {
     const e = s.effects;
     if (e.strikeQuarters > 0) e.strikeQuarters--;
@@ -783,7 +820,7 @@
     // -741M 이 된 상태를 놓친다 (한도까지 빌려도 여전히 마이너스인데 생존).
     const room = Math.max(0, CONFIG.maxDebt - s.debt);
     if (s.cash + room < 0) {
-      s.gameOver = { reason: 'bankrupt', ...finalScore(s, true) };
+      s.gameOver = { reason: 'bankrupt', lastTurn: s.turn, ...finalScore(s, true) };
       pushLog(s, 'bad', '자금이 완전히 고갈되고 차입 한도도 소진됐다. 회사는 법정관리에 들어간다.');
       return true;
     }
@@ -792,8 +829,16 @@
 
   function finishGame(s) {
     if (s.gameOver) return;
-    s.gameOver = { reason: 'complete', ...finalScore(s, false) };
-    pushLog(s, 'info', '20년의 경영이 끝났다. 최종 성적을 정산한다.');
+    // turn 은 이미 다음 인덱스(80)로 올라가 있다. 그대로 표시하면 존재하지 않는
+    // 2018년 1분기가 뜨므로, 마지막으로 경영한 분기를 따로 남긴다.
+    const lastTurn = Math.max(0, s.turn - 1);
+    s.gameOver = { reason: 'complete', lastTurn, ...finalScore(s, false) };
+    s.log.unshift({
+      turn: lastTurn,
+      label: turnLabel(lastTurn),
+      kind: 'info',
+      text: '20년의 경영이 끝났다. 최종 성적을 정산한다.',
+    });
   }
 
   // ─────────────────────────────── 파생 지표 ───────────────────────────────
