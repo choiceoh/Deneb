@@ -337,6 +337,17 @@ object Actions {
             state.routesOf(airline.id).any { it.active && it.touches(city.id) }
         if (!connected) return ActionResult.fail(state, "${city.name}에 취항하거나 슬롯을 가진 뒤에 제안할 수 있습니다.")
 
+        // 판이 끝나기 전에 완공되지 못할 공사는 받지 않는다. 공사비는 즉시 빠지는데
+        // 미완공 공사는 자기자본에 안 잡혀, 마지막 분기에 지르면 최종 순위 직전에
+        // 자산만 통째로 태우는 함정이 된다.
+        if (state.turn + Balance.EXPANSION_QUARTERS >= state.totalTurns) {
+            return ActionResult.fail(
+                state,
+                "남은 기간(${state.totalTurns - state.turn}분기) 안에 완공될 수 없습니다 " +
+                    "(공사에 ${Balance.EXPANSION_QUARTERS}분기 필요).",
+            )
+        }
+
         val cost = expansionCost(state, airline.id, city.id)
         if (airline.cash < cost) {
             return ActionResult.fail(state, "확장 공사비 ${(cost / 1e6).toInt()}백만 달러가 부족합니다.")

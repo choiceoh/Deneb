@@ -876,6 +876,49 @@ class RegressionTest {
     }
 
     @Test
+    fun `판이 끝나기 전에 완공될 수 없는 확장은 받지 않는다`() {
+        var s = fresh()
+        val city = s.routesOf("hanseong").first().from
+        s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }
+        // 남은 기간이 공사 기간보다 짧은 지점으로 옮긴다.
+        s = s.copy(turn = s.totalTurns - Balance.EXPANSION_QUARTERS)
+
+        val cash = s.player.cash
+        val r = Actions.execute(s, Command.FundExpansion("hanseong", city))
+        assertFalse(r.ok, "완공될 수 없는 공사를 받아 최종 순위 직전에 자산만 태웠다")
+        assertEquals(cash, r.state.player.cash, "실패했는데 공사비가 빠졌다")
+    }
+
+    @Test
+    fun `인수하면 피인수사 실적이 프로포마로 합쳐진다`() {
+        var s = fresh()
+        val victimId = s.livingAirlines.first { it.id != "hanseong" }.id
+        val quarters = List(4) { QuarterResult(turn = it, net = 40e6) }
+        s = s.withAirline2("hanseong") { it.copy(results = quarters, holdings = emptyMap()) }
+        s = s.withAirline2(victimId) { it.copy(results = quarters, holdings = emptyMap()) }
+
+        val merged = Stock.merge(s, "hanseong", victimId).airline("hanseong")
+        val annual = merged.results.takeLast(4).sumOf { it.net }
+        assertTrue(
+            abs(annual - 320e6) < 1.0,
+            "합병 후 연 순익이 ${annual / 1e6}M — 두 회사(각 160M)를 합친 320M 이어야 한다",
+        )
+        assertEquals(4, merged.results.size, "같은 분기가 합쳐지지 않고 늘어났다")
+    }
+
+    @Test
+    fun `기한 종료 뉴스는 마지막으로 진행한 분기에 찍힌다`() {
+        val s = fresh().let { it.copy(turn = it.totalTurns - 1) }
+        val end = TurnEngine.advance(s)
+        val milestone = end.news.last { it.kind == NewsKind.MILESTONE }
+        assertEquals(
+            end.displayTurn,
+            milestone.turn,
+            "최종 발표가 플레이하지도 않은 다음 분기에 찍혔다",
+        )
+    }
+
+    @Test
     fun `연고 없는 공항은 확장 출자를 제안할 수 없다`() {
         var s = fresh()
         val stranger = Cities.all.first { c ->

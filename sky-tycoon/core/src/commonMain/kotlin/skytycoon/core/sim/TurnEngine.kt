@@ -416,8 +416,11 @@ object TurnEngine {
                     "${position}위로 마쳤습니다. 다음엔 더 멀리 날 수 있습니다."
                 },
             ),
+            // 기한 종료로 오는 판정이라 turn 은 이미 totalTurns 다. 그대로 찍으면
+            // 뉴스 화면이 플레이하지도 않은 다음 해 1분기에 최종 발표를 올린다.
+            // (displayTurn 은 outcome 이 아직 안 붙은 이 시점에 보정해 주지 못한다.)
             news = state.news + NewsItem(
-                state.turn,
+                (state.turn - 1).coerceAtLeast(0),
                 NewsKind.MILESTONE,
                 if (won) "왕좌에 오르다" else "시대의 끝",
                 "최종 순위 ${position}위.",

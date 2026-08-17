@@ -255,6 +255,37 @@ data class QuarterResult(
     val debt: Double = 0.0,
     val equity: Double = 0.0,
 ) {
+    /**
+     * 같은 분기 실적을 합친다 (합병 시 프로포마 실적).
+     * 주가가 최근 4분기 순익에서 나오므로, 안 합치면 흑자 회사를 사도 그 실적이
+     * 통째로 사라지고 적자 회사를 사면 손실이 없던 일이 된다.
+     */
+    operator fun plus(o: QuarterResult) = QuarterResult(
+        turn = turn,
+        revenue = revenue + o.revenue,
+        cargoRevenue = cargoRevenue + o.cargoRevenue,
+        fuelCost = fuelCost + o.fuelCost,
+        crewCost = crewCost + o.crewCost,
+        maintCost = maintCost + o.maintCost,
+        landingCost = landingCost + o.landingCost,
+        paxServiceCost = paxServiceCost + o.paxServiceCost,
+        distributionCost = distributionCost + o.distributionCost,
+        overhead = overhead + o.overhead,
+        adSpend = adSpend + o.adSpend,
+        depreciation = depreciation + o.depreciation,
+        interestCost = interestCost + o.interestCost,
+        businessIncome = businessIncome + o.businessIncome,
+        extraordinaryCost = extraordinaryCost + o.extraordinaryCost,
+        tax = tax + o.tax,
+        net = net + o.net,
+        pax = pax + o.pax,
+        rpk = rpk + o.rpk,
+        asks = asks + o.asks,
+        cash = cash + o.cash,
+        debt = debt + o.debt,
+        equity = equity + o.equity,
+    )
+
     val totalRevenue get() = revenue + cargoRevenue + businessIncome
     val operatingCost
         get() = fuelCost + crewCost + maintCost + landingCost +

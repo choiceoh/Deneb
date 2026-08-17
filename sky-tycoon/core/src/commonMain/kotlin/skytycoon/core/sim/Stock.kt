@@ -234,10 +234,21 @@ object Stock {
         val pooled = acquirer.cash + target.cash + disposalProceeds
         val financed = (minorityPayout - pooled).coerceAtLeast(0.0)
 
+        // 두 회사의 같은 분기 실적을 합친다. 주가의 절반 이상이 최근 4분기 순익에서
+        // 나오므로, 인수사 실적만 남기면 흑자 회사를 삼켜도 그 벌이가 통째로 사라지고
+        // 적자 회사를 삼키면 손실이 없던 일이 돼 시세가 네 분기 내내 어긋난다.
+        val mergedResults = (acquirer.results + target.results)
+            .groupBy { it.turn }
+            .entries
+            .sortedBy { it.key }
+            .map { (_, rs) -> rs.reduce { x, y -> x + y } }
+            .takeLast(80)
+
         // 다른 주주들은 시장가로 정리한다.
         val airlines = state.airlines.map { a ->
             when (a.id) {
                 acquirerId -> a.copy(
+                    results = mergedResults,
                     cash = (pooled - minorityPayout).coerceAtLeast(0.0),
                     debt = a.debt + target.debt + financed,
                     shares = acquirerShares,
