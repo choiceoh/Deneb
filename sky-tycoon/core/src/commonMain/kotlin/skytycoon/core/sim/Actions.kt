@@ -327,6 +327,18 @@ object Actions {
     fun expansionInProgress(state: GameState, city: String): Boolean =
         state.expansions.any { it.city == city }
 
+    /**
+     * 지금 착공해도 판이 끝나기 전에 완공되는가.
+     *
+     * 인도는 advance 안에서 `deliverTurn <= turn + 1` 일 때 터지므로 정확히
+     * [Balance.EXPANSION_QUARTERS] 분기가 남은 시점은 마지막 진행에 맞춰 완공된다.
+     *
+     * 명령과 UI 가 이 식을 각자 쓰면 갈라진다 — 버튼은 살아 있는데 누르면 늘 거절되는
+     * 상태가 그렇게 나온다. 한 군데서 답하게 두고 양쪽이 이걸 부른다.
+     */
+    fun expansionFitsCampaign(state: GameState): Boolean =
+        state.turn + Balance.EXPANSION_QUARTERS <= state.totalTurns
+
     private fun fundExpansion(state: GameState, airline: Airline, cmd: Command.FundExpansion): ActionResult {
         val city = Cities.find(cmd.city) ?: return ActionResult.fail(state, "알 수 없는 도시입니다.")
         if (expansionInProgress(state, city.id)) {
@@ -340,10 +352,7 @@ object Actions {
         // 판이 끝나기 전에 완공되지 못할 공사는 받지 않는다. 공사비는 즉시 빠지는데
         // 미완공 공사는 자기자본에 안 잡혀, 마지막 분기에 지르면 최종 순위 직전에
         // 자산만 통째로 태우는 함정이 된다.
-        // 인도는 advance 안에서 deliverTurn <= turn + 1 일 때 터진다. 따라서 정확히
-        // EXPANSION_QUARTERS 분기가 남은 시점은 마지막 진행에 맞춰 완공된다 —
-        // 여기를 >= 로 막으면 멀쩡히 되는 마지막 기회를 뺏는다.
-        if (state.turn + Balance.EXPANSION_QUARTERS > state.totalTurns) {
+        if (!expansionFitsCampaign(state)) {
             return ActionResult.fail(
                 state,
                 "남은 기간(${state.totalTurns - state.turn}분기) 안에 완공될 수 없습니다 " +

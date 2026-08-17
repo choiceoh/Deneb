@@ -915,6 +915,11 @@ class RegressionTest {
         val r = Actions.execute(tooLate, Command.FundExpansion("hanseong", city))
         assertFalse(r.ok, "완공될 수 없는 공사를 받아 최종 순위 직전에 자산만 태웠다")
         assertEquals(cash, r.state.player.cash, "실패했는데 공사비가 빠졌다")
+
+        // UI 버튼도 같은 술어를 봐야 한다. 여기가 갈라지면 눌러도 늘 거절되는
+        // 버튼이 캠페인 막바지 내내 살아 있게 된다.
+        assertTrue(Actions.expansionFitsCampaign(lastChance))
+        assertFalse(Actions.expansionFitsCampaign(tooLate))
     }
 
     @Test

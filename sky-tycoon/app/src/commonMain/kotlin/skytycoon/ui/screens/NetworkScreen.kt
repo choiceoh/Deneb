@@ -197,6 +197,7 @@ private fun CityPanel(vm: GameViewModel, city: City, onCompose: (String) -> Unit
             } else {
                 val cost = Actions.expansionCost(s, player.id, city.id)
                 val connected = mine > 0 || s.routesOf(player.id).any { it.active && it.touches(city.id) }
+                val inTime = Actions.expansionFitsCampaign(s)
                 KeyValue("공사비", moneyShort(cost), Amber)
                 KeyValue("완공까지", "${Balance.EXPANSION_QUARTERS}분기")
                 KeyValue(
@@ -207,14 +208,16 @@ private fun CityPanel(vm: GameViewModel, city: City, onCompose: (String) -> Unit
                 VSpace(8)
                 Button(
                     onClick = { vm.run(Command.FundExpansion(player.id, city.id)) },
-                    enabled = connected && player.cash >= cost,
+                    enabled = connected && inTime && player.cash >= cost,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("확장 공사에 출자", fontSize = 13.sp) }
                 Text(
-                    if (!connected) {
-                        "이 공항에 취항하거나 슬롯을 가진 뒤에 제안할 수 있습니다."
-                    } else {
-                        "포화된 요지를 넓혀 선점하는 장기 투자입니다. 넓힐수록 다음 공사가 비싸집니다."
+                    when {
+                        !connected -> "이 공항에 취항하거나 슬롯을 가진 뒤에 제안할 수 있습니다."
+                        !inTime ->
+                            "남은 기간(${s.totalTurns - s.turn}분기) 안에 완공될 수 없어 더는 착공할 수 없습니다."
+                        else ->
+                            "포화된 요지를 넓혀 선점하는 장기 투자입니다. 넓힐수록 다음 공사가 비싸집니다."
                     },
                     color = TextLow,
                     fontSize = 11.sp,
