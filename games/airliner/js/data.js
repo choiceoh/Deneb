@@ -136,18 +136,39 @@
   ];
 
   /**
-   * 경쟁 제조사 — 세그먼트별 기본 경쟁력. 이 값은 플레이어의 입찰 점수(0~100)와
-   * 같은 척도에서 직접 비교되므로, 세그먼트별 최고치가 곧 "이겨야 할 문턱"이다.
-   * 평범한 초도 설계가 50대 중반을 내므로 문턱은 그 근처에 둬 첫 수주가 가능하게 한다.
+   * 경쟁 제조사는 `js/fleet.js`의 실존 제조사·실기종 카탈로그에서 나온다.
+   * 세그먼트별 경쟁력은 고정값이 아니라 "그 시점에 실제로 팔리던 기종"에서 유도되고,
+   * 아래 이벤트는 거기에 얹히는 보정치(drift)만 움직인다.
    */
-  const COMPETITORS = [
-    { id: 'aurelia', name: '아우렐리아 에어로스페이스', strength: { regional: 42, narrow: 55, wide: 60 } },
-    { id: 'vostok', name: '보스토크 항공기공업', strength: { regional: 47, narrow: 48, wide: 44 } },
-    { id: 'novaaero', name: '노바에어로', strength: { regional: 56, narrow: 45, wide: 36 } },
-  ];
 
   /** 경쟁사 경쟁력 상한 — 이벤트 누적으로 무한정 강해지는 것을 막는다. */
   const RIVAL_STRENGTH_CAP = 78;
+  /** 경쟁사 경쟁력 하한 — 악재가 겹쳐도 시장이 무주공산이 되지는 않는다. */
+  const RIVAL_STRENGTH_FLOOR = 25;
+  /** 이벤트 보정치의 절대 한계. 카탈로그가 만든 시대 흐름을 뒤집지 못하게 묶는다. */
+  const RIVAL_DRIFT_LIMIT = 14;
+
+  /**
+   * 이벤트가 건드릴 제조사·세그먼트를 고른다.
+   * 그 시점에 실제로 그 세그먼트를 팔고 있던 조합만 후보다 — 2016년의 BAE나
+   * 1998년의 수호이가 "신형을 발표"하면 안 된다.
+   */
+  function rivalTargets(s) {
+    const F = root.AirlinerFleet;
+    const year = F.yearAt(s.turn, CONFIG.startYear);
+    const out = [];
+    for (const c of s.competitors) {
+      for (const seg of SEGMENT_ORDER) {
+        const types = F.availableTypes(seg, year).filter((t) => t.maker === c.id);
+        if (types.length) out.push({ c, seg, types });
+      }
+    }
+    return out;
+  }
+
+  function flagshipOf(types) {
+    return types.reduce((a, b) => (b.power > a.power ? b : a));
+  }
 
   /**
    * 랜덤 이벤트. apply(state, ctx)는 engine이 주입한 헬퍼로 상태를 바꾸고
@@ -288,14 +309,15 @@
     },
     {
       id: 'rival_launch',
-      name: '경쟁사 신형 투입',
+      name: '경쟁사 개량형 투입',
       weight: 9,
       apply: (s, h) => {
-        const c = h.rng.pick(s.competitors);
-        const seg = h.rng.pick(['regional', 'narrow', 'wide']);
+        const targets = rivalTargets(s);
+        if (!targets.length) return '경쟁사들이 조용한 분기를 보냈다.';
+        const t = h.rng.pick(targets);
         const gain = h.rng.range(3, 8);
-        c.strength[seg] = Math.min(RIVAL_STRENGTH_CAP, c.strength[seg] + gain);
-        return `${c.name}이(가) ${SEGMENTS[seg].name} 신형을 발표했다. 해당 시장 경쟁이 거세진다.`;
+        t.c.drift[t.seg] = Math.min(RIVAL_DRIFT_LIMIT, (t.c.drift[t.seg] || 0) + gain);
+        return `${t.c.name}이(가) ${flagshipOf(t.types).name} 개량형을 내놨다. ${SEGMENTS[t.seg].name} 경쟁이 거세진다.`;
       },
     },
     {
@@ -303,12 +325,13 @@
       name: '경쟁사 악재',
       weight: 6,
       apply: (s, h) => {
-        const c = h.rng.pick(s.competitors);
-        const seg = h.rng.pick(['regional', 'narrow', 'wide']);
+        const targets = rivalTargets(s);
+        if (!targets.length) return '경쟁사들이 조용한 분기를 보냈다.';
+        const t = h.rng.pick(targets);
         const loss = h.rng.range(4, 9);
-        c.strength[seg] = Math.max(25, c.strength[seg] - loss);
+        t.c.drift[t.seg] = Math.max(-RIVAL_DRIFT_LIMIT, (t.c.drift[t.seg] || 0) - loss);
         h.reputation(2);
-        return `${c.name}의 ${SEGMENTS[seg].name} 프로그램이 대규모 지연에 빠졌다. 반사이익이 우리에게 온다.`;
+        return `${t.c.name}의 ${flagshipOf(t.types).name} 인도가 대규모 지연에 빠졌다. 반사이익이 우리에게 온다.`;
       },
     },
     {
@@ -352,8 +375,9 @@
     SEGMENT_ORDER,
     MATERIALS,
     AIRLINES,
-    COMPETITORS,
     RIVAL_STRENGTH_CAP,
+    RIVAL_STRENGTH_FLOOR,
+    RIVAL_DRIFT_LIMIT,
     EVENTS,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

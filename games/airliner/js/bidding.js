@@ -7,8 +7,19 @@
 (function (root) {
   'use strict';
 
-  const { SEGMENTS, AIRLINES, CONFIG } = root.AirlinerData;
+  const { SEGMENTS, AIRLINES, CONFIG, RIVAL_STRENGTH_CAP, RIVAL_STRENGTH_FLOOR } = root.AirlinerData;
   const { clamp } = root.AirlinerDesign;
+  const Fleet = root.AirlinerFleet;
+
+  /**
+   * 경쟁사 응찰 우위. 카탈로그 점수는 "기종의 실력"일 뿐이고, 실제 수주전에서
+   * 기존 기종은 개발비를 이미 회수했기 때문에 가격 공세 여지가 크다 — 그만큼 문턱을 올린다.
+   *
+   * 밸런스상 중요: 예전에는 경쟁사마다 난수를 뽑아 최댓값을 쓰는 방식이라 경쟁사 수(3)에서
+   * 오는 +5점 정도의 편향이 문턱에 섞여 있었다. 지금은 제조사가 8곳이라 그 방식을 쓰면
+   * 문턱이 제조사 수에 따라 멋대로 오르므로, 추첨은 한 번만 하고 편향을 이 상수로 명시한다.
+   */
+  const RIVAL_BID_EDGE = 4;
 
   /** 해당 분기에 새로 뜨는 RFP 목록을 만든다. */
   function generateRfps(state, rng) {
@@ -57,17 +68,22 @@
       relation,
       deadline: state.turn, // 이번 분기 안에 결정
       // 경쟁사 최고 점수는 입찰 확정 시점에 계산한다(플레이어가 미리 못 봄).
-      rivalHint: rivalBand(state, segmentId),
+      rivalHint: rivalBand(state, segmentId, seats, range),
     };
   }
 
-  /** 플레이어에게 보여줄 대략적 경쟁 강도 — 정확한 숫자는 감춘다. */
-  function rivalBand(state, segmentId) {
-    const best = Math.max(...state.competitors.map((c) => c.strength[segmentId]));
-    if (best >= 70) return { label: '매우 치열', level: 4 };
-    if (best >= 60) return { label: '치열', level: 3 };
-    if (best >= 50) return { label: '보통', level: 2 };
-    return { label: '느슨', level: 1 };
+  /**
+   * 플레이어에게 보여줄 대략적 경쟁 강도 — 정확한 숫자는 감추되,
+   * 어느 회사의 어느 기종과 붙는지는 알려준다(현실에서도 그건 안다).
+   */
+  function rivalBand(state, segmentId, reqSeats, reqRange) {
+    const offer = bestOffering(state, segmentId, reqSeats, reqRange);
+    const best = offer ? offer.score : RIVAL_STRENGTH_FLOOR;
+    const rival = offer ? offer.name : '—';
+    if (best >= 70) return { label: '매우 치열', level: 4, rival };
+    if (best >= 60) return { label: '치열', level: 3, rival };
+    if (best >= 50) return { label: '보통', level: 2, rival };
+    return { label: '느슨', level: 1, rival };
   }
 
   /**
@@ -147,17 +163,43 @@
     };
   }
 
-  /** 경쟁사 최종 점수 — 기본 경쟁력에 무작위 변동을 준다. */
-  function rivalScore(state, rfp, rng) {
-    let best = { name: '—', score: 0 };
+  /**
+   * 이 시점·이 요구사양에서 경쟁사들이 실제로 내놓을 수 있는 최고의 제안.
+   * 난수를 쓰지 않는다 — 경쟁사 수가 늘어도 문턱이 따라 오르지 않도록,
+   * 불확실성은 rivalScore 에서 딱 한 번만 얹는다.
+   *
+   * @param {number|null} reqSeats null 이면 적합도를 빼고 세그먼트 대표 기종만 고른다
+   */
+  function bestOffering(state, segmentId, reqSeats, reqRange) {
+    const year = Fleet.yearAt(state.turn, CONFIG.startYear);
+    const pool = Fleet.availableTypes(segmentId, year);
+
+    let best = null;
     for (const c of state.competitors) {
-      // 시간이 갈수록 업계 전체가 좋아진다(경쟁 인플레이션).
-      const era = state.turn * 0.06;
-      const s = c.strength[rfp.segment] + era + rng.normal(0, 6);
-      if (s > best.score) best = { name: c.name, score: s };
+      const drift = (c.drift && c.drift[segmentId]) || 0;
+      for (const type of pool) {
+        if (type.maker !== c.id) continue;
+        const score = Fleet.typeScore(type, state.market.fuelIndex, reqSeats, reqRange) + drift;
+        if (!best || score > best.score) best = { maker: c, type, score };
+      }
     }
-    best.score = Math.round(best.score * 10) / 10;
-    return best;
+    if (!best) return null;
+
+    return {
+      maker: best.maker,
+      type: best.type,
+      name: `${best.maker.name} ${best.type.name}`,
+      score: clamp(best.score, RIVAL_STRENGTH_FLOOR, RIVAL_STRENGTH_CAP),
+    };
+  }
+
+  function rivalScore(state, rfp, rng) {
+    const offer = bestOffering(state, rfp.segment, rfp.reqSeats, rfp.reqRange);
+    // 그 시점 그 세그먼트에 아무도 없으면(카탈로그 공백) 시장 평균이 문턱이 된다.
+    if (!offer) return { name: '—', score: RIVAL_STRENGTH_FLOOR };
+
+    const score = clamp(offer.score + rng.normal(RIVAL_BID_EDGE, 6), RIVAL_STRENGTH_FLOOR, RIVAL_STRENGTH_CAP);
+    return { name: offer.name, score: Math.round(score * 10) / 10 };
   }
 
   /**
@@ -183,5 +225,5 @@
     return { outcome, qty, rivalName: rival.name, rivalScore: rival.score, margin: Math.round(margin * 10) / 10 };
   }
 
-  root.AirlinerBidding = { generateRfps, scoreBid, resolveBid, rivalScore, rivalBand, CONFIG };
+  root.AirlinerBidding = { generateRfps, scoreBid, resolveBid, rivalScore, rivalBand, bestOffering, CONFIG };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

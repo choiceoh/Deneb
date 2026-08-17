@@ -10,11 +10,18 @@ const assert = require('node:assert');
 const path = require('node:path');
 
 const JS = path.join(__dirname, '..', 'js');
-for (const f of ['rng.js', 'data.js', 'design.js', 'bidding.js', 'engine.js']) {
+for (const f of ['rng.js', 'fleet.js', 'data.js', 'design.js', 'bidding.js', 'engine.js']) {
   require(path.join(JS, f));
 }
 
-const { AirlinerEngine: E, AirlinerDesign: D, AirlinerData: Data, AirlinerRng: R } = globalThis;
+const {
+  AirlinerEngine: E,
+  AirlinerDesign: D,
+  AirlinerData: Data,
+  AirlinerRng: R,
+  AirlinerFleet: F,
+  AirlinerBidding: B,
+} = globalThis;
 
 test('시드가 같으면 난수열이 같다 (재현성)', () => {
   const a = R.createRng(42);
@@ -744,4 +751,137 @@ test('수주하면 백로그가 쌓이고 인도되면 줄어든다', () => {
   assert.ok(sawDelivery, '신규 기종이 수주했다면 인도도 일어나야 한다');
   // 인도 수가 생산 수를 넘을 수 없다.
   for (const p of s.programs) assert.ok(p.delivered <= p.produced, `${p.name}: 인도(${p.delivered}) > 생산(${p.produced})`);
+});
+
+// ─────────────────────── 실존 제조사 카탈로그 ───────────────────────
+
+test('카탈로그의 모든 기종이 유효한 제조사·세그먼트를 가리킨다', () => {
+  const makers = new Set(F.MANUFACTURERS.map((m) => m.id));
+  const segs = new Set(Data.SEGMENT_ORDER);
+  const ids = new Set();
+  for (const t of F.AIRCRAFT) {
+    assert.ok(makers.has(t.maker), `${t.name}: 알 수 없는 제조사 ${t.maker}`);
+    assert.ok(segs.has(t.segment), `${t.name}: 알 수 없는 세그먼트 ${t.segment}`);
+    assert.ok(!ids.has(t.id), `${t.name}: 중복 id ${t.id}`);
+    ids.add(t.id);
+    assert.ok(t.seats > 0 && t.range > 0, `${t.name}: 제원이 비었다`);
+    assert.ok(t.end === null || t.end > t.eis, `${t.name}: 판매 종료가 취항보다 빠르다`);
+  }
+});
+
+test('기종은 취항 전·판매 종료 후에는 시장에 없다', () => {
+  const neo = F.AIRCRAFT.find((t) => t.id === 'a320neo');
+  assert.ok(!F.inService(neo, 2010), 'A320neo가 2010년에 팔리면 안 된다');
+  assert.ok(F.inService(neo, 2016.5), 'A320neo는 2016년에 팔리고 있어야 한다');
+
+  const rj = F.AIRCRAFT.find((t) => t.id === 'rj100');
+  assert.ok(F.inService(rj, 1999), '아브로 RJ100은 1999년에 팔리고 있어야 한다');
+  assert.ok(!F.inService(rj, 2010), '2003년 생산 종료 뒤에는 없어야 한다');
+});
+
+test('경쟁 문턱은 시대에 따라 실제 기종에서 나온다', () => {
+  const s = E.newGame(5);
+  const seg = Data.SEGMENTS.narrow;
+  const at = (turn) => {
+    s.turn = turn;
+    return B.bestOffering(s, 'narrow', Math.round(seg.seats.ref), Math.round(seg.range.ref));
+  };
+
+  const early = at(0); // 1998
+  const late = at(76); // 2017
+  assert.ok(early && late, '협동체는 전 기간 경쟁자가 있어야 한다');
+  // 1998년에 2016년 기종과 붙을 수는 없다.
+  assert.ok(early.type.eis <= 1998, `1998년 문턱이 ${early.type.name}(${early.type.eis})일 수 없다`);
+  assert.ok(late.score > early.score, '20년 뒤 경쟁 문턱이 더 높아야 한다');
+});
+
+test('경쟁사 수가 늘어도 실제 입찰 문턱이 따라 오르지 않는다', () => {
+  // 예전 방식(경쟁사마다 난수를 뽑아 최댓값)이면 제조사를 복제하는 것만으로 문턱이 올랐다.
+  // bestOffering 이 결정론이라는 것만 봐서는 이 성질이 지켜지는지 알 수 없으므로,
+  // 난수가 실제로 섞이는 rivalScore 의 평균으로 검사한다.
+  const seg = Data.SEGMENTS.wide;
+  const rfp = { segment: 'wide', reqSeats: Math.round(seg.seats.ref), reqRange: Math.round(seg.range.ref) };
+
+  const meanOf = (state) => {
+    const rng = R.createRng(31337);
+    let sum = 0;
+    const n = 4000;
+    for (let i = 0; i < n; i++) sum += B.rivalScore(state, rfp, rng).score;
+    return sum / n;
+  };
+
+  const base = E.newGame(9);
+  const dup = E.newGame(9);
+  // 같은 카탈로그를 파는 제조사를 3배로 늘린다.
+  dup.competitors = dup.competitors.concat(
+    dup.competitors.map((c) => ({ id: c.id, name: c.name + ' II', drift: { ...c.drift } })),
+    dup.competitors.map((c) => ({ id: c.id, name: c.name + ' III', drift: { ...c.drift } })),
+  );
+
+  const a = meanOf(base);
+  const b = meanOf(dup);
+  assert.ok(Math.abs(a - b) < 0.5, `제조사를 3배로 늘리자 문턱이 ${a.toFixed(1)} → ${b.toFixed(1)} 로 움직였다`);
+});
+
+test('유가가 오르면 연비 좋은 기종이 문턱을 가져간다', () => {
+  const s = E.newGame(11);
+  s.turn = 60; // 2013 — 787/A350 세대와 구형이 공존
+  const seg = Data.SEGMENTS.wide;
+  s.market.fuelIndex = 0.6;
+  const cheap = B.bestOffering(s, 'wide', Math.round(seg.seats.ref), Math.round(seg.range.ref));
+  s.market.fuelIndex = 2.0;
+  const dear = B.bestOffering(s, 'wide', Math.round(seg.seats.ref), Math.round(seg.range.ref));
+  assert.ok(dear.type.eff >= cheap.type.eff, '유가가 높으면 최소한 더 연비 좋은 기종이 나서야 한다');
+});
+
+test('가상 경쟁사를 쓰던 옛 세이브도 실존 제조사로 이관된다', () => {
+  const s = E.newGame(3);
+  // 옛 형식: strength 스칼라 맵, 지금은 없는 제조사 id
+  s.competitors = [
+    { id: 'aurelia', name: '아우렐리아 에어로스페이스', strength: { regional: 42, narrow: 55, wide: 60 } },
+  ];
+  E.ensureShape(s);
+  assert.ok(
+    s.competitors.every((c) => c.drift),
+    '이관 후에는 모든 경쟁사가 drift 를 가져야 한다',
+  );
+  assert.ok(
+    s.competitors.some((c) => c.id === 'boeing') && s.competitors.some((c) => c.id === 'airbus'),
+    '이관 후에는 실존 제조사 명단이어야 한다',
+  );
+  // 이관된 상태로 정산이 끝까지 돌아야 한다.
+  const r = E.endTurn(s);
+  assert.ok(r.ok, '이관된 세이브로 분기 정산이 실패하면 안 된다');
+});
+
+test('이벤트는 그 시점에 그 시장에 없는 제조사를 건드리지 않는다', () => {
+  const s = E.newGame(7);
+  const launch = Data.EVENTS.find((e) => e.id === 'rival_launch');
+  const rng = R.createRng(4242);
+  const h = { rng, reputation: () => {}, income: () => {}, expense: () => {}, fmt: (v) => String(v) };
+
+  for (const turn of [0, 40, 76]) {
+    s.turn = turn;
+    for (let i = 0; i < 40; i++) {
+      const before = JSON.stringify(s.competitors.map((c) => c.drift));
+      const text = launch.apply(s, h);
+      assert.strictEqual(typeof text, 'string', '이벤트는 항상 문장을 돌려줘야 한다');
+      const after = JSON.stringify(s.competitors.map((c) => c.drift));
+      if (before === after) continue;
+      // 움직인 제조사·세그먼트는 그 시점에 실제 판매 중이어야 한다.
+      const year = F.yearAt(turn, Data.CONFIG.startYear);
+      const moved = s.competitors.filter(
+        (c, idx) => JSON.stringify(c.drift) !== JSON.stringify(JSON.parse(before)[idx]),
+      );
+      for (const c of moved) {
+        const segs = Data.SEGMENT_ORDER.filter(
+          (seg) => c.drift[seg] !== JSON.parse(before)[s.competitors.indexOf(c)][seg],
+        );
+        for (const seg of segs) {
+          const active = F.availableTypes(seg, year).some((t) => t.maker === c.id);
+          assert.ok(active, `${year}년에 ${c.name}는 ${seg} 시장에 없는데 이벤트가 건드렸다`);
+        }
+      }
+    }
+  }
 });

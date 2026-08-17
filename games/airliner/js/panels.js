@@ -92,6 +92,20 @@
       </section>
 
       <section class="card">
+        <h3>경쟁 구도</h3>
+        <p class="muted">지금 각 시장에서 우리가 이겨야 하는 상대다. 경쟁사는 실제 역사대로 신형을 내놓는다.</p>
+        <table class="spec">
+          ${SEGMENT_ORDER.map((seg) => {
+            const sg = SEGMENTS[seg];
+            const o = B.bestOffering(s, seg, Math.round(sg.seats.ref), Math.round(sg.range.ref));
+            const mine = s.programs.filter((p) => p.segment === seg && p.phase === 'production');
+            const ours = mine.length ? mine.map((p) => esc(p.name)).join(', ') : '<span class="muted">없음</span>';
+            return `<tr><th>${sg.name}</th><td>${o ? esc(o.name) : '—'} <span class="muted">· 우리: ${ours}</span></td></tr>`;
+          }).join('')}
+        </table>
+      </section>
+
+      <section class="card">
         <h3>최근 기록</h3>
         <ul class="log">${s.log.slice(0, 6).map(logItem).join('')}</ul>
       </section>`;
@@ -366,6 +380,7 @@
             <tr><th>요구 기종</th><td>${rfp.segmentName} · ${rfp.reqSeats}석급 · ${num(rfp.reqRange)}km</td></tr>
             <tr><th>가격 민감도</th><td>${rfp.priceSensitivity >= 1.2 ? '매우 높음' : rfp.priceSensitivity >= 1.0 ? '높음' : rfp.priceSensitivity >= 0.8 ? '보통' : '낮음 (프리미엄 중시)'}</td></tr>
             <tr><th>경쟁 강도</th><td>${rfp.rivalHint.label}</td></tr>
+            <tr><th>맞붙을 기종</th><td>${esc(rfp.rivalHint.rival || '—')}</td></tr>
             <tr><th>우리와의 관계</th><td>${Math.round(s.relations[rfp.airlineId] ?? 40)} / 100</td></tr>
           </table>
           ${

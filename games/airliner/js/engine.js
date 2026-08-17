@@ -7,7 +7,8 @@
 (function (root) {
   'use strict';
 
-  const { CONFIG, SEGMENTS, AIRLINES, COMPETITORS, EVENTS } = root.AirlinerData;
+  const { CONFIG, SEGMENTS, AIRLINES, EVENTS } = root.AirlinerData;
+  const { MANUFACTURERS } = root.AirlinerFleet;
   const { evaluate, unitCostAt, clamp } = root.AirlinerDesign;
   const { generateRfps, scoreBid, resolveBid } = root.AirlinerBidding;
   const { createRng } = root.AirlinerRng;
@@ -51,7 +52,7 @@
       lines: [],
       backlog: [],
       relations: {},
-      competitors: COMPETITORS.map((c) => ({ id: c.id, name: c.name, strength: { ...c.strength } })),
+      competitors: newCompetitors(),
       rfps: [],
       bids: {},
       log: [],
@@ -148,6 +149,18 @@
    * 새 필드를 건드리면 현금만 차감한 채 예외가 나 행동이 반쯤 적용된다.
    * 상태를 바꾸는 진입점에서 먼저 호출한다.
    */
+  /**
+   * 경쟁사 상태. 세그먼트별 경쟁력 자체는 fleet 카탈로그가 시점별로 만들어 주므로
+   * 여기 남는 건 이벤트가 얹는 보정치(drift)뿐이다.
+   */
+  function newCompetitors() {
+    return MANUFACTURERS.map((m) => ({
+      id: m.id,
+      name: m.name,
+      drift: { regional: 0, narrow: 0, wide: 0 },
+    }));
+  }
+
   function ensureShape(s) {
     if (!s.effects) s.effects = {};
     if (!s.effects.grounded) {
@@ -165,6 +178,17 @@
       if (typeof s.pending[k] !== 'number') s.pending[k] = 0;
     }
     if (!s.stats) s.stats = { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 };
+
+    // 가상 경쟁사(strength 스칼라)를 쓰던 세이브는 실존 제조사 명단으로 갈아끼운다.
+    // 옛 strength 는 새 카탈로그와 척도가 달라 옮겨올 수 없으므로 보정치는 0에서 시작한다.
+    if (!Array.isArray(s.competitors) || s.competitors.some((c) => !c.drift)) {
+      s.competitors = newCompetitors();
+    }
+    for (const c of s.competitors) {
+      for (const seg of ['regional', 'narrow', 'wide']) {
+        if (typeof c.drift[seg] !== 'number') c.drift[seg] = 0;
+      }
+    }
     return s;
   }
 
