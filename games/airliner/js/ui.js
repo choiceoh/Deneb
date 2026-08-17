@@ -298,15 +298,19 @@
       const lbl = document.getElementById('disc-label-' + rfpId);
       if (lbl) lbl.textContent = pct + '%';
       ui.discountDraft[rfpId] = pct / 100; // 기종 미선택 상태에서도 값을 기억한다
+      const rfp = s.rfps.find((r) => r.id === rfpId);
+
       if (bid) {
         E.setBid(s, rfpId, bid.programId, pct / 100);
         const info = document.getElementById('bidinfo-' + rfpId);
-        const rfp = s.rfps.find((r) => r.id === rfpId);
         if (info && rfp) info.innerHTML = P.renderBidInfo(s, rfp);
-        // 후보 버튼의 점수·가격도 같은 할인율 기준으로 다시 그린다.
-        const cands = document.getElementById('cands-' + rfpId);
-        if (cands && rfp) cands.innerHTML = P.renderBidCandidates(s, rfp, pct / 100);
       }
+
+      // 후보 버튼의 점수·가격은 기종 선택 여부와 무관하게 갱신한다.
+      // 선택 후에만 갱신하면, 고르기 전 비교하는 동안 라벨의 할인율과
+      // 후보에 표시된 점수가 서로 다른 기준이 된다.
+      const cands = document.getElementById('cands-' + rfpId);
+      if (cands && rfp) cands.innerHTML = P.renderBidCandidates(s, rfp, pct / 100);
     }
   }
 
