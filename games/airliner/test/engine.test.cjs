@@ -95,6 +95,21 @@ test('품질 투자가 결함 이벤트의 발생 빈도까지 낮춘다', () =>
   assert.strictEqual(defect.weight(fresh), 0);
 });
 
+test('만료된 신용 경색의 가산폭은 재발 시 되살아나지 않는다', () => {
+  const s = E.newGame(9);
+  s.effects.rateBump = 0.011; // 강한 경색이
+  s.effects.rateBumpQuarters = 1; // 이번 분기로 끝난다
+  E.endTurn(s);
+  assert.strictEqual(s.effects.rateBumpQuarters, 0);
+  assert.strictEqual(s.effects.rateBump, 0, '기간이 끝나면 가산폭도 지워져야 한다');
+
+  // 이후 약한 경색이 재발해도 옛 강한 값이 병합되면 안 된다.
+  const squeeze = Data.EVENTS.find((e) => e.id === 'credit_squeeze');
+  squeeze.apply(s, { rng: R.createRng(4242), fmt: E.fmtMoney, reputation: () => {} });
+  assert.ok(s.effects.rateBump <= 0.011, '만료된 값이 되살아나면 안 된다');
+  assert.ok(s.effects.rateBump > 0, '새 경색은 적용돼야 한다');
+});
+
 test('신용 경색 재발이 진행 중인 효과를 약화시키지 않는다', () => {
   const s = E.newGame(9);
   s.effects.rateBump = 0.011;

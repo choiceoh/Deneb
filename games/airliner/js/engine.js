@@ -678,7 +678,12 @@
     const e = s.effects;
     if (e.strikeQuarters > 0) e.strikeQuarters--;
     if (e.supplyQuarters > 0) e.supplyQuarters--;
-    if (e.rateBumpQuarters > 0) e.rateBumpQuarters--;
+    if (e.rateBumpQuarters > 0) {
+      e.rateBumpQuarters--;
+      // 기간이 끝나면 가산폭도 함께 지운다. 남겨두면 나중에 약한 경색이
+      // 재발할 때 max() 병합이 만료된 높은 값을 되살린다.
+      if (e.rateBumpQuarters === 0) e.rateBump = 0;
+    }
     for (const id of Object.keys(e.grounded)) {
       e.grounded[id] -= 1;
       if (e.grounded[id] <= 0) {
