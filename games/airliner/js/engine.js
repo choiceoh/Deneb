@@ -823,18 +823,25 @@
       const text = chosen.apply(s, helpers);
       fired.push({ id: chosen.id, name: chosen.name, text });
       pushLog(s, 'event', `[${chosen.name}] ${text}`);
+
+      // 한 분기에 이벤트가 둘 이상 뽑힐 수 있다. 첫 이벤트가 회사를 지급불능으로
+      // 만들었는데 계속 추첨하면, 뒤이은 지원금이 파산을 되돌린다.
+      if (isInsolvent(s)) break;
     }
     return fired;
+  }
+
+  /** 남은 차입 여유까지 끌어와도 음수면 지급불능. */
+  function isInsolvent(s) {
+    return s.cash + Math.max(0, CONFIG.maxDebt - s.debt) < 0;
   }
 
   /** 지급불능 판정 — 종료됐으면 true. */
   function checkBankrupt(s) {
     if (s.gameOver) return true;
-    // 남은 차입 여유까지 끌어와도 음수면 지급불능이다.
-    // debt >= maxDebt 로만 보면, 부채가 한도에 1M 못 미친 채 이벤트로 현금이
-    // -741M 이 된 상태를 놓친다 (한도까지 빌려도 여전히 마이너스인데 생존).
-    const room = Math.max(0, CONFIG.maxDebt - s.debt);
-    if (s.cash + room < 0) {
+    // 부채가 한도에 1M 못 미친 채 이벤트로 현금이 -741M 이 된 상태도 잡아야 하므로
+    // debt >= maxDebt 가 아니라 "남은 여유까지 합쳐 음수인가"로 본다.
+    if (isInsolvent(s)) {
       s.gameOver = { reason: 'bankrupt', lastTurn: s.turn, ...finalScore(s, true) };
       pushLog(s, 'bad', '자금이 완전히 고갈되고 차입 한도도 소진됐다. 회사는 법정관리에 들어간다.');
       return true;

@@ -225,6 +225,61 @@ test('파산으로 끝나도 마지막 재무 행이 최종 현금을 설명한�
   assert.ok(checked > 0, '파산 표본을 찾지 못했다');
 });
 
+test('한 분기에 이벤트가 둘이어도 첫 이벤트의 파산을 되살리지 못한다', () => {
+  // 이벤트 풀을 결정적으로 바꿔 "치명적 지출 → 지원금" 순서를 강제한다.
+  // 지급불능을 각 이벤트 직후에 확인하지 않으면 뒤의 지원금이 파산을 되돌린다.
+  const original = Data.EVENTS.slice();
+  try {
+    Data.EVENTS.length = 0;
+    Data.EVENTS.push(
+      {
+        id: 't-drain',
+        name: '치명적 지출',
+        weight: 50,
+        apply: (s, h) => {
+          h.expense(s.cash + Math.max(0, Data.CONFIG.maxDebt - s.debt) + 100); // 확실히 지급불능
+          return '테스트용 대규모 지출';
+        },
+      },
+      {
+        id: 't-grant',
+        name: '거액 지원금',
+        weight: 50,
+        apply: (s, h) => {
+          h.income(50000); // 파산을 되돌릴 만큼 큰 금액
+          return '테스트용 대규모 지원금';
+        },
+      },
+    );
+
+    // 한 분기에 이벤트가 둘 뽑히는 경우(약 8%)라야 이 버그가 드러난다.
+    // 단발 이벤트 분기는 수정 전후가 동일하게 동작하므로, 조기 종료하지 않고
+    // 넓게 훑어 "지출+지원금이 같은 분기에 온" 표본을 반드시 확보한다.
+    let bothInSameQuarter = 0;
+    let drainQuarters = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = E.newGame(seed);
+      for (let i = 0; i < 40 && !s.gameOver; i++) {
+        E.endTurn(s);
+        const ev = s.events || [];
+        if (!ev.some((e) => e.id === 't-drain')) continue;
+        drainQuarters++;
+        if (ev.some((e) => e.id === 't-grant')) bothInSameQuarter++;
+        assert.ok(
+          s.gameOver,
+          `seed ${seed}: 지급불능 지출 뒤에도 게임이 계속된다 (현금 ${Math.round(s.cash)}, 이벤트 ${ev.map((e) => e.name).join('+')})`,
+        );
+        break;
+      }
+    }
+    assert.ok(drainQuarters > 0, '치명적 지출 이벤트 표본을 만들지 못했다');
+
+  } finally {
+    Data.EVENTS.length = 0;
+    Data.EVENTS.push(...original);
+  }
+});
+
 test('응찰할 수 없는 공고로는 관계가 깎이지 않는다', () => {
   // 초반엔 협동체 DN-150 하나뿐이라 리저널·광동체 공고엔 대응할 방법이 없다.
   // 그걸로 관계가 깎이면 플레이어가 손쓸 수 없는 이유로 이후 입찰 점수까지 낮아진다.
