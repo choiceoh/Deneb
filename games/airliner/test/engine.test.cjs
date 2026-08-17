@@ -252,10 +252,12 @@ test('한 분기에 이벤트가 둘이어도 첫 이벤트의 파산을 되살�
       },
     );
 
-    // 한 분기에 이벤트가 둘 뽑히는 경우(약 8%)라야 이 버그가 드러난다.
-    // 단발 이벤트 분기는 수정 전후가 동일하게 동작하므로, 조기 종료하지 않고
-    // 넓게 훑어 "지출+지원금이 같은 분기에 온" 표본을 반드시 확보한다.
-    let bothInSameQuarter = 0;
+    // 이 버그는 한 분기에 이벤트가 둘 뽑힐 때만 드러난다(약 8%). 단발 분기는
+    // 수정 전후가 같게 동작하므로 조기 종료하지 않고 60시드를 훑는다.
+    //
+    // 판별 단언은 "지출과 지원금이 같은 분기에 공존하지 않는다"이다. 수정 전에는
+    // 둘 다 적용돼 파산이 되돌려지고, 수정 후에는 지출 직후 추첨이 멈춰 지원금이
+    // 아예 적용되지 않는다. (수정 전 코드에서 seed 4가 실제로 실패하는 것을 확인)
     let drainQuarters = 0;
     for (let seed = 1; seed <= 60; seed++) {
       const s = E.newGame(seed);
@@ -264,10 +266,18 @@ test('한 분기에 이벤트가 둘이어도 첫 이벤트의 파산을 되살�
         const ev = s.events || [];
         if (!ev.some((e) => e.id === 't-drain')) continue;
         drainQuarters++;
-        if (ev.some((e) => e.id === 't-grant')) bothInSameQuarter++;
         assert.ok(
           s.gameOver,
           `seed ${seed}: 지급불능 지출 뒤에도 게임이 계속된다 (현금 ${Math.round(s.cash)}, 이벤트 ${ev.map((e) => e.name).join('+')})`,
+        );
+        // 지출 "이후"에 지원금이 적용되면 안 된다. 지원금이 먼저 온 경우는
+        // 정상이다 — 그 뒤 지출이 여전히 지급불능을 만들었고 게임은 끝났다.
+        const drainAt = ev.findIndex((e) => e.id === 't-drain');
+        const grantAfter = ev.findIndex((e, k) => k > drainAt && e.id === 't-grant');
+        assert.strictEqual(
+          grantAfter,
+          -1,
+          `seed ${seed}: 파산을 만든 지출 뒤에도 지원금이 적용됐다 (${ev.map((e) => e.name).join(' → ')})`,
         );
         break;
       }
