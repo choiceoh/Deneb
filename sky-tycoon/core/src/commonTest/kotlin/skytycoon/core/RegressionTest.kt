@@ -898,11 +898,21 @@ class RegressionTest {
         var s = fresh()
         val city = s.routesOf("hanseong").first().from
         s = s.withAirline2("hanseong") { it.copy(cash = 5e9) }
-        // 남은 기간이 공사 기간보다 짧은 지점으로 옮긴다.
-        s = s.copy(turn = s.totalTurns - Balance.EXPANSION_QUARTERS)
+        // 정확히 공사 기간만큼 남은 지점은 마지막 진행에 맞춰 완공되므로 허용돼야 한다.
+        val lastChance = s.copy(turn = s.totalTurns - Balance.EXPANSION_QUARTERS)
+        val ok = Actions.execute(lastChance, Command.FundExpansion("hanseong", city))
+        assertTrue(ok.ok, "마지막으로 완공 가능한 시점인데 거절했다: ${ok.message}")
+        var finished = ok.state
+        repeat(Balance.EXPANSION_QUARTERS) { if (finished.outcome == null) finished = TurnEngine.advance(finished) }
+        assertTrue(
+            finished.expansions.none { it.city == city },
+            "허용해 놓고 판이 끝날 때까지 완공되지 않았다",
+        )
 
-        val cash = s.player.cash
-        val r = Actions.execute(s, Command.FundExpansion("hanseong", city))
+        // 한 분기라도 모자라면 거절한다.
+        val tooLate = s.copy(turn = s.totalTurns - Balance.EXPANSION_QUARTERS + 1)
+        val cash = tooLate.player.cash
+        val r = Actions.execute(tooLate, Command.FundExpansion("hanseong", city))
         assertFalse(r.ok, "완공될 수 없는 공사를 받아 최종 순위 직전에 자산만 태웠다")
         assertEquals(cash, r.state.player.cash, "실패했는데 공사비가 빠졌다")
     }
