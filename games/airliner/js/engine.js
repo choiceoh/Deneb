@@ -496,9 +496,15 @@
     for (const rfp of s.rfps) {
       const bid = s.bids[rfp.id];
       if (!bid) {
-        // 무응찰 감점도 점수 계산이 모두 끝난 뒤에 적용한다 — 같은 항공사의
-        // 다른 공고 점수가 이 감점의 영향을 받으면 안 된다.
-        noBidAirlines.push(rfp.airlineId);
+        // 응찰 자체가 불가능한 공고(해당 세그먼트에 양산 기종이 없거나 전부 실격)는
+        // 감점하지 않는다. 초반엔 협동체 DN-150 하나뿐이라 리저널·광동체 공고에
+        // 대응할 방법이 없는데, 그걸로 관계가 깎이면 이후 입찰 점수까지 낮아진다.
+        const canBid = s.programs.some(
+          (p) => p.phase === 'production' && p.segment === rfp.segment && !scoreBid(s, rfp, p, 0).blocked,
+        );
+        // 감점은 점수 계산이 모두 끝난 뒤에 적용한다 — 같은 항공사의 다른 공고
+        // 점수가 이 감점의 영향을 받으면 안 된다.
+        if (canBid) noBidAirlines.push(rfp.airlineId);
         continue;
       }
       const program = s.programs.find((p) => p.id === bid.programId);

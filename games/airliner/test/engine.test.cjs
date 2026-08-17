@@ -225,6 +225,46 @@ test('파산으로 끝나도 마지막 재무 행이 최종 현금을 설명한�
   assert.ok(checked > 0, '파산 표본을 찾지 못했다');
 });
 
+test('응찰할 수 없는 공고로는 관계가 깎이지 않는다', () => {
+  // 초반엔 협동체 DN-150 하나뿐이라 리저널·광동체 공고엔 대응할 방법이 없다.
+  // 그걸로 관계가 깎이면 플레이어가 손쓸 수 없는 이유로 이후 입찰 점수까지 낮아진다.
+  const s = E.newGame(11);
+  const rel0 = { ...s.relations };
+  let unbiddable = 0;
+  let biddableSkipped = 0;
+
+  for (let i = 0; i < 20; i++) {
+    for (const rfp of s.rfps) {
+      if (E.eligiblePrograms(s, rfp).filter((x) => !x.score.blocked).length) biddableSkipped++;
+      else unbiddable++;
+    }
+    E.endTurn(s); // 아무 입찰도 하지 않는다
+  }
+  assert.ok(unbiddable > 0, '응찰 불가 공고 표본이 있어야 한다');
+
+  // 감점 총량이 "응찰 가능했는데 포기한" 건수로 설명돼야 한다.
+  const totalDrop = Object.keys(rel0).reduce((a, k) => a + Math.max(0, rel0[k] - s.relations[k]), 0);
+  assert.ok(
+    totalDrop <= biddableSkipped * 1.5 + 0.01,
+    `감점 총량 ${totalDrop.toFixed(1)}이 응찰 가능 포기 ${biddableSkipped}건(최대 ${biddableSkipped * 1.5})을 넘는다`,
+  );
+});
+
+test('응찰 가능한 공고를 포기하면 관계는 여전히 깎인다', () => {
+  const s = E.newGame(11);
+  const rfp = {
+    id: 'x', turn: 0, airlineId: 'hanul', airlineName: '한울항공', home: '동아시아',
+    segment: 'narrow', segmentName: '협동체', reqSeats: 150, reqRange: 4500, qty: 10,
+    priceSensitivity: 0.9, prestige: 0.8, relation: s.relations.hanul, deadline: 0,
+    rivalHint: { label: '보통', level: 2 },
+  };
+  s.rfps = [rfp];
+  s.bids = {};
+  const before = s.relations.hanul;
+  E.endTurn(s);
+  assert.ok(s.relations.hanul < before, '대응 가능한 공고를 무시하면 관계가 식어야 한다');
+});
+
 test('운항 정지 중인 기종은 재고를 처분할 수 없다', () => {
   // 처분을 허용하면 "인도도 멈춘다"는 결함 이벤트 효과를 리스사 매각으로 우회한다.
   const s = E.newGame(5);
