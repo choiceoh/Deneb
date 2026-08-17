@@ -2,7 +2,7 @@
  * 게임 엔진 — 상태 생성, 플레이어 행동, 분기 정산.
  *
  * 규칙: 이 파일은 DOM을 모른다. 모든 함수는 state를 받아 state를 바꾸고 로그를 남긴다.
- * 덕분에 test/engine.test.mjs 에서 브라우저 없이 전체 시뮬레이션을 돌릴 수 있다.
+ * 덕분에 test/engine.test.cjs 에서 브라우저 없이 전체 시뮬레이션을 돌릴 수 있다.
  */
 (function (root) {
   'use strict';
@@ -159,7 +159,7 @@
   /** 신규 프로그램 착수. 착수금(개발비의 8%)을 즉시 지출한다. */
   function launchProgram(s, spec, name) {
     const evalSpec = evaluate(spec);
-    const upfront = Math.round(evalSpec.devCost * 0.08);
+    const upfront = Math.round(evalSpec.devCost * CONFIG.launchUpfrontRate);
     if (s.cash < upfront) {
       return { ok: false, error: `착수금 ${fmtMoney(upfront)}이 부족합니다.` };
     }
@@ -176,7 +176,7 @@
       spent: upfront,
       certRemaining: evalSpec.certQuarters,
       qualityInvests: 0,
-      share: 50,
+      share: CONFIG.defaultProgramShare,
       produced: 0,
       delivered: 0,
       stock: 0,
@@ -391,6 +391,15 @@
 
     // ── 다음 분기로 ──
     s.turn++;
+
+    // 마지막 분기를 정산했다면 여기서 끝낸다. 존재하지 않는 다음 분기의 경쟁사 인도량이
+    // 최종 점유율을 깎거나, 이벤트가 최종 현금·평판은 물론 완주/파산 판정까지 뒤집는다.
+    if (s.turn >= CONFIG.totalTurns) {
+      checkGameOver(s);
+      saveRng(s, rng);
+      return { ok: true, report };
+    }
+
     tickEffects(s);
     driftMarket(s, rng);
     simulateRivals(s, rng);
@@ -461,6 +470,9 @@
   }
 
   function advanceDevelopment(s, rng, report) {
+    // 이번 분기 시작 시점에 이미 인증 심사 중이던 프로그램 (아래 카운트다운 대상).
+    const certifyingBefore = s.programs.filter((p) => p.phase === 'cert');
+
     // 인력 배분 0% = 프로그램 동결. 진행도 그대로 멈추고 개발비도 나가지 않는다.
     // 현금이 마를 때 개발을 갈아엎지 않고 버티는 유일한 탈출구다.
     const active = s.programs.filter((p) => p.phase === 'dev' && p.share > 0);
@@ -479,7 +491,9 @@
 
       const before = p.progress;
       p.progress = Math.min(100, p.progress + gain);
-      const spend = p.devCost * ((p.progress - before) / 100);
+      // 착수금으로 이미 낸 몫을 빼고 남은 개발비만 진행도에 비례해 집행한다.
+      // (전액을 다시 배분하면 실제 지출이 표시된 총 개발비의 108%가 된다.)
+      const spend = p.devCost * (1 - CONFIG.launchUpfrontRate) * ((p.progress - before) / 100);
       p.spent += spend;
       s.cash -= spend;
       report.rdCost += spend;
@@ -490,7 +504,9 @@
       }
     }
 
-    for (const p of s.programs.filter((x) => x.phase === 'cert')) {
+    // 개발 루프에서 방금 cert로 전환된 프로그램은 제외한다. 포함하면 개발에 그 분기를
+    // 다 쓰고도 인증 1분기가 함께 지나가, 3분기짜리 인증이 실제로는 2분기에 끝난다.
+    for (const p of certifyingBefore) {
       p.certRemaining -= 1;
       if (p.certRemaining <= 0) {
         p.phase = 'production';
@@ -651,6 +667,17 @@
         rng,
         fmt: fmtMoney,
         reputation: (d) => adjustReputation(s, d),
+        /** 가중 추첨 — 결함 대상 선정처럼 "위험이 높을수록 자주 걸린다"를 표현할 때. */
+        pickWeighted: (arr, weightOf) => {
+          const w = arr.map((x) => Math.max(1e-4, weightOf(x)));
+          const total = w.reduce((a, b) => a + b, 0);
+          let r = rng.next() * total;
+          for (let i = 0; i < arr.length; i++) {
+            r -= w[i];
+            if (r <= 0) return arr[i];
+          }
+          return arr[arr.length - 1];
+        },
       };
       const text = chosen.apply(s, helpers);
       fired.push({ id: chosen.id, name: chosen.name, text });

@@ -222,31 +222,60 @@ test('시작 시 노후 주력기와 가동 라인, 수주 잔고를 물려받�
   assert.ok(s.lines.some((l) => l.programId === legacy.id), '레거시 전용 라인이 있어야 한다');
   assert.ok(E.totalBacklog(s) > 0, '인계받은 수주 잔고가 있어야 한다');
   // 캐시카우가 실제로 현금을 벌어야 한다 (아무 조작 없이 초반 몇 분기).
+  // 시작값(186)과 비교하지 않으면 인도가 0이어도 통과하는 공허한 단언이 된다.
   const cash0 = s.cash;
+  const delivered0 = s.stats.delivered;
   for (let i = 0; i < 4; i++) E.endTurn(s);
-  assert.ok(s.stats.delivered > legacy.delivered - 1, '초반에 인도가 일어나야 한다');
+  assert.ok(s.stats.delivered > delivered0, `초반 4분기에 인도가 늘어야 한다 (${delivered0} → ${s.stats.delivered})`);
   assert.ok(s.cash > cash0 * 0.5, '캐시카우가 있는데 초반 4분기에 현금이 반토막 나면 안 된다');
+});
+
+test('개발비 총액은 착수금을 포함해 devCost를 넘지 않는다', () => {
+  const s = E.newGame(4711);
+  s.cash = 500000; // 자금 제약을 배제하고 회계만 본다
+  const r = E.launchProgram(s, { segment: 'regional', seats: 90, range: 2500, tech: 40, material: 'aluminum' }, 'ACC-1');
+  const p = r.program;
+  const budget = p.devCost;
+  assert.ok(p.spent > 0, '착수금이 즉시 반영돼야 한다');
+
+  for (let i = 0; i < 60 && p.phase === 'dev'; i++) E.endTurn(s);
+  assert.notStrictEqual(p.phase, 'dev', '개발이 끝나야 한다');
+
+  // 착수금(8%)을 낸 뒤 진행도에 다시 100%를 물리면 총액이 108%가 된다.
+  assert.ok(
+    Math.abs(p.spent - budget) <= budget * 0.01,
+    `총 개발 지출 ${Math.round(p.spent)}이 표시된 개발비 ${budget}와 어긋난다 (품질투자 제외 기준)`,
+  );
 });
 
 test('수주하면 백로그가 쌓이고 인도되면 줄어든다', () => {
   const s = E.newGame(1234);
-  E.launchProgram(s, { segment: 'regional', seats: 100, range: 3000, tech: 45, material: 'aluminum' }, 'R-100');
+  const launched = E.launchProgram(s, { segment: 'regional', seats: 100, range: 3000, tech: 45, material: 'aluminum' }, 'R-100').program;
+  // 물려받은 DN-150의 잔고·인도량으로도 참이 되지 않도록, 신규 기종만 놓고 본다.
+  const backlogOf = (id) => s.backlog.reduce((a, o) => a + (o.programId === id ? o.remaining : 0), 0);
   let sawBacklog = false;
   let sawDelivery = false;
+
   for (let i = 0; i < 60; i++) {
-    // 수주 잔고가 쌓였을 때만 라인을 늘리는, 최소한으로 합리적인 운영 정책.
-    const prod = s.programs.find((p) => p.phase === 'production');
-    if (prod && E.totalBacklog(s) > s.lines.length * 20 && s.lines.length < 3) E.buildLine(s, prod.id);
+    // 운영 정책은 현실적으로(레거시 포함 전 기종 판매) 두되, 단언은 신규 기종만 본다.
+    // 신규 기종으로만 입찰하면 캐시카우가 말라 파산해 라인조차 못 세운다.
+    for (const p of s.programs.filter((x) => x.phase === 'production')) {
+      const ownLines = s.lines.filter((l) => l.programId === p.id).length;
+      if (backlogOf(p.id) > ownLines * 20 && ownLines < 3) E.buildLine(s, p.id);
+    }
     for (const rfp of s.rfps) {
       const el = E.eligiblePrograms(s, rfp).filter((x) => !x.score.blocked);
-      if (el.length) E.setBid(s, rfp.id, el[0].program.id, 0.15);
+      if (el.length) {
+        el.sort((a, b) => b.score.total - a.score.total);
+        E.setBid(s, rfp.id, el[0].program.id, 0.15);
+      }
     }
     E.endTurn(s);
-    if (E.totalBacklog(s) > 0) sawBacklog = true;
-    if (s.stats.delivered > 0) sawDelivery = true;
+    if (backlogOf(launched.id) > 0) sawBacklog = true;
+    if (launched.delivered > 0) sawDelivery = true;
   }
-  assert.ok(sawBacklog, '60분기 동안 한 번도 수주하지 못하면 밸런스가 잘못된 것');
-  assert.ok(sawDelivery, '수주했다면 인도도 일어나야 한다');
+  assert.ok(sawBacklog, '60분기 동안 신규 기종이 한 번도 수주하지 못하면 밸런스가 잘못된 것');
+  assert.ok(sawDelivery, '신규 기종이 수주했다면 인도도 일어나야 한다');
   // 인도 수가 생산 수를 넘을 수 없다.
   for (const p of s.programs) assert.ok(p.delivered <= p.produced, `${p.name}: 인도(${p.delivered}) > 생산(${p.produced})`);
 });

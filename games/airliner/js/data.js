@@ -18,6 +18,8 @@
     engineerHireCost: 0.06, // 채용 일시금 (1명당)
     fixedOverheadPerQuarter: 55,
     lineOverheadPerLine: 9,
+    defaultProgramShare: 50, // 신규 프로그램의 기본 인력 배분(%)
+    launchUpfrontRate: 0.08, // 개발 착수금 (총 개발비 대비). 나머지는 진행도에 비례해 집행된다.
     depositRate: 0.15, // 수주 시 선수금
     inventoryHoldingCost: 0.004, // 재고 1기당 분기 유지비 (원가 대비)
     learningExponent: Math.log(0.87) / Math.log(2), // 87% 학습곡선
@@ -258,8 +260,10 @@
       weight: 8,
       condition: (s) => s.programs.some((p) => p.delivered > 0),
       apply: (s, h) => {
+        // 결함 위험이 높은 기종일수록 자주 걸린다. 균등 추첨이면 품질 투자로 낮춘
+        // defectRisk 가 중대/경미 판정에만 쓰여 "위험 25% 감소"가 빈도에 반영되지 않는다.
         const fleet = s.programs.filter((p) => p.delivered > 0);
-        const p = h.rng.pick(fleet);
+        const p = h.pickWeighted(fleet, (x) => x.defectRisk);
         const severity = h.rng.next() < p.defectRisk ? 'major' : 'minor';
         if (severity === 'major') {
           const cost = Math.round(p.delivered * p.unitCostBase * h.rng.range(0.08, 0.2));

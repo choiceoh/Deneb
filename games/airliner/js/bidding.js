@@ -173,7 +173,7 @@
     if (margin > 4) {
       outcome = 'win';
       qty = rfp.qty;
-    } else if (margin > -4) {
+    } else if (margin >= -4) {
       outcome = 'split';
       qty = Math.max(1, Math.round(rfp.qty * 0.5));
     } else {

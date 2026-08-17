@@ -1,0 +1,37 @@
+name: Games CI
+
+# games/ 는 빌드 도구·의존성이 없는 독립 레인이라 ci.yml(Go)·andromeda-ci.yml 어느 쪽도
+# 건드리지 않는다. 그대로 두면 회귀 테스트가 영영 실행되지 않으므로 전용 게이트를 둔다.
+# 경로 필터가 있어 게임을 만지지 않는 PR 에서는 아예 돌지 않는다.
+
+on:
+  push:
+    branches: [main]
+    paths: ["games/**", ".github/workflows/games-ci.yml"]
+  pull_request:
+    paths: ["games/**", ".github/workflows/games-ci.yml"]
+
+concurrency:
+  group: games-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  airliner:
+    name: airliner engine tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+
+      # 의존성 설치 없음 — 순수 JS 라 Node 표준 테스트 러너만으로 돌아간다.
+      - name: Run airliner engine tests
+        run: node --test games/airliner/test/engine.test.cjs

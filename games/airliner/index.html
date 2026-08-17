@@ -15,9 +15,10 @@
     <nav id="tabs" class="tabs"></nav>
     <main id="panel" class="panel"></main>
 
-    <div id="toast" class="toast"></div>
+    <!-- 턴 정산·오류가 이 토스트로만 전달되므로 라이브 리전으로 선언한다. -->
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <div id="modal" class="modal">
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
       <div class="modal-card"><div class="modal-body"></div></div>
     </div>
 

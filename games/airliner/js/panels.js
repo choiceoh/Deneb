@@ -166,12 +166,17 @@
   /** 설계 미리보기 — 슬라이더를 움직일 때 이 영역만 갈아끼운다. */
   function renderDesignPreview(s, spec) {
     const ev = D.evaluate(spec);
-    const upfront = Math.round(ev.devCost * 0.08);
+    const upfront = Math.round(ev.devCost * CONFIG.launchUpfrontRate);
     const seg = SEGMENTS[spec.segment];
 
     // 현재 인력으로 실제 얼마나 걸리는지 — 표시 기간은 인력 100% 가정이라 오해를 부른다.
-    const devsActive = s.programs.filter((p) => p.phase === 'dev' && p.share > 0).length;
-    const shareIfLaunched = devsActive ? 1 / (devsActive + 1) : 1;
+    // 엔진은 배분 가중치의 합으로 인력을 나누므로, 균등 배분이 아니라 실제 가중치로 계산해야
+    // 미리보기와 실제 진행 속도가 어긋나지 않는다 (기존이 5/95 같은 편중이면 차이가 크다).
+    const existingShare = s.programs
+      .filter((p) => p.phase === 'dev' && p.share > 0)
+      .reduce((a, p) => a + p.share, 0);
+    const newShare = CONFIG.defaultProgramShare;
+    const shareIfLaunched = newShare / (existingShare + newShare);
     const effective = Math.min(1.4, (s.engineers * shareIfLaunched) / ev.engineersNeeded);
     const realQuarters = effective > 0 ? Math.ceil(ev.devQuarters / effective) : Infinity;
 
@@ -183,7 +188,7 @@
       <h3>설계 평가</h3>
       <table class="spec">
         <tr><th>총 개발비</th><td class="${heavy ? 'bad' : ''}">${money(ev.devCost)}</td></tr>
-        <tr><th>착수금 (8%)</th><td class="${affordable ? '' : 'bad'}">${money(upfront)}</td></tr>
+        <tr><th>착수금 (${Math.round(CONFIG.launchUpfrontRate * 100)}%)</th><td class="${affordable ? '' : 'bad'}">${money(upfront)}</td></tr>
         <tr><th>개발 기간</th><td>${ev.devQuarters}분기 <span class="muted">(현 인력 기준 약 ${realQuarters === Infinity ? '∞' : realQuarters}분기)</span></td></tr>
         <tr><th>인증 기간</th><td>${ev.certQuarters}분기</td></tr>
         <tr><th>필요 인력</th><td>${num(ev.engineersNeeded)}명 <span class="muted">(보유 ${num(s.engineers)}명)</span></td></tr>
@@ -326,14 +331,14 @@
 
   // ─────────────────────────────── 수주 ───────────────────────────────
 
-  function renderRfps(s) {
+  function renderRfps(s, discountDraft) {
     if (!s.rfps.length) return '<div class="card"><p class="muted">이번 분기에는 새 입찰 공고가 없다.</p></div>';
 
     return s.rfps
       .map((rfp) => {
         const bid = s.bids[rfp.id];
         const candidates = s.programs.filter((p) => p.phase === 'production' && p.segment === rfp.segment);
-        const discount = bid ? bid.discount : 0.1;
+        const discount = bid ? bid.discount : (discountDraft && discountDraft[rfp.id]) ?? 0.1;
         const scored = candidates.map((p) => ({ p, sc: B.scoreBid(s, rfp, p, discount) }));
         const anyBiddable = scored.some((x) => !x.sc.blocked);
 
@@ -434,10 +439,10 @@
           <h3>차입 / 상환</h3>
           <p class="muted">분기 이자율 ${(CONFIG.interestPerQuarter * 100).toFixed(1)}%${s.effects.rateBumpQuarters > 0 ? ` <b class="bad">(+${(s.effects.rateBump * 100).toFixed(1)}%p 신용경색)</b>` : ''} · 한도 ${money(CONFIG.maxDebt)} · 여유 ${money(room)}</p>
           <div class="row wrap">
-            <button data-action="borrow" data-amt="1000" ${room < 1000 ? 'disabled' : ''}>$1.00B 차입</button>
-            <button data-action="borrow" data-amt="3000" ${room < 3000 ? 'disabled' : ''}>$3.00B 차입</button>
-            <button data-action="repay" data-amt="1000" ${s.cash < 1000 || s.debt < 1 ? 'disabled' : ''}>$1.00B 상환</button>
-            <button data-action="repay" data-amt="3000" ${s.cash < 3000 || s.debt < 1 ? 'disabled' : ''}>$3.00B 상환</button>
+            <button data-action="borrow" data-amt="1000" ${room <= 0 ? 'disabled' : ''}>${money(Math.min(1000, room))} 차입</button>
+            <button data-action="borrow" data-amt="3000" ${room <= 0 ? 'disabled' : ''}>${money(Math.min(3000, room))} 차입</button>
+            <button data-action="repay" data-amt="1000" ${s.cash < 1 || s.debt < 1 ? 'disabled' : ''}>${money(Math.min(1000, s.cash, s.debt))} 상환</button>
+            <button data-action="repay" data-amt="3000" ${s.cash < 1 || s.debt < 1 ? 'disabled' : ''}>${money(Math.min(3000, s.cash, s.debt))} 상환</button>
           </div>
           <p class="hint">분기 이자 ${money(s.debt * (CONFIG.interestPerQuarter + (s.effects.rateBumpQuarters > 0 ? s.effects.rateBump : 0)))}</p>
         </div>

@@ -19,6 +19,8 @@
     state: null,
     tab: 'overview',
     spec: D.defaultSpec('narrow'),
+    // 기종을 고르기 전에 만진 할인율 (RFP별). 선택 시 이 값을 그대로 물려준다.
+    discountDraft: {},
   };
 
   const TABS = [
@@ -50,7 +52,7 @@
         panel.innerHTML = P.renderProduction(s);
         break;
       case 'rfps':
-        panel.innerHTML = P.renderRfps(s);
+        panel.innerHTML = P.renderRfps(s, ui.discountDraft);
         break;
       case 'finance':
         panel.innerHTML = P.renderFinance(s);
@@ -121,11 +123,19 @@
     return true;
   }
 
+  // 게임 종료 뒤에도 허용되는 행동 — 나머지는 저장 상태를 바꿔 최종 성적과 어긋나게 만든다.
+  const ALLOWED_AFTER_END = new Set(['tab', 'new-game', 'close-modal']);
+
   function onClick(ev) {
     const btn = ev.target.closest('[data-action]');
     if (!btn || btn.disabled) return;
     const s = ui.state;
     const a = btn.dataset.action;
+
+    if (s.gameOver && !ALLOWED_AFTER_END.has(a)) {
+      toast('경영이 종료되어 더 이상 조작할 수 없다. 새 게임을 시작하라.', 'bad');
+      return;
+    }
 
     switch (a) {
       case 'tab':
@@ -206,7 +216,8 @@
       case 'pick-bid': {
         const rfpId = btn.dataset.rfp;
         const cur = s.bids[rfpId];
-        E.setBid(s, rfpId, btn.dataset.id, cur ? cur.discount : 0.1);
+        const discount = cur ? cur.discount : ui.discountDraft[rfpId] ?? 0.1;
+        E.setBid(s, rfpId, btn.dataset.id, discount);
         render();
         break;
       }
@@ -233,7 +244,7 @@
         break;
 
       case 'close-modal':
-        document.getElementById('modal').classList.remove('show');
+        closeModal();
         break;
     }
   }
@@ -267,12 +278,35 @@
       const pct = Number(el.value);
       const lbl = document.getElementById('disc-label-' + rfpId);
       if (lbl) lbl.textContent = pct + '%';
+      ui.discountDraft[rfpId] = pct / 100; // 기종 미선택 상태에서도 값을 기억한다
       if (bid) {
         E.setBid(s, rfpId, bid.programId, pct / 100);
         const info = document.getElementById('bidinfo-' + rfpId);
         const rfp = s.rfps.find((r) => r.id === rfpId);
         if (info && rfp) info.innerHTML = P.renderBidInfo(s, rfp);
       }
+    }
+  }
+
+  /** 모달이 열려 있으면 Esc 로 닫고, Tab 포커스를 모달 안에 가둔다. */
+  function onKeydown(ev) {
+    const modal = document.getElementById('modal');
+    if (!modal || !modal.classList.contains('show')) return;
+    if (ev.key === 'Escape') {
+      closeModal();
+      return;
+    }
+    if (ev.key !== 'Tab') return;
+    const focusables = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (ev.shiftKey && document.activeElement === first) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && document.activeElement === last) {
+      ev.preventDefault();
+      first.focus();
     }
   }
 
@@ -318,7 +352,7 @@
     const g = s.gameOver;
     const bankrupt = g.reason === 'bankrupt';
     const body = `
-      <h2>${bankrupt ? '파산' : '20년의 경영이 끝났다'}</h2>
+      <h2 id="modal-title">${bankrupt ? '파산' : '20년의 경영이 끝났다'}</h2>
       <p class="go-reason">${
         bankrupt
           ? `${E.turnLabel(s.turn)}, 자금이 고갈되고 차입 한도까지 소진됐다. 회사는 법정관리에 들어간다.`
@@ -336,9 +370,31 @@
         <button class="primary" data-action="new-game">새 게임</button>
         <button class="ghost" data-action="close-modal">기록 살펴보기</button>
       </div>`;
+    openModal(body);
+  }
+
+  /**
+   * 모달 열기/닫기 — 스크린리더가 대화상자를 인지하고 키보드 포커스가
+   * 뒤쪽 '분기 종료' 버튼에 남지 않도록 포커스를 옮기고 되돌린다.
+   */
+  let lastFocused = null;
+
+  function openModal(bodyHtml) {
     const modal = document.getElementById('modal');
-    modal.querySelector('.modal-body').innerHTML = body;
+    modal.querySelector('.modal-body').innerHTML = bodyHtml;
     modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    lastFocused = document.activeElement;
+    const first = modal.querySelector('button');
+    if (first) first.focus();
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('modal');
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    if (lastFocused && lastFocused.isConnected) lastFocused.focus();
+    lastFocused = null;
   }
 
   // ─────────────────────────────── 저장 / 시작 ───────────────────────────────
@@ -386,7 +442,8 @@
     ui.state = E.newGame(seed);
     ui.tab = 'overview';
     ui.spec = D.defaultSpec('narrow');
-    document.getElementById('modal').classList.remove('show');
+    ui.discountDraft = {};
+    closeModal();
     render();
     toast('새 경영을 시작한다. 주력기 DN-150이 버텨주는 동안 후속기를 띄워라.', 'good');
   }
@@ -397,6 +454,7 @@
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
     document.addEventListener('change', onChange);
+    document.addEventListener('keydown', onKeydown);
     render();
     if (ui.state.gameOver) showGameOver(ui.state);
     else if (saved) toast('저장된 경영을 이어서 진행한다.');
