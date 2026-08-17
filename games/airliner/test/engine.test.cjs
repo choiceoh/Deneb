@@ -204,6 +204,38 @@ test('파산은 다음 분기 이벤트가 되살리지 못한다', () => {
   assert.ok(sawInsolvent);
 });
 
+test('옛 세이브(신규 필드 없음)에서도 행동이 예외 없이 처리된다', () => {
+  const s = E.newGame(1);
+  const legacy = s.programs.find((p) => p.legacy);
+  legacy.stock = 5;
+  // 이전 커밋에서 저장된 상태를 흉내 — version은 그대로 1이라 로드된다.
+  delete s.pending;
+  delete s.effects.grounded;
+
+  const cashBefore = s.cash;
+  const r = E.sellStock(s, legacy.id, 5);
+  assert.ok(r.ok, '옛 세이브에서 재고 처분이 실패하면 안 된다');
+  assert.ok(s.cash > cashBefore, '처분 대금이 들어와야 한다');
+  assert.doesNotThrow(() => E.endTurn(s), '옛 세이브로 분기 종료가 가능해야 한다');
+});
+
+test('지급불능(현금<0 · 차입한도 소진) 상태로 살아있는 분기가 없다', () => {
+  // 정산발이든 이벤트발(결함 수리비)이든 즉시 종료여야 한다.
+  const max = Data.CONFIG.maxDebt;
+  for (const seed of [1, 50, 60, 21, 404, 1234]) {
+    const s = E.newGame(seed);
+    s.debt = max; // 한도 소진 상태에서 시작
+    for (let i = 0; i < 60 && !s.gameOver; i++) {
+      E.endTurn(s);
+      const insolvent = s.cash < 0 && s.debt >= max;
+      assert.ok(
+        !insolvent || s.gameOver,
+        `seed ${seed} t${s.turn}: 현금 ${Math.round(s.cash)} · 부채 ${Math.round(s.debt)} 인데 게임이 계속된다`,
+      );
+    }
+  }
+});
+
 test('한 분기의 입찰 점수는 앞선 수주의 평판·관계 상승에 영향받지 않는다', () => {
   const s = E.newGame(4242);
   const legacy = s.programs.find((p) => p.legacy);

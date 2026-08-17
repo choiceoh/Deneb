@@ -142,6 +142,20 @@
     }
   }
 
+  /**
+   * 나중에 추가된 필드를 기본값으로 채운다.
+   * 세이브 version은 그대로 1이라 이전 커밋의 저장본도 로드되는데, 그 상태로
+   * 새 필드를 건드리면 현금만 차감한 채 예외가 나 행동이 반쯤 적용된다.
+   * 상태를 바꾸는 진입점에서 먼저 호출한다.
+   */
+  function ensureShape(s) {
+    if (!s.effects) s.effects = {};
+    if (!s.effects.grounded) s.effects.grounded = {};
+    if (!s.pending) s.pending = { revenue: 0, delivered: 0 };
+    if (!s.stats) s.stats = { delivered: 0, revenue: 0, rivalDelivered: 240, ordersWon: 0, bidsMade: 0 };
+    return s;
+  }
+
   function rngFor(s) {
     const rng = createRng(s.rngState);
     return rng;
@@ -289,6 +303,7 @@
 
   /** 미인도 재고(화이트테일) 헐값 처분 — 정가의 68%. */
   function sellStock(s, programId, qty) {
+    ensureShape(s);
     const p = s.programs.find((x) => x.id === programId);
     if (!p || p.stock <= 0) return { ok: false, error: '처분할 재고가 없습니다.' };
     const n = Math.min(qty, p.stock);
@@ -362,9 +377,7 @@
 
   function endTurn(s) {
     if (s.gameOver) return { ok: false, error: '게임이 종료되었습니다.' };
-    // 스키마가 늘어난 뒤 저장된 옛 상태 방어 (필드가 없으면 기본값으로).
-    if (!s.effects.grounded) s.effects.grounded = {};
-    if (!s.pending) s.pending = { revenue: 0, delivered: 0 };
+    ensureShape(s);
     const rng = rngFor(s);
     const report = {
       label: turnLabel(s.turn),
@@ -422,6 +435,11 @@
     s.events = rollEvents(s, rng);
     s.rfps = generateRfps(s, rng);
     s.bids = {};
+
+    // 이벤트(결함 수리비 등)가 현금을 빼앗아 지급불능이 된 경우도 즉시 종료다.
+    // 정산 직후 검사만 두면, 이벤트발 지급불능은 다음 분기 내내 살아남아
+    // 재고 처분 등으로 회생할 수 있다.
+    checkBankrupt(s);
 
     saveRng(s, rng);
     return { ok: true, report };
@@ -818,6 +836,7 @@
     netWorth,
     finalScore,
     projectedQuarters,
+    ensureShape,
     fmtMoney,
     turnLabel,
   };

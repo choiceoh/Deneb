@@ -426,7 +426,8 @@
       const s = JSON.parse(raw);
       // 스키마가 바뀐 옛 세이브는 조용히 버린다.
       if (!s || s.version !== 1 || !Array.isArray(s.programs)) return null;
-      return s;
+      // 이전 버전에서 저장된 상태에 새 필드를 채워 넣는다.
+      return E.ensureShape(s);
     } catch (e) {
       return null;
     }
