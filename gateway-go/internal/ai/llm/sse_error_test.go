@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -36,12 +37,12 @@ func TestParseSSE_CleanStreamHasNoError(t *testing.T) {
 	}
 }
 
-func TestParseSSEWithByteLimitRejectsDelimiterFreeMultilineEvent(t *testing.T) {
+func TestParseSSEByteLimitRejectsDelimiterFreeMultilineEvent(t *testing.T) {
 	// Every individual line is well below Scanner's 1 MiB cap. Without a
 	// cumulative parser limit these lines are retained in dataBuf forever when
 	// the provider never sends the blank-line event delimiter.
 	input := strings.Repeat("data: 0123456789abcdef\n", 64)
-	events := ParseSSEWithByteLimit(strings.NewReader(input), 128)
+	events := parseSSE(context.Background(), strings.NewReader(input), 128)
 
 	var got []StreamEvent
 	for event := range events {

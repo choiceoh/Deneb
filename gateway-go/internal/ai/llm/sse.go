@@ -30,14 +30,6 @@ func ParseSSE(ctx context.Context, r io.Reader) <-chan StreamEvent {
 	return parseSSE(ctx, r, 0)
 }
 
-// ParseSSEWithByteLimit is ParseSSE with a cumulative wire-byte limit. The
-// limit is enforced while scanning, before a delimiter-free sequence of data
-// lines can grow dataBuf without bound. A non-positive limit preserves the
-// general-purpose parser's historical unlimited behavior.
-func ParseSSEWithByteLimit(r io.Reader, maxBytes int) <-chan StreamEvent {
-	return parseSSE(context.Background(), r, maxBytes)
-}
-
 func parseSSE(ctx context.Context, r io.Reader, maxBytes int) <-chan StreamEvent {
 	if ctx == nil {
 		ctx = context.Background()
