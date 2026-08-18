@@ -17,8 +17,8 @@ HTTP wire 형식만 책임진다.
   진입점이고 Anthropic mode에서는 streaming 경로를 재사용한다.
 - `normalize.go`의 `NormalizeMessages`, `DropEmptyMessages`,
   `ContentToBlocks`가 provider 전송 전 메시지 정규화를 소유한다.
-- `sse.go`의 `ParseSSE`와 `ParseSSEWithByteLimit`가 SSE framing과
-  취소 가능한 parser 수명주기를 소유한다.
+- `sse.go`의 `ParseSSE`, `parseSSE`, `startSSEPipelineWithByteLimit`가
+  SSE framing과 취소 가능한 parser 수명주기를 소유한다.
 
 ## 의존 방향과 불변조건
 
