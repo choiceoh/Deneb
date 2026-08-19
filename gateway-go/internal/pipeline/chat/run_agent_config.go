@@ -274,6 +274,26 @@ func mergeDeferredToolNames(groups ...[]string) []string {
 	return merged
 }
 
+func filterPreloadedDeferredToolNames(registry *ToolRegistry, names []string, preset string) []string {
+	if registry == nil || len(names) == 0 {
+		return nil
+	}
+	allowed := toolwire.AllowedTools(preset)
+	filtered := make([]string, 0, len(names))
+	for _, name := range names {
+		if _, ok := registry.DeferredToolDef(name); !ok {
+			continue
+		}
+		if allowed != nil {
+			if _, ok := allowed[name]; !ok {
+				continue
+			}
+		}
+		filtered = append(filtered, name)
+	}
+	return filtered
+}
+
 func resolveAgentExecutionPolicy(params RunParams, deps runDeps, cachedSession *session.Session, configuredMaxTokens int) agentExecutionPolicy {
 	maxTurns, timeout := resolveAgentRunLimits(params, deps, cachedSession)
 	maxOutputRecovery, maxOutputScaleFactors, streamIdleTimeout, parallelSafeTool := resolveAgentOutputPolicy(deps.briefcaseMode)
@@ -409,7 +429,11 @@ func buildAgentConfig(
 	acd agentConfigDeps,
 	logger *slog.Logger,
 ) (cfg agent.AgentConfig, spawnFlag *SpawnFlag, execStats *toolport.ToolExecStats, skillConsults *SkillConsultLog) {
-	initialDeferredTools := mergeDeferredToolNames(acd.ReplayDeferredTools, acd.InitialDeferredTools)
+	initialDeferredTools := filterPreloadedDeferredToolNames(
+		acd.Tools,
+		mergeDeferredToolNames(acd.ReplayDeferredTools, acd.InitialDeferredTools),
+		sessionToolPreset,
+	)
 	tools := buildAgentTools(acd.Tools, sessionToolPreset, initialDeferredTools)
 	state := newAgentRunState(initialDeferredTools)
 	policy := resolveAgentExecutionPolicy(params, deps, cachedSession, acd.MaxTokens)

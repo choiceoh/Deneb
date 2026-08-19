@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -143,32 +144,34 @@ func TestSyncOptionsFromPortPreservesRuntimeAndStreamContract(t *testing.T) {
 	var gotEvent chatport.ToolStreamEvent
 	var gotPhase string
 	req := chatport.SyncRequest{
-		MaxTokens:           &maxTokens,
-		MaxTurns:            &maxTurns,
-		MaxToolCallAttempts: &maxCalls,
-		SystemPrompt:        "system",
-		Thinking:            "off",
-		ToolPreset:          "boot",
-		MaxHistoryTokens:    42,
-		Delivery:            delivery,
-		EphemeralUser:       true,
-		EphemeralAssistant:  true,
-		AutoDeliveredOutput: true,
-		SkipRecall:          true,
-		FeedContext:         "feed",
-		GateUntrustedTools:  true,
-		BeforeToolCall:      func(string, string, []byte) (bool, string) { return true, "blocked" },
-		OnToolResult:        func(string, string, string, bool) {},
-		OnToolEvent:         func(event chatport.ToolStreamEvent) { gotEvent = event },
-		OnProgress:          func(phase string) { gotPhase = phase },
-		OnThinking:          func(string) {},
-		SoftDeadline:        20 * time.Minute,
+		MaxTokens:            &maxTokens,
+		MaxTurns:             &maxTurns,
+		MaxToolCallAttempts:  &maxCalls,
+		SystemPrompt:         "system",
+		Thinking:             "off",
+		ToolPreset:           "boot",
+		InitialDeferredTools: []string{"skill_lifecycle"},
+		MaxHistoryTokens:     42,
+		Delivery:             delivery,
+		EphemeralUser:        true,
+		EphemeralAssistant:   true,
+		AutoDeliveredOutput:  true,
+		SkipRecall:           true,
+		FeedContext:          "feed",
+		GateUntrustedTools:   true,
+		BeforeToolCall:       func(string, string, []byte) (bool, string) { return true, "blocked" },
+		OnToolResult:         func(string, string, string, bool) {},
+		OnToolEvent:          func(event chatport.ToolStreamEvent) { gotEvent = event },
+		OnProgress:           func(phase string) { gotPhase = phase },
+		OnThinking:           func(string) {},
+		SoftDeadline:         20 * time.Minute,
 	}
 
 	got := syncOptionsFromPort(req)
 	if got.MaxTokens != req.MaxTokens || got.MaxTurns != req.MaxTurns ||
 		got.MaxToolCallAttempts != req.MaxToolCallAttempts || got.SystemPrompt != req.SystemPrompt ||
 		got.Thinking != req.Thinking || got.ToolPreset != req.ToolPreset ||
+		!slices.Equal(got.InitialDeferredTools, req.InitialDeferredTools) ||
 		got.MaxHistoryTokens != req.MaxHistoryTokens || got.Delivery != delivery ||
 		!got.EphemeralUser || !got.EphemeralAssistant || !got.AutoDeliveredOutput ||
 		!got.SkipRecall || got.FeedContext != req.FeedContext || !got.GateUntrustedTools ||

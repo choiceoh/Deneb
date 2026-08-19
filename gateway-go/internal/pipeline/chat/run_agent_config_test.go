@@ -257,7 +257,7 @@ func TestBuildAgentConfig_PreloadsExactTriggerDeferredTools(t *testing.T) {
 	acd := agentConfigDeps{
 		Tools:                registry,
 		ReplayDeferredTools:  []string{"wiki"},
-		InitialDeferredTools: []string{"morning_letter", "wiki"},
+		InitialDeferredTools: []string{"morning_letter", "wiki", "read", "missing_tool"},
 	}
 	cfg, _, _, _ := buildAgentConfig(
 		RunParams{SessionKey: "cron:morning-letter:1"},
@@ -273,6 +273,33 @@ func TestBuildAgentConfig_PreloadsExactTriggerDeferredTools(t *testing.T) {
 	}
 	if got := activated.ActivatedNames(); !slices.Equal(got, []string{"wiki", "morning_letter"}) {
 		t.Fatalf("seeded deferred tools = %v, want stable deduplicated order", got)
+	}
+}
+
+func TestBuildAgentConfig_FiltersInitialDeferredToolsByPreset(t *testing.T) {
+	registry := NewToolRegistry()
+	registry.RegisterTool(ToolDef{Name: "read", Description: "read"})
+	registry.RegisterTool(ToolDef{Name: "fetch_tools", Description: "fetch"})
+	registry.RegisterTool(ToolDef{Name: "skill_lifecycle", Description: "lifecycle", Deferred: true})
+
+	acd := agentConfigDeps{
+		Tools:                registry,
+		InitialDeferredTools: []string{"skill_lifecycle"},
+	}
+	cfg, _, _, _ := buildAgentConfig(
+		RunParams{SessionKey: "client:main"},
+		runDeps{}, nil, nil, "conversation", acd, slog.Default(),
+	)
+	if got := toolNames(cfg.Tools); slices.Contains(got, "skill_lifecycle") {
+		t.Fatalf("conversation preset leaked preloaded skill_lifecycle: %v", got)
+	}
+	ctx := cfg.OnTurnInit(context.Background())
+	activated := toolport.DeferredActivationFromContext(ctx)
+	if activated == nil {
+		t.Fatal("turn context missing deferred activation")
+	}
+	if got := activated.ActivatedNames(); len(got) != 0 {
+		t.Fatalf("preset-excluded deferred tools were seeded: %v", got)
 	}
 }
 

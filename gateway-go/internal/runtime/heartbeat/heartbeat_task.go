@@ -352,6 +352,9 @@ func (t *heartbeatTask) Run(ctx context.Context) error {
 	defer cancel()
 
 	req := heartbeatSyncRequest()
+	if selfCodingNudge != "" || sweepNudge != "" {
+		req.InitialDeferredTools = []string{"skill_lifecycle"}
+	}
 	req.SessionKey = sessionKey
 	req.Message = triggerMsg
 	req.Model = t.model

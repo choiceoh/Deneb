@@ -42,6 +42,12 @@ type Params struct {
 	// high-effort reasoning. Empty = session/provider default.
 	Thinking string
 
+	// InitialDeferredTools activates selected deferred tools on turn 1 for
+	// runtime-owned jobs that know a named tool is mandatory. The chat layer
+	// filters these names through the effective tool preset before exposing
+	// schemas or seeding the deferred-activation context.
+	InitialDeferredTools []string
+
 	// PrebuiltMessages, when set, replaces the normal transcript-based context
 	// assembly. Used by the OpenAI-compatible HTTP API to pass through the full
 	// conversation history from the client.

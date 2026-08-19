@@ -185,7 +185,7 @@ func executeAgentRun(
 
 	// Stage 4: Build tool list and agent config.
 	acd := buildAgentConfigDeps(deps, messages, sessionToolPreset, logger)
-	acd.InitialDeferredTools = autoActivatedTools
+	acd.InitialDeferredTools = mergeDeferredToolNames(params.InitialDeferredTools, autoActivatedTools)
 	// execStats threads into recordRunCompletion (LogEnd's RepairedToolCalls) —
 	// #3117 introduced it while #3121 moved LogEnd into the completion sink.
 	cfg, spawnFlag, execStats, skillConsults := buildAgentConfig(params, deps, cachedSession, systemPrompt, sessionToolPreset, acd, logger)
