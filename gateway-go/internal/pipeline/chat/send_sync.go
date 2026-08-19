@@ -135,6 +135,11 @@ type SyncOptions struct {
 	// Empty means no restriction.
 	ToolPreset string
 
+	// InitialDeferredTools activates selected deferred tools on turn 1 for
+	// runtime-owned jobs that know a named tool is mandatory. The effective
+	// tool preset still gates both schema exposure and execution.
+	InitialDeferredTools []string
+
 	// MaxHistoryTokens overrides the transcript history token budget.
 	// When set, assembleContext trims older messages to fit within this budget.
 	MaxHistoryTokens int
@@ -256,6 +261,7 @@ func (h *Handler) prepareSyncRun(sessionKey, message, model, runIDPrefix string,
 		if opts.ToolPreset != "" {
 			sess.ToolPreset = opts.ToolPreset
 		}
+		params.InitialDeferredTools = append([]string(nil), opts.InitialDeferredTools...)
 		if opts.Delivery != nil {
 			params.Delivery = opts.Delivery
 		}

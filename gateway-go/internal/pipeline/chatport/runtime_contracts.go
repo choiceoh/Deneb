@@ -83,8 +83,12 @@ type SyncRequest struct {
 	SystemPrompt        string
 	Thinking            string
 	ToolPreset          string
-	MaxHistoryTokens    int
-	Delivery            *DeliveryContext
+	// InitialDeferredTools activates selected deferred tools on turn 1 for
+	// runtime-owned jobs that know a named tool is mandatory. The chat layer
+	// still filters these names through ToolPreset before exposing them.
+	InitialDeferredTools []string
+	MaxHistoryTokens     int
+	Delivery             *DeliveryContext
 
 	EphemeralUser       bool
 	EphemeralAssistant  bool

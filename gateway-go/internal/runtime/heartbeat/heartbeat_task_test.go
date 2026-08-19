@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,39 @@ func TestHeartbeatSyncRequestWithoutTranscriptPersistence(t *testing.T) {
 	}
 	if !req.AutoDeliveredOutput {
 		t.Fatal("heartbeat report is delivered by the proactive relay, so AutoDeliveredOutput must be true")
+	}
+}
+
+func TestHeartbeatSelfCodingNudgePreloadsSkillLifecycle(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Seoul")
+	if err != nil {
+		t.Skipf("Asia/Seoul tzdata unavailable: %v", err)
+	}
+	runner := &deliveryCaptureRunner{result: &chatport.SyncResult{
+		Text:     "NO_REPLY",
+		BestText: "NO_REPLY",
+	}}
+	tk := NewTask(TaskConfig{
+		ChatHandler: runner,
+		Logger:      slog.Default(),
+		HomeDir:     t.TempDir(),
+		ProposedSelfCoding: func() (int, string) {
+			return 1, "1:sc-a:100"
+		},
+		Now: func() time.Time { return time.Date(2026, 5, 3, 10, 0, 0, 0, loc) },
+	})
+
+	if err := tk.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !runner.called {
+		t.Fatal("expected self-coding nudge to dispatch a heartbeat turn")
+	}
+	if !slices.Equal(runner.req.InitialDeferredTools, []string{"skill_lifecycle"}) {
+		t.Fatalf("initial deferred tools = %v, want [skill_lifecycle]", runner.req.InitialDeferredTools)
+	}
+	if !strings.Contains(runner.req.Message, "[자가코딩 제안 검토]") {
+		t.Fatalf("heartbeat message missing self-coding nudge:\n%s", runner.req.Message)
 	}
 }
 

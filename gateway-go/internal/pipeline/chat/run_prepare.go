@@ -258,6 +258,9 @@ func buildTurnSystemPrompt(ctx context.Context, params RunParams, deps runDeps, 
 	for _, n := range toolwire.PreloadedDeferredTools(sessionToolPreset) {
 		preloaded[n] = struct{}{}
 	}
+	for _, n := range filterPreloadedDeferredToolNames(deps.tools, params.InitialDeferredTools, sessionToolPreset) {
+		preloaded[n] = struct{}{}
+	}
 	deferredSummaries := deps.tools.DeferredSummaries()
 	var deferredToolInfos []prompt.DeferredToolInfo
 	for _, ds := range deferredSummaries {
