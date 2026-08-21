@@ -12,18 +12,13 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - `exec_safety.go`의 `ExecCommandPreservesRunCache`는 shell pipeline을
   `parseExecCacheStages`로 분류하고 각 stage의 cache 보존 가능성을 판정한다.
   빈 stage·chaining·substitution·미인식 command는 무효화 방향으로 fail-closed한다.
-- Session tools (`sessions` / `sessions_spawn` / `subagents`) live in sibling
-  `tools/sessionops`.
-- Deferred schema activation (`fetch_tools`) lives in sibling `tools/fetchops`.
-  Observe (`ToolObserve`) lives in leaf package `observeops/` and is wired via
+- Session tools live in sibling `tools/sessionops`. `fetch_tools` lives in
+  `tools/fetchops`. Observe lives in `observeops/` and is wired via
   `server/toolbind/observebind`.
-- `browser.go`의 `ToolBrowser`는 agent-facing wrapper만 소유한다. Page Agent
-  bridge client와 전자결재 enrichment는 `platform/browserbridge`가 소유한다.
-- Phone tools (`phone_read`/`phone_write`) live in sibling `tools/phoneops`.
-  Native app dispatch (`PhoneActionFunc`, `ErrPhoneActionUnconfirmed`) stays
-  on `tooldeps`.
-- Gateway self-management (`gateway`, `heartbeat_update`) lives in sibling
-  `tools/gatewayops`.
+- Phone tools live in sibling `tools/phoneops`.
+- Gateway self-management lives in sibling `tools/gatewayops`.
+- Host wrappers (`browser`, `fleet`, `solarflow`, `workstation`) live in
+  sibling `tools/hostops`.
 
 ## 의존 방향과 불변조건
 
@@ -37,11 +32,8 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - exec run-cache는 pipeline의 모든 stage가 읽기 전용으로 증명될 때만
   보존한다. parser 실패나 모호한 flag를 실행 실패와 혼동해 cache를
   남기지 말고, workspace mutation 가능성으로 처리한다.
-- session spawn은 depth, 동시성, role 가용성, tool preset을 검증하고 terminal child를
-  cap에 포함하지 않는다. deferred activation은 등록된 deferred tool과 허용된 preset만
-  노출한다.
-- config/restart/update mutation은 payload에 결합된 단일사용·만료 approval token 없이는
-  실행하면 안 되며 secret path와 dirty/non-main update를 거절한다.
+- session spawn·deferred activation·config mutation 불변조건은 각 형제 패키지
+  (`sessionops`, `fetchops`, `gatewayops`)가 소유한다.
 
 ## 테스트와 집중 검증
 
@@ -50,6 +42,6 @@ session 상태는 주입된 infra/domain service가 소유한다.
   `contracts_test.go`의 `TestToolExecFallbackValidationStructuredAndHints`가 두 실행
   경로의 안전성을 검증한다.
 - `fetch_tools` 검증은 `tools/fetchops`, session 검증은 `tools/sessionops`,
-  gateway 검증은 `tools/gatewayops`로 옮겼다.
+  gateway 검증은 `tools/gatewayops`, host 래퍼 검증은 `tools/hostops`로 옮겼다.
 
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/tools/runtimeops`

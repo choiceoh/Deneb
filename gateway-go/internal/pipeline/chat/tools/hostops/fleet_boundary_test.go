@@ -1,4 +1,4 @@
-package runtimeops
+package hostops
 
 import (
 	"testing"
