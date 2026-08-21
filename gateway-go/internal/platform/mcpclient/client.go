@@ -487,13 +487,35 @@ func (c *Client) spawnLocked() error {
 // a stale handshake must not overwrite a newer spawn's ServerInfo.
 //
 // 2026-07-28 deleted the handshake this is named after, so the era has to be
-// detected rather than assumed: server/discover answers on a 2.0 server and is
-// "method not found" on every older one.
+// detected rather than assumed. THE ORDER IS THE SAFETY PROPERTY:
+//
+//   - A handshake-era server owns a lifecycle in which initialize must come
+//     first. Some enforce it by dropping the transport, not by answering
+//     "method not found" — and on stdio a dropped transport is a dead child,
+//     so there would be nothing left alive to fall back onto. Probing that era
+//     first would make such a server permanently unusable: every respawn would
+//     re-run the probe and die again.
+//   - A 2026-07-28 server has no lifecycle to violate. It is stateless and
+//     MUST answer an unimplemented method with "method not found", so an
+//     initialize aimed at it costs exactly one dead request.
+//
+// So the older era goes first and sees precisely the traffic it saw before 2.0
+// existed; server/discover is the fallback, reached only once initialize has
+// already failed. (The spec offers discover as a stdio compatibility probe,
+// but only as a MAY — detecting in this direction is equally conformant and
+// strictly safer for the installed base.)
 func (c *Client) handshake(ctx context.Context) (handshakeResult, error) {
+	res, initErr := c.initializeHandshake(ctx)
+	if initErr == nil {
+		return res, nil
+	}
 	if res, ok := c.discover(ctx); ok {
 		return res, nil
 	}
-	return c.initializeHandshake(ctx)
+	// Neither era answered. The initialize failure is the informative one —
+	// discover's is just "that method is missing too" — and this is the first
+	// point at which the failure is real, so it is also where it is counted.
+	return handshakeResult{}, c.noteCallError(initErr)
 }
 
 // initializeHandshake is the pre-2026-07-28 path: initialize +
@@ -504,7 +526,7 @@ func (c *Client) initializeHandshake(ctx context.Context) (handshakeResult, erro
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": clientName, "version": clientVersion},
 	}
-	raw, err := c.roundTrip(ctx, "initialize", params)
+	raw, err := c.probe(ctx, "initialize", params)
 	if err != nil {
 		return handshakeResult{}, fmt.Errorf("mcpclient: initialize: %w", err)
 	}

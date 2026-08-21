@@ -8,10 +8,13 @@ package mcpclient
 //
 // Which era a server speaks cannot be assumed — this gateway spawns whatever
 // npx wrapper the operator configured, and those move at their own pace. So
-// the client asks: `server/discover` is the one method every 2.0 server MUST
-// implement, and a handshake-era server answers it with "method not found".
-// That single probe is the era detector; everything else follows from the
+// the client asks. `server/discover` is the one method every 2.0 server MUST
+// implement, which makes it the era detector; everything else follows from the
 // version it settles on.
+//
+// It is reached only AFTER an initialize handshake has failed, never before —
+// see Client.handshake for why that order is a safety property and not a
+// preference.
 
 import (
 	"context"
@@ -84,21 +87,20 @@ func (c *Client) protocol() string {
 	return c.negotiatedProtocol
 }
 
-// discover probes for the stateless revision. A false return is the ordinary
-// answer from a handshake-era server, not a fault — the caller falls back to
-// initialize.
+// discover probes for the stateless revision, after initialize has already
+// failed. A false return means neither era answered — the caller reports the
+// initialize failure, which is the informative one.
 func (c *Client) discover(ctx context.Context) (handshakeResult, bool) {
 	// Bound the probe to half the init budget. A conforming server answers
-	// instantly either way (result or "method not found"), but a server that
-	// silently DROPS methods it does not implement would otherwise hold the
-	// whole initialization hostage — this way the fallback to initialize still
-	// gets the other half of the budget.
+	// instantly (result or "method not found"), but one that silently DROPS
+	// methods it does not implement would otherwise burn whatever remains of
+	// the initialization budget on a question already known to be unanswered.
 	probeCtx, cancel := context.WithTimeout(ctx, initTimeout/2)
 	defer cancel()
 
 	raw, err := c.probe(probeCtx, "server/discover", withStatelessMeta(nil, protocolVersion2026))
 	if err != nil {
-		c.logger.Debug("mcp server/discover unavailable; using initialize handshake",
+		c.logger.Debug("mcp server/discover unavailable after initialize failed",
 			"cmd", c.argv[0], "error", err)
 		return handshakeResult{}, false
 	}
@@ -112,14 +114,14 @@ func (c *Client) discover(ctx context.Context) (handshakeResult, bool) {
 		} `json:"_meta"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		c.logger.Debug("mcp server/discover result unreadable; using initialize handshake",
+		c.logger.Debug("mcp server/discover result unreadable",
 			"cmd", c.argv[0], "error", err)
 		return handshakeResult{}, false
 	}
 	// A server may implement discover for a revision we do not speak. Only a
 	// mutually supported one lets us go stateless.
 	if !containsVersion(out.SupportedVersions, protocolVersion2026) {
-		c.logger.Debug("mcp server/discover lists no revision we speak; using initialize handshake",
+		c.logger.Debug("mcp server/discover lists no revision we speak",
 			"cmd", c.argv[0], "supported", strings.Join(out.SupportedVersions, ","))
 		return handshakeResult{}, false
 	}

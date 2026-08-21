@@ -117,6 +117,45 @@ func TestHandshakeEraServerStillNegotiatesViaInitialize(t *testing.T) {
 	}
 }
 
+// A handshake-era server may enforce "initialize first" by dropping the
+// transport rather than answering "method not found". On stdio that is a dead
+// child, leaving nothing to fall back onto — and since every respawn would
+// re-run the probe, such a server would be permanently unusable, not just slow
+// to start. Detection therefore must not put anything on the wire ahead of
+// initialize. This test spawns exactly that server and requires it to work.
+func TestStrictLifecycleServerIsNeverProbedBeforeInitialize(t *testing.T) {
+	c, err := New(context.Background(),
+		[]string{os.Args[0], "-test.run=^TestHelperProcess$", "--", "mcp-helper", "strict-legacy"}, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(c.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := c.Start(ctx); err != nil {
+		t.Fatalf("Start against a strict-lifecycle server: %v", err)
+	}
+	if got := c.protocol(); got != "" {
+		t.Errorf("negotiated protocol = %q, want the handshake era (empty)", got)
+	}
+	if name, _ := c.ServerInfo(); name != "strict-mcp" {
+		t.Errorf("ServerInfo name = %q, want strict-mcp", name)
+	}
+	// The child must still be alive and serving: a probe that killed it would
+	// leave this failing even though Start had already returned.
+	tools, err := c.ListTools(ctx)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name != "echo" {
+		t.Errorf("tools = %+v, want the single echo tool", tools)
+	}
+	if stats := c.Stats(); stats.LastError != "" {
+		t.Errorf("LastError = %q, want a clean handshake to leave none", stats.LastError)
+	}
+}
+
 func TestWithStatelessMetaBoundaryMatrix(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -270,6 +309,51 @@ func runStatelessHelper() {
 			// Covers initialize and ping: both are gone in this revision, and
 			// a client that still calls them must see the failure.
 			replyErr(req.ID, -32601, "method not found: "+req.Method)
+		}
+	}
+	os.Exit(0)
+}
+
+// runStrictLegacyHelper is a handshake-era server that enforces the lifecycle
+// the way the strictest real ones do: anything before initialize and it exits,
+// taking the stdio transport with it. A client that probes for MCP 2.0 ahead
+// of the handshake gets a dead child and no way back.
+func runStrictLegacyHelper() {
+	initialized := false
+	sc := bufio.NewScanner(os.Stdin)
+	sc.Buffer(make([]byte, 64*1024), maxLineBytes)
+	for sc.Scan() {
+		var req struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if json.Unmarshal(sc.Bytes(), &req) != nil {
+			continue
+		}
+		if !initialized && req.Method != "initialize" {
+			os.Exit(1) // lifecycle violation — drop the transport
+		}
+		if len(req.ID) == 0 || string(req.ID) == "null" {
+			continue // notification (notifications/initialized)
+		}
+		switch req.Method {
+		case "initialize":
+			initialized = true
+			reply(req.ID, map[string]any{
+				"protocolVersion": handshakeProtocolVersion,
+				"capabilities":    map[string]any{"tools": map[string]any{}},
+				"serverInfo":      map[string]any{"name": "strict-mcp", "version": "1.0.0"},
+			})
+		case "tools/list":
+			reply(req.ID, map[string]any{"tools": []map[string]any{
+				{"name": "echo", "description": "echoes", "inputSchema": map[string]any{"type": "object"}},
+			}})
+		default:
+			data, _ := json.Marshal(map[string]any{
+				"jsonrpc": "2.0", "id": req.ID,
+				"error": map[string]any{"code": -32601, "message": "method not found"},
+			})
+			fmt.Println(string(data))
 		}
 	}
 	os.Exit(0)

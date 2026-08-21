@@ -5,12 +5,14 @@ configured server command, settle the protocol era once, then `tools/list` / <!-
 `tools/call` / liveness probe. Resources, prompts, and sampling are <!-- docref:ignore -->
 intentionally out of scope.
 
-Two eras are spoken, decided per server at initialization:
+Two eras are spoken, decided per server at initialization. **`initialize` is
+always the first thing on the wire**; `server/discover` runs only after it
+fails (see the invariants below — the order is a safety property):
 
 | Era | Detection | Per request |
 |---|---|---|
-| **2026-07-28** ("MCP 2.0") | `server/discover` answers and lists the revision | `params._meta` carries protocolVersion + clientInfo + clientCapabilities; `ping` → `server/discover` | <!-- docref:ignore -->
-| 2024-11-05 … 2025-06-18 | `server/discover` is "method not found" | `initialize` + `notifications/initialized` pinned the version; params unchanged | <!-- docref:ignore -->
+| 2024-11-05 … 2025-06-18 | `initialize` succeeds | `initialize` + `notifications/initialized` pinned the version; params unchanged | <!-- docref:ignore -->
+| **2026-07-28** ("MCP 2.0") | `initialize` fails, then `server/discover` answers and lists the revision | `params._meta` carries protocolVersion + clientInfo + clientCapabilities; `ping` → `server/discover` | <!-- docref:ignore -->
 
 ## Entry points
 
@@ -33,11 +35,22 @@ Two eras are spoken, decided per server at initialization:
   (stdin close → SIGTERM group → grace → SIGKILL).
 - Server-initiated requests answer "method not found"; fold recent stderr into
   init errors so first-run OAuth URLs surface to operators.
-- **Invariant**: the `server/discover` probe is detection, not a call — its <!-- docref:ignore -->
-  failure is the expected answer from a handshake-era server, so it goes
-  through `probe` (not `roundTrip`) and never lands in `Stats().LastError`.
-  It is bounded to half of `initTimeout` so a server that silently drops
-  unknown methods cannot starve the initialize fallback.
+- **Invariant — nothing precedes `initialize`.** A handshake-era server owns a
+  lifecycle in which initialize must come first, and some enforce it by
+  dropping the transport rather than answering "method not found". On stdio a
+  dropped transport is a dead child, so a pre-initialize probe would leave
+  nothing to fall back onto — and since every respawn re-runs detection, such
+  a server would be permanently unusable. A 2.0 server has no lifecycle to
+  violate and must answer an unknown method, so it absorbs a stray
+  `initialize` harmlessly. Hence: older era first, always. (The native Kotlin
+  client probes in the opposite order on purpose — HTTP has no shared
+  transport to lose, and that direction is what the spec recommends there.)
+- **Invariant**: both era attempts are detection, not calls — a failure is an
+  expected answer, so both go through `probe` (not `roundTrip`) and neither
+  lands in `Stats().LastError` while the other era still might answer. The
+  failure is counted once, in `handshake`, when both have been ruled out.
+  `discover` is bounded to half of `initTimeout` so a server that silently
+  drops unknown methods cannot burn the rest of the budget.
 - An MRTR `input_required` result is an error, not an empty tool output: this
   client declares no sampling/elicitation/roots capability, so it names the
   capability the server asked for instead of rendering nothing.

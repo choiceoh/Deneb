@@ -132,6 +132,12 @@ class McpClient(
      * not found". A failed probe is the expected answer from the older era —
      * never an error to report — so the handshake below is what surfaces a
      * genuinely unreachable or broken server.
+     *
+     * Probing first is safe here because each request is its own POST: a
+     * strict server that rejects anything before `initialize` costs one 4xx,
+     * and the handshake that follows opens a fresh request. (The gateway's
+     * stdio client deliberately detects in the opposite order — there a
+     * rejection can take the shared transport, and the child process with it.)
      */
     suspend fun connect() {
         if (discoverStatelessServer()) return

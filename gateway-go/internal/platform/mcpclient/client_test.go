@@ -284,7 +284,7 @@ func TestChildEnvAllowlist(t *testing.T) {
 // "mcp-helper" argv flag it acts as a fake MCP server over stdio
 // (newline-delimited JSON-RPC).
 func TestHelperProcess(t *testing.T) {
-	isHelper, slowInit, authHint, stateless := false, false, false, false
+	isHelper, slowInit, authHint, stateless, strictLegacy := false, false, false, false, false
 	termFile := ""
 	for _, arg := range os.Args {
 		switch {
@@ -292,6 +292,8 @@ func TestHelperProcess(t *testing.T) {
 			isHelper = true
 		case arg == "stateless":
 			stateless = true
+		case arg == "strict-legacy":
+			strictLegacy = true
 		case arg == "slow-init":
 			slowInit = true
 		case arg == "auth-hint":
@@ -306,6 +308,12 @@ func TestHelperProcess(t *testing.T) {
 	if stateless {
 		// MCP 2026-07-28 server — see runStatelessHelper in stateless_test.go.
 		runStatelessHelper()
+		return
+	}
+	if strictLegacy {
+		// Handshake-era server that enforces its lifecycle by dying — see
+		// runStrictLegacyHelper in stateless_test.go.
+		runStrictLegacyHelper()
 		return
 	}
 	if authHint {
