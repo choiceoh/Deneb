@@ -3,7 +3,7 @@ package webtools
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/browseops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/web"
 )
@@ -32,7 +32,7 @@ func Register(registry toolport.ToolRegistrar, spill tooldeps.SpilloverStore) {
 			"공개 정적 페이지는 web이 더 빠르니 web 먼저. 읽기 전용(클릭·입력 없음)·http(s)만. " +
 			"로그인이 풀려 있으면 운영자에게 noVNC 재로그인(scripts/browser/start-browser-sidecar.sh view)을 안내하라.",
 		InputSchema: schema.BrowseToolSchema(),
-		Fn:          tools.ToolBrowse(),
+		Fn:          browseops.ToolBrowse(),
 		Deferred:    true,
 	})
 }

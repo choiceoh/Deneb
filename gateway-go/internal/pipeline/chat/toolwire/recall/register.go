@@ -3,14 +3,14 @@ package recall
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/recallops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
 // RegisterPolarisTools registers the unified Polaris tool (search/describe/expand).
 // Called separately because the store and localAI are not part of CoreToolDeps.
-func RegisterPolarisTools(registry toolport.ToolRegistrar, store *polaris.Store, localAI tools.LocalAIFunc) {
+func RegisterPolarisTools(registry toolport.ToolRegistrar, store *polaris.Store, localAI recallops.LocalAIFunc) {
 	if store == nil {
 		return
 	}
@@ -23,7 +23,7 @@ func RegisterPolarisTools(registry toolport.ToolRegistrar, store *polaris.Store,
 			"expand(특정 summary_id 원문 복원, question 추가 시 LLM이 원문 기반 답변). " +
 			"`<recall-context>` 자동 주입은 첫 턴 cue 기반 preflight 한 번뿐이므로, 턴 도중 새 회상이 필요하면 이 도구를 직접 호출하라.",
 		InputSchema: schema.PolarisToolSchema(),
-		Fn:          tools.ToolPolaris(store, localAI),
+		Fn:          recallops.ToolPolaris(store, localAI),
 	})
 }
 
@@ -45,6 +45,6 @@ func RegisterKnowledgeTool(registry toolport.ToolRegistrar, router *knowledge.Ro
 			"op=record(wiki에 큐레이션 페이지 작성·갱신). " +
 			"polaris(현재 세션 회상)·graphify(개념 그래프)는 별개 도구로 분리됨 — paradigm이 다름.",
 		InputSchema: schema.KnowledgeToolSchema(),
-		Fn:          tools.ToolKnowledge(router),
+		Fn:          recallops.ToolKnowledge(router),
 	})
 }

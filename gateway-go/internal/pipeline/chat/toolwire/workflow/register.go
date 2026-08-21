@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/workflowops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 )
 
@@ -17,8 +17,8 @@ type ToolSet struct {
 // DefaultToolSet wires the production workflow tool implementations.
 func DefaultToolSet() ToolSet {
 	return ToolSet{
-		Goal:       tools.ToolGoal(),
-		Blackboard: tools.ToolBlackboard(),
+		Goal:       workflowops.ToolGoal(),
+		Blackboard: workflowops.ToolBlackboard(),
 	}
 }
 
@@ -55,11 +55,11 @@ func RegisterTools(registry toolport.ToolRegistrar, set ToolSet) {
 // NewGoalGlanceFunc builds the ambient standing-goal glance for the dynamic
 // system-prompt block.
 func NewGoalGlanceFunc() func(ctx context.Context, sessionKey string) string {
-	return tools.NewGoalGlanceFunc()
+	return workflowops.NewGoalGlanceFunc()
 }
 
 // HandleGoalCommand processes the /goal slash command against the process goal
 // store.
 func HandleGoalCommand(sessionKey, args string, respond func(text string)) {
-	tools.HandleGoalCommand(sessionKey, args, respond)
+	workflowops.HandleGoalCommand(sessionKey, args, respond)
 }
