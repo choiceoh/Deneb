@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/groupwareops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/phoneops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/sessionops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 )
@@ -250,14 +251,14 @@ func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDe
 		Name:        "sessions",
 		Description: "Sessions: list / history / search / send — other sessions' message logs, transcript keyword search, cross-session messaging",
 		InputSchema: schema.SessionsToolSchema(),
-		Fn:          runtimeops.ToolSessions(d),
+		Fn:          sessionops.ToolSessions(d),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "sessions_spawn",
 		Description: "Spawn a sub-agent to work in parallel — use for long tasks, research, or when the user is waiting. Faster than doing it yourself",
 		InputSchema: schema.SessionsSpawnToolSchema(),
-		Fn:          runtimeops.ToolSessionsSpawn(d),
+		Fn:          sessionops.ToolSessionsSpawn(d),
 	})
 	// Deferred (2026-07-09): the Sub-Agents prompt section tells the model NOT to
 	// poll with subagents — child completions auto-deliver via the notify relay
@@ -268,7 +269,7 @@ func RegisterSessionTools(registry toolport.ToolRegistrar, d *tooldeps.SessionDe
 		Name:        "subagents",
 		Description: "Monitor and control sub-agents: list status, steer with messages, or kill. Defaults to list",
 		InputSchema: schema.SubagentsToolSchema(),
-		Fn:          runtimeops.ToolSubagents(d),
+		Fn:          sessionops.ToolSubagents(d),
 		Deferred:    true,
 	})
 }
