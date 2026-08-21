@@ -67,6 +67,7 @@ func ToolWiki(d *tooldeps.WikiDeps, workspaceDir string) toolport.ToolFunc {
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
 		}
+		p.Action = normalizeWikiAction(p.Action)
 
 		if d.Store == nil {
 			return "위키가 비활성 상태입니다. DENEB_WIKI_ENABLED=true 로 활성화하세요.", nil

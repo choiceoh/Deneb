@@ -82,7 +82,7 @@ func TestBoundaryToolPolarisRejectsMalformedAndUnknownActions(t *testing.T) {
 	if _, err := tool(context.Background(), json.RawMessage(`{`)); err == nil {
 		t.Fatal("malformed input accepted")
 	}
-	for _, input := range []string{`{}`, `{"action":""}`, `{"action":"unknown"}`, `{"action":"SEARCH"}`} {
+	for _, input := range []string{`{}`, `{"action":""}`, `{"action":"unknown"}`, `{"action":"LOOKUP"}`} {
 		got, err := tool(context.Background(), json.RawMessage(input))
 		if err != nil {
 			t.Fatalf("input %s: %v", input, err)
@@ -90,5 +90,12 @@ func TestBoundaryToolPolarisRejectsMalformedAndUnknownActions(t *testing.T) {
 		if !strings.Contains(got, "search, describe, expand") {
 			t.Fatalf("input %s output = %q", input, got)
 		}
+	}
+	got, err := tool(context.Background(), json.RawMessage(`{"action":"SEARCH"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "query") {
+		t.Fatalf("SEARCH alias did not reach search: %q", got)
 	}
 }

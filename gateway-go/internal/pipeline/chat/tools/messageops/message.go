@@ -58,6 +58,7 @@ func ToolMessage() toolport.ToolFunc {
 		if err := jsonutil.UnmarshalInto("message params", input, &p); err != nil {
 			return "", err
 		}
+		p.Action = normalizeMessageAction(p.Action)
 		if p.Action == "" {
 			p.Action = "send"
 		}

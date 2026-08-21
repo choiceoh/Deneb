@@ -24,7 +24,7 @@ func ToolPolaris(store *polaris.Store, localAI LocalAIFunc) toolport.ToolFunc {
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
 		}
-		switch p.Action {
+		switch normalizePolarisAction(p.Action) {
 		case "search":
 			return searchFn(ctx, input)
 		case "describe":

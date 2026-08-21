@@ -42,6 +42,7 @@ func ToolCron(d *tooldeps.ChronoDeps) toolport.ToolFunc {
 		if err := jsonutil.UnmarshalInto("cron params", input, &p); err != nil {
 			return "", err
 		}
+		p.Action = normalizeCronAction(p.Action)
 
 		svc := d.Service
 

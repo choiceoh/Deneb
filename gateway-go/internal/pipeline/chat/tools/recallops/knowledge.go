@@ -22,7 +22,8 @@ import (
 func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			Op string `json:"op"`
+			Op     string `json:"op"`
+			Action string `json:"action"`
 
 			// recall
 			Query   string   `json:"query"`
@@ -50,8 +51,12 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 		if router == nil {
 			return "", fmt.Errorf("knowledge router is not configured")
 		}
+		op := normalizeKnowledgeOp(p.Op)
+		if op == "" {
+			op = normalizeKnowledgeOp(p.Action)
+		}
 
-		switch p.Op {
+		switch op {
 		case "recall":
 			layers := make([]knowledge.Layer, 0, len(p.Sources))
 			for _, source := range p.Sources {
@@ -77,7 +82,7 @@ func ToolKnowledge(router *knowledge.Router) toolport.ToolFunc {
 				Importance: p.Importance,
 			})
 		default:
-			return "", fmt.Errorf("unknown knowledge op %q (expected recall|read|record)", p.Op)
+			return "", fmt.Errorf("unknown knowledge op %q (expected recall|read|record)", op)
 		}
 	}
 }
