@@ -214,6 +214,26 @@ func TestToolWrite_createsParentDir(t *testing.T) {
 
 // ─── ToolEdit ───────────────────────────────────────────────────────────────
 
+func TestToolEditAcceptsPathAndOldTextAliases(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "note.txt")
+	if err := os.WriteFile(path, []byte("hello world"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustCallTool(t, ToolEdit(tmp), map[string]any{
+		"path":     path,
+		"old_text": "hello",
+		"new_text": "hi",
+	})
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "hi world" {
+		t.Fatalf("alias edit did not apply: %q", got)
+	}
+}
+
 func TestToolEditReplacesTextAndWritesFile(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "f.txt")

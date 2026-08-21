@@ -28,6 +28,11 @@ type verifyFinding struct {
 	Fix *verifyFix `json:"fix,omitempty"`
 }
 
+// wikiVerifyMisclassMaxTokens budgets the category-verdict JSON array. 2048
+// was eaten by residual reasoning on dual-mode models (empty content,
+// finish_reason=length) even with thinking disabled.
+const wikiVerifyMisclassMaxTokens = 8192
+
 // verifyFix is the structured, auto-applicable correction attached to a
 // high-confidence verifyFinding. Conservative by construction: only the two
 // safe, reversible (git-recoverable) actions are expressible.
@@ -525,7 +530,7 @@ JSON 배열만 반환. 다른 텍스트 없이.
 형식: [{"path":"...", "currentCategory":"...", "correctCategory":"...", "confidence":"high|medium|low", "reason":"..."}]`,
 		strings.Join(Categories, ", "), strings.Join(lines, "\n"))
 
-	req := wd.llmRequest("You are a wiki category validator. Respond only with a JSON array.", prompt, 2048)
+	req := wd.llmRequest("You are a wiki category validator. Respond only with a JSON array.", prompt, wikiVerifyMisclassMaxTokens)
 	// Strict-JSON one-shot: disable thinking so the output budget goes to the
 	// verdict array, not chain-of-thought. When server wiring already attached a
 	// chat_template_kwargs off-switch, do not also set Thinking{disabled}: the

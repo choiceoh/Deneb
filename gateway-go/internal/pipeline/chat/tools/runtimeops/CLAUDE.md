@@ -19,9 +19,9 @@ session 상태는 주입된 infra/domain service가 소유한다.
   `observeops/` and is wired via `server/toolbind/observebind`.
 - `browser.go`의 `ToolBrowser`는 agent-facing wrapper만 소유한다. Page Agent
   bridge client와 전자결재 enrichment는 `platform/browserbridge`가 소유한다.
-- `phone_action.go`/`phone.go`는 phone tool 검증·표현을 소유하고, native app
-  dispatch 계약(`PhoneActionFunc`, `ErrPhoneActionUnconfirmed`)은 `tooldeps`가
-  소유한다.
+- Phone tools (`phone_read`/`phone_write`) live in sibling `tools/phoneops`.
+  Native app dispatch (`PhoneActionFunc`, `ErrPhoneActionUnconfirmed`) stays
+  on `tooldeps`.
 - `gateway.go`의 `GatewayDeps`, `ToolGatewayWithDeps`가 status,
   config, restart, update approval 흐름을 소유한다.
 

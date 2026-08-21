@@ -21,6 +21,26 @@ import (
 // RegisterCoreTools populates the tool registrar with all core agent tools.
 func RegisterCoreTools(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	core.Register(registry, deps)
+	ops.RegisterRuntimeOps(registry, ops.RuntimeOpsDeps{
+		WorkspaceDir:   deps.WorkspaceDir,
+		GatewayVersion: deps.GatewayVersion,
+		ObserveTool:    deps.ObserveTool,
+		Fleet:          deps.Fleet,
+		Browser:        deps.Browser,
+		WikiStore:      deps.Wiki.Store,
+		SpilloverStore: deps.SpilloverStore,
+	})
+	ops.RegisterProcessTools(registry, &deps.Process)
+	webtools.Register(registry, deps.SpilloverStore)
+	ops.RegisterSessionTools(registry, &deps.Sessions)
+	ops.RegisterHeartbeatTool(registry)
+	media.RegisterMediaTools(registry, deps.WorkspaceDir, deps.SpilloverStore)
+	ops.RegisterPhoneTools(registry, deps.PhoneActionSender)
+	ops.RegisterWorkstationTool(registry, ops.WorkstationDeps{
+		Send: deps.WorkstationCommandSender,
+		Hint: deps.WorkstationUsageHint,
+	})
+	media.RegisterExtractionTools(registry, deps.AsrHotwords)
 	workflow.Register(registry)
 	domain.Register(registry, deps)
 	chrono.Register(registry, deps)

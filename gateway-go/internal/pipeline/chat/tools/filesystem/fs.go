@@ -75,16 +75,39 @@ func ToolWrite(defaultDir string) toolport.ToolFunc {
 // --- Edit tool ---
 
 // editParams is the edit tool's input payload.
+//
+// Canonical names are file_path / old_string / new_string. The Path / OldText /
+// NewText / File fields accept the aliases models keep sending (path, old_text,
+// new_text, file) so a schema mismatch is not a 100% error-rate tool.
 type editParams struct {
 	FilePath   string      `json:"file_path"`
+	Path       string      `json:"path"`
+	File       string      `json:"file"`
 	OldString  string      `json:"old_string"`
+	OldText    string      `json:"old_text"`
 	NewString  string      `json:"new_string"`
+	NewText    string      `json:"new_text"`
 	ReplaceAll bool        `json:"replace_all"`
 	Regex      bool        `json:"regex"`
 	Line       int         `json:"line"`
 	Anchor     string      `json:"anchor"`
 	AnchorEnd  string      `json:"anchor_end"`
 	Edits      []batchEdit `json:"edits"`
+}
+
+func (p *editParams) normalizeAliases() {
+	if p.FilePath == "" {
+		p.FilePath = p.Path
+	}
+	if p.FilePath == "" {
+		p.FilePath = p.File
+	}
+	if p.OldString == "" {
+		p.OldString = p.OldText
+	}
+	if p.NewString == "" {
+		p.NewString = p.NewText
+	}
 }
 
 // ToolEdit builds the workspace file-edit tool.
@@ -97,6 +120,7 @@ func ToolEdit(defaultDir string) toolport.ToolFunc {
 		if err := jsonutil.UnmarshalInto("edit params", input, &p); err != nil {
 			return "", err
 		}
+		p.normalizeAliases()
 		if p.FilePath == "" {
 			return "", fmt.Errorf("file_path is required")
 		}

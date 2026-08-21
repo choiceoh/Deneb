@@ -5,10 +5,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/filesystem"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/surface"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/ops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/webtools"
 )
 
 // RegisterFileTools registers the workspace file read/write/edit/grep surface.
@@ -33,7 +30,7 @@ func RegisterFileTools(registry toolport.ToolRegistrar, workspaceDir string, ext
 	// edits are rare. read/write/grep stay eager; an editing turn fetches this.
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "edit",
-		Description: "Edit one workspace file after reading it: pass file_path plus exactly one mode: old_string+new_string (exact unique text; add replace_all/line/regex only when needed), anchor+new_string (from read hashes=true, whole-line/range replacement), or edits=[{old_string,new_string}] for an all-or-nothing batch. Use write for brand-new or whole-file rewrites.",
+		Description: "Edit one file under the workspace after reading it (skill catalogs, the git repo, and ~/.deneb are out of reach — do not retry those paths). Pass file_path (not path/file) plus exactly one mode: old_string+new_string (exact unique text; add replace_all/line/regex only when needed), anchor+new_string (from read hashes=true, whole-line/range replacement), or edits=[{old_string,new_string}] for an all-or-nothing batch. Use write for brand-new or whole-file rewrites.",
 		InputSchema: schema.EditToolSchema(),
 		Fn:          filesystem.ToolEdit(workspaceDir),
 		Deferred:    true,
@@ -122,8 +119,10 @@ func RegisterOfficeTool(registry toolport.ToolRegistrar, workspaceDir string) {
 	})
 }
 
-// RegisterCoreTools populates the tool registrar with all core agent tools.
-// It delegates to domain-specific Register*Tools functions.
+// Register populates the workspace + knowledge-surface tools (files, graph,
+// office, codesearch, message, research/workfeed/market/org). Host operations
+// (gateway/observe/fleet/exec/phone/media/web) register from toolwire/wire so
+// this package no longer co-changes with those clusters.
 func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 	// Extra read-only roots outside the workspace: skill catalogs plus the
 	// memory root (capture originals referenced by oversized-document digests).
@@ -132,29 +131,10 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 		extraReadRoots = append(append([]string(nil), extraReadRoots...), deps.MemoryDir)
 	}
 	RegisterFileTools(registry, deps.WorkspaceDir, extraReadRoots...)
-	ops.RegisterRuntimeOps(registry, ops.RuntimeOpsDeps{
-		WorkspaceDir:   deps.WorkspaceDir,
-		GatewayVersion: deps.GatewayVersion,
-		ObserveTool:    deps.ObserveTool,
-		Fleet:          deps.Fleet,
-		Browser:        deps.Browser,
-		WikiStore:      deps.Wiki.Store,
-		SpilloverStore: deps.SpilloverStore,
-	})
 	RegisterGraphTool(registry, deps.WorkspaceDir)
 	RegisterCodeSearchTool(registry, deps.WorkspaceDir)
 	RegisterOfficeTool(registry, deps.WorkspaceDir)
-	ops.RegisterProcessTools(registry, &deps.Process)
-	webtools.Register(registry, deps.SpilloverStore)
-	ops.RegisterSessionTools(registry, &deps.Sessions)
 	RegisterChronoTools(registry)
-	ops.RegisterHeartbeatTool(registry)
-	media.RegisterMediaTools(registry, deps.WorkspaceDir, deps.SpilloverStore)
-	ops.RegisterPhoneTools(registry, deps.PhoneActionSender)
-	ops.RegisterWorkstationTool(registry, ops.WorkstationDeps{
-		Send: deps.WorkstationCommandSender,
-		Hint: deps.WorkstationUsageHint,
-	})
 
 	// Research panel: fan a question out to every healthy model in parallel
 	// (deep-research skill). Deferred — only deliberate deep research needs it,
@@ -182,8 +162,6 @@ func Register(registry toolport.ToolRegistrar, deps *tooldeps.CoreToolDeps) {
 			Deferred:    true,
 		})
 	}
-
-	media.RegisterExtractionTools(registry, deps.AsrHotwords)
 
 	// Market quotes: same cache as the miniapp 오늘 dashboard (원/달러·코스피·
 	// WTI·구리, 10m TTL). Deferred; nil = dashboard cache not wired.

@@ -107,7 +107,7 @@ var runtimeErrorImpactObservationWindow = runtimeErrorImpactQuietTargetHours * t
 
 // externalFaultPattern matches transient/external faults that are NOT source
 // defects — they must never become code candidates.
-var externalFaultPattern = regexp.MustCompile(`(?i)\b(429|rate.?limit|EOF|connection refused|connection reset|broken pipe|context canceled|context deadline|deadline exceeded|timed? ?out|timeout|unavailable|no such host|i/o timeout|TLS|temporarily|throttl)\b`)
+var externalFaultPattern = regexp.MustCompile(`(?i)\b(429|rate.?limit|EOF|connection refused|connection reset|broken pipe|context canceled|context deadline|deadline exceeded|timed? ?out|timeout|unavailable|no such host|i/o timeout|TLS|temporarily|throttl|upstream unreachable|err_name_not_resolved|server misbehaving)\b`)
 
 // Signature normalization: collapse the variable parts of an error message so
 // the same defect firing with different ids/numbers/paths folds into one key.
@@ -146,7 +146,12 @@ var observeOnlyPattern = regexp.MustCompile(`(?i)\(observe.?only\)|\bobserve.?on
 // observeOnlyPattern. Checked on the message only: `error` attrs carry the
 // underlying failure text, where these words would be coincidental.
 func isObserveOnlySignal(line observe.LogLine) bool {
-	return observeOnlyPattern.MatchString(line.Msg)
+	if observeOnlyPattern.MatchString(line.Msg) {
+		return true
+	}
+	// Executor bookkeeping (Info): a tool_result error is not a runtime defect.
+	// Exact message only — do not infer from nearby wording.
+	return line.Msg == "tool complete"
 }
 
 func isExternalFault(line observe.LogLine) bool {
