@@ -14,7 +14,8 @@
   `ToolGrep`가 workspace 파일 경계를 소유한다.
 - `runtimeops/exec.go`의 `ToolExec`, `ToolProcess`가 실행 표면을 소유한다.
   `sessionops/`는 `sessions`/`sessions_spawn`/`subagents`, `fetchops/`는
-  `fetch_tools`, `phoneops/`는 `phone_read`/`phone_write`를 소유한다.
+  `fetch_tools`, `phoneops/`는 `phone_read`/`phone_write`, `gatewayops/`는
+  `gateway`/`heartbeat_update`를 소유한다.
 - `artifact/`는 chart/diagram/file/media 결과물, `document/`는 문서 추출,
   `schedule/`은 calendar/todo, `mailarchive/`는 archive 조회 구현이다.
 - `groupwareops/`는 Amaranth10 전자결재·게시판·ERP 원장 조회와

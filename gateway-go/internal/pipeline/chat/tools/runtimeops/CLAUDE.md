@@ -22,8 +22,8 @@ session 상태는 주입된 infra/domain service가 소유한다.
 - Phone tools (`phone_read`/`phone_write`) live in sibling `tools/phoneops`.
   Native app dispatch (`PhoneActionFunc`, `ErrPhoneActionUnconfirmed`) stays
   on `tooldeps`.
-- `gateway.go`의 `GatewayDeps`, `ToolGatewayWithDeps`가 status,
-  config, restart, update approval 흐름을 소유한다.
+- Gateway self-management (`gateway`, `heartbeat_update`) lives in sibling
+  `tools/gatewayops`.
 
 ## 의존 방향과 불변조건
 
@@ -49,8 +49,7 @@ session 상태는 주입된 infra/domain service가 소유한다.
   `TestExecCacheClassificationPreservesCacheOnlyForReadOnlyStages`,
   `contracts_test.go`의 `TestToolExecFallbackValidationStructuredAndHints`가 두 실행
   경로의 안전성을 검증한다.
-- `fetch_tools` 검증은 `tools/fetchops`, session 검증은 `tools/sessionops`로 옮겼다.
-- `gateway_test.go`의 `TestGatewayConfigSetReturnsApprovalThenWritesOnConfirm`과
-  `TestGatewayConfirmedWithoutApprovalRejected`가 mutation 승인 계약을 확인한다.
+- `fetch_tools` 검증은 `tools/fetchops`, session 검증은 `tools/sessionops`,
+  gateway 검증은 `tools/gatewayops`로 옮겼다.
 
 `cd gateway-go && go test -count=1 ./internal/pipeline/chat/tools/runtimeops`
