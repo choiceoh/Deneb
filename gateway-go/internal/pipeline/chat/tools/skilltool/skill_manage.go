@@ -40,7 +40,7 @@ func ToolSkills(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSkillsD
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
 		}
-		switch p.Action {
+		switch normalizeSkillManageAction(p.Action) {
 		case "list":
 			return listFn(ctx, input)
 		case "create", "patch", "delete", "read", "list_files", "write_file", "remove_file":
@@ -77,6 +77,7 @@ func toolSkillManage(getSnapshot SkillsSnapshotProvider, workspaceDir, bundledSk
 		if err := jsonutil.UnmarshalInto("skill_manage params", input, &p); err != nil {
 			return "", err
 		}
+		p.Action = normalizeSkillManageAction(p.Action)
 		if p.Name == "" {
 			return "", fmt.Errorf("name is required")
 		}

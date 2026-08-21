@@ -92,7 +92,7 @@ func ToolCalendar(d *tooldeps.CalendarDeps) toolport.ToolFunc {
 		if err := json.Unmarshal(input, &p); err != nil {
 			return "", fmt.Errorf("parse input: %w", err)
 		}
-		switch strings.TrimSpace(p.Action) {
+		switch normalizeCalendarAction(p.Action) {
 		case "list", "":
 			return calActionList(ctx, d, p), nil
 		case "get":
