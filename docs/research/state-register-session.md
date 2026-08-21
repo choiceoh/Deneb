@@ -52,7 +52,7 @@ reads:
 - `gateway-go/internal/domain/session/manager.go:635` ApplyLifecycleEvent
 - `gateway-go/internal/domain/session/patch.go:143` ResetSession
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:72` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:256` killSession
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:256` killSession
 
 reads:
 
@@ -75,8 +75,8 @@ reads:
 - `gateway-go/internal/pipeline/chat/slash_dispatch.go:331` appendServerStatus
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:165` NewSubagentNotifier
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:371` buildNotifyItem
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:246` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:246` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:247` subagentsResult
 - `gateway-go/internal/runtime/server/server_rpc_session.go:360` configureSessionChatHandler
 - `gateway-go/internal/runtime/server/server_rpc_session.go:361` configureSessionChatHandler
 
@@ -123,21 +123,21 @@ reads:
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:375` buildNotifyItem
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:83` killOrphanedChildren
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:86` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:159` toolSessionsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:84` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:142` subagentsKill
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:145` subagentsKill
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:169` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:180` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:183` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:184` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:186` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:194` childLabel
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:208` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:234` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:292` resolveChildTarget
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:325` resolveChildTarget
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:159` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:84` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:142` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:145` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:169` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:180` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:183` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:184` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:186` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:194` childLabel
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:208` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:234` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:292` resolveChildTarget
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:325` resolveChildTarget
 - `gateway-go/internal/runtime/insights/engine.go:304` computeTopSessions
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:257` sessionsRecent
 - `gateway-go/internal/runtime/server/server.go:299` SessionSnapshot
@@ -152,8 +152,8 @@ reads:
 
 - `gateway-go/internal/domain/session/manager.go:334` evictStale
 - `gateway-go/internal/pipeline/chat/run_agent_config.go:334` resolveAgentRunLimits
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:152` toolSessionsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:152` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:163` toolSessionsList
 - `gateway-go/internal/runtime/insights/engine.go:207` filterSessions
 - `gateway-go/internal/runtime/insights/engine.go:308` computeTopSessions
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:258` sessionsRecent
@@ -164,7 +164,7 @@ reads:
 
 **writes**:
 
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:584` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:584` ToolSessionsSpawn
 
 reads:
 
@@ -173,10 +173,10 @@ reads:
 - `gateway-go/internal/pipeline/chat/session_autotitle.go:146` autoTitleSessionAsync
 - `gateway-go/internal/pipeline/chat/session_autotitle.go:180` autoTitleSessionAsync
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:369` buildNotifyItem
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:82` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:191` childLabel
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:192` childLabel
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:302` resolveChildTarget
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:82` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:191` childLabel
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:192` childLabel
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:302` resolveChildTarget
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:262` sessionsRecent
 - `gateway-go/internal/runtime/server/server.go:303` SessionSnapshot
 - `gateway-go/internal/runtime/server/session_labels.go:90` snapshotSessionLabels
@@ -215,8 +215,8 @@ reads:
 - `gateway-go/internal/pipeline/autoreply/acp/context_injection.go:65` StartSubagentResultInjection
 - `gateway-go/internal/pipeline/autoreply/acp/context_injection.go:70` StartSubagentResultInjection
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:372` buildNotifyItem
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:228` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:228` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:229` subagentsResult
 - `gateway-go/internal/runtime/cronrunner/cron_agent_adapter.go:466` CollectDescendantOutputs
 - `gateway-go/internal/runtime/cronrunner/cron_agent_adapter.go:473` CollectDescendantOutputs
 
@@ -224,9 +224,9 @@ reads:
 
 **writes**:
 
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:572` ToolSessionsSpawn
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:578` ToolSessionsSpawn
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:580` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:572` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:578` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:580` ToolSessionsSpawn
 
 reads:
 
@@ -236,11 +236,11 @@ reads:
 - `gateway-go/internal/pipeline/chat/run_model.go:53` resolveModel
 - `gateway-go/internal/pipeline/chat/run_start.go:88` startAsyncRunWithAdmission
 - `gateway-go/internal/pipeline/chat/run_start.go:89` startAsyncRunWithAdmission
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:604` ToolSessionsSpawn
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:605` ToolSessionsSpawn
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:104` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:105` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:604` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:605` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:104` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:105` subagentsList
 - `gateway-go/internal/runtime/insights/engine.go:256` computeModelStats
 - `gateway-go/internal/runtime/insights/engine.go:306` computeTopSessions
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:261` sessionsRecent
@@ -283,15 +283,15 @@ reads:
 - `gateway-go/internal/domain/session/manager.go:636` ApplyLifecycleEvent
 - `gateway-go/internal/domain/session/patch.go:144` ResetSession
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:75` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:259` killSession
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:259` killSession
 
 reads:
 
 - `gateway-go/internal/domain/session/lifecycle.go:130` DeriveLifecycleSnapshot
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:377` buildNotifyItem
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:378` buildNotifyItem
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:93` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:94` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:93` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:94` subagentsList
 - `gateway-go/internal/runtime/insights/engine.go:321` computeTopSessions
 - `gateway-go/internal/runtime/insights/engine.go:322` computeTopSessions
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:265` sessionsRecent
@@ -317,12 +317,12 @@ reads:
 - `gateway-go/internal/domain/session/lifecycle.go:129` DeriveLifecycleSnapshot
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:73` killOrphanedChildren
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:74` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:96` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:221` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:222` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:257` killSession
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:258` killSession
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:95` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:96` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:221` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:222` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:257` killSession
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:258` killSession
 - `gateway-go/internal/runtime/insights/engine.go:212` filterSessions
 - `gateway-go/internal/runtime/insights/engine.go:212` filterSessions
 - `gateway-go/internal/runtime/insights/engine.go:213` filterSessions
@@ -338,7 +338,7 @@ reads:
 - `gateway-go/internal/domain/session/manager.go:617` ApplyLifecycleEvent
 - `gateway-go/internal/domain/session/patch.go:141` ResetSession
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:70` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:255` killSession
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:255` killSession
 
 reads:
 
@@ -358,23 +358,23 @@ reads:
 - `gateway-go/internal/pipeline/chat/slash_dispatch.go:217` buildSessionStatus
 - `gateway-go/internal/pipeline/chat/subagent/notifier.go:370` buildNotifyItem
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:66` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:163` toolSessionsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/sessions_tool.go:559` ToolSessionsSpawn
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:51` ToolSubagents
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:52` ToolSubagents
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:86` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:95` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:126` subagentsKill
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:141` subagentsKill
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:142` subagentsKill
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:161` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:179` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:180` subagentsSteer
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:219` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:229` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:240` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:247` subagentsResult
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:249` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:163` toolSessionsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/sessions_tool.go:559` ToolSessionsSpawn
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:51` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:52` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:86` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:95` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:126` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:141` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:142` subagentsKill
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:161` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:179` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:180` subagentsSteer
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:219` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:229` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:240` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:247` subagentsResult
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:249` subagentsResult
 - `gateway-go/internal/runtime/insights/engine.go:307` computeTopSessions
 - `gateway-go/internal/runtime/rpc/handler/agent/agent.go:170` agentStatus
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:259` sessionsRecent
@@ -406,9 +406,9 @@ reads:
 - `gateway-go/internal/pipeline/chat/slash_dispatch.go:304` sessionTokenLine
 - `gateway-go/internal/pipeline/chat/slash_dispatch.go:314` sessionTokenLine
 - `gateway-go/internal/pipeline/chat/slash_dispatch.go:319` sessionTokenLine
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:100` subagentsList
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:101` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:100` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:100` subagentsList
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:101` subagentsList
 - `gateway-go/internal/runtime/insights/engine.go:239` computeOverview
 - `gateway-go/internal/runtime/insights/engine.go:240` computeOverview
 - `gateway-go/internal/runtime/insights/engine.go:272` computeModelStats
@@ -431,7 +431,7 @@ reads:
 - `gateway-go/internal/domain/session/patch.go:149` ResetSession
 - `gateway-go/internal/domain/session/patch.go:202` ClearTokens
 - `gateway-go/internal/pipeline/chat/subagent_cleanup.go:77` killOrphanedChildren
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:261` killSession
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:261` killSession
 
 reads:
 
@@ -440,8 +440,8 @@ reads:
 - `gateway-go/internal/domain/session/manager.go:335` evictStale
 - `gateway-go/internal/domain/session/manager.go:346` evictStale
 - `gateway-go/internal/domain/session/manager.go:521` EnsureVisible
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
-- `gateway-go/internal/pipeline/chat/tools/runtimeops/subagents_tool.go:56` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:56` ToolSubagents
+- `gateway-go/internal/pipeline/chat/tools/sessionops/subagents_tool.go:56` ToolSubagents
 - `gateway-go/internal/runtime/insights/engine.go:211` filterSessions
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:248` sessionsRecent
 - `gateway-go/internal/runtime/rpc/handler/handlerminiapp/sessions/sessions.go:248` sessionsRecent
