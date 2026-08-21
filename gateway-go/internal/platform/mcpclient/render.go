@@ -3,6 +3,7 @@ package mcpclient
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
@@ -25,7 +26,12 @@ const maxErrorTextBytes = 2000
 //   - structuredContent (2025-06-18 spec) is used as the result when the
 //     content array rendered to nothing — servers SHOULD mirror it in text,
 //     so it is only a fallback, never a duplicate;
-//   - isError=true becomes a Go error with the rendered (bounded) text.
+//   - isError=true becomes a Go error with the rendered (bounded) text;
+//   - resultType="input_required" (2026-07-28 MRTR) becomes an explicit error:
+//     this client declares no sampling/elicitation/roots capability, so it
+//     cannot answer the server's input requests, and an interim result has no
+//     content to render. Saying so beats returning "" — which a model reads
+//     as "the tool ran and found nothing".
 func renderToolResult(name string, raw json.RawMessage) (string, error) {
 	var res struct {
 		Content []struct {
@@ -38,9 +44,19 @@ func renderToolResult(name string, raw json.RawMessage) (string, error) {
 		} `json:"content"`
 		StructuredContent json.RawMessage `json:"structuredContent"`
 		IsError           bool            `json:"isError"`
+		// resultType is absent on pre-2026-07-28 servers, which the spec says
+		// to read as "complete" — the zero value does exactly that.
+		ResultType    string `json:"resultType"`
+		InputRequests map[string]struct {
+			Method string `json:"method"`
+		} `json:"inputRequests"`
 	}
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return "", fmt.Errorf("mcpclient: tools/call result: %w", err)
+	}
+	if res.ResultType == resultTypeInputRequired {
+		return "", fmt.Errorf("mcp tool %s needs client input this gateway does not provide (%s)",
+			name, describeInputRequests(res.InputRequests))
 	}
 	var sb strings.Builder
 	textSubstance := false
@@ -88,4 +104,27 @@ func truncateRuneSafe(s string, max int) string {
 		return s
 	}
 	return textutil.TruncateBytes(s, max) + "… [truncated]"
+}
+
+// describeInputRequests names the capabilities an MRTR server asked for, so
+// the operator sees WHICH one is missing (sampling? elicitation? roots?)
+// rather than a bare "unsupported". Sorted for a stable error string.
+func describeInputRequests(requests map[string]struct {
+	Method string `json:"method"`
+},
+) string {
+	if len(requests) == 0 {
+		return "no input requests declared"
+	}
+	methods := make([]string, 0, len(requests))
+	for _, req := range requests {
+		if req.Method != "" {
+			methods = append(methods, req.Method)
+		}
+	}
+	if len(methods) == 0 {
+		return "no input requests declared"
+	}
+	sort.Strings(methods)
+	return strings.Join(methods, ", ")
 }

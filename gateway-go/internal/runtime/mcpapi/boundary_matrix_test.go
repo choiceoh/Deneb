@@ -993,7 +993,7 @@ func TestMCPConcurrentPureBoundaries(t *testing.T) {
 					errs <- fmt.Errorf("negotiated %q", got)
 					return
 				}
-				if len(ProtocolVersions()) != 3 {
+				if len(ProtocolVersions()) != 4 {
 					errs <- fmt.Errorf("protocol catalog changed length")
 					return
 				}

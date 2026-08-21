@@ -45,6 +45,37 @@ data class McpCallToolResult(
     val content: List<McpContent> = emptyList(),
     @SerialName("isError")
     val isError: Boolean = false,
+    /**
+     * MCP 2026-07-28. Absent on older servers, which the spec says to read as
+     * "complete" — null does exactly that. [RESULT_TYPE_INPUT_REQUIRED] means
+     * the server returned an MRTR interim result instead of a final one.
+     */
+    val resultType: String? = null,
+    /** The requests an [RESULT_TYPE_INPUT_REQUIRED] result wants answered. */
+    val inputRequests: Map<String, McpInputRequest>? = null,
+)
+
+/** One server-initiated request inside an MRTR interim result. */
+@Serializable
+data class McpInputRequest(
+    val method: String? = null,
+)
+
+/**
+ * The result of `server/discover` — MCP 2026-07-28's replacement for the
+ * `initialize` handshake as a version and capability probe.
+ */
+@Serializable
+data class McpDiscoverResult(
+    val supportedVersions: List<String> = emptyList(),
+    val capabilities: JsonObject? = null,
+    val instructions: String? = null,
+)
+
+/** The result of a handshake-era `initialize`. */
+@Serializable
+data class McpInitializeResult(
+    val protocolVersion: String? = null,
 )
 
 @Serializable

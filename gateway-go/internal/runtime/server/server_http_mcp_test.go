@@ -75,11 +75,13 @@ func TestMCPInitializeReturnsNegotiatedVersionAndToolList(t *testing.T) {
 		t.Errorf("capabilities missing tools: %v", result["capabilities"])
 	}
 
-	// An unsupported requested version negotiates down to our newest.
+	// An unsupported requested version negotiates down to the newest revision
+	// that still speaks initialize — NOT to 2026-07-28, which removed the
+	// handshake the client just used.
 	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"2099-01-01"}}`)
 	out = decodeMCP(t, rec)
-	if versions := mcpapi.ProtocolVersions(); out["result"].(map[string]any)["protocolVersion"] != versions[0] {
-		t.Errorf("negotiated version = %v, want %s", out["result"].(map[string]any)["protocolVersion"], versions[0])
+	if got := out["result"].(map[string]any)["protocolVersion"]; got != "2025-06-18" {
+		t.Errorf("negotiated version = %v, want 2025-06-18", got)
 	}
 
 	rec = postMCP(t, s, token, `{"jsonrpc":"2.0","id":3,"method":"tools/list"}`)

@@ -15,6 +15,15 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 
+/**
+ * A Model Context Protocol client over streamable HTTP.
+ *
+ * Two protocol eras are spoken, decided per server by [connect]: MCP
+ * 2026-07-28 ("MCP 2.0") is stateless — no handshake, no session, per-request
+ * `_meta` and mirrored headers — while everything older uses the `initialize`
+ * handshake. A `server/discover` probe tells them apart; the revision's
+ * specifics live in McpProtocol2026.kt.
+ */
 class McpClient(
     private val url: String,
     private val headers: Map<String, String>,
@@ -35,28 +44,57 @@ class McpClient(
     private var sessionId: String? = null
     private var requestId = 0
 
+    /**
+     * The revision settled by [connect]: null until then, then whatever the
+     * server agreed to. [PROTOCOL_VERSION_2026] switches every request to the
+     * stateless shape.
+     */
+    private var negotiatedProtocol: String? = null
+
     private fun nextId(): Int = ++requestId
 
-    private suspend fun sendRequest(method: String, params: kotlinx.serialization.json.JsonElement? = null): JsonRpcResponse {
+    private suspend fun sendRequest(
+        method: String,
+        params: kotlinx.serialization.json.JsonElement? = null,
+        protocolOverride: String? = null,
+    ): JsonRpcResponse {
+        // The override lets the discovery probe speak 2.0 before anything is
+        // negotiated — that request is how the negotiation happens.
+        val protocol = protocolOverride ?: negotiatedProtocol
+        val stateless = protocol == PROTOCOL_VERSION_2026
+        val effectiveParams = withStatelessMeta(params, protocol)
         val request = JsonRpcRequest(
             id = nextId(),
             method = method,
-            params = params,
+            params = effectiveParams,
         )
         val requestBody = json.encodeToString(JsonRpcRequest.serializer(), request)
 
         val response = client.post(url) {
             contentType(ContentType.Application.Json)
             header("Accept", "application/json, text/event-stream")
-            sessionId?.let { header("Mcp-Session-Id", it) }
+            // 2025-06-18 and newer expect the negotiated version on every
+            // request; 2026-07-28 additionally mirrors the method and the
+            // tool/resource name so gateways route without parsing the body.
+            protocol?.let { header(HEADER_PROTOCOL_VERSION, it) }
+            if (stateless) {
+                header(HEADER_MCP_METHOD, method)
+                mcpNameFor(effectiveParams)?.let { header(HEADER_MCP_NAME, encodeHeaderValue(it)) }
+            } else {
+                sessionId?.let { header("Mcp-Session-Id", it) }
+            }
             this@McpClient.headers.keys.forEach { key ->
                 header(key, this@McpClient.headers[key]!!)
             }
             setBody(requestBody)
         }
 
-        // Track session ID from response
-        response.headers["Mcp-Session-Id"]?.let { sessionId = it }
+        // Track session ID from response. 2026-07-28 removed protocol-level
+        // sessions, so a stateless server's header (if any) is ignored rather
+        // than echoed back.
+        if (!stateless) {
+            response.headers["Mcp-Session-Id"]?.let { sessionId = it }
+        }
 
         val responseText = response.bodyAsText()
 
@@ -84,9 +122,42 @@ class McpClient(
         throw McpException("No valid JSON-RPC response found in SSE stream")
     }
 
-    suspend fun initialize() {
+    /**
+     * Settles which protocol era this server speaks and makes the client ready
+     * to call it.
+     *
+     * MCP 2026-07-28 deleted the `initialize` handshake, so the era has to be
+     * detected rather than assumed: `server/discover` is the one method every
+     * 2.0 server must implement, and an older server answers it with "method
+     * not found". A failed probe is the expected answer from the older era —
+     * never an error to report — so the handshake below is what surfaces a
+     * genuinely unreachable or broken server.
+     */
+    suspend fun connect() {
+        if (discoverStatelessServer()) return
+        handshake()
+    }
+
+    /** Returns true when the server speaks the stateless revision. */
+    private suspend fun discoverStatelessServer(): Boolean {
+        val result = runCatching {
+            val response = sendRequest("server/discover", protocolOverride = PROTOCOL_VERSION_2026)
+            if (response.error != null) return false
+            val payload = response.result ?: return false
+            json.decodeFromJsonElement<McpDiscoverResult>(payload)
+        }.getOrNull() ?: return false
+
+        // A server may implement discover for a revision we do not speak; only
+        // a mutually supported one lets us go stateless.
+        if (PROTOCOL_VERSION_2026 !in result.supportedVersions) return false
+        negotiatedProtocol = PROTOCOL_VERSION_2026
+        return true
+    }
+
+    /** The pre-2026-07-28 path: `initialize` pins the version for the connection. */
+    private suspend fun handshake() {
         val params = buildJsonObject {
-            put("protocolVersion", JsonPrimitive("2024-11-05"))
+            put("protocolVersion", JsonPrimitive(HANDSHAKE_PROTOCOL_VERSION))
             put(
                 "capabilities",
                 buildJsonObject {},
@@ -103,6 +174,12 @@ class McpClient(
         if (response.error != null) {
             throw McpException("Initialize failed: ${response.error.message}")
         }
+        // Adopt whatever the server negotiated down to: from 2025-06-18 on, it
+        // has to ride the MCP-Protocol-Version header of every later request.
+        negotiatedProtocol = response.result
+            ?.let { runCatching { json.decodeFromJsonElement<McpInitializeResult>(it) }.getOrNull() }
+            ?.protocolVersion
+            ?: HANDSHAKE_PROTOCOL_VERSION
 
         // Send initialized notification (no id, no response expected)
         sendNotification("notifications/initialized")
@@ -117,6 +194,7 @@ class McpClient(
 
         client.post(url) {
             contentType(ContentType.Application.Json)
+            negotiatedProtocol?.let { header(HEADER_PROTOCOL_VERSION, it) }
             sessionId?.let { header("Mcp-Session-Id", it) }
             this@McpClient.headers.keys.forEach { key ->
                 header(key, this@McpClient.headers[key]!!)
@@ -146,6 +224,16 @@ class McpClient(
         }
         val result = response.result ?: return ""
         val callResult = json.decodeFromJsonElement<McpCallToolResult>(result)
+        if (callResult.resultType == RESULT_TYPE_INPUT_REQUIRED) {
+            // MRTR: the server wants sampling/elicitation/roots input before it
+            // can finish. This client declares no such capability, and an
+            // interim result has no content — so say that rather than return
+            // "", which reads as "the tool ran and found nothing".
+            throw McpException(
+                "Tool $name needs client input this app does not provide: " +
+                    describeInputRequests(callResult.inputRequests),
+            )
+        }
         if (callResult.isError) {
             val errorText = callResult.content.mapNotNull { it.text }.joinToString("\n")
             throw McpException("Tool error: $errorText")

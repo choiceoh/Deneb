@@ -8,7 +8,7 @@ import (
 
 func TestProtocolVersionsAndToolDefinitionsBoundary(t *testing.T) {
 	versions := ProtocolVersions()
-	if len(versions) == 0 || versions[0] != "2025-06-18" {
+	if len(versions) == 0 || versions[0] != protocolVersion2026 {
 		t.Fatalf("protocol versions = %v, want newest revision first", versions)
 	}
 	tools := ToolDefinitions()
