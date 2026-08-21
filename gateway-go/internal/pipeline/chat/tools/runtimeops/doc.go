@@ -1,6 +1,7 @@
-// Package runtimeops owns tools that inspect or control the live agent runtime:
-// command execution, sessions and subagents, gateway and fleet management,
-// and deferred tool-catalog activation. Phone tools live in sibling phoneops.
+// Package runtimeops owns command execution and managed-process control
+// (exec / process). Host wrappers (browser, fleet, solarflow, workstation)
+// live in sibling hostops; gateway self-management lives in gatewayops;
+// sessions live in sessionops; phone tools live in phoneops.
 //
 // Registration stays in toolreg; this package does not depend on its parent
 // tools package.

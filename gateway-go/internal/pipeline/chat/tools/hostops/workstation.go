@@ -7,7 +7,7 @@
 // re-validates the command (its command-bus parser drops anything malformed),
 // executes it, and surfaces a visible "화면 조정" nudge — so the model gets an
 // immediate success once the frame is published to a connected desktop.
-package runtimeops
+package hostops
 
 import (
 	"context"

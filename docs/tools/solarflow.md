@@ -88,7 +88,7 @@ through; otherwise a disambiguation list).
 |------|------|
 | `gateway-go/internal/platform/solarflow/solarflow.go` | Config, FromEnv, StatusLine, Run, dispatch, customer resolution |
 | `gateway-go/internal/platform/solarflow/format.go` | search and generic (array-capping) formatters |
-| `gateway-go/internal/pipeline/chat/tools/runtimeops/solarflow.go` | chat tool `ToolSolarflow` and action aliases |
+| `gateway-go/internal/pipeline/chat/tools/hostops/solarflow.go` | chat tool `ToolSolarflow` and action aliases |
 
 Schema source is `gateway-go/internal/pipeline/chat/toolwire/schema/tool_schemas.json`
 (`make tool-schemas`); registration is in

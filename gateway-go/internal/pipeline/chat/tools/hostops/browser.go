@@ -7,7 +7,7 @@
 //
 // Opt-in via DENEB_BROWSER_URL (+ DENEB_BROWSER_TOKEN). Unconfigured → calm
 // "off" message, same pattern as fleet.
-package runtimeops
+package hostops
 
 import (
 	"context"
