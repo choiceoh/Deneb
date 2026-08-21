@@ -2,10 +2,15 @@
 // Protocol (MCP) stdio transport: it spawns a configured server command and
 // speaks newline-delimited JSON-RPC 2.0 over the child's stdin/stdout.
 //
-// Scope is deliberately narrow (mirror of server_http_mcp.go's minimalism on
-// the serving side): initialize handshake, tools/list, tools/call, ping. No
+// Scope is deliberately narrow (mirror of the mcpapi package's minimalism on
+// the serving side): handshake, tools/list, tools/call, liveness probe. No
 // resources/prompts/sampling — server-initiated requests are answered with
 // "method not found" so a well-behaved server degrades gracefully.
+//
+// Two protocol eras are spoken, decided per server at initialization:
+// 2026-07-28 ("MCP 2.0") is stateless — no handshake, per-request `_meta` —
+// and everything older uses the initialize handshake. A `server/discover`
+// probe tells them apart; see stateless.go.
 //
 // The stdio transport (not streamable HTTP) is the deliberate choice for
 // external servers like Plaud's: their npx wrapper owns the OAuth dance and
@@ -47,8 +52,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
-// protocolVersion is the newest MCP spec revision this client speaks.
-const protocolVersion = "2025-06-18"
+// handshakeProtocolVersion is the revision offered in an initialize handshake:
+// 2026-07-28's direct predecessor, so a handshake-era server is met with the
+// newest revision it could possibly speak and negotiates down from there.
+// It is deliberately NOT the newest revision this client speaks — 2026-07-28
+// has no initialize, so reaching this constant already means the server is in
+// the handshake era (see stateless.go).
+const handshakeProtocolVersion = "2025-11-25"
 
 // restartBackoff is the minimum interval between respawn attempts after the
 // child process dies — prevents a crash-looping server from being re-exec'd
@@ -128,11 +138,15 @@ type Client struct {
 	initDone chan struct{}
 	initErr  error
 	// Handshake-reported identity (ServerInfo accessor).
-	serverName        string
-	serverVersion     string
-	listChangedLogged bool // one restart-hint log per spawn, spam-proof
-	lastError         string
-	lastErrorAt       time.Time
+	serverName    string
+	serverVersion string
+	// negotiatedProtocol is the revision settled on at initialization. Empty
+	// means the handshake era; protocolVersion2026 means every request must
+	// carry its own `_meta` (see stateless.go).
+	negotiatedProtocol string
+	listChangedLogged  bool // one restart-hint log per spawn, spam-proof
+	lastError          string
+	lastErrorAt        time.Time
 
 	calls      atomic.Uint64
 	callErrors atomic.Uint64
@@ -185,10 +199,16 @@ func (c *Client) Start(ctx context.Context) error {
 	return c.ensureReady(ctx)
 }
 
-// Ping round-trips the MCP ping method — a cheap liveness probe for health
-// surfaces and future consumers.
+// Ping round-trips a cheap liveness probe for health surfaces and future
+// consumers. 2026-07-28 removed the `ping` method — a POST that returns is
+// liveness enough — so a stateless server is probed with server/discover, the
+// cheapest method every 2.0 server MUST implement.
 func (c *Client) Ping(ctx context.Context) error {
 	if err := c.ensureReady(ctx); err != nil {
+		return err
+	}
+	if c.protocol() == protocolVersion2026 {
+		_, err := c.roundTrip(ctx, "server/discover", withStatelessMeta(nil, protocolVersion2026))
 		return err
 	}
 	_, err := c.roundTrip(ctx, "ping", nil)
@@ -208,6 +228,7 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	if err := c.ensureReady(ctx); err != nil {
 		return nil, err
 	}
+	protocol := c.protocol()
 	var out []ToolInfo
 	cursor := ""
 	seenCursors := map[string]bool{}
@@ -216,6 +237,7 @@ func (c *Client) ListTools(ctx context.Context) ([]ToolInfo, error) {
 		if cursor != "" {
 			params["cursor"] = cursor
 		}
+		params = withStatelessMeta(params, protocol)
 		raw, err := c.roundTrip(ctx, "tools/list", params)
 		if err != nil {
 			return nil, err
@@ -248,7 +270,8 @@ func (c *Client) CallTool(ctx context.Context, name string, args rawJSON) (strin
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
-	raw, err := c.roundTrip(ctx, "tools/call", map[string]any{"name": name, "arguments": args})
+	params := withStatelessMeta(map[string]any{"name": name, "arguments": args}, c.protocol())
+	raw, err := c.roundTrip(ctx, "tools/call", params)
 	if err != nil {
 		return "", err
 	}
@@ -330,7 +353,7 @@ func (c *Client) ensureReady(ctx context.Context) error {
 func (c *Client) initRun(gen int) {
 	ctx, cancel := context.WithTimeout(c.lifeCtx, initTimeout)
 	defer cancel()
-	name, version, err := c.handshake(ctx)
+	res, err := c.handshake(ctx)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -357,8 +380,9 @@ func (c *Client) initRun(gen int) {
 		// later RUNTIME death of this fully-initialized server (waiters
 		// have ready=true's fast path; nothing reads initDone once ready).
 		c.initDone = nil
-		c.serverName = name
-		c.serverVersion = version
+		c.serverName = res.serverName
+		c.serverVersion = res.serverVersion
+		c.negotiatedProtocol = res.protocol
 	}
 }
 
@@ -460,19 +484,53 @@ func (c *Client) spawnLocked() error {
 	return nil
 }
 
-// handshake performs initialize + notifications/initialized and returns the
-// server's reported identity. State recording is the caller's job (initRun),
-// under its generation check — a stale handshake must not overwrite a newer
-// spawn's ServerInfo.
-func (c *Client) handshake(ctx context.Context) (name, version string, err error) {
-	params := map[string]any{
-		"protocolVersion": protocolVersion,
-		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "deneb-gateway", "version": "1.0"},
+// handshake establishes what this server speaks and returns its identity.
+// State recording is the caller's job (initRun), under its generation check —
+// a stale handshake must not overwrite a newer spawn's ServerInfo.
+//
+// 2026-07-28 deleted the handshake this is named after, so the era has to be
+// detected rather than assumed. THE ORDER IS THE SAFETY PROPERTY:
+//
+//   - A handshake-era server owns a lifecycle in which initialize must come
+//     first. Some enforce it by dropping the transport, not by answering
+//     "method not found" — and on stdio a dropped transport is a dead child,
+//     so there would be nothing left alive to fall back onto. Probing that era
+//     first would make such a server permanently unusable: every respawn would
+//     re-run the probe and die again.
+//   - A 2026-07-28 server has no lifecycle to violate. It is stateless and
+//     MUST answer an unimplemented method with "method not found", so an
+//     initialize aimed at it costs exactly one dead request.
+//
+// So the older era goes first and sees precisely the traffic it saw before 2.0
+// existed; server/discover is the fallback, reached only once initialize has
+// already failed. (The spec offers discover as a stdio compatibility probe,
+// but only as a MAY — detecting in this direction is equally conformant and
+// strictly safer for the installed base.)
+func (c *Client) handshake(ctx context.Context) (handshakeResult, error) {
+	res, initErr := c.initializeHandshake(ctx)
+	if initErr == nil {
+		return res, nil
 	}
-	raw, err := c.roundTrip(ctx, "initialize", params)
+	if res, ok := c.discover(ctx); ok {
+		return res, nil
+	}
+	// Neither era answered. The initialize failure is the informative one —
+	// discover's is just "that method is missing too" — and this is the first
+	// point at which the failure is real, so it is also where it is counted.
+	return handshakeResult{}, c.noteCallError(initErr)
+}
+
+// initializeHandshake is the pre-2026-07-28 path: initialize +
+// notifications/initialized, pinning the version for the whole connection.
+func (c *Client) initializeHandshake(ctx context.Context) (handshakeResult, error) {
+	params := map[string]any{
+		"protocolVersion": handshakeProtocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": clientName, "version": clientVersion},
+	}
+	raw, err := c.probe(ctx, "initialize", params)
 	if err != nil {
-		return "", "", fmt.Errorf("mcpclient: initialize: %w", err)
+		return handshakeResult{}, fmt.Errorf("mcpclient: initialize: %w", err)
 	}
 	var init struct {
 		ProtocolVersion string `json:"protocolVersion"`
@@ -482,16 +540,19 @@ func (c *Client) handshake(ctx context.Context) (name, version string, err error
 		} `json:"serverInfo"`
 	}
 	if err := json.Unmarshal(raw, &init); err != nil {
-		return "", "", fmt.Errorf("mcpclient: initialize result: %w", err)
+		return handshakeResult{}, fmt.Errorf("mcpclient: initialize result: %w", err)
 	}
 	if err := c.send(map[string]any{"jsonrpc": "2.0", "method": "notifications/initialized"}); err != nil {
-		return "", "", err
+		return handshakeResult{}, err
 	}
 	c.logger.Info("mcp server initialized",
 		"server", init.ServerInfo.Name,
 		"serverVersion", init.ServerInfo.Version,
 		"protocolVersion", init.ProtocolVersion)
-	return init.ServerInfo.Name, init.ServerInfo.Version, nil
+	return handshakeResult{
+		serverName:    init.ServerInfo.Name,
+		serverVersion: init.ServerInfo.Version,
+	}, nil
 }
 
 // stopLocked is the single teardown path: it signals the child's process
@@ -665,6 +726,18 @@ func (c *Client) onNotification(method string) {
 
 // roundTrip sends a request and waits for its response or ctx expiry.
 func (c *Client) roundTrip(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return c.request(ctx, method, params, false)
+}
+
+// probe is roundTrip for a call whose failure is an expected ANSWER rather
+// than a fault — the 2.0 era detection against a handshake-era server. Its
+// "method not found" is kept out of Stats' last-error, which operators read as
+// "this server is broken".
+func (c *Client) probe(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return c.request(ctx, method, params, true)
+}
+
+func (c *Client) request(ctx context.Context, method string, params any, quiet bool) (json.RawMessage, error) {
 	c.calls.Add(1)
 	c.pendingMu.Lock()
 	c.nextID++
@@ -678,24 +751,28 @@ func (c *Client) roundTrip(ctx context.Context, method string, params any) (json
 	if params != nil {
 		req["params"] = params
 	}
+	note := c.noteCallError
+	if quiet {
+		note = func(err error) error { return err }
+	}
 	if err := c.send(req); err != nil {
 		c.pendingMu.Lock()
 		delete(c.pending, id)
 		c.pendingMu.Unlock()
-		return nil, c.noteCallError(err)
+		return nil, note(err)
 	}
 
 	select {
 	case resp := <-ch:
 		if resp.Err != nil {
-			return nil, c.noteCallError(fmt.Errorf("mcpclient: %s: %w", method, resp.Err))
+			return nil, note(fmt.Errorf("mcpclient: %s: %w", method, resp.Err))
 		}
 		return resp.Result, nil
 	case <-ctx.Done():
 		c.pendingMu.Lock()
 		delete(c.pending, id)
 		c.pendingMu.Unlock()
-		return nil, c.noteCallError(fmt.Errorf("mcpclient: %s: %w", method, ctx.Err()))
+		return nil, note(fmt.Errorf("mcpclient: %s: %w", method, ctx.Err()))
 	}
 }
 

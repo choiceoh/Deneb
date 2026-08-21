@@ -93,7 +93,7 @@ class McpServerManager(private val appSettings: AppSettings) {
 
         val client = McpClient(server.url, server.headers)
         return try {
-            client.initialize()
+            client.connect()
             val toolDefs = client.listTools()
             val metadata = toolDefs.map { def ->
                 McpToolMetadata(
