@@ -256,9 +256,9 @@ func TestStatelessHeaderValidationBoundaryMatrix(t *testing.T) {
 		{
 			name: "unsupported protocol version",
 			body: `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":` +
-				`{"io.modelcontextprotocol/protocolVersion":"2025-11-25"}}}`,
+				`{"io.modelcontextprotocol/protocolVersion":"2025-09-01"}}}`,
 			headers: map[string]string{
-				headerProtocolVersion: "2025-11-25",
+				headerProtocolVersion: "2025-09-01",
 				headerMethod:          "tools/list",
 			},
 			wantCode: codeUnsupportedProtocolVersion,

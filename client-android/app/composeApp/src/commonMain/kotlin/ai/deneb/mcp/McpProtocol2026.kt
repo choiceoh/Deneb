@@ -28,7 +28,32 @@ const val PROTOCOL_VERSION_2026 = "2026-07-28"
  * newest we speak: 2026-07-28 has no `initialize`, so a server reached through
  * the handshake is in the older era by definition.
  */
-const val HANDSHAKE_PROTOCOL_VERSION = "2025-06-18"
+const val HANDSHAKE_PROTOCOL_VERSION = "2025-11-25"
+
+/**
+ * Handshake-era revisions this client can actually speak. A server may
+ * legally negotiate down to any of them, but the lifecycle rules say a client
+ * must not continue on a version it does not implement — so an answer outside
+ * this set is a failed connection, not a value to echo back in
+ * `MCP-Protocol-Version` on every later request.
+ */
+val SUPPORTED_HANDSHAKE_VERSIONS = setOf(
+    "2025-11-25",
+    "2025-06-18",
+    "2025-03-26",
+    "2024-11-05",
+)
+
+/**
+ * How long the 2.0 discovery probe may take before the client gives up and
+ * falls back to the handshake.
+ *
+ * A conforming server answers instantly either way — a result, or "method not
+ * found". A handshake-era server is allowed to simply stay silent on a method
+ * it does not know, though, and without this cap that silence would spend the
+ * client's whole 60s request budget before the real handshake even started.
+ */
+const val DISCOVER_PROBE_TIMEOUT_MS = 5_000L
 
 // Reserved `_meta` keys. The `io.modelcontextprotocol/` prefix is reserved for
 // the spec, so these names are stable.
@@ -43,6 +68,9 @@ const val HEADER_MCP_NAME = "Mcp-Name"
 
 /** Marks an MRTR interim result — the server needs input before it can finish. */
 const val RESULT_TYPE_INPUT_REQUIRED = "input_required"
+
+/** Marks an ordinary finished result. Absent on pre-2026-07-28 servers. */
+const val RESULT_TYPE_COMPLETE = "complete"
 
 // Base64 sentinel wrapping a header value that cannot travel as plain ASCII.
 private const val SENTINEL_PREFIX = "=?base64?"

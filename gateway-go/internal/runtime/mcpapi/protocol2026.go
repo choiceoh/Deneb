@@ -37,10 +37,17 @@ import (
 const protocolVersion2026 = "2026-07-28"
 
 // handshakeProtocolVersion is the newest revision that still speaks
-// `initialize`. A client using the handshake is by definition in that era, so
-// negotiation for an unknown requested version answers with this rather than
-// with the (handshake-less) newest revision overall.
-const handshakeProtocolVersion = "2025-06-18"
+// `initialize` — 2026-07-28's direct predecessor. A client using the handshake
+// is by definition in that era, so negotiation for an unknown requested
+// version answers with this rather than with the (handshake-less) newest
+// revision overall.
+//
+// Everything 2025-11-25 added over 2025-06-18 is optional for a server of this
+// shape (tasks were experimental and capability-gated, icons are an optional
+// field, and its authorization work is OAuth/OIDC discovery, which this
+// token-authed surface does not use), so a tools-only server speaks it
+// conformantly.
+const handshakeProtocolVersion = "2025-11-25"
 
 // Reserved `_meta` keys from the revision. The `io.modelcontextprotocol/`
 // prefix is reserved for the spec, so these names are stable.

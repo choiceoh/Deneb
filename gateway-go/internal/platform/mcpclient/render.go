@@ -31,7 +31,11 @@ const maxErrorTextBytes = 2000
 //     this client declares no sampling/elicitation/roots capability, so it
 //     cannot answer the server's input requests, and an interim result has no
 //     content to render. Saying so beats returning "" — which a model reads
-//     as "the tool ran and found nothing".
+//     as "the tool ran and found nothing";
+//   - any OTHER unrecognized resultType is an error for the same reason: only
+//     "complete" (and its absence, on a pre-2026-07-28 server) promises a
+//     finished result, so a value we do not know cannot be handed to the model
+//     as one. An extension result would otherwise arrive looking like success.
 func renderToolResult(name string, raw json.RawMessage) (string, error) {
 	var res struct {
 		Content []struct {
@@ -54,9 +58,14 @@ func renderToolResult(name string, raw json.RawMessage) (string, error) {
 	if err := json.Unmarshal(raw, &res); err != nil {
 		return "", fmt.Errorf("mcpclient: tools/call result: %w", err)
 	}
-	if res.ResultType == resultTypeInputRequired {
+	switch res.ResultType {
+	case resultTypeInputRequired:
 		return "", fmt.Errorf("mcp tool %s needs client input this gateway does not provide (%s)",
 			name, describeInputRequests(res.InputRequests))
+	case "", resultTypeComplete:
+		// "" is a pre-2026-07-28 server; the spec says read it as complete.
+	default:
+		return "", fmt.Errorf("mcp tool %s returned an unrecognized resultType %q", name, res.ResultType)
 	}
 	var sb strings.Builder
 	textSubstance := false

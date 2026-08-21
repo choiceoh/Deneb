@@ -156,6 +156,45 @@ func TestStrictLifecycleServerIsNeverProbedBeforeInitialize(t *testing.T) {
 	}
 }
 
+// Only "complete" (or its absence, from a pre-2026-07-28 server) promises a
+// finished result. Anything else — an extension result type, a future
+// revision's interim shape — must not reach the model looking like success.
+func TestUnrecognizedResultTypeIsNotRenderedAsSuccess(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr bool
+		want    string
+	}{
+		{name: "absent is complete", raw: `{"content":[{"type":"text","text":"결과"}]}`, want: "결과"},
+		{name: "explicit complete", raw: `{"resultType":"complete","content":[{"type":"text","text":"결과"}]}`, want: "결과"},
+		{name: "input required", raw: `{"resultType":"input_required","inputRequests":{"a":{"method":"sampling/createMessage"}}}`, wantErr: true},
+		{name: "unknown extension type", raw: `{"resultType":"io.example/deferred","content":[]}`, wantErr: true},
+		// The dangerous shape: an unknown type carrying content that would
+		// otherwise render as a perfectly ordinary answer.
+		{name: "unknown type with plausible content", raw: `{"resultType":"partial","content":[{"type":"text","text":"절반만"}]}`, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := renderToolResult("probe", json.RawMessage(tc.raw))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("renderToolResult = %q, want an error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("renderToolResult: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("renderToolResult = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWithStatelessMetaBoundaryMatrix(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

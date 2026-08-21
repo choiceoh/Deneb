@@ -3,6 +3,7 @@ package ai.deneb.mcp
 import ai.deneb.httpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -57,6 +58,7 @@ class McpClient(
         method: String,
         params: kotlinx.serialization.json.JsonElement? = null,
         protocolOverride: String? = null,
+        timeoutMillis: Long? = null,
     ): JsonRpcResponse {
         // The override lets the discovery probe speak 2.0 before anything is
         // negotiated — that request is how the negotiation happens.
@@ -72,6 +74,7 @@ class McpClient(
 
         val response = client.post(url) {
             contentType(ContentType.Application.Json)
+            timeoutMillis?.let { millis -> timeout { requestTimeoutMillis = millis } }
             header("Accept", "application/json, text/event-stream")
             // 2025-06-18 and newer expect the negotiated version on every
             // request; 2026-07-28 additionally mirrors the method and the
@@ -147,7 +150,11 @@ class McpClient(
     /** Returns true when the server speaks the stateless revision. */
     private suspend fun discoverStatelessServer(): Boolean {
         val result = runCatching {
-            val response = sendRequest("server/discover", protocolOverride = PROTOCOL_VERSION_2026)
+            val response = sendRequest(
+                "server/discover",
+                protocolOverride = PROTOCOL_VERSION_2026,
+                timeoutMillis = DISCOVER_PROBE_TIMEOUT_MS,
+            )
             if (response.error != null) return false
             val payload = response.result ?: return false
             json.decodeFromJsonElement<McpDiscoverResult>(payload)
@@ -181,11 +188,18 @@ class McpClient(
             throw McpException("Initialize failed: ${response.error.message}")
         }
         // Adopt whatever the server negotiated down to: from 2025-06-18 on, it
-        // has to ride the MCP-Protocol-Version header of every later request.
-        negotiatedProtocol = response.result
+        // has to ride the MCP-Protocol-Version header of every later request —
+        // which is exactly why it cannot be adopted blindly. Claiming a version
+        // this client does not implement would put a lie in that header on
+        // every request, so an unknown answer ends the connection instead.
+        val negotiated = response.result
             ?.let { runCatching { json.decodeFromJsonElement<McpInitializeResult>(it) }.getOrNull() }
             ?.protocolVersion
             ?: HANDSHAKE_PROTOCOL_VERSION
+        if (negotiated !in SUPPORTED_HANDSHAKE_VERSIONS) {
+            throw McpException("Server negotiated unsupported MCP protocol version: $negotiated")
+        }
+        negotiatedProtocol = negotiated
 
         // Send initialized notification (no id, no response expected)
         sendNotification("notifications/initialized")
@@ -230,15 +244,27 @@ class McpClient(
         }
         val result = response.result ?: return ""
         val callResult = json.decodeFromJsonElement<McpCallToolResult>(result)
-        if (callResult.resultType == RESULT_TYPE_INPUT_REQUIRED) {
-            // MRTR: the server wants sampling/elicitation/roots input before it
-            // can finish. This client declares no such capability, and an
-            // interim result has no content — so say that rather than return
-            // "", which reads as "the tool ran and found nothing".
-            throw McpException(
-                "Tool $name needs client input this app does not provide: " +
-                    describeInputRequests(callResult.inputRequests),
-            )
+        when (callResult.resultType) {
+            RESULT_TYPE_INPUT_REQUIRED ->
+                // MRTR: the server wants sampling/elicitation/roots input before
+                // it can finish. This client declares no such capability, and an
+                // interim result has no content — so say that rather than return
+                // "", which reads as "the tool ran and found nothing".
+                throw McpException(
+                    "Tool $name needs client input this app does not provide: " +
+                        describeInputRequests(callResult.inputRequests),
+                )
+
+            // null is a pre-2026-07-28 server; the spec says read it as complete.
+            null, RESULT_TYPE_COMPLETE -> Unit
+
+            else ->
+                // Only "complete" promises a finished result. An unrecognized
+                // type may still carry content, and rendering that as the tool's
+                // answer would hand the model a half-finished result as success.
+                throw McpException(
+                    "Tool $name returned an unrecognized resultType: ${callResult.resultType}",
+                )
         }
         if (callResult.isError) {
             val errorText = callResult.content.mapNotNull { it.text }.joinToString("\n")

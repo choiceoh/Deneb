@@ -34,9 +34,13 @@ const (
 	metaServerInfo         = "io.modelcontextprotocol/serverInfo"
 )
 
-// resultTypeInputRequired marks an MRTR interim result — the revision's
-// replacement for server-initiated sampling/elicitation/roots requests.
-const resultTypeInputRequired = "input_required"
+// Result types from the revision. resultTypeInputRequired marks an MRTR
+// interim result — the replacement for server-initiated sampling/elicitation/
+// roots requests; resultTypeComplete marks an ordinary finished result.
+const (
+	resultTypeComplete      = "complete"
+	resultTypeInputRequired = "input_required"
+)
 
 // Client identity reported to servers, in both eras.
 const (

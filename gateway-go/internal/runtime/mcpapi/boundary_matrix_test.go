@@ -290,20 +290,25 @@ func TestNegotiateMCPVersionBoundaryMatrix(t *testing.T) {
 		{
 			name:   "absent",
 			params: "",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "null",
 			params: "null",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "empty object",
 			params: "{}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
-			name:   "newest",
+			name:   "newest handshake revision",
+			params: "{\"protocolVersion\":\"2025-11-25\"}",
+			want:   "2025-11-25",
+		},
+		{
+			name:   "prior handshake revision",
 			params: "{\"protocolVersion\":\"2025-06-18\"}",
 			want:   "2025-06-18",
 		},
@@ -320,67 +325,67 @@ func TestNegotiateMCPVersionBoundaryMatrix(t *testing.T) {
 		{
 			name:   "future",
 			params: "{\"protocolVersion\":\"2099-01-01\"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "old unknown",
 			params: "{\"protocolVersion\":\"2020-01-01\"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "empty version",
 			params: "{\"protocolVersion\":\"\"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "space version",
 			params: "{\"protocolVersion\":\" 2025-06-18 \"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "case changed",
 			params: "{\"protocolVersion\":\"2025-06-18A\"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "numeric version",
 			params: "{\"protocolVersion\":20250618}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "boolean version",
 			params: "{\"protocolVersion\":true}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "array version",
 			params: "{\"protocolVersion\":[]}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "object version",
 			params: "{\"protocolVersion\":{}}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "malformed open",
 			params: "{",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "malformed string",
 			params: "{\"protocolVersion\":",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "array params",
 			params: "[]",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "string params",
 			params: "\"2025-03-26\"",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "extra fields",
@@ -395,12 +400,12 @@ func TestNegotiateMCPVersionBoundaryMatrix(t *testing.T) {
 		{
 			name:   "duplicate unsupported last",
 			params: "{\"protocolVersion\":\"2024-11-05\",\"protocolVersion\":\"bad\"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "unicode field",
 			params: "{\"프로토콜\":\"2025-03-26\"}",
-			want:   "2025-06-18",
+			want:   "2025-11-25",
 		},
 		{
 			name:   "leading whitespace",
@@ -781,7 +786,7 @@ func TestMCPHandlerRequestBoundaryMatrix(t *testing.T) {
 			origin:     "",
 			mode:       "ok",
 			wantStatus: 200,
-			wantBody:   "\"protocolVersion\":\"2025-06-18\"",
+			wantBody:   "\"protocolVersion\":\"2025-11-25\"",
 			wantAllow:  "",
 		},
 		{
@@ -993,7 +998,7 @@ func TestMCPConcurrentPureBoundaries(t *testing.T) {
 					errs <- fmt.Errorf("negotiated %q", got)
 					return
 				}
-				if len(ProtocolVersions()) != 4 {
+				if len(ProtocolVersions()) != 5 {
 					errs <- fmt.Errorf("protocol catalog changed length")
 					return
 				}

@@ -89,6 +89,7 @@ const maxMCPBodyBytes = 1 << 20 // 1 MiB
 var mcpProtocolVersions = []string{
 	protocolVersion2026,
 	handshakeProtocolVersion,
+	"2025-06-18",
 	"2025-03-26",
 	"2024-11-05",
 }

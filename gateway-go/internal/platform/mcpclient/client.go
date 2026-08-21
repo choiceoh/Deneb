@@ -52,11 +52,13 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
 )
 
-// handshakeProtocolVersion is the revision offered in an initialize handshake.
-// It is deliberately NOT the newest revision this client speaks: 2026-07-28
+// handshakeProtocolVersion is the revision offered in an initialize handshake:
+// 2026-07-28's direct predecessor, so a handshake-era server is met with the
+// newest revision it could possibly speak and negotiates down from there.
+// It is deliberately NOT the newest revision this client speaks — 2026-07-28
 // has no initialize, so reaching this constant already means the server is in
 // the handshake era (see stateless.go).
-const handshakeProtocolVersion = "2025-06-18"
+const handshakeProtocolVersion = "2025-11-25"
 
 // restartBackoff is the minimum interval between respawn attempts after the
 // child process dies — prevents a crash-looping server from being re-exec'd

@@ -202,6 +202,53 @@ class McpProtocol2026Test {
     }
 
     @Test
+    fun handshakeOfferIsTheNewestRevisionThatStillHasInitialize() {
+        // 2026-07-28's direct predecessor. Offering an older one would make a
+        // server that only speaks 2025-11-25 negotiate down to nothing.
+        assertEquals("2025-11-25", HANDSHAKE_PROTOCOL_VERSION)
+        assertTrue(HANDSHAKE_PROTOCOL_VERSION in SUPPORTED_HANDSHAKE_VERSIONS)
+        assertFalse(PROTOCOL_VERSION_2026 in SUPPORTED_HANDSHAKE_VERSIONS)
+    }
+
+    @Test
+    fun onlyImplementedHandshakeRevisionsMayBeAdopted() {
+        // The negotiated value rides MCP-Protocol-Version on every later
+        // request, so adopting one we do not implement would put a lie there.
+        for (supported in listOf("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")) {
+            assertTrue(supported in SUPPORTED_HANDSHAKE_VERSIONS, "should be adoptable: $supported")
+        }
+        for (unsupported in listOf("2099-01-01", "2026-07-28", "", "garbage")) {
+            assertFalse(unsupported in SUPPORTED_HANDSHAKE_VERSIONS, "should be rejected: $unsupported")
+        }
+    }
+
+    @Test
+    fun discoveryProbeIsBoundedWellBelowTheGeneralRequestTimeout() {
+        // A handshake-era server may simply stay silent on an unknown method.
+        // Without a dedicated cap that silence would spend the whole 60s
+        // request budget before the real handshake started.
+        assertTrue(
+            DISCOVER_PROBE_TIMEOUT_MS in 1_000..15_000,
+            "probe timeout $DISCOVER_PROBE_TIMEOUT_MS should be short but not flaky",
+        )
+    }
+
+    @Test
+    fun onlyCompleteAndAbsentResultTypesCountAsFinishedResults() {
+        fun decode(raw: String) = json.decodeFromJsonElement<McpCallToolResult>(json.parseToJsonElement(raw))
+
+        // Absent (pre-2026-07-28) and explicit "complete" are finished.
+        assertNull(decode("""{"content":[{"type":"text","text":"결과"}]}""").resultType)
+        assertEquals(RESULT_TYPE_COMPLETE, decode("""{"resultType":"complete","content":[]}""").resultType)
+
+        // Anything else must be distinguishable so callTool can refuse it —
+        // the dangerous shape is an unknown type carrying plausible content.
+        val unknown = decode("""{"resultType":"partial","content":[{"type":"text","text":"절반만"}]}""")
+        assertEquals("partial", unknown.resultType)
+        assertFalse(unknown.resultType == RESULT_TYPE_COMPLETE || unknown.resultType == null)
+    }
+
+    @Test
     fun statelessToolCallParamsProduceMatchingBodyAndHeaderValues() {
         // The revision's central header rule: Mcp-Name must equal params.name,
         // so the two are derived from the same object rather than separately.
