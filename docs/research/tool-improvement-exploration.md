@@ -43,7 +43,7 @@ sidebarTitle: "도구 개선 탐구"
 개선 논의의 공통 전제. 수치는 코드에서 직접 집계했다.
 
 - **도구 스키마 ~50개** (`toolwire/schema/tool_schemas.json` — 파라미터·max_output만 보유, 설명은 등록 코드에; `toolwire/toolreg_boundary_test.go` `allSchemaCases`), 등록은 toolwire + chat 측 별도(fetch_tools, code_action). 그중 **deferred ~23+** (`Deferred: true`, `toolwire/core/register.go`).
-- **deferred 메커니즘**: 초기 Tools 배열에서 스키마 제외, 시스템 프롬프트에는 이름 + 80 rune 절단 설명만 노출(`prompt/system_prompt.go`). 모델이 `fetch_tools`(exact names 또는 BM25 질의, `tools/runtimeops/fetch_tools.go`)로 활성화하면 다음 턴부터 `DynamicToolsProvider`가 스키마 주입.
+- **deferred 메커니즘**: 초기 Tools 배열에서 스키마 제외, 시스템 프롬프트에는 이름 + 80 rune 절단 설명만 노출(`prompt/system_prompt.go`). 모델이 `fetch_tools`(exact names 또는 BM25 질의, `tools/fetchops/fetch_tools.go`)로 활성화하면 다음 턴부터 `DynamicToolsProvider`가 스키마 주입.
 - **프리셋 8종** (`toolpreset/preset.go`): conversation/boot/self-review/researcher/implementer/verifier/wiki-research/coding. 노출·활성화·실행 4지점에서 게이트.
 - **실행 경로 안전장치** (`chat/tools.go:97` `ToolRegistry.Execute`, 단일 평면 레지스트리): malformed JSON 복구(`tool_argrepair.go`) → 프리셋 방어 → `$ref` 해석 → RunCache(grep만 캐시) → 실행 → 24K head/tail 절단 + 스필오버 → 캐시 무효화 → 사후처리 → 선택적 LLM 압축(`compress:true`, 16000자 이상만 — `localai_hooks.go:44`).
 - **루프 감지** (`ai/agent/tool_loop.go:40-42`): warn 10 / critical 20 / breaker 30, 같은 경로 편집 6회 넛지.
@@ -65,7 +65,7 @@ sidebarTitle: "도구 개선 탐구"
 
 ### 2.2 (A) fetch_tools 이미-활성 단락 (**P1 / S**) (효율 측면은 §3.1)
 
-- **현황**: 프로덕션 측정(2026-07-05, 14일 agent-logs): **fetch_tools 호출의 20%가 런 내 동일입력·동일결과 반복** 이력이 있었다. #3089가 컴팩션 cheap 패스에서 fetch_tools 결과를 보호했고, **§6.5에서 already-active 단락이 랜딩**(`tools/runtimeops/fetch_tools.go` — 이미 활성면 스키마 재출력 대신 한 줄). 아래 제안은 역사적 설계 노트; 현행은 §6.5 기준.
+- **현황**: 프로덕션 측정(2026-07-05, 14일 agent-logs): **fetch_tools 호출의 20%가 런 내 동일입력·동일결과 반복** 이력이 있었다. #3089가 컴팩션 cheap 패스에서 fetch_tools 결과를 보호했고, **§6.5에서 already-active 단락이 랜딩**(`tools/fetchops/fetch_tools.go` — 이미 활성면 스키마 재출력 대신 한 줄). 아래 제안은 역사적 설계 노트; 현행은 §6.5 기준.
 - **제안**: 활성 집합을 알면 재요청 시 스키마 재출력 대신 `"already active: X — call it directly"` 한 줄을 반환한다. 구현 시 동시성 주의 — `DeferredActivation.seen`은 executor 고루틴 전용이라(`toolport/context.go` 주석 명시) 도구 고루틴에서 직접 읽으면 안 된다. 옵션 ① executor가 턴 시작 시 불변 active-set 스냅샷을 ctx에 주입(락 불필요, 같은 턴 내 중복은 놓침), 옵션 ② seen을 mutex 보호로 전환(완전하지만 concurrency.md 체크리스트 대상). ①이 단순하고 반복의 대부분(턴 경계 넘어 재fetch)을 잡는다.
 - **예상 효과**: 반복 1회당 스키마 전문(수백~수천 토큰) 절약 + 모델의 "activated, call directly" 신호 강화.
 - **측정**: #3089 이후 반복률을 먼저 재측정(20%는 보호 이전 수치)하고, 단락 도입 후 다시 측정. 둘 다 agent-logs의 turn.tool 입력 해시로 산출 가능.

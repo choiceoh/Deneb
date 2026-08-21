@@ -6,7 +6,7 @@
 // substring hits. When no query token matches any tool (the "zero-IDF"
 // degenerate case), the caller falls back to a literal substring match so we
 // never regress recall versus the old substring-only search.
-package runtimeops
+package fetchops
 
 import (
 	"math"

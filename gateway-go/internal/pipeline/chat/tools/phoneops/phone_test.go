@@ -133,4 +133,11 @@ func TestPhoneRead_CallLogServesCacheThenAsksForSync(t *testing.T) {
 	if out2, _ := read(context.Background(), json.RawMessage(`{"what":"calls"}`)); !strings.Contains(out2, digest) {
 		t.Errorf("alias \"calls\" did not serve the cache: %q", out2)
 	}
+	// Models often send query/type instead of what.
+	if out3, err := read(context.Background(), json.RawMessage(`{"query":"calllog"}`)); err != nil || !strings.Contains(out3, digest) {
+		t.Errorf("query alias did not serve the cache: %q %v", out3, err)
+	}
+	if out4, err := read(context.Background(), json.RawMessage(`{"type":"calls"}`)); err != nil || !strings.Contains(out4, digest) {
+		t.Errorf("type+calls alias did not serve the cache: %q %v", out4, err)
+	}
 }

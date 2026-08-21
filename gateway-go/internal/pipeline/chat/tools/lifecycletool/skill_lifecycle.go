@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
@@ -189,7 +190,9 @@ const skillLifecycleActionRequirements = "Action requirements: " +
 	"self_correction requires at least one of title, candidate, or proposedChange and should include evidence, targetFiles, proposedChange, and risk when available; " +
 	"self_correction_review requires id and status=accepted|rejected|superseded|applied; " +
 	"validation_case requires skillName plus at least one concrete assertion; validation_case_from_session requires skillName and sessionKey; " +
-	"validation_backfill requires skillName; heartbeat_shadow_replay requires candidate; pin/unpin/archive/restore require skillName."
+	"validation_backfill requires skillName; heartbeat_shadow_replay requires candidate; pin/unpin/archive/restore require skillName. " +
+	"status default limit is 8; pass limit only when you need more. " +
+	"Aliases: review→self_correction_review, list/inspect→status, record/capture/queue→self_correction, create_skill→genesis, improve→evolve."
 
 // SkillLifecycleToolDescription returns the late-bound ToolDef description for
 // skill_lifecycle. Keep the action requirements here aligned with the schema
@@ -197,8 +200,26 @@ const skillLifecycleActionRequirements = "Action requirements: " +
 func SkillLifecycleToolDescription() string {
 	return "Propus control plane for Deneb self-improvement (tool name kept as skill_lifecycle for compatibility). " +
 		"Use only for self-improvement lifecycle decisions, audits, validation cases, deferred correction capture/review, and curator state. " +
+		"Do not call status without a reason to inspect the queue; prefer a known id + self_correction_review. " +
 		skillLifecycleActionRequirements + " " +
 		"Use through the evolution-proposal skill after meaningful workflows."
+}
+
+func normalizeSkillLifecycleAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "review", "correction_review", "self-correction-review":
+		return "self_correction_review"
+	case "list", "inspect":
+		return "status"
+	case "record", "capture", "queue":
+		return "self_correction"
+	case "create_skill":
+		return "genesis"
+	case "improve":
+		return "evolve"
+	default:
+		return strings.ToLower(strings.TrimSpace(action))
+	}
 }
 
 // ToolSkillLifecycle exposes propose/genesis/evolve/status as one agent-facing tool.
@@ -240,6 +261,7 @@ func ToolSkillLifecycle(backend SkillLifecycleBackend) ToolFunc {
 		if err := jsonutil.UnmarshalInto("skill_lifecycle params", input, &p); err != nil {
 			return "", err
 		}
+		p.Action = normalizeSkillLifecycleAction(p.Action)
 
 		var (
 			result any
@@ -398,7 +420,7 @@ func SkillLifecycleToolSchema() map[string]any {
 			},
 			"limit": map[string]any{
 				"type":        "integer",
-				"description": "For status: maximum recent lifecycle/self-correction entries to return; for validation_backfill: maximum session keys to scan (default 20, max 50)",
+				"description": "For status: maximum recent lifecycle/self-correction entries to return (default 8, max 50). For validation_backfill: maximum session keys to scan (default 20, max 50).",
 				"minimum":     1,
 				"maximum":     50,
 			},

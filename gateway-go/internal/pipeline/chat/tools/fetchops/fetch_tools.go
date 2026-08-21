@@ -5,7 +5,7 @@
 // needs a deferred tool, it calls fetch_tools to:
 //  1. Get the full schema description (returned as text).
 //  2. Signal DeferredActivation so the executor injects schemas on the next turn.
-package runtimeops
+package fetchops
 
 import (
 	"context"
