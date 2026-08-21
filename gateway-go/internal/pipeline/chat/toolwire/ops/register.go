@@ -7,6 +7,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/wiki"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/gatewayops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/groupwareops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/phoneops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
@@ -54,7 +55,7 @@ func RuntimeOpsToolSetFromDeps(deps RuntimeOpsDeps) RuntimeOpsToolSet {
 		})
 	}
 	set := RuntimeOpsToolSet{
-		Gateway:   runtimeops.ToolGatewayWithDeps(deps.WorkspaceDir, runtimeops.GatewayDeps{Version: deps.GatewayVersion}),
+		Gateway:   gatewayops.ToolGatewayWithDeps(deps.WorkspaceDir, gatewayops.GatewayDeps{Version: deps.GatewayVersion}),
 		Observe:   observeFn,
 		Fleet:     runtimeops.ToolFleet(&deps.Fleet),
 		Browser:   runtimeops.ToolBrowser(&deps.Browser),
@@ -203,7 +204,7 @@ func RegisterHeartbeatTool(registry toolport.ToolRegistrar) {
 			"trigger explicitly directs the agent to call this tool, so it must be visible in the default prompt " +
 			"(deferring it would force a fetch_tools round-trip and add a fragile turn).",
 		InputSchema: schema.HeartbeatUpdateToolSchema(),
-		Fn:          runtimeops.ToolHeartbeatUpdate(),
+		Fn:          gatewayops.ToolHeartbeatUpdate(),
 	})
 }
 
