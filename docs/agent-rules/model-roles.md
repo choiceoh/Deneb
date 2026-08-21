@@ -85,7 +85,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 
 | 임무 | 위치 | 방식 | 왜 |
 |---|---|---|---|
-| 웹페이지 인앱 번역 (en/ru→ko) | `chat/tools/translate.go` → `translate_deepl.go` | DeepL API (외부 번역 서비스) | 인앱 브라우저 인플레이스 번역은 **DeepL 전용**. LLM 역할 미사용 — DeepL 미설정/실패 시 그 배치는 원문 유지(개수 보존, 드롭/재정렬 금지). 이전 `translation` 역할 LLM 폴백은 폐기(2026-07-07) |
+| 웹페이지 인앱 번역 (en/ru→ko) | `chat/tools/translateops/translate.go` → `translate_deepl.go` | DeepL API (외부 번역 서비스) | 인앱 브라우저 인플레이스 번역은 **DeepL 전용**. LLM 역할 미사용 — DeepL 미설정/실패 시 그 배치는 원문 유지(개수 보존, 드롭/재정렬 금지). 이전 `translation` 역할 LLM 폴백은 폐기(2026-07-07) |
 | 주간업무보고 | `tools/routine/weekly_report.go` | 결정적 양식 | byte-identical 출력 (#2474) |
 | 메일 우선순위 분류 | `domain/mailpriority/score.go` | 정규식 점수 + 결합 신호 | 글랜스 트리아지 — 한국 업무메일 튜닝 휴리스틱. VIP(주소록)·활성 거래처(`wiki.ActiveCounterpartyDomains` — 최근 60일 프로젝트 연결 메일분석의 발신 도메인, freemail 제외, 서버 10분 캐시) 부스트는 콘텐츠 신호가 있을 때만 증폭(단독 발화 금지 — 글랜스성 보존). 같은 견적·금액 메일도 진행 거래처면 urgent로 — 단일 이벤트가 아닌 결합 신호(시나리오) 원칙 |
 | 카드 제목 폴백 | `runtime/proactive/workfeed_extract.go` | 휴리스틱 추출 | LLM 실패 시 graceful degradation |

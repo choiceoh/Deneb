@@ -3,7 +3,7 @@ package recall
 import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/recallops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/polaris"
 )
 
@@ -12,6 +12,6 @@ import (
 type (
 	ToolRegistrar = toolport.ToolRegistrar
 	Store         = polaris.Store
-	LocalAIFunc   = tools.LocalAIFunc
+	LocalAIFunc   = recallops.LocalAIFunc
 	Router        = knowledge.Router
 )

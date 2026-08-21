@@ -7,7 +7,7 @@
 ## 진입점과 책임
 
 - `wikitool/wiki.go`의 `ToolWiki`, `wikitool/contacts.go`의 `ToolContacts`,
-  `schedule/cron_tool.go`의 `ToolCron`, top-level `message.go`의 `ToolMessage`처럼
+  `schedule/cron_tool.go`의 `ToolCron`, `messageops/`의 `ToolMessage`처럼
   `Tool*` constructor가 `toolport.ToolFunc`를 반환하는 것이 기본 계약이다.
 - `filesystem/fs.go`의 `ToolWrite`, `ToolEdit`와
   `filesystem/read.go`의 `ToolRead`, `filesystem/fs_search.go`의
@@ -16,7 +16,11 @@
   `sessionops/`는 `sessions`/`sessions_spawn`/`subagents`, `fetchops/`는
   `fetch_tools`, `phoneops/`는 `phone_read`/`phone_write`, `gatewayops/`는
   `gateway`/`heartbeat_update`, `hostops/`는 `browser`/`fleet`/`solarflow`/
-  `workstation`을 소유한다.
+  `workstation`을 소유한다. `browseops/`는 `browse`, `officeops/`는 `office`,
+  `orgops/`는 `org`, `personaops/`는 `preference`, `workflowops/`는
+  `goal`/`blackboard`, `recallops/`는 `knowledge`/`polaris`/`research_panel`,
+  `graphifyops/`는 `graphify`, `translateops/`는 DeepL 세그먼트 번역,
+  `messageops/`는 `message`를 소유한다.
 - `artifact/`는 chart/diagram/file/media 결과물, `document/`는 문서 추출,
   `schedule/`은 calendar/todo, `mailarchive/`는 archive 조회 구현이다.
 - `groupwareops/`는 Amaranth10 전자결재·게시판·ERP 원장 조회와

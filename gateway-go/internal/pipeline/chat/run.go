@@ -334,7 +334,7 @@ func withRunContextValues(ctx context.Context, params RunParams, deps runDeps) c
 		// Diagnostic for the self-contradicting "채널이 끊겼어요" cron
 		// incident class: when this branch fires, the in-loop message tool
 		// will trip its replyFn-nil guard and (without the new wording in
-		// tools/message.go) the LLM has historically translated that into a
+		// tools/messageops) the LLM has historically translated that into a
 		// user-facing "channel down" report that itself gets delivered via
 		// the cron proactive-relay path. Capture the sessionKey/delivery so
 		// the next occurrence is debuggable from logs alone — wiring-order

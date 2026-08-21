@@ -4,9 +4,9 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/knowledge"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
-	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools"
 	mailtool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/mailarchive"
 	notebooktool "github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/notebook"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/personaops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/skilltool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/wikitool"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
@@ -100,7 +100,7 @@ func RegisterPersonaTools(registry toolport.ToolRegistrar, workspaceDir string) 
 			"추가만 가능하고 삭제·수정은 사용자만 SOUL.md 편집으로 할 수 있다 — 에이전트가 자기 규칙을 지우지 못하게 하는 의도적 비대칭. " +
 			"반영은 다음 세션부터. 일회성 사실은 wiki, 사용자 개인정보는 wiki 사용자 카테고리를 쓰고, 이건 '어떻게 행동할지'에만 쓴다.",
 		InputSchema: schema.PreferenceToolSchema(),
-		Fn:          tools.ToolPersonaPref(workspaceDir),
+		Fn:          personaops.ToolPersonaPref(workspaceDir),
 		Deferred:    true,
 	})
 }

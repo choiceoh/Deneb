@@ -1,6 +1,6 @@
 // web_fetch_browser.go — stealth-tier page render via the resident browser
 // sidecar (scripts/browser — Playwright headful Chromium on :18930, the same
-// sidecar the browse tool drives; see tools/browse.go).
+// sidecar the browse tool drives; see tools/browseops).
 //
 // This is the local-first replacement for what used to require r.jina.ai: a
 // real JS-executing render for SPA / bot-walled pages, without the target URL
@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	// browserRenderDefaultURL mirrors tools/browse.go's sidecar default; both
+	// browserRenderDefaultURL mirrors tools/browseops's sidecar default; both
 	// honor DENEB_BROWSE_URL (env override + sane default, sidecar convention).
 	browserRenderDefaultURL = "http://127.0.0.1:18930"
 	// browserRenderTimeout bounds navigate (sidecar caps at 25s) + settle +
