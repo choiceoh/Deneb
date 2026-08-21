@@ -20,7 +20,7 @@
 // was retired as "low value" with Termux, but who the operator spoke to and for
 // how long is exactly the 인물/미팅 context this assistant reasons about, and the
 // address book it already syncs is what turns a number into a person.
-package runtimeops
+package phoneops
 
 import (
 	"context"

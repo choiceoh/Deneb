@@ -18,6 +18,7 @@ func TestIsObserveOnlySignalMatchesExplicitAuthorMarkers(t *testing.T) {
 		"health ratchet regressed — advisory, not a gate",
 		"deadcode miner dry-run produced 3 findings",
 		"cache invalidation was a no-op this cycle",
+		"tool complete",
 	}
 	for _, msg := range advisory {
 		if !isObserveOnlySignal(observe.LogLine{Msg: msg}) {

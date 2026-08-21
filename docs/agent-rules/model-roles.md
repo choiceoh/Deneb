@@ -95,7 +95,7 @@ globs: gateway-go/internal/ai/modelrole/**, gateway-go/internal/pipeline/pilot/*
 | 프로젝트 현재 상태 이벤트 갱신 (메일분석) | `runtime/server/wiki_mail_analysis.go` → `domain/wiki/project_status.go:AppendProjectStatusLine` | 결정적 날짜 불릿 | 메일분석 시 관련 프로젝트 대표페이지 `## 현재 상태`에 한 줄 append (idempotent by mail id). 8h 드림 사이클을 안 기다리고 즉시 최신화 — 주기적 LLM 압축은 드리머가 |
 | 메일분석 당사자 앵커 | `platform/mailanalysis/party_anchor.go` (stage2 프롬프트 주입) | 헤더 파싱 + 우리측 도메인 셋 (`DENEB_MAIL_OUR_DOMAINS`) | 발신/수신/참조의 소속(우리 측/외부)을 결정적으로 명시해 분석 모델의 당사자 뒤집기 제거 — 실메일 섀도런 검증(2026-07-05, 모델 무관 이득). 형식은 scripts/dev/mail-bench.py 앵커와 동기 유지 |
 | 메일분석 날짜 앵커 | `platform/mailanalysis/date_anchor.go` (stage2 프롬프트 주입) | Date 헤더 파싱 + 상대 날짜 환산표(발송 주·다음 주·그 다음 주, 월요일 시작 KST) | "다음 주 금요일" 류를 계산이 아닌 표 조회로 — 상대 날짜 산술은 측정된 모델 약점(dsv4 두 형식 모두 오답, 2026-07-04 벤치). 실측: 앵커로 3/3 절대날짜+요일 명기, 무앵커 시 1/3이 상대 표현만 반복(절대 날짜 미기재). 헤더 미파싱 시 무주입 fail-open |
-| 폰 앱 사용 리듬 캐시 (`usage_update`) | `runtime/phoneevents/handler.go:recordPhoneUsage` → `chat/tools/runtimeops/phone_usage.go` (`phone_read what=usage`) | 캐시 전용 (파일 mtime=신선도, location_update와 동형) | 이전 "usage" 이벤트는 6시간마다 judgment 턴을 태우는데 guidance가 기본 침묵이라 거의 항상 NO_REPLY — 하루 ~4턴 낭비. 사용 리듬은 능동 알림 소스가 아니라 조회용 맥락이므로 캐시로 환원, 에이전트가 필요할 때 phone_read로 읽는다. 구 클라이언트의 "usage" 타입은 기존 judgment 경로 유지 (OTA 전환기 하위호환) |
+| 폰 앱 사용 리듬 캐시 (`usage_update`) | `runtime/phoneevents/handler.go:recordPhoneUsage` → `chat/tools/phoneops/phone_usage.go` (`phone_read what=usage`) | 캐시 전용 (파일 mtime=신선도, location_update와 동형) | 이전 "usage" 이벤트는 6시간마다 judgment 턴을 태우는데 guidance가 기본 침묵이라 거의 항상 NO_REPLY — 하루 ~4턴 낭비. 사용 리듬은 능동 알림 소스가 아니라 조회용 맥락이므로 캐시로 환원, 에이전트가 필요할 때 phone_read로 읽는다. 구 클라이언트의 "usage" 타입은 기존 judgment 경로 유지 (OTA 전환기 하위호환) |
 
 ## 도그마
 

@@ -33,6 +33,11 @@ func rsiLayerByKey(layers []rsiLayer, key string) rsiLayer {
 // wire projection both read — compiled allowlist sources auto-dispatch;
 // unknown prefixes stay staged until ladder supply-graduation.
 func TestSourceAutoDispatchesReturnsTrueForGraduatedFalseForStagedSources(t *testing.T) {
+	// Hermetic HOME: graduatedDispatchSources() reads the operator's real
+	// graduation_state.json otherwise, so a live-graduated prefix (sop-mining)
+	// looks dispatchable here and the staged assertion fails.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DENEB_STATE_DIR", t.TempDir())
 	graduated := []string{
 		"evolve-tool-gap", "self-harness",
 		"health-finding:volatile-hub:46a3", "tool-quality:web:desc", "tool-quality:exec:latency",

@@ -30,6 +30,9 @@ func TestIsExternalFaultReturnsTrueForNetworkAndRateLimitFalseForCodeDefects(t *
 		"read tcp: connection reset by peer",
 		"context deadline exceeded",
 		"unexpected EOF",
+		"wormhole_error: upstream unreachable: glm-5.2",
+		"page.goto: net::ERR_NAME_NOT_RESOLVED at tsgw.topsolar.kr",
+		"lookup oauth2.googleapis.com: server misbehaving",
 	}
 	for _, m := range ext {
 		if !isExternalFault(observe.LogLine{Msg: m}) {

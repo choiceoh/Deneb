@@ -8,6 +8,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/groupwareops"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/phoneops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/media"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
@@ -178,14 +179,14 @@ func RegisterPhoneTools(registry toolport.ToolRegistrar, send tooldeps.PhoneActi
 		Name:        "phone_read",
 		Description: "스마트폰 상태 읽기 전용 — '지금 어디야'·'배터리 몇 %'·'방금 폰에서 어떤 앱을 썼나/집중했나' 같은 질문이나 능동 판단 보조 맥락에 사용. 인자는 반드시 what 하나이며 값은 정확히 location(최근 위치) | battery(배터리·충전 상태) | usage(최근 앱 사용 리듬) 중 하나. 앱이 밀어주는 캐시만 읽고, 오래됐으면 앱에 갱신을 요청한 뒤 수 초 후 재호출하라고 안내한다. 휴대폰에 알림/음성/클립보드/앱 실행/문자/전화 같은 행동은 phone_write, 주소록 검색은 contacts, 화면·클립보드 읽기와 통화기록 조회는 지원하지 않는다. 사용 리듬만으로 선제 알림을 만들지 않는다.",
 		InputSchema: schema.PhoneReadToolSchema(),
-		Fn:          runtimeops.ToolPhoneRead(send),
+		Fn:          phoneops.ToolPhoneRead(send),
 		Deferred:    true,
 	})
 	registry.RegisterTool(toolport.ToolDef{
 		Name:        "phone_write",
 		Description: "사용자 스마트폰에 직접 작용한다(전부 인앱 실행, SSH 불필요). to — notify(알림 띄우기, text 필수·title 선택) | speak(음성으로 말하기, text) | clipboard(클립보드에 넣기, text) | open_url(target=URL) | open_app(target=패키지/앱명) | share(text) | message(target=수신자,text) | dial(target=전화번호) | photo(카메라) | alarm(알람 설정, target=\"HH:MM\" 24h, text=라벨 — 일회성·Android 전용, 반복 알람 미지원) | timer(타이머, target=단위 포함 \"10m\"/\"90s\"/\"1h30m\", text=라벨 — 단위 없는 숫자 거부). 운전 중 음성 안내, 답을 클립보드에 꽂기, 링크/앱 열기, 메시지·전화·사진·알람·타이머.",
 		InputSchema: schema.PhoneWriteToolSchema(),
-		Fn:          runtimeops.ToolPhoneWrite(send),
+		Fn:          phoneops.ToolPhoneWrite(send),
 		Deferred:    true,
 	})
 }
