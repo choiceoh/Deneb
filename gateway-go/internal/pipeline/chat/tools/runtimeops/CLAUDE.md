@@ -14,9 +14,9 @@ session 상태는 주입된 infra/domain service가 소유한다.
   빈 stage·chaining·substitution·미인식 command는 무효화 방향으로 fail-closed한다.
 - `sessions_tool.go`의 `ToolSessions`, `ToolSessionsSpawn`과
   `subagents_tool.go`의 `ToolSubagents`가 session 조회·생성·결과 회수를 담당한다.
-- `fetch_tools.go`의 `FetchToolsRegistry`, `ToolFetchTools`가 deferred schema
-  검색·활성화를 제공한다. Observe (`ToolObserve`) lives in leaf package
-  `observeops/` and is wired via `server/toolbind/observebind`.
+- Deferred schema activation (`fetch_tools`) lives in sibling `tools/fetchops`.
+  Observe (`ToolObserve`) lives in leaf package `observeops/` and is wired via
+  `server/toolbind/observebind`.
 - `browser.go`의 `ToolBrowser`는 agent-facing wrapper만 소유한다. Page Agent
   bridge client와 전자결재 enrichment는 `platform/browserbridge`가 소유한다.
 - Phone tools (`phone_read`/`phone_write`) live in sibling `tools/phoneops`.
@@ -50,8 +50,8 @@ session 상태는 주입된 infra/domain service가 소유한다.
   `contracts_test.go`의 `TestToolExecFallbackValidationStructuredAndHints`가 두 실행
   경로의 안전성을 검증한다.
 - `sessions_tool_test.go`의 `TestSessionsSpawn_RejectsBeyondMaxDepth`,
-  `TestSessionsSpawn_RejectsBeyondConcurrencyCap`, `fetch_tools_test.go`의
-  `TestFetchTools_PresetBlocksDisallowedName`가 session/tool 경계를 고정한다.
+  `TestSessionsSpawn_RejectsBeyondConcurrencyCap`가 session 경계를 고정한다.
+  `fetch_tools` 검증은 `tools/fetchops`로 옮겼다.
 - `gateway_test.go`의 `TestGatewayConfigSetReturnsApprovalThenWritesOnConfirm`과
   `TestGatewayConfirmedWithoutApprovalRejected`가 mutation 승인 계약을 확인한다.
 

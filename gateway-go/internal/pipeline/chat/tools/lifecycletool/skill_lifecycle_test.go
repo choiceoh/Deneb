@@ -155,6 +155,34 @@ func TestToolSkillLifecycleReadsSkillStatus(t *testing.T) {
 	}
 }
 
+func TestToolSkillLifecycleAcceptsActionAliases(t *testing.T) {
+	backend := &fakeSkillLifecycleBackend{}
+	fn := ToolSkillLifecycle(backend)
+
+	if _, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":    "inspect",
+		"skillName": "skill-factory",
+		"limit":     2,
+	})); err != nil {
+		t.Fatalf("inspect alias: %v", err)
+	}
+	if backend.status.SkillName != "skill-factory" || backend.status.Limit != 2 {
+		t.Fatalf("inspect did not route to status: %+v", backend.status)
+	}
+
+	if _, err := fn(context.Background(), mustJSONSkillLifecycle(t, map[string]any{
+		"action":     "review",
+		"id":         "sc-test",
+		"status":     "rejected",
+		"reviewNote": "external fault",
+	})); err != nil {
+		t.Fatalf("review alias: %v", err)
+	}
+	if backend.selfReview.ID != "sc-test" || backend.selfReview.Status != "rejected" {
+		t.Fatalf("review did not route to self_correction_review: %+v", backend.selfReview)
+	}
+}
+
 func TestSkillLifecycleToolDescriptionDocumentsActionRequirements(t *testing.T) {
 	desc := SkillLifecycleToolDescription()
 	for _, want := range []string{
@@ -163,6 +191,7 @@ func TestSkillLifecycleToolDescriptionDocumentsActionRequirements(t *testing.T) 
 		"self_correction_review requires id",
 		"validation_case requires skillName",
 		"heartbeat_shadow_replay requires candidate",
+		"status default limit is 8",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("SkillLifecycleToolDescription missing %q:\n%s", want, desc)

@@ -9,6 +9,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/codeaction"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/fetchops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tools/runtimeops"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolwire/schema"
 )
@@ -17,7 +18,7 @@ import (
 // back into the same registry (fetch_tools activation + code_action bridge).
 type RegistryBridge interface {
 	toolport.ToolRegistrar
-	runtimeops.FetchToolsRegistry
+	fetchops.FetchToolsRegistry
 	codeaction.ToolInvoker
 }
 
@@ -30,7 +31,7 @@ func RegisterRegistryBridgeTools(registry RegistryBridge, deps *tooldeps.CoreToo
 		Name:        "fetch_tools",
 		Description: "Load full schemas for deferred tools so you can call them. Use names (exact) or query (keyword search). The activated tools become available on the next turn",
 		InputSchema: schema.FetchToolsToolSchema(),
-		Fn:          runtimeops.ToolFetchToolsWithReranker(registry, deps.FetchToolsEmbedder, deps.FetchToolsReranker),
+		Fn:          fetchops.ToolFetchToolsWithReranker(registry, deps.FetchToolsEmbedder, deps.FetchToolsReranker),
 	})
 
 	// code_action (CodeAct): the model writes Python to orchestrate several

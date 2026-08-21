@@ -40,12 +40,15 @@ import (
 func ToolPhoneRead(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			What string `json:"what"`
+			What  string `json:"what"`
+			Query string `json:"query"`
+			Type  string `json:"type"`
 		}
 		if err := jsonutil.UnmarshalInto("phone_read params", input, &p); err != nil {
 			return "", err
 		}
-		switch strings.ToLower(strings.TrimSpace(p.What)) {
+		what := normalizePhoneReadWhat(p.What, p.Query, p.Type)
+		switch what {
 		case "location":
 			if cached, ok := readCachedPhoneLocation(phoneLocationMaxAge); ok {
 				return cached, nil
@@ -73,8 +76,28 @@ func ToolPhoneRead(send tooldeps.PhoneActionFunc) toolport.ToolFunc {
 		case "contacts", "addressbook":
 			return "폰 주소록 라이브 조회는 지원이 종료되었습니다 — 동기화된 주소록인 `contacts` 도구를 사용하세요 (이름/회사/전화 검색 지원).", nil
 		default:
-			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery|usage|calllog|messages)", p.What)
+			return "", fmt.Errorf("phone_read: unknown what=%q (use location|battery|usage|calllog|messages)", what)
 		}
+	}
+}
+
+func normalizePhoneReadWhat(what, query, typ string) string {
+	raw := strings.ToLower(strings.TrimSpace(what))
+	if raw == "" {
+		raw = strings.ToLower(strings.TrimSpace(query))
+	}
+	if raw == "" {
+		raw = strings.ToLower(strings.TrimSpace(typ))
+	}
+	switch raw {
+	case "calls":
+		return "calllog"
+	case "talk":
+		return "messages"
+	case "app_usage":
+		return "usage"
+	default:
+		return raw
 	}
 }
 

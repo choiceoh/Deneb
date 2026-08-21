@@ -378,7 +378,7 @@ func (b *skillLifecycleBackend) recordReviewUsage(req chattools.SkillEvolutionPr
 
 func normalizeSkillLifecycleStatusLimit(limit int) int {
 	if limit <= 0 {
-		return 20
+		return 8
 	}
 	if limit > skillLifecycleMaxStatusLogEntries {
 		return skillLifecycleMaxStatusLogEntries
