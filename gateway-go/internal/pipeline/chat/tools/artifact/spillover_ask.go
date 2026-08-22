@@ -28,7 +28,7 @@ const (
 	spillAskChunkTokens   = 512
 	spillAskReduceTokens  = 1024
 
-	// spillAskCallTimeout bounds ONE delegated call. The tool inherits the
+	// spillAskCallTimeout bounds EACH delegated call, map and reduce alike. The tool inherits the
 	// interactive turn context, whose backstop is 30 minutes, and the local-AI
 	// hub path preserves the caller deadline instead of imposing its own — so
 	// without this a single stalled helper request would eat the whole user
@@ -69,10 +69,12 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	// the dropped middle into clean-looking, in-session evidence. When the
 	// blob trips promptguard we refuse to delegate and let the caller page,
 	// so the existing chokepoint sees the real bytes.
-	for _, c := range chunks {
-		if len(promptguard.Scan(c.text)) > 0 {
-			return "", false
-		}
+	//
+	// Scan the RAW blob, never the chunks: chunk text prefixes every line with
+	// "N: ", which would stop line-anchored signatures (role impersonation) from
+	// matching content that paging would have caught.
+	if len(promptguard.Scan(strings.Join(lines, "\n"))) > 0 {
+		return "", false
 	}
 
 	type partial struct {
@@ -120,8 +122,10 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	for _, p := range partials {
 		fmt.Fprintf(&merged, "### %d–%d줄\n%s\n\n", p.firstLine, p.lastLine, p.answer)
 	}
-	reduced, err := ask(ctx, spillAskReduceSystemPrompt,
+	reduceCtx, cancelReduce := context.WithTimeout(ctx, spillAskCallTimeout)
+	reduced, err := ask(reduceCtx, spillAskReduceSystemPrompt,
 		fmt.Sprintf("## 질문\n%s\n\n## 부분 답변\n%s", question, merged.String()), spillAskReduceTokens)
+	cancelReduce()
 	if err != nil || strings.TrimSpace(reduced) == "" {
 		// Reduce failed — the partials are still real evidence, so return them
 		// rather than dropping work the local model already did.

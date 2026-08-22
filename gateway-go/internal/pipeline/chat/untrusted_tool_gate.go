@@ -104,13 +104,15 @@ func (g *untrustedToolGate) observeToolResult(name, _ /*toolUseID*/, result stri
 		g.markTainted("external-origin:" + name)
 		return
 	}
-	// code_action dials back into the registry without surfacing nested tool
-	// results to OnToolResult; external reads inside the script mark the turn
-	// context instead (ToolRegistry.Execute). Taint when the wrapper completes.
-	if name == "code_action" {
-		if tc := g.turnCtx.Load(); tc != nil && tc.ExternalOriginTouched() {
-			g.markTainted("external-origin:code_action")
-		}
+	// Some tools only reveal their external origin during execution, so the
+	// name alone cannot classify them: code_action dials back into the registry
+	// without surfacing nested tool results here, and read_spillover reaches
+	// into a blob whose origin tool is recorded on the spill rather than on
+	// this call. Both mark the turn context in ToolRegistry.Execute, so honor
+	// that flag whatever the tool is named — the flag is only ever set by an
+	// external-origin read, and taint is sticky either way.
+	if tc := g.turnCtx.Load(); tc != nil && tc.ExternalOriginTouched() {
+		g.markTainted("external-origin:" + name)
 	}
 }
 
