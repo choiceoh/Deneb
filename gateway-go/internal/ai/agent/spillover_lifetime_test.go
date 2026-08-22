@@ -559,6 +559,65 @@ func outlineEntries(t *testing.T, marker string) []struct {
 	return out
 }
 
+// When the clamp fires, the marker must not advertise offsets into text the
+// spill file does not contain. The outline and the file are both derived from
+// persistedForm, so a heading past the ceiling is simply absent from the
+// outline rather than pointing at nothing.
+func TestOutlineOffsetsHoldWhenTheSpillIsClamped(t *testing.T) {
+	origCap := maxSpillBytesPerSession
+	maxSpillBytesPerSession = 8 * 1024
+	t.Cleanup(func() { maxSpillBytesPerSession = origCap })
+
+	var b strings.Builder
+	pad := func(n int) {
+		for i := 0; i < n; i++ {
+			b.WriteString("padding line for the ceiling test\n")
+		}
+	}
+	// Two headings comfortably inside the ceiling — these must survive and stay
+	// addressable — and two well past it, which must not be advertised at all.
+	// Two of each because a lone heading is suppressed as noise, so a fixture
+	// with one divergent heading would pass vacuously.
+	b.WriteString("# 살아남는 섹션 A\n")
+	pad(60)
+	b.WriteString("# 살아남는 섹션 B\n")
+	pad(60)
+	b.WriteString("# 살아남는 섹션 C\n")
+	for b.Len() < maxSpillBytesPerSession {
+		b.WriteString("padding line inside the ceiling\n")
+	}
+	pad(300)
+	b.WriteString("# 잘려나가는 섹션 D\n")
+	pad(100)
+	b.WriteString("# 잘려나가는 섹션 E\n")
+	pad(300)
+	content := b.String()
+
+	store := NewSpilloverStore(t.TempDir())
+	store.SetSessionLiveness(func(string) bool { return true })
+	const key = "client:main"
+	id, err := store.Store(key, "exec", content)
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	persisted, err := store.Load(id, key)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	fileLines := strings.Split(persisted, "\n")
+
+	out := TruncateHeadTail(content, 2600, id)
+
+	for _, e := range outlineEntries(t, out) {
+		if e.line < 1 || e.line > len(fileLines) {
+			t.Fatalf("outline points at line %d, clamped file has %d lines", e.line, len(fileLines))
+		}
+		if got := strings.TrimSpace(fileLines[e.line-1]); got != e.text {
+			t.Errorf("offset %d points at %q, outline claims %q", e.line, got, e.text)
+		}
+	}
+}
+
 // Store must never evict the spill it is about to return a handle for.
 // Timestamps are taken before the disk write, so a concurrent spill can look
 // older; evicting the new entry would hand back a dead read_spillover pointer

@@ -76,6 +76,30 @@ var maxSpillBytesPerSession = 512 * 1024 * 1024
 // concluding the tool produced nothing more.
 const spillClampNotice = "\n\n…[이 결과는 세션 스필 상한을 넘어 뒷부분이 잘렸습니다 — 도구를 더 좁은 범위로 다시 실행하세요]\n"
 
+// persistedForm returns the exact bytes Store writes for content: redacted,
+// then clamped to the session byte ceiling.
+//
+// It is a named function because the truncation marker's outline has to agree
+// with it byte for byte — the offsets it prints are only meaningful as
+// positions in this text. Redaction is not line-count preserving and the clamp
+// drops a tail outright, so an outline computed from anything else points at
+// the wrong lines, or at lines the file does not contain.
+//
+// A single result bigger than the whole session ceiling would otherwise sit on
+// disk exempt from it: enforceSessionQuotaLocked spares the spill it is handing
+// a handle for, so nothing can evict it and the advertised ceiling is exceeded
+// by an arbitrary amount for as long as the session lives. Clamp the file
+// rather than refusing the spill — refusing leaves capToolOutput with no handle
+// to put in the marker, making the discarded middle unrecoverable, which is
+// worse than losing the tail of a result already past anything a session holds.
+func persistedForm(content string) string {
+	persisted := redact.String(content)
+	if len(persisted) > maxSpillBytesPerSession {
+		persisted = textutil.TruncateBytes(persisted, maxSpillBytesPerSession-len(spillClampNotice)) + spillClampNotice
+	}
+	return persisted
+}
+
 // spillEntry tracks a single spilled result on disk.
 type spillEntry struct {
 	Path       string
@@ -161,19 +185,7 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	filename := fmt.Sprintf("%s_%d_%s_%s.txt", sessionFilePrefix(sessionKey), now.UnixMilli(), safeTool, spillID)
 	path := filepath.Join(s.baseDir, filename)
 
-	persisted := redact.String(content)
-	// A single result bigger than the whole session ceiling would otherwise sit
-	// on disk exempt from it: enforceSessionQuotaLocked spares the spill it is
-	// handing a handle for, so nothing can evict it and the advertised ceiling
-	// is exceeded by an arbitrary amount for as long as the session lives.
-	//
-	// Clamp the file rather than refusing the spill. Refusing leaves
-	// capToolOutput with no handle to put in the truncation marker, which makes
-	// the discarded middle unrecoverable — a worse failure than losing the tail
-	// of a result that was already past anything a session can hold.
-	if len(persisted) > maxSpillBytesPerSession {
-		persisted = textutil.TruncateBytes(persisted, maxSpillBytesPerSession-len(spillClampNotice)) + spillClampNotice
-	}
+	persisted := persistedForm(content)
 	if err := os.WriteFile(path, []byte(persisted), 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 		return "", fmt.Errorf("spillover write: %w", err)
 	}

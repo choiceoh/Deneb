@@ -77,19 +77,20 @@ const (
 // spilledMiddleOutline renders the outline in the coordinates of the PERSISTED
 // spill file, which is what a read_spillover(offset=N) actually opens.
 //
-// Store writes redact.String(content), and redaction is not line-count
-// preserving: a PEM block spanning thirty lines collapses to a single token, so
-// every heading after it sits that many lines earlier in the file than in the
-// raw output. Numbers taken from the raw content would point past their
-// heading — silently, and further off the more secrets the output carried,
-// which defeats the absolute-offset navigation the outline exists to provide.
+// Store writes persistedForm(content), which differs from the raw output twice
+// over. Redaction is not line-count preserving — a PEM block spanning thirty
+// lines collapses to a single token, so every heading after it sits that many
+// lines earlier in the file — and an oversized result is clamped, so a heading
+// past the ceiling is not in the file at all. Numbers taken from the raw
+// content would point past their heading, or at nothing, silently defeating the
+// absolute-offset navigation the outline exists to provide.
 //
 // So the outline is computed over the same redacted text the file holds. The
 // head and tail the model reads stay raw, as they were: only the offsets have
 // to agree with the file. The cost is one more pass over the output, paid only
 // when the result actually spilled.
 func spilledMiddleOutline(content string, maxChars int) string {
-	persisted := redact.String(content)
+	persisted := persistedForm(content)
 	if len(persisted) <= maxChars {
 		// Redaction shrank the output below the budget, so the persisted file
 		// has no discarded middle to point into.
