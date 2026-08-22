@@ -263,15 +263,29 @@ def quote(text):
 def clamp_block(marked):
     """Cap the finished block, since marking is what makes it big.
 
-    Cut on a line boundary so no line loses its marker -- a partial line would
-    still carry one, but a clean cut keeps the block readable -- and say the
-    cut happened in a marked line rather than trailing off silently.
+    The cap covers the notice too. The first version kept
+    DECISION_BLOCK_CHARS characters and THEN appended the omission line, so the
+    block it returned was always over its own ceiling -- the same mistake this
+    function exists to fix, one level up: a bound that does not count part of
+    what it returns is not a bound. (The first test even allowed the overshoot,
+    which is how it survived.)
+
+    Cut on a line boundary so no line loses its marker. When the budget holds
+    no line boundary at all the head is a marked partial line, which is still
+    marked; when it holds nothing, only the notice goes out -- a leading empty
+    line would be an unmarked line inside the block.
     """
     if len(marked) <= DECISION_BLOCK_CHARS:
         return marked
     marker = UNTRUSTED_PREFIX.rstrip()
-    kept = marked[:DECISION_BLOCK_CHARS].rsplit("\n", 1)[0]
-    return f"{kept}\n{marker} …(길이 상한으로 생략 — 전문은 위 sha로)"
+    notice = f"{marker} …(길이 상한으로 생략 — 전문은 위 sha로)"
+    budget = DECISION_BLOCK_CHARS - len(notice) - 1  # -1 for the joining newline
+    head = marked[: max(budget, 0)]
+    cut = head.rfind("\n")
+    head = head[:cut] if cut != -1 else head.rstrip()
+    if not head:
+        return notice
+    return f"{head}\n{notice}"
 
 
 def fmt_decision(d):

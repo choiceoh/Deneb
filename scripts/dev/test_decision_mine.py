@@ -886,32 +886,36 @@ class EpisodeDedupTests(unittest.TestCase):
         self.assertEqual(len(paths), capture.MAX_EPISODES + 6, "all files must be cleared")
         self.assertEqual({r["session_id"] for r in rows}, {"A", "B"})
 
-    def test_two_ends_in_one_second_do_not_tie(self) -> None:
-        # `ts` used to be whole seconds, so a session ending twice in one
-        # second (resume, compaction) tied -- and the stable sort then let
-        # whichever row arrived last win, which under lock contention can be
-        # the OLDER state. Spool-drain ties fell to os.listdir() order.
+    def test_the_recorded_ts_keeps_sub_second_precision(self) -> None:
+        # Whole seconds tied: a session ending twice in one second (resume,
+        # compaction) produced two rows with the same sort key, and the stable
+        # sort then kept whichever arrived last -- which under lock contention
+        # can be the OLDER state. Spool-drain ties fell to os.listdir() order.
+        #
+        # The clock is stubbed rather than raced. Timing two real runs relied
+        # on both landing in the same second, which several git subprocesses
+        # can easily straddle, and on the platform clock being fine enough to
+        # tell them apart.
         recorded = []
         real_append, real_mine = capture.append_episode, capture.mine_decisions
+        real_time = capture.time.time
         capture.append_episode = lambda ep, **kw: recorded.append(ep)
         capture.mine_decisions = lambda cwd: None
-        payload = json.dumps(
-            {"session_id": "s", "cwd": self.tmp.name, "transcript_path": ""}
-        )
+        capture.time.time = lambda: 1234567890.75
         real_stdin = sys.stdin
+        sys.stdin = io.StringIO(
+            json.dumps({"session_id": "s", "cwd": self.tmp.name, "transcript_path": ""})
+        )
         try:
-            for _ in range(2):
-                sys.stdin = io.StringIO(payload)
-                with self.assertRaises(SystemExit):
-                    capture.main()
+            with self.assertRaises(SystemExit):
+                capture.main()
         finally:
             sys.stdin = real_stdin
+            capture.time.time = real_time
             capture.append_episode, capture.mine_decisions = real_append, real_mine
 
-        self.assertEqual(len(recorded), 2)
-        first, second = (r["ts"] for r in recorded)
-        self.assertEqual(int(first), int(second), "the test needs both ends in one second")
-        self.assertNotEqual(first, second, "same-second ends must not tie")
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0]["ts"], 1234567890.75)
 
     def test_the_drain_caps_by_ts_not_by_file_mtime(self) -> None:
         # Preselecting by mtime and parsing only those meant a backlog past
@@ -1099,7 +1103,9 @@ class DecisionSurfacingTests(unittest.TestCase):
         lines = ctx.splitlines()
         idx = [i for i, ln in enumerate(lines) if ln.startswith(marker)]
         block = "\n".join(lines[idx[0]:idx[-1] + 1])
-        self.assertLessEqual(len(block), surface.DECISION_BLOCK_CHARS + 80)
+        # No slack. The first version of this assertion allowed +80, which is
+        # how a clamp that appended its notice AFTER the cap survived review.
+        self.assertLessEqual(len(block), surface.DECISION_BLOCK_CHARS)
         # Clamping must not open a hole in the marking it clamps.
         self.assertEqual([ln for ln in lines[idx[0]:idx[-1] + 1] if not ln.startswith(marker)], [])
 
