@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import json
 import os
 import re
@@ -223,13 +224,36 @@ def memory_lock(name="memory", timeout=5.0, mem_dir=None):
                     os.close(fd)
 
 
-def _try_lock(fd) -> bool:
-    """Take an exclusive lock on `fd`, or report that someone else holds it.
+# The errnos that mean "someone else holds it" rather than "the call broke".
+# flock reports contention as EWOULDBLOCK (EAGAIN on Linux); msvcrt.locking
+# reports it as EDEADLOCK, and EACCES shows up for lock conflicts on some
+# platforms. Everything else -- ENOLCK, EBADF, EINVAL, EIO -- is a broken
+# call, not a busy lock.
+_CONTENTION_ERRNOS = frozenset(
+    code
+    for code in (
+        getattr(errno, "EWOULDBLOCK", None),
+        getattr(errno, "EAGAIN", None),
+        getattr(errno, "EACCES", None),
+        getattr(errno, "EDEADLK", None),
+        getattr(errno, "EDEADLOCK", None),
+    )
+    if code is not None
+)
 
-    False means "held by someone", which is what the caller must act on. A
-    platform with neither module would also return False -- and so never write
-    -- but that is the safe direction, and CPython ships one or the other
-    everywhere it runs.
+
+def _try_lock(fd) -> bool:
+    """True if taken. False means SOMEONE ELSE HOLDS IT -- nothing else.
+
+    Every other OSError propagates, and the caller's guard turns it into an
+    immediate "not held" instead of a wait. Folding "locking is unsupported
+    here" or "this fd is broken" into "held" would make each call sit out the
+    whole timeout and then report contention forever: mining would never
+    advance past the lock and episodes would only ever pile up in the spool,
+    with nothing failing loudly enough to say why.
+
+    That is the same collapse `is_ancestor` and `object_exists` already refuse
+    in this file -- one sentinel standing for two different answers.
     """
     try:
         if fcntl is not None:
@@ -238,9 +262,13 @@ def _try_lock(fd) -> bool:
             os.lseek(fd, 0, os.SEEK_SET)
             msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
         else:
+            # No locking primitive at all. Reporting contention would hide it
+            # forever; raising lets the caller give up now.
+            raise RuntimeError("no interprocess locking primitive available")
+    except OSError as exc:
+        if exc.errno in _CONTENTION_ERRNOS:
             return False
-    except OSError:
-        return False
+        raise
     return True
 
 

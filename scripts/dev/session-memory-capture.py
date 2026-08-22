@@ -229,26 +229,24 @@ def drain_pending(pending_dir):
     lands, so a crash in between leaves the files to be merged next time
     rather than dropping the episodes they hold.
 
-    The newest MAX_EPISODES are parsed but ALL listed files are returned for
-    deletion: anything older than that cannot survive the ledger cap anyway,
-    and leaving it would make every later drain re-read a backlog that can
-    never land.
+    EVERY file is parsed before anything is capped. The first version picked
+    the newest MAX_EPISODES by filesystem mtime and parsed only those, while
+    deleting all of them -- so with a backlog past the cap, an episode whose
+    mtime had been reset (a copy, a restore, a clock step) was deleted without
+    ever being read, and a genuinely older one could survive in its place. The
+    cap belongs on `ts`, which is the episode's own idea of when it happened,
+    so it is applied after parsing. Files still all go back for deletion:
+    anything past the cap cannot survive the ledger's own cap either, and
+    leaving it would make every later drain re-read a backlog that never lands.
     """
     try:
         names = [n for n in os.listdir(pending_dir) if n.endswith(".json")]
     except OSError:
         return [], []
 
-    def mtime(name):
-        try:
-            return os.path.getmtime(os.path.join(pending_dir, name))
-        except OSError:
-            return 0.0
-
-    names.sort(key=mtime)
     paths = [os.path.join(pending_dir, n) for n in names]
     rows = []
-    for path in paths[-MAX_EPISODES:]:
+    for path in paths:
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 row = json.load(f)
@@ -258,7 +256,8 @@ def drain_pending(pending_dir):
             continue
         if isinstance(row, dict):
             rows.append(row)
-    return rows, paths
+    rows.sort(key=lambda r: r.get("ts", 0))
+    return rows[-MAX_EPISODES:], paths
 
 
 def append_episode(episode, path=EPISODES, pending_dir=None, lock_timeout=LOCK_TIMEOUT):

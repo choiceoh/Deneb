@@ -231,15 +231,20 @@ def quote(text):
     Line-based rather than tag-based, for the reason UNTRUSTED_PREFIX gives:
     there is no boundary string here for content to forge.
 
-    Bare CR and CRLF are normalised to LF first. A lone `\r` starts a fresh
-    line in most renderers while `str.split("\n")` does not see one, so
-    without this a commit could put an unmarked-looking line on screen.
+    Split with `str.splitlines()`, not `split("\n")`. What counts as a line to
+    a renderer is not just LF: `\r`, `\v`, `\f`, U+001C-001E, U+0085, U+2028
+    and U+2029 all start a fresh line on screen while `split("\n")` sees none
+    of them -- so a commit could put unmarked-looking text on the next visual
+    line and walk straight back out of the boundary. `splitlines()` knows the
+    whole set; joining with LF then normalises them away. Fixing only `\r`,
+    as the first version did, left six other ways in.
+
+    An empty string splits to no lines at all, which would emit nothing where
+    a marked blank belongs, so that case is spelled out.
     """
-    body = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines = (text or "").splitlines() or [""]
     marker = UNTRUSTED_PREFIX.rstrip()
-    return "\n".join(
-        (UNTRUSTED_PREFIX + line) if line else marker for line in body.split("\n")
-    )
+    return "\n".join((UNTRUSTED_PREFIX + line) if line else marker for line in lines)
 
 
 def fmt_decision(d):

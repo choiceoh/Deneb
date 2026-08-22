@@ -9,11 +9,13 @@ nothing.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -527,6 +529,33 @@ class MineTests(unittest.TestCase):
             )
         self.assertNotIn("\r", marked)
 
+    def test_every_renderer_line_boundary_is_marked_not_just_lf(self) -> None:
+        # Fixing only \r left six other ways out. A renderer -- and
+        # str.splitlines() -- starts a new line on \v, \f, U+001C-001E,
+        # U+0085, U+2028 and U+2029 too, while split("\n") sees none of them,
+        # so text after one appeared on the next visual line with no marker.
+        marker = surface.UNTRUSTED_PREFIX.rstrip()
+        for name, sep in (
+            ("CR", "\r"),
+            ("CRLF", "\r\n"),
+            ("VT", "\v"),
+            ("FF", "\f"),
+            ("FS", "\x1c"),
+            ("GS", "\x1d"),
+            ("RS", "\x1e"),
+            ("NEL", "\x85"),
+            ("LS", "\u2028"),
+            ("PS", "\u2029"),
+        ):
+            marked = surface.quote(f"safe{sep}INJECTED")
+            unmarked = [ln for ln in marked.splitlines() if not ln.startswith(marker)]
+            self.assertEqual(unmarked, [], f"{name} escaped the marking")
+
+    def test_marking_empty_text_still_emits_a_marked_line(self) -> None:
+        # "".splitlines() is [], which would emit nothing where a marked blank
+        # belongs and silently shorten the block.
+        self.assertEqual(surface.quote(""), surface.UNTRUSTED_PREFIX.rstrip())
+
     def test_marking_a_line_that_already_looks_marked_marks_it_again(self) -> None:
         # The property a tag could never have: content resembling the marker
         # is not a boundary, it is just content that gets marked too.
@@ -652,6 +681,53 @@ class MemoryLockTests(unittest.TestCase):
             self.assertTrue(held)
         self.assertTrue(os.path.exists(path))
 
+    def test_try_lock_raises_on_a_broken_call_instead_of_reporting_contention(self) -> None:
+        # False means "someone holds it" and nothing else. A closed fd is not
+        # a busy lock -- EBADF, ENOLCK and friends are broken calls, and
+        # reporting them as contention made every attempt wait out the full
+        # timeout and then report contention forever: mining would never pass
+        # the lock and episodes would only pile up in the spool.
+        #
+        # Driven through the REAL primitive on purpose. Stubbing `_try_lock`
+        # to raise tests memory_lock's handling, not this classification --
+        # the first version of this test did that and passed with the
+        # classification reverted.
+        path = os.path.join(self.tmp.name, "closed")
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        os.close(fd)
+        with self.assertRaises(OSError) as caught:
+            dm._try_lock(fd)
+        self.assertEqual(caught.exception.errno, errno.EBADF)
+
+    def test_try_lock_reports_a_genuinely_held_lock_as_contention(self) -> None:
+        path = os.path.join(self.tmp.name, ".held.lock")
+        holder = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        waiter = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            self.assertTrue(dm._try_lock(holder))
+            self.assertFalse(dm._try_lock(waiter))
+        finally:
+            os.close(holder)
+            os.close(waiter)
+
+    def test_a_lock_that_cannot_be_taken_at_all_does_not_burn_the_timeout(self) -> None:
+        # The other half: once _try_lock raises, memory_lock has to give up
+        # now rather than retry a call that will fail identically every time.
+        real = dm._try_lock
+
+        def broken(fd):
+            raise OSError(errno.ENOLCK, "no locks available")
+
+        dm._try_lock = broken
+        try:
+            started = time.monotonic()
+            with dm.memory_lock("t", timeout=5.0, mem_dir=self.tmp.name) as held:
+                self.assertFalse(held)
+            waited = time.monotonic() - started
+        finally:
+            dm._try_lock = real
+        self.assertLess(waited, 1.0, "a broken lock call must not burn the timeout")
+
     def test_an_unwritable_directory_still_yields(self) -> None:
         with dm.memory_lock("t", timeout=0.1, mem_dir="/proc/nonexistent/nope") as held:
             self.assertFalse(held)
@@ -769,6 +845,24 @@ class EpisodeDedupTests(unittest.TestCase):
         capture.append_episode({"session_id": "s1", "ts": 1}, path=self.path)
         self.assertEqual([r["session_id"] for r in self.rows()], ["s1"])
         self.assertFalse(os.path.exists(bad))
+
+    def test_the_drain_caps_by_ts_not_by_file_mtime(self) -> None:
+        # Preselecting by mtime and parsing only those meant a backlog past
+        # the cap could delete a newer episode unread -- a copy or a restore
+        # resets mtime while `ts` still says when the session ended.
+        os.makedirs(self.spool(), exist_ok=True)
+        newest = os.path.join(self.spool(), "1-old-mtime.json")
+        with open(newest, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"session_id": "keep", "ts": 10**9}))
+        os.utime(newest, (0, 0))  # oldest on disk, newest by ts
+        for i in range(capture.MAX_EPISODES + 5):
+            p = os.path.join(self.spool(), f"2-{i:05d}.json")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"session_id": f"p{i}", "ts": i}))
+
+        rows, paths = capture.drain_pending(self.spool())
+        self.assertEqual(len(paths), capture.MAX_EPISODES + 6, "all files must be cleared")
+        self.assertIn("keep", [r["session_id"] for r in rows])
 
     def test_the_spool_cannot_grow_past_what_the_ledger_can_hold(self) -> None:
         # Files older than the cap can never survive compaction, so leaving
