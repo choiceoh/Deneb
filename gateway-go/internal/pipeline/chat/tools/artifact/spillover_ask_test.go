@@ -443,3 +443,20 @@ func TestSpilloverQuestionKeepsExplicitNoEvidenceAnswer(t *testing.T) {
 		t.Errorf("explicit no-evidence reply was dropped:\n%s", out)
 	}
 }
+
+// The no-evidence escape hatch must not be a substring test: an answer that
+// makes unverifiable claims and merely mentions the phrase would slip past the
+// citation gate entirely.
+func TestSpilloverQuestionRejectsClaimsHidingBehindNoEvidence(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 60)
+	rec := &askRecorder{reply: func(string) (string, error) {
+		return "설정값은 42이고 배포는 실패했으며 원인은 네트워크입니다. 참고로 일부 구간에는 근거 없음.", nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
+
+	if strings.Contains(out, "설정값은 42이고") {
+		t.Fatalf("uncited claims passed by mentioning the no-evidence phrase:\n%s", out)
+	}
+}

@@ -178,10 +178,23 @@ func hasAnyCitation(answer string) bool {
 	return citationRe.MatchString(answer)
 }
 
+// noEvidenceMaxChars bounds what can pass as the explicit no-evidence reply.
+// The prompt asks for that sentence ALONE, so anything appreciably longer is
+// carrying additional claims.
+const noEvidenceMaxChars = 60
+
 // isNoEvidenceAnswer recognizes the delegate's explicit "nothing here" reply,
 // which is a legitimate uncited outcome the system prompt asks for.
+//
+// It must not be a substring test: an answer that makes unverifiable claims and
+// merely mentions the phrase would slip past the citation gate entirely. The
+// reply has to be essentially that sentence and nothing else.
 func isNoEvidenceAnswer(answer string) bool {
-	return strings.Contains(answer, "근거 없음")
+	trimmed := strings.TrimSpace(answer)
+	if len(trimmed) > noEvidenceMaxChars {
+		return false
+	}
+	return strings.Contains(trimmed, "근거 없음")
 }
 
 // spillAskVerifyHint tells the root how to check a cited line itself. Without
