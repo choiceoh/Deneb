@@ -558,16 +558,22 @@ func TestOutlineScanReachesTheLastLineWithoutTrailingNewline(t *testing.T) {
 
 	out := TruncateHeadTail(content, 800, "sp_test")
 
-	if !strings.Contains(out, "# 마지막 섹션") {
-		t.Errorf("final line without a trailing newline was not scanned:\n%s", out)
-	}
+	// Assert on the OUTLINE, not on the whole marker: the final heading is also
+	// the last line, so it appears in the tail preview — a Contains check on
+	// `out` passes even when the scanner drops everything after the last
+	// newline, which is the exact failure this test exists to catch.
+	found := false
 	for _, e := range outlineEntries(t, out) {
 		if e.text != "# 마지막 섹션" {
 			continue
 		}
+		found = true
 		if want := 402; e.line != want {
 			t.Errorf("final heading numbered %d, want %d", e.line, want)
 		}
+	}
+	if !found {
+		t.Fatalf("final line without a trailing newline never reached the outline:\n%s", out)
 	}
 }
 
