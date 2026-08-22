@@ -101,35 +101,42 @@ type mcpError struct {
 }
 
 // requestMetaVersion pulls `params._meta["io.modelcontextprotocol/protocolVersion"]`
-// out of a request body. A malformed or absent `_meta` reads as "" — the
-// caller decides whether that is legal for the resolved era.
-func requestMetaVersion(params json.RawMessage) string {
+// out of a request body.
+//
+// The second return separates "the key is absent" from "the key is there but
+// unreadable", and that distinction is load-bearing: a malformed marker is
+// still a DECLARATION, just a broken one. Collapsing both to "" would let a
+// client with `"protocolVersion": 7` slip through the bare-probe exemption as
+// if it had declared nothing — the one path that skips validation.
+func requestMetaVersion(params json.RawMessage) (version string, present bool) {
 	if len(params) == 0 {
-		return ""
+		return "", false
 	}
 	var p struct {
 		Meta map[string]json.RawMessage `json:"_meta"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
-		return ""
+		return "", false
 	}
 	raw, ok := p.Meta[metaProtocolVersion]
 	if !ok {
-		return ""
+		return "", false
 	}
-	var version string
 	if err := json.Unmarshal(raw, &version); err != nil {
-		return ""
+		return "", true // present, but not a string
 	}
-	return version
+	return version, true
 }
 
 // declaresProtocol reports whether a request carries any 2.0 version marker at
 // all. A request with none is not a half-formed 2.0 request — it is a client
 // from the handshake era, or one probing to find out what we are.
 func declaresProtocol(r *http.Request, msg mcpMessage) bool {
-	return strings.TrimSpace(r.Header.Get(headerProtocolVersion)) != "" ||
-		strings.TrimSpace(requestMetaVersion(msg.Params)) != ""
+	if strings.TrimSpace(r.Header.Get(headerProtocolVersion)) != "" {
+		return true
+	}
+	_, present := requestMetaVersion(msg.Params)
+	return present
 }
 
 // requireProtocolVersion admits a request only if it declares 2026-07-28 in
@@ -142,8 +149,16 @@ func declaresProtocol(r *http.Request, msg mcpMessage) bool {
 // this (see Handler.ServeHTTP).
 func requireProtocolVersion(r *http.Request, msg mcpMessage) *mcpError {
 	header := strings.TrimSpace(r.Header.Get(headerProtocolVersion))
-	meta := strings.TrimSpace(requestMetaVersion(msg.Params))
+	rawMeta, metaPresent := requestMetaVersion(msg.Params)
+	meta := strings.TrimSpace(rawMeta)
 
+	// Present but unreadable: say so, rather than reporting it as missing and
+	// sending the client looking for a field it already sent.
+	if metaPresent && meta == "" {
+		return headerMismatch(fmt.Sprintf(
+			"params._meta[%q] must be a non-empty string", metaProtocolVersion,
+		))
+	}
 	if header != "" && meta != "" && header != meta {
 		return headerMismatch(fmt.Sprintf(
 			"%s header %q does not match body _meta %q", headerProtocolVersion, header, meta,

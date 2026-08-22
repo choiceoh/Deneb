@@ -17,9 +17,17 @@
 // ONE protocol revision is served: 2026-07-28 ("MCP 2.0"). The `initialize`
 // handshake era was supported briefly (#4561) and then dropped — it existed
 // only for external clients, and carrying it meant a second shape for every
-// result. A client on an older revision gets a 400 naming what we speak; the
-// one exception is `server/discover`, which answers without any 2.0 metadata
-// precisely so such a client can find that out. See protocol2026.go.
+// result. A client on an older revision gets a 400 naming what we speak.
+//
+// Two request shapes are admitted without 2.0 metadata, both deliberate:
+//   - `server/discover`, so a client on any revision can find out what we
+//     speak — it would otherwise have no machine-readable way to;
+//   - notifications (no id), which are acknowledged with 202 and dropped. The
+//     revision states outright that "header requirements for notification
+//     POSTs are not defined by this revision", so gating them would be
+//     inventing a rule; nothing is dispatched either way.
+//
+// See protocol2026.go.
 //
 // Deliberate minimalism (spec-conformant subset):
 //   - stateless: no Mcp-Session-Id, every request self-contained — which is
@@ -249,7 +257,10 @@ func (s *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Notifications (no id) are fire-and-forget: acknowledge and drop.
+	// Notifications (no id) are fire-and-forget: acknowledge and drop. This
+	// runs BEFORE the version gate on purpose — 2026-07-28 leaves header
+	// requirements for notification POSTs undefined, and a dropped message
+	// dispatches nothing, so there is nothing for a gate to protect.
 	if len(msg.ID) == 0 || string(msg.ID) == "null" {
 		w.WriteHeader(http.StatusAccepted)
 		return

@@ -234,8 +234,10 @@ func TestMCPTransportRejectsInvalidRequestsPerJSONRPCRules(t *testing.T) {
 	if rec := postMCPRaw(t, s, "", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("no-token status = %d", rec.Code)
 	}
-	// Notification (no id) → 202, no body. Header rules are undefined for
-	// notification POSTs in this revision, so it is accepted bare.
+	// Notification (no id) → 202, no body, and deliberately WITHOUT 2.0
+	// metadata: the revision says "header requirements for notification POSTs
+	// are not defined by this revision", so gating them would invent a rule.
+	// Nothing is dispatched, so nothing is exposed by accepting it.
 	if rec := postMCPRaw(t, s, token, `{"jsonrpc":"2.0","method":"notifications/initialized"}`, nil); rec.Code != http.StatusAccepted {
 		t.Errorf("notification status = %d", rec.Code)
 	}

@@ -419,18 +419,55 @@ func TestDecodeHeaderValueBoundaryMatrix(t *testing.T) {
 	}
 }
 
+// A malformed version marker must not be mistaken for an absent one. The
+// bare-probe exemption exists for requests with nothing to validate; a request
+// that DID declare a version — badly — has something to validate, and gets
+// told what is wrong with it instead of being served.
+func TestMalformedVersionMarkerDoesNotBuyTheBareProbeExemption(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest(http.MethodPost, "/mcp",
+		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":`+
+			`{"io.modelcontextprotocol/protocolVersion":7}}}`))
+	rec := httptest.NewRecorder()
+	configuredMCPHandler().ServeHTTP(rec, req)
+
+	errObj := errorOf(t, rec, http.StatusBadRequest, codeHeaderMismatch)
+	if msg, _ := errObj["message"].(string); !strings.Contains(msg, "must be a non-empty string") {
+		t.Errorf("message = %q, want it to name the malformed field", msg)
+	}
+}
+
 func TestRequestMetaVersionBoundaryMatrix(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name   string
-		params string
-		want   string
+		name        string
+		params      string
+		want        string
+		wantPresent bool
 	}{
 		{name: "absent params", params: "", want: ""},
 		{name: "empty object", params: `{}`, want: ""},
 		{name: "meta without version", params: `{"_meta":{}}`, want: ""},
-		{name: "version present", params: `{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, want: "2026-07-28"},
-		{name: "version wrong type", params: `{"_meta":{"io.modelcontextprotocol/protocolVersion":7}}`, want: ""},
+		{
+			name:        "version present",
+			params:      `{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`,
+			want:        "2026-07-28",
+			wantPresent: true,
+		},
+		// Present but unreadable is a broken DECLARATION, not an absent one:
+		// reporting it as absent would let it through the bare-probe exemption.
+		{
+			name:        "version wrong type",
+			params:      `{"_meta":{"io.modelcontextprotocol/protocolVersion":7}}`,
+			want:        "",
+			wantPresent: true,
+		},
+		{
+			name:        "version null",
+			params:      `{"_meta":{"io.modelcontextprotocol/protocolVersion":null}}`,
+			want:        "",
+			wantPresent: true,
+		},
 		{name: "meta wrong type", params: `{"_meta":"nope"}`, want: ""},
 		{name: "malformed json", params: `{"_meta":`, want: ""},
 		{name: "params is an array", params: `[1,2]`, want: ""},
@@ -438,8 +475,10 @@ func TestRequestMetaVersionBoundaryMatrix(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := requestMetaVersion(json.RawMessage(tc.params)); got != tc.want {
-				t.Errorf("requestMetaVersion(%q) = %q, want %q", tc.params, got, tc.want)
+			got, present := requestMetaVersion(json.RawMessage(tc.params))
+			if got != tc.want || present != tc.wantPresent {
+				t.Errorf("requestMetaVersion(%q) = (%q, %v), want (%q, %v)",
+					tc.params, got, present, tc.want, tc.wantPresent)
 			}
 		})
 	}
