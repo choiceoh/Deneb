@@ -208,11 +208,19 @@ def defang(text):
     that follows the real closer -- and everything after it -- reads as part of
     the attacker's block. Stripping only the closer fixed the escape and left
     the swallow.
+
+    Removal repeats until nothing changes, because one pass can BUILD a tag it
+    just removed: `</untrusted_commit_<untrusted_commit_history>history>` loses
+    its inner opener and the halves close up into a real closer. Each pass only
+    deletes, so the text strictly shrinks and this terminates.
     """
     out = text or ""
-    for tag in (UNTRUSTED_CLOSE, UNTRUSTED_OPEN):
-        out = out.replace(tag, "")
-    return out
+    while True:
+        before = out
+        for tag in (UNTRUSTED_CLOSE, UNTRUSTED_OPEN):
+            out = out.replace(tag, "")
+        if out == before:
+            return out
 
 
 def fmt_decision(d):
