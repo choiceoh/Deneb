@@ -187,11 +187,16 @@ def append_episode(episode, path=EPISODES):
     """Record the episode, replacing any earlier row for the same session.
 
     Rewrite-and-replace rather than append, so a session that ends repeatedly
-    leaves one row instead of nine. The rewrite is atomic (temp + os.replace)
-    because the memory dir is shared across worktrees and two sessions can end
-    at once. If anything about the rewrite fails we fall back to a plain
-    append: a duplicate row is a much smaller loss than a dropped episode, and
-    the whole point of this hook is that it cannot fail loudly.
+    leaves one row instead of nine. The rewrite runs under an interprocess lock
+    and lands atomically (temp + os.replace), because the memory dir is shared
+    across worktrees and two sessions can end at once.
+
+    If the lock cannot be taken we fall back to a plain append. That fallback
+    reduces loss rather than eliminating it: an append that lands after the
+    holder read its snapshot but before it replaces the file is still
+    overwritten. It stays anyway, because the alternatives are worse --
+    skipping loses the episode outright, and retrying until the lock frees
+    could block a session ending, which this hook must never do.
     """
     try:
         os.makedirs(MEM_DIR, exist_ok=True)
