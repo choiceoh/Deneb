@@ -39,6 +39,18 @@ import subprocess
 import sys
 import time
 
+# Exactly one of these exists on any given platform, and which one decides how
+# the memory lock is taken. Imported at module scope so the choice is visible
+# here rather than buried in the lock body.
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:  # POSIX
+    msvcrt = None
+
 MEM_DIR = os.path.expanduser("~/.claude/deneb-session-memory")
 DECISIONS = os.path.join(MEM_DIR, "decisions.jsonl")
 CURSOR = os.path.join(MEM_DIR, "decisions.cursor")
@@ -56,11 +68,6 @@ DEFAULT_LIMIT = 400
 MAX_FILES = 12
 MAX_BODY_CHARS = 2000
 MAX_RECORDS = 2000
-
-# How old a lock must be before its owner counts as gone. Well above the
-# slowest legitimate hold (a cold 400-commit mine is ~0.4s) so a live holder is
-# never mistaken for a dead one.
-STALE_LOCK_SECONDS = 120.0
 
 # Trailers and generated footers. These are mechanically appended, carry no
 # rationale, and would otherwise dominate the short bodies.
@@ -158,7 +165,7 @@ def git(*args, cwd=None):
 
 
 @contextlib.contextmanager
-def memory_lock(name="memory", timeout=5.0, stale_after=STALE_LOCK_SECONDS, mem_dir=None):
+def memory_lock(name="memory", timeout=5.0, mem_dir=None):
     """Serialize a whole read-modify-write against the shared memory dir.
 
     Atomic replacement alone is not enough here. Two SessionEnd processes can
@@ -167,74 +174,84 @@ def memory_lock(name="memory", timeout=5.0, stale_after=STALE_LOCK_SECONDS, mem_
     triggers. The memory dir is shared across every worktree on purpose, so
     simultaneous ends are a real case, not a theoretical one.
 
-    O_CREAT|O_EXCL because it is the one primitive that behaves the same on
-    POSIX and Windows without a dependency.
+    A kernel lock (`flock`, `msvcrt.locking` on Windows) rather than an
+    exclusive create. Both exclude a second holder; the difference is what
+    happens when a holder dies. A lock FILE outlives the process that made it,
+    so it has to be reclaimed on a guess -- "old enough that nobody can still
+    be holding it" -- and that guess brought its own failure modes: a slow but
+    live holder robbed at the threshold, a token written so a timed-out waiter
+    would not delete a lock it never owned, and a window between judging a lock
+    stale and unlinking it in which someone else takes it. The kernel releases
+    its lock when the fd closes, including on kill -9 and on crash, so an
+    abandoned lock is free at once and none of those questions get asked.
 
-    Waiting and reclaiming are separate questions, and conflating them is a bug:
-    a slow-but-live holder (a cold mine catching up) is not an abandoned one, so
-    a lock is only stolen once it is `stale_after` old, never merely because we
-    waited. Running out of patience yields False instead -- and callers must
-    honour that, because proceeding unlocked is exactly the overwrite the lock
-    exists to prevent.
+    The file is created but never unlinked, which is the point: unlinking a
+    locked file lets the next process create a NEW inode and lock that instead,
+    so both would hold "the lock" and neither would be wrong. An empty
+    `.<name>.lock` staying behind is the cost of that.
 
-    Release checks the token it wrote. Without that, a holder that timed out
-    against a stolen lock would delete whichever lock file exists at the end --
-    which by then can belong to someone else, cascading the theft.
+    Running out of patience yields False -- and callers must honour that,
+    because proceeding unlocked is exactly the overwrite the lock exists to
+    prevent.
     """
     directory = mem_dir or MEM_DIR
     path = os.path.join(directory, f".{name}.lock")
-    token = f"{os.getpid()}:{time.monotonic_ns()}"
+    fd = None
     acquired = False
     try:
         os.makedirs(directory, exist_ok=True)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
         deadline = time.monotonic() + timeout
         while True:
-            try:
-                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                try:
-                    os.write(fd, token.encode())
-                finally:
-                    os.close(fd)
+            if _try_lock(fd):
                 acquired = True
                 break
-            except FileExistsError:
-                if _lock_is_stale(path, stale_after):
-                    # The owner is gone: nothing will ever release this.
-                    try:
-                        os.unlink(path)
-                    except OSError:
-                        pass
-                    continue
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(0.05)
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
     except Exception:
         pass
     try:
         yield acquired
     finally:
-        if acquired and _lock_token(path) == token:
+        if fd is not None:
             try:
-                os.unlink(path)
-            except OSError:
-                pass
+                if acquired:
+                    _unlock(fd)
+            finally:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
 
 
-def _lock_token(path):
+def _try_lock(fd) -> bool:
+    """Take an exclusive lock on `fd`, or report that someone else holds it.
+
+    False means "held by someone", which is what the caller must act on. A
+    platform with neither module would also return False -- and so never write
+    -- but that is the safe direction, and CPython ships one or the other
+    everywhere it runs.
+    """
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return f.read().strip()
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        elif msvcrt is not None:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            return False
     except OSError:
-        return None
-
-
-def _lock_is_stale(path, stale_after):
-    """True when the lock is old enough that its owner cannot still be running."""
-    try:
-        return (time.time() - os.path.getmtime(path)) > stale_after
-    except OSError:
-        # Gone between the failed create and this check -- retry, do not steal.
         return False
+    return True
+
+
+def _unlock(fd) -> None:
+    """Release the lock. Closing the fd would do it too; this is explicit."""
+    with contextlib.suppress(OSError):
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        elif msvcrt is not None:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
 
 def is_ancestor(older: str, newer: str, cwd=None):
