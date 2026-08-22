@@ -54,8 +54,8 @@ var (
 	spillAskPhaseTimeout = 150 * time.Second
 )
 
-const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발춌만 근거로 답하라. " +
-	"근거가 된 줄 번호를 반드시 [L<번호>] 형태로 인용하고, 발춌에 근거가 없으면 " +
+const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발췌만 근거로 답하라. " +
+	"근거가 된 줄 번호를 반드시 [L<번호>] 형태로 인용하고, 발췌에 근거가 없으면 " +
 	"추측하지 말고 '이 구간에는 근거 없음'이라고만 답하라. 한국어로 답변."
 
 const spillAskReduceSystemPrompt = "같은 문서의 여러 구간에 대한 부분 답변들이다. " +
@@ -128,7 +128,7 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 	}
 	var partials []partial
 	for _, c := range chunks {
-		user := fmt.Sprintf("## 질문\n%s\n\n## 발춌 (%d–%d줄)\n%s",
+		user := fmt.Sprintf("## 질문\n%s\n\n## 발췌 (%d–%d줄)\n%s",
 			question, c.firstLine, c.lastLine, c.text)
 		callCtx, cancel := context.WithTimeout(phaseCtx, spillAskCallTimeout)
 		answer, err := ask(callCtx, spillAskSystemPrompt, user, spillAskChunkTokens)
