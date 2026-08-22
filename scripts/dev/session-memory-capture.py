@@ -372,7 +372,13 @@ def main():
     dirty = len([ln for ln in git(cwd, "status", "--porcelain").splitlines() if ln])
 
     episode = {
-        "ts": int(time.time()),
+        # Sub-second on purpose. `ts` orders the merge, and whole seconds tie
+        # constantly: a session ends twice in one second (resume, compaction),
+        # lock contention reorders which lands first, and a stable sort then
+        # lets the OLDER state win because it happened to arrive last. Ties in
+        # the spool drain also fell to os.listdir() order. Existing integer
+        # rows still compare fine against floats.
+        "ts": time.time(),
         "date": time.strftime("%Y-%m-%d %H:%M", time.localtime()),
         "session_id": session_id,
         "cwd": cwd,

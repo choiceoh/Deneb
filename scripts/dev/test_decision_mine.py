@@ -10,6 +10,7 @@ nothing.
 from __future__ import annotations
 
 import errno
+import io
 import json
 import os
 import subprocess
@@ -885,6 +886,33 @@ class EpisodeDedupTests(unittest.TestCase):
         self.assertEqual(len(paths), capture.MAX_EPISODES + 6, "all files must be cleared")
         self.assertEqual({r["session_id"] for r in rows}, {"A", "B"})
 
+    def test_two_ends_in_one_second_do_not_tie(self) -> None:
+        # `ts` used to be whole seconds, so a session ending twice in one
+        # second (resume, compaction) tied -- and the stable sort then let
+        # whichever row arrived last win, which under lock contention can be
+        # the OLDER state. Spool-drain ties fell to os.listdir() order.
+        recorded = []
+        real_append, real_mine = capture.append_episode, capture.mine_decisions
+        capture.append_episode = lambda ep, **kw: recorded.append(ep)
+        capture.mine_decisions = lambda cwd: None
+        payload = json.dumps(
+            {"session_id": "s", "cwd": self.tmp.name, "transcript_path": ""}
+        )
+        real_stdin = sys.stdin
+        try:
+            for _ in range(2):
+                sys.stdin = io.StringIO(payload)
+                with self.assertRaises(SystemExit):
+                    capture.main()
+        finally:
+            sys.stdin = real_stdin
+            capture.append_episode, capture.mine_decisions = real_append, real_mine
+
+        self.assertEqual(len(recorded), 2)
+        first, second = (r["ts"] for r in recorded)
+        self.assertEqual(int(first), int(second), "the test needs both ends in one second")
+        self.assertNotEqual(first, second, "same-second ends must not tie")
+
     def test_the_drain_caps_by_ts_not_by_file_mtime(self) -> None:
         # Preselecting by mtime and parsing only those meant a backlog past
         # the cap could delete a newer episode unread -- a copy or a restore
@@ -1052,6 +1080,34 @@ class DecisionSurfacingTests(unittest.TestCase):
         last = max(i for i, ln in enumerate(lines) if ln.startswith(marker))
         gaps = [ln for ln in lines[first:last + 1] if not ln.startswith(marker)]
         self.assertEqual(gaps, [], "the block has an unmarked line in it")
+
+    def test_the_marked_block_is_bounded_including_the_marking(self) -> None:
+        # The per-field caps count RAW characters, and marking then adds a
+        # marker and an indent to every line -- so the same 600-char body
+        # costs wildly different amounts depending on how many lines the
+        # commit author split it into, and they choose. Measured before the
+        # clamp: two ordinary decisions render 1639 chars, two built from
+        # one-character lines render 4525, nearly twice the card's own cap,
+        # from inputs that both passed the per-field caps.
+        adversarial = {
+            "subject": "\n".join("x" for _ in range(surface.DECISION_SUBJECT_CHARS)),
+            "commit": "abc", "sha": "abc", "date": "2026-01-01",
+            "rationale": "\n".join("y" for _ in range(surface.DECISION_CHARS)),
+        }
+        ctx = surface.build_context(card="", eps=[], decisions=[adversarial, adversarial])
+        marker = surface.UNTRUSTED_PREFIX.rstrip()
+        lines = ctx.splitlines()
+        idx = [i for i, ln in enumerate(lines) if ln.startswith(marker)]
+        block = "\n".join(lines[idx[0]:idx[-1] + 1])
+        self.assertLessEqual(len(block), surface.DECISION_BLOCK_CHARS + 80)
+        # Clamping must not open a hole in the marking it clamps.
+        self.assertEqual([ln for ln in lines[idx[0]:idx[-1] + 1] if not ln.startswith(marker)], [])
+
+    def test_clamping_leaves_an_ordinary_block_alone(self) -> None:
+        ordinary = {"subject": "feat(x): t", "commit": "abc", "sha": "abc",
+                    "date": "2026-01-01", "rationale": "why\nbecause"}
+        marked = surface.quote(surface.fmt_decision(ordinary))
+        self.assertEqual(surface.clamp_block(marked), marked)
 
     def test_the_whole_entry_is_bounded_not_just_the_rationale(self) -> None:
         # Git caps neither, so a commit with a huge subject could expand the

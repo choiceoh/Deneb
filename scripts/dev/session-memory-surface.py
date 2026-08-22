@@ -60,13 +60,26 @@ PATH_DISCOVERY_BUDGET = 4.0
 UNTRUSTED_PREFIX = "\u2502 "
 
 # Decisions are selected by path overlap, not recency, so the budget buys
-# relevance rather than a changelog. Deliberately under half the card's cap:
-# this block rides every session, and the card is still the primary tenant. Two
-# slots because the best path match is usually the one that matters and the
-# second is the fallback; a truncated body is fine since each entry carries the
-# sha to read in full.
+# relevance rather than a changelog. Two slots because the best path match is
+# usually the one that matters and the second is the fallback; a truncated body
+# is fine since each entry carries the sha to read in full.
 DECISION_SLOTS = 2
 DECISION_CHARS = 600
+
+# The ceiling that actually holds, applied to the finished block.
+#
+# The per-field caps above count RAW characters, and every line then gains the
+# marker and a two-space indent -- so the same 600-character body costs wildly
+# different amounts depending on how many lines the commit author split it
+# into, and they choose. Measured: two ordinary decisions render 1639 chars,
+# two built from one-character lines render 4525 -- nearly twice the card's own
+# cap, from inputs that both passed the per-field caps. Widening the line split
+# to every renderer boundary made this worse, since more characters now start a
+# line.
+#
+# 2000 leaves real decisions untouched (the 1639 above is typical) and puts a
+# ceiling on the rest.
+DECISION_BLOCK_CHARS = 2000
 
 # The subject needs its own cap. Git puts no length limit on a commit subject,
 # so capping only the rationale left the "bounded block" claim false: one
@@ -247,6 +260,20 @@ def quote(text):
     return "\n".join((UNTRUSTED_PREFIX + line) if line else marker for line in lines)
 
 
+def clamp_block(marked):
+    """Cap the finished block, since marking is what makes it big.
+
+    Cut on a line boundary so no line loses its marker -- a partial line would
+    still carry one, but a clean cut keeps the block readable -- and say the
+    cut happened in a marked line rather than trailing off silently.
+    """
+    if len(marked) <= DECISION_BLOCK_CHARS:
+        return marked
+    marker = UNTRUSTED_PREFIX.rstrip()
+    kept = marked[:DECISION_BLOCK_CHARS].rsplit("\n", 1)[0]
+    return f"{kept}\n{marker} …(길이 상한으로 생략 — 전문은 위 sha로)"
+
+
 def fmt_decision(d):
     # No per-field scrubbing here any more. Choosing which fields "come from
     # git" rather than "from the author" is exactly the reasoning that once
@@ -289,7 +316,7 @@ def build_context(card, eps, decisions):
         sections.append("\n".join(fmt_episode(e) for e in reversed(eps)))
     if decisions:
         sections.append(DECISION_HEADER)
-        sections.append(quote("\n\n".join(fmt_decision(d) for d in decisions)))
+        sections.append(clamp_block(quote("\n\n".join(fmt_decision(d) for d in decisions))))
         sections.append(DECISION_TRAILER)
     sections.append(FOOTER)
     return "\n\n".join(sections)
