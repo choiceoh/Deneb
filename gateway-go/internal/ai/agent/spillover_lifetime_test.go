@@ -261,3 +261,56 @@ func TestStoreClassifiesExternalOriginByToolName(t *testing.T) {
 		}
 	}
 }
+
+// Session keys nest: "client:main" is the parent of the native per-conversation
+// chats "client:main:<uuid>", and ":" sanitizes to "_". Removing the parent must
+// not sweep a live child's spill files — doing so would leave the child's index
+// entries pointing at files that no longer exist.
+func TestRemoveSessionDoesNotTouchNestedChildSessions(t *testing.T) {
+	dir := t.TempDir()
+	store := NewSpilloverStore(dir)
+
+	const parent = "client:main"
+	const child = "client:main:11111111-2222-3333-4444-555555555555"
+
+	parentID, err := store.Store(parent, "exec", strings.Repeat("p", 100))
+	if err != nil {
+		t.Fatalf("store parent: %v", err)
+	}
+	childID, err := store.Store(child, "exec", strings.Repeat("c", 100))
+	if err != nil {
+		t.Fatalf("store child: %v", err)
+	}
+
+	if err := store.RemoveSession(parent); err != nil {
+		t.Fatalf("remove parent: %v", err)
+	}
+
+	if _, err := store.Load(parentID, parent); err == nil {
+		t.Error("parent session spill survived its own removal")
+	}
+	if _, err := store.Load(childID, child); err != nil {
+		t.Errorf("child session spill was swept by the parent's cleanup: %v", err)
+	}
+}
+
+// A digit-only child segment must not defeat the disambiguation either.
+func TestRemoveSessionDistinguishesNumericChildSegment(t *testing.T) {
+	store := NewSpilloverStore(t.TempDir())
+
+	const parent = "client:main"
+	const child = "client:main:12345"
+
+	childID, err := store.Store(child, "exec", strings.Repeat("c", 100))
+	if err != nil {
+		t.Fatalf("store child: %v", err)
+	}
+
+	if err := store.RemoveSession(parent); err != nil {
+		t.Fatalf("remove parent: %v", err)
+	}
+
+	if _, err := store.Load(childID, child); err != nil {
+		t.Errorf("numeric-segment child spill was swept by the parent: %v", err)
+	}
+}

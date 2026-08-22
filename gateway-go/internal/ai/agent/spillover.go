@@ -47,6 +47,9 @@ const (
 	hashInputLimit = 256
 	// hashIDBytes is the number of SHA-256 bytes used for the spill ID (8 hex chars).
 	hashIDBytes = 4
+	// sessionHashBytes is the number of SHA-256 bytes of the session key baked
+	// into a spill filename (8 hex chars) so nested keys stay distinguishable.
+	sessionHashBytes = 4
 )
 
 // spillEntry tracks a single spilled result on disk.
@@ -130,9 +133,8 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%s", content[:min(hashInputLimit, len(content))], now.UnixNano(), sessionKey)))
 	spillID := fmt.Sprintf("sp_%x", hash[:hashIDBytes])
 
-	safeSess := sanitizeSessionKey(sessionKey)
 	safeTool := sanitizeToolName(toolName)
-	filename := fmt.Sprintf("%s_%d_%s_%s.txt", safeSess, now.UnixMilli(), safeTool, spillID)
+	filename := fmt.Sprintf("%s_%d_%s_%s.txt", sessionFilePrefix(sessionKey), now.UnixMilli(), safeTool, spillID)
 	path := filepath.Join(s.baseDir, filename)
 
 	persisted := redact.String(content)
@@ -330,13 +332,14 @@ func (s *SpilloverStore) RemoveSession(sessionKey string) error {
 	// 1. Drop in-memory entries and delete their files.
 	s.CleanSession(sessionKey)
 
-	// 2. Sweep filesystem for any orphan files with this session prefix.
-	//    Filenames follow the pattern: <safeSess>_<ts>_<tool>_<id>.txt so an
-	//    exact prefix match on "<safeSess>_" is a safe lower bound; we still
-	//    guard against accidentally deleting a different session whose key
-	//    happens to start with the same sanitized bytes by requiring the
-	//    trailing underscore.
-	prefix := sanitizeSessionKey(sessionKey) + "_"
+	// 2. Sweep filesystem for orphan files belonging to exactly this session.
+	//    The prefix carries a hash of the FULL key, so a parent key cannot
+	//    match its children: session keys nest ("client:main" is the parent of
+	//    the native per-conversation chats "client:main:<uuid>"), and a plain
+	//    sanitized-name prefix would let a parent's cleanup delete every live
+	//    child's spills while their index entries survived — leaving
+	//    read_spillover pointing at files that no longer exist.
+	prefix := sessionFilePrefix(sessionKey) + "_"
 	entries, err := os.ReadDir(s.baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -478,6 +481,19 @@ func (s *SpilloverStore) sweepUnindexedFiles(now time.Time) {
 }
 
 // --- helpers ---
+
+// sessionFilePrefix builds the filename prefix that identifies a spill's owning
+// session unambiguously: the sanitized key (readable) plus a short hash of the
+// FULL key (exact).
+//
+// The sanitized name alone is ambiguous because keys nest and ":" collapses to
+// "_": "client:main" and "client:main:<uuid>" both sanitize to names starting
+// "client_main_". The hash is taken over the untouched key, so no parent prefix
+// can match a child's files.
+func sessionFilePrefix(sessionKey string) string {
+	sum := sha256.Sum256([]byte(sessionKey))
+	return fmt.Sprintf("%s_%x", sanitizeSessionKey(sessionKey), sum[:sessionHashBytes])
+}
 
 // sanitizeSessionKey replaces characters unsafe for filenames.
 func sanitizeSessionKey(key string) string {

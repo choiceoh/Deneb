@@ -294,8 +294,11 @@ func TestSpilloverStore_RemoveSessionDeletesTrackedAndOrphanFiles(t *testing.T) 
 
 	// Drop an orphan file on disk that matches the doomed session's prefix
 	// but isn't tracked in the in-memory index (e.g. leftover from a prior
-	// process that died before cleanup).
-	orphanName := sanitizeSessionKey("session-doomed") + "_1_readz_sp_deadbeef.txt"
+	// process that died before cleanup). The prefix carries the session-key
+	// hash so nested keys stay distinguishable; a file written in an older
+	// format is not session-matched here and is collected by the TTL orphan
+	// sweep instead (see TestCleanExpiredSweepsOrphanFilesFromDisk).
+	orphanName := sessionFilePrefix("session-doomed") + "_1_readz_sp_deadbeef.txt"
 	orphanPath := filepath.Join(dir, orphanName)
 	if err := os.WriteFile(orphanPath, []byte("orphan"), 0o600); err != nil {
 		t.Fatalf("seed orphan: %v", err)
