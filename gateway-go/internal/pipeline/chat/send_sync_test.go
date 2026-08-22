@@ -277,6 +277,46 @@ func TestBestTextReturnsDeliverableOverFallbacks(t *testing.T) {
 	}
 }
 
+func TestAdmitSyncWhenSessionIdle_WaitsForActiveRun(t *testing.T) {
+	h := newSteerTestHandler()
+	h.mergeWindow = NewMergeWindowTracker()
+	markActiveRun(h, "client:main")
+
+	released := make(chan struct{})
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		h.abort.Cleanup("active-client:main")
+		close(released)
+	}()
+
+	start := time.Now()
+	if err := h.admitSyncWhenSessionIdle(context.Background(), "client:main"); err != nil {
+		t.Fatalf("admitSyncWhenSessionIdle: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 90*time.Millisecond {
+		t.Fatalf("returned after %v, expected to wait for active run to finish", elapsed)
+	}
+	<-released
+}
+
+func TestAdmitSyncWhenSessionIdle_RespectsContextCancel(t *testing.T) {
+	h := newSteerTestHandler()
+	h.mergeWindow = NewMergeWindowTracker()
+	markActiveRun(h, "client:main")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := h.admitSyncWhenSessionIdle(ctx, "client:main")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("waited %v after cancel, expected fast return", elapsed)
+	}
+}
+
 // TestWithSyncRunLifecycle_RegistersDuringAndCleansUpAfter locks the invariant
 // that makes native-chat auto-steer, /kill, and merge work: a synchronous run
 // is registered in the abort tracker WHILE it executes (so HasActiveRun sees
