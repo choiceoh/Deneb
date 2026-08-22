@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
 """SessionEnd hook: capture a deterministic skeleton of the coding session.
 
-Fires once when a Claude Code session ends. Reads the hook payload from stdin
-(session_id, transcript_path, cwd), gathers git facts about the branch's work,
-and appends one JSON "episode" to the shared session-memory log. No LLM, no
-network -- pure local git, so it can never fail or slow a session. The semantic
-layer (decisions, lessons, self-corrections) is written separately by the agent
-into card.md; this hook only captures the outcome skeleton that is tedious to
-reconstruct from memory next time.
+Reads the hook payload from stdin (session_id, transcript_path, cwd), gathers
+git facts about the branch's work, and records one JSON "episode" per session.
+No LLM, no network -- pure local git, so it can never fail or slow a session.
 
-Storage is a single shared dir (~/.claude/deneb-session-memory), NOT the repo and
-NOT per-worktree, so every worktree/session appends to one timeline.
+It does NOT fire once per session: SessionEnd runs again on resume and after
+compaction. So an episode REPLACES the earlier row for its session rather than
+appending, and the whole log is compacted on each write (see `compact`).
+
+Two layers of memory come out of this hook:
+
+- the outcome skeleton written here -- branch, commits, files, opening ask;
+- the decision rationale mined from git commit bodies into decisions.jsonl by
+  `decision_mine`, refreshed at the end of this hook.
+
+`card.md` remains the hand-written digest an agent may keep, and the surfacing
+hook still shows it. It is no longer the only semantic layer, because relying
+on an agent to write one left it empty in every session on record.
+
+Storage is a single shared dir (~/.claude/deneb-session-memory), NOT the repo
+and NOT per-worktree, so every worktree/session writes one timeline -- which is
+why writes here take an interprocess lock.
 
 Fail-safe contract: ANY error exits 0 with no output. A memory hook must never
 disrupt a coding session.
 """
 
+import contextlib
 import json
 import os
 import subprocess
@@ -117,13 +129,36 @@ def mine_decisions(cwd):
     written, so this one refreshes itself.
     """
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import decision_mine
-
-        decision_mine.mine(cwd=cwd)
+        _load_miner().mine(cwd=cwd)
     except Exception:
         # Same contract as the rest of this hook: memory never breaks a session.
         pass
+
+
+def _load_miner():
+    """Import the decision miner from this script's own directory, or None."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import decision_mine
+
+    return decision_mine
+
+
+@contextlib.contextmanager
+def _memory_lock(name, directory):
+    """The miner's interprocess lock, degrading to a no-op if it cannot load.
+
+    Read-modify-write on a dir shared by every worktree needs more than an
+    atomic rename: two SessionEnds can each read the same snapshot and replace
+    it in turn, and the later write just drops the earlier episode without
+    raising. Borrowed rather than duplicated so both writers use one lock.
+    """
+    try:
+        miner = _load_miner()
+    except Exception:
+        yield False
+        return
+    with miner.memory_lock(name, mem_dir=directory) as held:
+        yield held
 
 
 def compact(rows):
@@ -160,26 +195,27 @@ def append_episode(episode, path=EPISODES):
     """
     try:
         os.makedirs(MEM_DIR, exist_ok=True)
-        rows = []
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    try:
-                        rows.append(json.loads(line))
-                    except Exception:
-                        continue
-        except FileNotFoundError:
-            pass
-        rows.append(episode)
-        rows = compact(rows)[-MAX_EPISODES:]
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            for row in rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        os.replace(tmp, path)
-        return
+        with _memory_lock("episodes", os.path.dirname(path) or MEM_DIR):
+            rows = []
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        if not line.strip():
+                            continue
+                        try:
+                            rows.append(json.loads(line))
+                        except Exception:
+                            continue
+            except FileNotFoundError:
+                pass
+            rows.append(episode)
+            rows = compact(rows)[-MAX_EPISODES:]
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                for row in rows:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            os.replace(tmp, path)
+            return
     except Exception:
         pass
 

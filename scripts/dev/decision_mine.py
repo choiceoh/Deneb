@@ -31,11 +31,13 @@ script -- ``scripts/audit`` Python must not write ledgers.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 
 MEM_DIR = os.path.expanduser("~/.claude/deneb-session-memory")
 DECISIONS = os.path.join(MEM_DIR, "decisions.jsonl")
@@ -75,6 +77,11 @@ _SQUASH_ECHO = re.compile(r"^\s*\*\s+\S")
 # bodies. They describe the diff back to us -- not the author's reasoning.
 _BLOCKQUOTE = re.compile(r"^\s*>")
 
+# Marker comments that wrap generated sections (e.g. <!-- CURSOR_SUMMARY -->).
+# None appear in this repo's history today, but they carry no rationale in any
+# case, and leaving them in would let markup count toward MIN_BODY_LINES.
+_HTML_COMMENT = re.compile(r"^\s*<!--.*-->\s*$")
+
 _CONVENTIONAL = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!?):\s")
 _PR_NUMBER = re.compile(r"\(#(\d+)\)\s*$")
 
@@ -91,6 +98,55 @@ def git(*args, cwd=None):
         return out.stdout.strip() if out.returncode == 0 else ""
     except Exception:
         return ""
+
+
+@contextlib.contextmanager
+def memory_lock(name="memory", timeout=5.0, mem_dir=None):
+    """Serialize a whole read-modify-write against the shared memory dir.
+
+    Atomic replacement alone is not enough here. Two SessionEnd processes can
+    each read the same snapshot and then replace it in turn: the later write
+    simply omits the earlier one's work, and since nothing raises, no fallback
+    triggers. The memory dir is shared across every worktree on purpose, so
+    simultaneous ends are a real case, not a theoretical one.
+
+    O_CREAT|O_EXCL because it is the one primitive that behaves the same on
+    POSIX and Windows without a dependency. A lock left behind by a killed
+    process is reclaimed after `timeout`, and failing to acquire yields anyway:
+    a memory hook that blocks a session would be a worse bug than a lost row.
+    """
+    directory = mem_dir or MEM_DIR
+    path = os.path.join(directory, f".{name}.lock")
+    acquired = False
+    try:
+        os.makedirs(directory, exist_ok=True)
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                acquired = True
+                break
+            except FileExistsError:
+                if time.monotonic() >= deadline:
+                    # Treat it as abandoned: steal it rather than stall.
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+                    break
+                time.sleep(0.05)
+    except Exception:
+        pass
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
 
 def is_ancestor(older: str, newer: str, cwd=None) -> bool:
@@ -123,7 +179,7 @@ def clean_body(raw: str) -> list[str]:
             continue
         if any(low.startswith(p) for p in _NOISE_PREFIXES):
             continue
-        if _SQUASH_ECHO.match(line) or _BLOCKQUOTE.match(line):
+        if _SQUASH_ECHO.match(line) or _BLOCKQUOTE.match(line) or _HTML_COMMENT.match(line):
             continue
         # A bare rule is only ever a separator before a generated footer.
         if set(stripped) <= {"-", "*", "_"} and len(stripped) >= 3:
@@ -174,14 +230,22 @@ def touched_areas(files: list[str]) -> list[str]:
 
 
 def commit_records(ref: str, limit: int, since: str | None, cwd=None):
-    """Yield decision records for first-parent commits carrying rationale."""
+    """Yield decision records for first-parent commits carrying rationale.
+
+    `limit` caps the COLD scan only. Applying it to a cursor range silently
+    drops history: the walk returns the newest `limit` commits, mine() then
+    advances the cursor to head, and everything older in that range is never
+    looked at again. A cursor range is already bounded by real activity, so it
+    needs no cap -- catching up after a long gap is a one-time cost, and
+    correctness is worth more here than a bounded worst case.
+    """
     sep_f, sep_r = "\x01", "\x02"
     rng = f"{since}..{ref}" if since else ref
+    args = ["log", "--first-parent"]
+    if not since:
+        args += ["-n", str(limit)]
     raw = git(
-        "log",
-        "--first-parent",
-        "-n",
-        str(limit),
+        *args,
         f"--format=%H{sep_f}%h{sep_f}%aI{sep_f}%s{sep_f}%b{sep_r}",
         rng,
         cwd=cwd,
@@ -274,17 +338,25 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
     if since and not is_ancestor(since, head, cwd=cwd):
         since = None
 
-    existing = [] if full else load_existing(decisions_path)
-    known = {r.get("sha") for r in existing}
-    fresh = [r for r in commit_records(ref, limit, since, cwd=cwd) if r.get("sha") not in known]
+    # The snapshot and its cursor are one transaction: a run that wrote records
+    # but lost the cursor race would leave a newer cursor over an older
+    # snapshot, and those commits would count as processed forever.
+    with memory_lock("decisions", mem_dir=os.path.dirname(decisions_path)):
+        existing = [] if full else load_existing(decisions_path)
+        known = {r.get("sha") for r in existing}
+        fresh = [
+            r for r in commit_records(ref, limit, since, cwd=cwd)
+            if r.get("sha") not in known
+        ]
 
-    # git log is newest-first; store oldest-first so the file reads as a timeline.
-    merged = existing + list(reversed(fresh))
-    if len(merged) > MAX_RECORDS:
-        merged = merged[-MAX_RECORDS:]
-    write_records(merged, decisions_path)
-    write_cursor(head, cursor_path)
-    return len(fresh), len(merged)
+        # git log is newest-first; store oldest-first so the file reads as a
+        # timeline.
+        merged = existing + list(reversed(fresh))
+        if len(merged) > MAX_RECORDS:
+            merged = merged[-MAX_RECORDS:]
+        write_records(merged, decisions_path)
+        write_cursor(head, cursor_path)
+        return len(fresh), len(merged)
 
 
 def main(argv=None):
