@@ -63,14 +63,17 @@
 
 ## 4. 도입 후보와 판정
 
-### A. read_spillover 에 재귀 서브콜(question) 추가 — 채택 권고
+> **상태 (2026-08-22)**: A~D 는 이 PR 에서 구현됐다. 아래 판정은 그대로 두되, 각 항목의 착지 지점을 병기한다. E·F 는 판정대로 미도입.
+
+### A. read_spillover 에 재귀 서브콜(question) 추가 — 채택 권고 · **구현됨**
 
 `polaris expand` 와 **동형**으로 맞춘다. `read_spillover(spill_id, question="…")` 이면 블롭을 청크로 나눠 **lightweight 역할**로 맵리듀스하고 **답변과 근거 인용만** 루트로 반환한다. 현재는 모델이 20K자 페이지를 몇 번씩 루트 창으로 끌어올려야 하고, 그게 곧 context rot 재생산이다.
 
 - 근거: 이미 블롭·핸들·grep 이 다 있다. 빠진 건 "루트가 원문을 안 보고 답을 얻는" 마지막 홉 하나뿐이라 최저비용·최고효용이다.
 - 경계: 모델 역할 하드코딩 금지(`docs/agent-rules/model-roles.md`) — 요약/추출은 lightweight. 인터랙티브 턴에서는 청크 수·팬아웃 폭을 바운드한다(컴팩션의 `maxChunksPerPass` = 4 선례를 따를 것 — `gateway-go/internal/pipeline/compaction/llm.go:29`).
+- **착지**: `gateway-go/internal/pipeline/chat/tools/artifact/spillover_ask.go` (맵리듀스·청크 바운드 4·순차 실행), 스키마 `question` 파라미터, 위임자는 `tooldeps.LocalAIFunc` 로 주입. 답변에는 `[L번호]` 인용과 스캔 커버리지가 강제되고, 위임 실패는 페이징으로 폴백하되 **실패 사실을 명시**한다.
 
-### B. spill 수명을 세션 수명에 결속 — 채택 권고, A 보다 선행
+### B. spill 수명을 세션 수명에 결속 — 채택 권고, A 보다 선행 · **구현됨**
 
 RLM 의 전제는 "변수는 살아 있다"인데 Deneb 는 **구조적으로 깨져 있다**.
 
@@ -80,15 +83,21 @@ RLM 의 전제는 "변수는 살아 있다"인데 Deneb 는 **구조적으로 �
 
 수정 방향: TTL sweep 이 **세션이 살아있으면 건너뛰도록** 뒤집는다. 세션 종료 hook 은 이미 있다 — `gateway-go/internal/runtime/server/server_spillover_lifecycle.go` 가 세션 종료·`/reset`·eviction 에서 즉시 정리한다. 즉 "TTL 로 지우고 세션훅으로 조기 정리"를 **"세션훅이 정본, TTL 은 고아 파일 스윕만"** 으로 바꾼다.
 
-### C. 프리뷰 메타데이터 헤더 강화 — 채택 권고, 저비용
+- **착지**: `SpilloverStore.SetSessionLiveness` 주입 + `cleanExpired` 가 살아있는 세션을 건너뛴다. 술어는 `s.mu` 를 놓고 호출한다(concurrency.md §3 — 세션 매니저 락을 우리 락 아래 중첩시키지 않는다). 술어 미주입 시에는 기존 나이 기반 동작 유지.
+
+### C. 프리뷰 메타데이터 헤더 강화 — 채택 권고, 저비용 · **구현됨**
 
 현재 프리뷰 헤더는 `[SpillOver: ID=… | tool | N chars]` 와 head/tail 1K 뿐이다(`spillover.go` 의 `FormatPreview`). RLM 루트는 **크기·구조 메타만 보고 탐색 계획을 세운다**. 줄 수, 가능하면 섹션/헤딩 목차, 토큰 추정치를 헤더에 넣으면 모델이 `grep` 패턴과 `offset` 을 근거 있게 고른다. `polaris describe` 가 대화 이력에 대해 하는 일을 블롭에도 해주는 것이며, 비대칭 해소의 나머지 절반이다.
 
-### D. polaris expand 다중 노드 팬아웃과 잘림 신호 — 실험
+주의 하나 — 프리뷰 텍스트는 트랜스크립트로 흘러들어가고 컴팩션이 `read_spillover("sp_…")` 문자열을 **정규식으로** 잡는다(`gateway-go/internal/pipeline/compaction/protected.go:14`). 그 형태를 깨면 컴팩션이 포인터를 보호하지 못한다.
+
+- **착지**: 헤더에 줄 수를 넣고, `previewOutline` 이 섹션 마커(마크다운 헤딩·`=== x ===` 배너)를 1-기반 줄번호와 함께 최대 12개 나열한다. 구조가 없으면(마커 2개 미만) 개요를 아예 내지 않아 프리뷰에 노이즈를 얹지 않는다. 포인터 문자열 형태 불변은 테스트로 고정했다.
+
+### D. polaris expand 잘림 신호 — **구현됨** · 다중 노드 팬아웃 — 실험(미도입)
 
 `expand` 는 단일 `summary_id` 전용이고, 원문 직렬화는 **8000자에서 잘린다**(`gateway-go/internal/pipeline/chat/tools/recallops/polaris.go:243`). 잘림 안내는 서브 LLM 의 프롬프트 안에만 들어가고 **루트는 잘렸다는 사실을 모른다** — 루트가 부분 근거로 단정할 수 있는 경로다. 부수적으로 그 안내 문구는 전체 건수(`len(msgs)`)를 쓰고 있어 **잔여 건수가 아니다**(`gateway-go/internal/pipeline/chat/tools/recallops/polaris.go:250`). 실제 결함이다.
 
-- 최소 수정(즉시): 잘림 사실과 **잔여 건수**를 루트 반환값에도 표기.
+- 최소 수정(즉시): 잘림 사실과 **잔여 건수**를 루트 반환값에도 표기. → **착지**: `serializeExpandMessages` 가 `(text, omitted)` 를 반환하고 `expandCoverageNote` 가 위임 답변·원문 덤프 양쪽에 근거 범위를 붙인다. 기존 테스트가 버그 동작(항상 전체 건수)을 고정하고 있어 함께 교정했다.
 - 실험: `describe` 로 얻은 여러 노드에 병렬 서브질의 후 합성(RLM 의 파티션 전략). 자율 경로 한정이며 인터랙티브는 팬아웃 금지.
 
 ### E. 루트 무맥락화 / 컨텍스트 전면 변수화 — 스킵
@@ -103,7 +112,7 @@ Deneb 엔 이미 `exec`·`code_search`·`grep` 이 있어 "코드로 데이터�
 
 ## 5. 선결 과제와 리스크
 
-- **효용 측정 부재**: "재귀 서브콜이 페이지네이션보다 낫다"를 증명할 long-blob QA eval 이 없다. 최소한 대용량 자막·`exec` 출력 골드셋으로 페이지네이션 대 서브콜의 정확도/토큰 비교가 A 의 선결 조건이다.
+- **효용 측정 부재 (여전히 미해결)**: "재귀 서브콜이 페이지네이션보다 낫다"를 증명할 long-blob QA eval 이 없다. 구현은 결정적 단위 테스트(바운드·커버리지 표기·폴백·부분 실패)로만 검증됐고, **효용 자체는 아직 측정되지 않았다**. 대용량 자막·`exec` 출력 골드셋으로 페이지네이션 대 서브콜의 정확도/토큰을 비교하는 것이 다음 과제다.
 - **비용 폭주**: RLM 이 인정한 "비용 보장 없음"이 그대로 옮아온다. 청크 수·깊이(1 고정)·팬아웃 폭을 **하드 바운드**로 박고, 인터랙티브 턴에서는 팬아웃 자체를 끄는 게 안전 기본값이다.
 - **근거 소실**: 서브콜 답변만 루트로 올리면 인용 추적이 끊긴다. 답변에 **원문 offset/줄번호를 강제**해 `read_spillover(offset=…)` 로 검증 가능하게 유지한다.
 - **순서**: B(수명) → C(메타) → A(서브콜) → D(팬아웃). B 없이 A 를 얹으면 재귀 서브콜이 사라진 파일을 가리킨다.
