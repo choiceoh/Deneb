@@ -479,6 +479,27 @@ class EpisodeDedupTests(unittest.TestCase):
         self.assertEqual(len(self.rows()), capture.MAX_EPISODES)
 
 
+class EpisodeSurfacingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.tmp.name, "episodes.jsonl")
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_unusable_rows_are_filtered_before_formatting(self) -> None:
+        # fmt_episode asks every row for keys, so a `null` row reaching it
+        # raises and the fail-safe blanks the entire SessionStart block.
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("null\n")
+            f.write("{broken\n")
+            f.write(json.dumps({"date": "2026-01-01", "branch": "b"}) + "\n")
+        rows = surface.read_rows(self.path)
+        self.assertEqual(len(rows), 1)
+        # The survivor formats without raising.
+        self.assertIn("2026-01-01", surface.fmt_episode(rows[0]))
+
+
 class DecisionSurfacingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -521,6 +542,18 @@ class DecisionSurfacingTests(unittest.TestCase):
         # happened to rewrite the ledger.
         with open(self.path, "a", encoding="utf-8") as f:
             f.write("{truncated\n")
+        hits = surface.relevant_decisions(
+            {"gateway-go", "gateway-go/internal/mcpapi"}, path=self.path
+        )
+        self.assertEqual(hits[0]["commit"], "deep")
+
+    def test_a_non_object_row_does_not_take_the_whole_hook_down(self) -> None:
+        # `null` parses but has no keys, and the fail-safe turns the resulting
+        # AttributeError into an empty hook output -- hiding the card, the
+        # episodes and the decisions together. Compaction now preserves such a
+        # row next to live sessions, so the outage would stick.
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write("null\n[]\n")
         hits = surface.relevant_decisions(
             {"gateway-go", "gateway-go/internal/mcpapi"}, path=self.path
         )

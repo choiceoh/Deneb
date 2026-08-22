@@ -97,19 +97,34 @@ def read_card():
         return ""
 
 
-def recent_episodes():
+def read_rows(path):
+    """Parse a JSONL ledger into the rows that are actually usable.
+
+    Two filters, not one. Unparseable lines are skipped, and so are lines that
+    parse into something other than an object: `null` and `[]` are valid JSON,
+    and every consumer here asks rows for keys. One such row used to take the
+    whole hook down -- the fail-safe caught the AttributeError and exited with
+    empty output, hiding the card, the episodes and the decisions at once.
+    """
+    rows = []
     try:
-        with open(EPISODES, "r", encoding="utf-8", errors="replace") as f:
-            lines = [ln for ln in f if ln.strip()]
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                if isinstance(row, dict):
+                    rows.append(row)
     except Exception:
         return []
-    out = []
-    for line in lines[-RECENT_EPISODES:]:
-        try:
-            out.append(json.loads(line))
-        except Exception:
-            continue
-    return out
+    return rows
+
+
+def recent_episodes():
+    return read_rows(EPISODES)[-RECENT_EPISODES:]
 
 
 def fmt_episode(ep):
@@ -167,23 +182,7 @@ def relevant_decisions(areas, path=DECISIONS):
     """
     if not areas:
         return []
-    # Line by line: one truncated row must not blank the whole surface. A
-    # single comprehension raises on the bad line and the handler returns [],
-    # so every valid decision would stay hidden until some later SessionEnd
-    # happened to rewrite the ledger. `recent_episodes` above already reads
-    # this way, and the miner's `load_existing` was fixed for the same reason.
-    rows = []
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except Exception:
-                    continue
-    except Exception:
-        return []
+    rows = read_rows(path)
 
     scored = []
     for idx, row in enumerate(rows):
