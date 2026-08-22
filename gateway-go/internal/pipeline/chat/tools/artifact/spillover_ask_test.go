@@ -498,6 +498,24 @@ func TestSpilloverQuestionAcceptsDecoratedNoEvidenceAnswer(t *testing.T) {
 	}
 }
 
+// A map answer that pairs a real citation with a fabricated one must be
+// dropped whole. Requiring merely an in-range citation let the fabricated half
+// ride along — into the returned answer, and into the partials a failed reduce
+// falls back to.
+func TestSpillAskRejectsMapAnswerMixingFabricatedCitation(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 60) // one chunk: the answer is returned as-is
+	rec := &askRecorder{reply: func(string) (string, error) {
+		return "설정은 이렇습니다 [L2] 그리고 저렇습니다 [L999999]", nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "무엇?"})
+
+	if strings.Contains(out, "저렇습니다") {
+		t.Fatalf("an answer citing a line the chunk never held was accepted:\n%s", out)
+	}
+}
+
 // The reducer can mint a citation that matches the syntax but points at a line
 // no chunk was ever shown ([L999999]). Accepting it hands the root an answer
 // that LOOKS verifiable and is not — the one check the root has is re-opening a

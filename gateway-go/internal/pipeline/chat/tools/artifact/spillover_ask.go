@@ -146,7 +146,7 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 		// verifiable from the root's seat, which is the whole basis for
 		// returning an answer instead of the text — so drop it exactly like a
 		// failed chunk rather than presenting it as grounded evidence.
-		if !hasInRangeCitation(answer, c.firstLine, c.lastLine) && !isNoEvidenceAnswer(answer) {
+		if !citationsAllInRanges(answer, [][2]int{{c.firstLine, c.lastLine}}) && !isNoEvidenceAnswer(answer) {
 			continue
 		}
 		partials = append(partials, partial{
@@ -216,29 +216,18 @@ var spillAskSlots = make(chan struct{}, 1)
 // citationRe matches the [L<number>] citations the delegate is told to emit.
 var citationRe = regexp.MustCompile(`\[L(\d+)\]`)
 
-// hasInRangeCitation reports whether the answer cites at least one line inside
-// the chunk it was shown. An out-of-range number is not a usable pointer: the
-// root would open a line the delegate never read.
-func hasInRangeCitation(answer string, firstLine, lastLine int) bool {
-	for _, m := range citationRe.FindAllStringSubmatch(answer, -1) {
-		n, err := strconv.Atoi(m[1])
-		if err == nil && n >= firstLine && n <= lastLine {
-			return true
-		}
-	}
-	return false
-}
-
-// citationsAllInRanges reports whether the merged answer carries at least one
-// citation and EVERY citation it carries falls inside a range the delegate
-// actually read.
+// citationsAllInRanges reports whether an answer carries at least one citation
+// and EVERY citation it carries falls inside a range the delegate actually
+// read. Used on both stages: a map answer against the one chunk it was shown, a
+// reduced answer against the union of the chunks that succeeded.
 //
-// Requiring merely "a citation" let the reducer mint one: [L999999] matches the
-// syntax, so a fabricated pointer passed as verification while pointing at a
-// line no chunk was ever shown. The root's only check on a delegated answer is
-// re-opening a cited line, so a citation outside every successful chunk is
-// worse than none — it looks verifiable and is not. Falling back to the cited
-// partials keeps the real evidence.
+// Existential checks are not enough at either stage. "Has a citation" let the
+// reducer mint one — [L999999] matches the syntax — and "has an IN-RANGE
+// citation" let a map answer pair a real [L2] with a fabricated [L999999] and
+// carry it through, including into the partials a failed reduce falls back to.
+// The root's only check on a delegated answer is re-opening a cited line, so a
+// citation pointing outside what was read is worse than none: it looks
+// verifiable and is not.
 func citationsAllInRanges(answer string, ranges [][2]int) bool {
 	matches := citationRe.FindAllStringSubmatch(answer, -1)
 	if len(matches) == 0 {
