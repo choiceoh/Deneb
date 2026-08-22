@@ -36,6 +36,16 @@ import time
 
 MEM_DIR = os.path.expanduser("~/.claude/deneb-session-memory")
 EPISODES = os.path.join(MEM_DIR, "episodes.jsonl")
+# Where an episode waits when this run could not take the ledger lock. One
+# file per episode, merged by the next run that does take it -- see
+# `spool_episode`. Named relative to the ledger rather than fixed, so a spool
+# always belongs to the ledger whose lock it is waiting on.
+PENDING_DIR_NAME = "episodes.pending"
+
+# How long to wait for the ledger lock before spooling instead. Long enough to
+# ride out a normal rewrite (milliseconds) and short enough that a session
+# ending never visibly stalls on another session's write.
+LOCK_TIMEOUT = 5.0
 
 MAX_COMMITS = 20
 MAX_FILES_SAMPLE = 12
@@ -144,7 +154,7 @@ def _load_miner():
 
 
 @contextlib.contextmanager
-def _memory_lock(name, directory):
+def _memory_lock(name, directory, timeout=LOCK_TIMEOUT):
     """The miner's interprocess lock, degrading to a no-op if it cannot load.
 
     Read-modify-write on a dir shared by every worktree needs more than an
@@ -157,7 +167,7 @@ def _memory_lock(name, directory):
     except Exception:
         yield False
         return
-    with miner.memory_lock(name, mem_dir=directory) as held:
+    with miner.memory_lock(name, mem_dir=directory, timeout=timeout) as held:
         yield held
 
 
@@ -190,29 +200,114 @@ def compact(rows):
     return out
 
 
-def append_episode(episode, path=EPISODES):
+def episode_ts(row):
+    """The episode's own timestamp, as something that can always be sorted.
+
+    A row is JSON somebody else wrote: `ts` can be a string, null, or absent.
+    Sorting mixed types raises TypeError, and the outer guard swallows it --
+    so ONE such row made every later write spool instead of landing, and the
+    ledger stopped updating for good while the spool grew. Ordering has to
+    degrade, not explode. Booleans are ints in Python and are not timestamps,
+    so they degrade too.
+    """
+    value = row.get("ts") if isinstance(row, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return value
+
+
+def spool_episode(episode, pending_dir):
+    """Park one episode in a file of its own, for the next lock holder to merge.
+
+    The fallback used to append straight to the ledger, and an append that
+    lands after the holder read its snapshot but before it replaces the file
+    is simply overwritten -- the episode is gone and nothing raises. A
+    separate file cannot be clobbered by that rewrite, because the rewrite
+    only ever touches the ledger, and the drain that picks this up runs under
+    the same lock that serializes the rewrite.
+
+    Written temp-then-replace so a reader never sees half a row: the drain
+    treats an unparseable file as corrupt and deletes it, which would turn a
+    torn write into a lost episode.
+    """
+    os.makedirs(pending_dir, exist_ok=True)
+    path = os.path.join(pending_dir, f"{os.getpid()}-{time.monotonic_ns()}.json")
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(episode, ensure_ascii=False))
+    os.replace(tmp, path)
+
+
+def drain_pending(pending_dir):
+    """Episodes parked by runs that could not take the lock.
+
+    Returns (rows, paths). The caller deletes `paths` only after its rewrite
+    lands, so a crash in between leaves the files to be merged next time
+    rather than dropping the episodes they hold.
+
+    EVERY file is parsed before anything is capped. The first version picked
+    the newest MAX_EPISODES by filesystem mtime and parsed only those, while
+    deleting all of them -- so with a backlog past the cap, an episode whose
+    mtime had been reset (a copy, a restore, a clock step) was deleted without
+    ever being read, and a genuinely older one could survive in its place. The
+    cap belongs on `ts`, which is the episode's own idea of when it happened,
+    so it is applied after parsing. Files still all go back for deletion:
+    anything past the cap cannot survive the ledger's own cap either, and
+    leaving it would make every later drain re-read a backlog that never lands.
+    """
+    try:
+        names = [n for n in os.listdir(pending_dir) if n.endswith(".json")]
+    except OSError:
+        return [], []
+
+    paths = [os.path.join(pending_dir, n) for n in names]
+    rows = []
+    for path in paths:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                row = json.load(f)
+        except Exception:
+            # Unreadable means corrupt, not "not yet written" -- the write is
+            # temp-then-replace. Retrying it forever would wedge the drain.
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    # Compact BEFORE capping. Repeated SessionEnd for one session is the
+    # normal case this spool exists for, so a backlog is mostly duplicates:
+    # capping raw files at MAX_EPISODES could drop the one file holding an
+    # older session that the compacted ledger had room for. Dedupe first, then
+    # cap on what would actually survive.
+    rows.sort(key=episode_ts)
+    rows = compact(rows)
+    return rows[-MAX_EPISODES:], paths
+
+
+def append_episode(episode, path=EPISODES, pending_dir=None, lock_timeout=LOCK_TIMEOUT):
     """Record the episode, replacing any earlier row for the same session.
 
     Rewrite-and-replace rather than append, so a session that ends repeatedly
-    leaves one row instead of nine. The rewrite runs under an interprocess lock
-    and lands atomically (temp + os.replace), because the memory dir is shared
-    across worktrees and two sessions can end at once.
+    leaves one row instead of nine. The rewrite runs under an interprocess
+    lock and lands atomically (temp + os.replace), because the memory dir is
+    shared across worktrees and two sessions can end at once.
 
-    If the lock cannot be taken we fall back to a plain append. That fallback
-    reduces loss rather than eliminating it: an append that lands after the
-    holder read its snapshot but before it replaces the file is still
-    overwritten. It stays anyway, because the alternatives are worse --
-    skipping loses the episode outright, and retrying until the lock frees
-    could block a session ending, which this hook must never do.
+    The same rewrite drains whatever earlier runs parked in `pending_dir`
+    because they could not take that lock. Rows are ordered by `ts` before
+    compaction rather than by the order they arrive, so a spooled episode
+    that predates a row already in the ledger cannot overwrite it just by
+    landing later.
+
+    If the lock cannot be taken, the episode is spooled instead of appended.
+    That is the difference between narrowing the loss window and closing it:
+    an append can be overwritten by the holder's rewrite, a file of its own
+    cannot. Blocking until the lock frees is still not an option -- this hook
+    must never delay a session ending.
     """
+    home = os.path.dirname(path) or MEM_DIR
+    pending = pending_dir if pending_dir is not None else os.path.join(home, PENDING_DIR_NAME)
     try:
-        os.makedirs(MEM_DIR, exist_ok=True)
-        with _memory_lock("episodes", os.path.dirname(path) or MEM_DIR) as held:
+        os.makedirs(home, exist_ok=True)
+        with _memory_lock("episodes", home, timeout=lock_timeout) as held:
             if not held:
-                # Another SessionEnd holds the log. Rewriting it from a
-                # snapshot we read anyway would drop whatever they just wrote,
-                # so fall through to the append below: it only ever adds, and
-                # the next successful rewrite compacts the duplicate away.
                 raise RuntimeError("memory lock unavailable")
             rows = []
             try:
@@ -226,20 +321,29 @@ def append_episode(episode, path=EPISODES):
                             continue
             except FileNotFoundError:
                 pass
+            spooled, spooled_paths = drain_pending(pending)
+            rows.extend(spooled)
             rows.append(episode)
+            # Stable, so rows sharing a ts keep this order: ledger, then
+            # spooled, then the episode this run is recording.
+            rows.sort(key=episode_ts)
             rows = compact(rows)[-MAX_EPISODES:]
             tmp = f"{path}.{os.getpid()}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 for row in rows:
                     f.write(json.dumps(row, ensure_ascii=False) + "\n")
             os.replace(tmp, path)
+            for done in spooled_paths:
+                try:
+                    os.unlink(done)
+                except OSError:
+                    pass
             return
     except Exception:
         pass
 
     try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(episode, ensure_ascii=False) + "\n")
+        spool_episode(episode, pending)
     except Exception:
         pass
 

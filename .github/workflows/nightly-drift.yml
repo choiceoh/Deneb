@@ -44,6 +44,39 @@ jobs:
       - name: gofumpt (full tree)
         run: make go-fmt
 
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.5
+          working-directory: gateway-go
+          install-only: true
+          # The verify this job is here to run happens in the next step, with
+          # retries. Letting the action do it first would fail on the same
+          # network hiccup, before any retry could help.
+          verify: false
+
+      - name: Verify .golangci.yml against its schema
+        working-directory: gateway-go
+        # `golangci-lint run` silently ignores keys it does not know, so a
+        # typo'd option reads as "enabled" while doing nothing. `config
+        # verify` is what catches that -- but it downloads the schema from
+        # golangci-lint.run, and in the PR lane that fetch failed three times
+        # in one afternoon and took the Go gate down with it. Same reason
+        # every other check here lives in the nightly: it belongs on main's
+        # sweep, not on the PR critical path. Retried because the failure it
+        # is prone to is the network, not the config.
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if golangci-lint config verify; then
+              exit 0
+            fi
+            echo "config verify attempt ${attempt} failed; retrying"
+            sleep $((attempt * 5))
+          done
+          echo "config verify failed three times -- check .golangci.yml, then the schema host."
+          exit 1
+
       - name: Vet
         working-directory: gateway-go
         run: go vet ./...
