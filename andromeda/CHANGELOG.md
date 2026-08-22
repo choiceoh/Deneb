@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.116](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.115...andromeda-v0.0.116) (2026-08-22)
+
+
+### 🐛 Bug Fixes
+
+* **android:** 프로젝트 진행상황 모아보기를 제거 ([#4521](https://github.com/choiceoh/Deneb/issues/4521)) ([92344ed](https://github.com/choiceoh/Deneb/commit/92344edb594a5274578f0d7ba4048937377005aa))
+* **android:** 현장 지도 기능을 제거 ([#4517](https://github.com/choiceoh/Deneb/issues/4517)) ([5642169](https://github.com/choiceoh/Deneb/commit/5642169514992a4a5fe5213d9aca83710476ea7b))
+* **chat:** 긴 응답 진행 상태를 표시하고 타임아웃 응답을 보존 ([#4526](https://github.com/choiceoh/Deneb/issues/4526)) ([1799e64](https://github.com/choiceoh/Deneb/commit/1799e64e8b53a8726ec8a52f17af3fa380215fcc))
+
 ## [0.0.115](https://github.com/choiceoh/Deneb/compare/andromeda-v0.0.114...andromeda-v0.0.115) (2026-08-16)
 
 
