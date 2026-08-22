@@ -297,6 +297,70 @@ class MineTests(unittest.TestCase):
         self.assertEqual(total, 8)
         self.assertGreater(runs, 1, "the backlog should have taken several pages")
 
+    def test_a_cursor_ahead_of_the_ref_does_not_wipe_live_history(self) -> None:
+        # Non-ancestor covers far more than a rewrite -- a cursor ahead of the
+        # ref, a feature branch, a fetch that has not landed. Wiping on those
+        # threw away decisions still on the chain that a capped cold scan could
+        # not read back.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        first = self.rows()[0]["sha"]
+        # A cursor from a commit that is NOT an ancestor of the ref we mine.
+        git(self.root, "checkout", "-q", "-b", "side")
+        ahead = commit(self.root, "a/b/side.go", RICH.replace("(#42)", "(#77)"))
+        git(self.root, "checkout", "-q", "main")
+        # A newer commit on the chain, so a CAPPED cold scan can only reach
+        # that one -- which is what makes wiping distinguishable from pruning.
+        commit(self.root, "a/b/newer.go", RICH.replace("(#42)", "(#88)"))
+        self.cursor.write_text(ahead + "\n", encoding="utf-8")
+
+        self.mine(limit=1)
+        self.assertIn(first, [r["sha"] for r in self.rows()])
+
+    def test_an_unanswerable_ancestry_question_changes_nothing(self) -> None:
+        # Exit 128 is "could not ask", not "no". Reading a transient git
+        # failure as a rewrite would prune the ledger against a ref it could
+        # not read either.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        before = self.rows()
+        cursor_before = self.cursor.read_text(encoding="utf-8")
+        commit(self.root, "a/b/d.go", RICH.replace("(#42)", "(#43)"))
+
+        real = dm.is_ancestor
+        dm.is_ancestor = lambda *a, **k: None
+        try:
+            added, _ = self.mine()
+        finally:
+            dm.is_ancestor = real
+        self.assertEqual(added, 0)
+        self.assertEqual(self.rows(), before)
+        self.assertEqual(self.cursor.read_text(encoding="utf-8"), cursor_before)
+
+    def test_exit_128_is_reported_as_unanswerable_not_as_no(self) -> None:
+        self.assertIsNone(dm.is_ancestor("0" * 40, "HEAD", cwd=str(self.root)))
+
+    def test_an_empty_ledger_keeps_its_cursor(self) -> None:
+        # A scan that found no qualifying commits is a real result. Discarding
+        # its cursor turned every later run into a capped cold scan.
+        commit(self.root, "a/b/thin.go", "fix(x): thin\n\ntoo short")
+        self.mine()
+        self.assertEqual(self.rows(), [])
+        self.assertTrue(self.cursor.exists())
+
+        # Three qualifying commits arrive. With the cursor kept, paging walks
+        # all of them; discarding it makes every run a cold scan capped at
+        # `limit`, which reaches only the newest and then advances past the
+        # rest for good.
+        for i in range(3):
+            commit(self.root, f"a/b/r{i}.go", RICH.replace("(#42)", f"(#{i + 30})"))
+        total = 0
+        for _ in range(6):
+            _, total = self.mine(limit=1)
+            if total == 3:
+                break
+        self.assertEqual(total, 3)
+
     def test_a_rewritten_history_rebuilds_rather_than_keeping_dead_records(self) -> None:
         # A non-ancestor cursor means the history the ledger describes is gone:
         # its shas no longer resolve, and a stale path can still outrank a live

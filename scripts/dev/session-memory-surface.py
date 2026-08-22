@@ -27,6 +27,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 MEM_DIR = os.path.expanduser("~/.claude/deneb-session-memory")
 EPISODES = os.path.join(MEM_DIR, "episodes.jsonl")
@@ -35,6 +36,11 @@ DECISIONS = os.path.join(MEM_DIR, "decisions.jsonl")
 
 RECENT_EPISODES = 4
 CARD_CAP = 2500  # chars -- keep the always-injected block bounded
+
+# This hook is given 10s in .claude/settings.json. Path discovery is the only
+# part that shells out, so it gets one shared slice well under that -- being
+# killed would take the card and the episodes down with the decisions.
+PATH_DISCOVERY_BUDGET = 4.0
 
 # The fence around contributor-written commit text. Named constants because
 # three places have to agree on the exact string: the opener, the closer, and
@@ -147,10 +153,19 @@ def working_areas(cwd):
     has not edited anything yet gets nothing -- surfacing "recent decisions"
     with no relevance signal would just be a changelog.
     """
+    # One budget for the whole discovery, not one per command. Two calls at 8s
+    # each could outlast this hook's 10s timeout, and being killed costs far
+    # more than the decisions do: the card and the recent episodes go with it.
+    # Decisions are the optional part of this block, so they get the leftovers.
+    deadline = time.monotonic() + PATH_DISCOVERY_BUDGET
+
     def git(*args):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return []
         try:
             out = subprocess.run(
-                ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=8
+                ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=remaining
             )
             return out.stdout.splitlines() if out.returncode == 0 else []
         except Exception:

@@ -237,17 +237,50 @@ def _lock_is_stale(path, stale_after):
         return False
 
 
-def is_ancestor(older: str, newer: str, cwd=None) -> bool:
-    """True when `older` is reachable from `newer`. Exit-status only."""
+def is_ancestor(older: str, newer: str, cwd=None):
+    """True / False / None, where None means the question could not be asked.
+
+    git answers this one with exit status alone: 0 yes, 1 no, anything else
+    (128 for an unknown object, say) an operational error. Folding the error
+    into "no" would read a broken command as a rewritten history, and the
+    caller acts on that -- so the three stay three.
+    """
     try:
-        return subprocess.run(
+        code = subprocess.run(
             ["git", *(["-C", cwd] if cwd else []), "merge-base", "--is-ancestor", older, newer],
             capture_output=True,
             text=True,
             timeout=30,
-        ).returncode == 0
+        ).returncode
     except Exception:
+        return None
+    if code == 0:
+        return True
+    if code == 1:
         return False
+    return None
+
+
+def object_exists(rev, cwd=None) -> bool:
+    """Whether `rev` names a commit this repository actually has."""
+    return git_run("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}", cwd=cwd)[1]
+
+
+def prune_to_history(rows, ref, cwd=None):
+    """Drop records whose commit is no longer on `ref`'s first-parent chain.
+
+    Pruning rather than wiping, because "the cursor is not an ancestor" covers
+    far more than a rewrite: a cursor ahead of the ref, a run pointed at a
+    feature branch, a fetch that has not landed yet. Wiping on those threw away
+    live history that a capped cold scan could not read back. What actually
+    went stale is exactly the records that left the chain, so drop those and
+    keep the rest. A failed listing drops nothing.
+    """
+    listing, ok = git_run("rev-list", "--first-parent", ref, cwd=cwd)
+    if not ok:
+        return rows
+    live = {s for s in listing.split() if _OBJECT_NAME.match(s)}
+    return [r for r in rows if r.get("sha") in live]
 
 
 def strip_comment_spans(raw: str) -> str:
@@ -545,7 +578,21 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
     # point at commits `git show` can no longer resolve, and a stale path can
     # still outrank a live one when surfacing. So this is a rebuild, not just a
     # rewind.
-    rebuild = bool(since) and not is_ancestor(since, head, cwd=cwd)
+    rebuild = False
+    if since and not object_exists(since, cwd=cwd):
+        # The cursor names nothing this repo has -- a corrupted file, or a
+        # commit that was gc'd away. There is no ancestry question to ask, so
+        # drop the cursor and rescan. Waiting for an answer here would wedge
+        # the miner permanently, since the next run cannot ask it either.
+        since = None
+    elif since:
+        ancestry = is_ancestor(since, head, cwd=cwd)
+        if ancestry is None:
+            # The cursor resolves, but the question could not be asked -- a
+            # transient git failure. Both guesses lose data, so change nothing
+            # and let the next run ask again.
+            return 0, 0
+        rebuild = not ancestry
     if rebuild:
         since = None
 
@@ -558,14 +605,19 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
             # their snapshot; skipping costs nothing, because the cursor stays
             # put and the next run picks the same commits up.
             return 0, 0
-        if full or rebuild:
+        if full:
             existing, readable = [], True
         else:
             existing, readable = load_existing(decisions_path)
+            if rebuild:
+                existing = prune_to_history(existing, ref, cwd=cwd)
         # A cursor is only meaningful next to the ledger it was written for. If
-        # the ledger is gone or unreadable, honouring the cursor would mine
-        # nothing and then write that nothing back as the new history.
-        if not readable or (not existing and since):
+        # the ledger is GONE, honouring the cursor would mine nothing and then
+        # write that nothing back as the new history. An existing but empty
+        # ledger is different: a scan that found no qualifying commits is a
+        # real result, and discarding its cursor turned every later run into a
+        # capped cold scan that skipped the older half of any backlog.
+        if not readable:
             since = None
         # Page the range instead of walking all of it. Dropping the cap made a
         # long backlog one unbounded pass, and this runs inside SessionEnd's
