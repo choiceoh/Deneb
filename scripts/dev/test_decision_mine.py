@@ -279,6 +279,37 @@ class MineTests(unittest.TestCase):
         added, _ = self.mine()
         self.assertEqual(added, 1)
 
+    def test_a_backlog_is_paged_so_each_run_commits_progress(self) -> None:
+        # Removing the cap stopped the skipping but made a long backlog one
+        # unbounded pass, and this runs inside SessionEnd's 20s timeout: the
+        # hook would be killed before the cursor was written and every later
+        # end would retry the same range. Paging keeps both properties.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        for i in range(7):
+            commit(self.root, f"a/b/f{i}.go", RICH.replace("(#42)", f"(#{i + 60})"))
+
+        runs, total = 0, 0
+        while total < 8 and runs < 10:
+            added, total = self.mine(limit=2)
+            runs += 1
+            self.assertLessEqual(added, 2, "a run mined more than one page")
+        self.assertEqual(total, 8)
+        self.assertGreater(runs, 1, "the backlog should have taken several pages")
+
+    def test_a_rewritten_history_rebuilds_rather_than_keeping_dead_records(self) -> None:
+        # A non-ancestor cursor means the history the ledger describes is gone:
+        # its shas no longer resolve, and a stale path can still outrank a live
+        # one when surfacing.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        stale = self.rows()[0]["sha"]
+        git(self.root, "checkout", "-q", "--orphan", "fresh")
+        git(self.root, "rm", "-rq", "--cached", ".")
+        commit(self.root, "x/y/z.go", RICH.replace("(#42)", "(#99)"))
+        self.mine()
+        self.assertTrue(all(r["sha"] != stale for r in self.rows()))
+
     def test_a_backlog_larger_than_the_limit_is_not_skipped_forever(self) -> None:
         # The limit caps the cold scan only. Applying it to a cursor range
         # reads the newest N, advances the cursor to head anyway, and loses

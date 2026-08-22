@@ -362,6 +362,29 @@ def touched_areas(files: list[str]) -> list[str]:
     return out
 
 
+def page_target(ref, head, since, limit, cwd=None):
+    """The commit this run should mine up to. Returns (target, failed).
+
+    Oldest-first, so a page always ends at a commit every earlier one is an
+    ancestor of -- which is what makes the cursor safe to advance to it. When
+    the range fits in one page the target is `head` and this costs one extra
+    `git log` of bare shas.
+    """
+    if not since:
+        # A cold scan is already capped by `limit` inside commit_records, and
+        # it walks newest-first, so `head` is the right target.
+        return head, False
+    listing, ok = git_run(
+        "log", "--first-parent", "--reverse", "--format=%H", f"{since}..{ref}", cwd=cwd
+    )
+    if not ok:
+        return head, True
+    shas = [s for s in listing.split() if _OBJECT_NAME.match(s)]
+    if len(shas) > limit:
+        return shas[limit - 1], False
+    return head, False
+
+
 def commit_records(ref: str, limit: int, since: str | None, cwd=None):
     """Yield decision records for first-parent commits carrying rationale.
 
@@ -517,7 +540,13 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
     # is no longer an ancestor, and `since..head` would then silently resolve to
     # nothing. Exit status is the only signal here -- `--is-ancestor` prints
     # nothing either way -- so this cannot go through git().
-    if since and not is_ancestor(since, head, cwd=cwd):
+    #
+    # That also means the history the ledger describes is gone: its records
+    # point at commits `git show` can no longer resolve, and a stale path can
+    # still outrank a live one when surfacing. So this is a rebuild, not just a
+    # rewind.
+    rebuild = bool(since) and not is_ancestor(since, head, cwd=cwd)
+    if rebuild:
         since = None
 
     # The snapshot and its cursor are one transaction: a run that wrote records
@@ -529,7 +558,7 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
             # their snapshot; skipping costs nothing, because the cursor stays
             # put and the next run picks the same commits up.
             return 0, 0
-        if full:
+        if full or rebuild:
             existing, readable = [], True
         else:
             existing, readable = load_existing(decisions_path)
@@ -538,10 +567,20 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
         # nothing and then write that nothing back as the new history.
         if not readable or (not existing and since):
             since = None
+        # Page the range instead of walking all of it. Dropping the cap made a
+        # long backlog one unbounded pass, and this runs inside SessionEnd's
+        # 20s timeout: the hook would be killed before the cursor was written,
+        # and every later end would retry the same range and die the same way.
+        # Paging keeps both properties -- nothing is skipped, and each run
+        # commits the progress it made.
+        target, err = page_target(ref, head, since, limit, cwd=cwd)
+        if err:
+            return 0, len(existing)
+
         known = {r.get("sha") for r in existing}
         try:
             fresh = [
-                r for r in commit_records(ref, limit, since, cwd=cwd)
+                r for r in commit_records(target, limit, since, cwd=cwd)
                 if r.get("sha") not in known
             ]
         except ScanFailed:
@@ -554,7 +593,10 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
         if len(merged) > MAX_RECORDS:
             merged = merged[-MAX_RECORDS:]
         write_records(merged, decisions_path)
-        write_cursor(head, cursor_path)
+        # The cursor names the page we actually finished, not the ref we were
+        # aiming at. Writing `head` after a partial page is what would skip the
+        # remainder for good.
+        write_cursor(target, cursor_path)
         return len(fresh), len(merged)
 
 
