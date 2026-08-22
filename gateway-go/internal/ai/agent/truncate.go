@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
+	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
@@ -90,7 +91,12 @@ func middleOutline(content, middle string, headLen int) string {
 		if len(trimmed) > outlineEntryMaxChars {
 			trimmed = textutil.TruncateBytes(trimmed, outlineEntryMaxChars) + "…"
 		}
-		entries = append(entries, fmt.Sprintf("%d: %s", base+i, trimmed))
+		// Redact before surfacing. The caller hands TruncateHeadTail the RAW
+		// output — only the spill file is redacted on its way to disk — so a
+		// secret-bearing heading ("# OPENAI_API_KEY=…") in the discarded middle
+		// would otherwise be lifted out of the part nobody was going to see and
+		// put in front of the provider.
+		entries = append(entries, fmt.Sprintf("%d: %s", base+i, redact.String(trimmed)))
 		if len(entries) >= outlineMaxEntries {
 			entries = append(entries, "…")
 			break

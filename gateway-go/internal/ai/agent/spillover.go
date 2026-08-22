@@ -168,7 +168,7 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 		// default without having to remember a follow-up call.
 		ExternalOrigin: IsExternalOriginTool(toolName),
 	}
-	evicted := s.enforceSessionQuotaLocked(sessionKey)
+	evicted := s.enforceSessionQuotaLocked(sessionKey, spillID)
 	s.mu.Unlock()
 
 	for _, p := range evicted {
@@ -507,9 +507,15 @@ func (s *SpilloverStore) sweepUnindexedFiles(now time.Time) {
 // under the count and byte caps, returning the paths whose files the caller
 // must delete once the lock is released.
 //
+// keepID is exempt from eviction: Store calls this right after inserting, and
+// evicting that entry would hand the caller a handle whose file is already
+// gone — capToolOutput would embed a dead read_spillover pointer and the
+// truncated middle would be unrecoverable. Timestamps come from before the
+// disk write, so a concurrent spill can otherwise look older than it is.
+//
 // Caller must hold s.mu. File removal is deliberately left to the caller: disk
 // I/O under the index lock would stall every concurrent Store and Load.
-func (s *SpilloverStore) enforceSessionQuotaLocked(sessionKey string) []string {
+func (s *SpilloverStore) enforceSessionQuotaLocked(sessionKey, keepID string) []string {
 	type aged struct {
 		id      string
 		entry   *spillEntry
@@ -521,10 +527,18 @@ func (s *SpilloverStore) enforceSessionQuotaLocked(sessionKey string) []string {
 		if e.SessionKey != sessionKey {
 			continue
 		}
-		owned = append(owned, aged{id: id, entry: e, created: e.CreatedAt})
 		total += e.OrigLen
+		if id == keepID {
+			continue // never evict the spill we are about to hand back a handle for
+		}
+		owned = append(owned, aged{id: id, entry: e, created: e.CreatedAt})
 	}
-	if len(owned) <= maxSpillsPerSession && total <= maxSpillBytesPerSession {
+	// owned excludes keepID, so count it back in when measuring the session.
+	count := len(owned)
+	if keepID != "" {
+		count++
+	}
+	if count <= maxSpillsPerSession && total <= maxSpillBytesPerSession {
 		return nil
 	}
 
@@ -532,11 +546,12 @@ func (s *SpilloverStore) enforceSessionQuotaLocked(sessionKey string) []string {
 
 	var paths []string
 	for _, o := range owned {
-		if len(owned)-len(paths) <= maxSpillsPerSession && total <= maxSpillBytesPerSession {
+		if count <= maxSpillsPerSession && total <= maxSpillBytesPerSession {
 			break
 		}
 		paths = append(paths, o.entry.Path)
 		total -= o.entry.OrigLen
+		count--
 		delete(s.index, o.id)
 	}
 	return paths

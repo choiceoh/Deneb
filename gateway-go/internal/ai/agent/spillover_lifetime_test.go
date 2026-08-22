@@ -378,3 +378,47 @@ func TestSessionQuotaIsPerSession(t *testing.T) {
 		t.Errorf("sibling session's spill evicted by another session's quota: %v", err)
 	}
 }
+
+// The outline is built from the RAW output — only the spill file is redacted on
+// its way to disk — so a secret-bearing heading in the discarded middle must be
+// masked before it reaches the marker. Otherwise the outline lifts a secret out
+// of the part nobody was going to see and puts it in front of the provider.
+func TestMiddleOutlineRedactsSecrets(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		b.WriteString("head padding line\n")
+	}
+	b.WriteString("# OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF\n")
+	b.WriteString("=== 두번째 구간 ===\n")
+	for i := 0; i < 200; i++ {
+		b.WriteString("tail padding line\n")
+	}
+
+	out := TruncateHeadTail(b.String(), 800, "sp_test")
+
+	if strings.Contains(out, "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF") {
+		t.Fatalf("outline leaked a secret from the discarded middle:\n%s", out)
+	}
+}
+
+// Store must never evict the spill it is about to return a handle for.
+// Timestamps are taken before the disk write, so a concurrent spill can look
+// older; evicting the new entry would hand back a dead read_spillover pointer
+// and make the truncated middle unrecoverable.
+func TestStoreNeverEvictsTheSpillItJustCreated(t *testing.T) {
+	store := NewSpilloverStore(t.TempDir())
+	store.SetSessionLiveness(func(string) bool { return true })
+
+	const key = "client:main"
+	for i := 0; i < maxSpillsPerSession*2; i++ {
+		id, err := store.Store(key, "exec", strings.Repeat("x", 1024))
+		if err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+		// Every handle must resolve at the moment it is handed back — that is
+		// when capToolOutput embeds it in the truncation marker.
+		if _, err := store.Load(id, key); err != nil {
+			t.Fatalf("handle %d was dead on return: %v", i, err)
+		}
+	}
+}
