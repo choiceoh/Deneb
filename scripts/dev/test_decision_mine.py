@@ -99,6 +99,19 @@ class CleanBodyTests(unittest.TestCase):
         raw = "<!-- CURSOR_SUMMARY -->\nWhy we did it.\n<!-- /CURSOR_SUMMARY -->\n"
         self.assertEqual(dm.clean_body(raw), ["Why we did it."])
 
+    def test_a_comment_spanning_several_lines_is_removed_whole(self) -> None:
+        # A line-anchored pattern matches none of these lines, so the entire
+        # comment used to survive -- four lines of markup counted as reasoning.
+        raw = "<!-- CURSOR_SUMMARY\ninside\nstill inside\n-->\nWhy we did it."
+        self.assertEqual(dm.clean_body(raw), ["Why we did it."])
+
+    def test_an_unterminated_comment_does_not_leak_the_rest(self) -> None:
+        raw = "Why we did it.\n<!-- never closed\nmarkup\nmore markup"
+        self.assertEqual(dm.clean_body(raw), ["Why we did it."])
+
+    def test_text_around_an_inline_comment_survives(self) -> None:
+        self.assertEqual(dm.clean_body("before <!-- mid --> after"), ["before  after"])
+
 
 class LoadExistingTests(unittest.TestCase):
     """The ledger reader's contract, pinned directly.

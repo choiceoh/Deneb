@@ -77,10 +77,11 @@ _SQUASH_ECHO = re.compile(r"^\s*\*\s+\S")
 # bodies. They describe the diff back to us -- not the author's reasoning.
 _BLOCKQUOTE = re.compile(r"^\s*>")
 
-# Marker comments that wrap generated sections (e.g. <!-- CURSOR_SUMMARY -->).
-# None appear in this repo's history today, but they carry no rationale in any
-# case, and leaving them in would let markup count toward MIN_BODY_LINES.
-_HTML_COMMENT = re.compile(r"^\s*<!--.*-->\s*$")
+# Comment spans are removed by scanning, not by a regex. A line-anchored
+# pattern only ever sees one line, so a comment that spans several lines slips
+# through whole -- every one of its markup lines then counts toward
+# MIN_BODY_LINES, which is the inflation this filter exists to stop.
+_COMMENT_OPEN, _COMMENT_CLOSE = "<!--", "-->"
 
 _CONVENTIONAL = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!?):\s")
 _PR_NUMBER = re.compile(r"\(#(\d+)\)\s*$")
@@ -170,6 +171,28 @@ def is_ancestor(older: str, newer: str, cwd=None) -> bool:
         return False
 
 
+def strip_comment_spans(raw: str) -> str:
+    """Remove `<!-- ... -->` spans, however many lines they cover.
+
+    Scanned rather than matched: comments are not a line-shaped construct, and
+    a per-line pattern lets a multi-line one through intact. An unterminated
+    opener drops everything after it -- a comment nobody closed has no readable
+    end, and guessing one would put markup back in the rationale.
+    """
+    out, i = [], 0
+    text = raw or ""
+    while True:
+        start = text.find(_COMMENT_OPEN, i)
+        if start < 0:
+            out.append(text[i:])
+            return "".join(out)
+        out.append(text[i:start])
+        end = text.find(_COMMENT_CLOSE, start + len(_COMMENT_OPEN))
+        if end < 0:
+            return "".join(out)
+        i = end + len(_COMMENT_CLOSE)
+
+
 def clean_body(raw: str) -> list[str]:
     """Strip squash echoes, trailers, and bot blocks; keep the prose.
 
@@ -177,7 +200,7 @@ def clean_body(raw: str) -> list[str]:
     "lines of reasoning" rather than "lines of whitespace and boilerplate".
     """
     kept: list[str] = []
-    for line in (raw or "").splitlines():
+    for line in strip_comment_spans(raw).splitlines():
         stripped = line.strip()
         low = stripped.lower()
         if not stripped:
@@ -187,7 +210,7 @@ def clean_body(raw: str) -> list[str]:
             continue
         if any(low.startswith(p) for p in _NOISE_PREFIXES):
             continue
-        if _SQUASH_ECHO.match(line) or _BLOCKQUOTE.match(line) or _HTML_COMMENT.match(line):
+        if _SQUASH_ECHO.match(line) or _BLOCKQUOTE.match(line):
             continue
         # A bare rule is only ever a separator before a generated footer.
         if set(stripped) <= {"-", "*", "_"} and len(stripped) >= 3:
