@@ -165,6 +165,20 @@ def git(*args, cwd=None):
     return git_run(*args, cwd=cwd)[0]
 
 
+# The lock file's name, deliberately NOT the `.lock` the previous protocol
+# used. The memory dir is shared across worktrees, and worktrees update at
+# different times, so for a while some sessions run the old exclusive-create
+# code and some run this one. The two protocols cannot exclude each other --
+# one takes ownership by the file existing, the other by a kernel lock on an
+# open fd -- and sharing a filename makes that worse rather than better: the
+# old code eventually judges this file stale (it is never unlinked) and
+# unlinks it, so the next open creates a NEW inode and the kernel lock still
+# held on the old one guards nothing at all. Separate names keep each protocol
+# internally sound; the mixed window is then just an unserialized window
+# between old and new, which ends when every worktree has pulled.
+_LOCK_SUFFIX = "flock"
+
+
 @contextlib.contextmanager
 def memory_lock(name="memory", timeout=5.0, mem_dir=None):
     """Serialize a whole read-modify-write against the shared memory dir.
@@ -196,7 +210,7 @@ def memory_lock(name="memory", timeout=5.0, mem_dir=None):
     prevent.
     """
     directory = mem_dir or MEM_DIR
-    path = os.path.join(directory, f".{name}.lock")
+    path = os.path.join(directory, f".{name}.{_LOCK_SUFFIX}")
     fd = None
     acquired = False
     try:

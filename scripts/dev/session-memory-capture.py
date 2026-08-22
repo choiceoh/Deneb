@@ -200,6 +200,22 @@ def compact(rows):
     return out
 
 
+def episode_ts(row):
+    """The episode's own timestamp, as something that can always be sorted.
+
+    A row is JSON somebody else wrote: `ts` can be a string, null, or absent.
+    Sorting mixed types raises TypeError, and the outer guard swallows it --
+    so ONE such row made every later write spool instead of landing, and the
+    ledger stopped updating for good while the spool grew. Ordering has to
+    degrade, not explode. Booleans are ints in Python and are not timestamps,
+    so they degrade too.
+    """
+    value = row.get("ts") if isinstance(row, dict) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return value
+
+
 def spool_episode(episode, pending_dir):
     """Park one episode in a file of its own, for the next lock holder to merge.
 
@@ -256,7 +272,13 @@ def drain_pending(pending_dir):
             continue
         if isinstance(row, dict):
             rows.append(row)
-    rows.sort(key=lambda r: r.get("ts", 0))
+    # Compact BEFORE capping. Repeated SessionEnd for one session is the
+    # normal case this spool exists for, so a backlog is mostly duplicates:
+    # capping raw files at MAX_EPISODES could drop the one file holding an
+    # older session that the compacted ledger had room for. Dedupe first, then
+    # cap on what would actually survive.
+    rows.sort(key=episode_ts)
+    rows = compact(rows)
     return rows[-MAX_EPISODES:], paths
 
 
@@ -304,7 +326,7 @@ def append_episode(episode, path=EPISODES, pending_dir=None, lock_timeout=LOCK_T
             rows.append(episode)
             # Stable, so rows sharing a ts keep this order: ledger, then
             # spooled, then the episode this run is recording.
-            rows.sort(key=lambda r: r.get("ts", 0) if isinstance(r, dict) else 0)
+            rows.sort(key=episode_ts)
             rows = compact(rows)[-MAX_EPISODES:]
             tmp = f"{path}.{os.getpid()}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:

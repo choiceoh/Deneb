@@ -676,7 +676,7 @@ class MemoryLockTests(unittest.TestCase):
         # Unlinking a locked file lets the next process create a new inode and
         # lock THAT, so two holders would each be holding "the lock". The
         # leftover empty file is the price of the guarantee.
-        path = os.path.join(self.tmp.name, ".t.lock")
+        path = os.path.join(self.tmp.name, f".t.{dm._LOCK_SUFFIX}")
         with dm.memory_lock("t", mem_dir=self.tmp.name) as held:
             self.assertTrue(held)
         self.assertTrue(os.path.exists(path))
@@ -727,6 +727,18 @@ class MemoryLockTests(unittest.TestCase):
         finally:
             dm._try_lock = real
         self.assertLess(waited, 1.0, "a broken lock call must not burn the timeout")
+
+    def test_the_lock_file_is_not_the_old_protocols_filename(self) -> None:
+        # Worktrees share the memory dir and update at different times, so for
+        # a while some sessions run the exclusive-create protocol and some run
+        # this one. Sharing a filename lets the old code judge this file stale
+        # -- it is never unlinked -- and unlink it, after which the next open
+        # makes a NEW inode and the kernel lock still held on the old one
+        # guards nothing.
+        with dm.memory_lock("t", mem_dir=self.tmp.name) as held:
+            self.assertTrue(held)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, ".t.lock")))
+        self.assertTrue(os.path.exists(os.path.join(self.tmp.name, f".t.{dm._LOCK_SUFFIX}")))
 
     def test_an_unwritable_directory_still_yields(self) -> None:
         with dm.memory_lock("t", timeout=0.1, mem_dir="/proc/nonexistent/nope") as held:
@@ -845,6 +857,33 @@ class EpisodeDedupTests(unittest.TestCase):
         capture.append_episode({"session_id": "s1", "ts": 1}, path=self.path)
         self.assertEqual([r["session_id"] for r in self.rows()], ["s1"])
         self.assertFalse(os.path.exists(bad))
+
+    def test_one_unsortable_ts_does_not_wedge_every_later_write(self) -> None:
+        # `ts` is JSON somebody else wrote. Sorting a string against ints
+        # raises TypeError, the outer guard swallows it, and the episode is
+        # spooled instead of written -- so the ledger stops updating for good
+        # while the spool grows, with nothing saying why.
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"session_id": "bad", "ts": "not-a-number"}) + "\n")
+        capture.append_episode({"session_id": "new", "ts": 2}, path=self.path)
+        self.assertIn("new", [r.get("session_id") for r in self.rows()])
+        self.assertFalse(os.path.isdir(self.spool()) and os.listdir(self.spool()))
+
+    def test_a_backlog_of_one_sessions_repeats_does_not_evict_another(self) -> None:
+        # Repeated SessionEnd for one session is exactly what this spool
+        # collects, so a backlog is mostly duplicates. Capping raw files meant
+        # the single file holding an older session was deleted unread, even
+        # though the compacted ledger had room for it.
+        os.makedirs(self.spool(), exist_ok=True)
+        with open(os.path.join(self.spool(), "a.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"session_id": "A", "ts": 0}))
+        for i in range(capture.MAX_EPISODES + 5):
+            with open(os.path.join(self.spool(), f"b{i:04d}.json"), "w", encoding="utf-8") as f:
+                f.write(json.dumps({"session_id": "B", "ts": i + 1}))
+
+        rows, paths = capture.drain_pending(self.spool())
+        self.assertEqual(len(paths), capture.MAX_EPISODES + 6, "all files must be cleared")
+        self.assertEqual({r["session_id"] for r in rows}, {"A", "B"})
 
     def test_the_drain_caps_by_ts_not_by_file_mtime(self) -> None:
         # Preselecting by mtime and parsing only those meant a backlog past

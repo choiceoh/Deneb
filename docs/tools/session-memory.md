@@ -93,7 +93,12 @@ description: Auto-capture + always-surface memory for the Claude Code coding age
 - `episodes.pending/` — 잠금을 못 잡은 SessionEnd가 에피소드를 **한 건당 한 파일**로
   맡겨두는 곳. 다음에 잠금을 잡는 쓰기가 병합하고 지운다. 예전 폴백은 원장에 그냥
   append했는데, 보유자가 먼저 읽은 스냅샷으로 파일을 교체하면 그 행이 조용히 사라졌다.
-- `.episodes.lock` / `.decisions.lock` — 잠금 파일(빈 파일, 지우지 않고 남는다).
+- `.episodes.flock` / `.decisions.flock` — 잠금 파일(빈 파일, 지우지 않고 남는다).
+  이름이 `.lock`이 아닌 건 의도다 — 워크트리마다 갱신 시점이 달라 한동안 구버전(파일 존재
+  = 소유)과 신버전(커널 잠금)이 섞여 도는데, 파일 이름을 공유하면 구버전이 신버전의 파일을
+  stale로 보고 unlink → 새 inode 생성 → 신버전이 붙들고 있는 커널 잠금이 아무것도 지키지
+  못하게 된다. 이름을 나누면 각 프로토콜은 자기들끼리 온전하고, 혼용 구간은 그냥 "직렬화가
+  안 되는 창"으로 남았다가 모든 워크트리가 pull하면 끝난다.
 
 세션 데이터라 레포에 커밋하지 않는다. 훅 스크립트만 버전 관리 대상.
 
