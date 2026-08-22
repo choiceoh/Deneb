@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
+	"github.com/choiceoh/deneb/gateway-go/pkg/promptguard"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Delegated-read bounds.
@@ -16,14 +19,25 @@ import (
 // its answer — plus line numbers the root can verify with offset — comes back.
 //
 // The fan-out is deliberately small and sequential. Compaction bounds its own
-// LLM digestion at 4 chunks per pass for the same reason (an interactive turn
-// lives inside a 5-minute deadline), and this borrows that ceiling rather than
-// inventing a second cost model.
+// LLM digestion at 4 chunks per pass, and this borrows that ceiling rather than
+// inventing a second cost model: a delegated read sits inside a user's turn, so
+// its cost has to be bounded up front, not discovered.
 const (
 	spillAskMaxChunks     = 4
 	spillAskChunkMaxChars = 12000
 	spillAskChunkTokens   = 512
 	spillAskReduceTokens  = 1024
+
+	// spillAskCallTimeout bounds ONE delegated call. The tool inherits the
+	// interactive turn context, whose backstop is 30 minutes, and the local-AI
+	// hub path preserves the caller deadline instead of imposing its own — so
+	// without this a single stalled helper request would eat the whole user
+	// turn before the loop could try the next chunk or fall back to paging.
+	spillAskCallTimeout = 90 * time.Second
+
+	// spillAskLongLineHeadroom leaves room for the line number prefix and the
+	// truncation notice when a single oversized line is clipped.
+	spillAskLongLineHeadroom = 128
 )
 
 const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발췌만 근거로 답하라. " +
@@ -48,6 +62,19 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 		return "", false
 	}
 
+	// Injection-bearing blobs must not be delegated. The tool-result fence
+	// (agent.fenceUntrustedToolOutput) scans what a tool RETURNS: paging
+	// returns the raw bytes and gets scanned, but a delegated answer returns
+	// only a paraphrase — which would launder a hidden instruction sitting in
+	// the dropped middle into clean-looking, in-session evidence. When the
+	// blob trips promptguard we refuse to delegate and let the caller page,
+	// so the existing chokepoint sees the real bytes.
+	for _, c := range chunks {
+		if len(promptguard.Scan(c.text)) > 0 {
+			return "", false
+		}
+	}
+
 	type partial struct {
 		firstLine, lastLine int
 		answer              string
@@ -56,7 +83,9 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	for _, c := range chunks {
 		user := fmt.Sprintf("## 질문\n%s\n\n## 발췌 (%d–%d줄)\n%s",
 			question, c.firstLine, c.lastLine, c.text)
-		answer, err := ask(ctx, spillAskSystemPrompt, user, spillAskChunkTokens)
+		callCtx, cancel := context.WithTimeout(ctx, spillAskCallTimeout)
+		answer, err := ask(callCtx, spillAskSystemPrompt, user, spillAskChunkTokens)
+		cancel()
 		if err != nil || strings.TrimSpace(answer) == "" {
 			continue // one chunk failing must not sink the whole read
 		}
@@ -67,15 +96,17 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	}
 
 	// Coverage is stated up front, not buried: the model must know it is
-	// reading an answer drawn from part of the blob, not all of it. The
-	// scanned-lines count is what the chunks actually covered.
+	// reading an answer drawn from part of the blob, not all of it. It counts
+	// only the chunks that actually ANSWERED — counting attempted chunks would
+	// claim a failed region was searched, which is the exact coverage-hiding
+	// defect this change fixes for polaris expand.
 	scanned := 0
-	for _, c := range chunks {
-		scanned += c.lastLine - c.firstLine + 1
+	for _, p := range partials {
+		scanned += p.lastLine - p.firstLine + 1
 	}
 	var head strings.Builder
 	fmt.Fprintf(&head, "## %s 위임 답변\n\n**질문:** %s\n", spillID, question)
-	fmt.Fprintf(&head, "**근거 범위:** 총 %d줄 중 %d줄 스캔(%d구간)", len(lines), scanned, len(chunks))
+	fmt.Fprintf(&head, "**근거 범위:** 총 %d줄 중 %d줄 스캔(%d구간)", len(lines), scanned, len(partials))
 	if scanned < len(lines) {
 		fmt.Fprintf(&head, " — 전체를 다 보지는 않았습니다. 빠진 구간이 걸리면 grep=\"패턴\"으로 좁히세요")
 	}
@@ -132,6 +163,13 @@ func spillAskChunks(lines []string) []spillAskChunk {
 	}
 
 	for i, line := range lines {
+		// A single line can exceed the whole chunk budget — minified JSON, a
+		// base64 payload, compact command output. Without this the "bounded"
+		// request would carry the entire line and blow the helper's context.
+		if len(line) > spillAskChunkMaxChars {
+			line = textutil.TruncateBytes(line, spillAskChunkMaxChars-spillAskLongLineHeadroom) +
+				" …[줄 잘림 — 전체는 read_spillover(offset=" + fmt.Sprint(i+1) + ")]"
+		}
 		entry := fmt.Sprintf("%d: %s\n", i+1, line)
 		if b.Len() > 0 && b.Len()+len(entry) > spillAskChunkMaxChars {
 			flush(i) // previous line closed this chunk
