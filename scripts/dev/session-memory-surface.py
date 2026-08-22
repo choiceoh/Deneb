@@ -190,8 +190,11 @@ def defang(text):
 
 
 def fmt_decision(d):
-    # A squash subject already ends with "(#1234)", so only add the number when
-    # the subject does not carry it -- otherwise every entry says it twice.
+    # EVERY field rendered here is defanged, not a chosen few. The miner
+    # validates each field's shape, so this is the second layer -- and picking
+    # which fields "come from git" rather than "from the author" is exactly the
+    # reasoning that left `commit` interpolated raw while subject and rationale
+    # were cleaned. Inside the fence there is no trusted field.
     subject = defang(d.get("subject", ""))
     pr = d.get("pr")
     head = f"- **{subject}**"
@@ -201,8 +204,8 @@ def fmt_decision(d):
     truncated = len(body) > DECISION_CHARS
     if truncated:
         body = body[:DECISION_CHARS].rstrip() + " …"
-    sha = d.get("sha") or d.get("commit", "")
-    lines = [head, f"  `{d.get('commit','')}` · {d.get('date','')}"]
+    sha = defang(d.get("sha") or d.get("commit", ""))
+    lines = [head, f"  `{defang(d.get('commit', ''))}` · {defang(d.get('date', ''))}"]
     if body:
         lines += ["", "  " + body.replace("\n", "\n  ")]
     if truncated:

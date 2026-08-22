@@ -99,6 +99,15 @@ _PR_NUMBER = re.compile(r"\(#(\d+)\)\s*$")
 # exactly like one -- 40 hex digits can never be an option.
 _OBJECT_NAME = re.compile(r"^[0-9a-f]{40}$")
 
+# The same forgery reaches the OTHER git-supplied fields, and those flow
+# straight into the injected SessionStart block. Validating only the name that
+# goes to `git show` guarded the command and left the output unguarded: a
+# forged record could carry the closing fence tag in `short` and end the
+# untrusted span early. git decides both of these shapes, so anything that does
+# not match them is not a git record.
+_SHORT_NAME = re.compile(r"^[0-9a-f]{4,40}$")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
 
 def git(*args, cwd=None):
     """Run git, returning stdout stripped, or '' on any failure."""
@@ -326,8 +335,12 @@ def commit_records(ref: str, limit: int, since: str | None, cwd=None):
         parts = chunk.split(sep_f)
         if len(parts) < 4:
             continue
-        full, short, when, subject = parts[0].strip(), parts[1], parts[2], parts[3]
-        if not _OBJECT_NAME.match(full):
+        full, short, when, subject = parts[0].strip(), parts[1].strip(), parts[2].strip(), parts[3]
+        if not (
+            _OBJECT_NAME.match(full)
+            and _SHORT_NAME.match(short)
+            and _ISO_DATE.match(when)
+        ):
             # Not a real record boundary -- a forged one, or the tail of a body
             # that contained the separator. Either way there is nothing safe to
             # look up here.
