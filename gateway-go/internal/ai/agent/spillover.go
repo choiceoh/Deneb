@@ -47,13 +47,6 @@ const (
 	hashInputLimit = 256
 	// hashIDBytes is the number of SHA-256 bytes used for the spill ID (8 hex chars).
 	hashIDBytes = 4
-
-	// Preview outline bounds. The outline buys the model grep/offset targets,
-	// so it must stay far cheaper than the head+tail preview it sits next to.
-	outlineMinLines      = 40 // below this the head+tail preview already covers it
-	outlineMinEntries    = 2
-	outlineMaxEntries    = 12
-	outlineEntryMaxChars = 80
 )
 
 // spillEntry tracks a single spilled result on disk.
@@ -218,9 +211,6 @@ func FormatPreview(spillID, toolName, content string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "[SpillOver: ID=%s | %s | %d chars · %d lines]\n",
 		spillID, toolName, origLen, strings.Count(content, "\n")+1)
-	if toc := previewOutline(content); toc != "" {
-		sb.WriteString(toc)
-	}
 	fmt.Fprintf(&sb, "--- Preview (first %d chars) ---\n", len(head))
 	sb.WriteString(head)
 	sb.WriteByte('\n')
@@ -231,59 +221,6 @@ func FormatPreview(spillID, toolName, content string) string {
 	}
 	fmt.Fprintf(&sb, "To read full content, use tool: read_spillover(\"%s\")", spillID)
 	return sb.String()
-}
-
-// previewOutline renders a compact line-numbered outline of a spilled blob's
-// structural lines, or "" when the content has no usable structure.
-//
-// The preview deliberately shows only head+tail, which leaves the model
-// choosing a grep pattern or an offset blind for everything in between. An
-// outline gives it addresses to aim at: it is the blob-level equivalent of
-// what polaris(action="describe") does for conversation history. Entries carry
-// 1-based line numbers so they feed straight into read_spillover(offset=N).
-func previewOutline(content string) string {
-	lines := strings.Split(content, "\n")
-	if len(lines) < outlineMinLines {
-		return ""
-	}
-
-	var entries []string
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !isOutlineHeading(trimmed) {
-			continue
-		}
-		if len(trimmed) > outlineEntryMaxChars {
-			trimmed = trimmed[:outlineEntryMaxChars] + "…"
-		}
-		entries = append(entries, fmt.Sprintf("  %d: %s", i+1, trimmed))
-		if len(entries) >= outlineMaxEntries {
-			entries = append(entries, "  … (이하 생략 — grep으로 더 찾으세요)")
-			break
-		}
-	}
-	if len(entries) < outlineMinEntries {
-		return "" // one heading is not an outline, just noise in the preview
-	}
-
-	return "--- 구조 (offset으로 열기) ---\n" + strings.Join(entries, "\n") + "\n"
-}
-
-// isOutlineHeading recognizes the section markers that actually show up in
-// spilled output: markdown headings, `=== x ===` / `--- x ---` banners that
-// shell tooling prints, and bare `Name:` labels at the start of a line.
-func isOutlineHeading(trimmed string) bool {
-	switch {
-	case trimmed == "":
-		return false
-	case strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, " "):
-		return true
-	case (strings.HasPrefix(trimmed, "===") && strings.HasSuffix(trimmed, "===")) ||
-		(strings.HasPrefix(trimmed, "---") && strings.HasSuffix(trimmed, "---")):
-		return len(strings.Trim(trimmed, "=- ")) > 0
-	default:
-		return false
-	}
 }
 
 // SpillAndPreview is a convenience method: Store + FormatPreview.
