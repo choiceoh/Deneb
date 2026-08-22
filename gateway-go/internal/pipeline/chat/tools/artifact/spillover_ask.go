@@ -54,8 +54,8 @@ var (
 	spillAskPhaseTimeout = 150 * time.Second
 )
 
-const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발췌만 근거로 답하라. " +
-	"근거가 된 줄 번호를 반드시 [L<번호>] 형태로 인용하고, 발췌에 근거가 없으면 " +
+const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발춌만 근거로 답하라. " +
+	"근거가 된 줄 번호를 반드시 [L<번호>] 형태로 인용하고, 발춌에 근거가 없으면 " +
 	"추측하지 말고 '이 구간에는 근거 없음'이라고만 답하라. 한국어로 답변."
 
 const spillAskReduceSystemPrompt = "같은 문서의 여러 구간에 대한 부분 답변들이다. " +
@@ -124,10 +124,11 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 		firstLine, lastLine int
 		clippedLines        int
 		answer              string
+		cited               bool // carried real citations, vs the no-evidence reply
 	}
 	var partials []partial
 	for _, c := range chunks {
-		user := fmt.Sprintf("## 질문\n%s\n\n## 발췌 (%d–%d줄)\n%s",
+		user := fmt.Sprintf("## 질문\n%s\n\n## 발춌 (%d–%d줄)\n%s",
 			question, c.firstLine, c.lastLine, c.text)
 		callCtx, cancel := context.WithTimeout(phaseCtx, spillAskCallTimeout)
 		answer, err := ask(callCtx, spillAskSystemPrompt, user, spillAskChunkTokens)
@@ -147,12 +148,14 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 		// verifiable from the root's seat, which is the whole basis for
 		// returning an answer instead of the text — so drop it exactly like a
 		// failed chunk rather than presenting it as grounded evidence.
-		if !citationsAllInRanges(answer, [][2]int{{c.firstLine, c.lastLine}}) && !isNoEvidenceAnswer(answer) {
+		cited := citationsAllInRanges(answer, [][2]int{{c.firstLine, c.lastLine}})
+		if !cited && !isNoEvidenceAnswer(answer) {
 			continue
 		}
 		partials = append(partials, partial{
 			firstLine: c.firstLine, lastLine: c.lastLine,
 			clippedLines: c.clippedLines, answer: strings.TrimSpace(answer),
+			cited: cited,
 		})
 	}
 	if len(partials) == 0 {
@@ -191,9 +194,16 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content st
 	for _, p := range partials {
 		fmt.Fprintf(&merged, "### %d–%d줄\n%s\n\n", p.firstLine, p.lastLine, p.answer)
 	}
+	// Only chunks that actually supplied evidence contribute a citable range.
+	// A chunk that answered "근거 없음" was read but yielded nothing, so a
+	// reducer citation landing inside it points at a line no partial ever
+	// evidenced — verifiable-looking and unfounded, the same failure the
+	// range check exists to catch.
 	ranges := make([][2]int, 0, len(partials))
 	for _, p := range partials {
-		ranges = append(ranges, [2]int{p.firstLine, p.lastLine})
+		if p.cited {
+			ranges = append(ranges, [2]int{p.firstLine, p.lastLine})
+		}
 	}
 	reduceCtx, cancelReduce := context.WithTimeout(phaseCtx, spillAskCallTimeout)
 	reduced, err := ask(reduceCtx, spillAskReduceSystemPrompt,
