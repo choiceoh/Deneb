@@ -57,6 +57,11 @@ MAX_FILES = 12
 MAX_BODY_CHARS = 2000
 MAX_RECORDS = 2000
 
+# How old a lock must be before its owner counts as gone. Well above the
+# slowest legitimate hold (a cold 400-commit mine is ~0.4s) so a live holder is
+# never mistaken for a dead one.
+STALE_LOCK_SECONDS = 120.0
+
 # Trailers and generated footers. These are mechanically appended, carry no
 # rationale, and would otherwise dominate the short bodies.
 _NOISE_PREFIXES = (
@@ -110,7 +115,7 @@ def git(*args, cwd=None):
 
 
 @contextlib.contextmanager
-def memory_lock(name="memory", timeout=5.0, mem_dir=None):
+def memory_lock(name="memory", timeout=5.0, stale_after=STALE_LOCK_SECONDS, mem_dir=None):
     """Serialize a whole read-modify-write against the shared memory dir.
 
     Atomic replacement alone is not enough here. Two SessionEnd processes can
@@ -120,12 +125,22 @@ def memory_lock(name="memory", timeout=5.0, mem_dir=None):
     simultaneous ends are a real case, not a theoretical one.
 
     O_CREAT|O_EXCL because it is the one primitive that behaves the same on
-    POSIX and Windows without a dependency. A lock left behind by a killed
-    process is reclaimed after `timeout`, and failing to acquire yields anyway:
-    a memory hook that blocks a session would be a worse bug than a lost row.
+    POSIX and Windows without a dependency.
+
+    Waiting and reclaiming are separate questions, and conflating them is a bug:
+    a slow-but-live holder (a cold mine catching up) is not an abandoned one, so
+    a lock is only stolen once it is `stale_after` old, never merely because we
+    waited. Running out of patience yields False instead -- and callers must
+    honour that, because proceeding unlocked is exactly the overwrite the lock
+    exists to prevent.
+
+    Release checks the token it wrote. Without that, a holder that timed out
+    against a stolen lock would delete whichever lock file exists at the end --
+    which by then can belong to someone else, cascading the theft.
     """
     directory = mem_dir or MEM_DIR
     path = os.path.join(directory, f".{name}.lock")
+    token = f"{os.getpid()}:{time.monotonic_ns()}"
     acquired = False
     try:
         os.makedirs(directory, exist_ok=True)
@@ -133,17 +148,21 @@ def memory_lock(name="memory", timeout=5.0, mem_dir=None):
         while True:
             try:
                 fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, str(os.getpid()).encode())
-                os.close(fd)
+                try:
+                    os.write(fd, token.encode())
+                finally:
+                    os.close(fd)
                 acquired = True
                 break
             except FileExistsError:
-                if time.monotonic() >= deadline:
-                    # Treat it as abandoned: steal it rather than stall.
+                if _lock_is_stale(path, stale_after):
+                    # The owner is gone: nothing will ever release this.
                     try:
                         os.unlink(path)
                     except OSError:
                         pass
+                    continue
+                if time.monotonic() >= deadline:
                     break
                 time.sleep(0.05)
     except Exception:
@@ -151,11 +170,28 @@ def memory_lock(name="memory", timeout=5.0, mem_dir=None):
     try:
         yield acquired
     finally:
-        if acquired:
+        if acquired and _lock_token(path) == token:
             try:
                 os.unlink(path)
             except OSError:
                 pass
+
+
+def _lock_token(path):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def _lock_is_stale(path, stale_after):
+    """True when the lock is old enough that its owner cannot still be running."""
+    try:
+        return (time.time() - os.path.getmtime(path)) > stale_after
+    except OSError:
+        # Gone between the failed create and this check -- retry, do not steal.
+        return False
 
 
 def is_ancestor(older: str, newer: str, cwd=None) -> bool:
@@ -400,7 +436,12 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
     # The snapshot and its cursor are one transaction: a run that wrote records
     # but lost the cursor race would leave a newer cursor over an older
     # snapshot, and those commits would count as processed forever.
-    with memory_lock("decisions", mem_dir=os.path.dirname(decisions_path)):
+    with memory_lock("decisions", mem_dir=os.path.dirname(decisions_path)) as held:
+        if not held:
+            # Someone else is mining right now. Writing anyway would clobber
+            # their snapshot; skipping costs nothing, because the cursor stays
+            # put and the next run picks the same commits up.
+            return 0, 0
         if full:
             existing, readable = [], True
         else:

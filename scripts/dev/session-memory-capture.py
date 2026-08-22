@@ -195,7 +195,13 @@ def append_episode(episode, path=EPISODES):
     """
     try:
         os.makedirs(MEM_DIR, exist_ok=True)
-        with _memory_lock("episodes", os.path.dirname(path) or MEM_DIR):
+        with _memory_lock("episodes", os.path.dirname(path) or MEM_DIR) as held:
+            if not held:
+                # Another SessionEnd holds the log. Rewriting it from a
+                # snapshot we read anyway would drop whatever they just wrote,
+                # so fall through to the append below: it only ever adds, and
+                # the next successful rewrite compacts the duplicate away.
+                raise RuntimeError("memory lock unavailable")
             rows = []
             try:
                 with open(path, "r", encoding="utf-8", errors="replace") as f:
