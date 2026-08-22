@@ -141,9 +141,27 @@ func outlineOf(text string, hidden [2]int) string {
 		hiddenone bool
 	}
 	var found []entry
-	for i, line := range strings.Split(text, "\n") {
+	// Scanned by index rather than strings.Split: the split materializes a
+	// header for every line of the file, which on a newline-dense result near
+	// the spill ceiling costs far more than the text itself. Slicing shares the
+	// backing array, so only the few headings actually kept are copied.
+	lineNo := 0
+	for pos := 0; pos <= len(text); {
+		end := len(text)
+		if i := strings.IndexByte(text[pos:], '\n'); i >= 0 {
+			end = pos + i
+		}
+		line := text[pos:end]
+		lineNo++
+		i := lineNo - 1
+		advance := end == len(text)
+		pos = end + 1
+
 		trimmed := strings.TrimSpace(line)
 		if !isOutlineHeading(trimmed) {
+			if advance {
+				break
+			}
 			continue
 		}
 		// Redact before surfacing, and BEFORE the length cap. The entries come
@@ -164,6 +182,9 @@ func outlineOf(text string, hidden [2]int) string {
 		}
 		n := i + 1
 		found = append(found, entry{line: n, text: trimmed, hiddenone: n >= hidden[0] && n <= hidden[1]})
+		if advance {
+			break
+		}
 	}
 	if len(found) < outlineMinEntries {
 		return ""

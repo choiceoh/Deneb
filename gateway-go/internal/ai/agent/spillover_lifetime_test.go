@@ -544,6 +544,33 @@ func TestHiddenLineRangeEmptyWhenNothingDropped(t *testing.T) {
 	}
 }
 
+// The line scan is hand-rolled (strings.Split allocates a header per line of
+// the whole file), so its edges need pinning: a heading as the final line with
+// no trailing newline must still be found, and numbered correctly.
+func TestOutlineScanReachesTheLastLineWithoutTrailingNewline(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("# 첫 섹션\n")
+	for i := 0; i < 400; i++ {
+		b.WriteString("padding line\n")
+	}
+	b.WriteString("# 마지막 섹션") // no trailing newline
+	content := b.String()
+
+	out := TruncateHeadTail(content, 800, "sp_test")
+
+	if !strings.Contains(out, "# 마지막 섹션") {
+		t.Errorf("final line without a trailing newline was not scanned:\n%s", out)
+	}
+	for _, e := range outlineEntries(t, out) {
+		if e.text != "# 마지막 섹션" {
+			continue
+		}
+		if want := 402; e.line != want {
+			t.Errorf("final heading numbered %d, want %d", e.line, want)
+		}
+	}
+}
+
 // PEM markers assembled at runtime. Spelled out, they are a literal the repo's
 // detect-private-key gate rejects — correctly, since it cannot tell a fixture
 // from a leak. The concatenated value is byte-identical, so redaction still
