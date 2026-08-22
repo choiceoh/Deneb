@@ -144,6 +144,27 @@ func TestSpillPageClipsOversizedSingleLine(t *testing.T) {
 	}
 }
 
+// The exact-budget boundary: a first line of precisely spillPageMaxChars bytes
+// is not oversized by itself, but the newline it is emitted with pushes the
+// entry one byte over — and the budget check only bites once something is
+// already buffered, so nothing else stops it.
+func TestSpillPageClipsLineAtExactlyTheBudget(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	exact := strings.Repeat("e", spillPageMaxChars)
+	id, err := store.Store("client:test", "exec", exact+"\nsecond line\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id})
+
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("page body is %d chars — the boundary line escaped the budget", n)
+	}
+}
+
 // grep must clip an oversized match, not skip it. Skipping made the page
 // renderer's "search inside this line with grep" hint a dead end: the only
 // route into a long line's content refused to emit any of it.
@@ -210,8 +231,12 @@ func pageBodyLen(out string) int {
 	if i := strings.Index(body, "\n"); i >= 0 {
 		body = body[i+1:] // drop the header line
 	}
+	// The delimiter starts with the body's OWN trailing newline, which the
+	// production char counter counts. Dropping it here made the measurement one
+	// byte short of `chars` — enough to hide exactly the missing-newline
+	// reservation these assertions exist to catch.
 	if i := strings.LastIndex(body, "\n\n[계속: "); i >= 0 {
-		body = body[:i]
+		body = body[:i+1]
 	}
 	return len(body)
 }

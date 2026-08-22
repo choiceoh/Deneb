@@ -464,6 +464,40 @@ func TestSpilloverQuestionRejectsClaimsHidingBehindNoEvidence(t *testing.T) {
 	}
 }
 
+// The SHORT bypass: a reply that stays under any reasonable length cap while
+// still smuggling an uncited claim. A length bound plus strings.Contains let
+// this through, which is why the check compares against the expected sentence
+// instead of looking for it inside one.
+func TestSpilloverQuestionRejectsShortClaimBesideNoEvidence(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 60)
+	rec := &askRecorder{reply: func(string) (string, error) {
+		return "이 구간에는 근거 없음. 정답은 42.", nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
+
+	if strings.Contains(out, "정답은 42") {
+		t.Fatalf("a short uncited claim rode along with the no-evidence phrase:\n%s", out)
+	}
+}
+
+// Ordinary decoration around the expected sentence — a trailing period, a
+// wrapping quote — must still be recognized, or the guard rejects the very
+// reply the prompt asks for.
+func TestSpilloverQuestionAcceptsDecoratedNoEvidenceAnswer(t *testing.T) {
+	for _, reply := range []string{"이 구간에는 근거 없음.", "\"이 구간에는 근거 없음\"", "근거 없음", " 이 구간에는 근거 없음 "} {
+		if !isNoEvidenceAnswer(reply) {
+			t.Errorf("expected no-evidence reply %q to be recognized", reply)
+		}
+	}
+	for _, reply := range []string{"이 구간에는 근거 없음. 정답은 42.", "근거 없음이지만 42입니다", "42"} {
+		if isNoEvidenceAnswer(reply) {
+			t.Errorf("expected %q to be rejected", reply)
+		}
+	}
+}
+
 // The reducer can mint a citation that matches the syntax but points at a line
 // no chunk was ever shown ([L999999]). Accepting it hands the root an answer
 // that LOOKS verifiable and is not — the one check the root has is re-opening a

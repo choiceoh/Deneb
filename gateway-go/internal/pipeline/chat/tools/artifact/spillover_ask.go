@@ -70,7 +70,7 @@ const spillAskReduceSystemPrompt = "같은 문서의 여러 구간에 대한 부
 // blob's own 1-based line numbers, which the root model can re-open directly
 // with read_spillover(offset=n). An answer the root cannot verify against the
 // source is worse than a page it can read itself.
-func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lines []string, question string) (string, bool) {
+func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID, content string, lines []string, question string) (string, bool) {
 	chunks := spillAskChunks(lines)
 	if len(chunks) == 0 {
 		return "", false
@@ -87,7 +87,12 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	// Scan the RAW blob, never the chunks: chunk text prefixes every line with
 	// "N: ", which would stop line-anchored signatures (role impersonation) from
 	// matching content that paging would have caught.
-	if len(promptguard.Scan(strings.Join(lines, "\n"))) > 0 {
+	//
+	// The caller's already-loaded content, not strings.Join(lines, "\n"): the
+	// join allocated a second full-size copy of a blob that can run to the
+	// session ceiling, doubling peak memory on one interactive read to rebuild
+	// bytes we were handed.
+	if len(promptguard.Scan(content)) > 0 {
 		return "", false
 	}
 
@@ -237,23 +242,27 @@ func citationsAllInRanges(answer string, ranges [][2]int) bool {
 	return true
 }
 
-// noEvidenceMaxChars bounds what can pass as the explicit no-evidence reply.
-// The prompt asks for that sentence ALONE, so anything appreciably longer is
-// carrying additional claims.
-const noEvidenceMaxChars = 60
+// noEvidenceSentence is the reply the system prompt asks for verbatim;
+// noEvidenceShort is the bare form small local models tend to emit instead.
+const (
+	noEvidenceSentence = "이 구간에는 근거 없음"
+	noEvidenceShort    = "근거 없음"
+)
 
 // isNoEvidenceAnswer recognizes the delegate's explicit "nothing here" reply,
 // which is a legitimate uncited outcome the system prompt asks for.
 //
-// It must not be a substring test: an answer that makes unverifiable claims and
-// merely mentions the phrase would slip past the citation gate entirely. The
-// reply has to be essentially that sentence and nothing else.
+// It compares against the expected sentence rather than looking for it. A
+// length bound plus strings.Contains was still a bypass: "이 구간에는 근거 없음.
+// 정답은 42." sits under any reasonable length cap while smuggling an uncited
+// claim past the citation gate — which is the one check standing between the
+// root and an unverifiable answer.
 func isNoEvidenceAnswer(answer string) bool {
-	trimmed := strings.TrimSpace(answer)
-	if len(trimmed) > noEvidenceMaxChars {
-		return false
-	}
-	return strings.Contains(trimmed, "근거 없음")
+	trimmed := strings.Trim(strings.TrimSpace(answer), "\"'“”‘’`*[]()")
+	// Only trailing sentence punctuation is forgiven; anything after it is
+	// another claim, not decoration.
+	trimmed = strings.TrimRight(trimmed, " .。!?~…\t")
+	return trimmed == noEvidenceSentence || trimmed == noEvidenceShort
 }
 
 // spillAskVerifyHint tells the root how to check a cited line itself. Without

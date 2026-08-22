@@ -58,7 +58,7 @@ func ToolSpilloverRead(store tooldeps.SpilloverStore, ask tooldeps.LocalAIFunc) 
 
 		lines := strings.Split(content, "\n")
 		if q := strings.TrimSpace(p.Question); q != "" && ask != nil {
-			if answer, ok := spillAsk(ctx, ask, p.SpillID, lines, q); ok {
+			if answer, ok := spillAsk(ctx, ask, p.SpillID, content, lines, q); ok {
 				return answer, nil
 			}
 			// Delegation unavailable or empty — fall through to paging rather
@@ -101,7 +101,11 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 		// emitted whole, blow the tool-output cap, and be re-spilled into a
 		// fresh pointer: the model would get a new handle instead of a page,
 		// and repeating the read would chain spills indefinitely.
-		if len(line) > spillPageMaxChars {
+		// +1 for the newline the line is emitted with: a line of exactly
+		// spillPageMaxChars is not oversized by itself, but the entry that
+		// carries it is, and the budget check below only bites once something
+		// is already buffered.
+		if len(line)+1 > spillPageMaxChars {
 			// Size the cut from the ACTUAL notice, not a guessed headroom
 			// constant: the notice is Korean, so its byte length is roughly
 			// three times its visible length and a fixed guess silently
