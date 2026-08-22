@@ -3,6 +3,8 @@ package artifact
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,6 +94,14 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 		if err != nil || strings.TrimSpace(answer) == "" {
 			continue // one chunk failing must not sink the whole read
 		}
+		// The citation contract is only a prompt instruction, and a local model
+		// is free to ignore it. An answer with no in-range [L<n>] is not
+		// verifiable from the root's seat, which is the whole basis for
+		// returning an answer instead of the text — so drop it exactly like a
+		// failed chunk rather than presenting it as grounded evidence.
+		if !hasInRangeCitation(answer, c.firstLine, c.lastLine) && !isNoEvidenceAnswer(answer) {
+			continue
+		}
 		partials = append(partials, partial{
 			firstLine: c.firstLine, lastLine: c.lastLine,
 			clippedLines: c.clippedLines, answer: strings.TrimSpace(answer),
@@ -137,12 +147,41 @@ func spillAsk(ctx context.Context, ask tooldeps.LocalAIFunc, spillID string, lin
 	reduced, err := ask(reduceCtx, spillAskReduceSystemPrompt,
 		fmt.Sprintf("## 질문\n%s\n\n## 부분 답변\n%s", question, merged.String()), spillAskReduceTokens)
 	cancelReduce()
-	if err != nil || strings.TrimSpace(reduced) == "" {
+	// A reduction that drops every citation is no longer verifiable either, so
+	// it is treated like a failed reduce and the cited partials are returned.
+	if err != nil || strings.TrimSpace(reduced) == "" || !hasAnyCitation(reduced) {
 		// Reduce failed — the partials are still real evidence, so return them
 		// rather than dropping work the local model already did.
 		return head.String() + strings.TrimRight(merged.String(), "\n") + spillAskVerifyHint(spillID), true
 	}
 	return head.String() + strings.TrimSpace(reduced) + spillAskVerifyHint(spillID), true
+}
+
+// citationRe matches the [L<number>] citations the delegate is told to emit.
+var citationRe = regexp.MustCompile(`\[L(\d+)\]`)
+
+// hasInRangeCitation reports whether the answer cites at least one line inside
+// the chunk it was shown. An out-of-range number is not a usable pointer: the
+// root would open a line the delegate never read.
+func hasInRangeCitation(answer string, firstLine, lastLine int) bool {
+	for _, m := range citationRe.FindAllStringSubmatch(answer, -1) {
+		n, err := strconv.Atoi(m[1])
+		if err == nil && n >= firstLine && n <= lastLine {
+			return true
+		}
+	}
+	return false
+}
+
+// hasAnyCitation reports whether the merged answer kept any citation at all.
+func hasAnyCitation(answer string) bool {
+	return citationRe.MatchString(answer)
+}
+
+// isNoEvidenceAnswer recognizes the delegate's explicit "nothing here" reply,
+// which is a legitimate uncited outcome the system prompt asks for.
+func isNoEvidenceAnswer(answer string) bool {
+	return strings.Contains(answer, "근거 없음")
 }
 
 // spillAskVerifyHint tells the root how to check a cited line itself. Without

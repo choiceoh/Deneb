@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,19 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
+
+// stubChunkRe pulls the chunk's first line number out of the delegate prompt.
+var stubChunkRe = regexp.MustCompile(`발췌 \((\d+)–`)
+
+// stubAnswer builds a reply that satisfies the citation contract the tool now
+// enforces: map replies cite a line inside the chunk they were shown, reduce
+// replies just need to keep a citation.
+func stubAnswer(user, text string) string {
+	if m := stubChunkRe.FindStringSubmatch(user); len(m) == 2 {
+		return text + " [L" + m[1] + "]"
+	}
+	return text + " [L1]"
+}
 
 // askRecorder is a stub local model that records what it was asked.
 type askRecorder struct {
@@ -54,14 +68,14 @@ func spillWithLines(t *testing.T, n int) (tooldeps.SpilloverStore, context.Conte
 // context: the tool must return the delegate's answer, not the source lines.
 func TestSpilloverQuestionReturnsAnswerNotBlob(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 200)
-	rec := &askRecorder{reply: func(string) (string, error) {
-		return "설정값은 42다 [L7]", nil
+	rec := &askRecorder{reply: func(user string) (string, error) {
+		return stubAnswer(user, "설정값은 42다"), nil
 	}}
 	fn := ToolSpilloverRead(store, rec.fn())
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "설정값이 뭐야?"})
 
-	if !strings.Contains(out, "설정값은 42다 [L7]") {
+	if !strings.Contains(out, "설정값은 42다 [L") {
 		t.Fatalf("delegate answer missing:\n%s", out)
 	}
 	if strings.Contains(out, "line 150 payload") {
@@ -82,7 +96,7 @@ func TestSpilloverQuestionReturnsAnswerNotBlob(t *testing.T) {
 // re-open with offset. An answer the root cannot verify is worse than a page.
 func TestSpilloverQuestionChunksCarryLineNumbers(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 100)
-	rec := &askRecorder{reply: func(string) (string, error) { return "답", nil }}
+	rec := &askRecorder{reply: func(user string) (string, error) { return stubAnswer(user, "답"), nil }}
 	fn := ToolSpilloverRead(store, rec.fn())
 
 	callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
@@ -100,7 +114,7 @@ func TestSpilloverQuestionChunksCarryLineNumbers(t *testing.T) {
 // silently presenting it as a complete reading is not.
 func TestSpilloverQuestionStatesPartialCoverage(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 20000) // far beyond 4 chunks × 12K chars
-	rec := &askRecorder{reply: func(string) (string, error) { return "부분 답", nil }}
+	rec := &askRecorder{reply: func(user string) (string, error) { return stubAnswer(user, "부분 답"), nil }}
 	fn := ToolSpilloverRead(store, rec.fn())
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
@@ -156,14 +170,14 @@ func TestSpilloverQuestionSurvivesPartialChunkFailure(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 4000)
 	var n int
 	var mu sync.Mutex
-	rec := &askRecorder{reply: func(string) (string, error) {
+	rec := &askRecorder{reply: func(user string) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		n++
 		if n == 1 {
 			return "", errors.New("transient")
 		}
-		return "살아남은 답 [L900]", nil
+		return stubAnswer(user, "살아남은 답"), nil
 	}}
 	fn := ToolSpilloverRead(store, rec.fn())
 
@@ -222,14 +236,14 @@ func TestSpilloverQuestionCoverageExcludesFailedChunks(t *testing.T) {
 	store, ctx, id := spillWithLines(t, 4000) // several chunks
 	var n int
 	var mu sync.Mutex
-	rec := &askRecorder{reply: func(string) (string, error) {
+	rec := &askRecorder{reply: func(user string) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		n++
 		if n == 1 {
 			return "", errors.New("transient")
 		}
-		return "답 [L900]", nil
+		return stubAnswer(user, "답"), nil
 	}}
 	fn := ToolSpilloverRead(store, rec.fn())
 
@@ -337,7 +351,7 @@ func TestSpilloverQuestionReportsClippedLines(t *testing.T) {
 		t.Fatalf("store: %v", err)
 	}
 	ctx := toolport.WithSessionKey(context.Background(), "client:test")
-	rec := &askRecorder{reply: func(string) (string, error) { return "답 [L1]", nil }}
+	rec := &askRecorder{reply: func(user string) (string, error) { return stubAnswer(user, "답"), nil }}
 	fn := ToolSpilloverRead(store, rec.fn())
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
@@ -374,5 +388,58 @@ func TestSpillAskChunksAttributeClipToOwningChunk(t *testing.T) {
 		if c.clippedLines != 0 {
 			t.Errorf("chunk %d has no clipped line but reports %d", i, c.clippedLines)
 		}
+	}
+}
+
+// The citation contract is only a prompt instruction, and a local model may
+// ignore it. An answer with no in-range [L<n>] cannot be verified from the
+// root's seat — which is the whole basis for returning an answer instead of the
+// text — so it must be dropped, not presented as grounded evidence.
+func TestSpilloverQuestionRejectsUncitedAnswer(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 60)
+	rec := &askRecorder{reply: func(string) (string, error) {
+		return "출처 없이 그냥 단언합니다", nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
+
+	if strings.Contains(out, "출처 없이 그냥 단언합니다") {
+		t.Fatalf("uncited answer was presented as grounded evidence:\n%s", out)
+	}
+	if !strings.Contains(out, "위임 실패") {
+		t.Errorf("rejection must fall back to paging and say so:\n%s", out)
+	}
+}
+
+// A citation pointing outside the chunk the delegate was shown is not a usable
+// pointer — the root would open a line the delegate never read.
+func TestSpilloverQuestionRejectsOutOfRangeCitation(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 60)
+	rec := &askRecorder{reply: func(string) (string, error) {
+		return "엉뚱한 곳을 가리킵니다 [L999999]", nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
+
+	if strings.Contains(out, "엉뚱한 곳을 가리킵니다") {
+		t.Fatalf("out-of-range citation accepted as grounded:\n%s", out)
+	}
+}
+
+// The delegate's explicit "no evidence here" reply is a legitimate uncited
+// outcome the system prompt asks for, so it must survive.
+func TestSpilloverQuestionKeepsExplicitNoEvidenceAnswer(t *testing.T) {
+	store, ctx, id := spillWithLines(t, 60)
+	rec := &askRecorder{reply: func(string) (string, error) {
+		return "이 구간에는 근거 없음", nil
+	}}
+	fn := ToolSpilloverRead(store, rec.fn())
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "question": "q"})
+
+	if !strings.Contains(out, "근거 없음") {
+		t.Errorf("explicit no-evidence reply was dropped:\n%s", out)
 	}
 }
