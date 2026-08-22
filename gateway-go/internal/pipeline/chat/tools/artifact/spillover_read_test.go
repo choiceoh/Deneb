@@ -102,8 +102,8 @@ func TestSpilloverRead_CharBudget(t *testing.T) {
 	ctx := toolport.WithSessionKey(context.Background(), "client:test")
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "limit": 100})
-	if len(out) > spillPageMaxChars+2000 {
-		t.Errorf("page exceeded char budget: %d chars", len(out))
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("page body exceeded char budget: %d chars", n)
 	}
 	if !strings.Contains(out, "[계속:") {
 		t.Errorf("char-budget stop must still emit continuation hint")
@@ -136,8 +136,8 @@ func TestSpillPageClipsOversizedSingleLine(t *testing.T) {
 
 	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id})
 
-	if len(out) > spillPageMaxChars+2000 {
-		t.Errorf("page returned %d chars — oversized line escaped the budget", len(out))
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("page body is %d chars — oversized line escaped the budget", n)
 	}
 	if !strings.Contains(out, "잘렸습니다") {
 		t.Errorf("clipped line must say so:\n%s", out[:min(600, len(out))])
@@ -165,8 +165,8 @@ func TestSpillGrepClipsRatherThanSkipsOversizedMatch(t *testing.T) {
 	if !strings.Contains(out, "생략]") {
 		t.Errorf("clipped match must say what was dropped:\n%s", out[:min(500, len(out))])
 	}
-	if len(out) > spillPageMaxChars+2000 {
-		t.Errorf("grep result %d chars — clip did not bound the match", len(out))
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("grep body is %d chars — clip did not bound the match", n)
 	}
 }
 
@@ -192,7 +192,26 @@ func TestSpillGrepShowsMatchesPastTheHead(t *testing.T) {
 	if !strings.Contains(out, "앞 ") {
 		t.Errorf("window must say how much was dropped before the match:\n%s", out[:min(600, len(out))])
 	}
-	if len(out) > spillPageMaxChars+2000 {
-		t.Errorf("grep result %d chars — window did not bound the match", len(out))
+	if n := pageBodyLen(out); n > spillPageMaxChars {
+		t.Errorf("grep body is %d chars — window did not bound the match", n)
 	}
+}
+
+// pageBodyLen measures the rendered lines only — the header line and the
+// trailing continuation hint are frame, not payload, and the budget the clip
+// logic protects is the payload's.
+//
+// The previous assertions allowed len(out) up to spillPageMaxChars+2000, which
+// is far more slack than any real overshoot: a clip notice a few hundred bytes
+// over budget passed cleanly. Measuring the body against the exact constant is
+// what makes these tests able to fail.
+func pageBodyLen(out string) int {
+	body := out
+	if i := strings.Index(body, "\n"); i >= 0 {
+		body = body[i+1:] // drop the header line
+	}
+	if i := strings.LastIndex(body, "\n\n[계속: "); i >= 0 {
+		body = body[:i]
+	}
+	return len(body)
 }

@@ -270,7 +270,9 @@ func TestSpillAskChunksBoundsOversizedSingleLine(t *testing.T) {
 		t.Fatal("no chunks produced")
 	}
 	for i, c := range chunks {
-		if len(c.text) > spillAskChunkMaxChars+spillAskLongLineHeadroom*2 {
+		// Exact, no slack: the clip sizes itself from the real notice and the
+		// line-number prefix, so every chunk fits the budget outright.
+		if len(c.text) > spillAskChunkMaxChars {
 			t.Errorf("chunk %d is %d chars — an oversized line escaped the bound", i, len(c.text))
 		}
 	}

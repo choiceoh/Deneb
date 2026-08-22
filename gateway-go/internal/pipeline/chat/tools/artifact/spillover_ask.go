@@ -36,10 +36,6 @@ const (
 	// without this a single stalled helper request would eat the whole user
 	// turn before the loop could try the next chunk or fall back to paging.
 	spillAskCallTimeout = 90 * time.Second
-
-	// spillAskLongLineHeadroom leaves room for the line number prefix and the
-	// truncation notice when a single oversized line is clipped.
-	spillAskLongLineHeadroom = 128
 )
 
 const spillAskSystemPrompt = "아래는 큰 도구 출력의 일부다. 질문에 이 발췌만 근거로 답하라. " +
@@ -240,8 +236,17 @@ func spillAskChunks(lines []string) []spillAskChunk {
 		// request would carry the entire line and blow the helper's context.
 		lineClipped := false
 		if len(line) > spillAskChunkMaxChars {
-			line = textutil.TruncateBytes(line, spillAskChunkMaxChars-spillAskLongLineHeadroom) +
-				" …[이 줄은 너무 길어 앞부분만 전달됨 (원문 " + fmt.Sprint(i+1) + "번째 줄)]"
+			// Size the cut from the ACTUAL notice — it is Korean, so a fixed
+			// byte headroom would overshoot the chunk budget.
+			notice := " …[이 줄은 너무 길어 앞부분만 전달됨 (원문 " + fmt.Sprint(i+1) + "번째 줄)]"
+			// The line is emitted as "N: <line>\n", so the prefix and the
+			// newline come out of the same budget — otherwise the entry that
+			// carries this line lands just over it.
+			keep := spillAskChunkMaxChars - len(notice) - len(fmt.Sprintf("%d: \n", i+1))
+			if keep < 0 {
+				keep = 0
+			}
+			line = textutil.TruncateBytes(line, keep) + notice
 			lineClipped = true
 		}
 		entry := fmt.Sprintf("%d: %s\n", i+1, line)

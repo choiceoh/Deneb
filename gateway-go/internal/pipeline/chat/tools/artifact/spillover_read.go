@@ -22,9 +22,6 @@ const (
 	spillPageDefaultLines = 400
 	spillPageMaxChars     = 20000
 	spillGrepMaxMatches   = 200
-	// spillPageLineHeadroom leaves room for the clip notice appended to a
-	// single line that exceeds the whole page budget.
-	spillPageLineHeadroom = 160
 	// spillGrepLineMaxChars bounds ONE grep match so a single pathological line
 	// cannot consume the whole result.
 	spillGrepLineMaxChars = 4000
@@ -104,9 +101,19 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 		// emitted whole, blow the tool-output cap, and be re-spilled into a
 		// fresh pointer: the model would get a new handle instead of a page,
 		// and repeating the read would chain spills indefinitely.
-		if len(line) > spillPageMaxChars-spillPageLineHeadroom {
-			line = textutil.TruncateBytes(line, spillPageMaxChars-spillPageLineHeadroom) +
-				fmt.Sprintf(" …[이 줄은 %d자라 잘렸습니다 — grep=\"패턴\"으로 이 줄 안을 검색할 수 있습니다(역시 앞부분만 표시). 줄 전체를 그대로 받는 경로는 없습니다]", len(lines[i]))
+		if len(line) > spillPageMaxChars {
+			// Size the cut from the ACTUAL notice, not a guessed headroom
+			// constant: the notice is Korean, so its byte length is roughly
+			// three times its visible length and a fixed guess silently
+			// overshoots the page budget it exists to protect.
+			notice := fmt.Sprintf(" …[이 줄은 %d자라 잘렸습니다 — grep=\"패턴\"으로 이 줄 안을 검색할 수 있습니다(역시 앞부분만 표시). 줄 전체를 그대로 받는 경로는 없습니다]", len(line))
+			// -1 for the newline this line is emitted with, so the whole
+			// emitted entry — not just its text — fits the page budget.
+			keep := spillPageMaxChars - len(notice) - 1
+			if keep < 0 {
+				keep = 0
+			}
+			line = textutil.TruncateBytes(line, keep) + notice
 		}
 		if chars+len(line)+1 > spillPageMaxChars && chars > 0 {
 			break // char budget hit — stop before overflowing the page
