@@ -146,12 +146,15 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	// Snapshot before execution so a nested external read can be attributed to
-	// THIS invocation. The turn-wide flag is sticky, so it alone would label a
-	// purely local code_action external whenever anything else in the turn had
-	// already read outside content.
+	// Provenance for THIS invocation. The turn-wide flag is sticky, so it alone
+	// would label a purely local code_action external whenever anything else in
+	// the turn had already read outside content; a before/after counter around
+	// the call is no better, because a parallel external reader can move it
+	// inside that window. The sink is marked only by calls nested inside this
+	// one, so provenance follows the call tree.
 	turnCtx := TurnContextFromContext(ctx)
-	externalSeqBefore := turnCtx.ExternalOriginSeq()
+	ownOrigin := &toolport.OriginSink{}
+	callCtx := toolport.WithOriginSink(ctx, ownOrigin)
 
 	// Spill provenance is read BEFORE the tool runs. Reading it afterwards made
 	// it a SECOND index lookup, and the entry can disappear in between: a
@@ -167,7 +170,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	// no content to taint over.
 	spillExternal := r.spilledFromExternalOrigin(ctx, name, input)
 
-	output, err := def.Fn(ctx, input)
+	output, err := def.Fn(callCtx, input)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return output, ctxErr
 	}
@@ -177,13 +180,18 @@ func (r *ToolRegistry) Execute(ctx context.Context, name string, input rawJSON) 
 	if err != nil {
 		return output, err
 	}
-	// A nested external read during this call, detected by the sequence moving.
-	nestedExternal := name == "code_action" && turnCtx.ExternalOriginSeq() != externalSeqBefore
+	// A nested external read during this call — marked by the nested Execute
+	// itself, so a parallel sibling cannot forge it.
+	nestedExternal := name == "code_action" && ownOrigin.Touched()
 
 	if readsExternalOrigin(name) || spillExternal {
 		if turnCtx != nil {
 			turnCtx.MarkExternalOriginTouched()
 		}
+		// Attribute upward too: ctx (not callCtx) carries the sink of the
+		// invocation that dispatched this one, which is how a code_action learns
+		// its own bridge read outside content.
+		toolport.OriginSinkFromContext(ctx).Mark()
 	}
 
 	output = r.capToolOutput(ctx, def, name, output, nestedExternal)
