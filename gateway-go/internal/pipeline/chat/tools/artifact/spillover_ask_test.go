@@ -274,8 +274,8 @@ func TestSpillAskChunksBoundsOversizedSingleLine(t *testing.T) {
 			t.Errorf("chunk %d is %d chars — an oversized line escaped the bound", i, len(c.text))
 		}
 	}
-	if !strings.Contains(chunks[0].text, "줄 잘림") {
-		t.Errorf("clipped line must say so and point at the full content:\n%s", chunks[0].text[:200])
+	if !strings.Contains(chunks[0].text, "앞부분만 전달됨") {
+		t.Errorf("clipped line must say so:\n%s", chunks[0].text[:200])
 	}
 }
 

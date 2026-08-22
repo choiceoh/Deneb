@@ -228,7 +228,7 @@ func spillAskChunks(lines []string) []spillAskChunk {
 		lineClipped := false
 		if len(line) > spillAskChunkMaxChars {
 			line = textutil.TruncateBytes(line, spillAskChunkMaxChars-spillAskLongLineHeadroom) +
-				" …[줄 잘림 — 전체는 read_spillover(offset=" + fmt.Sprint(i+1) + ")]"
+				" …[이 줄은 너무 길어 앞부분만 전달됨 (원문 " + fmt.Sprint(i+1) + "번째 줄)]"
 			lineClipped = true
 		}
 		entry := fmt.Sprintf("%d: %s\n", i+1, line)

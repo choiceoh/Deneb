@@ -143,3 +143,29 @@ func TestSpillPageClipsOversizedSingleLine(t *testing.T) {
 		t.Errorf("clipped line must say so:\n%s", out[:min(600, len(out))])
 	}
 }
+
+// grep must clip an oversized match, not skip it. Skipping made the page
+// renderer's "search inside this line with grep" hint a dead end: the only
+// route into a long line's content refused to emit any of it.
+func TestSpillGrepClipsRatherThanSkipsOversizedMatch(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	huge := "NEEDLE" + strings.Repeat("q", spillPageMaxChars*4)
+	id, err := store.Store("client:test", "exec", huge+"\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": "NEEDLE"})
+
+	if !strings.Contains(out, "NEEDLE") {
+		t.Fatalf("oversized match was skipped — the recovery path is a dead end:\n%s", out)
+	}
+	if !strings.Contains(out, "앞부분만") {
+		t.Errorf("clipped match must say it is partial:\n%s", out[:min(500, len(out))])
+	}
+	if len(out) > spillPageMaxChars+2000 {
+		t.Errorf("grep result %d chars — clip did not bound the match", len(out))
+	}
+}

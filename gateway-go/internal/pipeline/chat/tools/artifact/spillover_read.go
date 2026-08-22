@@ -24,6 +24,9 @@ const (
 	// spillPageLineHeadroom leaves room for the clip notice appended to a
 	// single line that exceeds the whole page budget.
 	spillPageLineHeadroom = 160
+	// spillGrepLineMaxChars bounds ONE grep match so a single pathological line
+	// cannot consume the whole result.
+	spillGrepLineMaxChars = 4000
 )
 
 // ToolSpilloverRead returns a ToolFunc that reads a previously spilled large
@@ -102,7 +105,7 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 		// and repeating the read would chain spills indefinitely.
 		if len(line) > spillPageMaxChars-spillPageLineHeadroom {
 			line = textutil.TruncateBytes(line, spillPageMaxChars-spillPageLineHeadroom) +
-				fmt.Sprintf(" …[이 줄은 %d자라 잘렸습니다 — 이 줄 안을 찾으려면 grep=\"패턴\"]", len(lines[i]))
+				fmt.Sprintf(" …[이 줄은 %d자라 잘렸습니다 — grep=\"패턴\"으로 이 줄 안을 검색할 수 있습니다(역시 앞부분만 표시). 줄 전체를 그대로 받는 경로는 없습니다]", len(lines[i]))
 		}
 		if chars+len(line)+1 > spillPageMaxChars && chars > 0 {
 			break // char budget hit — stop before overflowing the page
@@ -136,12 +139,23 @@ func spillGrep(spillID string, lines []string, pattern string) string {
 			continue
 		}
 		matched++
-		if shown >= spillGrepMaxMatches || chars+len(line) > spillPageMaxChars {
+		if shown >= spillGrepMaxMatches {
 			continue // keep counting total matches, stop emitting
 		}
-		fmt.Fprintf(&b, "%d: %s\n", i+1, line)
+		// Clip rather than skip. Skipping an oversized match made the page
+		// renderer's "grep으로 찾으세요" hint a dead end: the only route into a
+		// long line's content refused to emit it.
+		shownLine := line
+		if len(shownLine) > spillGrepLineMaxChars {
+			shownLine = textutil.TruncateBytes(shownLine, spillGrepLineMaxChars) +
+				fmt.Sprintf(" …[이 줄 %d자 중 앞부분만]", len(line))
+		}
+		if chars+len(shownLine) > spillPageMaxChars && shown > 0 {
+			continue // page budget spent — keep counting, stop emitting
+		}
+		fmt.Fprintf(&b, "%d: %s\n", i+1, shownLine)
 		shown++
-		chars += len(line) + 8
+		chars += len(shownLine) + 8
 	}
 	if matched == 0 {
 		return fmt.Sprintf("[%s: 총 %d줄] %q 매치 없음.", spillID, len(lines), pattern)
