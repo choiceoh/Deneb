@@ -123,6 +123,17 @@ func (h *Handler) handleResetCommand(sessionKey string, respond func(text string
 			h.logger.Error("failed to delete transcript on reset", "error", err)
 		}
 	}
+	// Spill files go with the transcript. The lifecycle hook cannot catch this
+	// case: /reset ends by emitting PhaseEnd, which is the same terminal status
+	// an ordinary completed run emits, and runs must NOT release spills (their
+	// read_spillover pointers stay quoted in surviving history). Reset is the
+	// opposite — the history that quoted them was just deleted — so the reclaim
+	// is explicit here, alongside the other per-session state this clears.
+	if h.tools != nil {
+		if ss := h.tools.SpilloverStore(); ss != nil {
+			ss.CleanSession(sessionKey)
+		}
+	}
 	// Clear tool preset so session exits any preset mode (e.g. conversation).
 	if sess := h.sessions.Get(sessionKey); sess != nil && sess.ToolPreset != "" {
 		sess.ToolPreset = ""
