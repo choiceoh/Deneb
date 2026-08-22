@@ -23,16 +23,20 @@ const (
 )
 
 // ToolSpilloverRead returns a ToolFunc that reads a previously spilled large
-// tool result by its spill ID — paged (offset/limit lines) or filtered (grep),
-// never the whole blob at once. Access is session-scoped: the caller must
-// belong to the same session.
-func ToolSpilloverRead(store tooldeps.SpilloverStore) toolport.ToolFunc {
+// tool result by its spill ID — paged (offset/limit lines), filtered (grep),
+// or answered (question), never the whole blob at once. Access is
+// session-scoped: the caller must belong to the same session.
+//
+// ask is the local-model delegate behind the question path; nil (or a failing
+// hub) leaves the tool paging-only.
+func ToolSpilloverRead(store tooldeps.SpilloverStore, ask tooldeps.LocalAIFunc) toolport.ToolFunc {
 	return func(ctx context.Context, input json.RawMessage) (string, error) {
 		var p struct {
-			SpillID string `json:"spill_id"`
-			Offset  int    `json:"offset"`
-			Limit   int    `json:"limit"`
-			Grep    string `json:"grep"`
+			SpillID  string `json:"spill_id"`
+			Offset   int    `json:"offset"`
+			Limit    int    `json:"limit"`
+			Grep     string `json:"grep"`
+			Question string `json:"question"`
 		}
 		if err := jsonutil.UnmarshalInto("read_spillover params", input, &p); err != nil {
 			return "", err
@@ -48,6 +52,16 @@ func ToolSpilloverRead(store tooldeps.SpilloverStore) toolport.ToolFunc {
 		}
 
 		lines := strings.Split(content, "\n")
+		if q := strings.TrimSpace(p.Question); q != "" && ask != nil {
+			if answer, ok := spillAsk(ctx, ask, p.SpillID, lines, q); ok {
+				return answer, nil
+			}
+			// Delegation unavailable or empty — fall through to paging rather
+			// than failing the call, and say so instead of silently returning
+			// page 1 as if it answered the question.
+			page := spillPage(p.SpillID, lines, len(content), p.Offset, p.Limit)
+			return "[question 위임 실패 — 로컬 모델 응답 없음. 아래는 원문 페이지이니 grep/offset으로 직접 찾으세요]\n" + page, nil
+		}
 		if strings.TrimSpace(p.Grep) != "" {
 			return spillGrep(p.SpillID, lines, p.Grep), nil
 		}

@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -361,16 +362,26 @@ func (s *Server) initToolsAndDeps(chatCfg *chat.HandlerConfig, reg *modelrole.Re
 	chatCfg.Ambient.PersonaOverride = s.personaOverride
 
 	// Spillover store: saves large tool results to disk, replaces with preview.
-	// Session-end events release per-session spill files immediately instead of
-	// waiting for the 30-minute TTL sweep (see server_spillover_lifecycle.go).
+	// Session-end events release per-session spill files (see
+	// server_spillover_lifecycle.go) and the liveness predicate below demotes
+	// the TTL sweep to an orphan collector — compaction keeps read_spillover
+	// pointers alive for the whole session, so age alone must not delete a
+	// spill the model was told it can still page through.
 	// Keyed by the STATE dir (not the home dir): prod resolves to ~/.deneb as
 	// before, while dev/puppet instances (DENEB_STATE_DIR=/tmp/...) keep their
 	// spill files out of the production store.
 	{
 		spillDir := filepath.Join(config.ResolveStateDir(), "spillover")
 		spillStore := agent.NewSpilloverStore(spillDir)
+		if s.sessions != nil {
+			sessions := s.sessions
+			spillStore.SetSessionLiveness(func(key string) bool {
+				return sessions.Get(key) != nil
+			})
+		}
 		spillStore.StartCleanup(context.Background())
 		s.toolDeps.SpilloverStore = spillStore
+		s.toolDeps.SpilloverAsk = spilloverAskFunc()
 		s.initSpilloverLifecycle(spillStore)
 	}
 
@@ -507,4 +518,21 @@ func dreamerLLMShape(reg *modelrole.Registry) (extraBody map[string]any, synthes
 		return nil, 16384
 	}
 	return nil, 0
+}
+
+// spilloverAskFunc returns the local-LLM delegate that read_spillover(question=)
+// uses to answer from a spilled blob without paging the whole thing back into
+// the root context — the same depth-1 delegation polaris(action="expand",
+// question=) already does for conversation history.
+//
+// The hub is probed at call time rather than wiring time: tool registration
+// runs before the local-AI hub is guaranteed up, and an error here is not a
+// failure — the tool degrades to ordinary paging.
+func spilloverAskFunc() tooldeps.LocalAIFunc {
+	return func(ctx context.Context, system, user string, maxTokens int) (string, error) {
+		if pilot.LocalAIHub() == nil {
+			return "", errors.New("local AI hub unavailable")
+		}
+		return pilot.CallLocalLLM(ctx, system, user, maxTokens)
+	}
 }

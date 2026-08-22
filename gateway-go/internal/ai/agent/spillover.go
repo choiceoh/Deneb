@@ -9,6 +9,14 @@
 // read_spillover tool. MaxResultChars below is the larger "hard cap" used in
 // tests to size fixtures and document the upper bound; it does not trigger
 // spills directly.
+//
+// Lifetime: a spill lives as long as its session. Compaction clears older tool
+// results but keeps their read_spillover pointer, telling the model the full
+// output is "still available" (pipeline/compaction/restore.go) — so expiring a
+// spill while its session is still live turns that promise into a dangling
+// handle. The session-end hook (runtime/server/server_spillover_lifecycle.go)
+// is therefore the primary reclaim path, and the TTL sweep below is demoted to
+// an orphan collector: it only removes spills whose session is already gone.
 package agent
 
 import (
@@ -39,6 +47,13 @@ const (
 	hashInputLimit = 256
 	// hashIDBytes is the number of SHA-256 bytes used for the spill ID (8 hex chars).
 	hashIDBytes = 4
+
+	// Preview outline bounds. The outline buys the model grep/offset targets,
+	// so it must stay far cheaper than the head+tail preview it sits next to.
+	outlineMinLines      = 40 // below this the head+tail preview already covers it
+	outlineMinEntries    = 2
+	outlineMaxEntries    = 12
+	outlineEntryMaxChars = 80
 )
 
 // spillEntry tracks a single spilled result on disk.
@@ -51,10 +66,21 @@ type spillEntry struct {
 }
 
 // SpilloverStore manages disk-backed large tool results.
+//
+// Lock hierarchy (acquire in this order; never reverse):
+//
+//	SpilloverStore.mu
+//	SpilloverStore.livenessMu (independent — never held together with mu)
+//
+// sessionAlive is an injected callback into the session manager, so it is read
+// under livenessMu and invoked with mu released (concurrency.md §3).
 type SpilloverStore struct {
 	baseDir string
 	mu      sync.RWMutex
 	index   map[string]*spillEntry // spill_id → metadata
+
+	livenessMu   sync.RWMutex
+	sessionAlive func(sessionKey string) bool
 }
 
 // NewSpilloverStore creates a store rooted at baseDir (e.g. ~/.deneb/spillover).
@@ -64,6 +90,29 @@ func NewSpilloverStore(baseDir string) *SpilloverStore {
 		baseDir: baseDir,
 		index:   make(map[string]*spillEntry),
 	}
+}
+
+// SetSessionLiveness injects the predicate the TTL sweep uses to tell a live
+// session from a finished one. Without it the sweep falls back to pure age,
+// which is the pre-existing behaviour (and expires spills that compaction
+// stubs still point at). Wired once at composition time, before StartCleanup.
+func (s *SpilloverStore) SetSessionLiveness(alive func(sessionKey string) bool) {
+	s.livenessMu.Lock()
+	s.sessionAlive = alive
+	s.livenessMu.Unlock()
+}
+
+// isSessionAlive reports whether sessionKey still has a live session. It must
+// be called with s.mu released: the predicate reaches into the session manager
+// and taking an unrelated lock under s.mu would invert the hierarchy.
+func (s *SpilloverStore) isSessionAlive(sessionKey string) bool {
+	s.livenessMu.RLock()
+	alive := s.sessionAlive
+	s.livenessMu.RUnlock()
+	if alive == nil {
+		return false
+	}
+	return alive(sessionKey)
 }
 
 // Store writes content to disk and returns the spill ID.
@@ -130,8 +179,8 @@ func (s *SpilloverStore) Load(spillID, sessionKey string) (string, error) {
 			return "", fmt.Errorf("spillover ID %q not found — use the exact sp_* ID from the [SpillOver: ID=…] marker; this session's live spill IDs: %s",
 				spillID, strings.Join(available, ", "))
 		}
-		return "", fmt.Errorf("spillover ID %q not found — no live spillovers for this session (they expire after %s and do not survive a gateway restart); re-run the tool that produced the large output",
-			spillID, SpilloverTTL)
+		return "", fmt.Errorf("spillover ID %q not found — no live spillovers for this session (they are released when the session ends and do not survive a gateway restart); re-run the tool that produced the large output",
+			spillID)
 	}
 	if entry.SessionKey != sessionKey {
 		return "", fmt.Errorf("spillover ID %q belongs to a different session", spillID)
@@ -167,7 +216,11 @@ func FormatPreview(spillID, toolName, content string) string {
 	}
 
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "[SpillOver: ID=%s | %s | %d chars]\n", spillID, toolName, origLen)
+	fmt.Fprintf(&sb, "[SpillOver: ID=%s | %s | %d chars · %d lines]\n",
+		spillID, toolName, origLen, strings.Count(content, "\n")+1)
+	if toc := previewOutline(content); toc != "" {
+		sb.WriteString(toc)
+	}
 	fmt.Fprintf(&sb, "--- Preview (first %d chars) ---\n", len(head))
 	sb.WriteString(head)
 	sb.WriteByte('\n')
@@ -178,6 +231,59 @@ func FormatPreview(spillID, toolName, content string) string {
 	}
 	fmt.Fprintf(&sb, "To read full content, use tool: read_spillover(\"%s\")", spillID)
 	return sb.String()
+}
+
+// previewOutline renders a compact line-numbered outline of a spilled blob's
+// structural lines, or "" when the content has no usable structure.
+//
+// The preview deliberately shows only head+tail, which leaves the model
+// choosing a grep pattern or an offset blind for everything in between. An
+// outline gives it addresses to aim at: it is the blob-level equivalent of
+// what polaris(action="describe") does for conversation history. Entries carry
+// 1-based line numbers so they feed straight into read_spillover(offset=N).
+func previewOutline(content string) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) < outlineMinLines {
+		return ""
+	}
+
+	var entries []string
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !isOutlineHeading(trimmed) {
+			continue
+		}
+		if len(trimmed) > outlineEntryMaxChars {
+			trimmed = trimmed[:outlineEntryMaxChars] + "…"
+		}
+		entries = append(entries, fmt.Sprintf("  %d: %s", i+1, trimmed))
+		if len(entries) >= outlineMaxEntries {
+			entries = append(entries, "  … (이하 생략 — grep으로 더 찾으세요)")
+			break
+		}
+	}
+	if len(entries) < outlineMinEntries {
+		return "" // one heading is not an outline, just noise in the preview
+	}
+
+	return "--- 구조 (offset으로 열기) ---\n" + strings.Join(entries, "\n") + "\n"
+}
+
+// isOutlineHeading recognizes the section markers that actually show up in
+// spilled output: markdown headings, `=== x ===` / `--- x ---` banners that
+// shell tooling prints, and bare `Name:` labels at the start of a line.
+func isOutlineHeading(trimmed string) bool {
+	switch {
+	case trimmed == "":
+		return false
+	case strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, " "):
+		return true
+	case (strings.HasPrefix(trimmed, "===") && strings.HasSuffix(trimmed, "===")) ||
+		(strings.HasPrefix(trimmed, "---") && strings.HasSuffix(trimmed, "---")):
+		return len(strings.Trim(trimmed, "=- ")) > 0
+	default:
+		return false
+	}
 }
 
 // SpillAndPreview is a convenience method: Store + FormatPreview.
@@ -276,17 +382,57 @@ func (s *SpilloverStore) StartCleanup(ctx context.Context) {
 	})
 }
 
-// cleanExpired removes entries older than SpilloverTTL.
+// cleanExpired removes aged-out entries whose session is already gone.
+//
+// Age alone is not sufficient grounds to delete: compaction stubs older tool
+// results down to a read_spillover pointer and tells the model the full output
+// is still available, so a spill under a live session must outlive the TTL no
+// matter how long it sits untouched. Reclaiming a live session's spills is the
+// session-end hook's job (RemoveSession); this sweep only collects orphans —
+// spills whose session ended without that hook running (crash, restart).
+//
+// The liveness predicate runs with s.mu released (concurrency.md §3): it calls
+// into the session manager, and holding s.mu across it would nest an unrelated
+// lock under ours.
 func (s *SpilloverStore) cleanExpired() {
 	now := time.Now()
-	s.mu.Lock()
-	defer s.mu.Unlock()
+
+	type aged struct {
+		id, sessionKey, path string
+	}
+	var candidates []aged
+	s.mu.RLock()
 	for id, entry := range s.index {
 		if now.Sub(entry.CreatedAt) > SpilloverTTL {
-			os.Remove(entry.Path)
-			delete(s.index, id)
+			candidates = append(candidates, aged{id: id, sessionKey: entry.SessionKey, path: entry.Path})
 		}
 	}
+	s.mu.RUnlock()
+	if len(candidates) == 0 {
+		return
+	}
+
+	// Evaluate liveness once per session, outside the lock.
+	live := make(map[string]bool, len(candidates))
+	for _, c := range candidates {
+		if _, seen := live[c.sessionKey]; !seen {
+			live[c.sessionKey] = s.isSessionAlive(c.sessionKey)
+		}
+	}
+
+	s.mu.Lock()
+	for _, c := range candidates {
+		if live[c.sessionKey] {
+			continue // session still running — its spill handles must stay valid
+		}
+		// Re-check: Store may have replaced the entry while the lock was down.
+		if entry, ok := s.index[c.id]; !ok || entry.Path != c.path {
+			continue
+		}
+		os.Remove(c.path)
+		delete(s.index, c.id)
+	}
+	s.mu.Unlock()
 }
 
 // --- helpers ---

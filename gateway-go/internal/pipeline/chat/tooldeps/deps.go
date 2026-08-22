@@ -121,6 +121,13 @@ type SpilloverStore interface {
 	CleanSession(sessionKey string)
 }
 
+// LocalAIFunc delegates a bounded one-shot prompt to the local model, so a
+// tool can read a large payload without paging it into the root context. The
+// composition root injects it; nil disables the delegating path and callers
+// fall back to returning raw content. Mirrors recallops.LocalAIFunc, which
+// polaris(action="expand", question=) uses for the same purpose.
+type LocalAIFunc func(ctx context.Context, system, user string, maxTokens int) (string, error)
+
 // AgentLogAggregate is the cross-session roll-up sessions action=stats needs.
 type AgentLogAggregate struct {
 	Runs              int
@@ -272,6 +279,11 @@ type CoreToolDeps struct {
 	ObserveTool ObserveToolFunc
 	// SpilloverStore spills large tool results to disk; nil disables.
 	SpilloverStore SpilloverStore
+	// SpilloverAsk answers a question from a spilled blob by delegating to the
+	// local model, so read_spillover can return an answer instead of paging
+	// the blob back into the root context. nil leaves read_spillover
+	// paging-only.
+	SpilloverAsk LocalAIFunc
 
 	// WorkFeedRW is the workfeed tool's read/settle surface. Wired to the
 	// server's native-sync-teeing wrapper (NOT the raw store) so an
