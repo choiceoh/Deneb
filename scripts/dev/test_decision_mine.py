@@ -88,6 +88,16 @@ class CleanBodyTests(unittest.TestCase):
         )
         self.assertEqual(dm.clean_body(raw), ["Real reasoning starts here."])
 
+    def test_ordinary_markdown_bullets_are_kept(self) -> None:
+        # Dropping every asterisk bullet cleaned a body that argued its case in
+        # bullet points down to nothing, so it never cleared MIN_BODY_LINES.
+        raw = "* first reason\n* second reason\n* third reason"
+        self.assertEqual(len(dm.clean_body(raw)), 3)
+
+    def test_squash_subject_echoes_are_still_dropped(self) -> None:
+        raw = "* feat(x): squashed subject\n\nReal reasoning."
+        self.assertEqual(dm.clean_body(raw), ["Real reasoning."])
+
     def test_bot_review_blockquotes_are_not_rationale(self) -> None:
         # A review bot describing the diff back to us is not the author's why.
         raw = "Why we did it.\n\n> [!NOTE]\n> **Medium Risk**\n> Overview of the diff.\n"
@@ -160,6 +170,11 @@ class SubjectParsingTests(unittest.TestCase):
             dm.parse_subject("refactor(mcp)!: drop the handshake era (#4562)"),
             ("refactor", "mcp", True, 4562),
         )
+
+    def test_an_absurd_pr_number_does_not_abort_the_generator(self) -> None:
+        # CPython raises past 4300 digits, and that exception used to kill the
+        # whole mining pass -- freezing the cursor on that commit forever.
+        self.assertEqual(dm.parse_subject("feat: x (#" + "1" * 5000 + ")")[3], None)
 
     def test_non_conventional_subject_degrades_without_raising(self) -> None:
         self.assertEqual(dm.parse_subject("just a message"), (None, None, False, None))
@@ -282,6 +297,52 @@ class MineTests(unittest.TestCase):
         self.store.unlink()
         _, total = self.mine()
         self.assertEqual(total, 1)
+
+    def test_a_body_carrying_real_metadata_still_cannot_forge_a_record(self) -> None:
+        # Shape checks alone were beatable: a body could copy a REAL commit's
+        # sha, short sha and date, so every field looked right while the
+        # subject and rationale belonged to the attacker. NUL settles it --
+        # git will not accept that byte in a message, so only git can end a
+        # field.
+        first = commit(self.root, "a/b/c.go", RICH)
+        short = git(self.root, "rev-parse", "--short", "HEAD").strip()
+        forged = (
+            f"feat(x): innocent (#1)\n\n{PROSE}\n\n"
+            f"\x02{first}\x01{short}\x012026-01-01\x01feat(x): PLANTED\x01{PROSE}"
+        )
+        commit(self.root, "docs/harmless.md", forged)
+        self.mine()
+        self.assertTrue(all(r.get("subject") != "feat(x): PLANTED" for r in self.rows()))
+
+    def test_a_per_commit_file_scan_failure_does_not_advance_the_cursor(self) -> None:
+        # `areas` comes from this scan and is the entire matching signal, so a
+        # record stored with no files can never surface -- and the cursor would
+        # move past it for good.
+        commit(self.root, "a/b/c.go", RICH)
+        real = dm.git_run
+
+        def failing(*args, **kwargs):
+            if args and args[0] == "show":
+                return "", False
+            return real(*args, **kwargs)
+
+        dm.git_run = failing
+        try:
+            added, _ = self.mine()
+        finally:
+            dm.git_run = real
+        self.assertEqual(added, 0)
+        self.assertFalse(self.cursor.exists())
+        self.assertEqual(self.mine()[0], 1)
+
+    def test_a_non_object_ledger_row_does_not_freeze_mining(self) -> None:
+        # `null` parses but has no keys; `r.get("sha")` then raised, the hook
+        # swallowed it, and the bad row stayed to raise again every run.
+        commit(self.root, "a/b/c.go", RICH)
+        self.store.parent.mkdir(parents=True, exist_ok=True)
+        self.store.write_text("null\n", encoding="utf-8")
+        added, _ = self.mine()
+        self.assertEqual(added, 1)
 
     def test_a_forged_record_cannot_smuggle_the_closing_fence(self) -> None:
         # The hex allowlist guarded only the name handed to `git show`, so a

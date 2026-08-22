@@ -75,8 +75,14 @@ _NOISE_PREFIXES = (
 )
 
 # Squash-merge repeats each squashed commit's subject as a "* subject" bullet
-# before the prose. Keeping them would make the body look like a changelog.
-_SQUASH_ECHO = re.compile(r"^\s*\*\s+\S")
+# before the prose. Only those echoes are dropped: matching every asterisk
+# bullet also deleted ordinary Markdown lists, and a body that argued its case
+# in six bullet points was cleaned down to nothing and never mined.
+_SQUASH_ECHO = re.compile(r"^\s*\*\s+(?P<text>\S.*)$")
+
+# Real PR numbers are a handful of digits; anything near CPython's conversion
+# limit is a crafted subject, not a number.
+MAX_PR_DIGITS = 12
 
 # Bot review blocks (Cursor Bugbot's "> [!NOTE]" summary) ride into some PR
 # bodies. They describe the diff back to us -- not the author's reasoning.
@@ -97,6 +103,19 @@ _PR_NUMBER = re.compile(r"\(#(\d+)\)\s*$")
 # show`, where a value like `--output=<path>` is not a revision but an option
 # that WRITES the file it names. So an object name is accepted only if it looks
 # exactly like one -- 40 hex digits can never be an option.
+# Records are delimited by NUL, the one byte a commit message cannot carry:
+# git takes messages through argv or a file and rejects an embedded NUL, so no
+# crafted body can forge a field or record boundary. Earlier revisions used
+# control characters a message CAN contain and defended with shape checks --
+# which held the line one field at a time and lost it whenever a field was
+# added. The shape checks stay as a second layer, but the delimiter is what
+# makes the forgery impossible rather than merely detected.
+# The format string itself travels through argv, so it cannot hold a literal
+# NUL either; `%x00` is git's escape for emitting one.
+_NUL = "\x00"
+_FIELD_COUNT = 5
+_FIELDS = "%x00".join(["%H", "%h", "%aI", "%s", "%b"]) + "%x00"
+
 _OBJECT_NAME = re.compile(r"^[0-9a-f]{40}$")
 
 # The same forgery reaches the OTHER git-supplied fields, and those flow
@@ -260,6 +279,7 @@ def clean_body(raw: str) -> list[str]:
     "lines of reasoning" rather than "lines of whitespace and boilerplate".
     """
     kept: list[str] = []
+    seen_prose = False
     for line in strip_comment_spans(raw).splitlines():
         stripped = line.strip()
         low = stripped.lower()
@@ -270,11 +290,19 @@ def clean_body(raw: str) -> list[str]:
             continue
         if any(low.startswith(p) for p in _NOISE_PREFIXES):
             continue
-        if _SQUASH_ECHO.match(line) or _BLOCKQUOTE.match(line):
+        if _BLOCKQUOTE.match(line):
             continue
         # A bare rule is only ever a separator before a generated footer.
         if set(stripped) <= {"-", "*", "_"} and len(stripped) >= 3:
             continue
+        echo = _SQUASH_ECHO.match(line)
+        if echo and not seen_prose and _CONVENTIONAL.match(echo.group("text")):
+            # Squash echoes are the squashed subjects and always sit in the
+            # preamble. A subject-shaped bullet AFTER prose has started is the
+            # author writing a list -- dropping every bullet cleaned a body
+            # that argued its case in six points down to nothing.
+            continue
+        seen_prose = True
         kept.append(stripped)
     while kept and kept[-1] == "":
         kept.pop()
@@ -290,9 +318,13 @@ def parse_subject(subject: str):
         ctype = m.group("type")
         scope = m.group("scope") or None
         breaking = bool(m.group("bang"))
+    # A subject is contributor-controlled and git caps neither its length nor
+    # this suffix, so the digits are bounded before int(): CPython raises on a
+    # conversion past 4300 digits, and that exception would abort the whole
+    # generator -- leaving the cursor stuck on that commit run after run.
     pr = None
     p = _PR_NUMBER.search(subject or "")
-    if p:
+    if p and len(p.group(1)) <= MAX_PR_DIGITS:
         pr = int(p.group(1))
     return ctype, scope, breaking, pr
 
@@ -330,14 +362,13 @@ def commit_records(ref: str, limit: int, since: str | None, cwd=None):
     needs no cap -- catching up after a long gap is a one-time cost, and
     correctness is worth more here than a bounded worst case.
     """
-    sep_f, sep_r = "\x01", "\x02"
     rng = f"{since}..{ref}" if since else ref
     args = ["log", "--first-parent"]
     if not since:
         args += ["-n", str(limit)]
     raw, ok = git_run(
         *args,
-        f"--format=%H{sep_f}%h{sep_f}%aI{sep_f}%s{sep_f}%b{sep_r}",
+        f"--format={_FIELDS}",
         rng,
         cwd=cwd,
     )
@@ -348,29 +379,36 @@ def commit_records(ref: str, limit: int, since: str | None, cwd=None):
         raise ScanFailed(f"git log failed for {rng}")
     if not raw:
         return
-    for chunk in raw.split(sep_r):
-        chunk = chunk.strip("\n")
-        if not chunk.strip():
-            continue
-        parts = chunk.split(sep_f)
-        if len(parts) < 4:
-            continue
-        full, short, when, subject = parts[0].strip(), parts[1].strip(), parts[2].strip(), parts[3]
+
+    # Fixed-width records over a delimiter no message can contain, so the field
+    # and record boundaries are decided by git alone. The trailing separator
+    # leaves one empty tail element; drop it before grouping.
+    fields = raw.split(_NUL)
+    if fields and not fields[-1].strip():
+        fields.pop()
+    for i in range(0, len(fields) - _FIELD_COUNT + 1, _FIELD_COUNT):
+        full, short, when, subject, body_raw = (
+            fields[i].strip(), fields[i + 1].strip(), fields[i + 2].strip(),
+            fields[i + 3], fields[i + 4],
+        )
+        # Belt and braces on top of the delimiter: still the shapes git emits.
         if not (
             _OBJECT_NAME.match(full)
             and _SHORT_NAME.match(short)
             and _ISO_DATE.match(when)
         ):
-            # Not a real record boundary -- a forged one, or the tail of a body
-            # that contained the separator. Either way there is nothing safe to
-            # look up here.
             continue
-        body_raw = parts[4] if len(parts) > 4 else ""
         body = clean_body(body_raw)
         prose = [ln for ln in body if ln]
         if len(prose) < MIN_BODY_LINES:
             continue
-        files = [ln for ln in git("show", "--name-only", "--format=", full, "--", cwd=cwd).splitlines() if ln]
+        # This scan feeds `areas`, which is the whole matching signal. Treating
+        # a failed `git show` as "no files" would store a decision that can
+        # never match anything, and the cursor would move past it for good.
+        shown, shown_ok = git_run("show", "--name-only", "--format=", full, "--", cwd=cwd)
+        if not shown_ok:
+            raise ScanFailed(f"git show failed for {full}")
+        files = [ln for ln in shown.splitlines() if ln]
         ctype, scope, breaking, pr = parse_subject(subject)
         yield {
             "commit": short,
@@ -408,9 +446,15 @@ def load_existing(path=DECISIONS):
                 if not line.strip():
                     continue
                 try:
-                    rows.append(json.loads(line))
+                    row = json.loads(line)
                 except Exception:
                     continue
+                # `null` and `[]` parse but have no keys, and every consumer
+                # asks these rows for one. Keeping such a row froze mining for
+                # good: `r.get("sha")` raised, the hook swallowed it, and the
+                # bad row stayed to raise again on the next run.
+                if isinstance(row, dict):
+                    rows.append(row)
         return rows, True
     except FileNotFoundError:
         return [], False
