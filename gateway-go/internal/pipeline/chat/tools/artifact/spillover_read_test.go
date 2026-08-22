@@ -162,10 +162,37 @@ func TestSpillGrepClipsRatherThanSkipsOversizedMatch(t *testing.T) {
 	if !strings.Contains(out, "NEEDLE") {
 		t.Fatalf("oversized match was skipped — the recovery path is a dead end:\n%s", out)
 	}
-	if !strings.Contains(out, "앞부분만") {
-		t.Errorf("clipped match must say it is partial:\n%s", out[:min(500, len(out))])
+	if !strings.Contains(out, "생략]") {
+		t.Errorf("clipped match must say what was dropped:\n%s", out[:min(500, len(out))])
 	}
 	if len(out) > spillPageMaxChars+2000 {
 		t.Errorf("grep result %d chars — clip did not bound the match", len(out))
+	}
+}
+
+// A match sitting past the kept prefix must still be visible. Head-truncating
+// while matching the full line reported a hit whose text the model could not
+// see — and searching inside a long line is the whole reason this path exists.
+func TestSpillGrepShowsMatchesPastTheHead(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	// The needle sits far past spillGrepLineMaxChars.
+	line := strings.Repeat("q", spillGrepLineMaxChars*3) + "NEEDLE" + strings.Repeat("z", 5000)
+	id, err := store.Store("client:test", "exec", line+"\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id, "grep": "NEEDLE"})
+
+	if !strings.Contains(out, "NEEDLE") {
+		t.Fatalf("match past the head was reported but not shown:\n%s", out[:min(600, len(out))])
+	}
+	if !strings.Contains(out, "앞 ") {
+		t.Errorf("window must say how much was dropped before the match:\n%s", out[:min(600, len(out))])
+	}
+	if len(out) > spillPageMaxChars+2000 {
+		t.Errorf("grep result %d chars — window did not bound the match", len(out))
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
@@ -124,6 +125,42 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 	return strings.TrimRight(out, "\n")
 }
 
+// grepWindow returns a bounded slice of line centred on loc (the match), with
+// markers showing how much was dropped on each side. Bounds are backed off to
+// rune boundaries so a multi-byte character never splits into U+FFFD.
+func grepWindow(line string, loc []int) string {
+	start := 0
+	if loc != nil {
+		start = loc[0] - spillGrepLineMaxChars/2
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + spillGrepLineMaxChars
+	if end > len(line) {
+		end = len(line)
+		if start = end - spillGrepLineMaxChars; start < 0 {
+			start = 0
+		}
+	}
+	for start > 0 && !utf8.RuneStart(line[start]) {
+		start--
+	}
+	for end < len(line) && !utf8.RuneStart(line[end]) {
+		end++
+	}
+
+	var b strings.Builder
+	if start > 0 {
+		fmt.Fprintf(&b, "…[앞 %d자 생략]", start)
+	}
+	b.WriteString(line[start:end])
+	if end < len(line) {
+		fmt.Fprintf(&b, "…[뒤 %d자 생략]", len(line)-end)
+	}
+	return b.String()
+}
+
 // spillGrep renders regex-matching lines with their line numbers so the model
 // can jump straight to the relevant region (offset=N) instead of paging blind.
 func spillGrep(spillID string, lines []string, pattern string) string {
@@ -147,8 +184,11 @@ func spillGrep(spillID string, lines []string, pattern string) string {
 		// long line's content refused to emit it.
 		shownLine := line
 		if len(shownLine) > spillGrepLineMaxChars {
-			shownLine = textutil.TruncateBytes(shownLine, spillGrepLineMaxChars) +
-				fmt.Sprintf(" …[이 줄 %d자 중 앞부분만]", len(line))
+			// Window around the MATCH, not the head. Head-truncating while
+			// matching the full line reports a hit whose text the model cannot
+			// see — and searching inside a long line is the whole reason this
+			// path exists.
+			shownLine = grepWindow(line, re.FindStringIndex(line))
 		}
 		if chars+len(shownLine) > spillPageMaxChars && shown > 0 {
 			continue // page budget spent — keep counting, stop emitting
