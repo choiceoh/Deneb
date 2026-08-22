@@ -119,3 +119,27 @@ func TestSpilloverRead_SessionScoped(t *testing.T) {
 		t.Fatal("expected cross-session access to be refused")
 	}
 }
+
+// A single line larger than the page budget must be clipped. The budget check
+// only bites once something is buffered, so an oversized first line would go
+// out whole, blow the tool-output cap, and be re-spilled — handing the model a
+// new pointer instead of a page, and chaining spills on every retry.
+func TestSpillPageClipsOversizedSingleLine(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	huge := strings.Repeat("j", spillPageMaxChars*5)
+	id, err := store.Store("client:test", "exec", huge+"\nsecond line\n")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := toolport.WithSessionKey(context.Background(), "client:test")
+	fn := ToolSpilloverRead(store, nil)
+
+	out := callSpill(ctx, t, fn, map[string]any{"spill_id": id})
+
+	if len(out) > spillPageMaxChars+2000 {
+		t.Errorf("page returned %d chars — oversized line escaped the budget", len(out))
+	}
+	if !strings.Contains(out, "잘렸습니다") {
+		t.Errorf("clipped line must say so:\n%s", out[:min(600, len(out))])
+	}
+}

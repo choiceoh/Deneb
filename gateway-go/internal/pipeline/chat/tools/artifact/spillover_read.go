@@ -10,6 +10,7 @@ import (
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/tooldeps"
 	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 	"github.com/choiceoh/deneb/gateway-go/pkg/jsonutil"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Paging bounds. Content landed in spillover precisely because it blew the
@@ -20,6 +21,9 @@ const (
 	spillPageDefaultLines = 400
 	spillPageMaxChars     = 20000
 	spillGrepMaxMatches   = 200
+	// spillPageLineHeadroom leaves room for the clip notice appended to a
+	// single line that exceeds the whole page budget.
+	spillPageLineHeadroom = 160
 )
 
 // ToolSpilloverRead returns a ToolFunc that reads a previously spilled large
@@ -89,12 +93,23 @@ func spillPage(spillID string, lines []string, totalChars, offset, limit int) st
 	chars := 0
 	last := offset - 1 // last line actually included (1-based)
 	for i := offset - 1; i < totalLines && i < offset-1+limit; i++ {
-		if chars+len(lines[i])+1 > spillPageMaxChars && chars > 0 {
+		line := lines[i]
+		// One line can exceed the entire page budget — minified JSON, base64,
+		// compact command output. The budget check below only bites once
+		// something is already buffered, so an oversized FIRST line would be
+		// emitted whole, blow the tool-output cap, and be re-spilled into a
+		// fresh pointer: the model would get a new handle instead of a page,
+		// and repeating the read would chain spills indefinitely.
+		if len(line) > spillPageMaxChars-spillPageLineHeadroom {
+			line = textutil.TruncateBytes(line, spillPageMaxChars-spillPageLineHeadroom) +
+				fmt.Sprintf(" …[이 줄은 %d자라 잘렸습니다 — 이 줄 안을 찾으려면 grep=\"패턴\"]", len(lines[i]))
+		}
+		if chars+len(line)+1 > spillPageMaxChars && chars > 0 {
 			break // char budget hit — stop before overflowing the page
 		}
-		b.WriteString(lines[i])
+		b.WriteString(line)
 		b.WriteByte('\n')
-		chars += len(lines[i]) + 1
+		chars += len(line) + 1
 		last = i + 1
 	}
 
