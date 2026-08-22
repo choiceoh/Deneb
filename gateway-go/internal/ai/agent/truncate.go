@@ -88,15 +88,22 @@ func middleOutline(content, middle string, headLen int) string {
 		if !isOutlineHeading(trimmed) {
 			continue
 		}
+		// Redact before surfacing, and BEFORE the length cap. The caller hands
+		// TruncateHeadTail the RAW output — only the spill file is redacted on
+		// its way to disk — so a secret-bearing heading ("# OPENAI_API_KEY=…")
+		// in the discarded middle would otherwise be lifted out of the part
+		// nobody was going to see and put in front of the provider.
+		//
+		// Order matters: the patterns are length-anchored (AKIA + exactly 16
+		// chars, a JWT's three segments), so cutting the heading first can end
+		// a secret one char short of its own pattern — the masker then finds
+		// nothing and the surviving prefix ships in the clear. Mask the whole
+		// heading, then trim what is already inert.
+		trimmed = redact.String(trimmed)
 		if len(trimmed) > outlineEntryMaxChars {
 			trimmed = textutil.TruncateBytes(trimmed, outlineEntryMaxChars) + "…"
 		}
-		// Redact before surfacing. The caller hands TruncateHeadTail the RAW
-		// output — only the spill file is redacted on its way to disk — so a
-		// secret-bearing heading ("# OPENAI_API_KEY=…") in the discarded middle
-		// would otherwise be lifted out of the part nobody was going to see and
-		// put in front of the provider.
-		entries = append(entries, fmt.Sprintf("%d: %s", base+i, redact.String(trimmed)))
+		entries = append(entries, fmt.Sprintf("%d: %s", base+i, trimmed))
 		if len(entries) >= outlineMaxEntries {
 			entries = append(entries, "…")
 			break

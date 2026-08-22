@@ -33,6 +33,7 @@ import (
 
 	"github.com/choiceoh/deneb/gateway-go/pkg/redact"
 	"github.com/choiceoh/deneb/gateway-go/pkg/safego"
+	"github.com/choiceoh/deneb/gateway-go/pkg/textutil"
 )
 
 // Spillover thresholds.
@@ -62,9 +63,18 @@ const (
 	// Eviction is oldest-first, so the handles compaction most recently quoted
 	// survive. An evicted handle reports not-found and the model re-runs the
 	// tool — the same contract as a spill from an ended session.
-	maxSpillsPerSession     = 48
-	maxSpillBytesPerSession = 512 * 1024 * 1024
+	maxSpillsPerSession = 48
 )
+
+// maxSpillBytesPerSession is a var, not a const, only so tests can shrink it —
+// the clamp below is otherwise unobservable without allocating half a gigabyte.
+// Nothing at runtime writes it.
+var maxSpillBytesPerSession = 512 * 1024 * 1024
+
+// spillClampNotice terminates a spill that was itself larger than the whole
+// session ceiling, so the model reading it knows the tail is gone rather than
+// concluding the tool produced nothing more.
+const spillClampNotice = "\n\n…[이 결과는 세션 스필 상한을 넘어 뒷부분이 잘렸습니다 — 도구를 더 좁은 범위로 다시 실행하세요]\n"
 
 // spillEntry tracks a single spilled result on disk.
 type spillEntry struct {
@@ -152,6 +162,18 @@ func (s *SpilloverStore) Store(sessionKey, toolName, content string) (string, er
 	path := filepath.Join(s.baseDir, filename)
 
 	persisted := redact.String(content)
+	// A single result bigger than the whole session ceiling would otherwise sit
+	// on disk exempt from it: enforceSessionQuotaLocked spares the spill it is
+	// handing a handle for, so nothing can evict it and the advertised ceiling
+	// is exceeded by an arbitrary amount for as long as the session lives.
+	//
+	// Clamp the file rather than refusing the spill. Refusing leaves
+	// capToolOutput with no handle to put in the truncation marker, which makes
+	// the discarded middle unrecoverable — a worse failure than losing the tail
+	// of a result that was already past anything a session can hold.
+	if len(persisted) > maxSpillBytesPerSession {
+		persisted = textutil.TruncateBytes(persisted, maxSpillBytesPerSession-len(spillClampNotice)) + spillClampNotice
+	}
 	if err := os.WriteFile(path, []byte(persisted), 0o644); err != nil { //nolint:gosec // G306 — world-readable is intentional
 		return "", fmt.Errorf("spillover write: %w", err)
 	}

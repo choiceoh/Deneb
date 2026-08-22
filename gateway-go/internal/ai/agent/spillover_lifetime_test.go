@@ -401,6 +401,70 @@ func TestMiddleOutlineRedactsSecrets(t *testing.T) {
 	}
 }
 
+// Redaction must run BEFORE the 70-byte heading cap. The vendor patterns are
+// length-anchored (AKIA + exactly 16 chars), so cutting the heading first can
+// end a key one character short of its own pattern: the masker then matches
+// nothing and the surviving prefix ships to the provider in the clear. The
+// earlier test only covered a secret that still matched after truncation.
+func TestMiddleOutlineRedactsBeforeTruncating(t *testing.T) {
+	// Positioned so the key STRADDLES outlineEntryMaxChars — truncate-first
+	// leaves a partial key, redact-first masks the whole thing.
+	heading := "# deployment region credentials for the primary fleet AKIA1234567890ABCDEF"
+	if len(heading) <= outlineEntryMaxChars {
+		t.Fatalf("fixture must exceed the entry cap (%d bytes)", len(heading))
+	}
+	if idx := strings.Index(heading, "AKIA"); idx >= outlineEntryMaxChars {
+		t.Fatalf("key must start before the cap, starts at %d", idx)
+	}
+
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		b.WriteString("head padding line\n")
+	}
+	b.WriteString(heading + "\n")
+	b.WriteString("=== 두번째 구간 ===\n")
+	for i := 0; i < 200; i++ {
+		b.WriteString("tail padding line\n")
+	}
+
+	out := TruncateHeadTail(b.String(), 800, "sp_test")
+
+	if strings.Contains(out, "AKIA1234") {
+		t.Fatalf("truncation cut the key short of its pattern and the prefix escaped redaction:\n%s", out)
+	}
+}
+
+// A single tool result larger than the whole session ceiling must not slip
+// past it. The quota spares the spill it is handing a handle for, so nothing
+// would ever evict an oversized one and the advertised ceiling would be
+// exceeded by an arbitrary amount for the life of the session.
+func TestStoreClampsSpillLargerThanTheSessionCeiling(t *testing.T) {
+	origCap := maxSpillBytesPerSession
+	maxSpillBytesPerSession = 64 * 1024
+	t.Cleanup(func() { maxSpillBytesPerSession = origCap })
+
+	store := NewSpilloverStore(t.TempDir())
+	store.SetSessionLiveness(func(string) bool { return true })
+
+	const key = "client:main"
+	id, err := store.Store(key, "exec", strings.Repeat("x", maxSpillBytesPerSession*4))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	// The handle must still work — refusing the spill would leave the
+	// truncation marker with no pointer and the discarded middle unrecoverable.
+	got, err := store.Load(id, key)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(got) > maxSpillBytesPerSession {
+		t.Errorf("stored spill is %d bytes, over the %d ceiling", len(got), maxSpillBytesPerSession)
+	}
+	if !strings.Contains(got, "뒷부분이 잘렸습니다") {
+		t.Error("a clamped spill must say its tail is gone, or the model reads it as complete")
+	}
+}
+
 // Store must never evict the spill it is about to return a handle for.
 // Timestamps are taken before the disk write, so a concurrent spill can look
 // older; evicting the new entry would hand back a dead read_spillover pointer
