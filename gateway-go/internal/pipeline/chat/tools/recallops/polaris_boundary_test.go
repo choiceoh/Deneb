@@ -54,26 +54,34 @@ func TestBoundarySerializeExpandMessagesBudgetMatrix(t *testing.T) {
 		toolport.NewTextChatMessage("tool", "result", 3),
 	}
 	full := "[user]: hello\n\n[assistant]: 안녕하세요\n\n[tool]: result\n\n"
+	// wantOmitted is the count of messages that did NOT fit — the remaining
+	// ones, not the total. Reporting the total tells the model nothing about
+	// what it is missing, and the delegate answers from this excerpt.
 	tests := []struct {
-		name string
-		max  int
-		want string
+		name        string
+		max         int
+		want        string
+		wantOmitted int
 	}{
-		{name: "large budget", max: 1000, want: full},
-		{name: "exact full budget", max: len(full), want: full},
-		{name: "first only", max: len("[user]: hello\n\n"), want: "[user]: hello\n\n... (나머지 3건 생략)\n"},
-		{name: "zero budget", max: 0, want: "... (나머지 3건 생략)\n"},
-		{name: "negative budget", max: -1, want: "... (나머지 3건 생략)\n"},
+		{name: "large budget", max: 1000, want: full, wantOmitted: 0},
+		{name: "exact full budget", max: len(full), want: full, wantOmitted: 0},
+		{name: "first only", max: len("[user]: hello\n\n"), want: "[user]: hello\n\n... (나머지 2건 생략)\n", wantOmitted: 2},
+		{name: "zero budget", max: 0, want: "... (나머지 3건 생략)\n", wantOmitted: 3},
+		{name: "negative budget", max: -1, want: "... (나머지 3건 생략)\n", wantOmitted: 3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := serializeExpandMessages(msgs, tt.max); got != tt.want {
+			got, omitted := serializeExpandMessages(msgs, tt.max)
+			if got != tt.want {
 				t.Fatalf("serializeExpandMessages(max=%d) = %q, want %q", tt.max, got, tt.want)
+			}
+			if omitted != tt.wantOmitted {
+				t.Fatalf("serializeExpandMessages(max=%d) omitted = %d, want %d", tt.max, omitted, tt.wantOmitted)
 			}
 		})
 	}
-	if got := serializeExpandMessages(nil, 100); got != "" {
-		t.Fatalf("nil messages = %q", got)
+	if got, omitted := serializeExpandMessages(nil, 100); got != "" || omitted != 0 {
+		t.Fatalf("nil messages = %q, omitted %d", got, omitted)
 	}
 }
 
