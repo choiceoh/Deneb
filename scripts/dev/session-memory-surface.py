@@ -198,14 +198,22 @@ def relevant_decisions(areas, path=DECISIONS):
 
 
 def defang(text):
-    """Remove the closing tag from text that goes inside the untrusted span.
+    """Remove BOTH fence tags from text that goes inside the untrusted span.
 
     Applies to the subject as well as the body: both are written by whoever
     made the commit, and the subject is rendered FIRST, so a closing tag there
-    ends the span before the rationale is even reached -- putting the rest of
-    the entry outside the boundary that governs it.
+    ends the span before the rationale is even reached.
+
+    The opener matters just as much, for the reason DECISION_TRAILER already
+    documents: a second opening tag leaves an unterminated span, so the refusal
+    that follows the real closer -- and everything after it -- reads as part of
+    the attacker's block. Stripping only the closer fixed the escape and left
+    the swallow.
     """
-    return (text or "").replace(UNTRUSTED_CLOSE, "")
+    out = text or ""
+    for tag in (UNTRUSTED_CLOSE, UNTRUSTED_OPEN):
+        out = out.replace(tag, "")
+    return out
 
 
 def fmt_decision(d):

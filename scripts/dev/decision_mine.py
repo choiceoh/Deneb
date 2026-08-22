@@ -109,8 +109,12 @@ _SHORT_NAME = re.compile(r"^[0-9a-f]{4,40}$")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
-def git(*args, cwd=None):
-    """Run git, returning stdout stripped, or '' on any failure."""
+class ScanFailed(Exception):
+    """The history scan did not run, as distinct from finding nothing."""
+
+
+def git_run(*args, cwd=None):
+    """Run git, returning (stdout stripped, ok). `ok` is False on any failure."""
     try:
         out = subprocess.run(
             ["git", *(["-C", cwd] if cwd else []), *args],
@@ -118,9 +122,20 @@ def git(*args, cwd=None):
             text=True,
             timeout=30,
         )
-        return out.stdout.strip() if out.returncode == 0 else ""
+        return (out.stdout.strip(), True) if out.returncode == 0 else ("", False)
     except Exception:
-        return ""
+        return "", False
+
+
+def git(*args, cwd=None):
+    """Run git, returning stdout stripped, or '' on any failure.
+
+    Collapses failure into the empty string, so only use it where an empty
+    result and a failed command call for the same handling. Where they do not
+    -- the history scan, whose empty result advances the cursor -- use
+    `git_run` and act on `ok`.
+    """
+    return git_run(*args, cwd=cwd)[0]
 
 
 @contextlib.contextmanager
@@ -320,12 +335,17 @@ def commit_records(ref: str, limit: int, since: str | None, cwd=None):
     args = ["log", "--first-parent"]
     if not since:
         args += ["-n", str(limit)]
-    raw = git(
+    raw, ok = git_run(
         *args,
         f"--format=%H{sep_f}%h{sep_f}%aI{sep_f}%s{sep_f}%b{sep_r}",
         rng,
         cwd=cwd,
     )
+    # A failed scan and a scan that found nothing both come back empty, and the
+    # caller advances the cursor on an empty result -- so collapsing them means
+    # one transient git failure permanently skips that whole range.
+    if not ok:
+        raise ScanFailed(f"git log failed for {rng}")
     if not raw:
         return
     for chunk in raw.split(sep_r):
@@ -465,10 +485,14 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
         if not readable or (not existing and since):
             since = None
         known = {r.get("sha") for r in existing}
-        fresh = [
-            r for r in commit_records(ref, limit, since, cwd=cwd)
-            if r.get("sha") not in known
-        ]
+        try:
+            fresh = [
+                r for r in commit_records(ref, limit, since, cwd=cwd)
+                if r.get("sha") not in known
+            ]
+        except ScanFailed:
+            # Leave the cursor where it is so the next run retries this range.
+            return 0, len(existing)
 
         # git log is newest-first; store oldest-first so the file reads as a
         # timeline.

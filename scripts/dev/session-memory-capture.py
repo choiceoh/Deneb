@@ -169,14 +169,21 @@ def compact(rows):
     carrying them forever -- a session that has ended for good never gets
     another chance to replace its own rows.
     """
+    # `json.loads` accepts more than objects: a row of `null` or `[]` parses
+    # fine and then explodes on `.get`. That aborts the whole rewrite, so every
+    # later SessionEnd falls back to raw append -- no dedup, no cap, and the bad
+    # row never healed. Identify sessions only where there is a mapping to ask.
+    def session_of(row):
+        return row.get("session_id") if isinstance(row, dict) else None
+
     last_index = {}
     for i, row in enumerate(rows):
-        sid = row.get("session_id")
+        sid = session_of(row)
         if sid:
             last_index[sid] = i
     out = []
     for i, row in enumerate(rows):
-        sid = row.get("session_id")
+        sid = session_of(row)
         if sid and last_index.get(sid) != i:
             continue
         out.append(row)
