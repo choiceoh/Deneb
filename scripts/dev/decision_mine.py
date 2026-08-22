@@ -261,9 +261,37 @@ def is_ancestor(older: str, newer: str, cwd=None):
     return None
 
 
-def object_exists(rev, cwd=None) -> bool:
-    """Whether `rev` names a commit this repository actually has."""
-    return git_run("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}", cwd=cwd)[1]
+def object_exists(rev, cwd=None):
+    """True / False / None, where None means the question could not be asked.
+
+    The same three-way split as is_ancestor, for the same reason. `rev-parse
+    --verify --quiet` exits 1 for "this repository does not have that object"
+    and 128 for an operational failure -- being outside a repository, say.
+    Folding those together was harmless while a missing cursor only meant
+    "rescan"; it now also means "prune the ledger", and a broken command must
+    not be read as a rewritten history.
+    """
+    try:
+        code = subprocess.run(
+            [
+                "git",
+                *(["-C", cwd] if cwd else []),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                f"{rev}^{{commit}}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).returncode
+    except Exception:
+        return None
+    if code == 0:
+        return True
+    if code == 1:
+        return False
+    return None
 
 
 def prune_to_history(rows, ref, cwd=None):
@@ -569,30 +597,42 @@ def mine(ref="origin/main", limit=DEFAULT_LIMIT, full=False, cwd=None,
             return 0, 0
 
     since = None if full else read_cursor(cursor_path)
-    # A cursor left by a rewritten or unfetched history points at a commit that
-    # is no longer an ancestor, and `since..head` would then silently resolve to
-    # nothing. Exit status is the only signal here -- `--is-ancestor` prints
-    # nothing either way -- so this cannot go through git().
+    # A cursor left by a rewritten or unfetched history is either gone from the
+    # object database or no longer an ancestor, and `since..head` would then
+    # silently resolve to nothing. Exit status is the only signal for both
+    # questions -- `--is-ancestor` and `rev-parse --verify --quiet` print
+    # nothing either way -- so neither can go through git().
     #
-    # That also means the history the ledger describes is gone: its records
-    # point at commits `git show` can no longer resolve, and a stale path can
-    # still outrank a live one when surfacing. So this is a rebuild, not just a
-    # rewind.
+    # Either answer also means the history the ledger describes may be gone:
+    # records pointing at commits `git show` can no longer resolve, whose stale
+    # paths still outrank live ones when surfacing. So this is a rebuild, not
+    # just a rewind.
     rebuild = False
-    if since and not object_exists(since, cwd=cwd):
-        # The cursor names nothing this repo has -- a corrupted file, or a
-        # commit that was gc'd away. There is no ancestry question to ask, so
-        # drop the cursor and rescan. Waiting for an answer here would wedge
-        # the miner permanently, since the next run cannot ask it either.
-        since = None
-    elif since:
-        ancestry = is_ancestor(since, head, cwd=cwd)
-        if ancestry is None:
-            # The cursor resolves, but the question could not be asked -- a
-            # transient git failure. Both guesses lose data, so change nothing
-            # and let the next run ask again.
+    if since:
+        present = object_exists(since, cwd=cwd)
+        if present is None:
+            # A transient git failure, not an answer about the cursor. Both
+            # guesses lose something, so change nothing and ask again next run.
             return 0, 0
-        rebuild = not ancestry
+        if not present:
+            # The cursor names nothing this repo has -- history rewritten and
+            # the old commits gc'd away, or a corrupted file. There is no
+            # ancestry question left to ask, so rescan; and rebuild too,
+            # because a cursor whose commit is GONE is more evidence that the
+            # ledger describes dead history than a merely non-ancestor one,
+            # not less. Rescanning without pruning left those dead records in
+            # place for good: the cold scan re-adds the live commits, dedup by
+            # sha never revisits the dead ones, and a stale path keeps
+            # outranking a live one when surfacing.
+            since, rebuild = None, True
+        else:
+            ancestry = is_ancestor(since, head, cwd=cwd)
+            if ancestry is None:
+                # The cursor resolves, but the question could not be asked -- a
+                # transient git failure. Both guesses lose data, so change
+                # nothing and let the next run ask again.
+                return 0, 0
+            rebuild = not ancestry
     if rebuild:
         since = None
 

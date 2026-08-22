@@ -374,6 +374,51 @@ class MineTests(unittest.TestCase):
         self.mine()
         self.assertTrue(all(r["sha"] != stale for r in self.rows()))
 
+    def test_a_gone_cursor_prunes_the_dead_ledger_too(self) -> None:
+        # A cursor whose commit no longer EXISTS is stronger evidence of a
+        # rewrite than a merely non-ancestor one, so it has to prune as well.
+        # Rescanning without pruning left the dead records forever: the cold
+        # scan re-adds the live commits, dedup by sha never revisits the dead
+        # ones, and a stale path keeps outranking a live one when surfacing.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        stale = self.rows()[0]["sha"]
+        git(self.root, "checkout", "-q", "--orphan", "fresh")
+        git(self.root, "rm", "-rq", "--cached", ".")
+        commit(self.root, "x/y/z.go", RICH.replace("(#42)", "(#99)"))
+        # An object this repository does not have -- what a rewrite plus gc
+        # leaves behind, and what a corrupted cursor file looks like.
+        self.cursor.write_text("0" * 40 + "\n", encoding="utf-8")
+
+        self.mine()
+        self.assertTrue(all(r["sha"] != stale for r in self.rows()))
+
+    def test_an_unanswerable_cursor_existence_question_changes_nothing(self) -> None:
+        # Exit 128 is "could not ask", not "the cursor is gone". Reading a
+        # transient git failure as a gone cursor would now prune the ledger.
+        commit(self.root, "a/b/c.go", RICH)
+        self.mine()
+        before = self.rows()
+        cursor_before = self.cursor.read_text(encoding="utf-8")
+        commit(self.root, "a/b/d.go", RICH.replace("(#42)", "(#43)"))
+
+        real = dm.object_exists
+        dm.object_exists = lambda *a, **k: None
+        try:
+            added, _ = self.mine()
+        finally:
+            dm.object_exists = real
+        self.assertEqual(added, 0)
+        self.assertEqual(self.rows(), before)
+        self.assertEqual(self.cursor.read_text(encoding="utf-8"), cursor_before)
+
+    def test_object_exists_separates_absent_from_unaskable(self) -> None:
+        commit(self.root, "a/b/c.go", RICH)
+        self.assertIs(dm.object_exists("HEAD", cwd=str(self.root)), True)
+        self.assertIs(dm.object_exists("0" * 40, cwd=str(self.root)), False)
+        # Outside a repository git exits 128, which is not an answer.
+        self.assertIsNone(dm.object_exists("HEAD", cwd=self.tmp.name))
+
     def test_a_backlog_larger_than_the_limit_is_not_skipped_forever(self) -> None:
         # The limit caps the cold scan only. Applying it to a cursor range
         # reads the newest N, advances the cursor to head anyway, and loses
