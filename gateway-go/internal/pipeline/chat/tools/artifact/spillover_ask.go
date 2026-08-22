@@ -186,10 +186,11 @@ func spillAskChunks(lines []string) []spillAskChunk {
 		// A single line can exceed the whole chunk budget — minified JSON, a
 		// base64 payload, compact command output. Without this the "bounded"
 		// request would carry the entire line and blow the helper's context.
+		lineClipped := false
 		if len(line) > spillAskChunkMaxChars {
 			line = textutil.TruncateBytes(line, spillAskChunkMaxChars-spillAskLongLineHeadroom) +
 				" …[줄 잘림 — 전체는 read_spillover(offset=" + fmt.Sprint(i+1) + ")]"
-			clipped++
+			lineClipped = true
 		}
 		entry := fmt.Sprintf("%d: %s\n", i+1, line)
 		if b.Len() > 0 && b.Len()+len(entry) > spillAskChunkMaxChars {
@@ -200,6 +201,13 @@ func spillAskChunks(lines []string) []spillAskChunk {
 			first = i + 1
 		}
 		b.WriteString(entry)
+		// Counted AFTER the flush decision, so the clip lands on the chunk that
+		// actually carries the line. Counting before it would credit the
+		// previous chunk and leave this one reporting a clean full scan — the
+		// coverage-hiding case this whole path exists to prevent.
+		if lineClipped {
+			clipped++
+		}
 	}
 	flush(len(lines))
 	return chunks

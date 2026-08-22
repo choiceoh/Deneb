@@ -349,3 +349,30 @@ func TestSpilloverQuestionReportsClippedLines(t *testing.T) {
 		t.Errorf("partial coverage must be stated when a line was clipped:\n%s", out)
 	}
 }
+
+// The clip count must land on the chunk that carries the clipped line. Counting
+// it before the flush credited the previous chunk, so when only the clipped
+// chunk answered the header dropped the warning and claimed a clean full scan.
+func TestSpillAskChunksAttributeClipToOwningChunk(t *testing.T) {
+	filler := strings.Repeat("f", 200)
+	var lines []string
+	for len(lines) < 80 { // enough normal lines to fill the first chunk
+		lines = append(lines, filler)
+	}
+	lines = append(lines, strings.Repeat("z", spillAskChunkMaxChars*2)) // oversized
+
+	chunks := spillAskChunks(lines)
+
+	if len(chunks) < 2 {
+		t.Fatalf("expected the oversized line to open a later chunk, got %d chunk(s)", len(chunks))
+	}
+	last := chunks[len(chunks)-1]
+	if last.clippedLines != 1 {
+		t.Errorf("chunk holding the clipped line reports %d clips, want 1", last.clippedLines)
+	}
+	for i, c := range chunks[:len(chunks)-1] {
+		if c.clippedLines != 0 {
+			t.Errorf("chunk %d has no clipped line but reports %d", i, c.clippedLines)
+		}
+	}
+}
