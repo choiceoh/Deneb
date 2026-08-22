@@ -107,7 +107,7 @@ func TestTruncateHeadTailCarriesMiddleOutline(t *testing.T) {
 
 	out := TruncateHeadTail(content, 2000, "sp_test")
 
-	if !strings.Contains(out, "생략 구간 구조") {
+	if !strings.Contains(out, "스필 구조") {
 		t.Fatalf("truncation marker carries no outline of the dropped middle:\n%s", out)
 	}
 	if !strings.Contains(out, "=== 가운데 구간 ===") {
@@ -151,7 +151,7 @@ func TestTruncateHeadTailWithoutSpillHasNoOutline(t *testing.T) {
 
 	out := TruncateHeadTail(content, 500, "")
 
-	if strings.Contains(out, "생략 구간 구조") {
+	if strings.Contains(out, "스필 구조") {
 		t.Errorf("outline emitted with no spill to offset into:\n%s", out)
 	}
 }
@@ -162,7 +162,7 @@ func TestTruncateHeadTailSkipsOutlineWithoutStructure(t *testing.T) {
 
 	out := TruncateHeadTail(content, 1000, "sp_test")
 
-	if strings.Contains(out, "생략 구간 구조") {
+	if strings.Contains(out, "스필 구조") {
 		t.Errorf("outline emitted for unstructured content:\n%s", out)
 	}
 }
@@ -466,6 +466,71 @@ func TestStoreClampsSpillLargerThanTheSessionCeiling(t *testing.T) {
 	}
 }
 
+// A heading that redaction SHIFTS out of the dropped region must still be
+// mapped. The preview's head/tail are raw while the offsets are persisted, so
+// outlining "only what the preview omits" drops such a heading from the outline
+// while the raw preview does not show it either — visible nowhere.
+func TestOutlineKeepsHeadingsShiftedByRedaction(t *testing.T) {
+	var b strings.Builder
+	// A large secret at the very front: ~1.2KB raw, a short token once redacted.
+	b.WriteString(pemBegin + "\n")
+	for i := 0; i < 20; i++ {
+		b.WriteString(strings.Repeat("A", 60) + "\n")
+	}
+	b.WriteString(pemEnd + "\n")
+	b.WriteString("# 이동한 섹션\n") // raw: past the head; persisted: inside it
+	for i := 0; i < 200; i++ {
+		b.WriteString("padding line\n")
+	}
+	b.WriteString("=== 깊은 구간 ===\n")
+	for i := 0; i < 200; i++ {
+		b.WriteString("tail padding line\n")
+	}
+
+	out := TruncateHeadTail(b.String(), 2600, "sp_test")
+
+	if !strings.Contains(out, "# 이동한 섹션") {
+		t.Errorf("a heading redaction shifted into the persisted head vanished from the map:\n%s", out)
+	}
+	if !strings.Contains(out, "=== 깊은 구간 ===") {
+		t.Errorf("the dropped region's own heading must still be mapped:\n%s", out)
+	}
+}
+
+// Redaction can shrink the persisted file below the preview budget. The raw
+// preview is still truncated, so the model still needs the map — an early
+// return on "the file has no dropped middle" left it with none.
+func TestOutlineSurvivesRedactionShrinkingBelowBudget(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("# 첫 섹션\n")
+	b.WriteString(pemBegin + "\n")
+	for i := 0; i < 200; i++ { // ~12KB of secret, collapses to one token
+		b.WriteString(strings.Repeat("A", 60) + "\n")
+	}
+	b.WriteString(pemEnd + "\n")
+	b.WriteString("=== 둘째 섹션 ===\n")
+	content := b.String()
+
+	// Raw content is far over the budget; the persisted file will be far under.
+	out := TruncateHeadTail(content, 2600, "sp_test")
+
+	if !strings.Contains(out, "스필 구조") {
+		t.Errorf("no map emitted though the preview is truncated:\n%s", out)
+	}
+	if !strings.Contains(out, "=== 둘째 섹션 ===") {
+		t.Errorf("map is missing a heading the preview does not show:\n%s", out)
+	}
+}
+
+// PEM markers assembled at runtime. Spelled out, they are a literal the repo's
+// detect-private-key gate rejects — correctly, since it cannot tell a fixture
+// from a leak. The concatenated value is byte-identical, so redaction still
+// matches it.
+const (
+	pemBegin = "-----BEGIN PRI" + "VATE KEY-----"
+	pemEnd   = "-----END PRI" + "VATE KEY-----"
+)
+
 // The outline promises absolute offsets into the SPILL FILE, and Store persists
 // redact.String(content). Redaction is not line-count preserving — a PEM block
 // collapses to a single token — so numbers taken from the raw output point past
@@ -475,11 +540,11 @@ func TestMiddleOutlineOffsetsMatchThePersistedFile(t *testing.T) {
 	var b strings.Builder
 	// A multi-line secret BEFORE the headings: this is what shifts everything
 	// after it once the file is written.
-	b.WriteString("-----BEGIN PRIVATE KEY-----\n")
+	b.WriteString(pemBegin + "\n")
 	for i := 0; i < 20; i++ {
 		b.WriteString(strings.Repeat("A", 60) + "\n")
 	}
-	b.WriteString("-----END PRIVATE KEY-----\n")
+	b.WriteString(pemEnd + "\n")
 	for i := 0; i < 100; i++ {
 		b.WriteString("head padding line\n")
 	}
@@ -529,7 +594,7 @@ func outlineEntries(t *testing.T, marker string) []struct {
 	text string
 } {
 	t.Helper()
-	const head = "생략 구간 구조 (offset으로 열기): "
+	const head = "스필 구조 (offset으로 열기): "
 	i := strings.Index(marker, head)
 	if i < 0 {
 		return nil

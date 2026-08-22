@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/llm"
@@ -56,7 +57,7 @@ func TruncateHeadTail(content string, maxChars int, spillID string) string {
 		// pipeline/compaction/protected.go; keep its shape intact.
 		marker = fmt.Sprintf(
 			"\n\n... [%d lines truncated — use read_spillover(%q) for full content] ...%s\n\n",
-			truncatedLines, spillID, spilledMiddleOutline(content, maxChars),
+			truncatedLines, spillID, spilledOutline(content, maxChars),
 		)
 	} else {
 		marker = fmt.Sprintf("\n\n... [%d lines truncated] ...\n\n", truncatedLines)
@@ -74,8 +75,8 @@ const (
 	outlineEntryMaxChars = 70
 )
 
-// spilledMiddleOutline renders the outline in the coordinates of the PERSISTED
-// spill file, which is what a read_spillover(offset=N) actually opens.
+// spilledOutline maps the PERSISTED spill file's structure, which is what a
+// read_spillover(offset=N) actually opens.
 //
 // Store writes persistedForm(content), which differs from the raw output twice
 // over. Redaction is not line-count preserving — a PEM block spanning thirty
@@ -85,34 +86,42 @@ const (
 // content would point past their heading, or at nothing, silently defeating the
 // absolute-offset navigation the outline exists to provide.
 //
-// So the outline is computed over the same redacted text the file holds. The
-// head and tail the model reads stay raw, as they were: only the offsets have
-// to agree with the file. The cost is one more pass over the output, paid only
-// when the result actually spilled.
-func spilledMiddleOutline(content string, maxChars int) string {
+// It scans the WHOLE file rather than just the region the raw preview drops.
+// The preview's head/tail are raw and the offsets are persisted, so the two
+// live in different coordinate systems: any attempt to outline "only what the
+// preview omits" loses headings that redaction shifted across the boundary —
+// absent from the outline and from the preview both. Ranking (below) keeps the
+// dropped region's headings first, so scanning wide costs priority, not slots.
+//
+// The cost is one more pass over the output, paid only when the result spilled.
+func spilledOutline(content string, maxChars int) string {
 	persisted := persistedForm(content)
-	if len(persisted) <= maxChars {
-		// Redaction shrank the output below the budget, so the persisted file
-		// has no discarded middle to point into.
-		return ""
-	}
+
+	// The region the model cannot see, in PERSISTED coordinates. Approximate by
+	// construction — the preview it stands in for is raw — which is exactly why
+	// it only ranks entries instead of filtering them.
 	half := maxChars / 2
-	head := textutil.TruncateBytes(persisted, half)
-	tail := textutil.TailBytes(persisted, half)
-	middle := persisted[len(head) : len(persisted)-len(tail)]
-	return middleOutline(persisted, middle, len(head))
+	hidden := [2]int{0, 0}
+	if len(persisted) > maxChars {
+		head := textutil.TruncateBytes(persisted, half)
+		tail := textutil.TailBytes(persisted, half)
+		hidden[0] = strings.Count(head, "\n") + 1
+		hidden[1] = strings.Count(persisted[:len(persisted)-len(tail)], "\n") + 1
+	}
+	return outlineOf(persisted, hidden)
 }
 
-// middleOutline renders the section markers found in the discarded middle,
-// each with its 1-based line number in the ORIGINAL content so it feeds
-// straight into read_spillover(offset=N). Returns "" when the middle has no
-// usable structure.
-func middleOutline(content, middle string, headLen int) string {
-	// Line number of the middle's first line within the whole content.
-	base := strings.Count(content[:headLen], "\n") + 1
-
-	var entries []string
-	for i, line := range strings.Split(middle, "\n") {
+// outlineOf renders the section markers in text, each with its 1-based line
+// number, preferring those inside the hidden line range when there are more
+// headings than slots. Returns "" when there is no usable structure.
+func outlineOf(text string, hidden [2]int) string {
+	type entry struct {
+		line      int
+		text      string
+		hiddenone bool
+	}
+	var found []entry
+	for i, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !isOutlineHeading(trimmed) {
 			continue
@@ -133,16 +142,43 @@ func middleOutline(content, middle string, headLen int) string {
 		if len(trimmed) > outlineEntryMaxChars {
 			trimmed = textutil.TruncateBytes(trimmed, outlineEntryMaxChars) + "…"
 		}
-		entries = append(entries, fmt.Sprintf("%d: %s", base+i, trimmed))
-		if len(entries) >= outlineMaxEntries {
-			entries = append(entries, "…")
-			break
-		}
+		n := i + 1
+		found = append(found, entry{line: n, text: trimmed, hiddenone: n >= hidden[0] && n <= hidden[1]})
 	}
-	if len(entries) < outlineMinEntries {
+	if len(found) < outlineMinEntries {
 		return ""
 	}
-	return "\n생략 구간 구조 (offset으로 열기): " + strings.Join(entries, " · ")
+
+	// Headings the model cannot otherwise see come first; ties keep file order.
+	kept := make([]entry, 0, len(found))
+	for _, e := range found {
+		if e.hiddenone {
+			kept = append(kept, e)
+		}
+	}
+	truncated := len(kept) > outlineMaxEntries
+	if len(kept) > outlineMaxEntries {
+		kept = kept[:outlineMaxEntries]
+	}
+	for _, e := range found {
+		if len(kept) >= outlineMaxEntries {
+			truncated = truncated || !e.hiddenone
+			continue
+		}
+		if !e.hiddenone {
+			kept = append(kept, e)
+		}
+	}
+	sort.Slice(kept, func(i, j int) bool { return kept[i].line < kept[j].line })
+
+	parts := make([]string, 0, len(kept)+1)
+	for _, e := range kept {
+		parts = append(parts, fmt.Sprintf("%d: %s", e.line, e.text))
+	}
+	if truncated {
+		parts = append(parts, "…")
+	}
+	return "\n스필 구조 (offset으로 열기): " + strings.Join(parts, " · ")
 }
 
 // isOutlineHeading recognizes the section markers that actually show up in
