@@ -98,6 +98,20 @@ class CleanBodyTests(unittest.TestCase):
         raw = "* feat(x): squashed subject\n\nReal reasoning."
         self.assertEqual(dm.clean_body(raw), ["Real reasoning."])
 
+    def test_a_body_that_is_only_a_commit_list_carries_no_rationale(self) -> None:
+        # One odd squashed subject (`* WIP`, `* typo`) used to open the gate
+        # for every conventional echo behind it, so a body with zero reasoning
+        # cleared MIN_BODY_LINES and was stored as a decision.
+        raw = "\n".join(
+            ["* WIP"] + [f"* feat(p{i}): change {i}" for i in range(6)]
+        )
+        prose = [ln for ln in dm.clean_body(raw) if ln]
+        self.assertLess(len(prose), dm.MIN_BODY_LINES)
+
+    def test_bullets_after_prose_stay_whatever_their_shape(self) -> None:
+        raw = "Intro prose.\n\n* feat(x): looks conventional\n* plain point"
+        self.assertEqual(len([ln for ln in dm.clean_body(raw) if ln]), 3)
+
     def test_bot_review_blockquotes_are_not_rationale(self) -> None:
         # A review bot describing the diff back to us is not the author's why.
         raw = "Why we did it.\n\n> [!NOTE]\n> **Medium Risk**\n> Overview of the diff.\n"

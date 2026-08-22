@@ -296,11 +296,21 @@ def clean_body(raw: str) -> list[str]:
         if set(stripped) <= {"-", "*", "_"} and len(stripped) >= 3:
             continue
         echo = _SQUASH_ECHO.match(line)
-        if echo and not seen_prose and _CONVENTIONAL.match(echo.group("text")):
+        if echo:
             # Squash echoes are the squashed subjects and always sit in the
-            # preamble. A subject-shaped bullet AFTER prose has started is the
-            # author writing a list -- dropping every bullet cleaned a body
-            # that argued its case in six points down to nothing.
+            # preamble, so only subject-shaped bullets there are dropped -- a
+            # bullet after real prose is the author writing a list, and
+            # dropping every bullet cleaned a body that argued its case in six
+            # points down to nothing.
+            #
+            # A bullet never opens the gate, whatever its shape. Letting one
+            # do so meant a single odd squashed subject (`* WIP`, `* typo`)
+            # admitted every conventional echo behind it, so a body that was
+            # nothing but a commit list cleared MIN_BODY_LINES with no
+            # rationale at all.
+            if not seen_prose and _CONVENTIONAL.match(echo.group("text")):
+                continue
+            kept.append(stripped)
             continue
         seen_prose = True
         kept.append(stripped)
