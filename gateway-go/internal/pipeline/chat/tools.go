@@ -293,15 +293,16 @@ func (r *ToolRegistry) capToolOutput(ctx context.Context, def ToolDef, name, out
 	var spillID string
 	// Spill full content to disk so the LLM can retrieve it via read_spillover.
 	//
-	// Skip it once the run is cancelled: /reset cancels active runs and then
-	// reclaims the session's spills, so a spill written after that point would
-	// outlive the conversation it belongs to. Execute already returns early on
-	// cancellation, but that check happens before this call — re-checking here
-	// closes the common case where the cancel lands while a slow tool is
-	// finishing. A cancel landing between this check and Store still slips
-	// through; that residue is one unreferenced file, collected when the
-	// session itself ends (RemoveSession sweeps by session prefix).
-	if r.spillStore != nil && ctx.Err() == nil {
+	// This deliberately does NOT skip on a cancelled context. Doing so looked
+	// like a way to stop a /reset-cancelled run from leaving a spill behind,
+	// but cancellation here is not only /reset — a later abort, merge, or
+	// timeout reaches this point too, and every persisted tool_use keeps a
+	// corresponding result (ai/agent). Suppressing the spill would commit a
+	// truncated result carrying no handle, making the discarded middle
+	// unrecoverable while the session keeps running. A spill that outlives a
+	// reset is the cheaper failure: one unreferenced file, collected when the
+	// session ends (RemoveSession sweeps by session prefix).
+	if r.spillStore != nil {
 		sessionKey := toolport.SessionKeyFromContext(ctx)
 		spillID, _ = r.spillStore.Store(sessionKey, name, output)
 		// Store already classifies spills by their producing tool's name.
