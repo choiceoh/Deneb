@@ -1,11 +1,13 @@
 package chat
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/choiceoh/deneb/gateway-go/internal/ai/agent"
 	"github.com/choiceoh/deneb/gateway-go/internal/domain/session"
+	"github.com/choiceoh/deneb/gateway-go/internal/pipeline/chat/toolport"
 )
 
 // /reset must reclaim the session's spill files.
@@ -48,5 +50,24 @@ func TestResetCommandReclaimsSpillover(t *testing.T) {
 	}
 	if _, err := store.Load(otherID, "client:other"); err != nil {
 		t.Errorf("/reset reclaimed a sibling session's spill: %v", err)
+	}
+}
+
+// A tool finishing under a cancelled run must not write a new spill: /reset
+// cancels active runs and then reclaims the session's spills, so a spill
+// stored afterwards would outlive the conversation it belonged to.
+func TestCancelledRunDoesNotSpill(t *testing.T) {
+	store := agent.NewSpilloverStore(t.TempDir())
+	reg := NewToolRegistry()
+	reg.SetSpilloverStore(store)
+
+	ctx, cancel := context.WithCancel(toolport.WithSessionKey(context.Background(), "client:main"))
+	cancel()
+
+	out := reg.capToolOutput(ctx, ToolDef{Name: "exec"}, "exec",
+		strings.Repeat("x", agent.DefaultMaxOutput+1))
+
+	if strings.Contains(out, "read_spillover(") {
+		t.Errorf("cancelled run produced a spill handle:\n%s", out[:200])
 	}
 }
